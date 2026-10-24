@@ -34,8 +34,10 @@ const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// 1.5·2^52: adding and subtracting it rounds a value below 2^51 to an integer.
 const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 
-/// `e^r` times `2^(k/64)` as `(y, m, eps)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m`, for the
-/// reduced `r = rh + rl` (`|rh| <= 0.006`, `|rl| <= 2^-52·|rh|`).
+/// `e^r` times `2^(k/64)` as `(y, m, tail)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m` for
+/// `eps = `[`exp_eps`]`(y, tail)`, for the reduced `r = rh + rl` (`|rh| <= 0.006`,
+/// `|rl| <= 2^-52·|rh|`). The computed series tail is returned rather than `eps`, so that the
+/// in-place entries, whose rounding test needs no `eps` ([`near`]), do not form it.
 ///
 /// Proof. `e^r − 1 = r + r²/2 + r³·(1/3! + r/4! + … + r⁵/8!) + δ`, `|δ| <= |r|⁹/9!·1.01 < 2^-86`.
 /// The leading `rh + rh²/2` is exact as a double-double (`two_prod`, then `two_sum`); `rl` enters
@@ -73,8 +75,13 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let q = two_prod(th, ph);
     let b = fast_two_sum(th, q.hi);
     let y = fast_two_sum(b.hi, (b.lo + (tl + (q.lo + tl * ph))) + th * pl);
-    let eps = dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN);
-    Some((y, k >> 6, eps))
+    Some((y, k >> 6, tail))
+}
+
+/// [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
+#[inline(always)]
+fn exp_eps(y: Dd, tail: f64) -> f64 {
+    dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN)
 }
 
 /// `ln2/64` as the first three parts of `LN2_64_CW`, the last two negated: `C0` has 36 significant
@@ -125,8 +132,8 @@ fn reduce_pow(z: Dd, kf: f64) -> Dd {
 /// `2^-106.5` of `x − k·ln2/64`, far inside [`exp_kernel`]'s `2^-90`; `x.lo = 0` adds nothing.
 pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-    let (y, m, eps) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf))?;
-    settle(y, eps, m, mode)
+    let (y, m, tail) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf))?;
+    settle(y, exp_eps(y, tail), m, mode)
 }
 
 /// `ln 2` (`LN2[0]`) split by Dekker for [`exp2`]'s product: `LN2A` its upper 26 bits, `LN2B` the
@@ -144,8 +151,8 @@ const LN2B: f64 = f64::from_bits(0xbe20_5c61_1000_0000);
 /// sum `2^-105.5·|p|`: below `2^-104·|r| < 2^-111`, inside the kernel's `2^-90`.
 pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * 64.0);
-    let (y, m, eps) = exp_kernel(ln2_times(x - kf / 64.0), dd::to_i32(kf))?; // exact difference
-    settle(y, eps, m, mode)
+    let (y, m, tail) = exp_kernel(ln2_times(x - kf / 64.0), dd::to_i32(kf))?; // exact difference
+    settle(y, exp_eps(y, tail), m, mode)
 }
 
 /// `r·ln2` for [`exp2`] (proof there).
@@ -162,11 +169,12 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
     let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
     // (x − k·log10(2)/64)·ln10: the reduction is within 2^-95 and the product within 2^-100.
-    let (y, m, eps) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
-    settle(y, eps, m, mode)
+    let (y, m, tail) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
+    settle(y, exp_eps(y, tail), m, mode)
 }
 
-/// `ln x` as `(y, eps)` for a positive finite `x != 1`.
+/// `ln x` as `(y, tail)` for a positive finite `x != 1`: `|ln x − y| <= eps` for
+/// `eps = `[`log_eps`]`(y, tail)` (the computed series tail returned, as in [`exp_kernel`]).
 ///
 /// Proof. `x = 2^e·m`, `c ≈ 1/m` from `LOG_C` (12 bits, so `m·c` is exact as `two_prod`), and
 /// `r = m·c − 1` exact as a double-double (`p.hi − 1` is exact by Sterbenz). Requiring
@@ -194,7 +202,13 @@ fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let tail = rh * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
     let y = log_assemble(e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail));
-    Some((y, TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)))
+    Some((y, tail))
+}
+
+/// [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
+#[inline(always)]
+fn log_eps(y: Dd, tail: f64) -> f64 {
+    TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)
 }
 
 /// ln 2 split for [`log_assemble`]: `LN2H` keeps 42 significant bits, so `e·LN2H` is exact for
@@ -227,23 +241,23 @@ fn log_assemble(e: i32, idx: usize, lh: f64, ll: f64) -> Dd {
 
 /// `ln x` for a positive finite `x != 1`.
 pub fn log(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let (y, eps) = log_kernel(x)?;
-    settle(y, eps, 0, mode)
+    let (y, tail) = log_kernel(x)?;
+    settle(y, log_eps(y, tail), 0, mode)
 }
 
 /// `log2 x` for a positive finite `x` not a power of two: `ln x · (1/ln2)` (the product's error
 /// `< 2^-100·|y|`, the bound scaled by `1/ln2 < 1.5`).
 pub fn log2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let (y, eps) = log_kernel(x)?;
-    let y = y.mul(Dd::of(t::INV_LN2));
-    settle(y, 1.5 * eps + MARGIN * dd::abs(y.hi), 0, mode)
+    let (l, tail) = log_kernel(x)?;
+    let y = l.mul(Dd::of(t::INV_LN2));
+    settle(y, 1.5 * log_eps(l, tail) + MARGIN * dd::abs(y.hi), 0, mode)
 }
 
 /// `log10 x` for a positive finite `x` not a power of ten (`1/ln10 < 0.5`).
 pub fn log10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let (y, eps) = log_kernel(x)?;
-    let y = y.mul(Dd::of(t::INV_LN10));
-    settle(y, 0.5 * eps + MARGIN * dd::abs(y.hi), 0, mode)
+    let (l, tail) = log_kernel(x)?;
+    let y = l.mul(Dd::of(t::INV_LN10));
+    settle(y, 0.5 * log_eps(l, tail) + MARGIN * dd::abs(y.hi), 0, mode)
 }
 
 /// 2^51: at and above it every `double` is an integer (and [`dd::nearest_int`] no longer applies).
@@ -270,24 +284,128 @@ fn integral(x: f64) -> bool {
 // * Inexact is raised: when `settle` answers in round-to-nearest, `a = y.hi + dn` and
 //   `b = y.hi + up` are equal while `up − dn = 2e > 0`; both exact would make them differ (an exact
 //   sum of `y.hi` and a nonzero value below half an ulp is impossible, and a value of an ulp or
-//   more would separate them), so at least one of the two additions is inexact in hardware.
+//   more would separate them), so at least one of the two additions is inexact in hardware. When
+//   [`near`] answers, `y.hi + w` rounded to `y.hi` with `w != 0`: that addition was inexact.
+
+/// The relative bounds `rho` behind the constant rounding test [`near`] (register 13.5 #5): every
+/// `eps/|y.hi|` where the test is used is at most `rho`. Each is stated with slack and checked on
+/// operands by the `bounds` tests.
+/// [`exp`] and [`exp2`]: `eps/|y.hi| = 2^-49·|tail| + 2^-70` ([`exp_eps`]). For `|rh| <= 0.006`
+/// the computed `|q| <= 1/6 + 0.006/24·1.01 < 0.16692`, `s.hi <= 0.006²·(1 + u)`, so `|tail| <=
+/// 0.006³·0.16692·(1 + 4u) < 2^-24.72` and `eps/|y.hi| < 2^-70·(1 + 2^-3.72) < 1.0757·2^-70`;
+/// `RHO_EXP = 1.125·2^-70`.
+const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
+/// [`pow`] with `dz <= DZ_NEAR = 2^-72` (checked before the test): `eps/|v.hi| = 2^-49·|tail| +
+/// 2^-70 + 1.02·dz` ([`pow_eps`]; the computed `dz` is within `4u` of its real formula) `<
+/// (1.0757 + 0.2551)·2^-70`; `RHO_POW = 1.375·2^-70`.
+const RHO_POW: f64 = f64::from_bits(0x3b96_0000_0000_0000);
+const DZ_NEAR: f64 = f64::from_bits(0x3b70_0000_0000_0000);
+/// The logarithms with `|l.hi| >= LOG_NEAR = 0.34` for `ln x = l` (every `x` outside about
+/// `[0.71, 1.41]`, so every `e != 0`): `|rh| <= 2^-7` gives a computed `|q| < 0.3354`,
+/// `|tail| < 2^-21·0.3354·(1 + 3u) < 2^-22.57`, so `eps/|l.hi| = 2^-49·|tail|/|l.hi| + 2^-70 <
+/// 2^-71.57/0.34 + 2^-70 < 1.99·2^-70` ([`log_eps`]). `log2` and `log10` multiply `l` by `1/ln b`
+/// (error `< 2^-100·|y|`); the bound `eps·(1/ln b)` keeps the ratio: `eps'/|y.hi| <
+/// 1.99·2^-70·(1 + 2^-99) + 2^-99.9`. (Near 1 the ratio reaches 2^-64, so there the exact test
+/// decides.) `RHO_LOG = 2^-69`.
+const RHO_LOG: f64 = f64::from_bits(0x3ba0_0000_0000_0000);
+const LOG_NEAR: f64 = 0.34;
+/// The multipliers of [`near`]: for each `rho` above, the least `double` `C` with
+/// `C·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests): `1 + 1.12502·2^-16`,
+/// `1 + 1.37503·2^-16` and `1 + 2.00006·2^-16`.
+const C_EXP: f64 = f64::from_bits(0x3ff0_0012_0014_4018);
+const C_POW: f64 = f64::from_bits(0x3ff0_0016_001e_402b);
+const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
+
+/// The round-to-nearest result `y.hi·2^m` when `w = RN(y.lo·c)` leaves `y.hi + w` rounding to
+/// `y.hi` (`w != 0`), else `None` (one multiply, one add, one compare: de Dinechin, Lauter and
+/// Muller, "Fast and correct rounding of the logarithm in double precision", 2007; the CRlibm
+/// report). The caller gives `|f − (y.hi + y.lo)| <= eps <= rho·|y.hi|` with `c·(1 − 2^54·rho) >
+/// 1 + u` (`u = 2^-53`), `f` not a `double` nor a midpoint, and `y.hi·2^m` normal (scaling exact).
+///
+/// Proof. Let `H` be the distance from `y.hi` to the midpoint on `w`'s side: `ulp(y.hi)/2`, or
+/// `ulp/4` when `y.hi` is a power of two and `w` points toward zero; `H` is a power of two and
+/// `|y.hi| <= 2^54·H`. If `RN(y.hi + w) = y.hi`, then `|w| <= H` (beyond the midpoint the sum
+/// rounds away from `y.hi`; at it, ties to even may keep `y.hi`). The successor of `H` is
+/// `H·(1 + 2u)`, so `|w| <= H` gives `|y.lo|·c <= H·(1 + u)` and `|y.lo| <= H·(1 + u)/c <
+/// H·(1 − 2^54·rho)`. Then on `w`'s side `|y.lo| + eps < H − 2^54·rho·H + rho·|y.hi| <= H`, and on
+/// the other side `eps < 2^-15·H` is below that side's distance (at least `H/2`): every value
+/// within `eps` of `y.hi + y.lo`, `f` among them, rounds to `y.hi`. No normalization of `y` is
+/// needed. With `y.lo` uniform over half an ulp the test misses with probability about `c − 1`;
+/// then the exact test decides ([`finish`]).
+#[inline(always)]
+fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
+    let w = y.lo * c;
+    if y.hi + w == y.hi && w != 0.0 { Some(y.hi * dd::pow2(m)) } else { None }
+}
+
+/// The in-place entries' rounding: [`near`] with `c` when the caller's bound allows it, then the
+/// exact test [`settle`] with `eps()` when that misses. `st` records which answered (0 near, 1 near
+/// missed, 2 near not allowed, 3 neither: the accurate path; the callers start it at 4, refused
+/// before the test) for [`nearest_stage`]; the entries discard it.
+#[inline(always)]
+fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64> {
+    *st = 2;
+    if let Some(c) = c {
+        if let Some(v) = near(y, c, m) {
+            *st = 0;
+            return Some(v);
+        }
+        *st = 1;
+    }
+    let v = settle(y, eps(), m, Rounding::Nearest).map(|(v, _)| v);
+    if v.is_none() {
+        *st = 3;
+    }
+    v
+}
+
+/// Which step of the in-place entry `which` (0 exp, 1 exp2, 2 log, 3 log2, 4 log10, 5 pow; `y`
+/// only for pow) answers: the codes of [`finish`], 4 refused before the test. For the sweep's
+/// count of the constant test's miss rate (MATH-M6-F64-GAP-ROUND-TEST); not part of the ABI.
+#[doc(hidden)]
+pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8 {
+    let mut st = 4;
+    let _ = match which {
+        0 => exp_near(x, &mut st),
+        1 => exp2_near(x, &mut st),
+        2 => log_near(x, &mut st),
+        3 => log2_near(x, &mut st),
+        4 => log10_near(x, &mut st),
+        _ => pow_near(x, y, &mut st),
+    };
+    st
+}
 
 /// `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
 #[inline]
 pub fn exp_nearest(x: f64) -> Option<f64> {
+    exp_near(x, &mut 0)
+}
+
+#[inline(always)]
+fn exp_near(x: f64, st: &mut u8) -> Option<f64> {
     if !(crate::exp_log::TINY..708.0).contains(&dd::abs(x)) {
         return None;
     }
-    exp(x, Rounding::Nearest).map(|(v, _)| v)
+    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+    let (y, m, tail) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf))?;
+    finish(y, Some(C_EXP), m, || exp_eps(y, tail), st)
 }
 
 /// `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
 #[inline]
 pub fn exp2_nearest(x: f64) -> Option<f64> {
+    exp2_near(x, &mut 0)
+}
+
+#[inline(always)]
+fn exp2_near(x: f64, st: &mut u8) -> Option<f64> {
     if !(crate::exp_log::TINY..1021.0).contains(&dd::abs(x)) || integral(x) {
         return None;
     }
-    exp2(x, Rounding::Nearest).map(|(v, _)| v)
+    let kf = dd::nearest_int(x * 64.0);
+    let (y, m, tail) = exp_kernel(ln2_times(x - kf / 64.0), dd::to_i32(kf))?; // exact difference
+    finish(y, Some(C_EXP), m, || exp_eps(y, tail), st)
 }
 
 /// Whether `x` is a positive normal finite `double` other than 1 (the logarithms' fast domain).
@@ -303,25 +421,56 @@ fn log_domain(x: f64) -> bool {
 /// `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
 #[inline]
 pub fn log_nearest(x: f64) -> Option<f64> {
+    log_near(x, &mut 0)
+}
+
+#[inline(always)]
+fn log_near(x: f64, st: &mut u8) -> Option<f64> {
     if !log_domain(x) {
         return None;
     }
-    log(x, Rounding::Nearest).map(|(v, _)| v)
+    let (y, tail) = log_kernel(x)?;
+    finish(y, log_c(y), 0, || log_eps(y, tail), st)
+}
+
+/// [`near`]'s multiplier for a logarithm whose `ln x` is `l` (see [`RHO_LOG`]).
+#[inline(always)]
+fn log_c(l: Dd) -> Option<f64> {
+    (dd::abs(l.hi) >= LOG_NEAR).then_some(C_LOG)
+}
+
+/// `ln x · (1/ln b)` rounded for [`log2_near`] and [`log10_near`], with the bound of [`log2`] and
+/// [`log10`] (`scale·eps + 2^-70·|y|`) for the exact test.
+#[inline(always)]
+fn logb_near(x: f64, inv: [u64; 2], scale: f64, st: &mut u8) -> Option<f64> {
+    let (l, tail) = log_kernel(x)?;
+    let y = l.mul(Dd::of(inv));
+    finish(y, log_c(l), 0, || scale * log_eps(l, tail) + MARGIN * dd::abs(y.hi), st)
 }
 
 /// `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
 #[inline]
 pub fn log2_nearest(x: f64) -> Option<f64> {
+    log2_near(x, &mut 0)
+}
+
+#[inline(always)]
+fn log2_near(x: f64, st: &mut u8) -> Option<f64> {
     if !log_domain(x) || x.to_bits() & 0x000f_ffff_ffff_ffff == 0 {
         return None;
     }
-    log2(x, Rounding::Nearest).map(|(v, _)| v)
+    logb_near(x, t::INV_LN2, 1.5, st)
 }
 
 /// `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten
 /// `10^1 ..= 10^22` (exact; only integers in that range are compared).
 #[inline]
 pub fn log10_nearest(x: f64) -> Option<f64> {
+    log10_near(x, &mut 0)
+}
+
+#[inline(always)]
+fn log10_near(x: f64, st: &mut u8) -> Option<f64> {
     if !log_domain(x) {
         return None;
     }
@@ -334,7 +483,7 @@ pub fn log10_nearest(x: f64) -> Option<f64> {
             }
         }
     }
-    log10(x, Rounding::Nearest).map(|(v, _)| v)
+    logb_near(x, t::INV_LN10, 0.5, st)
 }
 
 /// `x^y` for the in-place entry: `x` positive, normal, finite, not 1; `2^-200 <= |y|`, and
@@ -351,12 +500,21 @@ pub fn log10_nearest(x: f64) -> Option<f64> {
 /// 2^-200` keeps `|y·ln x| >= 2^-253`: the exp kernel's `r²·2^-53` stays above 2^-560.
 #[inline]
 pub fn pow_nearest(x: f64, y: f64) -> Option<f64> {
+    pow_near(x, y, &mut 0)
+}
+
+/// [`near`] only with `dz <= DZ_NEAR` ([`RHO_POW`]) and `-1021 <= m <= 1022`, where `v.hi·2^m` is
+/// normal and finite (`0.99 < |v.hi| < 2`).
+#[inline(always)]
+fn pow_near(x: f64, y: f64, st: &mut u8) -> Option<f64> {
     if !log_domain(x) || !(f64::from_bits(0x3370_0000_0000_0000)..).contains(&dd::abs(y)) || integral(y * 2048.0) {
         return None; // 2^-200; a NaN y fails the comparison
     }
     // A subnormal or zero result is left to the full path: its final scaling in `tiny` is exact,
     // so hardware raises no underflow although the result is tiny and inexact.
-    pow(x, y, false, Rounding::Nearest).map(|(v, _)| v).filter(|v| *v >= f64::MIN_POSITIVE)
+    let (v, m, tail, dz) = pow_kernel(x, y)?;
+    let c = (dz <= DZ_NEAR && (-1021..=1022).contains(&m)).then_some(C_POW);
+    finish(v, c, m, || pow_eps(v, tail, dz), st).filter(|v| *v >= f64::MIN_POSITIVE)
 }
 
 /// 2^-48: the bound on the relative error of the `double` series tail in [`log_pow`], doubled.
@@ -447,6 +605,23 @@ fn log_pow(x: f64) -> Option<(Dd, f64)> {
 /// error of `v`. The sign: `x^y = −|x|^y`, and rounding `−a` in `mode` is the negation of
 /// rounding `a` in the mirrored mode (up and down swapped), the flags and `errno` the same.
 pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)> {
+    let (v, m, tail, dz) = pow_kernel(x, y)?;
+    let eps = pow_eps(v, tail, dz);
+    if !neg {
+        return settle(v, eps, m, mode);
+    }
+    let mirrored = match mode {
+        Rounding::Up => Rounding::Down,
+        Rounding::Down => Rounding::Up,
+        other => other,
+    };
+    settle(v, eps, m, mirrored).map(|(w, st)| (-w, st))
+}
+
+/// [`pow`]'s value `v·2^m` of `|x|^y` before rounding, with [`exp_kernel`]'s tail and the bound
+/// `dz` on `|z − y·ln x|` (proof at [`pow`]).
+#[inline(always)]
+fn pow_kernel(x: f64, y: f64) -> Option<(Dd, i32, f64, f64)> {
     let (l, el) = log_pow(x)?;
     let est = l.hi * y;
     if !(-745.1..=709.7).contains(&est) || dd::abs(est) < f64::from_bits(0x07b0_0000_0000_0000) {
@@ -463,17 +638,14 @@ pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)> {
     // exact as in [`exp`] (`k != 0`: `h` a multiple of `2^-80`, the sum's last place at most
     // `2^-96`; `k = 0`: `h = z.hi`, `l = 0`, `|z.lo| <= |z.hi|`). `r` within `2^-96.9` of `z − k·ln2/64`.
     let r = reduce_pow(z, kf);
-    let (v, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
-    let eps = eps + 1.02 * dd::abs(v.hi) * dz;
-    if !neg {
-        return settle(v, eps, m, mode);
-    }
-    let mirrored = match mode {
-        Rounding::Up => Rounding::Down,
-        Rounding::Down => Rounding::Up,
-        other => other,
-    };
-    settle(v, eps, m, mirrored).map(|(w, st)| (-w, st))
+    let (v, m, tail) = exp_kernel(r, dd::to_i32(kf))?;
+    Some((v, m, tail, dz))
+}
+
+/// [`pow`]'s bound `eps + 1.02·|v.hi|·dz` on the error of `v` (proof at [`pow`]).
+#[inline(always)]
+fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64 {
+    exp_eps(v, tail) + 1.02 * dd::abs(v.hi) * dz
 }
 
 /// The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
@@ -603,8 +775,8 @@ mod bounds {
                 continue;
             }
             let exact = mp::ln(Mp::from_f64(x));
-            if let Some((y, eps)) = log_kernel(x) {
-                within(exact, y, eps, "log_kernel", x);
+            if let Some((y, tail)) = log_kernel(x) {
+                within(exact, y, log_eps(y, tail), "log_kernel", x);
             }
             if let Some((y, el)) = log_pow(x) {
                 within(exact, y, el, "log_pow", x);
@@ -619,9 +791,9 @@ mod bounds {
                 continue;
             }
             let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-            if let Some((y, m, eps)) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf)) {
+            if let Some((y, m, tail)) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf)) {
                 let exact = mp::exp(Mp::from_f64(x)).mul(Mp::from_f64(dd::pow2(-m)));
-                within(exact, y, eps, "exp_kernel", x);
+                within(exact, y, exp_eps(y, tail), "exp_kernel", x);
             }
         }
     }
@@ -657,6 +829,28 @@ mod bounds {
     }
 
     /// [`exp2`]'s `r·ln2` within `2^-104·|r|`, its low part within `2^-52` of its high part.
+    #[test]
+    fn near_constants_cover_their_bounds() {
+        // Each multiplier is the least double with c·(1 − 2^54·rho) > 1 + 2^-53 (exact in Mp), and
+        // the kernels' eps/|y.hi| stays below rho where `near` is used.
+        let one_u = Mp::from_f64(1.0).add(Mp::from_f64(f64::EPSILON / 2.0));
+        for (c, rho) in [(C_EXP, RHO_EXP), (C_POW, RHO_POW), (C_LOG, RHO_LOG)] {
+            let k = Mp::from_f64(1.0).sub(Mp::from_f64(rho * dd::pow2(54)));
+            assert!(Mp::from_f64(c).mul(k).cmp_abs(one_u).is_gt(), "{c:e} below its bound");
+            assert!(Mp::from_f64(f64::from_bits(c.to_bits() - 1)).mul(k).cmp_abs(one_u).is_le(), "{c:e} not the least");
+        }
+        for x in operands(20000, -700.0, 700.0) {
+            let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+            if let Some((y, _, tail)) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf)) {
+                assert!(exp_eps(y, tail) <= RHO_EXP * dd::abs(y.hi), "exp({x:e})");
+            }
+            if let Some((y, tail)) = log_kernel(dd::abs(x).exp2()) {
+                assert!(log_c(y).is_none() || log_eps(y, tail) <= RHO_LOG * dd::abs(y.hi), "log(2^{x:e})");
+            }
+        }
+        assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= RHO_POW);
+    }
+
     #[test]
     fn exp2_product_stays_within_its_bound() {
         for x in operands(20_000, -1075.0, 1024.0).chain(operands(4000, -0.02, 0.02)) {
