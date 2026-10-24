@@ -97,8 +97,10 @@ fn fraction_words(x: &Big, words: usize) -> Vec<u64> {
 }
 
 /// Words of `2/π` stored: enough for Payne–Hanek reduction of every finite binary128 value
-/// (exponents up to 16383, plus the fraction bits the reduction keeps).
-pub const TWO_OVER_PI_WORDS: usize = 264;
+/// (exponents up to 16383, plus the fraction bits the reduction keeps): the 384-bit reduction
+/// (`mp::reduce_wide`, 9 words from bit 16270) reads up to word 263, the 768-bit one
+/// (`mpw::reduce_wide`, 15 words) up to word 269.
+pub const TWO_OVER_PI_WORDS: usize = 272;
 
 /// The generated source.
 pub fn generate() -> String {
@@ -161,9 +163,10 @@ pub fn generate() -> String {
     o.dd_const("PI", "`π` (mp::pi).", &pi);
     o.dd_const("PI_2", "`π/2`.", &pi.mul_pow2(-1));
     o.dd_const("PI_4", "`π/4`.", &pi.mul_pow2(-2));
-    let two_over_pi = Big::from_i64(2).div(&pi, 64 * TWO_OVER_PI_WORDS as u32 + 128, Round::Zero);
+    let pi_bits = 64 * TWO_OVER_PI_WORDS as u32 + 512;
+    let two_over_pi = Big::from_i64(2).div(&mp::pi(pi_bits), 64 * TWO_OVER_PI_WORDS as u32 + 128, Round::Zero);
     let words = fraction_words(&two_over_pi, TWO_OVER_PI_WORDS);
-    let _ = writeln!(o.src, "\n/// The bits of `2/π` after the binary point (2/π < 1), most significant first: {TWO_OVER_PI_WORDS} words, truncated (mp::pi at 17 400 bits).\npub(crate) static TWO_OVER_PI: [u64; {TWO_OVER_PI_WORDS}] = [");
+    let _ = writeln!(o.src, "\n/// The bits of `2/π` after the binary point (2/π < 1), most significant first: {TWO_OVER_PI_WORDS} words, truncated (mp::pi at {pi_bits} bits).\npub(crate) static TWO_OVER_PI: [u64; {TWO_OVER_PI_WORDS}] = [");
     for chunk in words.chunks(4) {
         let s: Vec<String> = chunk.iter().map(|w| format!("{w:#018x}")).collect();
         let _ = writeln!(o.src, "    {},", s.join(", "));
