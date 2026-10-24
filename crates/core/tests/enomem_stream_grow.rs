@@ -328,7 +328,6 @@ fn run(name: &'static str, body: fn() -> i32) {
         let _ = std::io::stderr().write_all(format!("{RAN}{name}\n").as_bytes());
         CSys.exit_group(body());
     }
-    // reexec-guard: allow(the RAN marker is asserted below)
     let o = std::process::Command::new(std::env::current_exe().unwrap())
         .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_ENOMEM_STREAM", name)
@@ -336,6 +335,7 @@ fn run(name: &'static str, body: fn() -> i32) {
         .unwrap();
     assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let err = String::from_utf8_lossy(&o.stderr);
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(err.contains(&format!("{RAN}{name}\n")), "the child did not run the case (libtest ran no test in it): {:?}\n{}\n{err}", o.status, String::from_utf8_lossy(&o.stdout));
     assert_eq!(o.status.code(), Some(0), "the child failed (its exit code names the check): {:?}\n{err}", o.status);
 }
