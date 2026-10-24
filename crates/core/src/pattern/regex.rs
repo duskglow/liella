@@ -332,17 +332,22 @@ pub struct Accel {
     /// The lazy DFA takes the existence and span scans (D-14.12 reserves the knob; no engine
     /// reads it yet). Groundwork for RX-T2-1: on by default, so turning it off is a no-op today.
     pub dfa: bool,
+    /// A work cap on every search, back-references or not (0: none; thread insertions, as
+    /// [`Options::budget`]): past it the search answers `REG_ESPACE`. A test knob for the fuzz
+    /// targets (FUZZ-REGEX-TIMEOUTS-2), which bound one call's time with it; the search checks
+    /// the budget it already carries, so the default costs nothing per insertion.
+    pub cap: u64,
 }
 
 impl Default for Accel {
     fn default() -> Self {
-        Self { prefilter: true, dfa: true }
+        Self { prefilter: true, dfa: true, cap: 0 }
     }
 }
 
 impl Accel {
     /// Every acceleration off: the engine alone.
-    pub const OFF: Self = Self { prefilter: false, dfa: false };
+    pub const OFF: Self = Self { prefilter: false, dfa: false, cap: 0 };
 }
 
 /// Where a match may start.
@@ -460,7 +465,7 @@ pub fn search_with(prog: &ProgRef<'_>, loc: &Locale, subject: &[u8], window: Win
     let ctx = exec::Ctx { not_bol: opts.not_bol, not_eol: opts.not_eol, newline_anchor: opts.newline_anchor };
     let m = exec::Matcher { prog, mode, loc, subject, ctx, policy: &policy::Posix };
     let caps = subexpressions && prog.ngroups > 0;
-    let base = exec::Run { caps: false, first_start: window.first, last_start: window.last, late: window.backward, end: None, budget: None };
+    let base = exec::Run { caps: false, first_start: window.first, last_start: window.last, late: window.backward, end: None, budget: (opts.accel.cap != 0).then_some(opts.accel.cap) };
     let mut groups = Groups::new();
     // The subexpressions, from the groups that hold them (hidden groups are not reported).
     let mut out = |c: &[i32]| -> Result<(), ReError> {
@@ -485,7 +490,7 @@ pub fn search_with(prog: &ProgRef<'_>, loc: &Locale, subject: &[u8], window: Win
                 return Ok(Some(Match { start, end, groups }));
             }
             // The span is known: the matcher runs on it alone (`Run::caps` set = no overall pass).
-            let known = exec::Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: None };
+            let known = exec::Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: base.budget };
             let Some((start, end)) = m.search(&known, true, opts.budget, src, &mut out)? else { return Ok(None) };
             return Ok(Some(Match { start, end, groups }));
         }

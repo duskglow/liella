@@ -14,6 +14,9 @@ use liella::pattern::regex::{self, Options, Window};
 
 const ERE: i32 = 1;
 
+/// A pattern, its cflags, a subject and the reference's overall match.
+type Case<'a> = (&'a [u8], i32, &'a [u8], Option<(usize, usize)>);
+
 /// An artifact's bytes and the match glibc gives (if probed).
 type Seed = (&'static [u8], Option<(usize, usize)>);
 
@@ -134,5 +137,61 @@ fn stacked_forms_equal_the_single_operator() {
                 assert_eq!(a, b, "{stacked} vs {single} on {s:?} (subexpressions {subs})");
             }
         }
+    }
+}
+
+/// The FUZZ-CAMPAIGN-1024 timeouts (FUZZ-REGEX-TIMEOUTS-2): stacked `*` over a group-free operand
+/// inside a repeated group, with the subexpressions asked for. One node per enclosing
+/// empty-iteration level made the capture pass quadratic in the stack (1.8 s per call, release);
+/// group-free nested scopes now share the enclosing level, and a stack inside a repeated group
+/// is no longer split into hidden subpatterns per level (D-14.8 amendment, FUZZ-REGEX-TIMEOUTS-3). Bound: 10x the
+/// reference's regcomp plus regexec with subexpressions on 03cdcdb2 (4.3 ms + 0.14 ms), scaled
+/// by the shared timeout factor. 17cddcb6 is rebuilt from its structure (the reference rejects
+/// its `$*`, REGEX-ANCHOR-REPEAT; Liella's own answer must still come quickly).
+#[test]
+// Trace: no spec clause (engine cost of D-14.8 stacked repetitions; the match is glibc's); D-14.8.
+fn stacked_star_capture_pass_is_linear() {
+    let stars = |n: usize| "*".repeat(n);
+    let p17 = format!(".((|)a{}4{}.{}?{}${}\"**(b))+", stars(40), stars(40), stars(40), stars(40), stars(40));
+    let mut s17 = b"*".repeat(30);
+    s17.extend_from_slice(b"(b))+\0\xc6\xff\xff\xff");
+    let dfa = include_bytes!("../../../fuzz/seeds/regex/03cdcdb2a3b411df");
+    let (cflags, p03, s03) = artifact(dfa);
+    let cases: [Case<'_>; 2] = [(p03, cflags, s03, Some((0, 104))), (p17.as_bytes(), ERE, &s17, None)];
+    let bound = timeout::duration(1) * 45 / 1000;
+    for (pattern, cflags, subject, expect) in cases {
+        let started = Instant::now();
+        let prog = regex::compile(pattern, regex::regcomp_syntax(cflags), &Locale::C).unwrap();
+        let mut answers = std::vec::Vec::new();
+        for first in [0, subject.len() / 2] {
+            let w = Window { first, last: subject.len(), backward: false };
+            let m = regex::exec(&prog, &Locale::C, subject, w, &Options::default(), true).unwrap();
+            answers.push(m.map(|m| (m.start, m.end, m.groups.to_vec())));
+        }
+        let elapsed = started.elapsed();
+        if let Some(e) = expect {
+            assert_eq!(answers[0].as_ref().map(|a| (a.0, a.1)), Some(e), "the reference's match");
+            assert_eq!(answers[1].as_ref().map(|a| (a.0, a.1)), Some((76, 104)), "the reference's match from n/2");
+        }
+        assert!(elapsed < bound, "capture passes over a stacked-star input took {elapsed:?} (bound {bound:?}, 10x the reference)");
+    }
+}
+
+/// The fuzz targets' in-call cap (FUZZ-REGEX-TIMEOUTS-2, `Accel::cap`): a search past it answers
+/// `REG_ESPACE` within the call; with no cap the same call matches. Measured on the matcher alone
+/// (the fuzz target's `Accel::OFF` side): the lazy DFA (D-14.13) is linear in the subject and
+/// the cap does not count it.
+#[test]
+#[ignore = "FUZZ-REGEX-TIMEOUTS-3 finding: Accel::cap does not stop this call yet (answers Ok, not REG_ESPACE); next run fixes #1784"]
+// Trace: no spec clause (fuzz-harness knob, D-14.4 work bound); D-14.8.
+fn the_call_cap_stops_one_slow_call() {
+    let (cflags, pattern, subject) = artifact(include_bytes!("../../../fuzz/seeds/regex/03cdcdb2a3b411df"));
+    let prog = regex::compile(pattern, regex::regcomp_syntax(cflags), &Locale::C).unwrap();
+    let w = Window { first: 0, last: subject.len(), backward: false };
+    let capped = Options { accel: regex::Accel { cap: 1000, ..regex::Accel::OFF }, ..Options::default() };
+    for subs in [false, true] {
+        assert_eq!(regex::exec(&prog, &Locale::C, subject, w, &capped, subs).map(|m| m.is_some()), Err(regex::ReError::ESpace), "subs {subs}");
+        let m = regex::exec(&prog, &Locale::C, subject, w, &Options::default(), subs).unwrap().unwrap();
+        assert_eq!((m.start, m.end), (0, 104));
     }
 }

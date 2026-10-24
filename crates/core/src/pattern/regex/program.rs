@@ -48,6 +48,27 @@ pub(crate) const OP_ENTER: u32 = 9;
 pub(crate) const OP_EXIT: u32 = 10;
 pub(crate) const OP_MATCH: u32 = 11;
 
+/// `ENTER`'s `c` for a shared scope, and the bit of `EXIT`'s `a` for one (D-14.8 amendment
+/// FUZZ-REGEX-TIMEOUTS-2): a group-free `X*`/`X+` that is the whole body of another group-free
+/// scope (through `?` only) counts its empty iterations on the enclosing scope's level instead of
+/// a level of its own, so stacked repetitions keep one node per instruction per enclosing level
+/// and the program grows linearly, not quadratically, in the stack's height.
+pub(crate) const SHARED: u32 = 1;
+/// The bit of `EXIT`'s `a` that marks a shared scope (the scope number is below it).
+pub(crate) const SHARED_EXIT: u32 = 1 << 31;
+
+/// `j` after `ENTER` `i` at `j`: one level more, or (shared) at least one.
+#[inline]
+pub(crate) fn enter_j(i: Inst, j: u32) -> u32 {
+    if i.c == SHARED { j.max(1) } else { j + 1 }
+}
+
+/// `j` after an empty iteration of `EXIT` `i` at `j >= 1`: one level less, or (shared) the same.
+#[inline]
+pub(crate) fn exit_j(i: Inst, j: u32) -> u32 {
+    if i.a & SHARED_EXIT != 0 { j } else { j - 1 }
+}
+
 /// One instruction: an operation and three operands (see the `OP_*` uses in `compile`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Inst {
@@ -163,6 +184,10 @@ struct Builder {
     scopes: TryVec<(u32, u32)>,
     /// The nodes of the instructions emitted so far (see [`MAX_NODES`]).
     nodes: usize,
+    /// The chain whose scope's body the next [`Builder::node`] compiles directly (through `?`
+    /// only), when that scope is group-free; else [`NONE`]. A group-free `X*` compiled there
+    /// shares the scope's level ([`SHARED`]).
+    share: u32,
 }
 
 impl Builder {
@@ -194,8 +219,17 @@ impl Builder {
         Ok(id)
     }
 
+    /// A chain for a shared scope: the enclosing chain's level, not one more.
+    fn chain_shared(&mut self, parent: u32, scope: u32) -> Result<u32, ReError> {
+        let depth = self.chains.get(usize::try_from(parent).unwrap_or(usize::MAX)).map_or(1, |c| c.depth);
+        let id = u32::try_from(self.chains.len()).map_err(|_| ReError::ESpace)?;
+        nomem(self.chains.push(Chain { parent, scope, depth }))?;
+        Ok(id)
+    }
+
     /// Compile `n` followed by `next`, inside scope chain `chain`; the entry instruction.
     fn node(&mut self, n: &Node, next: u32, chain: u32) -> Result<u32, ReError> {
+        let share = core::mem::replace(&mut self.share, NONE);
         Ok(match n {
             Node::Empty => next,
             Node::Byte(b) => self.emit(OP_BYTE, u32::from(*b), next, 0, chain)?,
@@ -226,15 +260,16 @@ impl Builder {
                 let body = self.node(x, close, chain)?;
                 self.emit(OP_OPEN, *g, body, 0, chain)?
             }
-            Node::Rep(x, m, n) => self.rep(x, *m, *n, next, chain)?,
+            Node::Rep(x, m, n) => self.rep(x, *m, *n, next, chain, share)?,
         })
     }
 
-    fn rep(&mut self, x: &Node, m: u32, n: Option<u32>, next: u32, chain: u32) -> Result<u32, ReError> {
+    fn rep(&mut self, x: &Node, m: u32, n: Option<u32>, next: u32, chain: u32, share: u32) -> Result<u32, ReError> {
         if n == Some(0) {
             return Ok(next);
         }
         if m == 1 && n == Some(1) {
+            self.share = share;
             return self.node(x, next, chain);
         }
         let groups = group_range(x);
@@ -242,6 +277,7 @@ impl Builder {
         if m == 0 && n == Some(1) {
             // `X?`: one optional pass; with no later iteration there is nothing to gate or to
             // reset (an enclosing repetition resets the groups at its own iterations).
+            self.share = share;
             let body = self.node(x, next, chain)?;
             return self.emit(OP_SPLIT, body, next, 0, chain);
         }
@@ -281,6 +317,17 @@ impl Builder {
         }
         let scope = u32::try_from(self.scopes.len()).map_err(|_| ReError::ESpace)?;
         nomem(self.scopes.push(if groups.0 == NONE { (1, 0) } else { groups }))?;
+        // Shared (D-14.8 amendment FUZZ-REGEX-TIMEOUTS-2): an unbounded group-free scope that is
+        // the whole body of a group-free scope (`share == chain`). Its first iteration starts
+        // with the enclosing iteration still empty (`j >= 1`, kept); a later one follows an
+        // iteration that consumed (`j = 0`, raised to 1). An empty iteration leaves `j` as it is,
+        // so the enclosing scope then stops: the states that path would reach are reached from
+        // this scope's loop split, which follows every consuming iteration. No epsilon cycle: a
+        // shared `ENTER` leaves `j >= 1`, so its `EXIT` loops only after a consuming instruction.
+        let shared = groups.0 == NONE && n.is_none() && share != NONE && share == chain;
+        let (exit_a, enter_c) = if shared { (scope | SHARED_EXIT, SHARED) } else { (scope, 0) };
+        // The body of a group-free scope may share its level in turn.
+        let inner_share = |inner: u32| if groups.0 == NONE { inner } else { NONE };
         // The optional part: after the mandatory copies, iterations that may stop.
         // `X{m,}` with `m >= 1`: the loop's iteration is also the last mandatory copy (D-14.8).
         // That copy would be `ENTER X EXIT(empty: next, consumed: loop)`, the very instructions of
@@ -290,10 +337,11 @@ impl Builder {
         let opt = match n {
             None => {
                 let l = self.emit(OP_SPLIT, NONE, next, 0, chain)?;
-                let inner = self.chain(chain, scope)?;
-                let ex = self.emit(OP_EXIT, scope, next, l, inner)?;
+                let inner = if shared { self.chain_shared(chain, scope)? } else { self.chain(chain, scope)? };
+                let ex = self.emit(OP_EXIT, exit_a, next, l, inner)?;
+                self.share = inner_share(inner);
                 let body = self.node(x, ex, inner)?;
-                let en = self.emit(OP_ENTER, scope, body, 0, chain)?;
+                let en = self.emit(OP_ENTER, scope, body, enter_c, chain)?;
                 self.patch(l, Inst { op: OP_SPLIT, a: en, b: next, c: 0 });
                 if m >= 1 {
                     last = m - 1;
@@ -307,6 +355,7 @@ impl Builder {
                 for _ in m..n {
                     let inner = self.chain(chain, scope)?;
                     let ex = self.emit(OP_EXIT, scope, next, cont, inner)?;
+                    self.share = inner_share(inner);
                     let body = self.node(x, ex, inner)?;
                     let en = self.emit(OP_ENTER, scope, body, 0, chain)?;
                     cont = self.emit(OP_SPLIT, en, next, 0, chain)?;
@@ -318,10 +367,11 @@ impl Builder {
         // repetition; before it, the next copy follows whatever the iteration matched.
         let mut entry = opt;
         for t in (1..=last).rev() {
-            let inner = self.chain(chain, scope)?;
-            let ex = if t == m { self.emit(OP_EXIT, scope, next, opt, inner)? } else { self.emit(OP_EXIT, scope, entry, entry, inner)? };
+            let inner = if shared { self.chain_shared(chain, scope)? } else { self.chain(chain, scope)? };
+            let ex = if t == m { self.emit(OP_EXIT, exit_a, next, opt, inner)? } else { self.emit(OP_EXIT, exit_a, entry, entry, inner)? };
+            self.share = inner_share(inner);
             let body = self.node(x, ex, inner)?;
-            entry = self.emit(OP_ENTER, scope, body, 0, chain)?;
+            entry = self.emit(OP_ENTER, scope, body, enter_c, chain)?;
         }
         Ok(entry)
     }
@@ -343,7 +393,7 @@ pub(crate) fn assert_code(a: Assert) -> u32 {
 impl Built {
     /// Build the automaton of a parsed pattern.
     fn build(parsed: Parsed, loc: &Locale, icase: bool) -> Result<Built, ReError> {
-        let mut b = Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0 };
+        let mut b = Builder { insts: TryVec::new(), inst_chain: TryVec::new(), chains: TryVec::new(), scopes: TryVec::new(), nodes: 0, share: NONE };
         let m = b.emit(OP_MATCH, 0, 0, 0, NONE)?;
         let start = b.node(&parsed.root, m, NONE)?;
         let mut p = Built {
@@ -533,8 +583,8 @@ impl Built {
             OP_SPLIT => [(i.a, j), (i.b, j)],
             OP_JMP => [(i.a, j), none],
             OP_OPEN | OP_CLOSE | OP_ASSERT | OP_BACKREF => [(i.b, j), none],
-            OP_ENTER => [(i.b, j + 1), none],
-            OP_EXIT if j >= 1 => [(i.b, j - 1), none],
+            OP_ENTER => [(i.b, enter_j(i, j)), none],
+            OP_EXIT if j >= 1 => [(i.b, exit_j(i, j)), none],
             OP_EXIT => [(i.c, 0), none],
             _ => [none, none],
         }

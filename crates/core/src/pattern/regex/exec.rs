@@ -974,7 +974,7 @@ impl<P: Policy> Matcher<'_, P> {
             OP_BYTE | OP_SET => [prog.node(i.b, 0), NONE],
             OP_BACKREF => [prog.node(i.b, j), prog.node(i.b, 0)],
             OP_OPEN | OP_CLOSE | OP_ASSERT => [prog.node(i.b, j), NONE],
-            OP_ENTER => [prog.node(i.b, j + 1), NONE],
+            OP_ENTER => [prog.node(i.b, super::program::enter_j(i, j)), NONE],
             OP_MATCH => [NONE, NONE],
             _ => {
                 let mut out = [NONE, NONE];
@@ -1092,7 +1092,7 @@ impl<P: Policy> Matcher<'_, P> {
                             Self::set_cap(caps, at + 1, -1);
                         }
                     }
-                    prog.node(inst.b, j + 1)
+                    prog.node(inst.b, super::program::enter_j(inst, j))
                 }
                 OP_ASSERT if !self.assert_ok(inst.a, pos) => return Ok(()),
                 OP_ASSERT => prog.node(inst.b, j),
@@ -1210,7 +1210,7 @@ impl<P: Policy> Matcher<'_, P> {
                         Self::set_cap(caps, at + 1, -1);
                     }
                 }
-                self.insert(st, p, prog.node(inst.b, j + 1), start, caps)?;
+                self.insert(st, p, prog.node(inst.b, super::program::enter_j(inst, j)), start, caps)?;
             }
             OP_ASSERT => {
                 if self.assert_ok(inst.a, p) {
@@ -1418,7 +1418,7 @@ pub(super) fn eps_of(inst: super::program::Inst, j: u32) -> impl Iterator<Item =
     let pair = match inst.op {
         super::program::OP_SPLIT => [(inst.a, j), (inst.b, j)],
         super::program::OP_JMP => [(inst.a, j), none],
-        super::program::OP_EXIT if j >= 1 => [(inst.b, j - 1), none],
+        super::program::OP_EXIT if j >= 1 => [(inst.b, super::program::exit_j(inst, j)), none],
         super::program::OP_EXIT => [(inst.c, 0), none],
         _ => [none, none],
     };
@@ -1558,7 +1558,7 @@ impl<P: Policy> Matcher<'_, P> {
             }
             OP_OPEN | OP_CLOSE | OP_ASSERT if inst.op != OP_ASSERT || self.assert_ok(inst.a, p) => self.fast_insert(st, p, prog.node(inst.b, j), start),
             OP_ASSERT => {}
-            OP_ENTER => self.fast_insert(st, p, prog.node(inst.b, j + 1), start),
+            OP_ENTER => self.fast_insert(st, p, prog.node(inst.b, super::program::enter_j(inst, j)), start),
             OP_MATCH => {
                 if st.run.end.is_none_or(|e| e == p) {
                     let better = match st.best {
@@ -1803,7 +1803,7 @@ impl<P: Policy> Matcher<'_, P> {
             }
             #[cfg(feature = "selftest")]
             super::paths::hit(super::paths::Path::ThreadSet);
-            Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: None }
+            Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: base.budget }
         };
         let mut pools = mem.pools();
         let Some(f) = self.run(&run, room, &mut pools)? else { return Ok(None) };
@@ -1936,7 +1936,7 @@ impl<P: Policy> Matcher<'_, P> {
                         *slot = tag | inst.a;
                         lp += 1;
                         if inst.op == OP_ENTER {
-                            j += 1;
+                            j = super::program::enter_j(inst, j);
                         }
                         inst.b
                     }
