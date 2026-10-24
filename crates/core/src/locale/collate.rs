@@ -1114,8 +1114,26 @@ pub fn key_each<T: Text>(c: &Collate, s: T, put: impl FnMut(usize, u32)) -> Opti
     Some(sink.1 - usize::from(last == Some(1)))
 }
 
+/// The bytes the reference's `strxfrm` writes for one wide weight unit (COLLATE-STRXFRM-DA-WEIGHT):
+/// the UTF-8 form of a unit from 0x80 on (so 0x97 is `c2 97`, as in da_DK.UTF-8's long-string
+/// keys), the byte itself below that; a unit that is not a scalar value stays one byte, 255.
+#[inline(always)]
+fn unit_bytes(u: u32, buf: &mut [u8; 4]) -> &[u8] {
+    if u < 0x80 {
+        buf[0] = u.to_le_bytes()[0];
+        return &buf[..1];
+    }
+    match char::from_u32(u) {
+        Some(ch) => ch.encode_utf8(buf).as_bytes(),
+        None => {
+            buf[0] = u8::MAX;
+            &buf[..1]
+        }
+    }
+}
+
 /// The `strxfrm` key of `s` under `c` in one pass, as [`key_each`] with the units as bytes
-/// (a unit above 255 becomes 255, as [`super::XfrmKey`] does): its leading bytes into `out` as
+/// (a unit from 0x80 on in its UTF-8 form, as the reference writes it): its leading bytes into `out` as
 /// far as they fit (a dropped final separator may be written at the returned length); returns
 /// the key's length.
 pub fn key_bytes(c: &Collate, s: &[u8], out: &mut [u8]) -> Option<usize> {
@@ -1141,10 +1159,13 @@ pub fn key_bytes(c: &Collate, s: &[u8], out: &mut [u8]) -> Option<usize> {
         }
         #[inline(always)]
         fn unit(&mut self, u: u32) {
-            if let Some(o) = self.0.get_mut(self.1) {
-                *o = u8::try_from(u).unwrap_or(u8::MAX);
+            let mut utf8 = [0u8; 4];
+            for &b in unit_bytes(u, &mut utf8) {
+                if let Some(o) = self.0.get_mut(self.1) {
+                    *o = b;
+                }
+                self.1 += 1;
             }
-            self.1 += 1;
         }
     }
     /// No room at all (`strxfrm(NULL, s, 0)`, the measuring call): the key's length only, each
@@ -1153,11 +1174,17 @@ pub fn key_bytes(c: &Collate, s: &[u8], out: &mut [u8]) -> Option<usize> {
     impl KeySink for Count {
         #[inline(always)]
         fn weights(&mut self, w: &Weights) {
+            if w.wide {
+                for x in 0..w.count {
+                    self.unit(w.get(x));
+                }
+                return;
+            }
             self.0 += w.count;
         }
         #[inline(always)]
-        fn unit(&mut self, _: u32) {
-            self.0 += 1;
+        fn unit(&mut self, u: u32) {
+            self.0 += unit_bytes(u, &mut [0u8; 4]).len();
         }
     }
     if out.is_empty() {
