@@ -25,6 +25,8 @@ _Static_assert(sizeof(long double) == sizeof(struct liella_ld_bits), "long doubl
 _Static_assert(sizeof(__float128) == sizeof(struct liella_f128_bits), "_Float128 is 16 bytes");
 struct liella_ld_bits liella_strtold_bits(const char *s, char **e);
 struct liella_ld_bits liella_wcstold_bits(const wchar_t *s, wchar_t **e);
+struct liella_ld_bits liella_strtold_internal_bits(const char *s, char **e, int group);
+struct liella_ld_bits liella_wcstold_internal_bits(const wchar_t *s, wchar_t **e, int group);
 struct liella_f128_bits liella_strtof128_bits(const char *s, char **e);
 struct liella_f128_bits liella_wcstof128_bits(const wchar_t *s, wchar_t **e);
 int liella_strfroml_bits(char *buf, size_t n, const char *fmt, struct liella_ld_bits x);
@@ -46,13 +48,13 @@ char *liella_qgcvt_bits(struct liella_ld_bits x, int ndigit, char *buf);
 long double LIELLA_FWD(strtold)(const char *s, char **e) { return LD(liella_strtold_bits(s, e)); }
 long double LIELLA_FWD(strtold_l)(const char *s, char **e, UNUSED void *loc) { return LD(liella_strtold_bits(s, e)); }
 long double LIELLA_FWD(__strtold_l)(const char *s, char **e, UNUSED void *loc) { return LD(liella_strtold_bits(s, e)); }
-long double LIELLA_FWD(__strtold_internal)(const char *s, char **e, UNUSED int group) { return LD(liella_strtold_bits(s, e)); }
+long double LIELLA_FWD(__strtold_internal)(const char *s, char **e, int group) { return LD(liella_strtold_internal_bits(s, e, group)); }
 long double LIELLA_FWD(strtof64x)(const char *s, char **e) { return LD(liella_strtold_bits(s, e)); }
 long double LIELLA_FWD(strtof64x_l)(const char *s, char **e, UNUSED void *loc) { return LD(liella_strtold_bits(s, e)); }
 long double LIELLA_FWD(wcstold)(const wchar_t *s, wchar_t **e) { return LD(liella_wcstold_bits(s, e)); }
 long double LIELLA_FWD(wcstold_l)(const wchar_t *s, wchar_t **e, UNUSED void *loc) { return LD(liella_wcstold_bits(s, e)); }
 long double LIELLA_FWD(__wcstold_l)(const wchar_t *s, wchar_t **e, UNUSED void *loc) { return LD(liella_wcstold_bits(s, e)); }
-long double LIELLA_FWD(__wcstold_internal)(const wchar_t *s, wchar_t **e, UNUSED int group) { return LD(liella_wcstold_bits(s, e)); }
+long double LIELLA_FWD(__wcstold_internal)(const wchar_t *s, wchar_t **e, int group) { return LD(liella_wcstold_internal_bits(s, e, group)); }
 long double LIELLA_FWD(wcstof64x)(const wchar_t *s, wchar_t **e) { return LD(liella_wcstold_bits(s, e)); }
 long double LIELLA_FWD(wcstof64x_l)(const wchar_t *s, wchar_t **e, UNUSED void *loc) { return LD(liella_wcstold_bits(s, e)); }
 
