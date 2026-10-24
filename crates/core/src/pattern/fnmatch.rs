@@ -1130,6 +1130,7 @@ mod tests {
         assert_eq!(c(b"ab?c", b"ab?c"), Some(true));
         assert_eq!(c(b"ab?c", b"abxc"), Some(true));
         assert_eq!(c(b"ab[xy]", b"ab["), Some(false));
+        assert_eq!(c(b"a[x]", b"a[x]"), Some(false));
         assert_eq!(c(b"ab[xy]", b"aby"), Some(true));
         assert_eq!(c(b"ab\\*", b"ab*"), Some(true));
         assert_eq!(c(b"ab\\*", b"abxy"), Some(false));
