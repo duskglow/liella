@@ -202,6 +202,19 @@ impl Host {
         self.names.push(0)
     }
 
+    /// This host with every name passed through `f`, repeats kept (`host.conf`'s `trim`).
+    pub fn map_names<'a>(&'a self, f: impl Fn(&'a [u8]) -> &'a [u8]) -> Result<Host> {
+        let mut h = Host { names: TryVec::new(), addrs: TryVec::new() };
+        for n in core::iter::once(self.name()).chain(self.aliases()) {
+            h.names.extend_from_slice(f(n))?;
+            h.names.push(0)?;
+        }
+        for &a in self.addrs.iter() {
+            h.addrs.push(a)?;
+        }
+        Ok(h)
+    }
+
     /// Add an address unless the host has it already.
     pub fn add_addr(&mut self, a: Ip) -> Result<()> {
         if self.addrs.contains(&a) { Ok(()) } else { self.addrs.push(a) }
