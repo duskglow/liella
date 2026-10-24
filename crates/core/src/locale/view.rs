@@ -439,8 +439,15 @@ impl LocaleView {
     /// Whether wide character `c` has a class of `mask` (`iswalpha`, ...): [`ctype::is_w`].
     #[inline]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
-        // One compare in front of the table walk (WCTYPE-LOCALE-3: a tuple match here kept the
-        // walk from being inlined and made the non-Latin path longer).
+        // The file-backed arm is out of line (PERF-WCTYPE-UTF8-REST-3, as `wtrans`).
+        if self.wide.is_some() {
+            return self.isw_wide(c, mask);
+        }
+        ctype::wclasses(c, &self.locale).intersects(mask)
+    }
+
+    #[inline(never)]
+    fn isw_wide(&self, c: u32, mask: Class) -> bool {
         match &self.wide {
             Some((w, _)) => match u8::try_from(c) {
                 Ok(b) => match self.latin() {
@@ -456,6 +463,16 @@ impl LocaleView {
     /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`].
     #[inline]
     pub fn wtrans(&self, c: u32, upper: bool) -> u32 {
+        // The file-backed arm is out of line so this body saves no registers for the built-in
+        // locales (PERF-WCTYPE-UTF8-REST-3).
+        if self.wide.is_some() {
+            return self.wtrans_wide(c, upper);
+        }
+        ctype::wtrans(c, if upper { Trans::Upper } else { Trans::Lower }, &self.locale)
+    }
+
+    #[inline(never)]
+    fn wtrans_wide(&self, c: u32, upper: bool) -> u32 {
         match &self.wide {
             Some((w, ascii)) => match u8::try_from(c) {
                 Ok(b) => match self.latin() {
@@ -471,6 +488,15 @@ impl LocaleView {
     /// `wcwidth` of `c`: [`crate::text::display_width`].
     #[inline]
     pub fn width(&self, c: u32) -> i32 {
+        // The file-backed arm is out of line (PERF-WCTYPE-UTF8-REST-3, as `wtrans`).
+        if self.wide.is_some() {
+            return self.width_wide(c);
+        }
+        crate::text::display_width(c, &self.locale)
+    }
+
+    #[inline(never)]
+    fn width_wide(&self, c: u32) -> i32 {
         match &self.wide {
             Some((w, _)) => match u8::try_from(c) {
                 Ok(b) => match self.latin() {
