@@ -17,6 +17,13 @@ Nothing here describes or derives from glibc's source code.
 ## The environment
 
 * `math_errhandling` is 3 (`MATH_ERRNO | MATH_ERREXCEPT`).
+* The caller's SSE control word is honoured, flush-to-zero and denormals-are-zero included (owner
+  ruling 2026-10-23, D-10.22; Intel SDM definitions): under DAZ a subnormal `float`/`double` operand
+  of an elementary, `lgamma`, `sincos`, complex or `sqrt` function is read as a zero of its sign and
+  raises nothing; under FTZ a result that would be subnormal (or the smallest normal reached by
+  rounding a tiny value) is a zero of its sign with underflow and inexact raised. Normal operands
+  with normal results are bit-identical to the default word's, whatever the caller's word. `long
+  double` (x87) and `_Float128` are not affected.
 * `fesetround` returns 0 for the four modes and 1 for anything else, which changes nothing.
 * `feraiseexcept(FE_OVERFLOW)` raises only overflow (no inexact); each flag alone raises only
   itself. Invalid and division by zero are set in MXCSR; overflow, underflow and inexact in the

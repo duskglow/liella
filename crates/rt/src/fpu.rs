@@ -162,9 +162,36 @@ pub const fn is_default_control(mxcsr: u32) -> bool {
     mxcsr & !MX_FLAGS == MX_DEFAULT
 }
 
-/// Whether an MXCSR value holds the default control word in some rounding direction (M6-2):
-/// [`is_default_control`] with the rounding field ignored. An instruction that is correctly
-/// rounded in every direction by definition (`sqrtss`, `sqrtsd`) runs in place under it.
+/// MXCSR flush-to-zero (results).
+const MX_FTZ: u32 = 1 << 15;
+
+/// MXCSR denormals-are-zero (operands).
+const MX_DAZ: u32 = 1 << 6;
+
+/// Whether an MXCSR value has flush-to-zero set: SSE results that would be subnormal are zeros
+/// of their sign, with underflow and inexact raised (Intel SDM, FTZ; owner ruling 2026-10-23).
+pub const fn is_ftz(mxcsr: u32) -> bool {
+    mxcsr & MX_FTZ != 0
+}
+
+/// Whether an MXCSR value has denormals-are-zero set: SSE operands that are subnormal are read
+/// as zeros of their sign, raising nothing (Intel SDM, DAZ; owner ruling 2026-10-23).
+pub const fn is_daz(mxcsr: u32) -> bool {
+    mxcsr & MX_DAZ != 0
+}
+
+/// Whether `sqrtss`/`sqrtsd` run in place under an MXCSR value (M6-2, D-10.22): every exception
+/// masked, in any rounding direction, with or without FTZ and DAZ. The instruction is correctly
+/// rounded in every direction by definition; FTZ cannot act on it (the square root of a non-zero
+/// finite operand is always normal), and under DAZ it reads a subnormal operand as a zero of its
+/// sign, which is the caller's own choice and honoured (owner ruling 2026-10-23).
+pub const fn is_sqrt_in_place(mxcsr: u32) -> bool {
+    is_default_control(mxcsr & !(MX_RC | MX_FTZ | MX_DAZ))
+}
+
+/// Whether an MXCSR value holds the default control word in some rounding direction: every
+/// exception masked, no FTZ, no DAZ. `hypotf`'s fast entry runs only there (#1541); under FTZ or
+/// DAZ it takes the accurate path, which honours them (owner ruling 2026-10-23).
 pub const fn is_default_but_rounding(mxcsr: u32) -> bool {
     is_default_control(mxcsr & !MX_RC)
 }
@@ -374,11 +401,19 @@ pub fn leave(m: &impl Machine, saved: u32) {
 /// [`leave`] and [`raise`] when it does not.
 pub fn enter(m: &impl Machine) -> (u32, bool) {
     let saved = m.mxcsr();
+    (saved, enter_from(m, saved))
+}
+
+/// [`enter`] on an MXCSR value the caller already read (a fast entry whose attempt refused:
+/// `hypotf`, #1541), so the slow path does not read MXCSR a second time. Returns whether the
+/// computation runs in place.
+#[inline]
+pub fn enter_from(m: &impl Machine, saved: u32) -> bool {
     let in_place = is_default_control(saved);
     if !in_place {
         m.set_mxcsr(MX_DEFAULT);
     }
-    (saved, in_place)
+    in_place
 }
 
 /// Read MXCSR once and say whether its control word is the default one, writing nothing: the
