@@ -77,21 +77,84 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     Some((y, k >> 6, eps))
 }
 
+/// `ln2/64` as the first three parts of `LN2_64_CW`, the last two negated: `C0` has 36 significant
+/// bits (lowest `2^-42`), `NC1` 35 (lowest `2^-80`), `NC2` 34, so `k·C0`, `k·NC1`, `k·NC2` are exact
+/// for `|k| < 2^17`; `|ln2/64 − C0 − C1 − C2| < 1.1·10^-37 < 2^-122.7`.
+const C0: f64 = f64::from_bits(t::LN2_64_CW[0]);
+const NC1: f64 = f64::from_bits(t::LN2_64_CW[1] ^ 0x8000_0000_0000_0000);
+const NC2: f64 = f64::from_bits(t::LN2_64_CW[2] ^ 0x8000_0000_0000_0000);
+
+/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 13.5 #2):
+/// `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, for
+/// `k = kf = nearest(xh·64/ln2)` and `|xh| <= 746` (`|k| <= 68,880 < 2^17`). The caller adds its
+/// low part to `l` and joins the two by Fast2Sum.
+///
+/// Proof. If `k = 0` every step is exact (`h = xh`, `l = 0`). Otherwise `|xh| >= 0.0054 > 2^-8`, so
+/// `xh` is a multiple of `2^-60`, and so is `xh − k·C0` (`k·C0` is a multiple of `2^-42`); that
+/// difference is below `(1/2 + 2^-36)·ln2/64 + |k|·2^-45.1 < 0.005416 < 2^-7`, so it fits 53 bits:
+/// `r0` is exact. Fast2Sum is exact when its first operand is a multiple of the second's last place
+/// (Handbook of Floating-Point Arithmetic, 2018, sec. 4.3.1, the condition on the exponents):
+/// `|k·C1| < 2^-29`, whose last place is at most `2^-81`, divides `2^-60`; so `s.hi + s.lo =
+/// r0 − k·C1` exactly, and `s.hi` is a multiple of `2^-80` (the exact difference is). Then
+/// `|s.lo| <= 2^-61` and `|k·C2| < 2^-68`: `l = RN(s.lo − k·C2)` is off by at most `2^-114`. With
+/// the parts' truncation, `|k|·2^-122.7 < 2^-106.6`, `h + l` is within `2^-106.5` of `xh − k·ln2/64`.
+#[inline(always)]
+fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64) {
+    let s = fast_two_sum(xh - kf * C0, kf * NC1);
+    (s.hi, s.lo + kf * NC2)
+}
+
+/// [`exp`]'s reduced argument (proof there).
+#[inline(always)]
+fn reduce_exp(x: f64, kf: f64) -> Dd {
+    let (h, l) = reduce_ln2(x, kf);
+    fast_two_sum(h, l)
+}
+
+/// [`pow`]'s reduced argument (proof there).
+#[inline(always)]
+fn reduce_pow(z: Dd, kf: f64) -> Dd {
+    let (h, l) = reduce_ln2(z.hi, kf);
+    fast_two_sum(h, l + z.lo)
+}
+
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
+///
+/// `r = Fast2Sum(h, l)` of [`reduce_ln2`]: exact, since `h` is a multiple of `2^-80` and `|l| <
+/// 2^-60` has its last place below `2^-112`. So `r` is normalized (`|rl| <= 2^-53·|rh|`) and within
+/// `2^-106.5` of `x − k·ln2/64`, far inside [`exp_kernel`]'s `2^-90`; `x.lo = 0` adds nothing.
 pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-    let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LN2_64_CW);
-    let (y, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
+    let (y, m, eps) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf))?;
     settle(y, eps, m, mode)
 }
 
+/// `ln 2` (`LN2[0]`) split by Dekker for [`exp2`]'s product: `LN2A` its upper 26 bits, `LN2B` the
+/// rest (`LN2A + LN2B = LN2[0]` exactly, `LN2B` of 26 bits).
+const LN2A: f64 = f64::from_bits(0x3fe6_2e43_0000_0000);
+const LN2B: f64 = f64::from_bits(0xbe20_5c61_1000_0000);
+
 /// `2^x` for `x` in the accurate path's finite range, `x` not an integer.
+///
+/// `r = x − k/64` is exact (`|r| <= 2^-7`). `r·ln2` as `p + q`: `p = RN(r·LN2[0])` and Dekker's
+/// error term with `LN2[0]` split ahead of time (`LN2A`, `LN2B`), so `p + e = r·LN2[0]` exactly;
+/// `q = e + r·LN2[1]` (`|LN2[1]| < 2^-55.2`). Not renormalized: `|e| <= 2^-53·|p|` and
+/// `|r·LN2[1]| <= 2^-54.7·|p|`, so `|q| <= 2^-52.5·|p|`, which [`exp_kernel`] accepts. Error:
+/// `|r|·|ln2 − LN2[0] − LN2[1]| < 2^-106·|r|`, the rounding of `r·LN2[1]` `2^-108.2·|r|`, of the
+/// sum `2^-105.5·|p|`: below `2^-104·|r| < 2^-111`, inside the kernel's `2^-90`.
 pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * 64.0);
-    let r = x - kf / 64.0; // exact
-    // r·ln2: `Dd::mul_f64` of the stored double-double, relative error < 2^-103.
-    let (y, m, eps) = exp_kernel(Dd::of(t::LN2).mul_f64(r), dd::to_i32(kf))?;
+    let (y, m, eps) = exp_kernel(ln2_times(x - kf / 64.0), dd::to_i32(kf))?; // exact difference
     settle(y, eps, m, mode)
+}
+
+/// `r·ln2` for [`exp2`] (proof there).
+#[inline(always)]
+fn ln2_times(r: f64) -> Dd {
+    let p = r * f64::from_bits(t::LN2[0]);
+    let (ra, rb) = dd::split(r);
+    let e = ((ra * LN2A - p) + ra * LN2B + rb * LN2A) + rb * LN2B;
+    Dd { hi: p, lo: e + r * f64::from_bits(t::LN2[1]) }
 }
 
 /// `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
@@ -377,8 +440,8 @@ fn log_pow(x: f64) -> Option<(Dd, f64)> {
 /// `est = RN(l.hi·y)`; in range, `|y| <= 709.7/|l.hi| < 2^63` (`|ln x| >= 2^-53` for `x != 1`),
 /// so the Dekker splitting in `z = l·y` (`Dd::mul_f64`) cannot overflow and, `|z| >= 2^-901`,
 /// its partial products do not underflow: `|l·y − z| <= 2^-100·|z|`. So `z` is within
-/// `dz = |y|·el + 2^-100·|z.hi|·1.01` of `y·ln x`. `exp`'s reduction ([`exp`], `|z| < 746`, the
-/// trailing part `z.lo` added in double-double) and [`exp_kernel`] give `v·2^m` with
+/// `dz = |y|·el + 2^-100·|z.hi|·1.01` of `y·ln x`. `exp`'s reduction ([`reduce_ln2`], `|z| < 746`, the
+/// trailing part `z.lo` added to its low part, within `2^-96.9`) and [`exp_kernel`] give `v·2^m` with
 /// `|e^z − v·2^m| <= eps·2^m`; `|e^(y·ln x) − e^z| <= e^z·|dz|·1.01` for `|dz| <= 2^-30`
 /// (checked), and `e^z·2^-m <= |v.hi|·(1 + 2^-50)`. So `eps + 1.02·|v.hi|·dz` bounds the
 /// error of `v`. The sign: `x^y = −|x|^y`, and rounding `−a` in `mode` is the negation of
@@ -395,7 +458,11 @@ pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)> {
         return None; // 2^-30
     }
     let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
-    let r = crate::exp_log::reduce(z, kf, &t::LN2_64_CW);
+    // [`reduce_ln2`] on `z.hi`, then `z.lo` (`|z.lo| <= 2^-44`, `z` normalized and `|z.hi| < 2^10`)
+    // joins the low part: that sum is below `2^-43` and rounds by at most `2^-97`; the Fast2Sum is
+    // exact as in [`exp`] (`k != 0`: `h` a multiple of `2^-80`, the sum's last place at most
+    // `2^-96`; `k = 0`: `h = z.hi`, `l = 0`, `|z.lo| <= |z.hi|`). `r` within `2^-96.9` of `z − k·ln2/64`.
+    let r = reduce_pow(z, kf);
     let (v, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
     let eps = eps + 1.02 * dd::abs(v.hi) * dz;
     if !neg {
@@ -552,11 +619,57 @@ mod bounds {
                 continue;
             }
             let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-            let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LN2_64_CW);
-            if let Some((y, m, eps)) = exp_kernel(r, dd::to_i32(kf)) {
+            if let Some((y, m, eps)) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf)) {
                 let exact = mp::exp(Mp::from_f64(x)).mul(Mp::from_f64(dd::pow2(-m)));
                 within(exact, y, eps, "exp_kernel", x);
             }
         }
+    }
+
+    /// `z − k·ln2/64` exactly, for the reduction tests.
+    fn reduced(zh: f64, zl: f64, kf: f64) -> Mp {
+        Mp::from_f64(zh).add(Mp::from_f64(zl)).sub(mp::ln2().mul_f64(kf).ldexp(-6))
+    }
+
+    /// [`reduce_ln2`] as [`exp`] and [`pow`] use it: within `2^-106` (exp) and `2^-96.9` (pow) of
+    /// exact and normalized, over the whole range and next to the multiples of ln2/64 (where `r`
+    /// is tiny and the Fast2Sums rest on the exponent condition, not on ordered magnitudes).
+    #[test]
+    fn exp_reduction_stays_within_its_bound() {
+        let near = (-68_880i32..=68_880).step_by(11).flat_map(|k| {
+            let c = (f64::from(k) * f64::from_bits(t::LN2[0])) / 64.0;
+            [c, f64::from_bits(c.to_bits() + 1), f64::from_bits(c.to_bits().wrapping_sub(1))]
+        });
+        let b_exp = f64::from_bits(0x3950_0000_0000_0000); // 2^-106
+        let b_pow = f64::from_bits(0x39f0_0000_0000_0000); // 2^-96
+        for x in operands(20_000, -746.0, 710.0).chain(operands(4000, -0.02, 0.02)).chain(near) {
+            let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+            let r = reduce_exp(x, kf);
+            within(reduced(x, 0.0, kf), r, b_exp, "exp reduction", x);
+            assert!(dd::abs(r.lo) <= dd::abs(r.hi) * f64::EPSILON * 0.5, "exp reduction({x:e}) not normalized");
+            // pow: a double-double argument with a full-size low part.
+            let z = fast_two_sum(x, x * f64::from_bits(0x3ca0_0000_0000_0000) * 0.49);
+            let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
+            let r = reduce_pow(z, kf);
+            within(reduced(z.hi, z.lo, kf), r, b_pow, "pow reduction", x);
+            assert!(dd::abs(r.lo) <= dd::abs(r.hi) * f64::EPSILON * 0.5, "pow reduction({x:e}) not normalized");
+        }
+    }
+
+    /// [`exp2`]'s `r·ln2` within `2^-104·|r|`, its low part within `2^-52` of its high part.
+    #[test]
+    fn exp2_product_stays_within_its_bound() {
+        for x in operands(20_000, -1075.0, 1024.0).chain(operands(4000, -0.02, 0.02)) {
+            let kf = dd::nearest_int(x * 64.0);
+            let r = x - kf / 64.0;
+            if r == 0.0 {
+                continue;
+            }
+            let y = ln2_times(r);
+            within(mp::ln2().mul_f64(r), y, dd::abs(r) * f64::from_bits(0x3970_0000_0000_0000), "exp2 r·ln2", x);
+            assert!(dd::abs(y.lo) <= dd::abs(y.hi) * f64::from_bits(0x3cb0_0000_0000_0000), "exp2 r·ln2({x:e}) low part too large");
+        }
+        assert_eq!(LN2A + LN2B, f64::from_bits(t::LN2[0]));
+        assert_eq!(dd::split(f64::from_bits(t::LN2[0])), (LN2A, LN2B));
     }
 }
