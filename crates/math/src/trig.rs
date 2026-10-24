@@ -122,7 +122,7 @@ fn reduce_pi64(x: f64) -> (i32, Dd) {
 }
 
 /// `(sin x, cos x)` for a finite `x`.
-fn sin_cos(x: f64) -> (Dd, Dd) {
+pub(crate) fn sin_cos(x: f64) -> (Dd, Dd) {
     let (n, r) = reduce_pi64(x);
     let u = r.sqr().neg();
     let sr = r.mul(horner(u, &t::INV_ODD_FACT[..8], 4));

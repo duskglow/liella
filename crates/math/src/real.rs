@@ -138,7 +138,7 @@ macro_rules! real {
 }
 
 impl Real for f32 {
-    real!(fast32, pow, trig, hyper);
+    real!(fast32, pow, fast32, hyper);
 }
 
 impl Real for f64 {

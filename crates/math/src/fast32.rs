@@ -1,5 +1,6 @@
-//! `float` fast paths for `exp`, `exp2`, `exp10`, `log`, `log2` and `log10` (Track M milestone 6,
-//! M6-3 `MATH-M6-F32-CORE`). Each evaluates `f(x)` in `double` with a table and a polynomial to a
+//! `float` fast paths for `exp`, `exp2`, `exp10`, `log`, `log2`, `log10` (Track M milestone 6,
+//! M6-3 `MATH-M6-F32-CORE`), `log1p` (`MATH-M6-F32-REST`) and `sin`, `cos`, `tan`, `sincos`
+//! (`MATH-M6-F32-TRIG`, the accurate path being [`crate::trig`]; it reuses that module's `sin(kπ/64)` table). Each evaluates `f(x)` in `double` with a table and a polynomial to a
 //! proved relative error bound ε, then applies the rounding test ([`round`]). When the test fails
 //! the caller runs the accurate double-double path ([`crate::exp_log`]) unchanged, so every result
 //! and every flag is bit-identical to it in every rounding direction (D-10.13).
@@ -15,6 +16,7 @@
 //! against the accurate path.
 #![allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing)] // bit fields and exponents of bounded width; table indices masked to 0..128; `cvtsd2ss` is the `as f32`
 
+use crate::coeffs::tables as t;
 use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
@@ -33,6 +35,14 @@ pub enum Fast {
     Log2,
     /// `log10f`.
     Log10,
+    /// `log1pf` (MATH-M6-F32-REST).
+    Log1p,
+    /// `sinf` (MATH-M6-F32-TRIG).
+    Sin,
+    /// `cosf` (MATH-M6-F32-TRIG).
+    Cos,
+    /// `tanf` (MATH-M6-F32-TRIG).
+    Tan,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -46,6 +56,12 @@ const EXP_DELTA: u64 = 512;
 /// log: ε ≤ 2^-44.79 (case A dominates), so < 296 ulp; log2, log10 add the rounding of the
 /// constant and of the product: ε ≤ 2^-44.77, < 300 ulp.
 const LOG_DELTA: u64 = 640;
+/// log1p: ε ≤ 6.8·2^-53 (proof at [`log1p_core`]), so < 6.9 ulp.
+const LOG1P_DELTA: u64 = 8;
+/// sin, cos: ε ≤ 9.05·2^-53 (proof at [`trig_core`]), so < 9.1 ulp.
+const TRIG_DELTA: u64 = 10;
+/// tan = s/c: both quotients' bounds and the division, ε ≤ 19.2·2^-53, so < 19.3 ulp.
+const TAN_DELTA: u64 = 20;
 
 /// x = 1.5·2^52: adding it rounds to an integer, held in the low bits.
 const SHIFT: f64 = 6_755_399_441_055_744.0;
@@ -58,6 +74,11 @@ const D3: f64 = 1.0 / 3.0;
 const D4: f64 = -1.0 / 4.0;
 const D5: f64 = 1.0 / 5.0;
 const D6: f64 = -1.0 / 6.0;
+// log1p's longer series and split ln 2 (log_core's shorter kernel, MATH-M6-F32-KERNEL, does not use them).
+const D7: f64 = 1.0 / 7.0;
+const D8: f64 = -1.0 / 8.0;
+const LN2_HI: f64 = f64::from_bits(0x3fe62e42fefa3a00); // ln 2, 44 significant bits
+const LN2_LO: f64 = f64::from_bits(0xbce0ca86c3898d00); // RN(ln 2 - LN2_HI)
 const INV_L: f64 = f64::from_bits(0x40671547652b82fe); // RN(128 / ln 2)
 const INV_M: f64 = f64::from_bits(0x407a934f0979a371); // RN(128 log2(10))
 const LN2: f64 = f64::from_bits(0x3fe62e42fefa39ef); // RN(ln 2)
@@ -234,7 +255,20 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Log => (log_core(x)?, LOG_DELTA, "logf"),
         Fast::Log2 => (log_core(x)? * INV_LN2, LOG_DELTA, "log2f"),
         Fast::Log10 => (log_core(x)? * INV_LN10, LOG_DELTA, "log10f"),
+        Fast::Log1p => (log1p_core(x)?, LOG1P_DELTA, "log1pf"),
+        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA, "sinf"),
+        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA, "cosf"),
+        Fast::Tan => {
+            let (s, c) = trig_core(x)?;
+            (s / c, TAN_DELTA, "tanf")
+        }
     };
+    finish(x, y, delta, mode, name)
+}
+
+/// The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+#[inline(always)]
+fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let r = round(y, delta, mode);
     stats::record(name, r.is_some());
     let v = r?;
@@ -315,6 +349,112 @@ fn log_core_from(x: f32, lo: u32) -> Option<f64> {
     Some(((ef * LN2 + LOG_C[i]) + r) + s)
 }
 
+/// ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1
+/// with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the rounding test's margin, and
+/// the test would refuse almost every operand; the accurate path's `near` case takes them).
+///
+/// z = RN(1 + x) is exact unless x ≥ 2^51: for x in (-1, -1/2] by Sterbenz; otherwise x's last
+/// bit is ≥ 2^-49 and its top below 2^52, so 1 + x spans at most 53 bits. z = 2^e·m, i, c and
+/// LOG_INV/LOG_C as in [`log_core`]; ln(1 + r) = r + r²(-1/2 + r/3 - ... - r^6/8) (Horner, D3..D8)
+/// and e·ln 2 = e·LN2_HI (exact, |e| ≤ 128, 44 bits) + e·LN2_LO, whose error terms (the series
+/// remainder, LOG_C's and the sums' roundings, 3.2·2^-53 in all) are the base below, except r:
+/// * e = 0 (z in [0.75, 1.5), so z is exact and x = z - 1): r = z·L - 1 = x·L + (L - 1) with
+///   L = LOG_INV[i]; x·L is exact (24 by 24 bits), L - 1 is exact (L in [2/3, 4/3], 24 bits), so r
+///   is RN of the exact value: 2^-53|r|. Case A (c = 1, L = 1): r = x exactly, as in log_core.
+///   Case B (c ≠ 1, |y| ≥ ln(1 + 2^-8) and |r| < 0.0040): r's rounding adds ≤ 1.03·2^-53|y|,
+///   4.3·2^-53 in total.
+/// * e ≠ 0 (|y| ≥ ln(4/3) > 0.287): m has up to 53 bits, so m·L is rounded once (≤ 2^-53
+///   absolute, |m·L - 1| < 2^-7) and the subtraction of 1 is exact (Sterbenz): ln(1 + r) moves by
+///   ≤ 1.01·2^-53, ≤ 3.6·2^-53|y|; z's own rounding for x ≥ 2^51 is ≤ 2^-53 absolute against
+///   |y| > 35 (≤ 2^-58|y|). With the base 3.2·2^-53: ≤ 6.8·2^-53.
+fn log1p_core(x: f32) -> Option<f64> {
+    let xd = f64::from(x);
+    // NaN, x ≤ -1, ∞ and |x| < 2^-26 (the zeros and subnormals included) go to the accurate path.
+    if !(xd > -1.0 && xd <= f64::from(f32::MAX)) || xd.to_bits() & !(1 << 63) < 0x3e50_0000_0000_0000 {
+        return None;
+    }
+    let z = 1.0 + xd;
+    let zb = z.to_bits();
+    let e = (zb.wrapping_sub(0x3fe8_0000_0000_0000) as i64 >> 52) as i32;
+    let m = f64::from_bits(zb.wrapping_sub((e as i64 as u64) << 52));
+    let i = ((m.to_bits() >> 45) & 127) as usize;
+    let l = LOG_INV[i];
+    let r = if e == 0 { xd * l + (l - 1.0) } else { m * l - 1.0 };
+    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * (D6 + r * (D7 + r * D8))))));
+    let ef = f64::from(e);
+    Some((ef * LN2_HI + LOG_C[i]) + (r + (s + ef * LN2_LO)))
+}
+
+/// The trig fast range: 2^-26 ≤ |x| < 2^19 (n below 2^23.4, so the n·PI64_k products are exact).
+const TRIG_MIN: f64 = 1.490_116_119_384_765_6e-8;
+const TRIG_MAX: f64 = 524_288.0;
+/// Below this |r| (for n ≠ 0) the reduction's absolute error would matter: the accurate path.
+const TRIG_R_MIN: f64 = 1.455_191_522_836_685_2e-11; // 2^-36
+const INV_PI64: f64 = f64::from_bits(t::SCALES[2]); // RN(64/π)
+const PI64_1: f64 = f64::from_bits(0x3fa9_21fb_5400_0000); // π/64 to 27 significant bits
+const PI64_2: f64 = f64::from_bits(0x3dc1_0b46_1100_0000); // the next 29 bits
+const PI64_3: f64 = f64::from_bits(0x3bf4_c4c6_628b_80dc); // RN(π/64 - PI64_1 - PI64_2)
+const S3: f64 = -1.0 / 6.0;
+const S5: f64 = 1.0 / 120.0;
+const S7: f64 = -1.0 / 5040.0;
+const K4: f64 = 1.0 / 24.0;
+const K6: f64 = -1.0 / 720.0;
+const K8: f64 = 1.0 / 40320.0;
+
+/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 9.05·2^-53, for 2^-26 ≤ |x| < 2^19.
+///
+/// Reduction (Cody–Waite): x = n·π/64 + r, n = nearest(RN(x·64/π)), so |r| < 0.024544.
+/// n·PI64_1 and n·PI64_2 are exact (27 and 29 bits, |n| < 2^24); x - n·PI64_1 is exact (both on
+/// the 2^-31 grid, the difference below 2^-5); then two roundings ≤ 2^-53 of their results, the
+/// product n·PI64_3 ≤ 2^-94 and the constants' tail ≤ 2^-95.8: |Δr| ≤ 2·2^-53|r| + 2^-93. n = 0
+/// gives r = x exactly. |r| < 2^-36 with n ≠ 0 goes to the accurate path.
+///
+/// sin r = r + r·z(S3 + z(S5 + z·S7)), z = r², Taylor remainder ≤ 2^-61.2|r|; with Δr and the final
+/// sum, |Δsr| ≤ 3.01·2^-53|r|. cos r - 1 = cm = z(-1/2 + z(K4 + z(K6 + z·K8))): remainder < 2^-75,
+/// |cm| ≤ 3.02·10^-4, |Δcm| ≤ 8·2^-53|cm|. S = sin(nπ/64), C = cos(nπ/64) are the `double` heads
+/// of the table (relative error 2^-53; sin 0, sin π, cos ±π/2 are exactly 0 and ±1).
+/// sin x = S + (S·cm + C·sr); cos x is the same with (C, -S) for (S, C) (the angle shifted by π/2).
+/// * n ≢ 0 (mod 64): the angle is at least π/128 from a multiple of π, so |S| ≤ 2|y| and
+///   |C·r| ≤ 1.0001|y|. The errors, in units of 2^-53|y|: S 2, C 1.0001, sr 3.0103, cm 0.005,
+///   the two products 1.002, the inner sum 1.02, the outer 1: ≤ 9.05.
+/// * n ≡ 0 (mod 64): S = 0, C = ±1, y = ±sr: Δr ≤ (2 + 2^-5)·2^-53|r| (|r| ≥ 2^-36), so ≤ 3.04.
+///
+/// No operand or intermediate is subnormal (|r| ≥ 2^-36 or r = x ≥ 2^-26, so z^4 ≥ 2^-304), and
+/// |y| ≥ 2^-37.
+#[inline(always)]
+fn trig_core(x: f32) -> Option<(f64, f64)> {
+    let xd = f64::from(x);
+    let ax = xd.abs();
+    // NaN, ±∞, |x| ≥ 2^19 and |x| < 2^-26 (the zeros and subnormals included): the accurate path.
+    if !(TRIG_MIN..TRIG_MAX).contains(&ax) {
+        return None;
+    }
+    let k = xd * INV_PI64 + SHIFT;
+    let n = (k.to_bits() & 127) as usize; // n mod 128 (the low bits of 2^51 + n)
+    let kf = k - SHIFT;
+    let r = ((xd - kf * PI64_1) - kf * PI64_2) - kf * PI64_3;
+    if r.abs() < TRIG_R_MIN {
+        return None;
+    }
+    let z = r * r;
+    let sr = r + r * z * (S3 + z * (S5 + z * S7));
+    let cm = z * (-0.5 + z * (K4 + z * (K6 + z * K8)));
+    let s = f64::from_bits(t::SIN_K_PI64[n][0]);
+    let c = f64::from_bits(t::SIN_K_PI64[(n + 32) & 127][0]);
+    Some((s + (s * cm + c * sr), c + (c * cm - s * sr)))
+}
+
+/// `sincosf`: one reduction for both results; each one that fails its rounding test is computed
+/// by the accurate path, so the pair and the flags are those of `sinf` and `cosf`.
+pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status) {
+    let Some((ys, yc)) = trig_core(x) else {
+        return crate::trig::sincos(x, mode);
+    };
+    let s = finish(x, ys, TRIG_DELTA, mode, "sinf").unwrap_or_else(|| crate::trig::sin(x, mode));
+    let c = finish(x, yc, TRIG_DELTA, mode, "cosf").unwrap_or_else(|| crate::trig::cos(x, mode));
+    ((s.0, c.0), s.1.and(c.1))
+}
+
 /// The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
 ///
 /// The `float` results of f and y in a direction can differ only if a rounding boundary (a
@@ -362,6 +502,9 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
+        // the caller takes [`eval`].
+        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan => return None,
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -384,11 +527,14 @@ nearest_fn!(log10_nearest, Fast::Log10);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
+        fast_fn!($name, $f, exp_log);
+    };
+    ($name:ident, $f:expr, $acc:ident) => {
         #[doc = concat!("`", stringify!($name), "` for `float`: the fast path, else the accurate path.")]
         pub fn $name(x: f32, mode: Rounding) -> (f32, Status) {
             match eval($f, x, mode) {
                 Some(r) => r,
-                None => crate::exp_log::$name(x, mode),
+                None => crate::$acc::$name(x, mode),
             }
         }
     };
@@ -399,14 +545,20 @@ fast_fn!(exp10, Fast::Exp10);
 fast_fn!(log, Fast::Log);
 fast_fn!(log2, Fast::Log2);
 fast_fn!(log10, Fast::Log10);
-pub use crate::exp_log::{expm1, log1p};
+fast_fn!(log1p, Fast::Log1p);
+fast_fn!(sin, Fast::Sin, trig);
+fast_fn!(cos, Fast::Cos, trig);
+fast_fn!(tan, Fast::Tan, trig);
+pub use crate::exp_log::expm1;
+pub use crate::trig::{acos, asin, atan, atan2};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::exp_log as acc;
 
-    const ALL: [Fast; 6] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10];
+    const ALL: [Fast; 10] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan];
+    const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
     fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
@@ -417,13 +569,32 @@ mod tests {
             Fast::Log => acc::log(x, m),
             Fast::Log2 => acc::log2(x, m),
             Fast::Log10 => acc::log10(x, m),
+            Fast::Log1p => acc::log1p(x, m),
+            Fast::Sin => crate::trig::sin(x, m),
+            Fast::Cos => crate::trig::cos(x, m),
+            Fast::Tan => crate::trig::tan(x, m),
         }
     }
 
     /// Compare the fast path with the accurate path on `xs` in every mode; the number taken.
     fn agree(xs: impl Iterator<Item = f32> + Clone) -> u64 {
+        agree_in(&ALL, xs)
+    }
+
+    /// [`agree`] for the functions `fs`; with trig among them also `sincosf` against `sinf`, `cosf`.
+    fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
         let mut taken = 0;
-        for f in ALL {
+        if fs.contains(&Fast::Sin) {
+            for m in MODES {
+                for x in xs.clone() {
+                    let ((s, c), st) = sincos(x, m);
+                    let (ws, wt) = sin(x, m);
+                    let (wc, wu) = cos(x, m);
+                    assert_eq!((m, x.to_bits(), s.to_bits(), c.to_bits(), st), (m, x.to_bits(), ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincosf");
+                }
+            }
+        }
+        for &f in fs {
             for m in MODES {
                 for x in xs.clone() {
                     if let Some(r) = eval(f, x, m) {
@@ -461,6 +632,19 @@ mod tests {
         }
         assert_eq!((INV_LN2, INV_LN10), (acc::log2(core::f64::consts::E, Rounding::Nearest).0, acc::log10(core::f64::consts::E, Rounding::Nearest).0));
         assert_eq!((INV_L / 128.0, INV_M / 128.0), (INV_LN2, acc::log2(10.0f64, Rounding::Nearest).0));
+        // Trig: the π/64 parts (27 and 29 bits, their sum π/64 within 2^-119), the exact zeros and
+        // ones of the sin(kπ/64) table and every entry against sin² + cos² = 1.
+        assert_eq!((PI64_1.to_bits() & 0x3ff_ffff, PI64_2.to_bits() & 0xff_ffff), (0, 0));
+        let pi64 = crate::dd::Dd::of(t::PI64);
+        let parts = crate::dd::Dd::from(PI64_1).add_f64(PI64_2).add_f64(PI64_3);
+        assert!(parts.sub(pi64).to_f64().abs() < 1e-34, "PI64 parts");
+        assert_eq!(INV_PI64, crate::dd::Dd::from(1.0).div(pi64).hi, "INV_PI64");
+        let tab = |k: usize| crate::dd::Dd::of(t::SIN_K_PI64[k]);
+        assert_eq!([0, 32, 64, 96].map(|k| f64::from_bits(t::SIN_K_PI64[k][0])), [0.0, 1.0, 0.0, -1.0]);
+        for k in 0..128 {
+            let (s, c) = (tab(k), tab((k + 32) & 127));
+            assert!(s.sqr().add(c.sqr()).add_f64(-1.0).to_f64().abs() < 1e-30, "SIN_K_PI64[{k}]");
+        }
     }
 
     /// The rounding test's mask form refuses exactly the margins of the old two-sided test, and
@@ -489,10 +673,19 @@ mod tests {
         // them by design.) Measured here, not in a test of its own: the counters are global.
         let exps = (0..1u32 << 17).map(|i| -30.0 + 60.0 * (i as f32) / 131_072.0);
         let logs = (0x0080_0000u32..0x7f80_0000).step_by(4001).map(f32::from_bits);
-        let names = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f"];
+        // log1pf: a grid over [-0.9, 10] (the bench row's range).
+        let log1ps = (0..1u32 << 17).map(|i| -0.9 + 10.9 * (i as f32) / 131_072.0);
+        // sinf, cosf, tanf: a grid over [-100, 100].
+        let trigs = (0..1u32 << 17).map(|i| -100.0 + 200.0 * (i as f32) / 131_072.0);
+        let names = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf"];
         for (i, (f, n)) in ALL.into_iter().zip(names).enumerate() {
             let before = stats::counts(n);
-            let xs: std::vec::Vec<f32> = if i < 3 { exps.clone().collect() } else { logs.clone().collect() };
+            let xs: std::vec::Vec<f32> = match i {
+                0..3 => exps.clone().collect(),
+                3..6 => logs.clone().collect(),
+                6 => log1ps.clone().collect(),
+                _ => trigs.clone().collect(),
+            };
             for x in xs {
                 let _ = eval(f, x, Rounding::Nearest);
             }
@@ -507,24 +700,87 @@ mod tests {
         assert_eq!(fast_tiny.count(), 0, "subnormal results are the accurate path's");
         let near1 = (0x3f7f_0000u32..0x3f81_0000).step_by(3).map(f32::from_bits);
         assert!(agree(near1) > 100_000);
+        // log1pf: around its 2^-26 cut, where e changes (z = 0.75, 1.5, 2) and near -1.
+        let near0 = [0x3280_0000u32, 0xb280_0000, 0x3e80_0000, 0xbe80_0000, 0x3f00_0000, 0x3f80_0000, 0xbf7f_0000]
+            .into_iter().flat_map(|b| (b - 0x8000..b + 0x8000).step_by(5)).map(f32::from_bits);
+        assert!(agree(near0) > 50_000);
+        // Trig: around the 2^-26 and 2^19 cuts and near multiples of π/2 and π/64.
+        let cuts = [0x3280_0000u32, 0xb280_0000, 0x4900_0000, 0xc900_0000, 0x3fc9_0fdb, 0x40c9_0fdb, 0x3d49_0fdb, 0x4b49_0fdb]
+            .into_iter().flat_map(|b| (b - 0x8000..b + 0x8000).step_by(5)).map(f32::from_bits);
+        assert!(agree_in(&TRIG, cuts) > 50_000);
         let exact = (-149..128).flat_map(|k| [k as f32, 2f32.powi(k)]).chain((0..11).map(|k| 10f32.powi(k)));
         agree(exact);
+    }
+
+    /// log1p_core's y is within its proved bound (< 6.9 ulp of y) of ln(1 + x), measured against
+    /// the double-double `log1p_dd` (error far below 2^-100). The agreement test cannot see a
+    /// loss of a few ulp of the `double`: it misrounds only next to a `float` boundary.
+    #[test]
+    fn log1p_core_is_within_its_bound() {
+        let grid = (0..1u32 << 16).map(|i| -0.99 + 20.0 * (i as f32) / 65_536.0);
+        let wide = (0x3280_0000u32..0x7f80_0000).step_by(1009).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let mut seen = 0u32;
+        for x in grid.chain(wide) {
+            if let Some(y) = log1p_core(x) {
+                seen += 1;
+                let f = crate::exp_log::log1p_dd(crate::dd::Dd::from(f64::from(x)));
+                let err = (crate::dd::Dd::from(y).sub(f)).to_f64();
+                let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+                assert!(err.to_bits() & !(1 << 63) <= (6.9 * ulp).to_bits(),"log1p_core({x:e}): {} ulp", err / ulp);
+            }
+        }
+        assert!(seen > 1_000_000, "{seen}");
+    }
+
+    /// trig_core's sin, cos (< 9.1 ulp) and tan = s/c (< 19.3 ulp) against the double-double
+    /// `sin_cos` of the accurate path (its error far below 2^-100).
+    #[test]
+    fn trig_core_is_within_its_bound() {
+        let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
+        let wide = (0x3280_0000u32..0x4900_0000).step_by(1009).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+        let mut seen = 0u32;
+        for x in grid.chain(wide) {
+            if let Some((s, c)) = trig_core(x) {
+                seen += 1;
+                let (fs, fc) = crate::trig::sin_cos(f64::from(x));
+                for (y, f, b, n) in [(s, fs, 9.1, "sin"), (c, fc, 9.1, "cos"), (s / c, fs.div(fc), 19.3, "tan")] {
+                    let err = crate::dd::Dd::from(y).sub(f).to_f64();
+                    assert!(err.abs() <= b * ulp(y), "trig_core {n}({x:e}): {} ulp", err / ulp(y));
+                }
+            }
+        }
+        assert!(seen > 750_000, "{seen}");
+    }
+
+    /// `fs` on every `float` operand in every mode; the number taken.
+    fn exhaustive(fs: &'static [Fast]) -> u64 {
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
+        let per = (1u64 << 32) / n + 1;
+        std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
+                let lo = t * per;
+                let hi = ((t + 1) * per).min(1 << 32);
+                agree_in(fs, (lo..hi).map(|b| f32::from_bits(b as u32)))
+            })).collect();
+            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
+        })
+    }
+
+    /// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's
+    /// proof; its own job, 3·2^34 calls).
+    #[test]
+    #[ignore]
+    fn trig_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&TRIG);
+        std::println!("trig fast path taken {taken} of {} calls", 12u64 << 32);
     }
 
     /// Every `float` operand in every mode (M6-3's proof; run as its own job, about 2^35 calls).
     #[test]
     #[ignore]
     fn fast_path_agrees_exhaustively() {
-        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
-        let per = (1u64 << 32) / n + 1;
-        let taken: u64 = std::thread::scope(|sc| {
-            let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
-                let lo = t * per;
-                let hi = ((t + 1) * per).min(1 << 32);
-                agree((lo..hi).map(|b| f32::from_bits(b as u32)))
-            })).collect();
-            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
-        });
-        std::println!("fast path taken {taken} of {} calls", 24u64 << 32);
+        let taken = exhaustive(&ALL);
+        std::println!("fast path taken {taken} of {} calls", 40u64 << 32);
     }
 }
