@@ -6,10 +6,15 @@
 //! (`LdBits`, `F128Bits`). Those carry the private version node `LIELLA_PRIVATE` (not
 //! exported from the product, phase 4).
 //!
-//! Conversions use the current rounding mode (MXCSR). The radix is `.` and there is no
-//! grouping: every locale is the C locale until phase 7 (D-6.7). The `ecvt`/`fcvt`/`l64a`
+//! Conversions use the current rounding mode (MXCSR) and the current locale's radix. Only the
+//! compat `__strto*_internal` / `__wcsto*_internal` entry points group, when their `group`
+//! argument is set: integers and decimal floats read the longest prefix grouped as `LC_NUMERIC`
+//! says ([`grouped`], STRTO-INTERNAL-GROUP-2; hex floats are not grouped yet). The `ecvt`/`fcvt`/`l64a`
 //! buffers are process-wide until the phase-4 thread blocks.
 
+use liella::bytes::Unit;
+use liella::error::Errno;
+use liella::mem::TryVec;
 use liella::num::{self, Float, Format, StdBit};
 use liella::num::parse::Dialect;
 use liella_abi::ctypes::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_ulonglong, c_ushort, locale_t, size_t, wchar_t, F128Bits, LdBits};
@@ -27,6 +32,252 @@ use crate::sys::CSys;
 
 /// Bytes the `strtol` fast path looks at first: a sign, 18 digits and the terminator.
 const STRTOL_HEAD: usize = 20;
+
+// ------------------------------------------------------------------ the compat `group` flag
+
+/// What the grouping scan reads: an integer in `base`, or a decimal float.
+#[derive(Clone, Copy)]
+enum Grouped {
+    Int(c_int),
+    Float,
+}
+
+/// The end a `num_compat` parser reports, as an offset from address 0 (`None`: not set).
+struct Rec(Option<usize>);
+
+impl liella_legacy::string_compat::Cursor for Rec {
+    fn get(&self) -> usize {
+        self.0.unwrap_or(0)
+    }
+    fn set(&mut self, addr: usize) {
+        self.0 = Some(addr);
+    }
+}
+
+/// The `LC_NUMERIC` group sizes from the right (`GROUPING`): the sizes before the first 0 or
+/// `CHAR_MAX` byte, and whether such a `CHAR_MAX` byte ends grouping (otherwise the last size
+/// repeats). `n == 0`: no grouping.
+struct Sizes<'a> {
+    g: &'a [u8],
+    stopped: bool,
+}
+
+impl Sizes<'_> {
+    fn new(g: &[u8]) -> Sizes<'_> {
+        let n = g.iter().position(|&b| b == 0 || b >= 127).unwrap_or(g.len());
+        Sizes { g: g.get(..n).unwrap_or(&[]), stopped: g.get(n).is_some_and(|&b| b != 0) }
+    }
+    /// The size of the group `t` places left of the rightmost one; `None`: not grouped.
+    fn at(&self, t: usize) -> Option<usize> {
+        match self.g.get(t) {
+            Some(&b) => Some(usize::from(b)),
+            None if self.stopped => None,
+            None => self.g.last().map(|&b| usize::from(b)),
+        }
+    }
+}
+
+fn is_digit<T: Unit>(u: T) -> bool {
+    u.as_byte().is_some_and(|b| b.is_ascii_digit())
+}
+
+/// Digits of `s` that end at `end`, counted back up to `limit + 1`.
+fn digits_back<T: Unit>(s: &[T], end: usize, limit: usize) -> usize {
+    s.get(..end).unwrap_or(&[]).iter().rev().take(limit.saturating_add(1)).take_while(|&&u| is_digit(u)).count()
+}
+
+/// A separator `sep` at `i` that a digit follows.
+fn sep_at<T: Unit>(s: &[T], i: usize, sep: &[T]) -> bool {
+    s.get(i..).is_some_and(|r| r.starts_with(sep)) && s.get(i.saturating_add(sep.len())).is_some_and(|&u| is_digit(u))
+}
+
+/// The text the parse sees when `group` is set (§8.1-§8.3, D-8.1 compat; STRTO-INTERNAL-GROUP-2):
+/// the longest correctly grouped prefix of the leading digit run, with its separators removed.
+/// `Ok(None)`: parse `s` itself; `Ok(Some((text, head, digits, cut)))`: parse `text`, made of
+/// `s[..head]`, the `digits` digits of `s[head..cut]` and, for a float grouped to the end of its
+/// run, the rest of `s` from `cut`; `Err`: no memory for the copy.
+///
+/// Integers group in base 10 (base 0 unless the number starts with `0`), floats unless hex
+/// (hex floats are STRTO-INTERNAL-GROUP-3's). One pass forward and one back, each candidate end
+/// checked in time bounded by the locale's sizes, so the cost is linear in the run.
+// The allow: every index is a position in `s` (a slice, so below isize::MAX) and every count is
+// at most `s.len()`; `j - n` runs only when `j > n`, `j -= 1` only when `j >= 1`, and the two
+// steps back over a group and its separator saturate.
+#[allow(clippy::type_complexity, clippy::arithmetic_side_effects)]
+// `_radix`: kept for the hex-float half (STRTO-INTERNAL-GROUP-4); a separator equal to it groups.
+fn grouped<T: Unit>(s: &[T], sep: &[T], _radix: &[T], g: &[u8], kind: Grouped) -> Result<Option<(TryVec<T>, usize, usize, usize)>, ()> {
+    let sizes = Sizes::new(g);
+    let Some(first) = sizes.at(0) else { return Ok(None) };
+    // A separator equal to the radix still groups (the reference, #2058).
+    if sep.is_empty() || first == 0 {
+        return Ok(None);
+    }
+    let byte = |i: usize| s.get(i).and_then(|u| u.as_byte());
+    let mut head = s.iter().take_while(|u| matches!(u.as_byte(), Some(b' ' | b'\t'..=b'\r'))).count();
+    if matches!(byte(head), Some(b'+' | b'-')) {
+        head += 1;
+    }
+    let lead = byte(head);
+    let hex = lead == Some(b'0') && matches!(byte(head + 1), Some(b'x' | b'X'));
+    let on = match kind {
+        Grouped::Int(base) => base == 10 || (base == 0 && lead != Some(b'0')),
+        Grouped::Float => !hex,
+    };
+    if !on {
+        return Ok(None);
+    }
+    // Forward: the first group, the separator count and the first later group whose size is
+    // not the repeating size (`bad`).
+    let g0 = s.get(head..).unwrap_or(&[]).iter().take_while(|&&u| is_digit(u)).count();
+    if g0 == 0 {
+        return Ok(None);
+    }
+    let repeat = if sizes.stopped { None } else { sizes.g.last().map(|&b| usize::from(b)) };
+    let (mut i, mut k, mut bad) = (head + g0, 0usize, None);
+    while sep_at(s, i, sep) {
+        i += sep.len();
+        let len = s.get(i..).unwrap_or(&[]).iter().take_while(|&&u| is_digit(u)).count();
+        k += 1;
+        if bad.is_none() && Some(len) != repeat {
+            bad = Some(k);
+        }
+        i += len;
+    }
+    let run_end = i;
+    if k == 0 {
+        return Ok(None);
+    }
+    let bad = bad.unwrap_or(k + 1);
+    let n = sizes.g.len();
+    // Back: the candidate ends right of each separator, the rightmost valid one first.
+    let (mut cut, mut pos, mut j) = (head + g0, run_end, k);
+    while j >= 1 {
+        let len_j = digits_back(s, pos, usize::MAX);
+        let sep_pos = pos.saturating_sub(len_j).saturating_sub(sep.len());
+        let ok = len_j >= first && {
+            // The groups between: the near ones one by one, the far ones by `bad`.
+            let mut e = sep_pos;
+            let mut fine = true;
+            for t in 1..j.min(n) {
+                let want = sizes.at(t).unwrap_or(0);
+                if digits_back(s, e, want) != want {
+                    fine = false;
+                    break;
+                }
+                e = e.saturating_sub(want).saturating_sub(sep.len());
+            }
+            fine && (j <= n || (!sizes.stopped && j - n < bad)) && sizes.at(j).is_none_or(|c| g0 <= c)
+        };
+        if ok {
+            cut = sep_pos + sep.len() + first;
+            break;
+        }
+        pos = sep_pos;
+        j -= 1;
+    }
+    if j == 0 {
+        // No separator survives: parse the first group alone.
+        return Ok(Some((TryVec::from_slice(s.get(..cut).unwrap_or(&[])).map_err(|_| ())?, cut, 0, cut)));
+    }
+    let mut text = TryVec::with_capacity(run_end + 1).map_err(|_| ())?;
+    text.extend_from_slice(s.get(..head).unwrap_or(&[])).map_err(|_| ())?;
+    let mut digits = 0;
+    for &u in s.get(head..cut).unwrap_or(&[]) {
+        if is_digit(u) {
+            text.push(u).map_err(|_| ())?;
+            digits += 1;
+        }
+    }
+    if matches!(kind, Grouped::Float) && cut == run_end {
+        text.extend_from_slice(s.get(cut..).unwrap_or(&[])).map_err(|_| ())?;
+    }
+    Ok(Some((text, head, digits, cut)))
+}
+
+/// Parse `s` (at `addr`, end cursor `e`) with `parse` honouring the compat `group` flag: the
+/// separator `sep` and `LC_NUMERIC` grouping `g` of the current locale. No memory for the copy:
+/// no conversion and `ENOMEM`.
+// The allow: `unit` is a type size (non-zero); the parser's end lies in `text`, so the offsets
+// are at most `s.len()` units; `u - head - digits` runs only when `u >= head + digits`, and
+// `u - head` only when `u > head`.
+#[allow(clippy::too_many_arguments, clippy::arithmetic_side_effects)]
+fn with_group<T: Unit, R>(s: &[T], addr: usize, e: Option<impl liella_legacy::string_compat::Cursor>, sep: &[T], radix: &[T], g: &[u8], kind: Grouped, parse: impl Fn(&[T], Option<&mut Rec>) -> (R, Option<Errno>)) -> (R, Option<Errno>) {
+    let unit = core::mem::size_of::<T>();
+    let mut rec = Rec(None);
+    let (r, at) = match grouped(s, sep, radix, g, kind) {
+        Ok(None) => {
+            let r = parse(s, Some(&mut rec));
+            (r, rec.0.map(|o| o / unit))
+        }
+        Ok(Some((text, head, digits, cut))) => {
+            let r = parse(text.as_slice(), Some(&mut rec));
+            let at = rec.0.map(|o| o / unit).map(|u| if u <= head { u } else if u >= head + digits { cut + (u - head - digits) } else {
+                // Inside the digits (not reached by a decimal parse): the source of digit `u - head`.
+                s.iter().enumerate().skip(head).filter(|&(_, &c)| is_digit(c)).nth(u - head).map_or(cut, |(i, _)| i)
+            });
+            (r, at)
+        }
+        Err(()) => {
+            let r = parse(&[], Some(&mut rec));
+            ((r.0, Some(Errno::ENOMEM)), Some(0))
+        }
+    };
+    if let (Some(at), Some(mut e)) = (at, e) {
+        e.set(addr.saturating_add(at.saturating_mul(unit)));
+    }
+    r
+}
+
+/// The current locale's thousands separator in wide units (`_NL_NUMERIC_THOUSANDS_SEP_WC`),
+/// empty when it has none.
+fn wthousands(l: &liella::locale::Locale) -> ([i32; 1], usize) {
+    match l.item(liella::locale::file::Cat::Numeric, 4) {
+        liella::locale::Item::Word(w) if w != 0 => ([i32::try_from(w).unwrap_or(0)], 1),
+        _ => ([0], 0),
+    }
+}
+
+/// `__strto*_internal` integers: `group == 0` is the plain parse (§8.1).
+// UNSAFE(slice): the export's C string is read through `strz`.
+#[allow(unsafe_code)]
+fn strtol_group<R>(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, parse: impl Fn(&[u8], Option<&mut Rec>) -> (R, Option<Errno>)) -> R {
+    let l = locale::current();
+    // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
+    ret::with_errno(with_group(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), l.thousands_sep(), locale::radix(l), l.grouping(), Grouped::Int(base), parse))
+}
+
+/// `__wcsto*_internal` integers (§8.3).
+// UNSAFE(slice): the export's wide string is read through `strz`.
+#[allow(unsafe_code)]
+fn wcstol_group<R>(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, parse: impl Fn(&[wchar_t], Option<&mut Rec>) -> (R, Option<Errno>)) -> R {
+    let l = locale::current();
+    let (sep, n) = wthousands(l);
+    // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
+    ret::with_errno(with_group(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), sep.get(..n).unwrap_or(&[]), &locale::wradix(l), l.grouping(), Grouped::Int(base), parse))
+}
+
+/// `__strto{d,f,ld}_internal` with `group` set (§8.2): the float bits in `fmt`.
+// UNSAFE(slice): the export's C string is read through `strz`.
+#[allow(unsafe_code)]
+fn strtof_group(s: *const c_char, e: Option<&mut *mut c_char>, fmt: Format) -> u128 {
+    let l = locale::current();
+    let radix = locale::radix(l);
+    let mode = num_compat::rounding(CSys.mxcsr());
+    // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.2).
+    ret::with_errno(with_group(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), l.thousands_sep(), radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, mode, radix)))
+}
+
+/// `__wcsto{d,f,ld}_internal` with `group` set (§8.3).
+// UNSAFE(slice): the export's wide string is read through `strz`.
+#[allow(unsafe_code)]
+fn wcstof_group(s: *const wchar_t, e: Option<&mut *mut wchar_t>, fmt: Format) -> u128 {
+    let l = locale::current();
+    let radix = locale::wradix(l);
+    let (sep, n) = wthousands(l);
+    let mode = num_compat::rounding(CSys.mxcsr());
+    // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
+    ret::with_errno(with_group(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), sep.get(..n).unwrap_or(&[]), &radix, l.grouping(), Grouped::Float, |t, c| num_compat::strto_float(t, 0, c, fmt, mode, &radix)))
+}
 
 /// The narrow signed `strtol` family (§8.1): the common shapes from the first
 /// [`STRTOL_HEAD`] bytes without measuring the text (STRTOIMAX), the rest by the full parse.
@@ -84,12 +335,18 @@ pub extern "C" fn __strtoll_l(s: *const c_char, e: Option<&mut *mut c_char>, bas
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtol_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, _group: c_int) -> c_long {
+pub extern "C" fn __strtol_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, group: c_int) -> c_long {
+    if group != 0 {
+        return strtol_group(s, e, base, |t, c| num_compat::strtol(t, 0, c, base, Dialect::C99));
+    }
     strtol_narrow(s, e, base, Dialect::C99)
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtoll_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, _group: c_int) -> c_long {
+pub extern "C" fn __strtoll_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, group: c_int) -> c_long {
+    if group != 0 {
+        return strtol_group(s, e, base, |t, c| num_compat::strtol(t, 0, c, base, Dialect::C99));
+    }
     strtol_narrow(s, e, base, Dialect::C99)
 }}
 
@@ -167,13 +424,19 @@ pub extern "C" fn __strtoull_l(s: *const c_char, e: Option<&mut *mut c_char>, ba
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtoul_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, _group: c_int) -> c_ulong {
+pub extern "C" fn __strtoul_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, group: c_int) -> c_ulong {
+    if group != 0 {
+        return strtol_group(s, e, base, |t, c| num_compat::strtoul(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
     ret::with_errno(num_compat::strtoul(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtoull_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, _group: c_int) -> c_ulong {
+pub extern "C" fn __strtoull_internal(s: *const c_char, e: Option<&mut *mut c_char>, base: c_int, group: c_int) -> c_ulong {
+    if group != 0 {
+        return strtol_group(s, e, base, |t, c| num_compat::strtoul(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
     ret::with_errno(num_compat::strtoul(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
@@ -257,13 +520,19 @@ pub extern "C" fn __wcstoll_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, b
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstol_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, _group: c_int) -> c_long {
+pub extern "C" fn __wcstol_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, group: c_int) -> c_long {
+    if group != 0 {
+        return wcstol_group(s, e, base, |t, c| num_compat::strtol(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtol(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstoll_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, _group: c_int) -> c_long {
+pub extern "C" fn __wcstoll_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, group: c_int) -> c_long {
+    if group != 0 {
+        return wcstol_group(s, e, base, |t, c| num_compat::strtol(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtol(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
@@ -347,13 +616,19 @@ pub extern "C" fn __wcstoull_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, 
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstoul_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, _group: c_int) -> c_ulong {
+pub extern "C" fn __wcstoul_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, group: c_int) -> c_ulong {
+    if group != 0 {
+        return wcstol_group(s, e, base, |t, c| num_compat::strtoul(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtoul(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstoull_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, _group: c_int) -> c_ulong {
+pub extern "C" fn __wcstoull_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, base: c_int, group: c_int) -> c_ulong {
+    if group != 0 {
+        return wcstol_group(s, e, base, |t, c| num_compat::strtoul(t, 0, c, base, Dialect::C99));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtoul(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), base, Dialect::C99))
 }}
@@ -455,7 +730,11 @@ pub extern "C" fn strtof32x_l(s: *const c_char, e: Option<&mut *mut c_char>, loc
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtod_internal(s: *const c_char, e: Option<&mut *mut c_char>, _group: c_int) -> f64 {
+pub extern "C" fn __strtod_internal(s: *const c_char, e: Option<&mut *mut c_char>, group: c_int) -> f64 {
+    if group != 0 {
+        // F64 bits fill only the low 64 bits, so the conversion is exact.
+        return f64::from_bits(u64::try_from(strtof_group(s, e, Format::F64)).unwrap_or(0));
+    }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
     ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
 }}
@@ -491,7 +770,11 @@ pub extern "C" fn strtof32_l(s: *const c_char, e: Option<&mut *mut c_char>, loc:
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __strtof_internal(s: *const c_char, e: Option<&mut *mut c_char>, _group: c_int) -> f32 {
+pub extern "C" fn __strtof_internal(s: *const c_char, e: Option<&mut *mut c_char>, group: c_int) -> f32 {
+    if group != 0 {
+        // F32 bits fill only the low 32 bits, so the conversion is exact.
+        return f32::from_bits(u32::try_from(strtof_group(s, e, Format::F32)).unwrap_or(0));
+    }
     // UNSAFE(slice) SAFETY: s is a string; e is NULL or a pointer variable (§8.1).
     ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::strz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), locale::radix(locale::current())))
 }}
@@ -539,7 +822,11 @@ pub extern "C" fn wcstof32x_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, l
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstod_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, _group: c_int) -> f64 {
+pub extern "C" fn __wcstod_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, group: c_int) -> f64 {
+    if group != 0 {
+        // F64 bits fill only the low 64 bits, so the conversion is exact.
+        return f64::from_bits(u64::try_from(wcstof_group(s, e, Format::F64)).unwrap_or(0));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtod(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
 }}
@@ -575,9 +862,29 @@ pub extern "C" fn wcstof32_l(s: *const wchar_t, e: Option<&mut *mut wchar_t>, lo
 }}
 
 export! { "GLIBC_2.2.5";
-pub extern "C" fn __wcstof_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, _group: c_int) -> f32 {
+pub extern "C" fn __wcstof_internal(s: *const wchar_t, e: Option<&mut *mut wchar_t>, group: c_int) -> f32 {
+    if group != 0 {
+        // F32 bits fill only the low 32 bits, so the conversion is exact.
+        return f32::from_bits(u32::try_from(wcstof_group(s, e, Format::F32)).unwrap_or(0));
+    }
     // UNSAFE(slice) SAFETY: s is a wide string; e is NULL or a pointer variable (§8.3).
     ret::with_errno(num_compat::strtof(ret::must(unsafe { strz::wcsz(s) }), conv::addr(s), conv::end(e), num_compat::rounding(CSys.mxcsr()), &locale::wradix(locale::current())))
+}}
+
+export! { "LIELLA_PRIVATE";
+pub extern "C" fn liella_strtold_internal_bits(s: *const c_char, e: Option<&mut *mut c_char>, group: c_int) -> LdBits {
+    if group != 0 {
+        return LdBits::from_bits(strtof_group(s, e, Format::F80));
+    }
+    liella_strtold_bits(s, e)
+}}
+
+export! { "LIELLA_PRIVATE";
+pub extern "C" fn liella_wcstold_internal_bits(s: *const wchar_t, e: Option<&mut *mut wchar_t>, group: c_int) -> LdBits {
+    if group != 0 {
+        return LdBits::from_bits(wcstof_group(s, e, Format::F80));
+    }
+    liella_wcstold_bits(s, e)
 }}
 
 export! { "LIELLA_PRIVATE";
