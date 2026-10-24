@@ -195,7 +195,7 @@ impl Parser<'_> {
         self.at(j) == Some(ch(b'[')) && j + 1 < to && matches!(self.at(j + 1), Some(c) if c == ch(b':') || c == ch(b'=') || c == ch(b'.'))
     }
 
-    /// The bracket expression whose `[` is just before `i`: the set and the index after its `]`,
+/// The bracket expression whose `[` is just before `i`: the set and the index after its `]`,
     /// or `None` when no valid bracket expression follows.
     fn bracket(&self, i: usize, to: usize, build: bool) -> Result<Option<(Set, usize)>> {
         if self.last_close < i + 2 {
@@ -939,23 +939,12 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
     // A `[` with no `]` after it can never close: it is a literal, decided in O(1) (C1-TRIAGE:
     // looking for the `]` from every `[` of a long unclosed run was quadratic).
     // Looked for only when the pattern has a `[` (most patterns have none).
-    let mut last_close: Option<Option<usize>> = None;
+    // `usize::MAX`: not looked for yet; 0: no `]` (a `[` at `pi` is never before it).
+    let mut last_close = usize::MAX;
     let (mut pi, mut si) = (0usize, 0usize);
     // The last star: the pattern after it, and where its match ends now.
     let mut star: Option<(usize, usize)> = None;
     loop {
-        // A run of ordinary characters that equal the string's: compared straight, without the
-        // per-step dispatch (a mismatch, or any other pattern character, ends the run and the
-        // step below decides). Ordinary characters match only themselves, bytewise.
-        if flags & CASEFOLD == 0 {
-            while let (Some(&c), Some(&x)) = (p.get(pi), s.get(si)) {
-                if c != x || matches!(c, b'*' | b'?' | b'[' | b'\\') {
-                    break;
-                }
-                pi += 1;
-                si += 1;
-            }
-        }
         // One step of the pattern at `pi` against the string at `si`: the new positions, or
         // `None` for a mismatch.
         let step: Option<(usize, usize)> = match p.get(pi) {
@@ -977,12 +966,28 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
                 // A trailing `\`: nothing matches.
                 None => return Some(false),
             },
-            Some(b'[') if (*last_close.get_or_insert_with(|| p.iter().rposition(|&c| c == b']'))).is_none_or(|k| k <= pi) => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
+            Some(b'[') if close_before(p, &mut last_close) <= pi => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
             Some(b'[') => match bracket_has(p, pi + 1, escapes, &mt, at(si).filter(|_| wild(si)))? {
                 Some((hit, after)) => hit.then_some((after, si + 1)),
                 None => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
             },
-            Some(&c) => at(si).is_some_and(|x| mt.same(u32::from(c), x)).then_some((pi + 1, si + 1)),
+            Some(&c) => at(si).is_some_and(|x| mt.same(u32::from(c), x)).then(|| {
+                // A run of further ordinary characters that equal the string's: compared straight,
+                // without the per-step dispatch (a mismatch, or any other pattern character, ends
+                // the run and the next step decides). Ordinary characters match only themselves,
+                // bytewise. Only here, so that steps for `*`, `?` and `[` pay nothing for it.
+                let (mut a, mut b) = (pi + 1, si + 1);
+                if flags & CASEFOLD == 0 {
+                    while let (Some(&c), Some(&x)) = (p.get(a), s.get(b)) {
+                        if c != x || matches!(c, b'*' | b'?' | b'[' | b'\\') {
+                            break;
+                        }
+                        a += 1;
+                        b += 1;
+                    }
+                }
+                (a, b)
+            }),
         };
         match step {
             Some((np, ns)) => {
@@ -1016,6 +1021,15 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
             }
         }
     }
+}
+
+/// The position of the last `]` in `p` (0 when there is none), looked for on first use and kept in `memo`.
+#[inline(always)]
+fn close_before(p: &[u8], memo: &mut usize) -> usize {
+    if *memo == usize::MAX {
+        *memo = p.iter().rposition(|&c| c == b']').unwrap_or(0);
+    }
+    *memo
 }
 
 /// The bracket expression whose `[` is just before `i` in the ASCII pattern `p`, tested against
