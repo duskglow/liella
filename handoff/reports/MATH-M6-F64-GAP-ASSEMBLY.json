@@ -1,0 +1,10 @@
+{"task": "MATH-M6-F64-GAP-ASSEMBLY", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT: Fast2Sum assembly for exp/log/pow and pow's cube coded, bounds restated and unit-checked against mp; counts not yet measured",
+ "branch": "task/math-m6-f64-gap-assembly", "head": null,
+ "gate": {"affected": "running (math-m6-f64-gap-assembly-gate)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [], "informational": ["plants run 1: 3 plants matched doc-comment text first and never mutated code; rerun as plants-2"],
+ "refused": [],
+ "improvement": "plants by perl substitution must anchor to code, not text the proof comments repeat; and never overwrite a job script a running job is reading",
+ "next_step": "read gate and plants-2, rerun per-call counts (base and head) with job2.sh, update register 13.5",
+ "report_file": "handoff/math-m6-f64-gap-assembly.md",
+ "jobs": ["math-m6-f64-gap-assembly-gate", "math-m6-f64-gap-assembly-plants-2", "math-m6-f64-gap-assembly-sweep"]}
