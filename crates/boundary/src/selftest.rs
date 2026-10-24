@@ -22,6 +22,8 @@ use liella_kernel::uapi::{SigSet, SIGKILL, SIGSTOP};
 use crate::raw;
 use crate::sys::CSys;
 
+pub mod failinject;
+
 std::thread_local!(static CALLER_BLOCKS: core::cell::Cell<i64> = const { core::cell::Cell::new(0) });
 
 /// Caller-owned blocks (the `caller_alloc` family: `strdup`, `wordexp`, `getifaddrs`, ...) that
