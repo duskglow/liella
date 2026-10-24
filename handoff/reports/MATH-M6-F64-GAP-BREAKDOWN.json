@@ -1,0 +1,11 @@
+{"task": "MATH-M6-F64-GAP-BREAKDOWN", "model": "opus", "tokens": null,
+ "result": "Per-phase instructions:u breakdown of f64 exp/exp2/log/log2/log10/pow vs glibc with first-principles minima and 8 ranked candidates (saturation-register section 13); docs only",
+ "branch": "task/math-m6-f64-gap-breakdown", "head": "99c27490",
+ "gate": {"affected": "see job math-m6-f64-gap-breakdown-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "FMA path for the f64 kernels (candidate 8, ~335 instructions summed): run-time dispatch in the default libm or only the x86-64-v3 build", "recommendation": "brief candidates 1-7 first (no dispatch needed); then decide dispatch with their counts"}],
+ "informational": ["brief cites section 14.1 of the register; none exists, the new section is 13 in the 12.x style", "counts are of the static libm.a the bench links; libm.so inlining not checked", "Ziv fallback rate not counted (inside the 21-49 unattributed per call)"],
+ "refused": [],
+ "improvement": "jobrun without the <kind> argument starts nothing and writes no log or jobs.tsv line; it should fail loudly (cost one 10-min wait)",
+ "next_step": "brief candidate 2 (three-part exp reduction) and 1 (Fast2Sum assembly) as stories; count the fallback rate before candidate 5",
+ "report_file": "handoff/math-m6-f64-gap-breakdown.md",
+ "jobs": ["math-m6-f64-gap-breakdown-so", "math-m6-f64-gap-breakdown-phases", "math-m6-f64-gap-breakdown-blocks", "math-m6-f64-gap-breakdown-gate"]}
