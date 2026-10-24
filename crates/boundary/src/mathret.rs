@@ -161,6 +161,120 @@ fn enter(unit: Unit) -> (Entry, Rounding) {
     (Entry { saved, in_place }, mode)
 }
 
+/// A value as the caller's denormals-are-zero reads it and flush-to-zero leaves it (owner ruling
+/// 2026-10-23, D-10.22): the caller's floating-point environment is honoured. Only `float` and
+/// `double` are SSE formats; every other format (x87 `long double`, the software `_Float128`)
+/// and the integers keep these identities. The test is on the bits, so the sound internal
+/// arithmetic (D-10.13) never runs under the caller's FTZ/DAZ.
+pub trait Denorm: Copy {
+    /// The operand as DAZ reads it: a subnormal is a zero of its sign, raising nothing.
+    #[inline]
+    fn daz(self) -> Self {
+        self
+    }
+    /// The result as FTZ leaves it, and whether it was flushed: a subnormal is a zero of its sign.
+    /// `tiny` is the computation's underflow report (tininess after rounding with an unbounded
+    /// exponent, as x86 detects it): a result that the subnormal grid rounded up to the smallest
+    /// normal while the value was tiny is flushed too (probed: `mulss`/`mulsd` of (1-2^-24)*2^-126
+    /// under MXCSR FTZ give +0 with underflow and inexact in every rounding direction, where the
+    /// default word gives the smallest normal).
+    #[inline]
+    fn ftz(self, _tiny: bool) -> (Self, bool) {
+        (self, false)
+    }
+}
+
+impl Denorm for f64 {
+    #[inline]
+    fn daz(self) -> f64 {
+        self.ftz(false).0
+    }
+    #[inline]
+    fn ftz(self, tiny: bool) -> (f64, bool) {
+        if self.is_subnormal() || (tiny && self.abs() == f64::MIN_POSITIVE) {
+            (f64::from_bits(self.to_bits() & (1 << 63)), true)
+        } else {
+            (self, false)
+        }
+    }
+}
+
+impl Denorm for f32 {
+    #[inline]
+    fn daz(self) -> f32 {
+        self.ftz(false).0
+    }
+    #[inline]
+    fn ftz(self, tiny: bool) -> (f32, bool) {
+        if self.is_subnormal() || (tiny && self.abs() == f32::MIN_POSITIVE) {
+            (f32::from_bits(self.to_bits() & (1 << 31)), true)
+        } else {
+            (self, false)
+        }
+    }
+}
+
+impl Denorm for F80 {}
+impl Denorm for F128 {}
+impl Denorm for LdBits {}
+impl Denorm for F128Bits {}
+impl Denorm for i32 {}
+impl Denorm for i64 {}
+impl Denorm for u64 {}
+impl Denorm for bool {}
+
+impl<A: Denorm, B: Denorm> Denorm for (A, B) {
+    #[inline]
+    fn daz(self) -> (A, B) {
+        (self.0.daz(), self.1.daz())
+    }
+    #[inline]
+    fn ftz(self, tiny: bool) -> ((A, B), bool) {
+        let ((a, fa), (b, fb)) = (self.0.ftz(tiny), self.1.ftz(tiny));
+        ((a, b), fa || fb)
+    }
+}
+
+impl<T: Denorm> Denorm for Complex<T> {
+    #[inline]
+    fn daz(self) -> Complex<T> {
+        Complex { re: self.re.daz(), im: self.im.daz() }
+    }
+    #[inline]
+    fn ftz(self, tiny: bool) -> (Complex<T>, bool) {
+        let ((re, fr), (im, fi)) = (self.re.ftz(tiny), self.im.ftz(tiny));
+        (Complex { re, im }, fr || fi)
+    }
+}
+
+impl Entry {
+    /// The operand as the caller's DAZ reads it. In place the caller's word is the default one
+    /// (no DAZ), so the hot path tests nothing but `in_place`.
+    #[inline]
+    fn operand<A: Denorm>(&self, x: A) -> A {
+        if !self.in_place && fpu::is_daz(self.saved) { x.daz() } else { x }
+    }
+
+    /// The result as the caller's FTZ leaves it: a subnormal result is a zero of its sign with
+    /// underflow and inexact raised, as the SSE unit does under FTZ (Intel SDM). `errno` stays
+    /// what the computation reported.
+    #[inline]
+    fn result<R: Denorm>(&self, v: R, st: &mut Status) -> R {
+        if !self.in_place && fpu::is_ftz(self.saved) {
+            // The status carries the union of the parts' flags: a pair or complex result whose
+            // other part underflowed and which holds exactly the smallest normal is flushed
+            // too (an edge of an edge; the parts are not told apart).
+            let (v, flushed) = v.ftz(st.flags.any(fpu::Flags::UNDERFLOW));
+            if flushed {
+                st.flags = st.flags.union(fpu::Flags::UNDERFLOW).union(fpu::Flags::INEXACT);
+            }
+            v
+        } else {
+            v
+        }
+    }
+}
+
 /// Leave an envelope function: restore the caller's MXCSR with the result's flags raised, then
 /// store its error. In place this is one MXCSR read and a write only when it differs
 /// ([`fpu::settle`]); after a switch, the restore and [`report`] as before.
@@ -205,14 +319,18 @@ pub trait Sqrt: CVal {
 impl Sqrt for f64 {
     #[inline]
     fn sqrt_c(self) -> f64 {
-        if fpu::is_default_but_rounding(crate::ffi::liella_machine_mxcsr_get()) {
+        let mx = crate::ffi::liella_machine_mxcsr_get();
+        if fpu::is_sqrt_in_place(mx) {
             let r = crate::ffi::liella_machine_sqrtsd(self);
-            if self < 0.0 {
+            // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
+            // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
+            if r.is_nan() && !self.is_nan() {
                 store_error(MathError::Domain);
             }
             r
         } else {
-            ret(liella_math::fused::sqrt::<f64, f64>(self, mode()))
+            let x = if fpu::is_daz(mx) { self.daz() } else { self };
+            ret(liella_math::fused::sqrt::<f64, f64>(x, fpu::rounding_of(mx)))
         }
     }
 }
@@ -220,14 +338,18 @@ impl Sqrt for f64 {
 impl Sqrt for f32 {
     #[inline]
     fn sqrt_c(self) -> f32 {
-        if fpu::is_default_but_rounding(crate::ffi::liella_machine_mxcsr_get()) {
+        let mx = crate::ffi::liella_machine_mxcsr_get();
+        if fpu::is_sqrt_in_place(mx) {
             let r = crate::ffi::liella_machine_sqrtss(self);
-            if self < 0.0 {
+            // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
+            // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
+            if r.is_nan() && !self.is_nan() {
                 store_error(MathError::Domain);
             }
             r
         } else {
-            ret(liella_math::fused::sqrt::<f32, f32>(self, mode()))
+            let x = if fpu::is_daz(mx) { self.daz() } else { self };
+            ret(liella_math::fused::sqrt::<f32, f32>(x, fpu::rounding_of(mx)))
         }
     }
 }
@@ -546,10 +668,11 @@ pub fn nan_tag(tag: &[u8]) -> u128 {
 /// otherwise MXCSR is switched and restored around it (M6-1). Either way the caller's MXCSR is
 /// left with only the result's own flags added. The optimisation barriers keep the computation
 /// between entry and exit.
-pub fn elem<A: Copy, R: CVal>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> (R, Status)) -> R::C {
+pub fn elem<A: Denorm, R: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> (R, Status)) -> R::C {
     let (e, mode) = enter(unit);
-    let x = core::hint::black_box(x);
-    let (v, st) = core::hint::black_box(f(x, mode));
+    let x = core::hint::black_box(e.operand(x));
+    let (v, mut st) = core::hint::black_box(f(x, mode));
+    let v = e.result(v, &mut st);
     exit(e, st);
     v.c()
 }
@@ -609,10 +732,11 @@ pub fn elem_fast<const HW: u8, A: Copy, R: CVal<C = R>>(
 const FAST_ATTEMPT_HW: fpu::Flags = fpu::Flags(fpu::Flags::INEXACT.0 | Status::HW_DENORMAL.0);
 
 /// `lgamma` and `gamma`: [`elem`], with the sign of `Γ(x)` stored in `signgam` (D-10.4).
-pub fn lgamma<A: Copy, R: CVal>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((R, Status), i32)) -> R::C {
+pub fn lgamma<A: Denorm, R: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((R, Status), i32)) -> R::C {
     let (e, mode) = enter(unit);
-    let x = core::hint::black_box(x);
-    let ((v, st), sign) = core::hint::black_box(f(x, mode));
+    let x = core::hint::black_box(e.operand(x));
+    let ((v, mut st), sign) = core::hint::black_box(f(x, mode));
+    let v = e.result(v, &mut st);
     crate::data::signgam.store(sign, core::sync::atomic::Ordering::Relaxed);
     crate::data::__signgam.store(sign, core::sync::atomic::Ordering::Relaxed);
     exit(e, st);
@@ -621,11 +745,12 @@ pub fn lgamma<A: Copy, R: CVal>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) ->
 
 /// `lgamma_r`: [`elem`], with the sign of `Γ(x)` stored through the required out-parameter
 /// (`signgam` untouched).
-pub fn lgamma_r<A: Copy, R: CVal>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((R, Status), i32), out: Option<&mut c_int>) -> R::C {
+pub fn lgamma_r<A: Denorm, R: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((R, Status), i32), out: Option<&mut c_int>) -> R::C {
     let dst = ret::must(conv::req(out));
     let (e, mode) = enter(unit);
-    let x = core::hint::black_box(x);
-    let ((v, st), sign) = core::hint::black_box(f(x, mode));
+    let x = core::hint::black_box(e.operand(x));
+    let ((v, mut st), sign) = core::hint::black_box(f(x, mode));
+    let v = e.result(v, &mut st);
     *dst = sign;
     exit(e, st);
     v.c()
@@ -645,9 +770,9 @@ pub struct Complex<T> {
 }
 
 /// A part of a [`Complex`] at the C boundary and the format `liella-math` computes it in.
-pub trait CPart: Copy {
+pub trait CPart: Copy + Denorm {
     /// The format.
-    type V: Copy;
+    type V: Copy + Denorm;
     /// From C.
     fn v(self) -> Self::V;
     /// To C.
@@ -732,8 +857,9 @@ pub fn cpart<C: CPart>(z: Complex<C>, f: impl FnOnce(C::V, C::V) -> C::V) -> C {
 /// A complex function of a complex argument (spec §10.5), in [`elem`]'s environment.
 pub fn cplx<C: CPart>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
     let (e, mode) = enter(unit);
-    let z = core::hint::black_box(z);
+    let z = core::hint::black_box(e.operand(z));
     let ((re, im), mut st) = core::hint::black_box(f(z.re.v(), z.im.v(), mode));
+    let (re, im) = e.result((re, im), &mut st);
     let mut r = Complex { re: C::of_v(re), im: C::of_v(im) };
     if C::invalid_rule(&[z.re, z.im], &mut r) {
         st.flags = st.flags.union(Status::INVALID.flags);
@@ -745,8 +871,9 @@ pub fn cplx<C: CPart>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Roun
 /// `cpow`: a complex function of two complex arguments.
 pub fn cplx2<C: CPart>(z: Complex<C>, w: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
     let (e, mode) = enter(unit);
-    let (z, w) = core::hint::black_box((z, w));
+    let (z, w) = core::hint::black_box(e.operand((z, w)));
     let ((re, im), mut st) = core::hint::black_box(f(z.re.v(), z.im.v(), w.re.v(), w.im.v(), mode));
+    let (re, im) = e.result((re, im), &mut st);
     let mut r = Complex { re: C::of_v(re), im: C::of_v(im) };
     if C::invalid_rule(&[z.re, z.im, w.re, w.im], &mut r) {
         st.flags = st.flags.union(Status::INVALID.flags);
@@ -756,17 +883,47 @@ pub fn cplx2<C: CPart>(z: Complex<C>, w: Complex<C>, unit: Unit, f: impl FnOnce(
 }
 
 /// A real function of a complex argument (`cabs`, `carg`), in [`elem`]'s environment.
-pub fn cplx_real<C: CPart, R: CVal>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Rounding) -> (R, Status)) -> R::C {
+pub fn cplx_real<C: CPart, R: CVal + Denorm>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Rounding) -> (R, Status)) -> R::C {
     elem(z, unit, |z, m| f(z.re.v(), z.im.v(), m))
 }
 
 /// `sincos`: [`elem`] with the two results stored through required out-parameters.
-pub fn sincos<A: CVal + Copy>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((A, A), Status), s: Option<&mut A::C>, c: Option<&mut A::C>) {
+pub fn sincos<A: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) -> ((A, A), Status), s: Option<&mut A::C>, c: Option<&mut A::C>) {
     let (s, c) = (ret::must(conv::req(s)), ret::must(conv::req(c)));
     let (e, mode) = enter(unit);
-    let x = core::hint::black_box(x);
-    let ((sv, cv), st) = core::hint::black_box(f(x, mode));
+    let x = core::hint::black_box(e.operand(x));
+    let ((sv, cv), mut st) = core::hint::black_box(f(x, mode));
+    let (sv, cv) = e.result((sv, cv), &mut st);
     *s = sv.c();
     *c = cv.c();
     exit(e, st);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Denorm;
+
+    #[test]
+    fn ftz_flushes_the_tininess_edge() {
+        // Clauses: s10_0_f_0.
+        // Probed black-box on shiki with ldmxcsr and mulss/mulsd: (1-2^-24)*2^-126 and
+        // (1-2^-53)*2^-1022 (ties on the subnormal grid, rounding to the smallest normal) give the
+        // smallest normal with underflow+inexact under the default word, and a zero of the sign with
+        // underflow+inexact under FTZ, in all four rounding directions: the value is tiny after
+        // rounding with an unbounded exponent and FTZ flushes a tiny result. (1-2^-26)*2^-126,
+        // which that rounding takes to 2^-126, is not tiny and stays. So with the computation's
+        // underflow report (`tiny`, the same after-rounding rule) the smallest normal is flushed:
+        assert_eq!(f64::MIN_POSITIVE.ftz(true), (0.0, true));
+        assert_eq!((-f64::MIN_POSITIVE).ftz(true).0.to_bits(), 1 << 63);
+        assert_eq!(f32::MIN_POSITIVE.ftz(true), (0.0, true));
+        assert_eq!((-f32::MIN_POSITIVE).ftz(true).0.to_bits(), 1 << 31);
+        // and not without it, nor any other normal, while a subnormal always is.
+        assert_eq!(f64::MIN_POSITIVE.ftz(false), (f64::MIN_POSITIVE, false));
+        assert_eq!(1.0f64.ftz(true), (1.0, false));
+        assert_eq!(f32::MIN_POSITIVE.ftz(false), (f32::MIN_POSITIVE, false));
+        assert_eq!(f64::from_bits(1).ftz(false), (0.0, true));
+        assert_eq!(f32::from_bits(1).ftz(true), (0.0, true));
+        assert_eq!(f64::from_bits(1).daz(), 0.0);
+        assert_eq!(f64::MIN_POSITIVE.daz(), f64::MIN_POSITIVE);
+    }
 }

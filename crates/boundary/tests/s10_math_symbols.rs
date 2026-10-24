@@ -205,52 +205,80 @@ fn math_envelope_keeps_the_callers_mxcsr() {
     assert_eq!(around(0x1f80, || m::exp(1000.0).to_bits()), (f64::INFINITY.to_bits(), 0x1fa8));
     assert_eq!(around(0x1f80, || m::log(-1.0).to_bits()).1, 0x1f81);
     assert_eq!(around(0x1f80, || m::sqrt(-1.0).to_bits()).1, 0x1f81);
-    // A subnormal operand whose result rounds to itself, and an exact subnormal result: under the
-    // caller's flush-to-zero the arithmetic forming them would give 0.
+    // The caller's FTZ/DAZ are honoured (owner ruling 2026-10-23, D-10.22): under DAZ a subnormal
+    // operand is a zero of its sign (nothing raised), under FTZ a subnormal result is a zero of its
+    // sign with underflow and inexact raised (Intel SDM), the computation itself running sound in
+    // the default word. FTZ is bit 15 (0x9f80 is FTZ alone), DAZ is bit 6 (0x9fc0 is both).
     let sub = f64::from_bits(1 << 40);
     let small: [extern "C" fn(f64) -> f64; 8] = [m::sin, m::tan, m::atan, m::asin, m::sinh, m::tanh, m::expm1, m::log1p];
     for (i, f) in small.iter().enumerate() {
-        let (v, mx) = around(0x9f80, || f(sub).to_bits());
-        assert_eq!((i, v, mx & !0x3f), (i, sub.to_bits(), 0x9f80));
+        // Was: the subnormal back (results independent of the caller's DAZ); now the owner's honour
+        // ruling: DAZ reads the operand as a zero of its sign, exact, nothing raised.
+        assert_eq!((i, around(0x9fc0, || f(sub).to_bits())), (i, (0, 0x9fc0)));
+        assert_eq!((i, around(0x9fc0, || f(-sub).to_bits())), (i, (1 << 63, 0x9fc0)));
+        assert_eq!((i, around(0x1fc0, || f(sub).to_bits())), (i, (0, 0x1fc0)));
+        // FTZ alone reads the operand as it is; the result (the subnormal itself) is flushed.
+        assert_eq!((i, around(0x9f80, || f(sub).to_bits())), (i, (0, 0x9fb0)));
+        assert_eq!((i, around(0x9f80, || f(-sub).to_bits())), (i, (1 << 63, 0x9fb0)));
     }
-    assert_eq!(around(0x9f80, || m::exp2(-1060.0).to_bits()), (1 << 14, 0x9f80));
-    // Flush-to-zero and denormals-are-zero are not the default: the computation runs in the
-    // default environment (a subnormal result and operand survive) and MXCSR comes back intact.
+    // Was: the exact subnormal 1 << 14; now flushed by FTZ (honour ruling), with underflow and inexact.
+    assert_eq!(around(0x9f80, || m::exp2(-1060.0).to_bits()), (0, 0x9f80 | 0x30));
+    assert_eq!(around(0x9fc0, || m::exp2(-1060.0).to_bits()), (0, 0x9fc0 | 0x30));
+    assert_eq!(around(0x1f80, || m::exp2(-1060.0).to_bits()), (1 << 14, 0x1f80));
+    // Flush-to-zero and denormals-are-zero are the caller's: a subnormal result is flushed with the
+    // hardware's flags, a subnormal operand is read as zero (exp(0) = 1 exactly, no inexact), and
+    // MXCSR comes back as it left with only those flags added.
     let tiny = m::exp(-740.0).to_bits();
     assert!(tiny != 0 && tiny < 0x0010_0000_0000_0000);
-    assert_eq!(around(0x9f80, || m::exp(-740.0).to_bits()), (tiny, 0x9f80 | 0x30));
-    assert_eq!(around(0x1fc0, || m::exp(sub).to_bits()), (1.0f64.to_bits(), 0x1fe0));
+    assert_eq!(around(0x1f80, || m::exp(-740.0).to_bits()), (tiny, 0x1f80 | 0x30)); // default word: the subnormal
+    // Was: the subnormal back under 0x9f80; now flushed (honour ruling).
+    assert_eq!(around(0x9f80, || m::exp(-740.0).to_bits()), (0, 0x9f80 | 0x30));
+    assert_eq!(around(0x9fc0, || m::exp(-740.0).to_bits()), (0, 0x9fc0 | 0x30));
+    // Was: 1.0 with inexact (the subnormal read as itself); now exp(0) = 1 exactly under DAZ.
+    assert_eq!(around(0x1fc0, || m::exp(sub).to_bits()), (1.0f64.to_bits(), 0x1fc0));
+    // Normal operands with normal results are unchanged under any FTZ/DAZ word.
+    assert_eq!(around(0x9f80, || m::exp(0.5).to_bits()), (m::exp(0.5).to_bits(), 0x9fa0));
     // In every rounding direction a caller with flush-to-zero (bit 15) or denormals-are-zero (bit 6)
-    // gets the result a default-word caller gets (a subnormal result stays subnormal, a subnormal
-    // operand is read as the subnormal it is) and MXCSR back with that bit as it left it.
-    let cases: [(&str, &dyn Fn() -> u64); 19] = [
-        ("sin(1e-310)", &|| m::sin(1e-310).to_bits()),
-        ("tan(-5e-324)", &|| m::tan(-5e-324).to_bits()),
-        ("sin(-2e-308)", &|| m::sin(-2e-308).to_bits()),
-        ("exp(-744)", &|| m::exp(-744.0).to_bits()),
-        ("exp(-708.5)", &|| m::exp(-708.5).to_bits()),
-        ("exp2(-1070.3)", &|| m::exp2(-1070.3).to_bits()),
-        ("pow(1.5e-160,2)", &|| m::pow(1.5e-160, 2.0).to_bits()),
-        ("atan2(1e-300,1e10)", &|| m::atan2(1e-300, 1e10).to_bits()),
-        ("erf(1e-310)", &|| m::erf(1e-310).to_bits()),
-        ("j1(1e-310)", &|| m::j1(1e-310).to_bits()),
-        ("expf(-100)", &|| u64::from(m::expf(-100.0).to_bits())),
-        ("erff(1e-40)", &|| u64::from(m::erff(1e-40).to_bits())),
-        ("log(1e-310)", &|| m::log(1e-310).to_bits()),
-        ("log2(5e-320)", &|| m::log2(5e-320).to_bits()),
-        ("log10(1e-315)", &|| m::log10(1e-315).to_bits()),
-        ("cbrt(1e-320)", &|| m::cbrt(1e-320).to_bits()),
-        ("atan2(3e-310,1e-310)", &|| m::atan2(3e-310, 1e-310).to_bits()),
-        ("atan2f(1e-38,1e5)", &|| u64::from(m::atan2f(1e-38, 1e5).to_bits())),
-        ("logf(1e-40)", &|| u64::from(m::logf(1e-40).to_bits())),
+    // gets the default-word result unless a subnormal is involved: a subnormal operand (`in_sub`) is
+    // read as zero under DAZ (the default-word result of the zeroed call, `f(true)`), and a subnormal
+    // result (`out_sub`) is a zero of its sign under FTZ with underflow and inexact raised; MXCSR
+    // comes back with the bit as it left it.
+    type Case<'a> = (&'a str, bool, bool, &'a dyn Fn(bool) -> u64);
+    let cases: [Case; 20] = [
+        ("exp(-707)", false, false, &|_| m::exp(-707.0).to_bits()), // a NORMAL result near the smallest normal: kept
+        ("sin(1e-310)", true, true, &|z| m::sin(if z { 0.0 } else { 1e-310 }).to_bits()),
+        ("tan(-5e-324)", true, true, &|z| m::tan(if z { -0.0 } else { -5e-324 }).to_bits()),
+        ("sin(-2e-308)", true, true, &|z| m::sin(if z { -0.0 } else { -2e-308 }).to_bits()),
+        ("exp(-744)", false, true, &|_| m::exp(-744.0).to_bits()),
+        ("exp(-708.5)", false, true,&|_| m::exp(-708.5).to_bits()),
+        ("exp2(-1070.3)", false, true, &|_| m::exp2(-1070.3).to_bits()),
+        ("pow(1.5e-160,2)", false, true, &|_| m::pow(1.5e-160, 2.0).to_bits()),
+        ("atan2(1e-300,1e10)", false, true, &|_| m::atan2(1e-300, 1e10).to_bits()),
+        ("erf(1e-310)", true, true, &|z| m::erf(if z { 0.0 } else { 1e-310 }).to_bits()),
+        ("j1(1e-310)", true, true, &|z| m::j1(if z { 0.0 } else { 1e-310 }).to_bits()),
+        ("expf(-100)", false, true, &|_| u64::from(m::expf(-100.0).to_bits())),
+        ("erff(1e-40)", true, true, &|z| u64::from(m::erff(if z { 0.0 } else { 1e-40 }).to_bits())),
+        ("log(1e-310)", true, false, &|z| m::log(if z { 0.0 } else { 1e-310 }).to_bits()),
+        ("log2(5e-320)", true, false, &|z| m::log2(if z { 0.0 } else { 5e-320 }).to_bits()),
+        ("log10(1e-315)", true, false, &|z| m::log10(if z { 0.0 } else { 1e-315 }).to_bits()),
+        ("cbrt(1e-320)", true, false, &|z| m::cbrt(if z { 0.0 } else { 1e-320 }).to_bits()),
+        ("atan2(3e-310,1e-310)", true, false, &|z| if z { m::atan2(0.0, 0.0) } else { m::atan2(3e-310, 1e-310) }.to_bits()),
+        ("atan2f(1e-38,1e5)", true, true, &|z| u64::from(m::atan2f(if z { 0.0 } else { 1e-38 }, 1e5).to_bits())), // 1e-38 is a subnormal float
+        ("logf(1e-40)", true, false, &|z| u64::from(m::logf(if z { 0.0 } else { 1e-40 }).to_bits())),
     ];
-    for (name, f) in cases {
+    for (name, in_sub, out_sub, f) in cases {
         for rc in 0..4u32 {
             let base = 0x1f80 | (rc << 13);
-            let (want, mx) = around(base, f);
-            for bit in [0x8000, 0x40] {
-                assert_eq!((name, rc, bit, around(base | bit, f)), (name, rc, bit, (want, mx | bit)));
-            }
+            let (want, mx) = around(base, || f(false));
+            // FTZ alone: reads the operand as it is; flushes a subnormal result.
+            // The sign bit of a `float` result is bit 31 (these four cases), of a `double` bit 63.
+            let narrow = name.split('(').next().is_some_and(|b| ["expf", "erff", "atan2f", "logf"].contains(&b));
+            let sign = if narrow { 1u64 << 31 } else { 1u64 << 63 };
+            let ftz = if out_sub { (want & sign, mx | 0x30 | 0x8000) } else { (want, mx | 0x8000) };
+            assert_eq!((name, rc, "ftz", around(base | 0x8000, || f(false))), (name, rc, "ftz", ftz));
+            // DAZ alone: reads a subnormal operand as a zero; nothing else is flushed.
+            let daz = if in_sub { let (v, m2) = around(base, || f(true)); (v, m2 | 0x40) } else { (want, mx | 0x40) };
+            assert_eq!((name, rc, "daz", around(base | 0x40, || f(false))), (name, rc, "daz", daz));
         }
     }
     // The default-word results those compare with: the subnormals and logarithms they should be.
@@ -263,6 +291,28 @@ fn math_envelope_keeps_the_callers_mxcsr() {
     let down = around(0x3f80, || m::exp(0.5).to_bits());
     assert_eq!((up.1, down.1), (0x5fa0, 0x3fa0));
     assert!(up.0 > down.0);
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+// ARCH(x86_64): the SSE unit's FTZ tininess rule (Intel SDM), probed on the host (s10_0_f_0)
+#[test]
+fn math_envelope_flushes_the_tininess_edge_as_the_hardware_does() {
+    // Clauses: s10_0_f_0.
+    use core::hint::black_box;
+    use liella_boundary::mathret::Denorm;
+    // Black box on the host: (1-2^-53)*2^-1022 is a value just below the smallest normal that ROUNDS
+    // to the smallest normal. The default word gives the smallest normal (underflow+inexact); the
+    // caller's FTZ gives +0 (underflow+inexact): FTZ acts on the tininess detected after rounding
+    // with an unbounded exponent, not on the encoding of the rounded result. That is the expected
+    // value here, and `Denorm::ftz(tiny = true)` (the envelope's rule) flushes it.
+    let edge = |f: f64| (black_box(f) * black_box(f64::MIN_POSITIVE)).to_bits();
+    let below = 1.0 - f64::EPSILON / 2.0;
+    assert_eq!(around(0x1f80, || edge(below)), (f64::MIN_POSITIVE.to_bits(), 0x1fb0));
+    assert_eq!(around(0x9f80, || edge(below)), (0, 0x9fb0));
+    // The smallest normal itself (exact product, not tiny) stays under FTZ.
+    assert_eq!(around(0x9f80, || edge(1.0)), (f64::MIN_POSITIVE.to_bits(), 0x9f80));
+    assert_eq!(f64::MIN_POSITIVE.ftz(true), (0.0, true));
+    assert_eq!(f64::MIN_POSITIVE.ftz(false), (f64::MIN_POSITIVE, false));
     fpu::clear(&CSys, Flags::ALL);
 }
 
