@@ -294,10 +294,12 @@ fn integral(x: f64) -> bool {
 /// the computed `|q| <= 1/6 + 0.006/24·1.01 < 0.16692`, `s.hi <= 0.006²·(1 + u)`, so `|tail| <=
 /// 0.006³·0.16692·(1 + 4u) < 2^-24.72` and `eps/|y.hi| < 2^-70·(1 + 2^-3.72) < 1.0757·2^-70`;
 /// `RHO_EXP = 1.125·2^-70`.
+#[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
 const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
 /// [`pow`] with `dz <= DZ_NEAR = 2^-72` (checked before the test): `eps/|v.hi| = 2^-49·|tail| +
 /// 2^-70 + 1.02·dz` ([`pow_eps`]; the computed `dz` is within `4u` of its real formula) `<
 /// (1.0757 + 0.2551)·2^-70`; `RHO_POW = 1.375·2^-70`.
+#[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
 const RHO_POW: f64 = f64::from_bits(0x3b96_0000_0000_0000);
 const DZ_NEAR: f64 = f64::from_bits(0x3b70_0000_0000_0000);
 /// The logarithms with `|l.hi| >= LOG_NEAR = 0.34` for `ln x = l` (every `x` outside about
@@ -307,6 +309,7 @@ const DZ_NEAR: f64 = f64::from_bits(0x3b70_0000_0000_0000);
 /// (error `< 2^-100·|y|`); the bound `eps·(1/ln b)` keeps the ratio: `eps'/|y.hi| <
 /// 1.99·2^-70·(1 + 2^-99) + 2^-99.9`. (Near 1 the ratio reaches 2^-64, so there the exact test
 /// decides.) `RHO_LOG = 2^-69`.
+#[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
 const RHO_LOG: f64 = f64::from_bits(0x3ba0_0000_0000_0000);
 const LOG_NEAR: f64 = 0.34;
 /// The multipliers of [`near`]: for each `rho` above, the least `double` `C` with
