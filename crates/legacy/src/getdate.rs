@@ -18,7 +18,9 @@
 //!   from the current one on (next year if it has passed);
 //! * a weekday without a day of the month: the first such day from the base day on (today, or
 //!   the month's first day);
-//! * a time without any date: today if it is still to come, else tomorrow;
+//! * a time without any date: tomorrow if its hour (0 when not given) is before the current hour,
+//!   else today, also in the current hour with the minutes past (POSIX leaves the equal hour
+//!   open; this is the reference's answer, D-23.7);
 //! * a `%z` offset: the time is read in that offset; `%Z` is accepted and ignored (spec gap).
 //!
 //! The result is normalised as `mktime` does (`tm_isdst` from the zone unless `%s` gave it).
@@ -122,7 +124,8 @@ fn complete<E: Env>(p: &Parsed<E::Zone>, env: &E) -> Result<Local<E::Zone>, i32>
     let cur = env.local(now).map_err(|_| INVALID)?.civil;
     let field = |v: Option<i32>| v.map(i64::from);
     let (pyear, pmon, pmday, pwday) = (field(p.year).map(|y| y + 1900), field(p.mon), field(p.mday), field(p.wday));
-    let date_given = pyear.is_some() || pmon.is_some() || pmday.is_some() || p.yday.is_some() || pwday.is_some();
+    // A year alone is not a date here: an earlier hour still moves to the next day (the reference's answer).
+    let date_given = pmon.is_some() || pmday.is_some() || p.yday.is_some() || pwday.is_some();
     let time_given = p.hour.is_some() || p.min.is_some() || p.sec.is_some();
     let cur_mon = i64::from(cur.month) - 1;
     let mut year = pyear.unwrap_or(cur.year);
@@ -152,7 +155,8 @@ fn complete<E: Env>(p: &Parsed<E::Zone>, env: &E) -> Result<Local<E::Zone>, i32>
     let (mut hour, mut min, mut sec) = (i64::from(cur.hour), i64::from(cur.minute), i64::from(cur.second));
     if time_given {
         (hour, min, sec) = (field(p.hour).unwrap_or(0), field(p.min).unwrap_or(0), field(p.sec).unwrap_or(0));
-        if !date_given && (hour, min, sec) < (i64::from(cur.hour), i64::from(cur.minute), i64::from(cur.second)) {
+        // Only the hour decides: the current hour is today, minutes past or not (the reference's answer).
+        if !date_given && hour < i64::from(cur.hour) {
             mday += 1;
         }
     }
@@ -215,6 +219,19 @@ mod tests {
         assert_eq!(done("%H:%M", "23:59"), Ok((2026, 10, 2, 23, 59, 0)), "still to come today");
         assert_eq!(done("%H:%M", "10:30"), Ok((2026, 10, 3, 10, 30, 0)), "passed: tomorrow");
         assert_eq!(done("%a %H", "Fri 9"), Ok((2026, 10, 2, 9, 0, 0)), "a date given: no moving");
+        // A time alone against the current hour (19:46:39), s23_7_c_3: only the hour decides.
+        for (input, day, why) in [
+            ("20:00", 2, "a later hour: today"),
+            ("19:50", 2, "the current hour, minutes ahead: today"),
+            ("19:10", 2, "the current hour, minutes past: today"),
+            ("19:46:00", 2, "the current minute, seconds past: today"),
+            ("18:59", 3, "an earlier hour: tomorrow"),
+        ] {
+            let fmt = if input.len() > 5 { "%H:%M:%S" } else { "%H:%M" };
+            assert_eq!(done(fmt, input).map(|c| c.2), Ok(day), "{input}: {why}");
+        }
+        assert_eq!(done("%Y %H:%M", "2030 10:00"), Ok((2030, 10, 3, 10, 0, 0)), "a year alone: an earlier hour is the next day");
+        assert_eq!(done("%M", "50"), Ok((2026, 10, 3, 0, 50, 0)), "minutes alone: hour 0, before the current hour");
         assert_eq!(done("%b %H:%S", "Feb 10:30"), Ok((2027, 2, 1, 10, 0, 30)));
         assert_eq!(done("%m/%d", "1/1"), Ok((2026, 1, 1, 19, 46, 39)));
         assert_eq!(done("%b %d", "Feb 30"), Err(INVALID));

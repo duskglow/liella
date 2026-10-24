@@ -33,6 +33,7 @@ directory argument; its output shows that directory as `<dir>`.
 | [timers.md](timers.md) | §23.4 timers (phase 9, written under the same rules before implementation) |
 | [zones.md](zones.md) | §23.5-23.6 broken-down time and time zones (phase 9, same rules) |
 | [timefmt.md](timefmt.md) | §23.7 strftime, strptime, getdate (phase 9, same rules) |
+| [time-gaps.md](time-gaps.md) | §23.5-23.7 the phase 9 gaps settled by probe: `mktime` in skipped and repeated hours, POSIX rules before 1970, `TZ` unset with `/etc/localtime` unreadable, `getdate` with `%Z` and partial times, a signed `%y` (TIME-SPEC-GAPS-SETTLE; probe in `time_gaps_probe.rs`) |
 | [netaddr.md](netaddr.md) | §15.3-15.8 address conversion, interfaces, IPv6 options, Ethernet addresses (phase 10, same rules) |
 | [users.md](users.md) | §17.3-17.6 user, group, shadow databases, shells, utmp (phase 10, same rules; run with `users_run.sh`) |
 | [netdb.md](netdb.md) | §16 netdb databases through `files`, getaddrinfo without DNS (phase 10, same rules; run with `netdb_run.sh`) |
