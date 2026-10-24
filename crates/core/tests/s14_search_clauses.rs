@@ -1451,11 +1451,13 @@ fn s14_7_c_2_6() {
     assert_eq!((f("*(a)", "x(a)", 0, &cl), f("?(a", "?(a", x, &cl), f("@(a\\|b)", "a", x, &cl)), (0, 0, 1), "without the flag, or unterminated, the operators are ordinary; `|` is not escapable");
     assert_eq!((f("!(x)", "a/b", fm::PATHNAME | x, &cl), f("*(a/b)", "a/b", fm::PATHNAME | x, &cl), f("!(x)", ".a", fm::PERIOD | x, &cl), f("*(x)", ".a", fm::PERIOD | x, &cl)), (0, 0, 0, 1));
     // Polynomial time, whatever the pattern (no backtracking).
-    let t = std::time::Instant::now();
+    // A work count, not a clock (WALLCLOCK-ASSERT-SWEEP): exact for these patterns and subject.
     let s = "a".repeat(400) + "b";
-    assert_eq!(f("*(a|aa|aaa)*(a|aa)c", &s, x, &cl), 1);
-    assert_eq!(f("*a*a*a*a*a*a*a*a*a*a*c", &s, 0, &cl), 1);
-    crate::timeout::assert_within("extglob polynomial-time matching", std::time::Duration::from_secs(20), t.elapsed());
+    let (p1, p2) = (fm::Pattern::new(b"*(a|aa|aaa)*(a|aa)c", x, &cl).unwrap(), fm::Pattern::new(b"*a*a*a*a*a*a*a*a*a*a*c", 0, &cl).unwrap());
+    assert!(!p1.matches(s.as_bytes(), &cl).unwrap() && !p2.matches(s.as_bytes(), &cl).unwrap());
+    let work = p1.work() + p2.work();
+    eprintln!("WORK extglob {work}");
+    assert!(work <= EXTGLOB_WORK, "extglob polynomial-time matching: {work} units, over {EXTGLOB_WORK}");
 }
 
 /// Spec §14.7 (Guarantees): Returns 0 for a match and `FNM_NOMATCH` otherwise. Multibyte-aware
@@ -2010,6 +2012,12 @@ fn fz2_prefix_matches_agree() {
     assert!(pat.prefix_matches(b"ab", &Locale::C).unwrap().is_none(), "FNM_PERIOD is matched prefix by prefix");
 }
 
+// fnmatch work-count bounds (`Pattern::work`, WALLCLOCK-ASSERT-SWEEP); exact counts of today's matcher (linear: suffix 8000 is 4x suffix 2000); a bound one step lower fails.
+const EXTGLOB_WORK: u64 = 5712;
+const PREFIX_WORK: u64 = 23440;
+const SUFFIX_WORK_2K: u64 = 12012;
+const SUFFIX_WORK_8K: u64 = 48012;
+
 /// FZ-2: the prefix-removal operators were quadratic in the value's length (a long value with a
 /// pattern that fails at every prefix took seconds; a fuzz input ran past libFuzzer's timeout).
 #[test]
@@ -2024,7 +2032,18 @@ fn fz2_prefix_removal_is_linear() {
         let r = w_with(&mut sh, words, 0).unwrap();
         assert_eq!(r.first().map_or(0, String::len), want, "{words}");
     }
-    crate::timeout::assert_within(&format!("prefix removal over {n} bytes"), std::time::Duration::from_secs(5), t.elapsed());
+    // The speed is a work count on the pattern layer, not a clock (WALLCLOCK-ASSERT-SWEEP); quadratic
+    // work would be about n/64 times this. The wordexp round trip above keeps only a hang guard.
+    let value = ("a".repeat(n) + "\u{e9}b").into_bytes();
+    let mut work = 0;
+    for p in ["b", "b*", "a?b", "a*\u{e9}", "a*", ""] {
+        let pt = fm::Pattern::new(p.as_bytes(), 0, &Locale::c_utf8(b"C.UTF-8")).unwrap();
+        pt.prefix_matches(&value, &Locale::c_utf8(b"C.UTF-8")).unwrap();
+        work += pt.work();
+    }
+    eprintln!("WORK prefix {work}");
+    assert!(work <= PREFIX_WORK, "prefix removal over {n} bytes: {work} units, over {PREFIX_WORK}");
+    crate::timeout::assert_within(&format!("prefix removal over {n} bytes (hang guard)"), std::time::Duration::from_secs(120), t.elapsed());
 }
 
 /// WORDEXP-SUFFIX: `Pattern::suffix_matches` (one backward pass) agrees with `Pattern::matches`
@@ -2132,7 +2151,18 @@ fn wordexp_suffix_removal_is_bounded() {
             let r = w_with(&mut sh, words, 0).unwrap();
             assert_eq!(r.first().map_or(0, String::len), want, "{words} n={n}");
         }
-        crate::timeout::assert_within(&format!("suffix removal over {n} bytes"), std::time::Duration::from_secs(5), t.elapsed());
+        // The speed is a work count on the pattern layer (WALLCLOCK-ASSERT-SWEEP); the clock is a hang guard.
+        let value = ("a".repeat(n) + "b").into_bytes();
+        let mut work = 0;
+        for p in ["a*c", "a?b", "?*?*?*c", "b", ""] {
+            let pt = fm::Pattern::new(p.as_bytes(), 0, &Locale::C).unwrap();
+            pt.suffix_matches(&value, &Locale::C).unwrap();
+            work += pt.work();
+        }
+        eprintln!("WORK suffix {n} {work}");
+        let bound = if n == 2_000 { SUFFIX_WORK_2K } else { SUFFIX_WORK_8K };
+        assert!(work <= bound, "suffix removal over {n} bytes: {work} units, over {bound}");
+        crate::timeout::assert_within(&format!("suffix removal over {n} bytes (hang guard)"), std::time::Duration::from_secs(120), t.elapsed());
     }
 }
 
@@ -2260,7 +2290,9 @@ fn c1_unclosed_bracket_run_is_linear_to_compile() {
     let t = std::time::Instant::now();
     assert!(pt.matches(&p, &loc).unwrap(), "unclosed `[` is a literal");
     assert!(!pt.matches(b"[", &loc).unwrap());
-    crate::timeout::assert_within("match of an unclosed bracket run", std::time::Duration::from_secs(5), t.elapsed());
+    // HANG GUARD, not a speed measurement (WALLCLOCK-ASSERT-SWEEP): this match does not run the general
+    // matcher (no work to count); compile cost is the ratio check above. 120 s idle base cannot be load-tripped.
+    crate::timeout::assert_within("match of an unclosed bracket run (hang guard)", std::time::Duration::from_secs(120), t.elapsed());
     // With a `]` at the end the run is one bracket expression and must still compile and match.
     let mut q = p.clone();
     q.push(b']');

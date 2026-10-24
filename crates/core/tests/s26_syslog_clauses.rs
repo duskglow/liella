@@ -456,7 +456,9 @@ fn s26_1_g_3() {
         }
     }
     assert_eq!(outcome, Delivery::Console, "a full receiver: the record goes to the console");
-    assert!(slowest < Duration::from_secs(2), "never blocked: {slowest:?}");
+    // HANG GUARD, not a speed measurement (WALLCLOCK-ASSERT-SWEEP): a blocked send waits for ever (or
+    // for the long wait the logger would have), so a minute cannot be tripped by load.
+    assert!(slowest < Duration::from_secs(60), "never blocked: {slowest:?}");
     assert!(std::fs::read(s.path("console")).unwrap().starts_with(b"busy: xxx"));
     drop(r);
     // A FIFO console nobody reads: not waited for.
@@ -466,7 +468,9 @@ fn s26_1_g_3() {
     std::fs::remove_file(s.path("log")).unwrap();
     let t = Instant::now();
     assert_eq!(l.log(&CSys, 6, STAMP, b"m"), Ok(Delivery::Lost));
-    timeout::assert_within("a lost log message must not block", Duration::from_secs(2), t.elapsed());
+    // HANG GUARD (WALLCLOCK-ASSERT-SWEEP): a blocking open of the FIFO never returns; 60 s idle-machine
+    // base (scaled further by load) cannot be reached by a slow host.
+    timeout::assert_within("a lost log message must not block", Duration::from_secs(60), t.elapsed());
     l.close(&CSys);
     plain.close(&CSys);
 }
