@@ -1378,7 +1378,7 @@ fn sym__res() {
 #[test]
 fn sym__res_hconf() {
     assert_eq!(size_of_val(&liella_boundary::data::_res_hconf), 72);
-    liella_boundary::data::set_hconf(true);
+    liella_boundary::data::set_hconf(true, false);
     assert_eq!(liella_boundary::data::_res_hconf[0].load(std::sync::atomic::Ordering::Relaxed), 1);
     assert_eq!(liella_boundary::data::_res_hconf[8].load(std::sync::atomic::Ordering::Relaxed), 0x10, "multi");
 }
