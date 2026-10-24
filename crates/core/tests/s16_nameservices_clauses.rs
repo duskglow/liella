@@ -96,7 +96,7 @@ impl Fx {
 
     /// A lookup context: the fixture's files and the configuration `conf` (an nsswitch.conf text).
     fn ctx(&self, conf: &str) -> Ctx<'_, CSys> {
-        Ctx { sys: &CSys, paths: &self.paths, config: Config::parse(conf.as_bytes()), multi: false, dns: None, locale: None, cache: None }
+        Ctx { sys: &CSys, paths: &self.paths, config: Config::parse(conf.as_bytes()), multi: false, hconf: None, dns: None, locale: None, cache: None }
     }
 }
 
