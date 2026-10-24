@@ -1,0 +1,10 @@
+{"task": "HARNESS-REEXEC-IGNORED", "model": "sonnet", "tokens": null,
+ "result": "COMPLETE pending the FULL gate: every re-exec test harness now passes --include-ignored and asserts the child ran one test; cargo xtask reexec-audit guards it; plants 4/4 caught",
+ "branch": "task/harness-reexec-ignored", "head": "HEADPLACEHOLDER",
+ "jobs": ["harness-reexec-ignored-gate-2", "harness-reexec-ignored-plants-2"],
+ "gate": {"affected": "FULL tier (xtask change), running detached", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [], "informational": ["No previously-ignored re-exec target was found besides memstream and s23_7_c_3_child; the gate answers whether any child was silently filtered out"],
+ "refused": [],
+ "improvement": "Touching xtask/src/main.rs escalates the gate to FULL; put a new static check in policy.rs and keep the main.rs edit to the registration lines",
+ "next_step": "read gate-2; any harness that now fails names a test that never ran before",
+ "report_file": "handoff/HARNESS-REEXEC-IGNORED.md"}
