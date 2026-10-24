@@ -1117,6 +1117,24 @@ mod tests {
     extern crate std;
     use std::vec::Vec;
 
+    /// A `[` after the first `]` still opens a bracket: the last `]` of the pattern decides, and a
+    /// run of equal ordinary characters stops before `*`, `?`, `[` and `\\` (the string holds the
+    /// metacharacter itself there).
+    // no spec clause: speed-up of the direct matcher; the general matcher defines the behaviour.
+    #[test]
+    fn direct_brackets_after_a_first_close_and_runs_stop_at_metacharacters() {
+        let c = |p: &[u8], s: &[u8]| direct(p, s, 0, &Locale::C);
+        assert_eq!(c(b"[ab][ab]", b"ba"), Some(true));
+        assert_eq!(c(b"x[ab]y[cd]z", b"xbycz"), Some(true));
+        assert_eq!(c(b"ab*c", b"ab*xc"), Some(true));
+        assert_eq!(c(b"ab?c", b"ab?c"), Some(true));
+        assert_eq!(c(b"ab?c", b"abxc"), Some(true));
+        assert_eq!(c(b"ab[xy]", b"ab["), Some(false));
+        assert_eq!(c(b"ab[xy]", b"aby"), Some(true));
+        assert_eq!(c(b"ab\\*", b"ab*"), Some(true));
+        assert_eq!(c(b"ab\\*", b"abxy"), Some(false));
+    }
+
     /// The direct matcher agrees with the general one on every pattern of up to three tokens
     /// over every string of up to three characters of `a b . / A`, under every combination of
     /// the flags it takes, in the C and C.UTF-8 locales.
