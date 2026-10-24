@@ -21,7 +21,7 @@
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // table indices reduced to the tables' ranges; exponents of bounded range
 
 use crate::coeffs::tables as t;
-use crate::dd::{self, two_prod, two_sum, Dd};
+use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
 use crate::float;
 use crate::status::{Flags, Rounding, Status};
 
@@ -42,10 +42,21 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// as `rl·(1 + rh)` (dropping `rl·rh²/2 < 2^-76`, `rl²/2 < 2^-120`); the tail
 /// `T = rh³·(1/3! + …)` (`|T| < 2^-24.5`) is evaluated in `double` with at most 4 roundings and
 /// the coefficients' own roundings (each below `u` relative): error `< 5u·|T| < 2^-50·|T|`. Using
-/// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64)` is stored as a
-/// double-double (error `< 2^-104`), and `y = t + t·p` is formed with `Dd::mul`/`Dd::add`
-/// (`< 2^-100` relative). So `|e^r·2^(j/64) − y| <= 2^(j/64)·(2^-50·|T| + 2^-74) + 2^-99 <=
-/// 2^-49·|T|·|y| + 2^-70·|y|` (`|y| >= 2^(j/64)·0.994`).
+/// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64) = th + tl` is stored as a
+/// double-double (error `< 2^-104`, `1 <= th < 2`, `|tl| <= 2^-53·th`).
+///
+/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 13.5 #1; Fast2Sum and Dekker's
+/// product as in Muller et al., Handbook of Floating-Point Arithmetic, 2018, ch. 4): `p = ph + pl`
+/// with `|ph| <= 0.00602`, `pl = a.lo + small` (`|a.lo| <= 2^-53·|ph|`, the small sum carrying `T`).
+/// `q = th·ph` exactly (`two_prod`); `th + q.hi` by Fast2Sum, exact since `|q.hi| <= 0.0121 < th`;
+/// `y` = Fast2Sum of that sum `b` and `lo = (b.lo + (tl + (q.lo + tl·ph))) + th·pl`, exact since
+/// `|lo| < 2^-20 <= |b.hi|`. Dropped: `tl·pl < 2^-53·2·2^-52 = 2^-104`. The four roundings in
+/// the first part of `lo` act on partial sums below `2^-51.9`: `< 2^-102.9`. `th·pl` and the
+/// last addition each add `u` of `th·|pl| <= th·(|T| + 2^-52.4·|ph|)`: `2u·th·|T| + 2^-104`.
+/// `T` itself: `5u·|T|` (above) and the two additions that carry it into `pl`, `2u·|T|`; with
+/// the assembly's `2u` that is `9u·th·|T| < 2^-49.8·th·|T|`. So `|e^r·2^(j/64) − y| <=
+/// 2^-49.8·th·|T| + th·2^-74 + 2^-101 <= 2^-49·|T|·|y| + 2^-70·|y|` (`|y| >= 0.994·th`; the
+/// computed `|tail|` is within `5u` of `|T|`).
 fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
@@ -56,9 +67,12 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let s = two_prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, 0.5 * s.hi);
-    let p = Dd { hi: a.hi, lo: a.lo + ((0.5 * s.lo + rl * (1.0 + rh)) + tail) };
-    let tj = Dd::of(t::EXP2_J64[usize::try_from(k & 63).unwrap_or(0)]);
-    let y = tj.add(tj.mul(p));
+    let (ph, pl) = (a.hi, a.lo + ((0.5 * s.lo + rl * (1.0 + rh)) + tail));
+    let tj = t::EXP2_J64[usize::try_from(k & 63).unwrap_or(0)];
+    let (th, tl) = (f64::from_bits(tj[0]), f64::from_bits(tj[1]));
+    let q = two_prod(th, ph);
+    let b = fast_two_sum(th, q.hi);
+    let y = fast_two_sum(b.hi, (b.lo + (tl + (q.lo + tl * ph))) + th * pl);
     let eps = dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN);
     Some((y, k >> 6, eps))
 }
@@ -96,9 +110,11 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// `|rh| <= 2^-7`: `ln(1 + r) = r − r²/2 + r³·(1/3 − r/4 + … − r⁷/10) + δ` with
 /// `|δ| <= |r|¹¹/11·1.01 < 2^-80·|r|`. `rh − rh²/2` is exact as a double-double; `rl` enters as
 /// `rl·(1 − rh + rh²)` (dropping `< 2^-74·|r|`); the tail `T` costs `< 2^-50·|T|` as in
-/// [`exp_kernel`]. `e·ln2` and `−ln c` are stored double-doubles (`< 2^-104` relative), summed by
-/// `Dd::add`. Either `e = 0` and `c = 1` (then `y ≈ r`), or `|y| >= 2^-8.1` while `|r| <= 2^-7`,
-/// so the absolute errors other than `T`'s are below `2^-72·|y|`.
+/// [`exp_kernel`], and the one addition that carries it in [`log_assemble`] costs `u·|T|`: `6u·|T|`
+/// in all. The assembly's other errors are below `2^-95·|e| + 2^-103` ([`log_assemble`]). Either
+/// `e = 0` and `c = 1` (then `y = r` up to the series' errors), or `e = 0`, `|m − 1| >= 2^-8` and
+/// `|y| >= 2^-8.01`, or `e != 0` and `|y| >= |e|·ln2 − ln√2 >= 0.34·|e|`: so the absolute errors
+/// other than `T`'s are below `2^-72·|y|`.
 fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let (e, m) = crate::exp_log::decompose(x);
     let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
@@ -114,9 +130,36 @@ fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let s = two_prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
-    let lr = Dd { hi: a.hi, lo: a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail) };
-    let y = Dd::of(t::LN2).mul_f64(f64::from(e)).add(Dd::of(t::LOG_L[idx])).add(lr);
+    let y = log_assemble(e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail));
     Some((y, TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)))
+}
+
+/// ln 2 split for [`log_assemble`]: `LN2H` keeps 42 significant bits, so `e·LN2H` is exact for
+/// `|e| < 2^11`; `LN2L = RN(ln2 − LN2H) < 2^-43`, and `|ln2 − LN2H − LN2L| < 2^-101`.
+const LN2H: f64 = f64::from_bits(0x3fe6_2e42_fefa_3800);
+const LN2L: f64 = f64::from_bits(0x3d2e_f357_93c7_6730);
+
+/// `e·ln2 + (−ln c) + (lh + ll)`, the logarithms' assembly (MATH-M6-F64-GAP-ASSEMBLY, register
+/// 13.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <= 0.347`, `|cl| <=
+/// 2^-53·|ch|`) and `log1p r = lh + ll` (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
+///
+/// Proof. `H = e·LN2H` is exact; `H + ch` by Fast2Sum is exact (`|H| >= 0.693 > |ch|`, or
+/// `H = 0`); `b.hi + lh` by 2Sum is exact. `y` = Fast2Sum of `u.hi` and
+/// `lo = (((u.lo + b.lo) + cl) + e·LN2L) + ll`, exact since `|lo| < 2^-40·(|e| + 1) + 2^-28·|lh|`
+/// is below `|u.hi|` (which is `|y|` within `2^-40`, and `|y|` is at least `0.34·|e|`, `2^-8.01`
+/// or `|lh|·(1 − 2^-28)` by the cases of [`log_kernel`]). Errors, with `S = |H| + |ch| + |lh|`:
+/// `e·(ln2 − LN2H − LN2L) < |e|·2^-101`; `RN(e·LN2L)`: `|e|·2^-96.9`; the roundings of the first
+/// three additions of `lo` (partial sums below `2^-52·S`, the third also `|e|·2^-43.9`):
+/// `2^-103.4·S + |e|·2^-96.9`; the last addition: `u·|ll| + 2^-104.9·S`, that is `u·|T|` plus
+/// `2^-103.9·|lh|`; the stored `LOG_L`: `2^-104·|ch|`. In all, `u·|T|` plus below
+/// `2^-95.2·|e| + 2^-102.5·S <= 2^-95·|e| + 2^-103` (`S <= 0.694·|e| + 0.36`).
+#[inline(always)]
+fn log_assemble(e: i32, idx: usize, lh: f64, ll: f64) -> Dd {
+    let ef = f64::from(e);
+    let c = t::LOG_L[idx];
+    let b = fast_two_sum(ef * LN2H, f64::from_bits(c[0]));
+    let u = two_sum(b.hi, lh);
+    fast_two_sum(u.hi, (((u.lo + b.lo) + f64::from_bits(c[1])) + ef * LN2L) + ll)
 }
 
 /// `ln x` for a positive finite `x != 1`.
@@ -255,8 +298,9 @@ pub fn pow_nearest(x: f64, y: f64) -> Option<f64> {
 
 /// 2^-48: the bound on the relative error of the `double` series tail in [`log_pow`], doubled.
 const LTAIL: f64 = f64::from_bits(0x3cf0_0000_0000_0000);
-/// 2^-99 and 2^-100: the bounds for the double-double steps of [`log_pow`] and [`pow`].
-const DD99: f64 = f64::from_bits(0x39c0_0000_0000_0000);
+/// 2^-94 (per unit of `|e|`) and 2^-100: the bounds for the double-double steps of [`log_pow`]
+/// and [`pow`].
+const DD94: f64 = f64::from_bits(0x3a10_0000_0000_0000);
 const DD100: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// 1/3 as a double-double (the error below 2^-110).
 const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_bits(0x3c75_5555_5555_5555) };
@@ -270,22 +314,27 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// `ln(1 + rh) = rh − rh²/2 + rh³/3 + T + δ` with `T = rh⁴·(−1/4 + rh/5 − … − rh⁷/11)` and
 /// `|δ| <= rh¹²/12·1.01 <= 2^-56·|T|` (`|T| >= 0.24·rh⁴`). Then:
 /// * `rh − rh²/2`: `two_prod` and `two_sum`, exact as a double-double.
-/// * `rh³/3`: the exact `rh²` times `rh` (`Dd::mul_f64`) times [`THIRD`] (`Dd::mul`), below
-///   `2^-100·|rh|³`.
+/// * `rh³/3` (register 13.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
+///   s.lo·rh`; `g = c.hi·THIRD.hi` exactly (`two_prod`, Dekker's split of the constant folded);
+///   `cube = g.hi + cube_lo`, `cube_lo = g.lo + ((c.lo + s.lo·rh)·THIRD.hi + c.hi·THIRD.lo)`.
+///   Dropped `(c.lo + s.lo·rh)·THIRD.lo` and `1/3 − THIRD` (`< 2^-110`): `< 2^-105·|rh³|`; six
+///   roundings on partial sums below `2^-51·|rh³|`: `< 2^-101.4·|rh³|`. So `< 2^-101·|rh|³ <=
+///   2^-115·|rh|`.
 /// * `T` in `double`: the coefficients' and Horner's roundings (`|rh·…| <= 2^-7·0.21` against
 ///   `1/4`, at most `4u` relative), `rh⁴ = s.hi²` (`2u` from `s.hi` plus `u`), the product
 ///   (`u`): `< 2^-50·|T|`.
 /// * `rl` enters as `rl·(1 − rh + rh²)`: the dropped `rl·rh³·1.01 < 2^-50.9·|T|` and
 ///   `rl²/2·1.01 < 2^-107·|rh|`; its rounding `< 2^-106·|rh|`.
 /// * The small sum `(−s.lo/2 + rl·(…)) + T`: two roundings, `< 2^-52·|T| + 2^-104·|rh|`.
-/// * Adding `rh³/3` and the small sum to the exact `rh − rh²/2` (`Dd::add`, `Dd::add_f64`):
-///   `< 2^-103·|rh|` (`|lr| <= 1.01·|rh|`).
+/// * `lh + ll`: `lh = RN(a.hi + g.hi)` by Fast2Sum (exact: `|g.hi| <= 2^-15.5·|rh| <= |a.hi|`)
+///   and `ll = ((h.lo + a.lo) + cube_lo) + small`: the first two roundings act on partial sums
+///   below `2^-51.9·|rh|`, the last on those plus `|T|·1.01`: `< 2^-53·|T| + 2^-103·|rh|`
+///   (`|ll| <= |T| + 2^-51·|rh|`).
 ///
-/// So `|ln(1 + r) − lr| <= (2^-50 + 2^-50.9 + 2^-52 + 2^-56)·|T| + 2^-100·|rh|
-/// <= 2^-48·|T| + 2^-100·|rh|`. The assembly `e·ln2 + (−ln c) + lr` is exact when `e = 0` and
-/// `c = 1` (both other terms are 0); otherwise `e·ln2` (`two_prod` of the stored `LN2.hi`, the
-/// trailing parts below `|e|·2^-106`), `−ln c` (stored, `< 2^-104`) and the two `Dd::add`s
-/// (`< 2^-104` of the operands' magnitudes, all below `|y| + 1`) cost `< 2^-99·(|y| + 1)`.
+/// So `|ln(1 + r) − (lh + ll)| <= (2^-50 + 2^-50.9 + 2^-52 + 2^-53 + 2^-56)·|T| + 2^-101·|rh|
+/// <= 2^-49·|T| + 2^-101·|rh|`. When `e = 0` and `c = 1` the result is `lh + ll` normalized by
+/// Fast2Sum (exact: `|ll| <= 2^-28·|lh|`). Otherwise [`log_assemble`] adds `u·|T|` (still
+/// within `2^-48·|T|`) and below `2^-95·|e| + 2^-103`, charged as `DD94·|e| + DD100`.
 fn log_pow(x: f64) -> Option<(Dd, f64)> {
     let (e, m) = crate::exp_log::decompose(x);
     let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
@@ -301,16 +350,18 @@ fn log_pow(x: f64) -> Option<(Dd, f64)> {
     let s = two_prod(rh, rh);
     let tail = s.hi * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
-    let cube = s.mul_f64(rh).mul(THIRD);
+    let c = two_prod(s.hi, rh);
+    let g = two_prod(c.hi, THIRD.hi);
+    let cube_lo = g.lo + ((c.lo + s.lo * rh) * THIRD.hi + c.hi * THIRD.lo);
+    let h = fast_two_sum(a.hi, g.hi);
     let small = (rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail;
-    let lr = a.add(cube).add_f64(small);
+    let ll = ((h.lo + a.lo) + cube_lo) + small;
     let mut el = LTAIL * dd::abs(tail) + DD100 * dd::abs(rh);
     let y = if e == 0 && i == 0 {
-        lr
+        fast_two_sum(h.hi, ll)
     } else {
-        let y = Dd::of(t::LN2).mul_f64(f64::from(e)).add(Dd::of(t::LOG_L[idx])).add(lr);
-        el += DD99 * (dd::abs(y.hi) + 1.0);
-        y
+        el += DD94 * dd::abs(f64::from(e)) + DD100;
+        log_assemble(e, idx, h.hi, ll)
     };
     Some((y, el))
 }
@@ -450,4 +501,62 @@ fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)> {
     let r = n * dd::pow2(-474) * dd::pow2(-600);
     let st = Status::flags(Flags(Flags::UNDERFLOW.0 | Flags::INEXACT.0));
     Some((r, float::range_errno(r, st)))
+}
+
+// The kernels' error bounds checked directly against the multi-precision oracle (`crate::mp`):
+// each dropped or misplaced term of an assembly is far above its bound, so these catch what the
+// rounding tests would see only rarely (MATH-M6-F64-GAP-ASSEMBLY). No spec clause: internal
+// bounds of the fast paths (D-10.13).
+#[cfg(test)]
+mod bounds {
+    use super::*;
+    use crate::mp::{self, Mp};
+
+    fn operands(n: usize, lo: f64, hi: f64) -> impl Iterator<Item = f64> {
+        let mut st = 0x2545_f491_4f6c_dd1du64;
+        (0..n).map(move |_| {
+            st ^= st << 13;
+            st ^= st >> 7;
+            st ^= st << 17;
+            lo + (hi - lo) * ((st >> 11) as f64 / 9_007_199_254_740_992.0)
+        })
+    }
+
+    fn within(exact: Mp, y: Dd, bound: f64, what: &str, x: f64) {
+        let err = exact.sub(Mp::from_f64(y.hi)).sub(Mp::from_f64(y.lo));
+        assert!(err.cmp_abs(Mp::from_f64(bound)).is_le(), "{what}({x:e}): error {:e} above the bound {bound:e}", err.to_f64());
+    }
+
+    #[test]
+    fn log_kernels_stay_within_their_bounds() {
+        let near = operands(3000, 0.95, 1.05);
+        let wide = operands(3000, -700.0, 700.0).map(f64::exp2);
+        for x in near.chain(wide).chain(operands(2000, 0.5, 4.0)) {
+            if x == 1.0 {
+                continue;
+            }
+            let exact = mp::ln(Mp::from_f64(x));
+            if let Some((y, eps)) = log_kernel(x) {
+                within(exact, y, eps, "log_kernel", x);
+            }
+            if let Some((y, el)) = log_pow(x) {
+                within(exact, y, el, "log_pow", x);
+            }
+        }
+    }
+
+    #[test]
+    fn exp_kernel_stays_within_its_bound() {
+        for x in operands(6000, -700.0, 700.0).chain(operands(2000, -0.02, 0.02)) {
+            if dd::abs(x) < crate::exp_log::TINY {
+                continue;
+            }
+            let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+            let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LN2_64_CW);
+            if let Some((y, m, eps)) = exp_kernel(r, dd::to_i32(kf)) {
+                let exact = mp::exp(Mp::from_f64(x)).mul(Mp::from_f64(dd::pow2(-m)));
+                within(exact, y, eps, "exp_kernel", x);
+            }
+        }
+    }
 }
