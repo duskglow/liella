@@ -111,6 +111,7 @@ Delivered blocks, not here.
 | `strptime` `%r` with an empty `T_FMT_AMPM` | `%I:%M:%S %p`, so `strftime`'s output reads back. | Fails. | D-23.7 | `s23_7_c_2`, `s23_7_c_1_2` |
 | `strptime` `%c %x %X %r` that do not match the locale's format | Fail. | Retry the C locale's format. | D-23.7 | `s23_7_c_2` |
 | `getdate` with a `DATEMSK` file that cannot be opened | `getdate_err` 2 (POSIX). | 3. | D-23.7 | `s23_7_c_3` |
+| `getdate` with a template that gives the month but no day (`%Y-%m`) | The first of the month (POSIX). Gain: correctness and a result that does not depend on the date of the call. | Another day of that month (the 5th for `2030-06` on 2026-10-24). | D-23.7 | `s23_7_c_3` |
 | `snprintf` and the other printf forms into a caller's buffer | Allocate while formatting (the format is parsed into heap tables), so they fail with `ENOMEM` when no memory can be mapped. A known characteristic, accepted by the owner (2026-10-02); the spec does not promise allocation-free formatting. | Format small results without allocating. | D-12.12 | `s12_6_c_r4`, `s12_6_f_2` |
 | `fileno` of a stream without a descriptor (memory, cookie) | -1 with `errno` `EBADF`, as §12.2 says. | -1, `errno` unchanged. | §12.2 | `s12_2_c_5` |
 | `scanf` integer out of range (`%d` reading `2147483648`, `%hhd` reading `300`) | Stores the type's minimum or maximum. | Stores the value converted to the type (wrapped), or `LONG_MAX`/`LONG_MIN` converted when the text exceeds `long`. ISO C leaves it undefined; the spec allows either. | D-12.6 | `s12_7_f_0` |
