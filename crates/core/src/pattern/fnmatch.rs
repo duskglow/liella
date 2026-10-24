@@ -938,11 +938,24 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
     let escapes = flags & NOESCAPE == 0;
     // A `[` with no `]` after it can never close: it is a literal, decided in O(1) (C1-TRIAGE:
     // looking for the `]` from every `[` of a long unclosed run was quadratic).
-    let last_close = p.iter().rposition(|&c| c == b']');
+    // Looked for only when the pattern has a `[` (most patterns have none).
+    let mut last_close: Option<Option<usize>> = None;
     let (mut pi, mut si) = (0usize, 0usize);
     // The last star: the pattern after it, and where its match ends now.
     let mut star: Option<(usize, usize)> = None;
     loop {
+        // A run of ordinary characters that equal the string's: compared straight, without the
+        // per-step dispatch (a mismatch, or any other pattern character, ends the run and the
+        // step below decides). Ordinary characters match only themselves, bytewise.
+        if flags & CASEFOLD == 0 {
+            while let (Some(&c), Some(&x)) = (p.get(pi), s.get(si)) {
+                if c != x || matches!(c, b'*' | b'?' | b'[' | b'\\') {
+                    break;
+                }
+                pi += 1;
+                si += 1;
+            }
+        }
         // One step of the pattern at `pi` against the string at `si`: the new positions, or
         // `None` for a mismatch.
         let step: Option<(usize, usize)> = match p.get(pi) {
@@ -964,7 +977,7 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
                 // A trailing `\`: nothing matches.
                 None => return Some(false),
             },
-            Some(b'[') if last_close.is_none_or(|k| k <= pi) => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
+            Some(b'[') if (*last_close.get_or_insert_with(|| p.iter().rposition(|&c| c == b']'))).is_none_or(|k| k <= pi) => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
             Some(b'[') => match bracket_has(p, pi + 1, escapes, &mt, at(si).filter(|_| wild(si)))? {
                 Some((hit, after)) => hit.then_some((after, si + 1)),
                 None => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
