@@ -504,6 +504,11 @@ pub extern "C" fn cacosf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::cacos)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_cacosf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::cacos)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cacosf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::cacos)
@@ -531,6 +536,11 @@ pub extern "C" fn cacosh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cacoshf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::cacosh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_cacoshf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::cacosh)
 }}
 
@@ -614,6 +624,11 @@ pub extern "C" fn cargf(x: mret::Complex<f32>) -> f32 {
     mret::cplx_real(x, mret::Unit::Sse, math::complex::carg)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_cargf128_bits(x: mret::Complex<F128Bits>) -> F128Bits {
+    mret::cplx_real(x, mret::Unit::Sse, math::complex::carg)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cargf32(x: mret::Complex<f32>) -> f32 {
     mret::cplx_real(x, mret::Unit::Sse, math::complex::carg)
@@ -649,6 +664,11 @@ pub extern "C" fn casinf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::casin)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_casinf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::casin)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn casinf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::casin)
@@ -676,6 +696,11 @@ pub extern "C" fn casinh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn casinhf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::casinh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_casinhf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::casinh)
 }}
 
@@ -719,6 +744,11 @@ pub extern "C" fn catanf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::catan)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_catanf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::catan)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn catanf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::catan)
@@ -746,6 +776,11 @@ pub extern "C" fn catanh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn catanhf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::catanh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_catanhf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::catanh)
 }}
 
@@ -829,6 +864,11 @@ pub extern "C" fn ccosf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ccos)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_ccosf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::ccos)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ccosf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ccos)
@@ -856,6 +896,11 @@ pub extern "C" fn ccosh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ccoshf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::ccosh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_ccoshf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ccosh)
 }}
 
@@ -939,6 +984,11 @@ pub extern "C" fn cexpf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_cexpf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cexpf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
@@ -1019,6 +1069,11 @@ pub extern "C" fn clog10f(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::clog10)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_clog10f128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::clog10)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn clog10f32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::clog10)
@@ -1046,6 +1101,11 @@ pub extern "C" fn liella_clog10l_bits(x: mret::Complex<LdBits>) -> mret::Complex
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn clogf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::clog)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_clogf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::clog)
 }}
 
@@ -1244,6 +1304,11 @@ pub extern "C" fn cpowf(x: mret::Complex<f32>, y: mret::Complex<f32>) -> mret::C
     mret::cplx2(x, y, mret::Unit::Sse, math::complex::cpow)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_cpowf128_bits(x: mret::Complex<F128Bits>, y: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx2(x, y, mret::Unit::Sse, math::complex::cpow)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cpowf32(x: mret::Complex<f32>, y: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx2(x, y, mret::Unit::Sse, math::complex::cpow)
@@ -1359,6 +1424,11 @@ pub extern "C" fn csinf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::csin)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_csinf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::csin)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csinf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::csin)
@@ -1386,6 +1456,11 @@ pub extern "C" fn csinh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn csinhf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_csinhf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::csinh)
 }}
 
@@ -1429,6 +1504,11 @@ pub extern "C" fn csqrtf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_csqrtf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn csqrtf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::csqrt)
@@ -1464,6 +1544,11 @@ pub extern "C" fn ctanf(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ctan)
 }}
 
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_ctanf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::ctan)
+}}
+
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ctanf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ctan)
@@ -1491,6 +1576,11 @@ pub extern "C" fn ctanh(x: mret::Complex<f64>) -> mret::Complex<f64> {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ctanhf(x: mret::Complex<f32>) -> mret::Complex<f32> {
+    mret::cplx(x, mret::Unit::Sse, math::complex::ctanh)
+}}
+
+export! { libm "LIELLA_PRIVATE";
+pub extern "C" fn liella_ctanhf128_bits(x: mret::Complex<F128Bits>) -> mret::Complex<F128Bits> {
     mret::cplx(x, mret::Unit::Sse, math::complex::ctanh)
 }}
 
