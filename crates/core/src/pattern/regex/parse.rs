@@ -766,7 +766,8 @@ pub(crate) fn parse(pattern: &[u8], syntax: u64, loc: &Locale) -> Result<Parsed,
 /// `abb`, so its group reports the last iteration `b` and `(b*)` the empty string. Such a
 /// subpattern (a repetition (one holding groups only in a pattern without back-references), or
 /// an alternation or a back-reference that holds no group; not a
-/// group's whole body, not part of an alternative, and before the opening of some group) gets a
+/// group's whole body, not a group-free repetition that is another repetition's whole
+/// operand, not part of an alternative, and before the opening of some group) gets a
 /// *hidden* group: every group is renumbered in opening order, and [`Parsed::report`] maps each
 /// subexpression to its group. A fixed-length subpattern needs none (where it lies follows from
 /// the subpatterns before it). Parts of an alternative are not compared on their own: the
@@ -818,13 +819,19 @@ fn hide_subpatterns(p: &mut Parsed) -> Result<(), ReError> {
         map: TryVec<u32>,
     }
     // Decide, in pre-order, which nodes get a hidden group and every group's number. `body`: `n`
-    // is a group's whole body; `alt`: `n` lies in an alternative (below the nearest group).
-    fn plan(n: &Node, body: bool, alt: bool, st: &mut Plan) -> Result<(), ReError> {
+    // is a group's whole body; `alt`: `n` lies in an alternative (below the nearest group);
+    // `rep`: `n` is a repetition's whole operand.
+    fn plan(n: &Node, body: bool, alt: bool, rep: bool, st: &mut Plan) -> Result<(), ReError> {
         let me = st.pre;
         st.pre += 1;
         let has = st.holds.get(me).copied().unwrap_or(false);
         let wrap = match n {
-            Node::Rep(..) => !has || !st.brefs,
+            // A group-free repetition that is another repetition's whole operand (`a**`, `a*?*`)
+            // is not weighed on its own (FUZZ-REGEX-TIMEOUTS-3, D-14.8): the outer repetition's
+            // hidden group fixes the stack's span, and how a group-free stack splits that span
+            // into iterations changes no later subexpression. Left unwrapped, the stack's scopes
+            // are group-free and share one empty-iteration level (program.rs `chain_shared`).
+            Node::Rep(..) => !(rep && !has) && (!has || !st.brefs),
             Node::Alt(_) | Node::Backref(_) => !has,
             _ => false,
         };
@@ -840,19 +847,19 @@ fn hide_subpatterns(p: &mut Parsed) -> Result<(), ReError> {
                 if let Some(m) = st.map.get_mut(usize::try_from(*g).unwrap_or(0).saturating_sub(1)) {
                     *m = st.next;
                 }
-                plan(x, true, false, st)?;
+                plan(x, true, false, false, st)?;
             }
             Node::Cat(v) => {
                 for c in v.iter() {
-                    plan(c, false, alt, st)?;
+                    plan(c, false, alt, false, st)?;
                 }
             }
             Node::Alt(v) => {
                 for c in v.iter() {
-                    plan(c, false, true, st)?;
+                    plan(c, false, true, false, st)?;
                 }
             }
-            Node::Rep(x, _, _) => plan(x, false, alt, st)?,
+            Node::Rep(x, _, _) => plan(x, false, alt, true, st)?,
             _ => {}
         }
         Ok(())
@@ -889,7 +896,7 @@ fn hide_subpatterns(p: &mut Parsed) -> Result<(), ReError> {
     let mut map = TryVec::new();
     nomem(map.resize(usize::try_from(p.ngroups).unwrap_or(0), 0u32))?;
     let mut st = Plan { brefs: p.brefs != 0, holds, last, pre: 0, next: 0, wrap: TryVec::new(), map };
-    plan(&p.root, false, false, &mut st)?;
+    plan(&p.root, false, false, false, &mut st)?;
     if st.next == p.ngroups {
         return Ok(());
     }
