@@ -55,6 +55,7 @@ fn ctx() -> Ctx<'static, CSys> {
 /// A host lookup's context: the process's switch, the calling thread's resolver for the `dns`
 /// source when the `hosts` line names it (D-16.3), and the thread's locale for IDNA texts.
 fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
+    hconf_env();
     let mut c = ctx().with_multi();
     let resolver = if c.spec(liella::names::nss::Database::Hosts).has(liella::names::nss::Service::Dns) { crate::resolv::host_resolver_pristine() } else { None };
     // A thread whose program changed `_res` bypasses the name-service cache (D-16.10).
@@ -63,8 +64,18 @@ fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
     }
     c.dns = resolver.as_ref().map(|(r, _)| r);
     c.locale = Some(crate::locale::current());
-    crate::data::set_hconf(c.multi);
+    crate::data::set_hconf(c.multi, c.hconf.is_some_and(|s| s.reorder));
     f(&c)
+}
+
+/// The `RESOLV_*` variables `host.conf`'s settings take (D-16.13), read at the first host
+/// lookup only, and like `HOSTALIASES` not in secure-execution mode; `RESOLV_HOST_CONF` names
+/// the file read in place of `/etc/host.conf` (observed: a missing one gives the defaults).
+fn hconf_env() {
+    nss::HOST_CONF.env_once(&CSys, || {
+        let get = |n: &[u8]| crate::process::secure_getenv(n).map(crate::strz::env_value);
+        (liella::names::hostconf::Env::read(get), get(b"RESOLV_HOST_CONF"))
+    });
 }
 
 /// The context of a `getaddrinfo` or `getnameinfo` call that consults no database (numeric
@@ -72,7 +83,9 @@ fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
 /// observed). `_res_hconf` is still filled at the first such call when no host lookup has.
 fn without_switch<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
     if !crate::data::hconf_filled() {
-        crate::data::set_hconf(ctx().with_multi().multi);
+        hconf_env();
+        let c = ctx().with_multi();
+        crate::data::set_hconf(c.multi, c.hconf.is_some_and(|s| s.reorder));
     }
     f(&Ctx::bare(&CSys, &nss::SYSTEM))
 }
