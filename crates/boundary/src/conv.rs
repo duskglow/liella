@@ -479,6 +479,10 @@ pub fn fill(dst: &mut [u8], v: u8) {
         // (`ffi`): AVX2 with the YMM state saved (the kernel flag; before the startup decision it
         // is false and the loop runs), 128 < len, `dst` a `&mut [u8]`.
         let _ = ffi::liella_machine_fill_avx2(dst.as_mut_ptr(), i32::from(v), dst.len());
+    } else if dst.len() > 128 {
+        // MEMSET-4K-SSE2: the SSE2 fill. Proof obligation of the declaration (`ffi`): 128 < len,
+        // `dst` a `&mut [u8]`.
+        let _ = ffi::liella_machine_fill_sse2(dst.as_mut_ptr(), i32::from(v), dst.len());
     } else {
         bytes::fill(dst, v);
     }
