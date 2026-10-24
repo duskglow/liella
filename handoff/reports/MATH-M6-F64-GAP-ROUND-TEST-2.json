@@ -1,0 +1,10 @@
+{"task": "MATH-M6-F64-GAP-ROUND-TEST-2", "model": "opus", "tokens": null,
+ "result": "near-test miss->exact unit test and sweep miss-rate cap added; plants 4/4 caught; counts, sweep and FULL gate running detached; register 13.5 row 5 / D-10.13 await the counts",
+ "branch": "task/math-m6-f64-gap-round-test-2", "head": "9a89612c",
+ "gate": {"affected": "FULL running (math-m6-f64-gap-round-test-2-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["origin/next merged, so the direct gate escalated to FULL", "counts job queued 35+ min for a slot on keke"],
+ "refused": [],
+ "improvement": "a counts job that only needs cbench_libm waited 35 min in the slot queue; a small-slot class for bench-only jobs would let a story read its counts in-run",
+ "next_step": "read counts log, write register 13.5 row 5 and the D-10.13 restatement with the measured saving and the sweep's miss ppm",
+ "report_file": "handoff/math-m6-f64-gap-round-test.md",
+ "jobs": ["math-m6-f64-gap-round-test-2-gate", "math-m6-f64-gap-round-test-2-plants", "math-m6-f64-gap-round-test-2-counts", "math-m6-f64-gap-round-test-2-sweep"]}
