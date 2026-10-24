@@ -1,0 +1,28 @@
+# The product workspace (BUILD-PATH-HASH): `liella-libc-so` and `liella-libm-so` only, outside the main
+# workspace (see crates/libc-so/Cargo.toml for why). Its root is `crates/` so that every path package the
+# products use (`../boundary`, `../core`, ...) lies inside it: cargo then hashes their paths relative to this
+# root into `-C metadata`. With the root at `crates/libc-so` they lay outside it, cargo hashed their absolute
+# paths, and the same commit built in two directories gave different symbol hashes, layout and `.text`.
+# Every other crate under `crates/` belongs to the main workspace and must be listed in `exclude`, which sends
+# cargo on to the repository root for it (a new crate missing here fails with "believes it's in a workspace").
+# `exclude = ["."]` does not work: cargo then excludes the two members as well.
+[workspace]
+resolver = "3"
+members = ["libc-so", "libm-so"]
+exclude = ["abi", "boundary", "core", "kernel", "ld", "legacy", "math", "mathtools", "mem", "native", "rt", "spectest", "thread-db"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+
+# TOOL-PROFILE: what `cargo xtask so`, `test` and `affected` build (thin LTO, 16 codegen units: a
+# one-line change relinks in a fraction of the time). Never benchmarked or shipped: `cargo xtask
+# bench` builds `release` and refuses products of this profile; LIELLA_FULL_PROFILE=1 selects `release`.
+[profile.fast]
+inherits = "release"
+lto = "thin"
+codegen-units = 16

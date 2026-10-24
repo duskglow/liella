@@ -1,0 +1,11 @@
+# Example fit (D-10.3): e^x - 1 = x q(x) on [-ln2/2, ln2/2], the reduced range of exp after
+# x = k ln2 + r. q has degree 10 (so expm1 has degree 11); q(0) = 1 is fixed so that the
+# leading term of x q(x) is exact.
+name = example_exp
+target = expm1_over_x
+interval = -ln2/2, ln2/2
+powers = 0..10
+fixed = 0:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/example_exp.rs

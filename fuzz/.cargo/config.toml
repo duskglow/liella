@@ -1,0 +1,7 @@
+# #1793: `cargo clippy --lib` in fuzz/ reported warnings (6 dead-code, 125 non-snake-case names
+# such as `_IO_sungetc`) that belong to the path dependencies (crates/boundary), which this
+# workspace builds whole but only partly calls. Allowed here, in fuzz/ only: the dependencies
+# themselves are linted under their own workspace's `-D warnings` gate and are unchanged.
+# (cargo-fuzz sets RUSTFLAGS itself, which takes precedence, so fuzz builds are unaffected.)
+[build]
+rustflags = ["-A", "dead_code", "-A", "non_snake_case"]

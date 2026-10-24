@@ -1,0 +1,285 @@
+function	type	ulps
+acos	f	1
+acos	-	1
+acos	l	2
+acos	f128	1
+acosh	f	2
+acosh	-	2
+acosh	l	3
+acosh	f128	4
+add_ldouble	f	-
+add_ldouble	-	-
+add_ldouble	l	-
+add_ldouble	f128	-
+asin	f	1
+asin	-	1
+asin	l	1
+asin	f128	1
+asinh	f	2
+asinh	-	2
+asinh	l	3
+asinh	f128	4
+atan	f	1
+atan	-	1
+atan	l	1
+atan	f128	1
+atan2	f	2
+atan2	-	-
+atan2	l	1
+atan2	f128	2
+atanh	f	2
+atanh	-	2
+atanh	l	3
+atanh	f128	4
+cabs	f	-
+cabs	-	1
+cabs	l	1
+cabs	f128	1
+cacos	f	2 + i 2
+cacos	-	1 + i 2
+cacos	l	1 + i 2
+cacos	f128	2 + i 2
+cacosh	f	2 + i 2
+cacosh	-	2 + i 1
+cacosh	l	2 + i 1
+cacosh	f128	2 + i 2
+carg	f	1
+carg	-	-
+carg	l	1
+carg	f128	2
+casin	f	1 + i 2
+casin	-	1 + i 2
+casin	l	1 + i 2
+casin	f128	2 + i 2
+casinh	f	2 + i 1
+casinh	-	2 + i 1
+casinh	l	2 + i 1
+casinh	f128	2 + i 2
+catan	f	1 + i 1
+catan	-	1 + i 1
+catan	l	1 + i 1
+catan	f128	1 + i 1
+catanh	f	1 + i 1
+catanh	-	1 + i 1
+catanh	l	1 + i 1
+catanh	f128	1 + i 1
+cbrt	f	1
+cbrt	-	4
+cbrt	l	1
+cbrt	f128	1
+ccos	f	1 + i 1
+ccos	-	1 + i 1
+ccos	l	1 + i 1
+ccos	f128	1 + i 1
+ccosh	f	1 + i 1
+ccosh	-	1 + i 1
+ccosh	l	1 + i 1
+ccosh	f128	1 + i 1
+cexp	f	1 + i 2
+cexp	-	2 + i 1
+cexp	l	1 + i 1
+cexp	f128	1 + i 1
+clog	f	3 + i 1
+clog	-	3 + i 1
+clog	l	3 + i 1
+clog	f128	2 + i 1
+clog10	f	4 + i 2
+clog10	-	3 + i 2
+clog10	l	4 + i 2
+clog10	f128	2 + i 2
+cos	f	1
+cos	-	1
+cos	l	1
+cos	f128	2
+cos_advsimd	f	-
+cos_advsimd	l	-
+cos_advsimd	f128	-
+cos_sve	f	-
+cos_sve	l	-
+cos_sve	f128	-
+cosh	f	2
+cosh	-	2
+cosh	l	3
+cosh	f128	2
+cpow	f	5 + i 2
+cpow	-	2 + i 0
+cpow	l	3 + i 4
+cpow	f128	4 + i 1
+csin	f	1 + i 0
+csin	-	1 + i 0
+csin	l	1 + i 0
+csin	f128	1 + i 1
+csinh	f	1 + i 1
+csinh	-	0 + i 1
+csinh	l	1 + i 1
+csinh	f128	1 + i 1
+csqrt	f	2 + i 2
+csqrt	-	2 + i 2
+csqrt	l	2 + i 2
+csqrt	f128	2 + i 2
+ctan	f	1 + i 2
+ctan	-	1 + i 2
+ctan	l	2 + i 1
+ctan	f128	3 + i 3
+ctanh	f	2 + i 2
+ctanh	-	2 + i 2
+ctanh	l	1 + i 2
+ctanh	f128	3 + i 3
+div_ldouble	f	-
+div_ldouble	-	-
+div_ldouble	l	-
+div_ldouble	f128	-
+erf	f	1
+erf	-	1
+erf	l	1
+erf	f128	1
+erfc	f	3
+erfc	-	5
+erfc	l	5
+erfc	f128	4
+exp	f	1
+exp	-	1
+exp	l	1
+exp	f128	1
+exp10	f	1
+exp10	-	2
+exp10	l	1
+exp10	f128	2
+exp2	f	1
+exp2	-	1
+exp2	l	1
+exp2	f128	1
+exp_advsimd	f	-
+exp_advsimd	l	-
+exp_advsimd	f128	-
+exp_sve	f	-
+exp_sve	l	-
+exp_sve	f128	-
+expm1	f	1
+expm1	-	1
+expm1	l	3
+expm1	f128	2
+fma	f	-
+fma	-	-
+fma	l	-
+fma	f128	-
+fma_ldouble	f	-
+fma_ldouble	-	-
+fma_ldouble	l	-
+fma_ldouble	f128	-
+fmod	f	-
+fmod	-	-
+fmod	l	-
+fmod	f128	-
+gamma	f	7
+gamma	-	4
+gamma	l	4
+gamma	f128	-
+hypot	f	1
+hypot	-	1
+hypot	l	1
+hypot	f128	1
+j0	f	9
+j0	-	3
+j0	l	8
+j0	f128	2
+j1	f	9
+j1	-	4
+j1	l	9
+j1	f128	4
+jn	f	4
+jn	-	4
+jn	l	4
+jn	f128	7
+lgamma	f	7
+lgamma	-	4
+lgamma	l	4
+lgamma	f128	5
+log	f	1
+log	-	1
+log	l	1
+log	f128	1
+log10	f	2
+log10	-	2
+log10	l	1
+log10	f128	2
+log1p	f	1
+log1p	-	1
+log1p	l	2
+log1p	f128	3
+log2	f	1
+log2	-	2
+log2	l	1
+log2	f128	3
+log_advsimd	f	-
+log_advsimd	l	-
+log_advsimd	f128	-
+log_sve	f	-
+log_sve	l	-
+log_sve	f128	-
+mul_ldouble	f	-
+mul_ldouble	-	-
+mul_ldouble	l	-
+mul_ldouble	f128	-
+pow	f	1
+pow	-	1
+pow	l	1
+pow	f128	2
+pow10	f	-
+pow10	-	-
+pow10	l	-
+pow10	f128	-
+sin	f	1
+sin	-	1
+sin	l	2
+sin	f128	2
+sin_advsimd	f	-
+sin_advsimd	l	-
+sin_advsimd	f128	-
+sin_sve	f	-
+sin_sve	l	-
+sin_sve	f128	-
+sincos	f	-
+sincos	-	1
+sincos	l	1
+sincos	f128	1
+sinh	f	2
+sinh	-	2
+sinh	l	3
+sinh	f128	2
+sqrt	f	-
+sqrt	-	-
+sqrt	l	-
+sqrt	f128	-
+sqrt_ldouble	f	-
+sqrt_ldouble	-	-
+sqrt_ldouble	l	-
+sqrt_ldouble	f128	-
+sub_ldouble	f	-
+sub_ldouble	-	-
+sub_ldouble	l	-
+sub_ldouble	f128	-
+tan	f	1
+tan	-	-
+tan	l	2
+tan	f128	1
+tanh	f	2
+tanh	-	2
+tanh	l	3
+tanh	f128	2
+tgamma	f	8
+tgamma	-	9
+tgamma	l	5
+tgamma	f128	4
+y0	f	9
+y0	-	3
+y0	l	2
+y0	f128	3
+y1	f	9
+y1	-	6
+y1	l	3
+y1	f128	5
+yn	f	3
+yn	-	3
+yn	l	4
+yn	f128	5

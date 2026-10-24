@@ -1,0 +1,18 @@
+root:x:0:0:root:/root:/bin/bash
+alice:x:1000:1000:Alice Liddell,,,:/home/alice:/bin/sh
+# a comment
+
+bob:*:1001:100::/home/bob:
+short:x:1002
+big:x:4294967295:4294967296:Big:/:/bin/sh
+neg:x:-1:-2:Neg:/:/bin/sh
+hex:x:0x10:010:Hex:/:/bin/sh
++nisuser::::::
+-excluded::::::
++@netgroup::::::
+  spaced:x:1003:1003:Spaced:/:/bin/sh
+trail:x:1004:1004:Trail:/home/trail:/bin/sh:extra
+empty::1005:1005::::
+longusername12:x:1007:1007:Long:/:/bin/sh
+eight888:x:1008:1008:Eight:/:/bin/sh
+nonl:x:1006:1006:No newline:/:/bin/sh

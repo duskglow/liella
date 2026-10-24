@@ -1,0 +1,22 @@
+# Product crate for libm.a / libm.so.6 (spec §10, D-10.7). Outside the main workspace, like
+# crates/libc-so: a no_std static library built by `cargo xtask so`.
+[package]
+name = "liella-libm-so"
+description = "Product crate: links the math translation layer into libm.a and libm.so.6"
+version = "0.0.0"
+edition = "2024"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[lib]
+name = "m"
+crate-type = ["staticlib"]
+test = false
+doctest = false
+
+[dependencies]
+# Only the libm symbols: the archive carries no libc symbol, and calls libc's (`__errno_location`,
+# `memcpy`) through the C library the program links.
+liella-boundary = { path = "../boundary", default-features = false, features = ["libm"] }
+
+# Profiles: crates/Cargo.toml (the product workspace, BUILD-PATH-HASH).

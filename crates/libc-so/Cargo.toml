@@ -1,0 +1,22 @@
+# Product crate for libc.so.6 / libc.a. Deliberately outside the main workspace (in the product
+# workspace, crates/Cargo.toml): a no_std
+# cdylib cannot link until phase 4 provides the runtime entry point, global allocator and panic
+# handler (implementation-plan.md §6, phase 4). Build it with `cargo xtask so` from phase 4 on.
+[package]
+name = "liella-libc-so"
+description = "Product crate: links the translation layer into libc.so.6 / libc.a"
+version = "0.0.0"
+edition = "2024"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[lib]
+name = "c"
+crate-type = ["staticlib", "cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+liella-boundary = { path = "../boundary", features = ["runtime"] }
+
+# Profiles: crates/Cargo.toml (the product workspace, BUILD-PATH-HASH).

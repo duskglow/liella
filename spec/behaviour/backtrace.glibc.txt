@@ -1,0 +1,20 @@
+layout_ok=1
+nested: leaf f3 f2 f1 driver | after_driver=1
+limit 0: n=0 | after_driver=0
+limit 1: n=1 leaf | after_driver=0
+limit 2: n=2 leaf f3 | after_driver=0
+limit 3: n=3 leaf f3 f2 | after_driver=0
+limit 5: n=5 leaf f3 f2 f1 driver | after_driver=0
+signal handler: leaf on_signal ~ g3 g2 g1 driver | after_driver=1
+symbols: 1
+  ./P(+H) [H]
+  ./P(+H) [H]
+  ./P(+H) [H]
+  ./P(+H) [H]
+one block: 1
+symbols n=0: 1
+symbols_fd:
+  ./P(+H)[H]
+  ./P(+H)[H]
+  ./P(+H)[H]
+  ./P(+H)[H]

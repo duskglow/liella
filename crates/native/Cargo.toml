@@ -1,0 +1,74 @@
+[package]
+name = "liella-native"
+description = "The native Rust interface (D-X.10): the clean API plus the stateful services over the native C ABI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_native"
+
+# How the program reaches the C library. Exactly one of `static` and `dynamic` is meant for a
+# program's build (`dylib` includes `dynamic`); the crate also builds with neither (the library
+# alone, as `cargo test --workspace` builds it) and with all (`clippy --all-features`), where
+# `static` wins (lib.rs, "Linkage").
+[features]
+# The program links like a product: statically, liella-crt1.o, libc.a, no host C library. The
+# public types of liella-rt and liella-kernel are re-exported too.
+static = ["dep:liella-rt", "dep:liella-kernel"]
+# The program links against libc.so.6 and reaches the stateful services only through the
+# LIELLA_NATIVE_1 symbols; the stateless clean API is compiled into it.
+dynamic = []
+# The crate as the root of the Rust dylib libliella_rust.so.<abi> (spec/abi/rust-abi.toml,
+# docs/toolchain.md): `dynamic`, plus the global allocator and the panic handler (a dylib must
+# define both, so its programs define neither), the exported string LIELLA_RUST_ABI and the
+# note .note.liella.rustabi. Only `cargo xtask rust-dylib` builds the dylib itself.
+dylib = ["dynamic"]
+
+[dependencies]
+liella = { workspace = true }
+liella-math = { workspace = true }
+liella-rt = { workspace = true, optional = true }
+liella-kernel = { workspace = true, optional = true }
+
+# The examples link against Liella's products, which only `cargo xtask native` passes to the
+# linker; `required-features` keeps them out of builds without their feature.
+[[example]]
+name = "native_static"
+required-features = ["static"]
+
+[[example]]
+name = "native_dynamic"
+required-features = ["dynamic"]
+
+# A program of the Rust dylib: `cargo xtask rust-dylib` builds it with rustc against
+# libliella_rust.so.<abi>; under Cargo it is only checked (clippy, against this crate's rlib).
+[[example]]
+name = "native_rust_dylib"
+required-features = ["dylib"]
+
+# Not `workspace = true`: src/ffi.rs holds the crate's C-ABI declarations and its allocator,
+# so `unsafe_code` is lowered from forbid to deny and allowed item by item there (category
+# *native*, `cargo xtask unsafe-audit`); every other module forbids it again.
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+unimplemented = "deny"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+as_conversions = "warn"
+mem_forget = "deny"
+# S8: allowed by default (tests, examples); the crate root denies it outside tests (clippy.toml).
+disallowed_methods = "allow"

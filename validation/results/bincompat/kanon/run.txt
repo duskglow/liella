@@ -1,0 +1,4 @@
+host: kanon
+date: 2026-10-23T03:43:41+00:00
+host glibc: glibc 2.39
+liella: target/liella libc.so.6=0f78e1cfca5abdec libm.so.6=8dd3e056a257ebbf libpthread.so.0=9fa91a1dcba1b2f7

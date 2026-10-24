@@ -1,0 +1,77 @@
+# cargo-nextest configuration: the runner of `cargo xtask test` and `cargo xtask affected --run`
+# when nextest is installed (xtask/src/nextest.rs; LIELLA_NO_NEXTEST=1 runs `cargo test` instead).
+# nextest runs every test as a process of its own, across binaries, so an in-process lock in a
+# test file (a `static Mutex`) no longer orders tests against each other: what must not overlap
+# across processes is ordered here (test groups) or by a file lock (conformance/run.sh, per
+# program). Groups and why: docs/nextest.md.
+
+[store]
+dir = "target/nextest"
+
+[test-groups]
+# The tests that run programs under `sudo` (private mount namespaces over the real /etc, /proc,
+# /var, ...) or in user/PID/mount namespaces of their own, and the name-service cache's sudo
+# tests: one at a time, as `cargo test` ran them. dns_products also starts DNS servers with
+# timed waits the probes print (its own `ONE_AT_A_TIME` lock says load stretches them).
+privileged = { max-threads = 1 }
+# GATE-SPEED-3: aio_products is six tests (engine x cache mode), each with its own build outputs, scratch
+# directories and private /dev/shm mount namespace, no ports and no shared files: up to 3 at once.
+# They are not in `privileged` (the other binaries stay one at a time).
+privileged-aio = { max-threads = 3 }
+
+[profile.default]
+# The CPUs this process may use (affinity mask, cgroup quota): a gate pinned to a 12-CPU slot runs 12
+# tests at once, not 24 (GATE-TEST-THREADS). `cargo xtask` sets NEXTEST_TEST_THREADS from the same count
+# times xtask/src/nextest.rs TEST_THREADS_PER_CPU, which overrides this for the gates.
+test-threads = "num-cpus"
+# A failure is a finding, never retried away.
+retries = 0
+# Run everything and report every failure (`cargo test` stopped at the first failing binary).
+fail-fast = false
+# The pass lines name every test that ran (the lists of two runs can be compared).
+status-level = "pass"
+final-status-level = "fail"
+# A test hanging for 30 minutes is ended and reported as TIMEOUT instead of holding the gate
+# until its 150-minute cap (the longest tests take about 3 minutes).
+slow-timeout = { period = "180s", terminate-after = 10 }
+
+[[profile.default.overrides]]
+filter = "binary(=admin_products) | binary(=catalogs_products) | binary(=dns_products) | binary(=fstree_products) | binary(=mntent_products) | binary(=netdb_products) | binary(=noproc_products) | binary(=nscache_products) | binary(=patterns_products) | binary(=posixipc_products) | binary(=process_products) | binary(=syslog_products) | binary(=terminals_products) | binary(=users_products)"
+test-group = "privileged"
+
+[[profile.default.overrides]]
+filter = "binary(=aio_products)"
+test-group = "privileged-aio"
+
+# GATE-SPEED: the privileged group is the longest chain of a pass (17 tests one at a time,
+# ~635 s of a ~645 s pass on keke, aio_products alone ~290 s): its tests start first, so the chain
+# begins at once and is never queued behind other tests.
+[[profile.default.overrides]]
+filter = "binary(=admin_products) | binary(=aio_products) | binary(=catalogs_products) | binary(=dns_products) | binary(=fstree_products) | binary(=mntent_products) | binary(=netdb_products) | binary(=noproc_products) | binary(=nscache_products) | binary(=patterns_products) | binary(=posixipc_products) | binary(=process_products) | binary(=syslog_products) | binary(=terminals_products) | binary(=users_products)"
+priority = 100
+
+# GATE-SPEED: the longest tests (minutes each, measured in the merge gates) start first, so the
+# gate does not end on one of them running alone while the other threads are idle (they used to
+# start among the last ~100 of ~4800). Priority changes only the order, never what runs. A new
+# test of more than a minute belongs here (the gate log's longest PASS lines show them).
+[[profile.default.overrides]]
+filter = """
+test(/^pattern::regex::plain_tests::required_strings_are_in_every_match_/)
+| test(/^pattern::regex::plain_tests::leading_strings_agree_with_the_engine_/)
+| test(/^pattern::regex_oracle_diff::the_optimized_engine_agrees_with_the_oracle_on_(random_patterns|the_record)_/)
+| (binary(=strstr_find) & test(/^str(case)?str_matches_a_naive_search/))
+| (binary(=small_compare) & test(/^compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_/))
+| (binary(=special_cr) & test(/^long_double_bessel_functions_are_correctly_rounded_/))
+| (binary(=casecmp_avx2) & test(=casecmp_equals_the_path_of_before_at_every_alignment_pair_length_and_difference))
+| test(=affected::tests::csys_assembly_selects_the_users_of_its_symbols)
+"""
+priority = 90
+
+# GATE-THREADS-REQUIRED: the special_ld / special_f128 products shards (8 tests each) check their
+# lines on an oracle pool of their own; each counts as `shard::POOL` (crates/math/tests/support/
+# shard.rs) test threads, so nextest starts no more of them than the slot holds (16 shards x 8
+# threads used to share a 12-CPU CI slot, load ~119 with half the allowed CPUs idle). The test
+# special_ld_products::pool_matches_the_nextest_config keeps the two numbers equal.
+[[profile.default.overrides]]
+filter = "binary(=special_ld_products) | binary(=special_f128_products)"
+threads-required = 4

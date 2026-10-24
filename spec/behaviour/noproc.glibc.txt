@@ -1,0 +1,66 @@
+== glibc 2.39 (dynamically linked), /proc and /sys as mounted
+/proc present: yes; /sys present: yes
+get_nprocs: = affinity
+get_nprocs_conf: >= get_nprocs
+sysconf(_SC_NPROCESSORS_ONLN): = affinity
+sysconf(_SC_NPROCESSORS_CONF) >= ONLN: yes
+sysconf(_SC_NGROUPS_MAX): 65536 errno=0
+sysconf(_SC_PHYS_PAGES) > 0: yes
+sysconf(_SC_PAGESIZE): 4096
+sysconf(_SC_CLK_TCK): 100
+getauxval(AT_PAGESZ): 4096; AT_SYSINFO_EHDR set: yes
+clock_gettime(CLOCK_MONOTONIC): 0
+pathconf(., _PC_LINK_MAX): 65000 errno=0
+pthread_getattr_np(main): 0, stack size <= RLIMIT_STACK
+pthread_setname_np(other): 0
+pthread_getname_np(other): 0 worker
+pthread_setname_np(self): 0
+pthread_getname_np(self): 0 probe
+pidfd_getpid(pidfd): the child errno=0
+pidfd_getpid(closed descriptor): -1 errno=EBADF
+pidfd_getpid(not a pidfd): -1 errno=EBADF
+ttyname(pty): /dev/pts/N errno=0
+ttyname_r(pty): 0
+ttyname(master): a name errno=0
+ttyname(/dev/null): NULL errno=ENOTTY
+isatty(pty): 1
+getlogin (stdin a pty without a utmp record): a name errno=0
+getlogin_r: a name
+ttyslot: 0
+group_member(getegid()): 1
+closefrom(150): descriptor 200 closed
+lchmod(file, 0640): 0 errno=0 mode 640
+getpwuid(0) twice: found root
+== glibc 2.39 (dynamically linked), empty tmpfs over /proc and /sys (unshare -r -m)
+/proc present: no; /sys present: no
+get_nprocs: = affinity
+get_nprocs_conf: >= get_nprocs
+sysconf(_SC_NPROCESSORS_ONLN): = affinity
+sysconf(_SC_NPROCESSORS_CONF) >= ONLN: yes
+sysconf(_SC_NGROUPS_MAX): 65536 errno=0
+sysconf(_SC_PHYS_PAGES) > 0: yes
+sysconf(_SC_PAGESIZE): 4096
+sysconf(_SC_CLK_TCK): 100
+getauxval(AT_PAGESZ): 4096; AT_SYSINFO_EHDR set: yes
+clock_gettime(CLOCK_MONOTONIC): 0
+pathconf(., _PC_LINK_MAX): 32000 errno=ENOENT
+pthread_getattr_np(main): ENOENT
+pthread_setname_np(other): ENOENT
+pthread_getname_np(other): ENOENT
+pthread_setname_np(self): 0
+pthread_getname_np(self): 0 probe
+pidfd_getpid(pidfd): -1 errno=EBADF
+pidfd_getpid(closed descriptor): -1 errno=EBADF
+pidfd_getpid(not a pidfd): -1 errno=EBADF
+ttyname(pty): /dev/pts/N errno=0
+ttyname_r(pty): 0
+ttyname(master): a name errno=0
+ttyname(/dev/null): NULL errno=ENOTTY
+isatty(pty): 1
+getlogin (stdin a pty without a utmp record): NULL errno=ENOENT
+getlogin_r: ENOENT
+ttyslot: 0
+group_member(getegid()): 1
+closefrom(150): descriptor 200 closed
+lchmod(file, 0640): 0 errno=0 mode 640
+getpwuid(0) twice: found root

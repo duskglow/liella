@@ -1,0 +1,460 @@
+running as root: no
+== constants
+AIO_CANCELED=0 AIO_NOTCANCELED=1 AIO_ALLDONE=2
+LIO_READ=0 LIO_WRITE=1 LIO_NOP=2 LIO_WAIT=0 LIO_NOWAIT=1
+SIGEV_SIGNAL=0 SIGEV_NONE=1 SIGEV_THREAD=2 SI_ASYNCIO=-4
+sizeof(struct aiocb)=168 sizeof(struct aiocb64)=168 sizeof(struct aioinit)=32
+offsetof aiocb: aio_fildes=0 aio_lio_opcode=4 aio_reqprio=8 aio_buf=16 aio_nbytes=24 aio_sigevent=32 aio_offset=128
+offsetof aiocb64: aio_fildes=0 aio_lio_opcode=4 aio_reqprio=8 aio_buf=16 aio_nbytes=24 aio_sigevent=32 aio_offset=128
+offsetof aioinit: aio_threads=0 aio_num=4 aio_idle_time=24
+AIO_PRIO_DELTA_MAX=20
+AIO_LISTIO_MAX undefined
+AIO_MAX undefined
+_POSIX_ASYNCHRONOUS_IO=200809
+_POSIX_PRIORITIZED_IO=200809
+sysconf(_SC_AIO_LISTIO_MAX)=-1 errno=0
+sysconf(_SC_AIO_MAX)=-1 errno=0
+sysconf(_SC_AIO_PRIO_DELTA_MAX)=20 errno=0
+sysconf(_SC_ASYNCHRONOUS_IO)=200809 errno=0
+sysconf(_SC_PRIORITIZED_IO)=200809 errno=0
+-- end constants: exit 0
+== aio_init small
+aio_init(threads=1, num=1, idle_time=0): returned
+two aio_read: return=100,50 data=ok
+aio_write: submit=0 error=0 return=2
+lio_listio(LIO_WAIT, 2 reads): 0 errno=- returns=10,4
+SIGEV_THREAD notification: calls=1 return=10
+-- end aio_init small: exit 0
+== aio_init negative
+aio_init(every field -1): returned
+two aio_read: return=100,50 data=ok
+aio_write: submit=0 error=0 return=2
+lio_listio(LIO_WAIT, 2 reads): 0 errno=- returns=10,4
+SIGEV_THREAD notification: calls=1 return=10
+-- end aio_init negative: exit 0
+== aio_init twice
+two aio_read: return=100,50 data=ok
+aio_write: submit=0 error=0 return=2
+lio_listio(LIO_WAIT, 2 reads): 0 errno=- returns=10,4
+SIGEV_THREAD notification: calls=1 return=10
+aio_init again after requests completed: returned
+two aio_read: return=100,50 data=ok
+aio_write: submit=0 error=0 return=2
+lio_listio(LIO_WAIT, 2 reads): 0 errno=- returns=10,4
+SIGEV_THREAD notification: calls=2 return=10
+-- end aio_init twice: exit 0
+== aio_read, regular file
+aio_read off=0 n=100 (file of 1000 bytes): submit=0 error=0 return=100
+  data matches the file: yes; byte after the data untouched: yes
+aio_read off=500 n=100 (file of 1000 bytes): submit=0 error=0 return=100
+  data matches the file: yes; byte after the data untouched: yes
+aio_read off=950 n=100 (file of 1000 bytes): submit=0 error=0 return=50
+  data matches the file: yes; byte after the data untouched: yes
+aio_read off=999 n=100 (file of 1000 bytes): submit=0 error=0 return=1
+  data matches the file: yes; byte after the data untouched: yes
+aio_read off=1000 n=100 (file of 1000 bytes): submit=0 error=0 return=0
+aio_read off=5000 n=100 (file of 1000 bytes): submit=0 error=0 return=0
+aio_read off=0 n=0 (file of 1000 bytes): submit=0 error=0 return=0
+file offset after the reads (set to 10 before; POSIX: unspecified): 10
+aio_read with aio_lio_opcode=LIO_WRITE: submit=0 error=0 return=10
+aio_read with aio_lio_opcode=LIO_NOP: submit=0 error=0 return=10
+aio_read with aio_lio_opcode=99: submit=0 error=0 return=10
+aio_read off=-1 n=10: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_read off=LLONG_MIN n=10: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_read off=LLONG_MAX n=10: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_read off=LLONG_MAX-5 n=10: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_read n=SSIZE_MAX+1 (buffer of 4096, file of 1000): submit=0 error=EFAULT return=-1 (errno after aio_return 0)
+aio_read n=SIZE_MAX (buffer of 4096, file of 1000): submit=0 error=EFAULT return=-1 (errno after aio_return 0)
+aio_read n=SSIZE_MAX (buffer of 4096, file of 1000): submit=0 error=EFAULT return=-1 (errno after aio_return 0)
+aio_read n=INT_MAX+1 (buffer of 4096, file of 1000): submit=0 error=0 return=1000
+  data matches the file: yes
+aio_read aio_reqprio=-1: submit=-1 errno=EINVAL
+aio_read aio_reqprio=0: submit=0 error=0 return=10
+aio_read aio_reqprio=1: submit=0 error=0 return=10
+aio_read aio_reqprio=20: submit=0 error=0 return=10
+aio_read aio_reqprio=21: submit=-1 errno=EINVAL
+aio_read aio_reqprio=2147483647: submit=-1 errno=EINVAL
+aio_read aio_reqprio=-2147483648: submit=-1 errno=EINVAL
+aio_read on a write-only descriptor: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read on a closed descriptor: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read on fd -1: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read on fd INT_MAX: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read on a directory: submit=0 error=EISDIR return=-1 (errno after aio_return 0)
+aio_read on an O_PATH descriptor: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read64 off=900 n=200: submit=0 errno=- aio_error64=0 aio_return64=100 data=ok
+-- end aio_read, regular file: exit 0
+== aio_write, regular file
+aio_write "hello" off=0: submit=0 error=0 return=5
+aio_write "world" off=100: submit=0 error=0 return=5
+size=105 contents: hello=yes hole of zeros=yes world=yes
+file offset after the writes (0 before; POSIX: unspecified): 0
+aio_write n=0 off=500: submit=0 error=0 return=0
+size after n=0 at 500: 105
+aio_write "tail" off=0 on an O_APPEND descriptor: submit=0 error=0 return=4
+aio_write "TAIL" off=3 on an O_APPEND descriptor: submit=0 error=0 return=4
+size=113 bytes 105..112="tailTAIL" start still hello=yes
+aio_write off=-1 n=5: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_write off=LLONG_MIN n=5: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_write off=LLONG_MAX-2 n=5: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_write off=LLONG_MAX n=5: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_write n=SSIZE_MAX+1: submit=0 error=EFAULT return=-1 (errno after aio_return 0)
+aio_write aio_reqprio=21: submit=-1 errno=EINVAL
+aio_write aio_reqprio=-1: submit=-1 errno=EINVAL
+aio_write with aio_lio_opcode=LIO_READ: submit=0 error=0 return=5
+  bytes 0..4 now "abcde"
+aio_write on a read-only descriptor: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_write on fd -1: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+RLIMIT_FSIZE 1000, SIGXFSZ ignored: aio_write off=2000 n=10: submit=0 error=EFBIG return=-1 (errno after aio_return 0)
+RLIMIT_FSIZE 1000, SIGXFSZ ignored: aio_write off=995 n=10: submit=0 error=0 return=5
+aio_write64 off=10 "sixty4": submit=0 errno=- aio_error64=0 aio_return64=6 bytes="sixty4"
+-- end aio_write, regular file: exit 0
+== SIGXFSZ default
+SIGXFSZ default: aio_write off=2000 n=10 past RLIMIT_FSIZE 1000: submit=0 error=EFBIG return=-1 (errno after aio_return 0)
+process still alive; SIGXFSZ pending in the caller: no
+-- end SIGXFSZ default: exit 0
+== SIGXFSZ blocked
+SIGXFSZ blocked in the caller: aio_write off=2000 n=10 past RLIMIT_FSIZE 1000: submit=0 error=EFBIG return=-1 (errno after aio_return 0)
+SIGXFSZ pending in the caller: no
+-- end SIGXFSZ blocked: exit 0
+== pipes
+pipe: aio_read n=100 off=0 with 10 bytes in the pipe: submit=0 error=0 return=10
+pipe: aio_read n=100 off=12345 with 10 bytes in the pipe: submit=0 error=0 return=10
+pipe: aio_write "abc" off=777: submit=0 error=0 return=3
+  the pipe then holds 3 bytes: "abc"
+pipe: aio_write off=-1: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+pipe: aio_read off=-1 with 1 byte in the pipe: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+pipe: aio_read on an empty pipe: submit=0 errno=-
+  after 400 ms: aio_error=EINPROGRESS
+  after writing 3 bytes: submit=0 error=0 return=3
+pipe: aio_read on an empty O_NONBLOCK pipe: submit=0 error=EAGAIN return=-1 (errno after aio_return 0)
+F_SETPIPE_SZ 65536: 65536
+pipe: aio_write of 100000 bytes into an empty O_NONBLOCK pipe of 65536: submit=0 error=0 return=65536
+pipe: aio_write of 10 bytes into the full O_NONBLOCK pipe: submit=0 error=EAGAIN return=-1 (errno after aio_return 0)
+  drained 65536 bytes
+pipe: blocking aio_write of 100000 bytes: submit=0 errno=-
+  the pipe fills to 65536 bytes; aio_error=EINPROGRESS
+  the reader drains 100000 bytes
+  then: submit=0 error=0 return=100000
+pipe: aio_read with the write end closed and the pipe empty: submit=0 error=0 return=0
+pipe: aio_write with the read end closed, SIGPIPE ignored: submit=0 error=EPIPE return=-1 (errno after aio_return 0)
+-- end pipes: exit 0
+== SIGPIPE default
+SIGPIPE default: aio_write with the read end closed: submit=0 error=EPIPE return=-1 (errno after aio_return 0)
+process still alive; SIGPIPE pending in the caller: no
+-- end SIGPIPE default: exit 0
+== SIGPIPE blocked
+SIGPIPE blocked in the caller: aio_write with the read end closed: submit=0 error=EPIPE return=-1 (errno after aio_return 0)
+SIGPIPE pending in the caller: no
+-- end SIGPIPE blocked: exit 0
+== sockets
+stream socket: aio_write "ping" off=99: submit=0 error=0 return=4
+  the peer receives "ping"
+stream socket: aio_read n=100 off=5 with 6 bytes queued: submit=0 error=0 return=6
+stream socket: aio_read with nothing queued: submit=0 errno=-
+  after 400 ms: aio_error=EINPROGRESS
+  the peer sends 4 bytes 100 ms later: submit=0 error=0 return=4
+stream socket: aio_read after the peer's shutdown(SHUT_WR): submit=0 error=0 return=0
+stream socket: aio_write after the peer closed, SIGPIPE ignored: submit=0 error=EPIPE return=-1 (errno after aio_return 0)
+stream socket: aio_fsync(O_SYNC): submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+datagram socket: aio_read n=4 of a 10-byte datagram: submit=0 error=0 return=4
+  got "0123"
+datagram socket: the next aio_read n=100: submit=0 error=0 return=3
+  got "abc"
+-- end sockets: exit 0
+== aio_fsync
+aio_fsync(O_SYNC) on a regular file: submit=0 error=0 return=0
+aio_fsync(O_DSYNC) on a regular file: submit=0 error=0 return=0
+aio_fsync(0): submit=-1 errno=EINVAL
+aio_fsync(O_RDWR): submit=-1 errno=EINVAL
+aio_fsync(O_SYNC|O_APPEND): submit=-1 errno=EINVAL
+aio_fsync(O_DSYNC|O_RDWR): submit=-1 errno=EINVAL
+aio_fsync(-1): submit=-1 errno=EINVAL
+aio_fsync(O_RSYNC): submit=0 error=0 return=0
+aio_fsync(O_SYNC) with offset -1, n=SIZE_MAX, reqprio 999, opcode 99: submit=0 error=0 return=0
+aio_fsync(O_SYNC) on a read-only descriptor: submit=0 error=0 return=0
+aio_fsync(O_SYNC) on fd -1: submit=-1 errno=EBADF
+aio_fsync(0) on fd -1: submit=-1 errno=EINVAL
+aio_fsync(O_SYNC) on a closed descriptor: submit=-1 errno=EBADF
+aio_fsync(O_SYNC) on /dev/null: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_fsync(O_SYNC) on a pipe write end: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_fsync(O_SYNC) on a pipe read end with a read blocked on it: submit=0 errno=-
+  after 400 ms: the sync's aio_error=EINPROGRESS, the read's aio_error=EINPROGRESS
+  the read, after 3 bytes are written: submit=0 error=0 return=3
+  the sync: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+aio_write then aio_fsync(O_DSYNC) on one descriptor, 50 times: the write was complete when the sync completed 50/50
+aio_fsync with SIGEV_SIGNAL: signal=SIGRTMIN+1 si_code=SI_ASYNCIO value=31 aio_error=0 aio_return=0
+aio_fsync64(O_DSYNC): submit=0 errno=- aio_error64=0 aio_return64=0
+aio_fsync64(0): submit=-1 errno=EINVAL
+-- end aio_fsync: exit 0
+== aio_error, aio_return
+aio_error on a zeroed, never submitted aiocb: 0 (-) errno=-
+aio_return on it: 0 errno=-
+blocked pipe read: aio_error=EINPROGRESS errno=-
+  aio_return before completion: -1 errno=0
+  aio_error after that: EINPROGRESS
+  after 4 bytes arrive: aio_error=0 errno=-
+  aio_return: 4 errno=-
+  aio_return a second time: 4 errno=-
+  aio_error after aio_return: 0 (-) errno=-
+the same aiocb reused for a new read: submit=0 error=0 return=2
+aio_read on a write-only /dev/null: submit=0 aio_error=EBADF aio_return=-1 errno after aio_return=0
+aio_error64 on a blocked aio_read64: EINPROGRESS
+  after 1 byte: aio_error64=0 aio_return64=1
+  aio_error on the same block through the non-64 function: 0
+-- end aio_error, aio_return: exit 0
+== aio_suspend
+aio_suspend({blocked}, 1, {0,0}): -1 errno=EAGAIN
+aio_suspend({blocked}, 1, 150 ms): -1 errno=EAGAIN waited at least the timeout: yes
+aio_suspend({completed}, 1, NULL): 0 errno=-
+aio_suspend({NULL, blocked, completed}, 3, NULL): 0 errno=-
+aio_suspend({NULL, NULL}, 2, {0,0}): 0 errno=-
+aio_suspend({NULL, NULL}, 2, 100 ms): 0 errno=-
+aio_suspend({blocked}, 0, 100 ms): 0 errno=-
+aio_suspend({completed and already aio_return'ed}, 1, {0,0}): 0 errno=-
+aio_suspend({zeroed, never submitted}, 1, {0,0}) (POSIX: undefined): 0 errno=-
+aio_suspend({blocked}, 1, NULL), SIGUSR1 handler (no SA_RESTART) after 100 ms: -1 errno=EINTR
+  handler ran: 1
+aio_suspend({blocked}, 1, 600 ms), SIGUSR1 handler with SA_RESTART after 100 ms: -1 errno=EINTR
+  handler ran: 1
+aio_suspend({blocked}, 1, 300 ms), SIGUSR1 blocked, sent after 50 ms: -1 errno=EAGAIN waited at least the timeout: yes
+  SIGUSR1 pending: yes
+aio_suspend({blocked}, 1, NULL), 3 bytes written 150 ms later: 0 errno=-
+  aio_error=0 aio_return=3
+aio_suspend64({blocked}, 1, 100 ms): -1 errno=EAGAIN
+aio_suspend64 after 1 byte: 0 errno=- return=1
+-- end aio_suspend: exit 0
+== aio_suspend all NULL, no timeout (alarm 2 s)
+aio_suspend({NULL, NULL}, 2, NULL): 0 errno=-
+-- end aio_suspend all NULL, no timeout (alarm 2 s): exit 0
+== aio_suspend invalid timeout (alarm 10 s)
+aio_suspend({blocked}, 1, {0,-1}): -1 errno=EAGAIN returned within 1 s: yes
+-- end aio_suspend invalid timeout (alarm 10 s): exit 0
+== aio_suspend invalid timeout (alarm 10 s)
+aio_suspend({blocked}, 1, {0,1000000000}): -1 errno=EAGAIN returned within 1 s: no
+-- end aio_suspend invalid timeout (alarm 10 s): exit 0
+== aio_suspend invalid timeout (alarm 10 s)
+aio_suspend({blocked}, 1, {-1,0}): -1 errno=EAGAIN returned within 1 s: yes
+-- end aio_suspend invalid timeout (alarm 10 s): exit 0
+== aio_suspend invalid timeout (alarm 10 s)
+aio_suspend({blocked}, 1, {LONG_MAX,0}), SIGUSR1 handler after 200 ms: -1 errno=EAGAIN; the handler had run at the return: no
+-- end aio_suspend invalid timeout (alarm 10 s): exit 0
+== aio_suspend negative nent (alarm 10 s)
+aio_suspend({blocked}, -1, 100 ms): -1 errno=EINVAL
+-- end aio_suspend negative nent (alarm 10 s): exit 0
+== aio_cancel
+aio_cancel(-1, NULL): -1 errno=EBADF
+aio_cancel(closed fd, NULL): -1 errno=EBADF
+aio_cancel(fd with no requests ever, NULL): AIO_ALLDONE errno=-
+aio_cancel(fd, completed request): AIO_ALLDONE errno=-; then aio_error=0 aio_return=50
+aio_cancel(fd, request already aio_return'ed): AIO_ALLDONE errno=-
+aio_cancel(fd, NULL) after everything completed: AIO_ALLDONE errno=-
+aio_cancel(other valid fd, completed request): -1 errno=EINVAL
+aio_cancel(-1, completed request): -1 errno=EBADF
+aio_cancel(fd, never submitted aiocb naming fd): AIO_ALLDONE errno=-
+aio_cancel(fd, never submitted aiocb naming another fd): -1 errno=EINVAL
+pipe read blocked (A): aio_cancel(another valid fd, &A): -1 errno=EINVAL; A's aio_error=EINPROGRESS
+  aio_cancel(-1, &A): -1 errno=EBADF
+  aio_cancel(pipe, &A): AIO_NOTCANCELED errno=-; A's aio_error=EINPROGRESS
+  second and third reads on the same pipe (B, C): aio_error=EINPROGRESS,EINPROGRESS
+  aio_cancel(pipe, &B): AIO_CANCELED errno=-; B's aio_error=ECANCELED aio_return=-1
+  notification for B: signal=SIGRTMIN+1 si_code=SI_ASYNCIO value=42
+  aio_cancel(pipe, &B) again: AIO_ALLDONE errno=-
+  aio_cancel(pipe, NULL) with A blocked and C queued: AIO_NOTCANCELED errno=-; aio_error A=EINPROGRESS C=ECANCELED
+  notification for C: signal=SIGRTMIN+1 value=43; aio_return C=-1
+  further notifications within 300 ms: none
+  5 bytes written: A aio_error=0 aio_return=5 data="hello"; notification value=1
+  aio_cancel(pipe, NULL) afterwards: AIO_ALLDONE errno=-
+pipe write of 100000 in progress (65536 in the pipe): aio_cancel(pipe, &W): AIO_NOTCANCELED errno=-; aio_error=EINPROGRESS
+  the reader drains 100000 bytes
+  then: submit=0 error=0 return=100000
+socket read blocked: aio_cancel(socket, NULL): AIO_NOTCANCELED errno=-; aio_error=EINPROGRESS
+  after the peer sends 5 bytes: submit=0 error=0 return=5
+aio_cancel64(fd, completed request): AIO_ALLDONE errno=-; aio_return64=10
+aio_cancel64(-1, NULL): -1 errno=EBADF
+-- end aio_cancel: exit 0
+== lio_listio
+lio_listio(mode 5, {NULL}, 1): -1 errno=EINVAL
+lio_listio(mode -1, {NULL}, 1): -1 errno=EINVAL
+lio_listio(LIO_WAIT, list, 0): 0 errno=-
+lio_listio(LIO_WAIT, {NULL}, 1): 0 errno=-
+lio_listio(LIO_WAIT, {write, NOP on fd -1, NULL, write}): 0 errno=-; at return aio_error=0,0
+  the LIO_NOP entry: aio_error=0 (-) errno=-
+  entries (aio_error/aio_return): [0] 0/4 [1] NULL [2] NULL [3] 0/4
+  file holds "aaaabbbb"
+lio_listio(LIO_WAIT, {read 8 at 0, write 2 at 8}): 0 errno=-
+  entries: [0] 0/8 [1] 0/2
+lio_listio(LIO_WAIT, {write, opcode 99}): -1 errno=EIO
+  write entry: aio_error=0 aio_return=2
+  opcode-99 entry: aio_error=22 (EINVAL) errno=-
+lio_listio(LIO_WAIT, {write, read on a write-only fd, read}): -1 errno=EIO; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {write, read on a write-only fd, read}): 0 errno=-; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_WAIT, {write, read on fd -1, read}): -1 errno=EIO; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {write, read on fd -1, read}): 0 errno=-; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_WAIT, {write, read with aio_reqprio 99, read}): -1 errno=EIO; entries: [0] 0/2 [1] EINVAL/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {write, read with aio_reqprio 99, read}): -1 errno=EINVAL; entries: [0] 0/2 [1] EINVAL/-1 [2] 0/4
+lio_listio(LIO_WAIT, {write, read with offset -1, read}): -1 errno=EIO; entries: [0] 0/2 [1] EINVAL/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {write, read with offset -1, read}): 0 errno=-; entries: [0] 0/2 [1] EINVAL/-1 [2] 0/4
+lio_listio(LIO_WAIT, {write, write on fd -1, read}): -1 errno=EIO; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {write, write on fd -1, read}): 0 errno=-; entries: [0] 0/2 [1] EBADF/-1 [2] 0/4
+lio_listio(LIO_NOWAIT, {file write, pipe read}, SIGEV_SIGNAL 77): 0 errno=-
+  before the pipe has data: signal within 400 ms=none; file write aio_error=0, pipe read aio_error=EINPROGRESS
+  after 3 bytes: signal=SIGRTMIN+2 si_code=SI_ASYNCIO value=77; at receipt both entries done: yes
+  further signals within 300 ms: none
+  entries: [0] 0/2 [1] 0/3
+lio_listio(LIO_NOWAIT, entry 0 with its own SIGEV_SIGNAL 5, list SIGEV_SIGNAL 78): 0; list signal=yes value=78; entry signal=yes value=5 code=SI_ASYNCIO
+  entries: [0] 0/2 [1] 0/2
+lio_listio(LIO_WAIT, entry with SIGEV_SIGNAL 6, list SIGEV_SIGNAL 79): 0 errno=-; list signal=none; entry signal=yes value=6
+lio_listio(LIO_NOWAIT, 0 entries, SIGEV_SIGNAL 80): 0 errno=-; signal=yes value=80
+lio_listio(LIO_NOWAIT, {NULL, NOP}, SIGEV_SIGNAL 81): 0 errno=-; signal=yes value=81
+lio_listio(LIO_NOWAIT, 2 entries, SIGEV_THREAD 99): 0 errno=-; calls=1 value=99 not the caller's thread=1 all entries done at the call=1
+  entries: [0] 0/2 [1] 0/4
+lio_listio(LIO_NOWAIT, {NULL}, SIGEV_THREAD): 0 errno=-; calls within 500 ms=1
+lio_listio(LIO_NOWAIT, 1 write, NULL sigevent): 0 errno=-
+  entries: [0] 0/2
+lio_listio(LIO_WAIT, 5000 one-byte writes): 0 errno=-; entries ok=5000; file size=6000
+lio_listio64(LIO_WAIT, {write, read}): 0 errno=-; returns 2,2
+lio_listio64(mode 7): -1 errno=EINVAL
+-- end lio_listio: exit 0
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+lio_listio(LIO_WAIT, 1024 NULL entries): 0 errno=-
+-- end lio_listio long list: exit 0
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+lio_listio(LIO_WAIT, 1024 entries, all the same LIO_NOP aiocb): 0 errno=-
+-- end lio_listio long list: exit 0
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+lio_listio(LIO_WAIT, 65536 NULL entries): 0 errno=-
+-- end lio_listio long list: exit 0
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+lio_listio(LIO_WAIT, 65536 entries, all the same LIO_NOP aiocb): 0 errno=-
+-- end lio_listio long list: exit 0
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+-- end lio_listio long list: killed by SIGSEGV
+== lio_listio long list
+stack limit (RLIMIT_STACK soft): 8 MiB
+-- end lio_listio long list: killed by SIGSEGV
+== lio_listio interrupted
+lio_listio(LIO_WAIT, {file write, blocked pipe read}), SIGUSR1 handler without SA_RESTART once the write is complete and the call blocked: -1 errno=EINTR handler ran=1
+  file write aio_error=0; pipe read aio_error=EINPROGRESS
+  300 ms later the process is alive; now writing 2 bytes into the pipe
+-- end lio_listio interrupted: killed by SIGSEGV
+== lio_listio interrupted
+lio_listio(LIO_WAIT, {file write, blocked pipe read}), SIGUSR1 handler with SA_RESTART once the write is complete and the call blocked, then 2 bytes into the pipe: 0 errno=- handler ran=1
+  entries: [0] 0/2 [1] 0/2
+-- end lio_listio interrupted: exit 0
+== lio_listio negative nent (alarm 10 s)
+lio_listio(LIO_WAIT, {NULL}, -1): 0 errno=-
+-- end lio_listio negative nent (alarm 10 s): exit 0
+== lio_listio negative nent (alarm 10 s)
+-- end lio_listio negative nent (alarm 10 s): killed by SIGSEGV
+== lio_listio negative nent (alarm 10 s)
+lio_listio(LIO_NOWAIT, {NULL}, -1): 0 errno=-
+-- end lio_listio negative nent (alarm 10 s): exit 0
+== lio_listio negative nent (alarm 10 s)
+-- end lio_listio negative nent (alarm 10 s): killed by SIGSEGV
+== notifications
+SIGEV_NONE read: submit=0 error=0 return=10
+  any signal within 300 ms: none
+zeroed aio_sigevent (SIGEV_SIGNAL with signal 0) read: submit=0 error=0 return=10
+  any signal within 300 ms: none
+SIGEV_SIGNAL SIGRTMIN+4 value 1234: signal=SIGRTMIN+4 si_signo ok=1 si_code=SI_ASYNCIO value=1234 si_pid is the process=1 si_uid is the user=1 si_errno=0; at receipt aio_error=0 aio_return=10
+  a second signal within 300 ms: none
+SIGEV_SIGNAL SIGRTMIN with sival_ptr=&aiocb: signal=SIGRTMIN+0 pointer is the aiocb=1
+SIGEV_SIGNAL SIGUSR2 value 7: signal=SIGUSR2 si_code=SI_ASYNCIO value=7
+SIGEV_SIGNAL on a failing read (write-only fd): submit=0 errno=- signal=SIGRTMIN+1 value=11 aio_error=EBADF
+SIGEV_SIGNAL with the signal blocked in every application thread: pending as seen by the submitting thread=yes, by another thread=yes
+SIGEV_SIGNAL to an SA_SIGINFO handler unblocked only in the submitting thread: calls=1 ran in the submitting thread=1 si_code=SI_ASYNCIO value=21
+SIGEV_THREAD value 5678: calls=1 value=5678 not the caller's thread=1 detached=1 SIGUSR1 (blocked in the caller) blocked=0 SIGUSR2 (unblocked in the caller) blocked=0 aio_error at the call=0
+SIGEV_THREAD with attributes (stack 4 MiB, joinable): calls=1 value=9 stack at least 4 MiB=1 detached=0
+SIGEV_THREAD on a failing read (write-only fd): submit=0 errno=- calls=1 aio_error at the call=EBADF
+three requests with SIGEV_THREAD: calls=3
+-- end notifications: exit 0
+== invalid notification (alarm 10 s)
+aio_read with SIGEV_SIGNAL with signal 65: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+  process still alive after 200 ms
+-- end invalid notification (alarm 10 s): exit 0
+== invalid notification (alarm 10 s)
+aio_read with SIGEV_SIGNAL with signal -1: submit=0 error=EINVAL return=-1 (errno after aio_return 0)
+  process still alive after 200 ms
+-- end invalid notification (alarm 10 s): exit 0
+== invalid notification (alarm 10 s)
+aio_read with sigev_notify 99: submit=0 error=0 return=10
+  process still alive after 200 ms
+-- end invalid notification (alarm 10 s): exit 0
+== invalid notification (alarm 10 s)
+aio_read with SIGEV_THREAD_ID: submit=0 error=0 return=10
+  process still alive after 200 ms
+-- end invalid notification (alarm 10 s): exit 0
+== invalid notification (alarm 10 s)
+-- end invalid notification (alarm 10 s): killed by SIGSEGV
+== ordering
+O_APPEND file, 8 one-byte aio_write per round: data in submission order in 100/100 rounds
+regular file, 8 one-byte aio_write to offset 0 per round: the last submitted is the byte left in 100/100 rounds
+regular file, overlapping aio_write of 8, 6, 4, 2 bytes at offset 0 per round: "DDCCBBAA" (submission order) in 100/100 rounds
+pipe, 8 one-byte aio_write per round: data in submission order in 100/100 rounds
+pipe, 4 one-byte aio_read queued on an empty pipe, bytes fed one at a time: each read got the byte of its rank in 20/20 rounds
+a read of /dev/zero while a pipe read is blocked: completes=yes; the pipe read still EINPROGRESS
+-- end ordering: exit 0
+== fork with a request pending
+parent: pipe read blocked (P), /dev/zero read complete and not yet returned (D)
+child: aio_error P=EINPROGRESS D=0
+child: aio_return D=8 errno=-
+child: aio_suspend({P}, 1, 100 ms)=-1 errno=EAGAIN
+child: aio_cancel(pipe, &P)=AIO_NOTCANCELED errno=-; P=EINPROGRESS
+child: aio_cancel(pipe, NULL)=AIO_NOTCANCELED errno=-
+child: a new aio_read of /dev/zero: submit=0 still EINPROGRESS after 3 s
+child: its own pipe read: EINPROGRESS
+child: aio_cancel(pipe, its own read)=AIO_CANCELED errno=-
+parent: child exit=0; aio_error P=EINPROGRESS D=0
+parent: P after 4 bytes: submit=0 error=0 return=4
+parent: D: submit=0 error=0 return=8
+-- end fork with a request pending: exit 0
+== fork with no request pending
+parent: /dev/zero read before fork: submit=0 error=0 return=8
+child: a new aio_read of /dev/zero: submit=0 still EINPROGRESS after 3 s
+parent: child exit=0
+parent: another read after the fork: submit=0 error=0 return=4
+-- end fork with no request pending: exit 0
+== exec
+before exec: a read blocked on pipe 1 (EINPROGRESS), a write of 100000 bytes to pipe 2 in progress (65536 bytes in it, EINPROGRESS)
+after exec: completion signal pending=no
+after exec: pipe 2 holds 65536 bytes; 300 ms later 65536
+after exec: drained 65536 bytes from pipe 2
+after exec: pipe 2 holds 0 bytes 300 ms after draining
+after exec: a byte written to pipe 1 is still there 300 ms later: yes
+after exec: completion signal pending=no
+-- end exec: exit 0
+== close with requests pending
+pipe: read A blocked, read B queued: EINPROGRESS, EINPROGRESS
+close(read end): 0 errno=- returned within 1 s: yes
+  400 ms later: A=EINPROGRESS B=EINPROGRESS
+  after writing 3 bytes: A done=yes
+  A: submit=0 error=0 return=3
+  B: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_read on the closed descriptor: submit=0 error=EBADF return=-1 (errno after aio_return 0)
+aio_cancel(closed descriptor, NULL): -1 errno=EBADF
+-- end close with requests pending: exit 0
+== *64 interfaces, offsets past 4 GiB
+aio_write64 at 5 GiB: submit=0 errno=-
+  aio_suspend64: 0 errno=-; aio_error64=0 aio_return64=5
+  file size=5368709125
+lio_listio64 read at 5 GiB: 0 errno=-; return=5 data="large"
+aio_cancel64(fd, NULL): AIO_ALLDONE errno=-
+aio_fsync64(O_SYNC): submit=0 errno=-; aio_error64=0 aio_return64=0
+aio_read at 5 GiB through struct aiocb: submit=0 error=0 return=5
+-- end *64 interfaces, offsets past 4 GiB: exit 0
+== RLIMIT_NPROC 1
+RLIMIT_NPROC 1 (the user has other processes): pthread_create=EAGAIN
+  aio_read of /dev/zero: submit=-1 errno=EAGAIN
+  aio_write: submit=-1 errno=EAGAIN
+  aio_fsync(O_SYNC): submit=-1 errno=EAGAIN
+  lio_listio(LIO_WAIT, 2 entries): -1 errno=EAGAIN
+    entries: [0] EAGAIN/0 [1] EAGAIN/0
+  aio_read of /dev/zero with SIGEV_THREAD: submit=-1 errno=EAGAIN
+    notification calls=0
+-- end RLIMIT_NPROC 1: exit 0
+cleanup: 0 entries left in <dir>

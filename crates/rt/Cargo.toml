@@ -1,0 +1,22 @@
+[package]
+name = "liella-rt"
+description = "Runtime mechanisms that need unsafe: process entry, TLS, threads, allocator, signals, contexts, FPU"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_rt"
+
+[dependencies]
+liella-kernel = { workspace = true }
+
+[dev-dependencies]
+spectest = { workspace = true }
+# The internal tests run the primitives against the real kernel (CSys).
+liella-boundary = { workspace = true, features = ["selftest"] }
+
+[lints]
+workspace = true

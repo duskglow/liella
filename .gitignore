@@ -1,0 +1,6 @@
+/target
+/conformance/build
+*.o
+*.so
+*.a
+__pycache__/

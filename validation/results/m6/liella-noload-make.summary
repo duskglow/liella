@@ -1,0 +1,8 @@
+built-from: test/validation 3535ebf + suite.sh noload variants (no library change; contains main 75c0f5c)
+configure-start 2026-10-05T11:27:40Z load: 1.35, 1.66, 3.06
+configure rc=0
+build-start 2026-10-05T11:27:53Z load: 1.60, 1.70, 3.06
+build rc=0 seconds=2.101313612
+check-start 2026-10-05T11:27:55Z load: 2.12, 1.81, 3.08
+check rc=0 seconds=58.089424634
+check-end 2026-10-05T11:28:53Z load: 1.29, 1.64, 2.95

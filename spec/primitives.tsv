@@ -1,0 +1,282 @@
+primitive	area
+execve	Process lifecycle
+execveat	Process lifecycle
+exit	Process lifecycle
+exit_group	Process lifecycle
+clone	Process lifecycle
+clone3	Process lifecycle
+wait4	Process lifecycle
+waitid	Process lifecycle
+getpid	Process lifecycle
+getppid	Process lifecycle
+gettid	Process lifecycle
+set_tid_address	Process lifecycle
+pidfd_open	Process descriptors
+pidfd_getfd	Process descriptors
+pidfd_send_signal	Process descriptors
+getuid	Credentials
+geteuid	Credentials
+getgid	Credentials
+getegid	Credentials
+getresuid	Credentials
+getresgid	Credentials
+setuid	Credentials
+setgid	Credentials
+setreuid	Credentials
+setregid	Credentials
+setresuid	Credentials
+setresgid	Credentials
+setfsuid	Credentials
+setfsgid	Credentials
+getgroups	Credentials
+setgroups	Credentials
+capget	Credentials
+capset	Credentials
+setsid	Sessions and groups
+getsid	Sessions and groups
+setpgid	Sessions and groups
+getpgid	Sessions and groups
+getpgrp	Sessions and groups
+rt_sigaction	Signals
+rt_sigprocmask	Signals
+rt_sigreturn	Signals
+rt_sigsuspend	Signals
+rt_sigpending	Signals
+rt_sigtimedwait	Signals
+rt_sigqueueinfo	Signals
+rt_tgsigqueueinfo	Signals
+kill	Signals
+tgkill	Signals
+sigaltstack	Signals
+signalfd4	Signals
+pause	Signals
+brk	Memory
+mmap	Memory
+munmap	Memory
+mprotect	Memory
+mremap	Memory
+madvise	Memory
+msync	Memory
+mincore	Memory
+mlock	Memory
+mlock2	Memory
+munlock	Memory
+mlockall	Memory
+munlockall	Memory
+remap_file_pages	Memory
+memfd_create	Memory
+pkey_alloc	Memory
+pkey_free	Memory
+pkey_mprotect	Memory
+process_madvise	Memory
+process_mrelease	Memory
+process_vm_readv	Memory
+process_vm_writev	Memory
+map_shadow_stack	Memory
+futex	Thread support
+WAIT	Thread support
+WAKE	Thread support
+WAIT_BITSET	Thread support
+REQUEUE	Thread support
+CMP_REQUEUE	Thread support
+LOCK_PI	Thread support
+LOCK_PI2	Thread support
+UNLOCK_PI	Thread support
+TRYLOCK_PI	Thread support
+WAIT_REQUEUE_PI	Thread support
+CMP_REQUEUE_PI	Thread support
+set_robust_list	Thread support
+rseq	Thread support
+arch_prctl	Thread support
+sched_yield	Thread support
+openat	File descriptors
+open_by_handle_at	File descriptors
+name_to_handle_at	File descriptors
+close	File descriptors
+close_range	File descriptors
+dup	File descriptors
+dup2	File descriptors
+dup3	File descriptors
+fcntl	File descriptors
+ioctl	File descriptors
+pipe2	File descriptors
+read	Data transfer
+write	Data transfer
+pread64	Data transfer
+pwrite64	Data transfer
+readv	Data transfer
+writev	Data transfer
+preadv	Data transfer
+pwritev	Data transfer
+preadv2	Data transfer
+pwritev2	Data transfer
+lseek	Data transfer
+sendfile	Data transfer
+copy_file_range	Data transfer
+splice	Data transfer
+tee	Data transfer
+vmsplice	Data transfer
+readahead	Data transfer
+pselect6	Multiplexing and events
+ppoll	Multiplexing and events
+epoll_create1	Multiplexing and events
+epoll_ctl	Multiplexing and events
+epoll_pwait	Multiplexing and events
+epoll_pwait2	Multiplexing and events
+eventfd2	Multiplexing and events
+inotify_init1	Multiplexing and events
+inotify_add_watch	Multiplexing and events
+inotify_rm_watch	Multiplexing and events
+fanotify_init	Multiplexing and events
+fanotify_mark	Multiplexing and events
+fsync	Durability and space
+fdatasync	Durability and space
+sync	Durability and space
+syncfs	Durability and space
+sync_file_range	Durability and space
+fadvise64	Durability and space
+fallocate	Durability and space
+ftruncate	Durability and space
+truncate	Durability and space
+flock	Locks
+newfstatat	Namespace and metadata
+fstat	Namespace and metadata
+statx	Namespace and metadata
+statfs	Namespace and metadata
+fstatfs	Namespace and metadata
+getdents64	Namespace and metadata
+getcwd	Namespace and metadata
+chdir	Namespace and metadata
+fchdir	Namespace and metadata
+chroot	Namespace and metadata
+mkdirat	Namespace and metadata
+mknodat	Namespace and metadata
+linkat	Namespace and metadata
+symlinkat	Namespace and metadata
+readlinkat	Namespace and metadata
+unlinkat	Namespace and metadata
+renameat2	Namespace and metadata
+fchmodat	Namespace and metadata
+fchmodat2	Namespace and metadata
+fchmod	Namespace and metadata
+fchownat	Namespace and metadata
+fchown	Namespace and metadata
+umask	Namespace and metadata
+faccessat	Namespace and metadata
+faccessat2	Namespace and metadata
+utimensat	Namespace and metadata
+*xattr	Namespace and metadata
+mount	Mounting
+umount2	Mounting
+pivot_root	Mounting
+fsopen	Mounting
+fsconfig	Mounting
+fsmount	Mounting
+fspick	Mounting
+move_mount	Mounting
+open_tree	Mounting
+mount_setattr	Mounting
+swapon	Mounting
+swapoff	Mounting
+quotactl	Mounting
+socket	Sockets
+socketpair	Sockets
+bind	Sockets
+listen	Sockets
+accept4	Sockets
+connect	Sockets
+shutdown	Sockets
+getsockname	Sockets
+getpeername	Sockets
+getsockopt	Sockets
+setsockopt	Sockets
+sendto	Sockets
+recvfrom	Sockets
+sendmsg	Sockets
+recvmsg	Sockets
+sendmmsg	Sockets
+recvmmsg	Sockets
+clock_gettime	Time
+clock_getres	Time
+clock_settime	Time
+clock_adjtime	Time
+clock_nanosleep	Time
+gettimeofday	Time
+settimeofday	Time
+time	Time
+times	Time
+setitimer	Time
+getitimer	Time
+alarm	Time
+timer_create	Time
+timer_settime	Time
+timer_gettime	Time
+timer_getoverrun	Time
+timer_delete	Time
+timerfd_create	Time
+timerfd_settime	Time
+timerfd_gettime	Time
+sched_setscheduler	Scheduling and resources
+sched_getscheduler	Scheduling and resources
+sched_setparam	Scheduling and resources
+sched_getparam	Scheduling and resources
+sched_get_priority_min	Scheduling and resources
+sched_get_priority_max	Scheduling and resources
+sched_rr_get_interval	Scheduling and resources
+sched_setaffinity	Scheduling and resources
+sched_getaffinity	Scheduling and resources
+getcpu	Scheduling and resources
+getpriority	Scheduling and resources
+setpriority	Scheduling and resources
+prlimit64	Scheduling and resources
+getrusage	Scheduling and resources
+sysinfo	Scheduling and resources
+msgget	IPC
+msgsnd	IPC
+msgrcv	IPC
+msgctl	IPC
+semget	IPC
+semtimedop	IPC
+semctl	IPC
+shmget	IPC
+shmat	IPC
+shmdt	IPC
+shmctl	IPC
+mq_open	IPC
+mq_unlink	IPC
+mq_timedsend	IPC
+mq_timedreceive	IPC
+mq_notify	IPC
+mq_getsetattr	IPC
+getrandom	Randomness
+uname	System identity and control
+sethostname	System identity and control
+setdomainname	System identity and control
+reboot	System identity and control
+syslog	System identity and control
+klogctl	System identity and control
+acct	System identity and control
+ioperm	System identity and control
+iopl	System identity and control
+modify_ldt	System identity and control
+init_module	System identity and control
+finit_module	System identity and control
+delete_module	System identity and control
+vhangup	System identity and control
+personality	System identity and control
+prctl	System identity and control
+unshare	System identity and control
+setns	System identity and control
+ptrace	System identity and control
+Initial process stack	A.2
+Auxiliary vector entries	A.2
+vDSO	A.2
+Signal frame and restorer	A.2
+Thread pointer register	A.2
+Shared memory protocols	A.2
+CPU instructions requiring OS support	A.2
+`/proc`	A.2
+`/sys`	A.2
+Device nodes	A.2
+Netlink `NETLINK_ROUTE`	A.2
+Kernel error numbers	A.2

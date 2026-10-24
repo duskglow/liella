@@ -1,0 +1,751 @@
+# Regression limits for the `ratio_host` rows of budgets.tsv, per CPU model (rule P10).
+#
+# Columns: cpu, benchmark, row, limit, status, rationale.
+#   cpu        the `model name` string of /proc/cpuinfo, exactly (not the host name). A CPU with no
+#              entry for a row is measured and reported but not gated (`cargo xtask bench` says so).
+#   limit      the most the same-run MEDIAN Liella/glibc ratio over the rounds may be (the number
+#              `cargo xtask bench --compare` prints as the ratio; not the worst round).
+#   status     `gate`: an ordinary regression limit. `known_regression`: a confirmed slowdown kept at
+#              its earlier bound; the run FAILS on it, labelled "known regression, PERF-REGRESS", until
+#              the slowdown is fixed (then the row becomes `gate` with a limit from its new median).
+#   rationale  where the limit comes from. A limit is 1.25 x the median ratio measured on that CPU
+#              (2026-10-05, the merged tree). A limit raised above the earlier one carries its reason:
+#              "noise (DRIFT-CHECK)" or "confirmed and accepted (<who/why>)". Nothing is accepted yet.
+#
+# The TARGET (ratio <= 1.10) is separate and informational; see budgets.tsv.
+#
+# cpu	benchmark	row	limit	status	rationale
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_s_path	2.139	gate	1.25 x median 1.711 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_mixed	2.424	gate	1.25 x median 1.939 on this CPU, 2026-10-05; above the earlier bound 2.07: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_f2	2.447	gate	1.25 x median 1.957 on this CPU, 2026-10-05; above the earlier bound 1.81: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_g	2.813	gate	1.25 x median 2.250 on this CPU, 2026-10-05; above the earlier bound 1.97: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_e	3.64	gate	1.25 x median 2.912 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_f_large	0.745	gate	1.25 x median 0.596 on this CPU, 2026-10-05; above the earlier bound 0.41: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	fprintf_ls_line	1.965	gate	1.25 x median 1.572 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fprintf_du_line	2.224	gate	1.25 x median 1.779 on this CPU, 2026-10-05; above the earlier bound 2.19: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcmp_names	4.252	gate	1.25 x median 3.401 on this CPU, 2026-10-05; above the earlier bound 3.11: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcmp_equal_16	4.579	gate	1.25 x median 3.663 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcmp_late_256	3.835	gate	1.25 x median 3.068 on this CPU, 2026-10-05; above the earlier bound 3.46: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcoll_c_names	3.705	gate	1.25 x median 2.964 on this CPU, 2026-10-05; above the earlier bound 2.40: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcoll_c_utf8_names	3.742	gate	1.25 x median 2.993 on this CPU, 2026-10-05; above the earlier bound 2.35: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcoll_en_us_names	2.282	gate	1.25 x median 1.825 on this CPU, 2026-10-05; above the earlier bound 2.13: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcoll_en_us_equal_16	0.069	gate	1.25 x median 0.055 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strcoll_en_us_utf8_16	1.485	gate	1.25 x median 1.188 on this CPU, 2026-10-05; above the earlier bound 1.46: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf8_utf16_ascii_4k	0.32	gate	1.25 x median 0.256 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf8_utf16_mixed_4k	3.067	gate	1.25 x median 2.453 on this CPU, 2026-10-05; above the earlier bound 2.61: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf16_utf8_mixed	3.09	gate	1.25 x median 2.472 on this CPU, 2026-10-05; above the earlier bound 2.95: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf8_utf32_mixed_4k	3.62	gate	1.25 x median 2.896 on this CPU, 2026-10-05; above the earlier bound 3.33: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf8_utf16_name	0.994	gate	1.25 x median 0.795 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_open_conv_close_name	0.317	gate	1.25 x median 0.253 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_utf8_8859_15_latin_4k	2.355	gate	1.25 x median 1.884 on this CPU, 2026-10-05; above the earlier bound 2.02: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	iconv_8859_15_utf8_latin	2.363	gate	1.25 x median 1.890 on this CPU, 2026-10-05; above the earlier bound 2.27: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_ls_iso	2.438	gate	1.25 x median 1.950 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_ls_recent_en_us	2.897	gate	1.25 x median 2.317 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_date_en_us	2.864	gate	1.25 x median 2.291 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_iso8601_tz	2.383	gate	1.25 x median 1.906 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_c_en_us	1.728	gate	1.25 x median 1.382 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_log	2.614	gate	1.25 x median 2.091 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_ls_recent_c	2.754	gate	1.25 x median 2.203 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	mktime_new_york	1.54	gate	1.25 x median 1.232 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	localtime_r_new_york	0.268	gate	1.25 x median 0.214 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	mktime_utc	1.42	gate	1.25 x median 1.136 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	mktime_posix_rule	2.753	gate	1.25 x median 2.202 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	localtime_r_posix_rule	3.235	gate	1.25 x median 2.588 on this CPU, 2026-10-05; above the earlier bound 2.85: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_literal	1.432	gate	1.25 x median 1.145 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_comment	6.842	gate	1.25 x median 5.473 on this CPU, 2026-10-05; above the earlier bound 6.43: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_ipv4	1.834	gate	1.25 x median 1.467 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_alt	3.924	gate	1.25 x median 3.139 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_icase_absent	4.537	gate	1.25 x median 3.629 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_dotstar	5.845	gate	1.25 x median 4.676 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_sed_kv	6.008	gate	1.25 x median 4.806 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_sed_swap	2.152	gate	1.25 x median 1.721 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	regcomp_regfree_sed_kv	0.445	gate	1.25 x median 0.356 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	regcomp_regfree_ipv4	1.133	gate	1.25 x median 0.906 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_star_c	0.647	gate	1.25 x median 0.517 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_ch	0.81	gate	1.25 x median 0.648 on this CPU, 2026-10-05; above the earlier bound 0.78: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_lib_so	0.867	gate	1.25 x median 0.693 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_period	1.292	gate	1.25 x median 1.033 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_question	0.693	gate	1.25 x median 0.554 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_class	1.625	gate	1.25 x median 1.300 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_casefold	1.477	gate	1.25 x median 1.181 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_paths_pathname	0.672	gate	1.25 x median 0.537 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_paths_leading_dir	0.882	gate	1.25 x median 0.705 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_tilde_var	8.113	gate	1.25 x median 6.490 on this CPU, 2026-10-05; above the earlier bound 7.76: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_arith	6.918	gate	1.25 x median 5.534 on this CPU, 2026-10-05; above the earlier bound 6.43: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_plain_8	4.398	gate	1.25 x median 3.518 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_param_forms	5.867	gate	1.25 x median 4.693 on this CPU, 2026-10-05; above the earlier bound 5.61: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	gettext_found	15.779	gate	1.25 x median 12.623 on this CPU, 2026-10-05; above the earlier bound 8.74: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	gettext_missing	2.458	gate	1.25 x median 1.966 on this CPU, 2026-10-05; above the earlier bound 1.72: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	ngettext_found	12.783	gate	1.25 x median 10.226 on this CPU, 2026-10-05; above the earlier bound 6.95: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	gettext_no_catalog	3.207	gate	1.25 x median 2.565 on this CPU, 2026-10-05; above the earlier bound 2.06: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_opt	gettext_c_locale	0.167	gate	1.25 x median 0.133 on this CPU, 2026-10-05; above the earlier bound 0.15: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regcomp_regexec_regfree_email	2.548	gate	1.25 x median 2.038 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regexec_literal_1k	0.585	gate	1.25 x median 0.468 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regexec_submatch_1k	3.013	gate	1.25 x median 2.410 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regexec_class_nomatch_1k	2.705	gate	1.25 x median 2.164 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regexec_backref	3.774	gate	1.25 x median 3.019 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	regexec_pathological_4k	0.019	gate	1.25 x median 0.015 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_star	1.109	gate	1.25 x median 0.887 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_bracket	1.515	gate	1.25 x median 1.212 on this CPU, 2026-10-05; above the earlier bound 1.51: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_pathname_nomatch	1.275	gate	1.25 x median 1.020 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	glob_1000_sorted	1.735	gate	1.25 x median 1.388 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	glob_1000_nosort	1.982	gate	1.25 x median 1.585 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_patterns	wordexp_tilde_var	7.718	gate	1.25 x median 6.174 on this CPU, 2026-10-05; above the earlier bound 7.40: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_patterns	wordexp_arith	6.819	gate	1.25 x median 5.455 on this CPU, 2026-10-05; above the earlier bound 6.26: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_time	gmtime_r	1.684	gate	1.25 x median 1.347 on this CPU, 2026-10-05; above the earlier bound 1.34: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_time	timegm	1.157	gate	1.25 x median 0.925 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_time	localtime_r_utc	1.96	gate	1.25 x median 1.568 on this CPU, 2026-10-05; above the earlier bound 1.62: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_time	localtime_r_new_york	0.288	gate	1.25 x median 0.230 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_time	localtime_r_new_york_2100	0.232	gate	1.25 x median 0.185 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_time	mktime_new_york	1.469	gate	1.25 x median 1.175 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_time	localtime_r_posix_rule	3.217	gate	1.25 x median 2.573 on this CPU, 2026-10-05; above the earlier bound 2.65: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_time	strftime_iso	2.464	gate	1.25 x median 1.971 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_time	strftime_c	2.007	gate	1.25 x median 1.605 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	isalpha_c	2.32	gate	1.25 x median 1.856 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	toupper_c	2.704	gate	1.25 x median 2.163 on this CPU, 2026-10-05; above the earlier bound 2.42: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	strtod_c	1.005	gate	1.25 x median 0.804 on this CPU, 2026-10-05; above the earlier bound 0.71: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	towupper_utf8	1.222	gate	1.25 x median 0.977 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	iswalpha_utf8	1.403	gate	1.25 x median 1.122 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	wcwidth_utf8	2.265	gate	1.25 x median 1.812 on this CPU, 2026-10-05; above the earlier bound 1.16: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	mbrtowc_utf8_3	2.315	gate	1.25 x median 1.852 on this CPU, 2026-10-05; above the earlier bound 2.30: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	strcoll_utf8_16	4.512	gate	1.25 x median 3.609 on this CPU, 2026-10-05; above the earlier bound 4.49: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	strtod_utf8	1.01	gate	1.25 x median 0.808 on this CPU, 2026-10-05; above the earlier bound 0.69: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	newlocale_free	0.452	gate	1.25 x median 0.361 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	iconv_utf8_utf16_4k	1.723	gate	1.25 x median 1.378 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_locale	iconv_utf8_8859_15_4k	2.409	gate	1.25 x median 1.927 on this CPU, 2026-10-05; above the earlier bound 2.23: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_locale	iconv_utf8_ascii_translit_4k	1.602	gate	1.25 x median 1.281 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_stdio	snprintf_d	1.344	gate	1.25 x median 1.075 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_stdio	snprintf_mixed	2.513	gate	1.25 x median 2.010 on this CPU, 2026-10-05; above the earlier bound 2.00: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_stdio	fprintf_d	1.697	gate	1.25 x median 1.357 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_stdio	fputs_32	2.947	gate	1.25 x median 2.357 on this CPU, 2026-10-05; above the earlier bound 2.63: first keke calibration, the earlier bound was shiki's
+AMD EPYC 7551 32-Core Processor	cbench_stdio	putc	4.863	gate	1.25 x median 3.890 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_stdio	fwrite_4k	1.853	gate	1.25 x median 1.482 on this CPU, 2026-10-05; above the earlier bound 1.58: first keke calibration, the earlier bound was shiki's
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_d	1.421	gate	1.25 x median 1.137 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_ld_large	1.294	gate	1.25 x median 1.035 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_x08	1.297	known_regression	1.05 x the pre-merge median 1.235 (DRIFT-CHECK, 2026-10-05); measured median now 1.359; earlier worst-based bound 1.59; not accepted; rechecked 2026-10-05 on main ded526c: median 1.35 twice (PERF-REGRESS branch had 1.26): still a regression after the merges, PJ item
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_s_path	1.737	gate	1.25 x median 1.390 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_s_d_colon	1.518	gate	1.25 x median 1.214 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_ls_line	1.172	gate	1.25 x median 0.938 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_mixed	1.780	gate	1.25 x median 1.424 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_f2	1.209	gate	1.25 x median 0.967 on this CPU, P9 opt/float-digits 2026-10-07 (was limit 1.687)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_g	1.311	gate	1.25 x median 1.049 on this CPU, P9 opt/float-digits 2026-10-07 (was limit 1.787)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_e	3.051	gate	1.25 x median 2.441 on this CPU, P9 opt/float-digits 2026-10-07 (was limit 4.172)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	snprintf_f_large	0.247	gate	1.25 x median 0.198 on this CPU, P9 opt/float-digits 2026-10-07 (was limit 0.399)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fprintf_ls_line	1.598	gate	1.25 x median 1.278 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fprintf_du_line	1.836	gate	1.25 x median 1.469 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcmp_names	1.913	gate	1.25 x median 1.530 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 2.834 (median 2.351 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcmp_equal_16	2.780	gate	1.25 x median 2.224 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 4.984 (median 4.009 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcmp_late_256	2.356	gate	1.25 x median 1.885 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 3.418 (median 2.435 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcoll_c_names	1.561	gate	1.25 x median 1.249 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 2.263 (median 1.780 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcoll_c_utf8_names	1.601	gate	1.25 x median 1.281 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 2.369 (median 1.802 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcoll_en_us_names	2.08	gate	1.25 x median 1.664 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcoll_en_us_equal_16	0.059	gate	1.25 x median 0.047 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strcoll_en_us_utf8_16	1.438	gate	1.25 x median 1.150 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf8_utf16_ascii_4k	0.389	gate	1.25 x median 0.311 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf8_utf16_mixed_4k	2.567	gate	1.25 x median 2.053 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf16_utf8_mixed	2.928	gate	1.25 x median 2.342 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf8_utf32_mixed_4k	3.16	gate	1.25 x median 2.528 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf8_utf16_name	0.987	gate	1.25 x median 0.789 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_open_conv_close_name	0.34	gate	1.25 x median 0.272 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_utf8_8859_15_latin_4k	1.959	gate	1.25 x median 1.567 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	iconv_8859_15_utf8_latin	2.253	gate	1.25 x median 1.802 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_ls_iso	2.406	gate	1.25 x median 1.925 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_ls_recent_en_us	2.734	gate	1.25 x median 2.187 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_date_en_us	2.815	gate	1.25 x median 2.252 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_iso8601_tz	2.231	gate	1.25 x median 1.785 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_c_en_us	1.420	gate	1.25 x median 1.136 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_log	2.577	gate	1.25 x median 2.062 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	strftime_ls_recent_c	2.650	gate	1.25 x median 2.120 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	mktime_new_york	2.025	gate	1.25 x median 1.620 on this CPU, 2026-10-05; raised from 1.98: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	localtime_r_new_york	0.194	gate	1.25 x median 0.155 on this CPU, 2026-10-07 (P7 per-thread period cache)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	mktime_utc	1.155	gate	1.25 x median 0.924 on this CPU, 2026-10-08, main 1591bf6: tightened after MKT-1: fixed-offset zones skip the search, 1.844 -> 0.924 (merge bench b21 merge-b21-s); was 1.75
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	mktime_posix_rule	1.906	gate	1.25 x median 1.525 on this CPU, 2026-10-08 (TB-SLOTS tbslots-after3; was 3.024)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	localtime_r_posix_rule	1.664	gate	1.25 x median 1.331 on this CPU, 2026-10-07 (P7 per-thread period cache)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_literal	1.388	gate	1.25 x median 1.110 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_comment	1.980	gate	1.25 x median 1.584 on this CPU, 2026-10-07 (RX-T1 required-bytes prefilter)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_ipv4	1.359	gate	1.25 x median 1.087 on this CPU, 2026-10-07 (RX-T1 required-bytes prefilter)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_alt	1.610	gate	1.25 x median 1.288 on this CPU, 2026-10-07 (RX-T1 required-bytes prefilter)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_icase_absent	5.14	gate	1.25 x median 4.112 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_grep_dotstar	7.45	gate	1.25 x median 5.960 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_sed_kv	3.995	gate	1.25 x median 3.196 on this CPU, 2026-10-07 (RX-T1 required-bytes prefilter)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_sed_swap	1.492	gate	1.25 x median 1.194 on this CPU, 2026-10-07 (RX-T1 required-bytes prefilter)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_mt4_shared	0.283	gate	1.25 x median 0.226 on this CPU, 2026-10-07 (RX-T1, new row)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	re_mt4_distinct	1.676	gate	1.25 x median 1.341 on this CPU, 2026-10-07 (RX-T1, new row)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	regcomp_regfree_sed_kv	0.473	gate	1.25 x median 0.378 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	regcomp_regfree_ipv4	1.123	gate	1.25 x median 0.898 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_star_c	0.674	gate	1.25 x median 0.539 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_ch	0.775	gate	1.25 x median 0.620 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_lib_so	0.829	gate	1.25 x median 0.663 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_period	1.219	gate	1.25 x median 0.975 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_question	0.862	gate	1.25 x median 0.689 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_class	1.742	gate	1.25 x median 1.393 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_names_casefold	1.808	gate	1.25 x median 1.446 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_paths_pathname	0.739	gate	1.25 x median 0.591 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	fnmatch_paths_leading_dir	0.9	gate	1.25 x median 0.720 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_tilde_var	5.224	gate	1.25 x median 4.179 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 7.93 (median 5.012 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_arith	6.59	gate	1.25 x median 5.272 on this CPU, 2026-10-05; raised from 6.43: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_plain_8	3.703	gate	1.25 x median 2.962 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 4.805 (median 3.349 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_quoted	4.999	gate	1.25 x median 3.999 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 6.000 (median 4.904 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_split_var	3.714	gate	1.25 x median 2.971 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 4.703 (median 3.696 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	wordexp_param_forms	3.681	gate	1.25 x median 2.945 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 5.805 (median 3.674 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_found	3.521	gate	1.25 x median 2.817 on this CPU, 2026-10-07; PJ-9 (LANGUAGE change no setting change, catalog lookup index, codecs kept): lowered from 3.887 (median 3.013 on the merge tree, same run pair)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_missing	0.686	gate	1.25 x median 0.549 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 1.854 (median 1.025 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	ngettext_found	3.188	gate	1.25 x median 2.550 on this CPU, 2026-10-07; PJ-9 (LANGUAGE change no setting change, catalog lookup index, codecs kept): lowered from 3.360 (median 2.680 on the merge tree, same run pair)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_no_catalog	0.709	gate	1.25 x median 0.567 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 2.29 (median 1.179 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_c_locale	0.157	gate	1.25 x median 0.125 on this CPU, 2026-10-05; raised from 0.15: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_vary_msgid	1.196	gate	1.25 x median 0.957 on this CPU, 2026-10-07; PJ-9 (LANGUAGE change no setting change, catalog lookup index, codecs kept): first limit (median 1.025 on the merge tree)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	gettext_language_alternating	2.435	gate	1.25 x median 1.948 on this CPU, 2026-10-07; PJ-9 (LANGUAGE change no setting change, catalog lookup index, codecs kept): first limit (median 8.978 on the merge tree)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_opt	cold_exec_empty	0.609	gate	1.25 x median 0.487 on this CPU, main ded526c 2026-10-05; recovered by PERF-REGRESS (opt/regress 30f6d9c), was known_regression
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regcomp_regexec_regfree_email	3.468	gate	1.25 x median 2.774 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regexec_literal_1k	0.791	gate	1.25 x median 0.633 (coordinator back-to-back base, 2026-10-07); raised from 0.705 for NOISE: medians 0.564-0.752 across 2026-10-07 runs with no regex change (worst rounds up to 0.76 on the base itself)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regexec_submatch_1k	4.187	gate	1.25 x median 3.349 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regexec_class_nomatch_1k	2.734	gate	1.25 x median 2.187 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regexec_backref	3.95	gate	1.25 x median 3.160 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	regexec_pathological_4k	0.029	gate	1.25 x median 0.023 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	fnmatch_star	1.195	gate	1.25 x median 0.956 on this CPU, 2026-10-05; raised from 1.14: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	fnmatch_bracket	1.45	gate	1.25 x median 1.160 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	fnmatch_pathname	1.037	gate	1.25 x median 0.829 on this CPU, main ded526c 2026-10-05; recovered by PERF-REGRESS (opt/regress 30f6d9c), was known_regression
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	fnmatch_pathname_nomatch	1.352	gate	1.25 x median 1.081 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	glob_1000_sorted	1.709	gate	1.25 x median 1.367 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	glob_1000_nosort	2.024	gate	1.25 x median 1.619 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	wordexp_tilde_var	5.205	gate	1.25 x median 4.164 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 7.713 (median 4.961 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_patterns	wordexp_arith	6.387	gate	1.25 x median 5.109 on this CPU, 2026-10-05; raised from 6.26: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	gmtime_r	1.283	gate	1.25 x median 1.026 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	timegm	1.397	gate	1.25 x median 1.117 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	localtime_r_utc	1.605	gate	1.25 x median 1.284 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	localtime_r_new_york	0.160	gate	1.25 x median 0.128 on this CPU, 2026-10-07 (P7 per-thread period cache)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	localtime_r_new_york_2100	0.152	gate	1.25 x median 0.122 on this CPU, 2026-10-07 (P7 per-thread period cache)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	mktime_new_york	1.812	gate	1.25 x median 1.449 on this CPU, 2026-10-05; raised from 1.76: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	localtime_r_posix_rule	1.649	gate	1.25 x median 1.319 on this CPU, 2026-10-07 (P7 per-thread period cache)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	strftime_iso	2.321	gate	1.25 x median 1.857 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_time	strftime_c	1.454	gate	1.25 x median 1.163 on this CPU, 2026-10-07 (P8: strftime direct path)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	isalpha_c	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-07 (opt/ctype-cache 9c5364b): PJ-22, isalpha reads the per-thread __ctype_b word (D-5.5); was median 1.865 on main a0e6694
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	toupper_c	1.429	gate	1.25 x median 1.143 on this CPU, 2026-10-07 (opt/ctype-cache 9c5364b): PJ-22, toupper reads the per-thread __ctype_toupper word (D-5.5); was median 1.566 on main a0e6694
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strtod_c	0.673	gate	1.25 x median 0.538 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	towupper_utf8	1.339	gate	1.25 x median 1.071 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	iswalpha_utf8	1.44	gate	1.25 x median 1.152 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	wcwidth_utf8	1.334	gate	1.25 x median 1.067 on this CPU, 2026-10-05; raised from 1.16: noise (DRIFT-CHECK)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	mbrtowc_utf8_3	1.761	gate	1.25 x median 1.409 on this CPU, 2026-10-08, main 1591bf6: tightened after AUD-FIX: UTF-8 single decode, 1.870 -> 1.409 (merge bench b21 merge-b21-s); was 2.343
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strcoll_utf8_16	1.795	gate	1.25 x median 1.436 on this CPU, 2026-10-07; PJ-8 (one-pass strcmp, env_find, short-string prologue): lowered from 4.184 (median 3.005 on the merge tree 10510b9 the same day)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strtod_utf8	0.668	gate	1.25 x median 0.534 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	newlocale_free	0.415	gate	1.25 x median 0.332 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	iconv_utf8_utf16_4k	1.953	gate	1.25 x median 1.562 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	iconv_utf8_8859_15_4k	2.2	gate	1.25 x median 1.760 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	iconv_utf8_ascii_translit_4k	1.717	gate	1.25 x median 1.373 on this CPU, 2026-10-05
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	snprintf_d	1.435	gate	1.25 x median 1.148 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	snprintf_mixed	1.701	gate	1.25 x median 1.361 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	fprintf_d	1.645	gate	1.25 x median 1.316 on this CPU, 2026-10-07 (PJ-20)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	fputs_32	1.694	gate	1.25 x median 1.355 on this CPU, 2026-10-07; lowered from 2.562: P5 (the front path of byte output, D-12.19)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	putc	1.524	gate	1.25 x median 1.219 on this CPU, 2026-10-07; lowered from 2.196: P5b (window-closed invariant, sealed records, D-12.19)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_stdio	fwrite_4k	1.509	gate	1.25 x median 1.207 on this CPU, 2026-10-05
+AMD EPYC 7551 32-Core Processor	cbench_opt	cold_exec_empty	0.722	gate	1.25 x median 0.577 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_d	1.215	gate	1.25 x median 0.972 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_ld_large	1.280	gate	1.25 x median 1.024 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_ls_line	1.344	gate	1.25 x median 1.075 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_s_d_colon	1.788	gate	1.25 x median 1.430 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_x08	1.633	gate	1.25 x median 1.306 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_quoted	5.818	gate	1.25 x median 4.654 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_opt	wordexp_split_var	4.988	gate	1.25 x median 3.990 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_pathname	1.195	gate	1.25 x median 0.956 on this CPU, main ded526c 2026-10-05; first keke limit for a former shiki known_regression row (PERF-REGRESS)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strcasecmp_c_16	7.974	gate	1.25 x median 6.379 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 13.065 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strcasecmp_c_256	7.346	gate	1.25 x median 5.877 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 25.538 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strncasecmp_c_64	11.742	gate	1.25 x median 9.394 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 29.557 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strcasecmp_utf8_256	7.395	gate	1.25 x median 5.916 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 25.819 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strcasecmp_en_256	7.334	gate	1.25 x median 5.867 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 74.858 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	fnmatch_casefold_en_32	0.989	gate	1.25 x median 0.791 on this CPU, 2026-10-07 (opt/casefold 42c62d6): PJ-23, ASCII fold without tables + 8-byte SWAR (D-5.6); was median 1.542 before (row added by PJ-23)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	fnmatch_en_us	0.430	gate	1.25 x median 0.344 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	iswalpha_en_us	0.954	gate	1.25 x median 0.763 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	mbrtowc_en_us_3	2.004	gate	1.25 x median 1.603 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	snprintf_f_en_us	1.074	gate	1.25 x median 0.859 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strtod_en_us	0.741	gate	1.25 x median 0.593 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memchr_4k	1.501	gate	1.25 x median 1.201 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memchr_64k	1.251	gate	1.25 x median 1.001 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memchr_64	1.926	gate	1.25 x median 1.541 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcmp_4k	1.225	gate	1.25 x median 0.980 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcmp_64k	1.009	gate	1.25 x median 0.807 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcmp_64	1.934	gate	1.25 x median 1.547 on this CPU, 2026-10-08, main 1591bf6: tightened after MEM-K3: register compare kernel D-4.23, 3.138 -> 1.547 (merge bench b21 merge-b21m-s); was 3.922
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_16	1.166	gate	1.25 x median 0.933 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_4k	1.380	gate	1.25 x median 1.104 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_4k_off	0.970	gate	1.25 x median 0.776 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_64k	1.260	gate	1.25 x median 1.008 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_64	1.406	gate	1.25 x median 1.125 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memmove_16	1.219	gate	1.25 x median 0.975 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memmove_4k	2.901	gate	1.25 x median 2.321 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memmove_64	1.124	gate	1.25 x median 0.899 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_4k	1.385	gate	1.25 x median 1.108 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_4k_off	1.241	gate	1.25 x median 0.993 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_64k	1.224	gate	1.25 x median 0.979 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_64	1.429	gate	1.25 x median 1.143 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	rawmemchr_4k	1.700	gate	1.25 x median 1.360 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	rawmemchr_64k	1.272	gate	1.25 x median 1.018 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	rawmemchr_64	2.290	gate	1.25 x median 1.832 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strlen_4k	1.464	gate	1.25 x median 1.171 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strlen_64k	1.264	gate	1.25 x median 1.011 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strlen_64	1.995	gate	1.25 x median 1.596 on this CPU, 2026-10-08, main 54d4744 (merge bench b22): tightened after STR-K1 scan loops + tail-call exports, 2.000 -> 1.596; was 2.500
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strnlen_4k	1.824	gate	1.25 x median 1.459 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strnlen_64k	1.325	gate	1.25 x median 1.060 on this CPU, 2026-10-08 (merge bench b20, main b1ec92d: LV-2 + MEM-K1 + MEMREF): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strnlen_64	2.019	gate	1.25 x median 1.615 on this CPU, 2026-10-08, main 54d4744 (merge bench b22): tightened after STR-K1, 2.300 -> 1.615; was 2.875
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	nl_langinfo_en_us	1.719	gate	1.25 x median 1.375 on this CPU, 2026-10-08 (merge bench b22, main 54d4744: LV-3 item tables): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	localeconv_en_us	0.564	gate	1.25 x median 0.451 on this CPU, 2026-10-08 (merge bench b22, main 54d4744: LV-3 item tables): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_locale	strftime_names_en_us	1.910	gate	1.25 x median 1.528 on this CPU, 2026-10-08 (merge bench b22, main 54d4744: LV-3 item tables): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_d	1.281	gate	1.25 x median 1.025 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_ld_large	1.221	gate	1.25 x median 0.977 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_x08	1.278	gate	1.25 x median 1.022 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_s_path	1.706	gate	1.25 x median 1.365 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_s_d_colon	1.456	gate	1.25 x median 1.165 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_ls_line	1.087	gate	1.25 x median 0.870 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_mixed	1.820	gate	1.25 x median 1.456 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_f2	1.154	gate	1.25 x median 0.923 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_g	1.291	gate	1.25 x median 1.033 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_e	2.958	gate	1.25 x median 2.366 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	snprintf_f_large	0.266	gate	1.25 x median 0.213 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fprintf_ls_line	1.655	gate	1.25 x median 1.324 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fprintf_du_line	1.877	gate	1.25 x median 1.502 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcmp_names	1.891	gate	1.25 x median 1.513 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcmp_equal_16	2.280	gate	1.25 x median 1.824 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcmp_late_256	2.116	gate	1.25 x median 1.693 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcoll_c_names	1.447	gate	1.25 x median 1.158 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcoll_c_utf8_names	1.464	gate	1.25 x median 1.171 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcoll_en_us_names	2.020	gate	1.25 x median 1.616 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcoll_en_us_equal_16	0.051	gate	1.25 x median 0.041 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strcoll_en_us_utf8_16	1.279	gate	1.25 x median 1.023 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf8_utf16_ascii_4k	0.380	gate	1.25 x median 0.304 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf8_utf16_mixed_4k	2.651	gate	1.25 x median 2.121 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf16_utf8_mixed	3.020	gate	1.25 x median 2.416 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf8_utf32_mixed_4k	3.209	gate	1.25 x median 2.567 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf8_utf16_name	0.980	gate	1.25 x median 0.784 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_open_conv_close_name	0.307	gate	1.25 x median 0.246 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_utf8_8859_15_latin_4k	1.756	gate	1.25 x median 1.405 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	iconv_8859_15_utf8_latin	1.996	gate	1.25 x median 1.597 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_ls_iso	1.514	gate	1.25 x median 1.211 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_ls_recent_en_us	1.558	gate	1.25 x median 1.246 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_date_en_us	1.495	gate	1.25 x median 1.196 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_iso8601_tz	1.386	gate	1.25 x median 1.109 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_c_en_us	1.259	gate	1.25 x median 1.007 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_log	1.383	gate	1.25 x median 1.106 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	strftime_ls_recent_c	1.492	gate	1.25 x median 1.194 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	mktime_new_york	2.129	gate	1.25 x median 1.703 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	localtime_r_new_york	0.159	gate	1.25 x median 0.127 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	mktime_utc	1.086	gate	1.25 x median 0.869 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	mktime_posix_rule	1.740	gate	1.25 x median 1.392 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	localtime_r_posix_rule	1.333	gate	1.25 x median 1.066 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_literal	1.335	gate	1.25 x median 1.068 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_comment	1.019	gate	1.25 x median 0.815 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_ipv4	0.830	gate	1.25 x median 0.664 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_alt	0.990	gate	1.25 x median 0.792 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_icase_absent	1.595	gate	1.25 x median 1.276 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_grep_dotstar	4.984	gate	1.25 x median 3.987 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_sed_kv	2.426	gate	1.25 x median 1.941 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_sed_swap	0.825	gate	1.25 x median 0.660 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	regcomp_regfree_sed_kv	0.545	gate	1.25 x median 0.436 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	regcomp_regfree_ipv4	1.157	gate	1.25 x median 0.926 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_mt4_shared	0.166	gate	1.25 x median 0.133 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	re_mt4_distinct	1.009	gate	1.25 x median 0.807 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_star_c	0.453	gate	1.25 x median 0.362 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_ch	0.590	gate	1.25 x median 0.472 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_lib_so	0.562	gate	1.25 x median 0.450 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_period	0.882	gate	1.25 x median 0.706 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_question	0.641	gate	1.25 x median 0.513 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_class	1.701	gate	1.25 x median 1.361 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_names_casefold	0.751	gate	1.25 x median 0.601 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_paths_pathname	0.578	gate	1.25 x median 0.462 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	fnmatch_paths_leading_dir	0.607	gate	1.25 x median 0.486 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_tilde_var	4.412	gate	1.25 x median 3.530 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_arith	4.620	gate	1.25 x median 3.696 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_plain_8	2.859	gate	1.25 x median 2.287 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_quoted	4.045	gate	1.25 x median 3.236 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_split_var	2.990	gate	1.25 x median 2.392 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	wordexp_param_forms	3.351	gate	1.25 x median 2.681 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_found	2.830	gate	1.25 x median 2.264 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_missing	0.562	gate	1.25 x median 0.450 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	ngettext_found	2.701	gate	1.25 x median 2.161 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_no_catalog	0.674	gate	1.25 x median 0.539 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_c_locale	0.112	gate	1.25 x median 0.090 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_vary_msgid	0.914	gate	1.25 x median 0.731 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_language_alternating	2.449	gate	1.25 x median 1.959 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	gettext_language_putenv_alone	2.045	gate	1.25 x median 1.636 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_opt	cold_exec_empty	0.619	gate	1.25 x median 0.495 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regcomp_regexec_regfree_email	3.249	gate	1.25 x median 2.599 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regexec_literal_1k	0.904	gate	1.25 x median 0.723 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regexec_submatch_1k	3.872	gate	1.25 x median 3.098 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regexec_class_nomatch_1k	1.462	gate	1.25 x median 1.170 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regexec_backref	2.296	gate	1.25 x median 1.837 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	regexec_pathological_4k	0.029	gate	owner 2026-10-10: 0.029 as on shiki (1.25 x median 0.000 rounded to a limit no run can meet; the row is ~3000x faster than glibc)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	fnmatch_star	0.901	gate	1.25 x median 0.721 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	fnmatch_bracket	1.323	gate	1.25 x median 1.058 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	fnmatch_pathname	0.877	gate	1.25 x median 0.702 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	fnmatch_pathname_nomatch	0.975	gate	1.25 x median 0.780 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	glob_1000_sorted	1.613	gate	1.25 x median 1.290 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	glob_1000_nosort	1.824	gate	1.25 x median 1.459 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	wordexp_tilde_var	4.600	gate	1.25 x median 3.680 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_patterns	wordexp_arith	4.835	gate	1.25 x median 3.868 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	gmtime_r	1.145	gate	1.25 x median 0.916 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	timegm	1.101	gate	1.25 x median 0.881 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	localtime_r_utc	1.415	gate	1.25 x median 1.132 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	localtime_r_new_york	0.135	gate	1.25 x median 0.108 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	localtime_r_new_york_2100	0.121	gate	1.25 x median 0.097 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	mktime_new_york	2.115	gate	1.25 x median 1.692 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	localtime_r_posix_rule	1.388	gate	1.25 x median 1.110 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	strftime_iso	1.499	gate	1.25 x median 1.199 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_time	strftime_c	1.518	gate	1.25 x median 1.214 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	isalpha_c	1.238	gate	1.25 x median 0.990 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	toupper_c	1.256	gate	1.25 x median 1.005 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strtod_c	0.654	gate	1.25 x median 0.523 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	towupper_utf8	1.016	gate	1.25 x median 0.813 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	iswalpha_utf8	1.055	gate	1.25 x median 0.844 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	wcwidth_utf8	0.998	gate	1.25 x median 0.798 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	mbrtowc_utf8_3	1.863	gate	1.25 x median 1.490 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strcoll_utf8_16	1.591	gate	1.25 x median 1.273 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strtod_utf8	0.650	gate	1.25 x median 0.520 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	newlocale_free	0.419	gate	1.25 x median 0.335 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	iconv_utf8_utf16_4k	2.170	gate	1.25 x median 1.736 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	iconv_utf8_8859_15_4k	1.905	gate	1.25 x median 1.524 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	iconv_utf8_ascii_translit_4k	1.355	gate	1.25 x median 1.084 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strcasecmp_c_16	6.915	gate	1.25 x median 5.532 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strcasecmp_c_256	7.013	gate	1.25 x median 5.610 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strncasecmp_c_64	9.860	gate	1.25 x median 7.888 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strcasecmp_utf8_256	7.485	gate	1.25 x median 5.988 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strcasecmp_en_256	7.510	gate	1.25 x median 6.008 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	fnmatch_casefold_en_32	1.136	gate	1.25 x median 0.909 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	snprintf_d	1.506	gate	1.25 x median 1.205 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	snprintf_mixed	1.741	gate	1.25 x median 1.393 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	fprintf_d	1.926	gate	1.25 x median 1.541 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	fputs_32	1.374	gate	1.25 x median 1.099 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	putc	1.458	gate	1.25 x median 1.166 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_stdio	fwrite_4k	1.288	gate	1.25 x median 1.030 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	mbrtowc_en_us_3	1.573	gate	1.25 x median 1.258 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	fnmatch_en_us	0.370	gate	1.25 x median 0.296 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strtod_en_us	0.640	gate	1.25 x median 0.512 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	snprintf_f_en_us	1.032	gate	1.25 x median 0.826 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	iswalpha_en_us	0.996	gate	1.25 x median 0.797 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcpy_64	1.495	gate	1.25 x median 1.196 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcpy_4k	1.447	gate	1.25 x median 1.158 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcpy_64k	1.271	gate	1.25 x median 1.017 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memset_64	1.250	gate	1.25 x median 1.000 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memset_4k	1.368	gate	1.25 x median 1.094 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memset_64k	1.266	gate	1.25 x median 1.013 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcmp_64	1.574	gate	1.25 x median 1.259 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcmp_4k	1.062	gate	1.25 x median 0.850 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcmp_64k	1.131	gate	1.25 x median 0.905 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memchr_64	1.669	gate	1.25 x median 1.335 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memchr_4k	1.502	gate	1.25 x median 1.202 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memchr_64k	1.393	gate	1.25 x median 1.114 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strlen_64	1.930	gate	1.25 x median 1.544 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strlen_4k	1.780	gate	1.25 x median 1.424 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strlen_64k	1.249	gate	1.25 x median 0.999 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strnlen_64	1.874	gate	1.25 x median 1.499 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strnlen_4k	1.286	gate	1.25 x median 1.029 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	strnlen_64k	1.289	gate	1.25 x median 1.031 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	rawmemchr_64	1.971	gate	1.25 x median 1.577 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	rawmemchr_4k	1.681	gate	1.25 x median 1.345 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	rawmemchr_64k	1.269	gate	1.25 x median 1.015 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcpy_4k_off	0.741	gate	1.25 x median 0.593 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memset_4k_off	1.241	gate	1.25 x median 0.993 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memcpy_16	0.927	gate	1.25 x median 0.742 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memset_16	1.160	gate	1.25 x median 0.928 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memmove_16	1.310	gate	1.25 x median 1.048 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memmove_64	0.994	gate	1.25 x median 0.795 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_memref	memmove_4k	2.672	gate	1.25 x median 2.138 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	nl_langinfo_en_us	1.529	gate	1.25 x median 1.223 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	localeconv_en_us	0.599	gate	1.25 x median 0.479 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz	cbench_locale	strftime_names_en_us	1.747	gate	1.25 x median 1.398 on this CPU, 2026-10-08 (kanon full calibration bench, main 5cc49dc; 3 rounds, BENCH-TP)
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_16_mix	1.278	gate	1.25 x median 1.022 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_16_mix	1.282	gate	1.25 x median 1.026 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcmp_16_mix	1.139	gate	1.25 x median 0.911 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memchr_16_mix	1.478	gate	1.25 x median 1.182 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strlen_16_mix	2.176	gate	1.25 x median 1.741 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strnlen_16_mix	2.249	gate	1.25 x median 1.799 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	rawmemchr_16_mix	1.706	gate	1.25 x median 1.365 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strcmp_16_mix	1.333	gate	1.25 x median 1.066 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcpy_64_mix	1.268	gate	1.25 x median 1.014 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memset_64_mix	1.282	gate	1.25 x median 1.026 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memcmp_64_mix	1.304	gate	1.25 x median 1.043 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	memchr_64_mix	1.393	gate	1.25 x median 1.114 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strlen_64_mix	1.805	gate	1.25 x median 1.444 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strnlen_64_mix	1.836	gate	1.25 x median 1.469 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	rawmemchr_64_mix	1.527	gate	1.25 x median 1.222 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz	cbench_memref	strcmp_64_mix	1.452	gate	1.25 x median 1.162 on this CPU, 2026-10-09 (BENCH-ALIGN, one partial bench of cbench_memref,cbench_hot on shiki, 3-5 rounds): first calibration of this row
+# kotori (Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz): owner 2026-10-10 adopted from bench/host_limits.proposed-ivb.tsv (tool/host-limits-ivb; full calibration bench of main 5236e77; rule 1.25 x same-run median; regexec_pathological_4k left out: median 0.000).
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_d	1.099	gate	1.25 x median 0.879 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_ld_large	1.04	gate	1.25 x median 0.832 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_x08	1.182	gate	1.25 x median 0.946 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_s_path	0.799	gate	1.25 x median 0.639 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_s_d_colon	1.181	gate	1.25 x median 0.945 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_ls_line	1.186	gate	1.25 x median 0.949 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_mixed	0.756	gate	1.25 x median 0.605 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_f2	0.606	gate	1.25 x median 0.485 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_g	0.689	gate	1.25 x median 0.551 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_e	1.189	gate	1.25 x median 0.951 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	snprintf_f_large	0.229	gate	1.25 x median 0.183 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fprintf_ls_line	1.199	gate	1.25 x median 0.959 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fprintf_du_line	1.312	gate	1.25 x median 1.050 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcmp_names	0.877	gate	1.25 x median 0.702 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcmp_equal_16	1.624	gate	1.25 x median 1.299 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcmp_late_256	1.55	gate	1.25 x median 1.240 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcoll_c_names	0.886	gate	1.25 x median 0.709 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcoll_c_utf8_names	0.879	gate	1.25 x median 0.703 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcoll_en_us_names	1.498	gate	1.25 x median 1.198 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcoll_en_us_equal_16	0.049	gate	1.25 x median 0.039 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strcoll_en_us_utf8_16	1.383	gate	1.25 x median 1.106 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf8_utf16_ascii_4k	0.246	gate	1.25 x median 0.197 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf8_utf16_mixed_4k	0.761	gate	1.25 x median 0.609 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf16_utf8_mixed	0.802	gate	1.25 x median 0.642 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf8_utf32_mixed_4k	0.925	gate	1.25 x median 0.740 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf8_utf16_name	1.129	gate	1.25 x median 0.903 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_open_conv_close_name	0.334	gate	1.25 x median 0.267 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_utf8_8859_15_latin_4k	0.451	gate	1.25 x median 0.361 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	iconv_8859_15_utf8_latin	0.474	gate	1.25 x median 0.379 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_ls_iso	1.105	gate	1.25 x median 0.884 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_ls_recent_en_us	1.041	gate	1.25 x median 0.833 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_date_en_us	1.084	gate	1.25 x median 0.867 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_iso8601_tz	1.005	gate	1.25 x median 0.804 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_c_en_us	0.564	gate	1.25 x median 0.451 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_log	1.056	gate	1.25 x median 0.845 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	strftime_ls_recent_c	1.041	gate	1.25 x median 0.833 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	mktime_new_york	0.85	gate	1.25 x median 0.680 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	localtime_r_new_york	0.099	gate	1.25 x median 0.079 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	mktime_utc	0.802	gate	1.25 x median 0.642 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	mktime_posix_rule	1.074	gate	1.25 x median 0.859 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	localtime_r_posix_rule	0.9	gate	1.25 x median 0.720 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_literal	0.471	gate	1.25 x median 0.377 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_comment	0.268	gate	1.25 x median 0.214 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_ipv4	0.107	gate	1.25 x median 0.086 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_alt	0.111	gate	1.25 x median 0.089 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_icase_absent	0.381	gate	1.25 x median 0.305 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_grep_dotstar	0.461	gate	1.25 x median 0.369 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_sed_kv	2.666	gate	1.25 x median 2.133 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_sed_swap	0.874	gate	1.25 x median 0.699 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	regcomp_regfree_sed_kv	0.596	gate	1.25 x median 0.477 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	regcomp_regfree_ipv4	1.29	gate	1.25 x median 1.032 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_mt4_shared	0.024	gate	1.25 x median 0.019 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	re_mt4_distinct	0.18	gate	1.25 x median 0.144 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_star_c	0.464	gate	1.25 x median 0.371 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_ch	0.536	gate	1.25 x median 0.429 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_lib_so	0.549	gate	1.25 x median 0.439 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_period	1.052	gate	1.25 x median 0.842 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_question	0.485	gate	1.25 x median 0.388 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_class	1.57	gate	1.25 x median 1.256 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_names_casefold	0.801	gate	1.25 x median 0.641 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_paths_pathname	0.565	gate	1.25 x median 0.452 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	fnmatch_paths_leading_dir	0.585	gate	1.25 x median 0.468 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_tilde_var	1.995	gate	1.25 x median 1.596 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_arith	2.38	gate	1.25 x median 1.904 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_plain_8	0.882	gate	1.25 x median 0.706 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_quoted	2.265	gate	1.25 x median 1.812 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_split_var	1.549	gate	1.25 x median 1.239 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	wordexp_param_forms	1.767	gate	1.25 x median 1.414 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_found	1.586	gate	1.25 x median 1.269 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_missing	0.323	gate	1.25 x median 0.258 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	ngettext_found	1.56	gate	1.25 x median 1.248 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_no_catalog	0.375	gate	1.25 x median 0.300 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_c_locale	0.138	gate	1.25 x median 0.110 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_vary_msgid	0.551	gate	1.25 x median 0.441 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_language_alternating	1.742	gate	1.25 x median 1.394 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	gettext_language_putenv_alone	1.534	gate	1.25 x median 1.227 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_opt	cold_exec_empty	0.651	gate	1.25 x median 0.521 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	regcomp_regexec_regfree_email	3.935	gate	1.25 x median 3.148 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	regexec_literal_1k	0.08	gate	1.25 x median 0.064 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	regexec_submatch_1k	4.713	gate	1.25 x median 3.770 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	regexec_class_nomatch_1k	1.486	gate	1.25 x median 1.189 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	regexec_backref	2.425	gate	1.25 x median 1.940 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	fnmatch_star	1.034	gate	1.25 x median 0.827 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	fnmatch_bracket	1.259	gate	1.25 x median 1.007 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	fnmatch_pathname	1.061	gate	1.25 x median 0.849 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	fnmatch_pathname_nomatch	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	glob_1000_sorted	1.22	gate	1.25 x median 0.976 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	glob_1000_nosort	1.234	gate	1.25 x median 0.987 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	wordexp_tilde_var	2.119	gate	1.25 x median 1.695 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_patterns	wordexp_arith	2.506	gate	1.25 x median 2.005 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	gmtime_r	0.717	gate	1.25 x median 0.574 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	timegm	0.815	gate	1.25 x median 0.652 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	localtime_r_utc	0.999	gate	1.25 x median 0.799 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	localtime_r_new_york	0.084	gate	1.25 x median 0.067 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	localtime_r_new_york_2100	0.079	gate	1.25 x median 0.063 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	mktime_new_york	0.71	gate	1.25 x median 0.568 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	localtime_r_posix_rule	0.889	gate	1.25 x median 0.711 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	strftime_iso	1.065	gate	1.25 x median 0.852 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_time	strftime_c	0.695	gate	1.25 x median 0.556 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	isalpha_c	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	toupper_c	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strtod_c	0.616	gate	1.25 x median 0.493 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	towupper_utf8	0.938	gate	1.25 x median 0.750 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iswalpha_utf8	1.137	gate	1.25 x median 0.910 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	wcwidth_utf8	0.989	gate	1.25 x median 0.791 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	mbrtowc_utf8_3	0.93	gate	1.25 x median 0.744 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strcoll_utf8_16	0.915	gate	1.25 x median 0.732 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strtod_utf8	0.614	gate	1.25 x median 0.491 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	newlocale_free	0.554	gate	1.25 x median 0.443 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iconv_utf8_utf16_4k	0.8	gate	1.25 x median 0.640 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iconv_utf8_8859_15_4k	0.346	gate	1.25 x median 0.277 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iconv_utf8_ascii_translit_4k	1.594	gate	1.25 x median 1.275 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strcasecmp_c_16	4.689	gate	1.25 x median 3.751 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strcasecmp_c_256	4.851	gate	1.25 x median 3.881 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strncasecmp_c_64	6.052	gate	1.25 x median 4.842 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strcasecmp_utf8_256	4.86	gate	1.25 x median 3.888 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strcasecmp_en_256	4.874	gate	1.25 x median 3.899 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	fnmatch_casefold_en_32	1.214	gate	1.25 x median 0.971 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	snprintf_d	1.12	gate	1.25 x median 0.896 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	snprintf_mixed	0.74	gate	1.25 x median 0.592 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	fprintf_d	1.308	gate	1.25 x median 1.046 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	fputs_32	1.394	gate	1.25 x median 1.115 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	putc	1.475	gate	1.25 x median 1.180 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_stdio	fwrite_4k	1.398	gate	1.25 x median 1.118 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	mbrtowc_en_us_3	0.914	gate	1.25 x median 0.731 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	fnmatch_en_us	0.394	gate	1.25 x median 0.315 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strtod_en_us	0.616	gate	1.25 x median 0.493 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	snprintf_f_en_us	0.581	gate	1.25 x median 0.465 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iswalpha_en_us	1.085	gate	1.25 x median 0.868 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_64	0.896	gate	1.25 x median 0.717 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_4k	1.172	gate	1.25 x median 0.938 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_64k	1.195	gate	1.25 x median 0.956 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_64	0.866	gate	1.25 x median 0.693 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_4k	1.288	gate	1.25 x median 1.030 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_64k	1.252	gate	1.25 x median 1.002 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_64	1.015	gate	1.25 x median 0.812 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_4k	1.635	gate	1.25 x median 1.308 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_8	1.499	gate	1.25 x median 1.199 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_16	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_32	1.146	gate	1.25 x median 0.917 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_64	1.015	gate	1.25 x median 0.812 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_128	1.071	gate	1.25 x median 0.857 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_eq_1k	1.412	gate	1.25 x median 1.130 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_8	1.801	gate	1.25 x median 1.441 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_16	1.499	gate	1.25 x median 1.199 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_32	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_64	1.354	gate	1.25 x median 1.083 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_128	1.871	gate	1.25 x median 1.497 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_head_1k	2.288	gate	1.25 x median 1.830 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_8	1.667	gate	1.25 x median 1.334 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_16	1.378	gate	1.25 x median 1.102 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_32	1.252	gate	1.25 x median 1.002 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_64	1.084	gate	1.25 x median 0.867 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_128	1.185	gate	1.25 x median 0.948 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	__memcmpeq_tail_1k	0.193	gate	1.25 x median 0.154 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_8	1.944	gate	1.25 x median 1.555 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_16	1.626	gate	1.25 x median 1.301 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_32	1.479	gate	1.25 x median 1.183 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_64	1.167	gate	1.25 x median 0.934 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_128	1.321	gate	1.25 x median 1.057 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_eq_1k	1.963	gate	1.25 x median 1.570 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_8	1.593	gate	1.25 x median 1.274 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_16	1.771	gate	1.25 x median 1.417 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_32	1.771	gate	1.25 x median 1.417 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_64	1.875	gate	1.25 x median 1.500 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_128	2.5	gate	1.25 x median 2.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_head_1k	3.333	gate	1.25 x median 2.666 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_8	1.564	gate	1.25 x median 1.251 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_16	1.635	gate	1.25 x median 1.308 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_32	1.581	gate	1.25 x median 1.265 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_64	1.879	gate	1.25 x median 1.503 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_128	2.446	gate	1.25 x median 1.957 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	bcmp_tail_1k	1.845	gate	1.25 x median 1.476 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_diff8_64	1.875	gate	1.25 x median 1.500 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_diff8_96	2.604	gate	1.25 x median 2.083 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_diff8_127	2.604	gate	1.25 x median 2.083 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_64k	1.229	gate	1.25 x median 0.983 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memchr_64	1.54	gate	1.25 x median 1.232 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memchr_4k	1.037	gate	1.25 x median 0.830 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memchr_64k	1.298	gate	1.25 x median 1.038 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strlen_64	1.334	gate	1.25 x median 1.067 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strlen_4k	1.249	gate	1.25 x median 0.999 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strlen_64k	1.254	gate	1.25 x median 1.003 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strnlen_64	1.495	gate	1.25 x median 1.196 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strnlen_4k	0.812	gate	1.25 x median 0.650 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strnlen_64k	1.275	gate	1.25 x median 1.020 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	rawmemchr_64	1.704	gate	1.25 x median 1.363 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	rawmemchr_4k	1.338	gate	1.25 x median 1.070 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	rawmemchr_64k	1.264	gate	1.25 x median 1.011 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_4k_off	1.083	gate	1.25 x median 0.866 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_4k_off	1.276	gate	1.25 x median 1.021 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_16	1.667	gate	1.25 x median 1.334 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_16	1.667	gate	1.25 x median 1.334 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memmove_16	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_128	2.11	gate	1.25 x median 1.688 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_128	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memmove_128	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_128	1.182	gate	1.25 x median 0.946 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memmove_64	1.251	gate	1.25 x median 1.001 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memmove_4k	1.345	gate	1.25 x median 1.076 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_16_mix	1.251	gate	1.25 x median 1.001 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_16_mix	1.157	gate	1.25 x median 0.926 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_16_mix	1.441	gate	1.25 x median 1.153 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memchr_16_mix	1.041	gate	1.25 x median 0.833 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strlen_16_mix	1.39	gate	1.25 x median 1.112 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strnlen_16_mix	1.312	gate	1.25 x median 1.050 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	rawmemchr_16_mix	1.051	gate	1.25 x median 0.841 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strcmp_16_mix	0.501	gate	1.25 x median 0.401 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcpy_64_mix	1.255	gate	1.25 x median 1.004 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memset_64_mix	1.157	gate	1.25 x median 0.926 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memcmp_64_mix	1.105	gate	1.25 x median 0.884 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	memchr_64_mix	1.836	gate	1.25 x median 1.469 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strlen_64_mix	1.329	gate	1.25 x median 1.063 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strnlen_64_mix	1.595	gate	1.25 x median 1.276 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	rawmemchr_64_mix	1.823	gate	1.25 x median 1.458 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_memref	strcmp_64_mix	0.764	gate	1.25 x median 0.611 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	nl_langinfo_en_us	1.375	gate	1.25 x median 1.100 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	localeconv_en_us	0.663	gate	1.25 x median 0.530 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	strftime_names_en_us	1.126	gate	1.25 x median 0.901 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iswalpha_l_en_us	1.552	gate	1.25 x median 1.242 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	towupper_l_en_us	2.037	gate	1.25 x median 1.630 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	nl_langinfo_l_en_us	2.185	gate	1.25 x median 1.748 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	iswctype_en_us	3.68	gate	1.25 x median 2.944 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_16	1.544	gate	1.25 x median 1.235 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_32	1.636	gate	1.25 x median 1.309 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_64	1.649	gate	1.25 x median 1.319 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_128	1.635	gate	1.25 x median 1.308 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_256	1.629	gate	1.25 x median 1.303 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	malloc_free_1024	1.549	gate	1.25 x median 1.239 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	lifo_batch64	1.194	gate	1.25 x median 0.955 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	realloc_grow_x2	1.365	gate	1.25 x median 1.092 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	realloc_grow_16step	1.017	gate	1.25 x median 0.814 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	calloc_free_64	0.891	gate	1.25 x median 0.713 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	calloc_free_4096	1.075	gate	1.25 x median 0.860 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	xthread_free_64	0.649	gate	1.25 x median 0.519 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strncmp_eq16	1.182	gate	1.25 x median 0.946 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strncmp_diff8	1.771	gate	1.25 x median 1.417 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strncmp_names64	1.2	gate	1.25 x median 0.960 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchr_16_hit	1.875	gate	1.25 x median 1.500 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchr_16_miss	1.454	gate	1.25 x median 1.163 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchr_64_hit	1.941	gate	1.25 x median 1.553 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchr_64_miss	1.989	gate	1.25 x median 1.591 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchrnul_16_hit	2.026	gate	1.25 x median 1.621 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchrnul_16_miss	1.405	gate	1.25 x median 1.124 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchrnul_64_hit	1.876	gate	1.25 x median 1.501 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strchrnul_64_miss	1.876	gate	1.25 x median 1.501 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	memrchr_64	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	memrchr_64_hit	2.467	gate	1.25 x median 1.974 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	memrchr_4k	1.376	gate	1.25 x median 1.101 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	mempcpy_16	2.874	gate	1.25 x median 2.299 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	mempcpy_64	1.915	gate	1.25 x median 1.532 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	memcpy_chk_64	0.834	gate	1.25 x median 0.667 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strcpy_chk_16	1.752	gate	1.25 x median 1.402 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	strcpy_chk_64	1.416	gate	1.25 x median 1.133 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	getc	1.691	gate	1.25 x median 1.353 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	getc_unlocked	2.272	gate	1.25 x median 1.818 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	putc_unlocked	1.713	gate	1.25 x median 1.370 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	fwrite_unlocked_16	1.703	gate	1.25 x median 1.362 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	fwrite_unlocked_64	1.494	gate	1.25 x median 1.195 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	getenv_hit_mid	0.603	gate	1.25 x median 0.482 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	getenv_hit_last	1.029	gate	1.25 x median 0.823 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	getenv_miss	0.639	gate	1.25 x median 0.511 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	errno_location	1.25	gate	1.25 x median 1.000 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	ctype_b_loc	1.458	gate	1.25 x median 1.166 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	ctype_get_mb_cur_max	1.458	gate	1.25 x median 1.166 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	mutex_lock_unlock_normal	4.054	gate	1.25 x median 3.243 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	mutex_lock_unlock_recursive	2.579	gate	1.25 x median 2.063 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	sys_fstat	1.32	gate	1.25 x median 1.056 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	sys_read_1	1.265	gate	1.25 x median 1.012 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_hot	sys_close_ebadf	1.294	gate	1.25 x median 1.035 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	mbrtowc_utf8_1	0.787	gate	1.25 x median 0.630 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_locale	mbrtowc_utf8_2	0.964	gate	1.25 x median 0.771 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	realloc_within_usable	1.917	gate	1.25 x median 1.534 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77; median above 1.1)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	realloc_moving	0.787	gate	1.25 x median 0.630 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	realloc_null_24	1.333	gate	1.25 x median 1.066 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	heap_mix_real	0.879	gate	1.25 x median 0.703 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_malloc	heap_mix_real_2t	0.547	gate	1.25 x median 0.438 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_startup	exec_true_static	0.586	gate	1.25 x median 0.469 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_startup	exec_true_echo	0.846	gate	1.25 x median 0.677 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_startup	exec_hello_locale	1.2	gate	1.25 x median 0.960 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_startup	spawn_bin_true	1.252	gate	1.25 x median 1.002 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_fstree	opendir_readdir_closedir_1000	1.304	gate	1.25 x median 1.043 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	cbench_fstree	readdir_entry	1.301	gate	1.25 x median 1.041 on this CPU, 2026-10-10 (kotori full calibration bench, main 5236e77)

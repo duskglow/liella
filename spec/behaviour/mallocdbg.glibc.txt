@@ -1,0 +1,1108 @@
+#### main
+== constants
+M_MXFAST 1
+M_NLBLKS 2
+M_GRAIN 3
+M_KEEP 4
+M_TRIM_THRESHOLD -1
+M_TOP_PAD -2
+M_MMAP_THRESHOLD -3
+M_MMAP_MAX -4
+M_CHECK_ACTION -5
+M_PERTURB -6
+M_ARENA_TEST -7
+M_ARENA_MAX -8
+MCHECK_DISABLED -1 MCHECK_OK 0 MCHECK_FREE 1 MCHECK_HEAD 2 MCHECK_TAIL 3
+sizeof(struct mallinfo) 40 sizeof(struct mallinfo2) 80
+== mallopt
+(each call in a fresh child; a child's status is printed only when it did not exit 0)
+mallopt(1, 0) = 1 errno unchanged
+mallopt(1, 1) = 1 errno unchanged
+mallopt(1, 64) = 1 errno unchanged
+mallopt(1, 128) = 1 errno unchanged
+mallopt(1, 160) = 1 errno unchanged
+mallopt(1, 161) = 0 errno unchanged
+mallopt(1, -1) = 0 errno unchanged
+mallopt(1, 2147483647) = 0 errno unchanged
+mallopt(2, 1) = 1 errno unchanged
+mallopt(2, 0) = 1 errno unchanged
+mallopt(3, 1) = 1 errno unchanged
+mallopt(3, 0) = 1 errno unchanged
+mallopt(4, 1) = 1 errno unchanged
+mallopt(4, 0) = 1 errno unchanged
+mallopt(-1, 0) = 1 errno unchanged
+mallopt(-1, 1) = 1 errno unchanged
+mallopt(-1, 131072) = 1 errno unchanged
+mallopt(-1, -1) = 1 errno unchanged
+mallopt(-1, 2147483647) = 1 errno unchanged
+mallopt(-1, -2147483648) = 1 errno unchanged
+mallopt(-2, 0) = 1 errno unchanged
+mallopt(-2, 4096) = 1 errno unchanged
+mallopt(-2, -1) = 1 errno unchanged
+mallopt(-2, 2147483647) = 1 errno unchanged
+mallopt(-2, -2147483648) = 1 errno unchanged
+mallopt(-3, 0) = 1 errno unchanged
+mallopt(-3, 4096) = 1 errno unchanged
+mallopt(-3, 131072) = 1 errno unchanged
+mallopt(-3, 33554432) = 1 errno unchanged
+mallopt(-3, 33554433) = 1 errno unchanged
+mallopt(-3, 1073741824) = 1 errno unchanged
+mallopt(-3, -1) = 1 errno unchanged
+mallopt(-3, 2147483647) = 1 errno unchanged
+mallopt(-4, 0) = 1 errno unchanged
+mallopt(-4, 1) = 1 errno unchanged
+mallopt(-4, 65536) = 1 errno unchanged
+mallopt(-4, -1) = 1 errno unchanged
+mallopt(-4, 2147483647) = 1 errno unchanged
+mallopt(-5, 0) = 1 errno unchanged
+mallopt(-5, 1) = 1 errno unchanged
+mallopt(-5, 2) = 1 errno unchanged
+mallopt(-5, 3) = 1 errno unchanged
+mallopt(-5, 5) = 1 errno unchanged
+mallopt(-5, 7) = 1 errno unchanged
+mallopt(-5, 8) = 1 errno unchanged
+mallopt(-5, -1) = 1 errno unchanged
+mallopt(-6, 0) = 1 errno unchanged
+mallopt(-6, 165) = 1 errno unchanged
+mallopt(-6, 256) = 1 errno unchanged
+mallopt(-6, -1) = 1 errno unchanged
+mallopt(-7, 0) = 1 errno unchanged
+mallopt(-7, 1) = 1 errno unchanged
+mallopt(-7, 8) = 1 errno unchanged
+mallopt(-7, -1) = 1 errno unchanged
+mallopt(-8, 0) = 1 errno unchanged
+mallopt(-8, 1) = 1 errno unchanged
+mallopt(-8, 4) = 1 errno unchanged
+mallopt(-8, -1) = 1 errno unchanged
+mallopt(0, 1) = 1 errno unchanged
+mallopt(5, 1) = 1 errno unchanged
+mallopt(100, 1) = 1 errno unchanged
+mallopt(-9, 1) = 1 errno unchanged
+mallopt(-100, 1) = 1 errno unchanged
+mallopt(-2147483648, 1) = 1 errno unchanged
+mallopt(2147483647, 1) = 1 errno unchanged
+== mallopt effects
+mallopt(M_PERTURB, 0xa5) = 1; fresh malloc(200): all 0x5a
+  calloc(1, 200) after it: all 0x00
+  fresh malloc(300000) (mmapped): all 0x5a
+  realloc 200 -> 400, bytes 200..399: all 0x5a
+-- M_PERTURB: child exited 0
+malloc(8192) by default: hblks unchanged; mallopt(M_MMAP_THRESHOLD, 4096) = 1; then malloc(8192): hblks unchanged
+  mallopt(M_MMAP_THRESHOLD, 64 MiB) = 1; then malloc(40 MiB): hblks unchanged, arena grew
+-- M_MMAP_THRESHOLD: child exited 0
+malloc(1 MiB) by default: hblks grew; mallopt(M_MMAP_MAX, 0) = 1; then malloc(1 MiB): hblks unchanged, arena grew
+-- M_MMAP_MAX: child exited 0
+mallopt(M_CHECK_ACTION, 0) = 1; then a double free:
+  stderr: [free(): double free detected in tcache 2]
+-- M_CHECK_ACTION 0 and a double free: child killed by signal SIGABRT
+== mallinfo and mallinfo2
+start (no allocation yet in this process): arena zero ordblks nonzero smblks zero hblks zero hblkhd zero usmblks zero fsmblks zero uordblks zero fordblks zero keepcost zero
+after 100 x malloc(1000): arena grew ordblks unchanged smblks unchanged hblks unchanged hblkhd unchanged usmblks unchanged fsmblks unchanged uordblks grew fordblks grew keepcost grew
+  uordblks grew by at least 100000: yes; arena grew by at least 100000 or was already large enough: yes
+after malloc(8 MiB): arena unchanged ordblks unchanged smblks unchanged hblks grew hblkhd grew usmblks unchanged fsmblks unchanged uordblks unchanged fordblks unchanged keepcost unchanged
+  hblks +1: yes; hblkhd grew by at least 8 MiB: yes; uordblks grew by at least 8 MiB: no
+  fordblks <= arena: yes; keepcost <= fordblks: yes; uordblks + fordblks == arena: yes; uordblks >= hblkhd: no
+  mallinfo between two equal mallinfo2 calls: bracketed
+  mallinfo vs mallinfo2: arena equal; ordblks equal; smblks equal; hblks equal; hblkhd equal; usmblks equal; fsmblks equal; uordblks equal; fordblks equal; keepcost equal
+after free(8 MiB block): arena unchanged ordblks unchanged smblks unchanged hblks shrank hblkhd shrank usmblks unchanged fsmblks unchanged uordblks unchanged fordblks unchanged keepcost unchanged
+  hblks back: yes; hblkhd back: yes
+after freeing the 100 blocks: arena unchanged ordblks unchanged smblks unchanged hblks unchanged hblkhd unchanged usmblks unchanged fsmblks unchanged uordblks shrank fordblks grew keepcost grew
+  uordblks back to start: no; usmblks zero
+-- basic: child exited 0
+after a second thread's 200 x malloc(1000) (blocks alive): arena grew ordblks grew smblks unchanged hblks unchanged hblkhd unchanged usmblks unchanged fsmblks unchanged uordblks grew fordblks shrank keepcost unchanged
+  uordblks grew by at least 200000: yes; arena grew by at least 200000: no
+  after freeing them: uordblks back below the level before the thread + 200000: yes
+-- thread arena: child exited 0
+-- more than 2 GiB through mmap-backed blocks
+3 x malloc(1 GiB) (untouched): all succeeded
+  mallinfo2 change: arena grew ordblks unchanged smblks unchanged hblks grew hblkhd grew usmblks unchanged fsmblks unchanged uordblks grew fordblks grew keepcost grew
+  mallinfo2 hblkhd >= 3 GiB: yes; uordblks >= 3 GiB: no; arena >= 3 GiB: no
+  mallinfo vs mallinfo2: arena equal; ordblks equal; smblks equal; hblks equal; hblkhd low 32 bits (negative); usmblks equal; fsmblks equal; uordblks equal; fordblks equal; keepcost equal
+   : child exited 0
+-- more than 2 GiB through the program break (M_MMAP_MAX 0)
+mallopt(M_MMAP_MAX, 0) = 1; 3 x malloc(1 GiB) (untouched): all succeeded
+  mallinfo2 change: arena grew ordblks unchanged smblks unchanged hblks unchanged hblkhd unchanged usmblks unchanged fsmblks unchanged uordblks grew fordblks grew keepcost grew
+  mallinfo2 arena >= 3 GiB: yes; uordblks >= 3 GiB: yes; hblkhd >= 3 GiB: no
+  mallinfo vs mallinfo2: arena low 32 bits (negative); ordblks equal; smblks equal; hblks equal; hblkhd equal; usmblks equal; fsmblks equal; uordblks low 32 bits (negative); fordblks equal; keepcost equal
+  after freeing them: arena shrank
+   : child exited 0
+== malloc_usable_size
+malloc(0): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(1): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(8): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(15): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(16): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(17): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(24): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(25): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(100): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(1000): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(4096): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(100000): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(1048576): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc(8388608): usable >= request yes; usable - request < 4096 + request/64: yes
+malloc_usable_size(NULL) = 0 errno unchanged
+calloc(3, 33): usable >= 99 yes
+realloc to 5000: usable >= 5000 yes
+realloc to 10: usable >= 10 yes
+aligned_alloc(4096, 100): usable >= 100 yes
+memalign(64, 1): usable >= 1 yes
+== malloc_stats (stderr, numbers replaced)
+  stderr: [Arena N:]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [Total (incl. mmap):]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [max mmap regions = N]
+  stderr: [max mmap bytes   = N]
+-- fresh child: child exited 0
+  stderr: [Arena N:]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [Arena N:]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [Total (incl. mmap):]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [max mmap regions = N]
+  stderr: [max mmap bytes   = N]
+-- one large block, one small, and a thread's block: child exited 0
+  stderr: [pending-before|Arena N:]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [Total (incl. mmap):]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [max mmap regions = N]
+  stderr: [max mmap bytes   = N]
+  stderr: [after|] (no newline)
+-- stderr fully buffered with pending text: child exited 0
+  errno after malloc_stats: unchanged
+  stderr: [Arena N:]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [Total (incl. mmap):]
+  stderr: [system bytes     = N]
+  stderr: [in use bytes     = N]
+  stderr: [max mmap regions = N]
+  stderr: [max mmap bytes   = N]
+-- errno: child exited 0
+  malloc_stats with fd 2 closed returned
+-- fd 2 closed: child exited 0
+== malloc_info (numbers replaced)
+-- options 0: malloc_info(0, memstream) = 0 errno unchanged, 686 bytes written
+  xml: [<malloc version="N">]
+  xml: [<heap nr="N">]
+  xml: [<sizes>]
+  xml: [  <size from="N" to="N" total="N" count="N"/>]
+  xml: [  <size from="N" to="N" total="N" count="N"/>]
+  xml: [</sizes>]
+  xml: [<total type="fast" count="N" size="N"/>]
+  xml: [<total type="rest" count="N" size="N"/>]
+  xml: [<system type="current" size="N"/>]
+  xml: [<system type="max" size="N"/>]
+  xml: [<aspace type="total" size="N"/>]
+  xml: [<aspace type="mprotect" size="N"/>]
+  xml: [</heap>]
+  xml: [<total type="fast" count="N" size="N"/>]
+  xml: [<total type="rest" count="N" size="N"/>]
+  xml: [<total type="mmap" count="N" size="N"/>]
+  xml: [<system type="current" size="N"/>]
+  xml: [<system type="max" size="N"/>]
+  xml: [<aspace type="total" size="N"/>]
+  xml: [<aspace type="mprotect" size="N"/>]
+  xml: [</malloc>]
+-- options 1: malloc_info(1, memstream) = 22 errno unchanged, 0 bytes written (none)
+-- options -1: malloc_info(-1, memstream) = 22 errno unchanged, 0 bytes written (none)
+-- options INT_MIN: malloc_info(-2147483648, memstream) = 22 errno unchanged, 0 bytes written (none)
+-- after a thread's block and a 1 MiB block: malloc_info(0, memstream) = 0 errno unchanged, 1060 bytes written
+  xml: [<malloc version="N">]
+  xml: [<heap nr="N">]
+  xml: [<sizes>]
+  xml: [  <size from="N" to="N" total="N" count="N"/>]
+  xml: [  <size from="N" to="N" total="N" count="N"/>]
+  xml: [</sizes>]
+  xml: [<total type="fast" count="N" size="N"/>]
+  xml: [<total type="rest" count="N" size="N"/>]
+  xml: [<system type="current" size="N"/>]
+  xml: [<system type="max" size="N"/>]
+  xml: [<aspace type="total" size="N"/>]
+  xml: [<aspace type="mprotect" size="N"/>]
+  xml: [</heap>]
+  xml: [<heap nr="N">]
+  xml: [<sizes>]
+  xml: [  <unsorted from="N" to="N" total="N" count="N"/>]
+  xml: [</sizes>]
+  xml: [<total type="fast" count="N" size="N"/>]
+  xml: [<total type="rest" count="N" size="N"/>]
+  xml: [<system type="current" size="N"/>]
+  xml: [<system type="max" size="N"/>]
+  xml: [<aspace type="total" size="N"/>]
+  xml: [<aspace type="mprotect" size="N"/>]
+  xml: [<aspace type="subheaps" size="N"/>]
+  xml: [</heap>]
+  xml: [<total type="fast" count="N" size="N"/>]
+  xml: [<total type="rest" count="N" size="N"/>]
+  xml: [<total type="mmap" count="N" size="N"/>]
+  xml: [<system type="current" size="N"/>]
+  xml: [<system type="max" size="N"/>]
+  xml: [<aspace type="total" size="N"/>]
+  xml: [<aspace type="mprotect" size="N"/>]
+  xml: [</malloc>]
+   (thread): child exited 0
+-- NULL stream: child killed by signal SIGSEGV
+  malloc_info(0, read-only stream) = 0 errno EBADF; ferror 1
+-- read-only stream: child exited 0
+== malloc_trim
+trim at start 1; with 3000 live blocks 1; after freeing the first 2000 1; again 1; after freeing the rest 1; again 0
+-- sequence: child exited 0
+automatic trimming off, 3 MB freed at the top: trim(1 TiB pad) 1 arena unchanged; trim(64 KiB) 1 arena shrank; trim(0) 1 arena shrank
+  keepcost after trim(0): nonzero; arena after trim(64 KiB) >= 64 KiB: yes
+-- pad: child exited 0
+trim after freeing a 16 MiB block: 1
+-- mmapped block: child exited 0
+trim after freeing a thread's only block: 0 errno unchanged
+-- thread arena: child exited 0
+== hook variables and compat symbols in libc.so.6
+weak references (unversioned, resolved at run time): __malloc_hook bound, __free_hook bound, malloc_get_state unbound, malloc_set_state unbound, mallwatch bound, tr_break bound
+dlopen linked, dlvsym linked
+__malloc_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__free_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__realloc_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__memalign_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__after_morecore_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__malloc_initialize_hook@GLIBC_2.2.5: present; unversioned dlsym: not found
+__morecore@GLIBC_2.2.5: present; unversioned dlsym: not found
+__default_morecore@GLIBC_2.2.5: present; unversioned dlsym: not found
+malloc_get_state@GLIBC_2.2.5: absent; unversioned dlsym: not found
+malloc_set_state@GLIBC_2.2.5: absent; unversioned dlsym: not found
+mallwatch@GLIBC_2.2.5: present; unversioned dlsym: not found
+tr_break@GLIBC_2.2.5: present; unversioned dlsym: not found
+mcheck@GLIBC_2.2.5: present; unversioned dlsym: found
+mcheck_pedantic@GLIBC_2.2.5: present; unversioned dlsym: found
+mcheck_check_all@GLIBC_2.2.5: present; unversioned dlsym: found
+mprobe@GLIBC_2.2.5: present; unversioned dlsym: found
+mtrace@GLIBC_2.2.5: present; unversioned dlsym: found
+muntrace@GLIBC_2.2.5: present; unversioned dlsym: found
+mallwatch initially NULL
+tr_break() returned
+__malloc_hook initially NULL
+__free_hook initially NULL
+  __malloc_hook assigned: malloc returned a block, hook called 0 times
+  __free_hook assigned: hook called 0 times
+  __realloc_hook assigned: realloc returned a block, hook called 0 times
+  __memalign_hook assigned: memalign and aligned_alloc returned blocks, hook called 0 times
+  __after_morecore_hook assigned, 6.4 MB from the heap: hook called 0 times
+  __morecore replaced by a failing function, 6.4 MB from the heap: all succeeded, it was called 0 times
+  stderr: (empty)
+-- assigning the hooks: child exited 0
+  __default_morecore(0): the current break, errno unchanged
+  stderr: (empty)
+-- __default_morecore: child exited 0
+  stderr: (empty)
+-- malloc_get_state: child exited 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+== mcheck, mprobe, mtrace after allocations
+mcheck(abortfn) after allocations = -1 errno unchanged
+mcheck_pedantic(abortfn) after allocations = -1
+mcheck(NULL) after allocations = -1
+mprobe(live block) = MCHECK_DISABLED
+mprobe(block written one past its end) = MCHECK_DISABLED
+mcheck_check_all() returned; abortfn calls 0
+  stderr: (empty)
+-- mcheck family: child exited 0
+mtrace(), malloc, free, muntrace() returned; errno unchanged
+muntrace() again returned
+  stderr: (empty)
+-- mtrace without MALLOC_TRACE: child exited 0
+done
+#### exit status 0
+#### mcheck-early
+== mcheck before the first allocation (abortfn)
+mcheck rc -1
+a second mcheck(abortfn) = -1
+  stderr: (empty)
+-- second call: child exited 0
+mprobe(fresh block) = MCHECK_DISABLED
+mprobe(after writing p[10]) = MCHECK_DISABLED
+free returned; abortfn calls 0
+  stderr: (empty)
+-- tail: child exited 0
+mprobe(after changing p[-1]) = MCHECK_DISABLED
+mprobe(after restoring p[-1]) = MCHECK_DISABLED
+free returned; abortfn calls 0
+  stderr: (empty)
+-- head: child exited 0
+mprobe(freed block) = MCHECK_DISABLED
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+mcheck_check_all() with a clobbered tail returned; abortfn calls 0
+restored, both freed; abortfn calls 0
+  stderr: (empty)
+-- mcheck_check_all: child exited 0
+realloc of a clobbered block returned a block; abortfn calls 0
+  stderr: (empty)
+-- realloc of a clobbered block: child exited 0
+mprobe(live block) = MCHECK_DISABLED
+mprobe(NULL) in a child next
+  stderr: (empty)
+-- mprobe: child exited 0
+mprobe(NULL) = MCHECK_DISABLED
+  stderr: (empty)
+-- mprobe(NULL): child exited 0
+mprobe(static buffer) = MCHECK_DISABLED
+  stderr: (empty)
+-- mprobe(not a heap block): child exited 0
+#### exit status 0
+#### mcheck-null
+== mcheck(NULL) before the first allocation: the default handler
+mcheck rc -1
+free returned
+  stderr: (empty)
+-- tail: child exited 0
+  stderr: [double free or corruption (out)]
+-- head: child killed by signal SIGABRT
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+#### exit status 0
+#### pedantic
+== mcheck_pedantic before the first allocation
+mcheck_pedantic rc -1
+clobbered a's tail; next: malloc(20)
+malloc(20) returned; abortfn calls 0
+restored, both freed; abortfn calls 0
+  stderr: (empty)
+-- clobber, then another malloc: child exited 0
+mcheck_check_all() with a clobbered tail returned; abortfn calls 0
+restored, both freed; abortfn calls 0
+  stderr: (empty)
+-- mcheck_check_all: child exited 0
+#### exit status 0
+#### late
+== mcheck, mprobe, mtrace after allocations
+mcheck(abortfn) after allocations = -1 errno unchanged
+mcheck_pedantic(abortfn) after allocations = -1
+mcheck(NULL) after allocations = -1
+mprobe(live block) = MCHECK_DISABLED
+mprobe(block written one past its end) = MCHECK_DISABLED
+mcheck_check_all() returned; abortfn calls 0
+  stderr: (empty)
+-- mcheck family: child exited 0
+mtrace(), malloc, free, muntrace() returned; errno unchanged
+muntrace() again returned
+  stderr: (empty)
+-- mtrace without MALLOC_TRACE: child exited 0
+#### exit status 0
+#### hooks-early i
+== hook variables assigned before the first allocation (through the global scope): i
+__malloc_initialize_hook assigned, __malloc_hook not assigned, __free_hook not assigned
+first malloc and free: malloc/free hooks called 0 times, initialize hook called 0 times
+#### exit status 0
+#### hooks-early m
+== hook variables assigned before the first allocation (through the global scope): m
+__malloc_initialize_hook not assigned, __malloc_hook assigned, __free_hook not assigned
+first malloc and free: malloc/free hooks called 0 times, initialize hook called 0 times
+#### exit status 0
+#### hooks-early f
+== hook variables assigned before the first allocation (through the global scope): f
+__malloc_initialize_hook not assigned, __malloc_hook not assigned, __free_hook assigned
+first malloc and free: malloc/free hooks called 0 times, initialize hook called 0 times
+#### exit status 0
+#### hooks-early imf
+== hook variables assigned before the first allocation (through the global scope): imf
+__malloc_initialize_hook assigned, __malloc_hook assigned, __free_hook assigned
+first malloc and free: malloc/free hooks called 0 times, initialize hook called 0 times
+#### exit status 0
+#### mtrace, MALLOC_TRACE unset
+== mtrace (MALLOC_TRACE unset)
+errno after mtrace: unchanged
+#### exit status 0
+#### mtrace, MALLOC_TRACE=<dir>/trace
+== mtrace (MALLOC_TRACE set)
+errno after mtrace: unchanged
+trace file: not created
+#### exit status 0
+#### env (nothing)
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_CHECK_=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_CHECK_=1
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_CHECK_=3
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_PERTURB_=165
+fingerprint:
+fresh malloc(200): all 0x5a
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_PERTURB_=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_MMAP_THRESHOLD_=32768
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena unchanged then unchanged; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_MMAP_MAX_=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks unchanged
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_TOP_PAD_=4194304
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: yes
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks unchanged
+40 x malloc(60000) then freed in reverse: arena unchanged then unchanged; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_TRIM_THRESHOLD_=1000000000
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then unchanged; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env MALLOC_ARENA_MAX=1
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists one heap
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.perturb=165
+fingerprint:
+fresh malloc(200): all 0x5a
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.mmap_threshold=32768
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena unchanged then unchanged; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.mmap_max=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks unchanged
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.top_pad=4194304
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: yes
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks unchanged
+40 x malloc(60000) then freed in reverse: arena unchanged then unchanged; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.trim_threshold=1000000000
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then unchanged; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.tcache_count=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then shrank; back: yes
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [double free or corruption (fasttop)]
+-- double free: child killed by signal SIGABRT
+  stderr: [double free or corruption (out)]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.check=3
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.mxfast=0
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.nonexistent=1
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.perturb=junk
+WARNING: ld.so: invalid GLIBC_TUNABLES value `junk' for option `glibc.malloc.perturb': ignored.
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.perturb=300
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.perturb=165:glibc.malloc.mmap_threshold=32768
+fingerprint:
+fresh malloc(200): all 0x5a
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena unchanged then unchanged; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### env GLIBC_TUNABLES=glibc.malloc.perturb=165 MALLOC_PERTURB_=1
+fingerprint:
+fresh malloc(200): all 0x5a
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+== reference only: LD_PRELOAD of the debug library
+#### preloaded hooks-preloaded
+== hook variables, found through the global scope
+weak references (unversioned, resolved at run time): __malloc_hook bound, __free_hook bound, malloc_get_state bound, malloc_set_state bound, mallwatch bound, tr_break bound
+dlopen linked, dlvsym linked
+__malloc_hook@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+__free_hook@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+__realloc_hook@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+__memalign_hook@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+__after_morecore_hook@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+__malloc_initialize_hook@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+__morecore@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+__default_morecore@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+malloc_get_state@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+malloc_set_state@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: not found
+mallwatch@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+tr_break@GLIBC_2.2.5: present (libc.so.6's); unversioned dlsym: not found
+mcheck@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+mcheck_pedantic@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+mcheck_check_all@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+mprobe@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+mtrace@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+muntrace@GLIBC_2.2.5: present (not libc.so.6's); unversioned dlsym: found
+mallwatch initially NULL
+tr_break() returned
+__malloc_hook initially NULL
+__free_hook initially NULL
+  __malloc_hook assigned: malloc returned a block, hook called 1 times
+  __free_hook assigned: hook called 1 times
+  __realloc_hook assigned: realloc returned a block, hook called 1 times
+  __memalign_hook assigned: memalign and aligned_alloc returned blocks, hook called 2 times
+  __after_morecore_hook assigned, 6.4 MB from the heap: hook called 0 times
+  __morecore replaced by a failing function, 6.4 MB from the heap: all succeeded, it was called 0 times
+  stderr: (empty)
+-- assigning the hooks: child exited 0
+  __default_morecore(0): the current break, errno unchanged
+  stderr: (empty)
+-- __default_morecore: child exited 0
+  malloc_get_state() = NULL errno ENOSYS
+  stderr: (empty)
+-- malloc_get_state: child exited 0
+  stderr: (empty)
+-- malloc_set_state: child killed by signal SIGSEGV
+  malloc_set_state(a zeroed 4 KiB buffer) = -1 errno 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+  malloc_set_state(a 4 KiB buffer of 0xff bytes) = -1 errno 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+  malloc_set_state(a heap block of 4 KiB, zeroed) = -1 errno 0
+  stderr: (empty)
+-- malloc_set_state: child exited 0
+#### exit status 0
+#### preloaded hooks-early i
+== hook variables assigned before the first allocation (through the global scope): i
+__malloc_initialize_hook assigned, __malloc_hook not assigned, __free_hook not assigned
+first malloc and free: malloc/free hooks called 0 times, initialize hook called 1 times
+#### exit status 0
+#### preloaded hooks-early m
+== hook variables assigned before the first allocation (through the global scope): m
+__malloc_initialize_hook not assigned, __malloc_hook assigned, __free_hook not assigned
+first malloc and free: malloc/free hooks called 1 times, initialize hook called 0 times
+#### exit status 0
+#### preloaded hooks-early f
+== hook variables assigned before the first allocation (through the global scope): f
+__malloc_initialize_hook not assigned, __malloc_hook not assigned, __free_hook assigned
+first malloc and free: malloc/free hooks called 1 times, initialize hook called 0 times
+#### exit status 0
+#### preloaded hooks-early imf
+== hook variables assigned before the first allocation (through the global scope): imf
+__malloc_initialize_hook assigned, __malloc_hook assigned, __free_hook assigned
+first malloc and free: malloc/free hooks called 2 times, initialize hook called 0 times
+#### exit status 0
+#### preloaded late
+== mcheck, mprobe, mtrace after allocations
+mcheck(abortfn) after allocations = -1 errno unchanged
+mcheck_pedantic(abortfn) after allocations = -1
+mcheck(NULL) after allocations = -1
+mprobe(live block) = MCHECK_DISABLED
+mprobe(block written one past its end) = MCHECK_DISABLED
+mcheck_check_all() returned; abortfn calls 0
+  stderr: (empty)
+-- mcheck family: child exited 0
+mtrace(), malloc, free, muntrace() returned; errno unchanged
+muntrace() again returned
+  stderr: (empty)
+-- mtrace without MALLOC_TRACE: child exited 0
+#### exit status 0
+#### preloaded mcheck-early
+== mcheck before the first allocation (abortfn)
+mcheck rc 0
+a second mcheck(abortfn) = -1
+  stderr: (empty)
+-- second call: child exited 0
+mprobe(fresh block) = MCHECK_OK
+  abortfn called with MCHECK_TAIL
+mprobe(after writing p[10]) = MCHECK_TAIL
+  abortfn called with MCHECK_TAIL
+free returned; abortfn calls 2
+  stderr: (empty)
+-- tail: child exited 0
+  abortfn called with MCHECK_HEAD
+mprobe(after changing p[-1]) = MCHECK_HEAD
+mprobe(after restoring p[-1]) = MCHECK_OK
+free returned; abortfn calls 1
+  stderr: (empty)
+-- head: child exited 0
+  abortfn called with MCHECK_HEAD
+mprobe(freed block) = MCHECK_HEAD
+  abortfn called with MCHECK_HEAD
+  stderr: (empty)
+-- double free: child killed by signal SIGSEGV
+  abortfn called with MCHECK_TAIL
+mcheck_check_all() with a clobbered tail returned; abortfn calls 1
+restored, both freed; abortfn calls 1
+  stderr: (empty)
+-- mcheck_check_all: child exited 0
+  abortfn called with MCHECK_TAIL
+realloc of a clobbered block returned a block; abortfn calls 1
+  stderr: (empty)
+-- realloc of a clobbered block: child exited 0
+mprobe(live block) = MCHECK_OK
+mprobe(NULL) in a child next
+  stderr: (empty)
+-- mprobe: child exited 0
+mprobe(NULL) = MCHECK_OK
+  stderr: (empty)
+-- mprobe(NULL): child exited 0
+  abortfn called with MCHECK_HEAD
+mprobe(static buffer) = MCHECK_HEAD
+  stderr: (empty)
+-- mprobe(not a heap block): child exited 0
+#### exit status 0
+#### preloaded mcheck-null
+== mcheck(NULL) before the first allocation: the default handler
+mcheck rc 0
+  stderr: [memory clobbered past end of allocated block]
+-- tail: child killed by signal SIGABRT
+  stderr: [memory clobbered before allocated block]
+-- head: child killed by signal SIGABRT
+  stderr: [memory clobbered before allocated block]
+-- double free: child killed by signal SIGABRT
+#### exit status 0
+#### preloaded pedantic
+== mcheck_pedantic before the first allocation
+mcheck_pedantic rc 0
+clobbered a's tail; next: malloc(20)
+  abortfn called with MCHECK_TAIL
+malloc(20) returned; abortfn calls 1
+restored, both freed; abortfn calls 1
+  stderr: (empty)
+-- clobber, then another malloc: child exited 0
+  abortfn called with MCHECK_TAIL
+mcheck_check_all() with a clobbered tail returned; abortfn calls 1
+restored, both freed; abortfn calls 1
+  stderr: (empty)
+-- mcheck_check_all: child exited 0
+#### exit status 0
+#### preloaded mtrace, MALLOC_TRACE unset
+== mtrace (MALLOC_TRACE unset)
+errno after mtrace: unchanged
+#### exit status 0
+#### preloaded mtrace, MALLOC_TRACE=<dir>/trace
+== mtrace (MALLOC_TRACE set)
+errno after mtrace: unchanged
+trace file: created, mode 0666 less the umask: yes
+  log: [= Start]
+  log: [@ <prog>:[0x?] + <addr> 0xa]
+  log: [@ <prog>:[0x?] + <addr> 0x20]
+  log: [@ <prog>:[0x?] < <addr>]
+  log: [@ <prog>:[0x?] > <addr> 0x64]
+  log: [@ <prog>:[0x?] + <addr> 0x32]
+  log: [@ <prog>:[0x?] + <addr> 0x46]
+  log: [@ <prog>:[0x?] - <addr>]
+  log: [@ <prog>:[0x?] - <addr>]
+  log: [@ <prog>:[0x?] - <addr>]
+  log: [@ <prog>:[0x?] + <addr> 0x5]
+  log: [@ <prog>:[0x?] - <addr>]
+  log: [= End]
+#### exit status 0
+#### preloaded mtrace, MALLOC_TRACE=<dir>/missing/trace
+== mtrace (MALLOC_TRACE set)
+errno after mtrace: ENOENT
+trace file: not created
+#### exit status 0
+#### preloaded env (nothing)
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: no
+7 x malloc(32) then freed: uordblks grew then unchanged; back: no
+after a second thread's malloc(5000): malloc_info lists two heaps
+one-byte overrun, free, malloc, free: survived
+  stderr: (empty)
+-- one-byte overrun: child exited 0
+  stderr: [free(): double free detected in tcache 2]
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer]
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### preloaded env MALLOC_CHECK_=1
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then shrank; back: yes
+after a second thread's malloc(5000): malloc_info lists one heap
+  stderr: [free(): invalid pointer] (no newline)
+-- one-byte overrun: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### preloaded env MALLOC_CHECK_=2
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then shrank; back: yes
+after a second thread's malloc(5000): malloc_info lists one heap
+  stderr: [free(): invalid pointer] (no newline)
+-- one-byte overrun: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### preloaded env MALLOC_CHECK_=3
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then shrank; back: yes
+after a second thread's malloc(5000): malloc_info lists one heap
+  stderr: [free(): invalid pointer] (no newline)
+-- one-byte overrun: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0
+#### preloaded env GLIBC_TUNABLES=glibc.malloc.check=3
+fingerprint:
+fresh malloc(200): all 0x00
+first allocation: arena grew, arena - uordblks >= 1 MiB: no
+malloc(64 KiB): hblks unchanged
+malloc(1 MiB): hblks grew
+40 x malloc(60000) then freed in reverse: arena grew then shrank; back to its size before: yes
+7 x malloc(32) then freed: uordblks grew then shrank; back: yes
+after a second thread's malloc(5000): malloc_info lists one heap
+  stderr: [free(): invalid pointer] (no newline)
+-- one-byte overrun: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- double free: child killed by signal SIGABRT
+  stderr: [free(): invalid pointer] (no newline)
+-- free of an interior pointer: child killed by signal SIGABRT
+#### exit status 0

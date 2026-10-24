@@ -1,0 +1,161 @@
+# Instruction-per-call limits (ICOUNT-LIMITS, owner ruling 2026-10-10). Columns: cpu, benchmark, row, max_instr, rationale.
+#   cpu        the `model name` of /proc/cpuinfo exactly, or * for every CPU (counts differ where a CPU takes a different code path).
+#   max_instr  the most instructions per call Liella may execute in the row (median of the 3 counted runs of `cargo xtask bench`).
+# Rows tightened to count + max(2 instr, 2%) by LIMITS-TIGHTEN (2026-10-11); new rows only for sizes <= 128 B and real shapes.
+# LIMITS-TIGHTEN-2 (2026-10-20): 4 rawmemchr rows re-tightened to the current count; new rows for hot small shapes (spread <= 2%, no locale/tz-database/file dependence).
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcpy_16	22	ABOVE glibc: Liella 20.4 vs glibc 19.4
+AMD EPYC 7551 32-Core Processor	cbench_memref	memset_16	24	ABOVE glibc: Liella 22.4 vs glibc 19.4
+AMD EPYC 7551 32-Core Processor	cbench_memref	memmove_16	22	ABOVE glibc: Liella 20.4 vs glibc 19.4; run2 differed: 20.5
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_16	32	Liella 29.4 vs glibc 29.4; headroom 2%; LIMITS-TIGHTEN, was 34
+AMD EPYC 7551 32-Core Processor	cbench_memref	memchr_16	28	Liella 25.4 vs glibc 28.4; headroom 2%; LIMITS-TIGHTEN, was 36
+AMD EPYC 7551 32-Core Processor	cbench_memref	strlen_16	22	Liella 19.4 vs glibc 21.4; headroom 2%; LIMITS-TIGHTEN, was 36
+AMD EPYC 7551 32-Core Processor	cbench_memref	strnlen_16	29	Liella 26.4 vs glibc 26.4; headroom 2%; LIMITS-TIGHTEN, was 58
+AMD EPYC 7551 32-Core Processor	cbench_memref	rawmemchr_16	24	Liella 21.4 vs glibc 23.4; headroom 2%; LIMITS-TIGHTEN-2, was 26
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcpy_64	24	ABOVE glibc: Liella 22.3 vs glibc 20.4; run2 differed: 22.4
+AMD EPYC 7551 32-Core Processor	cbench_memref	memset_64	24	ABOVE glibc: Liella 22.3 vs glibc 20.4; run2 differed: 22.4
+AMD EPYC 7551 32-Core Processor	cbench_memref	memmove_64	24	ABOVE glibc: Liella 22.4 vs glibc 20.4; run2 differed: 22.5
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_64	28	Liella 25.4 vs glibc 27.4; headroom 2%; LIMITS-TIGHTEN, was 34
+AMD EPYC 7551 32-Core Processor	cbench_memref	memchr_64	32	Liella 29.4 vs glibc 40.4; headroom 2%; LIMITS-TIGHTEN, was 41
+AMD EPYC 7551 32-Core Processor	cbench_memref	strlen_64	40	ABOVE glibc: Liella 38.4 vs glibc 33.4
+AMD EPYC 7551 32-Core Processor	cbench_memref	strnlen_64	58	Liella 55.4 vs glibc 48.4; headroom 2%; LIMITS-TIGHTEN, was 70
+AMD EPYC 7551 32-Core Processor	cbench_memref	rawmemchr_64	38	Liella 35.5 vs glibc 33.4; headroom 2%; LIMITS-TIGHTEN-2, was 42
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcpy_128	31	Liella 28.4 vs glibc 28.4; headroom 2%; LIMITS-TIGHTEN, was 45
+AMD EPYC 7551 32-Core Processor	cbench_memref	memset_128	30	Liella 27.4 vs glibc 25.4; headroom 2%; LIMITS-TIGHTEN, was 40
+AMD EPYC 7551 32-Core Processor	cbench_memref	memmove_128	31	Liella 28.5 vs glibc 28.5; headroom 2%; LIMITS-TIGHTEN, was 45
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_128	40	Liella 39.4 <= glibc 39.4
+AMD EPYC 7551 32-Core Processor	cbench_hot	strncmp_eq16	43	Liella 41.0 vs glibc 43.0; headroom 2%; LIMITS-TIGHTEN, was 59
+AMD EPYC 7551 32-Core Processor	cbench_hot	strncmp_diff8	43	Liella 41.0 vs glibc 34.0; headroom 2%; LIMITS-TIGHTEN, was 48
+AMD EPYC 7551 32-Core Processor	cbench_hot	strncmp_names64	55	Liella 52.1 vs glibc 43.0; headroom 2%; LIMITS-TIGHTEN, was 81
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchr_16_hit	33	Liella 31.0 vs glibc 29.0; headroom 2%; LIMITS-TIGHTEN, was 39
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchr_16_miss	33	Liella 31.0 vs glibc 29.0; headroom 2%; LIMITS-TIGHTEN, was 54
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchr_64_hit	41	Liella 38.1 vs glibc 38.0; headroom 2%; LIMITS-TIGHTEN, was 73
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchr_64_miss	41	Liella 38.1 vs glibc 38.1; headroom 2%; LIMITS-TIGHTEN, was 76
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchrnul_16_hit	30	Liella 28.0 vs glibc 27.0; headroom 2%; LIMITS-TIGHTEN, was 37
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchrnul_16_miss	30	Liella 28.0 vs glibc 27.0; headroom 2%; LIMITS-TIGHTEN, was 49
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchrnul_64_hit	38	Liella 35.1 vs glibc 36.1; headroom 2%; LIMITS-TIGHTEN, was 71
+AMD EPYC 7551 32-Core Processor	cbench_hot	strchrnul_64_miss	38	Liella 35.1 vs glibc 36.1; headroom 2%; LIMITS-TIGHTEN, was 71
+AMD EPYC 7551 32-Core Processor	cbench_hot	memrchr_64	37	Liella 34.1 vs glibc 39.0; headroom 2%; LIMITS-TIGHTEN, was 50
+AMD EPYC 7551 32-Core Processor	cbench_hot	memrchr_64_hit	30	Liella 28.0 vs glibc 27.0; headroom 2%; LIMITS-TIGHTEN, was 50
+AMD EPYC 7551 32-Core Processor	cbench_hot	mempcpy_16	23	Liella 21.0 vs glibc 22.0; headroom 2%; LIMITS-TIGHTEN, was 66
+AMD EPYC 7551 32-Core Processor	cbench_hot	mempcpy_64	25	Liella 23.0 vs glibc 23.0; headroom 2%; LIMITS-TIGHTEN, was 76
+AMD EPYC 7551 32-Core Processor	cbench_hot	memcpy_chk_64	29	ABOVE glibc: Liella 28 vs glibc 26
+AMD EPYC 7551 32-Core Processor	cbench_hot	strcpy_chk_16	38	Liella 36.0 vs glibc 61.1; headroom 2%; LIMITS-TIGHTEN, was 91
+AMD EPYC 7551 32-Core Processor	cbench_hot	strcpy_chk_64	44	Liella 41.1 vs glibc 70.1; headroom 2%; LIMITS-TIGHTEN, was 97
+AMD EPYC 7551 32-Core Processor	cbench_hot	ctype_b_loc	16	Liella 14.0 vs glibc 10.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	ctype_get_mb_cur_max	12	Liella 10.0 vs glibc 11.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	errno_location	11	Liella 9.0 vs glibc 10.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	fwrite_unlocked_16	86	Liella 83.5 vs glibc 114.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	fwrite_unlocked_64	95	Liella 93.0 vs glibc 120.6; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getc	54	Liella 51.4 vs glibc 27.3; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getc_unlocked	47	Liella 44.4 vs glibc 15.3; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getenv_hit_last	1015	Liella 995.0 vs glibc 1239.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getenv_hit_mid	578	Liella 566.5 vs glibc 674.8; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getenv_miss	581	Liella 569.4 vs glibc 1243.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	getline_80	214	Liella 208.9 vs glibc 215.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	mutex_lock_unlock_normal	66	Liella 64.0 vs glibc 72.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	mutex_lock_unlock_recursive	86	Liella 83.1 vs glibc 90.1; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_hot	putc_unlocked	43	Liella 40.2 vs glibc 19.1; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_startup	startup_instr_c	2150	CI-STARTUP: user-mode instructions per process, exec to exit; Liella 2075 vs glibc 115540 (dynamic, ld.so included); measured on fix/wl-latin-lazy 1d0bc6db, 2026-10-11, 0% spread
+AMD EPYC 7551 32-Core Processor	cbench_startup	startup_instr_setloc	69800	CI-STARTUP: + setlocale(LC_ALL, "") under en_US.UTF-8; Liella 69516 vs glibc 140747; fix/wl-latin-lazy 1d0bc6db; an eager 256-entry wctype fill (~194k) is far over; BENCH-FIXED-ENV (owner #490): re-set once under the fixed bench environment, Liella 68356 on EPYC 7551 (was 71000)
+AMD EPYC 7551 32-Core Processor	cbench_startup	startup_instr_printf	73600	CI-STARTUP: + setlocale + one printf; Liella 73236 vs glibc 142522; fix/wl-latin-lazy 1d0bc6db; BENCH-FIXED-ENV (owner #490): re-set once under the fixed bench environment, Liella 72077 on EPYC 7551 (was 74700)
+AMD EPYC 7551 32-Core Processor	cbench_startup	startup_instr_wctype	70900	CI-STARTUP: + setlocale + iswalpha/towupper/wcwidth(U+00E9); Liella 70480 vs glibc 140959; fix/wl-latin-lazy 1d0bc6db; BENCH-FIXED-ENV (owner #490): re-set once under the fixed bench environment, Liella 69393 on EPYC 7551 (was 71900)
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_eq_128	42	Liella 39.4 vs glibc 36.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_eq_16	28	Liella 25.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_eq_32	35	Liella 32.4 vs glibc 26.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_eq_64	28	Liella 25.4 vs glibc 26.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_eq_8	28	Liella 25.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_head_128	31	Liella 28.4 vs glibc 20.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_head_16	21	Liella 18.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_head_32	21	Liella 18.4 vs glibc 20.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_head_64	19	Liella 16.4 vs glibc 20.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_head_8	21	Liella 18.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_tail_128	42	Liella 39.4 vs glibc 36.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_tail_16	28	Liella 25.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_tail_32	35	Liella 32.4 vs glibc 20.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_tail_64	28	Liella 25.4 vs glibc 26.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	__memcmpeq_tail_8	21	Liella 18.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_eq_128	42	Liella 39.4 vs glibc 39.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_eq_16	28	Liella 25.4 vs glibc 29.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_eq_32	35	Liella 32.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_eq_64	28	Liella 25.4 vs glibc 27.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_eq_8	28	Liella 25.4 vs glibc 29.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_head_128	31	Liella 28.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_head_16	21	Liella 18.4 vs glibc 32.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_head_32	21	Liella 18.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_head_64	19	Liella 16.3 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_head_8	21	Liella 18.4 vs glibc 32.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_tail_128	42	Liella 39.4 vs glibc 44.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_tail_16	28	Liella 25.4 vs glibc 32.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_tail_32	35	Liella 32.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_tail_64	28	Liella 25.4 vs glibc 32.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	bcmp_tail_8	21	Liella 18.4 vs glibc 32.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memchr_16_mix	35	Liella 32.4 vs glibc 35.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memchr_64_mix	39	Liella 36.4 vs glibc 52.3; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_16_mix	47	Liella 44.4 vs glibc 45.1; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_64_mix	43	Liella 40.4 vs glibc 42.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_diff8_127	37	Liella 34.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_diff8_64	39	Liella 36.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcmp_diff8_96	37	Liella 34.4 vs glibc 24.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcpy_16_mix	32	Liella 29.5 vs glibc 29.5; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memcpy_64_mix	32	Liella 29.5 vs glibc 29.5; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memmem_miss_64	160	Liella 156.5 vs glibc 285.6; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memset_16_mix	22	Liella 19.4 vs glibc 19.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	memset_64_mix	22	Liella 19.5 vs glibc 19.5; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	rawmemchr_16_mix	31	Liella 28.4 vs glibc 30.4; headroom 2%; LIMITS-TIGHTEN-2, was 33
+AMD EPYC 7551 32-Core Processor	cbench_memref	rawmemchr_64_mix	43	Liella 40.6 vs glibc 40.4; headroom 2%; LIMITS-TIGHTEN-2, was 49
+AMD EPYC 7551 32-Core Processor	cbench_memref	strcasestr_hit_64	388	Liella 379.7 vs glibc 826.9; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strcasestr_miss_64	279	Liella 272.6 vs glibc 1124.0; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strcmp_16_mix	57	Liella 54.7 vs glibc 45.8; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strcmp_64_mix	76	Liella 73.3 vs glibc 61.8; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strlen_16_mix	29	Liella 26.4 vs glibc 28.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strlen_64_mix	47	Liella 44.4 vs glibc 40.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strnlen_16_mix	36	Liella 33.4 vs glibc 33.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strnlen_64_mix	65	Liella 62.5 vs glibc 55.4; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strstr_hit_64	263	Liella 257.6 vs glibc 157.5; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	strstr_miss_64	219	Liella 214.6 vs glibc 337.7; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	wcsstr_hit_64	881	Liella 863.0 vs glibc 471.7; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_memref	wcsstr_miss_64	1013	Liella 992.3 vs glibc 475.6; headroom 2%
+AMD EPYC 7551 32-Core Processor	cbench_locale	strcasecmp_c_16	118	Liella 115.1 vs glibc 50.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_locale	strncasecmp_c_64	151	Liella 147.1 vs glibc 68.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_stdio	fprintf_d	647	Liella 634.0 vs glibc 691.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_stdio	fputs_32	129	Liella 125.9 vs glibc 147.9; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_stdio	putc	50	Liella 47.2 vs glibc 32.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_stdio	snprintf_mixed	2120	Liella 2078.2 vs glibc 3353.6; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_time	gmtime_r	208	Liella 203.0 vs glibc 372.7; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_time	localtime_r_utc	391	Liella 382.4 vs glibc 652.4; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_time	strftime_iso	763	Liella 747.6 vs glibc 1330.8; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_bracket	949	Liella 929.9 vs glibc 888.9; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_patterns	fnmatch_star	376	Liella 368.3 vs glibc 401.4; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_ch	761	Liella 745.6 vs glibc 1580.6; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_names_class	2309	Liella 2262.9 vs glibc 1685.9; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_paths_leading_dir	472	Liella 461.8 vs glibc 1073.7; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	fnmatch_paths_pathname	755	Liella 739.7 vs glibc 1619.3; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	fprintf_du_line	860	Liella 843.0 vs glibc 912.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	localtime_r_posix_rule	402	Liella 393.7 vs glibc 640.3; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_alt	661	Liella 647.9 vs glibc 9386.5; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_dotstar	728	Liella 713.0 vs glibc 2913.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_icase_absent	1936	Liella 1897.7 vs glibc 6173.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_ipv4	1312	Liella 1286.1 vs glibc 18519.9; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_grep_literal	390	Liella 381.9 vs glibc 774.3; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_search_sed_so	683	Liella 668.7 vs glibc 1211.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_search_sed_swap	6574	Liella 6444.5 vs glibc 22923.6; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_sed_kv	2725	Liella 2671.5 vs glibc 12891.4; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	re_sed_swap	3269	Liella 3204.3 vs glibc 40678.8; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_f2	1222	Liella 1197.5 vs glibc 2471.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_g	1387	Liella 1358.9 vs glibc 2202.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_ld_large	557	Liella 545.4 vs glibc 654.7; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_ls_line	2482	Liella 2433.0 vs glibc 2434.8; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_mixed	2105	Liella 2063.3 vs glibc 3258.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_s_d_colon	981	Liella 961.3 vs glibc 955.7; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	snprintf_s_path	235	Liella 230.2 vs glibc 395.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	sprintf_chk_ls_nlink	820	Liella 803.4 vs glibc 730.3; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_log	831	Liella 813.8 vs glibc 1393.8; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_ls_iso	541	Liella 529.5 vs glibc 969.4; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_opt	strftime_ls_recent_c	484	Liella 474.4 vs glibc 784.0; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	calloc_free_64	176	Liella 172.2 vs glibc 283.2; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	heap_mix_real	150	Liella 146.6 vs glibc 201.4; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_128	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_16	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_32	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_64	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+AMD EPYC 7551 32-Core Processor	cbench_malloc	realloc_null_24	146	Liella 143.1 vs glibc 174.1; headroom 2%; LIMITS-TIGHTEN-2 new row

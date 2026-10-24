@@ -1,0 +1,307 @@
+# The C syscall layer's system calls: single source of truth for csys/src/sys/*.c,
+# csys/include/liella_sysnr.h and crates/boundary/src/ffi_sys.rs (`cargo xtask csys-gen`).
+#
+# Columns: wrapper name, kernel syscall name (__NR_<name> in the Linux UAPI asm/unistd_64.h),
+# spec Appendix A.1 area, argument kinds. Argument kinds follow the kernel ABI:
+#   i  a register-sized integer or an address passed as an integer   (C long, Rust i64)
+#   c  a pointer to memory the kernel reads                          (C const void *, Rust *const c_void)
+#   p  a pointer to memory the kernel writes (or reads and writes)   (C void *, Rust *mut c_void)
+#   -  no arguments
+# Every wrapper returns the raw kernel result: a value, or -errno.
+#
+# Optional fifth column, aarch64 (ledger A-3; numbers from the kernel's generic table, UAPI
+# asm-generic/unistd.h, as arm64 configures it). csys-gen fails unless it matches the header:
+#   =              (or no column) the same kernel call exists there
+#   =backwards     present, arguments in CONFIG_CLONE_BACKWARDS order (clone only; checked against
+#                  arch/arm64/Kconfig when a kernel header tree is installed)
+#   none:<call>    no number there; on aarch64 the wrapper is built on <call>, a call of this table
+#                  (written with the aarch64 C layer, ledger A-6; see docs/arch-syscalls.md)
+#   none:-         no number and no wrapper (x86-only; the export follows the reference, RL-8)
+#
+# name	syscall	area	args	[aarch64]
+execve	execve	process	ccc
+execveat	execveat	process	iccci
+exit	exit	process	i
+exit_group	exit_group	process	i
+clone	clone	process	iippi	=backwards
+clone3	clone3	process	pi
+wait4	wait4	process	ipip
+waitid	waitid	process	iipip
+getpid	getpid	process	-
+getppid	getppid	process	-
+gettid	gettid	process	-
+set_tid_address	set_tid_address	process	p
+pidfd_open	pidfd_open	process	ii
+pidfd_getfd	pidfd_getfd	process	iii
+pidfd_send_signal	pidfd_send_signal	process	iici
+getuid	getuid	creds	-
+geteuid	geteuid	creds	-
+getgid	getgid	creds	-
+getegid	getegid	creds	-
+getresuid	getresuid	creds	ppp
+getresgid	getresgid	creds	ppp
+setuid	setuid	creds	i
+setgid	setgid	creds	i
+setreuid	setreuid	creds	ii
+setregid	setregid	creds	ii
+setresuid	setresuid	creds	iii
+setresgid	setresgid	creds	iii
+setfsuid	setfsuid	creds	i
+setfsgid	setfsgid	creds	i
+getgroups	getgroups	creds	ip
+setgroups	setgroups	creds	ic
+capget	capget	creds	pp
+capset	capset	creds	pc
+setsid	setsid	sessions	-
+getsid	getsid	sessions	i
+setpgid	setpgid	sessions	ii
+getpgid	getpgid	sessions	i
+getpgrp	getpgrp	sessions	-	none:getpgid
+rt_sigaction	rt_sigaction	signal	icpi
+rt_sigprocmask	rt_sigprocmask	signal	icpi
+rt_sigsuspend	rt_sigsuspend	signal	ci
+rt_sigpending	rt_sigpending	signal	pi
+rt_sigtimedwait	rt_sigtimedwait	signal	cpci
+rt_sigqueueinfo	rt_sigqueueinfo	signal	iic
+rt_tgsigqueueinfo	rt_tgsigqueueinfo	signal	iiic
+kill	kill	signal	ii
+tgkill	tgkill	signal	iii
+sigaltstack	sigaltstack	signal	cp
+signalfd4	signalfd4	signal	icii
+pause	pause	signal	-	none:ppoll
+brk	brk	memory	i
+mmap	mmap	memory	iiiiii
+munmap	munmap	memory	ii
+mprotect	mprotect	memory	iii
+mremap	mremap	memory	iiiii
+madvise	madvise	memory	iii
+msync	msync	memory	iii
+mincore	mincore	memory	iip
+mlock	mlock	memory	ii
+mlock2	mlock2	memory	iii
+munlock	munlock	memory	ii
+mlockall	mlockall	memory	i
+munlockall	munlockall	memory	-
+remap_file_pages	remap_file_pages	memory	iiiii
+memfd_create	memfd_create	memory	ci
+pkey_alloc	pkey_alloc	memory	ii
+pkey_free	pkey_free	memory	i
+pkey_mprotect	pkey_mprotect	memory	iiii
+process_madvise	process_madvise	memory	iciii
+process_mrelease	process_mrelease	memory	ii
+# NUMA placement for the allocator (D-3.10). Not in spec Appendix A, which lists what glibc
+# itself wraps; Liella uses them internally and exports neither.
+mbind	mbind	memory	iiicii
+get_mempolicy	get_mempolicy	memory	ppiii
+process_vm_readv	process_vm_readv	memory	icicii
+process_vm_writev	process_vm_writev	memory	icicii
+map_shadow_stack	map_shadow_stack	memory	iii
+futex	futex	thread	piicpi
+set_robust_list	set_robust_list	thread	pi
+rseq	rseq	thread	piii
+arch_prctl	arch_prctl	thread	ii	none:-
+sched_yield	sched_yield	thread	-
+openat	openat	fd	icii
+openat2	openat2	fd	icci
+open_by_handle_at	open_by_handle_at	fd	ici
+name_to_handle_at	name_to_handle_at	fd	icppi
+close	close	fd	i
+close_range	close_range	fd	iii
+dup	dup	fd	i
+dup2	dup2	fd	ii	none:dup3
+dup3	dup3	fd	iii
+fcntl	fcntl	fd	iii
+ioctl	ioctl	fd	iii
+pipe2	pipe2	fd	pi
+read	read	io	ipi
+write	write	io	ici
+pread64	pread64	io	ipii
+pwrite64	pwrite64	io	icii
+readv	readv	io	ici
+writev	writev	io	ici
+preadv	preadv	io	iciii
+pwritev	pwritev	io	iciii
+preadv2	preadv2	io	iciiii
+pwritev2	pwritev2	io	iciiii
+lseek	lseek	io	iii
+sendfile	sendfile	io	iipi
+copy_file_range	copy_file_range	io	ipipii
+splice	splice	io	ipipii
+tee	tee	io	iiii
+vmsplice	vmsplice	io	icii
+readahead	readahead	io	iii
+io_uring_setup	io_uring_setup	io	ip
+io_uring_enter	io_uring_enter	io	iiiici
+io_uring_register	io_uring_register	io	iipi
+pselect6	pselect6	poll	ippppc
+ppoll	ppoll	poll	pipci
+epoll_create1	epoll_create1	poll	i
+epoll_ctl	epoll_ctl	poll	iiic
+epoll_pwait	epoll_pwait	poll	ipiici
+epoll_pwait2	epoll_pwait2	poll	ipicci
+eventfd2	eventfd2	poll	ii
+inotify_init1	inotify_init1	poll	i
+inotify_add_watch	inotify_add_watch	poll	ici
+inotify_rm_watch	inotify_rm_watch	poll	ii
+fanotify_init	fanotify_init	poll	ii
+fanotify_mark	fanotify_mark	poll	iiiic
+fsync	fsync	durability	i
+fdatasync	fdatasync	durability	i
+sync	sync	durability	-
+syncfs	syncfs	durability	i
+sync_file_range	sync_file_range	durability	iiii
+fadvise64	fadvise64	durability	iiii
+fallocate	fallocate	durability	iiii
+ftruncate	ftruncate	durability	ii
+truncate	truncate	durability	ci
+flock	flock	lock	ii
+newfstatat	newfstatat	fs	icpi
+fstat	fstat	fs	ip
+statx	statx	fs	iciip
+statfs	statfs	fs	cp
+fstatfs	fstatfs	fs	ip
+ustat	ustat	fs	ip	none:-
+getdents64	getdents64	fs	ipi
+getcwd	getcwd	fs	pi
+chdir	chdir	fs	c
+fchdir	fchdir	fs	i
+chroot	chroot	fs	c
+mkdirat	mkdirat	fs	ici
+mknodat	mknodat	fs	icii
+linkat	linkat	fs	icici
+symlinkat	symlinkat	fs	cic
+readlinkat	readlinkat	fs	icpi
+unlinkat	unlinkat	fs	ici
+renameat2	renameat2	fs	icici
+fchmodat	fchmodat	fs	ici
+fchmodat2	fchmodat2	fs	icii
+fchmod	fchmod	fs	ii
+fchownat	fchownat	fs	iciii
+fchown	fchown	fs	iii
+umask	umask	fs	i
+faccessat	faccessat	fs	ici
+faccessat2	faccessat2	fs	icii
+utimensat	utimensat	fs	icci
+setxattr	setxattr	fs	cccii
+lsetxattr	lsetxattr	fs	cccii
+fsetxattr	fsetxattr	fs	iccii
+getxattr	getxattr	fs	ccpi
+lgetxattr	lgetxattr	fs	ccpi
+fgetxattr	fgetxattr	fs	icpi
+listxattr	listxattr	fs	cpi
+llistxattr	llistxattr	fs	cpi
+flistxattr	flistxattr	fs	ipi
+removexattr	removexattr	fs	cc
+lremovexattr	lremovexattr	fs	cc
+fremovexattr	fremovexattr	fs	ic
+mount	mount	mount	cccic
+umount2	umount2	mount	ci
+pivot_root	pivot_root	mount	cc
+fsopen	fsopen	mount	ci
+fsconfig	fsconfig	mount	iicci
+fsmount	fsmount	mount	iii
+fspick	fspick	mount	ici
+move_mount	move_mount	mount	icici
+open_tree	open_tree	mount	ici
+mount_setattr	mount_setattr	mount	icici
+swapon	swapon	mount	ci
+swapoff	swapoff	mount	c
+quotactl	quotactl	mount	icip
+statmount	statmount	mount	cpii
+listmount	listmount	mount	cpii
+socket	socket	socket	iii
+socketpair	socketpair	socket	iiip
+bind	bind	socket	ici
+listen	listen	socket	ii
+accept4	accept4	socket	ippi
+connect	connect	socket	ici
+shutdown	shutdown	socket	ii
+getsockname	getsockname	socket	ipp
+getpeername	getpeername	socket	ipp
+getsockopt	getsockopt	socket	iiipp
+setsockopt	setsockopt	socket	iiici
+sendto	sendto	socket	iciici
+recvfrom	recvfrom	socket	ipiipp
+sendmsg	sendmsg	socket	ici
+recvmsg	recvmsg	socket	ipi
+sendmmsg	sendmmsg	socket	ipii
+recvmmsg	recvmmsg	socket	ipiip
+clock_gettime	clock_gettime	time	ip
+clock_getres	clock_getres	time	ip
+clock_settime	clock_settime	time	ic
+clock_adjtime	clock_adjtime	time	ip
+clock_nanosleep	clock_nanosleep	time	iicp
+gettimeofday	gettimeofday	time	pp
+settimeofday	settimeofday	time	cc
+time	time	time	p	none:clock_gettime
+times	times	time	p
+setitimer	setitimer	time	icp
+getitimer	getitimer	time	ip
+alarm	alarm	time	i	none:setitimer
+timer_create	timer_create	time	icp
+timer_settime	timer_settime	time	iicp
+timer_gettime	timer_gettime	time	ip
+timer_getoverrun	timer_getoverrun	time	i
+timer_delete	timer_delete	time	i
+timerfd_create	timerfd_create	time	ii
+timerfd_settime	timerfd_settime	time	iicp
+timerfd_gettime	timerfd_gettime	time	ip
+sched_setscheduler	sched_setscheduler	sched	iic
+sched_getscheduler	sched_getscheduler	sched	i
+sched_setparam	sched_setparam	sched	ic
+sched_getparam	sched_getparam	sched	ip
+sched_get_priority_min	sched_get_priority_min	sched	i
+sched_get_priority_max	sched_get_priority_max	sched	i
+sched_rr_get_interval	sched_rr_get_interval	sched	ip
+sched_setaffinity	sched_setaffinity	sched	iic
+sched_getaffinity	sched_getaffinity	sched	iip
+getcpu	getcpu	sched	ppp
+getpriority	getpriority	sched	ii
+setpriority	setpriority	sched	iii
+prlimit64	prlimit64	sched	iicp
+getrusage	getrusage	sched	ip
+sysinfo	sysinfo	sched	p
+sched_setattr	sched_setattr	sched	ici
+sched_getattr	sched_getattr	sched	ipii
+msgget	msgget	ipc	ii
+msgsnd	msgsnd	ipc	icii
+msgrcv	msgrcv	ipc	ipiii
+msgctl	msgctl	ipc	iip
+semget	semget	ipc	iii
+semtimedop	semtimedop	ipc	icic
+semctl	semctl	ipc	iiii
+shmget	shmget	ipc	iii
+shmat	shmat	ipc	iii
+shmdt	shmdt	ipc	i
+shmctl	shmctl	ipc	iip
+mq_open	mq_open	ipc	ciic
+mq_unlink	mq_unlink	ipc	c
+mq_timedsend	mq_timedsend	ipc	iciic
+mq_timedreceive	mq_timedreceive	ipc	ipipc
+mq_notify	mq_notify	ipc	ic
+mq_getsetattr	mq_getsetattr	ipc	icp
+getrandom	getrandom	random	pii
+uname	uname	system	p
+sethostname	sethostname	system	ci
+setdomainname	setdomainname	system	ci
+reboot	reboot	system	iiic
+syslog	syslog	system	ipi
+acct	acct	system	c
+ioperm	ioperm	system	iii	none:-
+iopl	iopl	system	i	none:-
+modify_ldt	modify_ldt	system	ipi	none:-
+init_module	init_module	system	cic
+finit_module	finit_module	system	ici
+delete_module	delete_module	system	ci
+vhangup	vhangup	system	-
+personality	personality	system	i
+prctl	prctl	system	iiiii
+unshare	unshare	system	i
+setns	setns	system	ii
+ptrace	ptrace	system	iiii
+create_module	create_module	system	ci	none:-
+get_kernel_syms	get_kernel_syms	system	p	none:-
+query_module	query_module	system	cipip	none:-
+nfsservctl	nfsservctl	system	ipp
+uselib	uselib	system	c	none:-
+syscall	*	process	iiiiiii

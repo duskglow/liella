@@ -1,0 +1,45 @@
+alloc [1.2.3.4] af=2 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+buffer [1.2.3.4] af=2 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+alloc [1.2.3.4] af=10 buffer=set size>0=1: rc=1 result=NULL status=12345 h_errno=1 errno=0
+buffer [1.2.3.4] af=10 in-buffer=0: rc=1 result=untouched status=0 h_errno=1 errno=0
+alloc [::1] af=10 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[::1] type=10 len=16 aliases=0 addr=::1
+buffer [::1] af=10 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[::1] type=10 len=16 aliases=0 addr=::1
+alloc [::1] af=2 buffer=set size>0=1: rc=1 result=NULL status=12345 h_errno=1 errno=0
+buffer [::1] af=2 in-buffer=0: rc=1 result=untouched status=0 h_errno=1 errno=0
+alloc [1.2.3] af=2 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[1.2.3] type=2 len=4 aliases=0 addr=1.2.0.3
+buffer [1.2.3] af=2 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[1.2.3] type=2 len=4 aliases=0 addr=1.2.0.3
+alloc [1.2.3.4.] af=2 buffer=set size>0=1: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [1.2.3.4.] af=2 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [1.2.3.4.5] af=2 buffer=set size>0=1: rc=1 result=NULL status=12345 h_errno=1 errno=0
+buffer [1.2.3.4.5] af=2 in-buffer=0: rc=1 result=untouched status=0 h_errno=1 errno=0
+alloc [123] af=2 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[123] type=2 len=4 aliases=0 addr=0.0.0.123
+buffer [123] af=2 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[123] type=2 len=4 aliases=0 addr=0.0.0.123
+alloc [example.com] af=2 buffer=set size>0=1: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [example.com] af=2 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [1.2.3.256] af=2 buffer=set size>0=1: rc=1 result=NULL status=12345 h_errno=1 errno=0
+buffer [1.2.3.256] af=2 in-buffer=0: rc=1 result=untouched status=0 h_errno=1 errno=0
+alloc [] af=2 buffer=NULL size>0=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [] af=2 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [1] af=2 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[1] type=2 len=4 aliases=0 addr=0.0.0.1
+buffer [1] af=2 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[1] type=2 len=4 aliases=0 addr=0.0.0.1
+alloc [0x7f.1] af=2 buffer=set size>0=1: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [0x7f.1] af=2 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [fe80::1%1] af=10 buffer=set size>0=1: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [fe80::1%1] af=10 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [1.2.3.a] af=2 buffer=set size>0=1: rc=0 result=untouched status=12345 h_errno=777 errno=0
+buffer [1.2.3.a] af=2 in-buffer=0: rc=0 result=untouched status=12345 h_errno=777 errno=0
+alloc [::ffff:1.2.3.4] af=10 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[::ffff:1.2.3.4] type=10 len=16 aliases=0 addr=::ffff:1.2.3.4
+buffer [::ffff:1.2.3.4] af=10 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[::ffff:1.2.3.4] type=10 len=16 aliases=0 addr=::ffff:1.2.3.4
+alloc [1.2.3.4] af=0 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+buffer [1.2.3.4] af=0 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+alloc [1.2.3.4] af=99 buffer=set size>0=1: rc=1 result=resbuf status=12345 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+buffer [1.2.3.4] af=99 in-buffer=1: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[1.2.3.4] type=2 len=4 aliases=0 addr=1.2.3.4
+buflen 0: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 8: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 16: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 24: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 32: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 40: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 48: rc=1 result=untouched status=-2 h_errno=-1 errno=34
+buflen 56: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[10.20.30.40] type=2 len=4 aliases=0 addr=10.20.30.40
+buflen 64: rc=1 result=untouched status=1 h_errno=0 errno=0 name=[10.20.30.40] type=2 len=4 aliases=0 addr=10.20.30.40

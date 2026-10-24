@@ -1,0 +1,63 @@
+rec enc send=0 n=2 now=1 pos0=4294967295: w12=800000080000000100000002 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=0 n=2 now=0 pos0=4294967295: | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=1 n=3 now=1 pos0=4294967295: w16=8000000c000000010000000200000003 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=8 n=3 now=1 pos0=4294967295: w16=8000000c000000010000000200000003 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=12 n=5 now=1 pos0=4294967295: w24=800000140000000100000002000000030000000400000005 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=13 n=5 now=1 pos0=4294967295: w24=800000140000000100000002000000030000000400000005 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc send=100 n=0 now=1 pos0=4294967295: w4=80000000 | ok=1 pos=4294967295 eor=1 pos2=4294967295
+rec enc opaque10 send=12: w16=8000000c6162636465666768696a0000 | ok=1 eor=1
+rec enc inline8=ptr inline100000=NULL setpostn0=0
+rec enc writefail: w8=8000000400000007 | ok=1 eor=0
+rec enc two records send=8: w16=80000004000000078000000400000008 | eor=1,1
+rec dec no-skip first=0/5a pos=4294967295
+rec dec eof-first eof=1 int=0/1 eof=1 skip=1 int=1
+rec dec one            chunk=64: skip0=1 1/1 1/2 eof=1 skip=1 next=0/5a5a eof=1
+rec dec one-chunk3     chunk=3: skip0=1 1/1 1/2 eof=1 skip=1 next=0/5a5a eof=1
+rec dec two-frags      chunk=64: skip0=1 1/1 1/2 eof=1 skip=1 next=0/5a5a eof=1
+rec dec past-end       chunk=64: skip0=1 1/1 0/5a5a eof=1 skip=1 next=0/5a5a eof=1
+rec dec skip-unread    chunk=64: skip0=1 eof=1 skip=1 next=0/5a5a eof=1
+rec dec empty-last     chunk=64: skip0=1 0/5a5a eof=1 skip=1 next=0/5a5a eof=1
+rec dec empty-frag     chunk=64: skip0=1 0/5a5a eof=1 skip=1 next=0/5a5a eof=1
+rec dec short-data     chunk=64: skip0=1 1/1 0/5a5a eof=1 skip=0 next=0/5a5a eof=1
+rec dec no-data        chunk=64: skip0=1 0/5a5a eof=1 skip=0 next=0/5a5a eof=1
+rec dec half-header    chunk=64: skip0=1 0/5a5a eof=1 skip=0 next=0/5a5a eof=1
+rec dec opaque6 over frags: ok=0 bytes=6162636465660000 then=0/0
+rec dec pos-after-int=4294967295 inline8=ptr [00000002 00000003] inline-past=NULL setpostn0=0
+stdio enc ok=1 pos=4,24 inline=NULL setpostn0=1 pos=0 ok2=1 file(24)=0000000901020304050607080000000568656c6c6f000000
+stdio dec 1:9 1:102030405060708 1:hello 0:5a pos=24
+stdio dec empty int=0/5a opaque3=0 pos=0
+stdio dec short 1:1 0:5a pos=6
+array enc 3/max3 ok=1 pos=16 bytes=0000000300000001ffffffff7fffffffaaaaaaaa
+array enc 3/max2 ok=0 pos=4 bytes=00000003aaaaaaaa
+array enc 3/room12 ok=0 pos=12 bytes=0000000300000001ffffffff
+array dec null ok=1 n=2 vals=5,-2 pos=12
+array free ok=1 -> NULL n=2
+array dec 2/max1 ok=0 n=2 ap=NULL pos=4
+array dec truncated ok=0 n=2 ap=ptr v0=5 pos=8
+array dec zero ok=1 n=0 ap=NULL
+array dec 0x40000001x4 ok=0 n=1073741825 ap=NULL
+array dec into caller ok=1 same=1 vals=5,-2
+vector enc ok=1 pos=12 bytes=000000010000ffff00001234aaaaaaaa
+vector dec ok=1 vals=1,ffff,1234
+vector dec short ok=0 vals=1,ffff,7 pos=8
+vector enc 0 ok=1 pos=0
+union enc d=1 ok=1 pos=8 bytes=0000000111223344aaaaaaaa
+union enc d=2 ok=1 pos=12 bytes=00000002fffffffffffffffe
+union enc d=3 nodefault ok=0 pos=4 bytes=00000003aaaaaaaa
+union enc d=3 default ok=1 pos=8 bytes=0000000300000005aaaaaaaa
+union enc d=0 ok=0 pos=4
+union dec ok=1 d=2 u=9
+union dec arm-missing ok=0 d=1 pos=4
+reference dec null ok=1 vals=5,0 pos=4
+reference free ok=1 -> NULL
+reference dec short ok=0 rp=ptr
+pointer enc ok=1 pos=8 bytes=0000000100000042aaaaaaaa
+pointer enc null ok=1 pos=4 bytes=00000000aaaaaaaa
+pointer dec ok=1 val=7
+pointer dec 0 ok=1 -> NULL
+pointer dec 5 ok=1 val=7
+sizeof int=4 hyper=8 str5=12 str0=4
+sizeof pair=8
+netobj enc ok=1 pos=8 bytes=0000000378797a00
+netobj enc 1025 ok=0 pos=4
+netobj dec 1024 ok=1 len=1024 ptr=ptr pos=1028

@@ -1,0 +1,21 @@
+[package]
+name = "liella-ld"
+description = "The dynamic linker (ld-linux-x86-64.so.2) and the dlopen machinery"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_ld"
+
+[dependencies]
+liella-kernel = { workspace = true }
+liella-rt = { workspace = true }
+
+[dev-dependencies]
+spectest = { workspace = true }
+
+[lints]
+workspace = true

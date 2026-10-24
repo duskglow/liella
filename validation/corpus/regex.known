@@ -1,0 +1,5 @@
+# Recorded disagreements of regex.corpus (corpus line, tab, reason); regex_corpus_products.rs
+# fails if a line not listed here disagrees, or if a listed line agrees again. For the
+# optimization thread (validation item C, 2026-10-05, main 75c0f5c).
+312	a\{32768\} (a count above RE_DUP_MAX 32767): glibc "Regular expression too big" (REG_ESIZE), Liella "Invalid content of \{\}" (REG_BADBR). POSIX regcomp lists a number too large under REG_BADBR; three-way rule pending (§14).
+491	^(.?)(.?).?\2\1$ on "ab": glibc reports a zero-length match at 0, which cannot satisfy ^...$ on a two-character string; Liella reports no match (-1), the correct answer. A glibc defect (sed's palindrome test fails under glibc's regex in the --without-included-regex build).

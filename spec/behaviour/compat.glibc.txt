@@ -1,0 +1,1626 @@
+== compat_libc
+memcpy@GLIBC_2.2.5 overlap n=0: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=1: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=2: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=3: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=7: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=8: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=15: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=16: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=31: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=32: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=33: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=63: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=64: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=100: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=128: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=255: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=256: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=1000: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=4096: shifts unlike memmove: none
+memcpy@GLIBC_2.2.5 overlap n=10000: shifts unlike memmove: none
+fmemopen@GLIBC_2.2.5 size0 r: NULL errno=EINVAL
+fmemopen@GLIBC_2.2.5 NULL size0 w+: NULL errno=EINVAL
+fmemopen@GLIBC_2.2.5 r "hello" size16: fread=16 feof=1
+fmemopen@GLIBC_2.2.5 r "hello" size16: SEEK_END ftell=16
+fmemopen@GLIBC_2.2.5 r size16: fseek 17=-1 fseek 16=0
+fmemopen@GLIBC_2.2.5 rb "hello" size16: SEEK_END ftell=16
+fmemopen@GLIBC_2.2.5 w size8 at open: buf=007878787878787878
+fmemopen@GLIBC_2.2.5 w size8 "abc" fflush: buf=616263007878787878 ftell=3
+fmemopen@GLIBC_2.2.5 w size8 seek1 fflush: buf=616263007878787878
+fmemopen@GLIBC_2.2.5 w size8 fclose: buf=616263007878787878
+fmemopen@GLIBC_2.2.5 w size4 "abcdef": fputs=1 fflush=-1 ferror=1 buf=6162630078
+fmemopen@GLIBC_2.2.5 w size4 fclose: buf=6162630078
+fmemopen@GLIBC_2.2.5 a "ab" size8: ftell at open=2
+fmemopen@GLIBC_2.2.5 a "ab" size8 "C": buf=616243007979790078
+fmemopen@GLIBC_2.2.5 a seek0 "D": buf=446243007979790078
+fmemopen@GLIBC_2.2.5 a+ "ab" size8: ftell=3 first fgetc=0
+fmemopen@GLIBC_2.2.5 NULL size8 w+ "abc" rewind: fread=8 first3=616263
+fmemopen@GLIBC_2.2.5 r+ "hello" size16: SEEK_END ftell=5 then "Z" buf=68656c6c6f5a0078787878787878787861
+fmemopen@GLIBC_2.2.5 [default] size0 r: FILE errno=0
+fmemopen@GLIBC_2.2.5 [default] NULL size0 w+: FILE errno=0
+fmemopen@GLIBC_2.2.5 [default] r "hello" size16: fread=16 feof=1
+fmemopen@GLIBC_2.2.5 [default] r "hello" size16: SEEK_END ftell=16
+fmemopen@GLIBC_2.2.5 [default] r size16: fseek 17=-1 fseek 16=0
+fmemopen@GLIBC_2.2.5 [default] rb "hello" size16: SEEK_END ftell=16
+fmemopen@GLIBC_2.2.5 [default] w size8 at open: buf=787878787878787878
+fmemopen@GLIBC_2.2.5 [default] w size8 "abc" fflush: buf=616263007878787878 ftell=3
+fmemopen@GLIBC_2.2.5 [default] w size8 seek1 fflush: buf=616263007878787878
+fmemopen@GLIBC_2.2.5 [default] w size8 fclose: buf=616263007878787878
+fmemopen@GLIBC_2.2.5 [default] w size4 "abcdef": fputs=1 fflush=-1 ferror=1 buf=6162630078
+fmemopen@GLIBC_2.2.5 [default] w size4 fclose: buf=6162630078
+fmemopen@GLIBC_2.2.5 [default] a "ab" size8: ftell at open=2
+fmemopen@GLIBC_2.2.5 [default] a "ab" size8 "C": buf=616243007979790078
+fmemopen@GLIBC_2.2.5 [default] a seek0 "D": buf=616243440079790078
+fmemopen@GLIBC_2.2.5 [default] a+ "ab" size8: ftell=2 first fgetc=-1
+fmemopen@GLIBC_2.2.5 [default] NULL size8 w+ "abc" rewind: fread=3 first3=616263
+fmemopen@GLIBC_2.2.5 [default] r+ "hello" size16: SEEK_END ftell=16 then "Z" buf=68656c6c6f007878787878787878787861
+realpath@GLIBC_2.2.5 "/" NULL: NULL errno=EINVAL | default: ok errno=0
+realpath@GLIBC_2.2.5 "." NULL: NULL errno=EINVAL | default: ok errno=0
+realpath@GLIBC_2.2.5 "" NULL: NULL errno=EINVAL | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 "/nonexistent-liella/x" NULL: NULL errno=EINVAL | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 "rp/loop" NULL: NULL errno=EINVAL | default: NULL errno=ELOOP
+realpath@GLIBC_2.2.5 "rp/file/" NULL: NULL errno=EINVAL | default: NULL errno=ENOTDIR
+realpath@GLIBC_2.2.5 "rp/dangling" NULL: NULL errno=EINVAL | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 "/" buf: ok errno=0 | default: ok errno=0 results equal
+realpath@GLIBC_2.2.5 "." buf: ok errno=0 | default: ok errno=0 results equal
+realpath@GLIBC_2.2.5 "" buf: NULL errno=ENOENT | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 "/nonexistent-liella/x" buf: NULL errno=ENOENT | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 "rp/loop" buf: NULL errno=ELOOP | default: NULL errno=ELOOP
+realpath@GLIBC_2.2.5 "rp/file/" buf: NULL errno=ENOTDIR | default: NULL errno=ENOTDIR
+realpath@GLIBC_2.2.5 "rp/dangling" buf: NULL errno=ENOENT | default: NULL errno=ENOENT
+realpath@GLIBC_2.2.5 NULL path: NULL errno=EINVAL | default: NULL errno=EINVAL
+regexec@GLIBC_2.2.5 "b" in "abcb" STARTEND [1,3) nmatch1: ret=0 m=(1,2),(-7,-7),(-7,-7) | default: ret=0 m=(1,2),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "b" in "abcb" STARTEND [2,4) nmatch1: ret=0 m=(1,2),(-7,-7),(-7,-7) | default: ret=0 m=(3,4),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "b" in "abcb" STARTEND [2,3) nmatch1: ret=0 m=(1,2),(-7,-7),(-7,-7) | default: ret=1 m=(2,3),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "b" in "abcb" STARTEND [1,3) nmatch0: ret=0 m=(1,3),(-7,-7),(-7,-7) | default: ret=0 m=(1,3),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "^c" in "abc" STARTEND [2,3): ret=1 m=(2,3),(-7,-7),(-7,-7) | default: ret=1 m=(2,3),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "^c" in "abc" STARTEND|NOTBOL [2,3): ret=1 m=(2,3),(-7,-7),(-7,-7) | default: ret=1 m=(2,3),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "a\0b" STARTEND [0,3) nul inside: ret=1 m=(0,3),(-7,-7),(-7,-7) | default: ret=0 m=(2,3),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "(a)(b)?" in "a" nmatch3: ret=0 m=(0,1),(0,1),(-1,-1) | default: ret=0 m=(0,1),(0,1),(-1,-1)
+regexec@GLIBC_2.2.5 "(a)" NOSUB in "xa" nmatch3: ret=0 m=(0,0),(-7,-7),(-7,-7) | default: ret=0 m=(0,0),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "^a" NOTBOL in "abc": ret=1 m=(0,0),(-7,-7),(-7,-7) | default: ret=1 m=(0,0),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "c$" NOTEOL in "abc": ret=1 m=(0,0),(-7,-7),(-7,-7) | default: ret=1 m=(0,0),(-7,-7),(-7,-7)
+regexec@GLIBC_2.2.5 "a" eflags 0x80 unknown: ret=0 m=(0,1),(-7,-7),(-7,-7) | default: ret=2 m=(0,0),(-7,-7),(-7,-7)
+nftw@GLIBC_2.2.5 flags=0: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 flags=0: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 flags=0: ret=0 errno=0 visits(sorted)=[default] t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 PHYS: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 PHYS: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 PHYS: ret=0 errno=0 visits(sorted)=[default] t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 PHYS|DEPTH: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:5:2:4 t/d/l:4:2:4 t/d:5:1:2 t/u:2:1:2 t/x:5:1:2 t:5:0:0
+nftw64@GLIBC_2.2.5 PHYS|DEPTH: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:5:2:4 t/d/l:4:2:4 t/d:5:1:2 t/u:2:1:2 t/x:5:1:2 t:5:0:0
+nftw@GLIBC_2.2.5 PHYS|DEPTH: ret=0 errno=0 visits(sorted)=[default] t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:5:2:4 t/d/l:4:2:4 t/d:5:1:2 t/u:2:1:2 t/x:5:1:2 t:5:0:0
+nftw@GLIBC_2.2.5 PHYS|MOUNT|CHDIR: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 PHYS|MOUNT|CHDIR: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 PHYS|MOUNT|CHDIR: ret=0 errno=0 visits(sorted)=[default] t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 flags=0x20 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 flags=0x20 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 flags=0x20 unknown: ret=-1 errno=EINVAL visits(sorted)=[default] 
+nftw@GLIBC_2.2.5 flags=0x100 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 flags=0x100 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 flags=0x100 unknown: ret=-1 errno=EINVAL visits(sorted)=[default] 
+nftw@GLIBC_2.2.5 flags=0x40000000 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 flags=0x40000000 unknown: ret=0 errno=0 visits(sorted)=t/d/dl:6:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:0:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 flags=0x40000000 unknown: ret=-1 errno=EINVAL visits(sorted)=[default] 
+nftw@GLIBC_2.2.5 ACTIONRETVAL skip-subtree at t/d: ret=2 errno=0 visits(sorted)=t/d:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 ACTIONRETVAL skip-subtree at t/d: ret=2 errno=0 visits(sorted)=t/d:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 ACTIONRETVAL skip-subtree at t/d: ret=0 errno=0 visits(sorted)=[default] t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 ACTIONRETVAL stop: ret=1 errno=0 visits(sorted)=t:1:0:0
+nftw64@GLIBC_2.2.5 ACTIONRETVAL stop: ret=1 errno=0 visits(sorted)=t:1:0:0
+nftw@GLIBC_2.2.5 ACTIONRETVAL stop: ret=1 errno=0 visits(sorted)=[default] t:1:0:0
+nftw@GLIBC_2.2.5 ACTIONRETVAL ret77: ret=77 errno=0 visits(sorted)=t:1:0:0
+nftw64@GLIBC_2.2.5 ACTIONRETVAL ret77: ret=77 errno=0 visits(sorted)=t:1:0:0
+nftw@GLIBC_2.2.5 ACTIONRETVAL ret77: ret=77 errno=0 visits(sorted)=[default] t:1:0:0
+nftw@GLIBC_2.2.5 callback ret77 no ACTIONRETVAL: ret=77 errno=0 visits(sorted)=t:1:0:0
+nftw64@GLIBC_2.2.5 callback ret77 no ACTIONRETVAL: ret=77 errno=0 visits(sorted)=t:1:0:0
+nftw@GLIBC_2.2.5 callback ret77 no ACTIONRETVAL: ret=77 errno=0 visits(sorted)=[default] t:1:0:0
+nftw@GLIBC_2.2.5 nopenfd=0: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 nopenfd=0: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 nopenfd=0: ret=0 errno=0 visits(sorted)=[default] t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 nopenfd=-1: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw64@GLIBC_2.2.5 nopenfd=-1: ret=0 errno=0 visits(sorted)=t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 nopenfd=-1: ret=0 errno=0 visits(sorted)=[default] t/d/dl:4:2:4 t/d/e/f:0:3:6 t/d/e:1:2:4 t/d/l:4:2:4 t/d:1:1:2 t/u:2:1:2 t/x:1:1:2 t:1:0:0
+nftw@GLIBC_2.2.5 missing root: ret=-1 errno=ENOENT visits(sorted)=
+nftw64@GLIBC_2.2.5 missing root: ret=-1 errno=ENOENT visits(sorted)=
+nftw@GLIBC_2.2.5 missing root: ret=-1 errno=ENOENT visits(sorted)=[default] 
+nftw@GLIBC_2.2.5 empty root: ret=-1 errno=ENOENT visits(sorted)=
+nftw64@GLIBC_2.2.5 empty root: ret=-1 errno=ENOENT visits(sorted)=
+nftw@GLIBC_2.2.5 empty root: ret=-1 errno=ENOENT visits(sorted)=[default] 
+quick_exit@GLIBC_2.10 plain: output="[qh2][qh1]" status=exit 3
+quick_exit@GLIBC_2.10 [default] plain: output="[qh2][qh1]" status=exit 3
+quick_exit@GLIBC_2.10 with thread_local dtor: output="[tls-dtor][qh2][qh1]" status=exit 3
+quick_exit@GLIBC_2.10 [default] with thread_local dtor: output="[qh2][qh1]" status=exit 3
+posix_spawn@GLIBC_2.2.5 "/bin/sh -c 'exit 7'": ret=0 child exit 7 | default: ret=0 child exit 7
+posix_spawn@GLIBC_2.2.5 missing file: ret=ENOENT | default: ret=ENOENT
+posix_spawn@GLIBC_2.2.5 not executable: ret=EACCES | default: ret=EACCES
+posix_spawn@GLIBC_2.2.5 no #! script: ret=0 child exit 9 | default: ret=ENOEXEC
+posix_spawn@GLIBC_2.2.5 bad addopen: ret=ENOENT | default: ret=ENOENT
+posix_spawnp@GLIBC_2.2.5 "sh" on PATH: ret=0 child exit 7 | default: ret=0 child exit 7
+posix_spawnp@GLIBC_2.2.5 missing on PATH: ret=ENOENT | default: ret=ENOENT
+posix_spawnp@GLIBC_2.2.5 not executable on PATH: ret=EACCES | default: ret=EACCES
+/bin/sh: 0: cannot open script: No such file
+posix_spawnp@GLIBC_2.2.5 no #! script on PATH: ret=0 child exit 2 | default: ret=ENOEXEC
+posix_spawnp@GLIBC_2.2.5 bad addopen: ret=ENOENT | default: ret=ENOENT
+clock_getres@GLIBC_2.2.5 id=0: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=0: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=1: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=1: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=2: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=2: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=3: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=3: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=4: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=4: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=7: ret=0 errno=0 | default: ret=0 errno=0 res equal
+clock_gettime@GLIBC_2.2.5 id=7: ret=0 errno=0 | default: ret=0 errno=0 same clock
+clock_getres@GLIBC_2.2.5 id=-5: ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_gettime@GLIBC_2.2.5 id=-5: ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_getres@GLIBC_2.2.5 id=99: ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_gettime@GLIBC_2.2.5 id=99: ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_settime@GLIBC_2.2.5 id=0 (unprivileged): ret=-1 errno=EPERM | default: ret=-1 errno=EPERM
+clock_settime@GLIBC_2.2.5 id=1 (unprivileged): ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_settime@GLIBC_2.2.5 id=-5 (unprivileged): ret=-1 errno=EINVAL | default: ret=-1 errno=EINVAL
+clock_nanosleep@GLIBC_2.2.5 MONOTONIC 1us: ret=0 errno-after=0 | default: ret=0 errno-after=0
+clock_nanosleep@GLIBC_2.2.5 REALTIME ABSTIME past: ret=0 errno-after=0 | default: ret=0 errno-after=0
+clock_nanosleep@GLIBC_2.2.5 nsec=2e9: ret=EINVAL errno-after=0 | default: ret=EINVAL errno-after=0
+clock_nanosleep@GLIBC_2.2.5 sec=-1: ret=EINVAL errno-after=0 | default: ret=EINVAL errno-after=0
+clock_nanosleep@GLIBC_2.2.5 THREAD_CPUTIME: ret=EINVAL errno-after=0 | default: ret=EINVAL errno-after=0
+clock_nanosleep@GLIBC_2.2.5 PROCESS_CPUTIME ABSTIME past: ret=0 errno-after=0 | default: ret=0 errno-after=0
+clock_nanosleep@GLIBC_2.2.5 id=-5: ret=EOPNOTSUPP errno-after=0 | default: ret=EOPNOTSUPP errno-after=0
+clock_nanosleep@GLIBC_2.2.5 id=99: ret=EINVAL errno-after=0 | default: ret=EINVAL errno-after=0
+clock_getcpuclockid@GLIBC_2.2.5 pid=0: ret=0 | default: ret=0 ids equal
+clock_getcpuclockid@GLIBC_2.2.5 pid=1: ret=0 | default: ret=0 ids equal
+clock_getcpuclockid@GLIBC_2.2.5 pid=nonexistent: ret=ESRCH | default: ret=ESRCH
+clock_getcpuclockid@GLIBC_2.2.5 pid=self: ret=0 id equals default
+== compat_thread
+# kernel sched_getaffinity size=8 bytes (the lines below are relative to it)
+sched_getaffinity@GLIBC_2.3.3 size=0: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=1: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=4: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=7: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=8: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=16: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=64: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=127: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=128: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=512: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=1024: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=4096: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=8192: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=2^32+128: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.3 size=SIZE_MAX: ret=-1 errno=EFAULT touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=0: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=1: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=4: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=7: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=8: ret=0 errno=0 touched=8 mask=current
+sched_getaffinity@GLIBC_2.3.4 [default] size=16: ret=0 errno=0 touched=16 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=64: ret=0 errno=0 touched=64 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=127: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=128: ret=0 errno=0 touched=128 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=512: ret=0 errno=0 touched=512 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=1024: ret=0 errno=0 touched=1024 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=4096: ret=0 errno=0 touched=4096 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=8192: ret=0 errno=0 touched=8192 mask=current tail=zero
+sched_getaffinity@GLIBC_2.3.4 [default] size=2^32+128: ret=-1 errno=EINVAL touched=0
+sched_getaffinity@GLIBC_2.3.4 [default] size=SIZE_MAX: ret=-1 errno=EINVAL touched=0
+sched_setaffinity@GLIBC_2.3.3 size=0: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=1: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=4: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=7: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=8: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=16: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=64: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=127: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=128: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=512: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=1024: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=4096: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=8192: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=2^32+128: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=SIZE_MAX: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 size=1024 +bit beyond kernel cpus: ret=-1 errno=EFAULT
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=0: ret=-1 errno=EINVAL
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=1: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=4: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=7: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=8: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=16: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=64: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=127: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=128: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=512: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=1024: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=4096: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=8192: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=2^32+128: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=SIZE_MAX: ret=0 errno=0
+sched_setaffinity@GLIBC_2.3.3 [default 2.3.4] size=1024 +bit beyond kernel cpus: ret=0 errno=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=0: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=1: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=4: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=7: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=8: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=16: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=64: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=127: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=128: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=512: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=1024: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=4096: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=8192: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=2^32+128: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.3 size=SIZE_MAX: ret=14 (EFAULT) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=0: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=1: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=4: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=7: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=8: ret=0 (0) touched=8 mask=current
+pthread_getaffinity_np@GLIBC_2.3.4 size=16: ret=0 (0) touched=16 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=64: ret=0 (0) touched=64 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=127: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=128: ret=0 (0) touched=128 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=512: ret=0 (0) touched=512 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=1024: ret=0 (0) touched=1024 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=4096: ret=0 (0) touched=4096 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=8192: ret=0 (0) touched=8192 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 size=2^32+128: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 size=SIZE_MAX: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=0: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=1: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=4: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=7: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=8: ret=0 (0) touched=8 mask=current
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=16: ret=0 (0) touched=16 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=64: ret=0 (0) touched=64 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=127: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=128: ret=0 (0) touched=128 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=512: ret=0 (0) touched=512 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=1024: ret=0 (0) touched=1024 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=4096: ret=0 (0) touched=4096 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=8192: ret=0 (0) touched=8192 mask=current tail=zero
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=2^32+128: ret=22 (EINVAL) touched=0
+pthread_getaffinity_np@GLIBC_2.3.4 [default 2.32] size=SIZE_MAX: ret=22 (EINVAL) touched=0
+pthread_setaffinity_np@GLIBC_2.3.3 size=0: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=1: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=4: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=7: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=8: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=16: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=64: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=127: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=128: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=512: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=1024: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=4096: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=8192: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=2^32+128: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=SIZE_MAX: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.3 size=1024 +bit beyond kernel cpus: ret=14 (EFAULT)
+pthread_setaffinity_np@GLIBC_2.3.4 size=0: ret=22 (EINVAL)
+pthread_setaffinity_np@GLIBC_2.3.4 size=1: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=4: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=7: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=8: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=16: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=64: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=127: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=128: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=512: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=1024: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=4096: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=8192: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=2^32+128: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=SIZE_MAX: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 size=1024 +bit beyond kernel cpus: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=0: ret=22 (EINVAL)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=1: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=4: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=7: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=8: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=16: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=64: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=127: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=128: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=512: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=1024: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=4096: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=8192: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=2^32+128: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=SIZE_MAX: ret=0 (0)
+pthread_setaffinity_np@GLIBC_2.3.4 [default 2.34] size=1024 +bit beyond kernel cpus: ret=0 (0)
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=0: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=1: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=4: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=7: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=8: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=16: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=64: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=127: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=128: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=512: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=1024: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=4096: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=8192: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=4294967424: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.3 size=18446744073709551615: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=0: ret=0 (0) touched=0
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=1: ret=0 (0) touched=1 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=4: ret=0 (0) touched=4 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=7: ret=0 (0) touched=7 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=8: ret=0 (0) touched=8 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=16: ret=0 (0) touched=16 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=64: ret=0 (0) touched=64 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=127: ret=0 (0) touched=127 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=128: ret=0 (0) touched=128 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=512: ret=0 (0) touched=512 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=1024: ret=0 (0) touched=1024 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=4096: ret=0 (0) touched=4096 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=8192: ret=0 (0) touched=8192 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=4294967424: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.4 size=18446744073709551615: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=0: ret=0 (0) touched=0
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=1: ret=0 (0) touched=1 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=4: ret=0 (0) touched=4 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=7: ret=0 (0) touched=7 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=8: ret=0 (0) touched=8 mask=OTHER
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=16: ret=0 (0) touched=16 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=64: ret=0 (0) touched=64 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=127: ret=0 (0) touched=127 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=128: ret=0 (0) touched=128 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=512: ret=0 (0) touched=512 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=1024: ret=0 (0) touched=1024 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=4096: ret=0 (0) touched=4096 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=8192: ret=0 (0) touched=8192 mask=OTHER tail=NONZERO
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=4294967424: child killed by signal 11
+pthread_attr_getaffinity_np@GLIBC_2.3.4 [default 2.34] size=18446744073709551615: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=0: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=1: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=4: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=7: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=8: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=16: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=64: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=127: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=128: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=512: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=1024: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=4096: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=8192: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=4294967424: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.3 size=18446744073709551615: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=0: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=1: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=4: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=7: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=8: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=16: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=64: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=127: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=128: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=512: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=1024: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=4096: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=8192: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=4294967424: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.4 size=SIZE_MAX: ret=ENOMEM readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=0: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=1: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=4: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=7: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=8: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=16: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=64: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=127: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=128: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=512: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=1024: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=4096: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=8192: ret=0 readback(default get, 8192 bytes)=0 touched=8192
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=4294967424: child killed by signal 11
+pthread_attr_setaffinity_np@GLIBC_2.3.4 [default 2.32] size=SIZE_MAX: ret=ENOMEM readback(default get, 8192 bytes)=0 touched=8192
+pthread_getattr_np@GLIBC_2.2.5 main thread: ret=0 | default: ret=0; stack equal, guard equal(0), detach 0/0, scope 0/0, inherit 0/0, policy 0/0, affinity-in-attr 0/0 masks equal
+pthread_getattr_np@GLIBC_2.2.5 created joinable thread (self): ret=0 | default: ret=0; stack equal, guard equal(4096), detach 0/0, scope 0/0, inherit 0/0, policy 0/0, affinity-in-attr 0/0 masks equal
+pthread_getattr_np@GLIBC_2.2.5 created detached thread (self): ret=0 | default: ret=0; stack equal, guard equal(4096), detach 1/1, scope 0/0, inherit 0/0, policy 0/0, affinity-in-attr 0/0 masks equal
+pthread_sigmask@GLIBC_2.2.5 SIG_BLOCK {USR1,32,33,34}: ret=0 kernel mask=0x200000200
+pthread_sigmask@GLIBC_2.2.5 SIG_SETMASK all-ones: ret=0 kernel mask=0xfffffffe7ffbfeff old word0=0x200000200
+pthread_sigmask@GLIBC_2.2.5 query: ret=0 word0=0xfffffffe7ffbfeff
+pthread_sigmask@GLIBC_2.2.5 how=99: ret=22 (EINVAL)
+pthread_sigmask@GLIBC_2.2.5 how=99 set=NULL: ret=0 (0)
+pthread_sigmask@GLIBC_2.2.5 [default] SIG_BLOCK {USR1,32,33,34}: ret=0 kernel mask=0x200000200
+pthread_sigmask@GLIBC_2.2.5 [default] SIG_SETMASK all-ones: ret=0 kernel mask=0xfffffffe7ffbfeff old word0=0x200000200
+pthread_sigmask@GLIBC_2.2.5 [default] query: ret=0 word0=0xfffffffe7ffbfeff
+pthread_sigmask@GLIBC_2.2.5 [default] how=99: ret=22 (EINVAL)
+pthread_sigmask@GLIBC_2.2.5 [default] how=99 set=NULL: ret=0 (0)
+== compat_libm
+_LIB_VERSION@GLIBC_2.2.5 initial value=2
+matherr@GLIBC_2.2.5 (library entry, DOMAIN record): returns=0 errno=0 retval=0x1.8p+0 program-matherr=- same-as-program=no
+exp@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp2@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+log@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp2f@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+logf@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p-3): r=0xa.df85458a2bb48p-2 errno=0 flags=X matherr=- | default: r=0xa.df85458a2bb48p-2 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (0x8p-3): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (0x8p-3): r=0xap+0 errno=0 flags=X matherr=- | default: r=0xap+0 errno=0 flags=X matherr=-
+log@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+log2@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+lgamma@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+lgammal@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+expf@GLIBC_2.2.5 (0x8p-3): r=0xa.df854p-2 errno=0 flags=X matherr=- | default: r=0xa.df854p-2 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (0x8p-3): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (0x8p-3): r=0xap+0 errno=0 flags=X matherr=- | default: r=0xap+0 errno=0 flags=X matherr=-
+logf@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+log2f@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+exp@GLIBC_2.2.5 (-0x8p-3): r=0xb.c5ab1b16779cp-5 errno=0 flags=X matherr=- | default: r=0xb.c5ab1b16779cp-5 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (-0x8p-3): r=0x8p-4 errno=0 flags=- matherr=- | default: r=0x8p-4 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (-0x8p-3): r=0xc.cccccccccccdp-7 errno=0 flags=X matherr=- | default: r=0xc.cccccccccccdp-7 errno=0 flags=X matherr=-
+log@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x8p-3): r=0xb.c5ab2p-5 errno=0 flags=X matherr=- | default: r=0xb.c5ab2p-5 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (-0x8p-3): r=0x8p-4 errno=0 flags=- matherr=- | default: r=0x8p-4 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-0x8p-3): r=0xc.ccccdp-7 errno=0 flags=X matherr=- | default: r=0xc.ccccdp-7 errno=0 flags=X matherr=-
+logf@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p-4): r=0xd.3094c70f034ep-3 errno=0 flags=X matherr=- | default: r=0xd.3094c70f034ep-3 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (0x8p-4): r=0xb.504f333f9de68p-3 errno=0 flags=X matherr=- | default: r=0xb.504f333f9de68p-3 errno=0 flags=X matherr=-
+exp10@GLIBC_2.2.5 (0x8p-4): r=0xc.a62c1d6d2da98p-2 errno=0 flags=X matherr=- | default: r=0xc.a62c1d6d2da98p-2 errno=0 flags=X matherr=-
+log@GLIBC_2.2.5 (0x8p-4): r=-0xb.17217f7d1cf78p-4 errno=0 flags=X matherr=- | default: r=-0xb.17217f7d1cf78p-4 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0x8p-4): r=-0x8p-3 errno=0 flags=X matherr=- | default: r=-0x8p-3 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0x8p-4): r=0x9.28682473d0de8p-4 errno=0 flags=X matherr=- | default: r=0x9.28682473d0de8p-4 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (0x8p-4): r=0x9.28682473d0de85fp-4 errno=0 flags=X matherr=- | default: r=0x9.28682473d0de85fp-4 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0x8p-4): r=0xd.3094cp-3 errno=0 flags=X matherr=- | default: r=0xd.3094cp-3 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (0x8p-4): r=0xb.504f3p-3 errno=0 flags=X matherr=- | default: r=0xb.504f3p-3 errno=0 flags=X matherr=-
+exp10f@GLIBC_2.2.5 (0x8p-4): r=0xc.a62c2p-2 errno=0 flags=X matherr=- | default: r=0xc.a62c2p-2 errno=0 flags=X matherr=-
+logf@GLIBC_2.2.5 (0x8p-4): r=-0xb.17218p-4 errno=0 flags=X matherr=- | default: r=-0xb.17218p-4 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0x8p-4): r=-0x8p-3 errno=0 flags=- matherr=- | default: r=-0x8p-3 errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (0x8p-4): r=0x9.28682p-4 errno=0 flags=X matherr=- | default: r=0x9.28682p-4 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.18p+6): r=0x8p+707 errno=0 flags=- matherr=- | default: r=0x8p+707 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (0xb.18p+6): r=0xd.216a68ffc0aap-1 errno=0 flags=X matherr=- | default: r=0xd.216a68ffc0aap-1 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0xb.18p+6): r=0x9.78bfb4f425ca8p+0 errno=0 flags=X matherr=- | default: r=0x9.78bfb4f425ca8p+0 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0xb.18p+6): r=0xf.6cf97c3fd37d8p+8 errno=0 flags=X matherr=- | default: r=0xf.6cf97c3fd37d8p+8 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (0xb.18p+6): r=0xf.6cf97c3fd37d579p+8 errno=0 flags=X matherr=- | default: r=0xf.6cf97c3fd37d579p+8 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xb.2p+3): r=0x8p+86 errno=0 flags=- matherr=- | default: r=0x8p+86 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+logf@GLIBC_2.2.5 (0xb.2p+3): r=0x8.fa2e9p-1 errno=0 flags=X matherr=- | default: r=0x8.fa2e9p-1 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0xb.2p+3): r=0xc.f3935p-1 errno=0 flags=X matherr=- | default: r=0xc.f3935p-1 errno=0 flags=X matherr=-
+lgammaf@GLIBC_2.2.5 (0xb.2p+3): r=0x9.a9504p+5 errno=0 flags=X matherr=- | default: r=0x9.a9504p+5 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0xb.a8p+6): r=0x8p-749 errno=0 flags=- matherr=- | default: r=0x8p-749 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0xdp+3): r=0x8p-107 errno=0 flags=- matherr=- | default: r=0x8p-107 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (-0xb.12p+6): r=0xe.6cf6d08897acp-1026 errno=0 flags=UX matherr=- | default: r=0xe.6cf6d08897acp-1026 errno=0 flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0xb.12p+6): r=0xb.504f333f9de68p-712 errno=0 flags=X matherr=- | default: r=0xb.504f333f9de68p-712 errno=0 flags=X matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.12p+6): r=-0xf.688c3742634ap+8 errno=0 flags=X matherr=- | default: r=-0xf.688c3742634ap+8 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.12p+6): r=-0xf.688c37426349cb5p+8 errno=0 flags=X matherr=- | default: r=-0xf.688c37426349cb5p+8 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (-0xb.4p+3): r=0x8.ec28p-133 errno=0 flags=UX matherr=- | default: r=0x8.ec28p-133 errno=0 flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0xb.4p+3): r=0x8p-93 errno=0 flags=- matherr=- | default: r=0x8p-93 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (0x8p+7): r=0xd.dce9df5c64358p-1 errno=0 flags=X matherr=- | default: r=0xd.dce9df5c64358p-1 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0x8p+7): r=0xap+0 errno=0 flags=X matherr=- | default: r=0xap+0 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0x8p+7): r=0xb.dba3e49244e5p+9 errno=0 flags=X matherr=- | default: r=0xb.dba3e49244e5p+9 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (0x8p+7): r=0xb.dba3e49244e5342p+9 errno=0 flags=X matherr=- | default: r=0xb.dba3e49244e5342p+9 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+logf@GLIBC_2.2.5 (0x8p+4): r=0x9.b43d5p-1 errno=0 flags=X matherr=- | default: r=0x9.b43d5p-1 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0x8p+4): r=0xep-1 errno=0 flags=- matherr=- | default: r=0xep-1 errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (0x8p+4): r=0xf.5c6d7p+5 errno=0 flags=X matherr=- | default: r=0xf.5c6d7p+5 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x9.a8p+5): r=0xd.dbf1bbf053bbp+442 errno=0 flags=X matherr=- | default: r=0xd.dbf1bbf053bbp+442 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (0x9.a8p+5): r=0x8p+306 errno=0 flags=- matherr=- | default: r=0x8p+306 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (0x9.a8p+5): r=0xb.777882022a578p-1 errno=0 flags=X matherr=- | default: r=0xb.777882022a578p-1 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0x9.a8p+5): r=0x8.457e99daec24p+0 errno=0 flags=X matherr=- | default: r=0x8.457e99daec24p+0 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0x9.a8p+5): r=0xb.694f5b21549a8p+7 errno=0 flags=X matherr=- | default: r=0xb.694f5b21549a8p+7 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (0x9.a8p+5): r=0xb.694f5b215499f94p+7 errno=0 flags=X matherr=- | default: r=0xb.694f5b215499f94p+7 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0x9.cp+2): r=0x9.9d21fp+53 errno=0 flags=X matherr=- | default: r=0x9.9d21fp+53 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (0x9.cp+2): r=0x8p+36 errno=0 flags=- matherr=- | default: r=0x8p+36 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+logf@GLIBC_2.2.5 (0x9.cp+2): r=0xe.a77cbp-2 errno=0 flags=X matherr=- | default: r=0xe.a77cbp-2 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0x9.cp+2): r=0xa.92204p-1 errno=0 flags=X matherr=- | default: r=0xa.92204p-1 errno=0 flags=X matherr=-
+lgammaf@GLIBC_2.2.5 (0x9.cp+2): r=0xc.defb7p+3 errno=0 flags=X matherr=- | default: r=0xc.defb7p+3 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (-0xa.5p+5): r=0xf.09fbbf83a7f88p-480 errno=0 flags=X matherr=- | default: r=0xf.09fbbf83a7f88p-480 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (-0xa.5p+5): r=0x8p-333 errno=0 flags=- matherr=- | default: r=0x8p-333 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xb.8p+2): r=0xc.6eaf1p-70 errno=0 flags=X matherr=- | default: r=0xc.6eaf1p-70 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (-0xb.8p+2): r=0x8p-49 errno=0 flags=- matherr=- | default: r=0x8p-49 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p-1077): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (0x8p-1077): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+exp10@GLIBC_2.2.5 (0x8p-1077): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+log@GLIBC_2.2.5 (0x8p-1077): r=-0xb.a1c2a236b8e18p+6 errno=0 flags=X matherr=- | default: r=-0xb.a1c2a236b8e18p+6 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0x8p-1077): r=-0x8.64p+7 errno=0 flags=X matherr=- | default: r=-0x8.64p+7 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0x8p-1077): r=0xb.a1c2a236b8e18p+6 errno=0 flags=X matherr=- | default: r=0xb.a1c2a236b8e18p+6 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (0x8p-1077): r=0xb.a1c2a236b8e1b1dp+6 errno=0 flags=X matherr=- | default: r=0xb.a1c2a236b8e1b1dp+6 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0x8p-152): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (0x8p-152): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+exp10f@GLIBC_2.2.5 (0x8p-152): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+logf@GLIBC_2.2.5 (0x8p-152): r=-0xc.e8edp+3 errno=0 flags=X matherr=- | default: r=-0xc.e8edp+3 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0x8p-152): r=-0x9.5p+4 errno=0 flags=- matherr=- | default: r=-0x9.5p+4 errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (0x8p-152): r=0xc.e8edp+3 errno=0 flags=X matherr=- | default: r=0xc.e8edp+3 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (-0xap-2): r=0xa.81c2e04a7a128p-7 errno=0 flags=X matherr=- | default: r=0xa.81c2e04a7a128p-7 errno=0 flags=X matherr=-
+exp2@GLIBC_2.2.5 (-0xap-2): r=0xb.504f333f9de68p-6 errno=0 flags=X matherr=- | default: r=0xb.504f333f9de68p-6 errno=0 flags=X matherr=-
+exp10@GLIBC_2.2.5 (-0xap-2): r=0xc.f3e37219c85b8p-12 errno=0 flags=X matherr=- | default: r=0xc.f3e37219c85b8p-12 errno=0 flags=X matherr=-
+log@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xap-2): r=-0xe.65fcfaf6878cp-8 errno=0 flags=X matherr=- | default: r=-0xe.65fcfaf6878cp-8 errno=0 flags=X matherr=-
+lgammal@GLIBC_2.2.5 (-0xap-2): r=-0xe.65fcfaf6878ac48p-8 errno=0 flags=X matherr=- | default: r=-0xe.65fcfaf6878ac48p-8 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (-0xap-2): r=0xa.81c2ep-7 errno=0 flags=X matherr=- | default: r=0xa.81c2ep-7 errno=0 flags=X matherr=-
+exp2f@GLIBC_2.2.5 (-0xap-2): r=0xb.504f3p-6 errno=0 flags=X matherr=- | default: r=0xb.504f3p-6 errno=0 flags=X matherr=-
+exp10f@GLIBC_2.2.5 (-0xap-2): r=0xc.f3e37p-12 errno=0 flags=X matherr=- | default: r=0xc.f3e37p-12 errno=0 flags=X matherr=-
+logf@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xap-2): r=-0xe.65fcfp-8 errno=0 flags=X matherr=- | default: r=-0xe.65fcfp-8 errno=0 flags=X matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xb.025d392f5fdap+6 errno=0 flags=X matherr=- | default: r=0xb.025d392f5fdap+6 errno=0 flags=X matherr=-
+log2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.e20a3ca9b2afp+6 errno=0 flags=X matherr=- | default: r=0xf.e20a3ca9b2afp+6 errno=0 flags=X matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammal@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.a7c99f65fedb129p+1022 errno=0 flags=X matherr=- | default: r=0xf.a7c99f65fedb129p+1022 errno=0 flags=X matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+logf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xa.a642cp+3 errno=0 flags=X matherr=- | default: r=0xa.a642cp+3 errno=0 flags=X matherr=-
+log2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xf.5d29bp+3 errno=0 flags=X matherr=- | default: r=0xf.5d29bp+3 errno=0 flags=X matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp2@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+log@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+log2@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+lgamma@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+lgammal@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+expf@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp2f@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+logf@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+log2f@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+exp2@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+log@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+lgammal@GLIBC_2.2.5 (-inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+expf@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+exp2f@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+logf@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+exp@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+exp2@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+log@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+log2@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+lgamma@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+lgammal@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+expf@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+exp2f@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+logf@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+log2f@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+lgammaf@GLIBC_2.2.5 (nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+exp@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp2@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp10@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+log@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp2f@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+exp10f@GLIBC_2.2.5 (-0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+logf@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0x8p+0 errno=0 flags=X matherr=- | default: r=0x8p+0 errno=0 flags=X matherr=-
+fmod@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0xe.6c15a230acf98p-2 errno=0 flags=X matherr=- | default: r=0xe.6c15a230acf98p-2 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0x8p+0 errno=0 flags=- matherr=- | default: r=0x8p+0 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x8p-2, 0xcp-2): r=0xe.6c15ap-2 errno=0 flags=X matherr=- | default: r=0xe.6c15ap-2 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+fmod@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+fmodf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x8p-2 errno=0 flags=- matherr=- | default: r=0x8p-2 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=0x8.f1bbcdcbfa54p-3 errno=0 flags=X matherr=- | default: r=0x8.f1bbcdcbfa54p-3 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=0x8.f1bbdp-3 errno=0 flags=X matherr=- | default: r=0x8.f1bbdp-3 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmod@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=0xap+0 errno=0 flags=- matherr=- | default: r=0xap+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=0xc.80fff5c360fe8p+5 errno=0 flags=X matherr=- | default: r=0xc.80fff5c360fe8p+5 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=0xap+0 errno=0 flags=- matherr=- | default: r=0xap+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=0xa.4ec9ap+2 errno=0 flags=X matherr=- | default: r=0xa.4ec9ap+2 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+fmod@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0xap+0 errno=0 flags=- matherr=- | default: r=0xap+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0xc.80fff5c360fe8p+5 errno=0 flags=X matherr=- | default: r=0xc.80fff5c360fe8p+5 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+fmodf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0xap+0 errno=0 flags=- matherr=- | default: r=0xap+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0xc.bf5f6p+2 errno=0 flags=X matherr=- | default: r=0xc.bf5f6p+2 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-0x8p-54 errno=0 flags=- matherr=- | default: r=-0x8p-54 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=0x8.01c6e9eb9ec5p+0 errno=0 flags=X matherr=- | default: r=0x8.01c6e9eb9ec5p+0 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-0xa.aaaa3p-5 errno=0 flags=- matherr=- | default: r=-0xa.aaaa3p-5 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=0x8.01c6fp+0 errno=0 flags=X matherr=- | default: r=0x8.01c6fp+0 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (nan, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (nan, 0x0p+0): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (nan, 0x0p+0): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (nan, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (nan, 0x0p+0): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (nan, 0x0p+0): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x8p-3, nan): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x8p-3, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x8p-3, nan): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x8p-3, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, -inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x0p+0, -inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, -inf): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x0p+0, -inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (-0x8p-3, inf): r=-0x8p-3 errno=0 flags=- matherr=- | default: r=-0x8p-3 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (-0x8p-3, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (-0x8p-3, inf): r=-0x8p-3 errno=0 flags=- matherr=- | default: r=-0x8p-3 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (-0x8p-3, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xf.2p+1 errno=0 flags=X matherr=- | default: r=0xf.2p+1 errno=0 flags=X matherr=-
+fmod@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xcp-3 errno=0 flags=- matherr=- | default: r=0xcp-3 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xb.b467369e08fp-1 errno=0 flags=X matherr=- | default: r=0xb.b467369e08fp-1 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xf.2p+1 errno=0 flags=X matherr=- | default: r=0xf.2p+1 errno=0 flags=X matherr=-
+fmodf@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xcp-3 errno=0 flags=- matherr=- | default: r=0xcp-3 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0xbp-1, 0x8p-2): r=0xb.b4673p-1 errno=0 flags=X matherr=- | default: r=0xb.b4673p-1 errno=0 flags=X matherr=-
+pow@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypot@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypot@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x8p-3, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, inf): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0x8p-3, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=-0x0p+0 errno=0 flags=- matherr=- | default: r=-0x0p+0 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (-0x0p+0, 0x8p-3): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypot@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xa.2p+3 errno=0 flags=X matherr=- | default: r=0xa.2p+3 errno=0 flags=X matherr=-
+fmod@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xcp-2 errno=0 flags=- matherr=- | default: r=0xcp-2 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xap-1 errno=0 flags=- matherr=- | default: r=0xap-1 errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xa.2p+3 errno=0 flags=X matherr=- | default: r=0xa.2p+3 errno=0 flags=X matherr=-
+fmodf@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xcp-2 errno=0 flags=- matherr=- | default: r=0xcp-2 errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (0xcp-2, 0x8p-1): r=0xap-1 errno=0 flags=- matherr=- | default: r=0xap-1 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmod@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=0xc.96404aa628fa8p+1020 errno=0 flags=X matherr=- | default: r=0xc.96404aa628fa8p+1020 errno=0 flags=X matherr=-
+powf@GLIBC_2.2.5 (inf, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (inf, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (inf, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (inf, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (inf, nan): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (inf, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (inf, nan): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (inf, nan): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (nan, inf): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+fmod@GLIBC_2.2.5 (nan, inf): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (nan, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+powf@GLIBC_2.2.5 (nan, inf): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (nan, inf): r=nan errno=0 flags=- matherr=- | default: r=nan errno=0 flags=- matherr=-
+hypotf@GLIBC_2.2.5 (nan, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0x8p-1077, 0x8p-1077): r=0x8p-3 errno=0 flags=X matherr=- | default: r=0x8p-3 errno=0 flags=X matherr=-
+fmod@GLIBC_2.2.5 (0x8p-1077, 0x8p-1077): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0x8p-1077, 0x8p-1077): r=0x8p-1077 errno=0 flags=UX matherr=- | default: r=0x8p-1077 errno=0 flags=UX matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x8p-3 errno=0 flags=- matherr=- | default: r=0x8p-3 errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmod@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=0x0p+0 errno=0 flags=- matherr=- | default: r=0x0p+0 errno=0 flags=- matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (inf, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+hypotf@GLIBC_2.2.5 (inf, inf): r=inf errno=0 flags=- matherr=- | default: r=inf errno=0 flags=- matherr=-
+_LIB_VERSION@GLIBC_2.2.5 set to -1: error cases only
+log@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+logf@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+log@GLIBC_2.2.5 (-0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xdp+3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.12p+6): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0x8.7p+7): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xa.5p+5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+log@GLIBC_2.2.5 (-0xap-2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-0xap-2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=0 flags=OX matherr=- | default: r=inf errno=0 flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=0 flags=OX matherr=- | default: r=inf errno=0 flags=OX matherr=-
+log@GLIBC_2.2.5 (-inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=inf errno=0 flags=Z matherr=- | default: r=inf errno=0 flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+_LIB_VERSION@GLIBC_2.2.5 set to 0: error cases only
+log: SING error
+log@GLIBC_2.2.5 (0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+log: SING error
+logf@GLIBC_2.2.5 (0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0x8p-3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0x8p-3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0xdp+3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0xb.12p+6): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0x8.7p+7): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0xa.5p+5): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-0xap-2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-0xap-2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=-
+log: DOMAIN error
+log@GLIBC_2.2.5 (-inf): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log: DOMAIN error
+logf@GLIBC_2.2.5 (-inf): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=-0xf.fffffp+124 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log: SING error
+log@GLIBC_2.2.5 (-0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+log: SING error
+logf@GLIBC_2.2.5 (-0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma: SING error
+lgamma: SING error
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=0xf.fffffp+124 errno=EDOM flags=Z matherr=- | default: r=0xf.fffffp+124 errno=EDOM flags=Z matherr=-
+pow(0,neg): DOMAIN error
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow(0,neg): DOMAIN error
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow(0,neg): DOMAIN error
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow(0,neg): DOMAIN error
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow(0,neg): DOMAIN error
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow(0,neg): DOMAIN error
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=0x0p+0 errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+neg**non-integral: DOMAIN error
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=0x0p+0 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+neg**non-integral: DOMAIN error
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=0x0p+0 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+neg**non-integral: DOMAIN error
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=0x0p+0 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+neg**non-integral: DOMAIN error
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=0x0p+0 errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=0x8p-3 errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=inf errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (inf, inf): r=inf errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=0x0p+0 errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=0xf.fffffp+124 errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmod:  DOMAIN error
+fmodf@GLIBC_2.2.5 (inf, inf): r=inf errno=EDOM flags=- matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+_LIB_VERSION@GLIBC_2.2.5 set to 1: error cases only
+log@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+log@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+log@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+_LIB_VERSION@GLIBC_2.2.5 set to 2: error cases only
+log@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+logf@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+log@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+log@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=ERANGE flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=ERANGE flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+_LIB_VERSION@GLIBC_2.2.5 set to 3: error cases only
+log@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+log@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x8p-3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.18p+6): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xb.2p+3): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0xb.a8p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.a8p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xb.a8p+6): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0xdp+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xdp+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xdp+3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (-0xb.12p+6): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xb.12p+6): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.4p+3): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.4p+3): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.4p+3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0x8p+7): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x8p+4): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10@GLIBC_2.2.5 (-0x8.7p+7): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0x8.7p+7): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x8.7p+7): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+expf@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp2f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+exp10f@GLIBC_2.2.5 (-0x9.6p+4): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0x9.6p+4): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0x9.6p+4): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10@GLIBC_2.2.5 (0x9.a8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0x9.cp+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (-0xa.5p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+log@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xa.5p+5): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgamma@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0xa.5p+5): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+exp10f@GLIBC_2.2.5 (-0xb.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+logf@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xb.8p+2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+lgammaf@GLIBC_2.2.5 (-0xb.8p+2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+log@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-0xap-2): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+exp@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgamma@GLIBC_2.2.5 (0xb.6472e511c8148p+1013): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+expf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp2f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+exp10f@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+lgammaf@GLIBC_2.2.5 (0xf.0bdc2p+119): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+log@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+logf@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log2f@GLIBC_2.2.5 (-inf): r=nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+log@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgamma@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+lgammal@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+logf@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+log2f@GLIBC_2.2.5 (-0x0p+0): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+lgammaf@GLIBC_2.2.5 (-0x0p+0): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=EDOM flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-3): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (-0x0p+0, -0x8p-3): r=-inf errno=EDOM flags=Z matherr=- | default: r=-inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+powf@GLIBC_2.2.5 (0x0p+0, -0x8p-2): r=inf errno=EDOM flags=Z matherr=- | default: r=inf errno=ERANGE flags=Z matherr=-
+pow@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p-3, 0x8p-4): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xap+0, 0xc.8p+5): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, 0xap+2): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+pow@GLIBC_2.2.5 (0xap+0, -0xc.8p+5): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+powf@GLIBC_2.2.5 (0xap+0, -0xc.8p+2): r=0x0p+0 errno=ERANGE flags=UX matherr=- | default: r=0x0p+0 errno=ERANGE flags=UX matherr=-
+pow@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaaaaaaaaaa8p-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+powf@GLIBC_2.2.5 (-0x8p+0, 0xa.aaaabp-5): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x8p-3, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (inf, 0x8p-3): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmod@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0x8.e679c2f5e45p+1020, 0x8.e679c2f5e45p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+fmodf@GLIBC_2.2.5 (0x0p+0, 0x0p+0): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+pow@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+hypot@GLIBC_2.2.5 (0xf.ffffffffffff8p+1020, 0xf.ffffffffffff8p+1020): r=inf errno=ERANGE flags=OX matherr=- | default: r=inf errno=ERANGE flags=OX matherr=-
+fmodf@GLIBC_2.2.5 (inf, inf): r=-nan errno=EDOM flags=I matherr=- | default: r=-nan errno=EDOM flags=I matherr=-
+# totalorder lines: 81 results (0/1) for every ordered pair of -0,+0,1,2,-inf,+inf,nan,-nan,snan, row-major
+totalorder@GLIBC_2.25:111101101011101101001101101000101101111111101000001101000000100111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000100111111111000000101
+totalorderf@GLIBC_2.25:111101101011101101001101101000101101111111101000001101000000101111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000101111111111000000101
+totalorderl@GLIBC_2.25:111101101011101101001101101000101101111111101000001101000000101111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000101111111111000000101
+totalorderf128@GLIBC_2.26:111101101011101101001101101000101101111111101000001101000000101111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000101111111111000000101
+totalorderf32@GLIBC_2.27:111101101011101101001101101000101101111111101000001101000000101111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000101111111111000000101
+totalorderf32x@GLIBC_2.27:111101101011101101001101101000101101111111101000001101000000100111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000100111111111000000101
+totalorderf64@GLIBC_2.27:111101101011101101001101101000101101111111101000001101000000100111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000100111111111000000101
+totalorderf64x@GLIBC_2.27:111101101011101101001101101000101101111111101000001101000000101111111111000000101 | default:111101101011101101001101101000101101111111101000001101000000101111111111000000101
+totalordermag@GLIBC_2.25:111111111111111111001111111000111111000011111000011111000000110000000110000000111 | default:111111111111111111001111111000111111000011111000011111000000110000000110000000111
+totalordermagf@GLIBC_2.25:111111111111111111001111111000111111000011111000011111000000111000000111000000111 | default:111111111111111111001111111000111111000011111000011111000000111000000111000000111
+totalordermagl@GLIBC_2.25:111111111111111111001111111000111111000011111000011111000000111000000111000000111 | default:111111111111111111001111111000111111000011111000011111000000111000000111000000111
+totalordermagf128@GLIBC_2.26:111111111111111111001111111000111111000011111000011111000000111000000111000000111 | default:111111111111111111001111111000111111000011111000011111000000111000000111000000111
+totalordermagf32@GLIBC_2.27:111111111111111111001111111000111111000011111000011111000000111000000111000000111 | default:111111111111111111001111111000111111000011111000011111000000111000000111000000111
+totalordermagf32x@GLIBC_2.27:111111111111111111001111111000111111000011111000011111000000110000000110000000111 | default:111111111111111111001111111000111111000011111000011111000000110000000110000000111
+totalordermagf64@GLIBC_2.27:111111111111111111001111111000111111000011111000011111000000110000000110000000111 | default:111111111111111111001111111000111111000011111000011111000000110000000110000000111
+totalordermagf64x@GLIBC_2.27:111111111111111111001111111000111111000011111000011111000000111000000111000000111 | default:111111111111111111001111111000111111000011111000011111000000111000000111000000111
+== compat_lg2
+glob@GLIBC_2.2.5 g/* 0: rc=0 n=5 [g/a g/b g/dang g/ls g/s] | default:  rc=0 n=5 [g/a g/b g/dang g/ls g/s]
+glob@GLIBC_2.2.5 g/* 0|ALTDIRFUNC: rc=0 n=5 [g/a g/b g/dang g/ls g/s] stat=0 lstat=0 opendir=1 | default:  rc=0 n=5 [g/a g/b g/dang g/ls g/s] stat=0 lstat=0 opendir=1
+glob@GLIBC_2.2.5 g/* MARK: rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] | default:  rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/]
+glob@GLIBC_2.2.5 g/* MARK|ALTDIRFUNC: rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] stat=5 lstat=0 opendir=1 | default:  rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] stat=5 lstat=0 opendir=1
+glob@GLIBC_2.2.5 g/* ONLYDIR: rc=0 n=2 [g/ls g/s] | default:  rc=0 n=2 [g/ls g/s]
+glob@GLIBC_2.2.5 g/* ONLYDIR|ALTDIRFUNC: rc=0 n=2 [g/ls g/s] stat=7 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls g/s] stat=7 lstat=0 opendir=1
+glob@GLIBC_2.2.5 g/*/ 0: rc=0 n=2 [g/ls/ g/s/] | default:  rc=0 n=2 [g/ls/ g/s/]
+glob@GLIBC_2.2.5 g/*/ 0|ALTDIRFUNC: rc=0 n=2 [g/ls/ g/s/] stat=9 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls/ g/s/] stat=9 lstat=0 opendir=1
+glob@GLIBC_2.2.5 g/d* 0: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob@GLIBC_2.2.5 g/d* 0|ALTDIRFUNC: rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=1 | default:  rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=1
+glob@GLIBC_2.2.5 g/dang 0: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob@GLIBC_2.2.5 g/dang 0|ALTDIRFUNC: rc=3 n=0 [] stat=1 lstat=0 opendir=0 | default:  rc=0 n=1 [g/dang] stat=0 lstat=1 opendir=0
+glob@GLIBC_2.2.5 g/dang NOCHECK: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob@GLIBC_2.2.5 g/dang NOCHECK|ALTDIRFUNC: rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=0 | default:  rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=0
+glob@GLIBC_2.2.5 g/missing NOCHECK: rc=0 n=1 [g/missing] | default:  rc=0 n=1 [g/missing]
+glob@GLIBC_2.2.5 g/missing NOCHECK|ALTDIRFUNC: rc=0 n=1 [g/missing] stat=0 lstat=0 opendir=0 | default:  rc=0 n=1 [g/missing] stat=0 lstat=0 opendir=0
+glob@GLIBC_2.2.5 g/missing 0: rc=3 n=0 [] | default:  rc=3 n=0 []
+glob@GLIBC_2.2.5 g/missing 0|ALTDIRFUNC: rc=3 n=0 [] stat=1 lstat=0 opendir=0 | default:  rc=3 n=0 [] stat=0 lstat=1 opendir=0
+glob@GLIBC_2.2.5 g/*/f 0: rc=0 n=2 [g/ls/f g/s/f] | default:  rc=0 n=2 [g/ls/f g/s/f]
+glob@GLIBC_2.2.5 g/*/f 0|ALTDIRFUNC: rc=0 n=2 [g/ls/f g/s/f] stat=9 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls/f g/s/f] stat=7 lstat=2 opendir=1
+glob@GLIBC_2.2.5 g/l*/f MARK: rc=0 n=1 [g/ls/f] | default:  rc=0 n=1 [g/ls/f]
+glob@GLIBC_2.2.5 g/l*/f MARK|ALTDIRFUNC: rc=0 n=1 [g/ls/f] stat=9 lstat=0 opendir=1 | default:  rc=0 n=1 [g/ls/f] stat=8 lstat=1 opendir=1
+glob@GLIBC_2.2.5 g/[ab] NOSORT: rc=0 n=2 [g/a g/b] | default:  rc=0 n=2 [g/a g/b]
+glob64@GLIBC_2.2.5 g/* 0: rc=0 n=5 [g/a g/b g/dang g/ls g/s] | default:  rc=0 n=5 [g/a g/b g/dang g/ls g/s]
+glob64@GLIBC_2.2.5 g/* 0|ALTDIRFUNC: rc=0 n=5 [g/a g/b g/dang g/ls g/s] stat=0 lstat=0 opendir=1 | default:  rc=0 n=5 [g/a g/b g/dang g/ls g/s] stat=0 lstat=0 opendir=1
+glob64@GLIBC_2.2.5 g/* MARK: rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] | default:  rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/]
+glob64@GLIBC_2.2.5 g/* MARK|ALTDIRFUNC: rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] stat=5 lstat=0 opendir=1 | default:  rc=0 n=5 [g/a g/b g/dang g/ls/ g/s/] stat=5 lstat=0 opendir=1
+glob64@GLIBC_2.2.5 g/* ONLYDIR: rc=0 n=2 [g/ls g/s] | default:  rc=0 n=2 [g/ls g/s]
+glob64@GLIBC_2.2.5 g/* ONLYDIR|ALTDIRFUNC: rc=0 n=2 [g/ls g/s] stat=7 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls g/s] stat=7 lstat=0 opendir=1
+glob64@GLIBC_2.2.5 g/*/ 0: rc=0 n=2 [g/ls/ g/s/] | default:  rc=0 n=2 [g/ls/ g/s/]
+glob64@GLIBC_2.2.5 g/*/ 0|ALTDIRFUNC: rc=0 n=2 [g/ls/ g/s/] stat=9 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls/ g/s/] stat=9 lstat=0 opendir=1
+glob64@GLIBC_2.2.5 g/d* 0: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob64@GLIBC_2.2.5 g/d* 0|ALTDIRFUNC: rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=1 | default:  rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=1
+glob64@GLIBC_2.2.5 g/dang 0: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob64@GLIBC_2.2.5 g/dang 0|ALTDIRFUNC: rc=3 n=0 [] stat=1 lstat=0 opendir=0 | default:  rc=0 n=1 [g/dang] stat=0 lstat=1 opendir=0
+glob64@GLIBC_2.2.5 g/dang NOCHECK: rc=0 n=1 [g/dang] | default:  rc=0 n=1 [g/dang]
+glob64@GLIBC_2.2.5 g/dang NOCHECK|ALTDIRFUNC: rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=0 | default:  rc=0 n=1 [g/dang] stat=0 lstat=0 opendir=0
+glob64@GLIBC_2.2.5 g/missing NOCHECK: rc=0 n=1 [g/missing] | default:  rc=0 n=1 [g/missing]
+glob64@GLIBC_2.2.5 g/missing NOCHECK|ALTDIRFUNC: rc=0 n=1 [g/missing] stat=0 lstat=0 opendir=0 | default:  rc=0 n=1 [g/missing] stat=0 lstat=0 opendir=0
+glob64@GLIBC_2.2.5 g/missing 0: rc=3 n=0 [] | default:  rc=3 n=0 []
+glob64@GLIBC_2.2.5 g/missing 0|ALTDIRFUNC: rc=3 n=0 [] stat=1 lstat=0 opendir=0 | default:  rc=3 n=0 [] stat=0 lstat=1 opendir=0
+glob64@GLIBC_2.2.5 g/*/f 0: rc=0 n=2 [g/ls/f g/s/f] | default:  rc=0 n=2 [g/ls/f g/s/f]
+glob64@GLIBC_2.2.5 g/*/f 0|ALTDIRFUNC: rc=0 n=2 [g/ls/f g/s/f] stat=9 lstat=0 opendir=1 | default:  rc=0 n=2 [g/ls/f g/s/f] stat=7 lstat=2 opendir=1
+glob64@GLIBC_2.2.5 g/l*/f MARK: rc=0 n=1 [g/ls/f] | default:  rc=0 n=1 [g/ls/f]
+glob64@GLIBC_2.2.5 g/l*/f MARK|ALTDIRFUNC: rc=0 n=1 [g/ls/f] stat=9 lstat=0 opendir=1 | default:  rc=0 n=1 [g/ls/f] stat=8 lstat=1 opendir=1
+glob64@GLIBC_2.2.5 g/[ab] NOSORT: rc=0 n=2 [g/a g/b] | default:  rc=0 n=2 [g/a g/b]
+timer_create@GLIBC_2.2.5 SIGEV_NONE: rc=0 bytes changed=4 highest changed byte=3
+timer_settime@GLIBC_2.2.5 10s: rc=0 errno=0 old=0.000000000/0.000000000
+timer_gettime@GLIBC_2.2.5 after settime: rc=0 remaining in [9,10]s=yes interval=0
+timer_getoverrun@GLIBC_2.2.5 armed SIGEV_NONE: rc=0
+timer_delete@GLIBC_2.2.5: rc=0 errno=0
+timer_delete@GLIBC_2.2.5 again: rc=-1 errno=22
+timer_gettime@GLIBC_2.2.5 deleted: rc=-1 errno=22
+timer_settime@GLIBC_2.2.5 id 4095 never created: rc=-1 errno=22
+timer_getoverrun@GLIBC_2.2.5 id 4095 never created: rc=-1 errno=22
+timer_create@GLIBC_2.2.5 SIGEV_THREAD 10ms: create rc=0 settime rc=0 notified=yes delete rc=0
+timer_create@GLIBC_2.2.5 bad clock: rc=-1 errno=22
+lio_listio@GLIBC_2.2.5 WAIT 2 reads: rc=0 errno=0 [0] error=115 return=-2 [1] error=115 return=-2 | default: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3
+lio_listio@GLIBC_2.2.5 WAIT bad fd first: rc=0 errno=0 [0] error=115 return=-2 [1] error=115 return=-2 | default: rc=-1 errno=5 [0] error=9 return=-1 [1] error=0 return=3
+lio_listio@GLIBC_2.2.5 NOWAIT 2 reads sig=NULL: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3 | default: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3
+lio_listio@GLIBC_2.2.5 NOWAIT bad fd first: rc=0 errno=0 [0] error=9 return=-1 [1] error=0 return=3 | default: rc=0 errno=0 [0] error=9 return=-1 [1] error=0 return=3
+lio_listio@GLIBC_2.2.5 WAIT nent=0: rc=0 errno=0 | default: rc=0 errno=0
+lio_listio@GLIBC_2.2.5 WAIT 2 NOP: rc=0 errno=0 [0] error=0 return=0 [1] error=0 return=0 | default: rc=0 errno=0 [0] error=0 return=0 [1] error=0 return=0
+lio_listio@GLIBC_2.2.5 mode 99: rc=-1 errno=22 [0] error=0 return=0 [1] error=0 return=0 | default: rc=-1 errno=22 [0] error=0 return=0 [1] error=0 return=0
+lio_listio@GLIBC_2.2.5 WAIT nent=-1: rc=0 errno=0 | default: rc=0 errno=0
+lio_listio64@GLIBC_2.2.5 WAIT 2 reads: rc=0 errno=0 [0] error=115 return=-2 [1] error=115 return=-2 | default: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3
+lio_listio64@GLIBC_2.2.5 WAIT bad fd first: rc=0 errno=0 [0] error=115 return=-2 [1] error=115 return=-2 | default: rc=-1 errno=5 [0] error=9 return=-1 [1] error=0 return=3
+lio_listio64@GLIBC_2.2.5 NOWAIT 2 reads sig=NULL: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3 | default: rc=0 errno=0 [0] error=0 return=3 [1] error=0 return=3
+lio_listio64@GLIBC_2.2.5 NOWAIT bad fd first: rc=0 errno=0 [0] error=9 return=-1 [1] error=0 return=3 | default: rc=0 errno=0 [0] error=9 return=-1 [1] error=0 return=3
+lio_listio64@GLIBC_2.2.5 WAIT nent=0: rc=0 errno=0 | default: rc=0 errno=0
+lio_listio64@GLIBC_2.2.5 WAIT 2 NOP: rc=0 errno=0 [0] error=0 return=0 [1] error=0 return=0 | default: rc=0 errno=0 [0] error=0 return=0 [1] error=0 return=0
+lio_listio64@GLIBC_2.2.5 mode 99: rc=-1 errno=22 [0] error=0 return=0 [1] error=0 return=0 | default: rc=-1 errno=22 [0] error=0 return=0 [1] error=0 return=0
+lio_listio64@GLIBC_2.2.5 WAIT nent=-1: rc=0 errno=0 | default: rc=0 errno=0
+__libc_start_main@GLIBC_2.2.5 init,fini,rtld_fini given: init main(argc=2 argv=same argv[1]=one envp=argv+argc+1:no) rtld_fini | status exit 7
+__libc_start_main@GLIBC_2.34 init,fini,rtld_fini given: init main(argc=2 argv=same argv[1]=one envp=argv+argc+1:no) rtld_fini | status exit 7
+_pthread_cleanup_push_defer@GLIBC_2.2.5 from DEFERRED: type inside=DEFERRED
+_pthread_cleanup_pop_restore@GLIBC_2.2.5 from DEFERRED execute=0: routine ran=0 type after=DEFERRED
+_pthread_cleanup_push_defer@GLIBC_2.2.5 from DEFERRED: type inside=DEFERRED
+_pthread_cleanup_pop_restore@GLIBC_2.2.5 from DEFERRED execute=1: routine ran=1 type after=DEFERRED
+_pthread_cleanup_push_defer@GLIBC_2.2.5 from ASYNC: type inside=DEFERRED
+_pthread_cleanup_pop_restore@GLIBC_2.2.5 from ASYNC execute=0: routine ran=0 type after=ASYNC
+_pthread_cleanup_push_defer@GLIBC_2.2.5 from ASYNC: type inside=DEFERRED
+_pthread_cleanup_pop_restore@GLIBC_2.2.5 from ASYNC execute=1: routine ran=1 type after=ASYNC
+_pthread_cleanup_push_defer@GLIBC_2.2.5 cancelled at testcancel: canceled=yes routine ran=10
+pthread_atfork@GLIBC_2.2.5: rc=0,0,0 order:pBpAqAqBcAcB (child then parent handlers above)
+pthread_atfork default: rc=0,0,0 order:pBpAqAqBcAcB (child then parent handlers above)
+__isnanf128@GLIBC_2.26 qNaN: 1 | isnan: 1
+__isnanf128@GLIBC_2.26 -qNaN: 1 | isnan: 1
+__isnanf128@GLIBC_2.26 sNaN: 1 | isnan: 1
+__isnanf128@GLIBC_2.26 inf: 0 | isnan: 0
+__isnanf128@GLIBC_2.26 -inf: 0 | isnan: 0
+__isnanf128@GLIBC_2.26 0: 0 | isnan: 0
+__isnanf128@GLIBC_2.26 1: 0 | isnan: 0
+__isnanf128@GLIBC_2.26 -1: 0 | isnan: 0
+stime@GLIBC_2.2.5 now, unprivileged: rc=-1 errno=1
+stime@GLIBC_2.2.5 NULL, unprivileged (child exits with 0 or errno): child signal 11
+== compat_condvar
+pthread_cond_init@GLIBC_2.2.5 NULL attr: rc=0
+pthread_cond_init@GLIBC_2.2.5 on 0xa5 bytes: changed bytes: 0 1 2 3 4 5 6 7; word0 zero
+pthread_cond_signal@GLIBC_2.2.5 after init, no waiter: rc=0
+pthread_cond_signal@GLIBC_2.2.5 after init: changed bytes: 0 1 2 3 4 5; word0 nonzero
+pthread_cond_destroy@GLIBC_2.2.5 after init: rc=0
+pthread_cond_destroy@GLIBC_2.2.5 after init: changed bytes: none; word0 nonzero
+pthread_cond_signal@GLIBC_2.2.5 zero object, no init: rc=0
+pthread_cond_signal@GLIBC_2.2.5 zero object: changed bytes: 0 1 2 3 4 5; word0 nonzero
+pthread_cond_broadcast@GLIBC_2.2.5 zero object, no init: rc=0
+pthread_cond_broadcast@GLIBC_2.2.5 zero object: changed bytes: 0 1 2 3 4 5; word0 nonzero
+pthread_cond_timedwait@GLIBC_2.2.5 zero object, past abstime: rc=110
+pthread_cond_timedwait@GLIBC_2.2.5 mutex held again after ETIMEDOUT: trylock=16
+pthread_cond_timedwait@GLIBC_2.2.5 zero object: changed bytes: 0 1 2 3 4 5; word0 nonzero
+pthread_cond_destroy@GLIBC_2.2.5 after timedwait: rc=0
+pthread_cond_destroy@GLIBC_2.2.5 after timedwait: changed bytes: none; word0 nonzero
+pthread_cond_destroy@GLIBC_2.2.5 zero object never used: rc=0
+pthread_cond_init@GLIBC_2.2.5 pshared attr: rc=22
+pthread_cond_init@GLIBC_2.2.5 pshared attr: changed bytes: 0 1 2 3 4 5 6 7; word0 zero
+pthread_cond_init@GLIBC_2.2.5 CLOCK_MONOTONIC attr: rc=22
+pthread_cond_timedwait@GLIBC_2.2.5 CLOCK_MONOTONIC attr, abstime monotonic+300ms: rc=110, waited>=200ms=no
+pthread_cond_timedwait@GLIBC_2.2.5 NULL attr, abstime realtime+300ms: rc=110, waited>=200ms=yes
+pthread_cond_init@GLIBC_2.2.5 8-byte object: rc=0
+pthread_cond_signal@GLIBC_2.2.5 8-byte object, no waiter: rc=0
+pthread_cond_broadcast@GLIBC_2.2.5 8-byte object, no waiter: rc=0
+pthread_cond_timedwait@GLIBC_2.2.5 8-byte object, past abstime: rc=110
+pthread_cond_timedwait@GLIBC_2.2.5 8-byte object, tv_nsec=1e9: rc=22
+pthread_cond_destroy@GLIBC_2.2.5 8-byte object: rc=0
+pthread_cond_timedwait@GLIBC_2.2.5 8-byte zero object, no init, past abstime: rc=110
+pthread_cond_destroy@GLIBC_2.2.5 8-byte zero object after use: rc=0
+pthread_cond_init@GLIBC_2.2.5 4-byte sequence (object of 4 bytes before a guard page): killed by signal 11
+pthread_cond_signal@GLIBC_2.2.5 with 4 waiters: rc=0, left after 300 ms=1
+pthread_cond_wait@GLIBC_2.2.5 waiters of that signal case: all 4 returned after a final broadcast
+pthread_cond_broadcast@GLIBC_2.2.5 with 4 waiters: rc=0, left after 300 ms=4
+pthread_cond_wait@GLIBC_2.2.5 waiters of that broadcast case: all 4 returned after a final broadcast
+pthread_cond_signal@GLIBC_2.2.5 allocation failing, zero object: rc=12, allocator calls=yes, word zero
+pthread_cond_broadcast@GLIBC_2.2.5 allocation failing, zero object: rc=12, allocator calls=yes, word zero
+pthread_cond_timedwait@GLIBC_2.2.5 allocation failing, zero object: rc=12, allocator calls=yes, word zero
+pthread_cond_wait@GLIBC_2.2.5 allocation failing, zero object: rc=12, allocator calls=yes, word zero
+pthread_cond_init@GLIBC_2.2.5 allocation failing, zero object: rc=0, allocator calls=none, word zero
+pthread_cond_destroy@GLIBC_2.2.5 1000 init/signal/destroy: in-use bytes grown a little

@@ -1,0 +1,215 @@
+# The schedule: which phase, track or stage owns each pending test (implementation-plan.md §4.3,
+# §6). Read by `cargo xtask status` (a report) and `cargo xtask status --schedule` (the check).
+#
+# Columns: kind, key, value, reference, note. Lines starting with '#' and blank lines are ignored.
+#
+# kind=fact    key=stage: the stage the project is in now (an owner id).
+# kind=owner   key=owner id; value=';'-separated settings:
+#                order=<n>   position in the plan's sequence (display only)
+#                state=done | current | future | track
+#                from=<id>   a track's first phase; join=<id> the phase it joins at
+#                started=<date>  a track's start (absent: not started)
+# kind=assign  key=selector; value=owner id, DEFERRAL or UNASSIGNED. The first matching row in
+#              file order decides, so specific rows come before section rows. Selectors:
+#                §N, §N.M      clauses whose section is N.M or below it; for symbols and libm
+#                              families (which carry only N), §N
+#                clause:<glob>[,<glob>...]   clause IDs      sym:<glob>[,...]   symbol names
+#                fam:<glob>[,...]  libm families   prim:<glob>[,...]  layout:<glob>[,...]
+#                compat-only   symbols with no default version (spec/abi/versions.tsv)
+#                group:<stem>  every test in the status group <stem> (a test file's name up to
+#                              its first '_': s24, appendix, locale, ...)
+#              A DEFERRAL names its reference (an owner ruling or a decision row) and its
+#              reason in the note; UNASSIGNED marks work the plan gives to nobody.
+#
+# The check fails for pending work owned by a phase that is done, by a track that has not
+# started or whose join phase is done, or that is UNASSIGNED (or matched by no row).
+
+kind	key	value	reference	note
+fact	stage	VAL	§6 "Validation and optimization (before phase 14)"	Phases 0-13 are done (each Delivered block: exit met); the current stage runs before phase 14.
+
+owner	P0	order=0;state=done	§6 Phase 0	Foundations
+owner	P1	order=1;state=done	§6 Phase 1	Kernel boundary
+owner	P2	order=2;state=done	§6 Phase 2	Pure computation core
+owner	M	order=2;state=track;from=P2;join=P14;started=2026-10-05	§6 Track M; §9.1 "Validation report" (2026-10-05)	Mathematics (libm): parallel from P2, joins at P14 (owner ruling 2026-10-06: the P8 join was missed; per the 2026-10-04 schedule ruling Track M is complete and benchmarked before phase 14 exits); started 2026-10-05 as its own thread and branch
+owner	P3	order=3;state=done	§6 Phase 3	Internal primitives and memory
+owner	P4	order=4;state=done	§6 Phase 4	Process runtime
+owner	P5	order=5;state=done	§6 Phase 5	Thin kernel surfaces
+owner	P6	order=6;state=done	§6 Phase 6	Threads, synchronisation, process-wide semantics
+owner	P7	order=7;state=done	§6 Phase 7	Locale and text
+owner	P8	order=8;state=done	§6 Phase 8	Streams and formatting
+owner	P9	order=9;state=done	§6 Phase 9	Time conversion and zones
+owner	P10	order=10;state=done	§6 Phase 10	Name services and databases
+owner	P11	order=11;state=done	§6 Phase 11	Processes and terminals
+owner	P12	order=12;state=done	§6 Phase 12	File system (high level) and patterns
+owner	P13	order=13;state=done	§6 Phase 13	Remaining services
+owner	VAL	order=14;state=current	§6 "Validation and optimization (before phase 14)"	Validation (coreutils, bash, sed) and optimization (P10), then fuzzing; gate before phase 14
+owner	P14	order=15;state=future	§6 Phase 14	Dynamic linking
+owner	P15	order=16;state=future	§6 Phase 15	Legacy tier and binary-compatibility acceptance
+owner	OPT2	order=17;state=future	§6 "Validation and optimization", last line; §2.3 P10	Short final optimization pass after phase 15 (the plan does not order it against the security pass)
+owner	SEC	order=17;state=future	§6 "Security pass (after phase 15, before release preparation)"	Security pass
+owner	POST	order=18;state=future	§6 "Post-release ledger and experiments"	After the first release
+
+# ---------------------------------------------------------------------------------------------
+# Item rows: finer assignments where the plan splits a section, moves an item, or defers it.
+
+# §0: the C conventions C0.1-C0.8 (clause IDs s0_6_c0_<N>_<i>).
+assign	clause:s0_6_c0_1_*	P4	§6 Phase 1 Delivered, deviation 3	C0.1's errno-storing clauses need the thread block; they move to phase 4
+assign	clause:s0_6_c0_3_*,s0_6_c0_8_*	P1	§6 Phase 1 Scope	C0.3, C0.8
+assign	clause:s0_6_c0_6_*	P15	§6 Phase 15 Scope ("every superseded versioned contract (C0.6, H7)")	Versioned contracts
+assign	clause:s0_6_c0_2_*,s0_6_c0_4_*,s0_6_c0_5_*,s0_6_c0_7_*	VAL	D-C0.2, D-C0.4, D-C0.5, D-C0.7 (plan/07-decisions/c0-cross-cutting-conventions.md, "Tests (milestone 5)")	Cross-cutting conventions (MT-safety and static buffers, *64 aliases, _chk forms, ownership): no phase scope names them; their tests (conformance/c/s00_*.c, s02_chk_fail.c, s12_symbols_printf_chk.c, s22_cancel_points.c, run by s00_conventions_clauses.rs and as_safety.rs) were delivered in the validation stage's milestone 5 and are real, not stubs
+
+# §3.4: alloca.
+assign	§3.4	DEFERRAL	D-3.8; §6 Phase 3 Delivered ("Pending clauses")	alloca is a compiler builtin: no library behaviour to implement, so these clauses are never specified as library tests
+
+# §7.6: rpmatch moved to phase 12.
+assign	clause:s7_6_c_0	P12	D-7.9 (owner: accepted 2026-10-01); §6 Phase 7 Delivered, deviation 1	rpmatch is built on phase 12's regex engine
+assign	sym:rpmatch	P12	D-7.9 (owner: accepted 2026-10-01); §6 Phase 7 Delivered, deviation 1	rpmatch is built on phase 12's regex engine
+
+# §12: cuserid waits for the user database; the libio internals and vtables are phase 15.
+assign	clause:s12_12_c_4	P10	D-12.15 ("cuserid waits for the user database (§17)"); §6 Phase 8 Delivered	The user database is §17.3-17.6, phase 10
+assign	sym:cuserid	P10	D-12.15 ("cuserid waits for the user database (§17)"); §6 Phase 8 Delivered	The user database is §17.3-17.6, phase 10
+assign	sym:_IO_*	P15	§6 Phase 15 Scope (§12.13, the _IO_* vtable objects, F32); §6 Phase 8 Delivered ("the 72 compat-only libio internals ... (phase 15, F32)"); §6 Phase 11 Delivered (_IO_proc_open/_IO_proc_close)	The _IO_* names still pending; the libio main entry points were phase 8
+
+# §16: nscd is not supported; one symbol has no signature.
+assign	clause:s16_1_g_3	DEFERRAL	D-16.5 (closed by the owner 2026-10-03)	nscd is not supported (the integrated cache D-16.10 replaces it); clause s16_1_g_3 is a recorded deviation, never implemented
+assign	sym:__nss_hostname_digits_dots	P10	§6 Phase 10 Scope (§16); §6 Phase 10 Delivered ("has no signature (pending)")	Spec gap: no installed header declares it
+
+# §20.4: pthread_kill waited for threads.
+assign	clause:s20_4_c_5	P6	§6 Phase 5 Delivered ("pthread_kill (s20_4_c_5) wait for phase 6")
+
+# §22: the compat condition variable and libthread_db.
+assign	clause:s22_5_c_1_2	P15	§6 Phase 6 Delivered, deviation 4 ("the compat condition variable (§22.5) for phase 15")	pthread_cond_*@GLIBC_2.2.5
+assign	§22.10	P14	§6 Phase 14 Scope (§22.10, libthread_db, F30)
+assign	sym:td_*	P14	§6 Phase 14 Scope (§22.10, libthread_db, F30); §6 Phase 6 Scope ("libthread_db waits for P14")	libthread_db's exports
+
+# §24.5-24.6: only gethostid and syscall are in a phase scope.
+assign	sym:gethostid,sethostid	P10	§6 Phase 10 Scope (§24.5, gethostid); D-24.9
+assign	clause:s24_6_c_5	P5	§6 Phase 5 Scope ("syscall()"); D-24.5	syscall's clause; the export was done in phase 5
+assign	clause:s24_6_c_6	P15	§6 Phase 15 Scope (compatibility-only names, C0.6, Appendix C.3)	The clause describes §24.6's compat entries, which are compatibility-only names
+assign	§24.5,§24.6	VAL	owner ruling 2026-10-06: validation stage owns §24.5-24.6 thin wrappers	uname, gethostname, capget/capset, sysinfo, getloadavg, the privileged system calls
+assign	sym:acct,capget,capset,delete_module,getdomainname,__getdomainname_chk,gethostname,__gethostname_chk,getloadavg,gnu_get_libc_release,gnu_get_libc_version,init_module,ioperm,iopl,klogctl,modify_ldt,quotactl,reboot,setdomainname,sethostname,sysinfo,uname,vhangup	VAL	owner ruling 2026-10-06: validation stage owns §24.5-24.6 thin wrappers	§24.5-24.6 names that are not compatibility-only
+
+# §29: the placeholder libraries' version nodes come with the loader.
+assign	sym:__libanl_version_placeholder,__libdl_version_placeholder,__libpthread_version_placeholder,__librt_version_placeholder,__libutil_version_placeholder,__rtld_version_placeholder	P14	§6 Phase 14 Scope ("the placeholder libraries (libpthread.so.0, libdl.so.2, librt.so.1, libutil.so.1, libanl.so.1) with their version nodes"; §27 ld.so)
+
+# §10: the libm track owns all of §10, including the __*_finite compat names.
+assign	§10	M	§6 Track M Scope (§10) and Translation ("The __*_finite compat names alias the main entries")
+
+# Compatibility-only names (no default version in Appendix C.3).
+assign	compat-only	P15	§6 Phase 15 Scope ("every superseded versioned contract ... 545 compatibility-only names"); C0.6; F15	Includes sys_errlist/sys_nerr (§2), the __*_small helpers (§4, ERRATA E6), the §16 compat names (§6 Phase 10 Delivered), §24.6's removed calls and §29
+
+# ---------------------------------------------------------------------------------------------
+# Section rows (spec §0-§29). Symbols carry only their section number, so each section also has
+# a whole-section row.
+
+assign	§0	P1	§6 Phase 1 Scope (C0.1 numbering, C0.3, C0.8)	Other C0 clauses: item rows above
+
+assign	§1.1,§1.2,§1.3,§1.4,§1.5	P4	§6 Phase 4 Scope (§1.1-1.5)
+assign	§1.6,§1.6a,§1.7	P8	§6 Phase 8 Scope (§1.6-1.7, getopt/argp)
+assign	§1.8	P4	§6 Phase 4 Scope ("§1.8, the tunables parser")	The tunables policy is phase 15's (§6 Phase 15 Scope)
+assign	§1	P4	§6 Phase 4 Scope (48 symbols); §6 Phase 8 Delivered ("§1 all 48")	Symbols: phase 4, getopt/argp phase 8
+
+assign	§2.1,§2.4,§2.5	P4	§6 Phase 4 Scope
+assign	§2.2,§2.3,§2.6,§2.7	P8	§6 Phase 8 Scope
+assign	§2	P8	§6 Phase 8 Delivered ("§2 34 of 38"; the rest compat-only, phase 15)	Symbols: phases 4 and 8
+
+assign	§3.1,§3.5,§3.7	P3	§6 Phase 3 Scope (heap, aligned forms, obstack, brk/sbrk)
+assign	§3.2,§3.3	P13	§6 Phase 13 Scope (§3.2-3.3); §6 Phase 3 Scope (§3.2's neutral subset, D-3.4)
+assign	§3	P3	§6 Phase 3 Scope (60 symbols)
+
+assign	§4	P2	§6 Phase 2 Scope (§4); §6 Phase 7 Scope (its locale-sensitive parts)	Includes the §4 Notes clauses (phase 2 Delivered: "design commentary", no later phase)
+
+assign	§5	P7	§6 Phase 7 Scope ("§5 full"); §6 Phase 2 Scope (C-locale part)
+assign	§6	P7	§6 Phase 7 Scope ("§6 full"); §6 Phase 2 Scope (UTF codecs)
+
+assign	§7.5	P8	§6 Phase 8 Scope (§7.5, strfmon)
+assign	§7.7,§7.8	P13	§6 Phase 13 Scope (§7.7-7.8, gettext and catgets)
+assign	§7	P7	§6 Phase 7 Scope (§7.1-7.4, §7.6)
+
+assign	§8	P2	§6 Phase 2 Scope (§8); §6 Phase 7 (radix); §6 Phase 8 (§8.4 remaining)	§8.8: phase 2 Delivered tied it to "§15 exports" without naming a phase
+assign	§9	P2	§6 Phase 2 Scope (§9)
+
+assign	§11.11	P13	§6 Phase 13 Scope (§11.11, POSIX AIO)
+assign	§11	P5	§6 Phase 5 Scope (§11 except AIO)
+
+assign	§12	P8	§6 Phase 8 Scope (§12)
+
+assign	§13.1,§13.2,§13.3,§13.8,§13.9,§13.13	P12	§6 Phase 12 Scope; D-13.10 (§13.13)
+assign	§13.4,§13.5,§13.6,§13.7,§13.10,§13.11,§13.12,§13.14,§13.15	P5	§6 Phase 5 Scope
+assign	§13	P12	§6 Phase 12 Delivered ("§13 and §14 have every in-scope clause and symbol specified")	Symbols and section-level clauses: phases 5 and 12
+
+assign	§14.1,§14.2,§14.3,§14.4,§14.5,§14.6	P2	§6 Phase 2 Scope (§14.1-14.6)
+assign	§14	P12	§6 Phase 12 Scope (§14.7-14.10)	Symbols: phases 2 and 12
+
+assign	§15.1,§15.2	P5	§6 Phase 5 Scope (§15.1-15.2)
+assign	§15	P10	§6 Phase 10 Scope (§15.3-15.7); §6 Phase 10 Delivered (§15.3-15.8)	Symbols: phases 5 and 10
+
+assign	§16	P10	§6 Phase 10 Scope (§16)
+
+assign	§17.1	P5	§6 Phase 5 Scope (§17.1)
+assign	§17.2	P6	§6 Phase 6 Scope (§17.2)
+assign	§17	P10	§6 Phase 10 Scope (§17.3-17.6); §6 Phase 11 Delivered (getpass, §17.5, came with phase 10)	Symbols: phases 5, 6 and 10
+
+assign	§18.1	P5	§6 Phase 5 Scope (§18.1)
+assign	§18.2	P6	§6 Phase 6 Scope (§18.2)
+assign	§18	P11	§6 Phase 11 Scope (§18.3-18.9)	Symbols: phases 5, 6 and 11
+
+assign	§19	P11	§6 Phase 11 Scope (§19)
+
+assign	§20	P5	§6 Phase 5 Scope (§20.1-20.9); §6 Phase 6 (the cancel and setxid interplay)
+
+assign	§21	P6	§6 Phase 6 Scope (§21)
+assign	§22	P6	§6 Phase 6 Scope (§22 minus libthread_db)
+
+assign	§23.4,§23.5,§23.6,§23.7	P9	§6 Phase 9 Scope (§23.4-23.7)
+assign	§23	P5	§6 Phase 5 Scope (§23.1-23.3); §6 Phase 9 Scope (§23.2's clock setting)	Symbols: phases 5 and 9
+
+assign	§24	P5	§6 Phase 5 Scope (§24.1-24.4)	§24.5-24.6: item rows above
+
+assign	§25.3,§25.4	P13	§6 Phase 13 Scope (§25.3-25.4)
+assign	§25	P5	§6 Phase 5 Scope (§25.1-25.2)	Symbols: phases 5 and 13
+
+assign	§26	P13	§6 Phase 13 Scope (§26)
+assign	§27	P14	§6 Phase 14 Scope (§27)	The dynamic loader's names
+assign	§28	P15	§6 Phase 15 Scope (§28, profiling)
+assign	§29	P15	§6 Phase 15 Scope (§29); D-H8
+
+# ---------------------------------------------------------------------------------------------
+# The other status groups: appendices and hand-written suites.
+
+assign	group:appendix	P1	§6 Phase 1 Exit (the 281 Appendix A primitive tests and 171 Appendix C layout tests)
+assign	group:csys	P0	§6 Phase 0 Delivered (csys_link.rs)
+assign	group:kernel,uapi,modern,ret,export	P1	§6 Phase 1 Delivered, Tests ("kernel types, uapi against Appendix C, modern calls, ret, export!")
+assign	group:bytes,float,search	P2	§6 Phase 2 Delivered and Builds (exhaustive byte primitives, IP-18, §14.1-14.6 structures)
+assign	group:heap,primitives	P3	§6 Phase 3 Delivered ("liella-rt's own suite"); §4.2 (runtime primitives from phase 3)	heap_threads.rs is phase 6's
+assign	group:machine	P4	D-4.14 (phase 4); D-4.17 (6a)
+assign	group:as	P5	§6 Phase 5 Delivered (AS-safety exit criterion)
+assign	group:pthread	P6	§6 Phase 6 Delivered (sync objects)
+assign	group:charmap,locale,iconv	P7	§6 Phase 7 Delivered, Tests
+assign	group:stdio,wstream,printf,scanf,registry,diag,getopt,argp,monetary,backtrace,stream	P8	§6 Phase 8 Delivered (differential tests; liella::stream)
+assign	group:timers,zones,timefmt	P9	§6 Phase 9 Delivered, Tests
+assign	group:netaddr,users,netdb,dns	P10	§6 Phase 10 Delivered, Tests
+assign	group:process,terminals	P11	§6 Phase 11 Delivered, Tests
+assign	group:fstree,patterns,mntent,nscache,secure,regex	P12	§6 Phase 12 Delivered, Tests
+assign	group:syslog,posixipc,catalogs,aio,mallocdbg	P13	§6 Phase 13 Delivered, Tests
+
+assign	group:admin	VAL	owner ruling 2026-10-06: validation stage owns §24.5-24.6 thin wrappers	System administration thin wrappers (§24.5-24.6)
+assign	group:arith	M	§6 Track M Scope (§10); started 2026-10-05	Exact arithmetic for math functions
+assign	group:complex	M	§6 Track M Scope (§10.5)	Complex functions end to end
+assign	group:consts	M	§6 Track M Scope (§10)	Mathematical constants (pi, ln 2)
+assign	group:digits	P10	§6 Phase 10 Scope (§16)	Numeric host parser __nss_hostname_digits_dots
+assign	group:elem	M	§6 Track M Scope (§10.3)	Elementary functions end to end
+assign	group:exact	M	§6 Track M Scope (§10.1, §10.2, §10.4, §10.6)	Exact and correctly rounded math functions
+assign	group:funcs	M	§6 Track M Scope (§10)	Elementary functions: identities and special values
+assign	group:mp	M	§6 Track M Scope (§10)	Fixed-precision kernels of special functions
+assign	group:noproc	VAL	§6 "Validation and optimization"; OD-5 confirmed 2026-10-04	Functions that work without /proc or /sys
+assign	group:reload	VAL	§6 "Validation and optimization"; D-X.13	Reloading time-zone and locale data
+assign	group:remez	M	§6 Track M Scope (§10)	Remez approximation tool
+assign	group:special	M	§6 Track M Scope (§10.5, §10.6)	Special functions end to end
+assign	group:versions	VAL	§6 "Validation and optimization"; T18	strverscmp end to end
+
+assign	group:sigev	VAL	§6 "Validation and optimization", TEST thread (caller stacks on every notification path); §9.1 "Before phase 14"
+assign	group:native	UNASSIGNED	D-X.10 (cross-cutting; no phase scope names the native interface)	No pending tests
+assign	group:historical,vocabulary	UNASSIGNED	§7 and §8.3 (no phase named)	No tests yet
+
+assign	group:casecmp,cold,collate,core,cpuid,cxx,env,exec,find,gmon,hot,langpack,legacy,liella,oracle,scanner,skip,small,strstr,time,unwind,wcsstr,wordexp,x87	UNASSIGNED	DOCS-STATUS-REFRESH (#1744): suites added by stories since the table was written; no phase scope names them	No pending tests (0 at 2026-10-24); give each an owner if a test in it ever goes pending

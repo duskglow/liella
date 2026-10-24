@@ -1,0 +1,25 @@
+[package]
+name = "liella-abi"
+description = "C types, glibc ABI layouts and the closed conversion vocabulary used by the translation layer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_abi"
+
+[dependencies]
+liella-kernel = { workspace = true }
+liella = { workspace = true }
+
+[dev-dependencies]
+spectest = { workspace = true }
+
+[features]
+# See module `export`.
+export = []
+
+[lints]
+workspace = true

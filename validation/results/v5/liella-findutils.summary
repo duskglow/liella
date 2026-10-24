@@ -1,0 +1,8 @@
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure-start 2026-10-23T06:39:07Z load: 86.70, 73.02, 61.50
+configure rc=0
+build-start 2026-10-23T06:40:54Z load: 77.36, 73.20, 62.78
+build rc=0 seconds=15.229577449
+check-start 2026-10-23T06:41:09Z load: 79.83, 73.96, 63.19
+check rc=0 seconds=84.412513598
+check-end 2026-10-23T06:42:33Z load: 94.95, 79.98, 66.24

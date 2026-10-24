@@ -1,0 +1,233 @@
+PASS: 1 tar version
+PASS: 2 decompressing from stdin
+PASS: 3 mixing options
+PASS: 4 interspersed options
+PASS: 5 TAR_OPTIONS with string arguments
+PASS: 6 occurrence compatibility
+PASS: 7 occurrence compatibility
+PASS: 8 --verify compatibility
+PASS: 9 compress option compatibility
+PASS: 10 --pax-option compatibility
+SKIP: 11 --pax-option compatibility
+PASS: 12 checkpoint defaults
+PASS: 13 checkpoint interval
+PASS: 14 dot action
+PASS: 15 dot action (compatibility syntax)
+PASS: 16 dot action and interval
+PASS: 17 compress: gzip
+PASS: 18 compress: bzip2
+PASS: 19 compress: xz
+SKIP: 20 compress: lzip
+SKIP: 21 compress: lzop
+PASS: 22 compress: zstd
+PASS: 23 Exclude
+PASS: 24 Directory
+PASS: 25 Several options
+PASS: 26 The --add-file option
+PASS: 27 multiple file lists
+PASS: 28 nested file lists
+PASS: 29 recursive file lists
+PASS: 30 files-from & recurse: toggle
+PASS: 31 toggle --recursion (not) from -T
+PASS: 32 -C in file lists
+PASS: 33 empty entries
+PASS: 34 0-separated file without -0
+PASS: 35 --null enables verbatim reading
+PASS: 36 empty file
+PASS: 37 entries with missing newlines
+PASS: 38 recursive extraction from --files-from
+PASS: 39 trailing slash in --files-from
+PASS: 40 tar --index-file=FILE --file=-
+PASS: 41 tar cvf -
+PASS: 42 gzip
+PASS: 43 recurse
+PASS: 44 recurse: toggle
+PASS: 45 short records
+PASS: 46 --numeric-owner basic tests
+PASS: 47 working -C with --same-order
+PASS: 48 multiple -C options
+PASS: 49 append
+PASS: 50 appending files with long names
+PASS: 51 append vs. create
+PASS: 52 append with name transformation
+PASS: 53 append with verify
+PASS: 54 append after changed blocking
+PASS: 55 transforming hard links on create
+PASS: 56 transformations and GNU volume labels
+PASS: 57 transforming escaped delimiters on create
+PASS: 58 transforming hard link targets
+PASS: 59 exclude
+PASS: 60 exclude wildcards
+PASS: 61 exclude: anchoring
+PASS: 62 exclude: wildcards match slash
+PASS: 63 exclude: case insensitive
+PASS: 64 exclude: lots of excludes
+PASS: 65 exclude: long files in pax archives
+PASS: 66 exclude: --exclude-backups option
+PASS: 67 --exclude-tag option
+PASS: 68 --exclude-tag option and --listed-incremental
+PASS: 69 --exclude-tag option in incremental pass
+PASS: 70 --exclude-tag-under option
+PASS: 71 --exclude-tag-under and --listed-incremental
+PASS: 72 --exclude-tag-under option in incremental pass
+PASS: 73 --exclude-tag-all option
+PASS: 74 --exclude-tag-all and --listed-incremental
+PASS: 75 --exclude-tag-all option in incremental pass
+PASS: 76 --exclude-vcs-ignores memory allocation
+PASS: 77 --exclude-vcs extract list compare
+PASS: 78 deleting a member after a big one
+PASS: 79 deleting a member from stdin archive
+PASS: 80 deleting members with long names
+PASS: 81 deleting a large last member
+PASS: 82 deleting non-existing member
+PASS: 83 EOF detection
+PASS: 84 extract over an existing directory
+PASS: 85 extracting symlinks over an existing file
+PASS: 86 extraction loops
+PASS: 87 extract + fnmatch
+PASS: 88 extracting selected members from pax
+PASS: 89 mode of extracted directories
+PASS: 90 extracting symlinks to a read-only dir
+PASS: 91 restoring mode on existing directory
+PASS: 92 extracting even when . and .. are unreadable
+PASS: 93 -C and delayed setting of metadata
+PASS: 94 scarce file descriptors
+PASS: 95 extract dot permissions
+PASS: 96 extract over symlinks
+PASS: 97 extract -C symlink
+PASS: 98 extract parent mkdir failure
+PASS: 99 extract empty directory with -C
+PASS: 100 name matching/transformation ordering
+PASS: 101 keep-old-files
+PASS: 102 skip-old-files
+PASS: 103 keep-directory-symlink
+PASS: 104 delay-directory-restore
+PASS: 105 delay-directory-restore on reversed ordering
+PASS: 106 --no-overwrite-dir
+PASS: 107 --to-stdout
+PASS: 109 extracting existing dir with --backup
+PASS: 110 link mismatch
+PASS: 111 single-volume label
+PASS: 112 multi-volume label
+PASS: 113 test-label option
+PASS: 114 label with non-create option
+PASS: 115 label with non-create option
+PASS: 116 incremental
+PASS: 117 restore broken symlinks from incremental
+PASS: 118 restoring timestamps from incremental
+PASS: 119 --listed for individual files
+PASS: 120 working --listed
+PASS: 122 --listed-incremental and --one-file-system
+SKIP: 123 --listed-incremental and remounted directories
+PASS: 124 renamed files in incrementals
+PASS: 125 proper icontents initialization
+PASS: 126 incremental dumps with -C
+PASS: 127 incremental dumps of nested directories
+PASS: 128 incremental restores with -C
+PASS: 129 filename normalization
+PASS: 130 incremental with alternating -C
+PASS: 131 concatenated incremental archives (deletes)
+PASS: 132 concatenated incremental archives (renames)
+PASS: 133 file removed as we read it
+PASS: 134 toplevel file removed
+PASS: 135 directory removed before reading
+PASS: 137 renamed dirs in incrementals
+PASS: 138 move between hierarchies
+PASS: 139 cyclic renames
+PASS: 140 renamed directory containing subdirectories
+PASS: 141 renamed subdirectories
+PASS: 142 chained renames
+PASS: 143 changed file types in incrementals
+PASS: 144 ignfail
+PASS: 145 link count gt 2
+PASS: 146 preserve hard links with --remove-files
+PASS: 147 working -l with --remove-files
+PASS: 148 link count is 1 but multiple occurrences
+PASS: 149 long names in V7 archives
+PASS: 150 long file names divisible by block size
+PASS: 151 ustar: unsplittable file name
+PASS: 152 ustar: unsplittable path name
+PASS: 153 ustar: splitting long names
+PASS: 154 old archives
+PASS: 155 time: tricky time stamps
+PASS: 156 time: clamping mtime
+PASS: 157 multivolume dumps from pipes
+PASS: 158 skipping a straddling member
+PASS: 159 MV archive & long filenames
+PASS: 160 split directory members in a MV archive
+PASS: 161 Restoring after an out of sync volume
+PASS: 162 Multivolumes with L=record_size
+SKIP: 163 volumes split at an extended header
+PASS: 164 multivolume header creation
+PASS: 165 bad next volume
+PASS: 166 file start at the beginning of a posix volume
+PASS: 167 --owner and --group
+PASS: 168 --owner-map and --group-map
+PASS: 169 sparse files
+PASS: 170 extracting sparse file over a pipe
+PASS: 171 storing sparse files > 8G
+PASS: 172 storing long sparse file names
+PASS: 173 listing sparse files bigger than 2^33 B
+PASS: 174 storing sparse file using seek method
+PASS: 175 sparse files with unicode names
+PASS: 176 sparse files in MV archives
+PASS: 177 sparse files in PAX MV archives, v.0.0
+PASS: 178 sparse files in PAX MV archives, v.0.1
+PASS: 179 sparse files in PAX MV archives, v.1.0
+PASS: 180 sparse file truncated while archiving
+PASS: 182 file truncated in data region while comparing
+PASS: 183 update unchanged directories
+PASS: 184 update directories
+PASS: 185 update changed files
+PASS: 186 update with chdir
+PASS: 187 update with wildcards
+PASS: 188 verify
+PASS: 189 volume
+SKIP: 190 volume header size
+PASS: 191 compressed format recognition
+PASS: 192 short input files
+PASS: 193 updating short archives
+PASS: 194 truncate
+PASS: 195 grow
+PASS: 196 sigpipe handling
+PASS: 197 compressor program failure
+PASS: 198 remove-files with compression
+PASS: 199 remove-files with compression: grand-child
+PASS: 200 remove-files with symbolic links
+PASS: 201 remove-files with -C:rel in -c/non-incr. mode
+PASS: 202 remove-files with -C:rel in -c/incr. mode
+PASS: 203 remove-files with -C:rel in -r mode
+PASS: 205 remove-files with -C:rel,rel in -c/incr. mode
+PASS: 206 remove-files with -C:rel,rel in -r mode
+PASS: 208 remove-files with -C:rel,abs in -c/incr. mode
+PASS: 209 remove-files with -C:rel,abs in -r mode
+PASS: 211 remove-files with -C:abs,rel in -c/incr. mode
+PASS: 212 remove-files with -C:abs,rel in -r mode
+PASS: 215 remove-files deleting two subdirs in -r mode
+PASS: 218 remove-files on full directory in -r mode
+PASS: 219 remove-files
+SKIP: 220 xattrs: basic functionality
+SKIP: 221 xattrs: change directory with -C option
+SKIP: 222 xattrs: trusted.* attributes
+SKIP: 223 xattrs: s/open/openat/ regression
+SKIP: 224 xattrs: keywords with '=' and '%'
+SKIP: 225 xattrs: exclude xattrs on create
+SKIP: 226 xattrs: xattrs and --skip-old-files
+SKIP: 227 xattrs: xattrs and read-only files
+SKIP: 228 acls: basic functionality
+SKIP: 229 acls: work with -C
+SKIP: 230 acls: default ACLs
+SKIP: 231 selinux: basic store/restore
+SKIP: 232 acls/selinux: special files & fifos
+SKIP: 233 capabilities: binary store/restore
+PASS: 234 tar --one-top-level
+PASS: 235 tar --one-top-level --show-transformed
+PASS: 236 tar --one-top-level --transform
+PASS: 237 tar --one-top-level --transform
+PASS: 238 tar --one-top-level restoring permissions
+SKIP: 239 gtarfail
+SKIP: 240 gtarfail2
+SKIP: 241 multi-fail
+SKIP: 242 ustar-big-2g
+SKIP: 243 ustar-big-8g
+SKIP: 244 pax-big-10g

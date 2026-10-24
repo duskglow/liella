@@ -1,0 +1,16 @@
+glibc	ls	read 1 of top/b	exit 0	13 lines	
+liella	ls	read 1 of top/b	exit 0	13 lines	
+glibc	ls	read 2 of top/b	exit 0	17 lines	
+liella	ls	read 2 of top/b	exit 0	17 lines	
+glibc	find	read 1 of top/b	exit 0	7 lines	
+liella	find	read 1 of top/b	exit 1	7 lines	find: ‘top/b’: No such file or directory|
+glibc	find	read 2 of top/b	exit 1	11 lines	find: ‘top/b/sub’: No such file or directory|
+liella	find	read 2 of top/b	exit 1	11 lines	find: ‘top/b/sub’: No such file or directory|find: ‘top/b’: No such file or directory|
+glibc	du	read 1 of top/b	exit 0	4 lines	
+liella	du	read 1 of top/b	exit 0	3 lines	
+glibc	du	read 2 of top/b	exit 0	4 lines	
+liella	du	read 2 of top/b	exit 0	3 lines	
+glibc	rm	read 1 of top/b	exit 1	0 lines	rm: cannot remove 'top/b': No such file or directory|
+liella	rm	read 1 of top/b	exit 1	0 lines	rm: cannot remove 'top/b': No such file or directory|
+glibc	rm	read 2 of top/b	exit 1	0 lines	rm: cannot remove 'top/b/f1': No such file or directory|rm: cannot remove 'top/b/f2': No such file or directory|rm: cannot remove 'top/b/f3': No such file or directory|rm: cannot remove 'top/b/sub': No such file or directory|
+liella	rm	read 2 of top/b	exit 1	0 lines	rm: cannot remove 'top/b/f1': No such file or directory|rm: cannot remove 'top/b/f2': No such file or directory|rm: cannot remove 'top/b/f3': No such file or directory|rm: cannot remove 'top/b/sub': No such file or directory|rm: traversal failed: top/b: No such file or directory|

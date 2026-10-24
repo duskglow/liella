@@ -1,0 +1,867 @@
+library	symbol	version	kind	story	drow	note
+ld-linux-x86-64.so.2	__rtld_version_placeholder	GLIBC_2.34	stub	LG-6	-	version node anchor; no callers
+libanl.so.1	__libanl_version_placeholder	GLIBC_2.2.5	stub	LG-6	-	version node anchor; no callers
+libc.so.6	_IO_vfscanf	GLIBC_2.2.5	behaviour	LG-8	D-12.15	extra error-pointer argument
+libc.so.6	__after_morecore_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__ctype32_b	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__ctype32_tolower	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__ctype32_toupper	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__ctype_b	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__ctype_tolower	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__ctype_toupper	GLIBC_2.2.5	object	LG-6	D-5.3	pointer to the C locale table
+libc.so.6	__default_morecore	GLIBC_2.2.5	stub	LG-11	D-3.5	
+libc.so.6	__dn_comp	GLIBC_2.2.5	alias	LG-7	D-16.6	target=dn_comp
+libc.so.6	__dn_expand	GLIBC_2.2.5	alias	LG-7	D-16.6	target=dn_expand
+libc.so.6	__dn_skipname	GLIBC_2.2.5	alias	LG-7	D-16.6	target=dn_skipname
+libc.so.6	__free_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__isnanf128	GLIBC_2.26	behaviour	LG-4	D-10.2	isnan on _Float128
+libc.so.6	__ivaliduser	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__key_decryptsession_pk_LOCAL	GLIBC_2.2.5	object	LG-16	D-29.1	
+libc.so.6	__key_encryptsession_pk_LOCAL	GLIBC_2.2.5	object	LG-16	D-29.1	
+libc.so.6	__key_gendes_LOCAL	GLIBC_2.2.5	object	LG-16	D-29.1	
+libc.so.6	__libc_clntudp_bufcreate	GLIBC_PRIVATE	subsystem	LG-15	D-29.1	
+libc.so.6	__libc_rpc_getport	GLIBC_PRIVATE	subsystem	LG-15	D-29.1	
+libc.so.6	__libc_start_main	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	__malloc_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__malloc_initialize_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__memalign_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__mempcpy_small	GLIBC_2.2.5	behaviour	LG-5	-	R15-7: probe black-box, else stub + differences row (ERRATA E6)
+libc.so.6	__morecore	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__mq_open_2	GLIBC_2.7	alias	LG-1	-	
+libc.so.6	__nss_database_lookup	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__nss_group_lookup	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__nss_hosts_lookup	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__nss_next	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__nss_passwd_lookup	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libc.so.6	__pthread_cleanup_routine	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__pthread_getspecific	GLIBC_2.2.5	alias	LG-1	-	target=pthread_getspecific
+libc.so.6	__pthread_key_create	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	__pthread_mutex_destroy	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutex_destroy
+libc.so.6	__pthread_mutex_init	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutex_init
+libc.so.6	__pthread_mutex_lock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutex_lock
+libc.so.6	__pthread_mutex_trylock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutex_trylock
+libc.so.6	__pthread_mutex_unlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutex_unlock
+libc.so.6	__pthread_mutexattr_destroy	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutexattr_destroy
+libc.so.6	__pthread_mutexattr_init	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutexattr_init
+libc.so.6	__pthread_mutexattr_settype	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutexattr_settype
+libc.so.6	__pthread_once	GLIBC_2.2.5	alias	LG-1	-	target=pthread_once
+libc.so.6	__pthread_register_cancel	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__pthread_register_cancel_defer	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__pthread_rwlock_destroy	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_destroy
+libc.so.6	__pthread_rwlock_init	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_init
+libc.so.6	__pthread_rwlock_rdlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_rdlock
+libc.so.6	__pthread_rwlock_tryrdlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_tryrdlock
+libc.so.6	__pthread_rwlock_trywrlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_trywrlock
+libc.so.6	__pthread_rwlock_unlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_unlock
+libc.so.6	__pthread_rwlock_wrlock	GLIBC_2.2.5	alias	LG-1	-	target=pthread_rwlock_wrlock
+libc.so.6	__pthread_setspecific	GLIBC_2.2.5	alias	LG-1	-	target=pthread_setspecific
+libc.so.6	__pthread_unregister_cancel	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__pthread_unregister_cancel_restore	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__pthread_unwind_next	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	__realloc_hook	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	__res_dnok	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_dnok
+libc.so.6	__res_hnok	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_hnok
+libc.so.6	__res_mailok	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_mailok
+libc.so.6	__res_mkquery	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_mkquery
+libc.so.6	__res_nmkquery	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_nmkquery
+libc.so.6	__res_nquery	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_nquery
+libc.so.6	__res_nquerydomain	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_nquerydomain
+libc.so.6	__res_nsearch	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_nsearch
+libc.so.6	__res_nsend	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_nsend
+libc.so.6	__res_ownok	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_ownok
+libc.so.6	__res_query	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_query
+libc.so.6	__res_querydomain	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_querydomain
+libc.so.6	__res_search	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_search
+libc.so.6	__res_send	GLIBC_2.2.5	alias	LG-7	D-16.6	target=res_send
+libc.so.6	__rpc_thread_createerr	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	__rpc_thread_svc_fdset	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	__rpc_thread_svc_max_pollfd	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	__rpc_thread_svc_pollfd	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	__secure_getenv	GLIBC_2.2.5	alias	LG-1	-	target=secure_getenv
+libc.so.6	__sigaddset	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	__sigdelset	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	__sigismember	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	__stpcpy_small	GLIBC_2.2.5	behaviour	LG-5	-	R15-7: probe black-box, else stub + differences row (ERRATA E6)
+libc.so.6	__strcpy_small	GLIBC_2.2.5	behaviour	LG-5	-	R15-7: probe black-box, else stub + differences row (ERRATA E6)
+libc.so.6	__strcspn_c1	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strcspn_c2	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strcspn_c3	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strpbrk_c2	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strpbrk_c3	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strsep_1c	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strsep_2c	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strsep_3c	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strspn_c1	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strspn_c2	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strspn_c3	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__strtok_r_1c	GLIBC_2.2.5	behaviour	LG-5	-	old <bits/string2.h> inline helper
+libc.so.6	__sysctl	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	_authenticate	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	_null_auth	GLIBC_2.2.5	object	LG-6	D-29.1	
+libc.so.6	_obstack	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	_pthread_cleanup_pop	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	_pthread_cleanup_pop_restore	GLIBC_2.2.5	behaviour	LG-2	-	cleanup push/pop that also switches the cancel type
+libc.so.6	_pthread_cleanup_push	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	_pthread_cleanup_push_defer	GLIBC_2.2.5	behaviour	LG-2	-	cleanup push/pop that also switches the cancel type
+libc.so.6	_res	GLIBC_2.2.5	object	LG-7	D-16.6	
+libc.so.6	_rpc_dtablesize	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	_seterr_reply	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	_sys_errlist	GLIBC_2.12	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_errlist	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_errlist	GLIBC_2.3	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_errlist	GLIBC_2.4	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_nerr	GLIBC_2.12	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_nerr	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_nerr	GLIBC_2.3	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_nerr	GLIBC_2.4	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_siglist	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	_sys_siglist	GLIBC_2.3.3	object	LG-6	-	size from versions.tsv
+libc.so.6	advance	GLIBC_2.2.5	behaviour	LG-10	-	<regexp.h>
+libc.so.6	aio_cancel	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_cancel64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_error	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_error64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_fsync	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_fsync64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_read	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_read64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_return	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_return64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_suspend	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_suspend64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_write	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	aio_write64	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	authdes_create	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	authdes_getucred	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	authdes_pk_create	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	authnone_create	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	authunix_create	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	authunix_create_default	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	bdflush	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	call_once	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	callrpc	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	cbc_crypt	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	cfree	GLIBC_2.2.5	alias	LG-1	-	target=free
+libc.so.6	clnt_broadcast	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_create	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_pcreateerror	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_perrno	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_perror	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_spcreateerror	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_sperrno	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnt_sperror	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clntraw_create	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clnttcp_create	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clntudp_bufcreate	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clntudp_create	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clntunix_create	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	clock_getcpuclockid	GLIBC_2.2.5	alias	LG-1	-	librt merge; LG-0b probe confirms
+libc.so.6	clock_getres	GLIBC_2.2.5	alias	LG-1	-	librt merge; LG-0b probe confirms
+libc.so.6	clock_gettime	GLIBC_2.2.5	alias	LG-1	-	librt merge; LG-0b probe confirms
+libc.so.6	clock_nanosleep	GLIBC_2.2.5	alias	LG-1	-	librt merge; LG-0b probe confirms
+libc.so.6	clock_settime	GLIBC_2.2.5	alias	LG-1	-	librt merge; LG-0b probe confirms
+libc.so.6	cnd_broadcast	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	cnd_destroy	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	cnd_init	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	cnd_signal	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	cnd_timedwait	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	cnd_wait	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	create_module	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	des_setparity	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	dladdr	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	dladdr1	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	dlclose	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	dlerror	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	dlinfo	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	dlmopen	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	dlopen	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	dlsym	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	dlvsym	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	ecb_crypt	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	fattach	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	fdetach	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	fmemopen	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	forkpty	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	gai_cancel	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	gai_error	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	gai_suspend	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	get_kernel_syms	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	get_myaddress	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	getaddrinfo_a	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	getmsg	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	getnetname	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	getpmsg	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	getpublickey	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	getrpcport	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	getsecretkey	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	glob	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	glob64	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	host2netname	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	isastream	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: returns 0 per probe
+libc.so.6	key_decryptsession	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_decryptsession_pk	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_encryptsession	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_encryptsession_pk	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_gendes	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_get_conv	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_secretkey_is_set	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_setnet	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	key_setsecret	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	lio_listio	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	lio_listio	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	lio_listio64	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	lio_listio64	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	llseek	GLIBC_2.2.5	alias	LG-1	-	target=lseek64
+libc.so.6	loc1	GLIBC_2.2.5	object	LG-10	-	<regexp.h>
+libc.so.6	loc2	GLIBC_2.2.5	object	LG-10	-	<regexp.h>
+libc.so.6	locs	GLIBC_2.2.5	object	LG-10	-	<regexp.h>
+libc.so.6	login	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	login_tty	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	logout	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	logwtmp	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	mallwatch	GLIBC_2.2.5	object	LG-6	D-3.5	inert variable
+libc.so.6	memcpy	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	mq_close	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_getattr	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_notify	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_open	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_receive	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_send	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_setattr	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_timedreceive	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_timedsend	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mq_unlink	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	mtx_destroy	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	mtx_init	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	mtx_lock	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	mtx_timedlock	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	mtx_trylock	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	mtx_unlock	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	netname2host	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	netname2user	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	nfsservctl	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	nftw	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	nftw64	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	ns_name_compress	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_ntop	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_pack	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_pton	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_skip	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_uncompress	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	ns_name_unpack	GLIBC_2.9	alias	LG-7	D-16.6	
+libc.so.6	openpty	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	passwd2des	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	pmap_getmaps	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	pmap_getport	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	pmap_rmtcall	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	pmap_set	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	pmap_unset	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	posix_spawn	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	posix_spawnp	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	pthread_atfork	GLIBC_2.2.5	behaviour	LG-2	-	__register_atfork without a DSO handle
+libc.so.6	pthread_attr_getaffinity_np	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	pthread_attr_getaffinity_np	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	pthread_attr_getguardsize	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_getstack	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_getstackaddr	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_getstacksize	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_setaffinity_np	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	pthread_attr_setaffinity_np	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	pthread_attr_setguardsize	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_setstack	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_setstackaddr	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_attr_setstacksize	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrier_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrier_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrier_wait	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrierattr_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrierattr_getpshared	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	pthread_barrierattr_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_barrierattr_setpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_cancel	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_clockjoin_np	GLIBC_2.31	alias	LG-1	-	
+libc.so.6	pthread_cond_broadcast	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_cond_clockwait	GLIBC_2.30	alias	LG-1	-	
+libc.so.6	pthread_cond_destroy	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_cond_init	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_cond_signal	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_cond_timedwait	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_cond_wait	GLIBC_2.2.5	behaviour	LG-3	-	old condvar object (s22_5_c_1_2)
+libc.so.6	pthread_condattr_getclock	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	pthread_condattr_getpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_condattr_setclock	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	pthread_condattr_setpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_create	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_detach	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_getaffinity_np	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	pthread_getaffinity_np	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	pthread_getattr_default_np	GLIBC_2.18	alias	LG-1	-	
+libc.so.6	pthread_getattr_np	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	pthread_getconcurrency	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_getcpuclockid	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_getname_np	GLIBC_2.12	alias	LG-1	-	
+libc.so.6	pthread_getspecific	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_join	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_key_create	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_key_delete	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_kill	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_kill_other_threads_np	GLIBC_2.2.5	stub	LG-5	-	no effect
+libc.so.6	pthread_mutex_clocklock	GLIBC_2.30	alias	LG-1	-	
+libc.so.6	pthread_mutex_consistent	GLIBC_2.12	alias	LG-1	-	
+libc.so.6	pthread_mutex_consistent_np	GLIBC_2.4	alias	LG-1	-	target=pthread_mutex_consistent
+libc.so.6	pthread_mutex_getprioceiling	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutex_setprioceiling	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutex_timedlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutex_trylock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_getkind_np	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutexattr_gettype
+libc.so.6	pthread_mutexattr_getprioceiling	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_getprotocol	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_getpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_getrobust	GLIBC_2.12	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_getrobust_np	GLIBC_2.4	alias	LG-1	-	target=pthread_mutexattr_getrobust
+libc.so.6	pthread_mutexattr_gettype	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_setkind_np	GLIBC_2.2.5	alias	LG-1	-	target=pthread_mutexattr_settype
+libc.so.6	pthread_mutexattr_setprioceiling	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_setprotocol	GLIBC_2.4	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_setpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_setrobust	GLIBC_2.12	alias	LG-1	-	
+libc.so.6	pthread_mutexattr_setrobust_np	GLIBC_2.4	alias	LG-1	-	target=pthread_mutexattr_setrobust
+libc.so.6	pthread_mutexattr_settype	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_once	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_clockrdlock	GLIBC_2.30	alias	LG-1	-	
+libc.so.6	pthread_rwlock_clockwrlock	GLIBC_2.30	alias	LG-1	-	
+libc.so.6	pthread_rwlock_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_rdlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_timedrdlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_timedwrlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_tryrdlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_trywrlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_unlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlock_wrlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_getkind_np	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_getpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_setkind_np	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_rwlockattr_setpshared	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_setaffinity_np	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	pthread_setaffinity_np	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	pthread_setattr_default_np	GLIBC_2.18	alias	LG-1	-	
+libc.so.6	pthread_setconcurrency	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_setname_np	GLIBC_2.12	alias	LG-1	-	
+libc.so.6	pthread_setschedprio	GLIBC_2.3.4	alias	LG-1	-	
+libc.so.6	pthread_setspecific	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_sigmask	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	pthread_sigqueue	GLIBC_2.11	alias	LG-1	-	
+libc.so.6	pthread_spin_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_spin_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_spin_lock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_spin_trylock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_spin_unlock	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_testcancel	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	pthread_timedjoin_np	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	pthread_tryjoin_np	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	pthread_yield	GLIBC_2.2.5	alias	LG-1	-	target=sched_yield
+libc.so.6	putmsg	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	putpmsg	GLIBC_2.2.5	stub	LG-5	D-29.1	STREAMS: ENOSYS per probe
+libc.so.6	query_module	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	quick_exit	GLIBC_2.10	behaviour	LG-2	-	LG-0b probe
+libc.so.6	realpath	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	regexec	GLIBC_2.2.5	behaviour	LG-2	-	LG-0b probe
+libc.so.6	registerrpc	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	rpc_createerr	GLIBC_2.2.5	object	LG-15	D-29.1	
+libc.so.6	rtime	GLIBC_2.2.5	subsystem	LG-15	D-29.1	
+libc.so.6	sched_getaffinity	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	sched_setaffinity	GLIBC_2.3.3	behaviour	LG-2	-	old cpu-set size rule; LG-0b probe
+libc.so.6	sem_clockwait	GLIBC_2.30	alias	LG-1	-	
+libc.so.6	sem_close	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_destroy	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_getvalue	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_init	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_open	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_post	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_timedwait	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_trywait	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_unlink	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sem_wait	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	shm_open	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	shm_unlink	GLIBC_2.2.5	alias	LG-1	-	
+libc.so.6	sigvec	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	sstk	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	step	GLIBC_2.2.5	behaviour	LG-10	-	<regexp.h>
+libc.so.6	stime	GLIBC_2.2.5	behaviour	LG-1	D-27.4	exported today by csys/src/machine/compat_stime.S
+libc.so.6	svc_exit	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_fdset	GLIBC_2.2.5	object	LG-14	D-29.1	
+libc.so.6	svc_getreq	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_getreq_common	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_getreq_poll	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_getreqset	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_max_pollfd	GLIBC_2.2.5	object	LG-14	D-29.1	
+libc.so.6	svc_pollfd	GLIBC_2.2.5	object	LG-14	D-29.1	
+libc.so.6	svc_register	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_run	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_sendreply	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svc_unregister	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcauthdes_stats	GLIBC_2.2.5	object	LG-16	D-29.1	
+libc.so.6	svcerr_auth	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_decode	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_noproc	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_noprog	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_progvers	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_systemerr	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcerr_weakauth	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcfd_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcraw_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svctcp_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcudp_bufcreate	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcudp_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcudp_enablecache	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcunix_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	svcunixfd_create	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	sys_errlist	GLIBC_2.12	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_errlist	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_errlist	GLIBC_2.3	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_errlist	GLIBC_2.4	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_nerr	GLIBC_2.12	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_nerr	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_nerr	GLIBC_2.3	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_nerr	GLIBC_2.4	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_sigabbrev	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_sigabbrev	GLIBC_2.3.3	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_siglist	GLIBC_2.2.5	object	LG-6	-	size from versions.tsv
+libc.so.6	sys_siglist	GLIBC_2.3.3	object	LG-6	-	size from versions.tsv
+libc.so.6	sysctl	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	thrd_create	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	thrd_detach	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	thrd_exit	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	thrd_join	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	timer_create	GLIBC_2.2.5	behaviour	LG-2	-	old timer_t ABI; LG-0b probe
+libc.so.6	timer_create	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	timer_delete	GLIBC_2.2.5	behaviour	LG-2	-	old timer_t ABI; LG-0b probe
+libc.so.6	timer_delete	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	timer_getoverrun	GLIBC_2.2.5	behaviour	LG-2	-	old timer_t ABI; LG-0b probe
+libc.so.6	timer_getoverrun	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	timer_gettime	GLIBC_2.2.5	behaviour	LG-2	-	old timer_t ABI; LG-0b probe
+libc.so.6	timer_gettime	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	timer_settime	GLIBC_2.2.5	behaviour	LG-2	-	old timer_t ABI; LG-0b probe
+libc.so.6	timer_settime	GLIBC_2.3.3	alias	LG-1	-	
+libc.so.6	tr_break	GLIBC_2.2.5	stub	LG-11	D-3.5	
+libc.so.6	tss_create	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	tss_delete	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	tss_get	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	tss_set	GLIBC_2.28	alias	LG-1	-	
+libc.so.6	uselib	GLIBC_2.2.5	stub	LG-5	D-29.1	removed syscall: ENOSYS
+libc.so.6	user2netname	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	ustat	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	vtimes	GLIBC_2.2.5	behaviour	LG-5	-	
+libc.so.6	xdecrypt	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_accepted_reply	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_array	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_authdes_cred	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_authdes_verf	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_authunix_parms	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_bool	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_bytes	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_callhdr	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_callmsg	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_char	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_cryptkeyarg	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_cryptkeyarg2	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_cryptkeyres	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_des_block	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_double	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_enum	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_float	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_free	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_getcredres	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_hyper	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_int	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_int16_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_int32_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_int64_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_int8_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_key_netstarg	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_key_netstres	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_keybuf	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_keystatus	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_long	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_longlong_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_netnamestr	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_netobj	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_opaque	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_opaque_auth	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_pmap	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_pmaplist	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_pointer	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_quad_t	GLIBC_2.3.4	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_reference	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_rejected_reply	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_replymsg	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_rmtcall_args	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_rmtcallres	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_short	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_sizeof	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_string	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_char	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_hyper	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_int	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_long	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_longlong_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_quad_t	GLIBC_2.3.4	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_u_short	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_uint16_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_uint32_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_uint64_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_uint8_t	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_union	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_unixcred	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xdr_vector	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdr_void	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdr_wrapstring	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdrmem_create	GLIBC_2.2.5	subsystem	LG-12	D-29.1	
+libc.so.6	xdrrec_create	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdrrec_endofrecord	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdrrec_eof	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdrrec_skiprecord	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xdrstdio_create	GLIBC_2.2.5	subsystem	LG-13	D-29.1	
+libc.so.6	xencrypt	GLIBC_2.2.5	subsystem	LG-16	D-29.1	
+libc.so.6	xprt_register	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc.so.6	xprt_unregister	GLIBC_2.2.5	subsystem	LG-14	D-29.1	
+libc_malloc_debug.so.0	__free_hook	GLIBC_2.2.5	object	LG-11	D-3.5	
+libc_malloc_debug.so.0	__malloc_hook	GLIBC_2.2.5	object	LG-11	D-3.5	
+libc_malloc_debug.so.0	__memalign_hook	GLIBC_2.2.5	object	LG-11	D-3.5	
+libc_malloc_debug.so.0	__realloc_hook	GLIBC_2.2.5	object	LG-11	D-3.5	
+libc_malloc_debug.so.0	aligned_alloc	GLIBC_2.16	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	calloc	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	free	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mallinfo	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mallinfo2	GLIBC_2.33	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	malloc	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	malloc_get_state	GLIBC_2.2.5	stub	DL-1	D-3.5	fails (D-3.5)
+libc_malloc_debug.so.0	malloc_info	GLIBC_2.10	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	malloc_set_state	GLIBC_2.2.5	stub	DL-1	D-3.5	fails (D-3.5)
+libc_malloc_debug.so.0	malloc_stats	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	malloc_trim	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	malloc_usable_size	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mallopt	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mcheck	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mcheck_check_all	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mcheck_pedantic	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	memalign	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mprobe	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	mtrace	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	muntrace	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	posix_memalign	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	pvalloc	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	realloc	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libc_malloc_debug.so.0	valloc	GLIBC_2.2.5	behaviour	LG-11	D-3.5	
+libdl.so.2	__libdl_version_placeholder	GLIBC_2.2.5	stub	LG-6	-	version node anchor; no callers
+libdl.so.2	__libdl_version_placeholder	GLIBC_2.3.3	stub	LG-6	-	version node anchor; no callers
+libdl.so.2	__libdl_version_placeholder	GLIBC_2.3.4	stub	LG-6	-	version node anchor; no callers
+libm.so.6	_LIB_VERSION	GLIBC_2.2.5	object	LG-4	D-10.2	
+libm.so.6	__acos_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acos
+libm.so.6	__acosf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=acosf128
+libm.so.6	__acosf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acosf
+libm.so.6	__acosh_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acosh
+libm.so.6	__acoshf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=acoshf128
+libm.so.6	__acoshf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acoshf
+libm.so.6	__acoshl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acoshl
+libm.so.6	__acosl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=acosl
+libm.so.6	__asin_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=asin
+libm.so.6	__asinf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=asinf128
+libm.so.6	__asinf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=asinf
+libm.so.6	__asinl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=asinl
+libm.so.6	__atan2_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atan2
+libm.so.6	__atan2f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=atan2f128
+libm.so.6	__atan2f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atan2f
+libm.so.6	__atan2l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atan2l
+libm.so.6	__atanh_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atanh
+libm.so.6	__atanhf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=atanhf128
+libm.so.6	__atanhf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atanhf
+libm.so.6	__atanhl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=atanhl
+libm.so.6	__cosh_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=cosh
+libm.so.6	__coshf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=coshf128
+libm.so.6	__coshf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=coshf
+libm.so.6	__coshl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=coshl
+libm.so.6	__exp10_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp10
+libm.so.6	__exp10f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=exp10f128
+libm.so.6	__exp10f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp10f
+libm.so.6	__exp10l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp10l
+libm.so.6	__exp2_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp2
+libm.so.6	__exp2f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=exp2f128
+libm.so.6	__exp2f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp2f
+libm.so.6	__exp2l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp2l
+libm.so.6	__exp_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=exp
+libm.so.6	__expf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=expf128
+libm.so.6	__expf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=expf
+libm.so.6	__expl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=expl
+libm.so.6	__fmod_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=fmod
+libm.so.6	__fmodf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=fmodf128
+libm.so.6	__fmodf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=fmodf
+libm.so.6	__fmodl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=fmodl
+libm.so.6	__gamma_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgamma_r
+libm.so.6	__gammaf128_r_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=lgammaf128_r
+libm.so.6	__gammaf_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgammaf_r
+libm.so.6	__gammal_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgammal_r
+libm.so.6	__hypot_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=hypot
+libm.so.6	__hypotf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=hypotf128
+libm.so.6	__hypotf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=hypotf
+libm.so.6	__hypotl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=hypotl
+libm.so.6	__j0_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j0
+libm.so.6	__j0f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=j0f128
+libm.so.6	__j0f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j0f
+libm.so.6	__j0l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j0l
+libm.so.6	__j1_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j1
+libm.so.6	__j1f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=j1f128
+libm.so.6	__j1f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j1f
+libm.so.6	__j1l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=j1l
+libm.so.6	__jn_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=jn
+libm.so.6	__jnf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=jnf128
+libm.so.6	__jnf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=jnf
+libm.so.6	__jnl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=jnl
+libm.so.6	__lgamma_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgamma_r
+libm.so.6	__lgammaf128_r_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=lgammaf128_r
+libm.so.6	__lgammaf_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgammaf_r
+libm.so.6	__lgammal_r_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=lgammal_r
+libm.so.6	__log10_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log10
+libm.so.6	__log10f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=log10f128
+libm.so.6	__log10f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log10f
+libm.so.6	__log10l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log10l
+libm.so.6	__log2_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log2
+libm.so.6	__log2f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=log2f128
+libm.so.6	__log2f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log2f
+libm.so.6	__log2l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log2l
+libm.so.6	__log_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=log
+libm.so.6	__logf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=logf128
+libm.so.6	__logf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=logf
+libm.so.6	__logl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=logl
+libm.so.6	__pow_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=pow
+libm.so.6	__powf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=powf128
+libm.so.6	__powf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=powf
+libm.so.6	__powl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=powl
+libm.so.6	__remainder_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=remainder
+libm.so.6	__remainderf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=remainderf128
+libm.so.6	__remainderf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=remainderf
+libm.so.6	__remainderl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=remainderl
+libm.so.6	__scalb_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=scalb
+libm.so.6	__scalbf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=scalbf
+libm.so.6	__scalbl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=scalbl
+libm.so.6	__sinh_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sinh
+libm.so.6	__sinhf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=sinhf128
+libm.so.6	__sinhf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sinhf
+libm.so.6	__sinhl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sinhl
+libm.so.6	__sqrt_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sqrt
+libm.so.6	__sqrtf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=sqrtf128
+libm.so.6	__sqrtf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sqrtf
+libm.so.6	__sqrtl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=sqrtl
+libm.so.6	__y0_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y0
+libm.so.6	__y0f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=y0f128
+libm.so.6	__y0f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y0f
+libm.so.6	__y0l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y0l
+libm.so.6	__y1_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y1
+libm.so.6	__y1f128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=y1f128
+libm.so.6	__y1f_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y1f
+libm.so.6	__y1l_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=y1l
+libm.so.6	__yn_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=yn
+libm.so.6	__ynf128_finite	GLIBC_2.26	alias	LG-4	D-10.2	target=ynf128
+libm.so.6	__ynf_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=ynf
+libm.so.6	__ynl_finite	GLIBC_2.15	alias	LG-4	D-10.2	target=ynl
+libm.so.6	exp	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	exp10	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	exp10f	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	exp2	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	exp2f	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	expf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	fmod	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	fmodf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	hypot	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	hypotf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	lgamma	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	lgammaf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	lgammal	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	log	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	log2	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	log2f	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	logf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	matherr	GLIBC_2.2.5	stub	LG-4	D-10.2	the library default handler: returns 0
+libm.so.6	pow	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	pow10	GLIBC_2.2.5	alias	LG-4	D-10.2	target=exp10
+libm.so.6	pow10f	GLIBC_2.2.5	alias	LG-4	D-10.2	target=exp10f
+libm.so.6	pow10l	GLIBC_2.2.5	alias	LG-4	D-10.2	target=exp10l
+libm.so.6	powf	GLIBC_2.2.5	behaviour	LG-4	D-10.2	SVID error handling (_LIB_VERSION, matherr); alias if LG-0b shows identical results
+libm.so.6	totalorder	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf128	GLIBC_2.26	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf32	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf32x	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf64	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderf64x	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalorderl	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermag	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf128	GLIBC_2.26	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf32	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf32x	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf64	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagf64x	GLIBC_2.27	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libm.so.6	totalordermagl	GLIBC_2.25	behaviour	LG-4	D-10.2	old ABI passes the operands by value (current takes pointers)
+libnsl.so.1	__create_ib_request	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	__do_niscall3	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	__follow_path	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	__free_fdresult	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_default_access	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_default_group	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_default_owner	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_default_ttl	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_finddirectory	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nis_hash	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nisbind_connect	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nisbind_create	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nisbind_destroy	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__nisbind_next	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	__prepare_niscall	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	__yp_check	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	_xdr_ib_request	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	_xdr_nis_result	GLIBC_PRIVATE	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_add	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_add_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_addmember	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_checkpoint	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_clone_directory	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_clone_object	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_clone_result	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_creategroup	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_destroy_object	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_destroygroup	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_dir_cmp	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_domain_of	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_domain_of_r	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_first_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_free_directory	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_free_object	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_free_request	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_freenames	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_freeresult	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_freeservlist	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_freetags	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_getnames	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_getservlist	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_ismember	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_leaf_of	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_leaf_of_r	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_lerror	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_list	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_local_directory	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_local_group	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_local_host	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_local_principal	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_lookup	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_mkdir	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_modify	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_modify_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_name_of	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_name_of_r	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_next_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_perror	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_ping	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_directory	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_group	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_group_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_link	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_object	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_result	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_rights	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_print_table	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_read_obj	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_remove	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_remove_entry	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_removemember	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_rmdir	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_servstate	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_sperrno	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_sperror	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_sperror_r	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_stats	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_verifygroup	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	nis_write_obj	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	readColdStartFile	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	writeColdStartFile	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	xdr_cback_data	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	xdr_domainname	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_keydat	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_mapname	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_obj_p	GLIBC_2.2.5	subsystem	LG-18	D-29.1	
+libnsl.so.1	xdr_peername	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_valdat	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_yp_buf	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypall	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypbind_binding	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypbind_resp	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypbind_resptype	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypbind_setdom	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypdelete_args	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypmap_parms	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypmaplist	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_yppush_status	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_yppushresp_xfr	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypreq_key	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypreq_nokey	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypreq_xfr	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_all	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_key_val	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_maplist	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_master	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_order	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_val	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypresp_xfr	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypstat	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypupdate_args	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	xdr_ypxfrstat	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_all	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_bind	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_first	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_get_default_domain	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_maplist	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_master	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_match	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_next	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_order	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_unbind	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yp_update	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	ypbinderr_string	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	yperr_string	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libnsl.so.1	ypprot_err	GLIBC_2.2.5	subsystem	LG-17	D-29.1	
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.11	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.12	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.18	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.2.5	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.2.6	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.28	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.3.2	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.3.3	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.3.4	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.30	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.31	stub	LG-6	-	version node anchor; no callers
+libpthread.so.0	__libpthread_version_placeholder	GLIBC_2.4	stub	LG-6	-	version node anchor; no callers
+libresolv.so.2	__p_secstodate	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	_gethtbyaddr	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	_gethtbyname	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	_gethtbyname2	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	_gethtent	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	_sethtent	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	res_gethostbyaddr	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	res_gethostbyname	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	res_gethostbyname2	GLIBC_2.2.5	behaviour	LG-7	D-16.6	
+libresolv.so.2	res_send_setqhook	GLIBC_2.2.5	stub	LG-7	D-16.6	hook setter: no effect
+libresolv.so.2	res_send_setrhook	GLIBC_2.2.5	stub	LG-7	D-16.6	hook setter: no effect
+librt.so.1	__librt_version_placeholder	GLIBC_2.2.5	stub	LG-6	-	version node anchor; no callers
+librt.so.1	__librt_version_placeholder	GLIBC_2.3.3	stub	LG-6	-	version node anchor; no callers
+librt.so.1	__librt_version_placeholder	GLIBC_2.3.4	stub	LG-6	-	version node anchor; no callers
+librt.so.1	__librt_version_placeholder	GLIBC_2.4	stub	LG-6	-	version node anchor; no callers
+librt.so.1	__librt_version_placeholder	GLIBC_2.7	stub	LG-6	-	version node anchor; no callers
+libutil.so.1	__libutil_version_placeholder	GLIBC_2.2.5	stub	LG-6	-	version node anchor; no callers

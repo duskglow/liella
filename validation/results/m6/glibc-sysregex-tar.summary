@@ -1,0 +1,8 @@
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure-start 2026-10-05T11:14:59Z load: 5.31, 4.04, 4.78
+configure rc=0
+build-start 2026-10-05T11:15:38Z load: 4.29, 3.95, 4.72
+build rc=0 seconds=6.015302343
+check-start 2026-10-05T11:15:44Z load: 4.59, 4.01, 4.74
+check rc=0 seconds=207.516302110
+check-end 2026-10-05T11:19:11Z load: 2.51, 3.10, 4.21

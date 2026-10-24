@@ -1,0 +1,28 @@
+[package]
+name = "liella-legacy"
+description = "Quarantined historical semantics required by the POSIX/glibc ABI, built on the clean API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_legacy"
+
+[features]
+# Test-only hooks (`recheck::SKEW_NS`); enabled through liella-boundary's `selftest`, never by a product.
+selftest = []
+
+[dependencies]
+liella-kernel = { workspace = true }
+liella-rt = { workspace = true }
+liella = { workspace = true }
+# The C structures some legacy shapes fill in place (random_data, drand48_data).
+liella-abi = { workspace = true }
+
+[dev-dependencies]
+spectest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,406 @@
+# dlsecure record: ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39; kernel 6.8.0-146-generic
+setgid copies: mode 2755 group is a supplementary group of the caller, not its real group
+probe_origin: (RUNPATH)            Library runpath: [$ORIGIN/lib]
+probe_origin_rpath: (RPATH)              Library rpath: [$ORIGIN/lib]
+== baseline [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== baseline [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== environment residue [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_BIND_NOW=1
+env LD_BIND_NOT=1
+env LD_DYNAMIC_WEAK=1
+env LD_WARN=1
+env LD_VERBOSE=1
+env LD_HWCAP_MASK=0
+env LD_ORIGIN_PATH=<dir>/o
+env LD_PROFILE=libnonexistent.so
+env LD_PROFILE_OUTPUT=<dir>/o
+env LD_LIBRARY_PATH=/nonexistent
+env LD_DEBUG_OUTPUT=<dir>/o/dbg
+env LD_ASSUME_KERNEL=6.0.0
+env LD_USE_LOAD_BIAS=0
+env LD_PRELOAD=
+env LD_AUDIT=
+env LD_DEBUG=
+env GLIBC_TUNABLES=glibc.malloc.tcache_count=0
+env TZ=UTC
+env TZDIR=<dir>/o
+env LOCPATH=<dir>/o
+env NLSPATH=<dir>/o
+env GCONV_PATH=<dir>/o
+env MALLOC_CHECK_=0
+env MALLOC_PERTURB_=0
+env MALLOC_ARENA_MAX=1
+env MALLOC_TRACE=<dir>/o/mtrace
+env HOSTALIASES=<dir>/o
+env LOCALDOMAIN=x
+env RES_OPTIONS=ndots:1
+env RESOLV_HOST_CONF=<dir>/o
+env TMPDIR=<dir>/o
+exit 0
+== environment residue [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_PROFILE_OUTPUT=<dir>/o
+env LD_ASSUME_KERNEL=6.0.0
+env LD_USE_LOAD_BIAS=0
+env TZ=UTC
+env MALLOC_CHECK_=0
+exit 0
+== LD_PRELOAD absolute untrusted [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+object libpre.so
+env PATH=/usr/bin:/bin
+env LD_PRELOAD=<dir>/pre/libpre.so
+stderr ctor libpre
+exit 0
+== LD_PRELOAD absolute untrusted [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_PRELOAD bare name, trusted dir, no set-ID bit [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+object libz.so.1
+env PATH=/usr/bin:/bin
+env LD_PRELOAD=libz.so.1
+exit 0
+== LD_PRELOAD bare name, trusted dir, no set-ID bit [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+stderr ERROR: ld.so: object 'libz.so.1' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored.
+exit 0
+== LD_PRELOAD absolute, trusted dir, no set-ID bit [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+object libz.so.1
+env PATH=/usr/bin:/bin
+env LD_PRELOAD=/lib/x86_64-linux-gnu/libz.so.1
+exit 0
+== LD_PRELOAD absolute, trusted dir, no set-ID bit [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_PRELOAD bare name, missing [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_PRELOAD=nonexistent.so
+stderr ERROR: ld.so: object 'nonexistent.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored.
+exit 0
+== LD_PRELOAD bare name, missing [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+stderr ERROR: ld.so: object 'nonexistent.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored.
+exit 0
+== LD_AUDIT absolute untrusted module [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_AUDIT=<dir>/aud/libaud.so
+stderr audit la_version
+exit 0
+== LD_AUDIT absolute untrusted module [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_AUDIT bare name, trusted dir, not a module [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_AUDIT=libz.so.1
+stderr ERROR: ld.so: object 'libz.so.1' cannot be loaded as audit interface: undefined symbol: la_version; ignored.
+exit 0
+== LD_AUDIT bare name, trusted dir, not a module [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== DT_NEEDED, no search path [plain]
+stderr <dir>/bin/probe_needs: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== DT_NEEDED, no search path [secure]
+stderr <dir>/bin/sg_probe_needs: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== LD_LIBRARY_PATH absolute [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+sgo_value 42
+object libsgo.so
+env PATH=/usr/bin:/bin
+env LD_LIBRARY_PATH=<dir>/bin/lib
+stderr ctor libsgo
+exit 0
+== LD_LIBRARY_PATH absolute [secure]
+stderr <dir>/bin/sg_probe_needs: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== LD_LIBRARY_PATH empty elements, cwd holds the library [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+sgo_value 42
+object libsgo.so
+env PATH=/usr/bin:/bin
+env LD_LIBRARY_PATH=:
+stderr ctor libsgo
+exit 0
+== LD_LIBRARY_PATH empty elements, cwd holds the library [secure]
+stderr <dir>/bin/sg_probe_needs: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== LD_LIBRARY_PATH relative element [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+sgo_value 42
+object libsgo.so
+env PATH=/usr/bin:/bin
+env LD_LIBRARY_PATH=lib
+stderr ctor libsgo
+exit 0
+== LD_LIBRARY_PATH relative element [secure]
+stderr <dir>/bin/sg_probe_needs: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== RUNPATH $ORIGIN/lib, untrusted program directory [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+sgo_value 42
+object libsgo.so
+env PATH=/usr/bin:/bin
+stderr ctor libsgo
+exit 0
+== RUNPATH $ORIGIN/lib, untrusted program directory [secure]
+stderr <dir>/bin/sg_probe_origin: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== RPATH $ORIGIN/lib, untrusted program directory [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+sgo_value 42
+object libsgo.so
+env PATH=/usr/bin:/bin
+stderr ctor libsgo
+exit 0
+== RPATH $ORIGIN/lib, untrusted program directory [secure]
+stderr <dir>/bin/sg_probe_origin_rpath: error while loading shared libraries: libsgo.so: cannot open shared object file: No such file or directory
+exit 127
+== dlopen $ORIGIN token in the name [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen ok
+object libsgo.so
+stderr ctor libsgo
+exit 0
+== dlopen $ORIGIN token in the name [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+dlopen fail $ORIGIN/lib/libsgo.so: cannot open shared object file: No such file or directory
+exit 0
+== dlopen relative name with a slash [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen ok
+object libsgo.so
+stderr ctor libsgo
+exit 0
+== dlopen relative name with a slash [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+dlopen ok
+object libsgo.so
+stderr ctor libsgo
+exit 0
+== dlopen absolute untrusted [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen ok
+object libsgo.so
+stderr ctor libsgo
+exit 0
+== dlopen absolute untrusted [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+dlopen ok
+object libsgo.so
+stderr ctor libsgo
+exit 0
+== LD_DEBUG=libs [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_DEBUG=libs
+stderr 25 lines, first: <pid>:	find library=libc.so.6 [0]; searching
+exit 0
+== LD_DEBUG=libs [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_DEBUG=libs with LD_DEBUG_OUTPUT [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_DEBUG=libs
+env LD_DEBUG_OUTPUT=<dir>/o/dbgout
+exit 0
+== LD_DEBUG=libs with LD_DEBUG_OUTPUT [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+LD_DEBUG_OUTPUT files: 1
+== LD_SHOW_AUXV=1 [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_SHOW_AUXV=1
+stdout other 22 lines, first: AT_SYSINFO_EHDR:      <hex>
+exit 0
+== LD_SHOW_AUXV=1 [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_SHOW_AUXV empty [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_SHOW_AUXV=
+stdout other 22 lines, first: AT_SYSINFO_EHDR:      <hex>
+exit 0
+== LD_SHOW_AUXV empty [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== LD_TRACE_LOADED_OBJECTS empty [plain]
+stdout other 3 lines, first: 	linux-vdso.so.1 (<hex>)
+exit 0
+== LD_TRACE_LOADED_OBJECTS empty [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_TRACE_LOADED_OBJECTS=
+exit 0
+== LD_TRACE_LOADED_OBJECTS=1 [plain]
+stdout other 3 lines, first: 	linux-vdso.so.1 (<hex>)
+exit 0
+== LD_TRACE_LOADED_OBJECTS=1 [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env LD_TRACE_LOADED_OBJECTS=1
+exit 0
+== GLIBC_TUNABLES [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+env GLIBC_TUNABLES=glibc.malloc.check=3
+exit 0
+== GLIBC_TUNABLES [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+env PATH=/usr/bin:/bin
+exit 0
+== TZ=Asia/Tokyo [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=Asia/Tokyo [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=:Asia/Tokyo [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=:Asia/Tokyo [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=JST-9 [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=JST-9 [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=/usr/share/zoneinfo/Asia/Tokyo [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=/usr/share/zoneinfo/Asia/Tokyo [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=:/usr/share/zoneinfo/Asia/Tokyo [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=:/usr/share/zoneinfo/Asia/Tokyo [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=<dir>/zone/myzone [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=<dir>/zone/myzone [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 0 zone 
+exit 0
+== TZ=:<dir>/zone/myzone [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=:<dir>/zone/myzone [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 0 zone 
+exit 0
+== TZ=Asia/../Asia/Tokyo [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=Asia/../Asia/Tokyo [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 0 zone Asia
+exit 0
+== TZ=../../../..<dir>/zone/myzone [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZ=../../../..<dir>/zone/myzone [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 0 zone 
+exit 0
+== TZDIR=<dir>/zone TZ=myzone [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+tz gmtoff 32400 zone JST
+exit 0
+== TZDIR=<dir>/zone TZ=myzone [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+tz gmtoff 0 zone myzone
+exit 0
+== ns private cache, control [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen ok
+object libsgc.so.1
+stderr ctor libsgc
+exit 0
+== ns private cache, control [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+dlopen ok
+object libsgc.so.1
+stderr ctor libsgc
+exit 0
+== ns no cache file [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns empty cache file [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns garbage cache file [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns cache cut to 16 bytes [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns cache cut in half [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns garbage cache file [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+dlopen fail libsgc.so.1: cannot open shared object file: No such file or directory
+exit 0
+== ns /etc/ld.so.preload names an untrusted absolute path [plain]
+secure 0 rgid_is_egid 1 ruid_is_euid 1
+object libpre.so
+env PATH=/usr/bin:/bin
+stderr ctor libpre
+exit 0
+== ns /etc/ld.so.preload names an untrusted absolute path [secure]
+secure 1 rgid_is_egid 0 ruid_is_euid 1
+object libpre.so
+env PATH=/usr/bin:/bin
+stderr ctor libpre
+exit 0

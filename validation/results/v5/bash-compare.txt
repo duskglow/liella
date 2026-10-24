@@ -1,0 +1,7 @@
+run-builtins	glibc: clean	liella: 6 diff lines
+run-execscript	glibc: 11 diff lines	liella: 11 diff lines
+run-glob-bracket	glibc: clean	liella: 105 diff lines
+run-glob-test	glibc: 18 diff lines	liella: 18 diff lines
+run-history	glibc: 21 diff lines	liella: 21 diff lines
+tests: 86; identical output: 81; different: 5
+clean (no diff) under glibc: 78/86; under liella: 76/86

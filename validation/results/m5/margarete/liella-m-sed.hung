@@ -1,0 +1,4 @@
+04:18:19 killed after 606s: sed -n -f /home/claude/validation/build/liella-m/sed/sed-4.10/testsuite/dc.sed 
+04:18:50 killed after 624s: sed -n -f /home/claude/validation/build/liella-m/sed/sed-4.10/testsuite/binary2.sed 
+04:28:29 killed after 609s: sed -n -f /home/claude/validation/build/liella-m/sed/sed-4.10/testsuite/dc.sed sqrt2-inp 
+04:28:59 killed after 609s: sed -n -f /home/claude/validation/build/liella-m/sed/sed-4.10/testsuite/binary3.sed 

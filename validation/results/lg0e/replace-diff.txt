@@ -1,0 +1,108 @@
+== coreutils: substitutions that differ (glibc < > liella)
+122c122
+< HAVE_DLOPEN='1'
+---
+> HAVE_DLOPEN='0'
+593c593
+< REPLACE_FCLOSE='1'
+---
+> REPLACE_FCLOSE='0'
+598c598
+< REPLACE_FFLUSH='1'
+---
+> REPLACE_FFLUSH='0'
+610,611c610,611
+< REPLACE_FOPEN='1'
+< REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+---
+> REPLACE_FOPEN='0'
+> REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+620,621c620,621
+< REPLACE_FSEEK='1'
+< REPLACE_FSEEKO='1'
+---
+> REPLACE_FSEEK='0'
+> REPLACE_FSEEKO='0'
+793c793
+< REPLACE_PTHREAD_RWLOCKATTR_INIT='1'
+---
+> REPLACE_PTHREAD_RWLOCKATTR_INIT='0'
+795c795
+< REPLACE_PTHREAD_RWLOCK_INIT='1'
+---
+> REPLACE_PTHREAD_RWLOCK_INIT='0'
+== coreutils: cache variables that differ (glibc < > liella)
+46d45
+< ac_cv_func__fseeki64=no
+294d292
+< ac_cv_have_decl_isblank=yes
+358d355
+< ac_cv_header_libintl_h=yes
+501a499
+> gl_cv_func_fclose_stdin=yes
+506c504
+< gl_cv_func_fflush_stdin=no
+---
+> gl_cv_func_fflush_stdin=yes
+628c626
+< gl_cv_func_pthread_rwlock_good_waitqueue=no
+---
+> gl_cv_func_pthread_rwlock_good_waitqueue=yes
+641c639
+< gl_cv_func_re_compile_pattern_working=no
+---
+> gl_cv_func_re_compile_pattern_working=yes
+754c752
+< gl_cv_lib_dl=none
+---
+> gl_cv_lib_dl=no
+== findutils: substitutions that differ (glibc < > liella)
+581c581
+< REPLACE_FCLOSE='1'
+---
+> REPLACE_FCLOSE='0'
+586c586
+< REPLACE_FFLUSH='1'
+---
+> REPLACE_FFLUSH='0'
+598,599c598,599
+< REPLACE_FOPEN='1'
+< REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+---
+> REPLACE_FOPEN='0'
+> REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+608,609c608,609
+< REPLACE_FSEEK='1'
+< REPLACE_FSEEKO='1'
+---
+> REPLACE_FSEEK='0'
+> REPLACE_FSEEKO='0'
+769c769
+< REPLACE_PTHREAD_RWLOCKATTR_INIT='1'
+---
+> REPLACE_PTHREAD_RWLOCKATTR_INIT='0'
+771c771
+< REPLACE_PTHREAD_RWLOCK_INIT='1'
+---
+> REPLACE_PTHREAD_RWLOCK_INIT='0'
+== findutils: cache variables that differ (glibc < > liella)
+29d28
+< ac_cv_func__fseeki64=no
+184d182
+< ac_cv_have_decl_isblank=yes
+234d231
+< ac_cv_header_libintl_h=yes
+330a328
+> gl_cv_func_fclose_stdin=yes
+335c333
+< gl_cv_func_fflush_stdin=no
+---
+> gl_cv_func_fflush_stdin=yes
+414c412
+< gl_cv_func_pthread_rwlock_good_waitqueue=no
+---
+> gl_cv_func_pthread_rwlock_good_waitqueue=yes
+427c425
+< gl_cv_func_re_compile_pattern_working=no
+---
+> gl_cv_func_re_compile_pattern_working=yes

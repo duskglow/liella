@@ -1,0 +1,20 @@
+[package]
+name = "liella-kernel"
+description = "Linux x86_64 kernel boundary: raw system calls, vDSO, auxiliary vector, kernel ABI structures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liella_kernel"
+
+[dependencies]
+
+
+[dev-dependencies]
+spectest = { workspace = true }
+
+[lints]
+workspace = true

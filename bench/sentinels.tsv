@@ -1,0 +1,33 @@
+# Sentinel rows (BENCH-AFF): timed by EVERY targeted bench (`cargo xtask bench --affected` / `bench-rows`), whatever
+# changed. In one fat-LTO library any change can move an untouched function by code placement alone (MEM-K5c:
+# memset_16 went 0.94 -> 1.13 on a change elsewhere), so the rows that carry most of real programs' time are always
+# measured. Derivation (2026-10-10, from the call-frequency survey work/callfreq/weighted.tsv): every function of
+# tier HOT or WARM with self_instr_share >= 0.002 (the share of all instructions real workloads spend in it), one
+# row each at its most common argument class (the smallest budgeted size: 16 B for the copy/fill kernels, 64 B
+# for the search kernels; arghist: 80% of calls <= 32 B), plus
+# the 4 KiB row of the bulk memory kernels (a different code path: placement moves them separately, memset_4k).
+# regexec/regcomp are WARM by call count but carry 12% of the instructions, more than any HOT function but strcoll.
+# Columns: bench, row, function, self_instr_share. Re-derive when weighted.tsv is regenerated.
+cbench_memref	memcpy_16	memcpy	0.1042
+cbench_memref	memcpy_4k	memcpy	0.1042
+cbench_memref	memmove_16	memmove	0.1042
+cbench_memref	memmove_4k	memmove	0.1042
+cbench_memref	memset_16	memset	0.0352
+cbench_memref	memset_4k	memset	0.0352
+cbench_memref	memchr_64	memchr	0.0785
+cbench_memref	memchr_4k	memchr	0.0785
+cbench_memref	strlen_64	strlen	0.0463
+cbench_memref	strlen_4k	strlen	0.0463
+cbench_memref	memcmp_64	memcmp	0.0321
+cbench_memref	memcmp_4k	memcmp	0.0321
+cbench_memref	rawmemchr_64	rawmemchr	0.0023
+cbench_locale	strcoll_utf8_16	strcoll	0.1286
+cbench_opt	strcoll_en_us_names	strcoll	0.1286
+cbench_opt	re_grep_alt	regexec	0.1224
+cbench_opt	regcomp_regfree_ipv4	regcomp	0.1224
+cbench_locale	snprintf_f_en_us	snprintf	0.0564
+cbench_opt	fprintf_du_line	fprintf	0.0564
+cbench_opt	strcmp_equal_16	strcmp	0.0112
+cbench_stdio	fwrite_4k	fwrite	0.0102
+cbench_locale	mbrtowc_utf8_3	mbrtowc	0.0077
+cbench_locale	localeconv_en_us	localeconv	0.0046

@@ -1,0 +1,144 @@
+sizeof(XDR)=48 xdr_void=1
+xdr_int enc 0                      ok=1 pos=4 handy=60 bytes=00000000aaaaaaaa
+xdr_int enc -1                     ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_int enc 0x7fffffff             ok=1 pos=4 handy=60 bytes=7fffffffaaaaaaaa
+xdr_int enc (-0x7fffffff - 1)      ok=1 pos=4 handy=60 bytes=80000000aaaaaaaa
+xdr_u_int enc 0xffffffffu          ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_long enc -1L                   ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_long enc 0x7fffffffL           ok=1 pos=4 handy=60 bytes=7fffffffaaaaaaaa
+xdr_long enc 0x80000000L           ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_long enc 0x100000001L          ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_long enc (-0x80000001L)        ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_u_long enc 0xffffffffUL        ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_u_long enc 0x100000000UL       ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_u_long enc (~0UL)              ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_short enc -2                   ok=1 pos=4 handy=60 bytes=fffffffeaaaaaaaa
+xdr_u_short enc 65535              ok=1 pos=4 handy=60 bytes=0000ffffaaaaaaaa
+xdr_char enc 'A'                   ok=1 pos=4 handy=60 bytes=00000041aaaaaaaa
+xdr_char enc -1                    ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_u_char enc 255                 ok=1 pos=4 handy=60 bytes=000000ffaaaaaaaa
+xdr_bool enc 0                     ok=1 pos=4 handy=60 bytes=00000000aaaaaaaa
+xdr_bool enc 1                     ok=1 pos=4 handy=60 bytes=00000001aaaaaaaa
+xdr_bool enc 2                     ok=1 pos=4 handy=60 bytes=00000001aaaaaaaa
+xdr_bool enc -1                    ok=1 pos=4 handy=60 bytes=00000001aaaaaaaa
+xdr_enum enc 3                     ok=1 pos=4 handy=60 bytes=00000003aaaaaaaa
+xdr_enum enc -1                    ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_hyper enc 0x0102030405060708LL ok=1 pos=8 handy=56 bytes=0102030405060708aaaaaaaa
+xdr_hyper enc -2LL                 ok=1 pos=8 handy=56 bytes=fffffffffffffffeaaaaaaaa
+xdr_u_hyper enc 0xfedcba9876543210ULL ok=1 pos=8 handy=56 bytes=fedcba9876543210aaaaaaaa
+xdr_longlong_t enc -3LL            ok=1 pos=8 handy=56 bytes=fffffffffffffffdaaaaaaaa
+xdr_u_longlong_t enc 5ULL          ok=1 pos=8 handy=56 bytes=0000000000000005aaaaaaaa
+xdr_quad_t enc -4LL                ok=1 pos=8 handy=56 bytes=fffffffffffffffcaaaaaaaa
+xdr_u_quad_t enc 6ULL              ok=1 pos=8 handy=56 bytes=0000000000000006aaaaaaaa
+xdr_int8_t enc -1                  ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_uint8_t enc 255                ok=1 pos=4 handy=60 bytes=000000ffaaaaaaaa
+xdr_int16_t enc -1                 ok=1 pos=4 handy=60 bytes=ffffffffaaaaaaaa
+xdr_uint16_t enc 65535             ok=1 pos=4 handy=60 bytes=0000ffffaaaaaaaa
+xdr_int32_t enc -5                 ok=1 pos=4 handy=60 bytes=fffffffbaaaaaaaa
+xdr_uint32_t enc 0xdeadbeefu       ok=1 pos=4 handy=60 bytes=deadbeefaaaaaaaa
+xdr_int64_t enc -6LL               ok=1 pos=8 handy=56 bytes=fffffffffffffffaaaaaaaaa
+xdr_uint64_t enc 0x1122334455667788ULL ok=1 pos=8 handy=56 bytes=1122334455667788aaaaaaaa
+xdr_float enc 1.5f                 ok=1 pos=4 handy=60 bytes=3fc00000aaaaaaaa
+xdr_float enc -0.0f                ok=1 pos=4 handy=60 bytes=80000000aaaaaaaa
+xdr_float enc NAN                  ok=1 pos=4 handy=60 bytes=7fc00000aaaaaaaa
+xdr_double enc 1.5                 ok=1 pos=8 handy=56 bytes=3ff8000000000000aaaaaaaa
+xdr_double enc -2.25               ok=1 pos=8 handy=56 bytes=c002000000000000aaaaaaaa
+xdr_int enc 7                      ok=0 pos=0 handy=3 bytes=aaaaaaaa
+xdr_hyper enc 7                    ok=0 pos=4 handy=0 bytes=00000000aaaaaaaa
+xdr_hyper enc 7                    ok=0 pos=4 handy=3 bytes=00000000aaaaaaaa
+xdr_double enc 1.0                 ok=0 pos=4 handy=2 bytes=3ff00000aaaaaaaa
+xdr_int twice size6                ok=1 pos=4 handy=2 bytes=00000001aaaaaaaa ok1=1 ok2=0
+xdr_char twice size5               ok=1 pos=4 handy=1 bytes=00000009aaaaaaaa r=10
+xdr_opaque enc abcde               ok=1 pos=8 handy=56 bytes=6162636465000000aaaaaaaa
+xdr_opaque enc empty               ok=1 pos=0 handy=64 bytes=aaaaaaaa
+xdr_opaque enc abcde size6         ok=0 pos=5 handy=1 bytes=6162636465aaaaaaaa
+xdr_opaque enc abcde size5         ok=0 pos=5 handy=0 bytes=6162636465aaaaaaaa
+xdr_opaque dec nonzero pad         ok=1 pos=8 handy=0 o=abcde
+xdr_opaque dec no pad              ok=0 pos=5 handy=0 o=abcde
+xdr_bytes enc xyz max10            ok=1 pos=8 handy=56 bytes=0000000378797a00aaaaaaaa
+xdr_bytes enc xyz max2             ok=0 pos=4 handy=60 bytes=00000003aaaaaaaa
+xdr_bytes dec xyz alloc            ok=1 pos=8 handy=0 n=3 p=set data=xyz
+  free ok=1 p=null
+xdr_bytes dec empty                ok=1 pos=4 handy=0 n=0 p=null
+xdr_bytes dec len11 max10          ok=0 pos=4 handy=4 n=11 p=null
+xdr_bytes dec len8 short           ok=0 pos=4 handy=4 n=8 p=set
+xdr_bytes dec into caller          ok=1 pos=8 handy=0 n=2 same=1 b=xyQQ
+xdr_bytes free null ok=1
+xdr_string enc hello max10         ok=1 pos=12 handy=52 bytes=0000000568656c6c6f000000aaaaaaaa
+xdr_string enc hello max5          ok=1 pos=12 handy=52 bytes=0000000568656c6c6f000000aaaaaaaa
+xdr_string enc hello max4          ok=0 pos=4 handy=60 bytes=00000005aaaaaaaa
+xdr_string enc empty               ok=1 pos=4 handy=60 bytes=00000000aaaaaaaa
+xdr_string enc null                ok=0 pos=0 handy=64 bytes=aaaaaaaa
+xdr_wrapstring enc hi              ok=1 pos=8 handy=56 bytes=0000000268690000aaaaaaaa
+xdr_string dec hello               ok=1 pos=12 handy=0 s=hello len=5
+  xdr_free -> s=null
+xdr_string dec hello max4          ok=0 pos=4 handy=8 s=null
+xdr_string dec empty               ok=1 pos=4 handy=0 s=set len=0
+xdr_string dec embedded nul        ok=1 pos=12 handy=0 s=h len=1
+xdr_string dec truncated           ok=0 pos=4 handy=2 s=set
+xdr_wrapstring dec len ~0          ok=0 pos=4 handy=2 s=null
+xdr_string dec into caller         ok=1 pos=8 handy=1 same=1 b=hii
+xdr_string free null ok=1
+xdr_int dec ffffffff               ok=1 pos=4 handy=0 v=-1
+xdr_int dec ffffff                 ok=0 pos=0 handy=3 v=1515870810
+xdr_u_int dec ffffffff             ok=1 pos=4 handy=0 v=4294967295
+xdr_long dec ffffffff              ok=1 pos=4 handy=0 v=-1
+xdr_long dec 80000000              ok=1 pos=4 handy=0 v=-2147483648
+xdr_u_long dec ffffffff            ok=1 pos=4 handy=0 v=4294967295
+xdr_short dec 00012345             ok=1 pos=4 handy=0 v=9029
+xdr_short dec 0000ffff             ok=1 pos=4 handy=0 v=-1
+xdr_u_short dec fffe0001           ok=1 pos=4 handy=0 v=1
+xdr_char dec 00000141              ok=1 pos=4 handy=0 v=65
+xdr_u_char dec 000001ff            ok=1 pos=4 handy=0 v=255
+xdr_bool dec 00000000              ok=1 pos=4 handy=0 v=0
+xdr_bool dec 00000001              ok=1 pos=4 handy=0 v=1
+xdr_bool dec 00000002              ok=1 pos=4 handy=0 v=1
+xdr_bool dec ffffffff              ok=1 pos=4 handy=0 v=1
+xdr_enum dec fffffffe              ok=1 pos=4 handy=0 v=-2
+xdr_hyper dec 0102030405060708     ok=1 pos=8 handy=0 v=72623859790382856
+xdr_hyper dec fffffffffffffffe     ok=1 pos=8 handy=0 v=-2
+xdr_hyper dec 01020304050607       ok=0 pos=4 handy=3 v=6510615555426900570
+xdr_u_hyper dec fedcba9876543210   ok=1 pos=8 handy=0 v=fedcba9876543210
+xdr_longlong_t dec fffffffffffffffd ok=1 pos=8 handy=0 v=-3
+xdr_u_longlong_t dec 0000000000000005 ok=1 pos=8 handy=0 v=5
+xdr_quad_t dec fffffffffffffffc    ok=1 pos=8 handy=0 v=-4
+xdr_u_quad_t dec 8000000000000000  ok=1 pos=8 handy=0 v=8000000000000000
+xdr_int8_t dec 000001ff            ok=1 pos=4 handy=0 v=-1
+xdr_uint8_t dec ffffff80           ok=1 pos=4 handy=0 v=128
+xdr_int16_t dec 00018000           ok=1 pos=4 handy=0 v=-32768
+xdr_uint16_t dec ffff8001          ok=1 pos=4 handy=0 v=32769
+xdr_int32_t dec fffffffb           ok=1 pos=4 handy=0 v=-5
+xdr_uint32_t dec deadbeef          ok=1 pos=4 handy=0 v=deadbeef
+xdr_int64_t dec fffffffffffffffa   ok=1 pos=8 handy=0 v=-6
+xdr_uint64_t dec 1122334455667788  ok=1 pos=8 handy=0 v=1122334455667788
+xdr_float dec 3fc00000             ok=1 pos=4 handy=0 v=0x1.8p+0
+xdr_float dec ff800000             ok=1 pos=4 handy=0 v=-inf
+xdr_double dec 3ff8000000000000    ok=1 pos=8 handy=0 v=0x1.8p+0
+xdr_double dec c002000000000000    ok=1 pos=8 handy=0 v=-0x1.2p+1
+xdr_double dec 3ff80000000000      ok=0 pos=4 handy=3 v=0x1.6969696969697p+62
+xdr_int XDR_FREE ok=1 v=5
+xdr_hyper XDR_FREE ok=1
+xdr_double XDR_FREE ok=1
+xdr_int op7 ok=0
+xdr_hyper op7 ok=0
+xdr_string op7 ok=0
+xdr_short op7 ok=0
+xdrmem fields: priv-base=0 base=1 handy=16 public=null
+setpostn 8 ok=1 pos=8 handy=8
+setpostn 16 ok=1 pos=16 handy=0
+setpostn 17 ok=0 pos=16 handy=0
+setpostn 0 ok=1 pos=0 handy=16
+inline 8 off=0 pos=8 handy=8
+inline 9 off=-1 pos=8 handy=8
+inline 3 off=8 pos=11 handy=5
+inline 0 off=11 pos=11 handy=5
+putint32 ok=1 pos=4 bytes=01020304
+putlong 0x1ffffffff ok=1 pos=4 bytes=ffffffff
+getint32 ok=1 v=-1
+getlong ok=1 v=-1
+getbytes 4 of 3 ok=0 pos=0 handy=3 o=QQQ
+putbytes 3 of 3 ok=1 pos=3 handy=0
+putbytes 4 of 3 ok=0 pos=0 handy=3
+putlong twice size5 r=10 pos=4 handy=1
+destroy pos=0 handy=16
+same ops table enc/dec=1

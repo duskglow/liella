@@ -1,0 +1,90 @@
+== glibc 2.39-0ubuntu8.9, dynamically linked (cc -std=gnu17 -O1 specman_probe.c -lm -lrt -pthread; LOCPATH holds the xx_YN.UTF-8 test locale)
+== p1-1 initstate with fewer than 8 bytes
+  initstate(n=7): NULL errno=EINVAL
+== p1-2 math_errhandling
+  math_errhandling = 3 (MATH_ERRNO 1, MATH_ERREXCEPT 2)
+== p1-3 domain errors
+  lrint(NAN) = -9.22337e+18 errno=0 flags=INVALID 
+  lrint(1e300) = -9.22337e+18 errno=0 flags=INVALID 
+  lround(1e300) = 9.22337e+18 errno=0 flags=
+  remquo(1, 0) = -nan errno=0 flags=INVALID 
+  fma(INFINITY, 0, 1) = -nan errno=0 flags=INVALID 
+  sqrt(-1) = -nan errno=EDOM flags=INVALID 
+  log(-1) = -nan errno=EDOM flags=INVALID 
+== p1-4 pole and range errors
+  logb(0) = -inf errno=0 flags=DIVBYZERO 
+  log(0) = -inf errno=ERANGE flags=DIVBYZERO 
+  hypot(1e-308, 1e-308) (no underflow) = 1.41421e-308 errno=0 flags=
+  hypot(4.9e-324, 0) (subnormal) = 4.94066e-324 errno=0 flags=
+  erf(1e-310) = 1.12838e-310 errno=0 flags=UNDERFLOW INEXACT
+  erfc(30) = 0 errno=ERANGE flags=UNDERFLOW INEXACT
+  fma(1e308, 10, 0) = inf errno=0 flags=OVERFLOW INEXACT
+  exp(1000) = inf errno=ERANGE flags=OVERFLOW INEXACT
+  exp(-1000) = 0 errno=ERANGE flags=UNDERFLOW INEXACT
+== p1-5 feenableexcept/fedisableexcept/fegetexcept
+  fegetexcept=0 feenableexcept(DIVBYZERO)=0 then fegetexcept=0x4 fedisableexcept(DIVBYZERO)=0x4 then fegetexcept=0
+  feenableexcept(0x40000)=0
+== p1-6 getsubopt on an unknown suboption
+  getsubopt("foo=bar,...") = -1, *valuep = foo=bar
+  getsubopt("foo,...") = -1, *valuep = foo
+== p1-7 malloc above PTRDIFF_MAX
+  malloc(PTRDIFF_MAX+1) = NULL errno=ENOMEM
+== p1-8 mbrtowc(NULL) with a partial character pending
+  after a partial character (-2): mbrtowc(NULL, NULL, 0) = -1 errno=EILSEQ; mbsinit after = 0
+== p1-9 localeconv and nl_langinfo pointers
+  localeconv twice: same struct yes, same decimal_point pointer yes
+== p1-10 rpmatch
+  C: y=1 Y=1 n=0 N=0 yes=1 ja=-1 nein=0 j=-1 x=-1
+  xx_YN.UTF-8: y=-1 Y=-1 n=-1 N=-1 yes=-1 ja=1 nein=-1 j=1 x=-1
+== p1-13 ecvt digit cap
+  strlen(ecvt(1/3, 30)) = 17; strlen(ecvt(1/3, 17)) = 17; strlen(ecvt(1/3, 100)) = 17
+== p1-14 y0/y1/yn underflow
+  y0(1e300) = -1.36814e-151 errno=0 flags=
+  y1(1e300) = 7.86067e-151 errno=0 flags=
+  yn(2, 1e300) = 1.36814e-151 errno=0 flags=
+  j0(1e300) = -7.86067e-151 errno=0 flags=
+== p2-1 aio_return twice
+  first aio_return = 5 errno=0; second = 5 errno=0
+== p2-2 aio_read with an invalid offset or descriptor (submission versus aio_error)
+  fd -1: aio_read = 0; aio_error = EBADF; aio_return = -1
+== p2-3 socketpair in other domains
+  socketpair(AF_UNIX, SOCK_STREAM) = 0 errno=0
+  socketpair(AF_UNIX, SOCK_SEQPACKET) = 0 errno=0
+  socketpair(AF_INET, SOCK_STREAM) = -1 errno=EOPNOTSUPP
+  socketpair(AF_INET, SOCK_SEQPACKET) = -1 errno=errno 94
+  socketpair(AF_TIPC, SOCK_STREAM) = -1 errno=EAFNOSUPPORT
+  socketpair(AF_TIPC, SOCK_SEQPACKET) = -1 errno=EAFNOSUPPORT
+== p2-6 tdelete of the root of a non-empty tree
+  delete the root 5 of {5,3,8}: result is the node of 8; node 3 kept, node 8 moved after
+  delete the only node: result non-NULL, root NULL
+== p3-1 posix_spawn of a file that does not exist
+  posix_spawn = ENOENT
+  posix_spawnp = ENOENT
+== p3-2 waitid of _exit(300)
+  si_status = 44
+== p3-3 msgrcv with a negative type
+  queue types 3,1,2; msgrcv(-3) receives type 1
+== p3-4 settimeofday with a time zone (unprivileged: nothing can change)
+  settimeofday(&tv, &tz) = -1 errno=EINVAL
+  settimeofday(NULL, &tz) = -1 errno=EPERM
+  settimeofday(&tv, NULL) = -1 errno=EPERM
+== p3-5 gettimeofday's time-zone argument
+  gettimeofday(&tv, &tz) = 0; tz after = {0, 0} (was 0x55 bytes)
+== p3-6 mq_notify registered twice by the same process
+  first = 0; second = -1 errno=EBUSY
+== p3-7 shm_open name length
+  name of 254 bytes after '/': ok
+  name of 255 bytes after '/': ok
+  name of 256 bytes after '/': ENAMETOOLONG
+  name of 257 bytes after '/': ENAMETOOLONG
+== p3-8 isastream
+  isastream(0) = 0 errno=0; isastream(999) = -1 errno=EBADF
+== p3-9 strsignal's buffer for an unknown signal
+  main Unknown signal 1000; another thread's buffer different
+== p3-11 SIGRTMIN
+  SIGRTMIN = 34, __libc_current_sigrtmin() = 34
+== specman_dns.sh, glibc
+_res.dnsrch holds 6 names (MAXDNSRCH 6)
+res_search = -1
+getaddrinfo = -2
+queries: host.d1.test .. host.d8.test, host; host2.d1.test .. host2.d8.test (each twice: A and AAAA), host2 (twice)

@@ -1,0 +1,190 @@
+== fgetpwent
+pw: [root][x] 0 0 [root][/root][/bin/bash]
+pw: [alice][x] 1000 1000 [Alice Liddell,,,][/home/alice][/bin/sh]
+pw: [bob][*] 1001 100 [][/home/bob][]
+pw: [+nisuser][] 0 0 [][][]
+pw: [-excluded][] 0 0 [][][]
+pw: [+@netgroup][] 0 0 [][][]
+pw: [spaced][x] 1003 1003 [Spaced][/][/bin/sh]
+pw: [trail][x] 1004 1004 [Trail][/home/trail][/bin/sh:extra]
+pw: [empty][] 1005 1005 [][][:]
+pw: [longusername12][x] 1007 1007 [Long][/][/bin/sh]
+pw: [eight888][x] 1008 1008 [Eight][/][/bin/sh]
+pw: [nonl][x] 1006 1006 [No newline][/][/bin/sh]
+end errno=2
+== fgetpwent_r buffer sizes
+size 1: r=34 res=NULL pos=0
+size 2: r=34 res=NULL pos=0
+size 4: r=34 res=NULL pos=0
+size 8: r=34 res=NULL pos=0
+size 16: r=34 res=NULL pos=0
+size 32: r=34 res=NULL pos=0
+size 64: r=0 res=set name=[root] pos=32
+== fgetgrent
+gr: [root][x] 0 members:
+gr: [users][x] 100 members: [alice] [bob]
+gr: [wheel][x] 10 members: [alice]
+gr: [empty][x] 200 members:
+gr: [trailing][x] 201 members: [alice]
+gr: [doubled][x] 202 members: [alice] [bob]
+gr: [spaced][x] 203 members: [alice ] [bob ]
+gr: [alice][x] 1000 members:
+gr: [many][x] 204 members: [a] [b] [c] [d] [e] [f] [g] [h] [i] [j] [k] [l] [m] [n] [o] [p] [q] [r] [s] [t] [u] [v] [w] [x] [y] [z] [alice]
+gr: [+][] 0 members:
+end errno=2
+== fgetgrent_r buffer sizes
+size 4: r=34 res=NULL
+size 16: r=34 res=NULL
+size 64: r=0 res=set
+size 256: r=0 res=set
+== fgetspent / sgetspent
+sp: [root][!] 19000 0 99999 7 -1 -1 18446744073709551615
+sp: [alice][$6$salt$hash] 19500 1 90 14 30 20000 18446744073709551615
+sp: [bob][*] -1 -1 -1 -1 -1 -1 18446744073709551615
+sp: [flag][x] 1 2 3 4 5 6 7
+sgetspent [carol:hash:1:2:3:4:5:6:]: [carol][hash] 1 2 3 4 5 6 18446744073709551615
+sgetspent [carol:hash]: NULL
+sgetspent [carol:hash:a:b:c:d:e:f:]: NULL
+sgetspent []: NULL
+sgetspent [carol::::::::]: [carol][] -1 -1 -1 -1 -1 -1 18446744073709551615
+sgetspent [carol:h:1:2:3:4:5:6:7:8]: NULL
+== fgetsgent / sgetsgent
+sg: [root][*] admins: members:
+sg: [users][!] admins: [alice] members: [alice] [bob]
+sg: [wheel][] admins: [admin1] [admin2] members: [alice]
+sg: [short][x] admins: members:
+sg: [empty][] admins: members:
+sgetsgent [g:p:a1,a2:m1]: [g][p] admins: [a1] [a2] members: [m1]
+sgetsgent [g:p]: [g][p] admins: members:
+== put*
+putpwent: 0
+putpwent +nis: 0
+putpwent with colon: -1 errno=22
+putgrent: 0
+putgrent empty: 0
+putspent: 0
+putspent all: 0
+putsgent: 0
+out: dave:x:1010:1010:Dave, Jr.:/home/dave:/bin/zsh
+out: +nis::::::
+out: staff:x:50:alice,bob
+out: nobody::65534:
+out: dave:$1$x$y:19000:0:99999:7:::
+out: eve:!:1:2:3:4:5:6:7
+out: staff:!:root:alice,bob
+putpwent NULL: -1 errno=22
+== utmp
+sizeof utmp=384 utmpx=384 line=32 user=32 host=256 id=4 tv=8
+utmpname: 0
+empty getutent: NULL errno=0
+put a: type=6 pid=100 line=[tty1] id=[1] user=[LOGIN] host=[host.example] tv=1000
+put b: type=7 pid=200 line=[pts/0] id=[ts/0] user=[alice] host=[host.example] tv=2000
+put c: type=2 pid=0 line=[~] id=[~~] user=[reboot] host=[host.example] tv=500
+put b2 (same id): type=8 pid=200 line=[pts/0] id=[ts/0] user=[] host=[host.example] tv=3000
+file size: 1152
+ent 0: type=6 pid=100 line=[tty1] id=[1] user=[LOGIN] host=[host.example] tv=1000
+ent 1: type=8 pid=200 line=[pts/0] id=[ts/0] user=[] host=[host.example] tv=3000
+ent 2: type=2 pid=0 line=[~] id=[~~] user=[reboot] host=[host.example] tv=500
+getutid USER id 1: type=6 pid=100 line=[tty1] id=[1] user=[LOGIN] host=[host.example] tv=1000
+getutid DEAD ts/0: type=8 pid=200 line=[pts/0] id=[ts/0] user=[] host=[host.example] tv=3000
+getutid BOOT_TIME: type=2 pid=0 line=[~] id=[~~] user=[reboot] host=[host.example] tv=500
+getutid bad type: NULL errno=22
+getutline tty1: type=6 pid=100 line=[tty1] id=[1] user=[LOGIN] host=[host.example] tv=1000
+getutline pts/0 (dead): NULL errno=3
+getutent_r: 0 same=1
+== wtmp
+wtmp size after 2: 768
+updwtmp to a missing file creates it: 0
+getutmpx: type=7 user=[alice] line=[pts/0]
+getutmp: same=1
+utmpxname: 0
+getutxent: LOGIN
+utmpname long: 0 errno=0
+done
+== getpwnam / getpwuid
+getpwnam [root] errno=0: [root][x] 0 0 [root][/root][/bin/bash]
+getpwnam [alice] errno=0: [alice][x] 1000 1000 [Alice Liddell,,,][/home/alice][/bin/sh]
+getpwnam [bob] errno=0: [bob][*] 1001 100 [][/home/bob][]
+getpwnam [nobody] errno=0: NULL
+getpwnam [short] errno=0: NULL
+getpwnam [big] errno=0: NULL
+getpwnam [spaced] errno=0: [spaced][x] 1003 1003 [Spaced][/][/bin/sh]
+getpwnam [+nisuser] errno=0: NULL
+getpwnam [] errno=0: NULL
+getpwnam [empty] errno=0: [empty][] 1005 1005 [][][:]
+getpwuid 0 errno=0: [root][x] 0 0 [root][/root][/bin/bash]
+getpwuid 1000 errno=0: [alice][x] 1000 1000 [Alice Liddell,,,][/home/alice][/bin/sh]
+getpwuid 1001 errno=0: [bob][*] 1001 100 [][/home/bob][]
+getpwuid 4242 errno=0: NULL
+getpwuid 65534 errno=0: NULL
+== getpwnam_r ERANGE protocol
+size 1: r=34 res=NULL
+size 2: r=34 res=NULL
+size 4: r=34 res=NULL
+size 8: r=34 res=NULL
+size 16: r=34 res=NULL
+size 32: r=34 res=NULL
+size 64: r=0 res=set
+size 128: r=0 res=set
+getpwnam_r missing: r=0 res=NULL
+sysconf GETPW_R_SIZE_MAX=1024 GETGR_R_SIZE_MAX=1024
+== enumeration
+getpwent: [root][x] 0 0 [root][/root][/bin/bash]
+getpwent: [alice][x] 1000 1000 [Alice Liddell,,,][/home/alice][/bin/sh]
+getpwent: [bob][*] 1001 100 [][/home/bob][]
+getpwent: [+nisuser][] 0 0 [][][]
+getpwent: [-excluded][] 0 0 [][][]
+getpwent: [+@netgroup][] 0 0 [][][]
+getpwent: [spaced][x] 1003 1003 [Spaced][/][/bin/sh]
+getpwent: [trail][x] 1004 1004 [Trail][/home/trail][/bin/sh:extra]
+getpwent: [empty][] 1005 1005 [][][:]
+getpwent: [longusername12][x] 1007 1007 [Long][/][/bin/sh]
+getpwent: [eight888][x] 1008 1008 [Eight][/][/bin/sh]
+getpwent: [nonl][x] 1006 1006 [No newline][/][/bin/sh]
+getgrent: [root][x] 0 members:
+getgrent: [users][x] 100 members: [alice] [bob]
+getgrent: [wheel][x] 10 members: [alice]
+getgrent: [empty][x] 200 members:
+getgrent: [trailing][x] 201 members: [alice]
+getgrent: [doubled][x] 202 members: [alice] [bob]
+getgrent: [spaced][x] 203 members: [alice ] [bob ]
+getgrent: [alice][x] 1000 members:
+getgrent: [many][x] 204 members: [a] [b] [c] [d] [e] [f] [g] [h] [i] [j] [k] [l] [m] [n] [o] [p] [q] [r] [s] [t] [u] [v] [w] [x] [y] [z] [alice]
+getgrent: [+][] 0 members:
+getspent: [root][!] 19000 0 99999 7 -1 -1 18446744073709551615
+getspent: [alice][$6$salt$hash] 19500 1 90 14 30 20000 18446744073709551615
+getspent: [bob][*] -1 -1 -1 -1 -1 -1 18446744073709551615
+getspent: [flag][x] 1 2 3 4 5 6 7
+getsgent: [root][*] admins: members:
+getsgent: [users][!] admins: [alice] members: [alice] [bob]
+getsgent: [wheel][] admins: [admin1] [admin2] members: [alice]
+getsgent: [short][x] admins: members:
+getsgent: [empty][] admins: members:
+== groups
+getgrnam users: [users][x] 100 members: [alice] [bob]
+getgrgid 10: [wheel][x] 10 members: [alice]
+getgrnam missing: NULL errno=0
+getspnam alice: [alice][$6$salt$hash] 19500 1 90 14 30 20000 18446744073709551615
+getsgnam wheel: [wheel][] admins: [admin1] [admin2] members: [alice]
+getgrouplist alice: 6 n=6: 1000 100 10 201 202 204
+getgrouplist alice n=2: -1 n=6
+getgrouplist missing user: 1 n=1 first=4242
+getpw 1000: 0 [alice:x:1000:1000:Alice Liddell,,,:/home/alice:/bin/sh]
+getpw 4242: -1 errno=0
+== getusershell
+shell [/bin/sh]
+shell [/bin/bash]
+shell [/usr/bin/zsh]
+shell [/bin/csh]
+== lckpwdf
+lckpwdf: 0
+lock file exists: 1
+ulckpwdf: 0
+ulckpwdf again: -1
+== cuserid (L_cuserid 9)
+euid 0: NULL [root] errno=0 same=1; buf returned [root] errno=0 after: 0 0 0 0 Z Z Z Z Z Z Z back=0
+euid 1000: NULL [alice] errno=0 same=1; buf returned [alice] errno=0 after: 0 0 0 Z Z Z Z Z Z Z back=0
+euid 1007: NULL [longuser] errno=0 same=1; buf returned [longuser] errno=0 after: Z Z Z Z Z Z Z back=0
+euid 1008: NULL [eight888] errno=0 same=1; buf returned [eight888] errno=0 after: Z Z Z Z Z Z Z back=0
+euid 4242: NULL [(null)] errno=0 same=1; buf returned [] errno=0 after: Z Z Z Z Z Z Z Z Z Z Z Z Z Z Z back=0
+done

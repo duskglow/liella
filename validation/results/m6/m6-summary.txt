@@ -1,0 +1,190 @@
+== glibc-gawk
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=8.722852851
+check-start 2026-10-05T10:06:19Z load: 2.42, 1.81, 2.27
+check rc=2 seconds=5.785584340
+check-end 2026-10-05T10:06:25Z load: 2.63, 1.87, 2.29
+own:       6 FAIL     588 PASS 
+gnulib: 
+  FAIL: delarpm2
+  FAIL: matchuninitialized
+  FAIL: arraysort2
+  FAIL: elemnew2
+  FAIL: elemnew4
+  FAIL: typeof7
+  undefined references: 0
+== liella-m-gawk
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=7.787911572
+check-start 2026-10-05T10:05:48Z load: 1.91, 1.68, 2.25
+check rc=2 seconds=5.608212301
+check-end 2026-10-05T10:05:54Z load: 1.91, 1.69, 2.25
+own:       6 FAIL     586 PASS 
+gnulib: 
+  FAIL: delarpm2
+  FAIL: matchuninitialized
+  FAIL: arraysort2
+  FAIL: elemnew2
+  FAIL: elemnew4
+  FAIL: typeof7
+  undefined references: 0
+== replacements gawk (glibc < > liella-m)
+== glibc-make
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=3.372173283
+check-start 2026-10-05T10:10:27Z load: 2.07, 2.97, 2.74
+check rc=0 seconds=58.088045753
+check-end 2026-10-05T10:11:25Z load: 1.60, 2.67, 2.65
+own:     134 PASS       2 SKIP 
+gnulib: 
+  undefined references: 0
+== liella-m-make
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=2 seconds=2.163148578
+check-start 2026-10-05T10:10:11Z load: 2.47, 3.09, 2.78
+check rc=2 seconds=.177534468
+check-end 2026-10-05T10:10:11Z load: 2.47, 3.09, 2.78
+own: 
+gnulib: 
+  undefined references: 11
+         3 dlsym
+         3 dlopen
+         3 dlerror
+         2 dlclose
+== replacements make (glibc < > liella-m)
+== glibc-tar
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=6.342458049
+check-start 2026-10-05T10:44:38Z load: 2.81, 2.90, 3.26
+check rc=0 seconds=259.736392528
+check-end 2026-10-05T10:48:57Z load: 4.36, 6.11, 4.63
+own:     207 PASS      26 SKIP 
+gnulib: 
+  undefined references: 0
+== liella-m-tar
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=6.834312614
+check-start 2026-10-05T10:21:54Z load: 2.87, 3.16, 3.23
+check rc=0 seconds=220.237965781
+check-end 2026-10-05T10:25:35Z load: 1.78, 2.46, 2.93
+own:     207 PASS      26 SKIP 
+gnulib: 
+  undefined references: 0
+== replacements tar (glibc < > liella-m)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FOPEN='1'
+  < REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+  > REPLACE_FOPEN='0'
+  > REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < ac_cv_func__fseeki64=no
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+== glibc-grep
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=4.566695908
+check-start 2026-10-05T10:52:03Z load: 3.03, 4.73, 4.35
+check rc=0 seconds=34.681042200
+check-end 2026-10-05T10:52:37Z load: 4.75, 4.98, 4.45
+own:      92 PASS      34 SKIP       2 XFAIL 
+gnulib:     257 PASS      58 SKIP 
+  undefined references: 0
+== liella-m-grep
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=5.036394504
+check-start 2026-10-05T10:49:56Z load: 2.25, 5.19, 4.41
+check rc=2 seconds=31.064289960
+check-end 2026-10-05T10:50:27Z load: 3.75, 5.27, 4.46
+own:       6 FAIL      89 PASS      68 SKIP       4 XPASS 
+gnulib:     257 PASS      58 SKIP 
+  XPASS: glibc-infloop
+  FAIL: ere
+  FAIL: case-fold-titlecase
+  FAIL: stack-overflow
+  XPASS: triple-backref
+  FAIL: case-fold-titlecase
+  FAIL: ere
+  XPASS: glibc-infloop
+  FAIL: stack-overflow
+  XPASS: triple-backref
+  undefined references: 0
+== replacements grep (glibc < > liella-m)
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+== glibc-diffutils
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=4.539240730
+check-start 2026-10-05T10:55:23Z load: 3.11, 4.23, 4.25
+check rc=0 seconds=25.254400047
+check-end 2026-10-05T10:55:49Z load: 4.53, 4.52, 4.34
+own:      31 PASS       2 SKIP       1 XFAIL 
+gnulib:     275 PASS      68 SKIP 
+  undefined references: 0
+== liella-m-diffutils
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=4.597992132
+check-start 2026-10-05T10:53:43Z load: 3.38, 4.46, 4.30
+check rc=0 seconds=20.572876758
+check-end 2026-10-05T10:54:03Z load: 4.83, 4.72, 4.39
+own:      31 PASS       2 SKIP       1 XFAIL 
+gnulib:     275 PASS      68 SKIP 
+  undefined references: 0
+== replacements diffutils (glibc < > liella-m)
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+== glibc-gzip
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=1.749460792
+check-start 2026-10-05T11:12:06Z load: 2.73, 3.55, 4.84
+check rc=0 seconds=12.116344411
+check-end 2026-10-05T11:12:18Z load: 2.62, 3.50, 4.81
+own:      34 PASS 
+gnulib: 
+  undefined references: 0
+== liella-m-gzip
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=1.713430423
+check-start 2026-10-05T10:56:15Z load: 4.07, 4.40, 4.31
+check rc=0 seconds=12.497310827
+check-end 2026-10-05T10:56:28Z load: 3.76, 4.32, 4.28
+own:      34 PASS 
+gnulib: 
+  undefined references: 0
+== replacements gzip (glibc < > liella-m)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FFLUSH='1'
+  > REPLACE_FFLUSH='0'
+  < REPLACE_FOPEN='1'
+  > REPLACE_FOPEN='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < ac_cv_func__fseeki64=no
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes

@@ -1,0 +1,1170 @@
+msgfmt: present
+gencat: present
+== initial state (before any other call)
+_nl_default_dirname: [/usr/share/locale]
+_libc_intl_domainname: [libc]
+_nl_domain_bindings NULL: yes
+textdomain(NULL): [messages]
+bindtextdomain("messages", NULL): [/usr/share/locale]
+bind_textdomain_codeset("messages", NULL): NULL
+bindtextdomain("never-bound", NULL): [/usr/share/locale]
+_nl_domain_bindings NULL after the queries: yes
+setlocale(LC_MESSAGES, NULL): [C]
+C locale: gettext("hello"): [hello]
+C locale: gettext returns its argument: yes
+C locale: ngettext n=0 plural, n=1 singular, n=2 plural, n=ULONG_MAX plural
+C locale: gettext(""): []
+NL_SETD 1 NL_CAT_LOCALE 1 sizeof(nl_catd) 8
+NL_SETMAX 2147483647
+NL_MSGMAX 2147483647
+NL_TEXTMAX 2147483647
+NL_ARGMAX 4096
+NL_LANGMAX 2048
+NL_NMAX 2147483647
+running as root: no
+== textdomain
+textdomain("alpha"): [alpha]
+result is the argument: no
+after the argument was overwritten, textdomain(NULL): [alpha]
+textdomain(NULL) returns the same pointer as the last set: yes
+textdomain(textdomain(NULL)): [alpha]
+textdomain("beta") errno after (preset EINTR): EINTR
+textdomain(""): [messages]
+  errno 0
+textdomain(NULL) after "": [messages]
+textdomain("messages"): [messages]
+textdomain("a/b"): [a/b]
+textdomain("../x"): [../x]
+textdomain(5000 x q): [<q>*5000]
+-- default domain tdom
+  gettext: [tdom]
+  dgettext(NULL): [tdom]
+  dcgettext(NULL, LC_MESSAGES): [tdom]
+  ngettext n=1: [tdom]
+  dngettext(NULL) n=1: [tdom]
+  dcngettext(NULL) n=1: [tdom]
+  __dcgettext(NULL): [tdom]
+  __dgettext(tdom): [tdom]
+-- default domain other (not bound, catalog in the tdom tree): gettext: [where]
+-- after binding other: gettext: [other]
+-- after textdomain(""): gettext: [messages]
+  textdomain(NULL): [messages]
+-- dgettext("", where) with default tdom: [where]
+== bindtextdomain
+bindtextdomain("bd1", NULL) before binding: [/usr/share/locale]
+bindtextdomain("bd1", <dir>/b1): [<dir>/b1]
+result is the argument: no
+after the argument was overwritten, bindtextdomain("bd1", NULL): [<dir>/b1]
+same pointer as the result of the set: yes
+bind_textdomain_codeset("bd1", NULL): NULL
+-- relative directory
+  bindtextdomain("bd2", "rel"): [rel]
+  lookup after chdir(<dir>/x): [relative to the cwd at lookup time]
+  bindtextdomain("bd2", NULL): [rel]
+  bindtextdomain("bd2b", "./dot"): [./dot]
+  lookup after chdir(<dir>/x): [dot relative at lookup]
+-- NULL and empty arguments
+  bindtextdomain(NULL, <dir>): NULL
+  errno 0
+  bindtextdomain(NULL, NULL): NULL
+  errno 0
+  bindtextdomain("", <dir>): NULL
+  errno 0
+  bindtextdomain("", NULL): NULL
+  errno 0
+  bindtextdomain("bd3", ""): []
+  errno 0
+  lookup bd3 with cwd <dir>: [found relative to the cwd]
+-- spelling of the directory
+  bindtextdomain("bd4", <dir>/b4/): [<dir>/b4/]
+  lookup: [b4]
+  bindtextdomain("bd5", <dir>//b5/.): [<dir>//b5/.]
+  lookup: [b5]
+  bindtextdomain with a 5000-byte directory: non-NULL, length 5000
+  lookup: [where]
+-- rebinding after a catalog was loaded
+  bound to b6a: [A]
+  rebound to b6b: [B]
+  rebound to b6a: [A]
+-- catalog file replaced on disk after it was loaded
+  first lookup: [old]
+  lookup 1.1 s after the file was replaced: [old]
+  after bindtextdomain with the same directory: [old]
+  after bindtextdomain with the directory spelled <dir>/b7/: [new]
+  after setlocale(LC_ALL, same name): [new]
+  after setlocale C then back: [new]
+_nl_domain_bindings NULL: no
+== bind_textdomain_codeset and conversion
+-- argument checks
+  bind_textdomain_codeset(NULL, "UTF-8"): NULL
+  errno 0
+  bind_textdomain_codeset("", "UTF-8"): NULL
+  errno 0
+  bind_textdomain_codeset("cs1", NULL) never set: NULL
+  errno 0
+  bind_textdomain_codeset("cs1", "ISO-8859-1"): [ISO-8859-1]
+  result is the argument: no
+  query after the argument was overwritten: [ISO-8859-1]
+  bindtextdomain("cs1", NULL) (only a codeset was set): [/usr/share/locale]
+  bind_textdomain_codeset("cs1", ""): []
+  query: []
+-- codeset changed after a lookup (same domain)
+  default: [\xc3\xa9]
+  second lookup returns the same pointer: yes
+  after ISO-8859-1: [\xe9]
+  first result still reads: [\xc3\xa9]
+  after UTF-8: [\xc3\xa9]
+-- OUTPUT_CHARSET environment variable (set to ISO-8859-1) before the first lookup
+  e-acute: [\xc3\xa9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset NULL
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [UTF-8]
+  bind_textdomain_codeset returns: [UTF-8]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [UTF-8]
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [utf8]
+  bind_textdomain_codeset returns: [utf8]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [utf8]
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ISO-8859-1]
+  bind_textdomain_codeset returns: [ISO-8859-1]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ISO-8859-1]
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [iso-8859-1]
+  bind_textdomain_codeset returns: [iso-8859-1]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [iso-8859-1]
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ISO-8859-15]
+  bind_textdomain_codeset returns: [ISO-8859-15]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ISO-8859-15]
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [\xa4] errno EINTR
+  mixed [na\xefve - \xa45] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ASCII]
+  bind_textdomain_codeset returns: [ASCII]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ASCII]
+  ascii [plain] errno EINTR
+  e-acute [e] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [naive - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fse]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ISO-8859-1//TRANSLIT]
+  bind_textdomain_codeset returns: [ISO-8859-1//TRANSLIT]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ISO-8859-1//TRANSLIT]
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ASCII//TRANSLIT]
+  bind_textdomain_codeset returns: [ASCII//TRANSLIT]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ASCII//TRANSLIT]
+  ascii [plain] errno EINTR
+  e-acute [e] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [naive - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fse]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [ISO-8859-1//IGNORE]
+  bind_textdomain_codeset returns: [ISO-8859-1//IGNORE]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [ISO-8859-1//IGNORE]
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [KOI8-R]
+  bind_textdomain_codeset returns: [KOI8-R]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [KOI8-R]
+  ascii [plain] errno EINTR
+  e-acute [e] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [naive - EUR5] errno EINTR
+  cyr [\xf6\xc1] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fse]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [EUC-JP]
+  bind_textdomain_codeset returns: [EUC-JP]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [EUC-JP]
+  ascii [plain] errno EINTR
+  e-acute [\x8f\xab\xb1] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\x8f\xab\xc1ve - EUR5] errno EINTR
+  cyr [\xa7\xa8\xa7\xd1] errno EINTR
+  kana [\xa4\xa2] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\x8f\xab\xb1]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [UTF-16LE]
+  bind_textdomain_codeset returns: [UTF-16LE]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [UTF-16LE]
+  ascii [p] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [\xac ] errno EINTR
+  mixed [n] errno EINTR
+  cyr [\x16\x040\x04] errno EINTR
+  kana [B0] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [\xe9]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset [NOPE]
+  bind_textdomain_codeset returns: [NOPE]
+  errno 0
+  bind_textdomain_codeset(NULL) returns: [NOPE]
+  ascii [ascii] errno EINTR
+  e-acute [e-acute] errno EINTR
+  euro [euro] errno EINTR
+  mixed [mixed] errno EINTR
+  cyr [cyr] errno EINTR
+  kana [kana] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [files]
+-- UTF-8 catalog, de_DE.UTF-8 locale, codeset []
+  bind_textdomain_codeset returns: []
+  errno 0
+  bind_textdomain_codeset(NULL) returns: []
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- UTF-8 catalog, fr_FR.ISO-8859-1 locale (no codeset bound)
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, LC_MESSAGES de_DE.UTF-8, LC_CTYPE C
+  ascii [plain] errno EINTR
+  e-acute [?] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na?ve - EUR5] errno EINTR
+  cyr [ZHa] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs?]
+-- UTF-8 catalog, LC_MESSAGES de_DE.UTF-8, LC_CTYPE fr_FR.ISO-8859-1
+  ascii [plain] errno EINTR
+  e-acute [\xe9] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\xefve - EUR5] errno EINTR
+  cyr [??] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\xe9]
+-- UTF-8 catalog, LC_MESSAGES de_DE.UTF-8, LC_CTYPE C.UTF-8
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- UTF-8 catalog, ru_RU.KOI8-R locale
+  ascii [plain] errno EINTR
+  e-acute [e] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [naive - EUR5] errno EINTR
+  cyr [\xf6\xc1] errno EINTR
+  kana [?] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fse]
+-- UTF-8 catalog, ja_JP.EUC-JP locale
+  ascii [plain] errno EINTR
+  e-acute [\x8f\xab\xb1] errno EINTR
+  euro [EUR] errno EINTR
+  mixed [na\x8f\xab\xc1ve - EUR5] errno EINTR
+  cyr [\xa7\xa8\xa7\xd1] errno EINTR
+  kana [\xa4\xa2] errno EINTR
+  invalid [invalid] errno EINTR
+  file n=2 [Fs\x8f\xab\xb1]
+-- UTF-8 catalog, fr_FR.ISO-8859-1 locale, codeset UTF-8 bound
+  ascii [plain] errno EINTR
+  e-acute [\xc3\xa9] errno EINTR
+  euro [\xe2\x82\xac] errno EINTR
+  mixed [na\xc3\xafve \xe2\x80\x93 \xe2\x82\xac5] errno EINTR
+  cyr [\xd0\x96\xd0\xb0] errno EINTR
+  kana [\xe3\x81\x82] errno EINTR
+  invalid [a\xff\xfeb] errno EINTR
+  file n=2 [Fs\xc3\xa9]
+-- ISO-8859-1 catalog in a UTF-8 locale
+  latin [\xc3\xa9t\xc3\xa9] errno EINTR
+-- ISO-8859-1 catalog in a UTF-8 locale, codeset ISO-8859-1 bound
+  latin [\xe9t\xe9] errno EINTR
+-- ISO-8859-1 catalog in an ISO-8859-1 locale
+  latin [\xe9t\xe9] errno EINTR
+-- no header entry, UTF-8 bytes, ISO-8859-1 locale
+  raw [\xc3\xa9] errno EINTR
+-- no header entry, ISO-8859-1 bytes, UTF-8 locale
+  raw [\xe9] errno EINTR
+-- no header entry, UTF-8 bytes, ISO-8859-1 locale, codeset UTF-8 bound
+  raw [\xc3\xa9] errno EINTR
+-- header without a charset, UTF-8 bytes, ISO-8859-1 locale
+  raw [\xc3\xa9] errno EINTR
+-- charset=CHARSET, UTF-8 bytes, ISO-8859-1 locale
+  raw [raw] errno EINTR
+-- charset=NOPE, UTF-8 bytes, ISO-8859-1 locale
+  raw [raw] errno EINTR
+-- charset=NOPE, UTF-8 bytes, UTF-8 locale
+  raw [raw] errno EINTR
+-- charset=utf-8 (lowercase), ISO-8859-1 locale
+  raw [\xe9] errno EINTR
+-- charset given on a later header line
+  raw [\xe9] errno EINTR
+-- charset without Content-Type
+  raw [\xe9] errno EINTR
+-- charset followed by a space and more text
+  raw [\xe9] errno EINTR
+== locale selection (catalogs: de_DE.UTF-8 fr_FR.UTF-8 cs_CZ.UTF-8 C POSIX C.UTF-8 it nl, bad = corrupt)
+-- no setlocale call, LANG=de_DE.UTF-8 LANGUAGE=it
+  setlocale not called
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- no setlocale call, LC_ALL=de_DE.UTF-8
+  setlocale not called
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- LANG=de_DE.UTF-8
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [de_DE.UTF-8] only-nl [only-nl]
+-- LANG=de_DE.UTF-8 LC_MESSAGES=fr_FR.UTF-8
+  setlocale ok
+  LC_MESSAGES [fr_FR.UTF-8] where [fr_FR.UTF-8] only-nl [only-nl]
+-- LANG=de LC_MESSAGES=fr LC_ALL=cs
+  setlocale ok
+  LC_MESSAGES [cs_CZ.UTF-8] where [cs_CZ.UTF-8] only-nl [only-nl]
+-- LC_ALL empty, LC_MESSAGES=fr, LANG=de
+  setlocale ok
+  LC_MESSAGES [fr_FR.UTF-8] where [fr_FR.UTF-8] only-nl [only-nl]
+-- LC_ALL and LC_MESSAGES empty, LANG=de
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [de_DE.UTF-8] only-nl [only-nl]
+-- LC_MESSAGES=xx_XX.UTF-8 (not installed), LANG=de
+  setlocale NULL
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- only setlocale(LC_MESSAGES, ""), LC_ALL=de_DE.UTF-8
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [de_DE.UTF-8] only-nl [only-nl]
+-- LANG=C LANGUAGE=it
+  setlocale ok
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- LANG=POSIX LANGUAGE=it
+  setlocale ok
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- LANG=C.UTF-8 LANGUAGE=it
+  setlocale ok
+  LC_MESSAGES [C.UTF-8] where [where] only-nl [only-nl]
+-- LANG unset LANGUAGE=it
+  setlocale ok
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=it
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=de LANGUAGE empty
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [de_DE.UTF-8] only-nl [only-nl]
+-- LANG=de LANGUAGE=zz (no catalog)
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=zz:it
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=de LANGUAGE=:::it:
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=de LANGUAGE=it:nl (per-message fall-through)
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [nl-only]
+-- LANG=de LANGUAGE=nl:it
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [nl] only-nl [nl-only]
+-- LANG=de LANGUAGE=C
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=C:it
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=it:C
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=de LANGUAGE=POSIX:it
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=bad:it (corrupt catalog first)
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=de LANGUAGE=de_DE.UTF-8
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [de_DE.UTF-8] only-nl [only-nl]
+-- LANG=de LANGUAGE=it, then LC_MESSAGES set to C
+  setlocale ok
+  LC_MESSAGES [C] where [where] only-nl [only-nl]
+-- LANG=de LANGUAGE=it, then LC_CTYPE set to C
+  setlocale ok
+  LC_MESSAGES [de_DE.UTF-8] where [it] only-nl [only-nl]
+-- LANG=fr LANGUAGE=../sel/it (a path in LANGUAGE)
+  setlocale ok
+  LC_MESSAGES [fr_FR.UTF-8] where [it] only-nl [only-nl]
+-- LANG=fr LANGUAGE=/it
+  setlocale ok
+  LC_MESSAGES [fr_FR.UTF-8] where [it] only-nl [only-nl]
+-- LANGUAGE changed at run time (LANG=de_DE.UTF-8, same domain)
+  LANGUAGE=it: [it]
+  LANGUAGE=nl, nothing else: [it]
+  another msgid only-nl: [nl-only]
+  after textdomain(textdomain(NULL)): [nl]
+  after setlocale(LC_MESSAGES, current): [nl]
+  LANGUAGE unset: [nl]
+  LANGUAGE=it again: [nl]
+-- environment changed after setlocale, no new setlocale
+  LC_MESSAGES/LANG now fr_FR.UTF-8: [nl]
+-- setlocale changed at run time
+  setlocale(LC_ALL, fr_FR.UTF-8): [fr_FR.UTF-8]
+  setlocale(LC_MESSAGES, cs_CZ.UTF-8): [cs_CZ.UTF-8]
+  setlocale(LC_MESSAGES, C): [where]
+-- uselocale (global LC_MESSAGES de_DE.UTF-8)
+  global: [de_DE.UTF-8]
+  thread locale LC_MESSAGES fr_FR.UTF-8: [fr_FR.UTF-8]
+  thread locale C, LANGUAGE=it: [where]
+  back to the global locale: [de_DE.UTF-8]
+== locale name variants (catalog directories found, most preferred first; LC_ALL hu_HU.UTF-8 unless named)
+-- LANGUAGE=xx_YY.ISO-8859-1@mod
+  order: xx_YY.ISO-8859-1@mod > xx_YY.iso88591@mod > xx_YY@mod > xx.ISO-8859-1@mod > xx.iso88591@mod > xx@mod > xx_YY.ISO-8859-1 > xx_YY.iso88591 > xx_YY > xx.ISO-8859-1 > xx.iso88591 > xx
+  never: xx_YY.ISO8859-1 xx_YY.iso-8859-1 xx_YY.ISO-8859-1@MOD XX xx_ZZ yy mod xx_YY.88591 xx_YY.iso88591@MOD hu hu_HU.UTF-8
+-- LANGUAGE=xx_YY.UTF-8
+  order: xx_YY.UTF-8 > xx_YY.utf8 > xx_YY > xx.UTF-8 > xx.utf8 > xx
+  never: xx_YY.UTF8 xx_YY.utf-8 xx_YY.UTF-8@mod xx@mod
+-- LANGUAGE=xx_YY.UTF-8@mod
+  order: xx_YY.UTF-8@mod > xx_YY.utf8@mod > xx_YY@mod > xx.UTF-8@mod > xx.utf8@mod > xx@mod > xx_YY.UTF-8 > xx_YY.utf8 > xx_YY > xx.UTF-8 > xx.utf8 > xx
+  never: -
+-- LANGUAGE=xx@mod
+  order: xx@mod > xx
+  never: xx_YY@mod xx.utf8@mod xx_YY
+-- LANGUAGE=xx_YY
+  order: xx_YY > xx
+  never: xx_YY.UTF-8 xx_YY.utf8 xx@mod xx_ZZ
+-- LANGUAGE=xx.utf8
+  order: xx.utf8 > xx
+  never: xx.UTF-8 xx_YY.utf8
+-- LANGUAGE=xx_YY.utf-8
+  order: xx_YY.utf-8 > xx_YY.utf8 > xx_YY > xx.utf-8 > xx.utf8 > xx
+  never: xx_YY.UTF-8
+-- LANGUAGE=xx_YY.8859-1 (codeset of digits)
+  order: xx_YY.8859-1 > xx_YY.iso88591 > xx_YY > xx.8859-1 > xx.iso88591 > xx
+  never: xx_YY.88591 xx.88591
+-- LANGUAGE=xx_YY.EUC-JP
+  order: xx_YY.EUC-JP > xx_YY.eucjp > xx_YY > xx.EUC-JP > xx.eucjp > xx
+  never: xx_YY.euc-jp
+-- LANGUAGE=xx_YY.@mod (empty codeset)
+  order: xx_YY@mod > xx@mod > xx_YY > xx
+  never: xx_YY.@mod xx_YY. xx.@mod xx.
+-- LANGUAGE=_YY (empty language)
+  order: _YY
+  never: (empty) YY
+-- LANGUAGE=xx_YY_ZZ
+  order: xx_YY_ZZ > xx
+  never: xx_YY
+-- LANGUAGE=german (an alias)
+  order: de_DE.ISO-8859-1 > de_DE.iso88591 > de_DE > de.ISO-8859-1 > de.iso88591 > de
+  never: german
+-- LANGUAGE=GERMAN
+  order: de_DE.ISO-8859-1 > de_DE.iso88591 > de_DE > de.ISO-8859-1 > de.iso88591 > de
+  never: GERMAN german
+-- LC_ALL=de_DE.UTF-8@euro, no LANGUAGE
+  order: de_DE.UTF-8@euro > de_DE.utf8@euro > de_DE@euro > de.UTF-8@euro > de.utf8@euro > de@euro > de_DE.UTF-8 > de_DE.utf8 > de_DE > de.UTF-8 > de.utf8 > de
+  never: de_DE.UTF-8@EURO DE
+-- LC_ALL=fr_FR.ISO-8859-1, no LANGUAGE
+  order: fr_FR.ISO-8859-1 > fr_FR.iso88591 > fr_FR > fr.ISO-8859-1 > fr.iso88591 > fr
+  never: fr_FR.UTF-8 fr_FR.utf8
+-- LC_ALL=de_DE.UTF-8 with LANGUAGE=xx (the locale is not a fall-back)
+  order: (none)
+  never: de_DE.UTF-8 de xx_XX
+== dcgettext categories (catalog <locale>/<category>/catd.mo says which)
+-- LC_ALL cs_CZ.UTF-8, LC_MESSAGES de_DE.UTF-8, LC_TIME fr_FR.UTF-8
+  LC_CTYPE (0): [cs_CZ.UTF-8/LC_CTYPE] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_CTYPE]
+  LC_NUMERIC (1): [cs_CZ.UTF-8/LC_NUMERIC] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_NUMERIC]
+  LC_TIME (2): [fr_FR.UTF-8/LC_TIME] errno EINTR; dcngettext n=2 [fr_FR.UTF-8/LC_TIME]
+  LC_COLLATE (3): [cs_CZ.UTF-8/LC_COLLATE] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_COLLATE]
+  LC_MONETARY (4): [cs_CZ.UTF-8/LC_MONETARY] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_MONETARY]
+  LC_MESSAGES (5): [de_DE.UTF-8/LC_MESSAGES] errno EINTR; dcngettext n=2 [de_DE.UTF-8/LC_MESSAGES]
+  LC_PAPER (7): [cs_CZ.UTF-8/LC_PAPER] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_PAPER]
+  LC_NAME (8): [cs_CZ.UTF-8/LC_NAME] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_NAME]
+  LC_ADDRESS (9): [cs_CZ.UTF-8/LC_ADDRESS] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_ADDRESS]
+  LC_TELEPHONE (10): [cs_CZ.UTF-8/LC_TELEPHONE] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_TELEPHONE]
+  LC_MEASUREMENT (11): [cs_CZ.UTF-8/LC_MEASUREMENT] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_MEASUREMENT]
+  LC_IDENTIFICATION (12): [cs_CZ.UTF-8/LC_IDENTIFICATION] errno EINTR; dcngettext n=2 [cs_CZ.UTF-8/LC_IDENTIFICATION]
+  LC_ALL (6): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  -1 (-1): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  13 (13): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  99 (99): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MAX (2147483647): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MIN (-2147483648): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+-- the same with LANGUAGE=it
+  LC_CTYPE (0): [it/LC_CTYPE] errno EINTR; dcngettext n=2 [it/LC_CTYPE]
+  LC_NUMERIC (1): [it/LC_NUMERIC] errno EINTR; dcngettext n=2 [it/LC_NUMERIC]
+  LC_TIME (2): [it/LC_TIME] errno EINTR; dcngettext n=2 [it/LC_TIME]
+  LC_COLLATE (3): [it/LC_COLLATE] errno EINTR; dcngettext n=2 [it/LC_COLLATE]
+  LC_MONETARY (4): [it/LC_MONETARY] errno EINTR; dcngettext n=2 [it/LC_MONETARY]
+  LC_MESSAGES (5): [it/LC_MESSAGES] errno EINTR; dcngettext n=2 [it/LC_MESSAGES]
+  LC_PAPER (7): [it/LC_PAPER] errno EINTR; dcngettext n=2 [it/LC_PAPER]
+  LC_NAME (8): [it/LC_NAME] errno EINTR; dcngettext n=2 [it/LC_NAME]
+  LC_ADDRESS (9): [it/LC_ADDRESS] errno EINTR; dcngettext n=2 [it/LC_ADDRESS]
+  LC_TELEPHONE (10): [it/LC_TELEPHONE] errno EINTR; dcngettext n=2 [it/LC_TELEPHONE]
+  LC_MEASUREMENT (11): [it/LC_MEASUREMENT] errno EINTR; dcngettext n=2 [it/LC_MEASUREMENT]
+  LC_IDENTIFICATION (12): [it/LC_IDENTIFICATION] errno EINTR; dcngettext n=2 [it/LC_IDENTIFICATION]
+  LC_ALL (6): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  -1 (-1): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  13 (13): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  99 (99): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MAX (2147483647): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MIN (-2147483648): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+-- LC_MESSAGES C, LC_TIME fr_FR.UTF-8, LANGUAGE=it
+  LC_CTYPE (0): [it/LC_CTYPE] errno EINTR; dcngettext n=2 [it/LC_CTYPE]
+  LC_NUMERIC (1): [it/LC_NUMERIC] errno EINTR; dcngettext n=2 [it/LC_NUMERIC]
+  LC_TIME (2): [it/LC_TIME] errno EINTR; dcngettext n=2 [it/LC_TIME]
+  LC_COLLATE (3): [it/LC_COLLATE] errno EINTR; dcngettext n=2 [it/LC_COLLATE]
+  LC_MONETARY (4): [it/LC_MONETARY] errno EINTR; dcngettext n=2 [it/LC_MONETARY]
+  LC_MESSAGES (5): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  LC_PAPER (7): [it/LC_PAPER] errno EINTR; dcngettext n=2 [it/LC_PAPER]
+  LC_NAME (8): [it/LC_NAME] errno EINTR; dcngettext n=2 [it/LC_NAME]
+  LC_ADDRESS (9): [it/LC_ADDRESS] errno EINTR; dcngettext n=2 [it/LC_ADDRESS]
+  LC_TELEPHONE (10): [it/LC_TELEPHONE] errno EINTR; dcngettext n=2 [it/LC_TELEPHONE]
+  LC_MEASUREMENT (11): [it/LC_MEASUREMENT] errno EINTR; dcngettext n=2 [it/LC_MEASUREMENT]
+  LC_IDENTIFICATION (12): [it/LC_IDENTIFICATION] errno EINTR; dcngettext n=2 [it/LC_IDENTIFICATION]
+  LC_ALL (6): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  -1 (-1): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  13 (13): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  99 (99): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MAX (2147483647): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+  INT_MIN (-2147483648): [where] errno EINTR; dcngettext n=2 (msgid_plural)
+== plural forms (S = msgid returned, P = msgid_plural returned)
+-- no header entry
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- header without Plural-Forms
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=2; plural=n != 1;
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=2; plural=n>1; (French)
+  0:[f0] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=1; plural=0;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- Russian
+  0:[f2] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f2] 7:[f2] 10:[f2] 11:[f2] 12:[f2] 14:[f2] 19:[f2] 21:[f0] 
+  22:[f1] 25:[f2] 100:[f2] 101:[f0] 102:[f1] 103:[f1] 111:[f2] 1000000:[f2] 4294967295:[f2] 4294967296:[f2] 4294967297:[f2] 18446744073709551615:[f2] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Polish
+  0:[f2] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f2] 7:[f2] 10:[f2] 11:[f2] 12:[f2] 14:[f2] 19:[f2] 21:[f2] 
+  22:[f1] 25:[f2] 100:[f2] 101:[f2] 102:[f1] 103:[f1] 111:[f2] 1000000:[f2] 4294967295:[f2] 4294967296:[f2] 4294967297:[f2] 18446744073709551615:[f2] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Czech
+  0:[f2] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f2] 7:[f2] 10:[f2] 11:[f2] 12:[f2] 14:[f2] 19:[f2] 21:[f2] 
+  22:[f2] 25:[f2] 100:[f2] 101:[f2] 102:[f2] 103:[f2] 111:[f2] 1000000:[f2] 4294967295:[f2] 4294967296:[f2] 4294967297:[f2] 18446744073709551615:[f2] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Slovenian
+  0:[f3] 1:[f0] 2:[f1] 3:[f2] 4:[f2] 5:[f3] 7:[f3] 10:[f3] 11:[f3] 12:[f3] 14:[f3] 19:[f3] 21:[f3] 
+  22:[f3] 25:[f3] 100:[f3] 101:[f0] 102:[f1] 103:[f2] 111:[f3] 1000000:[f3] 4294967295:[f3] 4294967296:[f3] 4294967297:[f3] 18446744073709551615:[f3] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Irish
+  0:[f2] 1:[f0] 2:[f1] 3:[f2] 4:[f2] 5:[f2] 7:[f3] 10:[f3] 11:[f4] 12:[f4] 14:[f4] 19:[f4] 21:[f4] 
+  22:[f4] 25:[f4] 100:[f4] 101:[f4] 102:[f4] 103:[f4] 111:[f4] 1000000:[f4] 4294967295:[f4] 4294967296:[f4] 4294967297:[f4] 18446744073709551615:[f4] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Arabic
+  0:[f0] 1:[f1] 2:[f2] 3:[f3] 4:[f3] 5:[f3] 7:[f3] 10:[f3] 11:[f4] 12:[f4] 14:[f4] 19:[f4] 21:[f4] 
+  22:[f4] 25:[f4] 100:[f5] 101:[f5] 102:[f5] 103:[f3] 111:[f4] 1000000:[f5] 4294967295:[f4] 4294967296:[f4] 4294967297:[f4] 18446744073709551615:[f4] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f2]
+-- index beyond nplurals: nplurals=2; plural=n;
+  0:[f0] 1:[f1] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- fewer forms than nplurals: nplurals=3; plural=n%3;
+  0:[f0] 1:[f1] 2:[f0] 3:[f0] 4:[f1] 5:[f0] 7:[f1] 10:[f1] 11:[f0] 12:[f0] 14:[f0] 19:[f1] 21:[f0] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f0] 102:[f0] 103:[f1] 111:[f0] 1000000:[f1] 4294967295:[f0] 4294967296:[f1] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- more forms than nplurals: nplurals=2; plural=n%3; (3 forms)
+  0:[f0] 1:[f1] 2:[f0] 3:[f0] 4:[f1] 5:[f0] 7:[f1] 10:[f1] 11:[f0] 12:[f0] 14:[f0] 19:[f1] 21:[f0] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f0] 102:[f0] 103:[f1] 111:[f0] 1000000:[f1] 4294967295:[f0] 4294967296:[f1] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- syntax error: nplurals=2; plural=n !=;
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=x; plural=n!=1;
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=2; (no plural)
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- plural=n!=1; (no nplurals)
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=0; plural=0;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- division by zero: nplurals=2; plural=n/0;
+  child killed by signal SIGFPE
+-- remainder by zero: nplurals=2; plural=n%0;
+  child killed by signal SIGFPE
+-- division by n: nplurals=3; plural=10/n;
+  child killed by signal SIGFPE
+-- subtraction below zero: nplurals=3; plural=n-5;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f2] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- no semicolon after the expression
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- spaces: '  nplurals = 2 ;  plural = n == 1 ? 1 : 0 ;'
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- precedence: nplurals=4; plural=1+2*n%3;
+  0:[f1] 1:[f3] 2:[f2] 3:[f1] 4:[f3] 5:[f2] 7:[f3] 10:[f3] 11:[f2] 12:[f1] 14:[f2] 19:[f3] 21:[f1] 
+  22:[f3] 25:[f3] 100:[f3] 101:[f2] 102:[f1] 103:[f3] 111:[f1] 1000000:[f3] 4294967295:[f1] 4294967296:[f3] 4294967297:[f2] 18446744073709551615:[f3] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f2]
+-- unary not: nplurals=3; plural=!n+!!n*2;
+  0:[f1] 1:[f2] 2:[f2] 3:[f2] 4:[f2] 5:[f2] 7:[f2] 10:[f2] 11:[f2] 12:[f2] 14:[f2] 19:[f2] 21:[f2] 
+  22:[f2] 25:[f2] 100:[f2] 101:[f2] 102:[f2] 103:[f2] 111:[f2] 1000000:[f2] 4294967295:[f2] 4294967296:[f2] 4294967297:[f2] 18446744073709551615:[f2] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f2]
+-- unary minus: nplurals=2; plural=-n;
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- constant beyond 32 bits: nplurals=2; plural=n>4294967295;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- nplurals=2; plural=n==4294967297;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f1] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- right-associative ?: nplurals=3; plural=n==1?0:n==2?1:2;
+  0:[f2] 1:[f0] 2:[f1] 3:[f2] 4:[f2] 5:[f2] 7:[f2] 10:[f2] 11:[f2] 12:[f2] 14:[f2] 19:[f2] 21:[f2] 
+  22:[f2] 25:[f2] 100:[f2] 101:[f2] 102:[f2] 103:[f2] 111:[f2] 1000000:[f2] 4294967295:[f2] 4294967296:[f2] 4294967297:[f2] 18446744073709551615:[f2] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- && and ||: nplurals=2; plural=n<2||n>10&&n<20;
+  0:[f1] 1:[f1] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- leading zero: nplurals=2; plural=n==010;
+  0:[f0] 1:[f0] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f1] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- no spaces: nplurals=2;plural=n!=1;
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- trailing text: nplurals=2; plural=n!=1; extra words
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- nplurals=1000; plural=n;
+  0:[f0] 1:[f1] 2:[f0] 3:[f0] 4:[f0] 5:[f0] 7:[f0] 10:[f0] 11:[f0] 12:[f0] 14:[f0] 19:[f0] 21:[f0] 
+  22:[f0] 25:[f0] 100:[f0] 101:[f0] 102:[f0] 103:[f0] 111:[f0] 1000000:[f0] 4294967295:[f0] 4294967296:[f0] 4294967297:[f0] 18446744073709551615:[f0] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f0]
+-- 200 nested parentheses
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- 4000 nested parentheses
+  0:[f1] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- lowercase header name plural-forms:
+  0:[f0] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Plural-Forms before Content-Type
+  0:[f0] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Plural-Forms in the middle of another line
+  0:[f0] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- Plural-Forms: plural before nplurals
+  0:[f0] 1:[f0] 2:[f1] 3:[f1] 4:[f1] 5:[f1] 7:[f1] 10:[f1] 11:[f1] 12:[f1] 14:[f1] 19:[f1] 21:[f1] 
+  22:[f1] 25:[f1] 100:[f1] 101:[f1] 102:[f1] 103:[f1] 111:[f1] 1000000:[f1] 4294967295:[f1] 4294967296:[f1] 4294967297:[f1] 18446744073709551615:[f1] 
+  singular-only entry: n=1 [Solo] n=2 [Solo]; gettext(file) [f0]; ngettext(file, other, 2) [f1]
+-- no catalog: dcngettext returns which argument
+  0:P 1:S 2:P 3:P 4:P 5:P 7:P 10:P 11:P 12:P 14:P 19:P 21:P 
+  22:P 25:P 100:P 101:P 102:P 103:P 111:P 1000000:P 4294967295:P 4294967296:P 4294967297:P 18446744073709551615:P 
+== contexts and special msgids
+  [menu\x04open] -> [Menu-Open]
+  [open] -> [Open-plain]
+  [menu\x04missing] -> (the argument)
+  [\x04bare] -> [empty-context]
+  [bare] -> (the argument)
+  [menu\x04] -> [empty-id-in-context]
+  [menu] -> (the argument)
+  [menu\x04file] -> [MF0]
+  [a\x04b\x04c] -> [two-separators]
+  [a\x04b] -> (the argument)
+  [high\xc3\xa9] -> [high-bytes]
+  [Open] -> (the argument)
+  [open ] -> (the argument)
+  [ open] -> (the argument)
+  [empty-translation] -> []
+  [\x04] -> (the argument)
+  dcngettext(menu\x04file, files) n=1 [MF0] n=2 [MF1]
+  gettext("") with a header entry: [Content-Type: text/plain; charset=UTF-8\x0aPlural-Forms: nplurals=2; plural=n != 1;\x0a]
+  same pointer twice: yes
+  gettext("") without a header entry: [] (the argument: yes)
+  gettext("") without a catalog: [] (the argument: yes)
+  not found returns the argument: yes
+  found twice, same pointer: yes
+  20000-byte msgid, not found, returns the argument: yes
+== msgfmt catalogs, hash table and search
+-- msgfmt a.mo
+  hello [hallo] menu|open [oeffnen] open [open] file n=1 [Datei] n=2 [Dateien] missing [missing]
+-- msgfmt a-nohash.mo
+  hello [hallo] menu|open [oeffnen] open [open] file n=1 [Datei] n=2 [Dateien] missing [missing]
+-- msgfmt a-be.mo
+  hello [hallo] menu|open [oeffnen] open [open] file n=1 [Datei] n=2 [Dateien] missing [missing]
+-- the probe's own writer: the same entries, little- and big-endian
+  hello [hallo] menu|open [oeffnen] open [open] file n=1 [Datei] n=2 [Dateien] missing [missing]
+  hello [hallo] menu|open [oeffnen] open [open] file n=1 [Datei] n=2 [Dateien] missing [missing]
+-- 500 entries (msgfmt, with and without a hash table)
+  big.mo: 500 of 500 found with the right translation; misses: (arg) (arg) (arg) (arg) (arg) (header)
+  big-nohash.mo: 500 of 500 found with the right translation; misses: (arg) (arg) (arg) (arg) (arg) (header)
+-- msgfmt catalog big.mo with its hash table altered (each in a child)
+  big.mo: N 501, hash size 673
+  every hash entry 0 (empty): 0 right, 500 untranslated, 0 other
+  every hash entry 2 (a valid index, the wrong string):  child killed by signal SIGALRM
+-- msgfmt Russian catalog (3 forms)
+  0:[r2] 1:[r0] 2:[r1] 3:[r1] 4:[r1] 5:[r2] 7:[r2] 10:[r2] 11:[r2] 12:[r2] 14:[r2] 19:[r2] 21:[r0] 
+  22:[r1] 25:[r2] 100:[r2] 101:[r0] 102:[r1] 103:[r1] 111:[r2] 1000000:[r2] 4294967295:[r2] 4294967296:[r2] 4294967297:[r2] 18446744073709551615:[r2] 
+-- msgfmt catalog with a system-dependent string (revision 1): msgid "count %<PRIu64> x"
+  [count %lu x] -> [zahl %lu y]
+  [count %llu x] -> (the argument)
+  [count %<PRIu64> x] -> (the argument)
+  [count % x] -> (the argument)
+  [count %ld x] -> (the argument)
+  header: [Content-Type: text/plain; charset=UTF-8\x0a]
+-- msgfmt ISO-8859-1 catalog in a UTF-8 locale
+  latin: [\xc3\xa9t\xc3\xa9]
+== damaged .mo files (probe-written: header, file|files, hello, zz; strings from offset 92)
+-- good file
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- empty file
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- 4 bytes (magic only)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- 20 bytes
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- 27 bytes
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- 28 bytes (header only)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- half the file
+  hello [] zz [zz] hell [hell] file n=2 [] errno EINTR
+-- all but the last byte
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- wrong magic 0x12345678
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- big-endian file (probe writer)
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- revision 1 (minor 1)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- revision 2 (minor 2)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- revision 0x10000 (major 1)
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- revision 0x20000 (major 2)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- revision 0xffffffff
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- N = 0
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- N = 2
+  hello [hello] zz [zz] hell [hell] file n=2 [Dateien] errno EINTR
+-- O = T (tables swapped onto each other)
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- hash size 5, offset beyond the file
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- key 'hello': length beyond the file
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- key 'hello': length 4
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- translation of 'hello': length beyond the file
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- translation of 'hello': length 3
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- translation of 'hello': length 0
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- translation of 'file': length 5 (one form)
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Datei] errno EINTR
+-- translation of 'zz' without its terminating NUL at the end of the file
+  hello [hallo] zz [ZZX] hell [hell] file n=2 [Dateien] errno EINTR
+-- keys not sorted, no hash table
+  hello [hallo] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- duplicate keys
+  hello [first] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- a directory in place of the file
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- mode 0000
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- a FIFO in place of the file (3 s limit)
+  child killed by signal SIGALRM
+-- symbolic link to a good file
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+-- dangling symbolic link
+  hello [hello] zz [zz] hell [hell] file n=2 (msgid_plural) errno EINTR
+-- LANGUAGE=bad:good, the bad catalog has a wrong magic number
+  hello [hallo] zz [ZZ] hell [hell] file n=2 [Dateien] errno EINTR
+== _nl_msg_cat_cntr (whether it changed after each step)
+  textdomain("cn") (new): changed
+  textdomain("cn") (same): changed
+  textdomain(NULL): unchanged
+  textdomain(""): changed
+  textdomain("cn"): changed
+  bindtextdomain(cn, <dir>/cn) (new): changed
+  bindtextdomain(cn, <dir>/cn) (same): unchanged
+  bindtextdomain(cn, NULL): unchanged
+  bind_textdomain_codeset(cn, UTF-8) (new): changed
+  bind_textdomain_codeset(cn, UTF-8) (same): unchanged
+  bind_textdomain_codeset(cn, NULL): unchanged
+  bindtextdomain(NULL, dir): unchanged
+  setlocale(LC_ALL, de_DE.UTF-8): changed
+  setlocale(LC_ALL, de_DE.UTF-8) (same): unchanged
+  setlocale(LC_ALL, NULL): unchanged
+  setlocale(LC_MESSAGES, fr_FR.UTF-8): changed
+  setlocale(LC_CTYPE, fr_FR.UTF-8): changed
+  setlocale(LC_NUMERIC, fr_FR.UTF-8): changed
+  setlocale(LC_ALL, xx_XX.UTF-8) (fails): unchanged
+  setlocale(LC_ALL, de_DE.UTF-8): changed
+  first lookup (loads the catalog): unchanged
+  second lookup: unchanged
+  lookup of a missing msgid: unchanged
+  lookup in a domain without a catalog: unchanged
+  bindtextdomain(cn, <dir>/cn2): changed
+  lookup (loads the new catalog): unchanged
+  newlocale: unchanged
+  uselocale: unchanged
+  setenv LANGUAGE: unchanged
+  lookup after the LANGUAGE change: unchanged
+  catopen: unchanged
+== errno across the gettext family
+-- errno preset to 0
+  gettext(C domain) 0 found 0 not-found 0 no-catalog 0 unreadable 0 truncated 0
+  conversion 0 ngettext 0 LC_ALL 0 textdomain 0 textdomain(NULL) 0
+  bindtextdomain 0 bindtextdomain(NULL dir) 0 bindtextdomain(NULL, NULL) 0 codeset 0
+-- errno preset to EINTR
+  gettext(C domain) EINTR found EINTR not-found EINTR no-catalog EINTR unreadable EINTR truncated EINTR
+  conversion EINTR ngettext EINTR LC_ALL EINTR textdomain EINTR textdomain(NULL) EINTR
+  bindtextdomain EINTR bindtextdomain(NULL dir) EINTR bindtextdomain(NULL, NULL) EINTR codeset EINTR
+-- errno preset to ENOMEM
+  gettext(C domain) ENOMEM found ENOMEM not-found ENOMEM no-catalog ENOMEM unreadable ENOMEM truncated ENOMEM
+  conversion ENOMEM ngettext ENOMEM LC_ALL ENOMEM textdomain ENOMEM textdomain(NULL) ENOMEM
+  bindtextdomain ENOMEM bindtextdomain(NULL dir) ENOMEM bindtextdomain(NULL, NULL) ENOMEM codeset ENOMEM
+-- errno preset to E#12345
+  gettext(C domain) E#12345 found E#12345 not-found E#12345 no-catalog E#12345 unreadable E#12345 truncated E#12345
+  conversion E#12345 ngettext E#12345 LC_ALL E#12345 textdomain E#12345 textdomain(NULL) E#12345
+  bindtextdomain E#12345 bindtextdomain(NULL dir) E#12345 bindtextdomain(NULL, NULL) E#12345 codeset E#12345
+== X/Open catalogs: the probe's .cat writer against gencat
+  a.cat: gencat wrote 326 bytes, plane size 5, depth 2; the writer's bytes are identical: yes
+  b.cat: gencat wrote 122 bytes, plane size 1, depth 3; the writer's bytes are identical: yes
+  c.cat: gencat wrote 38 bytes, plane size 1, depth 1; the writer's bytes are identical: yes
+== catopen/catgets/catclose on a gencat catalog
+-- the gencat fixture main.cat (absolute name)
+  catopen ok, errno 0, descriptors added 0
+  1,1: [one] errno 0
+  1,2: [tab\x09here] errno 0
+  1,3: [newline\x0aend] errno 0
+  1,4: [back\\slash] errno 0
+  1,5: [octal ABC and \x07 and A] errno 0
+  1,6: [continued line] errno 0
+  1,7: [] errno 0
+  1,8: [] errno 0
+  1,9: [other escapes \x0b\x08\x0d\x0c and q unknown] errno 0
+  1,10: [high bytes \xc3\xa4 (UTF-8)] errno 0
+  1,11: [quoted trailing space ] errno 0
+  1,12: [] errno 0
+  1,13: [quote inside " escaped] errno 0
+  1,14: ["no longer quoted"] errno 0
+  1,15: [two  spaces] errno 0
+  1,16: [tab separator] errno 0
+  1,17: [ leading space kept] errno 0
+  1,18: (default) errno ENOMSG
+  1,32767: [max message] errno 0
+  1,100000: [beyond NL_MSGMAX?] errno 0
+  1,0: (default) errno ENOMSG
+  1,-1: (default) errno 0
+  2,1: [set two one] errno 0
+  2,2: (default) errno ENOMSG
+  2,3: [set two three] errno 0
+  7,1: [seven] errno 0
+  9,1: [nine] errno 0
+  0,1: (default) errno ENOMSG
+  -1,1: (default) errno 0
+  3,1: (default) errno ENOMSG
+  2147483647,1: (default) errno 0
+  1,2147483647: (default) errno ENOMSG
+  -2147483648,-2147483648: (default) errno 0
+  -2,1: (default) errno 0
+  found with errno preset to EINTR: errno EINTR
+  the same message twice, same pointer: yes
+  missing with a NULL default: NULL, errno ENOMSG
+  after setlocale(LC_ALL, fr_FR.UTF-8), 1,1: [one]
+  a second catopen of the same file: ok, distinct descriptor: yes
+  catclose (second): 0 errno EINTR
+  first descriptor still reads 2,1: [set two one]
+  catclose: 0 errno EINTR, descriptors left over 0
+  catclose((nl_catd)-1): -1 errno EBADF
+  catgets((nl_catd)-1, 1, 1): (default) errno 0
+== catopen: NLSPATH, the name, the locale sources
+-- %N
+  catopen: ok; catgets(1,1): [app]
+-- %N.cat
+  catopen: ok; catgets(1,1): [app.cat]
+-- %L, LANG=de_DE.UTF-8@euro
+  catopen: ok; catgets(1,1): [full name]
+-- %l/%t/%c, LANG=de_DE.UTF-8@euro
+  catopen: ok; catgets(1,1): [c keeps the modifier]
+-- %l/%t/%c, LANG=de
+  catopen: ok; catgets(1,1): [l=de t= c=]
+-- %l/%t/%c, LANG=de_DE
+  catopen: ok; catgets(1,1): [l=de t=DE c=]
+-- %l/%t/%c, LANG=de.UTF-8
+  catopen: ok; catgets(1,1): [l=de t= c=UTF-8]
+-- %l/%t/%c, LANG=de@euro
+  catopen: ok; catgets(1,1): [l=de@euro t= c=]
+-- %l/%t/%c, LANG=de_DE@euro
+  catopen: ok; catgets(1,1): [l=de t=DE@euro c=]
+-- %l/%t/%c, LANG=de_DE_X.Y
+  catopen: ok; catgets(1,1): [l=de t=DE_X c=Y]
+-- %l/%t/%c, LANG=C.UTF-8
+  catopen: ok; catgets(1,1): [l=C t= c=UTF-8]
+-- %L/%l/%t/%c, LANG=C
+  catopen: ok; catgets(1,1): [L=C l=C]
+-- %L/%l/%t/%c, LANG=POSIX
+  catopen: ok; catgets(1,1): [L=POSIX l=POSIX]
+-- %L/%l/%t/%c, LANG empty
+  catopen: ok; catgets(1,1): [L=C l=C]
+-- %L/%l/%t/%c, LANG unset
+  catopen: ok; catgets(1,1): [L=C l=C]
+-- %%
+  catopen: ok; catgets(1,1): [a%b]
+-- unknown %X in the only template
+  catopen: -1 errno ENOENT
+-- unknown %X in the first template, a good second one
+  catopen: ok; catgets(1,1): [ok]
+-- a good template, then one with %X
+  catopen: ok; catgets(1,1): [ok]
+-- trailing %
+  catopen: -1 errno ENOENT
+-- trailing % in the first template, a good second one
+  catopen: -1 errno ENOENT
+-- leading colon (empty template), cwd holds app
+  catopen: ok; catgets(1,1): [cwd app]
+-- two adjacent colons
+  catopen: ok; catgets(1,1): [cwd app]
+-- trailing colon
+  catopen: ok; catgets(1,1): [cwd app]
+-- first template misses, second finds
+  catopen: ok; catgets(1,1): [b]
+-- first candidate is a directory
+  catopen: -1 errno EINVAL
+-- first candidate is unreadable
+  catopen: ok; catgets(1,1): [b]
+-- first candidate is not a catalog
+  catopen: -1 errno 0
+-- first candidate is empty
+  catopen: -1 errno EINVAL
+-- only candidate is a directory
+  catopen: -1 errno EINVAL
+-- only candidate is unreadable
+  catopen: -1 errno ENOENT
+-- only candidate is not a catalog
+  catopen: -1 errno 0
+-- only candidate is empty
+  catopen: -1 errno EINVAL
+-- absolute name, NLSPATH ignored
+  catopen: ok; catgets(1,1): [absolute]
+-- relative name with a slash
+  catopen: ok; catgets(1,1): [relative with slash]
+-- absolute name missing
+  catopen: -1 errno ENOENT
+-- absolute name, a directory
+  catopen: -1 errno EINVAL
+-- absolute name, unreadable
+  catopen: -1 errno EACCES
+-- absolute name below a file
+  catopen: -1 errno ENOTDIR
+-- name not found anywhere
+  catopen: -1 errno ENOENT
+-- NLSPATH unset, name not found
+  catopen: -1 errno ENOENT
+-- NLSPATH empty, cwd holds app
+  catopen: -1 errno ENOENT
+-- template without %N
+  catopen: ok; catgets(1,1): [fixed]
+-- empty name, NLSPATH <T>/n/%N (a directory <T>/n)
+  catopen: -1 errno EINVAL
+-- empty name, NLSPATH <T>/x%N (a catalog <T>/x)
+  catopen: ok; catgets(1,1): [x]
+-- empty name, NLSPATH unset
+  catopen: -1 errno EINVAL
+-- name containing %L
+  catopen: ok; catgets(1,1): [literal]
+-- LANG with a slash
+  catopen: ok; catgets(1,1): [slash in LANG]
+-- LANG=../x (parent directory)
+  catopen: ok; catgets(1,1): [escaped]
+-- path longer than PATH_MAX
+  catopen: -1 errno ENOENT
+-- flag 0 uses LANG (LC_ALL locale fr_FR.UTF-8, LANG=de_DE.UTF-8)
+  catopen: ok; catgets(1,1): [LANG]
+-- flag NL_CAT_LOCALE uses LC_MESSAGES (same setup)
+  catopen: ok; catgets(1,1): [LC_MESSAGES]
+-- flag 2 (same setup)
+  catopen: ok; catgets(1,1): [LANG]
+-- flag -1 (same setup)
+  catopen: ok; catgets(1,1): [LANG]
+-- flag 0 with LC_ALL=cs, LC_MESSAGES=it, LANG=de in the environment
+  catopen: ok; catgets(1,1): [LANG]
+-- flag 0 with LC_MESSAGES=it only
+  catopen: ok; catgets(1,1): [C]
+-- flag 0 with LC_ALL=cs only
+  catopen: ok; catgets(1,1): [C]
+-- NL_CAT_LOCALE without setlocale, LANG=de_DE.UTF-8
+  catopen: ok; catgets(1,1): [C]
+-- NL_CAT_LOCALE, LC_ALL locale de_DE.UTF-8@euro
+  catopen: ok; catgets(1,1): [LC_MESSAGES name with modifier]
+-- NLSPATH changed between two catopen calls in one process
+  first: [one] second: [two]
+-- the catalog file replaced after catopen
+[one]
+-- the catalog file removed after catopen
+[two]
+-- catopen does not change _nl_msg_cat_cntr or the gettext state
+  textdomain(NULL): [messages]
+== damaged .cat files (probe-written: plane size 3, depth 1; 1,1 one-one; 1,2 one-two; 2,1 two-one)
+-- good file
+  catopen: ok; 1,1 [one-one]; 1,2 [one-two]; 2,1 [two-one]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- empty file
+  catopen: -1 errno EINVAL
+-- 4 bytes
+  catopen: -1 errno EINVAL
+-- 11 bytes
+  catopen: -1 errno EINVAL
+-- 12 bytes (header only)
+  catopen: -1 errno 0
+-- tables cut (40 bytes)
+  catopen: -1 errno 0
+-- strings cut (90 bytes)
+  catopen: ok; 1,1 [one-on]; 1,2 []; 2,1 []; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- all but the last byte
+  catopen: ok; 1,1 [one-one]; 1,2 [one-two]; 2,1 [two-one]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- last string without its NUL
+  catopen: ok; 1,1 [one-one]; 1,2 [one-two]; 2,1 [two-oneX]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- wrong magic
+  catopen: -1 errno 0
+-- a big-endian writer's file (swapped header, tables in the other order)
+  catopen: -1 errno 0
+-- little-endian table zeroed
+  catopen: ok; 1,1 (default) errno ENOMSG; 1,2 (default) errno ENOMSG; 2,1 (default) errno ENOMSG; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- big-endian table zeroed
+  catopen: ok; 1,1 [one-one]; 1,2 [one-two]; 2,1 [two-one]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- plane size 0
+  child killed by signal SIGFPE
+-- plane size 2 (entries no longer at their hash slots)
+  catopen: ok; 1,1 (default) errno ENOMSG; 1,2 (default) errno ENOMSG; 2,1 (default) errno ENOMSG; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- slots 0 and 2 swapped (entries away from their hash slots)
+  catopen: ok; 1,1 (default) errno ENOMSG; 1,2 [one-two]; 2,1 (default) errno ENOMSG; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- message in the second plane, its first-plane slot free
+  catopen: ok; 1,1 [second plane]; 1,2 (default) errno ENOMSG; 2,1 (default) errno ENOMSG; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- string offset of 1,1 beyond the file
+  catopen: -1 errno 0
+-- string offset of 1,1 inside another string (offset 3)
+  catopen: ok; 1,1 [-one]; 1,2 [one-two]; 2,1 [two-one]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- set field of 1,1 stored as 1 instead of 2
+  catopen: ok; 1,1 (default) errno ENOMSG; 1,2 [one-two]; 2,1 [two-one]; 3,3 (default) errno ENOMSG; catclose 0 errno 0
+-- a directory
+  catopen: -1 errno EINVAL
+-- mode 0000
+  catopen: -1 errno EACCES
+-- a FIFO (3 s limit)
+  child killed by signal SIGALRM
+done

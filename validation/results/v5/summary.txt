@@ -1,0 +1,359 @@
+== glibc-coreutils
+configure rc=0
+build rc=0 seconds=22.352043850
+check-start 2026-10-04T18:04:06Z load: 3.55, 2.30, 2.10
+check rc=0 seconds=100.787991947
+check-end 2026-10-04T18:05:46Z load: 5.15, 3.24, 2.46
+own:     607 PASS     155 SKIP 
+gnulib:     495 PASS     106 SKIP 
+  undefined references: 0
+== liella-coreutils
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=27.698303326
+check-start 2026-10-23T06:40:28Z load: 76.27, 72.69, 62.33
+check rc=2 seconds=244.746660694
+check-end 2026-10-23T06:44:32Z load: 81.96, 80.83, 68.28
+own:       4 FAIL     601 PASS     318 SKIP 
+gnulib:     495 PASS     106 SKIP 
+  FAIL: tests/misc/stdbuf.sh
+  FAIL: tests/misc/responsive.sh
+  FAIL: tests/misc/responsive
+  FAIL: tests/misc/stdbuf
+  undefined references: 0
+== replacements coreutils (glibc < > liella)
+  < HAVE_DLOPEN='1'
+  > HAVE_DLOPEN='0'
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FFLUSH='1'
+  > REPLACE_FFLUSH='0'
+  < REPLACE_FOPEN='1'
+  < REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+  > REPLACE_FOPEN='0'
+  > REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < REPLACE_PTHREAD_RWLOCKATTR_INIT='1'
+  > REPLACE_PTHREAD_RWLOCKATTR_INIT='0'
+  < REPLACE_PTHREAD_RWLOCK_INIT='1'
+  > REPLACE_PTHREAD_RWLOCK_INIT='0'
+  < ac_cv_func__fseeki64=no
+  < ac_cv_have_decl_isblank=yes
+  < ac_cv_header_libintl_h=yes
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+  < gl_cv_func_re_compile_pattern_working=no
+  > gl_cv_func_re_compile_pattern_working=yes
+  < gl_cv_lib_dl=none
+  > gl_cv_lib_dl=no
+== glibc-sed
+configure rc=0
+build rc=0 seconds=5.787590860
+check-start 2026-10-04T18:03:13Z load: 2.82, 1.98, 1.99
+check rc=0 seconds=24.999789311
+check-end 2026-10-04T18:03:38Z load: 2.95, 2.08, 2.02
+own:      64 PASS      11 SKIP 
+gnulib:     222 PASS      65 SKIP 
+  undefined references: 0
+== liella-sed
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=5.249606491
+check-start 2026-10-23T06:38:45Z load: 89.40, 72.53, 61.10
+check rc=0 seconds=21.639107204
+check-end 2026-10-23T06:39:07Z load: 86.70, 73.02, 61.50
+own:      64 PASS      11 SKIP 
+gnulib:     222 PASS      65 SKIP 
+  undefined references: 0
+== replacements sed (glibc < > liella)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FFLUSH='1'
+  > REPLACE_FFLUSH='0'
+  < REPLACE_FOPEN='1'
+  < REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+  > REPLACE_FOPEN='0'
+  > REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < REPLACE_PTHREAD_RWLOCKATTR_INIT='1'
+  > REPLACE_PTHREAD_RWLOCKATTR_INIT='0'
+  < REPLACE_PTHREAD_RWLOCK_INIT='1'
+  > REPLACE_PTHREAD_RWLOCK_INIT='0'
+  < ac_cv_func__fseeki64=no
+  < ac_cv_have_decl_isblank=yes
+  < ac_cv_header_libintl_h=yes
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+  < gl_cv_func_re_compile_pattern_working=no
+  > gl_cv_func_re_compile_pattern_working=yes
+== glibc-findutils
+configure rc=0
+build rc=0 seconds=8.295363508
+check-start 2026-10-04T19:34:26Z load: 3.37, 5.01, 5.94
+check rc=0 seconds=49.997328165
+check-end 2026-10-04T19:35:16Z load: 6.27, 5.55, 6.07
+own:      28 PASS       4 SKIP 
+gnulib:     346 PASS      77 SKIP 
+  undefined references: 0
+== liella-findutils
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=15.229577449
+check-start 2026-10-23T06:41:09Z load: 79.83, 73.96, 63.19
+check rc=0 seconds=84.412513598
+check-end 2026-10-23T06:42:33Z load: 94.95, 79.98, 66.24
+own:      28 PASS       4 SKIP 
+gnulib:     346 PASS      77 SKIP 
+  undefined references: 0
+== replacements findutils (glibc < > liella)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FFLUSH='1'
+  > REPLACE_FFLUSH='0'
+  < REPLACE_FOPEN='1'
+  < REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+  > REPLACE_FOPEN='0'
+  > REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < REPLACE_PTHREAD_RWLOCKATTR_INIT='1'
+  > REPLACE_PTHREAD_RWLOCKATTR_INIT='0'
+  < REPLACE_PTHREAD_RWLOCK_INIT='1'
+  > REPLACE_PTHREAD_RWLOCK_INIT='0'
+  < ac_cv_func__fseeki64=no
+  < ac_cv_have_decl_isblank=yes
+  < ac_cv_header_libintl_h=yes
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+  < gl_cv_func_re_compile_pattern_working=no
+  > gl_cv_func_re_compile_pattern_working=yes
+== glibc-grep
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=4.566695908
+check-start 2026-10-05T10:52:03Z load: 3.03, 4.73, 4.35
+check rc=0 seconds=34.681042200
+check-end 2026-10-05T10:52:37Z load: 4.75, 4.98, 4.45
+own:      92 PASS      34 SKIP       2 XFAIL 
+gnulib:     257 PASS      58 SKIP 
+  undefined references: 0
+== liella-grep
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=11.883654784
+check-start 2026-10-23T06:43:12Z load: 93.65, 81.61, 67.37
+check rc=2 seconds=59.974409852
+check-end 2026-10-23T06:44:12Z load: 85.51, 81.35, 68.17
+own:       2 FAIL      91 PASS      68 SKIP       4 XPASS 
+gnulib:     257 PASS      58 SKIP 
+  XPASS: glibc-infloop
+  FAIL: stack-overflow
+  XPASS: triple-backref
+  XPASS: glibc-infloop
+  FAIL: stack-overflow
+  XPASS: triple-backref
+  undefined references: 0
+== replacements grep (glibc < > liella)
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+== glibc-gawk
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=8.722852851
+check-start 2026-10-05T10:06:19Z load: 2.42, 1.81, 2.27
+check rc=2 seconds=5.785584340
+check-end 2026-10-05T10:06:25Z load: 2.63, 1.87, 2.29
+own:       6 FAIL     588 PASS 
+gnulib: 
+  FAIL: delarpm2
+  FAIL: matchuninitialized
+  FAIL: arraysort2
+  FAIL: elemnew2
+  FAIL: elemnew4
+  FAIL: typeof7
+  undefined references: 0
+== liella-gawk
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=2 seconds=14.053179601
+check-start 2026-10-23T06:43:10Z load: 93.65, 81.61, 67.37
+check rc=2 seconds=5.230784079
+check-end 2026-10-23T06:43:15Z load: 93.52, 81.78, 67.50
+own:     604 PASS 
+gnulib: 
+  undefined references: 7
+         2 log
+         1 sin
+         1 pow
+         1 exp
+         1 cos
+         1 atan2
+== replacements gawk (glibc < > liella)
+== glibc-diffutils
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=4.539240730
+check-start 2026-10-05T10:55:23Z load: 3.11, 4.23, 4.25
+check rc=0 seconds=25.254400047
+check-end 2026-10-05T10:55:49Z load: 4.53, 4.52, 4.34
+own:      31 PASS       2 SKIP       1 XFAIL 
+gnulib:     275 PASS      68 SKIP 
+  undefined references: 0
+== liella-diffutils
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=5.833803570
+check-start 2026-10-23T06:45:17Z load: 61.39, 75.63, 67.12
+check rc=0 seconds=34.178899240
+check-end 2026-10-23T06:45:51Z load: 63.26, 74.36, 67.00
+own:      31 PASS       2 SKIP       1 XFAIL 
+gnulib:     275 PASS      68 SKIP 
+  undefined references: 0
+== replacements diffutils (glibc < > liella)
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+  < gl_cv_func_pthread_rwlock_good_waitqueue=no
+  > gl_cv_func_pthread_rwlock_good_waitqueue=yes
+== glibc-tar
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=6.342458049
+check-start 2026-10-05T10:44:38Z load: 2.81, 2.90, 3.26
+check rc=0 seconds=259.736392528
+check-end 2026-10-05T10:48:57Z load: 4.36, 6.11, 4.63
+own:     207 PASS      26 SKIP 
+gnulib: 
+  undefined references: 0
+== liella-tar
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=9.372524191
+check-start 2026-10-23T06:38:51Z load: 88.73, 72.67, 61.21
+check rc=0 seconds=268.680349567
+check-end 2026-10-23T06:43:19Z load: 92.60, 81.79, 67.58
+own:     207 PASS      26 SKIP 
+gnulib: 
+  undefined references: 0
+== replacements tar (glibc < > liella)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FOPEN='1'
+  < REPLACE_FOPEN_FOR_FOPEN_GNU='1'
+  > REPLACE_FOPEN='0'
+  > REPLACE_FOPEN_FOR_FOPEN_GNU='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < ac_cv_func__fseeki64=no
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+== glibc-gzip
+built-from: test/validation 3535ebf (contains main 75c0f5c); products built from it
+configure rc=0
+build rc=0 seconds=1.749460792
+check-start 2026-10-05T11:12:06Z load: 2.73, 3.55, 4.84
+check rc=0 seconds=12.116344411
+check-end 2026-10-05T11:12:18Z load: 2.62, 3.50, 4.81
+own:      34 PASS 
+gnulib: 
+  undefined references: 0
+== liella-gzip
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=4.261346543
+check-start 2026-10-23T06:44:25Z load: 83.70, 81.14, 68.31
+check rc=0 seconds=10.244069542
+check-end 2026-10-23T06:44:35Z load: 79.48, 80.33, 68.19
+own:      34 PASS 
+gnulib: 
+  undefined references: 0
+== replacements gzip (glibc < > liella)
+  < REPLACE_FCLOSE='1'
+  > REPLACE_FCLOSE='0'
+  < REPLACE_FFLUSH='1'
+  > REPLACE_FFLUSH='0'
+  < REPLACE_FOPEN='1'
+  > REPLACE_FOPEN='0'
+  < REPLACE_FSEEK='1'
+  < REPLACE_FSEEKO='1'
+  > REPLACE_FSEEK='0'
+  > REPLACE_FSEEKO='0'
+  < ac_cv_func__fseeki64=no
+  > gl_cv_func_fclose_stdin=yes
+  < gl_cv_func_fflush_stdin=no
+  > gl_cv_func_fflush_stdin=yes
+== glibc-noload-make
+built-from: test/validation 3535ebf + suite.sh noload variants (no library change; contains main 75c0f5c)
+configure rc=0
+build rc=0 seconds=2.113181690
+check-start 2026-10-05T11:29:06Z load: 1.84, 1.74, 2.96
+check rc=0 seconds=57.449309950
+check-end 2026-10-05T11:30:03Z load: 1.21, 1.57, 2.83
+own:     132 PASS       4 SKIP 
+gnulib: 
+  undefined references: 0
+== liella-noload-make
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=2.753540903
+check-start 2026-10-23T06:44:40Z load: 77.60, 79.93, 68.12
+check rc=0 seconds=60.975237807
+check-end 2026-10-23T06:45:41Z load: 61.58, 74.42, 66.94
+own:     132 PASS       4 SKIP 
+gnulib: 
+  undefined references: 0
+== replacements make (glibc-noload < > liella-noload)
+== liella-make
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=2 seconds=2.444025933
+check-start 2026-10-23T06:44:54Z load: 72.30, 78.71, 67.85
+check rc=2 seconds=.254183091
+check-end 2026-10-23T06:44:54Z load: 70.19, 78.17, 67.73
+own: 
+gnulib: 
+  undefined references: 11
+         3 dlsym
+         3 dlopen
+         3 dlerror
+         2 dlclose
+== replacements make (glibc < > liella)
+== bash
+built-from: task/pre14-validation-rerun ed6d4449 (origin/next 23fa3087 + liella-cc links libm.a)
+configure rc=0
+build rc=0 seconds=12.853031994
+check rc=0 seconds=135.381164038
+run-builtins	glibc: clean	liella: 6 diff lines
+run-execscript	glibc: 24 diff lines	liella: 11 diff lines
+run-glob-bracket	glibc: clean	liella: 105 diff lines
+run-glob-test	glibc: 18 diff lines	liella: 18 diff lines
+run-history	glibc: 21 diff lines	liella: 21 diff lines
+run-trap	glibc: 37 diff lines	liella: clean
+run-varenv	glibc: 12 diff lines	liella: clean
+tests: 86; identical output: 79; different: 7
+clean (no diff) under glibc: 76/86; under liella: 76/86
+== libm references (nm -u, programs using a libm.a symbol)
+/home/claude/validation-v5/build/liella/findutils/findutils-4.11.0/find/find: 993 libm symbols linked

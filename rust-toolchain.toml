@@ -1,0 +1,8 @@
+[toolchain]
+# Stable, pinned to an exact release so every host builds with the same compiler (owner 2026-10-23).
+# Open decision OD-3 (implementation-plan.md) evaluates whether C-variadic definitions or
+# panic=unwind in no_std justify a pinned nightly; until then, stable. Bumping this pin is a
+# deliberate change of its own.
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]
+targets = ["x86_64-unknown-linux-gnu"]

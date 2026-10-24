@@ -1,0 +1,9 @@
+# Example fit (D-10.3): sin on [-pi/4, pi/4], the reduced range after x = k pi/2 + r, by odd
+# powers up to 13, minimizing the relative error.
+name = example_sin
+target = sin
+interval = -pi/4, pi/4
+powers = odd 1..13
+error = relative
+format = f64
+output = crates/math/src/coeffs/example_sin.rs

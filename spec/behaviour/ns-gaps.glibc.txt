@@ -1,0 +1,112 @@
+== pfcode 0
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4660
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;;	a.test, type = MINFO, class = IN
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+== pfcode 0x10
+;;	a.test, type = MINFO, class = IN
+== pfcode 0x20
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+== pfcode 0x100
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+== pfcode 0x110
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;; QUERY SECTION:
+;;	a.test, type = MINFO, class = IN
+
+== pfcode 0x130
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;; QUERY SECTION:
+;;	a.test, type = MINFO, class = IN
+
+;; ANSWER SECTION:
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+
+== pfcode 0x1f0
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;; QUERY SECTION:
+;;	a.test, type = MINFO, class = IN
+
+;; ANSWER SECTION:
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+
+== pfcode 0x300
+; flags: qr aa rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+== pfcode 0x800
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4660
+;
+== pfcode 0x8f0
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4660
+;
+;;	a.test, type = MINFO, class = IN
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+== pfcode 0x9f0
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4660
+;; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;; QUERY SECTION:
+;;	a.test, type = MINFO, class = IN
+
+;; ANSWER SECTION:
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+
+== pfcode 0xb30
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4660
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+;; QUERY SECTION:
+;;	a.test, type = MINFO, class = IN
+
+;; ANSWER SECTION:
+a.test.			5M IN MINFO	r. e.
+a.test.			5M IN RP	mbox. txt.
+a.test.			5M IN MINFO	. .
+a.test.			5M IN RP	r.b.test. t.test.
+
+== pfcode 0x40
+== pfcode 0x80
+== pfcode 0x140
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+== pfcode 0x180
+; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 0
+== ns_sprintrr
+27 [a.test.			5M IN MINFO	r. e.]
+29 [a.test.			5M IN RP	mbox. txt.]
+25 [a.test.			5M IN MINFO	. .]
+36 [a.test.			5M IN RP	r.b.test. t.test.]
+== networks through dns
+  query [foo.test] type=12
+getnetbyname foo.test: NULL h_errno=2
+  query [bare] type=12
+getnetbyname bare: NULL h_errno=2
+  query [nx.test] type=12
+getnetbyname nx.test: NULL h_errno=4
+  query [0.2.0.192.in-addr.arpa] type=12
+getnetbyaddr 192.0.2.0: name=[netx.test] aliases= type=2 net=0xc00002
+  query [0.0.0.10.in-addr.arpa] type=12
+getnetbyaddr 10: name=[netx.test] aliases= type=2 net=0xa
+  query [0.0.16.172.in-addr.arpa] type=12
+getnetbyaddr 172.16: name=[netx.test] aliases= type=2 net=0xac10
+== group list merge
+getgrouplist u base=50: r=5 n=5 [50 60 61 70 99]
+getgrouplist u base=99: r=6 n=6 [99 50 50 60 61 70]
+getgrouplist u base=1: r=7 n=7 [1 50 50 60 61 70 99]
+getgrouplist v base=60: r=1 n=1 [60]
+getgrouplist v base=5: r=2 n=2 [5 60]
+getgrouplist nobody-here base=7: r=1 n=1 [7]

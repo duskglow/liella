@@ -1,0 +1,911 @@
+running as root: no
+== parsing
+-- basic
+ent 0: [/dev/sda1] [/] [ext4] [rw,relatime] 0 1
+  pos 33
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- tabs
+ent 0: [/dev/sda2] [/boot] [vfat] [defaults] 0 2
+  pos 34
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- runs of blanks
+ent 0: [/dev/sda3] [/home] [ext4] [rw,noatime] 1 2
+  pos 51
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- trailing blanks only after passno
+ent 0: [a] [b] [c] [d] 0 0
+  pos 15
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- escapes \040 \011 \012 \134
+ent 0: [/dev/a b] [/mnt/x\x09y\x0az\\w] [ext4] [rw] 0 0
+  pos 46
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- escapes in type and opts
+ent 0: [src] [/m] [t y\\pe] [o p\x09t] 0 0
+  pos 36
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- escape in freq
+ent 0: [src] [/m] [t] [o] 0 0
+  pos 19
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- other octal \101 \041 \177 \200 \377
+ent 0: [s\\101\\041] [/\\177\\200\\377] [t] [o] 0 0
+  pos 32
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- short octal \0 \00 \1 \12 \04x
+ent 0: [a\\0b] [/c\\00d] [e\\1f] [g\\12h] 0 0
+  pos 27
+ent 1: [x\\04y] [/z] [t] [o] 0 0
+  pos 44
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- \000
+ent 0: [a\\000b] [/m] [t] [o] 0 0
+  pos 18
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- out-of-range octal \400 \777
+ent 0: [a\\400b] [/c\\777d] [t] [o] 0 0
+  pos 23
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- non-octal \8 \9 \x41 \\ \n
+ent 0: [a\\8b] [/c\\9d] [t\\x41] [o\\p\\n] 0 0
+  pos 28
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- backslash at end of field and of line
+ent 0: [a\\] [/b] [t] [o] 0 0
+  pos 14
+ent 1: [c] [/d] [t] [o\\] 0 0
+  pos 24
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- backslash before blank
+ent 0: [a\\] [b] [/c] [t] 0 0
+  pos 16
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- comments
+ent 0: [a#b] [/c#d] [t] [o] 0 0
+  pos 57
+ent 1: [x] [/y] [t] [o] 0 0
+  pos 72
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- blank lines
+ent 0: [a] [/b] [t] [o] 0 0
+  pos 22
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- one field
+ent 0: [only] [] [] [] 0 0
+  pos 5
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- two fields
+ent 0: [src] [/dir] [] [] 0 0
+  pos 9
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- three fields
+ent 0: [src] [/dir] [type] [] 0 0
+  pos 14
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- four fields
+ent 0: [src] [/dir] [type] [opts] 0 0
+  pos 19
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- five fields
+ent 0: [src] [/dir] [type] [opts] 3 0
+  pos 21
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- seven fields
+ent 0: [src] [/dir] [type] [opts] 1 2
+  pos 29
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- eight fields
+ent 0: [src] [/dir] [type] [opts] 1 2
+  pos 27
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- missing fields between good lines
+ent 0: [a] [/a] [t] [o] 0 0
+  pos 13
+ent 1: [b] [] [] [] 0 0
+  pos 15
+ent 2: [c] [/c] [t] [o] 0 0
+  pos 28
+ent 3: [d] [/d] [] [] 0 0
+  pos 33
+ent 4: [e] [/e] [t] [o] 0 0
+  pos 46
+end: 5 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- freq and passno words
+ent 0: [a] [/a] [t] [o] 0 0
+  pos 13
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- freq and passno signs
+ent 0: [a] [/a] [t] [o] -1 2
+  pos 15
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- freq and passno large
+ent 0: [a] [/a] [t] [o] 2147483647 -2147483648
+  pos 31
+ent 1: [b] [/b] [t] [o] 1215752191 2147483647
+  pos 64
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- freq and passno hex and octal
+ent 0: [a] [/a] [t] [o] 0 0
+  pos 18
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- freq and passno trailing letters
+ent 0: [a] [/a] [t] [o] 1 0
+  pos 17
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- passno only letters, freq good
+ent 0: [a] [/a] [t] [o] 5 0
+  pos 13
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- empty opts via escape
+ent 0: [a] [/a] [t] [ ] 0 0
+  pos 16
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- no newline at end
+ent 0: [a] [/a] [t] [o] 0 0
+  pos 13
+ent 1: [b] [/b] [t] [o] 1 2
+  pos 25
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- no newline, five fields
+ent 0: [a] [/a] [t] [o] 1 0
+  pos 10
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- CRLF
+ent 0: [a] [/a] [t] [o] 0 1
+  pos 14
+ent 1: [b] [/b] [t] [o\x0d] 0 0
+  pos 24
+ent 2: [c] [/c] [t\x0d] [] 0 0
+  pos 32
+end: 3 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- CR inside
+ent 0: [a\x0d] [/a] [t] [o] 0 0
+  pos 14
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- empty file
+end: 0 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- only comments
+end: 0 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- NUL in a line
+ent 0: [a] [] [] [] 0 0
+  pos 28
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- NUL in a line, then two lines
+ent 0: [a] [/a] [] [] 0 0
+  pos 27
+ent 1: [d] [/d] [t] [o] 0 0
+  pos 40
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- NUL in the last line, no newline
+ent 0: [a] [/a] [t] [o] 0 0
+  pos 13
+ent 1: [b] [] [] [] 0 0
+  pos 26
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- a line of exactly one NUL
+ent 0: [d] [/d] [t] [o] 0 0
+  pos 28
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- UTF-8 bytes
+ent 0: [/dev/\xc3\xa9] [/m\xc3\xa4] [t] [o] 0 0
+  pos 21
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- form feed and vertical tab as separators
+ent 0: [a\x0c/b\x0bt] [o] [0] [0] 0 0
+  pos 13
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- leading comment char after blanks in a field
+ent 0: [a] [#b] [t] [o] 0 0
+  pos 13
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+== long lines (getmntent)
+-- fsname of 100 bytes
+ent 0: [<L>*100] [/a] [t] [o] 0 0
+  pos 112
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 128
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 1000 bytes
+ent 0: [<L>*1000] [/a] [t] [o] 0 0
+  pos 1012
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 1028
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4000 bytes
+ent 0: [<L>*4000] [/a] [t] [o] 0 0
+  pos 4012
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4028
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4090 bytes
+ent 0: [<L>*4090] [/a] [t] [] 0 0
+  pos 4102
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4118
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4095 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 4107
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4123
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4096 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 4108
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4124
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4097 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 4109
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4125
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 4200 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 4212
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 4228
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 8191 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 8203
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 8219
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 8192 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 8204
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 8220
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 8200 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 8212
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 8228
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 20000 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 20012
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 20028
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- fsname of 100000 bytes
+ent 0: [<L>*4095] [] [] [] 0 0
+  pos 100012
+ent 1: [next] [/n] [t] [o] 1 2
+  pos 100028
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- opts of 5000 bytes
+ent 0: [a] [/a] [t] [<o>*4088] 0 0
+  pos 5012
+ent 1: [b] [/b] [t] [o] 0 0
+  pos 5024
+end: 2 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+-- passno of 5000 digits, no newline
+ent 0: [a] [/a] [t] [o] 1 -1
+  pos 5011
+end: 1 entries, errno=0 feof=1 ferror=0
+again: NULL errno=EINTR
+endmntent: 1
+== getmntent storage
+two calls return the same struct: yes
+first fsname pointer still names: [second] (was [first])
+struct after second call: [second] [/second] [t2] [o2] 2 2
+two streams return the same struct: yes
+stream 1's result after stream 2's call: [other] [/other] [t3] [o3] 3 3
+stream 1 next: [second] [/second] [t2] [o2] 2 2
+getmntent_r returns its argument: yes
+getmntent_r fields inside buf: yes
+getmntent_r offsets: fsname 0 dir 6 type 13 opts 16
+getmntent's static entry after getmntent_r: [first] [/first] [t1] [o1] 1 1
+== getmntent_r buffer sizes
+first line: 36 bytes with the newline
+size 1 (in a child, 3 s limit): child killed by signal SIGALRM
+size 2: entry errno=0 pos=36 written=2 beyond untouched=yes
+  entry: [/] [] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 2 (in a child, 3 s limit): child exited 0
+size 3: entry errno=0 pos=36 written=3 beyond untouched=yes
+  entry: [/d] [] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 3 (in a child, 3 s limit): child exited 0
+size 5: entry errno=0 pos=36 written=5 beyond untouched=yes
+  entry: [/dev] [] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 5 (in a child, 3 s limit): child exited 0
+size 10: entry errno=0 pos=36 written=10 beyond untouched=yes
+  entry: [/dev/sda1] [] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 10 (in a child, 3 s limit): child exited 0
+size 11: entry errno=0 pos=36 written=11 beyond untouched=yes
+  entry: [/dev/sda1] [] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 11 (in a child, 3 s limit): child exited 0
+size 15: entry errno=0 pos=36 written=15 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 15 (in a child, 3 s limit): child exited 0
+size 16: entry errno=0 pos=36 written=16 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 16 (in a child, 3 s limit): child exited 0
+size 20: entry errno=0 pos=36 written=20 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 20 (in a child, 3 s limit): child exited 0
+size 25: entry errno=0 pos=36 written=25 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,r] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 25 (in a child, 3 s limit): child exited 0
+size 30: entry errno=0 pos=36 written=30 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relati] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 30 (in a child, 3 s limit): child exited 0
+size 31: entry errno=0 pos=36 written=31 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatim] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 31 (in a child, 3 s limit): child exited 0
+size 32: entry errno=0 pos=36 written=32 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 32 (in a child, 3 s limit): child exited 0
+size 33: entry errno=0 pos=36 written=33 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 33 (in a child, 3 s limit): child exited 0
+size 34: entry errno=0 pos=36 written=34 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 34 (in a child, 3 s limit): child exited 0
+size 35: entry errno=0 pos=36 written=35 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 0
+  next (256): [next] [/n] [t] [o] 1 1
+size 35 (in a child, 3 s limit): child exited 0
+size 36: entry errno=0 pos=36 written=36 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 36 (in a child, 3 s limit): child exited 0
+size 37: entry errno=0 pos=36 written=37 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 37 (in a child, 3 s limit): child exited 0
+size 38: entry errno=0 pos=36 written=37 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 38 (in a child, 3 s limit): child exited 0
+size 39: entry errno=0 pos=36 written=37 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 39 (in a child, 3 s limit): child exited 0
+size 40: entry errno=0 pos=36 written=37 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 40 (in a child, 3 s limit): child exited 0
+size 64: entry errno=0 pos=36 written=37 beyond untouched=yes
+  entry: [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+  next (256): [next] [/n] [t] [o] 1 1
+size 64 (in a child, 3 s limit): child exited 0
+256-byte buffer, call 0 (errno=0): [<F>*255] [] [] [] 0 0
+256-byte buffer, call 1 (errno=0): [z] [/z] [t] [o] 0 0
+256-byte buffer, call 2 (errno=0): NULL
+size 0: NULL errno=0 pos=0
+  next (256): [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+getmntent_r size 0: child exited 0
+size -1: NULL errno=0 pos=0
+  next (256): [/dev/sda1] [/mnt] [ext4] [rw,relatime] 0 2
+getmntent_r size -1: child exited 0
+== setmntent modes and errors
+setmntent(file, "r"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "r+"): ok O_RDWR cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "w"): ok O_WRONLY cloexec=yes pos=0
+  getmntent: NULL errno=EBADF ferror=1
+  endmntent: 1
+setmntent(file, "w+"): ok O_RDWR cloexec=yes pos=0
+  getmntent: NULL errno=0 ferror=0
+  endmntent: 1
+setmntent(file, "a"): ok O_WRONLY|O_APPEND cloexec=yes pos=13
+  getmntent: NULL errno=EBADF ferror=1
+  endmntent: 1
+setmntent(file, "a+"): ok O_RDWR|O_APPEND cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "re"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "rm"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "rb"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "rx"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "rc"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(file, "z"): NULL EINVAL
+setmntent(file, ""): NULL EINVAL
+setmntent(file, "+r"): NULL EINVAL
+setmntent(file, "ra"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: entry errno=0 ferror=0
+  entry: [m] [/m] [t] [o] 0 0
+  endmntent: 1
+setmntent(missing, "r"): NULL ENOENT
+setmntent(missing file, w, "w"): ok O_WRONLY cloexec=yes pos=0
+  getmntent: NULL errno=EBADF ferror=1
+  endmntent: 1
+  created by w (0 bytes): []
+setmntent(below a file, "r"): NULL ENOTDIR
+setmntent(directory, "r"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: NULL errno=EISDIR ferror=1
+  endmntent: 1
+setmntent(directory, "w"): NULL EISDIR
+setmntent(directory, "a"): NULL EISDIR
+setmntent(mode 0000 (as a user), "r"): NULL EACCES
+setmntent(empty name, "r"): NULL ENOENT
+setmntent(/dev/null, "r"): ok O_RDONLY cloexec=yes pos=0
+  getmntent: NULL errno=0 ferror=0
+  endmntent: 1
+_PATH_MOUNTED=[/etc/mtab] MOUNTED=[/etc/mtab] _PATH_MNTTAB=[/etc/fstab] MNTTAB=[/etc/fstab] _PATH_FSTAB=[/etc/fstab]
+MNTTYPE_IGNORE=[ignore] MNTTYPE_NFS=[nfs] MNTTYPE_SWAP=[swap]
+MNTOPT_DEFAULTS=[defaults] MNTOPT_RO=[ro] MNTOPT_RW=[rw]
+MNTOPT_SUID=[suid] MNTOPT_NOSUID=[nosuid] MNTOPT_NOAUTO=[noauto]
+FSTAB_RW=[rw] FSTAB_RQ=[rq] FSTAB_RO=[ro] FSTAB_SW=[sw] FSTAB_XX=[xx]
+sizeof struct mntent=40 struct fstab=48
+-- endmntent
+endmntent(open stream): 1
+endmntent(stream with pending output): 1
+  file after endmntent (9 bytes): [unflushed]
+endmntent(/dev/full with pending output): 1 errno=ENOSPC
+endmntent(NULL): 1
+endmntent(NULL): child exited 0
+endmntent(stream from fopen): 1
+getmntent on a stream from fopen: [unflushed] [] [] [] 0 0
+== addmntent
+addmntent([/dev/sda1] [/] [ext4] [rw,relatime] 0 1): 0 errno=0
+addmntent([a b] [/m p] [t y] [o p] 1 2): 0 errno=0
+addmntent([a\x09b] [/m\x09p] [t\x09y] [o\x09p] 0 0): 0 errno=0
+addmntent([a\x0ab] [/m\x0ap] [t\x0ay] [o\x0ap] 0 0): 0 errno=0
+addmntent([a\\b] [/m\\p] [t\\y] [o\\p] 0 0): 0 errno=0
+addmntent([a#b] [#m] [t] [o] 0 0): 0 errno=0
+addmntent([#hash] [/h] [t] [o] 0 0): 0 errno=0
+addmntent([a\x0db] [/m\x0bp] [t\x0cy] [o] 0 0): 0 errno=0
+addmntent([\\040] [/x] [t] [o] 0 0): 0 errno=0
+addmntent([\xc3\xa9] [/\x01\x7f] [t] [o] 0 0): 0 errno=0
+addmntent([] [] [] [] 0 0): 0 errno=0
+addmntent([neg] [/n] [t] [o] -1 -2147483648): 0 errno=0
+addmntent([big] [/b] [t] [o] 2147483647 10): 0 errno=0
+ftell after the adds: 309
+file size before endmntent: 309
+endmntent: 1
+file (309 bytes): [/dev/sda1 / ext4 rw,relatime 0 1\x0aa\\040b /m\\040p t\\040y o\\040p 1 2\x0aa\\011b /m\\011p t\\011y o\\011p 0 0\x0aa\\012b /m\\012p t\\012y o\\012p 0 0\x0aa\\134b /m\\134p t\\134y o\\134p 0 0\x0aa#b #m t o 0 0\x0a#hash /h t o 0 0\x0aa\x0db /m\x0bp t\x0cy o 0 0\x0a\\134040 /x t o 0 0\x0a\xc3\xa9 /\x01\x7f t o 0 0\x0a    0 0\x0aneg /n t o -1 -2147483648\x0abig /b t o 2147483647 10\x0a]
+  read back 0: [/dev/sda1] [/] [ext4] [rw,relatime] 0 1
+  read back 1: [a b] [/m p] [t y] [o p] 1 2
+  read back 2: [a\x09b] [/m\x09p] [t\x09y] [o\x09p] 0 0
+  read back 3: [a\x0ab] [/m\x0ap] [t\x0ay] [o\x0ap] 0 0
+  read back 4: [a\\b] [/m\\p] [t\\y] [o\\p] 0 0
+  read back 5: [a#b] [#m] [t] [o] 0 0
+  read back 6: [a\x0db] [/m\x0bp] [t\x0cy] [o] 0 0
+  read back 7: [\\040] [/x] [t] [o] 0 0
+  read back 8: [\xc3\xa9] [/\x01\x7f] [t] [o] 0 0
+  read back 9: [0] [0] [] [] 0 0
+  read back 10: [neg] [/n] [t] [o] -1 -2147483648
+  read back 11: [big] [/b] [t] [o] 2147483647 10
+-- addmntent and the stream position
+read: [one] [/1] [t] [o] 0 0
+pos before add: 15
+addmntent([added] [/added] [t] [o] 0 0): 0 errno=0
+pos after add: 68
+read after add: NULL
+endmntent: 1
+file (68 bytes): [one /1 t o 0 0\x0atwo /2 t o 0 0\x0athree /3 t o 0 0\x0aadded /added t o 0 0\x0a]
+addmntent([x] [/x] [t] [o] 0 0): 0 errno=0
+addmntent([y] [/y] [t] [o] 0 0): 0 errno=0
+pos after rewind: 0
+addmntent([z] [/z] [t] [o] 0 0): 0 errno=0
+pos after add: 39
+w+ read 0: [x] [/x] [t] [o] 0 0
+w+ read 1: [y] [/y] [t] [o] 0 0
+w+ read 2: [z] [/z] [t] [o] 0 0
+w+ read 3: NULL
+file (39 bytes): [x /x t o 0 0\x0ay /y t o 0 0\x0az /z t o 0 0\x0a]
+addmntent([app] [/app] [t] [o] 0 0): 0 errno=0
+mode a (32 bytes): [one /1 t o 0 0\x0aapp /app t o 0 0\x0a]
+-- addmntent errors and flushing
+addmntent([ro] [/ro] [t] [o] 0 0): 1 errno=EBADF
+ferror after: 1
+read-only stream's file (15 bytes): [one /1 t o 0 0\x0a]
+addmntent([full] [/full] [t] [o] 0 0): 1 errno=ENOSPC
+ferror after: 1
+endmntent: 1
+addmntent([flush] [/f] [t] [o] 0 0): 0 errno=0
+size right after addmntent with a 64 KiB buffer: 17
+NULL mnt_dir: child killed by signal SIGSEGV
+NULL mnt_opts: child killed by signal SIGSEGV
+== hasmntopt
+hasmntopt([ro], [ro]): offset 0 -> [ro]
+hasmntopt([rw], [ro]): NULL
+hasmntopt([rw,ro], [ro]): offset 3 -> [ro]
+hasmntopt([ro,rw], [rw]): offset 3 -> [rw]
+hasmntopt([rw,noro], [ro]): NULL
+hasmntopt([noro,ro], [ro]): offset 5 -> [ro]
+hasmntopt([rwx], [rw]): NULL
+hasmntopt([xrw], [rw]): NULL
+hasmntopt([xrw,rw], [rw]): offset 4 -> [rw]
+hasmntopt([rw=1], [rw]): offset 0 -> [rw=1]
+hasmntopt([rw=1], [rw=1]): offset 0 -> [rw=1]
+hasmntopt([rw=1], [rw=]): NULL
+hasmntopt([size=10,rw], [size]): offset 0 -> [size=10,rw]
+hasmntopt([size=10], [size=1]): NULL
+hasmntopt([size=10], [size=10]): offset 0 -> [size=10]
+hasmntopt([size=10], [size=100]): NULL
+hasmntopt([size==1], [size=]): offset 0 -> [size==1]
+hasmntopt([a,,b], []): offset 2 -> [,b]
+hasmntopt([], []): offset 0 -> []
+hasmntopt([rw], []): NULL
+hasmntopt([,rw,], [rw]): offset 1 -> [rw,]
+hasmntopt([,], []): offset 0 -> [,]
+hasmntopt([RW], [rw]): NULL
+hasmntopt([rw], [RW]): NULL
+hasmntopt([noatime,atime], [atime]): offset 8 -> [atime]
+hasmntopt([relatime], [atime]): NULL
+hasmntopt([uid=0,gid=0], [id]): NULL
+hasmntopt([uid=0,gid=0], [gid]): offset 6 -> [gid=0]
+hasmntopt([defaults], [default]): NULL
+hasmntopt([user_xattr], [user]): NULL
+hasmntopt([user,user_xattr], [user_xattr]): offset 5 -> [user_xattr]
+hasmntopt([user_xattr,user], [user]): offset 11 -> [user]
+hasmntopt([a b,c], [c]): offset 4 -> [c]
+hasmntopt([a b,c], [b]): NULL
+hasmntopt([a\x09b,c], [b]): NULL
+hasmntopt([x=a,b], [b]): offset 4 -> [b]
+hasmntopt([x=a,b], [a]): NULL
+hasmntopt([nouser,user], [user]): offset 7 -> [user]
+hasmntopt([ro,], [ro]): offset 0 -> [ro,]
+hasmntopt([mode=0755,ro], [ro]): offset 10 -> [ro]
+hasmntopt([ro], [r]): NULL
+hasmntopt([ro], [ro,]): NULL
+hasmntopt([rw,ro], [rw,ro]): offset 0 -> [rw,ro]
+hasmntopt([rw,ro], [w,r]): NULL
+hasmntopt([context="a,b",ro], [b"]): offset 11 -> [b",ro]
+hasmntopt([context="a,b",ro], [ro]): offset 14 -> [ro]
+hasmntopt([ro=], [ro]): offset 0 -> [ro=]
+hasmntopt([ro==], [ro=]): offset 0 -> [ro==]
+hasmntopt([=ro], [ro]): NULL
+hasmntopt([ro], [o]): NULL
+hasmntopt([aro,ro], [ro]): offset 4 -> [ro]
+hasmntopt([ro\x0a], [ro]): NULL
+hasmntopt([errors=remount-ro], [remount-ro]): NULL
+hasmntopt([errors=remount-ro], [ro]): NULL
+hasmntopt([errors=remount-ro,ro], [ro]): offset 18 -> [ro]
+hasmntopt([\xc3\xa9,ro], [\xc3\xa9]): offset 0 -> [\xc3\xa9,ro]
+hasmntopt returns a pointer into mnt_opts: yes; stable: yes
+hasmntopt NULL opts: child killed by signal SIGSEGV
+== /proc/self/mounts, structure only
+/proc/self/mounts: entries>0 yes; all four strings non-empty yes; freq and passno 0 yes; exactly one of rw/ro yes; / present yes
+/proc/mounts: entries>0 yes; all four strings non-empty yes; freq and passno 0 yes; exactly one of rw/ro yes; / present yes
+/etc/mtab: entries>0 yes; all four strings non-empty yes; freq and passno 0 yes; exactly one of rw/ro yes; / present yes
+done
+== root phase
+running as root: yes
+== fstab functions over the fixture /etc/fstab
+getfsent before setfsent: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+setfsent: 1
+getfsent 0: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+getfsent 1: spec [UUID=1234] file [/boot] vfstype [vfat] mntops [rw,umask=077] type [rw] freq 0 passno 2
+getfsent 2: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsent 3: spec [/dev/sda4] file [none] vfstype [swap] mntops [sw] type [sw] freq 0 passno 0
+getfsent 4: spec [/dev/sda5] file [/ign] vfstype [ext4] mntops [xx] type [xx] freq 0 passno 0
+getfsent 5: spec [/dev/sda6] file [/quota] vfstype [ext4] mntops [rq] type [rq] freq 0 passno 0
+getfsent 6: spec [/dev/sda7] file [/noauto] vfstype [ext4] mntops [noauto,ro] type [ro] freq 0 passno 0
+getfsent 7: spec [/dev/sda8] file [/user] vfstype [ext4] mntops [user,rw] type [rw] freq 0 passno 0
+getfsent 8: spec [/dev/sda9] file [/swapro] vfstype [swap] mntops [ro] type [ro] freq 0 passno 0
+getfsent 9: spec [/dev/sda10] file [/ignored] vfstype [ignore] mntops [defaults] type [??] freq 0 passno 0
+getfsent 10: spec [/dev/sda11] file [/rwro] vfstype [ext4] mntops [rw,ro] type [rw] freq 0 passno 0
+getfsent 11: spec [/dev/sda12] file [/other] vfstype [ext4] mntops [nosuid] type [??] freq 0 passno 0
+getfsent 12: spec [/dev/sda13] file [/sw2] vfstype [swap] mntops [defaults] type [??] freq 0 passno 0
+getfsent 13: spec [/dev/sda14] file [/xxfirst] vfstype [ext4] mntops [xx,rw] type [rw] freq 0 passno 0
+getfsent 14: spec [/dev/sp ace] file [/mnt/sp ace] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 0
+getfsent 15: spec [/dev/sda15] file [/tabs] vfstype [ext4] mntops [defaults] type [??] freq 3 passno 4
+getfsent 16: spec [/dev/short] file [/short] vfstype [] mntops [] type [??] freq 0 passno 0
+getfsent 17: spec [/dev/sda16] file [/five] vfstype [ext4] mntops [rw] type [rw] freq 1 passno 0
+getfsent 18: spec [/dev/sda1] file [/dup] vfstype [ext4] mntops [rw] type [rw] freq 0 passno 0
+getfsent 19: spec [/dev/sda17] file [/] vfstype [ext4] mntops [rw] type [rw] freq 0 passno 0
+getfsent 20: spec [tmpfs] file [/tmp] vfstype [tmpfs] mntops [size=10%,mode=1777] type [??] freq 0 passno 0
+getfsent 21: spec [/dev/sda18] file [/emptyopts] vfstype [ext4] mntops [ ] type [??] freq 0 passno 0
+getfsent 22: spec [/dev/o1] file [/o1] vfstype [ext4] mntops [ro,rw] type [rw] freq 0 passno 0
+getfsent 23: spec [/dev/o2] file [/o2] vfstype [ext4] mntops [rq,ro] type [rq] freq 0 passno 0
+getfsent 24: spec [/dev/o3] file [/o3] vfstype [ext4] mntops [ro,rq] type [rq] freq 0 passno 0
+getfsent 25: spec [/dev/o4] file [/o4] vfstype [ext4] mntops [sw,ro] type [ro] freq 0 passno 0
+getfsent 26: spec [/dev/o5] file [/o5] vfstype [ext4] mntops [ro,sw] type [ro] freq 0 passno 0
+getfsent 27: spec [/dev/o6] file [/o6] vfstype [ext4] mntops [xx,sw] type [sw] freq 0 passno 0
+getfsent 28: spec [/dev/o7] file [/o7] vfstype [ext4] mntops [sw,xx] type [sw] freq 0 passno 0
+getfsent 29: spec [/dev/o8] file [/o8] vfstype [ext4] mntops [xx,ro] type [ro] freq 0 passno 0
+getfsent 30: spec [/dev/o9] file [/o9] vfstype [ext4] mntops [rq,sw] type [rq] freq 0 passno 0
+getfsent 31: spec [/dev/o10] file [/o10] vfstype [ext4] mntops [sw,rq] type [rq] freq 0 passno 0
+getfsent 32: spec [/dev/o11] file [/o11] vfstype [ext4] mntops [xx,rq] type [rq] freq 0 passno 0
+getfsent 33: spec [/dev/o12] file [/o12] vfstype [ext4] mntops [ro=1] type [ro] freq 0 passno 0
+getfsent 34: spec [/dev/o13] file [/o13] vfstype [ext4] mntops [noro,rwx] type [??] freq 0 passno 0
+getfsent 35: spec [/dev/o14] file [/o14] vfstype [swap] mntops [defaults,sw] type [sw] freq 0 passno 0
+getfsent 36: spec [/dev/last] file [/last] vfstype [ext4] mntops [ro] type [ro] freq 0 passno 0
+getfsent after the end: NULL errno=EINTR
+setfsent: 1
+two getfsent calls return the same struct: yes
+first result after the second call: spec [UUID=1234] file [/boot] vfstype [vfat] mntops [rw,umask=077] type [rw] freq 0 passno 2
+(first spec was [/dev/sda1])
+setfsent again (open): 1
+getfsent after setfsent again: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+-- lookups
+getfsspec [/dev/sda1]: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+getfsspec [/dev/sda3]: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsspec [UUID=1234]: spec [UUID=1234] file [/boot] vfstype [vfat] mntops [rw,umask=077] type [rw] freq 0 passno 2
+getfsspec [/dev/sda4]: spec [/dev/sda4] file [none] vfstype [swap] mntops [sw] type [sw] freq 0 passno 0
+getfsspec [/dev/sp ace]: spec [/dev/sp ace] file [/mnt/sp ace] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 0
+getfsspec [/dev/sp\\040ace]: NULL
+getfsspec [/dev/sda15]: spec [/dev/sda15] file [/tabs] vfstype [ext4] mntops [defaults] type [??] freq 3 passno 4
+getfsspec [/dev/short]: spec [/dev/short] file [/short] vfstype [] mntops [] type [??] freq 0 passno 0
+getfsspec [/dev/last]: spec [/dev/last] file [/last] vfstype [ext4] mntops [ro] type [ro] freq 0 passno 0
+getfsspec [/dev/sda]: NULL
+getfsspec []: NULL
+getfsspec [/dev/none]: NULL
+getfsspec [tmpfs]: spec [tmpfs] file [/tmp] vfstype [tmpfs] mntops [size=10%,mode=1777] type [??] freq 0 passno 0
+getfsfile [/]: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+getfsfile [/home]: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsfile [none]: spec [/dev/sda4] file [none] vfstype [swap] mntops [sw] type [sw] freq 0 passno 0
+getfsfile [/mnt/sp ace]: spec [/dev/sp ace] file [/mnt/sp ace] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 0
+getfsfile [/tabs]: spec [/dev/sda15] file [/tabs] vfstype [ext4] mntops [defaults] type [??] freq 3 passno 4
+getfsfile [/short]: spec [/dev/short] file [/short] vfstype [] mntops [] type [??] freq 0 passno 0
+getfsfile [/dup]: spec [/dev/sda1] file [/dup] vfstype [ext4] mntops [rw] type [rw] freq 0 passno 0
+getfsfile [/last]: spec [/dev/last] file [/last] vfstype [ext4] mntops [ro] type [ro] freq 0 passno 0
+getfsfile [/ho]: NULL
+getfsfile []: NULL
+getfsfile [/nowhere]: NULL
+getfsfile [/emptyopts]: spec [/dev/sda18] file [/emptyopts] vfstype [ext4] mntops [ ] type [??] freq 0 passno 0
+getfsfile [/ign]: spec [/dev/sda5] file [/ign] vfstype [ext4] mntops [xx] type [xx] freq 0 passno 0
+-- lookups and the cursor
+setfsent: 1
+getfsent: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+getfsent: spec [UUID=1234] file [/boot] vfstype [vfat] mntops [rw,umask=077] type [rw] freq 0 passno 2
+getfsent: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsspec /dev/sda1: spec [/dev/sda1] file [/] vfstype [ext4] mntops [defaults] type [??] freq 0 passno 1
+getfsent after getfsspec: spec [UUID=1234] file [/boot] vfstype [vfat] mntops [rw,umask=077] type [rw] freq 0 passno 2
+getfsfile /home: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsent after getfsfile: spec [/dev/sda4] file [none] vfstype [swap] mntops [sw] type [sw] freq 0 passno 0
+getfsfile /last: spec [/dev/last] file [/last] vfstype [ext4] mntops [ro] type [ro] freq 0 passno 0
+getfsent after getfsfile /last: NULL
+getfsspec missing: NULL
+getfsent after a failed getfsspec: NULL
+getfsspec after endfsent: spec [/dev/sda3] file [/home] vfstype [ext4] mntops [ro,noatime] type [ro] freq 1 passno 2
+getfsent after that: spec [/dev/sda4] file [none] vfstype [swap] mntops [sw] type [sw] freq 0 passno 0
+endfsent twice: survived
+getfsspec and getfsent share the struct: yes
+== _PATH_MOUNTED as a fixture file
+mtab 0: [fixture-src] [/fixture] [tmpfs] [rw,size=1k] 0 0
+mtab 1: [other src] [/other\x09dir] [ext4] [ro] 0 0
+== _PATH_MNTTAB through getmntent
+fstab 0: [/dev/sda1] [/] [ext4] [defaults] 0 1
+fstab 1: [UUID=1234] [/boot] [vfat] [rw,umask=077] 0 2
+fstab 2: [/dev/sda3] [/home] [ext4] [ro,noatime] 1 2
+fstab 3: [/dev/sda4] [none] [swap] [sw] 0 0
+fstab 4: [/dev/sda5] [/ign] [ext4] [xx] 0 0
+fstab 5: [/dev/sda6] [/quota] [ext4] [rq] 0 0
+fstab 6: [/dev/sda7] [/noauto] [ext4] [noauto,ro] 0 0
+fstab 7: [/dev/sda8] [/user] [ext4] [user,rw] 0 0
+fstab 8: [/dev/sda9] [/swapro] [swap] [ro] 0 0
+fstab 9: [/dev/sda10] [/ignored] [ignore] [defaults] 0 0
+fstab 10: [/dev/sda11] [/rwro] [ext4] [rw,ro] 0 0
+fstab 11: [/dev/sda12] [/other] [ext4] [nosuid] 0 0
+fstab 12: [/dev/sda13] [/sw2] [swap] [defaults] 0 0
+fstab 13: [/dev/sda14] [/xxfirst] [ext4] [xx,rw] 0 0
+fstab 14: [/dev/sp ace] [/mnt/sp ace] [ext4] [defaults] 0 0
+fstab 15: [/dev/sda15] [/tabs] [ext4] [defaults] 3 4
+fstab 16: [/dev/short] [/short] [] [] 0 0
+fstab 17: [/dev/sda16] [/five] [ext4] [rw] 1 0
+fstab 18: [/dev/sda1] [/dup] [ext4] [rw] 0 0
+fstab 19: [/dev/sda17] [/] [ext4] [rw] 0 0
+fstab 20: [tmpfs] [/tmp] [tmpfs] [size=10%,mode=1777] 0 0
+fstab 21: [/dev/sda18] [/emptyopts] [ext4] [ ] 0 0
+fstab 22: [/dev/o1] [/o1] [ext4] [ro,rw] 0 0
+fstab 23: [/dev/o2] [/o2] [ext4] [rq,ro] 0 0
+fstab 24: [/dev/o3] [/o3] [ext4] [ro,rq] 0 0
+fstab 25: [/dev/o4] [/o4] [ext4] [sw,ro] 0 0
+fstab 26: [/dev/o5] [/o5] [ext4] [ro,sw] 0 0
+fstab 27: [/dev/o6] [/o6] [ext4] [xx,sw] 0 0
+fstab 28: [/dev/o7] [/o7] [ext4] [sw,xx] 0 0
+fstab 29: [/dev/o8] [/o8] [ext4] [xx,ro] 0 0
+fstab 30: [/dev/o9] [/o9] [ext4] [rq,sw] 0 0
+fstab 31: [/dev/o10] [/o10] [ext4] [sw,rq] 0 0
+fstab 32: [/dev/o11] [/o11] [ext4] [xx,rq] 0 0
+fstab 33: [/dev/o12] [/o12] [ext4] [ro=1] 0 0
+fstab 34: [/dev/o13] [/o13] [ext4] [noro,rwx] 0 0
+fstab 35: [/dev/o14] [/o14] [swap] [defaults,sw] 0 0
+fstab 36: [/dev/last] [/last] [ext4] [ro] 0 0
+== own mounts
+  mount: [src with space] [<dir>/m/back\\sl] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [back\\slash] [<dir>/m/bs] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/hash#x] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/nl\x0ac] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [with opts] [<dir>/m/opts] [tmpfs] [rw,nosuid,nodev,noexec,relatime,size=64k,mode=700,uid=1,gid=2,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,mode=700,uid=1,gid=2,inode64] nosuid yes
+  mount: [src with space] [<dir>/m/plain] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [read only] [<dir>/m/ro] [tmpfs] [ro,relatime,size=64k,inode64] 0 0
+    hasmntopt rw no ro yes size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/sp ace] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/ta\x09b] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+/proc/self/mounts: 9 mounts below <dir>; entries>0 yes
+/etc/mtab -> ../proc/self/mounts: 0
+  mount: [src with space] [<dir>/m/back\\sl] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [back\\slash] [<dir>/m/bs] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/hash#x] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/nl\x0ac] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [with opts] [<dir>/m/opts] [tmpfs] [rw,nosuid,nodev,noexec,relatime,size=64k,mode=700,uid=1,gid=2,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,mode=700,uid=1,gid=2,inode64] nosuid yes
+  mount: [src with space] [<dir>/m/plain] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [read only] [<dir>/m/ro] [tmpfs] [ro,relatime,size=64k,inode64] 0 0
+    hasmntopt rw no ro yes size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/sp ace] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+  mount: [src with space] [<dir>/m/ta\x09b] [tmpfs] [rw,relatime,size=64k,inode64] 0 0
+    hasmntopt rw yes ro no size [size=64k,inode64] nosuid no
+/etc/mtab: 9 mounts below <dir>; entries>0 yes
+== fstab functions without /etc/fstab
+setfsent: 0 errno=ENOENT
+getfsent: NULL
+getfsspec: NULL
+getfsfile: NULL
+== /etc/fstab empty
+setfsent: 1
+getfsent: NULL
+== /etc/fstab a directory
+setfsent: 1 errno=0
+getfsent: NULL
+== /etc/fstab replaced while open
+setfsent: 1
+getfsent: spec [/dev/a] file [/a] vfstype [ext4] mntops [rw] type [rw] freq 0 passno 0
+getfsent after rewrite in place: spec [/dev/b] file [/b] vfstype [ext4] mntops [rw] type [rw] freq 0 passno 0
+setfsent again: 1
+getfsent after setfsent again: spec [/dev/c] file [/c] vfstype [ext4] mntops [ro] type [ro] freq 0 passno 0
+done

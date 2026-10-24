@@ -1,0 +1,163 @@
+## matrix (env_probe matrix)
+== reader getenv (var IFS): fresh unset=[(null)] A=:=[:] B=,=[,]
+getenv       | 1a setenv overwrite A->B                     | before=[:] after=[,] after_tzset=[-] | SEEN
+getenv       | 1b unsetenv A->unset                         | before=[:] after=[(null)] after_tzset=[-] | SEEN
+getenv       | 1c putenv("V=B") over A                      | before=[:] after=[,] after_tzset=[-] | SEEN
+getenv       | 1d clearenv A->unset                         | before=[:] after=[(null)] after_tzset=[-] | SEEN
+getenv       | 1e setenv unset->B                           | before=[(null)] after=[,] after_tzset=[-] | SEEN
+getenv       | 1f putenv unset->B                           | before=[(null)] after=[,] after_tzset=[-] | SEEN
+getenv       | 2  putenv'd buffer mutated in place A->B     | before=[:] after=[,] after_tzset=[-] | SEEN
+getenv       | 3  environ[i]=new ptr A->B                   | before=[:] after=[,] after_tzset=[-] | SEEN
+getenv       | 4a environ=new array A->B                    | before=[:] after=[,] after_tzset=[-] | SEEN
+getenv       | 4b environ=new array A->unset                | before=[:] after=[(null)] after_tzset=[-] | SEEN
+getenv       | 5a slot ZZ overwritten by ptr: unset->B      | before=[(null)] after=[,] after_tzset=[-] | SEEN
+getenv       | 5b putenv'd buf renamed in place: unset->B   | before=[(null)] after=[,] after_tzset=[-] | SEEN
+getenv       | 6a duplicates [V=A,V=B]                      | before=[] after=[:] after_tzset=[] | first-wins
+getenv       | 6b duplicates [V=B,V=A]                      | before=[] after=[,] after_tzset=[] | first-wins
+== reader wordexp (var IFS): fresh unset=[n=2[a:b,c][d]] A=:=[n=2[a][b,c d]] B=,=[n=2[a:b][c d]]
+wordexp      | 1a setenv overwrite A->B                     | before=[n=2[a][b,c d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 1b unsetenv A->unset                         | before=[n=2[a][b,c d]] after=[n=2[a:b,c][d]] after_tzset=[-] | SEEN
+wordexp      | 1c putenv("V=B") over A                      | before=[n=2[a][b,c d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 1d clearenv A->unset                         | before=[n=2[a][b,c d]] after=[n=2[a:b,c][d]] after_tzset=[-] | SEEN
+wordexp      | 1e setenv unset->B                           | before=[n=2[a:b,c][d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 1f putenv unset->B                           | before=[n=2[a:b,c][d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 2  putenv'd buffer mutated in place A->B     | before=[n=2[a][b,c d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 3  environ[i]=new ptr A->B                   | before=[n=2[a][b,c d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 4a environ=new array A->B                    | before=[n=2[a][b,c d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 4b environ=new array A->unset                | before=[n=2[a][b,c d]] after=[n=2[a:b,c][d]] after_tzset=[-] | SEEN
+wordexp      | 5a slot ZZ overwritten by ptr: unset->B      | before=[n=2[a:b,c][d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 5b putenv'd buf renamed in place: unset->B   | before=[n=2[a:b,c][d]] after=[n=2[a:b][c d]] after_tzset=[-] | SEEN
+wordexp      | 6a duplicates [V=A,V=B]                      | before=[] after=[n=2[a][b,c d]] after_tzset=[] | first-wins
+wordexp      | 6b duplicates [V=B,V=A]                      | before=[] after=[n=2[a:b][c d]] after_tzset=[] | first-wins
+== reader gettext (var LANGUAGE): fresh unset=[hello] A=de=[hallo] B=fr=[bonjour]
+gettext      | 1a setenv overwrite A->B                     | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 1b unsetenv A->unset                         | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 1c putenv("V=B") over A                      | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 1d clearenv A->unset                         | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 1e setenv unset->B                           | before=[hello] after=[bonjour] after_tzset=[-] | SEEN
+gettext      | 1f putenv unset->B                           | before=[hello] after=[bonjour] after_tzset=[-] | SEEN
+gettext      | 2  putenv'd buffer mutated in place A->B     | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 3  environ[i]=new ptr A->B                   | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 4a environ=new array A->B                    | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 4b environ=new array A->unset                | before=[hallo] after=[hallo] after_tzset=[-] | NOT-SEEN
+gettext      | 5a slot ZZ overwritten by ptr: unset->B      | before=[hello] after=[bonjour] after_tzset=[-] | SEEN
+gettext      | 5b putenv'd buf renamed in place: unset->B   | before=[hello] after=[bonjour] after_tzset=[-] | SEEN
+gettext      | 6a duplicates [V=A,V=B]                      | before=[] after=[hallo] after_tzset=[] | first-wins
+gettext      | 6b duplicates [V=B,V=A]                      | before=[] after=[bonjour] after_tzset=[] | first-wins
+== reader localtime (var TZ): fresh unset=[d01 h00 UTC] A=EST5=[d31 h19 EST] B=PST8=[d31 h16 PST]
+localtime    | 1a setenv overwrite A->B                     | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 1b unsetenv A->unset                         | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime    | 1c putenv("V=B") over A                      | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 1d clearenv A->unset                         | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime    | 1e setenv unset->B                           | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 1f putenv unset->B                           | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 2  putenv'd buffer mutated in place A->B     | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 3  environ[i]=new ptr A->B                   | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 4a environ=new array A->B                    | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 4b environ=new array A->unset                | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime    | 5a slot ZZ overwritten by ptr: unset->B      | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 5b putenv'd buf renamed in place: unset->B   | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime    | 6a duplicates [V=A,V=B]                      | before=[] after=[d31 h19 EST] after_tzset=[] | first-wins
+localtime    | 6b duplicates [V=B,V=A]                      | before=[] after=[d31 h16 PST] after_tzset=[] | first-wins
+== reader localtime+tzset-primed (var TZ): fresh unset=[d01 h00 UTC] A=EST5=[d31 h19 EST] B=PST8=[d31 h16 PST]
+localtime+tzset-primed | 1a setenv overwrite A->B                     | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 1b unsetenv A->unset                         | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime+tzset-primed | 1c putenv("V=B") over A                      | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 1d clearenv A->unset                         | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime+tzset-primed | 1e setenv unset->B                           | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 1f putenv unset->B                           | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 2  putenv'd buffer mutated in place A->B     | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 3  environ[i]=new ptr A->B                   | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 4a environ=new array A->B                    | before=[d31 h19 EST] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 4b environ=new array A->unset                | before=[d31 h19 EST] after=[d01 h00 UTC] after_tzset=[d01 h00 UTC] | SEEN
+localtime+tzset-primed | 5a slot ZZ overwritten by ptr: unset->B      | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 5b putenv'd buf renamed in place: unset->B   | before=[d01 h00 UTC] after=[d31 h16 PST] after_tzset=[d31 h16 PST] | SEEN
+localtime+tzset-primed | 6a duplicates [V=A,V=B]                      | before=[] after=[d31 h19 EST] after_tzset=[] | first-wins
+localtime+tzset-primed | 6b duplicates [V=B,V=A]                      | before=[] after=[d31 h16 PST] after_tzset=[] | first-wins
+== reader localtime_r (var TZ): fresh unset=[d01 h00 UTC] A=EST5=[d31 h19 EST] B=PST8=[d31 h16 PST]
+localtime_r  | 1a setenv overwrite A->B                     | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 1b unsetenv A->unset                         | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r  | 1c putenv("V=B") over A                      | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 1d clearenv A->unset                         | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r  | 1e setenv unset->B                           | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 1f putenv unset->B                           | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 2  putenv'd buffer mutated in place A->B     | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 3  environ[i]=new ptr A->B                   | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 4a environ=new array A->B                    | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 4b environ=new array A->unset                | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r  | 5a slot ZZ overwritten by ptr: unset->B      | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 5b putenv'd buf renamed in place: unset->B   | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r  | 6a duplicates [V=A,V=B]                      | before=[] after=[d31 h19 EST] after_tzset=[] | first-wins
+localtime_r  | 6b duplicates [V=B,V=A]                      | before=[] after=[d31 h16 PST] after_tzset=[] | first-wins
+== reader localtime_r+tzset-primed (var TZ): fresh unset=[d01 h00 UTC] A=EST5=[d31 h19 EST] B=PST8=[d31 h16 PST]
+localtime_r+tzset-primed | 1a setenv overwrite A->B                     | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 1b unsetenv A->unset                         | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r+tzset-primed | 1c putenv("V=B") over A                      | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 1d clearenv A->unset                         | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r+tzset-primed | 1e setenv unset->B                           | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 1f putenv unset->B                           | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 2  putenv'd buffer mutated in place A->B     | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 3  environ[i]=new ptr A->B                   | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 4a environ=new array A->B                    | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 4b environ=new array A->unset                | before=[d31 h19 EST] after=[d31 h19 EST] after_tzset=[d01 h00 UTC] | NOT-SEEN
+localtime_r+tzset-primed | 5a slot ZZ overwritten by ptr: unset->B      | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 5b putenv'd buf renamed in place: unset->B   | before=[d01 h00 UTC] after=[d01 h00 UTC] after_tzset=[d31 h16 PST] | NOT-SEEN
+localtime_r+tzset-primed | 6a duplicates [V=A,V=B]                      | before=[] after=[d31 h19 EST] after_tzset=[] | first-wins
+localtime_r+tzset-primed | 6b duplicates [V=B,V=A]                      | before=[] after=[d31 h16 PST] after_tzset=[] | first-wins
+
+## gettext stickiness (env_probe gt)
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; gettext(hello) again                                                   -> [hallo]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; gettext(bye) (never looked up)                                         -> [au revoir]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; dgettext(envp,hello)                                                   -> [hallo]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; bindtextdomain(same dir) + gettext(hello)                              -> [hallo]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; textdomain(envp) + gettext(hello)                                      -> [bonjour]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; setlocale(LC_ALL,"") + gettext(hello)                                  -> [bonjour]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; bindtextdomain(other dir string) + gettext(hello)                      -> [bonjour]
+primed LANGUAGE=de (hello->hallo), then LANGUAGE=fr; setlocale(LC_MESSAGES,"C") then setlocale(LC_MESSAGES,"") + gettext(hello) -> [bonjour]
+
+## cost: reader(0 getenv,1 wordexp,2 gettext,3 localtime,4 localtime_r) N pos(0 first,1 last,2 absent) instructions:u per call
+0 10 0 507
+0 10 1 555
+0 10 2 525
+0 100 0 507
+0 100 1 1094
+0 100 2 1065
+0 1000 0 507
+0 1000 1 6504
+0 1000 2 6465
+1 10 0 3456
+1 10 1 3504
+1 10 2 3586
+1 100 0 3456
+1 100 1 4053
+1 100 2 4126
+1 1000 0 3456
+1 1000 1 9453
+1 1000 2 9526
+2 10 0 856
+2 10 1 856
+2 10 2 2409
+2 100 0 855
+2 100 1 856
+2 100 2 2969
+2 1000 0 856
+2 1000 1 855
+2 1000 2 8372
+3 10 0 1877
+3 10 1 1934
+3 10 2 2152
+3 100 0 1877
+3 100 1 2465
+3 100 2 2692
+3 1000 0 1899
+3 1000 1 7896
+3 1000 2 8092
+4 10 0 1741
+4 10 1 1741
+4 10 2 1748
+4 100 0 1741
+4 100 1 1741
+4 100 2 1748
+4 1000 0 1741
+4 1000 1 1741
+4 1000 2 1748

@@ -1,0 +1,145 @@
+kind	name	node	type	detail	doc
+const	LIELLA_NATIVE_VERSION	LIELLA_NATIVE_1	int32_t	1	The newest version node this header describes: LIELLA_NATIVE_<n>.
+const	LIELLA_HEAP_MIN_ALIGN	LIELLA_NATIVE_1	size_t	16	The alignment every heap block has at least.
+const	LIELLA_O_RDONLY	LIELLA_NATIVE_1	uint32_t	0x0	Open for reading only.
+const	LIELLA_O_WRONLY	LIELLA_NATIVE_1	uint32_t	0x1	Open for writing only.
+const	LIELLA_O_RDWR	LIELLA_NATIVE_1	uint32_t	0x2	Open for reading and writing.
+const	LIELLA_O_CREAT	LIELLA_NATIVE_1	uint32_t	0x40	Create the file if it does not exist (with the mode given).
+const	LIELLA_O_EXCL	LIELLA_NATIVE_1	uint32_t	0x80	With LIELLA_O_CREAT: fail with -EEXIST if the file exists.
+const	LIELLA_O_TRUNC	LIELLA_NATIVE_1	uint32_t	0x200	Truncate a regular file opened for writing to length 0.
+const	LIELLA_O_APPEND	LIELLA_NATIVE_1	uint32_t	0x400	Every write appends at the end of the file.
+const	LIELLA_O_NONBLOCK	LIELLA_NATIVE_1	uint32_t	0x800	Non-blocking I/O.
+const	LIELLA_O_DIRECTORY	LIELLA_NATIVE_1	uint32_t	0x10000	Fail with -ENOTDIR unless the path names a directory.
+const	LIELLA_O_NOFOLLOW	LIELLA_NATIVE_1	uint32_t	0x20000	Fail with -ELOOP if the final component is a symbolic link.
+const	LIELLA_O_CLOEXEC	LIELLA_NATIVE_1	uint32_t	0x80000	Close the descriptor on exec.
+const	LIELLA_SEEK_SET	LIELLA_NATIVE_1	uint32_t	0	The offset is absolute.
+const	LIELLA_SEEK_CUR	LIELLA_NATIVE_1	uint32_t	1	The offset is relative to the current offset.
+const	LIELLA_SEEK_END	LIELLA_NATIVE_1	uint32_t	2	The offset is relative to the end of the file.
+const	LIELLA_FS_NOFOLLOW	LIELLA_NATIVE_1	uint32_t	0x100	liella_fs_stat: describe a final symbolic link itself.
+const	LIELLA_S_IFMT	LIELLA_NATIVE_1	uint32_t	0170000	The file-type bits of liella_stat.mode.
+const	LIELLA_S_IFSOCK	LIELLA_NATIVE_1	uint32_t	0140000	A socket.
+const	LIELLA_S_IFLNK	LIELLA_NATIVE_1	uint32_t	0120000	A symbolic link.
+const	LIELLA_S_IFREG	LIELLA_NATIVE_1	uint32_t	0100000	A regular file.
+const	LIELLA_S_IFBLK	LIELLA_NATIVE_1	uint32_t	0060000	A block device.
+const	LIELLA_S_IFDIR	LIELLA_NATIVE_1	uint32_t	0040000	A directory.
+const	LIELLA_S_IFCHR	LIELLA_NATIVE_1	uint32_t	0020000	A character device.
+const	LIELLA_S_IFIFO	LIELLA_NATIVE_1	uint32_t	0010000	A FIFO.
+const	LIELLA_LC_CTYPE	LIELLA_NATIVE_1	int32_t	0	The locale category LC_CTYPE.
+const	LIELLA_LC_NUMERIC	LIELLA_NATIVE_1	int32_t	1	The locale category LC_NUMERIC.
+const	LIELLA_LC_TIME	LIELLA_NATIVE_1	int32_t	2	The locale category LC_TIME.
+const	LIELLA_LC_COLLATE	LIELLA_NATIVE_1	int32_t	3	The locale category LC_COLLATE.
+const	LIELLA_LC_MONETARY	LIELLA_NATIVE_1	int32_t	4	The locale category LC_MONETARY.
+const	LIELLA_LC_MESSAGES	LIELLA_NATIVE_1	int32_t	5	The locale category LC_MESSAGES.
+const	LIELLA_LC_ALL	LIELLA_NATIVE_1	int32_t	6	All categories (liella_locale_name: the composite name).
+const	LIELLA_LC_PAPER	LIELLA_NATIVE_1	int32_t	7	The locale category LC_PAPER.
+const	LIELLA_LC_NAME	LIELLA_NATIVE_1	int32_t	8	The locale category LC_NAME.
+const	LIELLA_LC_ADDRESS	LIELLA_NATIVE_1	int32_t	9	The locale category LC_ADDRESS.
+const	LIELLA_LC_TELEPHONE	LIELLA_NATIVE_1	int32_t	10	The locale category LC_TELEPHONE.
+const	LIELLA_LC_MEASUREMENT	LIELLA_NATIVE_1	int32_t	11	The locale category LC_MEASUREMENT.
+const	LIELLA_LC_IDENTIFICATION	LIELLA_NATIVE_1	int32_t	12	The locale category LC_IDENTIFICATION.
+const	LIELLA_TZ_ABBR_CAP	LIELLA_NATIVE_1	size_t	16	The capacity of liella_tm.abbr.
+const	LIELLA_NSCACHE_HOSTS	LIELLA_NATIVE_1	uint32_t	0	Name-service cache category: hosts (gethostbyname*, gethostbyaddr, getaddrinfo, getnameinfo).
+const	LIELLA_NSCACHE_PASSWD	LIELLA_NATIVE_1	uint32_t	1	Name-service cache category: the passwd database by name and UID.
+const	LIELLA_NSCACHE_GROUP	LIELLA_NATIVE_1	uint32_t	2	Name-service cache category: the group database by name and GID, and group lists.
+const	LIELLA_NSCACHE_SERVICES	LIELLA_NATIVE_1	uint32_t	3	Name-service cache category: services by name and port.
+const	LIELLA_NSCACHE_PROTOCOLS	LIELLA_NATIVE_1	uint32_t	4	Name-service cache category: protocols by name and number.
+const	LIELLA_NSCACHE_NETWORKS	LIELLA_NATIVE_1	uint32_t	5	Name-service cache category: networks by name and number.
+const	LIELLA_NSCACHE_ALL	LIELLA_NATIVE_1	uint32_t	0xffffffff	liella_nscache_invalidate: every category.
+const	LIELLA_NSCACHE_MODE_OFF	LIELLA_NATIVE_1	uint32_t	0	liella_nscache_info.mode: the cache is disabled (nothing mapped, no stat, no table).
+const	LIELLA_NSCACHE_MODE_IDLE	LIELLA_NATIVE_1	uint32_t	1	liella_nscache_info.mode: enabled, no table yet (no lookup since start, enable or a credential change).
+const	LIELLA_NSCACHE_MODE_PRIVATE	LIELLA_NATIVE_1	uint32_t	2	liella_nscache_info.mode: a table of this process only.
+const	LIELLA_NSCACHE_MODE_SHARED	LIELLA_NATIVE_1	uint32_t	3	liella_nscache_info.mode: the shared region of the effective user (/dev/shm/liella-nscache-<euid>).
+const	LIELLA_NSCACHE_MODE_UNAVAILABLE	LIELLA_NATIVE_1	uint32_t	4	liella_nscache_info.mode: enabled, but no table could be made; lookups are not cached.
+const	LIELLA_NSCACHE_REASON_NONE	LIELLA_NATIVE_1	uint32_t	0	liella_nscache_info.reason: the shared region is used.
+const	LIELLA_NSCACHE_REASON_NO_REGION	LIELLA_NATIVE_1	uint32_t	1	liella_nscache_info.reason: the process has no region location (not started by the library).
+const	LIELLA_NSCACHE_REASON_SECURE	LIELLA_NATIVE_1	uint32_t	2	liella_nscache_info.reason: AT_SECURE, or real and effective user or group IDs differ.
+const	LIELLA_NSCACHE_REASON_REFUSED	LIELLA_NATIVE_1	uint32_t	3	liella_nscache_info.reason: the region file is not trusted (owner, mode, type, size, symbolic link); it is left untouched.
+const	LIELLA_NSCACHE_REASON_UNAVAILABLE	LIELLA_NATIVE_1	uint32_t	4	liella_nscache_info.reason: the region could not be opened, created, sized, locked or mapped.
+const	LIELLA_GETPASS_DEFAULT_LIMIT	LIELLA_NATIVE_1	size_t	1048576	getpass's default bound: the most bytes of input before the newline (1 MiB).
+struct	liella_timespec	LIELLA_NATIVE_1	16	8	An instant (seconds and nanoseconds since 1970-01-01 00:00:00 UTC) or a clock reading.
+field	liella_timespec.sec	LIELLA_NATIVE_1	int64_t	0	Seconds.
+field	liella_timespec.nsec	LIELLA_NATIVE_1	int64_t	8	Nanoseconds, 0 to 999999999.
+struct	liella_stat	LIELLA_NATIVE_1	120	8	A file's status.
+field	liella_stat.dev	LIELLA_NATIVE_1	uint64_t	0	The device holding the file.
+field	liella_stat.ino	LIELLA_NATIVE_1	uint64_t	8	The inode number.
+field	liella_stat.nlink	LIELLA_NATIVE_1	uint64_t	16	The number of hard links.
+field	liella_stat.rdev	LIELLA_NATIVE_1	uint64_t	24	The device a special file stands for.
+field	liella_stat.size	LIELLA_NATIVE_1	int64_t	32	The size in bytes.
+field	liella_stat.blksize	LIELLA_NATIVE_1	int64_t	40	The preferred I/O block size.
+field	liella_stat.blocks	LIELLA_NATIVE_1	int64_t	48	The 512-byte blocks allocated.
+field	liella_stat.atime	LIELLA_NATIVE_1	struct liella_timespec	56	The last access.
+field	liella_stat.mtime	LIELLA_NATIVE_1	struct liella_timespec	72	The last modification of the contents.
+field	liella_stat.ctime	LIELLA_NATIVE_1	struct liella_timespec	88	The last change of the status.
+field	liella_stat.mode	LIELLA_NATIVE_1	uint32_t	104	The type (LIELLA_S_IF*) and permission bits.
+field	liella_stat.uid	LIELLA_NATIVE_1	uint32_t	108	The owner.
+field	liella_stat.gid	LIELLA_NATIVE_1	uint32_t	112	The group.
+field	liella_stat.reserved	LIELLA_NATIVE_1	uint32_t	116	Always 0.
+struct	liella_tm	LIELLA_NATIVE_1	64	8	A local time in the current zone. As input (liella_tz_from_local) year to second and isdst are read; out-of-range values carry.
+field	liella_tm.year	LIELLA_NATIVE_1	int64_t	0	The full year (2026 is 2026).
+field	liella_tm.month	LIELLA_NATIVE_1	int32_t	8	1 to 12.
+field	liella_tm.day	LIELLA_NATIVE_1	int32_t	12	1 to 31.
+field	liella_tm.hour	LIELLA_NATIVE_1	int32_t	16	0 to 23.
+field	liella_tm.minute	LIELLA_NATIVE_1	int32_t	20	0 to 59.
+field	liella_tm.second	LIELLA_NATIVE_1	int32_t	24	0 to 60 (60 only for an inserted leap second).
+field	liella_tm.weekday	LIELLA_NATIVE_1	int32_t	28	0 to 6, Sunday = 0.
+field	liella_tm.yearday	LIELLA_NATIVE_1	int32_t	32	0 to 365: days since 1 January.
+field	liella_tm.isdst	LIELLA_NATIVE_1	int32_t	36	1 daylight time, 0 not; as input, negative lets the zone decide.
+field	liella_tm.utc_offset	LIELLA_NATIVE_1	int32_t	40	Seconds east of UTC.
+field	liella_tm.abbr_len	LIELLA_NATIVE_1	uint32_t	44	The abbreviation's full length; abbr holds it only if it is at most LIELLA_TZ_ABBR_CAP.
+field	liella_tm.abbr	LIELLA_NATIVE_1	uint8_t[16]	48	The zone abbreviation, not NUL-terminated.
+struct	liella_nscache_info	LIELLA_NATIVE_1	64	8	The state of the process's name-service cache (liella_nscache_status).
+field	liella_nscache_info.enabled	LIELLA_NATIVE_1	uint32_t	0	1 enabled, 0 disabled.
+field	liella_nscache_info.categories	LIELLA_NATIVE_1	uint32_t	4	The enabled categories: bit 1 << LIELLA_NSCACHE_<category>.
+field	liella_nscache_info.mode	LIELLA_NATIVE_1	uint32_t	8	LIELLA_NSCACHE_MODE_*.
+field	liella_nscache_info.reason	LIELLA_NATIVE_1	uint32_t	12	Why the table is not the shared region: LIELLA_NSCACHE_REASON_*.
+field	liella_nscache_info.owner	LIELLA_NATIVE_1	uint64_t	16	The shared region's user ID; UINT64_MAX without one.
+field	liella_nscache_info.generation	LIELLA_NATIVE_1	uint64_t	24	The sum of the table's generations: it moves with every invalidation; 0 without a table.
+field	liella_nscache_info.hits	LIELLA_NATIVE_1	uint64_t	32	Lookups this process answered from the table.
+field	liella_nscache_info.misses	LIELLA_NATIVE_1	uint64_t	40	Cached lookups this process had to ask the sources for.
+field	liella_nscache_info.stats	LIELLA_NATIVE_1	uint64_t	48	stat calls this process made to validate the watched files.
+field	liella_nscache_info.stores	LIELLA_NATIVE_1	uint64_t	56	Answers this process stored in the table.
+fn	liella_heap_alloc	LIELLA_NATIVE_1	void *	size_t size, size_t align	size bytes aligned to align (any power of two; every block is aligned to at least LIELLA_HEAP_MIN_ALIGN), or NULL. Size 0 gives a unique block.
+fn	liella_heap_alloc_zeroed	LIELLA_NATIVE_1	void *	size_t size, size_t align	As liella_heap_alloc, with the size bytes zeroed.
+fn	liella_heap_alloc_secure	LIELLA_NATIVE_1	void *	size_t size, size_t align	A secure block: as liella_heap_alloc, reading as zero, in a mapping of its own kept out of core dumps. Whatever releases it (liella_heap_free, free, or liella_heap_realloc and realloc moving it) zeroes it before its memory can be reused; a reallocated block stays secure.
+fn	liella_heap_realloc	LIELLA_NATIVE_1	void *	void *ptr, size_t size	The block resized, contents kept up to the smaller size, or NULL (the block unchanged). NULL ptr allocates; size 0 frees and gives NULL. Aligned to LIELLA_HEAP_MIN_ALIGN only. A secure block stays secure, and the bytes past its old usable size read as zero; moved, the old block is zeroed.
+fn	liella_heap_free	LIELLA_NATIVE_1	void	void *ptr	Release the block at ptr (NULL: nothing).
+fn	liella_heap_usable_size	LIELLA_NATIVE_1	size_t	const void *ptr	The bytes usable in the block at ptr (at least its size; 0 for NULL).
+fn	liella_secure_zero	LIELLA_NATIVE_1	int64_t	void *ptr, size_t len	Zero the len bytes at ptr so that the stores are never optimised away, even inlined or under LTO and if the bytes are never read again (explicit_bzero calls it). NULL with len 0 does nothing.
+fn	liella_env_get	LIELLA_NATIVE_1	int64_t	const uint8_t *name, size_t name_len, uint8_t *buf, size_t buf_len	The value of the variable name into buf: its length, or -ENOENT.
+fn	liella_env_set	LIELLA_NATIVE_1	int64_t	const uint8_t *name, size_t name_len, const uint8_t *value, size_t value_len, uint32_t overwrite	Set the variable name to a copy of value; an existing one is replaced only if overwrite is non-zero.
+fn	liella_env_unset	LIELLA_NATIVE_1	int64_t	const uint8_t *name, size_t name_len	Remove every entry of the variable name.
+fn	liella_env_count	LIELLA_NATIVE_1	int64_t	void	The number of entries in the environment.
+fn	liella_env_entry	LIELLA_NATIVE_1	int64_t	size_t index, uint8_t *buf, size_t buf_len	Entry index (NAME=VALUE) into buf: its length, or -ENOENT past the last.
+fn	liella_environ_contract	LIELLA_NATIVE_1	int32_t	int32_t on	The environment contract, a Liella extension (off by default; docs/interfaces.md): non-zero on turns it on, 0 off; the previous state (1 on, 0 off). While it is on, getenv answers from a table of the names that setenv, putenv, unsetenv and clearenv keep current; a change made to environ, an entry of it or a putenv string's name without them is seen only after liella_environ_reload.
+fn	liella_environ_reload	LIELLA_NATIVE_1	void	void	Rebuild the environment contract's table from environ, after a change made without setenv, putenv, unsetenv or clearenv (nothing while the contract is off).
+fn	liella_fd_read	LIELLA_NATIVE_1	int64_t	int32_t fd, uint8_t *buf, size_t len	Read up to len bytes: the count (0 at end of file).
+fn	liella_fd_write	LIELLA_NATIVE_1	int64_t	int32_t fd, const uint8_t *buf, size_t len	Write up to len bytes: the count.
+fn	liella_fd_pread	LIELLA_NATIVE_1	int64_t	int32_t fd, uint8_t *buf, size_t len, int64_t offset	Read up to len bytes at offset: the count.
+fn	liella_fd_pwrite	LIELLA_NATIVE_1	int64_t	int32_t fd, const uint8_t *buf, size_t len, int64_t offset	Write up to len bytes at offset: the count.
+fn	liella_fd_close	LIELLA_NATIVE_1	int64_t	int32_t fd	Close fd (released even when the result is an error).
+fn	liella_fd_seek	LIELLA_NATIVE_1	int64_t	int32_t fd, int64_t offset, uint32_t whence	Move the offset (LIELLA_SEEK_*): the new offset.
+fn	liella_fd_stat	LIELLA_NATIVE_1	int64_t	int32_t fd, struct liella_stat *out	The status of the file open as fd into *out.
+fn	liella_fs_open	LIELLA_NATIVE_1	int64_t	const uint8_t *path, size_t path_len, uint32_t flags, uint32_t mode	Open the file at path (LIELLA_O_*; CLOEXEC is not implied): the descriptor.
+fn	liella_fs_stat	LIELLA_NATIVE_1	int64_t	const uint8_t *path, size_t path_len, uint32_t flags, struct liella_stat *out	The status of the file at path into *out (flags 0 or LIELLA_FS_NOFOLLOW).
+fn	liella_fs_mkdir	LIELLA_NATIVE_1	int64_t	const uint8_t *path, size_t path_len, uint32_t mode	Create the directory path.
+fn	liella_fs_unlink	LIELLA_NATIVE_1	int64_t	const uint8_t *path, size_t path_len	Remove the directory entry path (not a directory).
+fn	liella_fs_rmdir	LIELLA_NATIVE_1	int64_t	const uint8_t *path, size_t path_len	Remove the empty directory path.
+fn	liella_fs_rename	LIELLA_NATIVE_1	int64_t	const uint8_t *from, size_t from_len, const uint8_t *to, size_t to_len	Rename from to to, replacing to if it exists.
+fn	liella_clock_realtime	LIELLA_NATIVE_1	int64_t	struct liella_timespec *out	The current time into *out.
+fn	liella_clock_monotonic	LIELLA_NATIVE_1	int64_t	struct liella_timespec *out	The monotonic clock into *out.
+fn	liella_tz_to_local	LIELLA_NATIVE_1	int64_t	int64_t time, struct liella_tm *out	The local time of the instant time into *out, with offset and abbreviation.
+fn	liella_tz_from_local	LIELLA_NATIVE_1	int64_t	struct liella_tm *tm, int64_t *time	The instant of the local time *tm into *time; *tm normalised. Both left alone on failure.
+fn	liella_tz_invalidate	LIELLA_NATIVE_1	int64_t	void	Reload the time-zone data: every zone kept from a file is compared with its file before its next use and read again if the file changed (a tzdata update); then the zone TZ names is selected, as tzset does. Zones are otherwise kept for the life of the process. 0.
+fn	liella_locale_name	LIELLA_NATIVE_1	int64_t	int32_t category, uint8_t *buf, size_t buf_len	The current locale's name of category (LIELLA_LC_*; LIELLA_LC_ALL: composite) into buf: its length.
+fn	liella_locale_decimal_point	LIELLA_NATIVE_1	int64_t	uint8_t *buf, size_t buf_len	The current locale's decimal point into buf: its length.
+fn	liella_locale_invalidate	LIELLA_NATIVE_1	int64_t	void	Reload the locale data: every mapped locale file and charmap is compared with its file before its next use and read again if the file changed; then the global locale is loaded again by its names. Locale objects (newlocale, duplocale) keep their data. 0, or -ENOENT when a name of the global locale no longer resolves (it is then unchanged).
+fn	liella_process_exit	LIELLA_NATIVE_1	noreturn void	int32_t status	End the process as exit(status): C exit handlers, stream flush, exit.
+fn	liella_process_arg_count	LIELLA_NATIVE_1	int64_t	void	The number of program arguments (argc).
+fn	liella_process_arg	LIELLA_NATIVE_1	int64_t	size_t index, uint8_t *buf, size_t buf_len	Argument index into buf: its length, or -ENOENT past the count.
+fn	liella_process_id	LIELLA_NATIVE_1	int64_t	void	The process ID.
+fn	liella_nscache_enable	LIELLA_NATIVE_1	int64_t	uint32_t on	Enable (on non-zero) or disable the process's name-service cache: 1 if it was enabled, else 0. Disabled, a lookup costs one atomic load and nothing is mapped, stat'ed or kept; the table is dropped.
+fn	liella_nscache_category	LIELLA_NATIVE_1	int64_t	uint32_t category, uint32_t on	Enable or disable one category (LIELLA_NSCACHE_HOSTS ... NETWORKS) for this process: 1 if it was enabled, else 0; -EINVAL for another number.
+fn	liella_nscache_invalidate	LIELLA_NATIVE_1	int64_t	uint32_t category	Invalidate one category, or every one (LIELLA_NSCACHE_ALL), in this process's table and the user's shared region (every process of the user drops those answers); the next lookup validates the watched files at once. 0, or -EINVAL.
+fn	liella_nscache_status	LIELLA_NATIVE_1	int64_t	struct liella_nscache_info *out	The cache's state into *out.
+fn	liella_aio_use_threads	LIELLA_NATIVE_1	int64_t	void	Run this process's POSIX AIO requests on worker threads, never on io_uring: 0, or -EBUSY once a request has started io_uring (call it before the first request). It holds for the life of the process and in its fork children. The workers are also chosen without this call in secure-execution mode, under a seccomp filter, or with LIELLA_AIO_URING=0 in the environment at the first request.
+fn	liella_getpass_set_limit	LIELLA_NATIVE_1	int64_t	size_t bytes	Set the process's bound on getpass's line to bytes (0: LIELLA_GETPASS_DEFAULT_LIMIT again): the bound that was in force, or -EINVAL above PTRDIFF_MAX. A longer line is read to its end and discarded, every library buffer that held it zeroed, and getpass fails with EOVERFLOW (never a truncated password). It holds for the life of the process and in its fork children.

@@ -1,0 +1,1270 @@
+id	section	field	text
+s0_6_c0_1_0	0.6	Convention	Unless an entry says otherwise:
+s0_6_c0_1_1	0.6	Convention	A failing function returns a sentinel (-1, `NULL`, `EOF`, `(size_t)-1`, `MAP_FAILED`, ...) and stores a positive error code in the calling thread's `errno`.
+s0_6_c0_1_2	0.6	Convention	`errno` is never set to 0 by a library function. A successful call may still change `errno`. ⚑ HIST: callers that need to detect errors from functions with no free sentinel (for example `strtol`, `readdir`, `getpwnam`, math functions) must zero `errno` before the call. An explicit status result would remove that burden.
+s0_6_c0_1_3	0.6	Convention	The error codes are the kernel's (`EPERM`=1 ... `EHWPOISON`=133 on x86_64). ⚑ KERN: the numbering is the kernel ABI. Library-originated failures reuse kernel codes with library meanings (for example `EINVAL`, `ENOMEM`, `EOVERFLOW`).
+s0_6_c0_1_4	0.6	Convention	Newer POSIX interfaces (threads, `posix_spawn`, `posix_fadvise`, `posix_fallocate`, `posix_memalign`, `getaddrinfo`, `pthread_*`, `timer_*` are mixed) return the error number directly and leave `errno` unspecified. ⚑ PATH: two error conventions coexist in one library. A caller must know which convention each function follows.
+s0_6_c0_2_0	0.6	Convention	Unless stated, functions are *MT-Safe* in the manual's terminology (§1.2.2.1 of the manual defines MT-Safe, MT-Unsafe, AS-Safe, AC-Safe with qualifiers such as `race`, `locale`, `env`, `sig`, `term`, `init`, `lock`, `corrupt`, `heap`, `dlopen`, `plugin`, `i18n`, `timer`). The specification lists only departures:
+s0_6_c0_2_1	0.6	Convention	**Static result buffers.** Many classic functions return a pointer to storage owned by the library and overwritten by the next call (`strerror` historically, `asctime`, `ctime`, `gmtime`, `localtime`, `getpwnam`, `gethostbyname`, `inet_ntoa`, `ttyname`, `strtok`, `readdir`, `getlogin`, `ecvt`, `l64a`, `tmpnam(NULL)`, `ptsname`, ...). ⚑ HIST, ⚑ PATH: each of these grew a `_r` variant taking a caller buffer. The functional need is always "produce a result the caller owns", so in a new design the `_r` shape is the base contract.
+s0_6_c0_2_2	0.6	Convention	**Process-global mutable state that the contract exposes.** The current locale, the environment, the current directory, `umask`, signal dispositions, resource limits, the random seed of `rand`/`random`/`drand48`, the `getopt` cursor (`optind`, `optarg`), the `strtok` cursor, `h_errno`, `signgam`, the `tzname`/`timezone`/`daylight` variables, `environ`, `program_invocation_name`. Several of these are kernel-held (cwd, umask, signal dispositions, limits) and cannot be made per-thread. The others are library-held and are process-global only for history.
+s0_6_c0_2_3	0.6	Convention	**Async-signal safety.** Only functions listed as AS-Safe may be called from a signal handler that interrupted arbitrary code. POSIX enumerates the list. The functional reason is that the handler may run in the middle of a non-reentrant library operation on the same thread.
+s0_6_c0_2_4	0.6	Convention	**Cancellation points.** In a threaded program, the functions POSIX lists as cancellation points (blocking I/O, waits, sleeps, `open`, `close`, ...) may act on a pending deferred cancellation. glibc's cancellable wrappers are listed per section. ⚑ HIST: `close` being a cancellation point creates a well-known ambiguity about whether the descriptor was closed (on Linux it always is).
+s0_6_c0_3_0	0.6	Convention	Blocking primitives interrupted by a signal handler either restart automatically (handler installed with `SA_RESTART`) or fail with `EINTR`. Some kernel calls never restart (`select`, `poll`, `epoll_wait`, `nanosleep`, `sigsuspend`, socket calls with timeouts, ...) and some restart with an adjusted timeout. glibc does not hide this, apart from a few internal `TEMP_FAILURE_RETRY` loops. ⚑ KERN (restart semantics are kernel ABI), ⚑ HIST (`EINTR` as a caller-visible result is widely considered a design mistake, but the kernel ABI returns it).
+s0_6_c0_4_0	0.6	Convention	On x86_64, `off_t`, `ino_t`, `blkcnt_t`, `rlim_t`, and `time_t` are already 64 bits. The `*64` symbols (`open64`, `stat64`, `lseek64`, `fopen64`, `readdir64`, `getrlimit64`, ...) are exact aliases of the unsuffixed symbols. ⚑ COMPAT: they exist because on 32-bit ABIs `_FILE_OFFSET_BITS=64` and `_TIME_BITS=64` select 64-bit variants of hundreds of functions. The specification documents each function once. The 64-bit variant is the contract, and the 32-bit variant is a compatibility shim that must fail with `EOVERFLOW` when a value does not fit.
+s0_6_c0_5_0	0.6	Convention	Symbols named `__<name>_chk` (`__memcpy_chk`, `__printf_chk`, `__read_chk`, ...) implement the same contract as `<name>` with one extra input: the compiler-known size of the destination object. If the operation would write beyond it, the process terminates with a diagnostic (`__chk_fail`, "buffer overflow detected"). Format-string variants also reject `%n` in writable memory. ⚑ PATH: fortification is needed because the base interfaces do not take destination sizes. An interface that always carried a destination extent would make the whole `_chk` family unnecessary.
+s0_6_c0_6_0	0.6	Convention	Every exported name carries a version node (`GLIBC_2.2.5` is the x86_64 baseline). Some names have several versions with different contracts (for example `memcpy@GLIBC_2.2.5` permits overlapping arguments, while `memcpy@GLIBC_2.14` does not guarantee it; `realpath`, `sched_setaffinity`, `pthread_cond_*`, `regexec`, `glob`, `posix_spawn`, `nftw`, `fmemopen`, `quick_exit` all have older versioned contracts). Some names are exported only for old binaries and can no longer be linked against (`gets`, `matherr`, `__malloc_hook`, `sys_errlist`, `pow10`, `sigvec`, `ustat`, `stime`, `_sys_siglist`, the RPC/NIS stack moved to `libtirpc`/`libnsl`, ...). ⚑ COMPAT: an ABI-compatible replacement must keep every versioned contract that old binaries were linked against. Appendix B lists these.
+s0_6_c0_7_0	0.6	Convention	Unless stated, pointers the caller passes are borrowed only for the call's duration. Pointers the library returns are either (a) caller-owned heap memory to be released with `free`, (b) library-owned static storage (see C0.2), or (c) a view into caller-supplied storage. Each entry states which. ⚑ HIST: the C interface does not encode ownership in types, and several functions return different kinds from the same entry point (`realpath` with and without a buffer, `getcwd(NULL, 0)`, `strerror_r` GNU form).
+s0_6_c0_8_0	0.6	Convention	The kernel ABI that glibc builds on includes more than syscall numbers:
+s0_6_c0_8_1	0.6	Convention	The process entry state: stack layout (`argc`, `argv`, `envp`, auxiliary vector), initial register state.
+s0_6_c0_8_2	0.6	Convention	The **auxiliary vector** (`AT_PAGESZ`, `AT_HWCAP`/`AT_HWCAP2`, `AT_RANDOM`, `AT_SYSINFO_EHDR`, `AT_SECURE`, `AT_PHDR`, `AT_ENTRY`, `AT_BASE`, `AT_MINSIGSTKSZ`, `AT_EXECFN`, `AT_PLATFORM`, `AT_CLKTCK`, `AT_UID`/`AT_EUID`/`AT_GID`/`AT_EGID`).
+s0_6_c0_8_3	0.6	Convention	The **vDSO**: `clock_gettime`, `gettimeofday`, `time`, `getcpu`, `clock_getres`.
+s0_6_c0_8_4	0.6	Convention	The **signal frame** format and the `SA_RESTORER` / `rt_sigreturn` convention (x86_64 requires user space to supply the return trampoline).
+s0_6_c0_8_5	0.6	Convention	The **thread pointer** register (FS base on x86_64, set through `arch_prctl(ARCH_SET_FS)` or `clone(CLONE_SETTLS)`).
+s0_6_c0_8_6	0.6	Convention	**Shared user/kernel memory protocols**: futex words, robust-futex lists (`set_robust_list`), `clear_child_tid` (`set_tid_address` / `CLONE_CHILD_CLEARTID`), and the rseq area (`rseq`).
+s0_6_c0_8_7	0.6	Convention	**Pseudo-file systems**: `/proc` (`/proc/self/fd`, `/proc/self/maps`, `/proc/self/exe`, `/proc/stat`, `/proc/meminfo`, `/proc/sys/...`), `/sys` (`/sys/devices/system/cpu/...`), and `/dev` nodes (`/dev/ptmx`, `/dev/pts/*`, `/dev/null`, `/dev/tty`, `/dev/shm` for POSIX shared memory (a tmpfs mount convention), `/dev/log` (a syslog daemon socket, not kernel)).
+s0_6_c0_8_8	0.6	Convention	**Netlink** (`NETLINK_ROUTE`) for interface and address enumeration. Appendix A catalogues all of these against the contracts that need them.
+s1_1_c_0	1.1	Contract	Before `main` runs, the runtime turns the kernel's entry state into a C execution environment:
+s1_1_c_1	1.1	Contract	It passes `argc`, `argv`, and `envp`.
+s1_1_c_2	1.1	Contract	It makes the environment available as `environ`.
+s1_1_c_3	1.1	Contract	It initializes the thread pointer and TLS for the initial thread, and the stack-protector canary and pointer-guard values from `AT_RANDOM`.
+s1_1_c_4	1.1	Contract	It initializes the standard streams `stdin`, `stdout` and `stderr`, and the "C" locale.
+s1_1_c_5	1.1	Contract	It runs ELF constructors (`DT_PREINIT_ARRAY`, `DT_INIT`, `DT_INIT_ARRAY`) in dependency order.
+s1_1_c_6	1.1	Contract	It registers destructors to run at normal exit.
+s1_1_c_7	1.1	Contract	In secure-execution mode (`AT_SECURE` non-zero, which means setuid, setgid or file-capability binaries), it sanitizes the environment.
+s1_1_g_1	1.1	Guarantees	`argv[argc]` is `NULL`.
+s1_1_g_2	1.1	Guarantees	`envp` is `NULL`-terminated.
+s1_1_g_3	1.1	Guarantees	Descriptors 0, 1 and 2 are open when `main` runs. For secure-mode programs, glibc opens `/dev/null` on any of 0, 1, 2 that are closed. This prevents a privileged program's later `open` from receiving fd 1 or 2 and having its diagnostics written into a sensitive file.
+s1_1_g_4	1.1	Guarantees	In secure mode, unsafe environment variables are removed (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `GCONV_PATH`, `LOCPATH`, `MALLOC_*`, `TMPDIR`, `NLSPATH`, `HOSTALIASES`, `RES_OPTIONS`, `GLIBC_TUNABLES` with unsafe tunables, ...).
+s1_2_c_1	1.2	Contract	**`exit(status)`** runs, in reverse order of registration, all functions registered with `atexit`, `on_exit` and `__cxa_atexit`. Registrations made during exit processing also run. It then runs thread-local destructors for the calling thread, ELF destructors (`DT_FINI_ARRAY`) of loaded objects, flushes and closes all stdio streams, removes `tmpfile` files, and terminates the whole process with the status. It never returns.
+s1_2_c_2	1.2	Contract	**`_exit`/`_Exit(status)`** terminate the process immediately. They skip handlers, stream flushing and destructors. Async-signal-safe.
+s1_2_c_3	1.2	Contract	**`quick_exit(status)`** runs only the `at_quick_exit` handlers (LIFO), then `_Exit`.
+s1_2_c_4	1.2	Contract	**`abort()`** terminates abnormally with `SIGABRT`:
+s1_2_c_4_1	1.2	Contract	If a handler catches `SIGABRT` and returns, `abort` resets the disposition to default and raises the signal again.
+s1_2_c_4_2	1.2	Contract	If the process still survives, it executes an architecture trap instruction and finally `_exit(127)`.
+s1_2_c_4_3	1.2	Contract	The raise is not blocked by the signal mask: `abort` unblocks `SIGABRT` first.
+s1_2_c_4_4	1.2	Contract	Streams are *not* flushed (POSIX.1-2008 permits but no longer requires flushing; glibc stopped flushing in 2.27).
+s1_2_c_5	1.2	Contract	**`__cxa_atexit(fn, arg, dso)`** registers a destructor bound to a shared object. `__cxa_finalize(dso)` runs that object's destructors when it is unloaded (or all of them at exit when `dso` is NULL).
+s1_2_c_6	1.2	Contract	**`__cxa_thread_atexit_impl(fn, obj, dso)`** registers a destructor for a C++ `thread_local` object. It runs at thread exit, and it keeps `dso` loaded until then.
+s1_2_i_1	1.2	Inputs	**`status`** is an `int`. Only the low 8 bits reach a parent through `wait` (⚑ KERN: `exit_group` takes an int, but the wait-status encoding carries 8 bits).
+s1_2_i_2	1.2	Inputs	**`EXIT_SUCCESS`/`EXIT_FAILURE`** are 0 and 1.
+s1_2_i_3	1.2	Inputs	Registration limit: ISO C requires at least 32 `atexit` registrations. glibc has no fixed limit and allocates dynamically.
+s1_2_f_1	1.2	Failure	`atexit`, `at_quick_exit` and `__cxa_atexit` return non-zero if memory cannot be obtained.
+s1_2_f_2	1.2	Failure	Calling `exit` twice, or from an `atexit` handler, is undefined in ISO C. glibc detects reentry: later handlers are still run once.
+s1_2_f_3	1.2	Failure	`exit` from a multi-threaded process terminates all threads without running their cleanup handlers.
+s1_3_c_0	1.3	Contract	The process environment is a mutable mapping from names to values. It is initialized from `execve`'s `envp` and passed to children by the `exec*` functions that do not take an explicit environment.
+s1_3_c_1	1.3	Contract	**`getenv(name)`** returns the value for `name`, or `NULL` if absent.
+s1_3_c_2	1.3	Contract	**`secure_getenv(name)`** behaves like `getenv`, but returns `NULL` in secure-execution mode.
+s1_3_c_3	1.3	Contract	**`setenv(name, value, overwrite)`** adds or (if `overwrite`) replaces an entry.
+s1_3_c_4	1.3	Contract	**`unsetenv(name)`** removes *all* entries with that name.
+s1_3_c_5	1.3	Contract	**`putenv(string)`** inserts the caller's `NAME=VALUE` string itself (not a copy). Later changes to that storage change the environment. A string with no `=` removes the name (glibc extension).
+s1_3_c_6	1.3	Contract	**`clearenv()`** empties the environment.
+s1_3_i_1	1.3	Inputs	A name must be non-empty and must not contain `=`. `setenv` and `unsetenv` fail with `EINVAL` otherwise.
+s1_3_i_2	1.3	Inputs	Names and values are Text. They cannot contain the delimiter because the storage format is `NAME=VALUE\0` (⚑ KERN at `execve`, ⚑ HIST in memory).
+s1_3_g_1	1.3	Guarantees	`getenv`'s result stays valid until the entry is modified or removed.
+s1_3_g_2	1.3	Guarantees	`setenv` copies its arguments.
+s1_3_f_1	1.3	Failure	`ENOMEM`.
+s1_3_f_2	1.3	Failure	`EINVAL` for a bad name.
+s1_3_f_3	1.3	Failure	Duplicate names that came from `execve` are all removed by `unsetenv`. `getenv` returns the first.
+s1_3_t_0	1.3	Threads	MT-Unsafe `env`. Concurrent `getenv` and `setenv` are a data race. ⚑ HIST: `environ` is a bare global array that callers may read or replace directly, so the library cannot synchronize access. The functional need, a process-wide name→value map inherited across `exec`, would permit a lock-protected or copy-on-write structure. The catch is that `environ` is ABI.
+s1_4_c_0	1.4	Contract	Provides the `argv[0]` of the running program, both in full and as its final path component, for diagnostics.
+s1_5_c_0	1.5	Contract	Returns the value of an auxiliary-vector entry the kernel supplied at `execve`.
+s1_5_i_0	1.5	Inputs	A key (`AT_*`, `unsigned long`).
+s1_5_g_0	1.5	Guarantees	Returns the value if present.
+s1_5_f_0	1.5	Failure	Returns 0 and sets `ENOENT` if absent. ⚑ ARB: 0 is also a legitimate value for several keys, so the caller must inspect `errno`.
+s1_6_c_0	1.6	Contract	Iteratively classifies the elements of an argument list into options, option arguments and operands, according to a short-option specification string and (for the long forms) a table of long-option descriptors.
+s1_6_i_1	1.6	Inputs	**The argument list** (`argc`, `argv`).
+s1_6_i_2	1.6	Inputs	**The short-option specification**, a Text in which each character is an option letter, `:` after it means a required argument, and `::` means an optional one. A leading `+` requests POSIX mode (stop at the first operand). A leading `-` returns operands in place as option code 1. A leading `:` suppresses diagnostics and distinguishes a missing argument (`:`) from an unknown option (`?`).
+s1_6_i_3	1.6	Inputs	**The long-option table** (`struct option {name, has_arg, flag, val}`), terminated by an all-zero entry.
+s1_6_g_1	1.6	Guarantees	Each call returns the next option's code, or -1 when options are exhausted.
+s1_6_g_2	1.6	Guarantees	`optarg` points at the option's argument.
+s1_6_g_3	1.6	Guarantees	`optind` is the index of the next element to process.
+s1_6_g_4	1.6	Guarantees	By default (GNU mode), `getopt` **permutes** `argv` so that all operands end up at the end. Setting `POSIXLY_CORRECT` disables permutation.
+s1_6_g_5	1.6	Guarantees	`--` ends option processing.
+s1_6_f_1	1.6	Failure	An unknown option, or a missing required argument, returns `'?'` (or `':'`) and prints a diagnostic to `stderr` unless `opterr == 0`.
+s1_6_f_2	1.6	Failure	A long option may be abbreviated to any unambiguous prefix. An ambiguous prefix is an error.
+s1_6a_c_0	1.6a	Contract	Parse a comma-separated option Text (`"rw,size=10"`) against a NULL-terminated list of recognized names. Each call returns the index of the next suboption, or -1 if it is unknown, and sets a pointer to its `=value` (or `NULL`); for an unknown suboption the pointer is the whole `name[=value]` text. The input is modified in place (commas and `=` are overwritten with terminators) and a cursor is advanced.
+s1_7_c_0	1.7	Contract	A declarative command-line parser. The caller supplies a tree of option tables (`struct argp`, which may nest child parsers) and a callback. The library:
+s1_7_c_1	1.7	Contract	parses the list and calls the callback for each option, each operand, and the initialization/finalization events;
+s1_7_c_2	1.7	Contract	generates `--help`, `--usage` and `--version` output, formatted to the terminal width (`ARGP_HELP_FMT` tunes this);
+s1_7_c_3	1.7	Contract	reports errors in the standard `program: message` format.
+s1_7_i_0	1.7	Inputs	Option descriptors (`name`, `key`, `arg`, `flags`, `doc`, `group`). Flags such as `ARGP_NO_EXIT`, `ARGP_IN_ORDER`, `ARGP_NO_HELP`, `ARGP_PARSE_ARGV0`, `ARGP_SILENT`.
+s1_7_g_0	1.7	Guarantees	On success returns 0 and optionally the index of the first unparsed argument. By default the process exits with `argp_err_exit_status` (default `EX_USAGE`) on a usage error.
+s1_7_f_0	1.7	Failure	An error code returned from the callback aborts the parse. `ARGP_ERR_UNKNOWN` means "not mine; try child parsers".
+s1_8_c_0	1.8	Contract	The `GLIBC_TUNABLES` environment variable (`name=value:name=value`) adjusts library parameters at startup: malloc arena counts and thresholds, tcache sizes, thread stack cache, CPU feature masks (`glibc.cpu.hwcaps`), `glibc.rtld.*`, `glibc.pthread.rseq`, and others. Unknown or invalid tunables are ignored. In secure-execution mode, only tunables marked safe are honoured.
+s2_1_c_0	2.1	Contract	A per-thread modifiable integer lvalue that holds the most recent error code set by a library function on this thread. `errno` is a macro that expands to `(*__errno_location())`.
+s2_1_g_0	2.1	Guarantees	Each thread has its own `errno`, and signal handlers see the interrupted thread's `errno`. Portable handlers save and restore it.
+s2_2_c_0	2.2	Contract	Map an error number to a message.
+s2_2_c_1	2.2	Contract	**`strerror(e)`** returns a locale-translated message. The result is a pointer that stays valid until the next `strerror` call on the same thread (glibc uses a per-thread buffer only for unknown codes; known codes return a static string).
+s2_2_c_2	2.2	Contract	**`strerror_l(e, loc)`** does the same using locale object `loc`.
+s2_2_c_3	2.2	Contract	**`strerror_r(e, buf, n)`** has two contracts selected by feature macro (§0.5):
+s2_2_c_3_1	2.2	Contract	**XSI form (`__xpg_strerror_r`)** writes into `buf` and returns 0, `EINVAL` (unknown `e`) or `ERANGE` (buffer too small).
+s2_2_c_3_2	2.2	Contract	**GNU form** returns a `char *` that *may or may not* point into `buf` (it points at a static string for known codes).
+s2_2_c_4	2.2	Contract	**`strerrorname_np(e)`** returns the symbolic name (`"EINVAL"`), or `NULL` for an unknown code.
+s2_2_c_5	2.2	Contract	**`strerrordesc_np(e)`** returns the untranslated English description.
+s2_2_c_6	2.2	Contract	**`perror(s)`** writes `s: <message>\n` (or just the message if `s` is NULL or empty) to `stderr`. If `stderr` is unoriented, it makes it byte-oriented; it honours the orientation if already set.
+s2_2_f_0	2.2	Failure	Unknown codes yield `"Unknown error N"`.
+s2_3_c_0	2.3	Contract	Print `progname: <formatted message>[: <strerror(errno)>]\n` to `stderr`.
+s2_3_c_1	2.3	Contract	`err*` then call `exit(status)`.
+s2_3_c_2	2.3	Contract	`error(status, errnum, fmt, ...)` exits if `status != 0`. It includes the message for `errnum` if non-zero, flushes `stdout` first, and counts messages in `error_message_count`.
+s2_3_c_3	2.3	Contract	`error_at_line` additionally prints `file:line:`. With `error_one_per_line`, it suppresses repeated messages for the same line.
+s2_3_c_4	2.3	Contract	`error_print_progname`, if set, replaces the program-name prefix.
+s2_4_c_0	2.4	Contract	If the asserted expression is false and `NDEBUG` is not defined, print `prog: file:line: function: Assertion 'expr' failed.` and call `abort`. `assert_perror(e)` (GNU) does the same when `e != 0`, showing `strerror(e)`.
+s2_5_c_1	2.5	Contract	**`__stack_chk_fail`** is called by compiler-inserted code when a stack canary has changed. It prints `*** stack smashing detected ***: terminated` and aborts.
+s2_5_c_2	2.5	Contract	**`__chk_fail`** is called when a fortified function detects an overflow (C0.5). It prints `*** buffer overflow detected ***: terminated` and aborts.
+s2_5_g_0	2.5	Guarantees	No return. The diagnostic uses only async-signal-safe output, so it is written even from a corrupted heap state.
+s2_6_c_0	2.6	Contract	Formats a structured message from these fields and writes it to `stderr`, the console, or both:
+s2_6_c_1	2.6	Contract	**classification**: `MM_HARD`/`MM_SOFT`/`MM_FIRM`, `MM_APPL`/`MM_UTIL`/`MM_OPSYS`, `MM_RECOVER`/`MM_NRECOV`, `MM_PRINT`/`MM_CONSOLE`;
+s2_6_c_2	2.6	Contract	**label**: `"xxx:yyy"`, a component and subcomponent of at most 10 and 14 characters;
+s2_6_c_3	2.6	Contract	**severity**: `MM_HALT`, `MM_ERROR`, `MM_WARNING`, `MM_INFO`, or a severity added with `addseverity`;
+s2_6_c_4	2.6	Contract	**text**, **action**, **tag**. `MSGVERB` selects the fields to print and `SEV_LEVEL` defines extra severities.
+s2_6_f_0	2.6	Failure	Returns `MM_OK`, `MM_NOTOK`, `MM_NOMSG` (stderr failed) or `MM_NOCON` (console failed).
+s2_7_c_1	2.7	Contract	**`backtrace(buf, n)`** stores up to `n` return addresses of the current call stack into `buf` and returns the count.
+s2_7_c_2	2.7	Contract	**`backtrace_symbols(addrs, n)`** returns a single `malloc`ed block holding `n` Text descriptions (`object(symbol+offset) [address]`).
+s2_7_c_3	2.7	Contract	**`backtrace_symbols_fd`** writes the same descriptions to a file descriptor, without allocating.
+s2_7_f_1	2.7	Failure	The first call may load the unwinder (`libgcc_s`) via `dlopen`, so it is not async-signal-safe unless primed.
+s2_7_f_2	2.7	Failure	Frames without unwind information may be omitted.
+s2_7_f_3	2.7	Failure	Symbol names are available only for dynamic symbols.
+s3_1_c_0	3.1	Contract	Provide dynamically sized, suitably aligned blocks of writable memory whose lifetime the caller controls.
+s3_1_c_1	3.1	Contract	**`malloc(n)`** returns a block of at least `n` bytes, aligned for any fundamental type (`alignof(max_align_t)`, 16 on x86_64).
+s3_1_c_2	3.1	Contract	**`calloc(k, n)`** returns a zero-filled block for `k` elements of `n` bytes. If `k*n` overflows `size_t`, it fails with `ENOMEM`.
+s3_1_c_3	3.1	Contract	**`realloc(p, n)`** resizes block `p`, preserving `min(old, n)` bytes. It may move the block.
+s3_1_c_3_1	3.1	Contract	`realloc(NULL, n)` is `malloc(n)`.
+s3_1_c_3_2	3.1	Contract	`realloc(p, 0)` frees `p` and returns `NULL` in glibc. ⚑ HIST: implementations disagree (it may return a unique pointer), and C23 made the case undefined.
+s3_1_c_4	3.1	Contract	**`reallocarray(p, k, n)`** is `realloc` with an overflow-checked product.
+s3_1_c_5	3.1	Contract	**`free(p)`** releases a block. `free(NULL)` is a no-op. `free` preserves `errno` (2.33+).
+s3_1_c_6	3.1	Contract	**Aligned forms:**
+s3_1_c_6_1	3.1	Contract	`aligned_alloc(a, n)` (C11) requires a power-of-two `a`. glibc accepts any `n`; C11 required `n` to be a multiple of `a` until DR 460.
+s3_1_c_6_2	3.1	Contract	`posix_memalign(&p, a, n)` requires `a` to be a power of two and a multiple of `sizeof(void*)`. It returns the error number directly (`EINVAL`/`ENOMEM`) and leaves `*p` unmodified on failure.
+s3_1_c_6_3	3.1	Contract	`memalign(a, n)` (obsolete) rounds a non-power-of-two `a` up.
+s3_1_c_6_4	3.1	Contract	`valloc(n)` returns page-aligned memory.
+s3_1_c_6_5	3.1	Contract	`pvalloc(n)` returns page-aligned memory with `n` rounded up to a whole page.
+s3_1_c_7	3.1	Contract	**`malloc_usable_size(p)`** returns the number of bytes actually usable in the block, which is at least the requested size.
+s3_1_c_8	3.1	Contract	**`cfree`** is a compat alias for `free`.
+s3_1_i_0	3.1	Inputs	Sizes are `size_t`. Requests above `PTRDIFF_MAX` fail with `ENOMEM` (2.29+). The functional reason is that pointer subtraction within an object must be representable.
+s3_1_g_1	3.1	Guarantees	Distinct live blocks never overlap.
+s3_1_g_2	3.1	Guarantees	The contents of `malloc` and `realloc` growth are indeterminate. `calloc` contents are zero.
+s3_1_g_3	3.1	Guarantees	A block's alignment is at least the fundamental alignment, or the requested alignment.
+s3_1_g_4	3.1	Guarantees	Memory returned is not shared with any other live block, or with library-internal structures.
+s3_1_f_1	3.1	Failure	Failure returns `NULL` with `ENOMEM` (except `posix_memalign`).
+s3_1_f_2	3.1	Failure	`malloc(0)` returns a unique, freeable, non-NULL pointer in glibc. ⚑ ARB: the standard allows either this or NULL.
+s3_1_f_3	3.1	Failure	Double `free`, `free` of a non-heap pointer, and use after free are undefined behaviour. glibc detects many of these and aborts (`free(): invalid pointer`, `double free detected in tcache 2`, `malloc(): corrupted top size`), but does not guarantee to.
+s3_1_f_4	3.1	Failure	A `realloc` failure leaves the original block intact.
+s3_1_t_0	3.1	Threads	MT-Safe. A block may be freed by a different thread than the one that allocated it. Allocation after `fork` in a multi-threaded parent is supported: glibc reinitializes the allocator locks in the child, which is stronger than POSIX requires.
+s3_2_c_1	3.2	Contract	**`mallopt(param, value)`** adjusts allocator policy: `M_MMAP_THRESHOLD`, `M_MMAP_MAX`, `M_TRIM_THRESHOLD`, `M_TOP_PAD`, `M_ARENA_MAX`, `M_ARENA_TEST`, `M_PERTURB`, `M_CHECK_ACTION`, `M_MXFAST`. It returns 1 on success and 0 on error.
+s3_2_c_2	3.2	Contract	**`mallinfo2()`** returns a structure of `size_t` statistics (arena bytes, free chunks, mmapped bytes, in-use bytes, releasable bytes).
+s3_2_c_3	3.2	Contract	**`mallinfo()`** returns the same statistics as `int` fields.
+s3_2_c_4	3.2	Contract	**`malloc_stats()`** prints per-arena statistics to `stderr`.
+s3_2_c_5	3.2	Contract	**`malloc_info(options, fp)`** writes an XML description to `fp`. `options` must be 0; otherwise it fails with `EINVAL`. It returns 0, or -1 with `errno` set (Written 2026-10-04 (owner ruling, phase 12-13 report); malloc_info(3); the reference returns 22).
+s3_2_c_6	3.2	Contract	**`malloc_trim(pad)`** returns free memory to the system, leaving `pad` bytes at the top of the main heap. It returns 1 if any memory was released.
+s3_3_c_1	3.3	Contract	The hook variables are **compat-only** (2.34 removed their effect from `libc.so`). Old binaries can link to them, but they are inert in `libc.so.6`: assigning them does nothing. With `libc_malloc_debug.so` preloaded, only `__malloc_hook`, `__free_hook`, `__realloc_hook`, `__memalign_hook` and `__malloc_initialize_hook` act; `__after_morecore_hook` and `__morecore` stay inert (Written 2026-10-04 (owner ruling, phase 12-13 report), `spec/behaviour/mallocdbg.md`).
+s3_3_c_2	3.3	Contract	**`mcheck(abortfn)`** (with `libc_malloc_debug.so`) enables consistency checking of every block. It must be called before the first allocation. `mprobe(p)` returns the status of one block (`MCHECK_OK`, `MCHECK_HEAD`, `MCHECK_TAIL`, `MCHECK_FREE`, `MCHECK_DISABLED`).
+s3_3_c_3	3.3	Contract	**`mtrace()`** (with `libc_malloc_debug.so`) logs each allocation and free to the file named by `MALLOC_TRACE`. `muntrace()` stops logging.
+s3_3_c_4	3.3	Contract	**`malloc_get_state`/`malloc_set_state`** are compat stubs (Emacs unexec). They now fail.
+s3_4_c_0	3.4	Contract	Allocate `n` bytes in the caller's stack frame. The storage is released when the function returns.
+s3_4_f_0	3.4	Failure	There is no failure indication. Exceeding the stack is undefined, and in practice triggers `SIGSEGV` on the guard page.
+s3_5_c_0	3.5	Contract	A stack-discipline arena. Objects are allocated in order and freed by releasing an object together with everything allocated after it. The arena also supports *growing* an object incrementally before finalizing it.
+s3_5_i_0	3.5	Inputs	Chunk-size hint, alignment mask, and caller-supplied chunk allocation and free functions.
+s3_5_g_1	3.5	Guarantees	Finished objects never move.
+s3_5_g_2	3.5	Guarantees	A growing object may move until it is finished.
+s3_5_g_3	3.5	Guarantees	Alignment follows the obstack's alignment mask (default: fundamental alignment).
+s3_5_f_0	3.5	Failure	On allocation failure, `obstack_alloc_failed_handler` is called. Its default prints a message and calls `exit(obstack_exit_failure)`. ⚑ HIST: failure by exiting from inside a library, configured through a global handler.
+s3_7_c_0	3.7	Contract	`brk(addr)` sets the end of the data segment. `sbrk(delta)` moves it by `delta` and returns the old end.
+s3_7_f_0	3.7	Failure	`ENOMEM`.
+s4_n_1	4	Notes	All functions in this section are pure computations. **Kernel: none.**
+s4_n_2	4	Notes	All are MT-Safe and AS-Safe, except where stated (`strtok`, `strerror`, locale-dependent collation).
+s4_n_3	4	Notes	Overlapping source and destination is undefined behaviour unless the entry says otherwise.
+s4_n_4	4	Notes	⚑ HIST (section-wide). Almost every function here exists in two or more forms whose only difference is *how the extent of an input is delimited*:
+s4_n_4_1	4	Notes	byte count (`mem*`);
+s4_n_4_2	4	Notes	NUL terminator (`str*`);
+s4_n_4_3	4	Notes	NUL terminator *or* a count, whichever comes first (`strn*`);
+s4_n_4_4	4	Notes	a destination capacity (`strl*`, `*_chk`).
+s4_n_5	4	Notes	The functional needs are fewer than 20: copy, move, fill, compare, search for a byte, search for a subsequence, search for any of a set, measure, concatenate, tokenize, duplicate. Each need is multiplied by three to six delimiting conventions, and again by the wide-character (`wcs*`/`wmem*`) versions. ⚑ COMMENTARY: implies that one need gives one answer under every delimiting convention; covered by `s4_n_4`.
+s4_n_6	4	Notes	A design built on length-delimited **Text** needs one form per need. It needs NUL-terminated forms only at the kernel boundary (Path, argv). ⚑ COMMENTARY: nothing testable (an internal design rule, not observable through the C interface).
+s4_1_c_0	4.1	Contract	Copy a sequence of bytes (or wide characters) from source to destination.
+s4_1_c_1	4.1	Contract	**`memcpy(d, s, n)`** copies `n` bytes. Overlap is undefined. ⚑ COMPAT: `memcpy@GLIBC_2.2.5` tolerates overlap for old binaries; `@GLIBC_2.14` does not.
+s4_1_c_2	4.1	Contract	**`memmove`** copies correctly under overlap.
+s4_1_c_3	4.1	Contract	**`mempcpy`** returns `d + n` instead of `d`.
+s4_1_c_4	4.1	Contract	**`memccpy(d, s, c, n)`** copies up to and including the first byte equal to `c`, at most `n` bytes. It returns a pointer past the copied `c`, or `NULL` if `c` was not found.
+s4_1_c_5	4.1	Contract	**`bcopy(s, d, n)`** is `memmove` with the argument order reversed. ⚑ HIST (BSD); removed from POSIX in 2008.
+s4_1_c_6	4.1	Contract	**`strcpy(d, s)`** copies `s` including its terminator. `stpcpy` returns a pointer to the copied terminator (useful for appending).
+s4_1_c_7	4.1	Contract	**`strncpy(d, s, n)`** copies at most `n` bytes. If `s` is shorter, it pads `d` with zeros to exactly `n` bytes. If `s` is `n` bytes or longer, `d` is **not** terminated. ⚑ HIST: `strncpy` was designed for fixed-width, zero-padded fields (`utmp`, 14-byte directory entries of V7 Unix), not for bounded string copy. It is routinely misused as a bounded copy.
+s4_1_c_8	4.1	Contract	**`stpncpy`** is `strncpy` returning `d + min(strlen(s), n)`.
+s4_1_c_9	4.1	Contract	**`strlcpy(d, s, n)`** (2.38, from BSD) copies at most `n-1` bytes and always terminates if `n > 0`. It returns `strlen(s)`, so a result `≥ n` means truncation. ⚑ HIST: it reads all of `s` even when truncating.
+s4_1_c_10	4.1	Contract	**Wide forms** are the same contracts over `wchar_t` units.
+s4_1_i_0	4.1	Inputs	Valid, non-overlapping regions of the stated sizes. For `str*`, the source must be terminated. For `n` variants, `n` may be 0.
+s4_1_g_0	4.1	Guarantees	On return the destination holds the stated bytes. No other bytes are written, except `strncpy`'s padding.
+s4_1_f_0	4.1	Failure	None reported. A destination overflow is undefined behaviour (C0.5 fortify variants turn it into a controlled abort).
+s4_2_c_1	4.2	Contract	**`memset(d, c, n)`** sets `n` bytes to `(unsigned char)c`.
+s4_2_c_2	4.2	Contract	**`bzero(d, n)`** equals `memset(d, 0, n)`. ⚑ HIST.
+s4_2_c_3	4.2	Contract	**`explicit_bzero(d, n)`** zeroes the bytes, and the zeroing is guaranteed not to be optimized away by the compiler, even when the object is dead afterwards. This is the functional need behind clearing secrets. It is a contract with the compiler, not with the machine: copies in registers or on the stack are not covered.
+s4_3_c_0	4.3	Contract	Establish a total order between two sequences.
+s4_3_c_1	4.3	Contract	**`memcmp`/`strcmp`/`strncmp`** compare lexicographically, treating bytes as `unsigned char`. The result's sign is the order; only the sign is specified.
+s4_3_c_2	4.3	Contract	**`bcmp`** reports only equal or not equal. ⚑ HIST.
+s4_3_c_3	4.3	Contract	**`__memcmpeq`** (2.35) has the equality-only contract of `bcmp`, under a reserved name. It exists so that compilers can emit calls to it when only equality matters.
+s4_3_c_4	4.3	Contract	**`*casecmp`** compare after mapping each byte through the current locale's `tolower`. ⚑ HIST: byte-at-a-time case folding is wrong for multibyte encodings (UTF-8) and for language-specific folding (Turkish dotless i). The functional need, case-insensitive equality of text, requires a Unicode-aware fold, and the interface cannot express one.
+s4_3_c_5	4.3	Contract	**`strcoll`/`wcscoll`** compare according to the collation rules of `LC_COLLATE` (multi-level ISO 14651 ordering). With the "C" locale this is `strcmp`.
+s4_3_c_6	4.3	Contract	**`strverscmp`** (GNU) compares strings that contain embedded decimal numbers, so that "file9" < "file10". It treats leading zeros as fractional parts.
+s4_3_c_7	4.3	Contract	**`_l` variants** take an explicit locale object instead of the thread's current locale. ⚑ PATH: `_l` variants were added throughout the library once per-thread and explicit locales arrived (§7). In a new design an explicit locale (or none) is the base contract.
+s4_3_g_0	4.3	Guarantees	The comparisons are consistent (a total preorder for a fixed locale). `strcoll` agrees with the ordering of `strxfrm` outputs compared with `strcmp`.
+s4_3_f_0	4.3	Failure	`strcoll` may set `errno` (for example `EINVAL` for invalid multibyte input) and still return a result. ⚑ ARB: there is no sentinel, so detection requires zeroing `errno`.
+s4_4_c_0	4.4	Contract	Transform a string into a key such that `strcmp` on two keys gives the same order as `strcoll` on the originals. Writes at most `n` bytes including the terminator and returns the full key length (excluding the terminator). A result `≥ n` means the output is incomplete, and the contents of the destination are then unspecified.
+s4_5_c_1	4.5	Contract	**`memchr(s, c, n)`** returns the first position in `s[0..n)` holding `(unsigned char)c`, or `NULL`.
+s4_5_c_2	4.5	Contract	**`memrchr`** returns the last such position.
+s4_5_c_3	4.5	Contract	**`rawmemchr(s, c)`** searches without a bound. The caller asserts that `c` occurs.
+s4_5_c_4	4.5	Contract	**`strchr(s, c)`** returns the first occurrence of `c` in the terminated `s`. The terminator itself is searchable: `strchr(s, 0)` returns the end.
+s4_5_c_5	4.5	Contract	**`strchrnul`** returns the end of the string instead of `NULL`.
+s4_5_c_6	4.5	Contract	**`strrchr`** returns the last occurrence.
+s4_5_c_7	4.5	Contract	**`index`/`rindex`** are BSD names for `strchr`/`strrchr`. ⚑ HIST.
+s4_6_c_0	4.6	Contract	Return the first position at which the needle occurs in the haystack, or `NULL`. An empty needle matches at the start. `strcasestr` compares with locale case folding.
+s4_6_g_0	4.6	Guarantees	Worst-case linear time (a two-way string-matching algorithm). Callers may not rely on this; it is a quality-of-implementation property, not a contract.
+s4_7_c_1	4.7	Contract	**`strspn(s, set)`** returns the length of the longest prefix of `s` consisting only of bytes in `set`.
+s4_7_c_2	4.7	Contract	**`strcspn`** returns the length of the longest prefix consisting only of bytes *not* in `set`.
+s4_7_c_3	4.7	Contract	**`strpbrk`** returns a pointer to the first byte of `s` that is in `set`.
+s4_7_i_0	4.7	Inputs	`set` is a Text interpreted as a *set* of bytes. Order and duplicates do not matter, and the byte 0 cannot be a member. ⚑ HIST: a set of bytes delimited by NUL.
+s4_8_c_0	4.8	Contract	`strlen(s)` returns the number of bytes before the terminator. `strnlen(s, n)` returns `min(strlen(s), n)` and reads no more than `n` bytes.
+s4_9_c_1	4.9	Contract	**`strcat(d, s)`** appends `s` to the terminated string in `d`.
+s4_9_c_2	4.9	Contract	**`strncat(d, s, n)`** appends at most `n` bytes of `s`, then a terminator. `n` bounds the *source*, not the destination. ⚑ ARB: this is a frequent source of overflow bugs.
+s4_9_c_3	4.9	Contract	**`strlcat(d, s, size)`** appends while keeping the total length at most `size-1`, and returns `strlen(d_initial) + strlen(s)`. If `d` is not terminated within `size`, it returns `size + strlen(s)`.
+s4_10_c_0	4.10	Contract	Return a new `malloc`ed copy (or, for the `a` forms, a stack copy) of the string, or of at most `n` bytes of it, always terminated.
+s4_10_f_0	4.10	Failure	`NULL` with `ENOMEM`.
+s4_11_c_0	4.11	Contract	Split a mutable string into tokens separated by bytes from a delimiter set.
+s4_11_c_1	4.11	Contract	**`strtok(s, delim)`** skips leading delimiters, terminates the token in place (writes 0), and remembers the position in hidden process-global state. It then returns successive tokens when called with `s == NULL`. Empty tokens are never returned.
+s4_11_c_2	4.11	Contract	**`strtok_r`** keeps the position in a caller variable.
+s4_11_c_3	4.11	Contract	**`strsep(&s, delim)`** (BSD) returns empty tokens, advancing `*s` past the delimiter, and sets `*s = NULL` after the last token.
+s4_11_c_4	4.11	Contract	**`wcstok`** is `strtok_r` for wide strings (ISO C gave it three parameters).
+s4_13_c_0	4.13	Contract	Manage a *list of Text* stored as a single `malloc`ed buffer of concatenated NUL-terminated strings, together with its total length. You can:
+s4_13_c_1	4.13	Contract	create one from an `argv` array or a separator-delimited Text;
+s4_13_c_2	4.13	Contract	count its entries;
+s4_13_c_3	4.13	Contract	convert it back to an `argv`-style pointer array;
+s4_13_c_4	4.13	Contract	join its entries with a separator;
+s4_13_c_5	4.13	Contract	append, insert or delete entries;
+s4_13_c_6	4.13	Contract	iterate over it;
+s4_13_c_7	4.13	Contract	replace substrings in every entry.
+s4_13_f_0	4.13	Failure	Functions return `error_t` (`ENOMEM`), or 0 on success.
+s4_14_c_0	4.14	Contract	Treat an argz vector as a `NAME=VALUE` mapping: look up, add, merge (with or without overriding existing names), remove, and strip null entries. An entry without `=` has a *null* value, which is distinct from an empty value.
+s5_1_c_0	5.1	Contract	Report whether a single-byte character belongs to a class in the current (`LC_CTYPE`) or given locale.
+s5_1_i_0	5.1	Inputs	An `int` that must be representable as `unsigned char`, or equal `EOF` (-1). ⚑ HIST, ⚑ ARB: passing a plain `char` holding a negative value (any byte ≥ 0x80 on x86, where `char` is signed) is undefined behaviour. The domain includes `EOF` only so that the result of `getc` can be passed unchecked. The functional need is "classify this byte".
+s5_1_i_p1	5.1	Inputs	`isctype(c, mask)`/`__isctype` (GNU) test an arbitrary combination of class bits (`_IS*`).
+s5_1_g_0	5.1	Guarantees	A non-zero result means membership. Class relations hold, for example `isalnum ⇔ isalpha ∨ isdigit`. `isdigit` and `isxdigit` are locale-independent in practice (always `0-9`, `a-f`, `A-F`). `isascii(c)` tests `0 ≤ c ≤ 127`, and `toascii` masks to 7 bits (⚑ HIST, obsolete).
+s5_2_c_0	5.2	Contract	Classify a wide character (a Unicode code point on glibc) according to the locale's character classes. `wctype(name)` looks up a class by name (standard or locale-defined, for example `"jspace"`) and returns an opaque `wctype_t`. `iswctype(wc, t)` tests membership. `WEOF` is a member of no class.
+s5_2_g_0	5.2	Guarantees	The classes follow the locale's definition, which for glibc's UTF-8 locales is derived from the Unicode Character Database (Unicode 15.1.0 in 2.39).
+s5_2_f_0	5.2	Failure	`wctype` returns 0 for an unknown class.
+s5_3_c_0	5.3	Contract	Map one character to its lower- or uppercase counterpart in the locale. Characters without a counterpart map to themselves. `wctrans(name)` looks up a named mapping (`"tolower"`, `"toupper"`, or locale-defined, for example `"tojhira"`). `towctrans` applies it.
+s6_n_1	6	Notes	**Kernel: none** for all conversion functions, except `iconv_open`, which loads conversion modules. That needs `openat`, `mmap` and `dlopen` of `gconv` modules, and reads **Config** `gconv-modules` / `gconv-modules.cache` under `GCONV_PATH` or the built-in directory.
+s6_n_2	6	Notes	The *multibyte encoding* of the locale (`LC_CTYPE` codeset, usually UTF-8) is what these functions convert from and to. On glibc the *wide* representation is always UCS-4 (`__STDC_ISO_10646__` is defined), so `wchar_t` holds exactly one Unicode code point.
+s6_1_c_0	6.1	Contract	An opaque object holding the shift state and partial-character state of an ongoing conversion. A zero-initialized object is the initial state. `mbsinit(ps)` reports whether `ps` is in the initial state (true for `NULL`).
+s6_2_c_1	6.2	Contract	**`mbrtowc(&wc, s, n, ps)`** decodes one character from at most `n` bytes. It returns:
+s6_2_c_1_1	6.2	Contract	the number of bytes consumed;
+s6_2_c_1_2	6.2	Contract	0 for the null character;
+s6_2_c_1_3	6.2	Contract	`(size_t)-2` for an incomplete but valid prefix (all `n` bytes consumed into `ps`);
+s6_2_c_1_4	6.2	Contract	`(size_t)-1` with `EILSEQ` for an invalid sequence.
+s6_2_c_2	6.2	Contract	**`wcrtomb(s, wc, ps)`** encodes one character into at most `MB_CUR_MAX` bytes and returns the byte count, or `(size_t)-1`/`EILSEQ`.
+s6_2_c_3	6.2	Contract	**`mbrlen`** is `mbrtowc` without storing the result.
+s6_2_c_4	6.2	Contract	**The non-`r` forms (`mblen`, `mbtowc`, `wctomb`)** keep state in hidden static storage. ⚑ HIST, ⚑ PATH: that is why the `r` (restartable) forms exist.
+s6_2_c_5	6.2	Contract	**`btowc(c)`/`wctob(wc)`** convert between a single byte and a wide character when the character is a single byte in the locale encoding. Otherwise they return `WEOF`/`EOF`.
+s6_2_c_6	6.2	Contract	**`mbrtoc16`/`c16rtomb`** convert to and from UTF-16 code units. A character outside the BMP is delivered in two calls:
+s6_2_c_6_1	6.2	Contract	`mbrtoc16` returns `(size_t)-3` for the second (low) surrogate;
+s6_2_c_6_2	6.2	Contract	`c16rtomb` buffers a high surrogate in the state.
+s6_2_c_7	6.2	Contract	**`mbrtoc32`/`c32rtomb`** convert to and from UTF-32 code points. **`mbrtoc8`/`c8rtomb`** (2.36, C23) convert to and from UTF-8 code units, one unit per call.
+s6_2_i_0	6.2	Inputs	`MB_CUR_MAX` (a runtime value, `__ctype_get_mb_cur_max()`) bounds the bytes per character in the current locale. It is 6 for glibc UTF-8 (a historical maximum), although valid UTF-8 needs at most 4. `MB_LEN_MAX` is the compile-time bound (16).
+s6_2_g_0	6.2	Guarantees	Output is written only for complete characters.
+s6_2_f_1	6.2	Failure	Invalid or overlong UTF-8, surrogate code points, and values above `0x10FFFF` are rejected with `EILSEQ`.
+s6_2_f_2	6.2	Failure	`s == NULL` resets the state; with an incomplete character pending it is an invalid sequence: `(size_t)-1` with `EILSEQ`.
+s6_2_f_3	6.2	Failure	⚑ HIST: `(size_t)-1`, `-2` and `-3` are in-band sentinel values in an unsigned return type.
+s6_3_c_0	6.3	Contract	Convert a whole terminated string. The `nr` forms limit the *input* length as well as the output. They write at most `len` output units and return the number of units written (excluding the terminator), or `(size_t)-1`/`EILSEQ`. If `dst` is `NULL`, they only measure the output. The `r` forms advance `*src` to the point reached, or set it to `NULL` if the terminator was converted.
+s6_4_c_1	6.4	Contract	**`iconv_open(to, from)`** creates a conversion descriptor between two named encodings. The names are case-insensitive, and aliases are accepted. Suffixes on `to` modify how unconvertible characters are handled:
+s6_4_c_1_1	6.4	Contract	`//TRANSLIT` approximates them;
+s6_4_c_1_2	6.4	Contract	`//IGNORE` drops them;
+s6_4_c_1_3	6.4	Contract	a combined form (2.32+ `//TRANSLIT//IGNORE`) does both.
+s6_4_c_2	6.4	Contract	**`iconv(cd, &in, &inleft, &out, &outleft)`** converts as much input as possible, advancing the pointers and decrementing the counts. It returns the number of *irreversible* conversions performed.
+s6_4_c_3	6.4	Contract	**`iconv(cd, NULL, NULL, &out, &outleft)`** emits the shift sequence that returns the output to the initial state.
+s6_4_c_4	6.4	Contract	**`iconv(cd, NULL, NULL, NULL, NULL)`** resets the state.
+s6_4_c_5	6.4	Contract	**`iconv_close`** frees the descriptor.
+s6_4_f_1	6.4	Failure	`iconv_open` returns `(iconv_t)-1` with `EINVAL` if the conversion is unsupported.
+s6_4_f_2	6.4	Failure	`iconv` returns `(size_t)-1` with:
+s6_4_f_2_1	6.4	Failure	`E2BIG`: output space exhausted;
+s6_4_f_2_2	6.4	Failure	`EILSEQ`: invalid input, with `*in` left at the invalid sequence;
+s6_4_f_2_3	6.4	Failure	`EINVAL`: incomplete input at the end.
+s6_4_f_3	6.4	Failure	With `//IGNORE`, `iconv` skips invalid input but still returns -1/`EILSEQ` at the end. ⚑ HIST: this makes "was anything lost?" hard to distinguish from "did it fail?".
+s6_4_g_0	6.4	Guarantees	The conversion is resumable across calls with no loss. glibc supplies about 1,300 names or aliases for about 200 encodings (the `iconvdata` modules).
+s6_5_c_0	6.5	Contract	Return the number of terminal columns a wide character, or the first `n` characters of a wide string, occupies:
+s6_5_c_1	6.5	Contract	0 for combining and zero-width characters, and for the null character;
+s6_5_c_2	6.5	Contract	2 for East Asian wide and fullwidth characters and most emoji;
+s6_5_c_3	6.5	Contract	1 otherwise;
+s6_5_c_4	6.5	Contract	-1 if any character is non-printable.
+s7_1_c_0	7.1	Contract	A *locale* is a named set of cultural conventions, divided into categories:
+s7_1_c_r1	7.1	Contract	| `LC_CTYPE` | character classes, case mapping, multibyte encoding |
+s7_1_c_r2	7.1	Contract	| `LC_COLLATE` | string ordering |
+s7_1_c_r3	7.1	Contract	| `LC_NUMERIC` | decimal point, thousands grouping (non-monetary) |
+s7_1_c_r4	7.1	Contract	| `LC_MONETARY` | currency formatting |
+s7_1_c_r5	7.1	Contract	| `LC_TIME` | day and month names, date formats |
+s7_1_c_r6	7.1	Contract	| `LC_MESSAGES` | yes/no expressions, message catalog selection |
+s7_1_c_r7	7.1	Contract	| `LC_PAPER`, `LC_NAME`, `LC_ADDRESS`, `LC_TELEPHONE`, `LC_MEASUREMENT`, `LC_IDENTIFICATION` | GNU extensions |
+s7_1_c_p1	7.1	Contract	Locale-dependent functions consult the thread's current locale. That is the per-thread locale set with `uselocale`, or else the process-global locale set with `setlocale`. `"C"` and `"POSIX"` are built in. `"C.UTF-8"` has been built in since 2.35.
+s7_2_c_0	7.2	Contract	Query or set the global locale for one category or for all categories (`LC_ALL`).
+s7_2_c_1	7.2	Contract	`setlocale(cat, NULL)` returns the current name.
+s7_2_c_2	7.2	Contract	`setlocale(cat, "")` selects the locale from the environment: `LC_ALL`, then `LC_<cat>`, then `LANG`.
+s7_2_c_3	7.2	Contract	The name returned for `LC_ALL` can be passed back to `setlocale` to restore a composite locale.
+s7_2_c_4	7.2	Contract	A category whose current name is the name asked for keeps its data: it is not looked up again, so a changed `LOCPATH` or changed locale files take effect for it only after it has been set to another name (observed).
+s7_2_f_0	7.2	Failure	Returns `NULL` and leaves the locale unchanged if the name is unknown or the data is unavailable.
+s7_2_t_0	7.2	Threads	MT-Unsafe (`const:locale env`). It changes the locale of all threads that have not called `uselocale`. ⚑ HIST.
+s7_2_g_0	7.2	Guarantees	The returned string is library-owned, and valid until the next `setlocale`.
+s7_3_c_1	7.3	Contract	**`newlocale(mask, name, base)`** creates a locale object with the categories in `mask` taken from `name` and the rest from `base`. `base` is consumed: it may be reused or freed.
+s7_3_c_2	7.3	Contract	**`duplocale`** copies an object.
+s7_3_c_3	7.3	Contract	**`freelocale`** releases an object.
+s7_3_c_4	7.3	Contract	**`uselocale(loc)`** sets the calling thread's locale and returns the previous one. `LC_GLOBAL_LOCALE` reverts to the global locale, and `(locale_t)0` only queries.
+s7_3_f_0	7.3	Failure	`newlocale` returns `(locale_t)0` with `EINVAL` (bad mask) or `ENOENT` (unknown name). ⚑ ARB: freeing a locale that is still in use by a thread is undefined.
+s7_4_c_1	7.4	Contract	**`localeconv()`** returns a `struct lconv` describing the numeric and monetary conventions: `decimal_point`, `thousands_sep`, `grouping`, `int_curr_symbol`, `currency_symbol`, `mon_*`, `positive_sign`, `negative_sign`, `*_frac_digits`, `p_cs_precedes`, and the others.
+s7_4_c_2	7.4	Contract	**`nl_langinfo(item)`** returns one Text item. Items include `CODESET`, `D_T_FMT`, `D_FMT`, `T_FMT`, `DAY_1..7`, `ABDAY_*`, `MON_1..12`, `ABMON_*`, `ALTMON_*` (2.27+), `RADIXCHAR`, `THOUSEP`, `YESEXPR`, `NOEXPR`, `CRNCYSTR`, `ERA`, `ALT_DIGITS`, and GNU items for every category (`_NL_PAPER_HEIGHT`, `_NL_ADDRESS_POSTAL_FMT`, ...).
+s7_4_g_0	7.4	Guarantees	Pointers are library-owned. They stay valid until the locale changes.
+s7_5_c_0	7.5	Contract	Format one or more `double` or `long double` amounts according to a format string (`%n` national, `%i` international), using `LC_MONETARY`. Flags control fill character, grouping, sign style (`+`, `(`), and the suppression of the currency symbol. It writes at most `max` bytes.
+s7_5_f_0	7.5	Failure	Returns -1 with `E2BIG` if the result does not fit.
+s7_6_c_0	7.6	Contract	Classify a response Text against the locale's `YESEXPR`/`NOEXPR` regular expressions. Returns 1 (yes), 0 (no) or -1 (unrecognized).
+s7_7_c_0	7.7	Contract	Translate a message, identified by its original (msgid) text, into the language of `LC_MESSAGES` (or `LANGUAGE`, a colon-separated preference list).
+s7_7_c_1	7.7	Contract	**`gettext(id)`** returns the translation, or `id` itself if there is none.
+s7_7_c_2	7.7	Contract	**`ngettext(id, id_plural, n)`** selects a plural form using the catalog's plural expression.
+s7_7_c_3	7.7	Contract	**Domains** name separate catalogs. `textdomain` sets the default domain. `bindtextdomain(domain, dir)` sets where catalogs are found (`dir/<lang>/<CATEGORY>/ <domain>.mo`; `<CATEGORY>` is `LC_MESSAGES` except for `dcgettext`/`dcngettext` with another category; corrected 2026-10-04 under the three-way rule: the reference and bindtextdomain(3) agree, `spec/behaviour/catalogs.md`). `bind_textdomain_codeset` sets the output encoding.
+s7_7_c_4	7.7	Contract	`LANGUAGE` is ignored when the `LC_MESSAGES` locale is `C`, `POSIX` or `C.UTF-8`, and a `C` or `POSIX` element in the list ends the search untranslated.
+s7_7_c_5	7.7	Contract	`bindtextdomain` and `bind_textdomain_codeset` with a NULL or empty domain return NULL and leave `errno` unchanged (Written 2026-10-04 (owner ruling, phase 12-13 report), `spec/behaviour/catalogs.md`).
+s7_7_g_0	7.7	Guarantees	It never fails visibly: failure returns the untranslated text. Returned translations are read-only and library-owned. `errno` is preserved.
+s7_8_c_0	7.8	Contract	Open a catalog by name (searching `NLSPATH` templates with `%N`, `%L`, `%l`, `%t`, `%c` substitutions) and retrieve messages by numeric (set, message) identifiers, returning a default Text if one is missing.
+s7_8_c_p1	7.8	Contract	In an `NLSPATH` template, `%t` and `%c` keep the locale name's `@modifier`. The search stops (`EINVAL`) at a candidate that is a directory or not a catalog, rather than trying the remaining templates (Written 2026-10-04 (owner ruling, phase 12-13 report), `spec/behaviour/catalogs.md`).
+s7_8_f_0	7.8	Failure	`catopen` returns `(nl_catd)-1`; an empty name gives `EINVAL`. `catgets` returns the default and sets `errno`.
+s8_n_1	8	Notes	**Kernel: none** throughout this section.
+s8_n_2	8	Notes	Locale sensitivity (the radix character, thousands grouping with the GNU `'` flag, and locale digits with `I`) comes from `LC_NUMERIC`.
+s8_1_c_0	8.1	Contract	Parse the longest initial substring of a Text that has the form of an integer in base `b`, and report where parsing stopped.
+s8_1_i_1	8.1	Inputs	**The text.** Leading white space (`isspace`) is skipped, and an optional sign is accepted.
+s8_1_i_2	8.1	Inputs	**The base** is 2..36, or 0 for automatic detection:
+s8_1_i_2_1	8.1	Inputs	`0x`/`0X` → 16;
+s8_1_i_2_2	8.1	Inputs	a leading `0` → 8;
+s8_1_i_2_3	8.1	Inputs	`0b`/`0B` → 2 in C23 mode, via the `__isoc23_*` symbols (2.38+);
+s8_1_i_2_4	8.1	Inputs	otherwise 10.
+s8_1_i_3	8.1	Inputs	**An optional end pointer** receiving the position after the last consumed character.
+s8_1_g_1	8.1	Guarantees	On success it returns the value and sets the end pointer.
+s8_1_g_2	8.1	Guarantees	If no digits are consumed, it returns 0 and the end pointer equals the input.
+s8_1_g_3	8.1	Guarantees	On overflow it returns `LONG_MAX`/`LONG_MIN`/`ULONG_MAX` (as appropriate) and sets `ERANGE`.
+s8_1_g_4	8.1	Guarantees	For the unsigned forms a leading `-` is accepted, and the value is negated modulo 2^N. ⚑ HIST, ⚑ ARB: `strtoul("-1")` returns `ULONG_MAX` with no error, which is surprising and not functionally needed.
+s8_1_f_0	8.1	Failure	An invalid base gives `EINVAL`. ⚑ HIST: "no digits" is reported only through the end pointer, and range errors only through `errno`. The caller must zero `errno` and compare pointers. The need is a result that distinguishes {value, no number, out of range}.
+s8_2_c_0	8.2	Contract	Parse the longest initial substring that forms a floating constant, and return the correctly rounded value in the current rounding mode. Accepted forms:
+s8_2_c_1	8.2	Contract	decimal, with an optional exponent (`e`);
+s8_2_c_2	8.2	Contract	hexadecimal (`0x...p±n`);
+s8_2_c_3	8.2	Contract	`INF`/`INFINITY`;
+s8_2_c_4	8.2	Contract	`NAN` and `NAN(n-char-sequence)`, where the payload sets the NaN's mantissa bits. The radix character comes from the locale.
+s8_2_g_0	8.2	Guarantees	The result is correctly rounded (glibc uses exact arbitrary-precision arithmetic), for any length of input.
+s8_2_f_1	8.2	Failure	Overflow returns `±HUGE_VAL` and sets `ERANGE`.
+s8_2_f_2	8.2	Failure	Underflow returns the correctly rounded subnormal or zero and sets `ERANGE`.
+s8_2_f_3	8.2	Failure	No conversion returns 0 with the end pointer equal to the input.
+s8_3_c_0	8.3	Contract	The same as §8.1 and §8.2, over wide text.
+s8_4_c_1	8.4	Contract	**`strfromd(buf, n, fmt, x)`** (C23/TS 18661) formats `x` using a restricted `printf` conversion: `%[.prec]{a,A,e,E,f,F,g,G}`, with no flags, no width, and no locale grouping. It writes at most `n` bytes and returns the length the full result would have.
+s8_4_c_2	8.4	Contract	**`ecvt(x, ndigit, &decpt, &sign)`** returns `ndigit` significant digits, `ndigit` reduced to a limit the precision gives (17 for `double`, 21 for the `long double` `q` forms). **`fcvt`** returns `ndigit` digits after the point, `ndigit` reduced the same way. Both return the digits only, with the decimal-point position and the sign reported separately.
+s8_4_c_3	8.4	Contract	**`gcvt(x, ndigit, buf)`** formats like `%.*g`.
+s8_4_c_4	8.4	Contract	**The `q` forms** take `long double`.
+s8_4_c_5	8.4	Contract	**The `_r` forms** take a caller buffer.
+s8_4_g_0	8.4	Guarantees	Digit strings are exact (correctly rounded) representations.
+s8_6_c_1	8.6	Contract	**`abs(n)`** returns |n|. `abs(INT_MIN)` is undefined behaviour. ⚑ ARB: the result type cannot represent it, and C2y adds `uabs` for this.
+s8_6_c_2	8.6	Contract	**`div(n, d)`** returns the quotient (truncated toward zero) and the remainder together. Division by zero, and `INT_MIN / -1`, are undefined.
+s8_7_c_0	8.7	Contract	Pure bit queries on unsigned integers of each standard width. The contracts (for a value of width W bits):
+s8_7_c_1	8.7	Contract	**Counting:** number of leading or trailing zero or one bits. The result is W for 0 when counting zeros.
+s8_7_c_2	8.7	Contract	**Finding:** 1-based index of the first matching bit from the given end, or 0 if none.
+s8_7_c_3	8.7	Contract	**`count_zeros`/`count_ones`:** population counts.
+s8_7_c_4	8.7	Contract	**`has_single_bit`:** true if the value is a power of two.
+s8_7_c_5	8.7	Contract	**`bit_width`:** 1 + floor(log2 x), or 0 for x = 0.
+s8_7_c_6	8.7	Contract	**`bit_floor`:** the largest power of two ≤ x (0 for 0).
+s8_7_c_7	8.7	Contract	**`bit_ceil`:** the smallest power of two ≥ x. The result is 0 if it is not representable. ⚑ ARB, as specified by C23.
+s8_8_c_0	8.8	Contract	Convert between host byte order and big-endian (network) or little-endian order. On x86_64, `hton*` and `ntoh*` are byte swaps. Only `htonl`, `htons`, `ntohl` and `ntohs` are exported functions. The rest are macros.
+s8_9_c_0	8.9	Contract	Return the 1-based index of the least-significant set bit, or 0 if none.
+s8_10_c_0	8.10	Contract	Convert between a `long` (only the low 32 bits are used) and a string of up to 6 characters from `./0-9A-Za-z`, least-significant digit first.
+s9_1_c_1	9.1	Contract	**`getrandom(buf, n, flags)`** fills `buf` with up to `n` bytes from the kernel CSPRNG and returns the count, which may be short for large `n` or when interrupted.
+s9_1_c_1_1	9.1	Contract	`GRND_NONBLOCK` fails with `EAGAIN` instead of blocking before the pool is initialized.
+s9_1_c_1_2	9.1	Contract	`GRND_RANDOM` draws from the blocking pool (legacy).
+s9_1_c_1_3	9.1	Contract	`GRND_INSECURE` (kernel 5.6+) never blocks.
+s9_1_c_2	9.1	Contract	**`getentropy(buf, n)`** fills exactly `n ≤ 256` bytes, or fails with `EIO`. For `n > 256` it fails with `EIO` (POSIX 2024 requires `EINVAL`). ⚑ ARB: the 256-byte limit comes from OpenBSD and is not needed.
+s9_1_c_3	9.1	Contract	**`arc4random()`** returns a uniformly distributed 32-bit value.
+s9_1_c_4	9.1	Contract	**`arc4random_buf(buf, n)`** fills `n` bytes.
+s9_1_c_5	9.1	Contract	**`arc4random_uniform(bound)`** returns a uniform value in `[0, bound)` without modulo bias (0 for bound 0 or 1).
+s9_1_g_1	9.1	Guarantees	The `arc4random` family never fails and never returns non-random data. If the kernel cannot supply entropy, the process terminates ("cannot get entropy for arc4random").
+s9_1_g_2	9.1	Guarantees	In glibc 2.39 each call takes its bytes from `getrandom` (there is no user-space buffering), so output is fork-safe.
+s9_1_g_3	9.1	Guarantees	`getrandom` is a cancellation point. `arc4random` is not.
+s9_2_c_0	9.2	Contract	`rand()` returns a pseudo-random integer in `[0, RAND_MAX]` (`RAND_MAX` = 2^31-1). The sequence is deterministic for a given `srand(seed)`, and the default seed is 1. `rand_r(&seed)` keeps its state in a caller `unsigned int`.
+s9_2_t_0	9.2	Threads	`rand` is MT-Safe in glibc (it takes a lock), although ISO C does not require this.
+s9_3_c_0	9.3	Contract	An additive-feedback generator with caller-selectable state size (8, 32, 64, 128 or 256 bytes). It returns values in `[0, 2^31-1]`. `initstate` supplies a state buffer and returns the previous one. `setstate` switches buffers. The `_r` forms use a caller `struct random_data`.
+s9_3_g_0	9.3	Guarantees	For a given seed and state size, the sequence is deterministic and identical across glibc versions. Programs depend on this, so the algorithm is effectively a contract.
+s9_3_f_0	9.3	Failure	`initstate` with fewer than 8 bytes returns `NULL`/`EINVAL`.
+s9_4_c_0	9.4	Contract	A 48-bit linear congruential generator
+s9_4_c_p1	9.4	Contract	X(n+1) = (a·X(n) + c) mod 2^48, with a = 0x5DEECE66D and c = 0xB.
+s9_4_c_p2	9.4	Contract	The algorithm is **part of the contract**: POSIX specifies it exactly, and programs rely on the exact sequence.
+s9_4_c_3	9.4	Contract	`drand48` returns `[0.0, 1.0)`.
+s9_4_c_4	9.4	Contract	`lrand48` returns `[0, 2^31)`.
+s9_4_c_5	9.4	Contract	`mrand48` returns `[-2^31, 2^31)`.
+s9_4_c_6	9.4	Contract	The `e/n/j` forms take a caller-supplied 3×16-bit state.
+s9_4_c_7	9.4	Contract	`seed48` and `lcong48` set the state and the parameters. `seed48` returns a pointer to a static copy of the previous state.
+s10_0_c_0	10.0	Contract	Each real function `f` exists for every supported floating type, and the name suffix selects the type:
+s10_0_c_r1	10.0	Contract	| (none) | `double` | IEEE binary64 |
+s10_0_c_r2	10.0	Contract	| `f` | `float` | binary32 |
+s10_0_c_r3	10.0	Contract	| `l` | `long double` | x87 80-bit extended |
+s10_0_c_r4	10.0	Contract	| `f32` | `_Float32` | binary32 (alias of `f`) |
+s10_0_c_r5	10.0	Contract	| `f64` | `_Float64` | binary64 (alias of the unsuffixed form) |
+s10_0_c_r6	10.0	Contract	| `f32x` | `_Float32x` | binary64 |
+s10_0_c_r7	10.0	Contract	| `f64x` | `_Float64x` | x87 extended (alias of `l`) |
+s10_0_c_r8	10.0	Contract	| `f128` | `_Float128` | IEEE binary128 (software) |
+s10_0_c_p1	10.0	Contract	The contract is identical across types, apart from the range and precision of the type. This specification documents each function once. ⚑ HIST: C's lack of generic functions produces seven entry points per operation (≈1,000 of the ≈1,150 `libm` symbols). `<tgmath.h>` supplies type-generic macros on top.
+s10_0_f_0	10.0	Failure	`math_errhandling` is `MATH_ERRNO | MATH_ERREXCEPT` on glibc. A domain error sets `EDOM` and raises `FE_INVALID`, and a pole or range error sets `ERANGE` and raises `FE_DIVBYZERO`/`FE_OVERFLOW`/`FE_UNDERFLOW`. A range error sets `ERANGE` when the result overflows to ±∞ or underflows to ±0; a result rounded to the largest finite value (directed rounding) or to a subnormal raises the flags only. Some functions report through the flags only and never set `errno`: `lrint`, `llrint`, `lround`, `llround` (out of range), `fma` and the narrowing `*fma` forms, `remquo`, `logb` (its pole at 0), `nextafter`/`nexttoward` from a zero operand, and the underflow of `erf`. ⚑ HIST: setting `errno` from a pure function defeats vectorization and constant folding, which is why compilers offer `-fno-math-errno`. IEEE exception flags are the functionally sufficient channel. The historical SVID/XPG `matherr` callback and `_LIB_VERSION` selection are compat-only (removed from the API in 2.27).
+s10_0_g_0	10.0	Guarantees	glibc documents measured maximum ULP errors per function, per type, per architecture (manual "Errors in Math Functions"). It guarantees correct rounding only for the IEEE-required operations: `sqrt`, `fma`, the narrowing arithmetic of §10.4, conversions, `fmod`, `remainder`, and the rounding and classification functions. Other functions are "faithful or better, with documented bounds". A reimplementation must at least match those bounds, because programs (and the glibc test suite's `libm-test-ulps`) depend on them.
+s10_0_g2_0	10.0	Guarantees	Behaviour on NaN, ±∞ and ±0 follows C Annex F and IEEE 754-2008/2019. Quiet NaN inputs propagate without raising `FE_INVALID`. Signalling NaN inputs raise it.
+s10_0_c2_0	10.0	Contract	`__<name>_finite` (for example `__exp_finite`) were emitted by `-ffinite-math-only` builds before 2.31. They remain as compat symbols with the same contract as `<name>`, restricted to finite arguments.
+s10_1_c_1	10.1	Contract	Classify a value as NaN, infinite, zero, subnormal or normal. Also report its sign bit (including for ±0 and NaN), and whether a NaN is signalling or a value is canonical.
+s10_1_c_2	10.1	Contract	The comparison macros compare without raising `FE_INVALID` for quiet NaN operands.
+s10_1_c_3	10.1	Contract	`iseqsig` compares for equality and raises `FE_INVALID` for any NaN operand (sets `EDOM`).
+s10_1_c_4	10.1	Contract	`totalorder(&x, &y)` implements the IEEE 754 total ordering, including NaN payloads and signs. It takes pointers (C23 changed this from values) so that signalling NaNs are not quieted. `totalordermag` does the same on magnitudes.
+s10_2_t_r1	10.2	Contract	| `ceil`, `floor`, `trunc`, `round`, `roundeven` | Round to an integral value in the same format: up, down, toward zero, half away from zero, half to even. Exact; never raise `FE_INEXACT` (C23). |
+s10_2_t_r2	10.2	Contract	| `rint`, `nearbyint` | Round in the current rounding mode. `rint` may raise `FE_INEXACT`, `nearbyint` does not. |
+s10_2_t_r3	10.2	Contract	| `lrint`, `llrint`, `lround`, `llround` | Round and convert to `long`/`long long`. Out of range raises `FE_INVALID` and gives an unspecified value. |
+s10_2_t_r4	10.2	Contract	| `fromfp`, `ufromfp`, `fromfpx`, `ufromfpx` (TS 18661-1) | Round in a *specified* rounding direction to a signed or unsigned integer of a *specified bit width*, returned as `intmax_t`/`uintmax_t` (the 2.39 interface; C23's floating-format return arrived later). The `x` forms raise `FE_INEXACT` for a non-integral argument. Out of range (also NaN, ∞, width 0): a domain error (`EDOM`, `FE_INVALID`) and an unspecified value. |
+s10_2_t_r5	10.2	Contract	| `modf` | Split into integral and fractional parts, both with the argument's sign. |
+s10_2_t_r6	10.2	Contract	| `frexp`, `ldexp`, `scalbn`, `scalbln` | Decompose into a mantissa in [0.5, 1) and an exponent, or multiply by 2^n exactly (with overflow and underflow as specified). |
+s10_2_t_r7	10.2	Contract	| `ilogb`, `llogb`, `logb` | Unbiased exponent. `ilogb(0)` = `FP_ILOGB0` (INT_MIN), `ilogb(NaN)` = `FP_ILOGBNAN`, both with `FE_INVALID`. |
+s10_2_t_r8	10.2	Contract	| `significand` | `scalb(x, -ilogb(x))`. ⚑ HIST (BSD). |
+s10_2_t_r9	10.2	Contract	| `scalb` | Multiply by 2^y for floating `y`. ⚑ HIST: obsolete (XSI), only `double`/`float`/`long double`. |
+s10_2_t_r10	10.2	Contract	| `nextafter`, `nexttoward`, `nextup`, `nextdown` | The adjacent representable value toward `y`, or toward ±∞. Overflow and underflow flagged. |
+s10_2_t_r11	10.2	Contract	| `copysign`, `fabs` | Sign manipulation. Exact, never raise exceptions (even for sNaN). |
+s10_2_t_r12	10.2	Contract	| `fmod`, `remainder`, `drem`, `remquo` | Exact remainders. `fmod` truncates, `remainder` rounds to nearest. `remquo` also returns ≥ 3 low bits of the quotient with its sign. `drem` is the BSD alias of `remainder` (⚑ HIST). |
+s10_2_t_r13	10.2	Contract	| `fdim`, `fmax`, `fmin` | Positive difference; maximum and minimum treating a quiet NaN as missing data. |
+s10_2_t_r14	10.2	Contract	| `fmaximum`, `fminimum`, `fmaximum_num`, `fminimum_num`, `fmaximum_mag`, `fminimum_mag`, `fmaximum_mag_num`, `fminimum_mag_num` (2.35, C23) | IEEE 754-2019 maximum and minimum: NaN-propagating, or number-preferring (`_num`), or by magnitude (`_mag`). −0 < +0. |
+s10_2_t_r15	10.2	Contract	| `fmaxmag`, `fminmag` | TS 18661-1 magnitude max/min. ⚑ PATH: superseded by C23's `_mag_num`. |
+s10_2_t_r16	10.2	Contract	| `canonicalize` | Produce the canonical encoding of a value. It matters only for formats with non-canonical encodings (x87 pseudo-denormals). A signalling NaN gives a quiet NaN and `FE_INVALID`. An encoding that represents no value (x87 unnormals, pseudo-infinities, pseudo-NaNs) leaves the destination unchanged and returns nonzero, raising nothing. |
+s10_2_t_r17	10.2	Contract	| `getpayload`, `setpayload`, `setpayloadsig` | Read, or construct (quiet or signalling), a NaN payload. |
+s10_2_t_r18	10.2	Contract	| `nan(tag)` | Produce a quiet NaN whose payload is derived from the Text `tag`. Equivalent to `strtod("NAN(tag)")`. |
+s10_3_c_0	10.3	Contract	Each computes the named mathematical function, with the documented accuracy (§10.0) and C Annex F special cases. Domain or range failures are reported as in §10.0.
+s10_3_c_r1	10.3	Contract	| Exponential | `exp`, `exp2`, `exp10`, `expm1`, `pow10` (compat alias of `exp10`, ⚑ HIST) | Overflow → `HUGE_VAL`/`ERANGE`. `expm1` is accurate near 0. |
+s10_3_c_r2	10.3	Contract	| Logarithm | `log`, `log2`, `log10`, `log1p`, `logp1` (not in 2.39) | `log(0)` = −∞ (pole, `ERANGE`, `FE_DIVBYZERO`). `log(<0)` = NaN (`EDOM`). |
+s10_3_c_r3	10.3	Contract	| Power and roots | `pow`, `sqrt`, `cbrt`, `hypot`, `rsqrt`/`compoundn`/`pown`/`powr`/`rootn` (not in 2.39) | `pow(x, ±0)` = 1 even for NaN x; `pow(1, y)` = 1; `pow(−∞, y)` by parity. `sqrt` is correctly rounded, and `sqrt(-0)` = −0. `hypot(±∞, NaN)` = +∞. |
+s10_3_c_r4	10.3	Contract	| Trigonometric | `sin`, `cos`, `tan`, `sincos` (GNU: both at once), `asin`, `acos`, `atan`, `atan2`, `sinpi`/`cospi`/... (not in 2.39) | Arguments are reduced exactly for all finite inputs (Payne–Hanek), so results are meaningful for huge arguments. `sin(±∞)` = NaN (`EDOM`). `atan2` defines all signed-zero and infinity quadrants. |
+s10_3_c_r5	10.3	Contract	| Hyperbolic | `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh` | `atanh(±1)` = ±∞ (pole). `acosh(<1)` = NaN. |
+s10_3_c_r6	10.3	Contract	| Error and gamma | `erf`, `erfc`, `tgamma`, `lgamma`, `lgamma_r`, `gamma` (alias of `lgamma`, ⚑ HIST), `signgam` / `__signgam` (data) | `lgamma` stores the sign of Γ(x) in the **global** `signgam`, so it is MT-Unsafe. ⚑ HIST, ⚑ PATH: `lgamma_r(x, &sign)` exists for that reason. `tgamma` at negative integers: NaN, `EDOM`. |
+s10_3_c_r7	10.3	Contract	| Bessel | `j0`, `j1`, `jn`, `y0`, `y1`, `yn` | XSI. `yn(n, 0)` = −∞ (pole). Only `double`, `float`, `long double` and `_Float128`. ⚑ HIST: not in ISO C. |
+s10_4_t_r1	10.4	Contract	| `fma(x, y, z)` | (x × y) + z with a single rounding. |
+s10_4_t_r2	10.4	Contract	| `fadd`, `fsub`, `fmul`, `fdiv`, `fsqrt`, `ffma`, and `d*`, `f32*`, `f32x*`, `f64*`, `f64x*` forms (for example `daddl`, `f32addf64`) | Perform the operation on wider-format arguments and round *once* to the narrower result format. Correctly rounded. ⚑ HIST: the name encodes both formats, giving about 150 symbols for 6 operations. |
+s10_5_c_0	10.5	Contract	The elementary functions of a complex argument with the principal branch cuts of C Annex G. The special cases for infinite and NaN components are specified exhaustively in Annex G, and glibc follows them. `cproj` projects onto the Riemann sphere. `cabs` is `hypot(re, im)`, and `carg` is `atan2(im, re)`.
+s10_6_c_0	10.6	Contract	Query and modify the calling thread's floating-point status (exception flags) and control modes (rounding direction, trap enables):
+s10_6_c_1	10.6	Contract	Clear, raise and test the flags `FE_INVALID`, `FE_DIVBYZERO`, `FE_OVERFLOW`, `FE_UNDERFLOW` and `FE_INEXACT`.
+s10_6_c_2	10.6	Contract	Save and restore the flags as opaque objects (`fexcept_t`).
+s10_6_c_3	10.6	Contract	Get and set the rounding direction: `FE_TONEAREST`, `FE_UPWARD`, `FE_DOWNWARD`, `FE_TOWARDZERO`.
+s10_6_c_4	10.6	Contract	Save and restore the whole environment (`fenv_t`) or only the control modes (`femode_t`).
+s10_6_c_5	10.6	Contract	`feholdexcept` saves the environment, clears the flags, and makes exceptions non-trapping.
+s10_6_c_6	10.6	Contract	`feupdateenv` restores a saved environment and re-raises the saved exceptions.
+s10_6_c_7	10.6	Contract	GNU extensions: `feenableexcept`, `fedisableexcept` and `fegetexcept` control **trapping**, where an exception delivers `SIGFPE`.
+s10_6_g_0	10.6	Guarantees	They return 0 on success, non-zero on failure. `fesetround` fails for an unsupported mode. Exceptions: `fetestexcept` and `fetestexceptflag` return the set flags, `fegetround` the mode, `feenableexcept` and `fedisableexcept` the previously enabled set (−1 on failure), and `fegetexcept` the enabled set.
+s11_n_1	11	Notes	Most functions in this section are **thin wrappers**. The contract *is* the kernel's, and glibc adds only:
+s11_n_1_1	11	Notes	the errno convention (C0.1);
+s11_n_1_2	11	Notes	thread cancellation (C0.2), for blocking calls;
+s11_n_1_3	11	Notes	64-bit aliases (C0.4);
+s11_n_1_4	11	Notes	occasionally, emulation for older kernels.
+s11_n_2	11	Notes	Such entries are marked **[thin]**. For them, "Kernel" names the syscall, and the contract is the kernel's documented behaviour (man-pages section 2). Only the caller-visible facts that a reimplementation must preserve are specified here.
+s11_n_3	11	Notes	⚑ KERN (section-wide): descriptor numbering, open-file-description sharing, the offset model, and the semantics of flags are all kernel ABI.
+s11_1_c_0	11.1	Contract	Resolve a Path, relative to the current directory or to a directory fd (`AT_FDCWD` for the current directory), and return a new fd referring to a new open file description.
+s11_1_i_1	11.1	Inputs	**Access mode.** `O_RDONLY`, `O_WRONLY`, `O_RDWR` or `O_PATH`.
+s11_1_i_2	11.1	Inputs	**Creation flags.**
+s11_1_i_2_1	11.1	Inputs	`O_CREAT`, `O_EXCL` and `O_TRUNC` create or truncate the file.
+s11_1_i_2_2	11.1	Inputs	`O_NOCTTY` prevents acquiring a controlling terminal, and `O_NOFOLLOW` refuses a final symbolic link. `O_DIRECTORY` requires the Path to be a directory.
+s11_1_i_2_3	11.1	Inputs	`O_CLOEXEC` closes the fd on exec, and `O_TMPFILE` creates an unnamed file.
+s11_1_i_3	11.1	Inputs	**Status flags.** `O_APPEND`, `O_NONBLOCK`, `O_SYNC`, `O_DSYNC`, `O_DIRECT`, `O_NOATIME`, `O_ASYNC`, `O_LARGEFILE`.
+s11_1_i_4	11.1	Inputs	**Mode.** Required iff `O_CREAT` or `O_TMPFILE`, and passed as a variadic argument. ⚑ HIST: `open` is variadic only because the mode was an optional third argument in V7. The fortify wrapper `__open_2` exists to catch a missing mode at compile time.
+s11_1_g_1	11.1	Guarantees	The lowest free descriptor number is returned (⚑ KERN).
+s11_1_g_2	11.1	Guarantees	With `O_CREAT|O_EXCL` the create is atomic, even over most network file systems.
+s11_1_g_3	11.1	Guarantees	The mode is masked by `umask`, or by the directory's default ACL.
+s11_1_g_4	11.1	Guarantees	`creat(p, m)` = `open(p, O_CREAT|O_WRONLY|O_TRUNC, m)`. ⚑ HIST.
+s11_1_f_0	11.1	Failure	The kernel's errors: `EACCES`, `EEXIST`, `ENOENT`, `ENOTDIR`, `ELOOP`, `EMFILE` (per-process limit, `RLIMIT_NOFILE`), `ENFILE`, `ENAMETOOLONG`, `EISDIR`, `EROFS`, `ETXTBSY`, `EOVERFLOW`, `EINTR` (FIFOs, or blocking opens of devices), and others.
+s11_1_x_0	11.1	Cancellation	Yes.
+s11_2_c_0	11.2	Contract	Release a descriptor. The underlying open file description is released when its last descriptor closes. `close_range(lo, hi, flags)` closes (or, with `CLOSE_RANGE_CLOEXEC`, marks close-on-exec) every descriptor in `[lo, hi]`. `closefrom(lo)` closes all descriptors ≥ lo and never fails.
+s11_2_g_0	11.2	Guarantees	After `close` returns, even with `EINTR` or `EIO`, the descriptor is released. It must **not** be closed again, since the number may already have been reused.
+s11_2_f_0	11.2	Failure	`EBADF`, `EINTR`, `EIO` (for example, deferred write errors on NFS).
+s11_3_c_1	11.3	Contract	**`read(fd, buf, n)`** transfers up to `n` bytes from the file at the description's offset (or from the stream, for pipes, sockets and ttys) into `buf`, and advances the offset. It returns the count, which may be short: at end of file, for pipes and ttys, on signal interruption after partial transfer, and at the per-call cap. It returns 0 at end of file.
+s11_3_c_2	11.3	Contract	**`write`** transfers up to `n` bytes from `buf`. It may be short (full device, pipe capacity, signal, `RLIMIT_FSIZE`).
+s11_3_c_3	11.3	Contract	**`pread`/`pwrite`** use an explicit offset and do not move the file offset. ⚑ KERN: `pwrite` on an `O_APPEND` descriptor appends regardless of the offset (a Linux deviation from POSIX).
+s11_3_c_4	11.3	Contract	**The `v` forms** perform scatter/gather across an array of `(base, len)` pairs, of at most `IOV_MAX` = 1024 entries. The transfer is atomic with respect to other writers on the same description, as for a single write.
+s11_3_c_5	11.3	Contract	**The `v2` forms** add per-call flags: `RWF_HIPRI`, `RWF_DSYNC`, `RWF_SYNC`, `RWF_NOWAIT`, `RWF_APPEND`. An offset of -1 means "use the current offset".
+s11_3_i_1	11.3	Inputs	`n` up to `SSIZE_MAX`. ⚑ KERN: Linux transfers at most 0x7ffff000 bytes per call, so callers must loop.
+s11_3_i_2	11.3	Inputs	Writes to a pipe of at most `PIPE_BUF` (4096) bytes are atomic.
+s11_3_g_0	11.3	Guarantees	On success the byte count is exact. A regular-file `write` that returns `n` has updated the page cache. Durability requires §11.8.
+s11_3_f_1	11.3	Failure	`EAGAIN`/`EWOULDBLOCK` for non-blocking I/O.
+s11_3_f_2	11.3	Failure	`EINTR` if interrupted before any transfer.
+s11_3_f_3	11.3	Failure	`EPIPE` plus `SIGPIPE` for a broken pipe or socket.
+s11_3_f_4	11.3	Failure	`EFBIG`, `ENOSPC`, `EDQUOT`, `EIO`, `EISDIR`, `EINVAL` (bad alignment for `O_DIRECT`), `EBADF`, `EFAULT`, `EOVERFLOW`.
+s11_3_x_0	11.3	Cancellation	Yes.
+s11_4_c_0	11.4	Contract	Set the description's offset relative to the start (`SEEK_SET`), the current position (`SEEK_CUR`) or the end (`SEEK_END`). Also find the next data or hole region (`SEEK_DATA`/`SEEK_HOLE`). Returns the resulting offset.
+s11_4_f_1	11.4	Failure	`ESPIPE` on pipes, sockets and FIFOs.
+s11_4_f_2	11.4	Failure	`EINVAL` for a negative result or a bad `whence`.
+s11_4_f_3	11.4	Failure	`ENXIO` for `SEEK_DATA`/`SEEK_HOLE` beyond the end of file.
+s11_4_f_4	11.4	Failure	`EOVERFLOW`.
+s11_5_c_1	11.5	Contract	**`dup(fd)`** returns the lowest free descriptor, sharing the description.
+s11_5_c_2	11.5	Contract	**`dup2(old, new)`** makes `new` refer to `old`'s description, closing `new` first (atomically). If `old == new`, it validates `old` and returns it.
+s11_5_c_3	11.5	Contract	**`dup3`** is like `dup2`, but accepts `O_CLOEXEC` and fails with `EINVAL` if `old == new`.
+s11_5_c_4	11.5	Contract	**`fcntl(fd, cmd, ...)`** has these commands:
+s11_5_c_4_1	11.5	Contract	duplication: `F_DUPFD`, `F_DUPFD_CLOEXEC`;
+s11_5_c_4_2	11.5	Contract	descriptor flags: `F_GETFD`/`F_SETFD` (`FD_CLOEXEC`);
+s11_5_c_4_3	11.5	Contract	status flags: `F_GETFL`/`F_SETFL`;
+s11_5_c_4_4	11.5	Contract	locks: `F_GETLK`, `F_SETLK`, `F_SETLKW`, and the open-file-description locks `F_OFD_GETLK`, `F_OFD_SETLK`, `F_OFD_SETLKW`;
+s11_5_c_4_5	11.5	Contract	signal-driven I/O: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, `F_SETSIG`;
+s11_5_c_4_6	11.5	Contract	leases and notification: `F_SETLEASE`, `F_GETLEASE`, `F_NOTIFY`;
+s11_5_c_4_7	11.5	Contract	pipe size: `F_GETPIPE_SZ`, `F_SETPIPE_SZ`;
+s11_5_c_4_8	11.5	Contract	file seals: `F_ADD_SEALS`, `F_GET_SEALS`;
+s11_5_c_4_9	11.5	Contract	write-lifetime hints: `F_GET_RW_HINT`, `F_SET_RW_HINT`, `F_GET_FILE_RW_HINT`, `F_SET_FILE_RW_HINT`.
+s11_5_c_5	11.5	Contract	**`getdtablesize()`** returns the `RLIMIT_NOFILE` soft limit. ⚑ HIST.
+s11_6_c_0	11.6	Contract	Perform a device- or file-system-specific operation identified by a request number, with one untyped argument.
+s11_7_c_0	11.7	Contract	Wait until one or more descriptors are ready (readable, writable, exceptional, hang-up), until a timeout expires, or until a signal arrives.
+s11_7_c_1	11.7	Contract	**`select`** uses three fixed-size bit sets, rewrites them on return, and takes a `struct timeval` timeout that Linux updates with the remaining time.
+s11_7_c_2	11.7	Contract	**`pselect`** takes a `timespec` and atomically swaps the signal mask for the duration of the wait.
+s11_7_c_3	11.7	Contract	**`poll`** takes an array of `{fd, events, revents}` and a millisecond timeout. **`ppoll`** takes a `timespec` and a signal mask.
+s11_7_c_4	11.7	Contract	**epoll** is a kernel-held interest set:
+s11_7_c_4_1	11.7	Contract	`epoll_ctl` adds, modifies or deletes entries with edge- or level-triggered, `EPOLLONESHOT`, `EPOLLEXCLUSIVE` and `EPOLLWAKEUP` semantics;
+s11_7_c_4_2	11.7	Contract	`epoll_wait` returns ready entries with the caller's 64-bit cookie;
+s11_7_c_4_3	11.7	Contract	`epoll_pwait2` takes a `timespec`.
+s11_7_c_4_4	11.7	Contract	`epoll_create(size)` ignores `size` (it must be > 0). ⚑ HIST.
+s11_7_i_0	11.7	Inputs	For `select`, descriptors must be `< FD_SETSIZE` (1024). ⚑ ARB, ⚑ HIST: `fd_set` is a fixed 1024-bit array baked into the ABI, and a larger descriptor overflows it (fortify `__fdelt_chk` aborts). This is the main reason `select` is unusable in large programs. `poll` and epoll have no such limit.
+s11_7_g_0	11.7	Guarantees	They return the number of ready descriptors, or 0 on timeout. A negative `fd` in `poll` is ignored.
+s11_7_f_0	11.7	Failure	`EINTR`, `EBADF`, `EINVAL` (nfds > `RLIMIT_NOFILE`), `ENOMEM`.
+s11_7_x_0	11.7	Cancellation	Yes.
+s11_8_c_1	11.8	Contract	**`fsync(fd)`** does not return until the file's data and metadata are on stable storage. **`fdatasync`** omits metadata that is not needed to retrieve the data.
+s11_8_c_2	11.8	Contract	**`sync()`** schedules a flush of all file systems. On Linux it waits. **`syncfs(fd)`** flushes one file system.
+s11_8_c_3	11.8	Contract	**`sync_file_range(fd, off, n, flags)`** controls writeback of a range. It gives **no** durability guarantee for metadata.
+s11_8_c_4	11.8	Contract	**`posix_fadvise(fd, off, len, advice)`** declares the access pattern: `NORMAL`, `SEQUENTIAL`, `RANDOM`, `WILLNEED`, `DONTNEED`, `NOREUSE`. It returns the error number directly (C0.1).
+s11_8_c_5	11.8	Contract	**`readahead`** is a Linux-specific prefetch.
+s11_8_c_6	11.8	Contract	**`posix_fallocate`** guarantees that the space for the range is allocated, and extends the file if needed. It returns the error number directly. If the file system lacks `fallocate`, glibc **emulates** it by writing a byte into every block. ⚑ HIST: this emulation is slow, racy with concurrent writers, and cannot work on `O_APPEND` descriptors.
+s11_8_c_7	11.8	Contract	**`fallocate(fd, mode, off, len)`** is the Linux call with modes such as `FALLOC_FL_PUNCH_HOLE`, `FALLOC_FL_COLLAPSE_RANGE`, `FALLOC_FL_ZERO_RANGE` and `FALLOC_FL_KEEP_SIZE`. It has no emulation.
+s11_8_c_8	11.8	Contract	**`ftruncate`/`truncate`** set the file length. Extension reads as zeros.
+s11_9_c_0	11.9	Contract	Move data between descriptors without copying it through user memory.
+s11_9_c_1	11.9	Contract	**`sendfile(out, in, &off, n)`**: `in` must be mmap-able. Since Linux 2.6.33, `out` may be any file.
+s11_9_c_2	11.9	Contract	**`copy_file_range`** works between regular files, possibly as a reflink or a server-side copy.
+s11_9_c_3	11.9	Contract	**`splice`** works when one end is a pipe. **`tee`** duplicates pipe contents. **`vmsplice`** maps user pages into a pipe.
+s11_9_g_0	11.9	Guarantees	Returns the count transferred, which may be short.
+s11_9_f_0	11.9	Failure	`EINVAL` or `EXDEV` for unsupported combinations. Callers must then fall back to `read`/`write`. ⚑ HIST: glibc does not emulate `copy_file_range` (it did briefly, then removed the emulation in 2.30).
+s11_10_c_1	11.10	Contract	**`mmap(addr, len, prot, flags, fd, off)`** creates a mapping of a file (`MAP_SHARED`, `MAP_PRIVATE`, `MAP_SHARED_VALIDATE`) or of anonymous memory (`MAP_ANONYMOUS`). Other flags:
+s11_10_c_1_1	11.10	Contract	placement: `MAP_FIXED`, `MAP_FIXED_NOREPLACE`;
+s11_10_c_1_2	11.10	Contract	population and residency: `MAP_POPULATE`, `MAP_LOCKED`, `MAP_NORESERVE`;
+s11_10_c_1_3	11.10	Contract	huge pages: `MAP_HUGETLB` with a size encoding;
+s11_10_c_1_4	11.10	Contract	stacks: `MAP_GROWSDOWN`, `MAP_STACK`;
+s11_10_c_1_5	11.10	Contract	persistent memory: `MAP_SYNC`. It returns the address, or `MAP_FAILED` (`(void*)-1`, ⚑ HIST: not `NULL`, because address 0 is mappable).
+s11_10_c_2	11.10	Contract	**`munmap`** removes mappings in a range. **`mprotect`** changes access protections. **`pkey_mprotect`** also assigns a protection key.
+s11_10_c_3	11.10	Contract	**`pkey_alloc`, `pkey_free`, `pkey_get`, `pkey_set`** manage memory protection keys. `pkey_get` and `pkey_set` read and write the per-thread PKRU register: user-space only, no syscall.
+s11_10_c_4	11.10	Contract	**`madvise`** gives usage advice with Linux semantics. `MADV_DONTNEED` *discards* anonymous contents (a semantic effect, not advice). ⚑ HIST: advice with side effects.
+s11_10_c_5	11.10	Contract	**`posix_madvise`** is the POSIX subset. It never discards data: glibc maps `POSIX_MADV_DONTNEED` to a no-op for that reason. It returns the error number directly.
+s11_10_c_6	11.10	Contract	**`process_madvise`/`process_mrelease`** apply advice to, or reap, another process's memory through a pidfd.
+s11_10_c_7	11.10	Contract	**`mremap`** grows, shrinks or moves a mapping. It is variadic, with a new-address argument for `MREMAP_FIXED`.
+s11_10_c_8	11.10	Contract	**`remap_file_pages`** is deprecated and kernel-emulated.
+s11_10_c_9	11.10	Contract	**`msync`** flushes a shared mapping (`MS_SYNC`, `MS_ASYNC`, `MS_INVALIDATE`). It is a cancellation point.
+s11_10_c_10	11.10	Contract	**`mincore`** reports the residency of each page.
+s11_10_c_11	11.10	Contract	**`mlock`, `mlock2` (`MLOCK_ONFAULT`), `munlock`, `mlockall(MCL_CURRENT|MCL_FUTURE| MCL_ONFAULT)`, `munlockall`** pin pages in RAM.
+s11_10_c_12	11.10	Contract	**`memfd_create(name, flags)`** creates an anonymous file with optional sealing (`MFD_ALLOW_SEALING`) and huge pages (`MFD_HUGETLB`). New in the Linux 6.3 API: `MFD_EXEC`/`MFD_NOEXEC_SEAL`.
+s11_10_c_13	11.10	Contract	**`getpagesize()`** returns the page size (from `AT_PAGESZ`). ⚑ HIST: `sysconf(_SC_PAGESIZE)` is the POSIX form.
+s11_10_c_14	11.10	Contract	**`process_vm_readv`/`process_vm_writev`** copy between this and another process's address space (ptrace permission required).
+s11_10_i_0	11.10	Inputs	Addresses and offsets must be page-aligned (⚑ KERN). Lengths are rounded up to pages.
+s11_10_f_0	11.10	Failure	`ENOMEM`, `EACCES`, `EINVAL`, `EAGAIN` (lock limits), `EPERM`, `EEXIST` (`MAP_FIXED_NOREPLACE`), `ENODEV`, `EOVERFLOW`, `ETXTBSY`.
+s11_11_c_0	11.11	Contract	Start a read, write or fsync that proceeds concurrently with the caller, and observe its completion by polling (`aio_error` returns `EINPROGRESS` until done), by waiting (`aio_suspend` with a timeout), or by notification (`sigevent`: a signal or a new thread). `lio_listio` submits a batch (`LIO_WAIT`/`LIO_NOWAIT`). `aio_cancel` attempts to cancel requests. `aio_return` retrieves the final status; an application calls it once per request, and a further call returns the same status (Written 2026-10-04 (owner ruling, phase 12-13 report)). `aio_init` (GNU) tunes the thread pool.
+s11_11_g_0	11.11	Guarantees	Requests on the same fd with the same priority complete in submission order (glibc serializes them per fd). A request's `aiocb` must stay valid and unmodified until it completes.
+s11_11_f_0	11.11	Failure	Submission fails with `EAGAIN` (resources), `EINVAL` (an invalid `aio_reqprio`, `aio_fsync` operation, `lio_listio` mode or `aio_suspend` count, or no control block) or `EBADF` (`aio_fsync` and `aio_cancel` on a descriptor that is not open). Every other error, including an invalid offset, count or descriptor of a read or write, is the operation's own and is available through `aio_error`. Corrected 2026-10-04 (three-way rule: the reference and POSIX both report `EBADF` at submission, `spec/behaviour/aio.md`; an earlier text listed only `EAGAIN` and `EINVAL`).
+s11_12_c_1	11.12	Contract	**`eventfd(initval, flags)`** creates a descriptor holding a 64-bit counter. A read returns and resets it (or decrements it by 1 with `EFD_SEMAPHORE`), and a write adds to it. `eventfd_read` and `eventfd_write` are typed helpers that return 0 or -1.
+s11_12_c_2	11.12	Contract	**inotify** reports file-system events (create, delete, modify, move, attrib, ...) on watched paths as a stream of variable-length records read from a descriptor.
+s11_12_c_3	11.12	Contract	**fanotify** reports file-system access events with open file descriptors, optionally with permission decisions. It needs `CAP_SYS_ADMIN`.
+s11_13_c_1	11.13	Contract	**`flock(fd, op)`** takes shared or exclusive whole-file locks (`LOCK_SH`, `LOCK_EX`, `LOCK_UN`, `LOCK_NB`). The lock is owned by the open file description.
+s11_13_c_2	11.13	Contract	**`lockf(fd, cmd, len)`** locks, tests or unlocks an exclusive region from the current offset (`F_LOCK`, `F_TLOCK`, `F_ULOCK`, `F_TEST`). glibc implements it as `fcntl` POSIX record locks, so it inherits their per-process semantics (§11.5).
+s11_13_f_0	11.13	Failure	`EWOULDBLOCK`/`EAGAIN`, `EINTR`, `EDEADLK` (lockf), `ENOLCK`.
+s12_1_c_0	12.1	Contract	A *stream* (`FILE *`) is a library object that provides:
+s12_1_c_1	12.1	Contract	a **backing**: a file descriptor, a memory buffer, or user callbacks;
+s12_1_c_2	12.1	Contract	a **user-space buffer** with one of three policies: fully buffered, line-buffered, or unbuffered;
+s12_1_c_3	12.1	Contract	a **position**, and an **error indicator** and **end-of-file indicator**;
+s12_1_c_4	12.1	Contract	an **orientation**: undecided, byte, or wide. It is fixed by the first I/O operation, or by `fwide`;
+s12_1_c_5	12.1	Contract	for wide orientation, a **conversion state** that converts between wide characters and the locale's multibyte encoding at the buffer boundary;
+s12_1_c_6	12.1	Contract	a **lock**, which makes each stdio call on the stream atomic with respect to other threads.
+s12_1_c2_0	12.1	Contract	`stdin`, `stdout` and `stderr` are exported data objects, and so are `_IO_2_1_stdin_` and the other `_IO_*` objects (⚑ COMPAT). `stdout` is line-buffered if it refers to a terminal and fully buffered otherwise. `stderr` is unbuffered.
+s12_1_g_1	12.1	Guarantees	Output written to a stream reaches the backing when the buffer fills, when a newline is written to a line-buffered stream, at `fflush`, at `fclose`, at `exit`, or when input is requested from a line-buffered or unbuffered stream (which flushes all line-buffered output streams, per ISO C).
+s12_1_g_2	12.1	Guarantees	Alternating input and output on an update stream requires an intervening `fflush`, a positioning call, or (for output after input) end of file. ⚑ HIST: this restriction reflects a single shared buffer, and is not needed functionally.
+s12_2_c_1	12.2	Contract	**`fopen(path, mode)`** opens a Path and returns a stream. The mode is a Text:
+s12_2_c_1_1	12.2	Contract	a required prefix of `r`, `w`, `a`, `r+`, `w+` or `a+`;
+s12_2_c_1_2	12.2	Contract	an optional `b` (ignored on POSIX);
+s12_2_c_1_3	12.2	Contract	optional GNU and C11 modifiers: `x` (exclusive, `O_EXCL`), `e` (`O_CLOEXEC`), `m` (mmap for reading), `c` (no cancellation points), and `,ccs=CHARSET` (wide orientation with that encoding). Created files get mode `0666 & ~umask`.
+s12_2_c_2	12.2	Contract	**`fdopen(fd, mode)`** wraps an existing descriptor. The mode must be compatible with the descriptor's access mode.
+s12_2_c_3	12.2	Contract	**`freopen(path, mode, stream)`** closes `stream`'s backing and reopens it on a new Path while keeping the same `FILE *`. This is typically used to redirect a standard stream. A NULL `path` changes only the mode, and glibc supports this only as far as `fcntl` allows.
+s12_2_c_4	12.2	Contract	**`fclose`** flushes, closes the backing, and frees the stream (even on error). **`fcloseall`** (GNU) closes all streams.
+s12_2_c_5	12.2	Contract	**`fileno`** returns the backing descriptor, or -1/`EBADF` for streams without one.
+s12_2_f_0	12.2	Failure	`NULL` with the `errno` of the underlying `open`, `EINVAL` for a bad mode, or `ENOMEM`. `fclose` returns `EOF` if the flush or the close failed. The stream is gone either way.
+s12_3_c_1	12.3	Contract	**`fmemopen(buf, size, mode)`** gives stream access to a caller buffer of fixed size. If `buf` is NULL, the library allocates one, which is freed at close. In write modes, a NUL is maintained after the data when space permits.
+s12_3_c_2	12.3	Contract	**`open_memstream(&ptr, &size)`** / **`open_wmemstream`** create a write-only stream to a growing buffer. `*ptr` and `*size` are updated at `fflush` and `fclose`. The caller frees `*ptr`.
+s12_3_c_3	12.3	Contract	**`fopencookie(cookie, mode, {read, write, seek, close})`** (GNU) creates a stream whose backing is caller callbacks.
+s12_4_c_1	12.4	Contract	**`setvbuf(fp, buf, mode, size)`** selects `_IOFBF`, `_IOLBF` or `_IONBF`, and optionally a caller buffer. It must be called before any other operation on the stream.
+s12_4_c_2	12.4	Contract	**`setbuf`**, **`setbuffer`** and **`setlinebuf`** are shorthand forms. ⚑ HIST.
+s12_4_c_3	12.4	Contract	**`fflush(fp)`**:
+s12_4_c_3_1	12.4	Contract	For an output stream, it writes the buffered data to the backing.
+s12_4_c_3_2	12.4	Contract	For a seekable input stream, it discards the buffered input and repositions the backing to the logical position (POSIX 2008).
+s12_4_c_3_3	12.4	Contract	`fflush(NULL)` flushes all output streams.
+s12_4_c_4	12.4	Contract	**`__fpurge`** discards buffered data without writing it.
+s12_4_c_5	12.4	Contract	**The `<stdio_ext.h>` queries** report buffer size, pending bytes, and whether the stream is line-buffered, reading or writing, readable or writable.
+s12_4_c_6	12.4	Contract	**`__fsetlocking(fp, FSETLOCKING_BYCALLER)`** disables the stream's internal locking.
+s12_4_f_0	12.4	Failure	`fflush` returns `EOF` and sets the error indicator.
+s12_5_c_1	12.5	Contract	**`fgetc`/`getc`/`getchar`** return the next byte as `unsigned char` converted to `int`, or `EOF` at end of file or on error (the indicators distinguish the two).
+s12_5_c_2	12.5	Contract	**`fputc`/`putc`/`putchar`** write one byte and return it, or `EOF` on error.
+s12_5_c_3	12.5	Contract	**`ungetc(c, fp)`** pushes back one byte, which the next read returns. At least one byte of pushback is guaranteed. It clears the end-of-file indicator. Pushback is discarded by a positioning call.
+s12_5_c_4	12.5	Contract	**`fgets(buf, n, fp)`** reads at most `n-1` bytes, stopping after a newline, and terminates the result. It returns `buf`, or `NULL` if no bytes were read before end of file or an error.
+s12_5_c_5	12.5	Contract	**`getline(&buf, &cap, fp)`** / **`getdelim(..., delim, ...)`** read a whole line (or delimited record), growing the caller's `malloc` buffer as needed. They return the number of bytes read *including the delimiter*, and embedded NUL bytes are preserved in the count. They return -1 at end of file or on error.
+s12_5_c_6	12.5	Contract	**`fputs(s, fp)`** writes a Text without a newline. **`puts(s)`** writes it to `stdout` followed by a newline.
+s12_5_c_7	12.5	Contract	**`gets`** reads a line with **no bound**. It was removed from ISO C11, and glibc exports it only for old binaries (⚑ HIST: an inherently unsafe interface).
+s12_5_c_8	12.5	Contract	**`getw`/`putw`** read and write a native `int`. ⚑ HIST: they cannot distinguish the value `EOF` from end of file.
+s12_5_c_9	12.5	Contract	**The `_unlocked` forms** have the same contracts without taking the stream lock. The caller must hold it (§12.9).
+s12_5_c_10	12.5	Contract	**`__uflow`, `__underflow`, `__overflow`, `__wuflow`, `__wunderflow`, `__woverflow`** are the buffer refill and flush entry points called by old inline macros (⚑ COMPAT).
+s12_5a_c_1	12.5a	Contract	**`fread(buf, size, n, fp)`** reads up to `n` elements of `size` bytes and returns the number of *complete* elements read.
+s12_5a_c_2	12.5a	Contract	**`fwrite`** writes up to `n` elements and returns the number of complete elements written. A short count means end of file or an error, and `feof`/`ferror` tell which. If `size` or `n` is 0, the result is 0 with no effect.
+s12_5a_g_0	12.5a	Guarantees	Bytes of a partially transferred final element are consumed or written, but not counted. ⚑ ARB, ⚑ HIST: the element count hides how many bytes actually moved, so a caller needing byte accuracy must pass `size = 1`. The functional need is a byte count.
+s12_6_c_0	12.6	Contract	Render a format string with arguments into a destination:
+s12_6_c_r1	12.6	Contract	| a stream | `fprintf` |
+s12_6_c_r2	12.6	Contract	| `stdout` | `printf` |
+s12_6_c_r3	12.6	Contract	| a descriptor | `dprintf` (no stream buffering) |
+s12_6_c_r4	12.6	Contract	| a caller buffer | `sprintf` (unbounded), `snprintf` (bounded) |
+s12_6_c_r5	12.6	Contract	| a fresh `malloc` buffer | `asprintf` |
+s12_6_c_r6	12.6	Contract	| an obstack | `obstack_printf` |
+s12_6_c_p1	12.6	Contract	The format language is ISO C with POSIX and GNU extensions:
+s12_6_c_2	12.6	Contract	**Conversions:** `d i o u x X` (integers), `f F e E g G a A` (floating), `c s` (character and Text), `p` (pointer), `n` (store count), `%` (literal), `m` (GNU: `strerror(errno)`), `b`/`B` (C23 binary, 2.35+), `C`/`S` (XSI wide), `lc`/`ls` (wide).
+s12_6_c_3	12.6	Contract	**Length modifiers:** `hh h l ll q L j z t`, and the C23 `wN`/`wfN` (2.38+).
+s12_6_c_4	12.6	Contract	**Flags:** `- + space # 0`, `'` (locale thousands grouping), `I` (locale digits).
+s12_6_c_5	12.6	Contract	**Field width and precision:** literal, or `*` from an argument.
+s12_6_c_6	12.6	Contract	**Positional arguments:** `%n$`, `*m$` (POSIX).
+s12_6_g_1	12.6	Guarantees	Floating output is exact (correctly rounded) for any precision.
+s12_6_g_2	12.6	Guarantees	The result is identical regardless of destination.
+s12_6_g_3	12.6	Guarantees	Return values:
+s12_6_g_3_1	12.6	Guarantees	`snprintf` returns the length the full result *would* have had and writes at most `n-1` bytes plus a terminator.
+s12_6_g_3_2	12.6	Guarantees	`asprintf` returns the length, and `*strp` is set only on success.
+s12_6_g_3_3	12.6	Guarantees	The others return the number of bytes written.
+s12_6_g_4	12.6	Guarantees	`%s` with a precision reads no more than the precision's bytes (the argument need not be terminated).
+s12_6_g_5	12.6	Guarantees	`%s` with a NULL pointer prints `(null)` (GNU; undefined in ISO C).
+s12_6_f_0	12.6	Failure	A negative return, with `errno`:
+s12_6_f_1	12.6	Failure	`EOVERFLOW` if the result exceeds `INT_MAX` (⚑ HIST: the return type is `int`, which caps formatted output at 2 GiB), or if a field width or precision written in the format exceeds `INT_MAX`; in that case nothing is written to a stream (owner ruling R3, 2026-10-05);
+s12_6_f_2	12.6	Failure	`ENOMEM`;
+s12_6_f_3	12.6	Failure	`EILSEQ` (a wide character that cannot be converted);
+s12_6_f_4	12.6	Failure	`EBADF` or the other stream errors. In fortified builds, `%n` in a writable format string aborts. Mixing positional and non-positional arguments is undefined.
+s12_7_c_0	12.7	Contract	Parse input according to a format of directives:
+s12_7_c_1	12.7	Contract	white space matches any amount of white space;
+s12_7_c_2	12.7	Contract	an ordinary character must match exactly;
+s12_7_c_3	12.7	Contract	a conversion `%[*][width][m][len]conv` stores into successive pointer arguments. The conversions are `d i o u x X` (and C23 `b`), `a e f g`, `s`, `c`, `[set]`, `p`, `n` and `%`. `m` (POSIX 2008) allocates the destination for `s`, `c` and `[`, and `*` suppresses assignment. The functions return the number of assignments made, or `EOF` if input failure occurred before the first conversion.
+s12_7_g_0	12.7	Guarantees	Parsing stops at the first mismatch. The mismatching character is left unread (at most one character of pushback, so a partial match such as `"1e"` for `%f` consumes the prefix and fails). ⚑ ARB, ⚑ HIST: a single character of lookahead makes parsing lossy.
+s12_7_f_0	12.7	Failure	Integer overflow in a conversion is undefined behaviour in ISO C. glibc stores a wrapped or clamped value without an error. ⚑ HIST: `%d` cannot report range errors, so robust programs avoid it and use `strtol`.
+s12_7_f_1	12.7	Failure	the plain `scanf` (GNU: `%a` means "allocate", the pre-C99 meaning);
+s12_7_f_2	12.7	Failure	`__isoc99_*` (C99: `%a` is a floating conversion);
+s12_7_f_3	12.7	Failure	`__isoc23_*` (C23: `%i` and `%b` accept a `0b` prefix). The header selects the set by language mode. The need behind all three is a single parser with a specified grammar.
+s12_8_c_1	12.8	Contract	**`fseek`/`fseeko`** set the position, discarding pushback and buffered input and flushing output. `fseeko` takes an `off_t`, while `fseek` takes a `long`. ⚑ HIST: `long` is 32 bits on 32-bit ABIs.
+s12_8_c_2	12.8	Contract	**`ftell`/`ftello`** report the logical position.
+s12_8_c_3	12.8	Contract	**`fgetpos`/`fsetpos`** save and restore the position together with the conversion state in an opaque `fpos_t`. This is required for stateful wide streams.
+s12_8_c_4	12.8	Contract	**`rewind`** is `fseek(fp, 0, SEEK_SET)` plus `clearerr`, and reports no error. ⚑ HIST.
+s12_8_c_5	12.8	Contract	**`feof`/`ferror`** test the indicators, and **`clearerr`** resets them.
+s12_8_c_6	12.8	Contract	**`fwide(fp, mode)`** queries or sets the orientation (negative for byte, positive for wide, 0 to query). Once set, the orientation cannot change.
+s12_8_f_0	12.8	Failure	`ESPIPE`, `EINVAL`, `EOVERFLOW` (the position does not fit `long`).
+s12_9_c_0	12.9	Contract	Acquire or release a stream's recursive lock, so that a sequence of operations (typically `_unlocked` ones) executes atomically with respect to other threads. `ftrylockfile` returns 0 on success and non-zero if the lock is held by another thread.
+s12_10_c_0	12.10	Contract	The same as §12.5 over wide characters. On a wide-oriented stream, each wide character is converted to or from the multibyte encoding (the locale's, or the one given with `ccs=`). `WEOF` is returned at end of file, on error, and on an encoding error (with `EILSEQ` and the error indicator set).
+s12_11_c_1	12.11	Contract	**`register_printf_specifier(spec, handler, arginfo)`** installs a process-wide handler for a new conversion letter. `register_printf_function` is the older form of the same.
+s12_11_c_2	12.11	Contract	**`register_printf_modifier`** adds a length modifier (Text), and **`register_printf_type`** adds an argument type. **`parse_printf_format`** reports the argument types a format expects.
+s12_11_c_3	12.11	Contract	**`printf_size`** is a ready-made handler that prints sizes with binary or decimal unit prefixes.
+s12_11_c_4	12.11	Contract	**`__printf_fp`** is the internal floating-point formatter (⚑ COMPAT).
+s12_11_t_0	12.11	Threads	Registration is MT-Unsafe and global. ⚑ HIST: it changes the meaning of every `printf` in the process, including in libraries. The functional need, formatting user-defined types, is better met without global state.
+s12_12_c_1	12.12	Contract	**`tmpfile()`** returns an update stream on a new file that is automatically removed at close or at process exit. glibc uses `O_TMPFILE` in `P_tmpdir` (`/tmp`) where supported; otherwise it creates the file and unlinks it immediately.
+s12_12_c_2	12.12	Contract	**`tmpnam`/`tmpnam_r`/`tempnam`** return a Path that did not exist at the time of the call. ⚑ HIST: a time-of-check to time-of-use race makes them insecure (the linker warns). The need, "a new file nobody else can claim", is met by `mkstemp`/`tmpfile` (§13.9).
+s12_12_c_3	12.12	Contract	**`ctermid(buf)`** returns the Path of the controlling terminal. It is always `"/dev/tty"` on Linux.
+s12_12_c_4	12.12	Contract	**`cuserid(buf)`** returns a user name. ⚑ HIST: it was removed from POSIX because of ambiguity over whether it means the effective or the login user (glibc uses the effective UID).
+s12_13_c_0	12.13	Contract	Compat-only entry points. They were used by old inline macros and by the libstdc++ `stdio_filebuf` that shared glibc's `FILE` implementation. Each has the contract of the obvious public function. The vtable objects (`_IO_file_jumps`, ...) exist because libstdc++ v2 subclassed `FILE`.
+s13_n_1	13	Notes	Most operations are **[thin]** wrappers over the `*at` system calls. The non-`at` forms pass `AT_FDCWD`.
+s13_n_2	13	Notes	⚑ KERN. Path resolution, permission checks, symlink following, the `*at` directory-fd model, and inode metadata are all kernel ABI.
+s13_n_3	13	Notes	⚑ PATH. Every path function exists twice (`f(path)` and `fat(dirfd, path, flags)`), because the directory-relative form was added in 2006 to fix time-of-check to time-of-use races in the path-based form. The `*at` form is the base contract.
+s13_1_c_1	13.1	Contract	**`getcwd(buf, size)`** stores the absolute Path of the current directory.
+s13_1_c_1_1	13.1	Contract	With `buf == NULL` (GNU), it allocates: `size` bytes, or exactly the needed size if `size` is 0.
+s13_1_c_1_2	13.1	Contract	If the current directory is unreachable from the root (for example, after `chroot` or a lazy unmount), Linux returns a path beginning `"(unreachable)"`. glibc then fails with `ENOENT`.
+s13_1_c_2	13.1	Contract	**`get_current_dir_name()`** returns an allocated Path. It prefers `$PWD` if `$PWD` names the same directory, which preserves the symlinks the user navigated through.
+s13_1_c_3	13.1	Contract	**`getwd(buf)`** assumes `buf` holds `PATH_MAX` bytes. ⚑ HIST: an unbounded interface, removed from POSIX.
+s13_1_c_4	13.1	Contract	**`chdir`/`fchdir`** change the current directory. It is process-wide (⚑ KERN: cwd is per process, or shared per `CLONE_FS`).
+s13_1_c_5	13.1	Contract	**`chroot(path)`** changes the root directory. It needs `CAP_SYS_CHROOT`, and does not change the cwd.
+s13_1_f_0	13.1	Failure	`ERANGE` (buffer too small), `ENOENT`, `EACCES`, `ENAMETOOLONG`.
+s13_2_c_1	13.2	Contract	**`opendir(path)`**/**`fdopendir(fd)`** open a directory stream. `fdopendir` takes ownership of `fd`.
+s13_2_c_2	13.2	Contract	**`readdir(d)`** returns the next entry (`struct dirent`: `d_ino`, `d_off`, `d_reclen`, `d_type`, `d_name`), or `NULL` at the end.
+s13_2_c_2_1	13.2	Contract	The entry storage belongs to the stream and is overwritten by the next call on the same stream. Different streams may be read concurrently.
+s13_2_c_2_2	13.2	Contract	`d_type` may be `DT_UNKNOWN`, in which case the caller must `stat` the entry.
+s13_2_c_3	13.2	Contract	**`readdir_r`** copies the entry into a caller buffer. ⚑ HIST, ⚑ PATH: it is deprecated (2.24) because the caller cannot size `d_name` correctly for file systems with `NAME_MAX > 255`. The need that motivated it (thread safety) is met by `readdir`'s per-stream storage.
+s13_2_c_4	13.2	Contract	**`telldir`/`seekdir`** save and restore a position. ⚑ KERN: positions are opaque 64-bit cookies from the file system (hash values on ext4). glibc maps them through a table because `long` may be 32 bits.
+s13_2_c_5	13.2	Contract	**`rewinddir`** restarts the stream. **`closedir`** closes the stream and the fd. **`dirfd`** returns the stream's fd.
+s13_2_c_6	13.2	Contract	**`getdents64(fd, buf, n)`** (2.30) is the raw syscall. **`getdirentries(fd, buf, n, &base)`** is a BSD wrapper. ⚑ HIST.
+s13_2_g_0	13.2	Guarantees	Every entry that exists for the whole duration of the scan is returned exactly once. Entries created or removed during the scan may or may not appear. `.` and `..` are included (except on some special file systems).
+s13_2_f_0	13.2	Failure	`readdir` returns `NULL` both at the end and on error. ⚑ HIST: the caller must zero `errno` to distinguish them (C0.1). Errors are `EBADF`, `EOVERFLOW` (an entry does not fit a 32-bit `ino_t`), and `ENOENT` (the directory was removed).
+s13_3_c_1	13.3	Contract	**`scandir(dir, &list, filter, compar)`** reads all entries, keeps those for which `filter` returns non-zero, sorts them with `compar`, and returns an allocated array of allocated entries. It returns the count, or -1. **`alphasort`** compares names with `strcoll`, and **`versionsort`** with `strverscmp`.
+s13_3_c_2	13.3	Contract	**`nftw(path, fn, nopenfd, flags)`** walks a tree, calling `fn` with the path, its `stat`, a type code, and a `FTW` record (level and basename offset):
+s13_3_c_2_1	13.3	Contract	type codes: `FTW_F`, `FTW_D`, `FTW_DNR`, `FTW_DP`, `FTW_NS`, `FTW_SL`, `FTW_SLN`;
+s13_3_c_2_2	13.3	Contract	flags: `FTW_PHYS` (do not follow symlinks), `FTW_MOUNT` (stay on one file system), `FTW_DEPTH` (post-order), `FTW_CHDIR`, and the GNU `FTW_ACTIONRETVAL` (`fn` controls skipping);
+s13_3_c_2_3	13.3	Contract	a non-zero return from `fn` stops the walk, and that value is returned.
+s13_3_c_3	13.3	Contract	**`ftw`** is the older form, without flags. It always follows symlinks.
+s13_3_c_4	13.3	Contract	**`fts_*`** (BSD) is an iterator-style walk. `fts_read` returns `FTSENT` records. `fts_set` requests skip, follow or again for the current entry, and `fts_children` lists a directory's children. It sorts with an optional comparator and reports cycles (`FTS_DC`).
+s13_3_i_0	13.3	Inputs	For `nftw`, `nopenfd` bounds simultaneously open directory descriptors. ⚑ ARB: the walk depth is not limited by it, but the caller must pick the number.
+s13_3_f_0	13.3	Failure	-1 with `errno`. Entries that cannot be `stat`ed are reported as `FTW_NS`/`FTS_NS`.
+s13_4_c_1	13.4	Contract	**`link`** creates a new hard link (a name for the same inode).
+s13_4_c_2	13.4	Contract	**`symlink(target, linkpath)`** creates a symbolic link whose content is `target`, which is not resolved at creation.
+s13_4_c_3	13.4	Contract	**`readlink(path, buf, n)`** copies a link's content into `buf` **without** a terminator and returns its length. Truncation is silent: a result equal to `n` may mean truncation. ⚑ ARB, ⚑ KERN (the syscall behaves this way).
+s13_4_c_4	13.4	Contract	**`unlink`** removes a non-directory name. **`rmdir`** removes an empty directory. **`remove`** (ISO C) does either.
+s13_4_c_5	13.4	Contract	**`rename(old, new)`** atomically replaces `new` if it exists. **`renameat2`** (2.28) adds `RENAME_NOREPLACE`, `RENAME_EXCHANGE` and `RENAME_WHITEOUT`.
+s13_4_g_0	13.4	Guarantees	Rename within one file system is atomic: an observer sees either the old or the new `new`, never neither.
+s13_4_f_0	13.4	Failure	`EXDEV` (rename or link across file systems), `EEXIST`, `ENOTEMPTY`, `EISDIR`, `EBUSY`, `EMLINK`, `ELOOP`, `EPERM` (protected hardlinks or symlinks, sticky directories).
+s13_5_c_0	13.5	Contract	Create a directory, a FIFO, or a device, socket or regular node with the given mode (masked by `umask`) and device number. `makedev`, `major` and `minor` (`gnu_dev_*`, macros backed by inline functions) compose and decompose `dev_t`.
+s13_6_c_0	13.6	Contract	Return an inode's metadata:
+s13_6_c_1	13.6	Contract	type and permissions (`st_mode`), `st_ino`, `st_dev`, `st_nlink`, `st_uid`, `st_gid`, `st_rdev`, `st_size`, `st_blksize`, `st_blocks`;
+s13_6_c_2	13.6	Contract	`st_atim`, `st_mtim`, `st_ctim` (nanosecond `timespec`). `fstatat` flags are `AT_SYMLINK_NOFOLLOW`, `AT_EMPTY_PATH` and `AT_NO_AUTOMOUNT`.
+s13_6_f_0	13.6	Failure	`ENOENT`, `EACCES`, `ELOOP`, `ENOTDIR`, `EOVERFLOW` (a field does not fit a 32-bit type).
+s13_7_c_1	13.7	Contract	**The `chmod` family** changes permission bits. **`lchmod`** and **`fchmodat(..., AT_SYMLINK_NOFOLLOW)`** change a symlink itself. Since 2.32, glibc implements them via `O_PATH` + `/proc/self/fd`, or through `fchmodat2` on kernel 6.6+. Linux symlinks have no mode, so the result is `EOPNOTSUPP`.
+s13_7_c_2	13.7	Contract	**The `chown` family** changes owner and group. -1 leaves a field unchanged.
+s13_7_c_3	13.7	Contract	**`umask(mask)`** sets the process file-creation mask and returns the old one. It **cannot fail**. ⚑ HIST: there is no way to read the mask without setting it, except by setting it twice (racy) or by reading `/proc/self/status`.
+s13_7_c_4	13.7	Contract	**`access(path, mode)`** checks `R_OK`, `W_OK`, `X_OK` or `F_OK` using the **real** UID and GID. **`faccessat(..., AT_EACCESS)`** and **`euidaccess`/`eaccess`** use the effective IDs. ⚑ HIST: `access` was designed for setuid programs to ask "could the invoking user do this?", which is inherently a time-of-check to time-of-use race.
+s13_7_c_5	13.7	Contract	**`utimensat`/`futimens`** set access and modification times with nanosecond precision. `UTIME_NOW` and `UTIME_OMIT` are available per field.
+s13_7_c_6	13.7	Contract	**`utime`** (seconds), **`utimes`**, **`lutimes`**, **`futimes`** (µs) and **`futimesat`** are older forms. ⚑ HIST.
+s13_8_c_0	13.8	Contract	Resolve a Path to an absolute Path without `.`, `..` or symbolic-link components, naming the same file.
+s13_8_c_1	13.8	Contract	**`realpath(path, resolved)`** writes to `resolved` (`PATH_MAX` bytes), or allocates the result if `resolved` is NULL.
+s13_8_c_2	13.8	Contract	**`canonicalize_file_name`** always allocates.
+s13_8_f_0	13.8	Failure	`ENOENT` (any component is missing: the file must exist), `ELOOP`, `ENAMETOOLONG`, `EACCES`. After any failure the contents of a caller buffer are unspecified (POSIX leaves them undefined); callers must not rely on them. glibc writes the prefix that was resolved, including the failing component, only for `ENOENT` and `EACCES`, and leaves the buffer untouched for `ELOOP`, `ENOTDIR` and `ENAMETOOLONG` (`spec/behaviour/fstree.md`, the `realpath` lines). Corrected 2026-10-03 (owner ruling): an earlier text said the buffer held the resolved prefix after any failure.
+s13_9_c_1	13.9	Contract	**`mkstemp(template)`** replaces the trailing `XXXXXX` in a caller-writable Text with unique characters, creates the file with `O_CREAT|O_EXCL`, mode 0600, and returns the fd.
+s13_9_c_2	13.9	Contract	**The `o` forms** accept extra `open` flags (`O_CLOEXEC`, `O_APPEND`, `O_SYNC`).
+s13_9_c_3	13.9	Contract	**The `s` forms** allow a fixed suffix after the `X`s.
+s13_9_c_4	13.9	Contract	**`mkdtemp`** creates a directory with mode 0700.
+s13_9_c_5	13.9	Contract	**`mktemp`** only produces a name. ⚑ HIST: it is insecure, and the linker warns.
+s13_9_i_0	13.9	Inputs	The template must end in exactly six `X`s before the suffix. ⚑ ARB: six is a historical constant. More `X`s would give more entropy, but only the last six are replaced.
+s13_9_f_0	13.9	Failure	`EINVAL` (bad template), `EEXIST` (about 238,000 attempts exhausted), and the `open` errors.
+s13_10_c_1	13.10	Contract	**`statfs`** returns the Linux structure: type magic, block size, blocks, free and available blocks, files, free files, fsid, name length, fragment size, and mount flags.
+s13_10_c_2	13.10	Contract	**`statvfs`** is the POSIX form. glibc derives `f_flag` from `statfs.f_flags`, and since 2.39 `struct statvfs` also has `f_type`.
+s13_11_c_0	13.11	Contract	Set, get, list and remove named binary attributes on an inode. The namespaces are `user.`, `trusted.`, `security.` and `system.`.
+s13_11_c_1	13.11	Contract	`setxattr` flags: `XATTR_CREATE`, `XATTR_REPLACE`.
+s13_11_c_2	13.11	Contract	`get` and `list` with `size` 0 return the needed size.
+s13_11_c_3	13.11	Contract	`list` returns names as concatenated NUL-terminated Text.
+s13_11_f_0	13.11	Failure	`ENODATA`, `ERANGE`, `ENOTSUP`, `E2BIG`, `EDQUOT`.
+s13_12_c_1	13.12	Contract	**`mount(src, target, fstype, flags, data)`** attaches, remounts, binds, moves, or changes propagation. `data` is a file-system-specific Text.
+s13_12_c_2	13.12	Contract	**`umount2(target, flags)`**: `MNT_FORCE`, `MNT_DETACH`, `MNT_EXPIRE`, `UMOUNT_NOFOLLOW`.
+s13_12_c_3	13.12	Contract	**The 2.36 fd-based mount API** (`fsopen`/`fsconfig`/`fsmount`/`move_mount`/`open_tree`/ `fspick`/`mount_setattr`) configures a file-system context through a descriptor, which avoids the string-parsing `data` argument.
+s13_13_c_1	13.13	Contract	**`setmntent(file, mode)`** opens a mount table file: `/proc/self/mounts` (`_PATH_MOUNTED` is `/etc/mtab`, a symlink to it), or `/etc/fstab`.
+s13_13_c_2	13.13	Contract	**`getmntent`** parses the next line into `struct mntent`: `fsname`, `dir`, `type`, `opts`, `freq`, `passno`. The escapes `\040`, `\011`, `\012` and `\134` (and `\\`) are decoded to space, tab, newline and backslash; every other backslash is kept. Corrected 2026-10-03 (three-way rule: the reference library and getmntent(3) agree, `spec/behaviour/mntent.md`; the kernel's `/proc/self/mounts` writes only those four octal forms): an earlier text said octal escapes in general were decoded. `getmntent` returns static storage. ⚑ PATH: hence `getmntent_r`.
+s13_13_c_3	13.13	Contract	**`addmntent`** appends an entry. **`hasmntopt(ent, opt)`** finds an option in `opts`.
+s13_13_c_4	13.13	Contract	**The `fsent` functions** read `/etc/fstab` into `struct fstab`.
+s13_14_c_0	13.14	Contract	Enable or disable a swap device or file, with priority flags.
+s13_15_c_0	13.15	Contract	None. They always fail with `ENOSYS`. ⚑ COMPAT.
+s14_1_c_0	14.1	Contract	Reorder an array of `n` elements of `size` bytes into non-decreasing order according to a caller comparison function. `qsort_r` passes an extra context argument to the comparator (the GNU argument order, which differs from BSD's; ⚑ COMPAT).
+s14_1_i_0	14.1	Inputs	The comparator must implement a consistent total preorder. An inconsistent comparator leaves the array in unspecified order. The 2.39 algorithms still stay within the array in that case. Older releases' quicksort fallback could access memory outside the array when given a non-transitive comparator (the Qualys report of January 2024).
+s14_1_g_1	14.1	Guarantees	The array is a permutation of the input, sorted.
+s14_1_g_2	14.1	Guarantees	**Not stable.** ⚑ ARB, ⚑ HIST: glibc's historical mergesort *was* stable whenever it could allocate, and many programs silently depended on that. The contract never promised it.
+s14_1_g_3	14.1	Guarantees	2.39 uses a mergesort with a temporary buffer (on the stack for small inputs, otherwise `malloc`), and heapsort when allocation fails. It is O(n log n) worst case and never fails.
+s14_2_c_0	14.2	Contract	Find *an* element equal to the key in a sorted array, or return `NULL`. If there are several equal elements, which one is returned is unspecified.
+s14_3_c_0	14.3	Contract	Find the key in an unsorted array with `*nmemb` elements. `lsearch` appends the key if it is absent and increments `*nmemb`. The caller must guarantee space for one more element.
+s14_4_c_0	14.4	Contract	A balanced ordered set of caller pointers keyed by a comparator. The root is a caller `void *`.
+s14_4_c_1	14.4	Contract	**`tsearch`** finds or inserts, returning a pointer to the node, whose first member is the key pointer.
+s14_4_c_2	14.4	Contract	**`tfind`** finds.
+s14_4_c_3	14.4	Contract	**`tdelete`** removes and returns the parent node (unspecified if the tree becomes empty; non-NULL on success).
+s14_4_c_4	14.4	Contract	**`twalk`** visits nodes, reporting each in pre-, in- and post-order (`preorder`, `postorder`, `endorder`, `leaf`). ⚑ HIST: the SVID names are counter-intuitive. "postorder" means "in-order".
+s14_4_c_5	14.4	Contract	**`twalk_r`** (2.30) passes a context argument.
+s14_4_c_6	14.4	Contract	**`tdestroy`** (GNU) frees all nodes, calling a free function for each key.
+s14_4_g_0	14.4	Guarantees	O(log n) operations (glibc uses a red-black tree).
+s14_4_f_0	14.4	Failure	`tsearch` returns `NULL` if memory is exhausted.
+s14_5_c_0	14.5	Contract	A fixed-capacity hash table mapping Text keys to `void *` data. `hsearch(item, FIND|ENTER)` finds or inserts.
+s14_5_i_0	14.5	Inputs	The capacity is fixed at creation. glibc rounds it up to a prime.
+s14_5_f_1	14.5	Failure	`hsearch(ENTER)` returns `NULL` with `ENOMEM` when the table is full.
+s14_5_f_2	14.5	Failure	The table cannot be resized, and entries cannot be deleted.
+s14_5_f_3	14.5	Failure	`hdestroy` does not free keys.
+s14_6_c_0	14.6	Contract	Insert an element after a given one, or remove an element, in a caller-managed doubly linked list whose first two members are the forward and backward pointers. A NULL predecessor starts a new linear list.
+s14_7_c_0	14.7	Contract	Decide whether a Text matches a shell pattern.
+s14_7_c_1	14.7	Contract	**Pattern syntax:** `*`, `?`, `[...]` bracket expressions (ranges, `[:class:]`, `[=equiv=]`, `[.coll.]`), and `\` escapes.
+s14_7_c_2	14.7	Contract	**Flags:**
+s14_7_c_2_1	14.7	Contract	`FNM_NOESCAPE`;
+s14_7_c_2_2	14.7	Contract	`FNM_PATHNAME` (wildcards do not match `/`);
+s14_7_c_2_3	14.7	Contract	`FNM_PERIOD` (a leading `.` must be matched literally);
+s14_7_c_2_4	14.7	Contract	`FNM_LEADING_DIR`;
+s14_7_c_2_5	14.7	Contract	`FNM_CASEFOLD`;
+s14_7_c_2_6	14.7	Contract	`FNM_EXTMATCH` (ksh extended patterns `?(...)`, `*(...)`, `+(...)`, `@(...)`, `!(...)`).
+s14_7_g_0	14.7	Guarantees	Returns 0 for a match and `FNM_NOMATCH` otherwise. Multibyte-aware in the current locale.
+s14_7_f_0	14.7	Failure	Returns another non-zero value on error (for example `ENOMEM`). Invalid multibyte text in the pattern or the string is not an error: it is matched byte by byte, as an ordinary character per byte, so that `glob` can match any file name. Corrected 2026-10-03 (owner ruling; `spec/behaviour/patterns.md`: glibc matches such text byte by byte, POSIX and fnmatch(3) are silent): an earlier text gave invalid multibyte text as an example of an error.
+s14_8_c_0	14.8	Contract	Find all Paths matching a shell pattern, and return them in a `glob_t {gl_pathc, gl_pathv, gl_offs}`.
+s14_8_c_1	14.8	Contract	**Standard flags:** `GLOB_ERR`, `GLOB_MARK`, `GLOB_NOSORT`, `GLOB_DOOFFS`, `GLOB_NOCHECK`, `GLOB_APPEND`, `GLOB_NOESCAPE`.
+s14_8_c_2	14.8	Contract	**GNU flags:**
+s14_8_c_2_1	14.8	Contract	`GLOB_PERIOD`, `GLOB_BRACE` (`{a,b}`), `GLOB_NOMAGIC`, `GLOB_TILDE`, `GLOB_TILDE_CHECK` (`~user` expansion);
+s14_8_c_2_2	14.8	Contract	`GLOB_ONLYDIR`;
+s14_8_c_2_3	14.8	Contract	`GLOB_ALTDIRFUNC`, with caller directory-access callbacks.
+s14_8_c_3	14.8	Contract	Results are sorted with `strcoll` unless `GLOB_NOSORT`. An error callback may abort the walk.
+s14_8_c_4	14.8	Contract	**`glob_pattern_p`** reports whether a pattern contains wildcards.
+s14_8_f_0	14.8	Failure	`GLOB_NOSPACE`, `GLOB_ABORTED`, `GLOB_NOMATCH`.
+s14_9_c_1	14.9	Contract	**POSIX interface.**
+s14_9_c_1_1	14.9	Contract	`regcomp(&re, pattern, cflags)` compiles a basic or extended (`REG_EXTENDED`) regular expression. Other flags are `REG_ICASE`, `REG_NOSUB` and `REG_NEWLINE`.
+s14_9_c_1_2	14.9	Contract	`regexec(&re, text, nmatch, pmatch, eflags)` finds the leftmost-longest match and fills subexpression offsets (`regmatch_t`). `eflags` are `REG_NOTBOL`, `REG_NOTEOL` and the GNU `REG_STARTEND`, which lets `pmatch[0]` delimit the text so that it need not be terminated.
+s14_9_c_1_3	14.9	Contract	`regerror` formats an error code. `regfree` releases compiled storage.
+s14_9_c_2	14.9	Contract	**GNU interface.** `re_compile_pattern`, `re_search` and `re_match` work on length-delimited buffers (including split buffers, `_2`) with a selectable syntax (`re_syntax_options`, `RE_SYNTAX_*`). They support back-references, and word and buffer anchors.
+s14_9_c_3	14.9	Contract	**BSD interface.** `re_comp`/`re_exec` use one global compiled pattern. ⚑ HIST.
+s14_9_g_0	14.9	Guarantees	POSIX leftmost-longest semantics, and multibyte (locale) awareness. This includes subexpression selection as POSIX XBD 9.1 defines it: consistent with the whole match being the longest of the leftmost matches, each subpattern, from left to right, matches the longest possible string (a null string being longer than no match), and `regexec` reports subexpressions by its rules (the last match of a repeated group; -1 for a group that did not take part, including a group nested in a repetition whose last iteration did not take it). Clarified 2026-10-03 (owner ruling, `spec/behaviour/regex-submatch-analysis.md`): glibc selects subexpressions by alternation priority instead.
+s14_9_f_0	14.9	Failure	`regcomp` returns `REG_BADPAT`, `REG_ECOLLATE`, `REG_ECTYPE`, `REG_EESCAPE`, `REG_ESUBREG`, `REG_EBRACK`, `REG_EPAREN`, `REG_EBRACE`, `REG_BADBR`, `REG_ERANGE`, `REG_ESPACE` or `REG_BADRPT`. `regexec` returns `REG_NOMATCH` or `REG_ESPACE`.
+s14_10_c_0	14.10	Contract	Perform POSIX shell word expansion on a Text:
+s14_10_c_1	14.10	Contract	tilde, parameter and arithmetic expansion;
+s14_10_c_2	14.10	Contract	command substitution (`$(...)`, backquotes) unless `WRDE_NOCMD`;
+s14_10_c_3	14.10	Contract	field splitting on `IFS`;
+s14_10_c_4	14.10	Contract	pathname expansion and quote removal. The result is a list of words. Other flags are `WRDE_DOOFFS`, `WRDE_APPEND`, `WRDE_REUSE`, `WRDE_SHOWERR` and `WRDE_UNDEF`.
+s14_10_f_0	14.10	Failure	`WRDE_BADCHAR` (an unquoted `|&;<>(){}` or newline), `WRDE_BADVAL` (an undefined variable with `WRDE_UNDEF`), `WRDE_CMDSUB` (command substitution with `WRDE_NOCMD`), `WRDE_NOSPACE`, `WRDE_SYNTAX`.
+s15_n_1	15	Notes	The socket calls are **[thin]**. ⚑ KERN: the address structures (`sockaddr_in`, `sockaddr_in6`, `sockaddr_un`, `sockaddr_ll`, `sockaddr_nl`, ...), the option levels and names, and the message-header layout are kernel ABI.
+s15_n_2	15	Notes	⚑ HIST. The generic `struct sockaddr` (a 2-byte family plus 14 bytes) is too small for most address families. That is why `struct sockaddr_storage` exists, and why every call passes an explicit length. A tagged union of address types would express the need directly.
+s15_1_c_1	15.1	Contract	**`socket(domain, type, protocol)`** creates an endpoint. The domains are `AF_INET`, `AF_INET6`, `AF_UNIX`, `AF_NETLINK`, `AF_PACKET`, and others. The types are `SOCK_STREAM`, `SOCK_DGRAM`, `SOCK_SEQPACKET` and `SOCK_RAW`, optionally combined with `SOCK_NONBLOCK` and `SOCK_CLOEXEC`.
+s15_1_c_2	15.1	Contract	**`socketpair`** creates a connected pair. On Linux it is `AF_UNIX` only.
+s15_1_c_3	15.1	Contract	**`bind`** assigns a local address, and **`listen(fd, backlog)`** marks the socket passive.
+s15_1_c_4	15.1	Contract	**`accept`/`accept4`** return a new connected socket and, optionally, the peer address. `accept4` takes `SOCK_NONBLOCK|SOCK_CLOEXEC`.
+s15_1_c_5	15.1	Contract	**`connect`** initiates a connection, or sets the default peer for datagram sockets. A non-blocking connect fails with `EINPROGRESS`, and completion is observed via `poll` + `SO_ERROR`.
+s15_1_c_6	15.1	Contract	**`shutdown(fd, SHUT_RD|SHUT_WR|SHUT_RDWR)`** half-closes the connection.
+s15_1_c_7	15.1	Contract	**`getsockname`/`getpeername`** return the local or peer address, truncated to the supplied length. The full length is reported back.
+s15_1_c_8	15.1	Contract	**`getsockopt`/`setsockopt`** read and write options (`SOL_SOCKET`, `IPPROTO_TCP`, `IPPROTO_IP`, `IPPROTO_IPV6`, ...).
+s15_1_c_9	15.1	Contract	**`sockatmark`** reports whether the socket is at the out-of-band mark. **`isfdtype(fd, S_IFSOCK)`** tests a descriptor's type.
+s15_1_f_0	15.1	Failure	The kernel errors, for example `EADDRINUSE`, `EADDRNOTAVAIL`, `ECONNREFUSED`, `ETIMEDOUT`, `ENETUNREACH`, `EAFNOSUPPORT`, `EPROTONOSUPPORT`, `EMFILE`, `ENOBUFS`, `EINPROGRESS`, `EALREADY`, `EISCONN`, `ENOTCONN`, `ENOTSOCK`, `EINTR`.
+s15_1_x_0	15.1	Cancellation	`accept`, `accept4` and `connect` are cancellation points.
+s15_2_c_1	15.2	Contract	**`send`/`recv`** are `write`/`read` with flags: `MSG_DONTWAIT`, `MSG_NOSIGNAL`, `MSG_PEEK`, `MSG_WAITALL`, `MSG_OOB`, `MSG_TRUNC`, `MSG_MORE`, `MSG_ZEROCOPY`, ...
+s15_2_c_2	15.2	Contract	**`sendto`/`recvfrom`** also carry an address.
+s15_2_c_3	15.2	Contract	**`sendmsg`/`recvmsg`** use a message header with scatter/gather buffers, an address, and **ancillary data** (control messages). Examples are `SCM_RIGHTS` (passing descriptors), `SCM_CREDENTIALS`, `IP_PKTINFO` and timestamps. The `CMSG_*` macros and `__cmsg_nxthdr` iterate over ancillary data.
+s15_2_c_4	15.2	Contract	**`sendmmsg`/`recvmmsg`** transfer several messages per call. `recvmmsg` takes a timeout.
+s15_2_g_0	15.2	Guarantees	Datagram boundaries are preserved. A datagram longer than the buffer is truncated, which is reported by `MSG_TRUNC` in `msg_flags`.
+s15_2_f_0	15.2	Failure	As §11.3, plus `ECONNRESET`, `EMSGSIZE`, `EDESTADDRREQ`, `ENOTCONN`.
+s15_2_x_0	15.2	Cancellation	Yes.
+s15_3_c_1	15.3	Contract	**`inet_pton(af, text, dst)`** parses dotted-quad IPv4 (exactly four decimal parts) or IPv6 text (RFC 4291 forms, including embedded IPv4) into network byte order. It returns 1 on success, 0 for invalid text, and -1 with `EAFNOSUPPORT`.
+s15_3_c_2	15.3	Contract	**`inet_ntop(af, src, dst, size)`** formats an address, using RFC 5952 compressed form for IPv6. It fails with `ENOSPC` if the buffer is too small.
+s15_3_c_3	15.3	Contract	**`inet_aton`** accepts the historical forms: 1 to 4 parts, each in octal, decimal or hex, so `"10.1"` means 10.0.0.1. ⚑ HIST: this lenient syntax has caused security bugs through inconsistent parsing between programs.
+s15_3_c_4	15.3	Contract	**`inet_addr`** is `inet_aton` returning `INADDR_NONE` (0xFFFFFFFF) on error. ⚑ HIST, ⚑ ARB: that value is also the valid address 255.255.255.255.
+s15_3_c_5	15.3	Contract	**`inet_ntoa`** formats into a static per-thread buffer. ⚑ HIST.
+s15_3_c_6	15.3	Contract	**`inet_network`, `inet_makeaddr`, `inet_lnaof` and `inet_netof`** manipulate classful (A/B/C) network and host parts. ⚑ HIST: classful addressing has been obsolete since 1993 (CIDR).
+s15_3_c_7	15.3	Contract	**`inet_net_pton`/`inet_net_ntop`** parse and format CIDR prefixes. **`inet_nsap_*`** handle OSI NSAP addresses. ⚑ HIST.
+s15_3_c2_0	15.3	Contract	`in6addr_any` (`::`) and `in6addr_loopback` (`::1`) are `const struct in6_addr` objects. ⚑ HIST: they are data symbols rather than initializer macros, because C89 could not express a structure constant in an expression.
+s15_4_c_1	15.4	Contract	**`if_nametoindex(name)`** returns the interface index, or 0 (with `ENODEV`) if there is no such interface. **`if_indextoname(i, buf)`** writes the name into a buffer of `IF_NAMESIZE` (16).
+s15_4_c_2	15.4	Contract	**`if_nameindex()`** returns an allocated array of `{index, name}`, terminated by a zero entry.
+s15_4_c_3	15.4	Contract	**`getifaddrs(&list)`** returns an allocated linked list of per-address records: name, flags (`IFF_*`), address, netmask, broadcast or destination address, and per-interface statistics (for `AF_PACKET` entries, `ifa_data` holds `rtnl_link_stats`).
+s15_5_c_0	15.5	Contract	Build and parse IPv6 hop-by-hop and destination options and type-0 routing headers in caller buffers (RFC 3542). The `inet6_option_*` functions are the deprecated RFC 2292 forms. ⚑ HIST.
+s15_6_c_0	15.6	Contract	Get or set an include or exclude source list for a multicast group on an interface (RFC 3678).
+s15_7_c_0	15.7	Contract	Parse and format 48-bit MAC addresses (`xx:xx:xx:xx:xx:xx`). The non-`_r` forms use static storage (⚑ PATH). `ether_hostton` and `ether_ntohost` map between host names and MACs via the NSS `ethers` database. `ether_line` parses one line of `/etc/ethers`.
+s15_8_c_1	15.8	Contract	**`rcmd`** connects to an `rshd` from a privileged port (below 1024) and sends the user names and command, with an optional separate stderr channel.
+s15_8_c_2	15.8	Contract	**`rresvport`/`bindresvport`** bind a privileged port.
+s15_8_c_3	15.8	Contract	**`ruserok`/`iruserok`** check `~/.rhosts` and `/etc/hosts.equiv` trust.
+s15_8_c_4	15.8	Contract	**`rexec`** authenticates with a password sent in clear text.
+s16_1_c_0	16.1	Contract	Every lookup in a system database is routed, per database, through an ordered list of *sources* (services), with rules for what to do on each outcome. The databases are `passwd`, `group`, `shadow`, `gshadow`, `hosts`, `networks`, `protocols`, `services`, `rpc`, `ethers`, `netgroup`, `aliases`, `publickey` and `initgroups`.
+s16_1_c_1	16.1	Contract	**Sources** are `files`, `dns`, `db`, `compat`, and plugin modules such as `systemd`, `sss`, `ldap` and `winbind`.
+s16_1_c_2	16.1	Contract	**Outcome rules** are `[NOTFOUND=return]` style actions: `SUCCESS`, `NOTFOUND`, `UNAVAIL` and `TRYAGAIN`, each mapped to `return`, `continue` or `merge`.
+s16_1_c_3	16.1	Contract	**`__nss_hostname_digits_dots(name, resbuf, buffer, buffer_size, buflen, result, status, af, h_errnop)`** (compat, no header declares it; NSS host modules call it) answers a host lookup for a numeric name without the switch: `int` result; `const char *name`, `struct hostent *resbuf`, `char **buffer`, `size_t *buffer_size`, `size_t buflen`, `struct hostent **result`, `enum nss_status *status`, `int af`, `int *h_errnop`. It returns 1 when `name` is a dotted numeric IPv4 text (only digits and dots, not ending in a dot, as `inet_aton` reads it: `1.2.3` is 1.2.0.3) or an IPv6 literal (hexadecimal digits, colons and dots), whether or not it can be returned, and 0 for any other name, writing nothing.
+s16_1_c_4	16.1	Contract	The found entry is `resbuf`: `h_name` the name as given, no aliases, one address of family `af` (`AF_INET6`; any other value is `AF_INET`). A name of the other family, or one the parser rejects (`1.2.3.256`, five parts), is not found (`HOST_NOT_FOUND`).
+s16_1_c_5	16.1	Contract	**The allocating form** (`buffer_size` not NULL): the strings and lists go in `*buffer`, enlarged with `realloc` to fit (`*buffer`, `*buffer_size` updated; done for any non-empty name, also one answered with 0); `*result` is `resbuf`, or NULL when not found; `*status` is not written. **The caller-buffer form** (`buffer_size` NULL): `buflen` bytes at `*buffer`; `*status` is `NSS_STATUS_SUCCESS` (1) or `NSS_STATUS_NOTFOUND` (0); `*result` is not written. `*h_errnop` is 0 or `HOST_NOT_FOUND`.
+s16_1_c_6	16.1	Contract	**Failure.** A caller buffer too small: 1, `*status` `NSS_STATUS_TRYAGAIN` (-2), `*h_errnop` `NETDB_INTERNAL` (-1), `errno` `ERANGE`. No memory in the allocating form: 1, `*result` NULL, `NETDB_INTERNAL`, `ENOMEM`. A NULL `status` or `h_errnop` is not written (the reference dereferences it; S6). `errno` is not otherwise written. (Written 2026-10-05, owner ruling: observed black-box, `spec/behaviour/digits-dots.md`.) The switch is configured by `/etc/nsswitch.conf`, and each source is a shared object `libnss_<source>.so.2` loaded with `dlopen`. `__nss_configure_lookup(db, spec)` overrides the configuration programmatically.
+s16_1_g_1	16.1	Guarantees	A lookup returns the first successful answer under the rules. `merge` concatenates group members across sources.
+s16_1_g_2	16.1	Guarantees	The configuration is reloaded when the file changes (2.33+).
+s16_1_g_3	16.1	Guarantees	`nscd`, if running and enabled, answers from its cache over a Unix socket first.
+s16_2_c_1	16.2	Contract	**`getaddrinfo(node, service, hints, &res)`** translates a host name (or numeric address) and a service name (or port number) into a list of socket addresses suitable for `socket` plus `bind` or `connect`.
+s16_2_c_2	16.2	Contract	**Hints** select the family (`AF_UNSPEC`, `AF_INET`, `AF_INET6`), the socket type and the protocol. Flags are:
+s16_2_c_2_1	16.2	Contract	`AI_PASSIVE` (wildcard address for `bind`);
+s16_2_c_2_2	16.2	Contract	`AI_CANONNAME`;
+s16_2_c_2_3	16.2	Contract	`AI_NUMERICHOST`, `AI_NUMERICSERV`;
+s16_2_c_2_4	16.2	Contract	`AI_V4MAPPED`, `AI_ALL`;
+s16_2_c_2_5	16.2	Contract	`AI_ADDRCONFIG` (return only families configured on the host);
+s16_2_c_2_6	16.2	Contract	`AI_IDN` (IDNA via `libidn2`, loaded with `dlopen`), `AI_CANONIDN`.
+s16_2_c_3	16.2	Contract	The result list is **sorted by RFC 3484/6724 destination address selection**. That needs the source address for each candidate, which glibc learns by `connect`ing a UDP socket and calling `getsockname`. The policy table comes from `/etc/gai.conf`.
+s16_2_c_4	16.2	Contract	**`getnameinfo(sa, len, host, hl, serv, sl, flags)`** does the reverse. Flags are `NI_NUMERICHOST`, `NI_NUMERICSERV`, `NI_NOFQDN`, `NI_NAMEREQD`, `NI_DGRAM` and `NI_IDN`.
+s16_2_c_5	16.2	Contract	**`getaddrinfo_a(mode, list, n, sigevent)`** runs lookups asynchronously on helper threads. `gai_suspend`, `gai_error` and `gai_cancel` poll, wait and cancel.
+s16_2_f_0	16.2	Failure	Error codes are returned directly, not through `errno`: `EAI_AGAIN`, `EAI_BADFLAGS`, `EAI_FAIL`, `EAI_FAMILY`, `EAI_MEMORY`, `EAI_NONAME`, `EAI_SERVICE`, `EAI_SOCKTYPE`, `EAI_SYSTEM` (then `errno` is meaningful), `EAI_OVERFLOW`, `EAI_NODATA`, `EAI_ADDRFAMILY`, `EAI_INPROGRESS`, `EAI_CANCELED`, `EAI_NOTCANCELED`, `EAI_ALLDONE`, `EAI_INTR`, `EAI_IDN_ENCODE`. **`gai_strerror`** maps them to Text.
+s16_2_g_0	16.2	Guarantees	The result is allocated as a single list that must be freed with `freeaddrinfo`. Each entry is ready to pass to `socket` and `connect`.
+s16_3_c_0	16.3	Contract	Look up host entries (`struct hostent`: name, aliases, address type, length and list) by name or address, or enumerate the hosts database. The same applies to networks (`struct netent`).
+s16_3_f_0	16.3	Failure	`NULL`, with the error in **`h_errno`** (per-thread): `HOST_NOT_FOUND`, `TRY_AGAIN`, `NO_RECOVERY`, `NO_DATA`. `herror` and `hstrerror` produce messages.
+s16_4_c_0	16.4	Contract	A DNS client that sends queries to the configured recursive servers and returns raw DNS messages.
+s16_4_c_1	16.4	Contract	**Initialization.** `res_ninit(&state)` reads the configuration:
+s16_4_c_1_1	16.4	Contract	nameservers (at most `MAXNS` = 3, ⚑ ARB);
+s16_4_c_1_2	16.4	Contract	the search list (every domain of `search` is used by the lookups, 2.26+; the state's `dnsrch` array shows at most the first `MAXDNSRCH` = 6, ⚑ ARB);
+s16_4_c_1_3	16.4	Contract	options: `ndots`, `timeout`, `attempts`, `rotate`, `edns0`, `single-request`, `single-request-reopen`, `use-vc`, `no-aaaa`, `trust-ad`, `no-reload`, `inet6` (obsolete);
+s16_4_c_1_4	16.4	Contract	the sortlist.
+s16_4_c_2	16.4	Contract	**Querying.** `res_nquery(state, name, class, type, answer, anslen)` sends one query. `res_nsearch` applies the search list and `ndots` rules. `res_nsend` sends a prebuilt message.
+s16_4_c_3	16.4	Contract	**Message handling.** `res_nmkquery` builds a query. `dn_comp`/`dn_expand` compress and expand domain names. The `ns_*` functions parse and print resource records.
+s16_4_c_4	16.4	Contract	**Name checks.** `res_hnok` and the others check host-name syntax.
+s16_4_g_1	16.4	Guarantees	Queries are retried across servers with the configured timeouts.
+s16_4_g_2	16.4	Guarantees	Responses are validated: the ID, source address and question must match.
+s16_4_g_3	16.4	Guarantees	The AD bit is passed through only with `trust-ad`.
+s16_4_g_4	16.4	Guarantees	The configuration is re-read automatically when `/etc/resolv.conf` changes (2.26+), unless `no-reload` is set.
+s16_4_f_0	16.4	Failure	-1 with `h_errno` (`HOST_NOT_FOUND`, `TRY_AGAIN`, `NO_DATA`, `NO_RECOVERY`).
+s16_5_c_0	16.5	Contract	Look up a service (name ↔ port and protocol), a protocol (name ↔ number), or an ONC RPC program (name ↔ number), or enumerate these databases. For **netgroups**, enumerate the `(host, user, domain)` triples of a netgroup, or test membership (`innetgr`).
+s16_5_f_0	16.5	Failure	`NULL` on failure. The `_r` forms return an errno value, where `ERANGE` means "buffer too small".
+s16_6_c_0	16.6	Contract	Enumerate or look up entries of the NSS `aliases` database (`struct aliasent`: name, members, local flag).
+s17_1_c_0	17.1	Contract	Return the calling process's real, effective and saved user and group IDs, and its supplementary group list. `getgroups(0, NULL)` returns the count. `group_member(g)` (GNU) tests whether `g` is the effective GID or a supplementary group.
+s17_1_g_0	17.1	Guarantees	These calls never fail, except `getgroups` with `EINVAL` when the buffer is too small.
+s17_2_c_0	17.2	Contract	Change the process's user or group identities, following the POSIX rules:
+s17_2_c_1	17.2	Contract	A privileged process (one with `CAP_SETUID`/`CAP_SETGID`) may set any values.
+s17_2_c_2	17.2	Contract	An unprivileged process may only switch among its real, effective and saved IDs.
+s17_2_c_3	17.2	Contract	`setuid` with privilege sets all three. Also:
+s17_2_c_4	17.2	Contract	**`setgroups`** replaces the supplementary list. It requires privilege, and is denied in a user namespace when `/proc/self/setgroups` is `deny`.
+s17_2_c_5	17.2	Contract	**`initgroups(user, g)`** sets the supplementary list to all groups that `user` belongs to, plus `g`.
+s17_2_c_6	17.2	Contract	**`setfsuid`/`setfsgid`** set the file-system IDs used for access checks. They return the previous value and *cannot report failure*. ⚑ HIST.
+s17_2_g_0	17.2	Guarantees	**The change applies to every thread in the process atomically**, as POSIX requires.
+s17_2_f_0	17.2	Failure	`EPERM`, `EINVAL`, `EAGAIN` (`RLIMIT_NPROC` on some kernels).
+s17_3_c_1	17.3	Contract	**Look up a user record** (`struct passwd`: name, password placeholder, UID, GID, GECOS, home directory, shell) by name or by UID. Or enumerate all records, reading from NSS.
+s17_3_c_2	17.3	Contract	**Look up a group record** (`struct group`: name, password, GID, member-name list) in the same way.
+s17_3_c_3	17.3	Contract	**The `f` forms** parse records from a caller-supplied stream in `/etc/passwd` format. **`putpwent`/`putgrent`** write one.
+s17_3_c_4	17.3	Contract	**`getgrouplist(user, g, groups, &n)`** lists the GIDs of all groups the user belongs to. If the array is too small, it returns -1 and sets `*n` to the needed size.
+s17_3_c_5	17.3	Contract	**`getpw(uid, buf)`** writes a passwd line into an unbounded buffer. ⚑ HIST.
+s17_3_g_0	17.3	Guarantees	Results come from NSS (§16.1). The non-`_r` forms return static storage (⚑ PATH: hence the `_r` forms).
+s17_3_f_1	17.3	Failure	**Non-`_r` forms** return `NULL`. "Not found" is *not* an error: `errno` is left unchanged, or set to 0, `ENOENT`, `ESRCH`, `EBADF` or `EPERM` depending on the source. ⚑ HIST: POSIX allows several values here, so "not found" and "failed" are hard to tell apart.
+s17_3_f_2	17.3	Failure	**`_r` forms** return 0 with `*result == NULL` for not found, or an errno value (`ERANGE` means the caller buffer is too small; `sysconf(_SC_GETPW_R_SIZE_MAX)` gives only a hint). ⚑ HIST: the "guess a buffer size, retry on ERANGE" protocol.
+s17_3_f_3	17.3	Failure	**End of an enumeration** (`getpwent`, `getgrent`, `getspent`, `getsgent`): the non-`_r` forms return `NULL` with `errno` unchanged; the `_r` forms return `ENOENT`, `errno` unchanged.
+s17_4_c_0	17.4	Contract	The same pattern as §17.3, for `struct spwd` (the password hash and aging fields: last change, min, max, warn, inactive, expire) and `struct sgrp` (the group password, admins and members). The `s` forms parse one Text line.
+s17_5_c_1	17.5	Contract	**`getlogin()`** returns the name of the user logged in on the process's controlling session. glibc reads `/proc/self/loginuid` and maps it through the passwd database. If the audit login UID is unset, it falls back to the `utmp` entry for the controlling terminal.
+s17_5_c_2	17.5	Contract	**`ttyslot()`** returns the index of the current terminal's entry in the terminal table. ⚑ HIST.
+s17_5_c_3	17.5	Contract	**`getpass(prompt)`** opens `/dev/tty` (or uses stdin and stderr), disables echo, reads one line into a static buffer, and restores the terminal. ⚑ HIST: it is obsolete and the buffer is static. glibc puts no limit on the line's length (getpass(3), NOTES).
+s17_5_f_0	17.5	Failure	`getlogin` returns `NULL` with `ENXIO` or `ENOENT` when there is no login session.
+s17_5a_c_0	17.5a	Contract	Enumerate the shells listed in `/etc/shells`. If the file is absent, the list is `/bin/sh` and `/bin/csh`. Programs such as `chsh` and `ftpd` use it to decide whether a user has a "real" shell. The cursor is process-global.
+s17_6_c_0	17.6	Contract	Read and write the login records database:
+s17_6_c_1	17.6	Contract	`utmp`: current sessions, in `/var/run/utmp`;
+s17_6_c_2	17.6	Contract	`wtmp`: login and logout history, in `/var/log/wtmp`;
+s17_6_c_3	17.6	Contract	`btmp`: failed logins. The records are `struct utmp`/`utmpx`: type (`USER_PROCESS`, `DEAD_PROCESS`, `LOGIN_PROCESS`, `BOOT_TIME`, ...), PID, line, ID, user, host, exit status, session, time and address.
+s17_6_c_4	17.6	Contract	**`getutid`/`getutline`** search by type and ID, or by line. **`pututline`** writes the record, replacing the matching one.
+s17_6_c_5	17.6	Contract	**`login`/`logout`/`logwtmp`** (BSD, from `libutil`) are convenience wrappers.
+s17_6_c_6	17.6	Contract	**`utmpname`** selects a different file.
+s17_6_g_0	17.6	Guarantees	Record updates are serialized with `fcntl` locks, with a 10-second timeout (⚑ ARB).
+s18_1_c_0	18.1	Contract	Return the calling process's ID (its thread-group ID), its parent's ID, or the calling thread's kernel ID. These calls never fail.
+s18_2_c_1	18.2	Contract	**`fork()`** creates a child process that is a copy of the caller. Copied: memory (copy-on-write), descriptors (sharing descriptions), the signal mask and dispositions, the cwd, the umask, limits, and so on. Returns: 0 in the child, the child's PID in the parent.
+s18_2_c_1_1	18.2	Contract	Only the calling thread exists in the child.
+s18_2_c_1_2	18.2	Contract	`pthread_atfork` handlers run: *prepare* in reverse registration order before the fork, and *parent* and *child* in registration order after it.
+s18_2_c_1_3	18.2	Contract	glibc makes its own internal state (malloc, stdio lists, dynamic-linker locks) consistent in the child.
+s18_2_c_2	18.2	Contract	**`_Fork()`** (2.34, POSIX 2024) forks without running `atfork` handlers and without internal lock handling. It is async-signal-safe.
+s18_2_c_3	18.2	Contract	**`vfork()`** creates a child that shares the parent's memory. The parent is suspended until the child calls `execve` or `_exit`. The child may do nothing else. ⚑ HIST: `vfork` is an optimization that predates copy-on-write, and it is dangerous to use correctly. `posix_spawn` is the safe interface to the same primitive.
+s18_2_c_4	18.2	Contract	**`clone(fn, stack, flags, arg, [ptid, tls, ctid])`** is the Linux primitive. It creates a task that shares selected resources (`CLONE_VM`, `CLONE_FS`, `CLONE_FILES`, `CLONE_SIGHAND`, `CLONE_THREAD`, the namespaces, `CLONE_PIDFD`, `CLONE_SETTLS`, ...) and runs `fn(arg)` on the given stack. The child's return value from `fn` is its exit status. There is no public `clone3` wrapper in 2.39.
+s18_2_f_0	18.2	Failure	-1 with `EAGAIN` (`RLIMIT_NPROC`, or the kernel limit) or `ENOMEM`.
+s18_2_g_0	18.2	Guarantees	The child may call only async-signal-safe functions until it calls `exec`, per POSIX. glibc goes further: `malloc` works in the child.
+s18_3_c_0	18.3	Contract	Replace the process image with a new program, with the argument list and environment given. The PID, descriptors not marked close-on-exec, the signal mask, ignored signals (caught ones are reset to default), the cwd, limits and credentials are all preserved. Set-user-ID and file capabilities are applied.
+s18_3_c_1	18.3	Contract	**The `p` forms** search `$PATH` (the default is `/bin:/usr/bin`) for a name without `/`. If the file exists but is not a valid executable (`ENOEXEC`), they run it with `/bin/sh`. They continue past `EACCES` and report `EACCES` only if no later entry succeeds.
+s18_3_c_2	18.3	Contract	**The `l` forms** take a variadic, NULL-terminated argument list.
+s18_3_c_3	18.3	Contract	**The `e` forms** take an explicit environment. The other forms use `environ`.
+s18_3_c_4	18.3	Contract	**`fexecve(fd, ...)`** executes an open file, via `execveat(fd, "", AT_EMPTY_PATH)`, or `/proc/self/fd/N` on older kernels.
+s18_3_c_5	18.3	Contract	**`execveat`** (2.34) is a thin wrapper.
+s18_3_g_0	18.3	Guarantees	They do not return on success.
+s18_3_f_0	18.3	Failure	`E2BIG` (argv plus envp exceed the kernel limit, a quarter of `RLIMIT_STACK`, or `MAX_ARG_STRLEN` = 32 pages per string), `EACCES`, `ENOENT`, `ENOEXEC`, `ETXTBSY`, `ENOMEM`, `ELOOP`, `EPERM`.
+s18_4_c_0	18.4	Contract	Create a child process running a new program, applying a list of descriptor actions and attributes in the child before `exec`, and report the child's PID (or, for `pidfd_spawn`, a pidfd).
+s18_4_c_1	18.4	Contract	**File actions**, applied in order: open, close, dup2 (with `fd == newfd`, it clears `FD_CLOEXEC`), chdir, fchdir, closefrom, and tcsetpgrp.
+s18_4_c_2	18.4	Contract	**Attribute flags:**
+s18_4_c_2_1	18.4	Contract	`POSIX_SPAWN_RESETIDS`: use the real IDs;
+s18_4_c_2_2	18.4	Contract	`POSIX_SPAWN_SETPGROUP`, `POSIX_SPAWN_SETSID`;
+s18_4_c_2_3	18.4	Contract	`POSIX_SPAWN_SETSIGMASK`, `POSIX_SPAWN_SETSIGDEF`: reset listed signals to default;
+s18_4_c_2_4	18.4	Contract	`POSIX_SPAWN_SETSCHEDULER`, `POSIX_SPAWN_SETSCHEDPARAM`;
+s18_4_c_2_5	18.4	Contract	`POSIX_SPAWN_USEVFORK` (ignored);
+s18_4_c_2_6	18.4	Contract	`POSIX_SPAWN_SETCGROUP` (2.39, Linux 5.7+).
+s18_4_g_1	18.4	Guarantees	Returns 0 on success, or an error number. **Errors that occur in the child before `exec` succeeds are reported to the parent as the return value**, not as a child exit status. glibc has guaranteed this since 2.24.
+s18_4_g_2	18.4	Guarantees	Signal handlers do not run in the child between clone and exec: all signals are blocked, and caught signals are reset.
+s18_4_g_3	18.4	Guarantees	It is safe in multi-threaded programs.
+s18_4_f_0	18.4	Failure	The error numbers of the failing action, `fork` or `exec`.
+s18_5_c_1	18.5	Contract	**`pidfd_open(pid, flags)`** returns a descriptor that refers stably to a process. It becomes readable (for `poll`) when the process exits. `flags` may be `PIDFD_NONBLOCK`.
+s18_5_c_2	18.5	Contract	**`pidfd_getfd(pidfd, targetfd, 0)`** duplicates a descriptor out of another process.
+s18_5_c_3	18.5	Contract	**`pidfd_send_signal`** sends a signal without PID-reuse races.
+s18_5_c_4	18.5	Contract	**`pidfd_getpid(pidfd)`** (2.39) returns the PID, parsed from `/proc/self/fdinfo/N`.
+s18_5_f_0	18.5	Failure	`ESRCH` (the process is gone), `EPERM`, `EINVAL`.
+s18_6_c_0	18.6	Contract	Wait for a state change of a child and collect its status.
+s18_6_c_1	18.6	Contract	The state changes are: exited, killed by a signal, stopped, or continued (`WUNTRACED`, `WCONTINUED`).
+s18_6_c_2	18.6	Contract	**`waitpid(pid, &status, options)`** selects by PID, process group (`-pgid` or 0), or any child (-1).
+s18_6_c_3	18.6	Contract	**`waitid(idtype, id, &info, options)`** returns a `siginfo_t` with the full status. `idtype` may be `P_PID`, `P_PGID`, `P_ALL` or `P_PIDFD`, and options include `WEXITED`, `WSTOPPED`, `WCONTINUED` and `WNOWAIT`.
+s18_6_c_4	18.6	Contract	**`wait3`/`wait4`** also return the child's resource usage.
+s18_6_g_0	18.6	Guarantees	Status macros decode the value: `WEXITSTATUS` gives the 8-bit exit code, `WTERMSIG` the signal, and `WCOREDUMP`, `WSTOPSIG` and `WIFCONTINUED` the rest. A reaped child no longer exists as a zombie.
+s18_6_f_0	18.6	Failure	`ECHILD` (no matching children, or `SIGCHLD` is ignored so children are auto-reaped), `EINTR`, `EINVAL`.
+s18_6_x_0	18.6	Cancellation	Yes.
+s18_7_c_1	18.7	Contract	**`system(cmd)`** runs `/bin/sh -c cmd`. While it waits, it blocks `SIGCHLD` and ignores `SIGINT` and `SIGQUIT` in the caller. It returns the wait status, or -1 on failure. If the shell could not be executed, the status is exit code 127. `system(NULL)` reports whether a shell is available.
+s18_7_c_2	18.7	Contract	**`popen(cmd, "r"|"w"|"re"|"we")`** runs the command with a pipe connected to its stdout or stdin, and returns a stream. **`pclose`** closes the stream, waits for the child, and returns its status.
+s18_7_t_0	18.7	Threads	`system` is MT-Safe in 2.39. Concurrent calls share the `SIGINT` and `SIGQUIT` disposition changes, which are reference-counted.
+s18_8_c_1	18.8	Contract	**`setpgid(pid, pgid)`** moves a process into a new or existing group in the same session.
+s18_8_c_2	18.8	Contract	**`setsid()`** creates a new session and group with the caller as leader, with no controlling terminal. It fails with `EPERM` if the caller is already a group leader.
+s18_8_c_3	18.8	Contract	**`getsid`, `getpgid` and `getpgrp`** query.
+s18_8_c_4	18.8	Contract	**`setpgrp()`** is `setpgid(0, 0)`. ⚑ HIST: the SVID and BSD versions differ, and `__bsd_getpgrp` is the compat symbol for the BSD form.
+s18_8_c_5	18.8	Contract	**`daemon(nochdir, noclose)`** forks and the parent exits. The child calls `setsid`, changes to `/` unless `nochdir`, and redirects 0–2 to `/dev/null` unless `noclose`. It does **not** fork a second time, so the daemon may reacquire a controlling terminal. ⚑ HIST.
+s18_9_c_1	18.9	Contract	**`prctl(option, ...)`** gets or sets per-process or per-thread attributes: name, dumpable, no-new-privs, seccomp, parent-death signal, child subreaper, capability bounding set, memory tagging, and so on. It is variadic.
+s18_9_c_2	18.9	Contract	**`personality(p)`** sets the execution domain flags (for example `ADDR_NO_RANDOMIZE`).
+s18_9_c_3	18.9	Contract	**`unshare(flags)`** detaches the caller from shared namespaces or resources. **`setns(fd, nstype)`** joins a namespace.
+s18_9_c_4	18.9	Contract	**`arch_prctl(code, addr)`** gets or sets x86 architecture state (FS and GS base, CPUID faulting, AMX permissions). ⚑ KERN.
+s18_9_c_5	18.9	Contract	**`ptrace(request, pid, addr, data)`** traces a process. The variadic glibc prototype returns the peeked word for `PEEK*` requests, so a caller must zero `errno` to detect errors. ⚑ HIST.
+s19_1_c_1	19.1	Contract	**`tcgetattr`/`tcsetattr`** read and write a terminal's line-discipline settings (`struct termios`):
+s19_1_c_1_1	19.1	Contract	input, output, control and local mode flags;
+s19_1_c_1_2	19.1	Contract	control characters (`VINTR`, `VEOF`, `VMIN`, `VTIME`, ...);
+s19_1_c_1_3	19.1	Contract	line speeds. `tcsetattr` applies the settings immediately (`TCSANOW`), after output drains (`TCSADRAIN`), or after draining and flushing input (`TCSAFLUSH`).
+s19_1_c_2	19.1	Contract	**The `cf*` functions** get and set speeds as `B*` constants.
+s19_1_c_3	19.1	Contract	**`cfmakeraw`** configures raw mode.
+s19_1_c_4	19.1	Contract	**`tcsendbreak`** sends a break. **`tcdrain`** waits for output to drain (a cancellation point). **`tcflush`** discards queued data. **`tcflow`** suspends or resumes output or input.
+s19_1_c_5	19.1	Contract	**`tcgetsid`** returns the session that owns the terminal.
+s19_1_c_6	19.1	Contract	**`isatty(fd)`** reports whether `fd` is a terminal (`ENOTTY` otherwise).
+s19_1_f_0	19.1	Failure	`ENOTTY`, `EINVAL`, `EINTR`, `EIO` (background process group, orphaned).
+s19_2_c_1	19.2	Contract	**`tcgetpgrp(fd)`** returns the foreground process group of the terminal.
+s19_2_c_2	19.2	Contract	**`tcsetpgrp(fd, pgrp)`** makes `pgrp` the foreground group. When a background process calls it, it sends `SIGTTOU` unless that signal is blocked or ignored.
+s19_3_c_0	19.3	Contract	Return the Path of the terminal device open on `fd`. The non-`_r` form uses a static buffer (⚑ PATH).
+s19_3_f_1	19.3	Failure	`ENOTTY`: `fd` is not a terminal.
+s19_3_f_2	19.3	Failure	`ENODEV`: the device exists, but not in this mount namespace's `/dev`, for example inside a container with a different `/dev/pts`.
+s19_3_f_3	19.3	Failure	`ERANGE`: the buffer is too small.
+s19_4_c_1	19.4	Contract	**`posix_openpt(flags)`** opens a new master side (`O_RDWR`, `O_NOCTTY`).
+s19_4_c_2	19.4	Contract	**`grantpt(fd)`** sets ownership and permissions of the slave. On Linux with devpts this is already done by the kernel, so glibc only validates `fd`.
+s19_4_c_3	19.4	Contract	**`unlockpt(fd)`** unlocks the slave so it can be opened.
+s19_4_c_4	19.4	Contract	**`ptsname(fd)`** returns the slave's Path. It uses static storage (⚑ PATH).
+s19_4_c_5	19.4	Contract	**`openpty(&master, &slave, name, termp, winp)`** creates a pair, opening both sides and optionally applying attributes and a window size.
+s19_4_c_6	19.4	Contract	**`forkpty`** does `openpty` + `fork` + `login_tty` in the child.
+s19_4_c_7	19.4	Contract	**`login_tty(fd)`** makes `fd` the controlling terminal of a new session and redirects descriptors 0–2 to it.
+s19_4_f_0	19.4	Failure	`EAGAIN`/`ENOENT` (no ptys available), `EINVAL`/`ENOTTY` (not a master).
+s19_5_c_0	19.5	Contract	`getttyent` and the related functions read `/etc/ttys` (BSD). `gtty`, `stty` and `revoke` are compat stubs that fail with `ENOSYS`. ⚑ COMPAT.
+s20_1_c_0	20.1	Contract	A *signal* is an asynchronous notification identified by a number from 1 to 64 (`_NSIG` = 65 on Linux):
+s20_1_c_1	20.1	Contract	standard signals 1–31;
+s20_1_c_2	20.1	Contract	real-time signals `SIGRTMIN`..`SIGRTMAX`, which are 34–64 as visible to applications. Each signal has, per process, a *disposition*: default, ignore, or a handler. Each thread has a *mask* of blocked signals. Signals are either pending per thread or pending per process. Standard signals do not queue: a second pending instance is merged. Real-time signals queue, carry a value, and are delivered lowest-numbered first.
+s20_2_c_1	20.2	Contract	**`sigaction(sig, &act, &old)`** sets and gets the disposition. `act` holds the handler (or `SIG_DFL`/`SIG_IGN`), a mask added during the handler, and flags:
+s20_2_c_1_1	20.2	Contract	`SA_SIGINFO`: a three-argument handler receiving `siginfo_t` and `ucontext_t`;
+s20_2_c_1_2	20.2	Contract	`SA_RESTART`: C0.3;
+s20_2_c_1_3	20.2	Contract	`SA_NODEFER`, `SA_RESETHAND`;
+s20_2_c_1_4	20.2	Contract	`SA_ONSTACK`: use the alternate stack;
+s20_2_c_1_5	20.2	Contract	`SA_NOCLDSTOP`, `SA_NOCLDWAIT`: child-related behaviour.
+s20_2_c_2	20.2	Contract	**`signal(sig, handler)`** in glibc has **BSD semantics**: the handler stays installed, the signal is blocked during the handler, and calls restart. `sysv_signal` gives the SVR4 semantics: one-shot handler, no blocking, no restart. ⚑ HIST: the meaning of `signal` differs between Unix families. ISO C left it unspecified, which makes `signal` unportable.
+s20_2_c_3	20.2	Contract	**`siginterrupt(sig, flag)`** toggles `SA_RESTART`.
+s20_2_c_4	20.2	Contract	**`sigset`, `sighold`, `sigrelse`, `sigignore`** are SVR4 forms (removed from POSIX in 2024). ⚑ HIST.
+s20_2_c_5	20.2	Contract	**`ssignal`/`gsignal`** are SVID software signals (`gsignal` = `raise`). ⚑ HIST.
+s20_2_c_6	20.2	Contract	**`sigvec`** is 4.2BSD, compat only.
+s20_2_c_7	20.2	Contract	**`sigreturn`** is an exported stub that always fails with `ENOSYS`. The real return from a handler goes through the restorer described below.
+s20_2_f_0	20.2	Failure	`EINVAL`: an invalid signal, an attempt to catch or ignore `SIGKILL` or `SIGSTOP`, or a glibc-internal signal.
+s20_3_c_1	20.3	Contract	**`pthread_sigmask(how, &set, &old)`** changes the calling thread's mask with `SIG_BLOCK`, `SIG_UNBLOCK` or `SIG_SETMASK`. It returns an error number. **`sigprocmask`** is the same with the `errno` convention.
+s20_3_c_2	20.3	Contract	**The set operations** manipulate a `sigset_t`. `sigisemptyset`, `sigandset` and `sigorset` are GNU. The `__sig*` forms are inline helpers.
+s20_3_c_3	20.3	Contract	**`sigblock`, `sigsetmask` and `siggetmask`** are BSD forms that use an `int` mask of the first 31 signals. ⚑ HIST.
+s20_3_c_4	20.3	Contract	**`sigpause`** has two contracts selected by feature macros: BSD takes a mask, and XSI (`__xpg_sigpause`) takes a signal to remove from the mask. ⚑ HIST.
+s20_3_g_0	20.3	Guarantees	`SIGKILL` and `SIGSTOP` cannot be blocked, and are silently removed from the set. So are glibc's internal signals.
+s20_4_c_1	20.4	Contract	**`kill(pid, sig)`** sends to a process. `pid` 0 means the caller's group, -1 means all processes the caller may signal, and `-pgid` means a group. `sig` 0 only checks existence and permission.
+s20_4_c_2	20.4	Contract	**`killpg(pgrp, sig)`** sends to a group.
+s20_4_c_3	20.4	Contract	**`raise(sig)`** sends to the calling thread. The signal is delivered before `raise` returns, if unblocked.
+s20_4_c_4	20.4	Contract	**`sigqueue(pid, sig, value)`** sends with an attached `sigval`. It queues, for real-time signals.
+s20_4_c_5	20.4	Contract	**`pthread_kill(thread, sig)`** targets a thread in this process. **`pthread_sigqueue`** (GNU) does the same with a value.
+s20_4_c_6	20.4	Contract	**`tgkill(tgid, tid, sig)`** (2.30) is a thin wrapper.
+s20_4_f_0	20.4	Failure	`EINVAL`, `EPERM`, `ESRCH`. `pthread_kill` on a thread that has exited but not been joined returns 0 in 2.34+.
+s20_5_c_1	20.5	Contract	**`pause()`** sleeps until a handler runs, then returns -1/`EINTR`.
+s20_5_c_2	20.5	Contract	**`sigsuspend(&mask)`** atomically replaces the mask and waits for a handler to run, then restores the mask.
+s20_5_c_3	20.5	Contract	**`sigwait(&set, &sig)`** synchronously accepts a pending signal from `set`, which should be blocked. It returns the signal number through `sig`, and an error number as its result.
+s20_5_c_4	20.5	Contract	**`sigwaitinfo`/`sigtimedwait`** do the same with `siginfo_t` and an optional timeout (`EAGAIN` on timeout).
+s20_5_c_5	20.5	Contract	**`sigpending(&set)`** reports the pending signals.
+s20_5_x_0	20.5	Cancellation	All the waiting functions are cancellation points.
+s20_6_c_0	20.6	Contract	Create or modify a descriptor that returns pending signals from a mask as `struct signalfd_siginfo` records when read. The signals must be blocked in order to be received this way.
+s20_7_c_0	20.7	Contract	Define a per-thread memory region on which handlers flagged `SA_ONSTACK` run. This allows handling stack overflow. `SS_DISABLE` disables it, and `SS_AUTODISARM` (kernel 4.7+) disarms it while in use.
+s20_7_i_0	20.7	Inputs	The size must be at least `MINSIGSTKSZ`. ⚑ KERN, ⚑ HIST: since 2.34, `MINSIGSTKSZ` and `SIGSTKSZ` are **not constants** under `_DYNAMIC_STACK_SIZE_SOURCE`/ `_GNU_SOURCE`. They call `sysconf(_SC_MINSIGSTKSZ)`, because AVX-512 and AMX signal frames exceed the historical 2 KiB/8 KiB constants. The kernel reports the real minimum in `AT_MINSIGSTKSZ`.
+s20_8_c_1	20.8	Contract	**`strsignal(sig)`** returns a translated description. The storage is per-thread for unknown signals.
+s20_8_c_2	20.8	Contract	**`sigdescr_np`** returns the untranslated description, and **`sigabbrev_np`** returns the name without `SIG` (for example `"INT"`). Both were added in 2.32.
+s20_8_c_3	20.8	Contract	**`psignal(sig, s)`** and **`psiginfo(info, s)`** print to `stderr`.
+s20_9_c_0	20.9	Contract	A handler runs on the interrupted thread, with the signal (and `sa_mask`) blocked. It may call only async-signal-safe functions, per the POSIX list: `write`, `read`, `_exit`, `sigaction`, `kill`, `raise`, `open`, `close`, `fork`/`_Fork`, `execve`, `waitpid`, `sem_post`, `clock_gettime`, and others. It must save and restore `errno`. Returning from a handler for a synchronous fault (`SIGSEGV`, `SIGBUS`, `SIGFPE`, `SIGILL`) that does not fix the cause re-executes the faulting instruction.
+s21_1_c_1	21.1	Contract	**`setjmp(env)`** saves the calling environment (callee-saved registers, stack pointer, program counter, and for `sigsetjmp(env, 1)` the signal mask). It returns 0 when called directly.
+s21_1_c_2	21.1	Contract	**`longjmp(env, v)`** restores the environment so that `setjmp` appears to return `v` (1 if `v` is 0). The function that called `setjmp` must not have returned.
+s21_1_c_3	21.1	Contract	**`_setjmp`/`_longjmp`** never save or restore the mask. **`setjmp`** on glibc does not save the mask either (BSD would). ⚑ HIST: the default differs by Unix family.
+s21_1_c_4	21.1	Contract	**`__longjmp_chk`** is the fortified form. It aborts if the jump would move to a frame *below* the current stack pointer (an invalid jump), except for jumps between the alternate signal stack and the main stack.
+s21_1_i_0	21.1	Inputs	`setjmp` may appear only in restricted syntactic contexts (as a whole expression statement, or in a comparison inside `if`/`while`/`switch`). Local non-`volatile` variables modified after `setjmp` have indeterminate values after `longjmp`. ⚑ HIST: `setjmp` is a function that "returns twice", which compilers must special-case.
+s21_1_g_0	21.1	Guarantees	On x86_64 the saved stack and return addresses are mangled with a per-process secret (pointer guard). With CET, the shadow stack is unwound to match (via `incssp`).
+s21_2_c_1	21.2	Contract	**`getcontext(&uc)`** saves the full user context (registers, signal mask, stack description).
+s21_2_c_2	21.2	Contract	**`setcontext(&uc)`** resumes it.
+s21_2_c_3	21.2	Contract	**`makecontext(&uc, fn, argc, ...)`** modifies a context so that resuming it calls `fn` with `argc` integer arguments on the stack in `uc.uc_stack`. When `fn` returns, it resumes `uc.uc_link`, or exits the thread if that is NULL.
+s21_2_c_4	21.2	Contract	**`swapcontext(&old, &new)`** saves into `old` and resumes `new`.
+s21_2_i_0	21.2	Inputs	Arguments to `makecontext` must be `int`-sized. ⚑ HIST: on 64-bit ABIs, passing pointers is technically non-portable, although glibc supports 64-bit values on x86_64.
+s22_n_1	22	Notes	Since 2.34 all of `libpthread` is in `libc.so.6`. `libpthread.so.0` remains as an empty placeholder (⚑ COMPAT).
+s22_n_2	22	Notes	Pthread functions return **error numbers** and do not set `errno` (C0.1). The exceptions are `sem_*`, which use `errno`.
+s22_n_3	22	Notes	**Kernel (section-wide).** Thread synchronization rests on one primitive, the **futex** (`futex`/`futex_time64`), with operations `FUTEX_WAIT`, `FUTEX_WAKE`, `FUTEX_WAIT_BITSET` (absolute timeouts on a chosen clock), `FUTEX_LOCK_PI`, `FUTEX_UNLOCK_PI`, `FUTEX_TRYLOCK_PI`, `FUTEX_LOCK_PI2`, `FUTEX_CMP_REQUEUE_PI` and `FUTEX_WAIT_REQUEUE_PI`. The uncontended paths are pure user-space atomic instructions. The futex syscall itself is not exported by glibc; callers use `syscall()`.
+s22_1_c_1	22.1	Contract	**`pthread_create(&t, attr, fn, arg)`** starts a new thread in the process running `fn(arg)`. The new thread inherits the creator's signal mask (unless set by attribute), its floating-point environment, and its CPU affinity. It starts with no pending signals and a fresh `errno` and TLS.
+s22_1_c_2	22.1	Contract	**`pthread_exit(v)`** terminates the calling thread. It runs cancellation cleanup handlers, then TLS destructors (§22.6), then makes `v` available to `join`. When the last thread exits, the process exits with status 0.
+s22_1_c_3	22.1	Contract	**`pthread_join(t, &v)`** waits for `t` to terminate and releases it. The `_np` forms try, time out (on `CLOCK_REALTIME`), or time out on a chosen clock.
+s22_1_c_4	22.1	Contract	**`pthread_detach(t)`** means `t`'s resources are released at termination without a join.
+s22_1_c_5	22.1	Contract	**`pthread_self`/`pthread_equal`** identify threads. `pthread_t` values of terminated and released threads may be reused.
+s22_1_c_6	22.1	Contract	**The C11 `thrd_*` functions** have the same semantics with C11 result codes (`thrd_success`, `thrd_nomem`, `thrd_timedout`, `thrd_busy`, `thrd_error`). `thrd_sleep` returns -1 on interruption (with the remaining time) and another negative value on error.
+s22_1_c_7	22.1	Contract	**`__libc_single_threaded`** (2.32) is a `char` that is non-zero while the process has never created a thread. Libraries use it to skip atomic operations.
+s22_1_f_1	22.1	Failure	`EAGAIN`: thread or memory limits.
+s22_1_f_2	22.1	Failure	`EINVAL`: a bad attribute.
+s22_1_f_3	22.1	Failure	`EPERM`: a scheduling policy that is not permitted.
+s22_1_f_4	22.1	Failure	`EDEADLK`: joining self or a join cycle.
+s22_1_f_5	22.1	Failure	`ESRCH`/`EINVAL`: the thread is not joinable. Joining a detached thread, or joining twice, is undefined behaviour.
+s22_2_c_0	22.2	Contract	Build an attribute object that controls a new thread's:
+s22_2_c_1	22.2	Contract	detached state;
+s22_2_c_2	22.2	Contract	stack: size (at least `PTHREAD_STACK_MIN`, which since 2.34 is `sysconf(_SC_THREAD_STACK_MIN)` and not a constant), a caller-provided stack, and the guard size (rounded to pages; 0 disables the guard);
+s22_2_c_3	22.2	Contract	scheduling: policy and parameters, inherited or explicit. Only `PTHREAD_SCOPE_SYSTEM` is supported, and `PROCESS` gives `ENOTSUP`.
+s22_2_c_4	22.2	Contract	CPU affinity and initial signal mask. `pthread_getattr_np(t, &a)` returns the *actual* attributes of a running thread, including its stack bounds. For the main thread, these come from `/proc/self/maps` and `RLIMIT_STACK`. The `_default_np` functions set process-wide defaults. `pthread_{get,set}concurrency` are no-ops kept for XSI. ⚑ HIST.
+s22_2_g_0	22.2	Guarantees	The `RLIMIT_STACK` soft limit at startup (8 MiB typically), or 2 MiB if that is unlimited.
+s22_3_c_0	22.3	Contract	Request that a target thread terminate.
+s22_3_c_1	22.3	Contract	In the **deferred** mode (the default), the target acts on the request at the next cancellation point (C0.2), or at `pthread_testcancel`.
+s22_3_c_2	22.3	Contract	In the **asynchronous** mode, the target acts at any instruction. Only async-cancel-safe code may run with this enabled.
+s22_3_c_3	22.3	Contract	**Cancellation state** may be disabled, in which case requests stay pending.
+s22_3_c_4	22.3	Contract	**Acting on cancellation** runs the cleanup handlers in LIFO order and TLS destructors. In C++, it unwinds the stack with a forced unwind (`abi::__forced_unwind`). The thread then exits with `PTHREAD_CANCELED`.
+s22_3_g_0	22.3	Guarantees	If a cancellation point is cancelled *before* the underlying syscall had a side effect, the side effect did not happen. For `close`, the descriptor is still closed (⚑ KERN). For `read`/`write` cancelled after partial transfer, the call returns normally and is not cancelled.
+s22_4_c_0	22.4	Contract	Mutual exclusion. At most one thread owns a mutex.
+s22_4_c_1	22.4	Contract	**Types:** `NORMAL` (self-deadlock on relock), `ERRORCHECK` (`EDEADLK` on relock, `EPERM` on unlock by a non-owner), `RECURSIVE` (a count), and `DEFAULT` (= `NORMAL`). `PTHREAD_MUTEX_ADAPTIVE_NP` spins before blocking.
+s22_4_c_2	22.4	Contract	**Protocols:** `NONE`, `INHERIT` (priority inheritance), `PROTECT` (priority ceiling).
+s22_4_c_3	22.4	Contract	**`pshared`:** usable across processes when the mutex is placed in shared memory.
+s22_4_c_4	22.4	Contract	**Robust:** if the owner dies, the next locker gets `EOWNERDEAD` and must call `pthread_mutex_consistent`. Otherwise, after unlocking, the mutex becomes permanently `ENOTRECOVERABLE`.
+s22_4_c_5	22.4	Contract	**Timeouts:** `timedlock` is absolute on `CLOCK_REALTIME`. `clocklock` (2.30) takes the clock: `CLOCK_MONOTONIC` or `CLOCK_REALTIME`.
+s22_4_c_6	22.4	Contract	**Static initialization:** `PTHREAD_MUTEX_INITIALIZER` (all zero bytes) and the `_NP` initializers for the other types.
+s22_4_c_7	22.4	Contract	**C11 `mtx_*`:** `mtx_plain`, `mtx_timed`, `mtx_recursive`.
+s22_4_f_0	22.4	Failure	`EBUSY` (trylock), `ETIMEDOUT`, `EDEADLK`, `EPERM`, `EOWNERDEAD`, `ENOTRECOVERABLE`, `EINVAL`, `EAGAIN` (recursion count overflow).
+s22_5_c_1	22.5	Contract	**Condition variables.** `wait(c, m)` atomically releases `m` and blocks until signalled, then reacquires `m`. `signal` wakes at least one waiter, and `broadcast` wakes all. Spurious wakeups are permitted, so callers re-check their predicate. The timed variants use absolute timeouts. The clock is `CLOCK_REALTIME` by default, set by `condattr_setclock`, or given per call (`clockwait`).
+s22_5_c_1_1	22.5	Contract	**Guarantee (glibc 2.25+):** a signal wakes only a waiter that blocked *before* the signal. Waiters are grouped to ensure this.
+s22_5_c_1_2	22.5	Contract	⚑ COMPAT: `pthread_cond_*@GLIBC_2.2.5` implement the pre-2.3.2 condvar ABI for old binaries.
+s22_5_c_2	22.5	Contract	**Read-write locks.** Many readers or one writer. The preference is set by `kind_np`: `PREFER_READER` (the default; ⚑ HIST: writer starvation is possible), `PREFER_WRITER_NONRECURSIVE`. A recursive read lock by the same thread is permitted when preferring readers.
+s22_5_c_3	22.5	Contract	**Spin locks.** Busy-waiting mutual exclusion with no blocking. **Kernel:** none.
+s22_5_c_4	22.5	Contract	**Barriers.** Block until `count` threads have arrived. Exactly one of them receives `PTHREAD_BARRIER_SERIAL_THREAD`.
+s22_5_c_5	22.5	Contract	**`pthread_once(&o, fn)`/`call_once`.** Run `fn` exactly once across all threads. Others wait until it completes. If `fn` is cancelled, the once object is reset.
+s22_6_c_1	22.6	Contract	**Keys** are process-wide identifiers. Each thread has its own `void *` value per key (initially NULL), and a key may have a destructor.
+s22_6_c_2	22.6	Contract	At thread exit, destructors run for non-NULL values, repeated up to `PTHREAD_DESTRUCTOR_ITERATIONS` (4) rounds while values remain.
+s22_6_c_3	22.6	Contract	Keys are limited to `PTHREAD_KEYS_MAX` (1024). ⚑ ARB.
+s22_6_c_4	22.6	Contract	**Language-level TLS** (`__thread`, `_Thread_local`, `thread_local`) gives each thread its own instance of a variable. For dynamically loaded modules, the storage is allocated lazily through `__tls_get_addr(module, offset)`.
+s22_6_g_0	22.6	Guarantees	Static TLS for the executable and initially loaded libraries is at a fixed offset from the thread pointer.
+s22_7_c_0	22.7	Contract	A counting semaphore.
+s22_7_c_1	22.7	Contract	`post` increments and wakes a waiter. It is **async-signal-safe**, the only synchronization primitive that is.
+s22_7_c_2	22.7	Contract	`wait` decrements, blocking while the count is 0. The timed forms take an absolute time.
+s22_7_c_3	22.7	Contract	`getvalue` reports the count (glibc never reports a negative count for waiters).
+s22_7_c_4	22.7	Contract	**Unnamed semaphores** (`sem_init`) are shared between threads or, with `pshared`, between processes.
+s22_7_c_5	22.7	Contract	**Named semaphores** (`sem_open(name, O_CREAT|O_EXCL, mode, value)`) are files in `/dev/shm` named `sem.<name>`. Opening the same name twice in one process returns the same address.
+s22_7_f_0	22.7	Failure	Returns -1 with `errno`: `EAGAIN` (trywait), `ETIMEDOUT`, `EINTR`, `EINVAL`, `EOVERFLOW` (`SEM_VALUE_MAX` = `INT_MAX`), `ENOENT`, `EEXIST`, `EACCES`.
+s22_8_c_1	22.8	Contract	**Naming.** Set or get a thread name of at most 15 bytes plus a terminator (⚑ KERN: `TASK_COMM_LEN` is 16). Returns `ERANGE` if too long.
+s22_8_c_2	22.8	Contract	**Scheduling.** Per-thread scheduling policy and priority.
+s22_8_c_3	22.8	Contract	**`pthread_yield`** is `sched_yield`. ⚑ HIST: it is deprecated.
+s22_8_c_4	22.8	Contract	**Affinity.** A per-thread CPU mask.
+s22_8_c_5	22.8	Contract	**`pthread_getcpuclockid`** returns a clock ID that measures the thread's CPU time.
+s22_9_c_0	22.9	Contract	glibc registers an rseq area for each thread (2.35+, unless disabled with `glibc.pthread.rseq=0`) and publishes its offset from the thread pointer and its size, so that applications can use restartable sequences without registering their own area. `sched_getcpu` reads the current CPU from this area without a syscall.
+s22_10_c_0	22.10	Contract	A library that a *debugger* loads to interpret the thread structures of a target process. The debugger supplies memory and register access callbacks (`ps_pdread`, `ps_pdwrite`, `ps_lgetregs`, `ps_pglobal_lookup`, ...), and the library reports:
+s22_10_c_1	22.10	Contract	the thread list;
+s22_10_c_2	22.10	Contract	the LWP ↔ thread mapping;
+s22_10_c_3	22.10	Contract	TLS addresses;
+s22_10_c_4	22.10	Contract	TSD values;
+s22_10_c_5	22.10	Contract	creation and death event breakpoints.
+s23_1_c_0	23.1	Contract	Return the current value of a clock.
+s23_1_c_1	23.1	Contract	**`clock_gettime(id, &ts)`** reads one of these clocks:
+s23_1_c_1_1	23.1	Contract	`CLOCK_REALTIME`: settable wall-clock time since the Unix epoch;
+s23_1_c_1_2	23.1	Contract	`CLOCK_MONOTONIC`: not settable; it does not count suspend;
+s23_1_c_1_3	23.1	Contract	`CLOCK_BOOTTIME`: monotonic including suspend;
+s23_1_c_1_4	23.1	Contract	`CLOCK_MONOTONIC_RAW`: without NTP slewing;
+s23_1_c_1_5	23.1	Contract	`CLOCK_*_COARSE`: cheaper, lower resolution;
+s23_1_c_1_6	23.1	Contract	`CLOCK_TAI`;
+s23_1_c_1_7	23.1	Contract	`CLOCK_PROCESS_CPUTIME_ID`, `CLOCK_THREAD_CPUTIME_ID`;
+s23_1_c_1_8	23.1	Contract	dynamic clock IDs: those encoding a PID or TID, and those derived from a PTP clock descriptor.
+s23_1_c_2	23.1	Contract	**`clock_getres`** returns the resolution. **`clock_getcpuclockid(pid)`** returns the CPU clock ID for a process.
+s23_1_c_3	23.1	Contract	**`time(&t)`** returns seconds. **`gettimeofday(&tv, tz)`** returns microseconds; the `tz` argument is obsolete and is filled with zeros. **`ftime`** (compat, removed from the API in 2.33) returns milliseconds. ⚑ HIST: four resolutions of the same need.
+s23_1_c_4	23.1	Contract	**`timespec_get(&ts, TIME_UTC)`** (C11) is `CLOCK_REALTIME`. **`timespec_getres`** (C23) is its resolution. Only `TIME_UTC` is supported in 2.39; the optional C23 bases (`TIME_MONOTONIC`, ...) are not.
+s23_1_c_5	23.1	Contract	**`clock()`** returns the process CPU time in `CLOCKS_PER_SEC` (= 1,000,000) units, or -1. ⚑ HIST: `clock_t` wraps. XSI fixes `CLOCKS_PER_SEC` regardless of the real resolution.
+s23_1_c_6	23.1	Contract	**`times(&tms)`** returns user and system time for the process and for its waited-for children, in clock ticks (`sysconf(_SC_CLK_TCK)` = 100). It also returns an elapsed real-time value in ticks from an arbitrary origin. ⚑ HIST.
+s23_1_g_0	23.1	Guarantees	`CLOCK_MONOTONIC` never goes backwards. `CLOCK_REALTIME` may jump. `tv_nsec` is always in `[0, 1e9)`.
+s23_1_f_0	23.1	Failure	`EINVAL` (unknown clock), `EOVERFLOW` (32-bit `time_t` ABIs).
+s23_2_c_1	23.2	Contract	**`clock_settime`/`settimeofday`** set a clock. They require `CAP_SYS_TIME`. `settimeofday` with a non-NULL `tz` fails with `EINVAL` in 2.31+ (except for the special `tz`-only call). ⚑ HIST.
+s23_2_c_2	23.2	Contract	**`adjtime(&delta, &old)`** slews the clock gradually by `delta`.
+s23_2_c_3	23.2	Contract	**`adjtimex`/`ntp_adjtime`/`clock_adjtime`** give full access to the kernel NTP state machine (offset, frequency, status, PLL/FLL, TAI offset).
+s23_2_c_4	23.2	Contract	**`ntp_gettime`** reads the time together with the error estimate.
+s23_3_c_0	23.3	Contract	Suspend the calling thread.
+s23_3_c_1	23.3	Contract	**`nanosleep(&req, &rem)`** sleeps for a relative duration on `CLOCK_MONOTONIC`. If interrupted by a handler, it fails with `EINTR` and stores the remaining time.
+s23_3_c_2	23.3	Contract	**`clock_nanosleep(id, flags, &req, &rem)`** sleeps on a chosen clock, relative or absolute (`TIMER_ABSTIME`, which avoids drift). It returns the error number directly.
+s23_3_c_3	23.3	Contract	**`sleep(s)`** returns the unslept seconds (0 if complete). **`usleep(us)`** takes microseconds. ⚑ HIST: `usleep` was removed from POSIX, and it fails with `EINVAL` for `us ≥ 1,000,000` on some systems (not glibc).
+s23_3_x_0	23.3	Cancellation	Yes.
+s23_4_c_1	23.4	Contract	**`alarm(s)`** schedules a `SIGALRM` after `s` seconds, replacing any previous alarm. It returns the seconds that remained on the previous alarm. It cannot fail. **`ualarm`** does the same in microseconds. ⚑ HIST.
+s23_4_c_2	23.4	Contract	**`setitimer(which, &new, &old)`** sets one of three per-process interval timers: `ITIMER_REAL` (sends `SIGALRM`), `ITIMER_VIRTUAL` (`SIGVTALRM`) or `ITIMER_PROF` (`SIGPROF`). Values are microseconds.
+s23_4_c_3	23.4	Contract	**POSIX timers.** `timer_create(clock, &sigevent, &id)` creates any number of timers per process. Expiry is notified by:
+s23_4_c_3_1	23.4	Contract	a signal (`SIGEV_SIGNAL`), with `si_value`;
+s23_4_c_3_2	23.4	Contract	a signal to a specific thread (`SIGEV_THREAD_ID`);
+s23_4_c_3_3	23.4	Contract	a new thread (`SIGEV_THREAD`, which glibc implements with a helper thread that receives an internal signal);
+s23_4_c_3_4	23.4	Contract	nothing (`SIGEV_NONE`). `timer_settime` arms the timer, relative or absolute, with a nanosecond interval. `timer_getoverrun` reports expirations missed between signal deliveries.
+s23_4_c_4	23.4	Contract	**`timerfd_*`** are timers that deliver expirations as a readable counter on a descriptor. `TFD_TIMER_CANCEL_ON_SET` notifies when the realtime clock is set.
+s23_4_f_0	23.4	Failure	`EINVAL`, `EAGAIN` (resource limits), `ENOMEM`.
+s23_5_c_0	23.5	Contract	Convert between `time_t` (seconds since the epoch, ignoring leap seconds) and broken-down time (`struct tm`: second 0–60, minute, hour, day of month, month 0–11, year − 1900, weekday, day of year, DST flag, plus the GNU fields `tm_gmtoff` and `tm_zone`).
+s23_5_c_1	23.5	Contract	**`gmtime`** converts to UTC. **`localtime`** converts to the local time zone (§23.6).
+s23_5_c_2	23.5	Contract	**`mktime(&tm)`** is the inverse of `localtime`. It normalizes out-of-range fields (for example day 32 → next month) and resolves `tm_isdst = -1` automatically.
+s23_5_c_3	23.5	Contract	**`timegm`** (2.x, standardized in C23) is the inverse of `gmtime`. **`timelocal`** is an alias of `mktime`. ⚑ HIST.
+s23_5_c_4	23.5	Contract	**`difftime(t1, t0)`** returns `t1 - t0` as `double`.
+s23_5_c_5	23.5	Contract	**`asctime`/`ctime`** produce `"Sun Sep 16 01:03:52 1973\n"`.
+s23_5_c_6	23.5	Contract	**`dysize(y)`** returns 365 or 366. ⚑ HIST.
+s23_5_g_0	23.5	Guarantees	The `_r` forms write to caller storage. The others return a pointer to a single static `struct tm` or buffer, shared between `gmtime` and `localtime` and overwritten by either (⚑ HIST, ⚑ PATH).
+s23_5_f_1	23.5	Failure	`EOVERFLOW`: the year does not fit an `int`.
+s23_5_f_2	23.5	Failure	`mktime` returns -1 on error. ⚑ HIST, ⚑ ARB: -1 is also the valid time 1969-12-31 23:59:59 UTC, so errors are ambiguous (C23 recommends checking `errno`).
+s23_5_f_3	23.5	Failure	`asctime` has undefined behaviour (ISO C) for years outside 1000–9999. glibc formats years 0 to 9999 (years below 1000 without padding) and returns `NULL` with `EOVERFLOW` for negative years and years above 9999 (⚑ ARB: a fixed 26-byte format). Corrected 2026-10-02 (owner) from black-box observation, `spec/behaviour/zones.md`.
+s23_6_c_0	23.6	Contract	Establish the local time-zone rules from the `TZ` environment variable:
+s23_6_c_1	23.6	Contract	a POSIX rule string (`EST5EDT,M3.2.0,M11.1.0`);
+s23_6_c_2	23.6	Contract	`:path`, or a zone name, resolved as a file under `TZDIR`, default `/usr/share/zoneinfo`;
+s23_6_c_3	23.6	Contract	if `TZ` is unset, the system default `/etc/localtime`. The functions export the standard and daylight abbreviations (`tzname[2]`), the standard offset in seconds *west* of UTC (`timezone`, ⚑ HIST: the sign convention is the opposite of `tm_gmtoff`), and whether DST rules exist (`daylight`).
+s23_6_g_0	23.6	Guarantees	`localtime`, `mktime` and `strftime` call `tzset` implicitly (or behave as if they did). glibc re-reads the zone file when `TZ` changes, or when `/etc/localtime` changes and `TZ` is unset (checked by `stat`).
+s23_7_c_1	23.7	Contract	**`strftime(buf, max, fmt, &tm)`** formats broken-down time according to a directive language:
+s23_7_c_1_1	23.7	Contract	ISO C: `%a %A %b %B %c %d %H %I %j %m %M %p %S %U %w %W %x %X %y %Y %Z %%`;
+s23_7_c_1_2	23.7	Contract	POSIX and C99: `%C %D %e %F %g %G %h %n %r %R %t %T %u %V %z`;
+s23_7_c_1_3	23.7	Contract	`E` and `O` alternative modifiers (era, alternative digits);
+s23_7_c_1_4	23.7	Contract	GNU: `%k %l %P %s`, and the flags `_ - 0 ^ #` with width. Names come from `LC_TIME`. It returns the length, or **0 if the result does not fit**. ⚑ HIST, ⚑ ARB: 0 is also the correct length for an empty result, such as `"%p"` in some locales.
+s23_7_c_2	23.7	Contract	**`strptime(s, fmt, &tm)`** parses according to the same directives. It fills only the fields it parses (glibc also computes `tm_wday`/`tm_yday` when possible), and returns a pointer past the consumed input, or `NULL`.
+s23_7_c_3	23.7	Contract	**`getdate(s)`** parses `s` by trying each template in the file named by `DATEMSK`. It returns static storage, with errors in the global `getdate_err` (1–8). **`getdate_r`** returns the error. ⚑ HIST: a global error variable, and configuration through an environment-named file.
+s24_1_c_0	24.1	Contract	Get and set the soft and hard limits for a process resource:
+s24_1_c_1	24.1	Contract	`RLIMIT_AS`, `CORE`, `CPU`, `DATA`, `FSIZE`, `LOCKS`, `MEMLOCK`, `MSGQUEUE`, `NICE`, `NOFILE`, `NPROC`, `RSS`, `RTPRIO`, `RTTIME`, `SIGPENDING`, `STACK`.
+s24_1_c_2	24.1	Contract	`RLIM_INFINITY` means unlimited.
+s24_1_c_3	24.1	Contract	A process may lower its hard limit, and may raise it only with `CAP_SYS_RESOURCE`.
+s24_1_c_4	24.1	Contract	**`prlimit(pid, ...)`** operates on another process.
+s24_1_c_5	24.1	Contract	**`ulimit(cmd, ...)`** is the SVID form: `UL_GETFSIZE` returns 512-byte blocks. ⚑ HIST.
+s24_2_c_0	24.2	Contract	Return the resources used by the process (`RUSAGE_SELF`), by its waited-for children (`RUSAGE_CHILDREN`), or by the thread (`RUSAGE_THREAD`): user and system CPU time, max RSS, page faults, block I/O, and voluntary and involuntary context switches. Several BSD fields are always 0 on Linux. ⚑ KERN.
+s24_3_c_1	24.3	Contract	**`nice(inc)`** adds to the nice value and returns the new value. -1 is a valid result, so the caller must zero `errno`. ⚑ HIST.
+s24_3_c_2	24.3	Contract	**`getpriority`/`setpriority(which, who, prio)`** apply to a process, group or user. ⚑ KERN: the syscall returns `20 - nice` to avoid negative returns, and glibc converts it back.
+s24_3_c_3	24.3	Contract	**Scheduling policies:** `SCHED_OTHER`, `SCHED_BATCH`, `SCHED_IDLE`, `SCHED_FIFO`, `SCHED_RR`. `SCHED_DEADLINE` needs `sched_setattr`, which glibc does not wrap in 2.39. ⚑ KERN: the POSIX functions operate on a *thread* (the TID) on Linux, not on the process.
+s24_3_c_4	24.3	Contract	**Affinity:** `cpu_set_t` masks, 1024 CPUs by default. Dynamically sized sets are available through `CPU_ALLOC`. ⚑ ARB: `cpu_set_t` is 1024 bits, and machines can have more CPUs. ⚑ COMPAT: `sched_setaffinity@GLIBC_2.3.3` versus the older form without a size argument.
+s24_3_c_5	24.3	Contract	**`sched_getcpu()`** returns the current CPU. **`getcpu(&cpu, &node)`** (2.29) also returns the NUMA node.
+s24_4_c_1	24.4	Contract	**`sysconf(name)`** returns runtime values of system limits and options. Examples:
+s24_4_c_1_1	24.4	Contract	`_SC_ARG_MAX` (a quarter of `RLIMIT_STACK`, at least 128 KiB);
+s24_4_c_1_2	24.4	Contract	`_SC_CHILD_MAX`, `_SC_CLK_TCK`, `_SC_NGROUPS_MAX`, `_SC_OPEN_MAX`, `_SC_PAGESIZE`;
+s24_4_c_1_3	24.4	Contract	`_SC_NPROCESSORS_CONF`/`_ONLN`, `_SC_PHYS_PAGES`/`_AVPHYS_PAGES`;
+s24_4_c_1_4	24.4	Contract	`_SC_LEVEL1_DCACHE_*` (CPUID);
+s24_4_c_1_5	24.4	Contract	`_SC_MINSIGSTKSZ`, `_SC_SIGSTKSZ`, `_SC_THREAD_STACK_MIN`;
+s24_4_c_1_6	24.4	Contract	`_SC_GETPW_R_SIZE_MAX`;
+s24_4_c_1_7	24.4	Contract	about 250 POSIX option names. It returns -1 *without changing errno* for "no limit", and -1 with `EINVAL` for an unknown name. ⚑ HIST: three meanings share one return channel.
+s24_4_c_2	24.4	Contract	**`pathconf(path, name)`/`fpathconf(fd, name)`** return file-system-dependent limits: `_PC_NAME_MAX`, `_PC_PATH_MAX`, `_PC_LINK_MAX` (derived from `statfs.f_type`), `_PC_PIPE_BUF`, `_PC_CHOWN_RESTRICTED`, `_PC_NO_TRUNC`, `_PC_FILESIZEBITS`, `_PC_REC_*`, `_PC_2_SYMLINKS`.
+s24_4_c_3	24.4	Contract	**`confstr(name, buf, len)`** returns configuration Text: `_CS_PATH` (the default `PATH`), `_CS_GNU_LIBC_VERSION`, `_CS_GNU_LIBPTHREAD_VERSION`, `_CS_POSIX_V7_*_CFLAGS`. It returns the full length.
+s24_4_c_4	24.4	Contract	**`get_nprocs()`** counts online CPUs, and **`get_nprocs_conf()`** counts configured CPUs. **`get_phys_pages`/`get_avphys_pages`** count memory pages.
+s24_5_c_1	24.5	Contract	**`uname(&u)`** returns the kernel name, node name, release, version, machine, and domain name (GNU).
+s24_5_c_2	24.5	Contract	**`gethostname(buf, n)`** returns the node name. It fails with `ENAMETOOLONG` if truncated. ⚑ ARB: POSIX allows silent truncation.
+s24_5_c_3	24.5	Contract	**`getdomainname`** returns the NIS domain name, not the DNS domain. ⚑ HIST: a common confusion.
+s24_5_c_4	24.5	Contract	**`gethostid()`** returns a 32-bit host identifier: from `/etc/hostid` if present, otherwise derived from the host's IPv4 address. **`sethostid`** writes `/etc/hostid`. ⚑ HIST: the value is meaningless on modern systems.
+s24_5_c_5	24.5	Contract	**`gnu_get_libc_version()`** returns `"2.39"`, and **`gnu_get_libc_release()`** returns `"stable"`.
+s24_6_c_1	24.6	Contract	**`capget`/`capset`** read and write a thread's capability sets using the kernel's versioned header and data structures (`_LINUX_CAPABILITY_VERSION_3`). They are exported but not declared in any glibc header, and `libcap` is the intended interface. ⚑ HIST.
+s24_6_c_2	24.6	Contract	**`sysinfo(&si)`** returns uptime, load averages, total, free, shared and buffer RAM, swap, process count, and a memory unit.
+s24_6_c_3	24.6	Contract	**`getloadavg(a, n)`** returns up to three load averages, from `/proc/loadavg`.
+s24_6_c_4	24.6	Contract	**`reboot(cmd)`**, **`klogctl`** (the kernel log buffer), **`acct`** (process accounting), **`quotactl`**, **`ioperm`/`iopl`** (x86 port I/O permission), **`vhangup`**, **`init_module`/`delete_module`** and **`modify_ldt`** are thin wrappers.
+s24_6_c_5	24.6	Contract	**`syscall(nr, ...)`** invokes an arbitrary system call by number. It returns -1 with `errno` on error. This is the escape hatch for kernel interfaces glibc does not wrap (`futex`, `openat2`, `sched_setattr`, `io_uring_*`, `bpf`, `perf_event_open`, `clone3`, `landlock_*`, `seccomp`, ...).
+s24_6_c_6	24.6	Contract	The compat entries are stubs failing with `ENOSYS`, or wrappers for syscalls that have been removed from the kernel.
+s25_1_c_0	25.1	Contract	`pipe(fds)` creates a unidirectional byte channel: `fds[0]` reads and `fds[1]` writes. `pipe2` also accepts `O_CLOEXEC`, `O_NONBLOCK` and `O_DIRECT` (packet mode).
+s25_1_g_1	25.1	Guarantees	Writes of at most `PIPE_BUF` (4096) bytes are atomic.
+s25_1_g_2	25.1	Guarantees	A read on an empty pipe with no writers returns 0.
+s25_1_g_3	25.1	Guarantees	A write with no readers raises `SIGPIPE` and fails with `EPIPE`.
+s25_1_g_4	25.1	Guarantees	The capacity is adjustable with `F_SETPIPE_SZ`.
+s25_2_c_1	25.2	Contract	**Naming.** Kernel-persistent IPC objects named by a numeric key. `ftok(path, id)` derives a key from an inode number, a device number and an 8-bit ID. ⚑ HIST: collisions are possible, and the key space is 32 bits.
+s25_2_c_2	25.2	Contract	**Message queues.** `msgsnd`/`msgrcv` send and receive typed messages. Receive selects by type (the first of that type; for a negative type, the first message of the lowest type up to its absolute value; or any), with `IPC_NOWAIT`, `MSG_NOERROR`, `MSG_EXCEPT` and `MSG_COPY`.
+s25_2_c_3	25.2	Contract	**Semaphore sets.** `semop` performs an *atomic* array of operations on a set. `SEM_UNDO` reverses them at process exit. `semtimedop` adds a timeout. `semctl` is variadic, and its fourth argument is a `union semun` that **the caller must define**. ⚑ HIST.
+s25_2_c_4	25.2	Contract	**Shared memory.** `shmget` creates a segment, and `shmat` attaches it at a kernel-chosen or requested address (`SHM_RND`, `SHM_RDONLY`, `SHM_REMAP`). `shmdt` detaches it.
+s25_2_c_5	25.2	Contract	**Control.** The `*ctl` functions have `IPC_STAT`, `IPC_SET` and `IPC_RMID`, plus Linux-specific info commands.
+s25_2_f_0	25.2	Failure	`EACCES`, `EEXIST`, `ENOENT`, `EIDRM` (removed while waiting), `ENOSPC` (system limits), `E2BIG`, `ENOMSG`, `EAGAIN`, `EINTR`, `ERANGE`.
+s25_3_c_0	25.3	Contract	Named priority queues of messages.
+s25_3_c_1	25.3	Contract	A name is `"/name"`, with exactly one leading slash (⚑ KERN: the `mqueue` file-system namespace).
+s25_3_c_2	25.3	Contract	A message has at most `mq_msgsize` bytes and a priority, and the highest priority is received first.
+s25_3_c_3	25.3	Contract	`mq_notify` requests notification (a signal, or a new thread) when a message arrives on an empty queue, for a single registrant.
+s25_3_c_4	25.3	Contract	Attributes: `mq_flags` (`O_NONBLOCK`), `mq_maxmsg`, `mq_msgsize`, `mq_curmsgs`.
+s25_3_f_0	25.3	Failure	`EAGAIN`, `EMSGSIZE`, `ETIMEDOUT`, `EBADF`, `EINVAL` (a name without the leading slash, or attributes exceeding `/proc/sys/fs/mqueue/*`), `EACCES` (a further slash in the name, or permission denied), `ENOENT` (the name `/` alone, or no such queue without `O_CREAT`), `ENAMETOOLONG` (more than `NAME_MAX` bytes after the slash), `EBUSY` (`mq_notify` is already registered, by any process including the caller: the kernel's rule). Corrected 2026-10-04 (three-way rule: the reference and mq_open(3) agree, `spec/behaviour/posixipc.md`; an earlier text gave `EINVAL` for every bad name).
+s25_3_x_0	25.3	Cancellation	Send and receive are cancellation points.
+s25_4_c_0	25.4	Contract	Create or open a named shared-memory object. Leading slashes in the name are optional; after them the name is a single component, not `.` or `..`, with no further slash (`EINVAL`; `ENOENT` for `shm_unlink`) and at most `NAME_MAX` bytes (`ENAMETOOLONG`). The result is a descriptor to be sized with `ftruncate` and mapped with `mmap`. `shm_unlink` removes the name. Written 2026-10-04 (owner ruling, phase 12-13 report), `spec/behaviour/posixipc.md`.
+s26_1_c_1	26.1	Contract	**`openlog(ident, option, facility)`** sets a process-wide identifier prefix, options and a default facility. The options are:
+s26_1_c_1_1	26.1	Contract	`LOG_PID`, `LOG_CONS` (write to `/dev/console` on failure);
+s26_1_c_1_2	26.1	Contract	`LOG_NDELAY` (connect now), `LOG_ODELAY`;
+s26_1_c_1_3	26.1	Contract	`LOG_NOWAIT`;
+s26_1_c_1_4	26.1	Contract	`LOG_PERROR` (also write to stderr).
+s26_1_c_2	26.1	Contract	**`syslog(priority, fmt, ...)`** formats a message (the `printf` language plus `%m`) and sends it to the system logger, prefixed with priority, timestamp and identifier, and with the PID when `LOG_PID` is set (corrected 2026-10-04, three-way rule: the reference and syslog(3) agree, `spec/behaviour/syslog.md`; an earlier text said the PID was always included).
+s26_1_c_3	26.1	Contract	**`setlogmask(mask)`** filters priorities with `LOG_MASK`/`LOG_UPTO`.
+s26_1_c_4	26.1	Contract	**`closelog`** closes the connection.
+s26_1_g_1	26.1	Guarantees	Messages below the mask are discarded without being formatted.
+s26_1_g_2	26.1	Guarantees	If the connection fails, the message is retried once after reconnecting.
+s26_1_g_3	26.1	Guarantees	With `LOG_CONS`, a message that still cannot be delivered is written to the console.
+s26_1_g_4	26.1	Guarantees	It never reports failure to the caller.
+s27_1_c_1	27.1	Contract	**`dlopen(path, mode)`** loads an ELF shared object and its dependencies into the process and runs their constructors. It returns a handle, and repeated opens are reference-counted.
+s27_1_c_1_1	27.1	Contract	**Path search** applies when `path` contains no slash: `DT_RPATH`, `LD_LIBRARY_PATH`, `DT_RUNPATH`, `/etc/ld.so.cache`, then the default directories.
+s27_1_c_1_2	27.1	Contract	**Modes:** `RTLD_LAZY`/`RTLD_NOW` (binding time), `RTLD_GLOBAL`/`RTLD_LOCAL` (symbol visibility to later loads), `RTLD_NODELETE`, `RTLD_NOLOAD` (only return an existing handle), `RTLD_DEEPBIND` (prefer the object's own symbols).
+s27_1_c_1_3	27.1	Contract	**`dlopen(NULL)`** returns the global scope.
+s27_1_c_2	27.1	Contract	**`dlmopen(lmid, ...)`** loads into a separate *link-map namespace* (`LM_ID_NEWLM`), giving an isolated copy of the libraries.
+s27_1_c_3	27.1	Contract	**`dlsym(handle, name)`** returns the address of a symbol. The special handles are `RTLD_DEFAULT` (global lookup order) and `RTLD_NEXT` (the next occurrence after the caller's object, for interposition). **`dlvsym`** requests a specific symbol version.
+s27_1_c_4	27.1	Contract	**`dlclose`** decrements the reference count. At zero, it runs destructors and unmaps the object, unless the object is `NODELETE` or has unique symbols or TLS in use.
+s27_1_c_5	27.1	Contract	**`dlerror()`** returns a Text describing the last failure on this thread, and clears it. It returns `NULL` if there was no error. ⚑ HIST: this is yet another error channel. `dlsym` returning `NULL` is ambiguous for symbols whose value is 0, so callers must check `dlerror`.
+s27_1_c_6	27.1	Contract	**`dladdr(addr, &info)`** / **`dladdr1`** map an address to its object and nearest symbol.
+s27_1_c_7	27.1	Contract	**`dlinfo(handle, request, arg)`** queries a handle: its link map, origin, search paths, TLS module ID and block, and namespace.
+s27_1_c_8	27.1	Contract	**`dl_iterate_phdr(cb, data)`** calls `cb` for each loaded object, with its load address and program headers. The loader lock is held during the callback.
+s27_1_c_9	27.1	Contract	**`_dl_find_object(pc, &res)`** (2.35) finds an object and its `PT_GNU_EH_FRAME` for a program counter without taking locks. It exists for unwinders.
+s27_1_g_0	27.1	Guarantees	Symbol resolution follows ELF rules (global scope order, symbol versioning, `STB_GNU_UNIQUE`, IFUNC resolvers run at bind time). Constructors run in dependency order.
+s27_1_f_0	27.1	Failure	`NULL` plus `dlerror` text: file not found, wrong ELF class, undefined symbol (with `RTLD_NOW`), static TLS exhaustion, or a version mismatch.
+s27_2_c_0	27.2	Contract	Libraries named in `LD_AUDIT` (or `DT_AUDIT`) receive callbacks from the dynamic linker for library search, object load and unload, symbol binding (they can redirect bindings), and PLT entry and exit.
+s27_3_c_0	27.3	Contract	Return the address of a TLS variable, given a module ID and an offset, for the calling thread. The block is allocated on first access for modules loaded by `dlopen`.
+s27_3_f_0	27.3	Failure	None. Allocation failure aborts the process. ⚑ ARB: there is no error channel for a lazy allocation.
+s27_4_c_0	27.4	Contract	`_r_debug` and `_dl_debug_state` implement the debugger rendezvous. The debugger sets a breakpoint on `_dl_debug_state` and walks the `r_debug.r_map` list after each change. Since 2.35 `r_version` is 2, which adds a linked list of namespaces.
+s27_5_c_0	27.5	Contract	Report CPU features as detected by the dynamic linker (CPUID plus OS support via XCR0, masked by `glibc.cpu.hwcaps` tunables): "present" means the CPU supports the feature, and "active" means it is also usable.
+s28_1_c_1	28.1	Contract	**`monstartup(lowpc, highpc)`** allocates histogram and arc tables for a text range and starts PC sampling. `_mcleanup` writes `gmon.out` (or `$GMON_OUT_PREFIX.<pid>`) at exit.
+s28_1_c_2	28.1	Contract	**`mcount`/`_mcount`** is called at every function entry of `-pg` code and records the call arc.
+s28_1_c_3	28.1	Contract	**`profil(buf, size, offset, scale)`** samples the PC into a histogram on every `ITIMER_PROF` tick. **`sprofil`** takes multiple regions.
+s28_1_c_4	28.1	Contract	**`__cyg_profile_func_enter/_exit`** are empty hooks called by `-finstrument-functions` code, for the application to interpose.
+s28_3_c_0	28.3	Contract	`__fentry__` is the profiling counter call that `-pg -mfentry` code makes before the function prologue; it records the call arc as `mcount` does (§28.1). The others are covered in their sections.
+s29_1_c_1	29.1	Contract	**XDR** serializes C data to and from the External Data Representation (RFC 4506): encode, decode and free, for primitive types, arrays, strings, unions, pointers, and record-marking streams.
+s29_1_c_2	29.1	Contract	**The RPC runtime** provides client handles over UDP, TCP and Unix sockets, server dispatch, portmapper registration, and authentication flavours (`AUTH_NONE`, `AUTH_UNIX`/`AUTH_SYS`, `AUTH_DES`).
+s29_2_c_0	29.2	Contract	Client functions for Sun's Network Information Service (`yp_match`, `yp_first`, `yp_next`, `yp_all`, `yp_order`, `yp_master`, `yp_get_default_domain`, `yp_bind`, ...) and for NIS+.
+s29_3_c_0	29.3	Contract	None. These always fail with `ENOSYS`. `isastream` returns 0 for valid descriptors. ⚑ COMPAT: they were added for XSI conformance. Linux never implemented STREAMS.
+s29_4_c_0	29.4	Contract	Each keeps the contract it had when it was removed. Most are aliases of current functions, or stubs that fail with `ENOSYS`. Three are special:
+s29_4_c_1	29.4	Contract	**`__libc_freeres()`** releases all of libc's internal allocations so that leak checkers (Valgrind) report cleanly.
+s29_4_c_2	29.4	Contract	**`__libc_malloc` and friends** are aliases of `malloc` that cannot be interposed.
+s29_4_c_3	29.4	Contract	**`sysctl`/`__sysctl`** fail with `ENOSYS`, because the kernel removed the syscall in 5.5.

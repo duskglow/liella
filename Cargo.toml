@@ -1,0 +1,162 @@
+# Liella: a clean reimplementation of the glibc ABI in Rust.
+# Architecture and phase plan: implementation-plan.md. Contracts: glibc-functional-spec.md.
+#
+# Four artifacts: the spec; the C syscall layer (csys/); the Rust library (crates/); and the
+# POSIX translation layer (crates/boundary/src/posix).
+#
+# Layering at runtime (C callers at the top, the kernel at the bottom):
+#
+#   C callers ──▶ liella-boundary::posix   exports; conversions only        [unsafe: export, slice]
+#                   │
+#                   ▼  clean library, generic over liella_kernel::Sys       [forbid(unsafe_code)]
+#                 liella-legacy · liella · liella-math · liella-abi · liella-rt · liella-ld
+#                 (liella-mem: the mem* loops, #![no_builtins], D-4.11)
+#                   │
+#                   ▼
+#                 liella-boundary::sys (CSys) ──▶ liella-boundary::ffi       [unsafe: extern]
+#                   │
+#                   ▼
+#                 csys/ (C: syscall wrappers, machine primitives)  ──▶  Linux kernel
+#
+# In Cargo terms liella-boundary depends on every library crate and nothing depends on it.
+# It is the ONLY crate allowed `unsafe`, and only in four documented categories (extern,
+# export, slice, allocator); `cargo xtask unsafe-audit` enforces this. The one exception is the
+# native Rust facade liella-native (crates/native, D-X.10, a library for programs, not part of
+# the C library): its declarations of the native C ABI and its allocator over them, in one file
+# (category native).
+#
+# Products (separate builds from phase 4): crates/libc-so -> libc.so.6 / libc.a, plus the
+# ld.so and libthread_db products.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/spectest",
+    "crates/kernel",
+    "crates/abi",
+    "crates/rt",
+    "crates/mem",
+    "crates/core",
+    "crates/legacy",
+    "crates/math",
+    "crates/boundary",
+    "crates/ld",
+    "crates/thread-db",
+    "crates/native",
+    "crates/mathtools",
+    "xtask",
+]
+# Product crate: a separate build (needs the phase-4 entry point, allocator and panic handler).
+# Fuzz harnesses: a workspace of their own with a nightly toolchain and libfuzzer-sys, outside
+# the zero-dependency product build (`cargo xtask fuzz`).
+exclude = ["crates/libc-so", "crates/libm-so", "fuzz"]
+default-members = [
+    "crates/spectest",
+    "crates/kernel",
+    "crates/abi",
+    "crates/rt",
+    "crates/mem",
+    "crates/core",
+    "crates/legacy",
+    "crates/math",
+    "crates/boundary",
+    "crates/ld",
+    "crates/thread-db",
+    "crates/native",
+    "crates/mathtools",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "LGPL-2.1-or-later"
+publish = false
+
+# Zero external dependencies, by policy: no existing libc bindings or implementations may be
+# used as a reference (implementation-plan.md, section 1.2).
+[workspace.dependencies]
+spectest = { path = "crates/spectest" }
+liella-kernel = { path = "crates/kernel" }
+liella-abi = { path = "crates/abi" }
+liella-rt = { path = "crates/rt" }
+liella-mem = { path = "crates/mem" }
+liella = { path = "crates/core" }
+liella-legacy = { path = "crates/legacy" }
+liella-math = { path = "crates/math" }
+liella-boundary = { path = "crates/boundary" }
+liella-mathtools = { path = "crates/mathtools" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"             # only crates/boundary overrides this (to deny + audited allows)
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+unimplemented = "deny"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+as_conversions = "warn"
+mem_forget = "deny"
+# S8: allowed by default (tests); every library crate root denies it outside tests (clippy.toml).
+disallowed_methods = "allow"
+
+[profile.dev]
+panic = "abort"
+# D-X.23 (BUILD-DIET): no DWARF in dev/test builds; symbols stay (function names in backtraces) and a panic
+# still names its file:line (core::panic::Location needs no debuginfo). On Zen 1 a cold workspace test build
+# wrote 1.7 GB instead of 8.7 GB (131 s vs 187 s) and a warm one 1.3 GB instead of 7.2 GB. Opt in for a debugger or a
+# source-level backtrace with `CARGO_PROFILE_DEV_DEBUG=full` (or `line-tables-only`).
+debug = 0
+
+# D-4.13: the memory primitives are always optimised. Unoptimised code lowers fixed-size block
+# copies to calls to `memcpy`, which in a build with the exports is the primitive itself.
+[profile.dev.package.liella-mem]
+opt-level = 3
+
+# The libm test oracle (big-number arithmetic) is optimised so that the accuracy tests run in
+# seconds rather than minutes.
+[profile.dev.package.liella-mathtools]
+opt-level = 3
+
+# GATE-SPEED (2026-10-10): the test builds of the three product crates are optimised; o0/o2/o0 back to
+# back on Zen 1 ran the two test passes in 399/371 s at opt-level 2 against 709/756 and 690/732 s at 0.
+# Debug assertions and overflow checks stay on. Tests that call the exported libc names go through
+# `selftest::opaque` (LLVM treats those names as builtins at opt-level >= 1; `xtask opaque-audit`).
+[profile.dev.package.liella]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.dev.package.liella-boundary]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.dev.package.liella-math]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+# GATE-TIME (2026-10-11): xtask's own tests load and scan the whole tree in each test process (nextest);
+# unoptimised, affected::tests::csys_assembly_selects_the_users_of_its_symbols took 149 s on Haswell-EP, 15 s at
+# opt-level 2 (xtask test build 7 s -> 15 s). Debug assertions and overflow checks stay on.
+[profile.dev.package.xtask]
+opt-level = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+debug = "line-tables-only"

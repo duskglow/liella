@@ -1,0 +1,6 @@
+[alias]
+xtask = "run --quiet --package xtask --"
+
+# The library targets Linux x86_64 only (spec: glibc 2.39, x86_64 ABI lists). Build and test
+# inside Linux (for example WSL). On a OneDrive-backed checkout, point CARGO_TARGET_DIR at a
+# Linux-native directory; scripts/dev.sh does this.

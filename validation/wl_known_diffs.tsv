@@ -1,0 +1,5 @@
+# Known, accepted output differences Liella vs glibc (wl_report.py). A diff is allowed only if BOTH the workload and the
+# fingerprint (count of differing lines : sha1 of the differing lines, made by wl_run.sh) match; a changed fingerprint FAILS.
+# Add a row only with an owner/spec ruling; the reason and decision reference are mandatory.
+workload	fingerprint	reason	decision_ref
+ls-l-enUS	20:4c9756b03421	STRCOLL-PUNCT: Liella follows POSIX collation for punctuation in en_US.UTF-8, glibc's ls order differs (POSIX wins)	D-4.42 (owner ruling 2026-10-09: POSIX wins)

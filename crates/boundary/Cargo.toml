@@ -1,0 +1,63 @@
+[package]
+name = "liella-boundary"
+description = "The only crate allowed unsafe: C interop in both directions (C syscall layer below, C callers above)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+links = "liella_csys"
+
+[lib]
+name = "liella_boundary"
+
+[features]
+# Emit #[unsafe(no_mangle)] C symbols. Enabled only by the shipped products (crates/libc-so).
+export = []
+# The process runtime's exports and data objects (`__libc_start_main`, `exit`, `__errno_location`,
+# `environ`, ...): only a process Liella started can use them, so only the products enable this.
+# Test builds with `export` keep the host C library's runtime (D-4.13).
+runtime = ["export"]
+# The libm product (`crates/libm-so`): emit the math symbols `libm.so.6` and `libm.a` own (spec §10).
+# Independent of `export`: the libm archive carries no libc symbols, and test builds with `export`
+# never interpose on the host libm that Rust's own `f64` functions call.
+libm = []
+# Test-only helpers (`selftest`): forked children, a signal round trip. Enabled for this
+# crate's own tests through the self dev-dependency below; never by a product.
+selftest = ["liella/selftest", "liella-legacy/selftest"]
+
+[dependencies]
+liella-kernel = { workspace = true }
+liella-rt = { workspace = true }
+liella-abi = { workspace = true }
+liella = { workspace = true }
+liella-legacy = { workspace = true }
+liella-math = { workspace = true }
+
+[dev-dependencies]
+spectest = { workspace = true }
+liella-boundary = { path = ".", features = ["selftest"] }
+
+# Not `workspace = true`: this crate must lower `unsafe_code` from forbid to deny so that the
+# four permitted categories can be allowed item by item (implementation-plan.md §2.1).
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+unimplemented = "deny"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+as_conversions = "warn"
+mem_forget = "deny"
+# S8: allowed by default (tests, examples); the crate root denies it outside tests (clippy.toml).
+disallowed_methods = "allow"

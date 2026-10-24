@@ -1,0 +1,68 @@
+#!/bin/sh
+# A C compiler driver that builds programs statically against Liella (validation, D-22.10: a
+# static validation; dynamic linking waits for phase 14). Use it as CC for a configure script:
+#
+#   CC=/path/to/liella/scripts/liella-cc ./configure ...
+#
+# Compiling (-c, -S, -E, -M, -MM) is the real compiler with the system's headers (the installed
+# glibc 2.39 headers: Liella is ABI-compatible with them), unchanged. Linking is what the C
+# conformance suite does (conformance/run.sh): -static -nostdlib, Liella's start object first,
+# the program's objects and libraries, then Liella's libc.a and libgcc. The libraries glibc
+# splits out of libc (-lpthread, -lrt, -ldl, -lutil, -lanl, -lresolv, -lc) are dropped: their
+# functions are in libc.a. -lm links Liella's libm.a (a product since D-10.7) in its place when
+# the products have one; LIELLA_CC_NO_LIBM=1 drops it as before libm existed (the labelled
+# stand-in builds of validation/suite.sh, whose shim objects would collide with libm.a's one
+# object). -lmvec is dropped (no libmvec product).
+# Nothing of glibc's (libc.a, libm.a, crt1.o) is ever linked. Nothing is installed anywhere.
+#
+# Environment: LIELLA_PRODUCTS (default: <repository>/target/liella, or $CARGO_TARGET_DIR/liella)
+# names libc.a, libm.a and liella-crt1.o; LIELLA_REAL_CC (default gcc) is the compiler;
+# LIELLA_CC_EXTRA, words added to every link just before libc.a (validation's labelled
+# workarounds, validation/README.md: none by default).
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+products=${LIELLA_PRODUCTS:-${CARGO_TARGET_DIR:-$here/../target}/liella}
+cc=${LIELLA_REAL_CC:-gcc}
+
+link=yes
+for a in "$@"; do
+    case $a in
+        -c | -S | -E | -M | -MM) link=no ;;
+        # A shared object (a test's LD_PRELOAD library): a static program never loads one, so
+        # it is built as the system compiler builds it, untouched.
+        -shared) link=no ;;
+    esac
+done
+if [ $link = no ]; then
+    exec "$cc" "$@"
+fi
+
+for f in "$products/libc.a" "$products/liella-crt1.o"; do
+    if [ ! -f "$f" ]; then
+        echo "liella-cc: $f is missing (run cargo xtask so)" >&2
+        exit 1
+    fi
+done
+
+# Rebuild the arguments without the libraries libc.a replaces (order kept; arguments may
+# contain blanks, so they are re-set one by one).
+n=$#
+i=0
+while [ $i -lt $n ]; do
+    a=$1
+    shift
+    i=$((i + 1))
+    case $a in
+        -lm)
+            if [ -z "${LIELLA_CC_NO_LIBM:-}" ] && [ -f "$products/libm.a" ]; then
+                set -- "$@" "$products/libm.a"
+            fi ;;
+        -lpthread | -lrt | -ldl | -lutil | -lanl | -lresolv | -lc | -lmvec | -static | -pthread) ;;
+        *) set -- "$@" "$a" ;;
+    esac
+done
+# shellcheck disable=SC2086
+# `-x none`: a `-x LANG` among the program's arguments must not make the files added here
+# sources.
+exec "$cc" -static -nostdlib -x none "$products/liella-crt1.o" "$@" -x none ${LIELLA_CC_EXTRA:-} \
+    -Wl,--start-group "$products/libc.a" -lgcc -Wl,--end-group

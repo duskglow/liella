@@ -1,0 +1,5 @@
+[toolchain]
+# The fuzz harnesses only (libFuzzer needs nightly instrumentation). The products and every
+# other build keep the stable toolchain of the repository root (rust-toolchain.toml).
+channel = "nightly-2026-10-04"
+profile = "minimal"

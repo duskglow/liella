@@ -1,0 +1,24 @@
+# S8: allocation is fallible. The infallible `alloc` methods abort on exhaustion, so the library
+# crates deny them (`#![deny(clippy::disallowed_methods)]` in each crate root) and use
+# `liella::mem::{TryVec, TryBox}` or `try_reserve` instead. Tests may use them.
+disallowed-methods = [
+    { path = "alloc::vec::Vec::push", reason = "S8: use TryVec::push" },
+    { path = "alloc::vec::Vec::with_capacity", reason = "S8: use TryVec::with_capacity" },
+    { path = "alloc::vec::Vec::reserve", reason = "S8: use try_reserve" },
+    { path = "alloc::vec::Vec::reserve_exact", reason = "S8: use try_reserve_exact" },
+    { path = "alloc::vec::Vec::extend_from_slice", reason = "S8: use TryVec::extend_from_slice" },
+    { path = "alloc::vec::Vec::extend_from_within", reason = "S8: reserve first" },
+    { path = "alloc::vec::Vec::insert", reason = "S8: use TryVec::insert" },
+    { path = "alloc::vec::Vec::resize", reason = "S8: use TryVec::resize" },
+    { path = "alloc::vec::Vec::resize_with", reason = "S8: reserve first" },
+    { path = "alloc::vec::Vec::append", reason = "S8: reserve first" },
+    { path = "alloc::vec::Vec::into_boxed_slice", reason = "S8: may reallocate" },
+    { path = "alloc::vec::from_elem", reason = "S8: vec![x; n] aborts on exhaustion" },
+    { path = "alloc::boxed::Box::new", reason = "S8: use TryBox::new" },
+    { path = "alloc::string::String::push", reason = "S8: build bytes in a TryVec" },
+    { path = "alloc::string::String::push_str", reason = "S8: build bytes in a TryVec" },
+    { path = "alloc::string::String::with_capacity", reason = "S8: build bytes in a TryVec" },
+    { path = "slice::to_vec", reason = "S8: use TryVec::from_slice" },
+    { path = "alloc::borrow::ToOwned::to_owned", reason = "S8: use TryVec::from_slice" },
+    { path = "core::iter::Extend::extend", reason = "S8: reserve first" },
+]

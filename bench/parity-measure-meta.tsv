@@ -1,0 +1,8 @@
+bench	date	host	basis	v3_sorted_cells
+cbench_fstree	2026-10-23	kotori	measured BENCH-REFRESH-1023-2	- (not run)
+cbench_hot	2026-10-23	nico	measured BENCH-REFRESH-1023-2 (cycles in-process, paired)	- (not run; Ivy Bridge has no AVX2, nozomi/kanon not booked)
+cbench_locale	2026-10-23	kotori	measured BENCH-REFRESH-1023-4 (cycles in-process, paired, --counters)	- (not run; sorted not measured, v3 needs AVX2: not booked, over the 1 h limit)
+cbench_opt	2026-10-23	nico	measured BENCH-REFRESH-1023-4 (cycles in-process, paired, --counters)	- (not run; sorted not measured, v3 needs AVX2: not booked, over the 1 h limit)
+cbench_patterns	2026-10-23	nico	measured BENCH-REFRESH-1023-4 (cycles in-process, paired, --counters)	- (not run; sorted not measured, v3 needs AVX2: not booked, over the 1 h limit)
+cbench_stdio	2026-10-23	kotori	measured BENCH-REFRESH-1023-4 (cycles in-process, paired, --counters)	- (not run; sorted not measured, v3 needs AVX2: not booked, over the 1 h limit)
+cbench_time	2026-10-23	nico	measured BENCH-REFRESH-1023-4 (cycles in-process, paired, --counters)	- (not run; sorted not measured, v3 needs AVX2: not booked, over the 1 h limit)

@@ -1,0 +1,2584 @@
+== gmtime
+gmtime_r(0): 1970-01-01 00:00:00 wday=4 yday=0 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-1): 1969-12-31 23:59:59 wday=3 yday=364 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(951782400): 2000-02-29 00:00:00 wday=2 yday=59 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(951868799): 2000-02-29 23:59:59 wday=2 yday=59 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(2147483647): 2038-01-19 03:14:07 wday=2 yday=18 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(2147483648): 2038-01-19 03:14:08 wday=2 yday=18 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-2147483648): 1901-12-13 20:45:52 wday=5 yday=346 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-2147483649): 1901-12-13 20:45:51 wday=5 yday=346 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(253402300799): 9999-12-31 23:59:59 wday=5 yday=364 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(253402300800): 10000-01-01 00:00:00 wday=6 yday=0 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-62135596800): 1-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-62135596801): 0-12-31 23:59:59 wday=0 yday=365 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(67767976233532799): 2147483647-12-31 23:59:59 wday=2 yday=364 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(67767976233532800): 2147483648-01-01 00:00:00 wday=3 yday=0 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-67768040609740800): -2147481748-01-01 00:00:00 wday=4 yday=0 isdst=0 gmtoff=0 zone=GMT
+gmtime_r(-67768040609740801): NULL errno=75
+gmtime_r(9223372036854775807): NULL errno=75
+gmtime_r(-9223372036854775808): NULL errno=75
+== timegm
+timegm 2000-02-29: 951825600 errno=0
+  normalized: 2000-02-29 12:00:00 wday=2 yday=59 isdst=0 gmtoff=0 zone=GMT
+timegm mday 0: 1709164800 errno=0
+  normalized: 2024-02-29 00:00:00 wday=4 yday=59 isdst=0 gmtoff=0 zone=GMT
+timegm mday 32: 1706745600 errno=0
+  normalized: 2024-02-01 00:00:00 wday=4 yday=31 isdst=0 gmtoff=0 zone=GMT
+timegm mon 13: 1704067200 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=GMT
+timegm mon -1: 1667260800 errno=0
+  normalized: 2022-11-01 00:00:00 wday=2 yday=304 isdst=0 gmtoff=0 zone=GMT
+timegm hour -1: 1704063600 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=0 zone=GMT
+timegm sec 60: 1483228800 errno=0
+  normalized: 2017-01-01 00:00:00 wday=0 yday=0 isdst=0 gmtoff=0 zone=GMT
+timegm sec -1: -1 errno=0
+  normalized: 1969-12-31 23:59:59 wday=3 yday=364 isdst=0 gmtoff=0 zone=GMT
+timegm min 1000000: 1764067200 errno=0
+  normalized: 2025-11-25 10:40:00 wday=2 yday=328 isdst=0 gmtoff=0 zone=GMT
+timegm sec INT_MAX: 3851550847 errno=0
+  normalized: 2092-01-19 03:14:07 wday=6 yday=18 isdst=0 gmtoff=0 zone=GMT
+timegm sec INT_MIN: -443416448 errno=0
+  normalized: 1955-12-13 20:45:52 wday=2 yday=346 isdst=0 gmtoff=0 zone=GMT
+timegm isdst 1 ignored: 1719792000 errno=0
+  normalized: 2024-07-01 00:00:00 wday=1 yday=182 isdst=0 gmtoff=0 zone=GMT
+timegm year INT_MAX: 67768036160140800 errno=0
+  normalized: 2147485547-01-01 00:00:00 wday=3 yday=0 isdst=0 gmtoff=0 zone=GMT
+timegm year INT_MIN: -67768040609740800 errno=0
+  normalized: -2147481748-01-01 00:00:00 wday=4 yday=0 isdst=0 gmtoff=0 zone=GMT
+timegm year INT_MAX mon 12: -1 errno=75
+  normalized: 2147485547-13-01 00:00:00 wday=99 yday=999 isdst=0 gmtoff=0 zone=(null)
+== asctime
+asctime_r year -1900: [NULL] newline=0 errno=75
+asctime_r year 0: [Sun Sep 16 01:03:52 0] newline=1 errno=0
+asctime_r year 999: [Sun Sep 16 01:03:52 999] newline=1 errno=0
+asctime_r year 1000: [Sun Sep 16 01:03:52 1000] newline=1 errno=0
+asctime_r year 1973: [Sun Sep 16 01:03:52 1973] newline=1 errno=0
+asctime_r year 9999: [Sun Sep 16 01:03:52 9999] newline=1 errno=0
+asctime_r year 10000: [NULL] newline=0 errno=75
+asctime_r year 2147481747: [NULL] newline=0 errno=75
+asctime wday 7 mon 12: text errno=0
+asctime mday 123 hour 100: [Mon Sep123 100:03:52 1973] errno=0
+== misc
+dysize(1900) = 365
+dysize(2000) = 366
+dysize(2023) = 365
+dysize(2024) = 366
+dysize(0) = 366
+dysize(-4) = 366
+dysize(2100) = 365
+difftime(10, 3) = 7.0
+difftime(0, INT64_MAX) = -9.223372e+18
+difftime(2^53+1, 0) = 9007199254740992.0
+== TZ=(unset)
+tzname=[UTC][UTC] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=UTC
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=UTC
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=UTC
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=UTC
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=UTC
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=UTC
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=UTC
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=UTC
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=UTC
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=UTC
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=UTC
+tzname=[UTC][UTC] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=UTC
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=UTC
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=UTC
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=UTC
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=UTC
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=UTC
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=UTC
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=UTC
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=UTC
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=UTC
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=
+tzname=[Universal][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=Universal
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=Universal
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=Universal
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=Universal
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=Universal
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=Universal
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=Universal
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Universal
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Universal
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=Universal
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=Universal
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Universal
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Universal
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Universal
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Universal
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Universal
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Universal
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Universal
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Universal
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=Universal
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=:UTC
+tzname=[UTC][UTC] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=UTC
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=UTC
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=UTC
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=UTC
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=UTC
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=UTC
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=UTC
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=UTC
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=UTC
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=UTC
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=UTC0
+tzname=[UTC][UTC] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=UTC
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=UTC
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=UTC
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=UTC
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=UTC
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=UTC
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=UTC
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=UTC
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=UTC
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=UTC
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=UTC
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=UTC
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=UTC
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=UTC
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=GMT+5
+tzname=[GMT][GMT] timezone=18000 daylight=0
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=GMT
+1850-01-15T12Z: 1850-01-15 07:00:00 wday=2 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+1850-07-15T12Z: 1850-07-15 07:00:00 wday=1 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+1950-07-15T12Z: 1950-07-15 07:00:00 wday=6 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+1970-07-15T12Z: 1970-07-15 07:00:00 wday=3 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+2000-07-15T12Z: 2000-07-15 07:00:00 wday=6 yday=196 isdst=0 gmtoff=-18000 zone=GMT
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+2037-07-15T12Z: 2037-07-15 07:00:00 wday=3 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+2038-07-15T12Z: 2038-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+2100-07-15T12Z: 2100-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=GMT
+2500-07-15T12Z: 2500-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=GMT
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=GMT
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=America/New_York
+tzname=[EST][EDT] timezone=18000 daylight=1
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=EST
+transition at 1710054000: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition at 1730613600: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+1850-01-15T12Z: 1850-01-15 07:03:58 wday=2 yday=14 isdst=0 gmtoff=-17762 zone=LMT
+1850-07-15T12Z: 1850-07-15 07:03:58 wday=1 yday=195 isdst=0 gmtoff=-17762 zone=LMT
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1950-07-15T12Z: 1950-07-15 08:00:00 wday=6 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1970-07-15T12Z: 1970-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2000-07-15T12Z: 2000-07-15 08:00:00 wday=6 yday=196 isdst=1 gmtoff=-14400 zone=EDT
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2037-07-15T12Z: 2037-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2038-07-15T12Z: 2038-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2100-07-15T12Z: 2100-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2500-07-15T12Z: 2500-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=EST
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Europe/Berlin
+tzname=[CET][CEST] timezone=-3600 daylight=1
+2024-01-01T00Z: 2024-01-01 01:00:00 wday=1 yday=0 isdst=0 gmtoff=3600 zone=CET
+transition at 1711846800: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition at 1729990800: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+1850-01-15T12Z: 1850-01-15 12:53:28 wday=2 yday=14 isdst=0 gmtoff=3208 zone=LMT
+1850-07-15T12Z: 1850-07-15 12:53:28 wday=1 yday=195 isdst=0 gmtoff=3208 zone=LMT
+1900-01-15T12Z: 1900-01-15 13:00:00 wday=1 yday=14 isdst=0 gmtoff=3600 zone=CET
+1900-07-15T12Z: 1900-07-15 13:00:00 wday=0 yday=195 isdst=0 gmtoff=3600 zone=CET
+1950-01-15T12Z: 1950-01-15 13:00:00 wday=0 yday=14 isdst=0 gmtoff=3600 zone=CET
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=0 gmtoff=3600 zone=CET
+1970-01-15T12Z: 1970-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=CET
+1970-07-15T12Z: 1970-07-15 13:00:00 wday=3 yday=195 isdst=0 gmtoff=3600 zone=CET
+2000-01-15T12Z: 2000-01-15 13:00:00 wday=6 yday=14 isdst=0 gmtoff=3600 zone=CET
+2000-07-15T12Z: 2000-07-15 14:00:00 wday=6 yday=196 isdst=1 gmtoff=7200 zone=CEST
+2037-01-15T12Z: 2037-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=CET
+2037-07-15T12Z: 2037-07-15 14:00:00 wday=3 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2038-01-15T12Z: 2038-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2038-07-15T12Z: 2038-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2100-01-15T12Z: 2100-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2100-07-15T12Z: 2100-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2500-01-15T12Z: 2500-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2500-07-15T12Z: 2500-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 01:00:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 03:30:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 03:30:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 03:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 04:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+mktime 2024-01-32 25:61:61 isdst=-1: 2768521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=3600 zone=CET
+mktime year INT_MAX: 67768036160137200 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Europe/Dublin
+tzname=[GMT][IST] timezone=0 daylight=1
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=GMT
+transition at 1711846800: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition at 1729990800: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+1850-01-15T12Z: 1850-01-15 11:34:39 wday=2 yday=14 isdst=0 gmtoff=-1521 zone=LMT
+1850-07-15T12Z: 1850-07-15 11:34:39 wday=1 yday=195 isdst=0 gmtoff=-1521 zone=LMT
+1900-01-15T12Z: 1900-01-15 11:34:39 wday=1 yday=14 isdst=0 gmtoff=-1521 zone=DMT
+1900-07-15T12Z: 1900-07-15 11:34:39 wday=0 yday=195 isdst=0 gmtoff=-1521 zone=DMT
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=GMT
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=1 gmtoff=3600 zone=IST
+1970-01-15T12Z: 1970-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=IST
+1970-07-15T12Z: 1970-07-15 13:00:00 wday=3 yday=195 isdst=0 gmtoff=3600 zone=IST
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=GMT
+2000-07-15T12Z: 2000-07-15 13:00:00 wday=6 yday=196 isdst=1 gmtoff=3600 zone=IST
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=GMT
+2037-07-15T12Z: 2037-07-15 13:00:00 wday=3 yday=195 isdst=1 gmtoff=3600 zone=IST
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2038-07-15T12Z: 2038-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=IST
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2100-07-15T12Z: 2100-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=IST
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2500-07-15T12Z: 2500-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=IST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=IST
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=IST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=GMT
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Europe/London
+tzname=[GMT][BST] timezone=0 daylight=1
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=GMT
+transition at 1711846800: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition at 1729990800: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=GMT
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=GMT
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=GMT
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=GMT
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=GMT
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=1 gmtoff=3600 zone=BST
+1970-01-15T12Z: 1970-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=BST
+1970-07-15T12Z: 1970-07-15 13:00:00 wday=3 yday=195 isdst=0 gmtoff=3600 zone=BST
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=GMT
+2000-07-15T12Z: 2000-07-15 13:00:00 wday=6 yday=196 isdst=1 gmtoff=3600 zone=BST
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=GMT
+2037-07-15T12Z: 2037-07-15 13:00:00 wday=3 yday=195 isdst=1 gmtoff=3600 zone=BST
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2038-07-15T12Z: 2038-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2100-07-15T12Z: 2100-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2500-07-15T12Z: 2500-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=GMT
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=:Europe/London
+tzname=[GMT][BST] timezone=0 daylight=1
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=GMT
+transition at 1711846800: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition at 1729990800: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=GMT
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=GMT
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=GMT
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=GMT
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=GMT
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=1 gmtoff=3600 zone=BST
+1970-01-15T12Z: 1970-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=BST
+1970-07-15T12Z: 1970-07-15 13:00:00 wday=3 yday=195 isdst=0 gmtoff=3600 zone=BST
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=GMT
+2000-07-15T12Z: 2000-07-15 13:00:00 wday=6 yday=196 isdst=1 gmtoff=3600 zone=BST
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=GMT
+2037-07-15T12Z: 2037-07-15 13:00:00 wday=3 yday=195 isdst=1 gmtoff=3600 zone=BST
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2038-07-15T12Z: 2038-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2100-07-15T12Z: 2100-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=GMT
+2500-07-15T12Z: 2500-07-15 13:00:00 wday=4 yday=195 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 02:30:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=GMT
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=3600 zone=BST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=GMT
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=GMT
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Australia/Lord_Howe
+tzname=[+1030][+11] timezone=-37800 daylight=1
+2024-01-01T00Z: 2024-01-01 11:00:00 wday=1 yday=0 isdst=1 gmtoff=39600 zone=+11
+transition at 1712415600: 2024-04-07 01:30:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition at 1728142200: 2024-10-06 02:30:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+1850-01-15T12Z: 1850-01-15 22:36:20 wday=2 yday=14 isdst=0 gmtoff=38180 zone=LMT
+1850-07-15T12Z: 1850-07-15 22:36:20 wday=1 yday=195 isdst=0 gmtoff=38180 zone=LMT
+1900-01-15T12Z: 1900-01-15 22:00:00 wday=1 yday=14 isdst=0 gmtoff=36000 zone=AEST
+1900-07-15T12Z: 1900-07-15 22:00:00 wday=0 yday=195 isdst=0 gmtoff=36000 zone=AEST
+1950-01-15T12Z: 1950-01-15 22:00:00 wday=0 yday=14 isdst=0 gmtoff=36000 zone=AEST
+1950-07-15T12Z: 1950-07-15 22:00:00 wday=6 yday=195 isdst=0 gmtoff=36000 zone=AEST
+1970-01-15T12Z: 1970-01-15 22:00:00 wday=4 yday=14 isdst=0 gmtoff=36000 zone=AEST
+1970-07-15T12Z: 1970-07-15 22:00:00 wday=3 yday=195 isdst=0 gmtoff=36000 zone=AEST
+2000-01-15T12Z: 2000-01-15 23:00:00 wday=6 yday=14 isdst=1 gmtoff=39600 zone=+11
+2000-07-15T12Z: 2000-07-15 22:30:00 wday=6 yday=196 isdst=0 gmtoff=37800 zone=+1030
+2037-01-15T12Z: 2037-01-15 23:00:00 wday=4 yday=14 isdst=1 gmtoff=39600 zone=+11
+2037-07-15T12Z: 2037-07-15 22:30:00 wday=3 yday=195 isdst=0 gmtoff=37800 zone=+1030
+2038-01-15T12Z: 2038-01-15 23:00:00 wday=5 yday=14 isdst=1 gmtoff=39600 zone=+11
+2038-07-15T12Z: 2038-07-15 22:30:00 wday=4 yday=195 isdst=0 gmtoff=37800 zone=+1030
+2100-01-15T12Z: 2100-01-15 23:00:00 wday=5 yday=14 isdst=1 gmtoff=39600 zone=+11
+2100-07-15T12Z: 2100-07-15 22:30:00 wday=4 yday=195 isdst=0 gmtoff=37800 zone=+1030
+2500-01-15T12Z: 2500-01-15 23:00:00 wday=5 yday=14 isdst=1 gmtoff=39600 zone=+11
+2500-07-15T12Z: 2500-07-15 22:30:00 wday=4 yday=195 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+-899s isdst=-1: t-trans=900 errno=0
+  normalized: 2024-04-07 01:45:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+-899s isdst=0: t-trans=900 errno=0
+  normalized: 2024-04-07 01:45:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+-899s isdst=1: t-trans=-900 errno=0
+  normalized: 2024-04-07 01:45:00 wday=0 yday=97 isdst=1 gmtoff=39600 zone=+11
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-04-07 01:30:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+1s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-04-07 01:30:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+901s isdst=-1: t-trans=900 errno=0
+  normalized: 2024-04-07 01:45:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+901s isdst=0: t-trans=2700 errno=0
+  normalized: 2024-04-07 02:15:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+901s isdst=1: t-trans=900 errno=0
+  normalized: 2024-04-07 01:45:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+1801s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+-899s isdst=-1: t-trans=-900 errno=0
+  normalized: 2024-10-06 01:45:00 wday=0 yday=279 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+-899s isdst=0: t-trans=-900 errno=0
+  normalized: 2024-10-06 01:45:00 wday=0 yday=279 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+-899s isdst=1: t-trans=-2700 errno=0
+  normalized: 2024-10-06 01:15:00 wday=0 yday=279 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-06 02:30:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-10-06 02:30:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+1s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-06 01:30:00 wday=0 yday=279 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+901s isdst=-1: t-trans=900 errno=0
+  normalized: 2024-10-06 02:45:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+901s isdst=0: t-trans=900 errno=0
+  normalized: 2024-10-06 02:45:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+901s isdst=1: t-trans=-900 errno=0
+  normalized: 2024-10-06 01:45:00 wday=0 yday=279 isdst=0 gmtoff=37800 zone=+1030
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-06 03:00:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-06 03:00:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+transition 1 wall+1801s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-06 02:30:00 wday=0 yday=279 isdst=1 gmtoff=39600 zone=+11
+mktime 2024-01-32 25:61:61 isdst=-1: 2732521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=1 gmtoff=39600 zone=+11
+mktime year INT_MAX: 67768036160104800 errno=75
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Asia/Kolkata
+tzname=[IST][+0630] timezone=-19800 daylight=1
+2024-01-01T00Z: 2024-01-01 05:30:00 wday=1 yday=0 isdst=0 gmtoff=19800 zone=IST
+1850-01-15T12Z: 1850-01-15 17:53:28 wday=2 yday=14 isdst=0 gmtoff=21208 zone=LMT
+1850-07-15T12Z: 1850-07-15 17:53:28 wday=1 yday=195 isdst=0 gmtoff=21208 zone=LMT
+1900-01-15T12Z: 1900-01-15 17:21:10 wday=1 yday=14 isdst=0 gmtoff=19270 zone=MMT
+1900-07-15T12Z: 1900-07-15 17:21:10 wday=0 yday=195 isdst=0 gmtoff=19270 zone=MMT
+1950-01-15T12Z: 1950-01-15 17:30:00 wday=0 yday=14 isdst=0 gmtoff=19800 zone=IST
+1950-07-15T12Z: 1950-07-15 17:30:00 wday=6 yday=195 isdst=0 gmtoff=19800 zone=IST
+1970-01-15T12Z: 1970-01-15 17:30:00 wday=4 yday=14 isdst=0 gmtoff=19800 zone=IST
+1970-07-15T12Z: 1970-07-15 17:30:00 wday=3 yday=195 isdst=0 gmtoff=19800 zone=IST
+2000-01-15T12Z: 2000-01-15 17:30:00 wday=6 yday=14 isdst=0 gmtoff=19800 zone=IST
+2000-07-15T12Z: 2000-07-15 17:30:00 wday=6 yday=196 isdst=0 gmtoff=19800 zone=IST
+2037-01-15T12Z: 2037-01-15 17:30:00 wday=4 yday=14 isdst=0 gmtoff=19800 zone=IST
+2037-07-15T12Z: 2037-07-15 17:30:00 wday=3 yday=195 isdst=0 gmtoff=19800 zone=IST
+2038-01-15T12Z: 2038-01-15 17:30:00 wday=5 yday=14 isdst=0 gmtoff=19800 zone=IST
+2038-07-15T12Z: 2038-07-15 17:30:00 wday=4 yday=195 isdst=0 gmtoff=19800 zone=IST
+2100-01-15T12Z: 2100-01-15 17:30:00 wday=5 yday=14 isdst=0 gmtoff=19800 zone=IST
+2100-07-15T12Z: 2100-07-15 17:30:00 wday=4 yday=195 isdst=0 gmtoff=19800 zone=IST
+2500-01-15T12Z: 2500-01-15 17:30:00 wday=5 yday=14 isdst=0 gmtoff=19800 zone=IST
+2500-07-15T12Z: 2500-07-15 17:30:00 wday=4 yday=195 isdst=0 gmtoff=19800 zone=IST
+mktime 2024-01-32 25:61:61 isdst=-1: 2752321 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=19800 zone=IST
+mktime year INT_MAX: 67768036160121000 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Pacific/Kiritimati
+tzname=[+14][+14] timezone=-50400 daylight=0
+2024-01-01T00Z: 2024-01-01 14:00:00 wday=1 yday=0 isdst=0 gmtoff=50400 zone=+14
+1850-01-15T12Z: 1850-01-15 01:30:40 wday=2 yday=14 isdst=0 gmtoff=-37760 zone=LMT
+1850-07-15T12Z: 1850-07-15 01:30:40 wday=1 yday=195 isdst=0 gmtoff=-37760 zone=LMT
+1900-01-15T12Z: 1900-01-15 01:30:40 wday=1 yday=14 isdst=0 gmtoff=-37760 zone=LMT
+1900-07-15T12Z: 1900-07-15 01:30:40 wday=0 yday=195 isdst=0 gmtoff=-37760 zone=LMT
+1950-01-15T12Z: 1950-01-15 01:20:00 wday=0 yday=14 isdst=0 gmtoff=-38400 zone=-1040
+1950-07-15T12Z: 1950-07-15 01:20:00 wday=6 yday=195 isdst=0 gmtoff=-38400 zone=-1040
+1970-01-15T12Z: 1970-01-15 01:20:00 wday=4 yday=14 isdst=0 gmtoff=-38400 zone=-1040
+1970-07-15T12Z: 1970-07-15 01:20:00 wday=3 yday=195 isdst=0 gmtoff=-38400 zone=-1040
+2000-01-15T12Z: 2000-01-16 02:00:00 wday=0 yday=15 isdst=0 gmtoff=50400 zone=+14
+2000-07-15T12Z: 2000-07-16 02:00:00 wday=0 yday=197 isdst=0 gmtoff=50400 zone=+14
+2037-01-15T12Z: 2037-01-16 02:00:00 wday=5 yday=15 isdst=0 gmtoff=50400 zone=+14
+2037-07-15T12Z: 2037-07-16 02:00:00 wday=4 yday=196 isdst=0 gmtoff=50400 zone=+14
+2038-01-15T12Z: 2038-01-16 02:00:00 wday=6 yday=15 isdst=0 gmtoff=50400 zone=+14
+2038-07-15T12Z: 2038-07-16 02:00:00 wday=5 yday=196 isdst=0 gmtoff=50400 zone=+14
+2100-01-15T12Z: 2100-01-16 02:00:00 wday=6 yday=15 isdst=0 gmtoff=50400 zone=+14
+2100-07-15T12Z: 2100-07-16 02:00:00 wday=5 yday=196 isdst=0 gmtoff=50400 zone=+14
+2500-01-15T12Z: 2500-01-16 02:00:00 wday=6 yday=15 isdst=0 gmtoff=50400 zone=+14
+2500-07-15T12Z: 2500-07-16 02:00:00 wday=5 yday=196 isdst=0 gmtoff=50400 zone=+14
+mktime 2024-01-32 25:61:61 isdst=-1: 2721721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=50400 zone=+14
+mktime year INT_MAX: 67768036160090400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=America/Sao_Paulo
+tzname=[-03][-02] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=-03
+1850-01-15T12Z: 1850-01-15 08:53:32 wday=2 yday=14 isdst=0 gmtoff=-11188 zone=LMT
+1850-07-15T12Z: 1850-07-15 08:53:32 wday=1 yday=195 isdst=0 gmtoff=-11188 zone=LMT
+1900-01-15T12Z: 1900-01-15 08:53:32 wday=1 yday=14 isdst=0 gmtoff=-11188 zone=LMT
+1900-07-15T12Z: 1900-07-15 08:53:32 wday=0 yday=195 isdst=0 gmtoff=-11188 zone=LMT
+1950-01-15T12Z: 1950-01-15 10:00:00 wday=0 yday=14 isdst=1 gmtoff=-7200 zone=-02
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=-03
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=-03
+1970-07-15T12Z: 1970-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=-03
+2000-01-15T12Z: 2000-01-15 10:00:00 wday=6 yday=14 isdst=1 gmtoff=-7200 zone=-02
+2000-07-15T12Z: 2000-07-15 09:00:00 wday=6 yday=196 isdst=0 gmtoff=-10800 zone=-03
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2037-07-15T12Z: 2037-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=-03
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2038-07-15T12Z: 2038-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=-03
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2100-07-15T12Z: 2100-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=-03
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2500-07-15T12Z: 2500-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=-03
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=-03
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Africa/Casablanca
+tzname=[+00][+01] timezone=0 daylight=1
+2024-01-01T00Z: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=3600 zone=+01
+transition at 1710036000: 2024-03-10 02:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition at 1713060000: 2024-04-14 03:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+1850-01-15T12Z: 1850-01-15 11:29:40 wday=2 yday=14 isdst=0 gmtoff=-1820 zone=LMT
+1850-07-15T12Z: 1850-07-15 11:29:40 wday=1 yday=195 isdst=0 gmtoff=-1820 zone=LMT
+1900-01-15T12Z: 1900-01-15 11:29:40 wday=1 yday=14 isdst=0 gmtoff=-1820 zone=LMT
+1900-07-15T12Z: 1900-07-15 11:29:40 wday=0 yday=195 isdst=0 gmtoff=-1820 zone=LMT
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=+00
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=1 gmtoff=3600 zone=+01
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=+00
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=+00
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=+00
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=+00
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=+00
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=+00
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=+00
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=+00
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+-1799s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 02:30:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 02:30:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 02:30:00 wday=0 yday=69 isdst=1 gmtoff=3600 zone=+01
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 02:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 02:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 02:30:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-03-10 02:30:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-04-14 01:30:00 wday=0 yday=104 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-04-14 01:30:00 wday=0 yday=104 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-04-14 00:30:00 wday=0 yday=104 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-04-14 03:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-04-14 03:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-04-14 01:00:00 wday=0 yday=104 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-04-14 03:30:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-04-14 03:30:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-04-14 01:30:00 wday=0 yday=104 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-04-14 04:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-04-14 04:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-04-14 03:00:00 wday=0 yday=104 isdst=1 gmtoff=3600 zone=+01
+mktime 2024-01-32 25:61:61 isdst=-1: 2768521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=1 gmtoff=3600 zone=+01
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Antarctica/Troll
+tzname=[+00][+02] timezone=0 daylight=1
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=+00
+transition at 1711846800: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition at 1729990800: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=-00
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=-00
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=-00
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=-00
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=-00
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=-00
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=-00
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=-00
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=-00
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=-00
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=+00
+2037-07-15T12Z: 2037-07-15 14:00:00 wday=3 yday=195 isdst=1 gmtoff=7200 zone=+02
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2038-07-15T12Z: 2038-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=+02
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2100-07-15T12Z: 2100-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=+02
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=+00
+2500-07-15T12Z: 2500-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+-3599s isdst=-1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+-3599s isdst=0: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+-3599s isdst=1: t-trans=-10800 errno=0
+  normalized: 2024-03-30 22:00:00 wday=6 yday=89 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+1s isdst=1: t-trans=-7200 errno=0
+  normalized: 2024-03-30 23:00:00 wday=6 yday=89 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+3601s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=0 gmtoff=0 zone=+00
+transition 0 wall+7201s isdst=-1: t-trans=7200 errno=0
+  normalized: 2024-03-31 05:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+7201s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-03-31 05:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 0 wall+7201s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=+02
+transition 1 wall+-3599s isdst=-1: t-trans=-3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=+02
+transition 1 wall+-3599s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+-3599s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=+02
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+1s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+3601s isdst=0: t-trans=10800 errno=0
+  normalized: 2024-10-27 04:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+7201s isdst=-1: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+7201s isdst=0: t-trans=14400 errno=0
+  normalized: 2024-10-27 05:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+transition 1 wall+7201s isdst=1: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=0 zone=+00
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=+00
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=/usr/share/zoneinfo/Asia/Tokyo
+tzname=[JST][JDT] timezone=-32400 daylight=1
+2024-01-01T00Z: 2024-01-01 09:00:00 wday=1 yday=0 isdst=0 gmtoff=32400 zone=JST
+1850-01-15T12Z: 1850-01-15 21:18:59 wday=2 yday=14 isdst=0 gmtoff=33539 zone=LMT
+1850-07-15T12Z: 1850-07-15 21:18:59 wday=1 yday=195 isdst=0 gmtoff=33539 zone=LMT
+1900-01-15T12Z: 1900-01-15 21:00:00 wday=1 yday=14 isdst=0 gmtoff=32400 zone=JST
+1900-07-15T12Z: 1900-07-15 21:00:00 wday=0 yday=195 isdst=0 gmtoff=32400 zone=JST
+1950-01-15T12Z: 1950-01-15 21:00:00 wday=0 yday=14 isdst=0 gmtoff=32400 zone=JST
+1950-07-15T12Z: 1950-07-15 22:00:00 wday=6 yday=195 isdst=1 gmtoff=36000 zone=JDT
+1970-01-15T12Z: 1970-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+1970-07-15T12Z: 1970-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2000-01-15T12Z: 2000-01-15 21:00:00 wday=6 yday=14 isdst=0 gmtoff=32400 zone=JST
+2000-07-15T12Z: 2000-07-15 21:00:00 wday=6 yday=196 isdst=0 gmtoff=32400 zone=JST
+2037-01-15T12Z: 2037-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+2037-07-15T12Z: 2037-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2038-01-15T12Z: 2038-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2038-07-15T12Z: 2038-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2100-01-15T12Z: 2100-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2100-07-15T12Z: 2100-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2500-01-15T12Z: 2500-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2500-07-15T12Z: 2500-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+mktime 2024-01-32 25:61:61 isdst=-1: 2739721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=32400 zone=JST
+mktime year INT_MAX: 67768036160108400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=:/usr/share/zoneinfo/Asia/Tokyo
+tzname=[JST][JDT] timezone=-32400 daylight=1
+2024-01-01T00Z: 2024-01-01 09:00:00 wday=1 yday=0 isdst=0 gmtoff=32400 zone=JST
+1850-01-15T12Z: 1850-01-15 21:18:59 wday=2 yday=14 isdst=0 gmtoff=33539 zone=LMT
+1850-07-15T12Z: 1850-07-15 21:18:59 wday=1 yday=195 isdst=0 gmtoff=33539 zone=LMT
+1900-01-15T12Z: 1900-01-15 21:00:00 wday=1 yday=14 isdst=0 gmtoff=32400 zone=JST
+1900-07-15T12Z: 1900-07-15 21:00:00 wday=0 yday=195 isdst=0 gmtoff=32400 zone=JST
+1950-01-15T12Z: 1950-01-15 21:00:00 wday=0 yday=14 isdst=0 gmtoff=32400 zone=JST
+1950-07-15T12Z: 1950-07-15 22:00:00 wday=6 yday=195 isdst=1 gmtoff=36000 zone=JDT
+1970-01-15T12Z: 1970-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+1970-07-15T12Z: 1970-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2000-01-15T12Z: 2000-01-15 21:00:00 wday=6 yday=14 isdst=0 gmtoff=32400 zone=JST
+2000-07-15T12Z: 2000-07-15 21:00:00 wday=6 yday=196 isdst=0 gmtoff=32400 zone=JST
+2037-01-15T12Z: 2037-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+2037-07-15T12Z: 2037-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2038-01-15T12Z: 2038-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2038-07-15T12Z: 2038-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2100-01-15T12Z: 2100-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2100-07-15T12Z: 2100-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2500-01-15T12Z: 2500-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2500-07-15T12Z: 2500-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+mktime 2024-01-32 25:61:61 isdst=-1: 2739721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=32400 zone=JST
+mktime year INT_MAX: 67768036160108400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=EST
+tzname=[EST][EST] timezone=18000 daylight=0
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=EST
+1850-01-15T12Z: 1850-01-15 07:00:00 wday=2 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1850-07-15T12Z: 1850-07-15 07:00:00 wday=1 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1950-07-15T12Z: 1950-07-15 07:00:00 wday=6 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1970-07-15T12Z: 1970-07-15 07:00:00 wday=3 yday=195 isdst=0 gmtoff=-18000 zone=EST
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2000-07-15T12Z: 2000-07-15 07:00:00 wday=6 yday=196 isdst=0 gmtoff=-18000 zone=EST
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2037-07-15T12Z: 2037-07-15 07:00:00 wday=3 yday=195 isdst=0 gmtoff=-18000 zone=EST
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2038-07-15T12Z: 2038-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=EST
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2100-07-15T12Z: 2100-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=EST
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2500-07-15T12Z: 2500-07-15 07:00:00 wday=4 yday=195 isdst=0 gmtoff=-18000 zone=EST
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=EST
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=EST5EDT
+tzname=[EST][EDT] timezone=18000 daylight=1
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=EST
+transition at 1710054000: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition at 1730613600: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+1850-01-15T12Z: 1850-01-15 07:00:00 wday=2 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1850-07-15T12Z: 1850-07-15 07:00:00 wday=1 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1950-07-15T12Z: 1950-07-15 07:00:00 wday=6 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1970-07-15T12Z: 1970-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2000-07-15T12Z: 2000-07-15 08:00:00 wday=6 yday=196 isdst=1 gmtoff=-14400 zone=EDT
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2037-07-15T12Z: 2037-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2038-07-15T12Z: 2038-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2100-07-15T12Z: 2100-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2500-07-15T12Z: 2500-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=EST
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=EST5EDT,M3.2.0,M11.1.0
+tzname=[EST][EDT] timezone=18000 daylight=1
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=EST
+transition at 1710054000: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition at 1730613600: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+1850-01-15T12Z: 1850-01-15 07:00:00 wday=2 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1850-07-15T12Z: 1850-07-15 07:00:00 wday=1 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1950-07-15T12Z: 1950-07-15 07:00:00 wday=6 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1970-07-15T12Z: 1970-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2000-07-15T12Z: 2000-07-15 08:00:00 wday=6 yday=196 isdst=1 gmtoff=-14400 zone=EDT
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2037-07-15T12Z: 2037-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2038-07-15T12Z: 2038-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2100-07-15T12Z: 2100-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2500-07-15T12Z: 2500-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=EST
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=CET-1CEST,M3.5.0,M10.5.0/3
+tzname=[CET][CEST] timezone=-3600 daylight=1
+2024-01-01T00Z: 2024-01-01 01:00:00 wday=1 yday=0 isdst=0 gmtoff=3600 zone=CET
+transition at 1711846800: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition at 1729990800: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+1850-01-15T12Z: 1850-01-15 13:00:00 wday=2 yday=14 isdst=0 gmtoff=3600 zone=CET
+1850-07-15T12Z: 1850-07-15 13:00:00 wday=1 yday=195 isdst=0 gmtoff=3600 zone=CET
+1900-01-15T12Z: 1900-01-15 13:00:00 wday=1 yday=14 isdst=0 gmtoff=3600 zone=CET
+1900-07-15T12Z: 1900-07-15 13:00:00 wday=0 yday=195 isdst=0 gmtoff=3600 zone=CET
+1950-01-15T12Z: 1950-01-15 13:00:00 wday=0 yday=14 isdst=0 gmtoff=3600 zone=CET
+1950-07-15T12Z: 1950-07-15 13:00:00 wday=6 yday=195 isdst=0 gmtoff=3600 zone=CET
+1970-01-15T12Z: 1970-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=CET
+1970-07-15T12Z: 1970-07-15 14:00:00 wday=3 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2000-01-15T12Z: 2000-01-15 13:00:00 wday=6 yday=14 isdst=0 gmtoff=3600 zone=CET
+2000-07-15T12Z: 2000-07-15 14:00:00 wday=6 yday=196 isdst=1 gmtoff=7200 zone=CEST
+2037-01-15T12Z: 2037-01-15 13:00:00 wday=4 yday=14 isdst=0 gmtoff=3600 zone=CET
+2037-07-15T12Z: 2037-07-15 14:00:00 wday=3 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2038-01-15T12Z: 2038-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2038-07-15T12Z: 2038-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2100-01-15T12Z: 2100-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2100-07-15T12Z: 2100-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+2500-01-15T12Z: 2500-01-15 13:00:00 wday=5 yday=14 isdst=0 gmtoff=3600 zone=CET
+2500-07-15T12Z: 2500-07-15 14:00:00 wday=4 yday=195 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-31 00:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-31 01:00:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 03:30:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 03:30:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=0 gmtoff=3600 zone=CET
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 04:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 03:00:00 wday=0 yday=90 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=1 gmtoff=7200 zone=CEST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 03:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 04:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=3600 zone=CET
+mktime 2024-01-32 25:61:61 isdst=-1: 2768521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=3600 zone=CET
+mktime year INT_MAX: 67768036160137200 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=NZST-12NZDT,M9.5.0,M4.1.0/3
+tzname=[NZST][NZDT] timezone=-43200 daylight=1
+2024-01-01T00Z: 2024-01-01 13:00:00 wday=1 yday=0 isdst=1 gmtoff=46800 zone=NZDT
+transition at 1712412000: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition at 1727532000: 2024-09-29 03:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+1850-01-15T12Z: 1850-01-16 01:00:00 wday=3 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+1850-07-15T12Z: 1850-07-16 01:00:00 wday=2 yday=196 isdst=1 gmtoff=46800 zone=NZDT
+1900-01-15T12Z: 1900-01-16 01:00:00 wday=2 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+1900-07-15T12Z: 1900-07-16 01:00:00 wday=1 yday=196 isdst=1 gmtoff=46800 zone=NZDT
+1950-01-15T12Z: 1950-01-16 01:00:00 wday=1 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+1950-07-15T12Z: 1950-07-16 01:00:00 wday=0 yday=196 isdst=1 gmtoff=46800 zone=NZDT
+1970-01-15T12Z: 1970-01-16 01:00:00 wday=5 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+1970-07-15T12Z: 1970-07-16 00:00:00 wday=4 yday=196 isdst=0 gmtoff=43200 zone=NZST
+2000-01-15T12Z: 2000-01-16 01:00:00 wday=0 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+2000-07-15T12Z: 2000-07-16 00:00:00 wday=0 yday=197 isdst=0 gmtoff=43200 zone=NZST
+2037-01-15T12Z: 2037-01-16 01:00:00 wday=5 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+2037-07-15T12Z: 2037-07-16 00:00:00 wday=4 yday=196 isdst=0 gmtoff=43200 zone=NZST
+2038-01-15T12Z: 2038-01-16 01:00:00 wday=6 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+2038-07-15T12Z: 2038-07-16 00:00:00 wday=5 yday=196 isdst=0 gmtoff=43200 zone=NZST
+2100-01-15T12Z: 2100-01-16 01:00:00 wday=6 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+2100-07-15T12Z: 2100-07-16 00:00:00 wday=5 yday=196 isdst=0 gmtoff=43200 zone=NZST
+2500-01-15T12Z: 2500-01-16 01:00:00 wday=6 yday=15 isdst=1 gmtoff=46800 zone=NZDT
+2500-07-15T12Z: 2500-07-16 00:00:00 wday=5 yday=196 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+-1799s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=1 gmtoff=46800 zone=NZDT
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-04-07 03:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-04-07 02:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-04-07 03:30:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-04-07 02:30:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-04-07 03:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-04-07 04:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-04-07 03:00:00 wday=0 yday=97 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-09-29 01:30:00 wday=0 yday=272 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-09-29 01:30:00 wday=0 yday=272 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-09-29 00:30:00 wday=0 yday=272 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-09-29 03:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-09-29 03:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-09-29 01:00:00 wday=0 yday=272 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-09-29 03:30:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-09-29 03:30:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-09-29 01:30:00 wday=0 yday=272 isdst=0 gmtoff=43200 zone=NZST
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-09-29 04:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-09-29 04:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-09-29 03:00:00 wday=0 yday=272 isdst=1 gmtoff=46800 zone=NZDT
+mktime 2024-01-32 25:61:61 isdst=-1: 2725321 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=1 gmtoff=46800 zone=NZDT
+mktime year INT_MAX: 67768036160097600 errno=75
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=<+0330>-3:30
+tzname=[+0330][+0330] timezone=-12600 daylight=0
+2024-01-01T00Z: 2024-01-01 03:30:00 wday=1 yday=0 isdst=0 gmtoff=12600 zone=+0330
+1850-01-15T12Z: 1850-01-15 15:30:00 wday=2 yday=14 isdst=0 gmtoff=12600 zone=+0330
+1850-07-15T12Z: 1850-07-15 15:30:00 wday=1 yday=195 isdst=0 gmtoff=12600 zone=+0330
+1900-01-15T12Z: 1900-01-15 15:30:00 wday=1 yday=14 isdst=0 gmtoff=12600 zone=+0330
+1900-07-15T12Z: 1900-07-15 15:30:00 wday=0 yday=195 isdst=0 gmtoff=12600 zone=+0330
+1950-01-15T12Z: 1950-01-15 15:30:00 wday=0 yday=14 isdst=0 gmtoff=12600 zone=+0330
+1950-07-15T12Z: 1950-07-15 15:30:00 wday=6 yday=195 isdst=0 gmtoff=12600 zone=+0330
+1970-01-15T12Z: 1970-01-15 15:30:00 wday=4 yday=14 isdst=0 gmtoff=12600 zone=+0330
+1970-07-15T12Z: 1970-07-15 15:30:00 wday=3 yday=195 isdst=0 gmtoff=12600 zone=+0330
+2000-01-15T12Z: 2000-01-15 15:30:00 wday=6 yday=14 isdst=0 gmtoff=12600 zone=+0330
+2000-07-15T12Z: 2000-07-15 15:30:00 wday=6 yday=196 isdst=0 gmtoff=12600 zone=+0330
+2037-01-15T12Z: 2037-01-15 15:30:00 wday=4 yday=14 isdst=0 gmtoff=12600 zone=+0330
+2037-07-15T12Z: 2037-07-15 15:30:00 wday=3 yday=195 isdst=0 gmtoff=12600 zone=+0330
+2038-01-15T12Z: 2038-01-15 15:30:00 wday=5 yday=14 isdst=0 gmtoff=12600 zone=+0330
+2038-07-15T12Z: 2038-07-15 15:30:00 wday=4 yday=195 isdst=0 gmtoff=12600 zone=+0330
+2100-01-15T12Z: 2100-01-15 15:30:00 wday=5 yday=14 isdst=0 gmtoff=12600 zone=+0330
+2100-07-15T12Z: 2100-07-15 15:30:00 wday=4 yday=195 isdst=0 gmtoff=12600 zone=+0330
+2500-01-15T12Z: 2500-01-15 15:30:00 wday=5 yday=14 isdst=0 gmtoff=12600 zone=+0330
+2500-07-15T12Z: 2500-07-15 15:30:00 wday=4 yday=195 isdst=0 gmtoff=12600 zone=+0330
+mktime 2024-01-32 25:61:61 isdst=-1: 2759521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=12600 zone=+0330
+mktime year INT_MAX: 67768036160128200 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=<-03>3<-02>,M3.5.0/-2,M10.5.0/-1
+tzname=[-03][-02] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=-03
+transition at 1711846800: 2024-03-30 23:00:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition at 1729990800: 2024-10-26 22:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=-03
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=-03
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=-03
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=-03
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=-03
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=-03
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=-03
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=-02
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=-02
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=-02
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=-02
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=-02
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=-03
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-30 21:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=-03
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-30 21:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=-03
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-30 20:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=-03
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-30 23:00:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-30 23:00:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-30 21:00:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=-03
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-30 21:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=-03
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 00:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=-02
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-30 23:00:00 wday=6 yday=89 isdst=1 gmtoff=-7200 zone=-02
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-26 22:30:00 wday=6 yday=299 isdst=1 gmtoff=-7200 zone=-02
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-26 22:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-26 22:30:00 wday=6 yday=299 isdst=1 gmtoff=-7200 zone=-02
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-26 22:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-26 23:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-26 22:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-26 22:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-26 23:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-26 22:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-26 23:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 00:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=-03
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-26 23:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=-03
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=-03
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=XXX3:30
+tzname=[XXX][XXX] timezone=12600 daylight=0
+2024-01-01T00Z: 2023-12-31 20:30:00 wday=0 yday=364 isdst=0 gmtoff=-12600 zone=XXX
+1850-01-15T12Z: 1850-01-15 08:30:00 wday=2 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+1850-07-15T12Z: 1850-07-15 08:30:00 wday=1 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+1900-01-15T12Z: 1900-01-15 08:30:00 wday=1 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+1900-07-15T12Z: 1900-07-15 08:30:00 wday=0 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+1950-01-15T12Z: 1950-01-15 08:30:00 wday=0 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+1950-07-15T12Z: 1950-07-15 08:30:00 wday=6 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+1970-01-15T12Z: 1970-01-15 08:30:00 wday=4 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+1970-07-15T12Z: 1970-07-15 08:30:00 wday=3 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+2000-01-15T12Z: 2000-01-15 08:30:00 wday=6 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+2000-07-15T12Z: 2000-07-15 08:30:00 wday=6 yday=196 isdst=0 gmtoff=-12600 zone=XXX
+2037-01-15T12Z: 2037-01-15 08:30:00 wday=4 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+2037-07-15T12Z: 2037-07-15 08:30:00 wday=3 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+2038-01-15T12Z: 2038-01-15 08:30:00 wday=5 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+2038-07-15T12Z: 2038-07-15 08:30:00 wday=4 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+2100-01-15T12Z: 2100-01-15 08:30:00 wday=5 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+2100-07-15T12Z: 2100-07-15 08:30:00 wday=4 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+2500-01-15T12Z: 2500-01-15 08:30:00 wday=5 yday=14 isdst=0 gmtoff=-12600 zone=XXX
+2500-07-15T12Z: 2500-07-15 08:30:00 wday=4 yday=195 isdst=0 gmtoff=-12600 zone=XXX
+mktime 2024-01-32 25:61:61 isdst=-1: 2784721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-12600 zone=XXX
+mktime year INT_MAX: 67768036160153400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=JST-9
+tzname=[JST][JST] timezone=-32400 daylight=0
+2024-01-01T00Z: 2024-01-01 09:00:00 wday=1 yday=0 isdst=0 gmtoff=32400 zone=JST
+1850-01-15T12Z: 1850-01-15 21:00:00 wday=2 yday=14 isdst=0 gmtoff=32400 zone=JST
+1850-07-15T12Z: 1850-07-15 21:00:00 wday=1 yday=195 isdst=0 gmtoff=32400 zone=JST
+1900-01-15T12Z: 1900-01-15 21:00:00 wday=1 yday=14 isdst=0 gmtoff=32400 zone=JST
+1900-07-15T12Z: 1900-07-15 21:00:00 wday=0 yday=195 isdst=0 gmtoff=32400 zone=JST
+1950-01-15T12Z: 1950-01-15 21:00:00 wday=0 yday=14 isdst=0 gmtoff=32400 zone=JST
+1950-07-15T12Z: 1950-07-15 21:00:00 wday=6 yday=195 isdst=0 gmtoff=32400 zone=JST
+1970-01-15T12Z: 1970-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+1970-07-15T12Z: 1970-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2000-01-15T12Z: 2000-01-15 21:00:00 wday=6 yday=14 isdst=0 gmtoff=32400 zone=JST
+2000-07-15T12Z: 2000-07-15 21:00:00 wday=6 yday=196 isdst=0 gmtoff=32400 zone=JST
+2037-01-15T12Z: 2037-01-15 21:00:00 wday=4 yday=14 isdst=0 gmtoff=32400 zone=JST
+2037-07-15T12Z: 2037-07-15 21:00:00 wday=3 yday=195 isdst=0 gmtoff=32400 zone=JST
+2038-01-15T12Z: 2038-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2038-07-15T12Z: 2038-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2100-01-15T12Z: 2100-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2100-07-15T12Z: 2100-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+2500-01-15T12Z: 2500-01-15 21:00:00 wday=5 yday=14 isdst=0 gmtoff=32400 zone=JST
+2500-07-15T12Z: 2500-07-15 21:00:00 wday=4 yday=195 isdst=0 gmtoff=32400 zone=JST
+mktime 2024-01-32 25:61:61 isdst=-1: 2739721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=32400 zone=JST
+mktime year INT_MAX: 67768036160108400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,J60/2,J300/2
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1709269200: 2024-03-01 03:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1730001600: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-01 01:30:00 wday=5 yday=60 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-01 01:30:00 wday=5 yday=60 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-01 00:30:00 wday=5 yday=60 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-01 03:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-01 03:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-01 01:00:00 wday=5 yday=60 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-01 03:30:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-01 03:30:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-01 01:30:00 wday=5 yday=60 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-01 04:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-01 04:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-01 03:00:00 wday=5 yday=60 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 02:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 03:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,59/2,299/2
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1709182800: 2024-02-29 03:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1729915200: 2024-10-26 01:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-02-29 01:30:00 wday=4 yday=59 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-02-29 01:30:00 wday=4 yday=59 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-02-29 00:30:00 wday=4 yday=59 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-02-29 03:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-02-29 03:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-02-29 01:00:00 wday=4 yday=59 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-02-29 03:30:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-02-29 03:30:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-02-29 01:30:00 wday=4 yday=59 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-02-29 04:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-02-29 04:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-02-29 03:00:00 wday=4 yday=59 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-26 01:30:00 wday=6 yday=299 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-26 01:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-26 01:30:00 wday=6 yday=299 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-26 01:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-26 02:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-26 01:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-26 01:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-26 02:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-26 01:30:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-26 02:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-26 03:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-26 02:00:00 wday=6 yday=299 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,M3.2.0/-1,M11.1.0/26
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1710036000: 2024-03-10 00:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1730692800: 2024-11-04 01:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-09 22:30:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-09 22:30:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-09 21:30:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 00:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 00:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-09 22:00:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-09 22:30:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 00:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-04 01:30:00 wday=1 yday=308 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-04 01:30:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-04 01:30:00 wday=1 yday=308 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-04 01:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-04 02:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-04 01:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-04 01:30:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-04 02:30:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-04 01:30:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-04 02:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-04 03:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-04 02:00:00 wday=1 yday=308 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,M3.2.0/167,M11.1.0/-167
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1710640800: 2024-03-17 00:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1729998000: 2024-10-27 00:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-16 22:30:00 wday=6 yday=75 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-16 22:30:00 wday=6 yday=75 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-16 21:30:00 wday=6 yday=75 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-17 00:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-17 00:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-16 22:00:00 wday=6 yday=75 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-17 00:30:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-17 00:30:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-16 22:30:00 wday=6 yday=75 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-17 01:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-17 01:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-17 00:00:00 wday=0 yday=76 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 00:30:00 wday=0 yday=300 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-10-27 00:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-10-27 00:30:00 wday=0 yday=300 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-10-27 00:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-10-27 00:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-10-27 00:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-10-27 01:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-10-27 00:30:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-10-27 02:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-10-27 01:00:00 wday=0 yday=300 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB2,M3.2.0,M11.1.0
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1710046800: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1730606400: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB-1:30,M3.2.0,M11.1.0
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1710046800: 2024-03-10 06:30:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition at 1730593800: 2024-11-02 21:30:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 13:30:00 wday=3 yday=195 isdst=1 gmtoff=5400 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 13:30:00 wday=6 yday=196 isdst=1 gmtoff=5400 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 13:30:00 wday=3 yday=195 isdst=1 gmtoff=5400 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 13:30:00 wday=4 yday=195 isdst=1 gmtoff=5400 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 13:30:00 wday=4 yday=195 isdst=1 gmtoff=5400 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 13:30:00 wday=4 yday=195 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+-8099s isdst=-1: t-trans=-8100 errno=0
+  normalized: 2024-03-09 23:45:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-8099s isdst=0: t-trans=-8100 errno=0
+  normalized: 2024-03-09 23:45:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-8099s isdst=1: t-trans=-24300 errno=0
+  normalized: 2024-03-09 19:15:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 06:30:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 06:30:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-16200 errno=0
+  normalized: 2024-03-09 21:30:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+8101s isdst=-1: t-trans=8100 errno=0
+  normalized: 2024-03-10 08:45:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+8101s isdst=0: t-trans=8100 errno=0
+  normalized: 2024-03-10 08:45:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+8101s isdst=1: t-trans=-8100 errno=0
+  normalized: 2024-03-09 23:45:00 wday=6 yday=68 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+16201s isdst=-1: t-trans=16200 errno=0
+  normalized: 2024-03-10 11:00:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+16201s isdst=0: t-trans=16200 errno=0
+  normalized: 2024-03-10 11:00:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 0 wall+16201s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 06:30:00 wday=0 yday=69 isdst=1 gmtoff=5400 zone=BBB
+transition 1 wall+-8099s isdst=-1: t-trans=-8100 errno=0
+  normalized: 2024-11-02 23:45:00 wday=6 yday=306 isdst=1 gmtoff=5400 zone=BBB
+transition 1 wall+-8099s isdst=0: t-trans=8100 errno=0
+  normalized: 2024-11-02 23:45:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-8099s isdst=1: t-trans=-8100 errno=0
+  normalized: 2024-11-02 23:45:00 wday=6 yday=306 isdst=1 gmtoff=5400 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-02 21:30:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=16200 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-02 21:30:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+8101s isdst=-1: t-trans=8100 errno=0
+  normalized: 2024-11-02 23:45:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+8101s isdst=0: t-trans=24300 errno=0
+  normalized: 2024-11-03 04:15:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+8101s isdst=1: t-trans=8100 errno=0
+  normalized: 2024-11-02 23:45:00 wday=6 yday=306 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+16201s isdst=-1: t-trans=16200 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+16201s isdst=0: t-trans=32400 errno=0
+  normalized: 2024-11-03 06:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+16201s isdst=1: t-trans=16200 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA-25
+tzname=[AAA][AAA] timezone=-86400 daylight=0
+2024-01-01T00Z: 2024-01-02 00:00:00 wday=2 yday=1 isdst=0 gmtoff=86400 zone=AAA
+1850-01-15T12Z: 1850-01-16 12:00:00 wday=3 yday=15 isdst=0 gmtoff=86400 zone=AAA
+1850-07-15T12Z: 1850-07-16 12:00:00 wday=2 yday=196 isdst=0 gmtoff=86400 zone=AAA
+1900-01-15T12Z: 1900-01-16 12:00:00 wday=2 yday=15 isdst=0 gmtoff=86400 zone=AAA
+1900-07-15T12Z: 1900-07-16 12:00:00 wday=1 yday=196 isdst=0 gmtoff=86400 zone=AAA
+1950-01-15T12Z: 1950-01-16 12:00:00 wday=1 yday=15 isdst=0 gmtoff=86400 zone=AAA
+1950-07-15T12Z: 1950-07-16 12:00:00 wday=0 yday=196 isdst=0 gmtoff=86400 zone=AAA
+1970-01-15T12Z: 1970-01-16 12:00:00 wday=5 yday=15 isdst=0 gmtoff=86400 zone=AAA
+1970-07-15T12Z: 1970-07-16 12:00:00 wday=4 yday=196 isdst=0 gmtoff=86400 zone=AAA
+2000-01-15T12Z: 2000-01-16 12:00:00 wday=0 yday=15 isdst=0 gmtoff=86400 zone=AAA
+2000-07-15T12Z: 2000-07-16 12:00:00 wday=0 yday=197 isdst=0 gmtoff=86400 zone=AAA
+2037-01-15T12Z: 2037-01-16 12:00:00 wday=5 yday=15 isdst=0 gmtoff=86400 zone=AAA
+2037-07-15T12Z: 2037-07-16 12:00:00 wday=4 yday=196 isdst=0 gmtoff=86400 zone=AAA
+2038-01-15T12Z: 2038-01-16 12:00:00 wday=6 yday=15 isdst=0 gmtoff=86400 zone=AAA
+2038-07-15T12Z: 2038-07-16 12:00:00 wday=5 yday=196 isdst=0 gmtoff=86400 zone=AAA
+2100-01-15T12Z: 2100-01-16 12:00:00 wday=6 yday=15 isdst=0 gmtoff=86400 zone=AAA
+2100-07-15T12Z: 2100-07-16 12:00:00 wday=5 yday=196 isdst=0 gmtoff=86400 zone=AAA
+2500-01-15T12Z: 2500-01-16 12:00:00 wday=6 yday=15 isdst=0 gmtoff=86400 zone=AAA
+2500-07-15T12Z: 2500-07-16 12:00:00 wday=5 yday=196 isdst=0 gmtoff=86400 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2685721 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=86400 zone=AAA
+mktime year INT_MAX: 67768036160054400 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA25
+tzname=[AAA][AAA] timezone=86400 daylight=0
+2024-01-01T00Z: 2023-12-31 00:00:00 wday=0 yday=364 isdst=0 gmtoff=-86400 zone=AAA
+1850-01-15T12Z: 1850-01-14 12:00:00 wday=1 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+1850-07-15T12Z: 1850-07-14 12:00:00 wday=0 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+1900-01-15T12Z: 1900-01-14 12:00:00 wday=0 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+1900-07-15T12Z: 1900-07-14 12:00:00 wday=6 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+1950-01-15T12Z: 1950-01-14 12:00:00 wday=6 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+1950-07-15T12Z: 1950-07-14 12:00:00 wday=5 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+1970-01-15T12Z: 1970-01-14 12:00:00 wday=3 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+1970-07-15T12Z: 1970-07-14 12:00:00 wday=2 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+2000-01-15T12Z: 2000-01-14 12:00:00 wday=5 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+2000-07-15T12Z: 2000-07-14 12:00:00 wday=5 yday=195 isdst=0 gmtoff=-86400 zone=AAA
+2037-01-15T12Z: 2037-01-14 12:00:00 wday=3 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+2037-07-15T12Z: 2037-07-14 12:00:00 wday=2 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+2038-01-15T12Z: 2038-01-14 12:00:00 wday=4 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+2038-07-15T12Z: 2038-07-14 12:00:00 wday=3 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+2100-01-15T12Z: 2100-01-14 12:00:00 wday=4 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+2100-07-15T12Z: 2100-07-14 12:00:00 wday=3 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+2500-01-15T12Z: 2500-01-14 12:00:00 wday=4 yday=13 isdst=0 gmtoff=-86400 zone=AAA
+2500-07-15T12Z: 2500-07-14 12:00:00 wday=3 yday=194 isdst=0 gmtoff=-86400 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2858521 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-86400 zone=AAA
+mktime year INT_MAX: 67768036160227200 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA24:59:59
+tzname=[AAA][AAA] timezone=89999 daylight=0
+2024-01-01T00Z: 2023-12-30 23:00:01 wday=6 yday=363 isdst=0 gmtoff=-89999 zone=AAA
+1850-01-15T12Z: 1850-01-14 11:00:01 wday=1 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+1850-07-15T12Z: 1850-07-14 11:00:01 wday=0 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+1900-01-15T12Z: 1900-01-14 11:00:01 wday=0 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+1900-07-15T12Z: 1900-07-14 11:00:01 wday=6 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+1950-01-15T12Z: 1950-01-14 11:00:01 wday=6 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+1950-07-15T12Z: 1950-07-14 11:00:01 wday=5 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+1970-01-15T12Z: 1970-01-14 11:00:01 wday=3 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+1970-07-15T12Z: 1970-07-14 11:00:01 wday=2 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+2000-01-15T12Z: 2000-01-14 11:00:01 wday=5 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+2000-07-15T12Z: 2000-07-14 11:00:01 wday=5 yday=195 isdst=0 gmtoff=-89999 zone=AAA
+2037-01-15T12Z: 2037-01-14 11:00:01 wday=3 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+2037-07-15T12Z: 2037-07-14 11:00:01 wday=2 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+2038-01-15T12Z: 2038-01-14 11:00:01 wday=4 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+2038-07-15T12Z: 2038-07-14 11:00:01 wday=3 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+2100-01-15T12Z: 2100-01-14 11:00:01 wday=4 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+2100-07-15T12Z: 2100-07-14 11:00:01 wday=3 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+2500-01-15T12Z: 2500-01-14 11:00:01 wday=4 yday=13 isdst=0 gmtoff=-89999 zone=AAA
+2500-07-15T12Z: 2500-07-14 11:00:01 wday=3 yday=194 isdst=0 gmtoff=-89999 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2862120 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-89999 zone=AAA
+mktime year INT_MAX: 67768036160230799 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AB1
+tzname=[][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=<AB>1
+tzname=[][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA
+tzname=[AAA][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=AAA
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=AAA
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=AAA
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=AAA
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=AAA
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=AAA
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=AAA
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=AAA
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=AAA
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=AAA
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=AAA
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=AAA
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=AAA
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=AAA
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=AAA
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=AAA
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=AAA
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=AAA
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=AAA
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,M13.1.0,M11.1.0
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 22:00:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1704074400: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1735689600: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+1850-01-15T12Z: 1850-01-15 10:00:00 wday=2 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1850-07-15T12Z: 1850-07-15 10:00:00 wday=1 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1900-01-15T12Z: 1900-01-15 10:00:00 wday=1 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1900-07-15T12Z: 1900-07-15 10:00:00 wday=0 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1950-01-15T12Z: 1950-01-15 10:00:00 wday=0 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1950-07-15T12Z: 1950-07-15 10:00:00 wday=6 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 09:00:00 wday=6 yday=196 isdst=0 gmtoff=-10800 zone=AAA
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-01-01 00:30:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-12-31 19:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-12-31 20:00:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-12-31 22:30:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-12-31 22:30:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-12-31 23:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-12-31 23:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=75
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,M3.6.0,M11.1.0
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 22:00:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1704074400: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1711854000: 2024-03-31 01:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+1850-01-15T12Z: 1850-01-15 10:00:00 wday=2 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1850-07-15T12Z: 1850-07-15 10:00:00 wday=1 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1900-01-15T12Z: 1900-01-15 10:00:00 wday=1 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1900-07-15T12Z: 1900-07-15 10:00:00 wday=0 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1950-01-15T12Z: 1950-01-15 10:00:00 wday=0 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1950-07-15T12Z: 1950-07-15 10:00:00 wday=6 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-01-01 00:30:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-30 22:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-31 01:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-31 01:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-30 23:00:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-31 01:30:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-30 23:30:00 wday=6 yday=89 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-31 02:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-31 01:00:00 wday=0 yday=90 isdst=1 gmtoff=-7200 zone=BBB
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=75
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,J0/2,J300/2
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 22:00:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1704074400: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1735689600: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 09:00:00 wday=6 yday=196 isdst=0 gmtoff=-10800 zone=AAA
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 09:00:00 wday=3 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 09:00:00 wday=4 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-01-01 00:30:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-12-31 19:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-12-31 20:00:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-12-31 22:30:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-12-31 22:30:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-12-31 20:30:00 wday=2 yday=365 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-12-31 23:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-12-31 23:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-12-31 22:00:00 wday=2 yday=365 isdst=1 gmtoff=-7200 zone=BBB
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,366/2,J300/2
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 22:00:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1704074400: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1704078000: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+1850-01-15T12Z: 1850-01-15 10:00:00 wday=2 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1850-07-15T12Z: 1850-07-15 10:00:00 wday=1 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1900-01-15T12Z: 1900-01-15 10:00:00 wday=1 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1900-07-15T12Z: 1900-07-15 10:00:00 wday=0 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1950-01-15T12Z: 1950-01-15 10:00:00 wday=0 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1950-07-15T12Z: 1950-07-15 10:00:00 wday=6 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+1970-01-15T12Z: 1970-01-15 10:00:00 wday=4 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 10:00:00 wday=6 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 10:00:00 wday=4 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 10:00:00 wday=5 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 10:00:00 wday=5 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 10:00:00 wday=5 yday=14 isdst=1 gmtoff=-7200 zone=BBB
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-01-01 01:30:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-01-01 02:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-5400 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=-3600 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2023-12-31 23:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-01-01 01:30:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2023-12-31 23:30:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-01-01 02:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-01-01 01:00:00 wday=1 yday=0 isdst=1 gmtoff=-7200 zone=BBB
+mktime 2024-01-32 25:61:61 isdst=-1: 2779321 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=1 gmtoff=-7200 zone=BBB
+mktime year INT_MAX: 67768036160151600 errno=75
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=AAA3BBB,M3.2.0
+tzname=[AAA][BBB] timezone=10800 daylight=1
+2024-01-01T00Z: 2023-12-31 21:00:00 wday=0 yday=364 isdst=0 gmtoff=-10800 zone=AAA
+transition at 1710046800: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition at 1730606400: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+1850-01-15T12Z: 1850-01-15 09:00:00 wday=2 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1850-07-15T12Z: 1850-07-15 09:00:00 wday=1 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1900-01-15T12Z: 1900-01-15 09:00:00 wday=1 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1900-07-15T12Z: 1900-07-15 09:00:00 wday=0 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1950-01-15T12Z: 1950-01-15 09:00:00 wday=0 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1950-07-15T12Z: 1950-07-15 09:00:00 wday=6 yday=195 isdst=0 gmtoff=-10800 zone=AAA
+1970-01-15T12Z: 1970-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+1970-07-15T12Z: 1970-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2000-01-15T12Z: 2000-01-15 09:00:00 wday=6 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2000-07-15T12Z: 2000-07-15 10:00:00 wday=6 yday=196 isdst=1 gmtoff=-7200 zone=BBB
+2037-01-15T12Z: 2037-01-15 09:00:00 wday=4 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2037-07-15T12Z: 2037-07-15 10:00:00 wday=3 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2038-01-15T12Z: 2038-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2038-07-15T12Z: 2038-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2100-01-15T12Z: 2100-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2100-07-15T12Z: 2100-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+2500-01-15T12Z: 2500-01-15 09:00:00 wday=5 yday=14 isdst=0 gmtoff=-10800 zone=AAA
+2500-07-15T12Z: 2500-07-15 10:00:00 wday=4 yday=195 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-10800 zone=AAA
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-7200 zone=BBB
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-10800 zone=AAA
+mktime 2024-01-32 25:61:61 isdst=-1: 2782921 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-10800 zone=AAA
+mktime year INT_MAX: 67768036160151600 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Invalid//Zone
+tzname=[Invalid][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=Invalid
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=Invalid
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=Invalid
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=Invalid
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=Invalid
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=Invalid
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=Invalid
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Invalid
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Invalid
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=Invalid
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=Invalid
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Invalid
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Invalid
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Invalid
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Invalid
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Invalid
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Invalid
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Invalid
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Invalid
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=Invalid
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=Nonexistent/Zone
+tzname=[Nonexistent][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=Nonexistent
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=Nonexistent
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Nonexistent
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Nonexistent
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=Nonexistent
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZ=../../../etc/passwd
+tzname=[][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZDIR=/usr/share/zoneinfo/America
+== TZ=New_York
+tzname=[EST][EDT] timezone=18000 daylight=1
+2024-01-01T00Z: 2023-12-31 19:00:00 wday=0 yday=364 isdst=0 gmtoff=-18000 zone=EST
+transition at 1710054000: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition at 1730613600: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+1850-01-15T12Z: 1850-01-15 07:03:58 wday=2 yday=14 isdst=0 gmtoff=-17762 zone=LMT
+1850-07-15T12Z: 1850-07-15 07:03:58 wday=1 yday=195 isdst=0 gmtoff=-17762 zone=LMT
+1900-01-15T12Z: 1900-01-15 07:00:00 wday=1 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1900-07-15T12Z: 1900-07-15 07:00:00 wday=0 yday=195 isdst=0 gmtoff=-18000 zone=EST
+1950-01-15T12Z: 1950-01-15 07:00:00 wday=0 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1950-07-15T12Z: 1950-07-15 08:00:00 wday=6 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+1970-01-15T12Z: 1970-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+1970-07-15T12Z: 1970-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2000-01-15T12Z: 2000-01-15 07:00:00 wday=6 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2000-07-15T12Z: 2000-07-15 08:00:00 wday=6 yday=196 isdst=1 gmtoff=-14400 zone=EDT
+2037-01-15T12Z: 2037-01-15 07:00:00 wday=4 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2037-07-15T12Z: 2037-07-15 08:00:00 wday=3 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2038-01-15T12Z: 2038-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2038-07-15T12Z: 2038-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2100-01-15T12Z: 2100-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2100-07-15T12Z: 2100-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+2500-01-15T12Z: 2500-01-15 07:00:00 wday=5 yday=14 isdst=0 gmtoff=-18000 zone=EST
+2500-07-15T12Z: 2500-07-15 08:00:00 wday=4 yday=195 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=0: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+-1799s isdst=1: t-trans=-5400 errno=0
+  normalized: 2024-03-10 00:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=0: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1s isdst=1: t-trans=-3600 errno=0
+  normalized: 2024-03-10 01:00:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-03-10 03:30:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+1801s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-03-10 01:30:00 wday=0 yday=69 isdst=0 gmtoff=-18000 zone=EST
+transition 0 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-03-10 04:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 0 wall+3601s isdst=1: t-trans=0 errno=0
+  normalized: 2024-03-10 03:00:00 wday=0 yday=69 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=-1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+-1799s isdst=0: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+-1799s isdst=1: t-trans=-1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=1 gmtoff=-14400 zone=EDT
+transition 1 wall+1s isdst=-1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=0: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1s isdst=1: t-trans=0 errno=0
+  normalized: 2024-11-03 01:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=-1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=0: t-trans=5400 errno=0
+  normalized: 2024-11-03 02:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+1801s isdst=1: t-trans=1800 errno=0
+  normalized: 2024-11-03 01:30:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=-1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=0: t-trans=7200 errno=0
+  normalized: 2024-11-03 03:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+transition 1 wall+3601s isdst=1: t-trans=3600 errno=0
+  normalized: 2024-11-03 02:00:00 wday=0 yday=307 isdst=0 gmtoff=-18000 zone=EST
+mktime 2024-01-32 25:61:61 isdst=-1: 2790121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=-18000 zone=EST
+mktime year INT_MAX: 67768036160158800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== TZDIR=/nonexistent
+== TZ=Europe/Berlin
+tzname=[Europe][] timezone=0 daylight=0
+2024-01-01T00Z: 2024-01-01 00:00:00 wday=1 yday=0 isdst=0 gmtoff=0 zone=Europe
+1850-01-15T12Z: 1850-01-15 12:00:00 wday=2 yday=14 isdst=0 gmtoff=0 zone=Europe
+1850-07-15T12Z: 1850-07-15 12:00:00 wday=1 yday=195 isdst=0 gmtoff=0 zone=Europe
+1900-01-15T12Z: 1900-01-15 12:00:00 wday=1 yday=14 isdst=0 gmtoff=0 zone=Europe
+1900-07-15T12Z: 1900-07-15 12:00:00 wday=0 yday=195 isdst=0 gmtoff=0 zone=Europe
+1950-01-15T12Z: 1950-01-15 12:00:00 wday=0 yday=14 isdst=0 gmtoff=0 zone=Europe
+1950-07-15T12Z: 1950-07-15 12:00:00 wday=6 yday=195 isdst=0 gmtoff=0 zone=Europe
+1970-01-15T12Z: 1970-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Europe
+1970-07-15T12Z: 1970-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Europe
+2000-01-15T12Z: 2000-01-15 12:00:00 wday=6 yday=14 isdst=0 gmtoff=0 zone=Europe
+2000-07-15T12Z: 2000-07-15 12:00:00 wday=6 yday=196 isdst=0 gmtoff=0 zone=Europe
+2037-01-15T12Z: 2037-01-15 12:00:00 wday=4 yday=14 isdst=0 gmtoff=0 zone=Europe
+2037-07-15T12Z: 2037-07-15 12:00:00 wday=3 yday=195 isdst=0 gmtoff=0 zone=Europe
+2038-01-15T12Z: 2038-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Europe
+2038-07-15T12Z: 2038-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Europe
+2100-01-15T12Z: 2100-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Europe
+2100-07-15T12Z: 2100-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Europe
+2500-01-15T12Z: 2500-01-15 12:00:00 wday=5 yday=14 isdst=0 gmtoff=0 zone=Europe
+2500-07-15T12Z: 2500-07-15 12:00:00 wday=4 yday=195 isdst=0 gmtoff=0 zone=Europe
+mktime 2024-01-32 25:61:61 isdst=-1: 2772121 errno=0
+  normalized: 2024-02-02 02:02:01 wday=5 yday=32 isdst=0 gmtoff=0 zone=Europe
+mktime year INT_MAX: 67768036160140800 errno=0
+localtime_r(INT64_MAX): NULL errno=75
+== implicit tzset
+localtime_r after setenv, no tzset: 2024-07-03 09:46:40 wday=3 yday=184 isdst=0 gmtoff=0 zone=UTC
+tzname after localtime_r=[UTC][UTC] timezone=0
+localtime after setenv: 2024-07-03 05:46:40 wday=3 yday=184 isdst=1 gmtoff=-14400 zone=EDT
+tzname after localtime=[EST][EDT] timezone=18000 daylight=1
+mktime after setenv: -35200 zone=NZST
+localtime after another setenv: zone=CEST gmtoff=7200
+gmtime and localtime share their result: 1
+ctime and asctime share their result: 1
+done

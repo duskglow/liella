@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.sh text eol=lf
+# Fuzz seeds are inputs, byte for byte.
+fuzz/seeds/** -text

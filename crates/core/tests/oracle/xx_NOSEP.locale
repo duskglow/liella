@@ -1,0 +1,66 @@
+comment_char %
+% A test locale for monetary_products (D-7.11): en_US everywhere except LC_MONETARY, whose
+% thousands separator is empty while mon_grouping still asks for groups of three. strfmon must
+% then not group: no separators and no separator positions in `#` left precision.
+
+LC_IDENTIFICATION
+copy "en_US"
+END LC_IDENTIFICATION
+
+LC_CTYPE
+copy "en_US"
+END LC_CTYPE
+
+LC_COLLATE
+copy "en_US"
+END LC_COLLATE
+
+LC_MONETARY
+int_curr_symbol     "<U0055><U0053><U0044><U0020>"
+currency_symbol     "<U0024>"
+mon_decimal_point   "<U002E>"
+mon_thousands_sep   ""
+mon_grouping        3
+positive_sign       ""
+negative_sign       "<U002D>"
+int_frac_digits     2
+frac_digits         2
+p_cs_precedes       1
+p_sep_by_space      0
+n_cs_precedes       1
+n_sep_by_space      0
+p_sign_posn         1
+n_sign_posn         1
+END LC_MONETARY
+
+LC_NUMERIC
+copy "en_US"
+END LC_NUMERIC
+
+LC_TIME
+copy "en_US"
+END LC_TIME
+
+LC_MESSAGES
+copy "en_US"
+END LC_MESSAGES
+
+LC_PAPER
+copy "en_US"
+END LC_PAPER
+
+LC_NAME
+copy "en_US"
+END LC_NAME
+
+LC_ADDRESS
+copy "en_US"
+END LC_ADDRESS
+
+LC_TELEPHONE
+copy "en_US"
+END LC_TELEPHONE
+
+LC_MEASUREMENT
+copy "en_US"
+END LC_MEASUREMENT

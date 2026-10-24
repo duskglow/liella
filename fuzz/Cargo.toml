@@ -1,0 +1,215 @@
+# Fuzz harnesses for Liella's parsers of untrusted input (implementation-plan.md §6, "Fuzzing
+# infrastructure"). A workspace of its own, outside the product build: the library crates and
+# the products keep zero external dependencies and the pinned stable toolchain; only this crate
+# depends on `libfuzzer-sys` and builds with the nightly named in `rust-toolchain.toml`.
+#
+# Run through `cargo xtask fuzz <target> --time <minutes>` (corpus outside the repository,
+# seeds in `seeds/<target>`); `cargo xtask fuzz --list` names the targets.
+
+[package]
+name = "liella-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[lib]
+name = "liella_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+liella = { path = "../crates/core" }
+liella-legacy = { path = "../crates/legacy" }
+liella-abi = { path = "../crates/abi" }
+liella-boundary = { path = "../crates/boundary" }
+
+[profile.release]
+debug = 1
+panic = "abort"
+
+[[bin]]
+name = "nsswitch"
+path = "fuzz_targets/nsswitch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "resolv_conf"
+path = "fuzz_targets/resolv_conf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hosts"
+path = "fuzz_targets/hosts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "netdb_files"
+path = "fuzz_targets/netdb_files.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "passwd"
+path = "fuzz_targets/passwd.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "group"
+path = "fuzz_targets/group.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "shadow"
+path = "fuzz_targets/shadow.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nscache"
+path = "fuzz_targets/nscache.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dns"
+path = "fuzz_targets/dns.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "regex"
+path = "fuzz_targets/regex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "printf"
+path = "fuzz_targets/printf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scanf"
+path = "fuzz_targets/scanf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "locale"
+path = "fuzz_targets/locale.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "charmap"
+path = "fuzz_targets/charmap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "iconv"
+path = "fuzz_targets/iconv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glob"
+path = "fuzz_targets/glob.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wordexp"
+path = "fuzz_targets/wordexp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "digits_dots"
+path = "fuzz_targets/digits_dots.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scanners"
+path = "fuzz_targets/scanners.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "regex_dfa"
+path = "fuzz_targets/regex_dfa.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rpc_call"
+path = "fuzz_targets/rpc_call.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rpc_stream"
+path = "fuzz_targets/rpc_stream.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fnmatch"
+path = "fuzz_targets/fnmatch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "collate"
+path = "fuzz_targets/collate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "xdr_mem"
+path = "fuzz_targets/xdr_mem.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "xdr_rec"
+path = "fuzz_targets/xdr_rec.rs"
+test = false
+doc = false
+bench = false

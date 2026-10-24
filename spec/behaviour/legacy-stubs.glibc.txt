@@ -1,0 +1,73 @@
+mode plain
+isastream        isastream(fd)                      ret=0 errno=unchanged
+isastream        isastream(0)                       ret=0 errno=unchanged
+isastream        isastream(closed)                  ret=-1 errno=EBADF
+isastream        isastream(-1)                      ret=-1 errno=EBADF
+fattach          fattach(fd, "/nonexistent-liella") ret=-1 errno=ENOSYS
+fattach          fattach(closed, "/nonexistent-liella") ret=-1 errno=ENOSYS
+fattach          fattach(fd, NULL)                  ret=-1 errno=ENOSYS
+fdetach          fdetach("/nonexistent-liella")     ret=-1 errno=ENOSYS
+fdetach          fdetach(NULL)                      ret=-1 errno=ENOSYS
+getmsg           getmsg(fd, NULL, NULL, &flags)     ret=-1 errno=ENOSYS
+getmsg           getmsg(closed, NULL, NULL, NULL)   ret=-1 errno=ENOSYS
+putmsg           putmsg(fd, NULL, NULL, 0)          ret=-1 errno=ENOSYS
+putmsg           putmsg(closed, NULL, NULL, 0)      ret=-1 errno=ENOSYS
+getpmsg          getpmsg(fd, NULL, NULL, &band, &flags) ret=-1 errno=ENOSYS
+getpmsg          getpmsg(closed, NULL, NULL, NULL, NULL) ret=-1 errno=ENOSYS
+putpmsg          putpmsg(fd, NULL, NULL, 0, 0)      ret=-1 errno=ENOSYS
+putpmsg          putpmsg(closed, NULL, NULL, 0, 0)  ret=-1 errno=ENOSYS
+bdflush          bdflush(0, 0)                      ret=-1 errno=ENOSYS
+bdflush          bdflush(1, (long)buf)              ret=-1 errno=ENOSYS
+create_module    create_module("liella", 0)         ret=0xffffffffffffffff errno=ENOSYS
+create_module    create_module(NULL, 0)             ret=0xffffffffffffffff errno=ENOSYS
+get_kernel_syms  get_kernel_syms(NULL)              ret=-1 errno=ENOSYS
+get_kernel_syms  get_kernel_syms(buf)               ret=-1 errno=ENOSYS
+nfsservctl       nfsservctl(0, NULL, NULL)          ret=-1 errno=ENOSYS
+query_module     query_module(NULL, 0, NULL, 0, NULL) ret=-1 errno=ENOSYS
+query_module     query_module("liella", 1, buf, len, &ret) ret=-1 errno=ENOSYS
+sstk             sstk(0)                            ret=0xffffffffffffffff errno=ENOSYS
+sstk             sstk(4096)                         ret=0xffffffffffffffff errno=ENOSYS
+uselib           uselib("/nonexistent-liella")      ret=-1 errno=ENOSYS
+uselib           uselib(NULL)                       ret=-1 errno=ENOSYS
+sysctl           sysctl(name, 2, buf, &len, NULL, 0) ret=-1 errno=ENOSYS
+sysctl           sysctl(NULL, 0, NULL, NULL, NULL, 0) ret=-1 errno=ENOSYS
+__sysctl         __sysctl(name, 2, buf, &len, NULL, 0) ret=-1 errno=ENOSYS
+__sysctl         __sysctl(NULL, 0, NULL, NULL, NULL, 0) ret=-1 errno=ENOSYS
+len after sysctl 16
+mode seccomp
+isastream        isastream(fd)                      ret=0 errno=unchanged
+isastream        isastream(0)                       ret=0 errno=unchanged
+isastream        isastream(closed)                  ret=-1 errno=EBADF
+isastream        isastream(-1)                      ret=-1 errno=EBADF
+fattach          fattach(fd, "/nonexistent-liella") ret=-1 errno=ENOSYS
+fattach          fattach(closed, "/nonexistent-liella") ret=-1 errno=ENOSYS
+fattach          fattach(fd, NULL)                  ret=-1 errno=ENOSYS
+fdetach          fdetach("/nonexistent-liella")     ret=-1 errno=ENOSYS
+fdetach          fdetach(NULL)                      ret=-1 errno=ENOSYS
+getmsg           getmsg(fd, NULL, NULL, &flags)     ret=-1 errno=ENOSYS
+getmsg           getmsg(closed, NULL, NULL, NULL)   ret=-1 errno=ENOSYS
+putmsg           putmsg(fd, NULL, NULL, 0)          ret=-1 errno=ENOSYS
+putmsg           putmsg(closed, NULL, NULL, 0)      ret=-1 errno=ENOSYS
+getpmsg          getpmsg(fd, NULL, NULL, &band, &flags) ret=-1 errno=ENOSYS
+getpmsg          getpmsg(closed, NULL, NULL, NULL, NULL) ret=-1 errno=ENOSYS
+putpmsg          putpmsg(fd, NULL, NULL, 0, 0)      ret=-1 errno=ENOSYS
+putpmsg          putpmsg(closed, NULL, NULL, 0, 0)  ret=-1 errno=ENOSYS
+bdflush          bdflush(0, 0)                      ret=-1 errno=ENOSYS
+bdflush          bdflush(1, (long)buf)              ret=-1 errno=ENOSYS
+create_module    create_module("liella", 0)         ret=0xffffffffffffffff errno=EXDEV(syscall)
+create_module    create_module(NULL, 0)             ret=0xffffffffffffffff errno=EXDEV(syscall)
+get_kernel_syms  get_kernel_syms(NULL)              ret=-1 errno=EXDEV(syscall)
+get_kernel_syms  get_kernel_syms(buf)               ret=-1 errno=EXDEV(syscall)
+nfsservctl       nfsservctl(0, NULL, NULL)          ret=-1 errno=EXDEV(syscall)
+query_module     query_module(NULL, 0, NULL, 0, NULL) ret=-1 errno=EXDEV(syscall)
+query_module     query_module("liella", 1, buf, len, &ret) ret=-1 errno=EXDEV(syscall)
+sstk             sstk(0)                            ret=0xffffffffffffffff errno=ENOSYS
+sstk             sstk(4096)                         ret=0xffffffffffffffff errno=ENOSYS
+uselib           uselib("/nonexistent-liella")      ret=-1 errno=EXDEV(syscall)
+uselib           uselib(NULL)                       ret=-1 errno=EXDEV(syscall)
+sysctl           sysctl(name, 2, buf, &len, NULL, 0) ret=-1 errno=ENOSYS
+sysctl           sysctl(NULL, 0, NULL, NULL, NULL, 0) ret=-1 errno=ENOSYS
+__sysctl         __sysctl(name, 2, buf, &len, NULL, 0) ret=-1 errno=ENOSYS
+__sysctl         __sysctl(NULL, 0, NULL, NULL, NULL, 0) ret=-1 errno=ENOSYS
+len after sysctl 16
+6.8.0-147-generic

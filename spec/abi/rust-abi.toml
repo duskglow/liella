@@ -1,0 +1,136 @@
+# The Rust ABI versions of Liella's Rust dylib, libliella_rust.so.<abi> (implementation-plan.md
+# D-X.10). docs/toolchain.md explains every field and gives the commands they produce;
+# docs/interfaces.md explains when a program uses the dylib at all.
+#
+# A Rust dylib is compatible only with programs built by the same compiler (Rust has no stable
+# ABI), so each version is the exact toolchain and every option that changes what the dylib
+# exports or how it is called. A version is one table, [<abi>], with its subtables
+# [<abi>.<part>]. Rules:
+#
+# * A defined version is never changed. A new toolchain, or a change to any field below, is a
+#   new version lr<N+1> in a new table, built beside the old ones under its own file name and
+#   soname; programs keep the version their DT_NEEDED names.
+# * Each version has a pinned toolchain, `toolchain.rustup_toolchain`: a rustup toolchain
+#   installed beside the workspace's own (rust-toolchain.toml, channel "stable", which is
+#   independent of it and may move). `cargo xtask rust-dylib [<abi>]` runs every rustc command
+#   through the pinned toolchain, fails if it is not installed (naming the install command),
+#   and refuses unless its `rustc -vV` matches rustc_release, rustc_commit_hash, rustc_host and
+#   llvm_version exactly and its effective target features match target_features.
+# * `hash` is the FNV-1a 64-bit hash of the version's canonical form: every other field of its
+#   tables except `status`, one line `<table>.<key> = <value as written>` each, sorted
+#   bytewise, each line ended by a newline. The dylib carries it in its note
+#   .note.liella.rustabi; `cargo xtask rust-dylib` recomputes it and refuses a version whose
+#   recorded hash differs (a field was changed in place).
+# * `status` is "current" for the version `cargo xtask rust-dylib` builds by default (exactly
+#   one), "supported" for older versions still built and shipped, "retired" for versions no
+#   longer shipped. It is not part of the hash.
+#
+# Format: a subset of TOML. One `key = value` per line; values are strings without escapes,
+# integers, booleans, or one-line arrays of strings; `#` starts a comment outside strings.
+
+[lr1]
+identifier = "lr1"
+status = "current"
+# The native C ABI version node the dylib's stateful services call (spec/abi/native.tsv,
+# include/liella/native.h); the newest node any of its references names.
+native_c_abi = "LIELLA_NATIVE_1"
+hash = "b84ac90a5c7fa1e1"
+
+# The compiler, exactly as `rustc -vV` reports it on the reference system (the test VM:
+# Ubuntu 24.04, x86_64; rustup channel "stable" on 2026-10-02).
+[lr1.toolchain]
+# The pinned toolchain: the rustup channel name it is installed under, with
+#   rustup toolchain install 1.99.0 --profile minimal --target x86_64-unknown-linux-gnu
+rustup_toolchain = "1.99.0"
+rustc_release = "1.99.0"
+rustc_commit_hash = "b940084d7eb6a299eb4bfeb8e34901bc051e7ac4"
+rustc_commit_date = "2026-09-28"
+rustc_host = "x86_64-unknown-linux-gnu"
+llvm_version = "23.1.1"
+# The toolchain's precompiled sysroot for the target (rustup component rust-std): core, alloc
+# and compiler_builtins are compiled into the dylib from it. std is not used.
+sysroot_crates = ["core", "alloc", "compiler_builtins"]
+std = false
+# The linker: the C compiler driver `cc` running GNU ld (BFD), as for every Liella link. Not
+# rust-lld (-C linker-features=-lld turns rustc's default off): it places the start object's
+# section .eh_frame.liella_end outside .eh_frame on the static path.
+linker = "cc"
+linker_features = "-lld"
+# Recorded, not checked: the versions of the reference build's C tools. They do not change
+# the Rust ABI; a third party may use others of the same kind (GNU ld, a GCC-compatible cc).
+reference_cc = "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+reference_ld = "GNU ld (GNU Binutils for Ubuntu) 2.42"
+
+[lr1.target]
+triple = "x86_64-unknown-linux-gnu"
+target_cpu = "x86-64"
+# Target features given with -C target-feature (none: the CPU's defaults).
+target_feature_flags = []
+# The features in effect, as `rustc --print cfg --target <triple> -C target-cpu=<cpu>` lists
+# them (target_feature="..."); checked.
+target_features = ["fxsr", "sse", "sse2"]
+relocation_model = "pic"
+code_model = "small"
+
+[lr1.codegen]
+edition = "2024"
+opt_level = "3"
+debug_assertions = false
+overflow_checks = false
+# No unwinding anywhere: the dylib and its programs abort on panic (after the panic handler).
+panic = "abort"
+codegen_units = 1
+# A Rust dylib cannot be built with LTO.
+lto = "off"
+debuginfo = "0"
+# -C metadata of every crate of the dylib: the identifier. It enters every Rust symbol name,
+# so two versions in one process never share a symbol of Liella's crates.
+metadata = "lr1"
+# --remap-path-prefix=<checkout>=<this>: the absolute path of the checkout (the compiler's
+# working directory, recorded in the crate metadata) is written as this fixed path, so the
+# dylib is the same byte for byte wherever it is built.
+remap_path_prefix = "/liella"
+
+# The crates compiled into the dylib, in build order. Each entry: the crate root, then the
+# crates it is given with --extern. All but the last are rlibs; the last is the dylib.
+[lr1.crates]
+order = ["liella_kernel", "liella_rt", "liella_mem", "liella", "liella_math", "liella_native"]
+liella_kernel = ["crates/kernel/src/lib.rs"]
+liella_rt = ["crates/rt/src/lib.rs", "liella_kernel"]
+liella_mem = ["crates/mem/src/lib.rs"]
+liella = ["crates/core/src/lib.rs", "liella_kernel", "liella_mem", "liella_rt"]
+liella_math = ["crates/math/src/lib.rs", "liella_rt"]
+liella_native = ["crates/native/src/lib.rs", "liella", "liella_math"]
+# Cargo features of liella_native (passed as --cfg feature="..."); the other crates have none.
+liella_native_features = ["dynamic", "dylib"]
+# Defined by the dylib (feature dylib), so its programs define neither: the global allocator
+# (liella_native::heap::Allocator, over liella_heap_* in libc.so.6) and the panic handler
+# (message on standard error, then exit(101)).
+global_allocator = "dylib"
+panic_handler = "dylib"
+
+[lr1.product]
+file = "libliella_rust.so.lr1"
+soname = "libliella_rust.so.lr1"
+# The name rustc's --extern needs for a dylib (lib<crate>.so): a symbolic link to `file`,
+# used only to build programs.
+link_name = "libliella_native.so"
+needed = ["libc.so.6"]
+# The link arguments after rustc's own, in order: no start files and no default libraries;
+# the no-unwind helper (crates/native/link/nounwind.c compiled); Liella's libc.so.6; libgcc;
+# the soname. The file names nounwind.o and libc.so.6 stand for those files' paths.
+link_args = ["-nostartfiles", "-nostdlib", "nounwind.o", "libc.so.6", "-lgcc", "-Wl,-soname,libliella_rust.so.lr1"]
+note_section = ".note.liella.rustabi"
+note_owner = "Liella"
+note_type = "0x4c520001"
+symbol = "LIELLA_RUST_ABI"
+
+# What a program built against this version must do (docs/toolchain.md, "Programs of the
+# dylib"). Not build parameters of the dylib, but part of the version's contract.
+[lr1.consumer]
+same_toolchain = true
+same_target = true
+panic = "abort"
+defines_global_allocator = false
+defines_panic_handler = false
+links = ["libliella_rust.so.lr1", "libc.so.6"]

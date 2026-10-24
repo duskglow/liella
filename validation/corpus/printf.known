@@ -1,0 +1,7 @@
+# Recorded disagreements of printf.corpus (corpus line, tab, reason); printf_corpus_products.rs
+# fails if a line not listed here disagrees, or if a listed line agrees again. For the
+# optimization thread (validation item C, 2026-10-05, main 75c0f5c).
+8412	%Le of the x87 pseudo-denormal 00000000333333830000 (exponent field 0, integer bit set): glibc 8.405258e-4934, Liella 3.446156e-4932, the value the Intel SDM gives such an encoding (as with exponent 1). C is silent on non-canonical encodings; three-way rule pending (§12.6).
+8560	the same value with %Lg.
+9092	the same as 8412 (errno 84 at the call).
+9147	the same as 8560 (errno 84 at the call).

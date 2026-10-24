@@ -1,0 +1,457 @@
+setup (root): done
+done setup
+running as root: no
+/dev/shm: file system tmpfs
+/dev/mqueue: file system mqueue
+/dev/shm directory: mode 1777 owner root size 160
+/dev/mqueue at start: [rootq] [rootq-ro]
+/dev/shm at start: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+== mq_open names
+name [/q]: mq_open ok
+  /dev/mqueue: [q] [rootq] [rootq-ro]
+  reopen without O_CREAT: ok
+  mq_unlink: 0
+name [q]: mq_open EINVAL
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EINVAL
+name [//q]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [/a/b]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [/]: mq_open ENOENT
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: ENOENT
+name []: mq_open EINVAL
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EINVAL
+name [/.]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [/..]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [/q/]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [/sp ace]: mq_open ok
+  /dev/mqueue: [rootq] [rootq-ro] [sp ace]
+  reopen without O_CREAT: ok
+  mq_unlink: 0
+name [/nl\x0a]: mq_open ok
+  /dev/mqueue: [nl\x0a] [rootq] [rootq-ro]
+  reopen without O_CREAT: ok
+  mq_unlink: 0
+name [/\xc3\xa9]: mq_open ok
+  /dev/mqueue: [rootq] [rootq-ro] [\xc3\xa9]
+  reopen without O_CREAT: ok
+  mq_unlink: 0
+name [/<n>*255]: mq_open ok
+  /dev/mqueue: [<n>*255] [rootq] [rootq-ro]
+  reopen without O_CREAT: ok
+  mq_unlink: 0
+name [/<n>*256]: mq_open ENAMETOOLONG
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: ENAMETOOLONG
+name [<b>*255]: mq_open EINVAL
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EINVAL
+name [/a/]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+name [///]: mq_open EACCES
+  /dev/mqueue: [rootq] [rootq-ro]
+  mq_unlink: EACCES
+after the names: /dev/mqueue: [rootq] [rootq-ro]
+== mq_open attributes
+msg_default: 10
+msg_max: 10
+msgsize_default: 8192
+msgsize_max: 8192
+queues_max: 256
+MQ_PRIO_MAX 32768 sysconf(_SC_MQ_PRIO_MAX) 32768 sysconf(_SC_MQ_OPEN_MAX) -1
+sizeof(struct mq_attr) 64 sizeof(mqd_t) 4
+attr NULL: ok
+attr NULL: flags 0 maxmsg 10 msgsize 8192 curmsgs 0
+attr maxmsg 1 msgsize 1 flags 0 curmsgs 0: ok
+attr maxmsg 1 msgsize 1 flags 0 curmsgs 0: flags 0 maxmsg 1 msgsize 1 curmsgs 0
+attr maxmsg 10 msgsize 8192 flags 0 curmsgs 0: ok
+attr maxmsg 10 msgsize 8192 flags 0 curmsgs 0: flags 0 maxmsg 10 msgsize 8192 curmsgs 0
+attr maxmsg 11 msgsize 8 flags 0 curmsgs 0: EINVAL
+attr maxmsg 1 msgsize 8193 flags 0 curmsgs 0: EINVAL
+attr maxmsg 0 msgsize 8 flags 0 curmsgs 0: EINVAL
+attr maxmsg 1 msgsize 0 flags 0 curmsgs 0: EINVAL
+attr maxmsg -1 msgsize 8 flags 0 curmsgs 0: EINVAL
+attr maxmsg 1 msgsize -1 flags 0 curmsgs 0: EINVAL
+attr maxmsg 9223372036854775807 msgsize 8 flags 0 curmsgs 0: EINVAL
+attr maxmsg 1 msgsize 9223372036854775807 flags 0 curmsgs 0: EINVAL
+attr maxmsg 2 msgsize 4 flags 0x800 curmsgs 0: ok
+attr maxmsg 2 msgsize 4 flags 0x800 curmsgs 0: flags 0 maxmsg 2 msgsize 4 curmsgs 0
+attr maxmsg 2 msgsize 4 flags 0 curmsgs 5: ok
+attr maxmsg 2 msgsize 4 flags 0 curmsgs 5: flags 0 maxmsg 2 msgsize 4 curmsgs 0
+attr maxmsg 2 msgsize 4 flags 0x7fff curmsgs 0: ok
+attr maxmsg 2 msgsize 4 flags 0x7fff curmsgs 0: flags 0 maxmsg 2 msgsize 4 curmsgs 0
+existing queue, O_CREAT, invalid attr: ok
+existing queue, O_CREAT, invalid attr: flags 0 maxmsg 2 msgsize 4 curmsgs 0
+existing queue, no O_CREAT, invalid attr: ok
+== mq_open flags and modes
+O_RDWR|O_CREAT|O_EXCL descriptor: cloexec=yes access=RDWR append=no nonblock=no
+O_RDWR: flags 0 maxmsg 2 msgsize 8 curmsgs 0
+O_CREAT|O_EXCL on an existing queue: EEXIST
+O_EXCL without O_CREAT on an existing queue: ok
+O_RDWR|O_NONBLOCK: flags 0x800 maxmsg 2 msgsize 8 curmsgs 0
+O_RDWR|O_NONBLOCK descriptor: cloexec=yes access=RDWR append=no nonblock=yes
+O_WRONLY|O_CLOEXEC descriptor: cloexec=yes access=WRONLY append=no nonblock=no
+mq_receive on O_WRONLY: EBADF
+mq_send on O_RDONLY: EBADF
+access mode 3: EINVAL
+O_TRUNC: ok
+missing queue without O_CREAT: ENOENT
+mode 0666, umask 022: mode 0644 owner self size 80
+mode 0666, umask 022: reopen O_RDONLY ok, O_WRONLY ok, O_RDWR ok
+mode 0600, umask 022: mode 0600 owner self size 80
+mode 0600, umask 022: reopen O_RDONLY ok, O_WRONLY ok, O_RDWR ok
+mode 0400, umask 022: mode 0400 owner self size 80
+mode 0400, umask 022: reopen O_RDONLY ok, O_WRONLY EACCES, O_RDWR EACCES
+mode 0200, umask 022: mode 0200 owner self size 80
+mode 0200, umask 022: reopen O_RDONLY EACCES, O_WRONLY ok, O_RDWR EACCES
+mode 0, umask 022: mode 0000 owner self size 80
+mode 0, umask 022: reopen O_RDONLY EACCES, O_WRONLY EACCES, O_RDWR EACCES
+mode 07777, umask 022: mode 7755 owner self size 80
+mode 07777, umask 022: reopen O_RDONLY ok, O_WRONLY ok, O_RDWR ok
+mode 0666, umask 0: mode 0666 owner self size 80
+root's /rootq: mode 0600 owner root size 80
+root's /rootq-ro: mode 0644 owner root size 80
+root's /rootq O_RDONLY: EACCES
+root's /rootq O_WRONLY: EACCES
+root's /rootq-ro O_RDONLY: ok
+root's /rootq-ro O_WRONLY: EACCES
+root's /rootq-ro O_RDWR: EACCES
+root's /rootq O_RDWR|O_CREAT: EACCES
+mq_unlink root's /rootq-ro: EACCES
+/dev/mqueue: [rootq] [rootq-ro]
+== mq_send and mq_receive
+send [a1] prio 1: 0
+send [b5] prio 5: 0
+send [c3] prio 3: 0
+send [d5] prio 5: 0
+send [e0] prio 0: 0
+send [] prio 2: 0
+send [f32767] prio 32767: 0
+send [g5] prio 5: 0
+after 8 sends: flags 0 maxmsg 8 msgsize 16 curmsgs 8
+mq_timedsend to the full queue, timeout in the past: ETIMEDOUT
+receive: 6 [f32767] prio 32767
+receive: 2 [b5] prio 5
+receive: 2 [d5] prio 5
+receive: 2 [g5] prio 5
+receive: 2 [c3] prio 3
+receive: 0 [] prio 2
+receive: 2 [a1] prio 1
+receive: 2 [e0] prio 0
+mq_timedreceive from the empty queue, timeout in the past: -1 ETIMEDOUT
+send 16 bytes (msgsize): 0
+send 17 bytes: EMSGSIZE
+receive with 15-byte buffer, a message waiting: -1 EMSGSIZE
+receive with 0-byte buffer: -1 EMSGSIZE
+receive with 40-byte buffer, NULL prio: 16 0
+send prio MQ_PRIO_MAX: EINVAL
+send prio UINT_MAX: EINVAL
+send 17 bytes with prio MQ_PRIO_MAX: EINVAL
+after the size cases: flags 0 maxmsg 8 msgsize 16 curmsgs 0
+nonblock receive on empty: -1 EAGAIN
+nonblock send on full: EAGAIN
+nonblock mq_timedsend on full (5 s timeout): EAGAIN
+mq_send on -1: EBADF
+mq_receive on -1: -1 EBADF
+mq_send on a pipe: EBADF
+mq_getattr on a pipe: EBADF
+mq_notify on a pipe: EBADF
+mq_close: 0
+mq_close again: EBADF
+mq_close(-1): EBADF
+== timed send and receive
+timedsend full, tv_nsec -1: EINVAL
+timedsend with room, tv_nsec -1: EINVAL
+timedreceive empty, tv_nsec -1: -1 EINVAL
+timedreceive with a message, tv_nsec -1: -1 EINVAL
+timedsend full, tv_nsec 1000000000: EINVAL
+timedsend with room, tv_nsec 1000000000: EINVAL
+timedreceive empty, tv_nsec 1000000000: -1 EINVAL
+timedreceive with a message, tv_nsec 1000000000: -1 EINVAL
+timedsend full, tv_sec -1 tv_nsec 0: EINVAL
+timedsend with room, tv_sec -1 tv_nsec 0: EINVAL
+timedreceive empty, tv_sec -1 tv_nsec 0: -1 EINVAL
+timedreceive with a message, tv_sec -1 tv_nsec 0: -1 EINVAL
+timedsend full, tv_sec 0 tv_nsec 0: ETIMEDOUT
+timedsend with room, tv_sec 0 tv_nsec 0: 0
+timedreceive empty, tv_sec 0 tv_nsec 0: -1 ETIMEDOUT
+timedreceive with a message, tv_sec 0 tv_nsec 0: 1 0
+timedsend full, tv_sec -1 tv_nsec -1: EINVAL
+timedsend with room, tv_sec -1 tv_nsec -1: EINVAL
+timedreceive empty, tv_sec -1 tv_nsec -1: -1 EINVAL
+timedreceive with a message, tv_sec -1 tv_nsec -1: -1 EINVAL
+timedsend with room, NULL timeout: 0
+timedreceive with a message, NULL timeout: 1 0
+timedsend full, now+150 ms: ETIMEDOUT, waited at least 100 ms: yes
+timedreceive empty, now+150 ms: -1 ETIMEDOUT, waited at least 100 ms: yes
+== mq_getattr and mq_setattr
+setattr O_NONBLOCK (other fields 99): 0; old flags 0 maxmsg 3 msgsize 8 curmsgs 1
+after: flags 0x800 maxmsg 3 msgsize 8 curmsgs 1
+descriptor after setattr O_NONBLOCK: cloexec=yes access=RDWR append=no nonblock=yes
+receive on empty after setattr O_NONBLOCK: -1 EAGAIN
+setattr O_NONBLOCK|O_APPEND: EINVAL
+  now: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr O_RDWR: EINVAL
+  now: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr O_CREAT: EINVAL
+  now: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr -1: EINVAL
+  now: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr 0: 0
+  now: flags 0 maxmsg 3 msgsize 8 curmsgs 0
+setattr on one descriptor: that descriptor: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr on one descriptor: another descriptor of the queue: flags 0 maxmsg 3 msgsize 8 curmsgs 0
+setattr on one descriptor: a dup of it: flags 0x800 maxmsg 3 msgsize 8 curmsgs 0
+setattr on -1: EBADF
+mq_setattr(q, NULL, NULL): 0
+setattr NULL: child exited 0
+mq_getattr(q, NULL): 0
+getattr NULL: child exited 0
+== mq_notify with SIGEV_SIGNAL and SIGEV_NONE
+register: 0
+register again (same process): EBUSY
+child registers too: EBUSY
+child mq_notify(NULL): 0
+another process: child exited 0
+message on the empty queue: SIGUSR1 si_code SI_MESGQ si_value 42 si_pid self si_uid self
+second message (one-shot): no signal (EAGAIN)
+register after the notification: 0
+message on a non-empty queue: no signal (EAGAIN)
+sender: child exited 0
+message from another process after the queue emptied: SIGUSR1 si_code SI_MESGQ si_value 42 si_pid other si_uid self
+register: 0
+mq_notify(NULL): 0
+message after removal: no signal (EAGAIN)
+mq_notify(NULL) with nothing registered: 0
+register through a second descriptor: 0
+register through the first descriptor: EBUSY
+mq_notify(NULL) through the first descriptor: 0
+register through the first descriptor now: 0
+registered through the first descriptor, second descriptor closed, message: no signal (EAGAIN)
+register after that close: 0
+register after the registering descriptor was closed: 0
+SIGEV_NONE register: 0
+child registers too: EBUSY
+child mq_notify(NULL): 0
+another process while SIGEV_NONE is registered: child exited 0
+message with SIGEV_NONE: no signal (EAGAIN)
+register SIGEV_SIGNAL after a SIGEV_NONE arrival: 0
+sigev_notify 99: EINVAL
+SIGEV_SIGNAL signo 0: 0
+SIGEV_SIGNAL signo 65: EINVAL
+SIGEV_SIGNAL signo -1: EINVAL
+SIGEV_THREAD_ID: EINVAL
+mq_notify on -1: EBADF
+== mq_notify with SIGEV_THREAD
+register (attributes NULL): 0
+register again: EBUSY
+child registers too: EBUSY
+child mq_notify(NULL): 0
+another process: child exited 0
+message on the empty queue: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+second message (one-shot): no call
+register (joinable, stack 256 KiB): 0
+with attributes (destroyed after mq_notify): called; arg &token, thread new, detached yes, stack as requested, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+re-registering: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0, re-register inside: 0
+after re-registration: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+register: 0
+mq_notify(NULL): 0
+after removal: no call
+sender: child exited 0
+message from another process: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+second queue register: 0
+second queue: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+first queue: called; arg &token, thread new, detached yes, stack -, SIGUSR2 blocked no, SIGINT blocked no, signals 1-31 blocked 0
+calls so far: 7
+== mq_unlink
+missing: ENOENT
+missing, no slash: EINVAL
+name of 256 bytes after the slash: ENAMETOOLONG
+unlink while open: 0
+  /dev/mqueue: [rootq] [rootq-ro]
+  receive through the open descriptor: 4
+  reopen: ENOENT
+  a new queue with the name: ok
+  send to the old descriptor: 0; messages in the new queue: 0
+unlink twice: 0 ENOENT
+== __mq_open_2
+existing queue: ok
+existing queue: flags 0 maxmsg 2 msgsize 8 curmsgs 0
+missing queue: ENOENT
+no slash: EINVAL
+O_CREAT: child killed by SIGABRT
+O_CREAT: child stderr [*** invalid mq_open call: O_CREAT without mode and attr ***: terminated\x0a]
+/dev/mqueue: [o2] [rootq] [rootq-ro]
+== limits
+RLIMIT_MSGQUEUE 4096, queue of 10 x 8192: EMFILE
+RLIMIT_MSGQUEUE 4096, queue of 1 x 8: ok
+rlimit: child exited 0
+queues created before the first failure: 254 (ENOSPC)
+/dev/mqueue: [rootq] [rootq-ro]
+== shm_open names
+name [/s]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [s]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [s]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [s]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [//s]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [s]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [/a/b]: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+name [/]: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+name []: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+name [/.]: shm_open EEXIST
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: EISDIR
+name [/..]: shm_open EEXIST
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: EISDIR
+name [.]: shm_open EEXIST
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: EISDIR
+name [..]: shm_open EEXIST
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: EISDIR
+name [/s/]: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+name [/sp ace]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [sp ace]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [/nl\x0a]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [nl\x0a] [rootshm] [rootshm-ro]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [/\xc3\xa9]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [\xc3\xa9]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [/<s>*255]: shm_open ok
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro] [<s>*255]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [/<s>*256]: shm_open ENAMETOOLONG
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENAMETOOLONG
+name [<b>*255]: shm_open ok
+  /dev/shm: [<b>*255] [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  reopen without O_CREAT: ok
+  shm_unlink: 0
+name [///]: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+name [s/]: shm_open EINVAL
+  /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+  shm_unlink: ENOENT
+after the names: /dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+== shm_open flags and modes
+O_RDWR|O_CREAT|O_EXCL descriptor: cloexec=yes access=RDWR append=no nonblock=no
+mode 0666, umask 022: mode 0644 owner self size 0
+ftruncate 4096: 0
+O_CREAT|O_EXCL on an existing object: EEXIST
+O_RDONLY descriptor: cloexec=yes access=RDONLY append=no nonblock=no
+ftruncate on O_RDONLY: EINVAL
+O_WRONLY: ok
+O_WRONLY descriptor: cloexec=yes access=WRONLY append=no nonblock=no
+access mode 3: ok
+O_RDWR|O_APPEND|O_NONBLOCK: ok
+O_RDWR|O_APPEND|O_NONBLOCK descriptor: cloexec=yes access=RDWR append=yes nonblock=yes
+O_RDWR|O_DIRECTORY on a file: ENOTDIR
+O_EXCL without O_CREAT: ok
+before O_TRUNC: mode 0644 owner self size 4096
+O_RDWR|O_TRUNC: ok
+after O_TRUNC: mode 0644 owner self size 0
+O_RDONLY|O_TRUNC on a 4096-byte object: ok
+after O_RDONLY|O_TRUNC: mode 0644 owner self size 0
+access mode 3 again: ok
+access mode 3 descriptor: cloexec=yes access=3 append=no nonblock=no
+O_CREAT on an existing object (mode ignored): ok
+  still: mode 0644 owner self size 0
+missing object without O_CREAT: ENOENT
+O_RDONLY|O_CREAT: ok
+  ftruncate: EINVAL
+mode 0600, umask 022: mode 0600 owner self size 0
+mode 0600, umask 022: reopen O_RDONLY ok, O_RDWR ok
+mode 0400, umask 022: mode 0400 owner self size 0
+mode 0400, umask 022: reopen O_RDONLY ok, O_RDWR EACCES
+mode 0, umask 022: mode 0000 owner self size 0
+mode 0, umask 022: reopen O_RDONLY EACCES, O_RDWR EACCES
+mode 07777, umask 022: mode 7755 owner self size 0
+mode 07777, umask 022: reopen O_RDONLY ok, O_RDWR ok
+mode 01777, umask 022: mode 1755 owner self size 0
+mode 01777, umask 022: reopen O_RDONLY ok, O_RDWR ok
+mode 0666, umask 0: mode 0666 owner self size 0
+root's rootshm: mode 0600 owner root size 0
+root's rootshm-ro: mode 0644 owner root size 0
+root's /rootshm O_RDONLY: EACCES
+root's /rootshm-ro O_RDONLY: ok
+root's /rootshm-ro O_RDWR: EACCES
+root's /rootshm O_RDWR|O_CREAT: EACCES
+shm_unlink root's /rootshm-ro: EACCES
+symbolic link to rootshm-ro, O_RDONLY: ELOOP
+directory, O_RDONLY: ok
+directory, O_RDWR: EINVAL
+inside the directory: EINVAL
+shm_unlink of the directory: EACCES
+shm_unlink of the link: EACCES
+FIFO: child killed by SIGALRM
+/dev/shm: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+== ftruncate, mmap and shm_unlink
+new object size 0
+after ftruncate size 8192
+mmap: ok
+new pages zero: yes
+second mapping (O_RDONLY, PROT_READ) equal: yes
+PROT_WRITE MAP_SHARED on O_RDONLY: EACCES
+pread at 100: 16, equal: yes
+child reads the data: yes, child's write visible: yes
+shm_unlink: 0
+mapping still usable after unlink: yes
+reopen after unlink: ENOENT
+shm_unlink again: ENOENT
+shm_unlink missing, no slash: ENOENT
+shm_unlink "": ENOENT
+shm_unlink "/": ENOENT
+shm_unlink "/a/b": ENOENT
+/dev/mqueue at the end: [rootq] [rootq-ro]
+/dev/shm at the end: [dir] [fifo] [link] [rootshm] [rootshm-ro]
+done user
+== /dev/shm on another file system
+/dev/shm: file system ext2/3/4
+shm_open create: ok
+ftruncate: 0
+mmap: ok
+/dev/shm: [e]
+shm_unlink: 0
+done ext4
+== no /dev/shm
+/dev/shm exists: no
+shm_open create: ENOENT
+shm_open existing: ENOENT
+shm_unlink: ENOENT
+mq_open without /dev/mqueue: ok
+mq_unlink: 0
+done nodev

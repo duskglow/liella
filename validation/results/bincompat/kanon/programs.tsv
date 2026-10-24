@@ -1,0 +1,1037 @@
+program	direct	transitive	first_blocker	weak_missing
+/usr/bin/VGAuthService	ok	blocked	via libxmlsec1-openssl.so.1: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/[	ok	ok		0
+/usr/bin/aa-enabled	ok	ok		0
+/usr/bin/aa-exec	ok	ok		0
+/usr/bin/aa-features-abi	ok	ok		0
+/usr/bin/addpart	ok	ok		0
+/usr/bin/appstreamcli	ok	blocked	via libappstream.so.5: via libcurl-gnutls.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-cache	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-cdrom	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-config	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-extracttemplates	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-ftparchive	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-get	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-mark	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/apt-sortpkgs	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/arch	ok	ok		0
+/usr/bin/b2sum	ok	ok		0
+/usr/bin/base32	ok	ok		0
+/usr/bin/base64	ok	ok		0
+/usr/bin/basename	ok	ok		0
+/usr/bin/basenc	ok	ok		0
+/usr/bin/bash	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/bc	ok	ok		0
+/usr/bin/boltctl	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/bpftrace	ok	blocked	via libbpf.so.1: via libelf.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/bpftrace-aotrt	ok	blocked	via libbpf.so.1: via libelf.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs-convert	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs-find-root	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs-image	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs-map-logical	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfs-select-super	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/btrfstune	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/bunzip2	ok	ok		0
+/usr/bin/busctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/bzcat	ok	ok		0
+/usr/bin/bzip2	ok	ok		0
+/usr/bin/bzip2recover	ok	ok		0
+/usr/bin/cat	ok	ok		0
+/usr/bin/catman	ok	blocked	via libmandb-2.12.0.so: via libgdbm.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/chage	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/chattr	ok	blocked	via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/bin/chcon	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/chfn	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/chgrp	ok	ok		0
+/usr/bin/chmod	ok	ok		0
+/usr/bin/choom	ok	ok		0
+/usr/bin/chown	ok	ok		0
+/usr/bin/chrt	ok	ok		0
+/usr/bin/chsh	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/chvt	ok	ok		0
+/usr/bin/cifsiostat	ok	ok		0
+/usr/bin/cksum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/clear	ok	ok		0
+/usr/bin/clear_console	ok	ok		0
+/usr/bin/cmp	ok	ok		0
+/usr/bin/codepage	ok	ok		0
+/usr/bin/col	ok	ok		0
+/usr/bin/colcrt	ok	ok		0
+/usr/bin/colrm	ok	ok		0
+/usr/bin/column	ok	ok		0
+/usr/bin/comm	ok	ok		0
+/usr/bin/cp	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/cpio	ok	ok		0
+/usr/bin/crontab	ok	ok		0
+/usr/bin/csplit	ok	ok		0
+/usr/bin/curl	ok	blocked	via libcurl.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/bin/cut	ok	ok		0
+/usr/bin/cvtsudoers	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/bin/dash	ok	ok		0
+/usr/bin/date	ok	ok		0
+/usr/bin/dbus-cleanup-sockets	ok	ok		0
+/usr/bin/dbus-daemon	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbus-monitor	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbus-run-session	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbus-send	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbus-update-activation-environment	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbus-uuidgen	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dbxtool	ok	blocked	via libfwupd.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/dd	ok	ok		0
+/usr/bin/deallocvt	ok	ok		0
+/usr/bin/debian-distro-info	ok	ok		0
+/usr/bin/delpart	ok	ok		0
+/usr/bin/delv	ok	blocked	via libisc-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/df	ok	ok		0
+/usr/bin/diff	ok	ok		0
+/usr/bin/diff3	ok	ok		0
+/usr/bin/dig	ok	blocked	via libisc-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dir	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dircolors	ok	ok		0
+/usr/bin/dirmngr	ok	blocked	via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dirmngr-client	ok	ok		0
+/usr/bin/dirname	ok	ok		0
+/usr/bin/dmesg	ok	ok		0
+/usr/bin/dpkg	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dpkg-deb	ok	ok		0
+/usr/bin/dpkg-divert	ok	ok		0
+/usr/bin/dpkg-query	ok	ok		0
+/usr/bin/dpkg-split	ok	ok		0
+/usr/bin/dpkg-statoverride	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/dpkg-trigger	ok	ok		0
+/usr/bin/du	ok	ok		0
+/usr/bin/dumpkeys	ok	ok		0
+/usr/bin/echo	ok	ok		0
+/usr/bin/ed	ok	ok		0
+/usr/bin/efibootdump	ok	blocked	via libefivar.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/efibootmgr	ok	blocked	via libefivar.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/eject	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/env	ok	ok		0
+/usr/bin/envsubst	ok	ok		0
+/usr/bin/eqn	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/expand	ok	ok		0
+/usr/bin/expiry	ok	ok		0
+/usr/bin/expr	ok	ok		0
+/usr/bin/factor	ok	ok		0
+/usr/bin/faillog	ok	ok		0
+/usr/bin/faked-sysv	ok	ok		0
+/usr/bin/faked-tcp	ok	ok		0
+/usr/bin/fallocate	ok	ok		0
+/usr/bin/false	ok	ok		0
+/usr/bin/fgconsole	ok	ok		0
+/usr/bin/file	ok	ok		0
+/usr/bin/find	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/findmnt	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/flock	ok	ok		0
+/usr/bin/fmt	ok	ok		0
+/usr/bin/fold	ok	ok		0
+/usr/bin/free	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/fuser	ok	ok		0
+/usr/bin/fusermount3	ok	ok		0
+/usr/bin/fwupdmgr	ok	blocked	via libfwupd.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/fwupdtool	ok	blocked	via libfwupdengine.so: via libfwupd.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/gapplication	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/gawk	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/gdb	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/gdbus	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/getconf	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/getkeycodes	ok	ok		0
+/usr/bin/getopt	ok	ok		0
+/usr/bin/gettext	ok	ok		0
+/usr/bin/gio	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/git	ok	ok		0
+/usr/bin/git-shell	ok	ok		0
+/usr/bin/gpasswd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/gpg	ok	blocked	via libsqlite3.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/gpg-agent	ok	ok		0
+/usr/bin/gpg-connect-agent	ok	ok		0
+/usr/bin/gpg-wks-client	ok	ok		0
+/usr/bin/gpgconf	ok	ok		0
+/usr/bin/gpgparsemail	ok	ok		0
+/usr/bin/gpgsm	ok	ok		0
+/usr/bin/gpgsplit	ok	ok		0
+/usr/bin/gpgtar	ok	ok		0
+/usr/bin/gpgv	ok	ok		0
+/usr/bin/gpu-manager	ok	blocked	via libpci.so.3: via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grep	ok	ok		0
+/usr/bin/gresource	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/groff	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grops	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grotty	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/groups	ok	ok		0
+/usr/bin/grub-editenv	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-file	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-fstest	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-glue-efi	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-menulst2cfg	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkfont	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkimage	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mklayout	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mknetdir	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkpasswd-pbkdf2	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkrelpath	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkrescue	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mkstandalone	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-mount	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-render-label	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-script-check	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/grub-syslinux2cfg	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/gsettings	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/gzip	ok	ok		0
+/usr/bin/hardlink	ok	ok		0
+/usr/bin/head	ok	ok		0
+/usr/bin/hexdump	ok	ok		0
+/usr/bin/host	ok	blocked	via libisc-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/hostid	ok	ok		0
+/usr/bin/hostname	ok	ok		0
+/usr/bin/hostnamectl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/htop	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/inetutils-telnet	ok	blocked	via libkrb5.so.3: lib:libresolv.so.2	0
+/usr/bin/info	ok	ok		0
+/usr/bin/infocmp	ok	ok		0
+/usr/bin/install	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/install-info	ok	ok		0
+/usr/bin/ionice	ok	ok		0
+/usr/bin/iostat	ok	ok		0
+/usr/bin/ip	blocked	blocked	sym:dlopen@GLIBC_2.34	0
+/usr/bin/ipcmk	ok	ok		0
+/usr/bin/ipcrm	ok	ok		0
+/usr/bin/ipcs	ok	ok		0
+/usr/bin/ischroot	ok	ok		0
+/usr/bin/join	ok	ok		0
+/usr/bin/journalctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/jq	ok	ok		0
+/usr/bin/kbd_mode	ok	ok		0
+/usr/bin/kbdinfo	ok	ok		0
+/usr/bin/kbxutil	ok	ok		0
+/usr/bin/kernel-install	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/kill	ok	ok		0
+/usr/bin/killall	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/kmod	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/kmodsign	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/last	ok	ok		0
+/usr/bin/lastlog	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/less	ok	ok		0
+/usr/bin/lessecho	ok	ok		0
+/usr/bin/lesskey	ok	ok		0
+/usr/bin/lexgrog	ok	ok		0
+/usr/bin/link	ok	ok		0
+/usr/bin/ln	ok	ok		0
+/usr/bin/lnstat	ok	ok		0
+/usr/bin/loadkeys	ok	ok		0
+/usr/bin/loadunimap	ok	ok		0
+/usr/bin/locale	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/locale-check	ok	ok		0
+/usr/bin/localectl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/localedef	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/logger	ok	blocked	via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/login	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/loginctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/logname	ok	ok		0
+/usr/bin/look	ok	ok		0
+/usr/bin/lowntfs-3g	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/ls	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lsattr	ok	blocked	via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lsblk	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/lscpu	ok	ok		0
+/usr/bin/lshw	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lsipc	ok	ok		0
+/usr/bin/lslocks	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/lslogins	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lsmem	ok	ok		0
+/usr/bin/lsns	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/lsof	ok	blocked	via libtirpc.so.3: via libgssapi_krb5.so.2: via libkrb5.so.3: lib:libresolv.so.2	0
+/usr/bin/lspci	ok	blocked	via libpci.so.3: via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lsusb	ok	blocked	via libusb-1.0.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/lzmainfo	ok	ok		0
+/usr/bin/make	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/man	ok	blocked	via libmandb-2.12.0.so: via libgdbm.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/man-recode	ok	ok		0
+/usr/bin/mandb	ok	blocked	via libmandb-2.12.0.so: via libgdbm.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/manpath	ok	ok		0
+/usr/bin/mapscrn	ok	ok		0
+/usr/bin/mawk	ok	ok		0
+/usr/bin/mbimcli	ok	blocked	via libmbim-glib.so.4: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/mcookie	ok	ok		0
+/usr/bin/md5sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/mdig	ok	blocked	via libbind9-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: via libns-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: via libdns-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/memhog	ok	blocked	via libnuma.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/memusagestat	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/mesg	ok	ok		0
+/usr/bin/migratepages	ok	blocked	via libnuma.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/migspeed	ok	blocked	via libnuma.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/mkdir	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/mkfifo	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/mknod	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/mksquashfs	ok	ok		0
+/usr/bin/mktemp	ok	ok		0
+/usr/bin/mmcli	ok	blocked	via libmm-glib.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/mokutil	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/more	ok	ok		0
+/usr/bin/mount	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/mountpoint	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/mpstat	ok	ok		0
+/usr/bin/mt-gnu	ok	ok		0
+/usr/bin/mtr	ok	blocked	via libncurses.so.6: sym:dlopen@GLIBC_2.34	0
+/usr/bin/mtr-packet	ok	ok		0
+/usr/bin/mv	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/namei	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/nano	ok	blocked	via libncursesw.so.6: sym:dlopen@GLIBC_2.34	0
+/usr/bin/nc.openbsd	blocked	blocked	lib:libresolv.so.2	0
+/usr/bin/networkctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/newgrp	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/ngettext	ok	ok		0
+/usr/bin/nice	ok	ok		0
+/usr/bin/nl	ok	ok		0
+/usr/bin/nohup	ok	ok		0
+/usr/bin/nproc	ok	ok		0
+/usr/bin/nsenter	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/nslookup	ok	blocked	via libisc-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/nstat	ok	ok		0
+/usr/bin/nsupdate	ok	blocked	via libisc-9.18.39-0ubuntu0.24.04.8-Ubuntu.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/ntfs-3g	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/ntfs-3g.probe	ok	ok		0
+/usr/bin/ntfscat	ok	ok		0
+/usr/bin/ntfscluster	ok	ok		0
+/usr/bin/ntfscmp	ok	ok		0
+/usr/bin/ntfsdecrypt	ok	blocked	via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/bin/ntfsfallocate	ok	ok		0
+/usr/bin/ntfsfix	ok	ok		0
+/usr/bin/ntfsinfo	ok	ok		0
+/usr/bin/ntfsls	ok	ok		0
+/usr/bin/ntfsmove	ok	ok		0
+/usr/bin/ntfsrecover	ok	ok		0
+/usr/bin/ntfssecaudit	ok	ok		0
+/usr/bin/ntfstruncate	ok	ok		0
+/usr/bin/ntfsusermap	ok	ok		0
+/usr/bin/ntfswipe	ok	ok		0
+/usr/bin/numactl	ok	blocked	via libnuma.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/numastat	ok	ok		0
+/usr/bin/numfmt	ok	ok		0
+/usr/bin/od	ok	ok		0
+/usr/bin/openssl	ok	blocked	via libssl.so.3: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/openvt	ok	ok		0
+/usr/bin/partx	ok	ok		0
+/usr/bin/passwd	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/paste	ok	ok		0
+/usr/bin/patch	ok	ok		0
+/usr/bin/pathchk	ok	ok		0
+/usr/bin/peekfd	ok	ok		0
+/usr/bin/perl	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/perl5.38-x86_64-linux-gnu	ok	blocked	via libperl.so.5.38: lib:ld-linux-x86-64.so.2	0
+/usr/bin/perl5.38.2	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/pgrep	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/pic	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/pidstat	ok	ok		0
+/usr/bin/pidwait	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/pinentry-curses	ok	blocked	via libncursesw.so.6: sym:dlopen@GLIBC_2.34	0
+/usr/bin/ping	ok	ok		0
+/usr/bin/pinky	ok	ok		0
+/usr/bin/pkaction	ok	blocked	via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/pkcheck	ok	blocked	via libpolkit-agent-1.so.0: via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/pkcon	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/pkgconf	ok	ok		0
+/usr/bin/pkmon	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/pkttyagent	ok	blocked	via libpolkit-agent-1.so.0: via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/plymouth	ok	blocked	via libply.so.5: sym:dlerror@GLIBC_2.34	0
+/usr/bin/pmap	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/pr	ok	ok		0
+/usr/bin/preconv	ok	blocked	via libuchardet.so.0: via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/printenv	ok	ok		0
+/usr/bin/printf	ok	ok		0
+/usr/bin/prlimit	ok	ok		0
+/usr/bin/prtstat	ok	ok		0
+/usr/bin/ps	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/psfxtable	ok	ok		0
+/usr/bin/pslog	ok	ok		0
+/usr/bin/pstree	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/ptx	ok	ok		0
+/usr/bin/pwd	ok	ok		0
+/usr/bin/pwdx	ok	ok		0
+/usr/bin/python3.12	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/pzstd	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/qmi-firmware-update	ok	blocked	via libqmi-glib.so.5: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/qmicli	ok	blocked	via libqmi-glib.so.5: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/rdma	ok	ok		0
+/usr/bin/readlink	ok	ok		0
+/usr/bin/realpath	ok	ok		0
+/usr/bin/rename.ul	ok	ok		0
+/usr/bin/renice	ok	ok		0
+/usr/bin/resizecons	ok	ok		0
+/usr/bin/resizepart	ok	ok		0
+/usr/bin/resolvectl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/rev	ok	ok		0
+/usr/bin/rm	ok	ok		0
+/usr/bin/rmdir	ok	ok		0
+/usr/bin/rpcgen	ok	ok		0
+/usr/bin/rsync	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/run-parts	ok	ok		0
+/usr/bin/runcon	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/sadf	ok	ok		0
+/usr/bin/sar.sysstat	ok	ok		0
+/usr/bin/sbattach	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sbkeysync	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sbsiglist	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/sbsign	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sbvarsign	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sbverify	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/scalar	ok	ok		0
+/usr/bin/scp	ok	ok		0
+/usr/bin/screen	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/screendump	ok	ok		0
+/usr/bin/script	ok	ok		0
+/usr/bin/scriptlive	ok	ok		0
+/usr/bin/scriptreplay	ok	ok		0
+/usr/bin/sdiff	ok	ok		0
+/usr/bin/sed	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/seq	ok	ok		0
+/usr/bin/setarch	ok	ok		0
+/usr/bin/setfont	ok	ok		0
+/usr/bin/setkeycodes	ok	ok		0
+/usr/bin/setleds	ok	ok		0
+/usr/bin/setlogcons	ok	ok		0
+/usr/bin/setmetamode	ok	ok		0
+/usr/bin/setpci	ok	blocked	via libpci.so.3: via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/setpriv	ok	blocked	via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/setsid	ok	ok		0
+/usr/bin/setterm	ok	ok		0
+/usr/bin/sftp	ok	ok		0
+/usr/bin/sg_bg_ctl	ok	ok		0
+/usr/bin/sg_compare_and_write	ok	ok		0
+/usr/bin/sg_copy_results	ok	ok		0
+/usr/bin/sg_dd	ok	ok		0
+/usr/bin/sg_decode_sense	ok	ok		0
+/usr/bin/sg_emc_trespass	ok	ok		0
+/usr/bin/sg_format	ok	ok		0
+/usr/bin/sg_get_config	ok	ok		0
+/usr/bin/sg_get_elem_status	ok	ok		0
+/usr/bin/sg_get_lba_status	ok	ok		0
+/usr/bin/sg_ident	ok	ok		0
+/usr/bin/sg_inq	ok	ok		0
+/usr/bin/sg_logs	ok	ok		0
+/usr/bin/sg_luns	ok	ok		0
+/usr/bin/sg_map	ok	ok		0
+/usr/bin/sg_map26	ok	ok		0
+/usr/bin/sg_modes	ok	ok		0
+/usr/bin/sg_opcodes	ok	ok		0
+/usr/bin/sg_persist	ok	ok		0
+/usr/bin/sg_prevent	ok	ok		0
+/usr/bin/sg_raw	ok	ok		0
+/usr/bin/sg_rbuf	ok	ok		0
+/usr/bin/sg_rdac	ok	ok		0
+/usr/bin/sg_read	ok	ok		0
+/usr/bin/sg_read_attr	ok	ok		0
+/usr/bin/sg_read_block_limits	ok	ok		0
+/usr/bin/sg_read_buffer	ok	ok		0
+/usr/bin/sg_read_long	ok	ok		0
+/usr/bin/sg_readcap	ok	ok		0
+/usr/bin/sg_reassign	ok	ok		0
+/usr/bin/sg_referrals	ok	ok		0
+/usr/bin/sg_rep_pip	ok	ok		0
+/usr/bin/sg_rep_zones	ok	ok		0
+/usr/bin/sg_requests	ok	ok		0
+/usr/bin/sg_reset	ok	ok		0
+/usr/bin/sg_reset_wp	ok	ok		0
+/usr/bin/sg_rmsn	ok	ok		0
+/usr/bin/sg_rtpg	ok	ok		0
+/usr/bin/sg_safte	ok	ok		0
+/usr/bin/sg_sanitize	ok	ok		0
+/usr/bin/sg_sat_identify	ok	ok		0
+/usr/bin/sg_sat_phy_event	ok	ok		0
+/usr/bin/sg_sat_read_gplog	ok	ok		0
+/usr/bin/sg_sat_set_features	ok	ok		0
+/usr/bin/sg_scan	ok	ok		0
+/usr/bin/sg_seek	ok	ok		0
+/usr/bin/sg_senddiag	ok	ok		0
+/usr/bin/sg_ses	ok	ok		0
+/usr/bin/sg_ses_microcode	ok	ok		0
+/usr/bin/sg_start	ok	ok		0
+/usr/bin/sg_stpg	ok	ok		0
+/usr/bin/sg_stream_ctl	ok	ok		0
+/usr/bin/sg_sync	ok	ok		0
+/usr/bin/sg_test_rwbuf	ok	ok		0
+/usr/bin/sg_timestamp	ok	ok		0
+/usr/bin/sg_turs	ok	ok		0
+/usr/bin/sg_unmap	ok	ok		0
+/usr/bin/sg_verify	ok	ok		0
+/usr/bin/sg_vpd	ok	ok		0
+/usr/bin/sg_wr_mode	ok	ok		0
+/usr/bin/sg_write_buffer	ok	ok		0
+/usr/bin/sg_write_long	ok	ok		0
+/usr/bin/sg_write_same	ok	ok		0
+/usr/bin/sg_write_verify	ok	ok		0
+/usr/bin/sg_write_x	ok	ok		0
+/usr/bin/sg_xcopy	ok	ok		0
+/usr/bin/sg_zone	ok	ok		0
+/usr/bin/sginfo	ok	ok		0
+/usr/bin/sgm_dd	ok	ok		0
+/usr/bin/sgp_dd	ok	ok		0
+/usr/bin/sha1sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sha224sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sha256sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sha384sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sha512sum	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/showconsolefont	ok	ok		0
+/usr/bin/showkey	ok	ok		0
+/usr/bin/shred	ok	ok		0
+/usr/bin/shuf	ok	ok		0
+/usr/bin/skill	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/slabtop	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/sleep	ok	ok		0
+/usr/bin/snap	ok	ok		0
+/usr/bin/snapfuse	ok	blocked	via libfuse3.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/soelim	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/sort	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/split	ok	ok		0
+/usr/bin/splitfont	ok	ok		0
+/usr/bin/sprof	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/ss	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/ssh	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/bin/ssh-add	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/ssh-agent	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/ssh-keygen	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/bin/ssh-keyscan	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/stat	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/stdbuf	ok	ok		0
+/usr/bin/strace	ok	blocked	via libunwind-x86_64.so.8: via libunwind.so.8: lib:ld-linux-x86-64.so.2	0
+/usr/bin/stty	ok	ok		0
+/usr/bin/su	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/sudo	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/sudoreplay	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/bin/sum	ok	ok		0
+/usr/bin/sync	ok	ok		0
+/usr/bin/systemctl	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/bin/systemd-ac-power	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-analyze	ok	blocked	via libsystemd-core-255.so: via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-ask-password	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-cat	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-cgls	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-cgtop	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-creds	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-cryptenroll	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-cryptsetup	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-delta	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-detect-virt	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-escape	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-firstboot	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-hwdb	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-id128	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-inhibit	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-machine-id-setup	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-mount	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-notify	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-path	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-repart	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-run	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-socket-activate	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-stdio-bridge	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-sysext	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-sysusers	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-tmpfiles	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/systemd-tty-ask-password-agent	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/tabs	ok	ok		0
+/usr/bin/tac	ok	ok		0
+/usr/bin/tail	ok	ok		0
+/usr/bin/tapestat	ok	ok		0
+/usr/bin/tar	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/taskset	ok	ok		0
+/usr/bin/tbl	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/tclsh8.6	ok	blocked	via libtcl8.6.so: sym:dlerror@GLIBC_2.34	0
+/usr/bin/tcpdump	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/tee	ok	ok		0
+/usr/bin/tempfile	ok	ok		0
+/usr/bin/test	ok	ok		0
+/usr/bin/tic	ok	ok		0
+/usr/bin/time	ok	ok		0
+/usr/bin/timedatectl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/timeout	ok	ok		0
+/usr/bin/tload	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/tmux	blocked	blocked	lib:libresolv.so.2	0
+/usr/bin/tnftp	ok	blocked	via libssl.so.3: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/toe	ok	ok		0
+/usr/bin/top	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/touch	ok	ok		0
+/usr/bin/tput	ok	ok		0
+/usr/bin/tr	ok	ok		0
+/usr/bin/trace-cmd	ok	blocked	via libtraceevent.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/tracepath	ok	ok		0
+/usr/bin/troff	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/true	ok	ok		0
+/usr/bin/truncate	ok	ok		0
+/usr/bin/tset	ok	ok		0
+/usr/bin/tsort	ok	ok		0
+/usr/bin/tty	ok	ok		0
+/usr/bin/ubuntu-distro-info	ok	ok		0
+/usr/bin/uclampset	ok	ok		0
+/usr/bin/udevadm	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/bin/udisksctl	ok	blocked	via libpolkit-agent-1.so.0: via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/ul	ok	ok		0
+/usr/bin/umount	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/bin/uname	ok	ok		0
+/usr/bin/unexpand	ok	ok		0
+/usr/bin/uniq	ok	ok		0
+/usr/bin/unlink	ok	ok		0
+/usr/bin/unshare	ok	ok		0
+/usr/bin/unsquashfs	ok	ok		0
+/usr/bin/update-alternatives	ok	ok		0
+/usr/bin/update-mime-database	ok	blocked	via libxml2.so.2: sym:dlerror@GLIBC_2.34	0
+/usr/bin/upower	ok	blocked	via libupower-glib.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/bin/uptime	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/usbhid-dump	ok	blocked	via libusb-1.0.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/usbreset	ok	ok		0
+/usr/bin/users	ok	ok		0
+/usr/bin/utmpdump	ok	ok		0
+/usr/bin/uuidgen	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/uuidparse	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/varlinkctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vdir	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vim.basic	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/vim.tiny	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmhgfs-fuse	ok	blocked	via libfuse3.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/vmstat	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmtoolsd	ok	blocked	via libvmtools.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmware-alias-import	ok	blocked	via libvgauth.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/bin/vmware-checkvm	ok	blocked	via libvmtools.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmware-hgfsclient	ok	blocked	via libvmtools.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmware-namespace-cmd	ok	blocked	via libvmtools.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmware-rpctool	ok	ok		0
+/usr/bin/vmware-toolbox-cmd	ok	blocked	via libguestlib.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/vmware-vgauth-cmd	ok	blocked	via libvgauth.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/bin/vmware-vmblock-fuse	ok	blocked	via libfuse3.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/bin/vmware-xferlogs	ok	ok		0
+/usr/bin/w	ok	blocked	via libproc2.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/bin/wall	ok	ok		0
+/usr/bin/watch	ok	blocked	via libncursesw.so.6: sym:dlopen@GLIBC_2.34	0
+/usr/bin/watchgnupg	ok	ok		0
+/usr/bin/wc	ok	ok		0
+/usr/bin/wdctl	ok	ok		0
+/usr/bin/wget	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/bin/whatis	ok	blocked	via libmandb-2.12.0.so: via libgdbm.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/bin/whereis	ok	ok		0
+/usr/bin/whiptail	ok	blocked	via libnewt.so.0.52: sym:dlerror@GLIBC_2.34	0
+/usr/bin/who	ok	ok		0
+/usr/bin/whoami	ok	ok		0
+/usr/bin/write	ok	ok		0
+/usr/bin/x86_64-linux-gnu-addr2line	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-ar	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-as	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-c++filt	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-cpp-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-dwp	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-elfedit	ok	ok		0
+/usr/bin/x86_64-linux-gnu-g++-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gcc-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gcc-ar-13	ok	ok		0
+/usr/bin/x86_64-linux-gnu-gcc-nm-13	ok	ok		0
+/usr/bin/x86_64-linux-gnu-gcc-ranlib-13	ok	ok		0
+/usr/bin/x86_64-linux-gnu-gcov-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gcov-dump-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gcov-tool-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gp-archive	ok	blocked	via libgprofng.so.0: sym:dlsym@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-gp-collect-app	ok	blocked	via libgprofng.so.0: sym:dlsym@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-gp-display-src	ok	blocked	via libgprofng.so.0: sym:dlsym@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-gp-display-text	ok	blocked	via libgprofng.so.0: sym:dlsym@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-gprof	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-gprofng	ok	blocked	via libgprofng.so.0: sym:dlsym@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-ld.bfd	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/bin/x86_64-linux-gnu-ld.gold	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-lto-dump-13	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-nm	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-objcopy	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-objdump	ok	blocked	via libopcodes-2.42-system.so: via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-ranlib	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-readelf	ok	ok		0
+/usr/bin/x86_64-linux-gnu-size	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-strings	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/x86_64-linux-gnu-strip	ok	blocked	via libbfd-2.42-system.so: lib:ld-linux-x86-64.so.2	0
+/usr/bin/xargs	ok	ok		0
+/usr/bin/xauth	ok	blocked	via libX11.so.6: sym:dlopen@GLIBC_2.34	0
+/usr/bin/xdg-user-dirs-update	ok	ok		0
+/usr/bin/xxd	ok	ok		0
+/usr/bin/xz	ok	ok		0
+/usr/bin/yes	ok	ok		0
+/usr/bin/zdump	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/bin/zstd	ok	ok		0
+/usr/lib/apt/apt-helper	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/cdrom	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/copy	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/file	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/ftp	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/gpgv	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/http	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/mirror	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/rred	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/rsh	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/methods/store	ok	blocked	via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/planners/apt	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/solvers/apt	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/apt/solvers/dump	ok	blocked	via libapt-private.so.0.0: via libapt-pkg.so.6.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/cryptsetup/askpass	ok	ok		0
+/usr/lib/cryptsetup/scripts/passdev	ok	ok		0
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper	ok	blocked	via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/dracut/dracut-install	ok	blocked	via libkmod.so.2: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/lib/git-core/git	ok	ok		0
+/usr/lib/git-core/git-daemon	ok	ok		0
+/usr/lib/git-core/git-http-backend	ok	ok		0
+/usr/lib/git-core/git-http-fetch	ok	blocked	via libcurl-gnutls.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/lib/git-core/git-http-push	ok	blocked	via libcurl-gnutls.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/lib/git-core/git-imap-send	ok	blocked	via libcurl-gnutls.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/lib/git-core/git-remote-http	ok	blocked	via libcurl-gnutls.so.4: via librtmp.so.1: via libgnutls.so.30: lib:ld-linux-x86-64.so.2	0
+/usr/lib/git-core/git-sh-i18n--envsubst	ok	ok		0
+/usr/lib/git-core/git-shell	ok	ok		0
+/usr/lib/git-core/scalar	ok	ok		0
+/usr/lib/gnupg/dirmngr_ldap	ok	blocked	via libldap.so.2: via libsasl2.so.2: sym:dlclose@GLIBC_2.34	0
+/usr/lib/gnupg/gpg-check-pattern	ok	ok		0
+/usr/lib/gnupg/gpg-pair-tool	ok	ok		0
+/usr/lib/gnupg/gpg-preset-passphrase	ok	ok		0
+/usr/lib/gnupg/gpg-protect-tool	ok	ok		0
+/usr/lib/gnupg/keyboxd	ok	blocked	via libsqlite3.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/initramfs-tools/bin/busybox	ok	ok		0
+/usr/lib/initramfs-tools/bin/wait-for-root	ok	blocked	via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-146/bpftool	ok	blocked	via libelf.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-146/cpupower	ok	blocked	via libpci.so.3: via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-146/intel-speed-select	ok	ok		0
+/usr/lib/linux-tools-6.8.0-146/perf	blocked	blocked	sym:dlsym@GLIBC_2.34	0
+/usr/lib/linux-tools-6.8.0-146/turbostat	ok	ok		0
+/usr/lib/linux-tools-6.8.0-146/usbip	ok	blocked	via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-146/usbipd	ok	blocked	via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-146/x86_energy_perf_policy	ok	ok		0
+/usr/lib/linux-tools-6.8.0-147/bpftool	ok	blocked	via libelf.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-147/cpupower	ok	blocked	via libpci.so.3: via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-147/intel-speed-select	ok	ok		0
+/usr/lib/linux-tools-6.8.0-147/perf	blocked	blocked	sym:dlsym@GLIBC_2.34	0
+/usr/lib/linux-tools-6.8.0-147/turbostat	ok	ok		0
+/usr/lib/linux-tools-6.8.0-147/usbip	ok	blocked	via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-147/usbipd	ok	blocked	via libudev.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/linux-tools-6.8.0-147/x86_energy_perf_policy	ok	ok		0
+/usr/lib/openssh/sftp-server	ok	ok		0
+/usr/lib/openssh/ssh-keysign	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/lib/openssh/ssh-pkcs11-helper	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/lib/openssh/ssh-sk-helper	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/lib/polkit-1/polkit-agent-helper-1	ok	blocked	via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/polkit-1/polkitd	ok	blocked	via libpolkit-gobject-1.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/snapd/snap-bootstrap	ok	ok		0
+/usr/lib/snapd/snap-confine	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/lib/snapd/snap-device-helper	ok	ok		0
+/usr/lib/snapd/snap-discard-ns	ok	ok		0
+/usr/lib/snapd/snap-failure	ok	ok		0
+/usr/lib/snapd/snap-fde-keymgr	ok	ok		0
+/usr/lib/snapd/snap-gpio-helper	ok	ok		0
+/usr/lib/snapd/snap-preseed	ok	ok		0
+/usr/lib/snapd/snap-recovery-chooser	ok	ok		0
+/usr/lib/snapd/snap-repair	ok	ok		0
+/usr/lib/snapd/snap-seccomp	ok	ok		0
+/usr/lib/snapd/snap-strace-shim	ok	ok		0
+/usr/lib/snapd/snapd	ok	ok		0
+/usr/lib/snapd/snapd-apparmor	ok	ok		0
+/usr/lib/snapd/system-shutdown	ok	ok		0
+/usr/lib/sysstat/sadc	ok	ok		0
+/usr/lib/systemd/system-environment-generators/snapd-env-generator	ok	ok		0
+/usr/lib/systemd/system-generators/snapd-generator	ok	ok		0
+/usr/lib/systemd/system-generators/sshd-socket-generator	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-cryptsetup-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-debug-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-fstab-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-getty-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-gpt-auto-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-hibernate-resume-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-integritysetup-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-rc-local-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-run-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-system-update-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-sysv-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/system-generators/systemd-veritysetup-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd	ok	blocked	via libsystemd-core-255.so: via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-backlight	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-battery-check	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-binfmt	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-boot-check-no-failures	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-bsod	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-cgroups-agent	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-executor	ok	blocked	via libsystemd-core-255.so: via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-fsck	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-fsckd	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-growfs	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-hibernate-resume	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-hostnamed	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-initctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-integritysetup	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-journald	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-localed	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-logind	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-makefs	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-measure	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-modules-load	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-network-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-networkd	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-networkd-wait-online	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-pcrextend	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-pcrlock	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-pstore	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-quotacheck	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-random-seed	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-remount-fs	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-reply-password	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-resolved	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-rfkill	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-shutdown	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-sleep	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-socket-proxyd	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-storagetm	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-sulogin-shell	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-sysctl	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-sysupdate	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-time-wait-sync	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-timedated	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-timesyncd	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-tpm2-setup	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-update-done	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-update-utmp	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-user-runtime-dir	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-user-sessions	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-veritysetup	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-volatile-root	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/systemd-xdg-autostart-condition	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/systemd/user-generators/systemd-xdg-autostart-generator	ok	blocked	via libsystemd-shared-255.so: lib:ld-linux-x86-64.so.2	0
+/usr/lib/ubuntu-advantage/apt-esm-json-hook	ok	blocked	via libjson-c.so.5: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/ata_id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/bcache-register	ok	ok		0
+/usr/lib/udev/cdrom_id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/dmi_memory_id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/fido_id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/iocost	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/mtd_probe	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/probe-bcache	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/udev/scsi_id	ok	ok		0
+/usr/lib/udev/v4l_id	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/lib/x86_64-linux-gnu/awk/grcat	ok	ok		0
+/usr/lib/x86_64-linux-gnu/awk/pwcat	ok	ok		0
+/usr/lib/x86_64-linux-gnu/glib-2.0/gio-launch-desktop	ok	ok		0
+/usr/lib/x86_64-linux-gnu/glib-2.0/gio-querymodules	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/x86_64-linux-gnu/glib-2.0/glib-compile-schemas	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner	ok	blocked	via libgstreamer-1.0.so.0: sym:dladdr@GLIBC_2.34	0
+/usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-ptp-helper	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/lib/x86_64-linux-gnu/libcap.so.2.66	ok	ok		0
+/usr/lib/x86_64-linux-gnu/libpsx.so.2.66	ok	ok		0
+/usr/lib/x86_64-linux-gnu/security/pam_cap.so	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/lib/x86_64-linux-gnu/utempter/utempter	ok	ok		0
+/usr/libexec/boltd	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/fwupd/fwupd	ok	blocked	via libfwupdengine.so: via libfwupd.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/fwupd/fwupd-detect-cet	ok	ok		0
+/usr/libexec/gcc/x86_64-linux-gnu/13/cc1	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/gcc/x86_64-linux-gnu/13/cc1plus	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/gcc/x86_64-linux-gnu/13/collect2	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/gcc/x86_64-linux-gnu/13/g++-mapper-server	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/gcc/x86_64-linux-gnu/13/lto1	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/libexec/man-db/globbing	ok	ok		0
+/usr/libexec/man-db/manconv	ok	ok		0
+/usr/libexec/man-db/zsoelim	ok	ok		0
+/usr/libexec/mbim-proxy	ok	blocked	via libmbim-glib.so.4: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/netplan/generate	ok	blocked	via libnetplan.so.1: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/netplan/netplan-dbus	ok	blocked	via libnetplan.so.1: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/packagekit-direct	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/packagekitd	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/pk-debconf-helper	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/pk-offline-update	ok	blocked	via libpackagekit-glib2.so.18: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/plymouth/plymouthd-fd-escrow	ok	ok		0
+/usr/libexec/qmi-proxy	ok	blocked	via libqmi-glib.so.5: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/sudo/sesh	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/libexec/udisks2/udisksd	ok	blocked	via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/libexec/upowerd	ok	blocked	via libupower-glib.so.3: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/ModemManager	ok	blocked	via libmm-glib.so.0: via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/aa-load	ok	ok		0
+/usr/sbin/aa-status	ok	ok		0
+/usr/sbin/accessdb	ok	blocked	via libmandb-2.12.0.so: via libgdbm.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/agetty	ok	ok		0
+/usr/sbin/apparmor_parser	blocked	blocked	lib:ld-linux-x86-64.so.2	0
+/usr/sbin/arpd	ok	ok		0
+/usr/sbin/badblocks	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/bcache-super-show	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/biosdecode	ok	ok		0
+/usr/sbin/blkdiscard	ok	ok		0
+/usr/sbin/blkid	ok	ok		0
+/usr/sbin/blkzone	ok	ok		0
+/usr/sbin/blockdev	ok	ok		0
+/usr/sbin/bridge	ok	ok		0
+/usr/sbin/capsh	ok	ok		0
+/usr/sbin/cfdisk	ok	blocked	via libfdisk.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/cgdisk	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/chcpu	ok	ok		0
+/usr/sbin/chgpasswd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/chmem	ok	ok		0
+/usr/sbin/chpasswd	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/chroot	ok	ok		0
+/usr/sbin/cppw	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/cron	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/cryptsetup	ok	blocked	via libcryptsetup.so.12: sym:dlvsym@GLIBC_2.34	0
+/usr/sbin/ctrlaltdel	ok	ok		0
+/usr/sbin/dcb	ok	ok		0
+/usr/sbin/debugfs	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/devlink	ok	ok		0
+/usr/sbin/dhcpcd	blocked	blocked	sym:dlclose@GLIBC_2.34	0
+/usr/sbin/dmeventd	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/dmidecode	ok	ok		0
+/usr/sbin/dmsetup	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/dumpe2fs	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e2freefrag	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e2fsck	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e2image	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e2undo	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e4crypt	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/e4defrag	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/ethtool	ok	ok		0
+/usr/sbin/faillock	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/fatlabel	ok	ok		0
+/usr/sbin/fdisk	ok	blocked	via libfdisk.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/filefrag	ok	ok		0
+/usr/sbin/findfs	ok	ok		0
+/usr/sbin/fixparts	ok	blocked	via libstdc++.so.6: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/fsck	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/fsck.cramfs	ok	ok		0
+/usr/sbin/fsck.fat	ok	ok		0
+/usr/sbin/fsck.minix	ok	ok		0
+/usr/sbin/fsfreeze	ok	ok		0
+/usr/sbin/fstab-decode	ok	ok		0
+/usr/sbin/fstrim	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/gdisk	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/genl	blocked	blocked	sym:dlopen@GLIBC_2.34	0
+/usr/sbin/getcap	ok	ok		0
+/usr/sbin/getpcaps	ok	ok		0
+/usr/sbin/groupadd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/groupdel	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/groupmems	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/groupmod	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grpck	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grpconv	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grpunconv	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grub-install	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grub-macbless	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grub-mkdevicemap	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/grub-probe	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/hdparm	ok	ok		0
+/usr/sbin/iconvconfig	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/sbin/integritysetup	ok	blocked	via libcryptsetup.so.12: sym:dlvsym@GLIBC_2.34	0
+/usr/sbin/iscsi-iname	ok	ok		0
+/usr/sbin/iscsiadm	ok	blocked	via libisns.so.0: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/iscsid	ok	blocked	via libisns.so.0: via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/iscsistart	ok	blocked	via libcrypto.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/isosize	ok	ok		0
+/usr/sbin/iucode_tool	ok	ok		0
+/usr/sbin/kbdrate	ok	ok		0
+/usr/sbin/killall5	ok	ok		0
+/usr/sbin/kpartx	ok	blocked	via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/ldattach	ok	ok		0
+/usr/sbin/logrotate	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/logsave	ok	ok		0
+/usr/sbin/losetup	ok	ok		0
+/usr/sbin/lvm	ok	blocked	via libdevmapper-event.so.1.02.1: via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/lvmpolld	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/make-bcache	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/mdadm	blocked	blocked	sym:dlopen@GLIBC_2.34	0
+/usr/sbin/mdmon	ok	ok		0
+/usr/sbin/mke2fs	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/mkfs	ok	ok		0
+/usr/sbin/mkfs.bfs	ok	ok		0
+/usr/sbin/mkfs.btrfs	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/mkfs.cramfs	ok	ok		0
+/usr/sbin/mkfs.fat	ok	ok		0
+/usr/sbin/mkfs.minix	ok	ok		0
+/usr/sbin/mkfs.xfs	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/mkhomedir_helper	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/mklost+found	ok	ok		0
+/usr/sbin/mkntfs	ok	ok		0
+/usr/sbin/mkswap	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/mount.fuse3	ok	blocked	via libfuse3.so.3: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/mpathpersist	ok	blocked	via libmpathpersist.so.0: via libmultipath.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/multipath	ok	blocked	via libmultipath.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/multipathc	ok	blocked	via libmpathutil.so.0: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/multipathd	ok	blocked	via libmultipath.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/newusers	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/nfnl_osf	ok	ok		0
+/usr/sbin/nft	ok	blocked	via libnftables.so.1: via libxtables.so.12: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/nologin	ok	ok		0
+/usr/sbin/ntfsclone	ok	ok		0
+/usr/sbin/ntfscp	ok	ok		0
+/usr/sbin/ntfslabel	ok	ok		0
+/usr/sbin/ntfsresize	ok	ok		0
+/usr/sbin/ntfsundelete	ok	ok		0
+/usr/sbin/ownership	ok	ok		0
+/usr/sbin/pam_extrausers_chkpwd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/pam_extrausers_update	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/pam_timestamp_check	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/parted	ok	blocked	via libparted.so.2: via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/partprobe	ok	blocked	via libparted.so.2: via libdevmapper.so.1.02.1: via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/pdata_tools	blocked	blocked	sym:dlsym@GLIBC_2.34	0
+/usr/sbin/pivot_root	ok	ok		0
+/usr/sbin/plymouthd	ok	blocked	via libply.so.5: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/pwck	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/pwconv	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/pwhistory_helper	ok	ok		0
+/usr/sbin/pwunconv	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/readprofile	ok	ok		0
+/usr/sbin/resize2fs	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/rmt-tar	ok	ok		0
+/usr/sbin/rsyslogd	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/rtacct	ok	ok		0
+/usr/sbin/rtcwake	ok	ok		0
+/usr/sbin/rtmon	ok	ok		0
+/usr/sbin/runuser	ok	blocked	via libpam.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/setcap	ok	ok		0
+/usr/sbin/setvesablank	ok	ok		0
+/usr/sbin/setvtrgb	ok	ok		0
+/usr/sbin/sfdisk	ok	blocked	via libfdisk.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/sgdisk	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/sshd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/start-stop-daemon	ok	ok		0
+/usr/sbin/sudo_logsrvd	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/sbin/sudo_sendlog	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/sbin/sulogin	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/swaplabel	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/swapoff	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/swapon	ok	blocked	via libmount.so.1: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/switch_root	ok	ok		0
+/usr/sbin/sysctl	ok	ok		0
+/usr/sbin/tc	blocked	blocked	sym:dlopen@GLIBC_2.34	0
+/usr/sbin/thermald	ok	blocked	via libdbus-glib-1.so.2: via libdbus-1.so.3: via libsystemd.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/tipc	ok	ok		0
+/usr/sbin/tune2fs	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/umount.udisks2	ok	blocked	via libgio-2.0.so.0: via libgmodule-2.0.so.0: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/unix_chkpwd	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/unix_update	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/update-passwd	ok	blocked	via libselinux.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/usb_modeswitch	ok	blocked	via libusb-1.0.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/usbmuxd	ok	blocked	via libusb-1.0.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/useradd	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/userdel	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/usermod	blocked	blocked	sym:dlerror@GLIBC_2.34	0
+/usr/sbin/uuidd	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/vcstime	ok	ok		0
+/usr/sbin/vdpa	ok	ok		0
+/usr/sbin/veritysetup	ok	blocked	via libcryptsetup.so.12: sym:dlvsym@GLIBC_2.34	0
+/usr/sbin/vipw	ok	blocked	via libaudit.so.1: via libcap-ng.so.0: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/visudo	ok	blocked	via libsudo_util.so.0: sym:dlclose@GLIBC_2.34	0
+/usr/sbin/vpddecode	ok	ok		0
+/usr/sbin/wipefs	ok	ok		0
+/usr/sbin/xfs_copy	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_db	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_estimate	ok	ok		0
+/usr/sbin/xfs_fsr	ok	ok		0
+/usr/sbin/xfs_growfs	ok	blocked	via liburcu.so.8: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_io	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_logprint	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_mdrestore	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_quota	ok	ok		0
+/usr/sbin/xfs_repair	ok	blocked	via libuuid.so.1: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_rtcp	ok	ok		0
+/usr/sbin/xfs_scrub	ok	blocked	via libicui18n.so.74: via libicuuc.so.74: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/xfs_spaceman	ok	ok		0
+/usr/sbin/xtables-legacy-multi	ok	blocked	via libxtables.so.12: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/xtables-nft-multi	ok	blocked	via libxtables.so.12: sym:dlerror@GLIBC_2.34	0
+/usr/sbin/zerofree	ok	blocked	via libext2fs.so.2: via libcom_err.so.2: lib:ld-linux-x86-64.so.2	0
+/usr/sbin/zic	blocked	blocked	node:libc.so.6@GLIBC_ABI_DT_RELR	0
+/usr/sbin/zramctl	ok	ok		0

@@ -1,0 +1,636 @@
+== speeds
+cfsetospeed B0(0): 0 errno=0 ospeed=B0 ispeed=B0 cflag=0xb0
+cfsetispeed B0: 0 errno=0 ospeed=B0 ispeed=B0 cflag=0xb0
+cfsetspeed B0: 0 errno=0 ospeed=B0 ispeed=B0 cflag=0xb0
+cfsetospeed B50(0x1): 0 errno=0 ospeed=B50 ispeed=B50 cflag=0xb1
+cfsetispeed B50: 0 errno=0 ospeed=B50 ispeed=B50 cflag=0xb1
+cfsetspeed B50: 0 errno=0 ospeed=B50 ispeed=B50 cflag=0xb1
+cfsetospeed B75(0x2): 0 errno=0 ospeed=B75 ispeed=B75 cflag=0xb2
+cfsetispeed B75: 0 errno=0 ospeed=B75 ispeed=B75 cflag=0xb2
+cfsetspeed B75: 0 errno=0 ospeed=B75 ispeed=B75 cflag=0xb2
+cfsetospeed B110(0x3): 0 errno=0 ospeed=B110 ispeed=B110 cflag=0xb3
+cfsetispeed B110: 0 errno=0 ospeed=B110 ispeed=B110 cflag=0xb3
+cfsetspeed B110: 0 errno=0 ospeed=B110 ispeed=B110 cflag=0xb3
+cfsetospeed B134(0x4): 0 errno=0 ospeed=B134 ispeed=B134 cflag=0xb4
+cfsetispeed B134: 0 errno=0 ospeed=B134 ispeed=B134 cflag=0xb4
+cfsetspeed B134: 0 errno=0 ospeed=B134 ispeed=B134 cflag=0xb4
+cfsetospeed B150(0x5): 0 errno=0 ospeed=B150 ispeed=B150 cflag=0xb5
+cfsetispeed B150: 0 errno=0 ospeed=B150 ispeed=B150 cflag=0xb5
+cfsetspeed B150: 0 errno=0 ospeed=B150 ispeed=B150 cflag=0xb5
+cfsetospeed B200(0x6): 0 errno=0 ospeed=B200 ispeed=B200 cflag=0xb6
+cfsetispeed B200: 0 errno=0 ospeed=B200 ispeed=B200 cflag=0xb6
+cfsetspeed B200: 0 errno=0 ospeed=B200 ispeed=B200 cflag=0xb6
+cfsetospeed B300(0x7): 0 errno=0 ospeed=B300 ispeed=B300 cflag=0xb7
+cfsetispeed B300: 0 errno=0 ospeed=B300 ispeed=B300 cflag=0xb7
+cfsetspeed B300: 0 errno=0 ospeed=B300 ispeed=B300 cflag=0xb7
+cfsetospeed B600(0x8): 0 errno=0 ospeed=B600 ispeed=B600 cflag=0xb8
+cfsetispeed B600: 0 errno=0 ospeed=B600 ispeed=B600 cflag=0xb8
+cfsetspeed B600: 0 errno=0 ospeed=B600 ispeed=B600 cflag=0xb8
+cfsetospeed B1200(0x9): 0 errno=0 ospeed=B1200 ispeed=B1200 cflag=0xb9
+cfsetispeed B1200: 0 errno=0 ospeed=B1200 ispeed=B1200 cflag=0xb9
+cfsetspeed B1200: 0 errno=0 ospeed=B1200 ispeed=B1200 cflag=0xb9
+cfsetospeed B1800(0xa): 0 errno=0 ospeed=B1800 ispeed=B1800 cflag=0xba
+cfsetispeed B1800: 0 errno=0 ospeed=B1800 ispeed=B1800 cflag=0xba
+cfsetspeed B1800: 0 errno=0 ospeed=B1800 ispeed=B1800 cflag=0xba
+cfsetospeed B2400(0xb): 0 errno=0 ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed B2400: 0 errno=0 ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed B2400: 0 errno=0 ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed B4800(0xc): 0 errno=0 ospeed=B4800 ispeed=B4800 cflag=0xbc
+cfsetispeed B4800: 0 errno=0 ospeed=B4800 ispeed=B4800 cflag=0xbc
+cfsetspeed B4800: 0 errno=0 ospeed=B4800 ispeed=B4800 cflag=0xbc
+cfsetospeed B9600(0xd): 0 errno=0 ospeed=B9600 ispeed=B9600 cflag=0xbd
+cfsetispeed B9600: 0 errno=0 ospeed=B9600 ispeed=B9600 cflag=0xbd
+cfsetspeed B9600: 0 errno=0 ospeed=B9600 ispeed=B9600 cflag=0xbd
+cfsetospeed B19200(0xe): 0 errno=0 ospeed=B19200 ispeed=B19200 cflag=0xbe
+cfsetispeed B19200: 0 errno=0 ospeed=B19200 ispeed=B19200 cflag=0xbe
+cfsetspeed B19200: 0 errno=0 ospeed=B19200 ispeed=B19200 cflag=0xbe
+cfsetospeed B38400(0xf): 0 errno=0 ospeed=B38400 ispeed=B38400 cflag=0xbf
+cfsetispeed B38400: 0 errno=0 ospeed=B38400 ispeed=B38400 cflag=0xbf
+cfsetspeed B38400: 0 errno=0 ospeed=B38400 ispeed=B38400 cflag=0xbf
+cfsetospeed B57600(0x1001): 0 errno=0 ospeed=B57600 ispeed=B57600 cflag=0x10b1
+cfsetispeed B57600: 0 errno=0 ospeed=B57600 ispeed=B57600 cflag=0x10b1
+cfsetspeed B57600: 0 errno=0 ospeed=B57600 ispeed=B57600 cflag=0x10b1
+cfsetospeed B115200(0x1002): 0 errno=0 ospeed=B115200 ispeed=B115200 cflag=0x10b2
+cfsetispeed B115200: 0 errno=0 ospeed=B115200 ispeed=B115200 cflag=0x10b2
+cfsetspeed B115200: 0 errno=0 ospeed=B115200 ispeed=B115200 cflag=0x10b2
+cfsetospeed B230400(0x1003): 0 errno=0 ospeed=B230400 ispeed=B230400 cflag=0x10b3
+cfsetispeed B230400: 0 errno=0 ospeed=B230400 ispeed=B230400 cflag=0x10b3
+cfsetspeed B230400: 0 errno=0 ospeed=B230400 ispeed=B230400 cflag=0x10b3
+cfsetospeed B460800(0x1004): 0 errno=0 ospeed=B460800 ispeed=B460800 cflag=0x10b4
+cfsetispeed B460800: 0 errno=0 ospeed=B460800 ispeed=B460800 cflag=0x10b4
+cfsetspeed B460800: 0 errno=0 ospeed=B460800 ispeed=B460800 cflag=0x10b4
+cfsetospeed B500000(0x1005): 0 errno=0 ospeed=B500000 ispeed=B500000 cflag=0x10b5
+cfsetispeed B500000: 0 errno=0 ospeed=B500000 ispeed=B500000 cflag=0x10b5
+cfsetspeed B500000: 0 errno=0 ospeed=B500000 ispeed=B500000 cflag=0x10b5
+cfsetospeed B576000(0x1006): 0 errno=0 ospeed=B576000 ispeed=B576000 cflag=0x10b6
+cfsetispeed B576000: 0 errno=0 ospeed=B576000 ispeed=B576000 cflag=0x10b6
+cfsetspeed B576000: 0 errno=0 ospeed=B576000 ispeed=B576000 cflag=0x10b6
+cfsetospeed B921600(0x1007): 0 errno=0 ospeed=B921600 ispeed=B921600 cflag=0x10b7
+cfsetispeed B921600: 0 errno=0 ospeed=B921600 ispeed=B921600 cflag=0x10b7
+cfsetspeed B921600: 0 errno=0 ospeed=B921600 ispeed=B921600 cflag=0x10b7
+cfsetospeed B1000000(0x1008): 0 errno=0 ospeed=B1000000 ispeed=B1000000 cflag=0x10b8
+cfsetispeed B1000000: 0 errno=0 ospeed=B1000000 ispeed=B1000000 cflag=0x10b8
+cfsetspeed B1000000: 0 errno=0 ospeed=B1000000 ispeed=B1000000 cflag=0x10b8
+cfsetospeed B1152000(0x1009): 0 errno=0 ospeed=B1152000 ispeed=B1152000 cflag=0x10b9
+cfsetispeed B1152000: 0 errno=0 ospeed=B1152000 ispeed=B1152000 cflag=0x10b9
+cfsetspeed B1152000: 0 errno=0 ospeed=B1152000 ispeed=B1152000 cflag=0x10b9
+cfsetospeed B1500000(0x100a): 0 errno=0 ospeed=B1500000 ispeed=B1500000 cflag=0x10ba
+cfsetispeed B1500000: 0 errno=0 ospeed=B1500000 ispeed=B1500000 cflag=0x10ba
+cfsetspeed B1500000: 0 errno=0 ospeed=B1500000 ispeed=B1500000 cflag=0x10ba
+cfsetospeed B2000000(0x100b): 0 errno=0 ospeed=B2000000 ispeed=B2000000 cflag=0x10bb
+cfsetispeed B2000000: 0 errno=0 ospeed=B2000000 ispeed=B2000000 cflag=0x10bb
+cfsetspeed B2000000: 0 errno=0 ospeed=B2000000 ispeed=B2000000 cflag=0x10bb
+cfsetospeed B2500000(0x100c): 0 errno=0 ospeed=B2500000 ispeed=B2500000 cflag=0x10bc
+cfsetispeed B2500000: 0 errno=0 ospeed=B2500000 ispeed=B2500000 cflag=0x10bc
+cfsetspeed B2500000: 0 errno=0 ospeed=B2500000 ispeed=B2500000 cflag=0x10bc
+cfsetospeed B3000000(0x100d): 0 errno=0 ospeed=B3000000 ispeed=B3000000 cflag=0x10bd
+cfsetispeed B3000000: 0 errno=0 ospeed=B3000000 ispeed=B3000000 cflag=0x10bd
+cfsetspeed B3000000: 0 errno=0 ospeed=B3000000 ispeed=B3000000 cflag=0x10bd
+cfsetospeed B3500000(0x100e): 0 errno=0 ospeed=B3500000 ispeed=B3500000 cflag=0x10be
+cfsetispeed B3500000: 0 errno=0 ospeed=B3500000 ispeed=B3500000 cflag=0x10be
+cfsetspeed B3500000: 0 errno=0 ospeed=B3500000 ispeed=B3500000 cflag=0x10be
+cfsetospeed B4000000(0x100f): 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetispeed B4000000: 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetspeed B4000000: 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetospeed 50 (0x32): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 50 (0x32): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 50 (0x32): 0 errno=0 ospeed=B50 ispeed=B50 cflag=0xb1
+cfsetospeed 75 (0x4b): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 75 (0x4b): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 75 (0x4b): 0 errno=0 ospeed=B75 ispeed=B75 cflag=0xb2
+cfsetospeed 110 (0x6e): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 110 (0x6e): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 110 (0x6e): 0 errno=0 ospeed=B110 ispeed=B110 cflag=0xb3
+cfsetospeed 300 (0x12c): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 300 (0x12c): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 300 (0x12c): 0 errno=0 ospeed=B300 ispeed=B300 cflag=0xb7
+cfsetospeed 1200 (0x4b0): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 1200 (0x4b0): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 1200 (0x4b0): 0 errno=0 ospeed=B1200 ispeed=B1200 cflag=0xb9
+cfsetospeed 9600 (0x2580): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 9600 (0x2580): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 9600 (0x2580): 0 errno=0 ospeed=B9600 ispeed=B9600 cflag=0xbd
+cfsetospeed 19200 (0x4b00): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 19200 (0x4b00): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 19200 (0x4b00): 0 errno=0 ospeed=B19200 ispeed=B19200 cflag=0xbe
+cfsetospeed 38400 (0x9600): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 38400 (0x9600): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 38400 (0x9600): 0 errno=0 ospeed=B38400 ispeed=B38400 cflag=0xbf
+cfsetospeed 57600 (0xe100): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 57600 (0xe100): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 57600 (0xe100): 0 errno=0 ospeed=B57600 ispeed=B57600 cflag=0x10b1
+cfsetospeed 115200 (0x1c200): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 115200 (0x1c200): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 115200 (0x1c200): 0 errno=0 ospeed=B115200 ispeed=B115200 cflag=0x10b2
+cfsetospeed 4000000 (0x3d0900): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 4000000 (0x3d0900): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 4000000 (0x3d0900): 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetospeed 12345 (0x3039): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 12345 (0x3039): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 12345 (0x3039): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 16 (0x10): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 16 (0x10): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 16 (0x10): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 17 (0x11): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 17 (0x11): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 17 (0x11): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 4111 (0x100f): 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetispeed 4111 (0x100f): 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetspeed 4111 (0x100f): 0 errno=0 ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+cfsetospeed 4112 (0x1010): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 4112 (0x1010): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 4112 (0x1010): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 4128 (0x1020): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 4128 (0x1020): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 4128 (0x1020): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 4096 (0x1000): 0 errno=0 ospeed=0x1000 ispeed=0x1000 cflag=0x10b0
+cfsetispeed 4096 (0x1000): 0 errno=0 ospeed=0x1000 ispeed=0x1000 cflag=0x10b0
+cfsetspeed 4096 (0x1000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 8192 (0x2000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 8192 (0x2000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 8192 (0x2000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 65536 (0x10000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 65536 (0x10000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 65536 (0x10000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 1048576 (0x100000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 1048576 (0x100000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 1048576 (0x100000): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetospeed 4294967295 (0xffffffff): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetispeed 4294967295 (0xffffffff): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+cfsetspeed 4294967295 (0xffffffff): -1 errno=EINVAL ospeed=B2400 ispeed=B2400 cflag=0xbb
+ospeed B9600 only: ospeed=B9600 ispeed=B9600 cflag=0xbd
+then ispeed B2400: ospeed=B2400 ispeed=B2400 cflag=0xbb
+then cfsetispeed(0): 0 errno=0
+after ispeed 0: ospeed=B2400 ispeed=B0 cflag=0xbb
+then ospeed B1200: ospeed=B1200 ispeed=B0 cflag=0xb9
+ispeed B2400 then ospeed B9600: ospeed=B9600 ispeed=B9600 cflag=0xbd
+direct cflag B9600: ospeed=B9600 ispeed=B9600
+direct cflag B9600 CIBAUD=B2400: ospeed=B9600 ispeed=B9600
+direct cflag all ones: ospeed=B4000000 ispeed=B4000000
+direct cflag BOTHER: ospeed=0x1000 ispeed=0x1000
+== cfmakeraw
+cfmakeraw all ones: iflag=0xfffffa14 oflag=0xfffffffe cflag=0xfffffeff lflag=0xffff7fb4 VMIN=1 VTIME=0 other_cc_changed=0
+cfmakeraw zero: iflag=0 oflag=0 cflag=0x3d lflag=0 VMIN=1 VTIME=0 ospeed=B9600 ispeed=B9600
+cfmakeraw keeps speeds: ospeed=B300 ispeed=B300
+cfmakeraw clears: IGNBRK BRKINT PARMRK ISTRIP INLCR IGNCR ICRNL IXON OPOST CSIZE=CS8 PARENB ISIG ICANON ECHO ECHONL IEXTEN
+== attributes
+tcgetattr slave: 0 errno=0
+slave default: iflag=0x500 oflag=0x5 cflag=0xbf lflag=0x8a3b ispeed=B38400 ospeed=B38400 cc=03,1c,7f,15,04,00,01,00,11,13,1a,00,12,0f,17,16,00
+tcgetattr master: 0 errno=0
+master attrs equal slave: 1
+c_line default: 0
+tcgetattr prefilled: cc[17..31]=00,00,00,00,00,00,00,00,00,00,00,00,00,00,00
+tcgetattr /dev/null: -1 errno=ENOTTY
+tcgetattr regular file: -1 errno=ENOTTY
+tcgetattr pipe: -1 errno=ENOTTY
+tcgetattr fd -1: -1 errno=EBADF
+tcgetattr closed fd 900: -1 errno=EBADF
+tcsetattr /dev/null: -1 errno=ENOTTY
+tcsetattr fd -1: -1 errno=EBADF
+tcsetattr /dev/null bad action: -1 errno=EINVAL
+tcsetattr fd -1 bad action: -1 errno=EINVAL
+TCSANOW=0 TCSADRAIN=1 TCSAFLUSH=2
+TCSASOFT not defined
+tcsetattr TCSANOW: 0 errno=0
+TCSANOW applied: 1
+tcsetattr TCSADRAIN: 0 errno=0
+TCSADRAIN applied: 1
+tcsetattr TCSAFLUSH: 0 errno=0
+TCSAFLUSH applied: 1
+tcsetattr action 0x3: -1 errno=EINVAL
+action 0x3 left settings unchanged: 1
+tcsetattr action 0x4: -1 errno=EINVAL
+action 0x4 left settings unchanged: 1
+tcsetattr action 0xffffffff: -1 errno=EINVAL
+action 0xffffffff left settings unchanged: 1
+tcsetattr action 0x10: -1 errno=EINVAL
+action 0x10 left settings unchanged: 1
+tcsetattr action 0x7fffffff: -1 errno=EINVAL
+action 0x7fffffff left settings unchanged: 1
+tcsetattr action 0x100: -1 errno=EINVAL
+action 0x100 left settings unchanged: 1
+TCSANOW pending input: before=1 after=1
+TCSADRAIN pending input: before=1 after=1
+TCSAFLUSH pending input: before=1 after=0
+tcsetattr all flag bits: 0 errno=0
+all flag bits read back: iflag=0x7fffffff oflag=0xffffffff cflag=0xcff0eefd lflag=0xffffffff ospeed=B9600 ispeed=B9600
+tcsetattr CS7 PARENB PARODD CSTOPB, ECHO toggled: 0 errno=0
+read back: CSIZE=CS8 PARENB=0 PARODD=1 CSTOPB=1 ECHO toggled=1
+tcsetattr cc: 0 errno=0
+cc read back: VINTR=1 VMIN=5 VTIME=7 VEOL2=0x42 cc[17..31]=55,55,00,00,00,00,00,00,00,00,00,00,00,00,00
+pty speed B50: 0 errno=0 read back ospeed=B50 ispeed=B50 cflag=0xb1
+pty speed B75: 0 errno=0 read back ospeed=B75 ispeed=B75 cflag=0xb2
+pty speed B110: 0 errno=0 read back ospeed=B110 ispeed=B110 cflag=0xb3
+pty speed B134: 0 errno=0 read back ospeed=B134 ispeed=B134 cflag=0xb4
+pty speed B150: 0 errno=0 read back ospeed=B150 ispeed=B150 cflag=0xb5
+pty speed B200: 0 errno=0 read back ospeed=B200 ispeed=B200 cflag=0xb6
+pty speed B300: 0 errno=0 read back ospeed=B300 ispeed=B300 cflag=0xb7
+pty speed B600: 0 errno=0 read back ospeed=B600 ispeed=B600 cflag=0xb8
+pty speed B1200: 0 errno=0 read back ospeed=B1200 ispeed=B1200 cflag=0xb9
+pty speed B1800: 0 errno=0 read back ospeed=B1800 ispeed=B1800 cflag=0xba
+pty speed B2400: 0 errno=0 read back ospeed=B2400 ispeed=B2400 cflag=0xbb
+pty speed B4800: 0 errno=0 read back ospeed=B4800 ispeed=B4800 cflag=0xbc
+pty speed B9600: 0 errno=0 read back ospeed=B9600 ispeed=B9600 cflag=0xbd
+pty speed B19200: 0 errno=0 read back ospeed=B19200 ispeed=B19200 cflag=0xbe
+pty speed B38400: 0 errno=0 read back ospeed=B38400 ispeed=B38400 cflag=0xbf
+pty speed B57600: 0 errno=0 read back ospeed=B57600 ispeed=B57600 cflag=0x10b1
+pty speed B115200: 0 errno=0 read back ospeed=B115200 ispeed=B115200 cflag=0x10b2
+pty speed B230400: 0 errno=0 read back ospeed=B230400 ispeed=B230400 cflag=0x10b3
+pty speed B460800: 0 errno=0 read back ospeed=B460800 ispeed=B460800 cflag=0x10b4
+pty speed B500000: 0 errno=0 read back ospeed=B500000 ispeed=B500000 cflag=0x10b5
+pty speed B576000: 0 errno=0 read back ospeed=B576000 ispeed=B576000 cflag=0x10b6
+pty speed B921600: 0 errno=0 read back ospeed=B921600 ispeed=B921600 cflag=0x10b7
+pty speed B1000000: 0 errno=0 read back ospeed=B1000000 ispeed=B1000000 cflag=0x10b8
+pty speed B1152000: 0 errno=0 read back ospeed=B1152000 ispeed=B1152000 cflag=0x10b9
+pty speed B1500000: 0 errno=0 read back ospeed=B1500000 ispeed=B1500000 cflag=0x10ba
+pty speed B2000000: 0 errno=0 read back ospeed=B2000000 ispeed=B2000000 cflag=0x10bb
+pty speed B2500000: 0 errno=0 read back ospeed=B2500000 ispeed=B2500000 cflag=0x10bc
+pty speed B3000000: 0 errno=0 read back ospeed=B3000000 ispeed=B3000000 cflag=0x10bd
+pty speed B3500000: 0 errno=0 read back ospeed=B3500000 ispeed=B3500000 cflag=0x10be
+pty speed B4000000: 0 errno=0 read back ospeed=B4000000 ispeed=B4000000 cflag=0x10bf
+tcsetattr ospeed B9600 ispeed B2400: 0 errno=0
+split speeds read back: ospeed=B2400 ispeed=B2400 cflag=0xbb
+tcsetattr ospeed B19200 ispeed 0: 0 errno=0
+ispeed 0 read back: ospeed=B19200 ispeed=B19200 cflag=0xbe
+cfsetospeed BOTHER for the pty: 0 errno=0
+tcsetattr after cfsetospeed BOTHER: 0 errno=0
+BOTHER read back: ospeed=0x1000 ispeed=0x1000
+tcsetattr direct cflag BOTHER: 0 errno=0
+direct BOTHER read back: ospeed=0x1000 ispeed=0x1000
+tcsetattr master: 0 errno=0
+master write seen on slave: 1
+tcsetattr B0: 0 errno=0
+after B0: tcgetattr 0 errno=0 ospeed=B0 ispeed=B0
+after B0: write slave 1 errno=0
+== line control
+tcsendbreak slave 0: 0 errno=0
+tcsendbreak slave 10: 0 errno=0
+tcsendbreak slave -1: 0 errno=0
+tcsendbreak master 0: 0 errno=0
+tcsendbreak /dev/null: -1 errno=ENOTTY
+tcsendbreak fd -1: -1 errno=EBADF
+master bytes after tcsendbreak: 0
+slave bytes after tcsendbreak: 0
+tcdrain slave: 0 errno=0
+tcdrain master: 0 errno=0
+tcdrain /dev/null: -1 errno=ENOTTY
+tcdrain fd -1: -1 errno=EBADF
+TCIFLUSH=0 TCOFLUSH=1 TCIOFLUSH=2 TCOOFF=0 TCOON=1 TCIOFF=2 TCION=3
+tcflush slave TCIFLUSH: 0 errno=0
+tcflush slave TCOFLUSH: 0 errno=0
+tcflush slave TCIOFLUSH: 0 errno=0
+tcflush slave 3: -1 errno=EINVAL
+tcflush slave -1: -1 errno=EINVAL
+tcflush master TCIOFLUSH: 0 errno=0
+tcflush /dev/null: -1 errno=ENOTTY
+tcflush /dev/null bad queue: -1 errno=ENOTTY
+tcflush fd -1: -1 errno=EBADF
+flush input to slave, slave TCIFLUSH: readable before=1 after=0
+flush input to slave, slave TCOFLUSH: readable before=1 after=1
+flush input to slave, slave TCIOFLUSH: readable before=1 after=0
+flush output of slave, slave TCOFLUSH: readable before=1 after=1
+flush output of slave, slave TCIFLUSH: readable before=1 after=1
+flush output of slave, master TCIFLUSH: readable before=1 after=0
+flush input to slave, master TCOFLUSH: readable before=1 after=1
+tcflow slave TCOOFF: 0 errno=0
+write while TCOOFF: -1 errno=EAGAIN
+master readable while TCOOFF: 0
+tcflow slave TCOON: 0 errno=0
+write after TCOON: 1 errno=0
+master readable after TCOON: 1
+master bytes after TCOON: 1 [y]
+tcflow slave TCOON again: 0 errno=0
+tcflow slave TCIOFF: 0 errno=0
+master bytes after TCIOFF: 1 [\x13]
+tcflow slave TCION: 0 errno=0
+master bytes after TCION: 1 [\x11]
+TCIOFF with VSTOP=1: 1 [\x01]
+TCION with VSTART=2: 1 [\x02]
+TCIOFF with VSTOP disabled: 0
+tcflow slave 4: -1 errno=EINVAL
+tcflow slave -1: -1 errno=EINVAL
+tcflow master TCOOFF: 0 errno=0
+tcflow master TCOON: 0 errno=0
+tcflow /dev/null: -1 errno=ENOTTY
+tcflow /dev/null bad action: -1 errno=ENOTTY
+tcflow fd -1: -1 errno=EBADF
+== isatty, ctermid
+isatty slave: 1 errno=0
+isatty master: 1 errno=0
+isatty /dev/null: 0 errno=ENOTTY
+isatty regular file: 0 errno=ENOTTY
+isatty directory: 0 errno=ENOTTY
+isatty pipe: 0 errno=ENOTTY
+isatty socket: 0 errno=ENOTTY
+isatty fd -1: 0 errno=EBADF
+isatty closed fd 900: 0 errno=EBADF
+isatty slave keeps errno: 1 errno=1234
+L_ctermid=9
+ctermid(NULL): [/dev/tty] same pointer twice=1
+ctermid(buf): [/dev/tty] returns buf=1
+== ttyname
+ttyname slave: [/dev/pts/<n>] equals ptsname=1
+ttyname master: [/dev/ptmx] same static buffer=1
+ttyname /dev/null: NULL errno=ENOTTY
+ttyname fd -1: NULL errno=EBADF
+ttyname closed fd 900: NULL errno=EBADF
+ttyname pipe: NULL errno=ENOTTY
+ttyname regular file: NULL errno=ENOTTY
+ttyname after a failure: [/dev/pts/<n>] errno=0
+slave name length: 10..20
+ttyname_r size 0: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ttyname_r size 1: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ttyname_r size len-1: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ttyname_r size len: 19 (ENODEV) errno=ENODEV buf=[written]
+ttyname_r size len+1: 0 (0) errno=0 buf=[/dev/pts/<n>]
+ttyname_r size 256: 0 (0) errno=0 buf=[/dev/pts/<n>]
+ttyname_r /dev/null: 25 (ENOTTY) errno=ENOTTY
+ttyname_r fd -1: 9 (EBADF) errno=EBADF
+ttyname_r /dev/null size 0: 34 (ERANGE) errno=ERANGE
+ttyname_r(slave, NULL, 64): 22 errno=EINVAL
+ttyname_r(slave, NULL, 0): 22 errno=EINVAL
+ttyname via symlink: [/dev/pts/<n>] equals ptsname=1
+ttyname dup of slave: equals ptsname=1
+== pty api
+posix_openpt O_RDWR: fd errno=0
+  master O_RDWR: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_NOCTTY: fd errno=0
+  master O_RDWR|O_NOCTTY: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_CLOEXEC: fd errno=0
+  master O_RDWR|O_CLOEXEC: O_RDWR nonblock=0 append=0 cloexec=1 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_NONBLOCK: fd errno=0
+  master O_RDWR|O_NONBLOCK: O_RDWR nonblock=1 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDONLY: fd errno=0
+  master O_RDONLY: O_RDONLY nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_WRONLY: fd errno=0
+  master O_WRONLY: O_WRONLY nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_ACCMODE: fd errno=0
+  master O_ACCMODE: other nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_APPEND: fd errno=0
+  master O_RDWR|O_APPEND: O_RDWR nonblock=0 append=1 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_CREAT: fd errno=0
+  master O_RDWR|O_CREAT: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_EXCL: fd errno=0
+  master O_RDWR|O_EXCL: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_TRUNC: fd errno=0
+  master O_RDWR|O_TRUNC: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt O_RDWR|O_DIRECTORY: -1 errno=ENOTDIR
+posix_openpt O_RDWR|O_PATH: fd errno=0
+  master O_RDWR|O_PATH: O_RDONLY nonblock=0 append=0 cloexec=0 isatty=0 ttyname=[NULL]
+posix_openpt O_RDWR|0x40000000: fd errno=0
+  master O_RDWR|0x40000000: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+posix_openpt -1: -1 errno=ENOTDIR
+getpt: fd errno=0
+  getpt master: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+ptsname master: [/dev/pts/<n>]
+open slave before unlockpt: -1 errno=EIO
+slave before grantpt: mode=620 owner_is_me=1 gid=5
+grantpt master: 0 errno=0
+slave after grantpt: mode=620 owner_is_me=1 gid=5
+unlockpt master: 0 errno=0
+unlockpt master again: 0 errno=0
+grantpt master again: 0 errno=0
+open slave after unlockpt: fd errno=0
+  slave: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/pts/<n>]
+grantpt slave: -1 errno=EINVAL
+grantpt /dev/null: -1 errno=EINVAL
+grantpt regular file: -1 errno=EINVAL
+grantpt fd -1: -1 errno=EBADF
+grantpt closed fd 900: -1 errno=EBADF
+unlockpt slave: -1 errno=EINVAL
+unlockpt /dev/null: -1 errno=EINVAL
+unlockpt regular file: -1 errno=EINVAL
+unlockpt fd -1: -1 errno=EBADF
+ptsname slave: NULL errno=ENOTTY
+ptsname /dev/null: NULL errno=ENOTTY
+ptsname regular file: NULL errno=ENOTTY
+ptsname fd -1: NULL errno=EBADF
+ptsname static buffer: same pointer=1 names differ=1
+ptsname_r size 0: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ptsname_r size 1: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ptsname_r size len-1: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ptsname_r size len: 34 (ERANGE) errno=ERANGE buf=[untouched]
+ptsname_r size len+1: 0 (0) errno=0 buf=[/dev/pts/<n>]
+ptsname_r size 256: 0 (0) errno=0 buf=[/dev/pts/<n>]
+ptsname_r NULL buffer: child killed by SIGSEGV
+ptsname_r slave: 25 (ENOTTY) errno=ENOTTY
+ptsname_r /dev/null: 25 (ENOTTY) errno=ENOTTY
+ptsname_r fd -1: 9 (EBADF) errno=EBADF
+round trip: slave read 4 [ping], master read 4 [pong]
+master read after slave closed: -1 errno=EIO
+== openpty
+openpty all NULL: 0 errno=0
+openpty opened 2 descriptors
+  openpty master: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/ptmx]
+  openpty slave: O_RDWR nonblock=0 append=0 cloexec=0 isatty=1 ttyname=[/dev/pts/<n>]
+ptsname(master) equals ttyname(slave): 1
+openpty default: iflag=0x500 oflag=0x5 cflag=0xbf lflag=0x8a3b ispeed=B38400 ospeed=B38400 cc=03,1c,7f,15,04,00,01,00,11,13,1a,00,12,0f,17,16,00
+TIOCGWINSZ default: 0 errno=0
+default winsize: rows=0 cols=0 xpixel=0 ypixel=0
+openpty name termp winp: 0 errno=0
+openpty name: [/dev/pts/<n>] equals ttyname(slave)=1
+openpty termp read back: iflag=0x500 oflag=0x1 cflag=0x14b2 lflag=0x3 ispeed=B115200 ospeed=B115200 cc=03,00,00,00,04,09,04,00,00,00,00,00,00,00,00,00,00
+openpty termp applied: 1
+openpty winp on slave: rows=24 cols=80 xpixel=640 ypixel=480
+openpty winp on master: rows=24 cols=80
+openpty with all iflag bits: 0 errno=0
+openpty all iflag bits read back: iflag=0x7fffffff
+openpty NULL master: child killed by SIGSEGV
+openpty NULL slave: child killed by SIGSEGV
+== controlling terminal
+setsid: 1 errno=0
+new session, pty opened O_NOCTTY: open /dev/tty -1 errno=ENXIO
+tcgetpgrp slave (not controlling): -1 errno=ENOTTY
+tcgetsid slave (not controlling): -1 errno=ENOTTY
+tcsetpgrp slave (not controlling): -1 errno=ENOTTY
+tcgetpgrp master (not controlling): 0 errno=0
+posix_openpt(O_RDWR) in a session leader: open /dev/tty -1 errno=ENXIO
+getpt in a session leader: open /dev/tty -1 errno=ENXIO
+openpty in a session leader: open /dev/tty -1 errno=ENXIO
+slave opened without O_NOCTTY: open /dev/tty fd errno=0
+tcgetpgrp(slave)==getpgrp: 1
+tcgetpgrp(master)==getpgrp: 1
+tcgetpgrp(/dev/tty)==getpgrp: 1
+tcgetsid(slave)==getsid: 1
+tcgetsid(master): session errno=0
+ttyname(/dev/tty fd): [/dev/tty]
+ctermid: [/dev/tty]
+tcgetsid /dev/null: -1 errno=ENOTTY
+tcgetsid fd -1: -1 errno=EBADF
+tcgetpgrp /dev/null: -1 errno=ENOTTY
+tcgetpgrp fd -1: -1 errno=EBADF
+tcsetpgrp own group: 0 errno=0
+tcsetpgrp via master: 0 errno=0
+tcsetpgrp -1: -1 errno=EINVAL
+tcsetpgrp 0: -1 errno=ESRCH
+tcsetpgrp INT_MIN: -1 errno=EINVAL
+tcsetpgrp unused id: -1 errno=ESRCH
+tcsetpgrp group of another session: -1 errno=EPERM
+tcsetpgrp /dev/null: -1 errno=ENOTTY
+tcsetpgrp fd -1: -1 errno=EBADF
+foreground still own group: 1
+background tcsetpgrp (SIGTTOU default): stopped by SIGTTOU
+background tcsetpgrp (SIGTTOU ignored): 0 errno=0
+  foreground restored to own group: 1
+background tcsetpgrp (SIGTTOU blocked): 0 errno=0
+  foreground restored to own group: 1
+background tcsetattr (SIGTTOU default): stopped by SIGTTOU
+background tcsetattr (SIGTTOU ignored): 0 errno=0
+background tcsetattr (SIGTTOU blocked): 0 errno=0
+background tcdrain (SIGTTOU default): stopped by SIGTTOU
+background tcdrain (SIGTTOU ignored): 0 errno=0
+background tcdrain (SIGTTOU blocked): 0 errno=0
+background tcflush (SIGTTOU default): stopped by SIGTTOU
+background tcflush (SIGTTOU ignored): 0 errno=0
+background tcflush (SIGTTOU blocked): 0 errno=0
+background tcflow (SIGTTOU default): stopped by SIGTTOU
+background tcflow (SIGTTOU ignored): 0 errno=0
+background tcflow (SIGTTOU blocked): 0 errno=0
+background tcsendbreak (SIGTTOU default): stopped by SIGTTOU
+background tcsendbreak (SIGTTOU ignored): 0 errno=0
+background tcsendbreak (SIGTTOU blocked): 0 errno=0
+background tcgetattr (SIGTTOU default): 0 errno=0
+background tcgetattr (SIGTTOU ignored): 0 errno=0
+background tcgetattr (SIGTTOU blocked): 0 errno=0
+background tcgetpgrp==session leader's group (SIGTTOU default): 1 errno=0
+background tcgetsid==session (SIGTTOU default): 1 errno=0
+orphaned background tcsetpgrp (SIGTTOU default): -1 errno=ENOTTY
+orphaned background tcsetattr (SIGTTOU default): -1 errno=EIO
+orphaned background tcdrain (SIGTTOU default): -1 errno=EIO
+orphaned background tcflush (SIGTTOU default): -1 errno=EIO
+orphaned background tcgetattr (SIGTTOU default): 0 errno=0
+== login_tty
+login_tty slave: 0 errno=0
+session leader: 1
+isatty 0 1 2: 1 1 1
+ttyname(0..2) is the slave: 1 1 1
+tcgetpgrp(0)==getpgrp: 1
+tcgetsid(0)==getsid: 1
+original slave descriptor after login_tty: closed errno=EBADF
+open /dev/tty after login_tty: fd
+descriptors 0-2 cloexec: 0 0 0
+login_tty /dev/null: -1 errno=ENOTTY
+after failed login_tty: session leader=1 fd still open=1 stdin is /dev/null=1
+login_tty fd -1: -1 errno=EBADF
+login_tty as session leader already: 0 errno=EPERM
+ttyname(0) is the slave: 1
+tcgetsid(0)==getsid: 1
+login_tty master: 0 errno=0
+isatty 0: 1 tcgetsid(0)==getsid: 1
+login_tty fd 0: 0 errno=0
+fd 0 still open=1 isatty 1 2: 1 1
+login_tty of another session's terminal: -1 errno=EPERM controlling now=0
+first session keeps the terminal: 1
+== forkpty
+forkpty with args: parent got master=1 name=[/dev/pts/<n>] descriptors added=1
+parent: ptsname(master)==name: 1
+parent: descriptors on the slave: 0
+parent: read from master [hello\x0a]
+child: session leader=1 tcgetpgrp(0)==getpgrp=1 isatty 0 1 2: 1 1 1
+child: amaster in child is unchanged
+child: other terminal descriptors: 0
+child: ttyname(0)==name: 1
+child: termp applied: 1
+child: winsize rows=30 cols=100
+parent: child exit 7
+forkpty NULL args: parent got master=1 name=[unset] descriptors added=1
+parent: read from master [hello\x0d\x0a]
+child: session leader=1 tcgetpgrp(0)==getpgrp=1 isatty 0 1 2: 1 1 1
+child: amaster in child is unchanged
+child: other terminal descriptors: 0
+parent: child exit 7
+== cancellation
+cancel pending, tcdrain: cancelled
+cancel pending, tcsendbreak: returned
+cancel pending, tcsetattr TCSANOW: returned
+cancel pending, tcsetattr TCSADRAIN: returned
+cancel pending, tcflush: returned
+cancel pending, tcflow: returned
+cancel pending, tcgetattr: returned
+cancel pending, isatty: returned
+cancel pending, ttyname_r: returned
+cancel pending, openpty: cancelled
+== stubs
+gtty slave: -1 errno=ENOSYS
+gtty /dev/null: -1 errno=ENOSYS
+gtty fd -1: -1 errno=ENOSYS
+stty slave: -1 errno=ENOSYS
+stty fd -1: -1 errno=ENOSYS
+revoke slave: -1 errno=ENOSYS
+revoke /dev/null: -1 errno=ENOSYS
+revoke missing: -1 errno=ENOSYS
+revoke empty: -1 errno=ENOSYS
+slave usable after revoke: 1
+== ns: ttyent
+TTY_ON=0x1 TTY_SECURE=0x2 _PATH_TTYS=[/etc/ttys]
+setttyent: 1 errno=0
+getttyent 1: name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+getttyent 2: name=[ttyv0] getty=[/usr/libexec/getty Pc] type=[cons25] status=0x3 window=[/usr/X11/bin/xterm -display :0] comment=[NULL]
+getttyent 3: name=[ttyv1] getty=[none] type=[network] status=0 window=[NULL] comment=[NULL]
+getttyent 4: name=[indented] getty=[getty1] type=[type1] status=0x1 window=[NULL] comment=[NULL]
+getttyent 5: name=[ttyd0] getty=[/usr/libexec/getty std.9600] type=[dialup] status=0 window=[NULL] comment=[trailing comment]
+getttyent 6: name=[ttyd1] getty=[g] type=[t] status=0 window=[NULL] comment=[on#nospace]
+getttyent 7: name=[nameonly] getty=[NULL] type=[NULL] status=0 window=[NULL] comment=[NULL]
+getttyent 8: name=[nameonly2] getty=[] type=[NULL] status=0 window=[NULL] comment=[c]
+getttyent 9: name=[quoted] getty=[a "b" c] type=[t y p e] status=0x1 window=[NULL] comment=[insecure]
+getttyent 10: name=[hash] getty=[x#y] type=[t] status=0 window=[NULL] comment=[z\x09on]
+getttyent 11: name=[flags] getty=[g] type=[t] status=0x2 window=[NULL] comment=[unknown]
+getttyent 12: name=[winonly] getty=[g] type=[t] status=0 window=[abc] comment=[NULL]
+getttyent 13: name=[wquoted] getty=[g] type=[t] status=0x1 window=[a b] comment=[NULL]
+getttyent 14: name=[emptyq] getty=[] type=[] status=0x1 window=[NULL] comment=[NULL]
+getttyent 15: name=[upper] getty=[g] type=[t] status=0 window=[NULL] comment=[ON SECURE]
+getttyent 16: name=[unterminated] getty=[abc def] type=[NULL] status=0 window=[NULL] comment=[NULL]
+getttyent 17: name=[commentonly] getty=[] type=[NULL] status=0 window=[NULL] comment=[all comment]
+getttyent 18: name=[ttyd1] getty=[dup] type=[dup] status=0x1 window=[NULL] comment=[NULL]
+getttyent end: NULL errno=0
+getttyent after end: NULL errno=0
+endttyent: 1 errno=0
+endttyent again: 1 errno=0
+getttyent after endttyent (no setttyent): name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+same static entry: 1
+getttyent next: name=[ttyv0] getty=[/usr/libexec/getty Pc] type=[cons25] status=0x3 window=[/usr/X11/bin/xterm -display :0] comment=[NULL]
+setttyent rewinds: 1 errno=0
+getttyent after setttyent: name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+getttynam console: name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+getttynam nonl: NULL errno=0
+getttynam ttyd1 (two entries): name=[ttyd1] getty=[g] type=[t] status=0 window=[NULL] comment=[on#nospace]
+getttynam missing: NULL errno=0
+getttynam empty: NULL errno=0
+getttynam indented: name=[indented] getty=[getty1] type=[type1] status=0x1 window=[NULL] comment=[NULL]
+getttynam prefix 'ttyv': NULL errno=0
+getttyent after getttynam: name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+getttyent after getttynam mid-enumeration: name=[console] getty=[/usr/libexec/getty std.9600] type=[vt100] status=0x3 window=[NULL] comment=[NULL]
+setttyent without the file: 0 errno=ENOENT
+getttyent without the file: NULL errno=ENOENT
+getttynam without the file: NULL errno=ENOENT
+endttyent without the file: 1 errno=0
+long lines 0: name=[before99] getty length=1 status=0x1
+long lines 1: name=[long99] getty length=91 status=0
+long lines 2: name=[before100] getty length=1 status=0x1
+long lines 3: name=[before300] getty length=1 status=0x1
+long lines 4: name=[after] getty length=1 status=0x1
+long lines 5: NULL errno=0
+== ns: ttyname
+mount tmpfs over /dev/pts: 0 errno=0
+entry gone: ttyname NULL errno=ENODEV
+entry gone: ttyname_r 19 (ENODEV)
+entry gone: isatty 1
+entry gone: ptsname /dev/pts/<n> errno=0
+umount tmpfs: 0 errno=0
+mount new devpts instance: 0 errno=0
+other instance: ttyname NULL errno=ENODEV
+other instance: ttyname_r 19 (ENODEV)
+other instance: ptsname of old master /dev/pts/<n> errno=0
+bind /dev/pts/ptmx over /dev/ptmx: 0 errno=0
+new instance first pty: [/dev/pts/0]
+new instance: ttyname of its slave equals ptsname=1
+new instance has a pty with the old number: 1
+same number in another instance: ttyname NULL errno=ENODEV
+same number in another instance: ttyname_r 19 (ENODEV)
+mount tmpfs over /proc: 0 errno=0
+no /proc: ttyname /dev/pts/<n> errno=0 equals ptsname=1
+no /proc: ttyname_r 0 (0)
+no /proc, old instance: ttyname NULL errno=ENOTTY
+no /proc: ptsname /dev/pts/<n> errno=0
+no /proc: openpty 0 errno=0 name=[/dev/pts/<n>]
+umount /proc: 0 errno=0

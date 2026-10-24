@@ -1,0 +1,226 @@
+== offline
+res_mkquery: 33 flags=0120 qd=1 body=03777777076578616d706c6503636f6d0000010001
+res_mkquery bad name: -1
+res_mkquery small buffer: -1
+dn_comp: 17 7 2 bytes=03777777076578616d706c6503636f6d00046d61696cc010c010
+dn_expand: 7 [mail.example.com]
+dn_expand 2: 2 [example.com]
+dn_skipname: 7
+dn_expand pointer loop: -1
+dn_expand forward pointer: 2 [a]
+dn_expand escapes: 10 [a\.b.\\.\001\032]
+checks [example.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [ex-ample.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [-example.com]: hnok=0 ownok=0 mailok=1 dnok=1
+checks [example-.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [ex_ample.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [1example.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [example.com.]: hnok=1 ownok=1 mailok=1 dnok=1
+checks []: hnok=1 ownok=1 mailok=1 dnok=1
+checks [.]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [a..b]: hnok=0 ownok=0 mailok=0 dnok=0
+checks [*.example.com]: hnok=0 ownok=1 mailok=1 dnok=1
+checks [ex ample.com]: hnok=0 ownok=0 mailok=0 dnok=0
+checks [xn--bcher-kva.com]: hnok=1 ownok=1 mailok=1 dnok=1
+checks [a.b-c.d]: hnok=1 ownok=1 mailok=1 dnok=1
+ns_samename: 1 0 0
+ns_makecanon: 0 [Example.Com.]
+ns_makecanon trailing dots: 0 [a.b.]
+ns_name_pton: 1
+ns_name_ntop: 16 [www.Example.com]
+ns_name escapes: 0 10 [a\.b.c\.d]
+ns_format_ttl 0: 0S
+ns_format_ttl 59: 59S
+ns_format_ttl 60: 1M
+ns_format_ttl 3600: 1H
+ns_format_ttl 86400: 1D
+ns_format_ttl 604800: 1W
+ns_format_ttl 90061: 1d1h1m1s
+ns_format_ttl 1213261: 2w1h1m1s
+ns_parse_ttl [1W2D3H4M5S]: 0 788645
+ns_parse_ttl [3600]: 0 3600
+ns_parse_ttl [1h]: 0 3600
+ns_parse_ttl [2w]: 0 1209600
+ns_parse_ttl [1D1D]: 0 172800
+ns_parse_ttl [x]: -1 0
+ns_parse_ttl []: -1 0
+ns_parse_ttl [1H30]: -1 0
+ns_datetosecs: 1704067200 err=0
+ns_datetosecs bad: 0 err=0
+b64_ntop: 20 [SGVsbG8sIHdvcmxkIQ==]
+b64_pton: 13 [Hello, world!]
+b64_pton bad: -1
+b64_ntop small: -1
+hstrerror: [Resolver internal error] [Resolver Error 0 (no error)] [Unknown host] [Host name lookup failure] [Unknown server error] [No address associated with name] [Unknown resolver error]
+p_type 1 28 15 16 999: A AAAA MX TXT 999
+p_class 1 3 255 42: IN CHAOS ANY 42
+p_rcode 0 3 99: NOERROR NXDOMAIN 99
+done
+== scenario basic
+_res: nscount=1 ndots=1 retrans=1 retry=2 options_vc=0 trustad=0 noaaaa=0
+  ns 0: 127.0.0.1:53
+gethostbyname: [a.test] aliases: addrs: 192.0.2.10
+gai [a.test] fam=0 flags=2: 0 192.0.2.10 canon=a.test
+gethostbyname: NULL h_errno=4
+gai [aaaa.test] fam=0 flags=2: 0 2001:db8::20 canon=aaaa.test
+gethostbyname: [both.test] aliases: addrs: 192.0.2.11
+gai [both.test] fam=0 flags=2: 0 2001:db8::21 canon=both.test 192.0.2.11
+gethostbyname: [multi.test] aliases: addrs: 192.0.2.12 192.0.2.13
+gai [multi.test] fam=0 flags=2: 0 192.0.2.12 canon=multi.test 192.0.2.13
+gethostbyname: [a.test] aliases: [cname.test] addrs: 192.0.2.10
+gai [cname.test] fam=0 flags=2: 0 192.0.2.10 canon=a.test
+gethostbyname: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gai [nx.test] fam=0 flags=2: 0 192.0.2.200 canon=local.test
+gethostbyname: NULL h_errno=2
+gai [servfail.test] fam=0 flags=2: -3 (Temporary failure in name resolution)
+gethostbyname: NULL h_errno=2
+gai [refused.test] fam=0 flags=2: -3 (Temporary failure in name resolution)
+gethostbyname: [trunc.test] aliases: addrs: 192.0.2.30
+gai [trunc.test] fam=0 flags=2: 0 192.0.2.30 canon=trunc.test
+gethostbyname: [slow.test] aliases: addrs: 192.0.2.31
+gai [slow.test] fam=0 flags=2: 0 192.0.2.31 canon=slow.test
+gethostbyname: [badid.test] aliases: addrs: 192.0.2.32
+gai [badid.test] fam=0 flags=2: 0 192.0.2.32 canon=badid.test
+gethostbyname: NULL h_errno=2
+gai [wrongq.test] fam=0 flags=2: -3 (Temporary failure in name resolution)
+gethostbyname: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gai [local.test] fam=0 flags=2: 0 192.0.2.200 canon=local.test
+gethostbyname: [A.TEST] aliases: addrs: 192.0.2.10
+gai [A.TEST] fam=0 flags=2: 0 192.0.2.10 canon=A.TEST
+gai v6 [a.test] fam=10 flags=0: -5 (No address associated with hostname)
+gai v6 mapped [a.test] fam=10 flags=8: 0 ::ffff:192.0.2.10
+gai idn [bücher.test] fam=2 flags=40: -105 (Parameter string not correctly encoded)
+gai no idn [bücher.test] fam=2 flags=0: -2 (Name or service not known)
+res_query [a.test] type=1: 46 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    a.test.			5M IN A		192.0.2.10
+res_query [mx.test] type=15: 57 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    mx.test.		5M IN MX	10 mail.test.
+res_query [txt.test] type=16: 58 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    txt.test.		5M IN TXT	"hello world"
+res_query [cname.test] type=1: 80 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=2
+    cname.test.		5M IN CNAME	a.test.
+    a.test.			5M IN A		192.0.2.10
+res_query [nx.test] type=1: -1 h_errno=1
+res_query [servfail.test] type=1: -1 h_errno=2
+res_query [ad.test] type=1: 48 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    ad.test.		5M IN A		192.0.2.33
+res_query [aaaa.test] type=1: -1 h_errno=4
+gethostbyaddr: [a.test] aliases: addrs: 192.0.2.10
+getnameinfo 192.0.2.10: 0 a.test http
+getnameinfo 2001:db8::20: 0 aaaa.test
+getnameinfo 192.0.2.99 NAMEREQD: -2
+done
+== scenario search
+_res: nscount=1 ndots=2 retrans=1 retry=1 options_vc=0 trustad=0 noaaaa=0
+  ns 0: 127.0.0.1:53
+  search 0: example.test
+  search 1: other.test
+res_search [host] type=1: 68 h_errno=1 rcode=0 aa=1 tc=0 ad=0 an=1
+    host.example.test.	5M IN A		192.0.2.40
+res_search [x.y] type=1: 66 h_errno=1 rcode=0 aa=1 tc=0 ad=0 an=1
+    x.y.example.test.	5M IN A		192.0.2.41
+res_search [x.y.] type=1: 40 h_errno=1 rcode=0 aa=1 tc=0 ad=0 an=1
+    x.y.			5M IN A		192.0.2.42
+res_search [nx] type=1: -1 h_errno=1
+gethostbyname host: [host.example.test] aliases: addrs: 192.0.2.40
+gai [host] fam=2 flags=2: 0 192.0.2.40 canon=host.example.test
+gai [x.y] fam=2 flags=2: 0 192.0.2.41 canon=x.y.example.test
+res_querydomain host example.test: 68
+done
+== scenario trustad
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=0 trustad=1 noaaaa=0
+  ns 0: 127.0.0.1:53
+res_query [ad.test] type=1: 48 h_errno=0 rcode=0 aa=1 tc=0 ad=1 an=1
+    ad.test.		5M IN A		192.0.2.33
+res_query [a.test] type=1: 46 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    a.test.			5M IN A		192.0.2.10
+done
+== scenario noaaaa
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=0 trustad=0 noaaaa=1
+  ns 0: 127.0.0.1:53
+res_query [aaaa.test] type=28: -1 h_errno=4
+gai [both.test] fam=0 flags=0: 0 192.0.2.11
+gai [aaaa.test] fam=0 flags=0: -5 (No address associated with hostname)
+gethostbyname2 v6: NULL h_errno=4
+done
+== scenario usevc
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=1 trustad=0 noaaaa=0
+  ns 0: 127.0.0.1:53
+gethostbyname: [a.test] aliases: addrs: 192.0.2.10
+gai [a.test] fam=0 flags=2: 0 192.0.2.10 canon=a.test
+gethostbyname: NULL h_errno=4
+gai [aaaa.test] fam=0 flags=2: 0 2001:db8::20 canon=aaaa.test
+gethostbyname: [both.test] aliases: addrs: 192.0.2.11
+gai [both.test] fam=0 flags=2: 0 2001:db8::21 canon=both.test 192.0.2.11
+gethostbyname: [multi.test] aliases: addrs: 192.0.2.12 192.0.2.13
+gai [multi.test] fam=0 flags=2: 0 192.0.2.12 canon=multi.test 192.0.2.13
+gethostbyname: [a.test] aliases: [cname.test] addrs: 192.0.2.10
+gai [cname.test] fam=0 flags=2: 0 192.0.2.10 canon=a.test
+gethostbyname: NULL h_errno=1
+gai [nx.test] fam=0 flags=2: -2 (Name or service not known)
+gethostbyname: NULL h_errno=2
+gai [servfail.test] fam=0 flags=2: -3 (Temporary failure in name resolution)
+gethostbyname: NULL h_errno=3
+gai [refused.test] fam=0 flags=2: -2 (Name or service not known)
+gethostbyname: [trunc.test] aliases: addrs: 192.0.2.30
+gai [trunc.test] fam=0 flags=2: 0 192.0.2.30 canon=trunc.test
+gethostbyname: [slow.test] aliases: addrs: 192.0.2.31
+gai [slow.test] fam=0 flags=2: 0 192.0.2.31 canon=slow.test
+gethostbyname: [badid.test] aliases: addrs: 192.0.2.32
+gai [badid.test] fam=0 flags=2: 0 192.0.2.32 canon=badid.test
+gethostbyname: NULL h_errno=4
+gai [wrongq.test] fam=0 flags=2: -5 (No address associated with hostname)
+gethostbyname: NULL h_errno=4
+gai [local.test] fam=0 flags=2: -5 (No address associated with hostname)
+gethostbyname: [A.TEST] aliases: addrs: 192.0.2.10
+gai [A.TEST] fam=0 flags=2: 0 192.0.2.10 canon=A.TEST
+gai v6 [a.test] fam=10 flags=0: -5 (No address associated with hostname)
+gai v6 mapped [a.test] fam=10 flags=8: 0 ::ffff:192.0.2.10
+gai idn [bücher.test] fam=2 flags=40: -105 (Parameter string not correctly encoded)
+gai no idn [bücher.test] fam=2 flags=0: -2 (Name or service not known)
+res_query [a.test] type=1: 46 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    a.test.			5M IN A		192.0.2.10
+res_query [mx.test] type=15: 57 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    mx.test.		5M IN MX	10 mail.test.
+res_query [txt.test] type=16: 58 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    txt.test.		5M IN TXT	"hello world"
+res_query [cname.test] type=1: 80 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=2
+    cname.test.		5M IN CNAME	a.test.
+    a.test.			5M IN A		192.0.2.10
+res_query [nx.test] type=1: -1 h_errno=1
+res_query [servfail.test] type=1: -1 h_errno=2
+res_query [ad.test] type=1: 48 h_errno=0 rcode=0 aa=1 tc=0 ad=0 an=1
+    ad.test.		5M IN A		192.0.2.33
+res_query [aaaa.test] type=1: -1 h_errno=4
+gethostbyaddr: [a.test] aliases: addrs: 192.0.2.10
+getnameinfo 192.0.2.10: 0 a.test http
+getnameinfo 2001:db8::20: 0 aaaa.test
+getnameinfo 192.0.2.99 NAMEREQD: -2
+done
+== scenario notfound_return
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=0 trustad=0 noaaaa=0
+  ns 0: 127.0.0.1:53
+gethostbyname nx.test: NULL h_errno=1
+gethostbyname local.test: NULL h_errno=4
+gethostbyname a.test: [a.test] aliases: addrs: 192.0.2.10
+gai [nx.test] fam=2 flags=0: -2 (Name or service not known)
+gai [local.test] fam=2 flags=0: -5 (No address associated with hostname)
+done
+== scenario notfound_continue
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=0 trustad=0 noaaaa=0
+  ns 0: 127.0.0.1:53
+gethostbyname nx.test: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gethostbyname local.test: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gethostbyname a.test: [a.test] aliases: addrs: 192.0.2.10
+gai [nx.test] fam=2 flags=0: 0 192.0.2.200
+gai [local.test] fam=2 flags=0: 0 192.0.2.200
+done
+== scenario unavail
+_res: nscount=1 ndots=1 retrans=1 retry=1 options_vc=0 trustad=0 noaaaa=0
+  ns 0: 127.0.0.2:53
+gethostbyname nx.test: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gethostbyname local.test: [local.test] aliases: [nx.test] addrs: 192.0.2.200
+gethostbyname a.test: NULL h_errno=1
+gai [nx.test] fam=2 flags=0: 0 192.0.2.200
+gai [local.test] fam=2 flags=0: 0 192.0.2.200
+done

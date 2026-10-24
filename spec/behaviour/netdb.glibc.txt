@@ -1,0 +1,204 @@
+done
+== gethostbyname
+byname [localhost]: [localhost] type=2 len=4 aliases: addrs: 127.0.0.1
+byname2 v6 [localhost]: [localhost] type=10 len=16 aliases: [ip6-localhost] [ip6-loopback] addrs: ::1
+byname [alpha]: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+byname2 v6 [alpha]: NULL h_errno=1
+byname [alpha.example.org]: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+byname2 v6 [alpha.example.org]: NULL h_errno=1
+byname [a1]: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+byname2 v6 [a1]: NULL h_errno=1
+byname [ALPHA]: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+byname2 v6 [ALPHA]: NULL h_errno=1
+byname [beta]: [beta] type=2 len=4 aliases: addrs: 192.0.2.2
+byname2 v6 [beta]: NULL h_errno=1
+byname [gamma]: [gamma] type=2 len=4 aliases: addrs: 192.0.2.4
+byname2 v6 [gamma]: [gamma] type=10 len=16 aliases: [gamma6] addrs: 2001:db8::10
+byname [gamma6]: NULL h_errno=1
+byname2 v6 [gamma6]: [gamma] type=10 len=16 aliases: [gamma6] addrs: 2001:db8::10
+byname [spaced]: [spaced] type=2 len=4 aliases: addrs: 192.0.2.5
+byname2 v6 [spaced]: NULL h_errno=1
+byname [badaddr]: NULL h_errno=1
+byname2 v6 [badaddr]: NULL h_errno=1
+byname [upper]: [UPPER] type=2 len=4 aliases: addrs: 192.0.2.7
+byname2 v6 [upper]: NULL h_errno=1
+byname [short]: NULL h_errno=1
+byname2 v6 [short]: NULL h_errno=1
+byname [dup]: [dup] type=2 len=4 aliases: [alpha] addrs: 192.0.2.8
+byname2 v6 [dup]: NULL h_errno=1
+byname [nonesuch]: NULL h_errno=1
+byname2 v6 [nonesuch]: NULL h_errno=1
+byname []: [] type=2 len=4 aliases: addrs: 192.0.2.6
+byname2 v6 []: NULL h_errno=1
+byname [192.0.2.99]: [192.0.2.99] type=2 len=4 aliases: addrs: 192.0.2.99
+byname2 v6 [192.0.2.99]: NULL h_errno=1
+byname [2001:db8::99]: NULL h_errno=1
+byname2 v6 [2001:db8::99]: [2001:db8::99] type=10 len=16 aliases: addrs: 2001:db8::99
+byname [1.2]: [1.2] type=2 len=4 aliases: addrs: 1.0.0.2
+byname2 v6 [1.2]: NULL h_errno=1
+== gethostbyaddr
+byaddr 127.0.0.1: [localhost] type=2 len=4 aliases: addrs: 127.0.0.1
+byaddr 192.0.2.1: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+byaddr 192.0.2.2: [beta] type=2 len=4 aliases: addrs: 192.0.2.2
+byaddr 192.0.2.3: [beta] type=2 len=4 aliases: addrs: 192.0.2.3
+byaddr 192.0.2.8: [dup] type=2 len=4 aliases: [alpha] addrs: 192.0.2.8
+byaddr 192.0.2.99: NULL h_errno=1
+byaddr 2001:db8::10: [gamma] type=10 len=16 aliases: [gamma6] addrs: 2001:db8::10
+byaddr ::1: [localhost] type=10 len=16 aliases: [ip6-localhost] [ip6-loopback] addrs: ::1
+== gethostbyname_r ERANGE
+size 8: r=34 res=NULL herr=-1
+size 16: r=34 res=NULL herr=-1
+size 32: r=34 res=NULL herr=-1
+size 64: r=34 res=NULL herr=-1
+size 128: r=0 res=set herr=0
+size 256: r=0 res=set herr=0
+size 512: r=0 res=set herr=0
+size 1024: r=0 res=set herr=0
+== gethostent
+ent: [localhost] type=2 len=4 aliases: addrs: 127.0.0.1
+ent: [localhost] type=2 len=4 aliases: [ip6-localhost] [ip6-loopback] addrs: 127.0.0.1
+ent: [alpha] type=2 len=4 aliases: [alpha.example.org] [a1] addrs: 192.0.2.1
+ent: [beta] type=2 len=4 aliases: addrs: 192.0.2.2
+ent: [beta] type=2 len=4 aliases: addrs: 192.0.2.3
+ent: [gamma] type=2 len=4 aliases: addrs: 192.0.2.4
+ent: [spaced] type=2 len=4 aliases: addrs: 192.0.2.5
+ent: [] type=2 len=4 aliases: addrs: 192.0.2.6
+ent: [UPPER] type=2 len=4 aliases: addrs: 192.0.2.7
+ent: [dup] type=2 len=4 aliases: [alpha] addrs: 192.0.2.8
+== networks
+getnetbyname [loopback]: [loopback] type=2 net=7f000000 aliases=-
+getnetbyname [example]: [example] type=2 net=c0000200 aliases=exnet
+getnetbyname [exnet]: [example] type=2 net=c0000200 aliases=exnet
+getnetbyname [link-local]: [link-local] type=2 net=a9fe0000 aliases=-
+getnetbyname [bad]: [bad] type=2 net=ffffffff aliases=-
+getnetbyname [none]: NULL
+getnetbyaddr 127: NULL
+getnetbyaddr c00002: NULL
+netent: [loopback] 7f000000
+netent: [link-local] a9fe0000
+netent: [example] c0000200
+netent: [bad] ffffffff
+== services
+getservbyname [echo/tcp]: [echo] 7 [tcp] aliases:-
+getservbyname [echo/udp]: [echo] 7 [udp] aliases:-
+getservbyname [echo/NULL]: [echo] 7 [tcp] aliases:-
+getservbyname [www/tcp]: [http] 80 [tcp] aliases:www
+getservbyname [http/NULL]: [http] 80 [tcp] aliases:www
+getservbyname [ssh/udp]: NULL
+getservbyname [alias2/tcp]: [custom] 65000 [tcp] aliases:alias1
+getservbyname [badport/tcp]: [badport] 4464 [tcp] aliases:-
+getservbyname [noproto/NULL]: [noproto] 9999 [] aliases:-
+getservbyname [nonesuch/NULL]: NULL
+getservbyname [ECHO/tcp]: NULL
+getservbyport 7/tcp: echo
+getservbyport 22/tcp: ssh
+getservbyport 80/tcp: http
+getservbyport 65000/tcp: custom
+getservbyport 12345/tcp: NULL
+getservbyport 80/NULL: http/tcp
+servent: [echo] 7/tcp
+servent: [echo] 7/udp
+servent: [ftp] 21/tcp
+servent: [ssh] 22/tcp
+servent: [http] 80/tcp
+servent: [http] 80/udp
+servent: [custom] 65000/tcp
+servent: [badport] 4464/tcp
+servent: [noproto] 9999/
+== protocols
+getprotobyname [tcp]: tcp 6
+getprotobyname [TCP]: tcp 6
+getprotobyname [icmpv6]: ipv6-icmp 58
+getprotobyname [ipv6-icmp]: ipv6-icmp 58
+getprotobyname [bad]: NULL -1
+getprotobyname [none]: NULL -1
+getprotobynumber 17: udp
+getprotobynumber 99: NULL
+== rpc
+getrpcbyname portmap: portmapper 100000
+getrpcbynumber 100003: nfs
+getrpcbyname bogus: NULL
+== ethers
+ether_hostton alpha: 0 0:11:22:33:44:55
+ether_hostton nonesuch: -1
+ether_ntohost 0:1:2:3:4:5: 0 beta
+== netgroup
+innetgr [trusted] (alpha,alice,example.org): 1
+innetgr [trusted] (beta,NULL,NULL): 1
+innetgr [trusted] (gamma,bob,NULL): 1
+innetgr [trusted] (delta,NULL,NULL): 0
+innetgr [nested] (gamma,NULL,NULL): 1
+innetgr [empty] (NULL,NULL,NULL): 0
+innetgr [loop1] (x,NULL,NULL): 0
+innetgr [nonesuch] (NULL,NULL,NULL): 0
+setnetgrent trusted: 1
+netgrent: (alpha,alice,example.org)
+netgrent: (beta,-,NULL)
+netgrent: (gamma,bob,NULL)
+== aliases
+getaliasbyname root: [root] 2: [alice] [bob]
+aliasent: [postmaster] 1: [root]
+aliasent: [root] 2: [alice] [bob]
+aliasent: [multi] 3: [a] [b] [c]
+== getaddrinfo
+gai [localhost] [80] fam=0 type=1 flags=0: 0 {fam=2 type=1 proto=6 127.0.0.1:80 canon=-}
+gai [localhost] [NULL] fam=0 type=0 flags=0: 0 {fam=2 type=1 proto=6 127.0.0.1:0 canon=-} {fam=2 type=2 proto=17 127.0.0.1:0 canon=-} {fam=2 type=3 proto=0 127.0.0.1:0 canon=-}
+gai [alpha] [http] fam=2 type=1 flags=2: 0 {fam=2 type=1 proto=6 192.0.2.1:80 canon=alpha}
+gai [a1] [ssh] fam=0 type=1 flags=2: 0 {fam=2 type=1 proto=6 192.0.2.1:22 canon=alpha}
+gai [gamma] [NULL] fam=0 type=2 flags=0: 0 {fam=10 type=2 proto=17 2001:db8::10:0 canon=-}
+gai [gamma] [NULL] fam=10 type=2 flags=8: 0 {fam=10 type=2 proto=17 2001:db8::10:0 canon=-}
+gai [gamma] [NULL] fam=10 type=2 flags=18: 0 {fam=10 type=2 proto=17 2001:db8::10:0 canon=-} {fam=10 type=2 proto=17 ::ffff:192.0.2.4:0 canon=-}
+gai [beta] [7] fam=0 type=0 flags=0: 0 {fam=2 type=1 proto=6 192.0.2.2:7 canon=-} {fam=2 type=2 proto=17 192.0.2.2:7 canon=-} {fam=2 type=3 proto=0 192.0.2.2:7 canon=-}
+gai [192.0.2.50] [80] fam=0 type=1 flags=4: 0 {fam=2 type=1 proto=6 192.0.2.50:80 canon=-}
+gai [alpha] [80] fam=0 type=1 flags=4: -2 (Name or service not known)
+gai [2001:db8::1] [80] fam=2 type=1 flags=0: -9 (Address family for hostname not supported)
+gai [NULL] [80] fam=0 type=1 flags=1: 0 {fam=2 type=1 proto=6 0.0.0.0:80 canon=-} {fam=10 type=1 proto=6 :::80 canon=-}
+gai [NULL] [80] fam=0 type=1 flags=0: 0 {fam=10 type=1 proto=6 ::1:80 canon=-} {fam=2 type=1 proto=6 127.0.0.1:80 canon=-}
+gai [NULL] [NULL] fam=0 type=0 flags=0: -2 (Name or service not known)
+gai [localhost] [nonesuch] fam=0 type=1 flags=0: -8 (Servname not supported for ai_socktype)
+gai [localhost] [http] fam=0 type=1 flags=400: -2 (Name or service not known)
+gai [localhost] [80] fam=0 type=3 flags=0: -8 (Servname not supported for ai_socktype)
+gai [localhost] [80] fam=99 type=1 flags=0: -6 (ai_family not supported)
+gai [localhost] [80] fam=0 type=1 flags=10000: -1 (Bad value for ai_flags)
+gai [nonesuch] [80] fam=0 type=1 flags=0: -2 (Name or service not known)
+gai [localhost] [80] fam=0 type=1 flags=20: 0 {fam=2 type=1 proto=6 127.0.0.1:80 canon=-}
+gai [alpha] [80] fam=0 type=1 flags=20: 0 {fam=2 type=1 proto=6 192.0.2.1:80 canon=-}
+gai [] [80] fam=0 type=1 flags=0: 0 {fam=2 type=1 proto=6 192.0.2.6:80 canon=-}
+gai [localhost] [65536] fam=0 type=1 flags=0: 0 {fam=2 type=1 proto=6 127.0.0.1:0 canon=-}
+gai [localhost] [-1] fam=0 type=1 flags=0: -8 (Servname not supported for ai_socktype)
+gai [1.2] [80] fam=2 type=1 flags=0: 0 {fam=2 type=1 proto=6 1.0.0.2:80 canon=-}
+gai [0x7f.1] [80] fam=2 type=1 flags=0: 0 {fam=2 type=1 proto=6 127.0.0.1:80 canon=-}
+gai [fe80::1%lo] [80] fam=10 type=1 flags=4: 0 {fam=10 type=1 proto=6 fe80::1:80 canon=-}
+gai NULL hints: 0 {fam=2 type=1 proto=6 192.0.2.1:80 canon=-} {fam=2 type=2 proto=17 192.0.2.1:80 canon=-} {fam=2 type=3 proto=0 192.0.2.1:80 canon=-}
+== getnameinfo
+gni 192.0.2.1:80 flags=0 -> 0 host=[alpha] serv=[http]
+gni 192.0.2.1:80 flags=1 -> 0 host=[192.0.2.1] serv=[http]
+gni 192.0.2.99:22 flags=0 -> 0 host=[192.0.2.99] serv=[ssh]
+gni 192.0.2.99:22 flags=8 -> -2 host=[] serv=[]
+gni 192.0.2.1:7 flags=10 -> 0 host=[alpha] serv=[echo]
+gni 192.0.2.1:12345 flags=0 -> 0 host=[alpha] serv=[12345]
+gni 192.0.2.1:80 flags=4 -> 0 host=[alpha] serv=[http]
+gni 2001:db8::10:80 flags=0 -> 0 host=[gamma] serv=[http]
+gni ::1:22 flags=2 -> 0 host=[localhost] serv=[22]
+gni 192.0.2.1:80 flags=4000 -> -1 host=[] serv=[]
+gni small host buffer: -12
+gni bad length: -6
+gni nothing requested: 0
+== gai_strerror
+gai_strerror -12: Result too large for supplied buffer
+gai_strerror -11: System error
+gai_strerror -10: Memory allocation failure
+gai_strerror -9: Address family for hostname not supported
+gai_strerror -8: Servname not supported for ai_socktype
+gai_strerror -7: ai_socktype not supported
+gai_strerror -6: ai_family not supported
+gai_strerror -5: No address associated with hostname
+gai_strerror -4: Non-recoverable failure in name resolution
+gai_strerror -3: Temporary failure in name resolution
+gai_strerror -2: Name or service not known
+gai_strerror -1: Bad value for ai_flags
+gai_strerror 0: Success
+gai_strerror 1: Unknown error
+gai_strerror -100: Processing request in progress
+gai_strerror -101..-105: [Parameter string not correctly encoded] [Interrupted by a signal] [All requests done] [Request not canceled] [Request canceled]
+done

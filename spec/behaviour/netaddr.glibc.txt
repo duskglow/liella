@@ -1,0 +1,245 @@
+== inet_pton AF_INET
+[1.2.3.4] -> 1 errno=0 01020304
+[0.0.0.0] -> 1 errno=0 00000000
+[255.255.255.255] -> 1 errno=0 ffffffff
+[256.1.1.1] -> 0 errno=0 eeeeeeee
+[1.2.3] -> 0 errno=0 eeeeeeee
+[1.2.3.4.5] -> 0 errno=0 eeeeeeee
+[01.2.3.4] -> 0 errno=0 eeeeeeee
+[1.2.3.04] -> 0 errno=0 eeeeeeee
+[0x1.2.3.4] -> 0 errno=0 eeeeeeee
+[ 1.2.3.4] -> 0 errno=0 eeeeeeee
+[1.2.3.4 ] -> 0 errno=0 eeeeeeee
+[1..3.4] -> 0 errno=0 eeeeeeee
+[] -> 0 errno=0 eeeeeeee
+[1.2.3.4
+] -> 0 errno=0 eeeeeeee
+[127.1] -> 0 errno=0 eeeeeeee
+[1.2.3.-4] -> 0 errno=0 eeeeeeee
+[+1.2.3.4] -> 0 errno=0 eeeeeeee
+[999.0.0.0] -> 0 errno=0 eeeeeeee
+== inet_pton AF_INET6
+[::] -> 1 errno=0 00000000000000000000000000000000
+[::1] -> 1 errno=0 00000000000000000000000000000001
+[1::] -> 1 errno=0 00010000000000000000000000000000
+[1:2:3:4:5:6:7:8] -> 1 errno=0 00010002000300040005000600070008
+[1:2:3:4:5:6:7:8:9] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1:2:3:4:5:6:7] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1::2::3] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[::ffff:1.2.3.4] -> 1 errno=0 00000000000000000000ffff01020304
+[::1.2.3.4] -> 1 errno=0 00000000000000000000000001020304
+[1:2:3:4:5:6:1.2.3.4] -> 1 errno=0 00010002000300040005000601020304
+[1:2:3:4:5:6:7:1.2.3.4] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[fe80::1%eth0] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[FE80::ABCD] -> 1 errno=0 fe80000000000000000000000000abcd
+[12345::] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1:2:3:4:5:6:7::] -> 1 errno=0 00010002000300040005000600070000
+[::1:2:3:4:5:6:7] -> 1 errno=0 00000001000200030004000500060007
+[:::] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[:1::] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1:::2] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[0000:0000::] -> 1 errno=0 00000000000000000000000000000000
+[00000::] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1:2:3:4:5:6:7:8:] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[:1:2:3:4:5:6:7:8] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[::ffff:256.1.1.1] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[::ffff:1.2.3] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[1.2.3.4] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[ ::1] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+[g::] -> 0 errno=0 eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+inet_pton AF_UNIX -> -1 errno=97
+== inet_ntop
+[::] -> :: errno=0
+[::1] -> ::1 errno=0
+[1::] -> 1:: errno=0
+[1:0:0:2:0:0:0:3] -> 1:0:0:2::3 errno=0
+[1:0:0:2:0:0:3:4] -> 1::2:0:0:3:4 errno=0
+[1:2:3:4:5:6:7:8] -> 1:2:3:4:5:6:7:8 errno=0
+[0:0:1:0:0:0:0:0] -> 0:0:1:: errno=0
+[1:0:2:0:3:0:4:0] -> 1:0:2:0:3:0:4:0 errno=0
+[::ffff:1.2.3.4] -> ::ffff:1.2.3.4 errno=0
+[::1.2.3.4] -> ::1.2.3.4 errno=0
+[::ffff:0:1.2.3.4] -> ::ffff:0:102:304 errno=0
+[64:ff9b::1.2.3.4] -> 64:ff9b::102:304 errno=0
+[fe80::abcd:ef01] -> fe80::abcd:ef01 errno=0
+[2001:db8::1:0:0:1] -> 2001:db8::1:0:0:1 errno=0
+[2001:db8:0:0:1:0:0:1] -> 2001:db8::1:0:0:1 errno=0
+[0:0:0:0:0:0:0:1:] not parsed
+[abcd:ef01:2345:6789:abcd:ef01:2345:6789] -> abcd:ef01:2345:6789:abcd:ef01:2345:6789 errno=0
+[::0.0.0.1] -> ::1 errno=0
+[::ffff:0.0.0.0] -> ::ffff:0.0.0.0 errno=0
+inet_ntop v4 size 10 -> NULL errno=28
+inet_ntop v4 size 11 -> NULL errno=28
+inet_ntop v4 size 12 -> 192.168.0.1 errno=0
+inet_ntop v4 size 13 -> 192.168.0.1 errno=0
+inet_ntop v6 size 10 -> NULL errno=28
+inet_ntop v6 size 11 -> NULL errno=28
+inet_ntop v6 size 12 -> 2001:db8::1 errno=0
+inet_ntop v6 size 13 -> 2001:db8::1 errno=0
+inet_ntop AF_UNIX -> NULL errno=97
+== inet_aton / inet_addr / inet_network
+[1.2.3.4] aton=1 01020304 addr=01020304 network=01020304
+[10.1] aton=1 0a000001 addr=0a000001 network=00000a01
+[10.1.2] aton=1 0a010002 addr=0a010002 network=000a0102
+[10] aton=1 0000000a addr=0000000a network=0000000a
+[0x7f.1] aton=1 7f000001 addr=7f000001 network=00007f01
+[0177.0.0.1] aton=1 7f000001 addr=7f000001 network=7f000001
+[0x7f000001] aton=1 7f000001 addr=7f000001 network=ffffffff
+[4294967295] aton=1 ffffffff addr=ffffffff network=ffffffff
+[4294967296] aton=0 eeeeeeee addr=ffffffff network=00000000
+[1.2.3.4.5] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[1.2.3.256] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[1.2.65535] aton=1 0102ffff addr=0102ffff network=ffffffff
+[1.16777215] aton=1 01ffffff addr=01ffffff network=ffffffff
+[1.16777216] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[08.1.1.1] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[0x.1.1.1] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[1.2.3.4 trailing] aton=1 01020304 addr=01020304 network=ffffffff
+[1.2.3.4	tab] aton=1 01020304 addr=01020304 network=ffffffff
+[ 1.2.3.4] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[255.255.255.255] aton=1 ffffffff addr=ffffffff network=ffffffff
+[1.2.3.] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[.1.2.3] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+[0xffffffff] aton=1 ffffffff addr=ffffffff network=ffffffff
+[0X10.0.0.1] aton=1 10000001 addr=10000001 network=10000001
+[1.2.3.4x] aton=0 eeeeeeee addr=ffffffff network=ffffffff
+inet_aton NULL out: 1
+== classful
+0a010203 lnaof=00010203 netof=0000000a ntoa=10.1.2.3
+80010203 lnaof=00000203 netof=00008001 ntoa=128.1.2.3
+c0a80001 lnaof=00000001 netof=00c0a800 ntoa=192.168.0.1
+e0000001 lnaof=00000001 netof=00e00000 ntoa=224.0.0.1
+f0000001 lnaof=00000001 netof=00f00000 ntoa=240.0.0.1
+7f000001 lnaof=00000001 netof=0000007f ntoa=127.0.0.1
+00000000 lnaof=00000000 netof=00000000 ntoa=0.0.0.0
+makeaddr(a, 10203) = 0a010203
+makeaddr(80, 102) = 00800102
+makeaddr(8001, 203) = 80010203
+makeaddr(c0a800, 1) = c0a80001
+makeaddr(a, ffffffff) = 0affffff
+makeaddr(0, 5) = 00000005
+makeaddr(ffffff01, 2) = ffffff03
+inet_ntoa shared buffer: 1 [5.6.7.8]
+== inet_net_pton / inet_net_ntop
+[10/8] -> 8 errno=0 0aeeeeee ntop=10/8
+[10.1/16] -> 16 errno=0 0a01eeee ntop=10.1/16
+[10.1.2.3/24] -> 24 errno=0 0a010203 ntop=10.1.2/24
+[10.1.2.3] -> 32 errno=0 0a010203 ntop=10.1.2.3/32
+[192.168.1/24] -> 24 errno=0 c0a801ee ntop=192.168.1/24
+[0x0a/8] -> 8 errno=0 0aeeeeee ntop=10/8
+[10/33] -> -1 errno=90 0aeeeeee
+[10/0] -> 0 errno=0 0aeeeeee ntop=0/0
+[1.2.3.4/32] -> 32 errno=0 01020304 ntop=1.2.3.4/32
+[default] -> -1 errno=2 eeeeeeee
+[0/0] -> 0 errno=0 00eeeeee ntop=0/0
+[10.1.2.3/7] -> 7 errno=0 0a010203 ntop=10/7
+[224/4] -> 4 errno=0 e0eeeeee ntop=224/4
+[128/2] -> 2 errno=0 80eeeeee ntop=128/2
+[abc] -> -1 errno=2 eeeeeeee
+[10/] -> -1 errno=2 0aeeeeee
+[/8] -> -1 errno=2 eeeeeeee
+[1.2.3.4.5/32] -> -1 errno=90 01020304
+[12345/8] -> -1 errno=2 eeeeeeee
+net_ntop bits 0 -> 0/0 errno=0
+net_ntop bits 3 -> 0/3 errno=0
+net_ntop bits 6 -> 8/6 errno=0
+net_ntop bits 9 -> 10.0/9 errno=0
+net_ntop bits 12 -> 10.0/12 errno=0
+net_ntop bits 15 -> 10.0/15 errno=0
+net_ntop bits 18 -> 10.1.0/18 errno=0
+net_ntop bits 21 -> 10.1.0/21 errno=0
+net_ntop bits 24 -> 10.1.0/24 errno=0
+net_ntop bits 27 -> 10.1.0.0/27 errno=0
+net_ntop bits 30 -> 10.1.0.0/30 errno=0
+net_ntop bits 33 -> NULL errno=22
+net_ntop small -> NULL errno=90
+net_pton v6 -> -1 errno=97
+== inet_nsap / inet_neta
+nsap_addr [0x47.0005.80ffef00] -> 0 
+nsap_addr [47000580ffef00] -> 7 47000580ffef00 ntoa=47.0005.80FF.EF00
+nsap_addr [0x] -> 0 
+nsap_addr [0x1] -> 0 
+nsap_addr [0x12.34] -> 0 
+nsap_addr [0xgg] -> 0 
+nsap_addr [0x0123456789abcdef0123456789abcdef0123456789] -> 0 
+neta 0 -> 0.0.0.0
+neta a -> 10
+neta a14 -> 10.20
+neta a1e1e -> 10.30.30
+neta small -> NULL errno=90
+== ether
+[00:11:22:33:44:55] -> ok 001122334455 ntoa=0:11:22:33:44:55
+[0:1:2:3:4:5] -> ok 000102030405 ntoa=0:1:2:3:4:5
+[AA:BB:CC:DD:EE:FF] -> ok aabbccddeeff ntoa=aa:bb:cc:dd:ee:ff
+[00:11:22:33:44] -> NULL 00112233eeee
+[00:11:22:33:44:55:66] -> ok 001122334455 ntoa=0:11:22:33:44:55
+[00-11-22-33-44-55] -> NULL eeeeeeeeeeee
+[001122334455] -> NULL eeeeeeeeeeee
+[00:11:22:33:44:5g] -> NULL 0011223344ee
+[100:11:22:33:44:55] -> NULL eeeeeeeeeeee
+[ 00:11:22:33:44:55] -> NULL eeeeeeeeeeee
+[00:11:22:33:44:55 x] -> ok 001122334455 ntoa=0:11:22:33:44:55
+[] -> NULL eeeeeeeeeeee
+ether_aton shared: 1 a:b:c:d:e:f
+ether_line [00:11:22:33:44:55 hostname] -> 0 host=[hostname] 001122334455
+ether_line [00:11:22:33:44:55	host # comment] -> 0 host=[host] 001122334455
+ether_line [# comment] -> -1 host=[untouched] eeeeeeeeeeee
+ether_line [00:11:22:33:44:55] -> -1 host=[untouched] 001122334455
+ether_line [  00:11:22:33:44:55   spaced  ] -> -1 host=[untouched] eeeeeeeeeeee
+ether_line [zz:11:22:33:44:55 bad] -> -1 host=[untouched] eeeeeeeeeeee
+ether_line [00:11:22:33:44:55 a b] -> 0 host=[a] 001122334455
+ether_line [] -> -1 host=[untouched] eeeeeeeeeeee
+== inet6_opt
+init size: 2
+init: 2
+append 4/4: 8
+set_val: 4
+append 2/2: 12
+append 3/8 (bad align): -1
+append type 0 (pad): -1
+finish: 16 sizeonly=16
+bytes: ee07c204112233440502abcd01020000
+next: pos=8 type=c2 len=4
+  val=11223344
+next: pos=12 type=05 len=2
+find 05: 12 len=2
+find 99: -1
+== inet6_rth
+rth_space type0 0: 8
+rth_space type0 1: 24
+rth_space type0 2: 40
+rth_space type0 3: 56
+rth_space type 9: 0
+rth_init: ok
+rth_init small: NULL
+rth_add 0: 0
+rth_add 1: 0
+rth_add 2: 0
+rth_add 3: -1
+segments: 3
+reverse: 0
+getaddr 0: 2001:db8::3
+getaddr 1: 2001:db8::2
+getaddr 2: 2001:db8::1
+getaddr 3: NULL
+header: 0006000300000000
+== interfaces
+if_nametoindex lo: 1
+if_nametoindex nosuch: 0 errno=19
+if_nametoindex long: 0 errno=19
+if_indextoname lo: lo
+if_indextoname 999999: NULL errno=6
+if_nameindex: lo=1 count>0=1 terminated=1
+getifaddrs: 0 errno=0
+lo fam=17 flags_up_loop=1 addr=- mask=- data=1
+lo fam=2 flags_up_loop=1 addr=127.0.0.1 mask=255.0.0.0 data=0
+lo fam=10 flags_up_loop=1 addr=::1 mask=ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff data=0
+== misc
+in6addr_any=:: in6addr_loopback=::1
+htonl=44332211 htons=2211 ntohl=44332211 ntohs=2211
+getipv4sourcefilter unjoined: -1 errno=99
+getipv4sourcefilter on -1: -1 errno=9
+ruserok no files: -1
+done

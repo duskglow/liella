@@ -1,0 +1,44 @@
+# libm.so.6 compat (non-default) versions versions.tsv lists that Liella does not export yet (binary-compatibility phase 15).
+# RATCHET (rulings #1176, #1187): this list may only shrink. `cargo xtask so` fails (naming the symbol) on
+#   - a compat version versions.tsv lists that libm.so.6 does not export and that is NOT listed here;
+#   - a listed entry that libm.so.6 now exports ("remove it from compat-missing-libm.tsv"): delete the row in the same commit;
+#   - a listed entry that is not a compat (non-default) row of versions.tsv (defaults can never be listed).
+# Never add rows to make the check pass: build the missing compat version instead (SO-CHECK-DEFAULT-VERSION).
+symbol	version
+_LIB_VERSION	GLIBC_2.2.5
+exp	GLIBC_2.2.5
+exp10	GLIBC_2.2.5
+exp10f	GLIBC_2.2.5
+exp2	GLIBC_2.2.5
+exp2f	GLIBC_2.2.5
+expf	GLIBC_2.2.5
+fmod	GLIBC_2.2.5
+fmodf	GLIBC_2.2.5
+hypot	GLIBC_2.2.5
+hypotf	GLIBC_2.2.5
+lgamma	GLIBC_2.2.5
+lgammaf	GLIBC_2.2.5
+lgammal	GLIBC_2.2.5
+log	GLIBC_2.2.5
+log2	GLIBC_2.2.5
+log2f	GLIBC_2.2.5
+logf	GLIBC_2.2.5
+matherr	GLIBC_2.2.5
+pow	GLIBC_2.2.5
+powf	GLIBC_2.2.5
+totalorder	GLIBC_2.25
+totalorderf	GLIBC_2.25
+totalorderf128	GLIBC_2.26
+totalorderf32	GLIBC_2.27
+totalorderf32x	GLIBC_2.27
+totalorderf64	GLIBC_2.27
+totalorderf64x	GLIBC_2.27
+totalorderl	GLIBC_2.25
+totalordermag	GLIBC_2.25
+totalordermagf	GLIBC_2.25
+totalordermagf128	GLIBC_2.26
+totalordermagf32	GLIBC_2.27
+totalordermagf32x	GLIBC_2.27
+totalordermagf64	GLIBC_2.27
+totalordermagf64x	GLIBC_2.27
+totalordermagl	GLIBC_2.25

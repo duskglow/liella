@@ -1,0 +1,10 @@
+# CPU models whose ratio_host rows are DECIDED ON CYCLES, not ns (FALLBACK-CYCLES; owner ruling 2026-10-10 18:35 UTC:
+# "yes, but keep an eye on time too, if we see a consistent drag, it needs to be investigated").
+# Why: on these low-power Ivy Bridge boxes the core clock is bimodal run to run (1.5-2.5 GHz) for glibc and Liella
+# alike, so ns ratios gave a false 1.38x and a false 0.85x while cycles moved < 3% (NICO-GAP; liella-historic:handoff/nico-gap.md, not in the tree when cited).
+# `cargo xtask bench` decides each ratio_host row on the cycles ratio (user+kernel) against bench/host_cycle_limits.tsv;
+# a row without a cycle limit, or without a cycles counter, falls back to its ns limit in bench/host_limits.tsv.
+# ns ratios and per-side GHz stay printed (advisory). A future low-power host = one line here + its cycle limits.
+# Columns: cpu (the `model name` of /proc/cpuinfo, exactly), rationale.
+Intel(R) Xeon(R) CPU E3-1220L V2 @ 2.30GHz	nico: bare metal Ivy Bridge, bimodal clock (NICO-GAP)
+Intel(R) Xeon(R) CPU E3-1265L V2 @ 2.50GHz	kotori: bare metal Ivy Bridge, bimodal clock (NICO-GAP)

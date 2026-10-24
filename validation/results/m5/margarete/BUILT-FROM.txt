@@ -1,0 +1,4 @@
+margarete (Linux 5.10.0, glibc 2.39-0ubuntu8.9), milestone 5, 2026-10-05.
+liella-m-*: Liella built from branch 17c73bb (test/validation) = main 246ae7f, before the correctness fixes (12fdf19).
+glibc-*: the stock glibc baseline built on margarete with the same scripts.
+These summaries predate the built-from line in suite.sh; this note records it.

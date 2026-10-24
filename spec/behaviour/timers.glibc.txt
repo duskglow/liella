@@ -1,0 +1,94 @@
+alarm(0) idle: 0 errno=0
+alarm(0) after alarm(5): 5 errno=0
+alarm(0) with 0.7 s left: 1 errno=0
+alarm(0) with 1.6 s left: 2 errno=0
+alarm(UINT_MAX) then alarm(0): >=INT_MAX errno=0
+ualarm(0,0) idle: 0 errno=0
+ualarm(0,0) after ualarm(500000): (400000,500000] errno=0
+ualarm(1000000,0): 4294967295 errno=22
+ualarm(2500000,0): 4294967295 errno=22
+alarm(0) after ualarm(2500000): 0 errno=0
+ualarm(300000,100000) itimer: interval=100 value<=300ms=1
+setitimer REAL 3s/250ms: 0 errno=0
+getitimer REAL: interval=250 value_s=3
+alarm(0) after setitimer REAL 3s: 3 errno=0
+getitimer REAL after alarm(0): interval=0 value=0
+setitimer VIRTUAL 0 with old: 0 errno=0
+old VIRTUAL: interval=0 value_ms(900,1100]=1
+setitimer PROF 0: 0 errno=0
+setitimer which=3: -1 errno=22
+setitimer which=-1: -1 errno=22
+getitimer which=3: -1 errno=22
+setitimer usec=1000000: -1 errno=22
+setitimer interval usec=1000000: -1 errno=22
+setitimer sec=-1: -1 errno=22
+setitimer usec=-1: -1 errno=22
+ITIMER_REAL expiry: sig=14 code_kernel=1
+alarm expiry: sig=14 code_kernel=1
+timer_create REALTIME NULL: 0 errno=0
+timer_settime 10ms: 0 errno=0
+NULL sigevent expiry: sig=14 code_timer=1 value_is_id=1
+timer_delete: 0 errno=0
+timer_delete again: -1 errno=22
+timer_create MONOTONIC SIGUSR1: 0 errno=0
+timer_gettime disarmed: 0 errno=0
+disarmed: value=0 interval=0
+periodic 1ms, 60ms blocked: sig=10 value=42 overrun>10=1 errno=0
+siginfo overrun matches=1
+timer_settime 5s with old: 0 errno=0
+old: interval=1 value<=1=1
+gettime: interval=0 value_s=5
+timer_settime nsec=1e9: -1 errno=22
+timer_settime interval nsec=1e9: -1 errno=22
+timer_settime sec=-1: -1 errno=22
+timer_settime flags=2: 0 errno=0
+timer_settime ABSTIME past: 0 errno=0
+past absolute fires: sig=10
+timer_delete: 0 errno=0
+timer_create SIGEV_NONE: 0 errno=0
+SIGEV_NONE: interval=20 value<=20=1 pending_usr1=0
+timer_create SIGEV_THREAD_ID self: 0 errno=0
+SIGEV_THREAD_ID expiry: sig=12 code_timer=1
+timer_create SIGEV_THREAD_ID foreign tid: -1 errno=22
+timer_create clock=99: -1 errno=22
+timer_create notify=99: -1 errno=22
+timer_create signo=0: -1 errno=22
+timer_create signo=65: -1 errno=22
+timer_create PROCESS_CPUTIME: 0 errno=0
+timer_create THREAD_CPUTIME: 0 errno=0
+timer_create BOOTTIME: 0 errno=0
+timer_create MONOTONIC_RAW: -1 errno=95
+timer_create REALTIME_COARSE: -1 errno=95
+timer_gettime bad id: -1 errno=22
+timer_getoverrun bad id: -1 errno=22
+timer_delete bad id: -1 errno=22
+200 timers created: 200 distinct_first_two=1
+timer_create SIGEV_THREAD: 0 errno=0
+SIGEV_THREAD: calls>=3=1 value=7 not_main=1 detached=1 usr1_blocked=1
+timer_getoverrun SIGEV_THREAD: 0 errno=0
+timer_delete SIGEV_THREAD: 0 errno=0
+SIGEV_THREAD after delete: no more calls=1
+timer_create SIGEV_THREAD a: 0 errno=0
+timer_create SIGEV_THREAD b: 0 errno=0
+two one-shot SIGEV_THREAD timers: calls=2
+timerfd_create MONOTONIC 0: 1 errno=0
+timerfd_create flags=1: -1 errno=22
+timerfd_create clock=99: -1 errno=22
+timerfd_create PROCESS_CPUTIME: -1 errno=22
+timerfd_create NONBLOCK|CLOEXEC: ok=1
+read disarmed nonblocking: -1 errno=11
+timerfd_settime 10ms: 0 errno=0
+timerfd_gettime: 0 errno=0
+armed: interval=0 value<=10=1
+read 4 bytes: -1 errno=22
+read after expiry: 8 count=1 errno=0
+periodic 1ms after 30ms: 8 count>=10=1
+timerfd_settime disarm with old: 0 errno=0
+old: interval=1
+timerfd_settime flags=4: -1 errno=22
+timerfd_settime CANCEL_ON_SET without ABSTIME: 0 errno=0
+timerfd_settime ABSTIME|CANCEL_ON_SET: 0 errno=0
+timerfd_settime nsec=1e9: -1 errno=22
+timerfd_settime on a pipe: -1 errno=22
+timerfd_gettime bad fd: -1 errno=9
+done

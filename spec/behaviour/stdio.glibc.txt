@@ -1,0 +1,200 @@
+== files
+tell pos=22 on_disk=0 pending=22
+getc c=97
+fgets ok=1 [Zbcline one\0a]
+getline n=9 eof=0 [line two\0a]
+getline n=1 eof=1 [x]
+getline n=-1 eof=1
+seek4 c=105 tell=5
+fread_end n=2 [\0ax] eof=0
+clearerr eof=0 err=0
+ungetc3 tell=2 c1=51 c2=50 c3=49 c4=110
+append_end size=25
+fclose r=0
+fread_elems n=3 eof=1 tell=25
+fwrite_elems n=3
+final_size size=34
+getdelim n=6 [ab\00cd;]
+getdelim n=4 [ef\00;]
+getdelim n=1 [g]
+getdelim n=-1
+== errors
+fopen_missing null=1 errno=2
+fopen_bad_mode null=1 errno=22
+write_readonly r=-1 errno=9 ferror=1
+read_writeonly r=-1 errno=9 ferror=1 feof=0
+fdopen_mismatch null=1 errno=22
+fdopen_ok fileno_matches=1
+fseek_bad_whence r=-1 errno=22
+== buffering
+full after_ab=0 after_newline=0 after_100=0 flbf=0 bufsize=4096 closed=105
+line after_ab=0 after_newline=4 after_100=4 flbf=1 bufsize=4096 closed=105
+none after_ab=2 after_newline=5 after_100=105 flbf=0 bufsize=1 closed=105
+user_buffer setvbuf=0 in_user=0 on_disk=5 closed=5
+setvbuf_late r=0
+fflush_input fd_pos_before=10 fflush=0 fd_pos_after=2 next=50
+stdio_ext reading=1 writing=0 readable=1 writable=0 locking=1 set=1 now=2
+== memory
+fmemopen r null=0 ok=1 errno=0
+ open tell=0
+ read n=10 eof=1 [abc\00defghi]
+ end tell=10
+ fputs r=0 flush=0 tell=1 [abc\00defghij\00]
+ end2 tell=10
+ seek11 r=-1 errno=22
+ fwrite n=0 flush=0 err=1 [abc\00defghij\00]
+ close r=0 [abc\00defghij\00]
+fmemopen r null=1 ok=1 errno=0
+ open tell=0
+ read n=10 eof=1 
+ end tell=10
+ fputs r=0 flush=0 tell=1
+ end2 tell=10
+ seek11 r=-1 errno=22
+ fwrite n=0 flush=0 err=1
+ close r=0
+fmemopen r+ null=0 ok=1 errno=0
+ open tell=0
+ read n=10 eof=1 [abc\00defghi]
+ end tell=10
+ fputs r=1 flush=0 tell=3 [aXY\00defghij\00]
+ end2 tell=10
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1 [aXY\00defg12j\00]
+ close r=0 [aXY\00defg12j\00]
+fmemopen r+ null=1 ok=1 errno=0
+ open tell=0
+ read n=10 eof=1 
+ end tell=10
+ fputs r=1 flush=0 tell=3
+ end2 tell=10
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1
+ close r=0
+fmemopen w null=0 ok=1 errno=0
+ open tell=0
+ end tell=0
+ fputs r=1 flush=0 tell=3 [aXY\00defghij\00]
+ end2 tell=3
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1 [aXY\00defg1\00j\00]
+ close r=0 [aXY\00defg1\00j\00]
+fmemopen w null=1 ok=1 errno=0
+ open tell=0
+ end tell=0
+ fputs r=1 flush=0 tell=3
+ end2 tell=3
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1
+ close r=0
+fmemopen w+ null=0 ok=1 errno=0
+ open tell=0
+ read n=0 eof=1 []
+ end tell=0
+ fputs r=1 flush=0 tell=3 [\00XY\00defghij\00]
+ end2 tell=3
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1 [\00XY\00defg1\00j\00]
+ close r=0 [\00XY\00defg1\00j\00]
+fmemopen w+ null=1 ok=1 errno=0
+ open tell=0
+ read n=0 eof=1 
+ end tell=0
+ fputs r=1 flush=0 tell=3
+ end2 tell=3
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=-1 err=1
+ close r=0
+fmemopen a null=0 ok=1 errno=0
+ open tell=3
+ end tell=3
+ fputs r=1 flush=0 tell=5 [abcXY\00fghij\00]
+ end2 tell=5
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=0 err=0 [abcXY12345j\00]
+ close r=0 [abcXY12345j\00]
+fmemopen a null=1 ok=1 errno=0
+ open tell=0
+ end tell=0
+ fputs r=1 flush=0 tell=2
+ end2 tell=2
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=0 err=0
+ close r=0
+fmemopen a+ null=0 ok=1 errno=0
+ open tell=3
+ read n=0 eof=1 []
+ end tell=3
+ fputs r=1 flush=0 tell=5 [abcXY\00fghij\00]
+ end2 tell=5
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=0 err=0 [abcXY12345j\00]
+ close r=0 [abcXY12345j\00]
+fmemopen a+ null=1 ok=1 errno=0
+ open tell=0
+ read n=0 eof=1 
+ end tell=0
+ fputs r=1 flush=0 tell=2
+ end2 tell=2
+ seek11 r=-1 errno=22
+ fwrite n=5 flush=0 err=0
+ close r=0
+memstream ptr_unset=1 sz=99
+ before_flush sz=99
+ flush sz=5 [hello\00]
+ seek2 sz=2
+ write sz=3 [heZl]
+ past_end sz=11 [heZlo\00\00\00\00\00!\00]
+ end tell=11
+ closed sz=2011 last=120 nul=1
+== cookies
+ cb_read n=8192
+read n=6 [seed d]
+ cb_seek off=0 whence=0
+ cb_write n=3 [XYZ]
+tell cb_seek off=0 whence=1
+ pos=3
+ cb_close
+closed flag=1 [XYZd data]
+null_fns getc=-1 eof=0 fputs=1 flush=-1 seek=-1
+== standard
+fileno in=0 out=1 err=2
+freopen same=1 fd=1
+redirected size=16
+fwide query=-1 byte=-1 then_wide=-1
+== names
+ L_tmpnam=20 TMP_MAX=238328 in_buf=1
+tmpnam /tmp/file###### len=15 letters=1 exists=0
+tmpnam_null /tmp/file###### len=15 letters=1 exists=0
+ same_static=1
+ tmpnam_r_null=1
+tmpnam_r /tmp/file###### len=15 letters=1 exists=0
+tempnam /tmp/file###### len=15 letters=1 exists=0
+tempnam_pfx /tmp/abcde###### len=16 letters=1 exists=0
+tempnam_empty_pfx /tmp/file###### len=15 letters=1 exists=0
+tempnam_dir <dir>/p###### len=8 letters=1 exists=0
+tempnam_slashes <dir>/q###### len=8 letters=1 exists=0
+tempnam_missing_dir /tmp/m###### len=12 letters=1 exists=0
+tempnam_root //r###### len=9 letters=1 exists=0
+tempnam_tmpdir <dir>/e###### len=8 letters=1 exists=0
+tempnam_bad_tmpdir /var/tmp/e###### len=16 letters=1 exists=0
+tmpnam_ignores_tmpdir /tmp/file###### len=15 letters=1 exists=0
+ctermid /dev/tty in_buf=1 /dev/tty L_ctermid=9
+== libio
+ putc=65 padn=70 padn0=0 flush=0 seekpos=0
+ getc=65 peek=45 peek_again=45 sgetn=10 [----------] seekoff_cur=71
+getline_info extract=1 n=1 [\0aZ] eof=0 next=108
+getline_info extract=1 n=4 [lineZ] eof=0 next=32
+getline_info extract=1 n=14 [ one\0aline two;Z] eof=0 next=114
+getline_info extract=1 n=5 [rest\0aZ] eof=0 next=108
+getline_info extract=0 n=0 [Z] eof=0 next=108
+getline_info extract=0 n=4 [lineZ] eof=0 next=32
+getline_info extract=0 n=13 [ one\0aline twoZ] eof=0 next=114
+getline_info extract=0 n=4 [restZ] eof=0 next=108
+getline_info extract=-1 n=0 [Z] eof=0 next=10
+getline_info extract=-1 n=0 [Z] eof=0 next=10
+getline_info extract=-1 n=18 [\0aline one\0aline twoZ] eof=0 next=59
+getline_info extract=-1 n=5 [;restZ] eof=0 next=10
+getline n=1 [\0a]
+ feof=0 ferror=0 seekoff_end=99 getc_end=-1 feof_end=1
+ iter_seen=7 first_is_h=1 flush_all=0

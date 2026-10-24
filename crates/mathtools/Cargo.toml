@@ -1,0 +1,16 @@
+[package]
+name = "liella-mathtools"
+description = "libm test oracle (arbitrary-precision arithmetic) and tooling: minimax fitting, glibc comparison (D-10.3)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Test and tool code only (D-10.3): no library crate or product depends on it. It uses std and,
+# like the rest of the workspace, has no external dependencies.
+[lib]
+name = "liella_mathtools"
+
+[lints]
+workspace = true

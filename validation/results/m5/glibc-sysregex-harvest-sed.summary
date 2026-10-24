@@ -1,0 +1,8 @@
+built-from: harvest tools of branch d2d4630 + suite.sh harvest tag; glibc 2.39-0ubuntu8.9
+configure-start 2026-10-05T04:37:25Z load: 27.40, 31.10, 32.28
+configure rc=0
+build-start 2026-10-05T04:38:14Z load: 14.97, 27.30, 30.94
+build rc=0 seconds=4.404913948
+check-start 2026-10-05T04:38:18Z load: 14.33, 26.96, 30.81
+check rc=2 seconds=28.242406883
+check-end 2026-10-05T04:38:46Z load: 10.91, 24.93, 30.01

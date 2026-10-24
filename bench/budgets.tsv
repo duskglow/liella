@@ -1,0 +1,622 @@
+# Performance budgets (implementation-plan.md rule P6). `cargo xtask bench` builds the
+# benchmark examples in release mode and fails if any budget is exceeded.
+#
+# Columns: benchmark, measurement, rule, bound, rationale.
+#   rule `max_ns`:   the measurement in ns/op must not exceed `bound`.
+#   rule `ratio_to`: the measurement must not exceed `bound` x the named measurement
+#                    (written as `<bound>x<other>`), which keeps budgets machine-independent.
+#   rule `ratio_host`: the row is also measured with the benchmark built against the host C
+#                    library (dynamically linked, as `--compare` builds it; rebuilt only when the
+#                    benchmark's source changes), in the same `cargo xtask bench`, over N rounds
+#                    (`--runs`, default 5) after a warm-up round. `bound` is the TARGET (a ratio,
+#                    1.10: within about 10% of glibc, owner 2026-10-05); a miss is printed and never
+#                    fails the run. The regression GATE is separate: `bench/host_limits.tsv` holds,
+#                    per CPU model (the `model name` line of /proc/cpuinfo, not the host name), a
+#                    limit on the same-run MEDIAN Liella/glibc ratio of the row. A CPU with no entries
+#                    is measured and reported, never gated. The worst ratio (slowest Liella round /
+#                    fastest glibc round) is printed as a diagnostic only.
+#
+# Absolute bounds are deliberately loose (they catch order-of-magnitude regressions on any
+# x86_64 machine); the ratios carry the design claims.
+#
+# benchmark	measurement	rule	bound	rationale
+bench_kernel	thread_pointer	max_ns	5	F47: one call per TLS access must stay a few cycles (OD-C3 measured 0.72 ns without LTO)
+bench_kernel	cpuid_leaf0	max_ns	2000	sanity: CPUID traps under some hypervisors but stays bounded
+bench_kernel	getppid	ratio_to	1.5xread_dev_zero_64	a no-argument wrapper costs no more than a small read: no hidden work in the C layer or CSys
+bench_kernel	clock_gettime_vdso	ratio_to	0.5xclock_gettime_syscall	P3: the vDSO path must beat the system call it replaces by at least 2x
+bench_kernel	clock_gettime_syscall	max_ns	5000	sanity
+bench_kernel	read_dev_zero_64	max_ns	5000	sanity
+bench_mem	memcpy_4k	ratio_to	1.1xref_memcpy_4k	phase-2 exit: memcpy within 10% of the hardware copy bandwidth at 4 KiB (liella-mem, D-4.11)
+bench_mem	memset_4k	ratio_to	1.1xref_memcpy_4k	phase-2 exit: memset within 10% of the hardware copy bandwidth at 4 KiB
+bench_mem	strlen_4k	ratio_to	1.1xref_memcpy_4k	phase-2 exit: strlen within 10% of the hardware copy bandwidth at 4 KiB (C-layer scanner since phase 4, OD-C2, D-4.14)
+bench_mem	strnlen_4k	ratio_to	1.1xref_memcpy_4k	phase 4 (OD-C2): the bounded scanner within 10% of the hardware copy bandwidth at 4 KiB
+bench_mem	rawmemchr_4k	ratio_to	1.1xref_memcpy_4k	phase 4 (OD-C2): the byte scanner within 10% of the hardware copy bandwidth at 4 KiB
+bench_mem	memcmp_4k	ratio_to	1.5xref_memcpy_4k	phase 6a (OD-C2 revised, D-4.17): the C-layer compare reads two 4 KiB inputs; within 1.5x of a 4 KiB copy (glibc measures 1.27x)
+bench_mem	memchr_4k	ratio_to	1.1xref_memcpy_4k	phase 6a (OD-C2 revised, D-4.17): the bounded byte scanner within 10% of the hardware copy bandwidth at 4 KiB
+bench_heap	malloc_free_64	max_ns	1000	sanity: a small malloc/free pair stays far below a microsecond
+bench_heap	malloc_free_64	ratio_to	1.5xref_malloc_free_64	phase 6 (owner 2026-10-01): one thread, a 64-byte malloc/free pair within 1.5x the host glibc (per-thread slabs, D-3.11)
+bench_heap	threads16_64	ratio_to	2xref_threads16_64	phase 6 (owner 2026-10-01): 16 threads at once, wall time per 64-byte pair within 2x the host glibc (per-thread caches, node shards: D-3.11, D-3.12)
+bench_heap	malloc_free_1m	ratio_to	2xref_malloc_free_1m	phase 6 (owner 2026-10-01): a 1 MiB malloc/free pair within 2x the host glibc (large-block reuse, D-3.13)
+cbench_thread	gettid	max_ns	5	phase 6 (owner 2026-10-01): gettid is a load from the thread block (D-22.9), the same few cycles as the thread pointer (F47)
+cbench_thread	gettid	ratio_to	0.1xgetppid	phase 6: no system call: a tenth of the cheapest system call through the same layer
+cbench_thread	pthread_self	max_ns	5	phase 6: pthread_self is the thread pointer (D-22.9)
+cbench_thread	getppid	max_ns	5000	sanity
+cbench_locale	isalpha_c	max_ns	12	phase 7: a table read through the calling thread's locale (D-7.8); sanity. Raised from 10 at phase 9: the phase-8 products measured 10.1 ns on the same machine on 2026-10-02 (machine variance, not a regression; entry 7)
+cbench_locale	towupper_utf8	max_ns	18	phase 7: the built-in C.UTF-8 case tables (D-5.4); sanity Tightened at the end of the optimization pass to 3x the final Liella time on shiki (6 ns, 2026-10-05).
+cbench_locale	mbrtowc_utf8_3	max_ns	100	phase 7: one UTF-8 character decoded; sanity
+cbench_locale	iconv_utf8_utf16_4k	max_ns	32613	phase 7: 4 KiB through the pivot (D-6.9), under 50 ns a byte; sanity Tightened at the end of the optimization pass to 3x the final Liella time on shiki (10871 ns, 2026-10-05).
+cbench_locale	iconv_utf8_8859_15_4k	max_ns	68769	phase 7: 4 KiB encoded through a system charmap (D-6.8); sanity Tightened at the end of the optimization pass to 3x the final Liella time on shiki (22923 ns, 2026-10-05).
+cbench_stdio	snprintf_d	max_ns	180	phase 8: printf("%d") into a buffer; sanity (glibc 83 ns; the owner sets the target, progress entry 6) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (60 ns, 2026-10-05).
+cbench_stdio	snprintf_mixed	max_ns	2167	phase 8: four conversions including a double; sanity Tightened at the end of the optimization pass to 3x the final Liella time on shiki (722 ns, 2026-10-05).
+cbench_stdio	fprintf_d	max_ns	270	phase 8: printf("%d") into a fully buffered stream; sanity (glibc 91 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (90 ns, 2026-10-05).
+cbench_stdio	fputs_32	max_ns	87	phase 8: a 32-byte fputs into a fully buffered stream; sanity (glibc 14 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (29 ns, 2026-10-05).
+cbench_stdio	putc	max_ns	35	phase 8: putc through the exported function; sanity (glibc 4 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (11 ns, 2026-10-05).
+cbench_stdio	fwrite_4k	max_ns	1153	phase 8: 4 KiB through an 8 KiB buffer; sanity (glibc 221 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (384 ns, 2026-10-05).
+cbench_time	gmtime_r	max_ns	123	phase 9: UTC conversion; sanity (glibc 36 ns; entry 7) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (41 ns, 2026-10-05).
+cbench_time	localtime_r_new_york	max_ns	483	phase 9: a TZif zone; sanity (glibc 889 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (161 ns, 2026-10-05).
+cbench_time	localtime_r_posix_rule	max_ns	375	phase 9: a POSIX rule; sanity (glibc 67 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (125 ns, 2026-10-05).
+cbench_time	mktime_new_york	max_ns	777	phase 9: mktime with tm_isdst -1; sanity (glibc 218 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (259 ns, 2026-10-05).
+cbench_time	strftime_iso	max_ns	827	phase 9: an ISO 8601 timestamp; sanity (glibc 204 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (275 ns, 2026-10-05).
+cbench_netdb	inet_pton_v6	max_ns	1000	phase 10: an IPv6 text parsed; sanity (Liella 105-143 ns across builds, glibc 77 ns; entry 8)
+cbench_netdb	inet_ntop_v6	max_ns	500	phase 10: an IPv6 address formatted (RFC 5952); sanity (Liella 73 ns, glibc 440 ns)
+cbench_netdb	getaddrinfo_numeric_v4	max_ns	3000	phase 10: getaddrinfo with AI_NUMERICHOST, no configuration file read; sanity (Liella 464 ns after the phase-11 review, glibc 133 ns)
+cbench_netdb	getaddrinfo_localhost	max_ns	60000	phase 10: "localhost" through the files source (/etc/hosts); sanity (Liella 11.0 us, glibc 8.8 us; mostly system calls)
+cbench_netdb	getnameinfo_numeric	max_ns	2000	phase 10: getnameinfo with NI_NUMERICHOST|NI_NUMERICSERV; sanity (Liella 270 ns, glibc 306 ns)
+cbench_netdb	getpwnam_r_root	max_ns	40000	phase 10: the passwd database through the files source; sanity (Liella 5.2 us, glibc 5.2 us)
+cbench_netdb	getservbyname_r_http	max_ns	60000	phase 10: the services database through the files source; sanity (Liella 8.2 us, glibc 9.3 us)
+cbench_netdb	getpwnam_r_named	max_ns	200000	STRESS-ENV-AUDIT-2: getpwnam_r of CBENCH_STRESS_USER (root in the fixed environment; the last of 50,000 appended users under `--stress names`); sanity
+cbench_netdb	getgrnam_r_named	max_ns	200000	STRESS-ENV-AUDIT-2: getgrnam_r of CBENCH_STRESS_GROUP (root; the last of 50,000 appended groups under `--stress names`); sanity
+cbench_netdb	getgrouplist_named	max_ns	2000000	STRESS-ENV-AUDIT-2: getgrouplist of CBENCH_STRESS_USER, every group entry read (and every group service asked); sanity
+cbench_netdb	res_mkquery	max_ns	15000	phase 10: a query message built (the resolver state checked, a random ID); sanity (Liella 2.0 us, glibc 1.6 us)
+cbench_netdb	dn_comp	max_ns	1500	phase 10: a name compressed against an earlier one; sanity (Liella 185 ns after the phase-11 review, glibc 55 ns)
+cbench_process	posix_spawn_true	max_ns	4000000	phase 11: posix_spawn of /bin/true + waitpid; sanity, dominated by the kernel and the child program (Liella 0.58-0.63 ms, glibc 0.51 ms; entry 9)
+cbench_process	posix_spawnp_true	max_ns	4000000	STRESS-ENV-AUDIT-2: posix_spawnp of `true` found in the second PATH directory + waitpid; sanity, dominated by the kernel and the child (the `path` stress profile puts 197 missing directories first)
+cbench_process	posix_spawn_true	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; gives cbench_process a glibc side and counted rows (POSIX-SPAWNP-ROW); kernel- and child-dominated, the instruction limit carries the parent-side claim
+cbench_process	posix_spawnp_true	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; PATH search in the parent (POSIX-SPAWNP-ROW); compare under `--stress path`; the instruction limit carries the parent-side claim
+cbench_process	posix_spawn_true_actions	max_ns	4000000	phase 11: as posix_spawn_true with three file actions (open, dup2, close); sanity (Liella 0.58-0.66 ms, glibc 0.51 ms)
+cbench_process	fork_exit_wait	max_ns	1500000	phase 11: fork, _exit in the child, waitpid; sanity (Liella 0.17-0.23 ms, glibc 0.19-0.23 ms)
+cbench_process	vfork_exit_wait	max_ns	1500000	phase 11: vfork without CLONE_VM (D-18.1, F24), _exit in the child, waitpid; sanity (Liella 0.14-0.21 ms, glibc 0.07 ms)
+cbench_process	system_exit0	max_ns	5000000	phase 11: system("exit 0"), /bin/sh started and waited for; sanity (Liella 0.70-0.74 ms, glibc 0.58 ms)
+cbench_process	popen_pclose_true	max_ns	5000000	phase 11: popen("true", "r") + pclose; sanity (Liella 0.64-0.75 ms, glibc 0.59 ms)
+cbench_process	waitpid_echild	max_ns	2000	phase 11: waitpid(-1, WNOHANG) with no child (ECHILD); sanity (Liella 218 ns, glibc 207 ns)
+cbench_process	tcgetattr	max_ns	2000	phase 11: TCGETS2 on a pty slave (D-19.1); sanity (Liella 274 ns, glibc 264 ns)
+cbench_process	tcsetattr_now	max_ns	6000	phase 11: TCSANOW with the current settings, read first (D-19.1); sanity (Liella 890 ns, glibc 1131 ns)
+cbench_process	cfsetspeed_cfgetospeed	max_ns	100	phase 11: speed codes in the C structure; sanity (Liella 11.9 ns, glibc 19.0 ns)
+cbench_process	openpty_close	max_ns	200000	phase 11: openpty (ptmx, unlock, TIOCGPTPEER; D-19.2) and two closes; sanity (Liella 28.9 us, glibc 28.9 us)
+cbench_process	ttyname_r	max_ns	30000	phase 11: the /proc/self/fd link checked against the descriptor (D-19.3); sanity (Liella 3.9 us after the phase-12 review, glibc 3.9 us)
+cbench_process	isatty_pty	max_ns	2000	phase 11: one TCGETS2; sanity (Liella 267 ns, glibc 270 ns)
+cbench_process	isatty_devnull	max_ns	1000	phase 11: ENOTTY from /dev/null; sanity (Liella 126 ns, glibc 126 ns)
+cbench_process	posix_spawn_true_heap256m	max_ns	5000000	phase 11: posix_spawn + waitpid from a process with 256 MiB of touched heap, whose page tables a child without CLONE_VM copies (D-18.3); sanity (Liella 0.62-0.69 ms, glibc 0.50 ms)
+cbench_nscache	getpwnam_r_cached	max_ns	5000	D-16.10: a passwd lookup answered by the name-service cache; sanity (Liella 0.88 us cached, 5.3 us uncached, glibc 5.2 us)
+cbench_nscache	getpwnam_r_cached	ratio_to	0.4xgetpwnam_r_uncached	D-16.10: the cache answers passwd lookups at least 2.5x faster than the sources (measured 6x)
+cbench_nscache	getaddrinfo_localhost_cached	max_ns	30000	D-16.10: getaddrinfo("localhost") answered by the cache; sanity (Liella 4.8 us cached, 11.3 us uncached)
+cbench_nscache	getaddrinfo_localhost_cached	ratio_to	0.7xgetaddrinfo_localhost_uncached	D-16.10: the per-lookup steps after the cache (context, resolver state, packing) stay; measured 0.43x
+cbench_nscache	getservbyname_r_cached	max_ns	10000	D-16.10: a services lookup answered by the cache; sanity (Liella 2.0 us cached, 8.5 us uncached)
+cbench_nscache	getservbyname_r_cached	ratio_to	0.5xgetservbyname_r_uncached	D-16.10: measured 0.24x
+cbench_patterns	regcomp_regexec_regfree_email	max_ns	389598	phase 12 (D-14.4): compile, match ([a-z]+)@([a-z]+)\.com with subexpressions in a 1 KiB line, free; sanity (Liella 344 us, glibc 61 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (129866 ns, 2026-10-05).
+cbench_patterns	regexec_literal_1k	max_ns	4712	phase 12: a literal in a 1 KiB line, REG_NOSUB; sanity (Liella 23 us with the first-byte skip, glibc 3.2 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1571 ns, 2026-10-05).
+cbench_patterns	regexec_submatch_1k	max_ns	367697	phase 12: ([a-z]+)@([a-z]+)\.com, three entries, 1 KiB line; sanity (Liella 338 us, glibc 48 us: the overall-match pass simulates threads per byte; a lazy DFA is an optimization-pass target) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (122565 ns, 2026-10-05).
+cbench_patterns	regexec_class_nomatch_1k	max_ns	4260	phase 12: [[:digit:]]+ absent from a 1 KiB line; sanity (Liella 2.6 us, glibc 0.77 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1420 ns, 2026-10-05).
+cbench_patterns	regexec_backref	max_ns	21365	phase 12: \(b[a-z]*\)@\1 on a short line (the back-reference pass, budget re_max_failures); sanity (Liella 8.5 us, glibc 3.0 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (7122 ns, 2026-10-05).
+cbench_patterns	regexec_pathological_4k	max_ns	3834524	phase 12 (D-14.4, linear time): (a|aa)*c on 4096 a's, no match; sanity (Liella 2.3 ms, glibc 61 ms) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1278174 ns, 2026-10-05).
+cbench_patterns	fnmatch_star	max_ns	87	phase 12 (§14.7): *.c against a 17-byte name; sanity (Liella 0.53 us after the phase-13 review, glibc 42 ns; entry 10) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (29 ns, 2026-10-05).
+cbench_patterns	fnmatch_bracket	max_ns	264	phase 12: [a-m]*_[!0-9]*.[ch], ranges and a negated bracket; sanity (Liella 1.05 us, glibc 96 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (88 ns, 2026-10-05).
+cbench_patterns	fnmatch_pathname	max_ns	138	phase 12: src/*/x*.c with FNM_PATHNAME, a match; sanity (Liella 0.96 us, glibc 63 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (46 ns, 2026-10-05).
+cbench_patterns	fnmatch_pathname_nomatch	max_ns	91	phase 12: src/*.c with FNM_PATHNAME against a deeper path; sanity (Liella 0.68 us, glibc 32 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (30 ns, 2026-10-05).
+cbench_patterns	glob_1000_sorted	max_ns	1934238	phase 12 (§14.8): dir/f* over 1,000 files, sorted (strcoll), globfree; sanity (Liella 0.95 ms, glibc 0.64 ms) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (644746 ns, 2026-10-05).
+cbench_patterns	glob_1000_nosort	max_ns	1555600	phase 12: as glob_1000_sorted with GLOB_NOSORT; sanity (Liella 0.81 ms, glibc 0.46 ms) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (518533 ns, 2026-10-05).
+cbench_patterns	wordexp_tilde_var	max_ns	5589	phase 12 (§14.10; D-14.7): ~/a $HOME b with WRDE_NOCMD, wordfree; sanity (Liella 2.9 us, glibc 0.40 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1863 ns, 2026-10-05).
+cbench_patterns	wordexp_arith	max_ns	5367	phase 12: x $((3*(4+5)-7)) y with WRDE_NOCMD; sanity (Liella 3.6 us, glibc 0.45 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1789 ns, 2026-10-05).
+cbench_nscache	first_getpwnam_r_cached	ratio_to	1.25xfirst_getpwnam_r_uncached	D-16.10 cold start: a fresh process's first lookup goes to the sources (the region is attached by its second), so it costs what an uncached one does; the bound leaves room for noise (measured 0.95-1.05x)
+cbench_nscache	first_getpwnam_r_create	ratio_to	1.25xfirst_getpwnam_r_uncached	D-16.10 cold start, the region absent (created by the second lookup); measured 0.97-1.04x
+cbench_nscache	first_getpwnam_r_uncached	max_ns	1000000	sanity: a fresh process's first lookup without the cache (VM: 74-98 us, mostly first-touch faults)
+cbench_fstree	opendir_readdir_closedir_1000	max_ns	3000000	phase 12 (§13.2; D-13.14): a directory of 1,000 files read whole (ext4 under /tmp); sanity (Liella 0.34 ms, glibc 0.35 ms; entry 10)
+cbench_fstree	readdir_entry	max_ns	3000	phase 12: readdir per entry over an open stream (rewinddir, then to the end); sanity (Liella 340 ns, glibc 343 ns: getdents64 dominates)
+cbench_fstree	fdopendir_readdir_closedir_99	max_ns	500000	WL-HOT-DU (§13.2): openat + fdopendir + readdir to the end + closedir on a 99-file directory, the per-directory step of a tree walker (du); sanity
+cbench_fstree	getcwd	max_ns	5000	phase 12 (§13.1): getcwd into a PATH_MAX buffer, one system call; sanity (Liella 0.50 us, glibc 0.49 us)
+cbench_fstree	realpath_5	max_ns	60000	phase 12 (§13.8; D-13.5): a canonical 5-component path, descriptor walk; sanity (Liella 8.6 us after the phase-13 review, glibc 4.0 us)
+cbench_fstree	scandir_alphasort_1000	max_ns	5000000	phase 12 (§13.2): scandir with alphasort over 1,000 files, entries freed; sanity (Liella 0.70 ms, glibc 0.55 ms)
+cbench_fstree	nftw_phys_1000	max_ns	10000000	phase 12 (§13.9): nftw with FTW_PHYS over 10 directories of 99 files; sanity (Liella 1.45 ms, glibc 1.31 ms: one fstatat per entry in both)
+cbench_fstree	fts_physical_1000	max_ns	15000000	phase 12 (§13.9): fts_open/fts_read/fts_close with FTS_PHYSICAL over the same tree; sanity (Liella 2.1 ms, glibc 1.4 ms)
+cbench_fstree	mkstemp_unlink_close	max_ns	150000	phase 12 (§13.3): mkstemp, unlink and close in the scratch directory; sanity (Liella 19.3 us, glibc 19.1 us)
+cbench_fstree	getmntent_50_lines	max_ns	250000	phase 12 (§13.13; D-13.15): setmntent, 50 getmntent, endmntent; sanity (Liella 33 us after the phase-13 review, glibc 21 us)
+cbench_aio	pread_4k	max_ns	20000	phase 13 (§11.11): the synchronous call an AIO read stands for, 4 KiB from a cached regular file; sanity (Liella 0.51 us, glibc 0.50 us)
+cbench_aio	aio_read_suspend_4k	max_ns	500000	phase 13 (§11.11; D-11.8): aio_read of 4 KiB from a cached regular file, aio_suspend until done, aio_return; two thread wakes in both libraries (Liella: the io_uring helper and back; glibc: a worker and back); sanity (VM, noisy: Liella 25-46 us, glibc 23-53 us)
+cbench_aio	lio_listio_wait_16x4k	max_ns	2000000	phase 13 (§11.11; D-11.8): lio_listio(LIO_WAIT) of 16 reads of 4 KiB on one descriptor, run one after the other (§11.11 order); sanity (VM, noisy: Liella 54-90 us, glibc 39-58 us; optimization target: linked submissions)
+cbench_services	gettext_found	max_ns	20000	phase 13 (§7.7; D-7.12): gettext of a msgid a fixture .mo holds, en_US.UTF-8; sanity (Liella 2.4 us after the review before phase 14: one stat of the catalog per lookup by decision; glibc 67 ns)
+cbench_services	gettext_missing	max_ns	25000	phase 13: gettext of a msgid the catalog lacks (every directory variant tried); sanity (Liella 2.8 us, glibc 0.30 us)
+cbench_services	ngettext_found	max_ns	20000	phase 13: ngettext(n = 3) of a plural entry; sanity (Liella 2.5 us, glibc 87 ns)
+cbench_services	catgets_found	max_ns	100	phase 13 (§7.8; D-7.12): catgets of a message a fixture .cat holds; sanity (Liella 10 ns, glibc 4.7 ns)
+cbench_services	mq_send_receive_4	max_ns	8000	phase 13 (§25.3; D-25.5): mq_send then mq_receive of 4 bytes on the program's own queue; sanity (Liella 0.88 us, glibc 0.85 us)
+cbench_services	shm_open_map_unlink	max_ns	120000	phase 13 (§25.4): shm_open, ftruncate, mmap, munmap, close, shm_unlink of 4 KiB; sanity (Liella 13.7 us, glibc 12.1 us)
+cbench_services	vsyslog_masked	max_ns	100	phase 13 (§26.1; D-26.2): vsyslog with a priority the mask excludes (nothing formatted or sent); sanity (Liella 10 ns, glibc 23 ns)
+cbench_services	openlog_closelog	max_ns	400	phase 13: openlog without LOG_NDELAY, closelog (no connection); sanity (Liella 41 ns, glibc 41 ns)
+cbench_services	malloc_usable_size	max_ns	60	phase 13 (§3.2; D-3.4): a live 100-byte block (the pointer validated); sanity (Liella 7.8 ns, glibc 3.0 ns)
+cbench_services	mallinfo2	max_ns	15000	phase 13 (§3.2; D-3.4): the statistics scan the slab records; sanity (Liella 1.5 us after the review before phase 14, glibc 0.13 us)
+cbench_services	malloc_info_devnull	max_ns	50000	phase 13 (§3.2; D-3.4): the XML report to /dev/null through a stream; sanity (Liella 5.5 us after the review before phase 14, glibc 1.9 us)
+cbench_opt	snprintf_ls_line	max_ns	1066	P10 baseline (optimization stage): an ls -l line (eight conversions) into a buffer; sanity (shiki: Liella 1.37 us, glibc 0.26 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (355 ns, 2026-10-05).
+cbench_opt	strcmp_names	max_ns	41	P10 baseline (optimization stage): neighbouring file names, as a sort compares them; sanity (Liella 11 ns, glibc 5.5 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (13 ns, 2026-10-05).
+cbench_opt	strcoll_en_us_names	max_ns	156	P10 baseline (optimization stage): the same pairs in en_US.UTF-8; sanity (Liella 135 ns, glibc 31 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (52 ns, 2026-10-05).
+cbench_opt	iconv_utf8_utf16_mixed_4k	max_ns	47927	P10 baseline (optimization stage): 4 KiB of mixed-script UTF-8 to UTF-16LE; sanity (Liella 42 us, glibc 7.7 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (15975 ns, 2026-10-05).
+cbench_opt	strftime_date_en_us	max_ns	1055	P10 baseline (optimization stage): date(1)'s default format in en_US.UTF-8; sanity (Liella 0.72 us, glibc 0.12 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (351 ns, 2026-10-05).
+cbench_opt	mktime_posix_rule	max_ns	1207	P10 baseline (optimization stage): mktime under a POSIX TZ rule; sanity (Liella 0.75 us, glibc 0.14 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (402 ns, 2026-10-05).
+cbench_opt	re_sed_kv	max_ns	17830	P10 baseline (optimization stage): a sed s/// pattern with two subexpressions, per line of a 256-line text; sanity (Liella 12.7 us, glibc 1.1 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (5943 ns, 2026-10-05).
+cbench_opt	fnmatch_names_ch	max_ns	277	P10 baseline (optimization stage): *.[ch] per file name; sanity (Liella 0.70 us, glibc 0.15 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (92 ns, 2026-10-05).
+cbench_opt	wordexp_plain_8	max_ns	6292	P10 baseline (optimization stage): eight plain words, WRDE_NOCMD; sanity (Liella 3.2 us, glibc 0.56 us) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (2097 ns, 2026-10-05).
+cbench_opt	gettext_found	max_ns	1440	P10 baseline (optimization stage): a msgid the fixture catalog holds; sanity (Liella 2.0 us, glibc 68 ns) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (480 ns, 2026-10-05).
+cbench_opt	cold_exec_once	max_ns	3048702	P10 baseline (optimization stage): execve to exit of a program calling every P10 target once, median of 31; sanity (Liella 1.2 ms, glibc 1.1 ms) Tightened at the end of the optimization pass to 3x the final Liella time on shiki (1016234 ns, 2026-10-05).
+#
+# P10 final (end of the optimization pass, owner ruling 2026-10-05): every row of the optimization
+# benchmarks within 1.25x of its achieved ratio to the host C library, the achieved ratio being
+# the worst of the final runs (slowest Liella round over fastest host round).
+cbench_opt	snprintf_d	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_ld_large	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_x08	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_s_path	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_s_d_colon	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_ls_line	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	sprintf_chk_ls_nlink	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; ls -l mode + link count column, PRINTF-MULTI
+cbench_opt	snprintf_mixed	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_f2	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_g	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_e	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	snprintf_f_large	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fprintf_ls_line	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fprintf_du_line	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcmp_names	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcmp_equal_16	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcmp_late_256	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcoll_c_names	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcoll_c_utf8_names	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcoll_en_us_names	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcoll_en_us_equal_16	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strcoll_en_us_utf8_16	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf8_utf16_ascii_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf8_utf16_mixed_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf16_utf8_mixed	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf8_utf32_mixed_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf8_utf16_name	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_open_conv_close_name	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_utf8_8859_15_latin_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	iconv_8859_15_utf8_latin	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_ls_iso	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_ls_recent_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_date_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_iso8601_tz	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_c_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_log	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	strftime_ls_recent_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	mktime_new_york	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	localtime_r_new_york	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	mktime_utc	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	mktime_posix_rule	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	localtime_r_posix_rule	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_literal	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_comment	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_ipv4	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_alt	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_icase_absent	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_grep_dotstar	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_sed_kv	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_sed_swap	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	regcomp_regfree_sed_kv	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	regcomp_regfree_ipv4	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_mt4_shared	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; four threads x 1024 searches of the re_grep_alt pattern through ONE shared regex_t, per batch (owner 2026-10-07: shows matcher-cache contention); the regression limit per CPU model is in host_limits.tsv
+cbench_opt	re_mt4_distinct	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the same with one regex_t per thread; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_star_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_ch	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_lib_so	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_period	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_question	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_class	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_names_casefold	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_paths_pathname	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	fnmatch_paths_leading_dir	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_tilde_var	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_arith	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_plain_8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_quoted	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_split_var	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	wordexp_param_forms	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	gettext_found	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	gettext_missing	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	ngettext_found	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	gettext_no_catalog	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	gettext_c_locale	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_opt	execvp_missing	max_ns	200000	STRESS-ENV-AUDIT-2: execvp of a command in no PATH directory, ENOENT after one execve per directory (3 in the fixed PATH, 200 under `--stress path`); sanity, dominated by the kernel
+cbench_opt	gettext_vary_msgid	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; new row of the gettext cache task, gated on shiki since PJ-9 (host_limits.tsv)
+cbench_opt	gettext_language_alternating	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; new row of the gettext cache task, gated on shiki since PJ-9 (host_limits.tsv)
+cbench_opt	gettext_language_putenv_alone	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; new row of the gettext cache task, no host_limits entry yet (measured and reported, not gated)
+cbench_opt	gettext_language_steady	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; new row of GETTEXT-MEMO-HIT-COST (LANGUAGE set, no putenv between calls), no host_limits entry yet (measured and reported, not gated)
+cbench_opt	cold_exec_empty	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regcomp_regexec_regfree_email	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regexec_literal_1k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regexec_submatch_1k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regexec_class_nomatch_1k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regexec_backref	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	regexec_pathological_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	fnmatch_star	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	fnmatch_bracket	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	fnmatch_pathname	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	fnmatch_pathname_nomatch	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	glob_1000_sorted	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	glob_1000_nosort	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	wordexp_tilde_var	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_patterns	wordexp_arith	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	gmtime_r	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	timegm	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	localtime_r_utc	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	localtime_r_new_york	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	localtime_r_new_york_2100	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	mktime_new_york	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	localtime_r_posix_rule	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	strftime_iso	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_time	strftime_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	isalpha_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	toupper_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strtod_c	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	towupper_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	iswalpha_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	wcwidth_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	mbrtowc_utf8_3	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strcoll_utf8_16	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strtod_utf8	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	newlocale_free	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	iconv_utf8_utf16_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	iconv_utf8_8859_15_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	iconv_utf8_ascii_translit_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strcasecmp_c_16	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strcasecmp_c_256	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strncasecmp_c_64	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strcasecmp_utf8_256	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_locale	strcasecmp_en_256	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_locale	fnmatch_casefold_en_32	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; case-insensitive comparison rows added by PJ-23 (D-5.5 follow-up); the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	snprintf_d	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	snprintf_mixed	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	fprintf_d	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	fputs_32	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	putc	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_stdio	fwrite_4k	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; the regression limit per CPU model is in host_limits.tsv
+cbench_locale	mbrtowc_en_us_3	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	fnmatch_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	strtod_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	snprintf_f_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	iswalpha_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_memref	memcpy_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcpy_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcpy_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcpy_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memset_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memset_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memset_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcmp_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcmp_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcmp_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcmp_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	__memcmpeq_eq_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_eq_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_eq_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_eq_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_eq_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_eq_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_head_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	__memcmpeq_tail_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_eq_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_head_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_8	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_16	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_32	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_128	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	bcmp_tail_1k	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	memcmp_diff8_64	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	memcmp_diff8_96	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	memcmp_diff8_127	ratio_host	1.00	MEMCMP-EQ-3 (2026-10-10): Liella vs glibc for the equality-call shapes (equal, first byte differs, last byte differs) and the sort -C shape; report only, no host limit (limits are the owner's)
+cbench_memref	memcmp_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcmp_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memchr_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memchr_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memchr_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memchr_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memchr_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memchr_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strlen_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strlen_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strlen_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strlen_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strlen_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strlen_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strnlen_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strnlen_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strnlen_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strnlen_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	strnlen_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row strnlen_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	rawmemchr_64	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row rawmemchr_64; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	rawmemchr_4k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row rawmemchr_4k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	rawmemchr_64k	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row rawmemchr_64k; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_4k_off	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memcpy_4k_off; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_4k_off	ratio_host	1.00	MEMREF (owner 2026-10-08): glibc parity is the upper bound for the bench_mem row memset_4k_off; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_16	ratio_host	1.00	MEM-K1 (owner 2026-10-08): glibc parity is the upper bound; the small-copy kernel (D-4.22) at the C symbol; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_16	ratio_host	1.00	MEM-K1 (owner 2026-10-08): glibc parity is the upper bound; the small-copy kernel (D-4.22) at the C symbol; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memmove_16	ratio_host	1.00	MEM-K1 (owner 2026-10-08): glibc parity is the upper bound; the small-copy kernel (D-4.22) at the C symbol; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_128	ratio_host	1.00	MEM-K5 (owner 2026-10-08): glibc parity is the upper bound; the copy kernel's 65-128 byte class (D-4.22) at the C symbol, at its largest size; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memset_128	ratio_host	1.00	MEM-K5 (owner 2026-10-08): glibc parity is the upper bound; the fill kernel's 65-128 byte class (D-4.22) at the C symbol, at its largest size; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memmove_128	ratio_host	1.00	MEM-K5 (owner 2026-10-08): glibc parity is the upper bound; the copy kernel's 65-128 byte class (D-4.22) at the C symbol, at its largest size; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_144	ratio_host	1.00	COPY-256 (D-4.25 amendment): glibc parity is the upper bound; the copy entry's 129-256 byte class at the C symbol (144 = the fstatat struct, 256 = statx); informational target, no host limit yet (reported, not gated).
+cbench_memref	memmove_144	ratio_host	1.00	COPY-256 (D-4.25 amendment): glibc parity is the upper bound; the copy entry's 129-256 byte class at the C symbol (144 = the fstatat struct, 256 = statx); informational target, no host limit yet (reported, not gated).
+cbench_memref	memcpy_256	ratio_host	1.00	COPY-256 (D-4.25 amendment): glibc parity is the upper bound; the copy entry's 129-256 byte class at the C symbol (144 = the fstatat struct, 256 = statx); informational target, no host limit yet (reported, not gated).
+cbench_memref	memmove_256	ratio_host	1.00	COPY-256 (D-4.25 amendment): glibc parity is the upper bound; the copy entry's 129-256 byte class at the C symbol (144 = the fstatat struct, 256 = statx); informational target, no host limit yet (reported, not gated).
+cbench_memref	memcmp_128	ratio_host	1.00	MEM-K5 (owner 2026-10-08): glibc parity is the upper bound; the compare kernel's 65-128 byte class (D-4.23) at the C symbol, at its largest size; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcmp_16	ratio_host	1.00	STR-CHR-CMP-SHORT-2 (2026-10-22): glibc parity is the upper bound; memcmp at the C symbol for the 9-16 byte class (the CI instruction rows, so --rows can select them, #734); informational target, no host limit (limits are the owner's)
+cbench_memref	memcmp_144	ratio_host	1.00	STR-CHR-CMP-SHORT-2 (2026-10-22): glibc parity is the upper bound; memcmp at the C symbol for the 129+ byte (144) class (the CI instruction rows, so --rows can select them, #734); informational target, no host limit (limits are the owner's)
+cbench_memref	memcmp_256	ratio_host	1.00	STR-CHR-CMP-SHORT-2 (2026-10-22): glibc parity is the upper bound; memcmp at the C symbol for the 129+ byte (256) class (the CI instruction rows, so --rows can select them, #734); informational target, no host limit (limits are the owner's)
+cbench_memref	memmove_64	ratio_host	1.00	MEM-K1 (owner 2026-10-08): glibc parity is the upper bound; the small-copy kernel (D-4.22) at the C symbol; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memmove_4k	ratio_host	1.00	MEM-K1 (owner 2026-10-08): glibc parity is the upper bound; the small-copy kernel (D-4.22) at the C symbol; informational target, the regression limit per CPU model is in host_limits.tsv
+cbench_memref	memcpy_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memset_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memcmp_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memchr_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strlen_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strnlen_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	rawmemchr_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strcmp_16_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memcpy_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memset_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memcmp_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	memchr_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strlen_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strnlen_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	rawmemchr_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_memref	strcmp_64_mix	ratio_host	1.00	BENCH-ALIGN (owner 2026-10-09): glibc parity is the upper bound; operands cycle through start offsets weighted like real calls (ARG-HIST); informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_locale	nl_langinfo_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01/LV-3; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	localeconv_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01/LV-3; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	strftime_names_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-01/LV-3; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	iswalpha_l_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-4; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	towupper_l_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-4; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	nl_langinfo_l_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-4; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_locale	iswctype_en_us	ratio_host	1.10	target: within about 10% of glibc (owner 2026-10-05), informational; compiled en_US.UTF-8 locale rows added by LV-4; per-CPU limits to be calibrated from the first merge bench that measures them (host_limits.tsv)
+cbench_malloc	malloc_free_16	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	malloc_free_32	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	malloc_free_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	malloc_free_128	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	malloc_free_256	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	malloc_free_1024	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	lifo_batch64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	realloc_grow_x2	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	realloc_grow_16step	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	calloc_free_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	calloc_free_4096	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	xthread_free_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strncmp_eq16	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strncmp_diff8	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strncmp_names64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchr_16_hit	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchr_16_miss	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchr_64_hit	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchr_64_miss	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchrnul_16_hit	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchrnul_16_miss	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchrnul_64_hit	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strchrnul_64_miss	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	memrchr_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	memrchr_64_hit	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	memrchr_4k	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mempcpy_16	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mempcpy_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	memcpy_chk_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strcpy_chk_16	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	strcpy_chk_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	getc	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	getc_unlocked	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	putc_unlocked	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	fwrite_unlocked_16	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	fwrite_unlocked_64	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	getenv_hit_mid	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	getenv_hit_last	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	getenv_miss	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	errno_location	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	ctype_b_loc	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	ctype_get_mb_cur_max	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mutex_lock_unlock_normal	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mutex_lock_unlock_recursive	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mutex_lock_unlock_normal_mt	ratio_host	1.00	MUTEX-3 (owner hot-path rule 2026-10-09): the normal mutex row after a pthread_create + join (multi-threaded mode; the row without _mt is the single-threaded one); glibc parity is the upper bound; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	mutex_lock_unlock_recursive_mt	ratio_host	1.00	MUTEX-3 (owner hot-path rule 2026-10-09): the recursive mutex row after a pthread_create + join (multi-threaded mode; the row without _mt is the single-threaded one); glibc parity is the upper bound; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_hot	sys_fstat	ratio_host	1.00	syscall wrapper: user-instruction column is the measure, kernel time is noise; informational, never gated
+cbench_hot	sys_read_1	ratio_host	1.00	syscall wrapper: user-instruction column is the measure, kernel time is noise; informational, never gated
+cbench_hot	sys_close_ebadf	ratio_host	1.00	syscall wrapper: user-instruction column is the measure, kernel time is noise; informational, never gated
+cbench_locale	mbrtowc_utf8_1	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_locale	mbrtowc_utf8_2	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	realloc_within_usable	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	realloc_moving	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	realloc_null_24	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	heap_mix_real	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_malloc	heap_mix_real_2t	ratio_host	1.00	BENCH-HOT (owner 2026-10-09): glibc parity is the upper bound for this HOT function; informational target, no host_limits entry yet (not gated until calibrated on shiki)
+cbench_startup	exec_true_static	max_ns	5000000	STARTUP-COST: posix_spawn of this program (child returns 0 from main) + waitpid; sanity, kernel-dominated; compare Liella static with glibc static/dynamic
+cbench_startup	exec_true_echo	max_ns	5000000	STARTUP-COST: as exec_true_static, the child writes one line with puts to /dev/null; sanity
+cbench_startup	exec_hello_locale	max_ns	8000000	STARTUP-COST: child does setlocale(LC_ALL, "") + printf under LC_ALL=en_US.UTF-8; sanity (locale loading)
+cbench_startup	exec_true_static	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; process lifetime (exec to exit), STARTUP-COST
+cbench_startup	exec_true_echo	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; process lifetime (exec to exit), STARTUP-COST
+cbench_startup	exec_hello_locale	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; process lifetime (exec to exit), STARTUP-COST
+cbench_startup	spawn_bin_true	max_ns	5000000	STARTUP-COST: posix_spawn of the system /bin/true + waitpid, stdout to /dev/null; the parent-side path alone (same child for every build); sanity
+cbench_startup	spawn_bin_true	ratio_host	1.10	target: within about 10% of glibc (dynamic), informational; parent-side spawn path, STARTUP-COST
+cbench_startup	startup_instr_c	max_ns	8000000	CI-STARTUP: fork + exec + wait of one child: start + exit, no setlocale (C locale); sanity only, the gate is its user-mode instruction limit (bench/instr_limits.tsv)
+cbench_startup	startup_instr_setloc	max_ns	8000000	CI-STARTUP: fork + exec + wait of one child: setlocale(LC_ALL, "") under en_US.UTF-8, exit; sanity only, the gate is its user-mode instruction limit (bench/instr_limits.tsv)
+cbench_startup	startup_instr_printf	max_ns	8000000	CI-STARTUP: fork + exec + wait of one child: setlocale(LC_ALL, "") under en_US.UTF-8 + one printf; sanity only, the gate is its user-mode instruction limit (bench/instr_limits.tsv)
+cbench_startup	startup_instr_wctype	max_ns	8000000	CI-STARTUP: fork + exec + wait of one child: setlocale(LC_ALL, "") under en_US.UTF-8 + iswalpha/towupper/wcwidth of U+00E9; sanity only, the gate is its user-mode instruction limit (bench/instr_limits.tsv)
+cbench_fstree	opendir_readdir_closedir_1000	ratio_host	1.00	HOT (CALL-FREQ): a 1,000-entry directory read start to end; glibc twin added by READDIR-1
+cbench_fstree	readdir_entry	ratio_host	1.00	HOT (CALL-FREQ): readdir per entry over an open stream; glibc twin added by READDIR-1
+cbench_fstree	fdopendir_readdir_closedir_99	ratio_host	1.00	WL-HOT-DU: the per-directory step of du/ls -R (openat, fdopendir, readdir, closedir); report-only (no host_limits entry yet)
+cbench_libm	expf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp2f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp2	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp2l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp2f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp10f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp10	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp10l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp10f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expm1f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expm1	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expm1l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expm1f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	logf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	logl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	logf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log2f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log2	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log2l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log2f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log10f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log10	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log10l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log10f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log1pf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log1p	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log1pl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log1pf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cbrtf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cbrt	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cbrtl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cbrtf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sqrtf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sqrt	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sqrtl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sqrtf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sin	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cosf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cos	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cosl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cosf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tan	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asin	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acosf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acos	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acosl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acosf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atan	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinhf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinhl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinhf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	coshf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cosh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	coshl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	coshf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanhf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanhl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tanhf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinhf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinhl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	asinhf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acoshf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acosh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acoshl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	acoshf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanhf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanh	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanhl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atanhf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erff	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erfl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erff128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erfcf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erfc	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erfcl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	erfcf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tgammaf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tgamma	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tgammal	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	tgammaf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	lgammaf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	lgamma	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	lgammal	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	lgammaf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j0f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j0	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j0l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j0f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j1f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j1	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j1l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	j1f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y0f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y0	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y0l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y0f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y1f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y1	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y1l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	y1f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	powf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	pow	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	powl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	powf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	hypotf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	hypot	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	hypotl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	hypotf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atan2f	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atan2	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atan2l	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	atan2f128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	jnf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	jn	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	jnl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	jnf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	ynf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	yn	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	ynl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	ynf128	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cexpf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cexp	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cexpl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	clogf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	clog	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	clogl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	csinf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	csin	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	csqrtf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	csqrt	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	csqrtl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cpowf	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cpow	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	cpowl	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp_qnan	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expf_qnan	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp_tiny	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp_small	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp_overflow_errno	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sin_huge	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	exp_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	log_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sin_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	expf_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	sinf_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_libm	pow_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)

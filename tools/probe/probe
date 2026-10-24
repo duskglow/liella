@@ -1,0 +1,589 @@
+#!/usr/bin/env python3
+# LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
+# probe - cached black-box probe service (task PR-8).  Installed on keke as ~/bin/probe.
+#
+# Compiles one C program, runs it against the system glibc (a black box: only its behaviour is
+# observed) and against Liella (static link exactly like conformance/run.sh), and prints both
+# results side by side.  Results are cached by content in ~/probe-cache (machine state, never
+# committed).  Stdlib only.  See tools/probe/README.md for usage.
+import argparse
+import base64
+import datetime
+import fcntl
+import hashlib
+import json
+import os
+import re
+import resource
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+CACHE = os.environ.get("PROBE_CACHE") or os.path.join(HOME, "probe-cache")
+TMPROOT = os.path.join(HOME, "probe-tmp")
+CFLAGS = ["-std=gnu17", "-O1", "-fno-builtin", "-fstack-protector-strong"]
+KEEP = 1 << 20          # bytes of each stream kept in the cache
+SHOWN = 2000            # bytes of each stream shown by default
+C_KEYWORDS = set("if else for while do switch case return sizeof defined main static inline void int char long short "
+                 "unsigned signed float double struct union enum typedef const volatile register extern goto break "
+                 "continue default _Alignof _Alignas _Static_assert __attribute__ __asm__ asm typeof __typeof__ "
+                 "offsetof va_start va_end va_arg va_copy".split())
+
+
+def die(msg, code=2):
+    print("probe: " + msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def sha(*parts):
+    h = hashlib.sha256()
+    for p in parts:
+        if isinstance(p, str):
+            p = p.encode("utf-8", "surrogateescape")
+        h.update(len(p).to_bytes(8, "little"))
+        h.update(p)
+    return h.hexdigest()
+
+
+def sha_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def esc(b, limit=None):
+    """Bytes -> the escaped one-line form of spec/behaviour/*.glibc.txt (\\n, \\t, \\\\, \\xNN)."""
+    out = []
+    for c in (b[:limit] if limit is not None else b):
+        if c == 10:
+            out.append("\\n")
+        elif c == 9:
+            out.append("\\t")
+        elif c == 13:
+            out.append("\\r")
+        elif c == 92:
+            out.append("\\\\")
+        elif 32 <= c < 127:
+            out.append(chr(c))
+        else:
+            out.append("\\x%02x" % c)
+    return "".join(out)
+
+
+# ---------------------------------------------------------------- source facts
+def title_of(src):
+    m = re.search(r"^\s*(?://+\s*(.*)|/\*+\s*(.*?)(?:\*/)?\s*$)", src, re.M)
+    t = (m.group(1) or m.group(2) or "").strip() if m else ""
+    return t or "(untitled)"
+
+
+def funcs_of(src):
+    s = re.sub(r"/\*.*?\*/|//[^\n]*", " ", src, flags=re.S)
+    s = re.sub(r'"(?:\\.|[^"\\])*"', '""', s)
+    defined = set(re.findall(r"^[A-Za-z_][\w \t\*]*?\b(\w+)\s*\([^;{)]*\)\s*\{", s, re.M))
+    names = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", s))
+    return sorted(n for n in names if n not in C_KEYWORDS and n not in defined)
+
+
+# ---------------------------------------------------------------- Liella tree
+def tree_commit(tree):
+    try:
+        with open(os.path.join(tree, ".published"), encoding="utf-8") as f:
+            w = f.read().split()
+            if w:
+                return w[0]
+    except OSError:
+        pass
+    try:
+        r = subprocess.run(["git", "-C", tree, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=20)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unknown"
+
+
+def products(tree):
+    d = os.path.join(tree, "target", "liella")
+    return {"crt": os.path.join(d, "liella-crt1.o"), "libc": os.path.join(d, "libc.a"),
+            "libm": os.path.join(d, "libm.a"), "libpthread": os.path.join(d, "libpthread.a")}
+
+
+def products_stale(tree):
+    """None if the products exist and no source is newer; else 'missing' or 'stale'."""
+    p = products(tree)
+    if not (os.path.isfile(p["crt"]) and os.path.isfile(p["libc"])):
+        return "missing"
+    ref = min(os.path.getmtime(p["crt"]), os.path.getmtime(p["libc"]))
+    for sub in ("crates", "csys", "include"):
+        for dp, _dn, fn in os.walk(os.path.join(tree, sub)):
+            for n in fn:
+                if n.endswith((".rs", ".toml", ".h", ".S", ".s", ".c", ".ld", ".map")):
+                    try:
+                        if os.path.getmtime(os.path.join(dp, n)) > ref:
+                            return "stale"
+                    except OSError:
+                        pass
+    for n in ("Cargo.lock", "Cargo.toml"):
+        try:
+            if os.path.getmtime(os.path.join(tree, n)) > ref:
+                return "stale"
+        except OSError:
+            pass
+    return None
+
+
+def products_hash(tree):
+    p = products(tree)
+    return sha(*[sha_file(p[k]) for k in ("crt", "libc", "libm", "libpthread") if os.path.isfile(p[k])])
+
+
+# ---------------------------------------------------------------- cache
+def entry_dir(h):
+    return os.path.join(CACHE, h)
+
+
+def load(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def store(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(obj, f, indent=1)
+    os.replace(tmp, path)
+
+
+def find_entry(prefix):
+    if not os.path.isdir(CACHE):
+        die("no cache")
+    hits = [n for n in os.listdir(CACHE) if n.startswith(prefix) and os.path.isfile(os.path.join(CACHE, n, "meta.json"))]
+    if len(hits) != 1:
+        die("%s: %d matching entries" % (prefix, len(hits)))
+    return hits[0]
+
+
+def update_index(h, meta, verdict, commit):
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, "index.tsv")
+    clean = lambda s: re.sub(r"[\t\r\n]+", " ", s)
+    line = "\t".join([h, datetime.date.today().isoformat(), clean(meta["title"]), ",".join(meta["funcs"]), verdict, commit])
+    old = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = [x.rstrip("\n") for x in f if x.split("\t", 1)[0] != h]
+    except OSError:
+        pass
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(old + [line]) + "\n")
+    os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- running
+def limits(mem_mb):
+    def f():
+        resource.setrlimit(resource.RLIMIT_AS, (mem_mb << 20, mem_mb << 20))
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (64 << 20, 64 << 20))
+        os.setsid()
+    return f
+
+
+def build(cmd, wd, out):
+    r = subprocess.run(cmd, cwd=wd, capture_output=True, timeout=300)
+    return r.returncode == 0 and os.path.isfile(out), (r.stdout + r.stderr)
+
+
+def run_exe(wd, args, stdin_data, env, timeout, mem_mb):
+    """Run ./probe in the scratch dir; the result record (streams stored base64)."""
+    outp, errp = os.path.join(wd, ".out"), os.path.join(wd, ".err")
+    t0 = time.time()
+    status, code, sig = "exit", None, None
+    with open(outp, "wb") as fo, open(errp, "wb") as fe:
+        p = subprocess.Popen(["./probe"] + args, cwd=wd, env=env, stdin=subprocess.PIPE, stdout=fo, stderr=fe,
+                             preexec_fn=limits(mem_mb))
+        try:
+            p.communicate(stdin_data, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            status = "timeout"
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            p.wait()
+        try:
+            os.killpg(p.pid, signal.SIGKILL)   # stray children of the probe
+        except OSError:
+            pass
+    if status == "exit":
+        if p.returncode < 0:
+            status, sig = "signal", -p.returncode
+        else:
+            code = p.returncode
+    with open(outp, "rb") as f:
+        so = f.read()
+    with open(errp, "rb") as f:
+        se = f.read()
+    return {"status": status, "code": code, "signal": sig, "seconds": round(time.time() - t0, 3),
+            "stdout_len": len(so), "stderr_len": len(se), "stdout_sha": hashlib.sha256(so).hexdigest(),
+            "stderr_sha": hashlib.sha256(se).hexdigest(),
+            "stdout": base64.b64encode(so[:KEEP]).decode(), "stderr": base64.b64encode(se[:KEEP]).decode()}
+
+
+def fail_record(status, text):
+    t = text[-4000:]
+    return {"status": status, "code": None, "signal": None, "seconds": 0, "stdout_len": 0, "stderr_len": len(t),
+            "stdout_sha": hashlib.sha256(b"").hexdigest(), "stderr_sha": hashlib.sha256(t).hexdigest(),
+            "stdout": "", "stderr": base64.b64encode(t).decode()}
+
+
+def same(a, b):
+    return all(a[k] == b[k] for k in ("status", "code", "signal", "stdout_sha", "stderr_sha", "stdout_len", "stderr_len"))
+
+
+def describe(r):
+    if r["status"] == "exit":
+        return "exit %d" % r["code"]
+    if r["status"] == "signal":
+        return "signal %d" % r["signal"]
+    return r["status"]
+
+
+def stream_text(r, which, full):
+    raw = base64.b64decode(r[which])
+    s = esc(raw, None if full else SHOWN)
+    n = r[which + "_len"]
+    note = "%d bytes" % n
+    if len(raw) < n:
+        note += ", stored %d" % len(raw)
+    if not full and len(raw) > SHOWN:
+        note += ", shown %d" % SHOWN
+    return "[%s] (%s)" % (s, note)
+
+
+def render(h, meta, g, lr, hit_g, hit_l, commit, tree, full=False):
+    v = "SAME" if same(g, lr) else "DIFFERENT"
+    out = ["probe %s  %s" % (h[:12], meta["title"]),
+           "liella: %s @ %s   cache: glibc %s, liella %s" % (tree, commit, "HIT" if hit_g else "miss", "HIT" if hit_l else "miss"),
+           "verdict: " + v, ""]
+    for name, r in (("glibc", g), ("liella", lr)):
+        note = " (compiler/linker output in stderr)" if r["status"] in ("compile-error", "link-error") else ""
+        out.append("%-6s status: %s%s" % (name, describe(r), note))
+        out.append("       stdout=" + stream_text(r, "stdout", full))
+        out.append("       stderr=" + stream_text(r, "stderr", full))
+    return v, "\n".join(out)
+
+
+def brief(r, full=False):
+    # --json used to cut each stream at SHOWN bytes even with --full (EFAULT-PATHS); --full lifts the cut here too.
+    d = {k: r[k] for k in ("status", "code", "signal", "stdout_len", "stderr_len")}
+    d["stdout"] = esc(base64.b64decode(r["stdout"]), None if full else SHOWN)
+    d["stderr"] = esc(base64.b64decode(r["stderr"]), None if full else SHOWN)
+    return d
+
+
+# ---------------------------------------------------------------- main run
+def do_run(a):
+    if os.geteuid() == 0:
+        die("refusing to run probes as root")
+    src_path = os.path.abspath(a.file)
+    try:
+        with open(src_path, "rb") as f:
+            src_b = f.read()
+    except OSError as e:
+        die("cannot read %s: %s" % (a.file, e))
+    src = src_b.decode("utf-8", "replace")
+    stdin_data = b""
+    if a.stdin:
+        try:
+            with open(a.stdin, "rb") as f:
+                stdin_data = f.read()
+        except OSError as e:
+            die("cannot read --stdin file: %s" % e)
+    flags = CFLAGS + (a.cflags.split() if a.cflags else [])
+    env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "LANG": "C"}
+    for kv in a.env:
+        if "=" not in kv:
+            die("--env wants K=V: " + kv)
+        k, v = kv.split("=", 1)
+        env[k] = v
+    args = a.args or []
+    tree = os.path.abspath(os.path.expanduser(a.liella))
+    if not os.path.isdir(tree):
+        die("no Liella tree at " + tree)
+    meta = {"title": title_of(src), "funcs": funcs_of(src), "flags": flags, "args": args, "env": env,
+            "stdin_len": len(stdin_data), "timeout": a.timeout}
+    hc = sha(src_b, *flags)                                             # compile key
+    h = sha(src_b, "\0".join(flags), "\0".join(args), stdin_data,
+            "\0".join("%s=%s" % kv for kv in sorted(env.items())), str(a.timeout))
+    stale = products_stale(tree)
+    commit = tree_commit(tree)
+    ed = entry_dir(h)
+    gpath = os.path.join(ed, "glibc.json")
+    g = None if a.no_cache else load(gpath)
+    lr = lpath = ph = None
+    if not stale:
+        ph = products_hash(tree)
+        lpath = os.path.join(ed, "liella-%s.json" % ph[:16])
+        lr = None if a.no_cache else load(lpath)
+    if (g is None or lr is None) and os.environ.get("PROBE_SLOT") != "1":
+        shared = os.path.join(HOME, "bin", "shared")
+        if os.path.exists(shared):
+            os.environ["PROBE_SLOT"] = "1"
+            os.execv(shared, [shared, sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+    hit_g, hit_l = g is not None, lr is not None
+    if g is None or lr is None:
+        os.makedirs(TMPROOT, exist_ok=True)
+        lockpath = os.path.join(TMPROOT, h[:16] + ".lock")
+        lock = open(lockpath, "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        top = os.path.join(TMPROOT, h[:16])
+        wd = os.path.join(top, "wd")       # the same path for both sides: probes may print it
+        shutil.rmtree(top, ignore_errors=True)
+        os.makedirs(wd)
+        penv = dict(env, HOME=wd, TMPDIR=wd)
+        exe = os.path.join(wd, "probe")
+        try:
+            shutil.copyfile(src_path, os.path.join(wd, "probe.c"))
+            if g is None:
+                gexe = os.path.join(entry_dir(hc), "glibc.bin")
+                gerr = os.path.join(entry_dir(hc), "glibc.compile.txt")
+                if not os.path.isfile(gexe):
+                    ok, txt = build(["gcc"] + flags + ["probe.c", "-o", "probe", "-lm", "-lpthread"], wd, exe)
+                    os.makedirs(entry_dir(hc), exist_ok=True)
+                    if ok:
+                        shutil.copyfile(exe, gexe)
+                    else:
+                        with open(gerr, "wb") as f:
+                            f.write(txt)
+                if os.path.isfile(gexe):
+                    shutil.copyfile(gexe, exe)
+                    os.chmod(exe, 0o755)
+                    g = run_exe(wd, args, stdin_data, penv, a.timeout, a.mem)
+                    os.unlink(exe)
+                else:
+                    with open(gerr, "rb") as f:
+                        g = fail_record("compile-error", f.read())
+                store(gpath, g)
+            if lr is None:
+                if stale:
+                    print("probe: Liella products %s in %s; running cargo xtask so" % (stale, tree), file=sys.stderr)
+                    benv = dict(os.environ, PATH=os.path.join(HOME, ".cargo", "bin") + os.pathsep + os.environ.get("PATH", ""))
+                    r = subprocess.run(["cargo", "xtask", "so"], cwd=tree, env=benv, capture_output=True, timeout=5400)
+                    if r.returncode != 0:
+                        die("cargo xtask so failed:\n" + (r.stdout + r.stderr)[-2000:].decode("utf-8", "replace"))
+                    if products_stale(tree) == "missing":
+                        die("products still missing after cargo xtask so")
+                    ph = products_hash(tree)
+                    lpath = os.path.join(ed, "liella-%s.json" % ph[:16])
+                    if not a.no_cache:
+                        lr = load(lpath)
+                        hit_l = lr is not None
+                if lr is None:
+                    p = products(tree)
+                    lexe = os.path.join(entry_dir(hc), "liella-%s.bin" % ph[:16])
+                    lerr = lexe + ".link.txt"
+                    if not os.path.isfile(lexe):
+                        # The conformance/run.sh line; libm/libpthread archives only if libc.a alone does not link.
+                        base = ["cc"] + flags + ["-static", "-nostdlib", "-I", os.path.join(tree, "include"), p["crt"], "probe.c"]
+                        sets = [[p["libc"]], [p["libc"], p["libm"], p["libpthread"]]]
+                        ok, txt = False, b""
+                        for libs in sets:
+                            libs = [x for x in libs if os.path.isfile(x)]
+                            ok, txt = build(base + libs + ["-lgcc", "-o", "probe"], wd, exe)
+                            if ok:
+                                break
+                        os.makedirs(entry_dir(hc), exist_ok=True)
+                        if ok:
+                            shutil.copyfile(exe, lexe)
+                        else:
+                            with open(lerr, "wb") as f:
+                                f.write(txt)
+                    if os.path.isfile(lexe):
+                        shutil.copyfile(lexe, exe)
+                        os.chmod(exe, 0o755)
+                        lr = run_exe(wd, args, stdin_data, penv, a.timeout, a.mem)
+                    else:
+                        with open(lerr, "rb") as f:
+                            lr = fail_record("link-error", f.read())
+                    store(lpath, lr)
+        finally:
+            shutil.rmtree(top, ignore_errors=True)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            lock.close()
+            try:
+                os.unlink(lockpath)
+            except OSError:
+                pass
+    if commit == "unknown" and ph:
+        commit = "products-" + ph[:8]
+    store(os.path.join(ed, "meta.json"), dict(meta, source=src, key=h, commit=commit, tree=tree))
+    v, text = render(h, meta, g, lr, hit_g, hit_l, commit, tree, a.full)
+    update_index(h, meta, v, commit)
+    if a.json:
+        print(json.dumps({"hash": h, "verdict": v, "title": meta["title"], "commit": commit,
+                          "cache": {"glibc": hit_g, "liella": hit_l}, "glibc": brief(g, a.full), "liella": brief(lr, a.full)}))
+    else:
+        print(text)
+    return 0 if v == "SAME" else 1
+
+
+# ---------------------------------------------------------------- find / show / record
+def latest_liella(ed):
+    cands = [os.path.join(ed, n) for n in os.listdir(ed) if n.startswith("liella-") and n.endswith(".json")]
+    if not cands:
+        die("no Liella result stored for " + os.path.basename(ed))
+    return load(max(cands, key=os.path.getmtime))
+
+
+def do_find(words):
+    try:
+        with open(os.path.join(CACHE, "index.tsv"), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        die("no index yet")
+    ws = [w.lower() for w in words]
+    n = 0
+    for ln in lines:
+        if all(w in ln.lower() for w in ws):
+            print(ln)
+            n += 1
+    print("(%d match%s; columns: hash, date, title, functions, verdict, liella commit)" % (n, "" if n == 1 else "es"), file=sys.stderr)
+    return 0 if n else 1
+
+
+def do_show(prefix, full):
+    h = find_entry(prefix)
+    ed = entry_dir(h)
+    meta = load(os.path.join(ed, "meta.json"))
+    g, lr = load(os.path.join(ed, "glibc.json")), latest_liella(ed)
+    _v, text = render(h, meta, g, lr, True, True, meta["commit"], meta["tree"], full)
+    print(text)
+    print("\nargs=%r env=%r stdin=%d bytes flags=%s timeout=%ss" % (meta["args"], meta["env"], meta["stdin_len"], " ".join(meta["flags"]), meta["timeout"]))
+    return 0
+
+
+def do_record(prefix):
+    h = find_entry(prefix)
+    meta = load(os.path.join(entry_dir(h), "meta.json"))
+    g = load(os.path.join(entry_dir(h), "glibc.json"))
+    label = meta["title"] + (" [args: %s]" % " ".join(meta["args"]) if meta["args"] else "")
+    if g["status"] == "exit":
+        ex = "exit=%d" % g["code"]
+    elif g["status"] == "signal":
+        ex = "signal=%d" % g["signal"]
+    else:
+        ex = "exit=" + g["status"]
+    print("== %s %s" % (label, ex))
+    print("stdout=[%s]" % esc(base64.b64decode(g["stdout"])) + ("" if g["stdout_len"] <= KEEP else " (truncated)"))
+    print("stderr=[%s]" % esc(base64.b64decode(g["stderr"])) + ("" if g["stderr_len"] <= KEEP else " (truncated)"))
+    return 0
+
+
+# ---------------------------------------------------------------- selftest
+SELFTESTS = [
+    ("same", "// selftest: same output\n#include <stdio.h>\nint main(void){ printf(\"hello %d\\n\", 42); fputs(\"err\\n\", stderr); return 3; }\n",
+     [], "SAME", "exit 3", "exit 3"),
+    ("different", "// selftest: different (AT_BASE: dynamic glibc has an interpreter, static Liella none)\n#include <stdio.h>\n#include <sys/auxv.h>\nint main(void){ printf(\"%d\\n\", getauxval(AT_BASE) != 0); return 0; }\n",
+     [], "DIFFERENT", "exit 0", "exit 0"),
+    ("crash", "// selftest: crash by signal\n#include <signal.h>\nint main(void){ raise(SIGSEGV); return 0; }\n",
+     [], "SAME", "signal 11", "signal 11"),
+    ("timeout", "// selftest: timeout\n#include <unistd.h>\nint main(void){ for(;;) pause(); }\n",
+     ["--timeout", "2"], "SAME", "timeout", "timeout"),
+]
+
+
+def do_selftest(a):
+    base = os.path.join(TMPROOT, "selftest-%d" % os.getpid())
+    os.makedirs(base)
+    env = dict(os.environ, PROBE_CACHE=os.path.join(base, "cache"), PROBE_SLOT="1")
+    me = [sys.executable, os.path.abspath(__file__)]
+    bad = 0
+
+    def call(*argv):
+        r = subprocess.run(me + list(argv), env=env, capture_output=True, text=True)
+        try:
+            return json.loads(r.stdout), r
+        except ValueError:
+            return None, r
+
+    try:
+        for name, code, extra, want_v, want_g, want_l in SELFTESTS:
+            f = os.path.join(base, name + ".c")
+            with open(f, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(code)
+            j1, r1 = call(f, "--liella", a.liella, "--json", *extra)
+            j2, r2 = call(f, "--liella", a.liella, "--json", *extra)
+            ok = bool(j1 and j2) and j1["verdict"] == want_v and describe(j1["glibc"]) == want_g and describe(j1["liella"]) == want_l \
+                and not j1["cache"]["glibc"] and not j1["cache"]["liella"] and j2["cache"]["glibc"] and j2["cache"]["liella"]
+            if ok and name == "same":
+                ok = j1["glibc"]["stdout"] == "hello 42\\n" and j1["glibc"]["stderr"] == "err\\n"
+            print("selftest %-9s %s" % (name, "ok" if ok else "FAIL " + (json.dumps([j1, j2]) if j1 and j2 else r1.stdout + r1.stderr)[:800]))
+            bad += not ok
+        j, r = call(os.path.join(base, "same.c"), "--liella", a.liella, "--json", "--no-cache")
+        ok = bool(j) and not j["cache"]["glibc"] and not j["cache"]["liella"]
+        print("selftest %-9s %s" % ("no-cache", "ok" if ok else "FAIL " + r.stdout + r.stderr))
+        bad += not ok
+        h = j["hash"] if j else ""
+        r = subprocess.run(me + ["--find", "selftest", "same"], env=env, capture_output=True, text=True)
+        ok = r.returncode == 0 and h in r.stdout
+        print("selftest %-9s %s" % ("find", "ok" if ok else "FAIL " + r.stdout + r.stderr))
+        bad += not ok
+        r = subprocess.run(me + ["--record", h[:10]], env=env, capture_output=True, text=True)
+        ok = r.stdout == "== selftest: same output exit=3\nstdout=[hello 42\\n]\nstderr=[err\\n]\n"
+        print("selftest %-9s %s" % ("record", "ok" if ok else "FAIL " + r.stdout + r.stderr))
+        bad += not ok
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+    print("selftest: %s" % ("all passed" if not bad else "%d FAILED" % bad))
+    return 1 if bad else 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Cached black-box probe: run a C program against glibc and Liella and compare.")
+    ap.add_argument("file", nargs="?", help="probe C source")
+    ap.add_argument("--liella", default=os.path.join(HOME, "w", "nightly"), help="Liella tree (default ~/w/nightly)")
+    ap.add_argument("--args", nargs="*", help="program arguments (give --args last)")
+    ap.add_argument("--stdin", help="file fed to standard input")
+    ap.add_argument("--env", action="append", default=[], metavar="K=V", help="environment variable (repeatable)")
+    ap.add_argument("--timeout", type=float, default=20, help="seconds per run (default 20)")
+    ap.add_argument("--mem", type=int, default=2048, help="address-space limit in MiB (default 2048)")
+    ap.add_argument("--cflags", help="extra compiler flags (part of the cache key)")
+    ap.add_argument("--no-cache", action="store_true", help="ignore the cache (results are stored again)")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--full", action="store_true", help="show whole streams, not the first %d bytes" % SHOWN)
+    ap.add_argument("--find", nargs="+", metavar="WORD", help="search the index (all words must match)")
+    ap.add_argument("--show", metavar="HASH", help="print a stored result")
+    ap.add_argument("--record", metavar="HASH", help="print a block in spec/behaviour/*.glibc.txt style (glibc result)")
+    ap.add_argument("--selftest", action="store_true")
+    a = ap.parse_args()
+    if a.find:
+        return do_find(a.find)
+    if a.show:
+        return do_show(a.show, a.full)
+    if a.record:
+        return do_record(a.record)
+    if a.selftest:
+        sh = os.path.join(HOME, "bin", "shared")
+        if os.environ.get("PROBE_SLOT") != "1" and os.path.exists(sh):
+            os.environ["PROBE_SLOT"] = "1"
+            os.execv(sh, [sh, sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+        return do_selftest(a)
+    if not a.file:
+        ap.error("a source file is required")
+    return do_run(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

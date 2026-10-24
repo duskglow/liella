@@ -1,0 +1,331 @@
+# DL-0b record: ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39; x86_64; loader /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+
+== errors: dlopen(RTLD_NOW) of each file (path DIR/<name>; a name without DIR when noted)
+<dir>/nope.so | ret=NULL | dlerror=[<dir>/nope.so: cannot open shared object file: No such file or directory] | again=NULL
+libnope_xyz.so                     | ret=NULL | dlerror=[libnope_xyz.so: cannot open shared object file: No such file or directory] | again=NULL
+<dir>/text.so | ret=NULL | dlerror=[<dir>/text.so: file too short] | again=NULL
+<dir>/empty.so | ret=NULL | dlerror=[<dir>/empty.so: file too short] | again=NULL
+<dir>/short.so | ret=NULL | dlerror=[<dir>/short.so: file too short] | again=NULL
+<dir>/subdir | ret=NULL | dlerror=[<dir>/subdir: cannot read file data: Is a directory] | again=NULL
+<dir>/class32.so | ret=NULL | dlerror=[<dir>/class32.so: wrong ELF class: ELFCLASS32] | again=NULL
+<dir>/machine.so | ret=NULL | dlerror=[<dir>/machine.so: cannot open shared object file: No such file or directory] | again=NULL
+<dir>/msb.so | ret=NULL | dlerror=[<dir>/msb.so: ELF file data encoding not little-endian] | again=NULL
+<dir>/osabi.so | ret=NULL | dlerror=[<dir>/osabi.so: ELF file OS ABI invalid] | again=NULL
+<dir>/etype_rel.o | ret=NULL | dlerror=[<dir>/etype_rel.o: only ET_DYN and ET_EXEC can be loaded] | again=NULL
+<dir>/trunc.so | ret=NULL | dlerror=[<dir>/trunc.so: cannot read file data] | again=NULL
+<dir>/pie_exe | ret=NULL | dlerror=[<dir>/pie_exe: cannot dynamically load position-independent executable] | again=NULL
+<dir>/nopie_exe | ret=NULL | dlerror=[<dir>/nopie_exe: cannot dynamically load executable] | again=NULL
+<dir>/libMissingDep.so | ret=NULL | dlerror=[libGone.so: cannot open shared object file: No such file or directory] | again=NULL
+<dir>/libU.so | ret=NULL | dlerror=[<dir>/libU.so: undefined symbol: undefined_symbol_xyz] | again=NULL
+<dir>/libW.so | ret=NULL | dlerror=[<dir>/libVer.so: version `VER_2' not found (required by <dir>/libW.so)] | again=NULL
+ctor C
+<dir>/libC.so | ret=handle | dlerror=NULL | again=NULL
+"" (empty name)                    | ret=handle | dlerror=NULL | again=NULL
+== errors: other calls
+ctor U
+<dir>/libU.so | ret=handle | dlerror=NULL | again=NULL
+ctor U
+LAZY undefined, open               | ret=handle | dlerror=NULL | again=NULL
+LAZY undefined, dlsym use_undef    | ret=handle | dlerror=NULL | again=NULL
+LAZY then NOW|NOLOAD               | ret=handle | dlerror=NULL | again=NULL
+LAZY then NOW                      | ret=handle | dlerror=NULL | again=NULL
+mode 0                             | ret=NULL | dlerror=[<dir>/libC.so: invalid mode for dlopen(): Invalid argument] | again=NULL
+ctor C
+mode NOW|LAZY                      | ret=handle | dlerror=NULL | again=NULL
+NOLOAD, not loaded                 | ret=NULL | dlerror=NULL | again=NULL
+dlopen(NULL)                       | ret=handle | dlerror=NULL | again=NULL
+ctor C
+dlsym(handle, present)             | ret=handle | dlerror=NULL | again=NULL
+ctor C
+dlsym(handle, missing)             | ret=NULL | dlerror=[<dir>/libC.so: undefined symbol: no_such_symbol_xyz] | again=NULL
+dlsym(RTLD_DEFAULT, missing)       | ret=NULL | dlerror=[<dir>/dlprobe: undefined symbol: no_such_symbol_xyz] | again=NULL
+dlsym(RTLD_NEXT, missing)          | ret=NULL | dlerror=[<dir>/dlprobe: undefined symbol: no_such_symbol_xyz] | again=NULL
+dlvsym(printf, GLIBC_2.2.5)        | ret=handle | dlerror=NULL | again=NULL
+dlvsym(printf, GLIBC_9.99)         | ret=NULL | dlerror=[<dir>/dlprobe: undefined symbol: printf, version GLIBC_9.99] | again=NULL
+ctor C
+dlvsym(unversioned obj, NOVER_1)   | ret=NULL | dlerror=[<dir>/libC.so: undefined symbol: fn_C, version NOVER_1] | again=NULL
+ctor C
+dlopen twice same handle           | ret=handle | dlerror=NULL | again=NULL
+dlclose 1 of 2                     | ret=0 | dlerror=NULL | again=NULL
+dtor C
+dlclose 2 of 2                     | ret=0 | dlerror=NULL | again=NULL
+closenull                          | child signal 11
+ctor C
+dlinfo(request 9999)               | ret=-1 | dlerror=[unsupported dlinfo request] | again=NULL
+ctor C
+dlinfo ORIGIN = [<dir>] | ret=0 | dlerror=NULL | again=NULL
+
+== phdr: dl_iterate_phdr counters (adds/subs read from the first object)
+  [0] name=[] phnum=13 tls_modid=0
+  [1] name=[linux-vdso.so.1] phnum=4 tls_modid=0
+  [2] name=[/lib/x86_64-linux-gnu/libc.so.6] phnum=14 tls_modid=1
+  [3] name=[/lib64/ld-linux-x86-64.so.2] phnum=11 tls_modid=0
+start (names)                        objects=4 adds=4 subs=0
+ctor C
+dlopen C                             objects=5 adds=5 subs=0
+dlopen C again (same handle)         objects=5 adds=5 subs=0
+ctor B
+ctor200 A
+ctor300 A
+ctor A
+  [0] name=[] phnum=13 tls_modid=0
+  [1] name=[linux-vdso.so.1] phnum=4 tls_modid=0
+  [2] name=[/lib/x86_64-linux-gnu/libc.so.6] phnum=14 tls_modid=1
+  [3] name=[/lib64/ld-linux-x86-64.so.2] phnum=11 tls_modid=0
+  [4] name=[<dir>/libC.so] phnum=11 tls_modid=0
+  [5] name=[<dir>/libA.so] phnum=11 tls_modid=0
+  [6] name=[<dir>/libB.so] phnum=11 tls_modid=0
+dlopen A (needs B, C)                objects=7 adds=7 subs=0
+dtor A
+dtor300 A
+dtor200 A
+dtor B
+dlclose A                            objects=5 adds=7 subs=2
+dlclose C (1 of 2)                   objects=5 adds=7 subs=2
+dtor C
+dlclose C (2 of 2)                   objects=4 adds=7 subs=3
+dlopen text.so (fails)               objects=4 adds=7 subs=3
+dlopen MissingDep (fails)            objects=4 adds=8 subs=4
+ctor C
+dlopen C NODELETE                    objects=5 adds=9 subs=4
+dlclose C NODELETE                   objects=5 adds=9 subs=4
+dtor C
+
+== tls: one dlopen of a library with an N-byte initial-exec TLS block, fresh process each
+largest N that loads: 1664; first failing N: 1728: <dir>/tls/libtls1728.so: cannot allocate memory in static TLS block
+== tls: successive dlopens of distinct libraries with a 128-byte initial-exec TLS block
+ctor tlsc0
+ctor tlsc1
+ctor tlsc2
+ctor tlsc3
+ctor tlsc4
+ctor tlsc5
+ctor tlsc6
+ctor tlsc7
+ctor tlsc8
+ctor tlsc9
+ctor tlsc10
+ctor tlsc11
+ctor tlsc12
+loaded 13 of 64; failure: <dir>/tls/libtlsc13.so: cannot allocate memory in static TLS block
+dtor tlsc0
+dtor tlsc1
+dtor tlsc2
+dtor tlsc3
+dtor tlsc4
+dtor tlsc5
+dtor tlsc6
+dtor tlsc7
+dtor tlsc8
+dtor tlsc9
+dtor tlsc10
+dtor tlsc11
+dtor tlsc12
+
+== subst: RTLD_DI_SERINFO of libR.so (DT_RUNPATH '/r/$LIB/$PLATFORM/$ORIGIN/${LIB}')
+ctor R
+  path[0] = [<dir>] flags=0x0
+  path[1] = [/r/lib/x86_64-linux-gnu/haswell/<dir>/lib/x86_64-linux-gnu] flags=0x0
+  path[2] = [/lib/x86_64-linux-gnu] flags=0x0
+  path[3] = [/usr/lib/x86_64-linux-gnu] flags=0x0
+  path[4] = [/lib] flags=0x0
+  path[5] = [/usr/lib] flags=0x0
+== subst: dlerror of dlopen("DIR/$LIB/$PLATFORM/x.so") (no expansion in dlopen names?)
+  ret=NULL dlerror=[<dir>/$LIB/$PLATFORM/x.so: cannot open shared object file: No such file or directory]
+== subst: dlopen("$ORIGIN/libC.so") from the program
+ctor C
+  ret=handle dlerror=[]
+dtor R
+dtor C
+
+== compat: dlopen of each library, then dlsym(lib, name) (searches the library and its
+   dependencies); shown: the defining object's file name from dladdr, '-' = not found
+libdl.so.2               loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libpthread.so.0          loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+librt.so.1               loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libutil.so.1             loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libanl.so.1              loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libBrokenLocale.so.1     loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libresolv.so.2           loads: dlopen=libc.so.6 dlsym=libc.so.6 dladdr=libc.so.6 pthread_create=libc.so.6 pthread_mutex_lock=libc.so.6 sem_open=libc.so.6 clock_gettime=libc.so.6 timer_create=libc.so.6 mq_open=libc.so.6 shm_open=libc.so.6 aio_read=libc.so.6 openpty=libc.so.6 forkpty=libc.so.6 login_tty=libc.so.6 getaddrinfo_a=libc.so.6 gai_suspend=libc.so.6 res_query=libc.so.6 __libc_freeres=libc.so.6 malloc=libc.so.6 no_such_xyz=-
+libthread_db.so.1        FAILS: /lib/x86_64-linux-gnu/libthread_db.so.1: undefined symbol: ps_pdwrite
+
+== order: dlorder close (main linked -lA -lD; A needs B, C; D needs C; E needs C, F)
+preinit_array main
+ctor C
+ctor B
+DT_INIT D
+ctor D
+ctor200 A
+ctor300 A
+ctor A
+ctor main
+init_array main
+main
+dlopen E
+ctor F
+ctor E
+dlclose E
+dtor E
+atexit-from-ctor E
+dtor F
+dlclose E done
+return from main
+atexit main 2
+atexit main 1
+fini_array main
+dtor main
+dtor A
+dtor300 A
+dtor200 A
+dtor D
+DT_FINI D
+dtor B
+dtor C
+   rc=0
+== order: dlorder exit (main linked -lA -lD; A needs B, C; D needs C; E needs C, F)
+preinit_array main
+ctor C
+ctor B
+DT_INIT D
+ctor D
+ctor200 A
+ctor300 A
+ctor A
+ctor main
+init_array main
+main
+dlopen E
+ctor F
+ctor E
+exit without dlclose
+atexit main 2
+atexit-from-ctor E
+atexit main 1
+fini_array main
+dtor main
+dtor A
+dtor300 A
+dtor200 A
+dtor D
+DT_FINI D
+dtor B
+dtor E
+dtor C
+dtor F
+   rc=0
+== order: dlorder _exit (main linked -lA -lD; A needs B, C; D needs C; E needs C, F)
+preinit_array main
+ctor C
+ctor B
+DT_INIT D
+ctor D
+ctor200 A
+ctor300 A
+ctor A
+ctor main
+init_array main
+main
+dlopen E
+ctor F
+ctor E
+_exit
+   rc=0
+== order: dlorder cycle (main linked -lA -lD; A needs B, C; D needs C; E needs C, F)
+preinit_array main
+ctor C
+ctor B
+DT_INIT D
+ctor D
+ctor200 A
+ctor300 A
+ctor A
+ctor main
+init_array main
+main
+dlopen E
+ctor F
+ctor E
+dlopen H (H<->I cycle)
+ctor I
+ctor H
+dlclose H
+dtor H
+dtor I
+dlclose H done
+return from main
+atexit main 2
+atexit-from-ctor E
+atexit main 1
+fini_array main
+dtor main
+dtor A
+dtor300 A
+dtor200 A
+dtor D
+DT_FINI D
+dtor B
+dtor E
+dtor C
+dtor F
+   rc=0
+
+== loader: exit status and messages
+-- missing DT_NEEDED | rc=127
+   err: <dir>/prog_missing: error while loading shared libraries: libGone2.so: cannot open shared object file: No such file or directory
+-- ld.so --verify static_exe | rc=1
+-- ld.so --verify libC.so | rc=2
+-- lazy undefined function, -z lazy | rc=127
+   out: ctor U2x
+   out: main before call
+   err: <dir>/prog_lazy: symbol lookup error: <dir>/prog_lazy: undefined symbol: fn_U2
+-- lazy undefined function, -z now | rc=127
+   err: <dir>/prog_now: symbol lookup error: <dir>/prog_now: undefined symbol: fn_U2
+-- lazy undefined, LD_BIND_NOW=1 | rc=127
+   err: <dir>/prog_lazy: symbol lookup error: <dir>/prog_lazy: undefined symbol: fn_U2
+-- version VER_2 not found | rc=1
+   err: <dir>/prog_ver: <dir>/libVer.so: version `VER_2' not found (required by <dir>/prog_ver)
+-- ld.so with no arguments | rc=1
+   err: /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2: missing program name
+   err: Try '/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 --help' for more information.
+-- ld.so nonexistent program | rc=127
+   err: <dir>/nope: error while loading shared libraries: <dir>/nope: cannot open shared object file: No such file or directory
+-- ld.so text file | rc=127
+   err: <dir>/text.so: error while loading shared libraries: <dir>/text.so: file too short
+-- ld.so directory | rc=127
+   err: <dir>/subdir: error while loading shared libraries: <dir>/subdir: cannot read file data: Error 21
+-- ld.so class32 object | rc=127
+   err: <dir>/class32.so: error while loading shared libraries: <dir>/class32.so: wrong ELF class: ELFCLASS32
+-- ld.so a shared library (no main) | rc=139
+   err: Segmentation fault (core dumped)
+-- ld.so pie_exe | rc=0
+-- ld.so nopie_exe | rc=0
+-- ld.so --verify dlorder | rc=0
+-- ld.so --verify text.so | rc=1
+-- ld.so --list prog_missing | rc=127
+   err: <dir>/prog_missing: error while loading shared libraries: libGone2.so: cannot open shared object file: No such file or directory
+-- ld.so --bogus-option | rc=1
+   err: /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2: unrecognized option '--bogus-option'
+   err: Try '/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 --help' for more information.
+-- ld.so --version | rc=0
+   out: ld.so (Ubuntu GLIBC 2.39-0ubuntu8.9) stable release version 2.39.
+   out: Copyright (C) 2024 Free Software Foundation, Inc.
+   out: This is free software; see the source for copying conditions.
+   out: There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+   out: PARTICULAR PURPOSE.
+-- ld.so --help | rc=0
+   out: Usage: /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 [OPTION]... EXECUTABLE-FILE [ARGS-FOR-PROGRAM...]
+   out: You have invoked 'ld.so', the program interpreter for dynamically-linked
+   out: ELF programs.  Usually, the program interpreter is invoked automatically
+   out: when a dynamically-linked executable is started.
+   out: 
+   out: You may invoke the program interpreter program directly from the command
+
+== compat: exported names of the placeholder libraries (nm -D --defined-only, name@version)
+-- libdl.so.2: GLIBC_2.2.5 GLIBC_2.3.3 GLIBC_2.3.4 __libdl_version_placeholder@GLIBC_2.2.5 __libdl_version_placeholder@GLIBC_2.3.3 __libdl_version_placeholder@GLIBC_2.3.4 
+-- libpthread.so.0: GLIBC_2.11 GLIBC_2.12 GLIBC_2.18 GLIBC_2.2.5 GLIBC_2.2.6 GLIBC_2.28 GLIBC_2.3.2 GLIBC_2.3.3 GLIBC_2.3.4 GLIBC_2.30 GLIBC_2.31 GLIBC_2.4 __libpthread_version_placeholder@GLIBC_2.11 __libpthread_version_placeholder@GLIBC_2.12 __libpthread_version_placeholder@GLIBC_2.18 __libpthread_version_placeholder@GLIBC_2.2.5 __libpthread_version_placeholder@GLIBC_2.2.6 __libpthread_version_placeholder@GLIBC_2.28 __libpthread_version_placeholder@GLIBC_2.3.2 __libpthread_version_placeholder@GLIBC_2.3.3 __libpthread_version_placeholder@GLIBC_2.3.4 __libpthread_version_placeholder@GLIBC_2.30 __libpthread_version_placeholder@GLIBC_2.31 __libpthread_version_placeholder@GLIBC_2.4 
+-- librt.so.1: GLIBC_2.2.5 GLIBC_2.3.3 GLIBC_2.3.4 GLIBC_2.4 GLIBC_2.7 __librt_version_placeholder@GLIBC_2.2.5 __librt_version_placeholder@GLIBC_2.3.3 __librt_version_placeholder@GLIBC_2.3.4 __librt_version_placeholder@GLIBC_2.4 __librt_version_placeholder@GLIBC_2.7 
+-- libutil.so.1: GLIBC_2.2.5 __libutil_version_placeholder@GLIBC_2.2.5 
+-- libanl.so.1: GLIBC_2.2.5 __libanl_version_placeholder@GLIBC_2.2.5 
+
+== bindnow: regular ELF files in /usr/bin (symlinks not followed)
+elf64=681 static=1 dynamic_bind_now=666 dynamic_lazy=14 type_dyn(pie)=667

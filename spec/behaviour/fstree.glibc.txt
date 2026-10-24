@@ -1,0 +1,2071 @@
+stat -f -c %T: ext2/ext3
+scratch directory file system: ext2/ext3 (f_type 0xef53)
+running as root: no (the permission cases need a non-root user)
+== getcwd
+getcwd(buf, PATH_MAX+64): <dir>/c/sub ret==buf
+getcwd(buf, len+1): <dir>/c/sub ret==buf
+getcwd(buf, len): NULL errno=ERANGE buf=untouched
+getcwd(buf, 2): NULL errno=ERANGE buf=untouched
+getcwd(buf, 1): NULL errno=ERANGE buf=untouched
+getcwd(buf, 0): NULL errno=EINVAL buf=untouched
+getcwd(NULL, 0): <dir>/c/sub
+getcwd(NULL, len+1): <dir>/c/sub
+getcwd(NULL, len): NULL errno=ERANGE
+getcwd(NULL, 1): NULL errno=ERANGE
+getcwd(NULL, 100000): <dir>/c/sub
+getwd: <dir>/c/sub ret==buf
+-- get_current_dir_name with cwd <dir>/c/sub (<dir>/c_link -> c/sub)
+PWD unset: <dir>/c/sub
+PWD=<dir>/c/sub (physical): <dir>/c/sub
+PWD=<dir>/c_link (symlink to cwd): <dir>/c_link
+PWD=<dir>/c_link/ (trailing slash): <dir>/c_link/
+PWD=<dir>/c/./sub: <dir>/c/./sub
+PWD=<dir>/c/../c/sub: <dir>/c/../c/sub
+PWD=<dir>//c/sub: <dir>//c/sub
+PWD=<dir>/c (another directory): <dir>/c/sub
+PWD=<dir>/missing: <dir>/c/sub
+PWD=. (relative, names cwd): .
+PWD=c/sub (relative): <dir>/c/sub
+PWD="": <dir>/c/sub
+-- removed working directory
+rmdir(../gone) from inside: 0 -
+getcwd(buf, PATH_MAX+64): NULL errno=ENOENT buf=untouched
+getcwd(NULL, 0): NULL errno=ENOENT
+getwd: NULL errno=ENOENT buf=[untouched]
+get_current_dir_name PWD unset: NULL errno=ENOENT
+get_current_dir_name PWD=<dir>/gone: NULL errno=ENOENT
+opendir(.): ok, readdir entries=0 errno=0
+realpath(.): ENOENT
+realpath(..): ENOENT
+chdir(..) from removed dir: 0 -; cwd now <dir>
+-- chdir, fchdir, chroot (as euid non-zero)
+chdir(""): -1 ENOENT cwd=<dir>
+chdir(missing): -1 ENOENT cwd=<dir>
+chdir(t/b) file: -1 ENOTDIR cwd=<dir>
+chdir(t/b/) file with slash: -1 ENOTDIR cwd=<dir>
+chdir(t/nosearch) mode 0600: -1 EACCES cwd=<dir>
+chdir(t/noread) mode 0333: 0 - cwd=<dir>/t/noread
+chdir(lp/s_loop): -1 ELOOP cwd=<dir>
+chdir(t/s_dangling): -1 ENOENT cwd=<dir>
+chdir(4200-byte ./././...): -1 ENAMETOOLONG cwd=<dir>
+chdir(256-byte component): -1 ENAMETOOLONG cwd=<dir>
+chdir(t/s_dir): 0 cwd=<dir>/t/a
+fchdir(t/a O_RDONLY): 0 cwd=<dir>/t/a
+fchdir(t/a O_PATH): 0 - cwd=<dir>/t/a
+fchdir(file): -1 ENOTDIR
+fchdir(closed fd): -1 EBADF
+fchdir(-1): -1 EBADF
+chroot(t/a) unprivileged: -1 EPERM
+chroot(missing) unprivileged: -1 ENOENT
+== working directory deeper than PATH_MAX (deep/ + 25 x {d200}; PATH_MAX=4096)
+expected length <dir>+5030
+getcwd(buf, PATH_MAX): NULL errno=ERANGE buf=untouched
+getcwd(buf, 16384): <dir>/deep/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200} errno=- len=<dir>+5030
+getcwd(buf, len+1): ok
+getcwd(buf, len): ERANGE
+getcwd(NULL, 0): ok len=<dir>+5030
+getcwd(NULL, PATH_MAX): ERANGE
+getwd: NULL errno=ERANGE buf=[untouched]
+get_current_dir_name PWD unset: <dir>/deep/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}
+get_current_dir_name PWD=physical path: <dir>/deep/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}/{d200}
+realpath(., NULL): ok len=<dir>+5030
+realpath(., buf): ENAMETOOLONG buf=untouched
+realpath(bottom, NULL): ENAMETOOLONG len=<dir>+0
+canonicalize_file_name(bottom): ENAMETOOLONG len=<dir>+0
+chmod(level 10, 0111): 0 -
+  getcwd(buf, 16384): EACCES
+  getcwd(NULL, 0): EACCES
+  get_current_dir_name PWD unset: NULL errno=EACCES
+  realpath(., NULL): EACCES
+-- realpath from level 15 of a 10-component relative path (result over PATH_MAX)
+input length 2009
+realpath(rel, buf): ENAMETOOLONG buf=untouched
+realpath(rel, NULL): ENAMETOOLONG len=<dir>+0
+canonicalize_file_name(rel): ENAMETOOLONG len=<dir>+0
+-- realpath of an input string over PATH_MAX (deep/ + 25 components, from <dir>)
+input length 5036
+realpath(in, buf): ENAMETOOLONG buf=untouched
+realpath(in, NULL): ENAMETOOLONG len=<dir>+0
+canonicalize_file_name(in): ENAMETOOLONG
+== directory streams (fs ext2/ext3 (f_type 0xef53))
+opendir(r): ok, dirfd close-on-exec=yes, O_NONBLOCK set
+telldir at start: 0
+entries=8 errno at end=0
+r in directory order (fs ext2/ext3 (f_type 0xef53)): s p f d . .. l <n>*255
+r sorted, with d_type: .:DIR ..:DIR d:DIR f:REG l:LNK <n>*255:REG p:FIFO s:SOCK
+d_reclen .: 24
+d_reclen d: 24
+d_reclen f: 24
+d_reclen <n>*255: 280
+readdir after end: NULL errno=0
+readdir after end with errno=EINTR before: NULL errno=EINTR
+two readdir calls return the same storage: no; first entry name still intact in storage: yes
+closedir: 0
+fcntl(old dirfd) after closedir: -1 EBADF
+readdir_r: 8 entries, last return 0 result NULL
+readdir_r after end: 0 result NULL
+readdir64: 8 entries
+readdir64_r: 8 entries
+two streams interleaved: 8 and 8 entries
+-- opendir errors
+opendir(""): NULL ENOENT
+opendir(missing): NULL ENOENT
+opendir(r/f) file: NULL ENOTDIR
+opendir(r/f/) file with slash: NULL ENOTDIR
+opendir(r/l) symlink to file: NULL ENOTDIR
+opendir(t/noread) mode 0333: NULL EACCES
+opendir(t/nosearch) mode 0600: ok, 3 entries
+opendir(t/nosearch/x) below 0600: NULL EACCES
+opendir(lp/s_loop): NULL ELOOP
+opendir(t/s_dir) symlink to dir: ok, 5 entries
+opendir(r/) trailing slash: ok, 8 entries
+opendir(256-byte name): NULL ENAMETOOLONG
+opendir(r/p) FIFO: NULL ENOTDIR
+-- fdopendir, dirfd
+fd close-on-exec before fdopendir: no
+fdopendir(dir fd): ok, dirfd==fd: yes, close-on-exec after: yes
+  entries=8
+  fd after closedir: -1 EBADF
+fdopendir(fd at end of directory): 0 entries; after rewinddir: 8 entries
+fdopendir(file fd): NULL ENOTDIR; fd still open: yes
+fdopendir(O_PATH dir fd): NULL EBADF
+fdopendir(-1): NULL EBADF
+fdopendir(closed 1000): NULL EBADF
+-- errors while reading
+readdir with its descriptor closed: NULL errno=EBADF
+readdir_r with its descriptor closed: 9 result NULL
+closedir with its descriptor closed: -1 EBADF
+readdir of a directory removed after opendir: 0 entries errno=0
+-- getdents64, getdirentries
+getdents64(dir, 1 byte): -1 EINVAL
+getdents64 total entries=8 final 0
+getdents64 sorted: . .. d f l <n>*255 p s
+getdents64(file): -1 ENOTDIR
+getdents64(-1): -1 EBADF
+getdirentries first call: bytes>0 base=0
+getdirentries total entries=8 final 0
+-- rewinddir sees entries created after the stream reached its end
+readdir at end after create/unlink: NULL
+after rewinddir, sorted: . .. b c
+-- telldir, seekdir (60 entries; positions are fs cookies, fs ext2/ext3 (f_type 0xef53))
+entries=60 telldir before first readdir=0
+positions distinct: yes; end position distinct from all: yes
+seekdir(pos[0]): telldir==pos yes, readdir gives entry 0: yes
+seekdir(pos[1]): telldir==pos yes, readdir gives entry 1: yes
+seekdir(pos[2]): telldir==pos yes, readdir gives entry 2: yes
+seekdir(pos[17]): telldir==pos yes, readdir gives entry 17: yes
+seekdir(pos[30]): telldir==pos yes, readdir gives entry 30: yes
+seekdir(pos[45]): telldir==pos yes, readdir gives entry 45: yes
+seekdir(pos[59]): telldir==pos yes, readdir gives entry 59: yes
+seekdir(pos[3]): telldir==pos yes, readdir gives entry 3: yes
+seekdir(end position): readdir NULL
+telldir after rewinddir == start: yes
+seekdir in a second stream with the first stream's pos[30]: same entry
+after seekdir(pos[10]) the remaining entries repeat in order: yes
+-- directory removed while open (fs ext2/ext3 (f_type 0xef53); every line names it)
+[fs ext2/ext3] readdir, empty directory removed before the first read: 0 entries; end: NULL errno=0; again: NULL errno=0
+[fs ext2/ext3] readdir, empty directory removed after 1 entry read: 1 more (dot entries 1); end: NULL errno=0
+[fs ext2/ext3] readdir, 3 files, emptied and removed after 3 entries read: 2 more; end: NULL errno=0
+[fs ext2/ext3] readdir, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs ext2/ext3] readdir64, empty directory removed before the first read: 0 entries; end: NULL errno=0; again: NULL errno=0
+[fs ext2/ext3] readdir64, empty directory removed after 1 entry read: 1 more (dot entries 1); end: NULL errno=0
+[fs ext2/ext3] readdir64, 3 files, emptied and removed after 3 entries read: 2 more; end: NULL errno=0
+[fs ext2/ext3] readdir64, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs ext2/ext3] readdir_r, empty directory removed before the first read: 0 entries; end: ret=0 result=NULL; again: ret=0 result=NULL
+[fs ext2/ext3] readdir_r, empty directory removed after 1 entry read: 1 more (dot entries 1); end: ret=0 result=NULL
+[fs ext2/ext3] readdir_r, 3 files, emptied and removed after 3 entries read: 2 more; end: ret=0 result=NULL
+[fs ext2/ext3] readdir_r, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: ret=0 result=NULL
+[fs ext2/ext3] readdir64_r, empty directory removed before the first read: 0 entries; end: ret=0 result=NULL; again: ret=0 result=NULL
+[fs ext2/ext3] readdir64_r, empty directory removed after 1 entry read: 1 more (dot entries 1); end: ret=0 result=NULL
+[fs ext2/ext3] readdir64_r, 3 files, emptied and removed after 3 entries read: 2 more; end: ret=0 result=NULL
+[fs ext2/ext3] readdir64_r, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: ret=0 result=NULL
+[fs ext2/ext3] readdir, 2000 files, emptied but NOT removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs ext2/ext3] rewinddir after removal (5 entries read before it): 0 entries; end: NULL errno=0
+[fs ext2/ext3] seekdir(0) after that: 0 entries; end: NULL errno=0
+[fs ext2/ext3] rewinddir on a stream whose directory was removed before the first read: 0 entries; end: NULL errno=0
+[fs ext2/ext3] fdopendir(descriptor of a removed directory): ok 0; readdir: 0 entries; end: NULL errno=0
+[fs ext2/ext3] fdopendir, then the directory removed: readdir_r 0 entries; end: ret=0 result=NULL
+[fs ext2/ext3] getdents64 on a descriptor of an empty directory removed before the first call: ENOENT; again: ENOENT
+[fs ext2/ext3]   lseek(0): 0; getdents64 after it: ENOENT
+[fs ext2/ext3] getdents64, 2000 files, one 1024-byte call (bytes>0), then emptied and removed: ENOENT; again: ENOENT
+[fs ext2/ext3]   lseek(0): 0; getdents64 after it: ENOENT
+[fs ext2/ext3] getdents64, 2000 files, one 1024-byte call (bytes>0), then emptied but NOT removed: bytes>0
+[fs ext2/ext3] removed working directory: open("."): ok; getdents64: ENOENT
+== readdir while entries are created and removed (fs ext2/ext3 (f_type 0xef53))
+stable entries: 1500, seen exactly once 1500, never 0, more than once 0; '.' 1 '..' 1; unexpected names 0; end errno=0
+victims never removed (4) all seen: yes, once each
+entries returned more than once among removed/created: 0/0
+created during the scan: 555, removed during the scan: 296
+(directory order, fs ext2/ext3 (f_type 0xef53)) removed entries seen before removal: 193 of 296; created entries seen: 195 of 555
+== scandir
+scandir(sc, NULL, NULL) in directory order (fs ext2/ext3 (f_type 0xef53)): 37: a001 B e _c b a01 0a Z ~ c ä a b 9 a1.10 a0 x~ é z a1 . .. .h A1 Å E a00 a-b a2 A a1.9 h a10 ch a ab 10 1
+alphasort C: 37: . .. .h 0a 1 10 9 A A1 B E Z _c a a b a-b a0 a00 a001 a01 a1 a1.10 a1.9 a10 a2 ab b c ch e h x~ z ~ Å ä é
+versionsort C: 37: . .. .h 0a 1 9 10 A A1 B E Z _c a a b a-b a001 a00 a01 a0 a1 a1.9 a1.10 a2 a10 ab b c ch e h x~ z ~ Å ä é
+alphasort en_US.UTF-8: 37: . .. ~ 0a 1 10 9 a A Å ä a0 a00 a001 a01 a1 A1 a10 a1.10 a1.9 a2 a b a-b ab b B _c c ch e E é .h h x~ z Z
+versionsort en_US.UTF-8: 37: . .. .h 0a 1 9 10 A A1 B E Z _c a a b a-b a001 a00 a01 a0 a1 a1.9 a1.10 a2 a10 ab b c ch e h x~ z ~ Å ä é
+scandir64+alphasort64 en_US.UTF-8: 37: . .. ~ 0a 1 10 9 a A Å ä a0 a00 a001 a01 a1 A1 a10 a1.10 a1.9 a2 a b a-b ab b B _c c ch e E é .h h x~ z Z
+alphasort cs_CZ.UTF-8: 37: . .. ~ a A Å ä a b a-b ab a0 a00 a001 a01 a1 A1 a10 a1.10 a1.9 a2 b B _c c e E é .h h ch x~ z Z 0a 1 10 9
+versionsort cs_CZ.UTF-8: 37: . .. .h 0a 1 9 10 A A1 B E Z _c a a b a-b a001 a00 a01 a0 a1 a1.9 a1.10 a2 a10 ab b c ch e h x~ z ~ Å ä é
+scandir64+alphasort64 cs_CZ.UTF-8: 37: . .. ~ a A Å ä a b a-b ab a0 a00 a001 a01 a1 A1 a10 a1.10 a1.9 a2 b B _c c e E é .h h ch x~ z Z 0a 1 10 9
+scandir64+versionsort64 C: 37: . .. .h 0a 1 9 10 A A1 B E Z _c a a b a-b a001 a00 a01 a0 a1 a1.9 a1.10 a2 a10 ab b c ch e h x~ z ~ Å ä é
+filter (no dot names): count 34; filter called 37 times; saw . yes, .. yes
+filter returning 1 for "a" (0 otherwise): count 1
+filter returning 2 for "a" (0 otherwise): count 1
+filter returning -1 for "a" (0 otherwise): count 1
+filter returning 0 for "a" (0 otherwise): count 0
+empty directory, alphasort: 2: . ..
+scandir(missing): -1 ENOENT list unchanged
+scandir(""): -1 ENOENT list unchanged
+scandir(sc/a) file: -1 ENOTDIR list unchanged
+scandir(t/noread) 0333: -1 EACCES list unchanged
+scandir(t/nosearch) 0600: 3 - list written
+scandir(lp/s_loop): -1 ELOOP list unchanged
+t/nosearch with d_type (0600: names readable, entries not searchable): .:DIR ..:DIR ns_f:REG
+scandirat(<dir> fd, sc): 37
+scandirat(AT_FDCWD, sc): 37
+scandirat(-5, sc): -1 EBADF
+scandirat(-5, <dir>/sc absolute): 37
+scandirat(file fd, x): -1 ENOTDIR
+scandirat64(AT_FDCWD, sc, versionsort64): 37
+-- alphasort, versionsort called directly (sign)
+[a] vs [b]: alphasort C <, en_US.UTF-8 <; versionsort <
+[b] vs [a]: alphasort C >, en_US.UTF-8 >; versionsort >
+[a] vs [a]: alphasort C =, en_US.UTF-8 =; versionsort =
+[a] vs [B]: alphasort C >, en_US.UTF-8 <; versionsort >
+[A] vs [b]: alphasort C <, en_US.UTF-8 <; versionsort <
+[a2] vs [a10]: alphasort C >, en_US.UTF-8 >; versionsort <
+[a01] vs [a1]: alphasort C <, en_US.UTF-8 <; versionsort <
+[a001] vs [a01]: alphasort C <, en_US.UTF-8 <; versionsort <
+[a0] vs [a00]: alphasort C <, en_US.UTF-8 <; versionsort >
+[a1.9] vs [a1.10]: alphasort C >, en_US.UTF-8 >; versionsort <
+[] vs [a]: alphasort C <, en_US.UTF-8 <; versionsort <
+[é] vs [f]: alphasort C >, en_US.UTF-8 <; versionsort >
+[_c] vs [a]: alphasort C <, en_US.UTF-8 >; versionsort <
+== nftw, ftw over t (fs ext2/ext3 (f_type 0xef53))
+nftw(t, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  F level=1 base=2 t/s_file [reg]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  D level=1 base=2 t/s_dir [dir]
+  F level=2 base=8 t/s_dir/f1 [reg]
+  D level=2 base=8 t/s_dir/sub [dir]
+  F level=3 base=12 t/s_dir/sub/x [reg]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SLN level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  D level=2 base=4 t/a/sub [dir]
+  F level=3 base=8 t/a/sub/x [reg]
+  SL level=2 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  F level=1 base=2 t/s_file [reg]
+  DP level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  F level=2 base=8 t/s_dir/f1 [reg]
+  F level=3 base=12 t/s_dir/sub/x [reg]
+  DP level=2 base=8 t/s_dir/sub [dir]
+  DP level=1 base=2 t/s_dir [dir]
+  F level=1 base=2 t/so [sock]
+  NS level=2 base=11 t/nosearch/ns_f
+  DP level=1 base=2 t/nosearch [dir]
+  SLN level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  DP level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_PHYS|FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=1 base=2 t/s_file [lnk]
+  DP level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  NS level=2 base=11 t/nosearch/ns_f
+  DP level=1 base=2 t/nosearch [dir]
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  F level=3 base=8 t/a/sub/x [reg]
+  DP level=2 base=4 t/a/sub [dir]
+  SL level=2 base=4 t/a/s_up [lnk]
+  DP level=1 base=2 t/a [dir]
+  DP level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_PHYS|FTW_CHDIR) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir] cwd=<dir>
+  SL level=1 base=2 t/s_file [lnk] cwd=<dir>/t
+  D level=1 base=2 t/e [dir] cwd=<dir>/t
+  F level=1 base=2 t/p [fifo] cwd=<dir>/t
+  F level=1 base=2 t/b [reg] cwd=<dir>/t
+  SL level=1 base=2 t/s_dir [lnk] cwd=<dir>/t
+  F level=1 base=2 t/so [sock] cwd=<dir>/t
+  D level=1 base=2 t/nosearch [dir] cwd=<dir>/t
+  -> -1 errno=EACCES; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_PHYS|FTW_CHDIR|FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=1 base=2 t/s_file [lnk] cwd=<dir>/t
+  DP level=1 base=2 t/e [dir] cwd=<dir>/t/e
+  F level=1 base=2 t/p [fifo] cwd=<dir>/t
+  F level=1 base=2 t/b [reg] cwd=<dir>/t
+  SL level=1 base=2 t/s_dir [lnk] cwd=<dir>/t
+  F level=1 base=2 t/so [sock] cwd=<dir>/t
+  -> -1 errno=EACCES; cwd after=<dir>
+nftw(t, nopenfd=10, FTW_MOUNT|FTW_PHYS (one file system)) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  D level=2 base=4 t/a/sub [dir]
+  F level=3 base=8 t/a/sub/x [reg]
+  SL level=2 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+-- the same over u (t without the unreadable and unsearchable directories, the FIFO and the socket)
+nftw(u, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 u [dir]
+  F level=1 base=2 u/s_file [reg]
+  D level=1 base=2 u/e [dir]
+  F level=1 base=2 u/b [reg]
+  D level=1 base=2 u/s_dir [dir]
+  F level=2 base=8 u/s_dir/f1 [reg]
+  D level=2 base=8 u/s_dir/sub [dir]
+  F level=3 base=12 u/s_dir/sub/x [reg]
+  SLN level=1 base=2 u/s_dangling [lnk]
+  -> 0; cwd after=<dir>
+nftw(u, nopenfd=10, FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  F level=1 base=2 u/s_file [reg]
+  DP level=1 base=2 u/e [dir]
+  F level=1 base=2 u/b [reg]
+  F level=2 base=8 u/s_dir/f1 [reg]
+  F level=3 base=12 u/s_dir/sub/x [reg]
+  DP level=2 base=8 u/s_dir/sub [dir]
+  DP level=1 base=2 u/s_dir [dir]
+  SLN level=1 base=2 u/s_dangling [lnk]
+  DP level=0 base=0 u [dir]
+  -> 0; cwd after=<dir>
+nftw(u, nopenfd=10, FTW_PHYS|FTW_CHDIR) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 u [dir] cwd=<dir>
+  SL level=1 base=2 u/s_file [lnk] cwd=<dir>/u
+  D level=1 base=2 u/e [dir] cwd=<dir>/u
+  F level=1 base=2 u/b [reg] cwd=<dir>/u
+  SL level=1 base=2 u/s_dir [lnk] cwd=<dir>/u
+  SL level=1 base=2 u/s_dangling [lnk] cwd=<dir>/u
+  D level=1 base=2 u/a [dir] cwd=<dir>/u
+  F level=2 base=4 u/a/f1 [reg] cwd=<dir>/u/a
+  D level=2 base=4 u/a/sub [dir] cwd=<dir>/u/a
+  F level=3 base=8 u/a/sub/x [reg] cwd=<dir>/u/a/sub
+  SL level=2 base=4 u/a/s_up [lnk] cwd=<dir>/u/a
+  -> 0; cwd after=<dir>
+nftw(u, nopenfd=10, FTW_PHYS|FTW_CHDIR|FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=1 base=2 u/s_file [lnk] cwd=<dir>/u
+  DP level=1 base=2 u/e [dir] cwd=<dir>/u/e
+  F level=1 base=2 u/b [reg] cwd=<dir>/u
+  SL level=1 base=2 u/s_dir [lnk] cwd=<dir>/u
+  SL level=1 base=2 u/s_dangling [lnk] cwd=<dir>/u
+  F level=2 base=4 u/a/f1 [reg] cwd=<dir>/u/a
+  F level=3 base=8 u/a/sub/x [reg] cwd=<dir>/u/a/sub
+  DP level=2 base=4 u/a/sub [dir] cwd=<dir>/u/a/sub
+  SL level=2 base=4 u/a/s_up [lnk] cwd=<dir>/u/a
+  DP level=1 base=2 u/a [dir] cwd=<dir>/u/a
+  DP level=0 base=0 u [dir] cwd=<dir>/u
+  -> 0; cwd after=<dir>
+nftw(u, nopenfd=10, FTW_CHDIR (following links)) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 u [dir] cwd=<dir>
+  F level=1 base=2 u/s_file [reg] cwd=<dir>/u
+  D level=1 base=2 u/e [dir] cwd=<dir>/u
+  F level=1 base=2 u/b [reg] cwd=<dir>/u
+  D level=1 base=2 u/s_dir [dir] cwd=<dir>/u
+  F level=2 base=8 u/s_dir/f1 [reg] cwd=<dir>/u/a
+  D level=2 base=8 u/s_dir/sub [dir] cwd=<dir>/u/a
+  F level=3 base=12 u/s_dir/sub/x [reg] cwd=<dir>/u/a/sub
+  SLN level=1 base=2 u/s_dangling [lnk] cwd=<dir>/u
+  -> 0; cwd after=<dir>
+nftw(u, nopenfd=10, FTW_PHYS|FTW_CHDIR, 5 at u/a/sub/x) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 u [dir] cwd=<dir>
+  SL level=1 base=2 u/s_file [lnk] cwd=<dir>/u
+  D level=1 base=2 u/e [dir] cwd=<dir>/u
+  F level=1 base=2 u/b [reg] cwd=<dir>/u
+  SL level=1 base=2 u/s_dir [lnk] cwd=<dir>/u
+  SL level=1 base=2 u/s_dangling [lnk] cwd=<dir>/u
+  D level=1 base=2 u/a [dir] cwd=<dir>/u
+  F level=2 base=4 u/a/f1 [reg] cwd=<dir>/u/a
+  D level=2 base=4 u/a/sub [dir] cwd=<dir>/u/a
+  F level=3 base=8 u/a/sub/x [reg] cwd=<dir>/u/a/sub
+  -> 5; cwd after=<dir>
+nftw(lp, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 lp [dir]
+  -> -1 errno=ELOOP; cwd after=<dir>
+nftw(lp, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 lp [dir]
+  SL level=1 base=3 lp/s_loop [lnk]
+  F level=1 base=3 lp/f [reg]
+  -> 0; cwd after=<dir>
+-- FTW_ACTIONRETVAL
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, SKIP_SUBTREE at t/a) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS|DEPTH, SKIP_SUBTREE at t/a (FTW_DP)) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=1 base=2 t/s_file [lnk]
+  DP level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  NS level=2 base=11 t/nosearch/ns_f
+  DP level=1 base=2 t/nosearch [dir]
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  F level=3 base=8 t/a/sub/x [reg]
+  DP level=2 base=4 t/a/sub [dir]
+  SL level=2 base=4 t/a/s_up [lnk]
+  DP level=1 base=2 t/a [dir]
+  DP level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, SKIP_SIBLINGS at t/a/f1) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS|DEPTH, SKIP_SIBLINGS at t/a/f1) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=1 base=2 t/s_file [lnk]
+  DP level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  NS level=2 base=11 t/nosearch/ns_f
+  DP level=1 base=2 t/nosearch [dir]
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  DP level=1 base=2 t/a [dir]
+  DP level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, SKIP_SUBTREE at file t/b) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  D level=2 base=4 t/a/sub [dir]
+  F level=3 base=8 t/a/sub/x [reg]
+  SL level=2 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, STOP at t/b) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  -> 1; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, 99 at t/b) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  -> 99; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, SKIP_SIBLINGS at the root) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+nftw(t, nopenfd=10, ACTIONRETVAL|PHYS, SKIP_SUBTREE at the root) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  -> 0; cwd after=<dir>
+constants: FTW_CONTINUE=0 FTW_STOP=1 FTW_SKIP_SUBTREE=2 FTW_SKIP_SIBLINGS=3
+-- a non-zero return stops the walk
+nftw(t, nopenfd=10, PHYS, 42 at t/b) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  -> 42; cwd after=<dir>
+nftw(t, nopenfd=10, PHYS, -7 at t/a/sub/x) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  D level=2 base=4 t/a/sub [dir]
+  F level=3 base=8 t/a/sub/x [reg]
+  -> -7; cwd after=<dir>
+nftw(t, nopenfd=10, PHYS|CHDIR, -7 at t/a/sub/x) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir] cwd=<dir>
+  SL level=1 base=2 t/s_file [lnk] cwd=<dir>/t
+  D level=1 base=2 t/e [dir] cwd=<dir>/t
+  F level=1 base=2 t/p [fifo] cwd=<dir>/t
+  F level=1 base=2 t/b [reg] cwd=<dir>/t
+  SL level=1 base=2 t/s_dir [lnk] cwd=<dir>/t
+  F level=1 base=2 t/so [sock] cwd=<dir>/t
+  D level=1 base=2 t/nosearch [dir] cwd=<dir>/t
+  -> -1 errno=EACCES; cwd after=<dir>
+nftw(t, nopenfd=10, PHYS without ACTIONRETVAL, FTW_STOP (1) at t/a/sub/x) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 t [dir]
+  SL level=1 base=2 t/s_file [lnk]
+  D level=1 base=2 t/e [dir]
+  F level=1 base=2 t/p [fifo]
+  F level=1 base=2 t/b [reg]
+  SL level=1 base=2 t/s_dir [lnk]
+  F level=1 base=2 t/so [sock]
+  D level=1 base=2 t/nosearch [dir]
+  NS level=2 base=11 t/nosearch/ns_f
+  SL level=1 base=2 t/s_dangling [lnk]
+  DNR level=1 base=2 t/noread [dir]
+  D level=1 base=2 t/a [dir]
+  F level=2 base=4 t/a/f1 [reg]
+  D level=2 base=4 t/a/sub [dir]
+  F level=3 base=8 t/a/sub/x [reg]
+  -> 1; cwd after=<dir>
+-- roots
+nftw(t/b, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  F level=0 base=2 t/b [reg]
+  -> 0; cwd after=<dir>
+nftw(t/s_dir, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/s_dir [dir]
+  F level=1 base=8 t/s_dir/f1 [reg]
+  D level=1 base=8 t/s_dir/sub [dir]
+  F level=2 base=12 t/s_dir/sub/x [reg]
+  D level=1 base=8 t/s_dir/s_up [dir]
+  F level=2 base=13 t/s_dir/s_up/s_file [reg]
+  D level=2 base=13 t/s_dir/s_up/e [dir]
+  F level=2 base=13 t/s_dir/s_up/p [fifo]
+  F level=2 base=13 t/s_dir/s_up/b [reg]
+  F level=2 base=13 t/s_dir/s_up/so [sock]
+  D level=2 base=13 t/s_dir/s_up/nosearch [dir]
+  NS level=3 base=22 t/s_dir/s_up/nosearch/ns_f
+  SLN level=2 base=13 t/s_dir/s_up/s_dangling [lnk]
+  DNR level=2 base=13 t/s_dir/s_up/noread [dir]
+  -> 0; cwd after=<dir>
+nftw(t/s_dir, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=0 base=2 t/s_dir [lnk]
+  -> 0; cwd after=<dir>
+nftw(t/s_dir/, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=0 base=2 t/s_dir [lnk]
+  -> 0; cwd after=<dir>
+nftw(t/s_dangling, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SLN level=0 base=2 t/s_dangling [lnk]
+  -> 0; cwd after=<dir>
+nftw(t/s_dangling, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  SL level=0 base=2 t/s_dangling [lnk]
+  -> 0; cwd after=<dir>
+nftw(lp/s_loop, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=ELOOP; cwd after=<dir>
+nftw(missing, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=ENOENT; cwd after=<dir>
+nftw(, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=ENOENT; cwd after=<dir>
+nftw(t/b/x, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=ENOTDIR; cwd after=<dir>
+nftw(t/nosearch/ns_f, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=EACCES; cwd after=<dir>
+nftw(t/nosearch, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/nosearch [dir]
+  NS level=1 base=11 t/nosearch/ns_f
+  -> 0; cwd after=<dir>
+nftw(t/nosearch, nopenfd=10, FTW_CHDIR) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/nosearch [dir]
+  -> -1 errno=EACCES; cwd after=<dir>
+nftw(t/noread, nopenfd=10, 0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  DNR level=0 base=2 t/noread [dir]
+  -> 0; cwd after=<dir>
+nftw(t/noread, nopenfd=10, FTW_DEPTH) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  DNR level=0 base=2 t/noread [dir]
+  -> 0; cwd after=<dir>
+nftw(t/a/, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/a [dir]
+  F level=1 base=4 t/a/f1 [reg]
+  D level=1 base=4 t/a/sub [dir]
+  F level=2 base=8 t/a/sub/x [reg]
+  SL level=1 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(t//a, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=3 t//a [dir]
+  F level=1 base=5 t//a/f1 [reg]
+  D level=1 base=5 t//a/sub [dir]
+  F level=2 base=9 t//a/sub/x [reg]
+  SL level=1 base=5 t//a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(./t/a/sub, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=6 ./t/a/sub [dir]
+  F level=1 base=10 ./t/a/sub/x [reg]
+  -> 0; cwd after=<dir>
+nftw(<dir>/t/a/sub, nopenfd=10, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=<dir>+5 <dir>/t/a/sub [dir]
+  F level=1 base=<dir>+9 <dir>/t/a/sub/x [reg]
+  -> 0; cwd after=<dir>
+nftw(., nopenfd=10, FTW_PHYS (cwd t/e, empty)) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 . [dir]
+  -> 0; cwd after=<dir>/t/e
+nftw(.., nopenfd=10, FTW_PHYS (cwd t/e)) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=0 .. [dir]
+  SL level=1 base=3 ../s_file [lnk]
+  D level=1 base=3 ../e [dir]
+  F level=1 base=3 ../p [fifo]
+  F level=1 base=3 ../b [reg]
+  SL level=1 base=3 ../s_dir [lnk]
+  F level=1 base=3 ../so [sock]
+  D level=1 base=3 ../nosearch [dir]
+  NS level=2 base=12 ../nosearch/ns_f
+  SL level=1 base=3 ../s_dangling [lnk]
+  DNR level=1 base=3 ../noread [dir]
+  D level=1 base=3 ../a [dir]
+  F level=2 base=5 ../a/f1 [reg]
+  D level=2 base=5 ../a/sub [dir]
+  F level=3 base=9 ../a/sub/x [reg]
+  SL level=2 base=5 ../a/s_up [lnk]
+  -> 0; cwd after=<dir>/t/e
+-- nopenfd
+nftw(t/a, nopenfd=0, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/a [dir]
+  F level=1 base=4 t/a/f1 [reg]
+  D level=1 base=4 t/a/sub [dir]
+  F level=2 base=8 t/a/sub/x [reg]
+  SL level=1 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(t/a, nopenfd=-1, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/a [dir]
+  F level=1 base=4 t/a/f1 [reg]
+  D level=1 base=4 t/a/sub [dir]
+  F level=2 base=8 t/a/sub/x [reg]
+  SL level=1 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+nftw(t/a, nopenfd=1, FTW_PHYS) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D level=0 base=2 t/a [dir]
+  F level=1 base=4 t/a/f1 [reg]
+  D level=1 base=4 t/a/sub [dir]
+  F level=2 base=8 t/a/sub/x [reg]
+  SL level=1 base=4 t/a/s_up [lnk]
+  -> 0; cwd after=<dir>
+-- ftw
+ftw(t, nopenfd=10) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D t [dir]
+  F t/s_file [reg]
+  D t/e [dir]
+  F t/p [fifo]
+  F t/b [reg]
+  D t/s_dir [dir]
+  F t/s_dir/f1 [reg]
+  D t/s_dir/sub [dir]
+  F t/s_dir/sub/x [reg]
+  F t/so [sock]
+  D t/nosearch [dir]
+  NS t/nosearch/ns_f
+  NS t/s_dangling
+  DNR t/noread [dir]
+  -> 0; cwd after=<dir>
+(the callback returns 5 at t/b)
+ftw(t, nopenfd=10) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D t [dir]
+  F t/s_file [reg]
+  D t/e [dir]
+  F t/p [fifo]
+  F t/b [reg]
+  -> 5; cwd after=<dir>
+ftw(t/s_dangling, nopenfd=10) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  NS t/s_dangling
+  -> 0; cwd after=<dir>
+ftw(missing, nopenfd=10) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  -> -1 errno=ENOENT; cwd after=<dir>
+ftw(t/a, nopenfd=0) (directory order, fs ext2/ext3 (f_type 0xef53)):
+  D t/a [dir]
+  F t/a/f1 [reg]
+  D t/a/sub [dir]
+  F t/a/sub/x [reg]
+  D t/a/s_up [dir]
+  F t/a/s_up/s_file [reg]
+  D t/a/s_up/e [dir]
+  F t/a/s_up/p [fifo]
+  F t/a/s_up/b [reg]
+  F t/a/s_up/so [sock]
+  D t/a/s_up/nosearch [dir]
+  NS t/a/s_up/nosearch/ns_f
+  NS t/a/s_up/s_dangling
+  DNR t/a/s_up/noread [dir]
+  -> 0; cwd after=<dir>
+nftw(/, FTW_PHYS|FTW_ACTIONRETVAL) with a callback that stops at once:
+  D / -> stop
+  -> 1
+== walks over the deep tree (paths up to 5036 bytes; PATH_MAX=4096; each walk runs in a child process)
+nftw(deep, 20, FTW_PHYS):
+  callbacks=27 maxlevel=26 maxpathlen=5036 F=1 D=26 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_DEPTH):
+  callbacks=27 maxlevel=26 maxpathlen=5036 F=1 D=0 DNR=0 NS=0 SL=0 DP=26 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, 0):
+  callbacks=27 maxlevel=26 maxpathlen=5036 F=1 D=26 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR):
+  the process was killed by signal 6 (SIGABRT)
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_DEPTH):
+  the process was killed by signal 6 (SIGABRT)
+nftw(deep, 1, FTW_PHYS|FTW_CHDIR):
+  callbacks=27 maxlevel=26 maxpathlen=5036 F=1 D=26 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+ftw(deep, 20) (ftw has no level: maxlevel stays 0):
+  callbacks=27 maxlevel=0 maxpathlen=5036 F=1 D=26 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_ACTIONRETVAL), not descending below level 18 (longest path 3622 bytes):
+  callbacks=19 maxlevel=18 maxpathlen=3622 F=0 D=19 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_ACTIONRETVAL), not descending below level 19 (longest path 3823 bytes):
+  callbacks=20 maxlevel=19 maxpathlen=3823 F=0 D=20 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_ACTIONRETVAL), not descending below level 20 (longest path 4024 bytes):
+  callbacks=21 maxlevel=20 maxpathlen=4024 F=0 D=21 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_ACTIONRETVAL), not descending below level 21 (longest path 4225 bytes):
+  callbacks=22 maxlevel=21 maxpathlen=4024 F=0 D=22 DNR=0 NS=0 SL=0 DP=0 SLN=0 -> 0; cwd after=<dir>
+  1 callbacks had a path that does not name the entry: first at level 21, length 0, base 4025
+nftw(deep, 20, FTW_PHYS|FTW_CHDIR|FTW_ACTIONRETVAL), not descending below level 22 (longest path 4426 bytes):
+  the process was killed by signal 6 (SIGABRT)
+nftw(deep, nopenfd=1, FTW_PHYS): callbacks=21 -> -1 errno=ENAMETOOLONG; most descriptors open beyond the caller's during a callback: 1
+nftw(deep, nopenfd=2, FTW_PHYS): callbacks=27 -> 0; most descriptors open beyond the caller's during a callback: 2
+nftw(deep, nopenfd=5, FTW_PHYS): callbacks=27 -> 0; most descriptors open beyond the caller's during a callback: 5
+nftw(deep, nopenfd=100, FTW_PHYS): callbacks=27 -> 0; most descriptors open beyond the caller's during a callback: 26
+== fts over t (fs ext2/ext3 (f_type 0xef53))
+fts_open(t; FTS_PHYSICAL; sorted by name):
+  D level=0 name=t path=t acc=t [dir] cwd=<dir>
+  D level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+  F level=2 name=f1 path=t/a/f1 acc=f1 [reg] cwd=<dir>/t/a
+  SL level=2 name=s_up path=t/a/s_up acc=s_up [lnk] cwd=<dir>/t/a
+  D level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+  F level=3 name=x path=t/a/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+  DP level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+  DP level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+  F level=1 name=b path=t/b acc=b [reg] cwd=<dir>/t
+  D level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+  DP level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+  D level=1 name=noread path=t/noread acc=noread [dir] cwd=<dir>/t
+  DNR level=1 name=noread path=t/noread acc=noread errno=EACCES [dir] cwd=<dir>/t
+  D level=1 name=nosearch path=t/nosearch acc=nosearch [dir] cwd=<dir>/t
+  DP level=1 name=nosearch path=t/nosearch acc=nosearch errno=EACCES [dir] cwd=<dir>/t
+  DEFAULT level=1 name=p path=t/p acc=p [fifo] cwd=<dir>/t
+  SL level=1 name=s_dangling path=t/s_dangling acc=s_dangling [lnk] cwd=<dir>/t
+  SL level=1 name=s_dir path=t/s_dir acc=s_dir [lnk] cwd=<dir>/t
+  SL level=1 name=s_file path=t/s_file acc=s_file [lnk] cwd=<dir>/t
+  DEFAULT level=1 name=so path=t/so acc=so [sock] cwd=<dir>/t
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_LOGICAL; sorted by name):
+  D level=0 name=t path=t acc=t [dir] cwd=<dir>
+  D level=1 name=a path=t/a acc=t/a [dir] cwd=<dir>
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg] cwd=<dir>
+  DC level=2 name=s_up path=t/a/s_up acc=t/a/s_up cycle=t/a/s_up [dir] cwd=<dir>
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir] cwd=<dir>
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg] cwd=<dir>
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir] cwd=<dir>
+  DP level=1 name=a path=t/a acc=t/a [dir] cwd=<dir>
+  F level=1 name=b path=t/b acc=t/b [reg] cwd=<dir>
+  D level=1 name=e path=t/e acc=t/e [dir] cwd=<dir>
+  DP level=1 name=e path=t/e acc=t/e [dir] cwd=<dir>
+  D level=1 name=noread path=t/noread acc=t/noread [dir] cwd=<dir>
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir] cwd=<dir>
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir] cwd=<dir>
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES cwd=<dir>
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir] cwd=<dir>
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo] cwd=<dir>
+  SLNONE level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk] cwd=<dir>
+  D level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir] cwd=<dir>
+  F level=2 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 [reg] cwd=<dir>
+  DC level=2 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up cycle=t/s_dir/s_up [dir] cwd=<dir>
+  D level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir] cwd=<dir>
+  F level=3 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x [reg] cwd=<dir>
+  DP level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir] cwd=<dir>
+  DP level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir] cwd=<dir>
+  F level=1 name=s_file path=t/s_file acc=t/s_file [reg] cwd=<dir>
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock] cwd=<dir>
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_SEEDOT|FTS_NOCHDIR; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  DOT level=1 name=. path=t/. acc=t/. [dir]
+  DOT level=1 name=.. path=t/.. acc=t/.. [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  DOT level=2 name=. path=t/a/. acc=t/a/. [dir]
+  DOT level=2 name=.. path=t/a/.. acc=t/a/.. [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DOT level=3 name=. path=t/a/sub/. acc=t/a/sub/. [dir]
+  DOT level=3 name=.. path=t/a/sub/.. acc=t/a/sub/.. [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DOT level=2 name=. path=t/e/. acc=t/e/. [dir]
+  DOT level=2 name=.. path=t/e/.. acc=t/e/.. [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=. path=t/nosearch/. acc=t/nosearch/. errno=EACCES
+  NS level=2 name=.. path=t/nosearch/.. acc=t/nosearch/.. errno=EACCES
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOSTAT|FTS_NOCHDIR; sorted by name):
+  D level=0 name=t path=t acc=t
+  D level=1 name=a path=t/a acc=t/a
+  NSOK level=2 name=f1 path=t/a/f1 acc=t/a/f1
+  NSOK level=2 name=s_up path=t/a/s_up acc=t/a/s_up
+  D level=2 name=sub path=t/a/sub acc=t/a/sub
+  NSOK level=3 name=x path=t/a/sub/x acc=t/a/sub/x
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub
+  DP level=1 name=a path=t/a acc=t/a
+  NSOK level=1 name=b path=t/b acc=t/b
+  D level=1 name=e path=t/e acc=t/e
+  DP level=1 name=e path=t/e acc=t/e
+  D level=1 name=noread path=t/noread acc=t/noread
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch
+  NSOK level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch
+  NSOK level=1 name=p path=t/p acc=t/p
+  NSOK level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling
+  NSOK level=1 name=s_dir path=t/s_dir acc=t/s_dir
+  NSOK level=1 name=s_file path=t/s_file acc=t/s_file
+  NSOK level=1 name=so path=t/so acc=t/so
+  DP level=0 name=t path=t acc=t
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_LOGICAL|FTS_NOSTAT; sorted by name):
+  D level=0 name=t path=t acc=t cwd=<dir>
+  D level=1 name=a path=t/a acc=t/a cwd=<dir>
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 cwd=<dir>
+  DC level=2 name=s_up path=t/a/s_up acc=t/a/s_up cycle=t/a/s_up cwd=<dir>
+  D level=2 name=sub path=t/a/sub acc=t/a/sub cwd=<dir>
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x cwd=<dir>
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub cwd=<dir>
+  DP level=1 name=a path=t/a acc=t/a cwd=<dir>
+  F level=1 name=b path=t/b acc=t/b cwd=<dir>
+  D level=1 name=e path=t/e acc=t/e cwd=<dir>
+  DP level=1 name=e path=t/e acc=t/e cwd=<dir>
+  D level=1 name=noread path=t/noread acc=t/noread cwd=<dir>
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES cwd=<dir>
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch cwd=<dir>
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES cwd=<dir>
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch cwd=<dir>
+  DEFAULT level=1 name=p path=t/p acc=t/p cwd=<dir>
+  SLNONE level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling cwd=<dir>
+  D level=1 name=s_dir path=t/s_dir acc=t/s_dir cwd=<dir>
+  F level=2 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 cwd=<dir>
+  DC level=2 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up cycle=t/s_dir/s_up cwd=<dir>
+  D level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub cwd=<dir>
+  F level=3 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x cwd=<dir>
+  DP level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub cwd=<dir>
+  DP level=1 name=s_dir path=t/s_dir acc=t/s_dir cwd=<dir>
+  F level=1 name=s_file path=t/s_file acc=t/s_file cwd=<dir>
+  DEFAULT level=1 name=so path=t/so acc=t/so cwd=<dir>
+  DP level=0 name=t path=t acc=t cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_XDEV|FTS_NOCHDIR; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  D level=0 name=t path=t acc=t [dir]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_LOGICAL|FTS_NOCHDIR; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  D level=0 name=t path=t acc=t [dir]
+  F level=1 name=s_file path=t/s_file acc=t/s_file [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  F level=2 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 [reg]
+  D level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  F level=3 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x [reg]
+  DP level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  DC level=2 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up cycle=t/s_dir/s_up [dir]
+  DP level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  SLNONE level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DC level=2 name=s_up path=t/a/s_up acc=t/a/s_up cycle=t/a/s_up [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t/s_dir; FTS_PHYSICAL|FTS_NOCHDIR; sorted by name):
+  SL level=0 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t/s_dir; FTS_PHYSICAL|FTS_COMFOLLOW|FTS_NOCHDIR; sorted by name):
+  D level=0 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  F level=1 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 [reg]
+  SL level=1 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up [lnk]
+  D level=1 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  F level=2 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x [reg]
+  DP level=1 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  DP level=0 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t/s_dangling lp/s_loop t/s_file; FTS_PHYSICAL|FTS_COMFOLLOW|FTS_NOCHDIR; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  SLNONE level=0 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SLNONE level=0 name=s_loop path=lp/s_loop acc=lp/s_loop [lnk]
+  F level=0 name=s_file path=t/s_file acc=t/s_file [reg]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t/s_dangling lp/s_loop t/s_file; FTS_LOGICAL|FTS_NOCHDIR; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  SLNONE level=0 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SLNONE level=0 name=s_loop path=lp/s_loop acc=lp/s_loop [lnk]
+  F level=0 name=s_file path=t/s_file acc=t/s_file [reg]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- roots
+fts_open(t/b t/a/sub missing t/e; FTS_PHYSICAL|FTS_NOCHDIR; sorted by name):
+  NS level=0 name=missing path=missing acc=missing errno=ENOENT
+  D level=0 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=1 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=0 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=0 name=b path=t/b acc=t/b [reg]
+  D level=0 name=e path=t/e acc=t/e [dir]
+  DP level=0 name=e path=t/e acc=t/e [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+  (roots given in argument order; no comparison function, so no directory order is involved)
+fts_open(t/b t/a/sub missing t/e; FTS_PHYSICAL|FTS_NOCHDIR, roots unsorted; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  F level=0 name=b path=t/b acc=t/b [reg]
+  D level=0 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=1 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=0 name=sub path=t/a/sub acc=t/a/sub [dir]
+  NS level=0 name=missing path=missing acc=missing errno=ENOENT
+  D level=0 name=e path=t/e acc=t/e [dir]
+  DP level=0 name=e path=t/e acc=t/e [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t/b/x t/nosearch/ns_f t/nosearch t/noread; FTS_PHYSICAL; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  NS level=0 name=x path=t/b/x acc=t/b/x errno=ENOTDIR cwd=<dir>
+  NS level=0 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES cwd=<dir>
+  D level=0 name=nosearch path=t/nosearch acc=t/nosearch [dir] cwd=<dir>
+  DP level=0 name=nosearch path=t/nosearch acc=t/nosearch errno=EACCES [dir] cwd=<dir>
+  D level=0 name=noread path=t/noread acc=t/noread [dir] cwd=<dir>
+  DNR level=0 name=noread path=t/noread acc=t/noread errno=EACCES [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(""; FTS_PHYSICAL; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  fts_open: NULL ENOENT
+fts_open(t/b ""; FTS_PHYSICAL; no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  fts_open: NULL ENOENT
+fts_open(; FTS_PHYSICAL, empty argv (in a child process); no comparison):
+  (directory order, fs ext2/ext3 (f_type 0xef53))
+  the process was killed by signal 11
+fts_open(t/a/ t//e ./t/a/sub; FTS_PHYSICAL|FTS_NOCHDIR; sorted by name):
+  D level=0 name=sub path=./t/a/sub acc=./t/a/sub [dir]
+  F level=1 name=x path=./t/a/sub/x acc=./t/a/sub/x [reg]
+  DP level=0 name=sub path=./t/a/sub acc=./t/a/sub [dir]
+  D level=0 name=e path=t//e acc=t//e [dir]
+  DP level=0 name=e path=t//e acc=t//e [dir]
+  D level=0 name= path=t/a/ acc=t/a/ [dir]
+  F level=1 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=1 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=2 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=0 name= path=t/a/ acc=t/a/ [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(<dir>/t/a/sub; FTS_PHYSICAL; sorted by name):
+  D level=0 name=sub path=<dir>/t/a/sub acc=<dir>/t/a/sub [dir] cwd=<dir>
+  F level=1 name=x path=<dir>/t/a/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+  DP level=0 name=sub path=<dir>/t/a/sub acc=<dir>/t/a/sub [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- options
+fts_open(t, 0): ok -
+fts_open(t, FTS_PHYSICAL|FTS_LOGICAL): ok -
+fts_open(t, FTS_PHYSICAL|0x1000): NULL EINVAL
+fts_open(t, FTS_PHYSICAL|FTS_NAMEONLY): NULL EINVAL
+fts_open(t, FTS_PHYSICAL|FTS_STOP): NULL EINVAL
+fts_open(t, FTS_NOCHDIR alone): ok -
+constants: FTS_COMFOLLOW=1 FTS_LOGICAL=2 FTS_NOCHDIR=4 FTS_NOSTAT=8 FTS_PHYSICAL=16 FTS_SEEDOT=32 FTS_XDEV=64 FTS_WHITEOUT=128 FTS_OPTIONMASK=255 FTS_NAMEONLY=256 FTS_STOP=512
+info values: D=1 DC=2 DEFAULT=3 DNR=4 DOT=5 DP=6 ERR=7 F=8 INIT=9 NS=10 NSOK=11 SL=12 SLNONE=13 W=14; AGAIN=1 FOLLOW=2 NOINSTR=3 SKIP=4; ROOTLEVEL=0 ROOTPARENTLEVEL=-1
+-- fts_set
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, SKIP at t/a; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+    fts_set(4): 0 -
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, SKIP at t/a postorder; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+    fts_set(4): 0 -
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, AGAIN at t/b, t/a/sub (preorder), t/e (postorder), once each; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_set(1): 0 -
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_set(1): 0 -
+  F level=1 name=b path=t/b acc=t/b [reg]
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_set(1): 0 -
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, FOLLOW at s_dir, s_dangling, s_file and file b; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_set(2): 0 -
+  D level=1 name=e path=t/e acc=t/e [dir]
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_set(2): 0 -
+  SLNONE level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_set(2): 0 -
+  D level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  F level=2 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 [reg]
+  SL level=2 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up [lnk]
+  D level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  F level=3 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x [reg]
+  DP level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+  DP level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_set(2): 0 -
+  F level=1 name=s_file path=t/s_file acc=t/s_file [reg]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(lp; FTS_PHYSICAL|FTS_NOCHDIR, FOLLOW at the self loop lp/s_loop; sorted by name):
+  D level=0 name=lp path=lp acc=lp [dir]
+  F level=1 name=f path=lp/f acc=lp/f [reg]
+  SL level=1 name=s_loop path=lp/s_loop acc=lp/s_loop [lnk]
+    fts_set(2): 0 -
+  SLNONE level=1 name=s_loop path=lp/s_loop acc=lp/s_loop [lnk]
+  DP level=0 name=lp path=lp acc=lp [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(lp; FTS_LOGICAL; sorted by name):
+  D level=0 name=lp path=lp acc=lp [dir] cwd=<dir>
+  F level=1 name=f path=lp/f acc=lp/f [reg] cwd=<dir>
+  SLNONE level=1 name=s_loop path=lp/s_loop acc=lp/s_loop [lnk] cwd=<dir>
+  DP level=0 name=lp path=lp acc=lp [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL (chdir), FOLLOW at s_dir; sorted by name):
+  D level=0 name=t path=t acc=t [dir] cwd=<dir>
+  D level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+  F level=2 name=f1 path=t/a/f1 acc=f1 [reg] cwd=<dir>/t/a
+  SL level=2 name=s_up path=t/a/s_up acc=s_up [lnk] cwd=<dir>/t/a
+  D level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+  F level=3 name=x path=t/a/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+  DP level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+  DP level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+  F level=1 name=b path=t/b acc=b [reg] cwd=<dir>/t
+  D level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+  DP level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+  D level=1 name=noread path=t/noread acc=noread [dir] cwd=<dir>/t
+  DNR level=1 name=noread path=t/noread acc=noread errno=EACCES [dir] cwd=<dir>/t
+  D level=1 name=nosearch path=t/nosearch acc=nosearch [dir] cwd=<dir>/t
+  DP level=1 name=nosearch path=t/nosearch acc=nosearch errno=EACCES [dir] cwd=<dir>/t
+  DEFAULT level=1 name=p path=t/p acc=p [fifo] cwd=<dir>/t
+  SL level=1 name=s_dangling path=t/s_dangling acc=s_dangling [lnk] cwd=<dir>/t
+  SL level=1 name=s_dir path=t/s_dir acc=s_dir [lnk] cwd=<dir>/t
+    fts_set(2): 0 -
+  D level=1 name=s_dir path=t/s_dir acc=s_dir [dir] cwd=<dir>/t
+  F level=2 name=f1 path=t/s_dir/f1 acc=f1 [reg] cwd=<dir>/t/a
+  SL level=2 name=s_up path=t/s_dir/s_up acc=s_up [lnk] cwd=<dir>/t/a
+  D level=2 name=sub path=t/s_dir/sub acc=sub [dir] cwd=<dir>/t/a
+  F level=3 name=x path=t/s_dir/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+  DP level=2 name=sub path=t/s_dir/sub acc=sub [dir] cwd=<dir>/t/a
+  DP level=1 name=s_dir path=t/s_dir acc=s_dir [dir] cwd=<dir>/t
+  SL level=1 name=s_file path=t/s_file acc=s_file [lnk] cwd=<dir>/t
+  DEFAULT level=1 name=so path=t/so acc=so [sock] cwd=<dir>/t
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, instr 7 at t/b and -1 at t/e; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+  D level=1 name=a path=t/a acc=t/a [dir]
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+  DP level=1 name=a path=t/a acc=t/a [dir]
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_set(7): 1 EINVAL
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_set(-1): 1 EINVAL
+  DP level=1 name=e path=t/e acc=t/e [dir]
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+  DP level=0 name=t path=t acc=t [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- fts_instr written directly (FTS-INSTR-DIRECT: fts acts on the field, not only on fts_set)
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, SKIP at t/a; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  D level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+    fts_instr=4 written directly
+  DP level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, AGAIN at t/b, t/a/sub (preorder), t/e (postorder), once each; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  D level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+    fts_instr=3
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+    fts_instr=3
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+    fts_instr=1 written directly
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+    fts_instr=3
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  DP level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+    fts_instr=1 written directly
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+    fts_instr=1 written directly
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, FOLLOW at s_dir, s_dangling, s_file and file b; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  D level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+    fts_instr=3
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+    fts_instr=3
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+    fts_instr=3
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  DP level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+    fts_instr=2 written directly
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+    fts_instr=2 written directly
+  SLNONE level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+    fts_instr=2 written directly
+  D level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+    fts_instr=3
+  F level=2 name=f1 path=t/s_dir/f1 acc=t/s_dir/f1 [reg]
+    fts_instr=3
+  SL level=2 name=s_up path=t/s_dir/s_up acc=t/s_dir/s_up [lnk]
+    fts_instr=3
+  D level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+    fts_instr=3
+  F level=3 name=x path=t/s_dir/sub/x acc=t/s_dir/sub/x [reg]
+    fts_instr=3
+  DP level=2 name=sub path=t/s_dir/sub acc=t/s_dir/sub [dir]
+    fts_instr=3
+  DP level=1 name=s_dir path=t/s_dir acc=t/s_dir [dir]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+    fts_instr=2 written directly
+  F level=1 name=s_file path=t/s_file acc=t/s_file [reg]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL (chdir), FOLLOW at s_dir; sorted by name):
+  D level=0 name=t path=t acc=t [dir] cwd=<dir>
+    fts_instr=3
+  D level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+    fts_instr=3
+  F level=2 name=f1 path=t/a/f1 acc=f1 [reg] cwd=<dir>/t/a
+    fts_instr=3
+  SL level=2 name=s_up path=t/a/s_up acc=s_up [lnk] cwd=<dir>/t/a
+    fts_instr=3
+  D level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+    fts_instr=3
+  F level=3 name=x path=t/a/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+    fts_instr=3
+  DP level=2 name=sub path=t/a/sub acc=sub [dir] cwd=<dir>/t/a
+    fts_instr=3
+  DP level=1 name=a path=t/a acc=a [dir] cwd=<dir>/t
+    fts_instr=3
+  F level=1 name=b path=t/b acc=b [reg] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+    fts_instr=3
+  DP level=1 name=e path=t/e acc=e [dir] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=noread [dir] cwd=<dir>/t
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=noread errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=nosearch [dir] cwd=<dir>/t
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=nosearch errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=p [fifo] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=s_dangling [lnk] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=s_dir [lnk] cwd=<dir>/t
+    fts_instr=3
+    fts_instr=2 written directly
+  D level=1 name=s_dir path=t/s_dir acc=s_dir [dir] cwd=<dir>/t
+    fts_instr=3
+  F level=2 name=f1 path=t/s_dir/f1 acc=f1 [reg] cwd=<dir>/t/a
+    fts_instr=3
+  SL level=2 name=s_up path=t/s_dir/s_up acc=s_up [lnk] cwd=<dir>/t/a
+    fts_instr=3
+  D level=2 name=sub path=t/s_dir/sub acc=sub [dir] cwd=<dir>/t/a
+    fts_instr=3
+  F level=3 name=x path=t/s_dir/sub/x acc=x [reg] cwd=<dir>/t/a/sub
+    fts_instr=3
+  DP level=2 name=sub path=t/s_dir/sub acc=sub [dir] cwd=<dir>/t/a
+    fts_instr=3
+  DP level=1 name=s_dir path=t/s_dir acc=s_dir [dir] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=s_file [lnk] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=so [sock] cwd=<dir>/t
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+    fts_instr=3
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(t; FTS_PHYSICAL|FTS_NOCHDIR, 7 at t/b, 0 at t/e, NOINSTR at t/a, 0xffff at t/a/sub; sorted by name):
+  D level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  D level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+    fts_instr=3 written directly
+  F level=2 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+    fts_instr=3
+  SL level=2 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+    fts_instr=3
+  D level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+    fts_instr=65535 written directly
+  F level=3 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+    fts_instr=3
+  DP level=2 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  DP level=1 name=a path=t/a acc=t/a [dir]
+    fts_instr=3
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+    fts_instr=7 written directly
+  D level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+    fts_instr=0 written directly
+  DP level=1 name=e path=t/e acc=t/e [dir]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_children then instructions written into fts_instr directly (the entries of t, FTS_PHYSICAL|FTS_NOCHDIR):
+  fts_read: t:D
+  a: fts_instr=4 written directly
+  e: fts_instr=4 written directly
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_children then instructions written into fts_instr directly (the entries of t, FTS_PHYSICAL (chdir)):
+  fts_read: t:D
+  a: fts_instr=4 written directly
+  e: fts_instr=4 written directly
+  F level=1 name=b path=t/b acc=b [reg] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=noread [dir] cwd=<dir>/t
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=noread errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=nosearch [dir] cwd=<dir>/t
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=nosearch errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=p [fifo] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=s_dangling [lnk] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=s_dir [lnk] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=s_file [lnk] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=so [sock] cwd=<dir>/t
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_children then instructions written into fts_instr directly (roots t/s_dir t/a t/b, before the first fts_read, FTS_PHYSICAL|FTS_NOCHDIR):
+  F level=1 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+    fts_instr=3
+  SL level=1 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+    fts_instr=3
+  D level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=2 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+    fts_instr=3
+  DP level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=0 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  SL level=0 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- fts_set on the entries fts_children lists (only what fts(3) defines)
+fts_children then instructions through fts_set (the entries of t, FTS_PHYSICAL|FTS_NOCHDIR):
+  fts_read: t:D
+  a: fts_set(4): 0 -
+  e: fts_set(4): 0 -
+  F level=1 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=t/noread [dir]
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=t/noread errno=EACCES [dir]
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  NS level=2 name=ns_f path=t/nosearch/ns_f acc=t/nosearch/ns_f errno=EACCES
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=t/nosearch [dir]
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=t/p [fifo]
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=t/s_dangling [lnk]
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=t/s_file [lnk]
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=t/so [sock]
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir]
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_children then instructions through fts_set (the entries of t, FTS_PHYSICAL (chdir)):
+  fts_read: t:D
+  a: fts_set(4): 0 -
+  e: fts_set(4): 0 -
+  F level=1 name=b path=t/b acc=b [reg] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=noread path=t/noread acc=noread [dir] cwd=<dir>/t
+    fts_instr=3
+  DNR level=1 name=noread path=t/noread acc=noread errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  D level=1 name=nosearch path=t/nosearch acc=nosearch [dir] cwd=<dir>/t
+    fts_instr=3
+  DP level=1 name=nosearch path=t/nosearch acc=nosearch errno=EACCES [dir] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=p path=t/p acc=p [fifo] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dangling path=t/s_dangling acc=s_dangling [lnk] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_dir path=t/s_dir acc=s_dir [lnk] cwd=<dir>/t
+    fts_instr=3
+  SL level=1 name=s_file path=t/s_file acc=s_file [lnk] cwd=<dir>/t
+    fts_instr=3
+  DEFAULT level=1 name=so path=t/so acc=so [sock] cwd=<dir>/t
+    fts_instr=3
+  DP level=0 name=t path=t acc=t [dir] cwd=<dir>
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_children then instructions through fts_set (roots t/s_dir t/a t/b, before the first fts_read, FTS_PHYSICAL|FTS_NOCHDIR):
+  F level=1 name=f1 path=t/a/f1 acc=t/a/f1 [reg]
+    fts_instr=3
+  SL level=1 name=s_up path=t/a/s_up acc=t/a/s_up [lnk]
+    fts_instr=3
+  D level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=2 name=x path=t/a/sub/x acc=t/a/sub/x [reg]
+    fts_instr=3
+  DP level=1 name=sub path=t/a/sub acc=t/a/sub [dir]
+    fts_instr=3
+  F level=0 name=b path=t/b acc=t/b [reg]
+    fts_instr=3
+  SL level=0 name=s_dir path=t/s_dir acc=t/s_dir [lnk]
+    fts_instr=3
+  fts_read end: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- fts_children
+fts_children before the first fts_read (roots t/e t/b, sorted by name): t/b:F(level 0) t/e:D(level 0)
+then fts_read: t/b:F t/e:D t/e:DP
+[FTS_NOCHDIR] after fts_read returns t:D
+  fts_children(0): a:D b:F e:D noread:D nosearch:D p:DEFAULT s_dangling:SL s_dir:SL s_file:SL so:DEFAULT cwd=<dir>
+  fts_children(FTS_NAMEONLY): a:NSOK b:NSOK e:NSOK noread:NSOK nosearch:NSOK p:NSOK s_dangling:NSOK s_dir:NSOK s_file:NSOK so:NSOK
+  fts_children(5): NULL EINVAL
+  remaining fts_read: t/a:D t/a/f1:F t/a/s_up:SL t/a/sub:D t/a/sub/x:F t/a/sub:DP t/a:DP t/b:F [fts_children at file: NULL errno=0] t/e:D [fts_children at empty t/e: NULL errno=0] t/e:DP t/noread:D [fts_children at t/noread: NULL errno=EACCES] t/noread:DNR t/nosearch:D [fts_children at t/nosearch: ns_f:NS(EACCES) errno=EACCES] t/nosearch/ns_f:NS t/nosearch:DP t/p:DEFAULT t/s_dangling:SL t/s_dir:SL t/s_file:SL t/so:DEFAULT t:DP
+  fts_children after the end (in a child process): the process was killed by signal 11
+  cwd after fts_close=<dir>
+[chdir] after fts_read returns t:D
+  fts_children(0): a:D b:F e:D noread:D nosearch:D p:DEFAULT s_dangling:SL s_dir:SL s_file:SL so:DEFAULT cwd=<dir>
+  fts_children(FTS_NAMEONLY): a:NSOK b:NSOK e:NSOK noread:NSOK nosearch:NSOK p:NSOK s_dangling:NSOK s_dir:NSOK s_file:NSOK so:NSOK
+  fts_children(5): NULL EINVAL
+  remaining fts_read: t/a:D t/a/f1:F t/a/s_up:SL t/a/sub:D t/a/sub/x:F t/a/sub:DP t/a:DP t/b:F [fts_children at file: NULL errno=0] t/e:D [fts_children at empty t/e: NULL errno=0] t/e:DP t/noread:D [fts_children at t/noread: NULL errno=EACCES] t/noread:DNR t/nosearch:D [fts_children at t/nosearch: errno=EACCES] t/nosearch:DP t/p:DEFAULT t/s_dangling:SL t/s_dir:SL t/s_file:SL t/so:DEFAULT t:DP
+  fts_children after the end (in a child process): the process was killed by signal 11
+  cwd after fts_close=<dir>
+-- FTSENT fields
+root: level 0, fts_parent level -1, fts_number 0
+t/a/f1: fts_parent is the entry named a: yes, parent fts_number 7
+t/a postorder: fts_number 7, fts_pointer is the preorder entry: yes
+-- fts_close in the middle of a chdir walk
+stopped at t/a/sub/x, cwd=<dir>/t/a/sub
+fts_close: 0 0 cwd after=<dir>
+-- fts64
+fts64 over t: 22 entries, 6 FTS_D; fts64_close 0
+-- fts over the deep tree (each walk in a child process)
+fts(deep, FTS_PHYSICAL):
+  FTS_PHYSICAL: entries=53 maxlevel=26 maxpathlen=5036 D=26 DP=26 F=1 NS=0 DNR=0 ERR=0 first error none ; end errno=0; most extra descriptors 1
+fts(deep, FTS_PHYSICAL|FTS_NOCHDIR):
+  FTS_PHYSICAL|FTS_NOCHDIR: entries=43 maxlevel=21 maxpathlen=4225 D=21 DP=21 F=0 NS=1 DNR=0 ERR=0 first error ENAMETOOLONG NS@21; end errno=0; most extra descriptors 0
+fts(deep, FTS_LOGICAL):
+  FTS_LOGICAL: entries=43 maxlevel=21 maxpathlen=4225 D=21 DP=21 F=0 NS=1 DNR=0 ERR=0 first error ENAMETOOLONG NS@21; end errno=0; most extra descriptors 0
+fts(deep, FTS_LOGICAL|FTS_NOCHDIR):
+  FTS_LOGICAL|FTS_NOCHDIR: entries=43 maxlevel=21 maxpathlen=4225 D=21 DP=21 F=0 NS=1 DNR=0 ERR=0 first error ENAMETOOLONG NS@21; end errno=0; most extra descriptors 0
+== realpath, canonicalize_file_name (lines show the caller-buffer result; alloc and canonicalize_file_name are shown only when they differ)
+realpath(rp): <dir>/rp
+realpath(rp/a/f): <dir>/rp/a/f
+realpath(rp/./a//f): <dir>/rp/a/f
+realpath(rp/a/../a/f): <dir>/rp/a/f
+realpath(./rp/a/): <dir>/rp/a
+realpath(rp/a/.): <dir>/rp/a
+realpath(rp/l_rel): <dir>/rp/a
+realpath(rp/l_rel/f): <dir>/rp/a/f
+realpath(rp/l_abs/f): <dir>/rp/a/f
+realpath(rp/l_file): <dir>/rp/a/f
+realpath(rp/l_dots): <dir>/rp/a/f
+realpath(rp/l_up/rp/a): <dir>/rp/a
+realpath(rp/l_file/): NULL ENOTDIR buf=untouched | alloc: ENOTDIR | canonicalize_file_name: ENOTDIR
+realpath(rp/a/f/): NULL ENOTDIR buf=untouched | alloc: ENOTDIR | canonicalize_file_name: ENOTDIR
+realpath(rp/a/f/.): NULL ENOTDIR buf=untouched | alloc: ENOTDIR | canonicalize_file_name: ENOTDIR
+realpath(rp/a/f/..): NULL ENOTDIR buf=untouched | alloc: ENOTDIR | canonicalize_file_name: ENOTDIR
+realpath(rp/a/f/x): NULL ENOTDIR buf=untouched | alloc: ENOTDIR | canonicalize_file_name: ENOTDIR
+realpath(rp/missing): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/missing/): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/missing/x): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/a/missing): NULL ENOENT buf=<dir>/rp/a/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/missing/../a): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/l_dang): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/l_dang/x): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/l_dang2): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/l_loop): NULL ELOOP buf=untouched | alloc: ELOOP | canonicalize_file_name: ELOOP
+realpath(rp/l_loop/x): NULL ELOOP buf=untouched | alloc: ELOOP | canonicalize_file_name: ELOOP
+realpath(rp/l_ping): NULL ELOOP buf=untouched | alloc: ELOOP | canonicalize_file_name: ELOOP
+realpath(rp/ns/f): NULL EACCES buf=<dir>/rp/ns/f | alloc: EACCES | canonicalize_file_name: EACCES
+realpath(rp/ns): <dir>/rp/ns
+realpath(rp/ns/d/..): NULL EACCES buf=<dir>/rp/ns/d | alloc: EACCES | canonicalize_file_name: EACCES
+realpath(rp/ns/..): <dir>/rp
+realpath(rp/nr/d): <dir>/rp/nr/d
+realpath(rp/nr): <dir>/rp/nr
+realpath(rp/l_root): /
+realpath(rp/l_root/..): /
+realpath(/): /
+realpath(//): /
+realpath(///): /
+realpath(/..): /
+realpath(/../..): /
+realpath(//.): /
+realpath(""): NULL ENOENT buf=untouched | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(.): <dir>
+realpath(./): <dir>
+realpath(<dir>/rp/l_rel/f): <dir>/rp/a/f
+realpath(<dir>/rp/missing/x): NULL ENOENT buf=<dir>/rp/missing | alloc: ENOENT | canonicalize_file_name: ENOENT
+realpath(rp/<n>*256): NULL ENAMETOOLONG buf=untouched | alloc: ENAMETOOLONG | canonicalize_file_name: ENAMETOOLONG
+realpath(rp/<n>*255): NULL ENOENT buf=<dir>/rp/<n>*255 | alloc: ENOENT | canonicalize_file_name: ENOENT
+(<long> = rp + /. x 2099 + /a/f, 4204 bytes)
+realpath(<long>): <dir>/rp/a/f
+realpath(NULL, buf): NULL EINVAL buf=untouched
+canonicalize_file_name(NULL): NULL EINVAL
+-- symbolic-link chains rp/ch/l<k> -> l<k-1>, l0 -> ../a/f
+realpath: chains l0..l39 resolve (l39 is 40 links); first failure l40 ELOOP
+stat (the kernel's limit, for comparison): chains l0..l39 resolve
+realpath m<k>/f (chain as a directory component): m0..m39 resolve; first failure m40 ELOOP
+realpath rp/hop/h/h/... (41 separate one-hop links): ELOOP
+realpath through k separate one-hop links h -> .: up to k=40 resolve
+== temporary names (umask 022 unless stated; each case runs 8 times, '?' marks a position that varied)
+mkstemp(mk/aXXXXXX): fd mk/a?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp(mk/XXXXXX): fd mk/?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp(XXXXXX): fd ?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp(mk/aXXXXXXXX): fd mk/aXX?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp(mk/aXXXXX): -1 EINVAL template unchanged
+mkstemp(mk/a): -1 EINVAL template unchanged
+mkstemp(mk/axxxxxx): -1 EINVAL template unchanged
+mkstemp(mk/aXXXXXXb): -1 EINVAL template unchanged
+mkstemp(XXXXX): -1 EINVAL template unchanged
+mkstemp(""): -1 EINVAL template unchanged
+mkstemp(mk/aXXXXXX/): -1 EINVAL template unchanged
+mkstemp(mk_ro/aXXXXXX): -1 EACCES template mk_ro/a??????
+mkstemp(missing/aXXXXXX): -1 ENOENT template missing/a??????
+mkstemp(mk/file/aXXXXXX): -1 ENOTDIR template mk/file/a??????
+mkstemp(mk/a.XXXXXX.XXXXXX): fd mk/a.XXXXXX.?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp(mk/éXXXXXX): fd mk/é?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp umask 077: fd mk/u?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp umask 277: fd mk/u?????? mode=0400 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp umask 000: fd mk/u?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemp umask 777: fd mk/u?????? mode=0000 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+20 mkstemp calls on one template, files kept: all created yes, names distinct yes
+-- mkstemps
+mkstemps(mk/bXXXXXX.txt, 4): fd mk/b??????.txt mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemps(mk/bXXXXXX.txt, 5): -1 EINVAL template unchanged
+mkstemps(mk/bXXXXXX.txt, 3): -1 EINVAL template unchanged
+mkstemps(mk/bXXXXXX, 0): fd mk/b?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemps(mk/bXXXXXX.txt, -1): -1 EINVAL template unchanged
+mkstemps(mk/bXXXXXX.txt, 100): -1 EINVAL template unchanged
+mkstemps(mk/bXXXXXXXX, 2): fd mk/b??????XX mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemps(XXXXXX.t, 2): fd ??????.t mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkstemps(mk/bXXXXXX.txt, 14): -1 EINVAL template unchanged
+mkstemps(mk/bXXXXXX.txt, 8): -1 EINVAL template unchanged
+-- mkostemp flags
+mkostemp(0): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_CLOEXEC): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=yes name-is-fd=yes
+mkostemp(O_APPEND): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|APPEND cloexec=no name-is-fd=yes
+mkostemp(O_SYNC): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|SYNC cloexec=no name-is-fd=yes
+mkostemp(O_DSYNC): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|DSYNC cloexec=no name-is-fd=yes
+mkostemp(O_NONBLOCK): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|NONBLOCK cloexec=no name-is-fd=yes
+mkostemp(O_NOATIME): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|NOATIME cloexec=no name-is-fd=yes
+mkostemp(O_WRONLY): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_RDWR): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_ACCMODE): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_TRUNC): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_CREAT|O_EXCL): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_NOFOLLOW): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_NOCTTY): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp(O_DIRECTORY): -1 EINVAL template mk/o??????
+mkostemp(O_PATH): -1 ENOENT template mk/o??????
+mkostemp(O_TMPFILE): -1 EINVAL template mk/o??????
+mkostemp(O_DIRECT): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|DIRECT cloexec=no name-is-fd=yes
+mkostemp(O_CLOEXEC|O_APPEND|O_SYNC): fd mk/o?????? mode=0600 reg size=0 acc=RDWR|APPEND|SYNC cloexec=yes name-is-fd=yes
+mkostemp(0x40000000): fd mk/o?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemps(mk/pXXXXXX.s, 2, O_CLOEXEC|O_APPEND): fd mk/p??????.s mode=0600 reg size=0 acc=RDWR|APPEND cloexec=yes name-is-fd=yes
+mkostemps(mk/pXXXXXX.s, 3, O_CLOEXEC): -1 EINVAL template unchanged
+mkstemp64(mk/rXXXXXX): fd mk/r?????? mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemp64(mk/rXXXXXX, O_CLOEXEC): fd mk/r?????? mode=0600 reg size=0 acc=RDWR cloexec=yes name-is-fd=yes
+mkstemps64(mk/rXXXXXX.x, 2): fd mk/r??????.x mode=0600 reg size=0 acc=RDWR cloexec=no name-is-fd=yes
+mkostemps64(mk/rXXXXXX.x, 2, O_APPEND): fd mk/r??????.x mode=0600 reg size=0 acc=RDWR|APPEND cloexec=no name-is-fd=yes
+-- mkdtemp
+mkdtemp(mk/dXXXXXX): ret==template mk/d?????? mode=0700 dir
+mkdtemp(mk/dXXXXX): NULL EINVAL template unchanged
+mkdtemp(mk/dXXXXXXXX): ret==template mk/dXX?????? mode=0700 dir
+mkdtemp(mk/dXXXXXX/): NULL EINVAL template unchanged
+mkdtemp(mk_ro/dXXXXXX): NULL EACCES template mk_ro/d??????
+mkdtemp(missing/dXXXXXX): NULL ENOENT template missing/d??????
+mkdtemp(mk/file/dXXXXXX): NULL ENOTDIR template mk/file/d??????
+mkdtemp(""): NULL EINVAL template unchanged
+mkdtemp umask 077: ret==template mk/v?????? mode=0700 dir
+mkdtemp umask 277: ret==template mk/v?????? mode=0500 dir
+mkdtemp umask 000: ret==template mk/v?????? mode=0700 dir
+mkdtemp umask 777: ret==template mk/v?????? mode=0000 dir
+-- mktemp
+mktemp(mk/gXXXXXX): ret==template mk/g?????? not created
+mktemp(mk/gXXXXX): ret==template template[0]=NUL errno=EINVAL
+mktemp(mk/g): ret==template template[0]=NUL errno=EINVAL
+mktemp(missing/gXXXXXX): ret==template missing/g?????? not created
+mktemp(mk_ro/gXXXXXX): ret==template mk_ro/g?????? not created
+mktemp(mk/file/gXXXXXX): ret==template template[0]=NUL errno=ENOTDIR
+mktemp(""): ret==template template[0]=NUL errno=EINVAL
+cleanup: 0 entries left in <dir>
+done
+scratch directory file system: tmpfs (f_type 0x1021994)
+== root phase: euid 0 yes; scratch fs tmpfs (f_type 0x1021994)
+-- chroot (in a child)
+chroot(c) with cwd <dir>: 0 -
+  getcwd(buf, PATH_MAX): NULL errno=ENOENT buf=(unreachable)<dir>
+  getcwd(NULL, 0): NULL errno=ENOENT
+  getwd: NULL errno=ENOENT buf=[untouched]
+  get_current_dir_name PWD unset: NULL errno=ENOENT
+  get_current_dir_name PWD=/: NULL errno=ENOENT
+  realpath(., buf): ENOENT buf=
+  realpath(c/in, buf) (relative to the old cwd): ENOENT buf=
+  realpath(/in/..): /
+  chdir(/in): 0; getcwd=/in
+  chdir(/..): 0; getcwd=/
+chroot(missing) as root: -1 ENOENT
+chroot(file) as root: -1 ENOTDIR
+chroot("") as root: -1 ENOENT
+-- lazy unmount of the working directory's file system
+umount2(<dir>/lz, MNT_DETACH): 0 0
+  getcwd(buf, PATH_MAX): NULL errno=ENOENT buf=(unreachable)/in
+  getcwd(NULL, 0): NULL errno=ENOENT
+  getwd: NULL errno=ENOENT buf=[untouched]
+  get_current_dir_name PWD unset: NULL errno=ENOENT
+  get_current_dir_name PWD=<dir>/lz/in: NULL errno=ENOENT
+  realpath(., buf): ENOENT buf=
+  realpath(.., NULL): ENOENT
+  opendir(.) still reads: 2 entries
+-- FTW_MOUNT, FTS_XDEV, device nodes: m/ (fs tmpfs (f_type 0x1021994)) holds f and mnt, a second tmpfs
+m/mnt fs tmpfs (f_type 0x1021994)
+m/mnt sorted, with d_type: .:DIR ..:DIR blk:BLK chr:CHR inner:REG sub:DIR
+nftw(m, nopenfd=10, FTW_PHYS) (directory order, fs tmpfs (f_type 0x1021994)):
+  D level=0 base=0 m [dir]
+  D level=1 base=2 m/zero [dir]
+  D level=1 base=2 m/mnt [dir]
+  F level=2 base=6 m/mnt/blk [blk]
+  F level=2 base=6 m/mnt/chr [chr]
+  D level=2 base=6 m/mnt/sub [dir]
+  F level=3 base=10 m/mnt/sub/g [reg]
+  F level=2 base=6 m/mnt/inner [reg]
+  F level=1 base=2 m/f [reg]
+  -> 0; cwd after=<dir>
+nftw(m, nopenfd=10, FTW_PHYS|FTW_MOUNT) (directory order, fs tmpfs (f_type 0x1021994)):
+  D level=0 base=0 m [dir]
+  D level=1 base=2 m/zero [dir]
+  F level=1 base=2 m/f [reg]
+  -> 0; cwd after=<dir>
+nftw(m, nopenfd=10, FTW_PHYS|FTW_MOUNT|FTW_DEPTH) (directory order, fs tmpfs (f_type 0x1021994)):
+  DP level=1 base=2 m/zero [dir]
+  F level=1 base=2 m/f [reg]
+  DP level=0 base=0 m [dir]
+  -> 0; cwd after=<dir>
+nftw(m/mnt, nopenfd=10, FTW_MOUNT) (directory order, fs tmpfs (f_type 0x1021994)):
+  D level=0 base=2 m/mnt [dir]
+  F level=1 base=6 m/mnt/blk [blk]
+  F level=1 base=6 m/mnt/chr [chr]
+  D level=1 base=6 m/mnt/sub [dir]
+  F level=2 base=10 m/mnt/sub/g [reg]
+  F level=1 base=6 m/mnt/inner [reg]
+  -> 0; cwd after=<dir>
+fts_open(m; FTS_PHYSICAL|FTS_NOCHDIR; sorted by name):
+  D level=0 name=m path=m acc=m [dir]
+  F level=1 name=f path=m/f acc=m/f [reg]
+  D level=1 name=mnt path=m/mnt acc=m/mnt [dir]
+  DEFAULT level=2 name=blk path=m/mnt/blk acc=m/mnt/blk [blk]
+  DEFAULT level=2 name=chr path=m/mnt/chr acc=m/mnt/chr [chr]
+  F level=2 name=inner path=m/mnt/inner acc=m/mnt/inner [reg]
+  D level=2 name=sub path=m/mnt/sub acc=m/mnt/sub [dir]
+  F level=3 name=g path=m/mnt/sub/g acc=m/mnt/sub/g [reg]
+  DP level=2 name=sub path=m/mnt/sub acc=m/mnt/sub [dir]
+  DP level=1 name=mnt path=m/mnt acc=m/mnt [dir]
+  D level=1 name=zero path=m/zero acc=m/zero [dir]
+  DP level=1 name=zero path=m/zero acc=m/zero [dir]
+  DP level=0 name=m path=m acc=m [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(m; FTS_PHYSICAL|FTS_XDEV|FTS_NOCHDIR; sorted by name):
+  D level=0 name=m path=m acc=m [dir]
+  F level=1 name=f path=m/f acc=m/f [reg]
+  D level=1 name=mnt path=m/mnt acc=m/mnt [dir]
+  DP level=1 name=mnt path=m/mnt acc=m/mnt [dir]
+  D level=1 name=zero path=m/zero acc=m/zero [dir]
+  DP level=1 name=zero path=m/zero acc=m/zero [dir]
+  DP level=0 name=m path=m acc=m [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(m; FTS_PHYSICAL|FTS_XDEV; sorted by name):
+  D level=0 name=m path=m acc=m [dir] cwd=<dir>
+  F level=1 name=f path=m/f acc=f [reg] cwd=<dir>/m
+  D level=1 name=mnt path=m/mnt acc=mnt [dir] cwd=<dir>/m
+  DP level=1 name=mnt path=m/mnt acc=mnt [dir] cwd=<dir>/m
+  D level=1 name=zero path=m/zero acc=zero [dir] cwd=<dir>/m
+  DP level=1 name=zero path=m/zero acc=zero [dir] cwd=<dir>/m
+  DP level=0 name=m path=m acc=m [dir] cwd=<dir>
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+fts_open(m/mnt; FTS_PHYSICAL|FTS_XDEV|FTS_NOCHDIR; sorted by name):
+  D level=0 name=mnt path=m/mnt acc=m/mnt [dir]
+  DEFAULT level=1 name=blk path=m/mnt/blk acc=m/mnt/blk [blk]
+  DEFAULT level=1 name=chr path=m/mnt/chr acc=m/mnt/chr [chr]
+  F level=1 name=inner path=m/mnt/inner acc=m/mnt/inner [reg]
+  D level=1 name=sub path=m/mnt/sub acc=m/mnt/sub [dir]
+  F level=2 name=g path=m/mnt/sub/g acc=m/mnt/sub/g [reg]
+  DP level=1 name=sub path=m/mnt/sub acc=m/mnt/sub [dir]
+  DP level=0 name=mnt path=m/mnt acc=m/mnt [dir]
+  fts_read end: NULL errno=0; again: NULL errno=0
+  fts_close: 0; cwd after=<dir>
+-- directory removed while open (fs tmpfs (f_type 0x1021994); every line names it)
+[fs tmpfs] readdir, empty directory removed before the first read: 0 entries; end: NULL errno=0; again: NULL errno=0
+[fs tmpfs] readdir, empty directory removed after 1 entry read: 1 more (dot entries 1); end: NULL errno=0
+[fs tmpfs] readdir, 3 files, emptied and removed after 3 entries read: 2 more; end: NULL errno=0
+[fs tmpfs] readdir, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs tmpfs] readdir64, empty directory removed before the first read: 0 entries; end: NULL errno=0; again: NULL errno=0
+[fs tmpfs] readdir64, empty directory removed after 1 entry read: 1 more (dot entries 1); end: NULL errno=0
+[fs tmpfs] readdir64, 3 files, emptied and removed after 3 entries read: 2 more; end: NULL errno=0
+[fs tmpfs] readdir64, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs tmpfs] readdir_r, empty directory removed before the first read: 0 entries; end: ret=0 result=NULL; again: ret=0 result=NULL
+[fs tmpfs] readdir_r, empty directory removed after 1 entry read: 1 more (dot entries 1); end: ret=0 result=NULL
+[fs tmpfs] readdir_r, 3 files, emptied and removed after 3 entries read: 2 more; end: ret=0 result=NULL
+[fs tmpfs] readdir_r, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: ret=0 result=NULL
+[fs tmpfs] readdir64_r, empty directory removed before the first read: 0 entries; end: ret=0 result=NULL; again: ret=0 result=NULL
+[fs tmpfs] readdir64_r, empty directory removed after 1 entry read: 1 more (dot entries 1); end: ret=0 result=NULL
+[fs tmpfs] readdir64_r, 3 files, emptied and removed after 3 entries read: 2 more; end: ret=0 result=NULL
+[fs tmpfs] readdir64_r, 2000 files, emptied and removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: ret=0 result=NULL
+[fs tmpfs] readdir, 2000 files, emptied but NOT removed after 50 entries read: more entries returned: some (fewer than the 1952 left: yes); end: NULL errno=0
+[fs tmpfs] rewinddir after removal (5 entries read before it): 0 entries; end: NULL errno=0
+[fs tmpfs] seekdir(0) after that: 0 entries; end: NULL errno=0
+[fs tmpfs] rewinddir on a stream whose directory was removed before the first read: 0 entries; end: NULL errno=0
+[fs tmpfs] fdopendir(descriptor of a removed directory): ok 0; readdir: 0 entries; end: NULL errno=0
+[fs tmpfs] fdopendir, then the directory removed: readdir_r 0 entries; end: ret=0 result=NULL
+[fs tmpfs] getdents64 on a descriptor of an empty directory removed before the first call: ENOENT; again: ENOENT
+[fs tmpfs]   lseek(0): 0; getdents64 after it: ENOENT
+[fs tmpfs] getdents64, 2000 files, one 1024-byte call (bytes>0), then emptied and removed: ENOENT; again: ENOENT
+[fs tmpfs]   lseek(0): 0; getdents64 after it: ENOENT
+[fs tmpfs] getdents64, 2000 files, one 1024-byte call (bytes>0), then emptied but NOT removed: 0 (end)
+[fs tmpfs] removed working directory: open("."): ok; getdents64: ENOENT
+done root

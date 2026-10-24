@@ -1,0 +1,354 @@
+running as root: no
+== constants
+priorities: EMERG 0 ALERT 1 CRIT 2 ERR 3 WARNING 4 NOTICE 5 INFO 6 DEBUG 7
+facilities: KERN 0 USER 8 MAIL 16 DAEMON 24 AUTH 32 SYSLOG 40 LPR 48 NEWS 56 UUCP 64 CRON 72 AUTHPRIV 80 FTP 88 LOCAL0 128 LOCAL7 184
+options: PID 0x1 CONS 0x2 ODELAY 0x4 NDELAY 0x8 NOWAIT 0x10 PERROR 0x20
+masks: PRIMASK 0x7 FACMASK 0x3f8 NFACILITIES 24 LOG_MASK(ERR) 0x8 LOG_UPTO(ERR) 0xf LOG_PRI(0x9b) 3 LOG_FAC(0x9b) 19 LOG_MAKEPRI(LOCAL0,ERR) 131
+_PATH_LOG [/dev/log] INTERNAL_NOPRI 0x10 INTERNAL_MARK 0xc0
+prioritynames: alert=1 crit=2 debug=7 emerg=0 err=3 error=3 info=6 none=16 notice=5 panic=0 warn=4 warning=4
+facilitynames: auth=32 authpriv=80 cron=72 daemon=24 ftp=88 kern=0 lpr=48 mail=16 mark=192 news=56 security=32 syslog=40 user=8 uucp=64 local0=128 local1=136 local2=144 local3=152 local4=160 local5=168 local6=176 local7=184
+== default connection (no openlog)
+after first syslog: fds +1 -0; socket unix dgram peer=[/dev/log] cloexec=yes nonblock=no
+first: 35+1P [<14><TS> <prog>: first message]
+after second syslog: fds +0 -0
+second: 36+1P [<14><TS> <prog>: second message]
+after closelog: fds +0 -1
+after second closelog: fds +0 -0
+after closelog: 36+1P [<14><TS> <prog>: after closelog]
+== priorities and facilities (no openlog)
+fac KERN: <8> <9> <10> <11> <12> <13> <14> <15>
+fac USER: <8> <9> <10> <11> <12> <13> <14> <15>
+fac MAIL: <16> <17> <18> <19> <20> <21> <22> <23>
+fac DAEMON: <24> <25> <26> <27> <28> <29> <30> <31>
+fac AUTH: <32> <33> <34> <35> <36> <37> <38> <39>
+fac SYSLOG: <40> <41> <42> <43> <44> <45> <46> <47>
+fac LPR: <48> <49> <50> <51> <52> <53> <54> <55>
+fac NEWS: <56> <57> <58> <59> <60> <61> <62> <63>
+fac UUCP: <64> <65> <66> <67> <68> <69> <70> <71>
+fac CRON: <72> <73> <74> <75> <76> <77> <78> <79>
+fac AUTHPRIV: <80> <81> <82> <83> <84> <85> <86> <87>
+fac FTP: <88> <89> <90> <91> <92> <93> <94> <95>
+fac 12<<3: <96> <97> <98> <99> <100> <101> <102> <103>
+fac 15<<3: <120> <121> <122> <123> <124> <125> <126> <127>
+fac LOCAL0: <128> <129> <130> <131> <132> <133> <134> <135>
+fac LOCAL1: <136> <137> <138> <139> <140> <141> <142> <143>
+fac LOCAL2: <144> <145> <146> <147> <148> <149> <150> <151>
+fac LOCAL3: <152> <153> <154> <155> <156> <157> <158> <159>
+fac LOCAL4: <160> <161> <162> <163> <164> <165> <166> <167>
+fac LOCAL5: <168> <169> <170> <171> <172> <173> <174> <175>
+fac LOCAL6: <176> <177> <178> <179> <180> <181> <182> <183>
+fac LOCAL7: <184> <185> <186> <187> <188> <189> <190> <191>
+pri 0xffffffff: 65+1P [<35><TS> <prog>: syslog: unknown facility/priority: ffffffff]
+pri 0xffffffff: 31+1P [<1023><TS> <prog>: bad pri]
+pri 0xffffffff: errno after EDOM
+pri 0x3fb: 31+1P [<1019><TS> <prog>: bad pri]
+pri 0x3fb: errno after EDOM
+pri 0xc3: 30+1P [<195><TS> <prog>: bad pri]
+pri 0xc3: errno after EDOM
+pri 0xcb: 30+1P [<203><TS> <prog>: bad pri]
+pri 0xcb: errno after EDOM
+pri 0x400: 60+1P [<35><TS> <prog>: syslog: unknown facility/priority: 400]
+pri 0x400: 28+1P [<8><TS> <prog>: bad pri]
+pri 0x400: errno after EDOM
+pri 0x403: 60+1P [<35><TS> <prog>: syslog: unknown facility/priority: 403]
+pri 0x403: 29+1P [<11><TS> <prog>: bad pri]
+pri 0x403: errno after EDOM
+pri 0x1003: 61+1P [<35><TS> <prog>: syslog: unknown facility/priority: 1003]
+pri 0x1003: 29+1P [<11><TS> <prog>: bad pri]
+pri 0x1003: errno after EDOM
+pri 0x10003: 62+1P [<35><TS> <prog>: syslog: unknown facility/priority: 10003]
+pri 0x10003: 29+1P [<11><TS> <prog>: bad pri]
+pri 0x10003: errno after EDOM
+pri 0x80000000: 65+1P [<35><TS> <prog>: syslog: unknown facility/priority: 80000000]
+pri 0x80000000: 28+1P [<8><TS> <prog>: bad pri]
+pri 0x80000000: errno after EDOM
+pri 0x80000083: 65+1P [<35><TS> <prog>: syslog: unknown facility/priority: 80000083]
+pri 0x80000083: 30+1P [<131><TS> <prog>: bad pri]
+pri 0x80000083: errno after EDOM
+pri 0x7fffffff: 65+1P [<35><TS> <prog>: syslog: unknown facility/priority: 7fffffff]
+pri 0x7fffffff: 31+1P [<1023><TS> <prog>: bad pri]
+pri 0x7fffffff: errno after EDOM
+== openlog facility
+openlog facility LOCAL3: ERR <155> KERN|ERR <155> DAEMON|ERR <27>
+openlog facility 0 after LOCAL3: ERR <3> KERN|ERR <3> DAEMON|ERR <27>
+openlog facility MAIL: ERR <19> KERN|ERR <19> DAEMON|ERR <27>
+openlog facility LOCAL3|ERR: ERR <19> KERN|ERR <19> DAEMON|ERR <27>
+openlog facility 0x400: ERR <19> KERN|ERR <19> DAEMON|ERR <27>
+openlog facility 0x3f8: ERR <1019> KERN|ERR <1019> DAEMON|ERR <27>
+openlog facility -1: ERR <1019> KERN|ERR <1019> DAEMON|ERR <27>
+openlog facility LOCAL5: ERR <171> KERN|ERR <171> DAEMON|ERR <27>
+openlog facility 7: ERR <171> KERN|ERR <171> DAEMON|ERR <27>
+openlog facility 0x10000|LOCAL1: ERR <171> KERN|ERR <171> DAEMON|ERR <27>
+after openlog LOCAL2 and closelog: ERR <147>
+openlog(NULL, 0, LOCAL2): ERR <147>
+== ident
+ident first: 27 [<6><TS> first: x]
+ident buffer changed after openlog: 36 [<6><TS> second-changed: x]
+ident buffer emptied after openlog: 22 [<6><TS> : x]
+after closelog: 22+1P [<6><TS> <prog>: x]
+ident empty: 22 [<6><TS> : x]
+ident empty, LOG_PID: 31 [<6><TS> [<pid>]: x]
+ident NULL: 22 [<6><TS> : x]
+ident NULL, LOG_PID: 31 [<6><TS> [<pid>]: x]
+ident with blank, colon, brackets: 30 [<6><TS> a b:c[d]: x]
+ident with newline, control, UTF-8: 30 [<6><TS> nl\x0aid\x01\xc3\xa9: x]
+ident with conversions: 28 [<6><TS> %s%n%m: x]
+ident 31 bytes, LOG_PID: 62 [<6><TS> iiiiiiiiiiiiiiiiiiiiiiiiiiiiiii[<pid>]: x]
+ident 32 bytes, LOG_PID: 63 [<6><TS> iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii[<pid>]: x]
+ident 33 bytes, LOG_PID: 64 [<6><TS> iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii[<pid>]: x]
+ident 64 bytes, LOG_PID: 95 [<6><TS> <i>*64[<pid>]: x]
+ident 255 bytes, LOG_PID: 286 [<6><TS> <i>*255[<pid>]: x]
+ident 256 bytes, LOG_PID: 287 [<6><TS> <i>*256[<pid>]: x]
+ident 1000 bytes, LOG_PID: 1031 [<6><TS> <i>*1000[<pid>]: x]
+ident 1024 bytes, LOG_PID: 1055 [<6><TS> <i>*1024[<pid>]: x]
+ident 2000 bytes, LOG_PID: 2031 [<6><TS> <i>*2000[<pid>]: x]
+ident 2999 bytes, LOG_PID: 3030 [<6><TS> <i>*2999[<pid>]: x]
+openlog one then openlog NULL: 25 [<6><TS> one: x]
+== options
+LOG_PID: 34 [<6><TS> opt[<pid>]: x]
+after openlog LOG_NDELAY: fds +1 -0; socket unix dgram peer=[/dev/log] cloexec=yes nonblock=no
+after syslog: fds +0 -0
+LOG_NDELAY: 25 [<6><TS> opt: x]
+after a second openlog LOG_NDELAY: fds +0 -0
+after openlog 0 while connected: fds +0 -0
+openlog 0 while connected: 25 [<6><TS> opt: x]
+after closelog: fds +0 -1
+after openlog LOG_ODELAY: fds +0 -0
+after syslog: fds +1 -0; socket unix dgram peer=[/dev/log] cloexec=yes nonblock=no
+LOG_ODELAY: 25 [<6><TS> opt: x]
+after openlog 0: fds +0 -0
+LOG_NOWAIT: 25 [<6><TS> opt: x]
+unknown option bits 0x5000: 25 [<6><TS> opt: x]
+LOG_PID then openlog without it: 26 [<6><TS> opt2: x]
+LOG_PID, LOCAL1, closelog, syslog: 33+1P [<142><TS> <prog>[<pid>]: x]
+== LOG_PERROR
+perr: stderr 14 [perr: to both\x0a]
+perr: 32 [<3><TS> perr: to both]
+perr pid: stderr 24 [perr[<pid>]: with pid\x0a]
+perr pid: 42 [<3><TS> perr[<pid>]: with pid]
+perr trailing newline: stderr 32 [perr[<pid>]: trailing newline\x0a]
+perr trailing newline: 51 [<3><TS> perr[<pid>]: trailing newline\x0a]
+perr two newlines: stderr 29 [perr[<pid>]: two newlines\x0a\x0a]
+perr two newlines: 48 [<3><TS> perr[<pid>]: two newlines\x0a\x0a]
+perr embedded newline: stderr 23 [perr[<pid>]: in\x0aside\x0a]
+perr embedded newline: 41 [<3><TS> perr[<pid>]: in\x0aside]
+perr empty: stderr 16 [perr[<pid>]: \x0a]
+perr empty: 34 [<3><TS> perr[<pid>]: ]
+perr NUL: stderr 17 [perr[<pid>]: a\x0a]
+perr NUL: 37 [<3><TS> perr[<pid>]: a\x00b]
+perr 5000: stderr 5016 [perr[<pid>]: <y>*5000\x0a]
+perr 5000: 5034 [<3><TS> perr[<pid>]: <y>*5000]
+perr ident NULL: stderr 17 [perr: ident NULL\x0a]
+perr ident NULL: 35 [<3><TS> perr: ident NULL]
+perr ident empty: stderr 14 [: ident empty\x0a]
+perr ident empty: 32 [<3><TS> : ident empty]
+perr masked priority: stderr 0 []
+perr masked priority: nothing
+stderr orientation after LOG_PERROR: 0
+perr after closelog: stderr 17+1P [<prog>: after closelog\x0a]
+perr after closelog: 35+1P [<3><TS> <prog>: after closelog]
+perr after openlog 0: stderr 0 []
+perr after openlog 0: 54+1P [<11><TS> <prog>: after openlog(NULL, 0, LOG_USER)]
+stderr closed: 28 [closed2: with stderr closed\x0a]
+stderr closed: 46 [<3><TS> closed2: with stderr closed]
+perr with fd 2 closed: child exited 0
+perr with fd 2 closed, parent: nothing
+== setlogmask
+setlogmask(0) initially: 0xff
+setlogmask(0) again: 0xff
+setlogmask(LOG_MASK(ERR)): 0xff
+setlogmask(0): 0x8
+mask ERR, LOCAL0|0: none
+mask ERR, LOCAL0|1: none
+mask ERR, LOCAL0|2: none
+mask ERR, LOCAL0|3: <131>
+mask ERR, LOCAL0|4: none
+mask ERR, LOCAL0|5: none
+mask ERR, LOCAL0|6: none
+mask ERR, LOCAL0|7: none
+setlogmask(LOG_UPTO(WARNING)): 0x8
+mask UPTO(WARNING), 0: <8>
+mask UPTO(WARNING), 1: <9>
+mask UPTO(WARNING), 2: <10>
+mask UPTO(WARNING), 3: <11>
+mask UPTO(WARNING), 4: <12>
+mask UPTO(WARNING), 5: none
+mask UPTO(WARNING), 6: none
+mask UPTO(WARNING), 7: none
+setlogmask(-1): 0x1f
+setlogmask(0): 0xffffffff
+mask -1, DEBUG: <15>
+setlogmask(0x100): 0xffffffff
+setlogmask(0): 0x100
+mask 0x100, 0: none
+mask 0x100, 1: none
+mask 0x100, 2: none
+mask 0x100, 3: none
+mask 0x100, 4: none
+mask 0x100, 5: none
+mask 0x100, 6: none
+mask 0x100, 7: none
+mask 0x100, invalid pri 0x10003: nothing
+setlogmask(0x1ff): 0x100
+setlogmask(LOG_MASK(INFO)): 0x1ff
+mask INFO, invalid pri 0x10003: nothing
+mask INFO, pri -1: nothing
+masked syslog with a counting specifier: count 0, none
+passing syslog with a counting specifier: count 1
+passed: 30+1P [<14><TS> <prog>: passed W]
+masked message while not connected: fds +0 -0
+setlogmask(0) after closelog: 0x40
+restore 0xff: 0x40
+== format
+%m EACCES: 43 [<6><TS> fmt: m=Permission denied]
+%m 0: 33 [<6><TS> fmt: m=Success]
+%m 99999: 45 [<6><TS> fmt: m=Unknown error 99999]
+%m -5: 42 [<6><TS> fmt: m=Unknown error -5]
+%m twice with arguments: 79 [<6><TS> fmt: a No such file or directory 7 No such file or directory]
+%m with width and precision: 97 [<6><TS> fmt: [No such file or directory     ] [     No such file or directory] [No su]]
+%%m: 53 [<6><TS> fmt: %m %No such file or directory]
+vsyslog %m: 55 [<6><TS> fmt: v No such file or directory arg]
+errno after a delivered syslog (EDOM before): EDOM
+errno: 40 [<6><TS> fmt: errno preserved?]
+empty message: 24 [<6><TS> fmt: ]
+trailing newline: 29 [<6><TS> fmt: line\x0a]
+two trailing newlines: 30 [<6><TS> fmt: line\x0a\x0a]
+only a newline: 25 [<6><TS> fmt: \x0a]
+embedded newline and CRLF: 30 [<6><TS> fmt: a\x0ab\x0d\x0ac]
+embedded NUL: 29 [<6><TS> fmt: a\x00b\x00c]
+control and high bytes: 38 [<6><TS> fmt: tab\x09here \x01\x7f\xc3\xa9\xff]
+printf conversions: 48 [<6><TS> fmt: -42  3.14 ff str q (nil)]
+%ls: 28 [<6><TS> fmt: wide]
+== long messages (datagram)
+body 900: 925 [<6><TS> long: <x>*900]
+body 900: errno after EDOM
+body 1000: 1025 [<6><TS> long: <x>*1000]
+body 1000: errno after EDOM
+body 1023: 1048 [<6><TS> long: <x>*1023]
+body 1023: errno after EDOM
+body 1024: 1049 [<6><TS> long: <x>*1024]
+body 1024: errno after EDOM
+body 1025: 1050 [<6><TS> long: <x>*1025]
+body 1025: errno after EDOM
+body 2000: 2025 [<6><TS> long: <x>*2000]
+body 2000: errno after EDOM
+body 2048: 2073 [<6><TS> long: <x>*2048]
+body 2048: errno after EDOM
+body 4000: 4025 [<6><TS> long: <x>*4000]
+body 4000: errno after EDOM
+body 8192: 8217 [<6><TS> long: <x>*8192]
+body 8192: errno after EDOM
+body 16384: 16409 [<6><TS> long: <x>*16384]
+body 16384: errno after EDOM
+body 65536: 65561 [<6><TS> long: <x>*65536]
+body 65536: errno after EDOM
+body 100000: 100025 [<6><TS> long: <x>*100000]
+body 100000: errno after EDOM
+body 200000: 200025 [<6><TS> long: <x>*200000]
+body 200000: errno after EDOM
+body 212000: 212025 [<6><TS> long: <x>*212000]
+body 212000: errno after EDOM
+body 213000: nothing
+body 213000: errno after EMSGSIZE
+body 300000: nothing
+body 300000: errno after EMSGSIZE
+body 1000000: nothing
+body 1000000: errno after EMSGSIZE
+body 300000, LOG_CONS: errno after EMSGSIZE
+body 300000, LOG_CONS: fds +0 -0
+body 300000, LOG_CONS: nothing
+body 300000, LOG_CONS: console 300008 [long: <x>*300000\x0d\x0a]
+short after the long one: 36 [<6><TS> long: short after]
+format of 3000 bytes: 3025 [<6><TS> long: <z>*3000]
+NULL format: child killed by SIGSEGV
+NULL format, parent: nothing
+== timestamp time zone
+TZ=XST-5:30: 24 [<6><TS> tz: x]
+TZ changed to UTC0 without tzset: 24 [<6><TS?> tz: x]
+after tzset: 24 [<6><TS> tz: x]
+tz: child exited 0
+== fork
+parent before: 47 [<6><TS> fork[<pid>]: parent before]
+child: child exited 0
+child's message: 48 [<6><TS> fork[<cpid>]: from the child]
+parent after: 67 [<6><TS> fork[<pid>]: parent after the child's closelog]
+== __syslog_chk and __vsyslog_chk
+__syslog_chk flag 1: 60 [<163><TS> chk[<pid>]: chk 5 s Permission denied]
+__vsyslog_chk flag 1: 61 [<163><TS> chk[<pid>]: vchk 6 t Permission denied]
+__syslog_chk flag -1: 42 [<163><TS> chk[<pid>]: flag -1]
+returned, n=3
+chk flag 1, read-only format with %n: 32 [<6><TS> chk: ro  done]
+chk read-only %n: child exited 0
+chk writable %n: child killed by SIGABRT
+chk writable %n: child stderr 40 [*** %n in writable segment detected ***\x0a]
+returned, n=4
+chk flag 0, writable format with %n: 33 [<6><TS> chk: rw0  done]
+chk flag 0 writable %n: child exited 0
+vchk writable %n: child killed by SIGABRT
+vchk writable %n: child stderr 40 [*** %n in writable segment detected ***\x0a]
+returned, n=-1
+chk flag 1, writable %n, masked: nothing
+chk masked writable %n: child exited 0
+returned, n=6
+syslog with %n: 35 [<6><TS> chk: plain  done]
+syslog %n: child exited 0
+parent after the children: nothing
+== receiver queue full (datagram)
+4000 messages, receiver not reading: child killed by SIGALRM
+calls returned: more than 10, fewer than 4000; datagrams queued: more than 10, fewer than 4000; calls returned == datagrams queued: yes
+after drain: 59+1P [<166><TS> <prog>[<pid>]: after the queue was drained]
+== receiver gone and reconnection
+connected: 31 [<6><TS> gone: before]
+receiver closed: errno after ECONNREFUSED
+after syslog to a closed receiver: fds +0 -1
+receiver closed, LOG_CONS: console 23 [gone: receiver closed\x0d\x0a]
+receiver still closed, LOG_CONS: console 29 [gone: receiver still closed\x0d\x0a]
+new receiver: 37 [<6><TS> gone: new receiver]
+new receiver, LOG_CONS: console 0 []
+first receiver: 28 [<6><TS> gone: one]
+replaced receiver: 42 [<6><TS> gone: after replacement]
+replaced receiver, next: 30 [<6><TS> gone: again]
+receiver closed, no LOG_CONS: errno after ECONNREFUSED
+receiver closed, no LOG_CONS: console 0 []
+== stream socket at /dev/log
+after openlog LOG_NDELAY: fds +1 -0; socket unix stream peer=[/dev/log] cloexec=yes nonblock=no
+pending connection after openlog: yes
+stream bytes: 5150 [<6><TS> stream: one\x00<6><TS> stream: two\x0a\x00<6><TS> stream: \x00<6><TS> stream: a\x00b\x00<6><TS> stream: <s>*5000\x00]
+further connection: no
+pending connection after openlog without LOG_NDELAY: no
+stream lazy: 41 [<6><TS> stream[<pid>]: lazy\x00]
+stream 100000: 100028 [<6><TS> stream: <L>*100000\x00]
+returned after a closed peer
+stream peer closed, listener still there, LOG_CONS: console 0 []
+stream peer closed: child exited 0
+after the child, further connections: 49 [<6><TS> pipe: to a closed stream peer\x00]
+returned, errno EPIPE
+stream peer closed, /dev/log removed, LOG_CONS: console 44 [pipe: to a closed stream peer, no listener\x0d\x0a]
+stream peer gone: child exited 0
+returned, errno EPIPE
+stream peer gone, no LOG_CONS: child exited 0
+== /dev/log absent
+no LOG_CONS: errno after EDOM
+after syslog with no /dev/log: fds +0 -0
+no LOG_CONS: console 0 []
+after openlog LOG_NDELAY with no /dev/log: fds +0 -0
+LOG_CONS: errno after EDOM
+LOG_CONS: console 22 [cons: to the console\x0d\x0a]
+LOG_CONS|LOG_PID: console 25 [cons[<pid>]: with pid\x0d\x0a]
+LOG_CONS trailing newline: console 34 [cons[<pid>]: trailing newline\x0a\x0d\x0a]
+LOG_CONS NUL: console 18 [cons[<pid>]: a\x0d\x0a]
+LOG_CONS 5000: console 5017 [cons[<pid>]: <c>*5000\x0d\x0a]
+LOG_CONS two messages: console 30 [cons[<pid>]: 2\x0d\x0ast, longer\x0d\x0a]
+after a LOG_CONS message: fds +0 -0
+LOG_CONS fds: console 20 [cons[<pid>]: fds\x0d\x0a]
+LOG_CONS|LOG_PERROR: stderr 11 [cons: both\x0a]
+LOG_CONS|LOG_PERROR: console 12 [cons: both\x0d\x0a]
+LOG_PERROR without LOG_CONS: stderr 18 [cons: stderr only\x0a]
+LOG_PERROR without LOG_CONS: console 0 []
+LOG_CONS, no /dev/console: console ENOENT
+still alive
+/dev/log a regular file, LOG_CONS: console 21 [cons: log is a file\x0d\x0a]
+/dev/log file size after: 0
+== /dev/console a FIFO without a reader (no /dev/log)
+fifo console: child killed by SIGALRM
+done
