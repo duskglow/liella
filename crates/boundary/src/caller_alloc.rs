@@ -50,10 +50,28 @@ fn counted(yes: bool, d: i64) {
     let _ = (yes, d);
 }
 
+/// Whether the test builds' injected failure (`liella::failinject`, ALLOC-FAIL-INJECT) takes
+/// this allocation of `bytes` bytes: `errno` is then `ENOMEM`, as for exhausted memory. Products
+/// compile it away.
+#[inline(always)]
+fn injected(bytes: usize) -> bool {
+    #[cfg(feature = "selftest")]
+    if liella::failinject::should_fail(bytes) {
+        crate::errno::set(Errno::ENOMEM);
+        return true;
+    }
+    #[cfg(not(feature = "selftest"))]
+    let _ = bytes;
+    false
+}
+
 /// `malloc(n)` through the symbol.
 #[allow(dead_code)] // the §3 exports (phase 3)
 #[inline(always)]
 pub(crate) fn malloc(n: usize) -> *mut c_void {
+    if injected(n) {
+        return core::ptr::null_mut();
+    }
     let p = c_malloc(n);
     counted(!p.is_null(), 1);
     p
@@ -62,6 +80,9 @@ pub(crate) fn malloc(n: usize) -> *mut c_void {
 /// `calloc(n, size)` through the symbol.
 #[inline(always)]
 pub(crate) fn calloc(n: usize, size: usize) -> *mut c_void {
+    if injected(n.saturating_mul(size)) {
+        return core::ptr::null_mut();
+    }
     let p = c_calloc(n, size);
     counted(!p.is_null(), 1);
     p
@@ -72,6 +93,10 @@ pub(crate) fn calloc(n: usize, size: usize) -> *mut c_void {
 #[allow(dead_code)] // the §3 exports (phase 3)
 #[inline(always)]
 pub(crate) fn realloc(p: *mut c_void, n: usize) -> *mut c_void {
+    // A failed growth leaves `p` allocated, as `realloc` does; `realloc(p, 0)` is a release.
+    if n != 0 && injected(n) {
+        return core::ptr::null_mut();
+    }
     let q = c_realloc(p, n);
     // A new block from NULL; `realloc(p, 0)` returning NULL released `p`.
     counted(p.is_null() && !q.is_null(), 1);

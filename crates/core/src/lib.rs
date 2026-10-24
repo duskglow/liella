@@ -21,6 +21,8 @@ extern crate alloc;
 
 pub mod error;
 pub mod mem;
+#[cfg(feature = "selftest")]
+pub mod failinject;
 pub mod env;
 pub mod getopt;
 pub mod argp;

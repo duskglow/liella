@@ -40,11 +40,19 @@ impl<T> TryVec<T> {
 
     /// Room for `n` more elements.
     pub fn reserve(&mut self, n: usize) -> Result<()> {
+        #[cfg(feature = "selftest")]
+        if crate::failinject::grow_fails(self.inner.capacity(), self.inner.len(), n, size_of::<T>()) {
+            return Err(Errno::ENOMEM);
+        }
         self.inner.try_reserve(n).map_err(|_| Errno::ENOMEM)
     }
 
     /// Room for exactly `n` more elements.
     pub fn reserve_exact(&mut self, n: usize) -> Result<()> {
+        #[cfg(feature = "selftest")]
+        if crate::failinject::grow_fails(self.inner.capacity(), self.inner.len(), n, size_of::<T>()) {
+            return Err(Errno::ENOMEM);
+        }
         self.inner.try_reserve_exact(n).map_err(|_| Errno::ENOMEM)
     }
 
@@ -458,6 +466,10 @@ impl<T> TryBox<T> {
     /// `value` on the heap.
     pub fn new(value: T) -> Result<TryBox<T>> {
         let mut slot = Vec::new();
+        #[cfg(feature = "selftest")]
+        if crate::failinject::grow_fails(0, 0, 1, size_of::<T>()) {
+            return Err(Errno::ENOMEM);
+        }
         slot.try_reserve_exact(1).map_err(|_| Errno::ENOMEM)?;
         // Capacity was reserved above, so this cannot allocate.
         #[allow(clippy::disallowed_methods)]
