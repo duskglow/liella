@@ -52,10 +52,11 @@ pub(crate) fn check(test: &str) {
     }
     let o = Command::new(&bin.0)
         .arg(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(CHILD, "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let (out, err) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     if o.status.code() == Some(77) {
         if let Some(why) = err.lines().find_map(|l| l.strip_prefix("SKIP: ")) {

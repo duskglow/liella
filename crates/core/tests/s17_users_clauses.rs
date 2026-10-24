@@ -409,7 +409,8 @@ fn s17_5a_c_0() {
         assert_eq!((missing(), missing(), missing()), (Some("/bin/sh".into()), Some("/bin/csh".into()), None), "no file: /bin/sh and /bin/csh");
         return;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["s17_5a_c_0", "--exact", "--test-threads=1"]).env("LIELLA_C17_SHELLS", "1").output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["s17_5a_c_0", "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_C17_SHELLS", "1").output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
 }
 #[test]
@@ -705,8 +706,9 @@ fn s17_5_c_3() {
         return;
     }
     let mut child = std::process::Command::new("setsid")
+        // reexec-guard: allow(spawned; the child's marker output is asserted below)
         .arg(std::env::current_exe().unwrap())
-        .args(["s17_5_c_3", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["s17_5_c_3", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_S17_GETPASS", "1")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

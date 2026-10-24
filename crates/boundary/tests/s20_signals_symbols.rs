@@ -118,10 +118,11 @@ fn alone(name: &str, body: impl FnOnce() -> bool) {
         CSys.exit_group(if body() { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S20_ALONE", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{name} failed in its child: {}", child_report(&o));
 }
 
@@ -143,10 +144,11 @@ fn own_stderr(name: &str, body: impl FnOnce()) -> String {
         CSys.exit_group(0);
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1", "--nocapture"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_S20_ERR", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let all = String::from_utf8(o.stderr).unwrap();
     all.lines().filter(|l| l.contains("LIELLA")).map(|l| format!("{l}\n")).collect()
 }

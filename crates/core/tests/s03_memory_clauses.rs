@@ -82,11 +82,13 @@ fn probe() -> Option<String> {
 }
 
 fn run_probe(test: &str, name: &str) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 /// Run `body` alone in a re-executed copy of this binary (one test, one thread), so that heap
@@ -684,11 +686,12 @@ fn s3_3_c_3() {
     }
     let path = scratch::Scratch::path("mtrace");
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["s3_3_c_3", "--exact", "--test-threads=1"])
+        .args(["s3_3_c_3", "--exact", "--include-ignored", "--test-threads=1"])
         .env(PROBE, "trace")
         .env("MALLOC_TRACE", &*path)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success());
     // Liella's C library traces itself (D-3.5 as decided in phase 13; the reference needs
     // libc_malloc_debug.so preloaded): the file holds the start, the 100-byte block's

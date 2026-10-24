@@ -142,12 +142,14 @@ fn run_probe(test: &str, name: &str) -> std::process::Output {
     // whatever the child left (a fortify child aborts and drops nothing).
     let scratch = tmp("child");
     std::fs::create_dir(scratch.to_str().unwrap()).unwrap();
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .env(CHILD_TMP, scratch.to_str().unwrap())
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 /// The variable naming a re-executed child's scratch directory ([`run_probe`]).
@@ -507,10 +509,11 @@ fn sym_aio_cancel() {
         CSys.exit_group(0);
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_aio_cancel", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["sym_aio_cancel", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, "aio-close-first")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "close cancels queued aio requests when it follows the process's first aio_read: {}", String::from_utf8_lossy(&o.stderr));
     check_cancel(s::aio_cancel);
     close_cancels_queued();
@@ -1089,10 +1092,11 @@ fn sym_lockf() {
     assert_eq!(s::lockf(fd, 2, 0), 0, "F_TLOCK");
     assert_eq!(s::lockf(fd, 3, 0), 0, "F_TEST: our own lock does not conflict");
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_lockf", "--exact", "--test-threads=1"])
+        .args(["sym_lockf", "--exact", "--include-ignored", "--test-threads=1"])
         .env(PROBE, p.to_str().unwrap())
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "another process: F_TEST and F_TLOCK fail");
     assert_eq!(s::lockf(fd, 0, 0), 0, "F_ULOCK");
     errno::set_raw(0);
@@ -1116,10 +1120,11 @@ fn sym_lockf64() {
     assert_eq!(s::lockf64(fd, 2, 0), 0, "F_TLOCK");
     assert_eq!(s::lockf64(fd, 3, 0), 0, "F_TEST: our own lock does not conflict");
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_lockf64", "--exact", "--test-threads=1"])
+        .args(["sym_lockf64", "--exact", "--include-ignored", "--test-threads=1"])
         .env(PROBE, p.to_str().unwrap())
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "another process: F_TEST and F_TLOCK fail");
     assert_eq!(s::lockf64(fd, 0, 0), 0, "F_ULOCK");
     errno::set_raw(0);
