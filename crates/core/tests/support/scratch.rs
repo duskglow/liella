@@ -90,6 +90,7 @@ pub(crate) fn remove(p: &Path) {
     let _ = std::fs::remove_dir_all(p);
 }
 
+// FS-ORDER: restores permissions on every entry; the order of visiting is irrelevant
 fn open_up(p: &Path) {
     if std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir()) {
         let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700));

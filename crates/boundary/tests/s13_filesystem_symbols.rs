@@ -855,6 +855,7 @@ fn sym_fts_open() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_fts_read() {
     let t = Tmp::new("fts_read");
     t.file("f");
@@ -877,6 +878,7 @@ fn sym_fts_read() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_fts_set() {
     let t = Tmp::new("fts_set");
     t.dir("d");
@@ -894,6 +896,7 @@ fn sym_fts_set() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_ftw() {
     let t = Tmp::new("ftw");
     t.dir("d");
@@ -906,6 +909,7 @@ fn sym_ftw() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_ftw64() {
     let t = Tmp::new("ftw64");
     t.file("f");
@@ -1712,6 +1716,7 @@ fn sym_move_mount() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_nftw() {
     let t = Tmp::new("nftw");
     t.dir("d");
@@ -1728,6 +1733,7 @@ fn sym_nftw() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_nftw64() {
     let t = Tmp::new("nftw64");
     t.file("f");
@@ -2053,6 +2059,7 @@ fn sym_rmdir() {
 }
 
 #[test]
+// FS-ORDER: the listing is ordered by the `alpha` comparison function
 fn sym_scandir() {
     let t = Tmp::new("scandir");
     t.file("b");
@@ -2065,6 +2072,7 @@ fn sym_scandir() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_scandir64() {
     let t = Tmp::new("scandir64");
     t.file("a");
@@ -2095,6 +2103,7 @@ fn sym_scandirat() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_seekdir() {
     let t = Tmp::new("seekdir");
     for n in ["a", "b", "c"] {
@@ -2287,6 +2296,7 @@ fn sym_symlinkat() {
 }
 
 #[test]
+// FS-ORDER: symbol smoke test of the listing call itself: asserts return codes, counts and callback flags, not the order of entries
 fn sym_telldir() {
     let t = Tmp::new("telldir");
     let d = s::opendir(cpath(&t.path).as_ptr());

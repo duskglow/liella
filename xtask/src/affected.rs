@@ -1141,6 +1141,7 @@ enum Class {
 const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/policy.rs", &[]),
     ("xtask/src/forkalloc.rs", &[]),
+    ("xtask/src/fs_order.rs", &[]),
     ("xtask/src/symgap.rs", &["symgap"]),
     ("xtask/src/status.rs", &["status"]),
     ("xtask/src/schedule.rs", &["status"]),
