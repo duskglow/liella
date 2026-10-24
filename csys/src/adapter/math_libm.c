@@ -103,28 +103,42 @@ struct liella_ld_bits liella_cabsf64x_bits(struct liella_ldc_bits);
 long double MATH_FWD(cabsf64x)(long double _Complex a0) { return LD(liella_cabsf64x_bits(LDC_BITS(a0))); }
 struct liella_ld_bits liella_cabsl_bits(struct liella_ldc_bits);
 long double MATH_FWD(cabsl)(long double _Complex a0) { return LD(liella_cabsl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_cacosf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(cacosf128)(_Float128 _Complex a0) { return F128C(liella_cacosf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_cacosf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(cacosf64x)(long double _Complex a0) { return LDC(liella_cacosf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_cacoshf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(cacoshf128)(_Float128 _Complex a0) { return F128C(liella_cacoshf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_cacoshf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(cacoshf64x)(long double _Complex a0) { return LDC(liella_cacoshf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_cacoshl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(cacoshl)(long double _Complex a0) { return LDC(liella_cacoshl_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_cacosl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(cacosl)(long double _Complex a0) { return LDC(liella_cacosl_bits(LDC_BITS(a0))); }
+struct liella_f128_bits liella_cargf128_bits(struct liella_f128c_bits);
+__float128 MATH_FWD(cargf128)(_Float128 _Complex a0) { return F128(liella_cargf128_bits(F128C_BITS(a0))); }
 struct liella_ld_bits liella_cargf64x_bits(struct liella_ldc_bits);
 long double MATH_FWD(cargf64x)(long double _Complex a0) { return LD(liella_cargf64x_bits(LDC_BITS(a0))); }
 struct liella_ld_bits liella_cargl_bits(struct liella_ldc_bits);
 long double MATH_FWD(cargl)(long double _Complex a0) { return LD(liella_cargl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_casinf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(casinf128)(_Float128 _Complex a0) { return F128C(liella_casinf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_casinf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(casinf64x)(long double _Complex a0) { return LDC(liella_casinf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_casinhf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(casinhf128)(_Float128 _Complex a0) { return F128C(liella_casinhf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_casinhf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(casinhf64x)(long double _Complex a0) { return LDC(liella_casinhf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_casinhl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(casinhl)(long double _Complex a0) { return LDC(liella_casinhl_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_casinl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(casinl)(long double _Complex a0) { return LDC(liella_casinl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_catanf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(catanf128)(_Float128 _Complex a0) { return F128C(liella_catanf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_catanf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(catanf64x)(long double _Complex a0) { return LDC(liella_catanf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_catanhf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(catanhf128)(_Float128 _Complex a0) { return F128C(liella_catanhf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_catanhf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(catanhf64x)(long double _Complex a0) { return LDC(liella_catanhf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_catanhl_bits(struct liella_ldc_bits);
@@ -137,8 +151,12 @@ struct liella_ld_bits liella_cbrtf64x_bits(struct liella_ld_bits);
 long double MATH_FWD(cbrtf64x)(long double a0) { return LD(liella_cbrtf64x_bits(LD_BITS(a0))); }
 struct liella_ld_bits liella_cbrtl_bits(struct liella_ld_bits);
 long double MATH_FWD(cbrtl)(long double a0) { return LD(liella_cbrtl_bits(LD_BITS(a0))); }
+struct liella_f128c_bits liella_ccosf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(ccosf128)(_Float128 _Complex a0) { return F128C(liella_ccosf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_ccosf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(ccosf64x)(long double _Complex a0) { return LDC(liella_ccosf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_ccoshf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(ccoshf128)(_Float128 _Complex a0) { return F128C(liella_ccoshf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_ccoshf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(ccoshf64x)(long double _Complex a0) { return LDC(liella_ccoshf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_ccoshl_bits(struct liella_ldc_bits);
@@ -151,6 +169,8 @@ struct liella_ld_bits liella_ceilf64x_bits(struct liella_ld_bits);
 long double MATH_FWD(ceilf64x)(long double a0) { return LD(liella_ceilf64x_bits(LD_BITS(a0))); }
 struct liella_ld_bits liella_ceill_bits(struct liella_ld_bits);
 long double MATH_FWD(ceill)(long double a0) { return LD(liella_ceill_bits(LD_BITS(a0))); }
+struct liella_f128c_bits liella_cexpf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(cexpf128)(_Float128 _Complex a0) { return F128C(liella_cexpf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_cexpf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(cexpf64x)(long double _Complex a0) { return LDC(liella_cexpf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_cexpl_bits(struct liella_ldc_bits);
@@ -161,10 +181,14 @@ struct liella_ld_bits liella_cimagf64x_bits(struct liella_ldc_bits);
 long double MATH_FWD(cimagf64x)(long double _Complex a0) { return LD(liella_cimagf64x_bits(LDC_BITS(a0))); }
 struct liella_ld_bits liella_cimagl_bits(struct liella_ldc_bits);
 long double MATH_FWD(cimagl)(long double _Complex a0) { return LD(liella_cimagl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_clog10f128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(clog10f128)(_Float128 _Complex a0) { return F128C(liella_clog10f128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_clog10f64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(clog10f64x)(long double _Complex a0) { return LDC(liella_clog10f64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_clog10l_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(clog10l)(long double _Complex a0) { return LDC(liella_clog10l_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_clogf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(clogf128)(_Float128 _Complex a0) { return F128C(liella_clogf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_clogf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(clogf64x)(long double _Complex a0) { return LDC(liella_clogf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_clogl_bits(struct liella_ldc_bits);
@@ -191,6 +215,8 @@ struct liella_ld_bits liella_coshl_bits(struct liella_ld_bits);
 long double MATH_FWD(coshl)(long double a0) { return LD(liella_coshl_bits(LD_BITS(a0))); }
 struct liella_ld_bits liella_cosl_bits(struct liella_ld_bits);
 long double MATH_FWD(cosl)(long double a0) { return LD(liella_cosl_bits(LD_BITS(a0))); }
+struct liella_f128c_bits liella_cpowf128_bits(struct liella_f128c_bits, struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(cpowf128)(_Float128 _Complex a0, _Float128 _Complex a1) { return F128C(liella_cpowf128_bits(F128C_BITS(a0), F128C_BITS(a1))); }
 struct liella_ldc_bits liella_cpowf64x_bits(struct liella_ldc_bits, struct liella_ldc_bits);
 long double _Complex MATH_FWD(cpowf64x)(long double _Complex a0, long double _Complex a1) { return LDC(liella_cpowf64x_bits(LDC_BITS(a0), LDC_BITS(a1))); }
 struct liella_ldc_bits liella_cpowl_bits(struct liella_ldc_bits, struct liella_ldc_bits);
@@ -207,20 +233,30 @@ struct liella_ld_bits liella_crealf64x_bits(struct liella_ldc_bits);
 long double MATH_FWD(crealf64x)(long double _Complex a0) { return LD(liella_crealf64x_bits(LDC_BITS(a0))); }
 struct liella_ld_bits liella_creall_bits(struct liella_ldc_bits);
 long double MATH_FWD(creall)(long double _Complex a0) { return LD(liella_creall_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_csinf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(csinf128)(_Float128 _Complex a0) { return F128C(liella_csinf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_csinf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csinf64x)(long double _Complex a0) { return LDC(liella_csinf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_csinhf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(csinhf128)(_Float128 _Complex a0) { return F128C(liella_csinhf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_csinhf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csinhf64x)(long double _Complex a0) { return LDC(liella_csinhf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_csinhl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csinhl)(long double _Complex a0) { return LDC(liella_csinhl_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_csinl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csinl)(long double _Complex a0) { return LDC(liella_csinl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_csqrtf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(csqrtf128)(_Float128 _Complex a0) { return F128C(liella_csqrtf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_csqrtf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csqrtf64x)(long double _Complex a0) { return LDC(liella_csqrtf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_csqrtl_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(csqrtl)(long double _Complex a0) { return LDC(liella_csqrtl_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_ctanf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(ctanf128)(_Float128 _Complex a0) { return F128C(liella_ctanf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_ctanf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(ctanf64x)(long double _Complex a0) { return LDC(liella_ctanf64x_bits(LDC_BITS(a0))); }
+struct liella_f128c_bits liella_ctanhf128_bits(struct liella_f128c_bits);
+_Float128 _Complex MATH_FWD(ctanhf128)(_Float128 _Complex a0) { return F128C(liella_ctanhf128_bits(F128C_BITS(a0))); }
 struct liella_ldc_bits liella_ctanhf64x_bits(struct liella_ldc_bits);
 long double _Complex MATH_FWD(ctanhf64x)(long double _Complex a0) { return LDC(liella_ctanhf64x_bits(LDC_BITS(a0))); }
 struct liella_ldc_bits liella_ctanhl_bits(struct liella_ldc_bits);
