@@ -525,8 +525,8 @@ pub(crate) const PI_2: [u64; 2] = [0x3ff921fb54442d18, 0x3c91a62633145c07]; // 1
 /// `π/4`.
 pub(crate) const PI_4: [u64; 2] = [0x3fe921fb54442d18, 0x3c81a62633145c07]; // 0.7853981633974483
 
-/// The bits of `2/π` after the binary point (2/π < 1), most significant first: 264 words, truncated (mp::pi at 17 400 bits).
-pub(crate) static TWO_OVER_PI: [u64; 264] = [
+/// The bits of `2/π` after the binary point (2/π < 1), most significant first: 272 words, truncated (mp::pi at 17920 bits).
+pub(crate) static TWO_OVER_PI: [u64; 272] = [
     0xa2f9836e4e441529, 0xfc2757d1f534ddc0, 0xdb6295993c439041, 0xfe5163abdebbc561,
     0xb7246e3a424dd2e0, 0x06492eea09d1921c, 0xfe1deb1cb129a73e, 0xe88235f52ebb4484,
     0xe99c7026b45f7e41, 0x3991d639835339f4, 0x9c845f8bbdf9283b, 0x1ff897ffde05980f,
@@ -593,6 +593,8 @@ pub(crate) static TWO_OVER_PI: [u64; 264] = [
     0x4d7e6f5119a5abf9, 0xb5d6df8261dd9602, 0x36169f3ac4a1a283, 0x6ded727a8d39a9b8,
     0x825c326b5b2746ed, 0x34007700d255f4fc, 0x4d59018071e0e13f, 0x89b295f364a8f1ae,
     0xa74b38fc4ceab2bb, 0x47270babc3a734ba, 0x6052dd34f8563aeb, 0x7e8a31bb365895b7,
+    0x47f7a994c3aad392, 0x251e7f3ed8974ebb, 0xa94fd8ae01e661b4, 0x393d8ea523aa3306,
+    0x8e1633b53bb1881d, 0x3a9d4013d0cc1be5, 0xf862e73bf28f39b5, 0xbf0bc23522747ea2,
 ];
 
 /// `atan(j/64)` for j = 0..64 (mp::atan).
