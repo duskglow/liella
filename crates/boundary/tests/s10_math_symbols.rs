@@ -30,6 +30,39 @@ fn observe(f: impl FnOnce()) -> (i32, Flags) {
     (liella_boundary::errno::get(), fpu::test(&CSys, Flags::ALL))
 }
 
+/// `observe(f)` with the caller's MXCSR set to `mx` for the call; the caller's word is restored.
+// ARCH(x86_64): the caller's MXCSR (FTZ, DAZ, rounding) around a call; FPCR on aarch64 (A-9)
+fn observe_with_ctl(mx: u32, f: impl FnOnce()) -> (i32, Flags) {
+    use liella_kernel::machine::Machine;
+    // ARCH(x86_64): save, set and restore the caller's MXCSR; FPCR on aarch64 (A-9)
+    let saved = CSys.mxcsr();
+    // ARCH(x86_64): set the caller's MXCSR
+    CSys.set_mxcsr(mx);
+    let seen = observe(f);
+    // ARCH(x86_64): restore the caller's MXCSR
+    CSys.set_mxcsr(saved);
+    seen
+}
+
+/// `observe(f)` with the x87 control word set to `cw` for the call; the caller's word is restored.
+// ARCH(x86_64): the x87 control word (precision control); no such unit on aarch64 (A-9)
+fn observe_with_cw(cw: u16, f: impl FnOnce()) -> (i32, Flags) {
+    use liella_kernel::machine::Machine;
+    // ARCH(x86_64): save, set and restore the x87 control word; no x87 on aarch64 (A-9)
+    let saved = CSys.x87_control();
+    // ARCH(x86_64): set the x87 control word
+    CSys.set_x87_control(cw);
+    let seen = observe(f);
+    // ARCH(x86_64): restore the x87 control word
+    CSys.set_x87_control(saved);
+    seen
+}
+
+/// MXCSR rounding-control field (bits 13-14) and the matching `fesetround` argument (x87 RC,
+/// bits 10-11): nearest, down, up, toward zero.
+// ARCH(x86_64): x87 rounding-control encodings of `fesetround`; FE_* values on aarch64 (A-9)
+const ROUND_DIRECTIONS: [(u32, i32); 4] = [(0, 0), (1, 0x400), (2, 0x800), (3, 0xc00)];
+
 #[test]
 fn math_translation_reports_errno_flags_and_out_parameters() {
     // Clauses: s10_0_f_0, s10_0_c_0.
@@ -205,51 +238,73 @@ fn math_envelope_keeps_the_callers_mxcsr() {
     assert_eq!(around(0x1f80, || m::exp(1000.0).to_bits()), (f64::INFINITY.to_bits(), 0x1fa8));
     assert_eq!(around(0x1f80, || m::log(-1.0).to_bits()).1, 0x1f81);
     assert_eq!(around(0x1f80, || m::sqrt(-1.0).to_bits()).1, 0x1f81);
-    // A subnormal operand whose result rounds to itself, and an exact subnormal result: under the
-    // caller's flush-to-zero the arithmetic forming them would give 0.
+    // The caller's flush-to-zero and denormals-are-zero are honoured (owner ruling 2026-10-23,
+    // D-10.22): under FTZ a subnormal result is a zero of its sign with underflow and inexact
+    // raised (a subnormal operand whose result rounds to itself, an exact subnormal result);
+    // under DAZ a subnormal operand is read as a zero of its sign. MXCSR comes back intact.
     let sub = f64::from_bits(1 << 40);
     let small: [extern "C" fn(f64) -> f64; 8] = [m::sin, m::tan, m::atan, m::asin, m::sinh, m::tanh, m::expm1, m::log1p];
     for (i, f) in small.iter().enumerate() {
-        let (v, mx) = around(0x9f80, || f(sub).to_bits());
-        assert_eq!((i, v, mx & !0x3f), (i, sub.to_bits(), 0x9f80));
+        assert_eq!((i, around(0x9f80, || f(sub).to_bits())), (i, (0, 0x9f80 | 0x30)));
+        assert_eq!((i, around(0x9f80, || f(-sub).to_bits())), (i, (1 << 63, 0x9f80 | 0x30)));
+        assert_eq!((i, around(0x1fc0, || f(-sub).to_bits())), (i, (1 << 63, 0x1fc0)));
     }
-    assert_eq!(around(0x9f80, || m::exp2(-1060.0).to_bits()), (1 << 14, 0x9f80));
-    // Flush-to-zero and denormals-are-zero are not the default: the computation runs in the
-    // default environment (a subnormal result and operand survive) and MXCSR comes back intact.
-    let tiny = m::exp(-740.0).to_bits();
-    assert!(tiny != 0 && tiny < 0x0010_0000_0000_0000);
-    assert_eq!(around(0x9f80, || m::exp(-740.0).to_bits()), (tiny, 0x9f80 | 0x30));
-    assert_eq!(around(0x1fc0, || m::exp(sub).to_bits()), (1.0f64.to_bits(), 0x1fe0));
-    // In every rounding direction a caller with flush-to-zero (bit 15) or denormals-are-zero (bit 6)
-    // gets the result a default-word caller gets (a subnormal result stays subnormal, a subnormal
-    // operand is read as the subnormal it is) and MXCSR back with that bit as it left it.
-    let cases: [(&str, &dyn Fn() -> u64); 19] = [
-        ("sin(1e-310)", &|| m::sin(1e-310).to_bits()),
-        ("tan(-5e-324)", &|| m::tan(-5e-324).to_bits()),
-        ("sin(-2e-308)", &|| m::sin(-2e-308).to_bits()),
-        ("exp(-744)", &|| m::exp(-744.0).to_bits()),
-        ("exp(-708.5)", &|| m::exp(-708.5).to_bits()),
-        ("exp2(-1070.3)", &|| m::exp2(-1070.3).to_bits()),
-        ("pow(1.5e-160,2)", &|| m::pow(1.5e-160, 2.0).to_bits()),
-        ("atan2(1e-300,1e10)", &|| m::atan2(1e-300, 1e10).to_bits()),
-        ("erf(1e-310)", &|| m::erf(1e-310).to_bits()),
-        ("j1(1e-310)", &|| m::j1(1e-310).to_bits()),
-        ("expf(-100)", &|| u64::from(m::expf(-100.0).to_bits())),
-        ("erff(1e-40)", &|| u64::from(m::erff(1e-40).to_bits())),
-        ("log(1e-310)", &|| m::log(1e-310).to_bits()),
-        ("log2(5e-320)", &|| m::log2(5e-320).to_bits()),
-        ("log10(1e-315)", &|| m::log10(1e-315).to_bits()),
-        ("cbrt(1e-320)", &|| m::cbrt(1e-320).to_bits()),
-        ("atan2(3e-310,1e-310)", &|| m::atan2(3e-310, 1e-310).to_bits()),
-        ("atan2f(1e-38,1e5)", &|| u64::from(m::atan2f(1e-38, 1e5).to_bits())),
-        ("logf(1e-40)", &|| u64::from(m::logf(1e-40).to_bits())),
+    assert_eq!(around(0x9f80, || m::exp2(-1060.0).to_bits()), (0, 0x9f80 | 0x30));
+    assert_eq!(around(0x9f80, || m::exp(-740.0).to_bits()), (0, 0x9f80 | 0x30));
+    assert_eq!(around(0x1fc0, || m::exp(sub).to_bits()), (1.0f64.to_bits(), 0x1fc0));
+    // Normal operands and normal results are the default word's, in every rounding direction,
+    // under FTZ, DAZ and both; a subnormal one is flushed as above. `daz` is the same call with
+    // its subnormal operands read as zeros of their sign; `w32` marks a `float` result.
+    type Case<'a> = (&'a str, &'a dyn Fn() -> u64, Option<&'a dyn Fn() -> u64>, bool);
+    let cases: [Case<'_>; 25] = [
+        ("powf(1e-40,0.3)", &|| u64::from(m::powf(1e-40, 0.3).to_bits()), Some(&|| u64::from(m::powf(0.0, 0.3).to_bits())), true),
+        ("powf(2.5,-97.3)", &|| u64::from(m::powf(2.5, -97.3).to_bits()), None, true),
+        ("sin(1e-310)", &|| m::sin(1e-310).to_bits(), Some(&|| m::sin(0.0).to_bits()), false),
+        ("tan(-5e-324)", &|| m::tan(-5e-324).to_bits(), Some(&|| m::tan(-0.0).to_bits()), false),
+        ("sin(-2e-308)", &|| m::sin(-2e-308).to_bits(), Some(&|| m::sin(-0.0).to_bits()), false),
+        ("exp(-744)", &|| m::exp(-744.0).to_bits(), None, false),
+        ("exp(-708.5)", &|| m::exp(-708.5).to_bits(), None, false),
+        ("exp2(-1070.3)", &|| m::exp2(-1070.3).to_bits(), None, false),
+        ("pow(1.5e-160,2)", &|| m::pow(1.5e-160, 2.0).to_bits(), None, false),
+        ("atan2(1e-300,1e10)", &|| m::atan2(1e-300, 1e10).to_bits(), None, false),
+        ("erf(1e-310)", &|| m::erf(1e-310).to_bits(), Some(&|| m::erf(0.0).to_bits()), false),
+        ("j1(1e-310)", &|| m::j1(1e-310).to_bits(), Some(&|| m::j1(0.0).to_bits()), false),
+        ("expf(-100)", &|| u64::from(m::expf(-100.0).to_bits()), None, true),
+        ("erff(1e-40)", &|| u64::from(m::erff(1e-40).to_bits()), Some(&|| u64::from(m::erff(0.0).to_bits())), true),
+        ("log(1e-310)", &|| m::log(1e-310).to_bits(), Some(&|| m::log(0.0).to_bits()), false),
+        ("log2(5e-320)", &|| m::log2(5e-320).to_bits(), Some(&|| m::log2(0.0).to_bits()), false),
+        ("log10(1e-315)", &|| m::log10(1e-315).to_bits(), Some(&|| m::log10(0.0).to_bits()), false),
+        ("cbrt(1e-320)", &|| m::cbrt(1e-320).to_bits(), Some(&|| m::cbrt(0.0).to_bits()), false),
+        ("atan2(3e-310,1e-310)", &|| m::atan2(3e-310, 1e-310).to_bits(), Some(&|| m::atan2(0.0, 0.0).to_bits()), false),
+        ("atan2f(1e-38,1e5)", &|| u64::from(m::atan2f(1e-38, 1e5).to_bits()), Some(&|| u64::from(m::atan2f(0.0, 1e5).to_bits())), true),
+        ("logf(1e-40)", &|| u64::from(m::logf(1e-40).to_bits()), Some(&|| u64::from(m::logf(0.0).to_bits())), true),
+        // The hardware square root (M6-2) runs under the caller's word: DAZ reads 0.
+        ("sqrt(1e-310)", &|| m::sqrt(1e-310).to_bits(), Some(&|| m::sqrt(0.0).to_bits()), false),
+        ("sqrt(5e-324)", &|| m::sqrt(5e-324).to_bits(), Some(&|| m::sqrt(0.0).to_bits()), false),
+        ("sqrtf(1e-40)", &|| u64::from(m::sqrtf(1e-40).to_bits()), Some(&|| u64::from(m::sqrtf(0.0).to_bits())), true),
+        ("sqrt(2)", &|| m::sqrt(2.0).to_bits(), None, false),
     ];
-    for (name, f) in cases {
+    let flush = |b: u64, w32: bool| -> Option<u64> {
+        let (exp, sign) = if w32 { (0x7f80_0000, 1 << 31) } else { (0x7ff0_0000_0000_0000, 1 << 63) };
+        (b & exp == 0 && b & !sign != 0).then_some(b & sign)
+    };
+    for (name, f, daz, w32) in cases {
         for rc in 0..4u32 {
             let base = 0x1f80 | (rc << 13);
-            let (want, mx) = around(base, f);
-            for bit in [0x8000, 0x40] {
-                assert_eq!((name, rc, bit, around(base | bit, f)), (name, rc, bit, (want, mx | bit)));
+            // Bit 1 (denormal operand, outside FE_ALL_EXCEPT) aside: the hardware square root
+            // sets it for a subnormal operand in place; the software path not.
+            let read = |bit: u32| match daz {
+                Some(g) if bit & 0x40 != 0 => around(base, g),
+                _ => around(base, f),
+            };
+            for bit in [0x8000, 0x40, 0x8040] {
+                let (want, mx) = read(bit);
+                let (want, mx) = match flush(want, w32) {
+                    Some(z) if bit & 0x8000 != 0 => (z, mx | 0x30),
+                    _ => (want, mx),
+                };
+                let (v, got) = around(base | bit, f);
+                assert_eq!((name, rc, bit, v, got & !2), (name, rc, bit, want, (mx | bit) & !2));
             }
         }
     }
@@ -263,6 +318,160 @@ fn math_envelope_keeps_the_callers_mxcsr() {
     let down = around(0x3f80, || m::exp(0.5).to_bits());
     assert_eq!((up.1, down.1), (0x5fa0, 0x3fa0));
     assert!(up.0 > down.0);
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+// ARCH(x86_64): the math envelope's MXCSR contract (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_envelope_keeps_a_result_that_is_not_tiny_under_the_callers_ftz() {
+    // Clauses: s10_0_f_0.
+    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on shiki,
+    // see `ftz_flushes_the_tininess_edge` in mathret.rs). A result that is exactly the smallest
+    // normal and not tiny is kept under the caller's FTZ, without underflow.
+    let edge = f64::MIN_POSITIVE;
+    assert_eq!(around(0x9f80, || m::exp2(-1022.0).to_bits()), (edge.to_bits(), 0x9f80));
+    assert_eq!(around(0x9f80, || u64::from(m::exp2f(-126.0).to_bits())), (u64::from(f32::MIN_POSITIVE.to_bits()), 0x9f80));
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// What a software-path case returns: a `double`, a `float`, an integer (never flushed) or a
+/// `float`/`double` the reference never flushes under FTZ (an operand-returning form or an x87
+/// narrowing: probed, #1549, D-10.22).
+#[derive(Clone, Copy)]
+enum Res {
+    F64,
+    F32,
+    Int,
+    Kept,
+}
+
+/// A normal long double 1.0 * 2^(biased - 16383) (explicit integer bit).
+fn ld_pow2(biased: u128) -> LdBits {
+    LdBits::from_bits((biased << 64) | (1u128 << 63))
+}
+
+// ARCH(x86_64): the caller's MXCSR FTZ/DAZ through the software paths (s10_0_f_0); FPCR on aarch64 (A-9)
+#[test]
+fn math_software_paths_honour_the_callers_ftz_and_daz() {
+    // Clauses: s10_0_f_0.
+    // D-10.22 (owner ruling 2026-10-23, MATH-M6-FPENV-HONOR-REST): the families outside the
+    // envelope (`mret::Soft`: fma, fdim, the narrowing operations, nextafter, ldexp/scalbn, the
+    // rounding and min/max families, the integer results, out-parameter forms, hypot) follow the
+    // envelope's rule. Under DAZ a `float`/`double` operand that is subnormal is read as a zero of
+    // its sign (`daz` is the same call with those zeros); under FTZ a `float`/`double` result that
+    // is subnormal is a zero of its sign with underflow and inexact; under both, both. Normal
+    // operands and results are the default word's, in every rounding direction. Probed against the
+    // reference under FTZ, DAZ and both (#1549, `Res::Kept`): `long double` operands are x87 values
+    // and the narrowing from them (`daddl`, `faddl`, `fmull`) is never flushed; the min/max forms
+    // return the operand as DAZ reads it (fmax, fminmag) or the raw operand DAZ's comparison picks
+    // (fmaximum*), never flushed; nextafter gives `y` for operands equal as DAZ reads them, else
+    // steps the raw `x`; nextup/nextdown/nexttoward step the raw `x`; a step from an `x` DAZ reads
+    // as zero raises nothing (the `daz` closures there are bit patterns: no flags); fabs and
+    // copysign are unchanged in every mode; the rounding family reads its operand as DAZ does.
+    type Case<'a> = (&'a str, &'a dyn Fn() -> u64, Option<&'a dyn Fn() -> u64>, Res);
+    let d = |v: f64| v.to_bits();
+    let f = |v: f32| u64::from(v.to_bits());
+    let cases: [Case<'_>; 57] = [
+        ("fma(1e-160,1e-160,0)", &|| d(m::fma(1e-160, 1e-160, 0.0)), None, Res::F64),
+        ("fma(1e-310,2,0)", &|| d(m::fma(1e-310, 2.0, 0.0)), Some(&|| d(m::fma(0.0, 2.0, 0.0))), Res::F64),
+        ("fma(1.5,2,0.1)", &|| d(m::fma(1.5, 2.0, 0.1)), None, Res::F64),
+        ("fmaf(1e-40,1,-0)", &|| f(m::fmaf(1e-40, 1.0, -0.0)), Some(&|| f(m::fmaf(0.0, 1.0, -0.0))), Res::F32),
+        ("fdim(3e-308,1e-308)", &|| d(m::fdim(3e-308, 1e-308)), Some(&|| d(m::fdim(3e-308, 0.0))), Res::F64),
+        ("fdim(5,1.1)", &|| d(m::fdim(5.0, 1.1)), None, Res::F64),
+        ("fadd(1e-39,1e-39)", &|| f(m::fadd(1e-39, 1e-39)), None, Res::F32),
+        ("fmul(1e-20,1e-20)", &|| f(m::fmul(1e-20, 1e-20)), None, Res::F32),
+        ("fsqrt(1e-80)", &|| f(m::fsqrt(1e-80)), None, Res::F32),
+        ("fdiv(1,3)", &|| f(m::fdiv(1.0, 3.0)), None, Res::F32),
+        ("ffma(1e-310,1,1e-39)", &|| f(m::ffma(1e-310, 1.0, 1e-39)), Some(&|| f(m::ffma(0.0, 1.0, 1e-39))), Res::F32),
+        ("daddl(2^-1070,0)", &|| d(m::liella_daddl_bits(ld_pow2(16383 - 1070), LdBits::from_bits(0))), None, Res::Kept),
+        ("faddl(2^-140,0)", &|| f(m::liella_faddl_bits(ld_pow2(16383 - 140), LdBits::from_bits(0))), None, Res::Kept),
+        ("fmull(2^-70,2^-70)", &|| f(m::liella_fmull_bits(ld_pow2(16383 - 70), ld_pow2(16383 - 70))), None, Res::Kept),
+        ("faddl(1,2^-30)", &|| f(m::liella_faddl_bits(ld_pow2(16383), ld_pow2(16383 - 30))), None, Res::Kept),
+        ("ldexp(1,-1070)", &|| d(m::ldexp(1.0, -1070)), None, Res::F64),
+        ("ldexp(1e-310,4)", &|| d(m::ldexp(1e-310, 4)), Some(&|| d(m::ldexp(0.0, 4))), Res::F64),
+        ("scalbn(3,-1060)", &|| d(m::scalbn(3.0, -1060)), None, Res::F64),
+        ("ldexpf(1.5,-140)", &|| f(m::ldexpf(1.5, -140)), None, Res::F32),
+        ("ldexp(1.25,-20)", &|| d(m::ldexp(1.25, -20)), None, Res::F64),
+        ("nextafter(0,1)", &|| d(m::nextafter(0.0, 1.0)), Some(&|| 1), Res::Kept),
+        ("nextafter(1e-310,1)", &|| d(m::nextafter(1e-310, 1.0)), Some(&|| d(1e-310) + 1), Res::Kept),
+        ("nextafter(1e-310,2e-310)", &|| d(m::nextafter(1e-310, 2e-310)), Some(&|| d(2e-310)), Res::Kept),
+        ("nextafterf(-0,-1)", &|| f(m::nextafterf(-0.0, -1.0)), Some(&|| 0x8000_0001), Res::Kept),
+        ("nextup(-5e-324)", &|| d(m::nextup(-5e-324)), Some(&|| 1 << 63), Res::Kept),
+        ("nextdown(1e-310)", &|| d(m::nextdown(1e-310)), Some(&|| d(1e-310) - 1), Res::Kept),
+        ("nexttoward(1e-310,1)", &|| d(m::liella_nexttoward_bits(1e-310, ld_pow2(16383))), Some(&|| d(1e-310) + 1), Res::Kept),
+        ("nexttowardf(1e-40,-1)", &|| f(m::liella_nexttowardf_bits(1e-40, ld_pow2(16383 + (1 << 15)))), Some(&|| f(1e-40) - 1), Res::Kept),
+        ("nextafter(1,2)", &|| d(m::nextafter(1.0, 2.0)), None, Res::Kept),
+        ("ceil(1e-310)", &|| d(m::ceil(1e-310)), Some(&|| d(m::ceil(0.0))), Res::F64),
+        ("floor(-1e-310)", &|| d(m::floor(-1e-310)), Some(&|| d(m::floor(-0.0))), Res::F64),
+        ("rintf(1e-40)", &|| f(m::rintf(1e-40)), Some(&|| f(m::rintf(0.0))), Res::F32),
+        ("ceil(2.5)", &|| d(m::ceil(2.5)), None, Res::F64),
+        ("trunc(-1e-310)", &|| d(m::trunc(-1e-310)), Some(&|| d(m::trunc(-0.0))), Res::F64),
+        ("round(1e-310)", &|| d(m::round(1e-310)), Some(&|| d(m::round(0.0))), Res::F64),
+        ("nearbyint(-1e-310)", &|| d(m::nearbyint(-1e-310)), Some(&|| d(m::nearbyint(-0.0))), Res::F64),
+        ("fabs(-1e-310)", &|| d(m::fabs(-1e-310)), None, Res::Kept),
+        ("copysign(1e-310,-1)", &|| d(m::copysign(1e-310, -1.0)), None, Res::Kept),
+        ("fmax(1e-310,-1)", &|| d(m::fmax(1e-310, -1.0)), Some(&|| d(m::fmax(0.0, -1.0))), Res::Kept),
+        ("fminf(-1e-40,1)", &|| f(m::fminf(-1e-40, 1.0)), Some(&|| f(m::fminf(-0.0, 1.0))), Res::Kept),
+        ("fminmag(1e-310,2e-310)", &|| d(m::fminmag(1e-310, 2e-310)), Some(&|| d(m::fminmag(0.0, 0.0))), Res::Kept),
+        ("fmaximum(1e-310,-1)", &|| d(m::fmaximum(1e-310, -1.0)), None, Res::Kept),
+        ("fminimum_num(1e-310,0)", &|| d(m::fminimum_num(1e-310, 0.0)), Some(&|| d(1e-310)), Res::Kept),
+        ("fminimum_mag_num(-1e-310,1)", &|| d(m::fminimum_mag_num(-1e-310, 1.0)), None, Res::Kept),
+        ("fmaximum_magf(-1e-40,0)", &|| f(m::fmaximum_magf(-1e-40, 0.0)), Some(&|| 0), Res::Kept),
+        ("fmax(2,3)", &|| d(m::fmax(2.0, 3.0)), None, Res::F64),
+        ("remainder(1e-307,3e-308)", &|| d(m::remainder(1e-307, 3e-308)), None, Res::F64),
+        ("fmod(1e-300,3e-310)", &|| d(m::fmod(1e-300, 3e-310)), Some(&|| d(m::fmod(1e-300, 0.0))), Res::F64),
+        ("hypot(1e-310,1e-310)", &|| d(m::hypot(1e-310, 1e-310)), Some(&|| d(m::hypot(0.0, 0.0))), Res::F64),
+        ("logb(1e-310)", &|| d(m::logb(1e-310)), Some(&|| d(m::logb(0.0))), Res::F64),
+        ("lrint(1e-310)", &|| m::lrint(1e-310).cast_unsigned(), Some(&|| m::lrint(0.0).cast_unsigned()), Res::Int),
+        ("ilogb(1e-310)", &|| u64::from(m::ilogb(1e-310).cast_unsigned()), Some(&|| u64::from(m::ilogb(0.0).cast_unsigned())), Res::Int),
+        ("fromfp(1e-310,up,8)", &|| m::fromfp(1e-310, 0, 8).cast_unsigned(), Some(&|| m::fromfp(0.0, 0, 8).cast_unsigned()), Res::Int),
+        ("lround(2.5)", &|| m::lround(2.5).cast_unsigned(), None, Res::Int),
+        ("remquo(1e-307,3e-308)", &|| d(m::remquo(1e-307, 3e-308, Some(&mut 0))), None, Res::F64),
+        ("modf(-1e-310)", &|| d(m::modf(-1e-310, Some(&mut 0.0))), Some(&|| d(m::modf(-0.0, Some(&mut 0.0)))), Res::F64),
+        ("frexp(1e-310)", &|| d(m::frexp(1e-310, Some(&mut 0))), Some(&|| d(m::frexp(0.0, Some(&mut 0)))), Res::F64),
+    ];
+    let flush = |b: u64, r: Res| -> Option<u64> {
+        let (exp, sign) = match r {
+            Res::F64 => (0x7ff0_0000_0000_0000, 1 << 63),
+            Res::F32 => (0x7f80_0000, 1 << 31),
+            Res::Int | Res::Kept => return None,
+        };
+        (b & exp == 0 && b & !sign != 0).then_some(b & sign)
+    };
+    let mut flushed = 0;
+    for (name, call, daz, r) in cases {
+        for rc in 0..4u32 {
+            let base = 0x1f80 | (rc << 13);
+            for bit in [0x8000, 0x40, 0x8040] {
+                let (want, mx) = match daz {
+                    Some(g) if bit & 0x40 != 0 => around(base, g),
+                    _ => around(base, call),
+                };
+                let (want, mx) = match flush(want, r) {
+                    Some(z) if bit & 0x8000 != 0 => {
+                        flushed += 1;
+                        (z, mx | 0x30)
+                    }
+                    _ => (want, mx),
+                };
+                let (v, got) = around(base | bit, call);
+                assert_eq!((name, rc, bit, v, got & !2), (name, rc, bit, want, (mx | bit) & !2));
+            }
+        }
+    }
+    // The table reaches the flush: the cases with subnormal default-word results are subnormal.
+    assert!(flushed >= 100, "{flushed}");
+    assert_eq!(around(0x1f80, || d(m::ldexp(1.0, -1070))), (1 << 4, 0x1f80));
+    assert_eq!(around(0x1f80, || f(m::fadd(1e-39, 1e-39))).0 & 0x7f80_0000, 0);
+    // The tininess edge through a software path (D-10.22, FPENV-HONOR-2): hypot of these two
+    // subnormals is the smallest normal, tiny after rounding (underflow under the default word),
+    // and is flushed under the caller's FTZ; a smallest normal that is not tiny is kept.
+    let (x, y) = (f64::from_bits((1 << 52) - 1), f64::from_bits((1 << 26) + (1 << 23)));
+    let edge = f64::MIN_POSITIVE.to_bits();
+    assert_eq!(around(0x1f80, || d(m::hypot(x, y))), (edge, 0x1fb0));
+    assert_eq!(around(0x9f80, || d(m::hypot(x, y))), (0, 0x9fb0));
+    assert_eq!(around(0x9f80, || d(m::ldexp(1.0, -1022))), (edge, 0x9f80));
+    assert_eq!(around(0x9f80, || d(m::fma(f64::MIN_POSITIVE, 1.0, 0.0))), (edge, 0x9f80));
     fpu::clear(&CSys, Flags::ALL);
 }
 
@@ -1248,6 +1457,171 @@ fn complex_long_double_and_float128_forwarded_members() {
     assert_eq!(observe(|| assert_eq!(m::liella_cabsf128_bits(three_four), q(0x4001_4000_0000_0000))), (0, Flags(0)));
     let qinf = Complex { re: q(0xffff_0000_0000_0000), im: q(0x8000_0000_0000_0000) };
     assert_eq!(observe(|| assert_eq!(m::liella_cprojf128_bits(qinf), Complex { re: q(0x7fff_0000_0000_0000), im: q(0x8000_0000_0000_0000) })), (0, Flags(0)));
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrt_hardware_matches_the_software_square_root() {
+    // Clauses: s10_0_f_0.
+    // M6-2: the hardware square roots give the bits, flags and errno of `fused::sqrt` in every
+    // rounding direction, for every class of operand (the x87 pseudo-denormal and an unnormal
+    // take the software path).
+    use liella_math::{fused, MathError, Rounding, F80};
+    let ld = |se: u128, mant: u64| (se << 64) | u128::from(mant);
+    let f80s = [
+        ld(0x4000, 1 << 63), ld(0x4000, 3 << 62), ld(0x3fff, 1 << 63), ld(0x0000, 5), ld(0x0000, 1 << 62),
+        ld(0x7ffe, u64::MAX), ld(0xbfff, 1 << 63), ld(0x8000, 0), ld(0x8000, 7), ld(0xffff, 1 << 63),
+        ld(0x7fff, 1 << 63), ld(0x7fff, 3 << 62), ld(0xffff, (1 << 63) | 1), ld(0x0000, (1 << 63) | 5),
+        ld(0x4000, 5), ld(0x3ffe, 0xb504_f333_f9de_6484),
+    ];
+    let f64s = [2.0, 3.0, 1e-310, 5e-324, f64::MAX, -1.0, -0.0, -1e-310, f64::NEG_INFINITY, f64::INFINITY,
+        f64::NAN, -f64::NAN, f64::from_bits(0x7ff0_0000_0000_0001), 0.5, 1e300];
+    let f32s = [2.0f32, 3.0, 1e-40, f32::MIN_POSITIVE, f32::MAX, -1.0, -0.0, f32::NEG_INFINITY,
+        f32::from_bits(0x7f80_0001), -f32::NAN, 0.1];
+    let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
+    for (rc, mode) in [(0, Rounding::Nearest), (0x400, Rounding::Down), (0x800, Rounding::Up), (0xc00, Rounding::Zero)] {
+        assert_eq!(liella_boundary::posix::s10_math::fesetround(rc), 0);
+        for b in f80s {
+            let (want, st) = fused::sqrt::<F80, F80>(F80(b), mode);
+            let mut got = 0;
+            let seen = observe(|| got = m::liella_sqrtl_bits(LdBits::from_bits(b)).to_bits());
+            assert_eq!((rc, b, got, seen), (rc, b, want.0, (errno_of(st.error), Flags(st.flags.0))));
+        }
+        for x in f64s {
+            let (want, st) = fused::sqrt::<f64, f64>(x, mode);
+            let mut got = 0;
+            let seen = observe(|| got = m::sqrt(x).to_bits());
+            assert_eq!((rc, x.to_bits(), got, seen), (rc, x.to_bits(), want.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+        }
+        for x in f32s {
+            let (want, st) = fused::sqrt::<f32, f32>(x, mode);
+            let mut got = 0;
+            let seen = observe(|| got = m::sqrtf(x).to_bits());
+            assert_eq!((rc, x.to_bits(), got, seen), (rc, x.to_bits(), want.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+        }
+    }
+    assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+    // D-10.22 (owner ruling 2026-10-23): the caller's FTZ and DAZ are honoured. Under FTZ, DAZ or
+    // both, every operand gives the exact square root of the operand as the caller's DAZ reads it
+    // (a subnormal is a zero of its sign: no flag, no EDOM), in every rounding direction.
+    {
+        let sub64 =[5e-324, 1e-310, f64::from_bits(0x000f_ffff_ffff_ffff), -5e-324, -1e-310];
+        let sub32 = [1e-45f32, 1e-40, f32::from_bits(0x007f_ffff), -1e-45, -1e-40];
+        for ctl in [0x8000_u32, 0x0040, 0x8040] {
+            for (rc, mode) in [(0, Rounding::Nearest), (1, Rounding::Down), (2, Rounding::Up), (3, Rounding::Zero)] {
+                let mx = 0x1f80 | ctl | (rc << 13);
+                for x in f64s.into_iter().chain(sub64) {
+                    let xr = if ctl & 0x40 != 0 && x.is_subnormal() { f64::from_bits(x.to_bits() & (1 << 63)) } else { x };
+                    let (w, st) = fused::sqrt::<f64, f64>(xr, mode);
+                    let (want, flags, errno) = (w.to_bits(), st.flags.0, errno_of(st.error));
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
+                    assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), want, (errno, Flags(flags))));
+                }
+                for x in f32s.into_iter().chain(sub32) {
+                    let xr = if ctl & 0x40 != 0 && x.is_subnormal() { f32::from_bits(x.to_bits() & (1 << 31)) } else { x };
+                    let (w, st) = fused::sqrt::<f32, f32>(xr, mode);
+                    let (want, flags, errno) = (w.to_bits(), st.flags.0, errno_of(st.error));
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());
+                    assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), want, (errno, Flags(flags))));
+                }
+            }
+        }
+    }
+    // D-10.22 (probe MATH-M6-SQRT-FTZ-2, glibc 2.39, the same under every FTZ/DAZ word and
+    // rounding direction): EDOM follows x < 0, not the sign bit. -0 gives -0, a negative quiet
+    // NaN comes back unchanged, both with no flag and no EDOM; a negative signalling NaN comes
+    // back quieted with invalid and no EDOM. A negative subnormal is below -0 under every word
+    // (DAZ included, D-10.22 envelope rule): the table of negative operands below covers it.
+    {
+        let d_cases: [(u64, u64, u8); 4] = [
+            (0x8000_0000_0000_0000, 0x8000_0000_0000_0000, 0),
+            (0xfff8_0000_0000_0000, 0xfff8_0000_0000_0000, 0),
+            (0xfff0_0000_0000_0001, 0xfff8_0000_0000_0001, Flags::INVALID.0),
+            (0x7ff8_0000_0000_0000, 0x7ff8_0000_0000_0000, 0),
+        ];
+        let f_cases: [(u32, u32, u8); 4] = [
+            (0x8000_0000, 0x8000_0000, 0),
+            (0xffc0_0000, 0xffc0_0000, 0),
+            (0xff80_0001, 0xffc0_0001, Flags::INVALID.0),
+            (0x7fc0_0000, 0x7fc0_0000, 0),
+        ];
+        let l_cases: [(u128, u128, u8); 4] = [
+            (ld(0x8000, 0), ld(0x8000, 0), 0),
+            (ld(0xffff, 3 << 62), ld(0xffff, 3 << 62), 0),
+            (ld(0xffff, (1 << 63) | 1), ld(0xffff, (3 << 62) | 1), Flags::INVALID.0),
+            (ld(0x7fff, 3 << 62), ld(0x7fff, 3 << 62), 0),
+        ];
+        for ctl in [0_u32, 0x8000, 0x0040, 0x8040] {
+            for (rc, fe_dir) in ROUND_DIRECTIONS {
+                let mx = 0x1f80 | ctl | (rc << 13);
+                for (x, want, flags) in d_cases {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrt(f64::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, want, (0, Flags(flags))));
+                }
+                for (x, want, flags) in f_cases {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrtf(f32::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, want, (0, Flags(flags))));
+                }
+                // x87 rounding follows the same direction; FTZ/DAZ do not reach fsqrt.
+                assert_eq!(liella_boundary::posix::s10_math::fesetround(fe_dir), 0);
+                for (x, want, flags) in l_cases {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::liella_sqrtl_bits(LdBits::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, want, (0, Flags(flags))));
+                }
+                assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+            }
+        }
+    }
+    // D-10.22 (probe MATH-M6-SQRT-FTZ-5, glibc 2.39, every FTZ/DAZ word and rounding direction):
+    // the other side of the EDOM rule. A negative NORMAL operand (including -infinity and the
+    // smallest normal) gives the default quiet NaN, invalid and EDOM; so does a negative
+    // subnormal (sqrt/sqrtf), under DAZ too (envelope rule, D-10.22); only a non-NaN operand
+    // below -0 does, so an EDOM taken from the sign bit alone fails here for -0 and -NaN above.
+    {
+        let d_neg = [0xbff0_0000_0000_0000_u64, 0x8010_0000_0000_0000, 0xffef_ffff_ffff_ffff, 0xfff0_0000_0000_0000, 0x8000_0000_0000_0001, 0x800f_ffff_ffff_ffff];
+        let f_neg = [0xbf80_0000_u32, 0x8080_0000, 0xff7f_ffff, 0xff80_0000, 0x8000_0001, 0x807f_ffff];
+        let l_neg = [ld(0xbfff, 1 << 63), ld(0x8001, 1 << 63), ld(0xfffe, u64::MAX), ld(0xffff, 1 << 63)];
+        for ctl in [0_u32, 0x8000, 0x0040, 0x8040] {
+            for (rc, fe_dir) in ROUND_DIRECTIONS {
+                let mx = 0x1f80 | ctl | (rc << 13);
+                // Under DAZ a negative subnormal is -0 (the table above): only the normal ones.
+                for x in d_neg.into_iter().filter(|&x| ctl & 0x40 == 0 || x & 0x7ff0_0000_0000_0000 != 0) {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrt(f64::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, 0xfff8_0000_0000_0000, (33, Flags::INVALID)));
+                }
+                for x in f_neg.into_iter().filter(|&x| ctl & 0x40 == 0 || x & 0x7f80_0000 != 0) {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::sqrtf(f32::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, 0xffc0_0000, (33, Flags::INVALID)));
+                }
+                assert_eq!(liella_boundary::posix::s10_math::fesetround(fe_dir), 0);
+                for x in l_neg {
+                    let mut got = 0;
+                    let seen = observe_with_ctl(mx, || got = m::liella_sqrtl_bits(LdBits::from_bits(x)).to_bits());
+                    assert_eq!((mx, x, got, seen), (mx, x, ld(0xffff, 3 << 62), (33, Flags::INVALID)));
+                }
+                assert_eq!(liella_boundary::posix::s10_math::fesetround(0), 0);
+            }
+        }
+    }
+    // An x87 precision control below 64 bits is not the default word: sqrtl keeps the software
+    // path's 64-bit result there (fsqrt in place would round to 53 or 24 bits).
+    {
+        for cw in [0x027f_u16, 0x007f] {
+            for b in [ld(0x4000, 1 << 63), ld(0x4000, 3 << 62), ld(0x3ffe, 0xb504_f333_f9de_6484)] {
+                let (want, st) = fused::sqrt::<F80, F80>(F80(b), Rounding::Nearest);
+                let mut got = 0;
+                let seen = observe_with_cw(cw, || got = m::liella_sqrtl_bits(LdBits::from_bits(b)).to_bits());
+                assert_eq!((cw, b, got, seen), (cw, b, want.0, (errno_of(st.error), Flags(st.flags.0))));
+            }
+        }
+    }
     fpu::clear(&CSys, Flags::ALL);
 }
 
