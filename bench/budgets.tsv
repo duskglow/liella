@@ -620,3 +620,6 @@ cbench_libm	sin_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 
 cbench_libm	expf_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	sinf_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
 cbench_libm	pow_upward	ratio_host	1.0	M6-0: libm speed, glibc is the bar (owner 2026-10-23); measured, not gated (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024	max_ns	2000	BENCH-ROWS-UNMEASURED: qsort of 1,024 ints with a C comparator, per comparison; sanity only (the instruction count is the claim)
+cbench_unmeasured	readdir_entry_flat	max_ns	3000	BENCH-ROWS-UNMEASURED: readdir per entry over an open 1,000-file stream; sanity only
+cbench_unmeasured	fts_entry_flat	max_ns	20000	BENCH-ROWS-UNMEASURED: fts_open/fts_read/fts_close FTS_PHYSICAL|FTS_NOCHDIR over a flat 1,000-file directory, per entry; sanity only
