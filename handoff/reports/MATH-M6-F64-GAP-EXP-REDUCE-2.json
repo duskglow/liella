@@ -1,0 +1,12 @@
+{"task": "MATH-M6-F64-GAP-EXP-REDUCE-2", "model": "opus", "tokens": null,
+ "result": "exp/pow/exp2 reduction (register 13.5 #2) merged with next, clippy/static green, 10/10 plants caught; gate, sweep and counts running at hand-back, register row not yet filled",
+ "branch": "task/math-m6-f64-gap-exp-reduce-2", "head": "33c75b77 (code; docs commit on top)",
+ "gate": {"affected": "running (keke:math-m6-f64-gap-exp-reduce-2-gate, Direct tier)", "peak": null},
+ "accepted_first_attempt": null, "rulings": [],
+ "informational": ["saturation-register.md has several '## 13.' sections from parallel stories; renumbering is the coordinator's call",
+   "cargo xtask bench --compare takes bench programs positionally; --rows does not apply to --compare (two count runs lost to this)"],
+ "refused": [],
+ "jobs": ["keke:math-m6-f64-gap-exp-reduce-2-gate", "keke:math-m6-f64-gap-exp-reduce-2-plants", "keke:math-m6-f64-gap-exp-reduce-2-percall2", "keke:math-m6-f64-gap-exp-reduce-2-sweep"],
+ "improvement": "bench --compare should accept bench/row filters (or reject unknown positionals before building); two count jobs lost to the invocation",
+ "next_step": "read percall2 and write the measured saving into register 13.5 row 2 and D-10.13",
+ "report_file": "handoff/math-m6-f64-gap-exp-reduce.md"}
