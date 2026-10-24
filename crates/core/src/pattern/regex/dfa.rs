@@ -799,7 +799,7 @@ impl Dfa<'_> {
                     None
                 }
                 OP_ENTER => {
-                    push(scr, prog.node(inst.b, j + 1), &mut top);
+                    push(scr, prog.node(inst.b, super::program::enter_j(inst, j)), &mut top);
                     None
                 }
                 _ => {
@@ -913,7 +913,7 @@ mod tests {
                             for first in 0..=s.len().min(2) {
                                 for (not_bol, not_eol) in [(false, false), (true, false), (false, true)] {
                                     for nl in [extra & cflags::NEWLINE != 0, extra & cflags::NEWLINE == 0] {
-                                        let opts = Options { not_bol, not_eol, newline_anchor: nl, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true } };
+                                        let opts = Options { not_bol, not_eol, newline_anchor: nl, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 } };
                                         let want = nfa(&prog, loc, s, first, &opts);
                                         for st in &mut stores {
                                             let f0 = get(&counters::FALLBACKS);
@@ -1026,7 +1026,7 @@ mod tests {
                                 {
                                     for (not_bol, not_eol) in [(false, false), (true, false), (false, true)] {
                                         let window = Window { first, last, backward: false };
-                                        let opts = Options { not_bol, not_eol, newline_anchor: extra & cflags::NEWLINE != 0, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true } };
+                                        let opts = Options { not_bol, not_eol, newline_anchor: extra & cflags::NEWLINE != 0, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 } };
                                         for caps in [false, true] {
                                             let off = Options { accel: Accel::OFF, ..opts };
                                             let want: Got = exec(&prog, loc, s, window, &off, caps).unwrap().map(|m| (m.start, m.end, m.groups.to_vec()));
@@ -1090,7 +1090,7 @@ mod tests {
             let prog = compile(pat, regcomp_syntax(cflags::EXTENDED), &Locale::C).unwrap();
             assert!(prog.view().one_pass, "{k}: one-pass program expected");
             let window = Window { first: 0, last: s.len(), backward: false };
-            let opts = Options { budget: 1 << 20, accel: Accel { prefilter: false, dfa: true }, ..Options::default() };
+            let opts = Options { budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 }, ..Options::default() };
             let off = Options { accel: Accel::OFF, ..opts };
             let want = exec(&prog, &Locale::C, s, window, &off, true).unwrap().map(|m| (m.start, m.end, m.groups.to_vec()));
             let n0 = get(&counters::SPAN_ONE_PASS);
