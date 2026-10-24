@@ -38,8 +38,9 @@ is identified.
 **Why it is a clean room** (owner, 2026-10-02). The primary purpose of the project, from the
 start, is an experiment: to see what code results from rewriting from first principles, from the
 documentation and specifications, with modern techniques. Consulting glibc's source would pull
-its historical choices in and taint that goal; it would also undermine the clean-room claim on
-which a license change depends. Exact reproduction of current glibc is therefore not the aim of
+its historical choices in and taint that goal. (A planned licence change also depended on the
+clean-room claim when this was written; since 2026-10-22 Liella has glibc's own licence,
+LGPL-2.1-or-later, so that reason no longer applies.) Exact reproduction of current glibc is therefore not the aim of
 this pass: where the spec is silent and glibc's observed behaviour looks like a historical
 artifact, a cleaner and consistent choice is preferred and recorded as a deliberate difference.
 Inefficient, suboptimal or even wrong choices are acceptable now and are worked out over time.

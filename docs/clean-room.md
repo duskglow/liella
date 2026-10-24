@@ -23,7 +23,7 @@ contributions.
 
 ## 1. Why there is a clean room
 
-The owner gave two reasons (plan §1.4, 2026-10-02).
+The owner gave two reasons (plan §1.4, 2026-10-02). The first still holds; the second no longer applies.
 
 **The experiment.** The project's primary purpose is to see what code results from rewriting a C
 library from first principles: from documentation and specifications, with modern techniques.
@@ -32,9 +32,10 @@ reason, exact reproduction of glibc is not the aim: where the spec is silent and
 behaviour looks like a historical artifact, Liella may choose a cleaner, consistent behaviour and
 record it as a deliberate difference.
 
-**The licence.** Liella is licensed under LGPL-2.1-or-later ([README](../README.md#license)).
-Plan §1.4 states that a licence change depends on the clean-room claim, and that consulting
-glibc's source would undermine that claim.
+**The licence (no longer applies).** When the plan was written, a change of licence was still
+open, and plan §1.4 noted that it would depend on the clean-room claim. On 2026-10-22 Liella took
+glibc's own licence, LGPL-2.1-or-later ([README](../README.md#license)), so licensing is no longer
+a reason for the clean room. The experiment above is.
 
 ## 2. How it works
 
