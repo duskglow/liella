@@ -1,6 +1,6 @@
 //! Complex functions (spec §10.5, Track M milestones 4 and 5) of `float`, `double` and x87
-//! `long double` (every function generic over [`Real`]; the cut-offs are derived for precisions up
-//! to 73 bits, [`MAX_PREC`], so `_Float128` is refused at compile time until M5-4).
+//! `long double` and `_Float128` (every function generic over [`Real`]; the cut-offs are derived
+//! for precisions up to 113 bits, [`MAX_PREC`], and a wider format is refused at compile time).
 //!
 //! Each function takes the real and imaginary parts and returns both parts of the result with
 //! one [`Status`]. A finite result is evaluated in the 384-bit arithmetic of [`crate::mp`] from
@@ -208,8 +208,22 @@ fn signed<F: Float>(neg: bool, mode: Rounding, f: impl FnOnce(Rounding) -> (F, S
 /// As the exponent of an [`Mp`] (`|v| < 2^exp`): `|v| < 2^-150` exactly when `exp <= -150`.
 const TINY_EXP: i64 = -150;
 
-/// The widest precision the cut-offs of this module are derived for (see [`TINY_EXP`]).
-const MAX_PREC: u32 = 73;
+/// The widest precision the cut-offs of this module are derived for: `_Float128` (M5-4).
+///
+/// [`TINY_EXP`] holds at 113 bits branch by branch: every leading term is 1 or a part (exact, a
+/// representable value, so only its neighbours 2^-114 away matter) with a deviation below 2^-149,
+/// or a product `xy` (226 bits, 2^-227 from any other boundary) whose deviation is quadratic
+/// (below 2^-299). Where a leading term has 2·PREC bits and a first-order deviation (`clog` next
+/// to `|z| = 1`), the cut-off is [`near_unit_exp`].
+const MAX_PREC: u32 = 113;
+
+/// The exponent below which `t = |z|² − 1` (exact, at most 2·PREC bits) gives `ln|z| = t/2` with
+/// its side: the deviation `t/2` (relative) must lie below the 2^-(2·PREC + 1) that separates an
+/// inexact `t/2` from every rounding boundary. 2^-150 for up to 73 bits, 2^-230 for `_Float128`;
+/// above it the 384-bit `ln1p` resolves the deviation (at least 2^-232 relative).
+fn near_unit_exp<F: Float>() -> i64 {
+    -(i64::from(F::PREC) * 2 + 4).max(150)
+}
 
 /// A deviation's direction (above in magnitude) from the sign of `d`; `tie` when `d` is zero (then
 /// the next order decides, as the caller knows).
@@ -413,7 +427,16 @@ pub fn cabs<F: Float>(x: F, y: F, mode: Rounding) -> (F, Status) {
 }
 
 /// `carg`: `atan2(y, x)`, in every format with an `atan2` (D-10.21).
+///
+/// `cargf128` of two quiet NaNs that differ only in sign returns the real part's, as glibc's
+/// does (complex_f128_products.rs); `atan2`'s choice would give the imaginary part's.
 pub fn carg<F: Real>(x: F, y: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 113 {
+        let (a, b) = (Op::new(x), Op::new(y));
+        if a.k == K::Nan && b.k == K::Nan && !a.snan && !b.snan && a.neg != b.neg && (x.to_bits() ^ y.to_bits()).count_ones() == 1 {
+            return (x, sn(false));
+        }
+    }
     y.atan2(x, mode)
 }
 
@@ -556,7 +579,7 @@ fn log_abs<F: Real>(a: &Op<F>, b: &Op<F>, ten: bool, mode: Rounding) -> (F, Stat
         // below 2^-150 relative; t has at most 2·PREC bits (x² − 1 is 0 or at least 2^-2·PREC
         // in magnitude, so the larger part is 1), so t/2 lies 0 or farther from every boundary.
         let (t, exact) = mp::add_x(big.sqr().sub(Mp::from_i64(1)), small.sqr());
-        if exact && !t.is_zero() && t.exp < -150 {
+        if exact && !t.is_zero() && t.exp < near_unit_exp::<F>() {
             return Part::Dev(t.ldexp(-1), t.neg).round(mode);
         }
     } else if small.exp < big.exp - 150 {
@@ -576,13 +599,21 @@ fn log_abs<F: Real>(a: &Op<F>, b: &Op<F>, ten: bool, mode: Rounding) -> (F, Stat
 
 /// `m` if `|z|² = 10^m` exactly (`clog10(6 + 8i) = 1`): only possible when the squares are close
 /// enough for their sum to be exact here.
+///
+/// The sum must be exact (a 113-bit part squares to 226 bits, so a sum of parts 100 binary orders
+/// apart no longer fits the 384 bits, and a rounded sum could equal `10^m` by accident). `10^m`
+/// stays exact here up to `m = 165` (5^165 < 2^384); a larger power would need a sum beyond the
+/// 384 bits, which the exactness test refuses (such a `z` takes the general path: a known limit).
 fn power_of_ten(p: Mp, q: Mp) -> Option<i64> {
-    if (p.exp - q.exp).abs() > 100 {
+    if (p.exp - q.exp).abs() > 192 {
         return None;
     }
-    let n = p.sqr().add(q.sqr());
+    let (n, exact) = mp::add_x(p.sqr(), q.sqr());
+    if !exact {
+        return None;
+    }
     let mut t = Mp::from_i64(10);
-    for m in 1..=115 {
+    for m in 1..=165 {
         match t.cmp_abs(n) {
             core::cmp::Ordering::Equal => return Some(m),
             core::cmp::Ordering::Greater => return None,
@@ -664,11 +695,33 @@ fn sqrt_ratio<F: Float>(a: &Op<F>, p: Mp, q: Mp) -> Option<(Part, Part)> {
 /// 2^(prec/2 + 2) (within 64 binary orders for every format); `r = u² + v²` then has at most
 /// 2·prec + 1 bits (`u = 1`, `v = 2^64 − 1` gives 127 for x87), its candidate 2·prec + 2.
 fn sqrt_exact(p: Mp, q: Mp, prec: u32) -> Option<(Mp, Mp)> {
+    if 2 * prec + 2 > 190 {
+        // |p/q| <= u/(2v) and |q/p| = 2uv/((u − v)(u + v)) stay below 2^(prec + 1).
+        return if p.is_zero() || (p.exp - q.exp).abs() <= i64::from(prec) + 2 { sqrt_exact_wide(p, q, prec) } else { None };
+    }
     if !p.is_zero() && (p.exp - q.exp).abs() > 64 {
         return None;
     }
     let r = exact_root(p.sqr().add(q.sqr()), (2 * prec + 2).max(120))?;
     Some((mp::exact_sqrt(r.add(p).ldexp(-1))?, mp::exact_sqrt(r.sub(p).ldexp(-1))?))
+}
+
+/// [`sqrt_exact`] for `_Float128`, where `r` (up to 227 bits) has a square beyond the 384: the
+/// candidates `u` and `v` (at most `prec` bits each, see above) are the approximations rounded to
+/// `prec` bits, and the root is exact when `(u + iv)² = p + iq` exactly (`u²`, `v²` and `uv` have at
+/// most 226 bits, and `u² − v²` spans at most 226 + 128 bits, all checked by `mul_x`/`add_x`).
+fn sqrt_exact_wide(p: Mp, q: Mp, prec: u32) -> Option<(Mp, Mp)> {
+    let r = p.sqr().add(q.sqr()).sqrt();
+    let u = r.add(p).ldexp(-1).sqrt().round_bits(prec);
+    if u.is_zero() {
+        return None;
+    }
+    let v = q.div(u.ldexp(1)).round_bits(prec);
+    let (u2, e1) = mp::mul_x(u, u);
+    let (v2, e2) = mp::mul_x(v, v);
+    let (d, e3) = mp::add_x(u2, v2.neg());
+    let (uv, e4) = mp::mul_x(u, v);
+    (e1 && e2 && e3 && e4 && d == p && uv.ldexp(1) == q).then_some((u, v))
 }
 
 /// The square root of an exact `v >= 0` when it is a dyadic number of at most `bits` significant
@@ -1698,6 +1751,36 @@ fn pow_general<F: Float>(a: &Op<F>, b: &Op<F>, p: &Op<F>, q: &Op<F>, mode: Round
 #[allow(clippy::unwrap_used, clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    /// `_Float128` cut-offs (M5-4): an exact root whose parts are 112 binary orders apart, an
+    /// exact `|z|² − 1` of 226 bits beside the 1 (below 2^-150, above the 2^-230 cut-off), and an
+    /// inexact sum of squares that the 384 bits would round onto `10^2`.
+    #[test]
+    fn f128_cutoffs_are_derived_for_113_bits() {
+        use crate::float::F128;
+        let q = |v: Mp| mp::round_exact::<F128>(v, Rounding::Nearest).0;
+        let one = Mp::from_i64(1);
+        let (u, v) = (one.ldexp(112), one.ldexp(112).sub(one));
+        let (p, im) = (u.sqr().sub(v.sqr()), u.mul(v).ldexp(1));
+        for m in [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero] {
+            let ((re, ii), st) = csqrt::<F128>(q(p), q(im), m);
+            assert_eq!((re, ii, st), (q(u), q(v), Status::OK), "{m:?}");
+        }
+        // z = 1 + i(2^112 + 1)·2^-200: t = y² ≈ 2^-176 (225 bits after the halving) lies 2^-224
+        // (relative) above the 113-bit R = 2^-177 (1 + 2^-111); ln|z| = t/2 (1 − t/2 + ...) lies
+        // 2^-177 below t/2, so below R: toward zero it is R's predecessor (the 2^-150 cut-off of
+        // the narrower formats would give R).
+        let y = one.ldexp(112).add(one).ldexp(-200);
+        let t = y.sqr();
+        let ((re, _), _) = clog::<F128>(q(one), q(y), Rounding::Zero);
+        let want = mp::round::<F128>(t.ldexp(-1).sub(t.sqr().ldexp(-2)), Rounding::Zero).0;
+        let r = mp::round_exact::<F128>(one.add(one.ldexp(-111)).ldexp(-177), Rounding::Nearest).0;
+        assert!(want != r);
+        assert_eq!(re, want);
+        // clog10(6 + 8i) = 1 + i·atan2(8, 6)/ln 10: still exact (the sum of squares is exact).
+        let ((re, _), _) = clog10::<F128>(q(Mp::from_i64(6)), q(Mp::from_i64(8)), Rounding::Up);
+        assert_eq!(re, q(one));
+    }
 
     /// The small angles of the inverse functions at huge operands are an exact `2^-200` (or
     /// `1.5 · 2^-200`) times `1 ± δ` with `δ` near 2^-400, beyond the 384 bits ([`far_angle`]):
