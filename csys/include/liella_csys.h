@@ -114,6 +114,7 @@ void liella_machine_fill_erms(void *dst, int c, size_t n);
 void *liella_machine_move_avx2(void *d, const void *s, size_t n);
 void *liella_machine_move_sse2(void *d, const void *s, size_t n);
 void *liella_machine_fill_avx2(void *d, int c, size_t n);
+void *liella_machine_fill_sse2(void *d, int c, size_t n);
 /* The folded 1-64 byte copy and fill classes (D-4.22 MEM-K4b; src/machine/fold.S). */
 void *liella_machine_move_fold33(void *d, const void *s, size_t n);
 void *liella_machine_move_fold1(void *d, const void *s, size_t n);

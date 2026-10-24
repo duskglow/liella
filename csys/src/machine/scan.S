@@ -4614,6 +4614,55 @@ liella_machine_fill_avx2:
 	vzeroupper
 	ret
 	.size liella_machine_fill_avx2, .-liella_machine_fill_avx2
+
+/* SSE2 fill (MEMSET-4K-SSE2): the AVX2 fill's shape with 16-byte vectors, for CPUs (or the
+ * hwcaps=-AVX2 level) without the AVX2 kernel: the first 16 bytes as one unaligned vector, then
+ * eight 16-byte-aligned vectors per step from the first 16-byte boundary above dst while a whole
+ * step fits, then the last 128 bytes as eight unaligned vectors ending at the end (overlap is
+ * harmless: every store writes the same value). SSE2 is the x86-64 baseline; no state to clean.
+ *
+ * void *liella_machine_fill_sse2(void *dst, int c, size_t n), n >= 128; returns dst */
+	.section .text.liella_machine_fill_sse2,"ax",@progbits
+	.globl liella_machine_fill_sse2
+	.type liella_machine_fill_sse2, @function
+	.p2align 6
+liella_machine_fill_sse2:
+	movd %esi, %xmm0
+	punpcklbw %xmm0, %xmm0
+	pshuflw $0, %xmm0, %xmm0
+	punpcklqdq %xmm0, %xmm0
+	movq %rdi, %rax				/* dst */
+	leaq (%rdi,%rdx), %r9			/* the end */
+	movups %xmm0, (%rdi)			/* the first 16 bytes */
+	leaq 16(%rdi), %rcx
+	andq $-16, %rcx				/* the first 16-byte boundary above dst: dst < rcx <= dst + 16 */
+	leaq -128(%r9), %r10			/* the last 128 bytes start here (n >= 128: not below dst) */
+	cmpq %r10, %rcx
+	ja .Lfill_sse2_ends
+	.p2align 4
+.Lfill_sse2_128:				/* while a whole step ends at or before the end */
+	movdqa %xmm0, (%rcx)
+	movdqa %xmm0, 16(%rcx)
+	movdqa %xmm0, 32(%rcx)
+	movdqa %xmm0, 48(%rcx)
+	movdqa %xmm0, 64(%rcx)
+	movdqa %xmm0, 80(%rcx)
+	movdqa %xmm0, 96(%rcx)
+	movdqa %xmm0, 112(%rcx)
+	subq $-128, %rcx
+	cmpq %r10, %rcx
+	jbe .Lfill_sse2_128
+.Lfill_sse2_ends:				/* fewer than 128 bytes left from rcx: the last 128 */
+	movups %xmm0, (%r10)
+	movups %xmm0, 16(%r10)
+	movups %xmm0, 32(%r10)
+	movups %xmm0, 48(%r10)
+	movups %xmm0, 64(%r10)
+	movups %xmm0, 80(%r10)
+	movups %xmm0, 96(%r10)
+	movups %xmm0, 112(%r10)
+	ret
+	.size liella_machine_fill_sse2, .-liella_machine_fill_sse2
 	.text
 
 /* size_t liella_machine_casecmp_avx2(const char *a, const char *b, size_t n) (CASECMP-K1): the

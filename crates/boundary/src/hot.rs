@@ -469,6 +469,14 @@ unsafe fn fill_large(d: *mut c_void, c: u8, n: usize) -> *mut c_void {
             // kernel flag, `dispatch`), 128 < n, `d` non-NULL (tested above), the caller's contract.
             crate::ffi::liella_machine_fill_avx2(d.cast(), i32::from(c), n).cast()
         }
+        Bulk::Sse2 => {
+            if d.is_null() {
+                null_region();
+            }
+            // Proof obligation of the declaration (`ffi`): SMALL_MAX (128) < n, `d` non-NULL
+            // (tested above), the caller's contract.
+            crate::ffi::liella_machine_fill_sse2(d.cast(), i32::from(c), n).cast()
+        }
         // UNSAFE(hot-kernel) SAFETY: the function's contract, unchanged.
         #[allow(unsafe_code)]
         _ => unsafe { fill_checked(d, c, n) },
@@ -641,7 +649,8 @@ pub(crate) fn bulk_fill(n: usize, avx2: bool, erms: bool, erms_min: usize) -> Bu
     } else if avx2 {
         Bulk::Avx2
     } else {
-        Bulk::Checked
+        // MEMSET-4K-SSE2: the SSE2 fill (the baseline; also the level before the startup decision).
+        Bulk::Sse2
     }
 }
 
