@@ -1,5 +1,7 @@
-//! `float` fast paths for `exp`, `exp2`, `exp10`, `log`, `log2` and `log10` (Track M milestone 6,
-//! M6-3 `MATH-M6-F32-CORE`). Each evaluates `f(x)` in `double` with a table and a polynomial to a
+//! `float` fast paths for `exp`, `exp2`, `exp10`, `log`, `log2`, `log10` (Track M milestone 6,
+//! M6-3 `MATH-M6-F32-CORE`), `log1p` (`MATH-M6-F32-REST`), `sin`, `cos`, `tan`, `sincos`
+//! (`MATH-M6-F32-TRIG`, the accurate path being [`crate::trig`]; it reuses that module's `sin(kπ/64)` table)
+//! and `pow` (`MATH-M6-F32-POWF`). Each evaluates `f(x)` in `double` with a table and a polynomial to a
 //! proved relative error bound ε, then applies the rounding test ([`round`]). When the test fails
 //! the caller runs the accurate double-double path ([`crate::exp_log`]) unchanged, so every result
 //! and every flag is bit-identical to it in every rounding direction (D-10.13).
@@ -15,6 +17,7 @@
 //! against the accurate path.
 #![allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing)] // bit fields and exponents of bounded width; table indices masked to 0..128; `cvtsd2ss` is the `as f32`
 
+use crate::coeffs::tables as t;
 use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
@@ -33,6 +36,18 @@ pub enum Fast {
     Log2,
     /// `log10f`.
     Log10,
+    /// `log1pf` (MATH-M6-F32-REST).
+    Log1p,
+    /// `sinf` (MATH-M6-F32-TRIG).
+    Sin,
+    /// `cosf` (MATH-M6-F32-TRIG).
+    Cos,
+    /// `tanf` (MATH-M6-F32-TRIG).
+    Tan,
+    /// `expm1f` (MATH-M6-F32-REST-2).
+    Expm1,
+    /// `cbrtf` (MATH-M6-F32-REST-2).
+    Cbrt,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -46,6 +61,26 @@ const EXP_DELTA: u64 = 512;
 /// log: ε ≤ 2^-44.79 (case A dominates), so < 296 ulp; log2, log10 add the rounding of the
 /// constant and of the product: ε ≤ 2^-44.77, < 300 ulp.
 const LOG_DELTA: u64 = 640;
+/// log1p: ε ≤ 6.8·2^-53 (proof at [`log1p_core`]), so < 6.9 ulp.
+const LOG1P_DELTA: u64 = 8;
+/// sin, cos: ε ≤ 9.05·2^-53 (proof at [`trig_core`]), so < 9.1 ulp.
+const TRIG_DELTA: u64 = 10;
+/// tan = s/c: both quotients' bounds and the division, ε ≤ 19.2·2^-53, so < 19.3 ulp.
+const TAN_DELTA: u64 = 20;
+/// expm1: ε ≤ 9.1·2^-53 (proof at [`expm1_core`]), so < 9.2 ulp; 12 keeps a margin.
+const EXPM1_DELTA: u64 = 12;
+/// cbrt: ε ≤ 5.4·2^-53 (proof at [`cbrt_core`]), so < 5.5 ulp.
+const CBRT_DELTA: u64 = 7;
+/// The binomial series of (1 + r)^(1/3): C(1/3, n) for n = 1..6.
+const B1: f64 = 1.0 / 3.0;
+const B2: f64 = -1.0 / 9.0;
+const B3: f64 = 5.0 / 81.0;
+const B4: f64 = -10.0 / 243.0;
+const B5: f64 = 22.0 / 729.0;
+const B6: f64 = -154.0 / 6561.0;
+/// pow: ε < 89·2^-53 (proof at [`pow_core`]), so < 89.01 ulp; 96 leaves room. A `float` result
+/// falls back with probability about 2·96/2^28 (one call in 1.4 million).
+const POW_DELTA: u64 = 96;
 
 /// x = 1.5·2^52: adding it rounds to an integer, held in the low bits.
 const SHIFT: f64 = 6_755_399_441_055_744.0;
@@ -58,6 +93,19 @@ const D3: f64 = 1.0 / 3.0;
 const D4: f64 = -1.0 / 4.0;
 const D5: f64 = 1.0 / 5.0;
 const D6: f64 = -1.0 / 6.0;
+// log1p's longer series and split ln 2 (log_core's shorter kernel, MATH-M6-F32-KERNEL, does not use them).
+const D7: f64 = 1.0 / 7.0;
+const D8: f64 = -1.0 / 8.0;
+const LN2_HI: f64 = f64::from_bits(0x3fe62e42fefa3a00); // ln 2, 44 significant bits
+const LN2_LO: f64 = f64::from_bits(0xbce0ca86c3898d00); // RN(ln 2 - LN2_HI)
+// expm1's two-part reduction and Taylor coefficients (exp_core's one-step kernel, MATH-M6-F32-KERNEL,
+// does not use them). L_HI = ln 2/128 cut to 38 significant bits, so kd·L_HI is exact for |k| < 2^15;
+// L_LO = RN(ln 2/128 - L_HI); |L_HI + L_LO - ln 2/128| < 2^-99.9, ≤ 2^-85 after the ·k scaling.
+const L_HI: f64 = f64::from_bits(0x3f762e42fefa0000);
+const L_LO: f64 = f64::from_bits(0x3d0cf79abc9e3b3a);
+const C3: f64 = 1.0 / 6.0;
+const C4: f64 = 1.0 / 24.0;
+const C5: f64 = 1.0 / 120.0;
 const INV_L: f64 = f64::from_bits(0x40671547652b82fe); // RN(128 / ln 2)
 const INV_M: f64 = f64::from_bits(0x407a934f0979a371); // RN(128 log2(10))
 const LN2: f64 = f64::from_bits(0x3fe62e42fefa39ef); // RN(ln 2)
@@ -234,7 +282,22 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Log => (log_core(x)?, LOG_DELTA, "logf"),
         Fast::Log2 => (log_core(x)? * INV_LN2, LOG_DELTA, "log2f"),
         Fast::Log10 => (log_core(x)? * INV_LN10, LOG_DELTA, "log10f"),
+        Fast::Log1p => (log1p_core(x)?, LOG1P_DELTA, "log1pf"),
+        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA, "sinf"),
+        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA, "cosf"),
+        Fast::Tan => {
+            let (s, c) = trig_core(x)?;
+            (s / c, TAN_DELTA, "tanf")
+        }
+        Fast::Expm1 => (expm1_core(x)?, EXPM1_DELTA, "expm1f"),
+        Fast::Cbrt => (cbrt_core(x)?, CBRT_DELTA, "cbrtf"),
     };
+    finish(x, y, delta, mode, name)
+}
+
+/// The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+#[inline(always)]
+fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let r = round(y, delta, mode);
     stats::record(name, r.is_some());
     let v = r?;
@@ -315,6 +378,284 @@ fn log_core_from(x: f32, lo: u32) -> Option<f64> {
     Some(((ef * LN2 + LOG_C[i]) + r) + s)
 }
 
+/// ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1
+/// with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the rounding test's margin, and
+/// the test would refuse almost every operand; the accurate path's `near` case takes them).
+///
+/// z = RN(1 + x) is exact unless x ≥ 2^51: for x in (-1, -1/2] by Sterbenz; otherwise x's last
+/// bit is ≥ 2^-49 and its top below 2^52, so 1 + x spans at most 53 bits. z = 2^e·m, i, c and
+/// LOG_INV/LOG_C as in [`log_core`]; ln(1 + r) = r + r²(-1/2 + r/3 - ... - r^6/8) (Horner, D3..D8)
+/// and e·ln 2 = e·LN2_HI (exact, |e| ≤ 128, 44 bits) + e·LN2_LO, whose error terms (the series
+/// remainder, LOG_C's and the sums' roundings, 3.2·2^-53 in all) are the base below, except r:
+/// * e = 0 (z in [0.75, 1.5), so z is exact and x = z - 1): r = z·L - 1 = x·L + (L - 1) with
+///   L = LOG_INV[i]; x·L is exact (24 by 24 bits), L - 1 is exact (L in [2/3, 4/3], 24 bits), so r
+///   is RN of the exact value: 2^-53|r|. Case A (c = 1, L = 1): r = x exactly, as in log_core.
+///   Case B (c ≠ 1, |y| ≥ ln(1 + 2^-8) and |r| < 0.0040): r's rounding adds ≤ 1.03·2^-53|y|,
+///   4.3·2^-53 in total.
+/// * e ≠ 0 (|y| ≥ ln(4/3) > 0.287): m has up to 53 bits, so m·L is rounded once (≤ 2^-53
+///   absolute, |m·L - 1| < 2^-7) and the subtraction of 1 is exact (Sterbenz): ln(1 + r) moves by
+///   ≤ 1.01·2^-53, ≤ 3.6·2^-53|y|; z's own rounding for x ≥ 2^51 is ≤ 2^-53 absolute against
+///   |y| > 35 (≤ 2^-58|y|). With the base 3.2·2^-53: ≤ 6.8·2^-53.
+fn log1p_core(x: f32) -> Option<f64> {
+    let xd = f64::from(x);
+    // NaN, x ≤ -1, ∞ and |x| < 2^-26 (the zeros and subnormals included) go to the accurate path.
+    if !(xd > -1.0 && xd <= f64::from(f32::MAX)) || xd.to_bits() & !(1 << 63) < 0x3e50_0000_0000_0000 {
+        return None;
+    }
+    let z = 1.0 + xd;
+    let zb = z.to_bits();
+    let e = (zb.wrapping_sub(0x3fe8_0000_0000_0000) as i64 >> 52) as i32;
+    let m = f64::from_bits(zb.wrapping_sub((e as i64 as u64) << 52));
+    let i = ((m.to_bits() >> 45) & 127) as usize;
+    let l = LOG_INV[i];
+    let r = if e == 0 { xd * l + (l - 1.0) } else { m * l - 1.0 };
+    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * (D6 + r * (D7 + r * D8))))));
+    let ef = f64::from(e);
+    Some((ef * LN2_HI + LOG_C[i]) + (r + (s + ef * LN2_LO)))
+}
+
+/// The trig fast range: 2^-26 ≤ |x| < 2^19 (n below 2^23.4, so the n·PI64_k products are exact).
+const TRIG_MIN: f64 = 1.490_116_119_384_765_6e-8;
+const TRIG_MAX: f64 = 524_288.0;
+/// Below this |r| (for n ≠ 0) the reduction's absolute error would matter: the accurate path.
+const TRIG_R_MIN: f64 = 1.455_191_522_836_685_2e-11; // 2^-36
+const INV_PI64: f64 = f64::from_bits(t::SCALES[2]); // RN(64/π)
+const PI64_1: f64 = f64::from_bits(0x3fa9_21fb_5400_0000); // π/64 to 27 significant bits
+const PI64_2: f64 = f64::from_bits(0x3dc1_0b46_1100_0000); // the next 29 bits
+const PI64_3: f64 = f64::from_bits(0x3bf4_c4c6_628b_80dc); // RN(π/64 - PI64_1 - PI64_2)
+const S3: f64 = -1.0 / 6.0;
+const S5: f64 = 1.0 / 120.0;
+const S7: f64 = -1.0 / 5040.0;
+const K4: f64 = 1.0 / 24.0;
+const K6: f64 = -1.0 / 720.0;
+const K8: f64 = 1.0 / 40320.0;
+
+/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 9.05·2^-53, for 2^-26 ≤ |x| < 2^19.
+///
+/// Reduction (Cody–Waite): x = n·π/64 + r, n = nearest(RN(x·64/π)), so |r| < 0.024544.
+/// n·PI64_1 and n·PI64_2 are exact (27 and 29 bits, |n| < 2^24); x - n·PI64_1 is exact (both on
+/// the 2^-31 grid, the difference below 2^-5); then two roundings ≤ 2^-53 of their results, the
+/// product n·PI64_3 ≤ 2^-94 and the constants' tail ≤ 2^-95.8: |Δr| ≤ 2·2^-53|r| + 2^-93. n = 0
+/// gives r = x exactly. |r| < 2^-36 with n ≠ 0 goes to the accurate path.
+///
+/// sin r = r + r·z(S3 + z(S5 + z·S7)), z = r², Taylor remainder ≤ 2^-61.2|r|; with Δr and the final
+/// sum, |Δsr| ≤ 3.01·2^-53|r|. cos r - 1 = cm = z(-1/2 + z(K4 + z(K6 + z·K8))): remainder < 2^-75,
+/// |cm| ≤ 3.02·10^-4, |Δcm| ≤ 8·2^-53|cm|. S = sin(nπ/64), C = cos(nπ/64) are the `double` heads
+/// of the table (relative error 2^-53; sin 0, sin π, cos ±π/2 are exactly 0 and ±1).
+/// sin x = S + (S·cm + C·sr); cos x is the same with (C, -S) for (S, C) (the angle shifted by π/2).
+/// * n ≢ 0 (mod 64): the angle is at least π/128 from a multiple of π, so |S| ≤ 2|y| and
+///   |C·r| ≤ 1.0001|y|. The errors, in units of 2^-53|y|: S 2, C 1.0001, sr 3.0103, cm 0.005,
+///   the two products 1.002, the inner sum 1.02, the outer 1: ≤ 9.05.
+/// * n ≡ 0 (mod 64): S = 0, C = ±1, y = ±sr: Δr ≤ (2 + 2^-5)·2^-53|r| (|r| ≥ 2^-36), so ≤ 3.04.
+///
+/// No operand or intermediate is subnormal (|r| ≥ 2^-36 or r = x ≥ 2^-26, so z^4 ≥ 2^-304), and
+/// |y| ≥ 2^-37.
+#[inline(always)]
+fn trig_core(x: f32) -> Option<(f64, f64)> {
+    let xd = f64::from(x);
+    let ax = xd.abs();
+    // NaN, ±∞, |x| ≥ 2^19 and |x| < 2^-26 (the zeros and subnormals included): the accurate path.
+    if !(TRIG_MIN..TRIG_MAX).contains(&ax) {
+        return None;
+    }
+    let k = xd * INV_PI64 + SHIFT;
+    let n = (k.to_bits() & 127) as usize; // n mod 128 (the low bits of 2^51 + n)
+    let kf = k - SHIFT;
+    let r = ((xd - kf * PI64_1) - kf * PI64_2) - kf * PI64_3;
+    if r.abs() < TRIG_R_MIN {
+        return None;
+    }
+    let z = r * r;
+    let sr = r + r * z * (S3 + z * (S5 + z * S7));
+    let cm = z * (-0.5 + z * (K4 + z * (K6 + z * K8)));
+    let s = f64::from_bits(t::SIN_K_PI64[n][0]);
+    let c = f64::from_bits(t::SIN_K_PI64[(n + 32) & 127][0]);
+    Some((s + (s * cm + c * sr), c + (c * cm - s * sr)))
+}
+
+/// `sincosf`: one reduction for both results; each one that fails its rounding test is computed
+/// by the accurate path, so the pair and the flags are those of `sinf` and `cosf`.
+pub fn sincos(x: f32, mode: Rounding) -> ((f32, f32), Status) {
+    let Some((ys, yc)) = trig_core(x) else {
+        return crate::trig::sincos(x, mode);
+    };
+    let s = finish(x, ys, TRIG_DELTA, mode, "sinf").unwrap_or_else(|| crate::trig::sin(x, mode));
+    let c = finish(x, yc, TRIG_DELTA, mode, "cosf").unwrap_or_else(|| crate::trig::cos(x, mode));
+    ((s.0, c.0), s.1.and(c.1))
+}
+
+include!("fast32_tables.rs");
+
+/// e^x - 1 as a `double` y with |y/f - 1| ≤ 9.1·2^-53, for a `float` x in (-18, 89) with
+/// |x| ≥ 2^-45 (below that the rounding test refuses every operand: y is within 12 ulp of x).
+///
+/// Reduction as for e^x in [`exp_core`]: x = k·ln2/128 + u, |u| ≤ 0.00271 with absolute error
+/// ≤ 2^-61.4 (|k| < 2^15), and for k = 0, u = x exactly. E = 2^m·2^(j/128) (m = k >> 7, j = k & 127)
+/// = 2^m·(T + T_lo) with T = EXP2_TAB[j], T_lo = EXP2_LO[j] (its rounding ≤ 2^-106·T); e^u = 1 + q,
+/// q = u·h, h = 1 + u(1/2 + u(1/6 + u(1/24 + u/120))). f = (E - 1) + E·q is evaluated as
+/// y = RN(2^m·T - 1) + 2^m·(T_lo + T·q), 2^m exact (m in [-26, 128]). With δ = 2^-53:
+/// * k = 0: y = RN(u·h), T = 1, T_lo = 0, the rest exact: h's error ≤ 1.002δ, the product δ, the
+///   Taylor remainder u^5/720 ≤ 0.9δ relative: ≤ 2.91δ.
+/// * k ≠ 0: |x| ≥ ln2/256, so |u| ≤ |k|·ln2/256 and |E - 1| ≤ 2.003|f|, |E·q| ≤ 1.003|f|,
+///   E·|u| ≤ 1.01|f| (the worst case is k = ±1). Terms: RN(2^m·T - 1) ≤ 2.003δ; u's error, scaled by
+///   E/|f| ≤ 372: ≤ 1.07δ; h, u·h, T·q (1.002 + 1 + 1)δ·1.003; the sum T_lo + T·q 1.003δ; the
+///   Taylor remainder 0.9δ·1.01; T_lo's rounding ≤ 2^-96; the last sum δ. Total ≤ 9.0δ, so 9.1δ.
+///
+/// Every intermediate is a normal `double` or zero (Horner keeps u's powers out), so only inexact
+/// is raised in hardware.
+fn expm1_core(x: f32) -> Option<f64> {
+    let x = f64::from(x);
+    // NaN, x ≤ -18, x ≥ 89 and |x| < 2^-45 (the zeros and subnormals included) go to the accurate path.
+    if !(x > -18.0 && x < 89.0) || x.to_bits() & !(1 << 63) < 0x3d20_0000_0000_0000 {
+        return None;
+    }
+    let kd = x * INV_L + SHIFT;
+    let k = kd.to_bits() as i32;
+    let kd = kd - SHIFT;
+    let u = (x - kd * L_HI) - kd * L_LO;
+    let j = (k & 127) as usize;
+    let t = EXP2_TAB[j];
+    let p = f64::from_bits((((k >> 7) + 1023) as u64) << 52);
+    let h = 1.0 + u * (0.5 + u * (C3 + u * (C4 + u * C5)));
+    let hi = t * p - 1.0;
+    Some(hi + p * (EXP2_LO[j] + t * (u * h)))
+}
+
+/// ∛x as a `double` y with |y/∛x - 1| ≤ 5.4·2^-53, for a finite nonzero `float` x.
+///
+/// |x| = 2^e·m with e, m, i, r as in [`log_core`] (r = m·LOG_INV[i] - 1 exact, |r| < 2^-7; the
+/// `double` of a subnormal `float` is normal). e = 3q + j, j in {0, 1, 2}. Then
+/// ∛|x| = 2^q·CBRT_S[j]·CBRT_T[i]·(1 + r)^(1/3) exactly with the unrounded table values, since
+/// m = (1 + r)/LOG_INV[i]. (1 + r)^(1/3) = 1 + r·g, g the binomial series to degree 6: the
+/// remainder ≤ |C(1/3, 7)|·|r|^7·1.01 ≤ 0.019·2^-49 < 0.31δ (δ = 2^-53). g's coefficient and
+/// Horner roundings are ≤ 2.2δ|g| and scaled by |r·g| < 2^-8.5: ≤ 0.01δ; the sum 1 + r·g δ. The
+/// two table entries δ each (CBRT_S[0] = 1 exact), the products S·T and ·p δ each, 2^q exact.
+/// Total ≤ 5.33δ, so 5.4δ. Every operation is on normal `double`s: only inexact in hardware.
+fn cbrt_core(x: f32) -> Option<f64> {
+    let a = x.to_bits() & 0x7fff_ffff;
+    if a.wrapping_sub(1) >= 0x7f7f_ffff {
+        return None; // ±0, ±∞, NaN: the accurate path's special cases
+    }
+    let xb = f64::from(f32::from_bits(a)).to_bits();
+    let e = (xb.wrapping_sub(0x3fe8_0000_0000_0000) as i64 >> 52) as i32;
+    let m = f64::from_bits(xb.wrapping_sub((e as i64 as u64) << 52));
+    let i = ((m.to_bits() >> 45) & 127) as usize;
+    let r = m * LOG_INV[i] - 1.0;
+    let p = 1.0 + r * (B1 + r * (B2 + r * (B3 + r * (B4 + r * (B5 + r * B6)))));
+    // e in [-149, 128]: e + 150 = 3(q + 50) + j with a nonnegative dividend.
+    let n = (e + 150) as u32;
+    let (q, j) = ((n / 3) as i32 - 50, (n % 3) as usize);
+    let y = CBRT_S[j] * CBRT_T[i] * p * f64::from_bits(((q + 1023) as u64) << 52);
+    Some(if x < 0.0 { -y } else { y })
+}
+
+/// |x|^y as a `double` with |result/|x|^y - 1| ≤ 89·2^-53 (MATH-M6-F32-POWF), for a finite
+/// nonzero `float` x, a finite nonzero `float` y and t = y·ln|x| in (-104, 89); the sign is the
+/// caller's. No new tables: ln|x| comes from LOG_INV/LOG_C, e^t from EXP2_TAB. Its kernels are
+/// its own (log1p's series D3..D8, expm1's L_HI/L_LO and C3..C5), not [`log_core`]'s and
+/// [`exp_core`]'s shorter ones (MATH-M6-F32-KERNEL), whose 2^-45 bounds it does not inherit.
+///
+/// 1. ln|x| = H + lo, with e, i, r the reduction of [`log_core`] (r exact) and
+///    s = r²·(-1/2 + r·(D3 + … + r·D8)), the series of [`log1p_core`]. a = RN(e·LN2_HI + LOG_C[i])
+///    and H = RN(a + r) carry their rounding errors exactly (Fast2Sum: e·LN2_HI is exact and
+///    either 0 or ≥ 0.69 > 0.41 ≥ |LOG_C| in magnitude; a is 0 or |a| ≥ 0.0058 > 0.0040 ≥ |r|).
+///    lo = h_lo + (a_lo + (s + e·LN2_LO)). Errors relative to |ln x|: LOG_C's rounding
+///    ≤ 2^-54|LOG_C| ≤ 2^-54·1.51|ln x| (|LOG_C| ≤ 1.51|ln x| in every case of the reduction); the
+///    Taylor remainder and the evaluation of s ≤ 2^-58.6|r| ≤ 2^-58.6·1.004|ln x|; the sums in lo
+///    (|lo| ≤ 2^-7.9|H|) and LN2_LO's products below 2^-60. In all δ_L ≤ 0.81·2^-53.
+/// 2. t = y·(H + lo): H1 = H to 24 significant bits, H2 = H - H1 (exact); P = y·H1 is exact
+///    (24 by 24 bits), Q = RN(y·RN(H2 + lo)) with |H2 + lo| ≤ 2^-7.8|H|, so its two roundings
+///    add ≤ 2^-60|t|. t_hi = RN(P + Q), t_lo = (P - t_hi) + Q exactly (Fast2Sum, |Q| < |P|).
+///    So |Δt| ≤ 0.83·2^-53|t| < 86.5·2^-53 for |t| < 104.
+/// 3. e^t: k = round(128·t_hi/ln 2), |k| ≤ 19207 < 2^15 for |t| < 104. D = t_hi - k·L_HI is
+///    exact (L_HI has 38 significant bits, so k·L_HI is exact and on the 2^-45 grid; when k ≠ 0,
+///    |t_hi| > 2^-9 so t_hi is on the 2^-61 grid; |D| < 2^-8). u = D + (t_lo - k·L_LO): L_HI + L_LO
+///    is within 2^-99.9 of ln 2/128 (≤ 2^-84.9 after ·k), |k·L_LO| < 2^-32 and |t_lo| ≤ 2^-46 round
+///    below 2^-84, and the last sum's rounding ≤ 2^-53·2^-8.5: ≤ 2^-61 absolute added in all.
+///    e^u = 1 + u·(1 + u·(1/2 + u·(C3 + u·(C4 + u·C5)))): Taylor remainder |u|^6/720·1.003 < 2^-60.7
+///    (|u| < 0.00272), the coefficients' and Horner's roundings scaled by |u| ≤ 2^-8.5 (< 2^-60
+///    in all); v = T + T·(u·h): T's rounding 2^-53, the last sum's 2^-53, the product T·(u·h)'s
+///    ≤ 2^-53·0.0028; the scaling by 2^(k>>7) is exact. ≤ 1.02·2^-52 relative.
+///
+/// Total: e^|Δt| - 1 + 1.02·2^-52 + 2^-61 ≤ (0.84|t| + 2.06)·2^-53 < 89·2^-53 (|t| < 104).
+fn pow_core(ax: f64, yd: f64) -> Option<f64> {
+    let xb = ax.to_bits();
+    let e = (xb.wrapping_sub(0x3fe8_0000_0000_0000) as i64 >> 52) as i32;
+    let m = f64::from_bits(xb.wrapping_sub((e as i64 as u64) << 52));
+    let i = ((m.to_bits() >> 45) & 127) as usize;
+    let r = m * LOG_INV[i] - 1.0;
+    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * (D6 + r * (D7 + r * D8))))));
+    let ef = f64::from(e);
+    let a0 = ef * LN2_HI;
+    let a = a0 + LOG_C[i];
+    let a_lo = (a0 - a) + LOG_C[i];
+    let h = a + r;
+    let h_lo = (a - h) + r;
+    let lo = h_lo + (a_lo + (s + ef * LN2_LO));
+    let h1 = f64::from_bits(h.to_bits() & 0xffff_ffff_e000_0000);
+    let p = yd * h1;
+    let q = yd * ((h - h1) + lo);
+    let t = p + q;
+    if !(t > -104.0 && t < 89.0) {
+        return None; // overflow, underflow to 0 and NaN-free bounds: the accurate path
+    }
+    let t_lo = (p - t) + q;
+    let kd = t * INV_L + SHIFT;
+    let k = kd.to_bits() as i32;
+    let kd = kd - SHIFT;
+    let u = (t - kd * L_HI) + (t_lo - kd * L_LO);
+    let tt = EXP2_TAB[(k & 127) as usize];
+    let hh = 1.0 + u * (0.5 + u * (C3 + u * (C4 + u * C5)));
+    let v = tt + tt * (u * hh);
+    // k >> 7 is in [-151, 128]: 2^(k>>7) is a normal `double`.
+    Some(v * f64::from_bits((((k >> 7) + 1023) as u64) << 52))
+}
+
+/// `powf`'s fast path: x, y finite and nonzero, x > 0 or y an integer (the sign from its parity).
+/// Every other operand (the C Annex F special cases, ±0, ±∞, NaN, x < 0 with y not an integer)
+/// and every result the rounding test refuses (the exact powers among them) go to [`crate::pow`].
+#[inline(always)]
+pub fn eval_pow(x: f32, y: f32, mode: Rounding) -> Option<(f32, Status)> {
+    let (xb, yb) = (x.to_bits(), y.to_bits());
+    let (xa, ya) = (xb & 0x7fff_ffff, yb & 0x7fff_ffff);
+    if xa.wrapping_sub(1) >= 0x7f7f_ffff || ya.wrapping_sub(1) >= 0x7f7f_ffff {
+        return None; // ±0, ±∞, NaN
+    }
+    let mut neg = false;
+    if xb >> 31 != 0 {
+        // y must be an integer: |y| ≥ 2^23, or no fraction bits below its units bit.
+        let ey = (ya >> 23) as i32 - 127;
+        if ey < 0 {
+            return None;
+        }
+        if ey < 23 {
+            let sig = (ya & 0x7f_ffff) | 0x80_0000;
+            let sh = 23 - ey as u32;
+            if sig & ((1 << sh) - 1) != 0 {
+                return None;
+            }
+            neg = (sig >> sh) & 1 == 1;
+        }
+    }
+    let y0 = pow_core(f64::from(f32::from_bits(xa)), f64::from(y))?;
+    let r = round(if neg { -y0 } else { y0 }, POW_DELTA, mode);
+    stats::record("powf", r.is_some());
+    let v = r?;
+    // round's range is the normal `float`s and it refuses exact results: inexact only, as in
+    // [`finish`]; denormal-operand from `f64::from` of a subnormal x or y.
+    let denormal = x.is_subnormal() || y.is_subnormal();
+    let hw = if denormal { Flags::INEXACT.union(Status::HW_DENORMAL) } else { Flags::INEXACT };
+    Some((v, Status::flags(Flags::INEXACT).hw(hw)))
+}
+
+/// `powf`: the fast path, else the accurate path.
+pub fn pow(x: f32, y: f32, mode: Rounding) -> (f32, Status) {
+    match eval_pow(x, y, mode) {
+        Some(r) => r,
+        None => crate::pow::pow(x, y, mode),
+    }
+}
+
 /// The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
 ///
 /// The `float` results of f and y in a direction can differ only if a rounding boundary (a
@@ -362,6 +703,9 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
+        // the caller takes [`eval`].
+        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt => return None,
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -384,11 +728,14 @@ nearest_fn!(log10_nearest, Fast::Log10);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
+        fast_fn!($name, $f, exp_log);
+    };
+    ($name:ident, $f:expr, $acc:ident) => {
         #[doc = concat!("`", stringify!($name), "` for `float`: the fast path, else the accurate path.")]
         pub fn $name(x: f32, mode: Rounding) -> (f32, Status) {
             match eval($f, x, mode) {
                 Some(r) => r,
-                None => crate::exp_log::$name(x, mode),
+                None => crate::$acc::$name(x, mode),
             }
         }
     };
@@ -399,14 +746,22 @@ fast_fn!(exp10, Fast::Exp10);
 fast_fn!(log, Fast::Log);
 fast_fn!(log2, Fast::Log2);
 fast_fn!(log10, Fast::Log10);
-pub use crate::exp_log::{expm1, log1p};
+fast_fn!(log1p, Fast::Log1p);
+fast_fn!(sin, Fast::Sin, trig);
+fast_fn!(cos, Fast::Cos, trig);
+fast_fn!(tan, Fast::Tan, trig);
+pub use crate::trig::{acos, asin, atan, atan2};
+fast_fn!(expm1, Fast::Expm1);
+fast_fn!(cbrt, Fast::Cbrt, pow);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::exp_log as acc;
 
-    const ALL: [Fast; 6] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10];
+    const ALL: [Fast; 12] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt];
+    const NAMES: [&str; 12] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf"];
+    const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
     fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
@@ -417,13 +772,34 @@ mod tests {
             Fast::Log => acc::log(x, m),
             Fast::Log2 => acc::log2(x, m),
             Fast::Log10 => acc::log10(x, m),
+            Fast::Log1p => acc::log1p(x, m),
+            Fast::Sin => crate::trig::sin(x, m),
+            Fast::Cos => crate::trig::cos(x, m),
+            Fast::Tan => crate::trig::tan(x, m),
+            Fast::Expm1 => acc::expm1(x, m),
+            Fast::Cbrt => crate::pow::cbrt(x, m),
         }
     }
 
     /// Compare the fast path with the accurate path on `xs` in every mode; the number taken.
     fn agree(xs: impl Iterator<Item = f32> + Clone) -> u64 {
+        agree_in(&ALL, xs)
+    }
+
+    /// [`agree`] for the functions `fs`; with trig among them also `sincosf` against `sinf`, `cosf`.
+    fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
         let mut taken = 0;
-        for f in ALL {
+        if fs.contains(&Fast::Sin) {
+            for m in MODES {
+                for x in xs.clone() {
+                    let ((s, c), st) = sincos(x, m);
+                    let (ws, wt) = sin(x, m);
+                    let (wc, wu) = cos(x, m);
+                    assert_eq!((m, x.to_bits(), s.to_bits(), c.to_bits(), st), (m, x.to_bits(), ws.to_bits(), wc.to_bits(), wt.and(wu)), "sincosf");
+                }
+            }
+        }
+        for &f in fs {
             for m in MODES {
                 for x in xs.clone() {
                     if let Some(r) = eval(f, x, m) {
@@ -461,6 +837,46 @@ mod tests {
         }
         assert_eq!((INV_LN2, INV_LN10), (acc::log2(core::f64::consts::E, Rounding::Nearest).0, acc::log10(core::f64::consts::E, Rounding::Nearest).0));
         assert_eq!((INV_L / 128.0, INV_M / 128.0), (INV_LN2, acc::log2(10.0f64, Rounding::Nearest).0));
+        // EXP2_LO[j] = RN(2^(j/128) - EXP2_TAB[j]), 2^(j/128) from the accurate path's double-double exp.
+        // The reference needs a full double-double ln 2: LN2_HI + LN2_LO holds only about 89 bits
+        // (both have trailing zeros), an error near 2^-95 in 2^(j/128), far above EXP2_LO's own
+        // rounding (≤ 2^-107). ln2_dd is checked here: RN(ln 2) as its head, and e^ln2_dd = 2.
+        let ln2_dd = crate::dd::two_sum(f64::from_bits(0x3fe6_2e42_fefa_39ef), f64::from_bits(0x3c7a_bc9e_3b39_803f));
+        assert_eq!(ln2_dd.to_f64(), ln2);
+        let (two, m2) = acc::exp_dd(ln2_dd);
+        assert!(two.scale(crate::dd::pow2(m2)).add_f64(-2.0).to_f64().abs() <= 2f64.powi(-102), "e^ln2_dd");
+        // Tolerance 2^-100 absolute: the reference's error (ln2_dd ≤ 2^-106, exp_dd ≤ 2^-102 as just
+        // checked at the far end) plus EXP2_LO's rounding stay below it on a correct table, and it
+        // certifies |T + T_lo - 2^(j/128)| ≤ 2^-99, inside the 2^-96 that expm1_core's proof uses.
+        // A one-ulp change of an entry (2^-106) is within the proof's slack: equivalent by design.
+        for j in 0..128 {
+            let (v, m) = acc::exp_dd(ln2_dd.mul_f64(j as f64 / 128.0));
+            let lo = v.scale(crate::dd::pow2(m)).sub(crate::dd::Dd::from(EXP2_TAB[j])).to_f64();
+            assert!((EXP2_LO[j] - lo).abs() <= 2f64.powi(-100), "EXP2_LO[{j}]: {:e}", EXP2_LO[j] - lo);
+        }
+        // CBRT_T[i]^3·LOG_INV[i] = 1 within the rounding of CBRT_T[i] (≤ 3/2 ulp relative), CBRT_S[j]^3 = 2^j.
+        for i in 0..128 {
+            let t = CBRT_T[i];
+            let c = crate::dd::Dd::from(t).sqr().mul_f64(t).mul_f64(LOG_INV[i]).add_f64(-1.0).to_f64();
+            let ulp = f64::from_bits(t.to_bits() & 0x7ff0_0000_0000_0000) * f64::EPSILON;
+            assert!(c.abs() <= 1.5 * ulp / t * (1.0 + 1e-6), "CBRT_T[{i}]: {c:e}");
+        }
+        for (j, s) in CBRT_S.iter().enumerate() {
+            assert_eq!(s.to_bits(), crate::pow::cbrt((1u32 << j) as f64, Rounding::Nearest).0.to_bits(), "CBRT_S[{j}]");
+        }
+        // Trig: the π/64 parts (27 and 29 bits, their sum π/64 within 2^-119), the exact zeros and
+        // ones of the sin(kπ/64) table and every entry against sin² + cos² = 1.
+        assert_eq!((PI64_1.to_bits() & 0x3ff_ffff, PI64_2.to_bits() & 0xff_ffff), (0, 0));
+        let pi64 = crate::dd::Dd::of(t::PI64);
+        let parts = crate::dd::Dd::from(PI64_1).add_f64(PI64_2).add_f64(PI64_3);
+        assert!(parts.sub(pi64).to_f64().abs() < 1e-34, "PI64 parts");
+        assert_eq!(INV_PI64, crate::dd::Dd::from(1.0).div(pi64).hi, "INV_PI64");
+        let tab = |k: usize| crate::dd::Dd::of(t::SIN_K_PI64[k]);
+        assert_eq!([0, 32, 64, 96].map(|k| f64::from_bits(t::SIN_K_PI64[k][0])), [0.0, 1.0, 0.0, -1.0]);
+        for k in 0..128 {
+            let (s, c) = (tab(k), tab((k + 32) & 127));
+            assert!(s.sqr().add(c.sqr()).add_f64(-1.0).to_f64().abs() < 1e-30, "SIN_K_PI64[{k}]");
+        }
     }
 
     /// The rounding test's mask form refuses exactly the margins of the old two-sided test, and
@@ -489,10 +905,19 @@ mod tests {
         // them by design.) Measured here, not in a test of its own: the counters are global.
         let exps = (0..1u32 << 17).map(|i| -30.0 + 60.0 * (i as f32) / 131_072.0);
         let logs = (0x0080_0000u32..0x7f80_0000).step_by(4001).map(f32::from_bits);
-        let names = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f"];
-        for (i, (f, n)) in ALL.into_iter().zip(names).enumerate() {
+        // log1pf: a grid over [-0.9, 10] (the bench row's range).
+        let log1ps = (0..1u32 << 17).map(|i| -0.9 + 10.9 * (i as f32) / 131_072.0);
+        // sinf, cosf, tanf: a grid over [-100, 100].
+        let trigs = (0..1u32 << 17).map(|i| -100.0 + 200.0 * (i as f32) / 131_072.0);
+        for (i, (f, n)) in ALL.into_iter().zip(NAMES).enumerate() {
             let before = stats::counts(n);
-            let xs: std::vec::Vec<f32> = if i < 3 { exps.clone().collect() } else { logs.clone().collect() };
+            let xs: std::vec::Vec<f32> = match i {
+                0..=2 | 10 => exps.clone().collect(),
+                6 => log1ps.clone().collect(),
+                7..=9 => trigs.clone().collect(),
+                11 => logs.clone().flat_map(|x| [x, -x]).collect(),
+                _ => logs.clone().collect(),
+            };
             for x in xs {
                 let _ = eval(f, x, Rounding::Nearest);
             }
@@ -507,24 +932,262 @@ mod tests {
         assert_eq!(fast_tiny.count(), 0, "subnormal results are the accurate path's");
         let near1 = (0x3f7f_0000u32..0x3f81_0000).step_by(3).map(f32::from_bits);
         assert!(agree(near1) > 100_000);
+        // log1pf: around its 2^-26 cut, where e changes (z = 0.75, 1.5, 2) and near -1.
+        let near0 = [0x3280_0000u32, 0xb280_0000, 0x3e80_0000, 0xbe80_0000, 0x3f00_0000, 0x3f80_0000, 0xbf7f_0000]
+            .into_iter().flat_map(|b| (b - 0x8000..b + 0x8000).step_by(5)).map(f32::from_bits);
+        assert!(agree(near0) > 50_000);
+        // Trig: around the 2^-26 and 2^19 cuts and near multiples of π/2 and π/64.
+        let cuts = [0x3280_0000u32, 0xb280_0000, 0x4900_0000, 0xc900_0000, 0x3fc9_0fdb, 0x40c9_0fdb, 0x3d49_0fdb, 0x4b49_0fdb]
+            .into_iter().flat_map(|b| (b - 0x8000..b + 0x8000).step_by(5)).map(f32::from_bits);
+        assert!(agree_in(&TRIG, cuts) > 50_000);
         let exact = (-149..128).flat_map(|k| [k as f32, 2f32.powi(k)]).chain((0..11).map(|k| 10f32.powi(k)));
         agree(exact);
     }
 
+    /// log1p_core's y is within its proved bound (< 6.9 ulp of y) of ln(1 + x), measured against
+    /// the double-double `log1p_dd` (error far below 2^-100). The agreement test cannot see a
+    /// loss of a few ulp of the `double`: it misrounds only next to a `float` boundary.
+    #[test]
+    fn log1p_core_is_within_its_bound() {
+        let grid = (0..1u32 << 16).map(|i| -0.99 + 20.0 * (i as f32) / 65_536.0);
+        let wide = (0x3280_0000u32..0x7f80_0000).step_by(1009).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let mut seen = 0u32;
+        for x in grid.chain(wide) {
+            if let Some(y) = log1p_core(x) {
+                seen += 1;
+                let f = crate::exp_log::log1p_dd(crate::dd::Dd::from(f64::from(x)));
+                let err = (crate::dd::Dd::from(y).sub(f)).to_f64();
+                let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+                assert!(err.to_bits() & !(1 << 63) <= (6.9 * ulp).to_bits(),"log1p_core({x:e}): {} ulp", err / ulp);
+            }
+        }
+        assert!(seen > 1_000_000, "{seen}");
+    }
+
+    /// trig_core's sin, cos (< 9.1 ulp) and tan = s/c (< 19.3 ulp) against the double-double
+    /// `sin_cos` of the accurate path (its error far below 2^-100).
+    #[test]
+    fn trig_core_is_within_its_bound() {
+        let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
+        let wide = (0x3280_0000u32..0x4900_0000).step_by(1009).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+        let mut seen = 0u32;
+        for x in grid.chain(wide) {
+            if let Some((s, c)) = trig_core(x) {
+                seen += 1;
+                let (fs, fc) = crate::trig::sin_cos(f64::from(x));
+                for (y, f, b, n) in [(s, fs, 9.1, "sin"), (c, fc, 9.1, "cos"), (s / c, fs.div(fc), 19.3, "tan")] {
+                    let err = crate::dd::Dd::from(y).sub(f).to_f64();
+                    assert!(err.abs() <= b * ulp(y), "trig_core {n}({x:e}): {} ulp", err / ulp(y));
+                }
+            }
+        }
+        assert!(seen > 750_000, "{seen}");
+    }
+
+    /// `fs` on every `float` operand in every mode; the number taken.
+    fn exhaustive(fs: &'static [Fast]) -> u64 {
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
+        let per = (1u64 << 32) / n + 1;
+        std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
+                let lo = t * per;
+                let hi = ((t + 1) * per).min(1 << 32);
+                agree_in(fs, (lo..hi).map(|b| f32::from_bits(b as u32)))
+            })).collect();
+            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
+        })
+    }
+
+    /// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's
+    /// proof; its own job, 3·2^34 calls).
+    #[test]
+    #[ignore]
+    fn trig_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&TRIG);
+        std::println!("trig fast path taken {taken} of {} calls", 12u64 << 32);
+    }
+
+    /// expm1_core's y is within its proved bound (|y/f - 1| ≤ 9.1·2^-53) of f = e^x - 1, f from the
+    /// double-double `exp_dd` minus 1. Below |x| = 2^-20 exp_dd's absolute error (about 2^-104)
+    /// is no longer far below 2^-53·|f|, so the grid starts there. (Clause M6-3: no spec clause.)
+    #[test]
+    fn expm1_core_is_within_its_bound() {
+        let grid = (0..1u32 << 16).map(|i| -17.9 + 106.8 * (i as f32) / 65_536.0);
+        let near0 = (0x3580_0000u32..0x3c00_0000).step_by(97).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let mut seen = 0u32;
+        for x in grid.chain(near0) {
+            if x.abs() < 2f32.powi(-20) {
+                continue;
+            }
+            if let Some(y) = expm1_core(x) {
+                seen += 1;
+                let (v, m) = acc::exp_dd(crate::dd::Dd::from(f64::from(x)));
+                let f = v.scale(crate::dd::pow2(m)).add_f64(-1.0);
+                let err = crate::dd::Dd::from(y).sub(f).to_f64();
+                assert!(err.abs() <= 9.1 * f.to_f64().abs() / 9_007_199_254_740_992.0, "expm1_core({x:e}): {} δ", err / f.to_f64() * 9_007_199_254_740_992.0);
+            }
+        }
+        assert!(seen > 100_000, "{seen}");
+    }
+
+    /// powf's fast path against the accurate path on pairs, every mode; the number taken.
+    fn agree_pow(xs: &[f32], ys: &[f32]) -> u64 {
+        let mut taken = 0;
+        for m in MODES {
+            for &x in xs {
+                for &y in ys {
+                    if let Some(r) = eval_pow(x, y, m) {
+                        taken += 1;
+                        let want = crate::pow::pow(x, y, m);
+                        assert_eq!((m, x.to_bits(), y.to_bits(), r.0.to_bits(), r.1), (m, x.to_bits(), y.to_bits(), want.0.to_bits(), want.1));
+                    }
+                }
+            }
+        }
+        taken
+    }
+
+    /// C Annex F F.10.4.4 (no spec clause beyond s10_0_f_0's Annex F reference): every special case
+    /// of `powf` through the fast entry, in every mode; none of them may take the fast path.
+    #[test]
+    fn powf_annex_f_special_cases() {
+        let (inf, nan) = (f32::INFINITY, f32::NAN);
+        let ok = Status::OK;
+        let cases: [(f32, f32, f32, Status); 30] = [
+            (0.0, -3.0, inf, Status::POLE), (-0.0, -3.0, -inf, Status::POLE), (0.0, -2.5, inf, Status::POLE),
+            (-0.0, -2.0, inf, Status::POLE), (0.0, -inf, inf, ok), (-0.0, -inf, inf, ok),
+            (0.0, 3.0, 0.0, ok), (-0.0, 3.0, -0.0, ok), (-0.0, 2.5, 0.0, ok), (-0.0, 4.0, 0.0, ok),
+            (-1.0, inf, 1.0, ok), (-1.0, -inf, 1.0, ok), (1.0, nan, 1.0, ok), (1.0, -7.5, 1.0, ok),
+            (nan, 0.0, 1.0, ok), (-3.0, -0.0, 1.0, ok), (-2.0, 0.5, nan, Status::DOMAIN),
+            (0.5, -inf, inf, ok), (-0.5, -inf, inf, ok), (2.0, -inf, 0.0, ok), (0.5, inf, 0.0, ok),
+            (-2.0, inf, inf, ok), (-inf, -3.0, -0.0, ok), (-inf, -2.5, 0.0, ok), (-inf, 3.0, -inf, ok),
+            (-inf, 2.5, inf, ok), (inf, -0.5, 0.0, ok), (inf, 0.5, inf, ok), (nan, 2.0, nan, ok), (2.0, nan, nan, ok),
+        ];
+        for m in MODES {
+            for (x, y, v, st) in cases {
+                assert!(eval_pow(x, y, m).is_none(), "{x} {y}");
+                let (got, gst) = pow(x, y, m);
+                let same = if v.is_nan() { got.is_nan() } else { got.to_bits() == v.to_bits() };
+                assert!(same && (gst.flags, gst.error) == (st.flags, st.error), "pow({x}, {y}) = {got} {gst:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn powf_fast_path_agrees_with_the_accurate_path() {
+        // Grids of x and y over the working ranges (negative x with integer y), the subnormal
+        // operands and results, the exact powers (which the test must refuse), and the rate.
+        let xs: std::vec::Vec<f32> = (0..1500u32).map(|i| f32::from_bits(0x0000_1000 + i * 0x0005_6a3b)).chain((0..300).map(|i| -0.01 - 0.37 * i as f32)).collect();
+        let ys: std::vec::Vec<f32> = (0..400).map(|i| -30.0 + 0.1503 * i as f32).chain((-12..13).map(|i| i as f32)).chain([1e-3, -7e-5, 1e-30, 2e-40, 130.7, -77.1, 1e4, 3e5]).collect();
+        let n = agree_pow(&xs, &ys);
+        assert!(n > 150_000, "{n}");
+        let near1: std::vec::Vec<f32> = (0x3f7f_f000u32..0x3f80_1000).step_by(3).map(f32::from_bits).collect();
+        assert!(agree_pow(&near1, &[1e3, -2.5e4, 3e6, 0.37]) > 20_000);
+        let exact: std::vec::Vec<f32> = (1..40).map(|i| i as f32).chain([0.25, 0.125, 1.5, -2.0, -3.0]).collect();
+        agree_pow(&exact, &[2.0, 3.0, 0.5, -1.0, -2.0, 1.5, 0.25, 4.0, 10.0, 24.0]);
+        // Subnormal results: x^y near 2^-126 .. 2^-149.
+        let sub: std::vec::Vec<f32> = (0..2000).map(|i| -86.0 - 0.009 * i as f32).collect();
+        assert!(agree_pow(&[core::f32::consts::E, 0.5, 2.0, 7.25], &sub) > 10_000);
+        let before = stats::counts("powf");
+        // The rate on pairs with |y·ln x| ≤ 70 (x in [0.01, 100], |y| ≤ 15); next to the overflow
+        // and underflow thresholds the results leave the fast range by design.
+        for x in (0..2000).map(|i| 0.01 + 0.049_99 * i as f32) {
+            for y in (0..500).map(|i| -15.0 + 0.0601 * i as f32) {
+                let _ = eval_pow(x, y, Rounding::Nearest);
+            }
+        }
+        let c = stats::counts("powf").since(before);
+        assert!(c.check_fallback("powf", 10_000).is_ok(), "powf: fallback rate {c:?}");
+    }
+
+    /// pow_core's result is within its proved bound (< 89.01 ulp) of |x|^y, measured against the
+    /// double-double e^(y·ln x) (error far below 2^-100); the agreement tests cannot see a loss
+    /// of a few ulp of the `double`.
+    #[test]
+    fn pow_core_is_within_its_bound() {
+        let mut seen = 0u32;
+        let xs = (0x0000_0100u32..0x7f80_0000).step_by(100_003).map(f32::from_bits);
+        for x in xs {
+            for j in 0..64 {
+                let y = (-40.0 + 1.27 * j as f32) * if j % 3 == 0 { 1.0 } else { 0.3 };
+                let Some(v) = pow_core(f64::from(x), f64::from(y)) else { continue };
+                seen += 1;
+                let l = crate::exp_log::log_dd(crate::dd::Dd::from(f64::from(x))).mul_f64(f64::from(y));
+                let (f, sc) = crate::exp_log::exp_dd(l);
+                let err = crate::dd::Dd::from(v).sub(f.scale(f64::from_bits(((sc + 1023) as u64) << 52))).to_f64(); // e^l = f·2^sc
+                let ulp = f64::from_bits(v.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+                // The proof's bound as a function of t: (0.84|t| + 2.06)·2^-53, below 89 overall.
+                assert!(err.abs() <= (0.84 * l.hi.abs() + 2.1) * ulp, "pow_core({x:e}, {y:e}): {} ulp", err / ulp);
+            }
+        }
+        assert!(seen > 100_000, "{seen}");
+    }
+
+    /// cbrt_core's y is within its proved bound (|y/∛x - 1| ≤ 5.4·2^-53), measured as
+    /// |y³/x - 1| ≤ 3·5.4·2^-53 (plus 2^-60 for the square of the error) in double-double. (Clause M6-3: no spec clause.)
+    #[test]
+    fn cbrt_core_is_within_its_bound() {
+        let wide = (1u32..0x7f80_0000).step_by(997).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let near1 = (0x3f70_0000u32..0x3f90_0000).step_by(7).map(f32::from_bits);
+        let mut seen = 0u32;
+        for x in wide.chain(near1) {
+            if let Some(y) = cbrt_core(x) {
+                seen += 1;
+                let x = f64::from(x);
+                let c = crate::dd::Dd::from(y).sqr().mul_f64(y).add_f64(-x).to_f64() / x;
+                assert!(c.abs() <= 16.2 / 9_007_199_254_740_992.0 + 2f64.powi(-60), "cbrt_core({x:e}): {} δ", c * 9_007_199_254_740_992.0 / 3.0);
+            }
+        }
+        assert!(seen > 1_000_000, "{seen}");
+    }
+
+    /// powf: every `float` x for a set of y, and every `float` y for a set of x, in every mode
+    /// (MATH-M6-F32-POWF's proof; its own job, 18 slices of 2^34 calls).
+    #[test]
+    #[ignore]
+    fn powf_fast_path_agrees_exhaustively() {
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
+        let per = (1u64 << 32) / n + 1;
+        let fixed = [2.0f32, 3.0, -2.0, 0.5, 1.5, -1.5, 1.0 / 3.0, 2.5, 7.1, -0.7, 1e-3, 33.3];
+        let other = [2.0f32, 0.9, 1.0001, 10.0, -3.0, 1.5];
+        let slices = fixed.iter().map(|&y| (true, y)).chain(other.iter().map(|&x| (false, x)));
+        let mut taken = 0u64;
+        for (all_x, c) in slices {
+            taken += std::thread::scope(|sc| {
+                let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
+                    let lo = t * per;
+                    let hi = ((t + 1) * per).min(1 << 32);
+                    let v: std::vec::Vec<f32> = (lo..hi).map(|b| f32::from_bits(b as u32)).collect();
+                    if all_x { agree_pow(&v, &[c]) } else { agree_pow(&[c], &v) }
+                })).collect();
+                hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum::<u64>()
+            });
+            std::println!("slice all_x={all_x} c={c:e}: fast path taken {taken} so far");
+        }
+    }
+
     /// Every `float` operand in every mode (M6-3's proof; run as its own job, about 2^35 calls).
+    /// `FAST32_SWEEP=expm1f,cbrtf` limits it to the named functions (default: all of ALL).
     #[test]
     #[ignore]
     fn fast_path_agrees_exhaustively() {
+        let want = std::env::var("FAST32_SWEEP").unwrap_or_default();
+        let fs: std::vec::Vec<Fast> = ALL.into_iter().zip(NAMES)
+            .filter(|(_, n)| want.is_empty() || want.split(',').any(|w| w == *n)).map(|(f, _)| f).collect();
+        assert!(!fs.is_empty(), "FAST32_SWEEP={want} names no function");
+        std::println!("sweeping {fs:?}");
+        let fs = &fs[..];
         let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
         let per = (1u64 << 32) / n + 1;
         let taken: u64 = std::thread::scope(|sc| {
             let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
                 let lo = t * per;
                 let hi = ((t + 1) * per).min(1 << 32);
-                agree((lo..hi).map(|b| f32::from_bits(b as u32)))
+                agree_in(fs, (lo..hi).map(|b| f32::from_bits(b as u32)))
             })).collect();
             hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
         });
-        std::println!("fast path taken {taken} of {} calls", 24u64 << 32);
+        std::println!("fast path taken {taken} of {} calls", (fs.len() as u64 * 4) << 32);
     }
 }
