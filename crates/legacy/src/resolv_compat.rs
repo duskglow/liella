@@ -753,6 +753,159 @@ pub fn host_by_addr_life<S: Sys>(sys: &S, r: &Resolver, ip: Ip, life: &mut Life)
     }
 }
 
+/// A `networks` record from the `dns` source (§16.3): the official name, the right-aligned
+/// number and the aliases (text, separated by spaces).
+#[derive(Debug)]
+pub struct DnsNet {
+    /// The official name.
+    pub name: TryVec<u8>,
+    /// The number, right-aligned (D-16.2).
+    pub number: u32,
+    /// The aliases, separated by spaces.
+    pub aliases: TryVec<u8>,
+}
+
+/// The `PTR` question for the network `net` (observed): its trailing zero octets dropped, the
+/// rest padded with zero octets to four and written in reverse under `in-addr.arpa`
+/// (`192.0.2` and `192.0.2.0` both ask `0.2.0.192.in-addr.arpa`). Returns the name and the
+/// number without its trailing zero octets.
+pub fn net_ptr_name(net: u32) -> (TryVec<u8>, u32) {
+    let mut n = net;
+    while n != 0 && n & 0xff == 0 {
+        n >>= 8;
+    }
+    let be = n.to_be_bytes();
+    let sig = be.get(be.iter().position(|&b| b != 0).unwrap_or(3)..).unwrap_or(&[]);
+    let mut octets = [0u8; 4];
+    for (o, b) in octets.iter_mut().zip(sig) {
+        *o = *b;
+    }
+    let mut q = TryVec::new();
+    for o in octets.iter().rev() {
+        let d = [b'0'.wrapping_add(o.wrapping_div(100)), b'0'.wrapping_add(o.wrapping_div(10).wrapping_rem(10)), b'0'.wrapping_add(o.wrapping_rem(10))];
+        let skip = if *o >= 100 { 0 } else if *o >= 10 { 1 } else { 2 };
+        let _ = q.extend_from_slice(d.get(skip..).unwrap_or(&[])).and_then(|()| q.push(b'.'));
+    }
+    let _ = q.extend_from_slice(b"in-addr.arpa");
+    (q, n)
+}
+
+/// The number an `in-addr.arpa` name spells (observed): its labels read in reverse, each the
+/// value of its leading digits (0 for none), shifted in by octets.
+pub fn net_of_reverse(text: &[u8]) -> u32 {
+    let labels = text.get(..text.len().saturating_sub(13)).unwrap_or(&[]);
+    labels.rsplit(|&c| c == b'.').filter(|l| !l.is_empty()).fold(0u32, |acc, l| {
+        let v = l.iter().take_while(|c| c.is_ascii_digit()).fold(0u32, |v, &c| v.wrapping_mul(10).wrapping_add(u32::from(c.wrapping_sub(b'0'))));
+        acc.wrapping_shl(8).wrapping_add(v)
+    })
+}
+
+/// Whether `text` is a name under `in-addr.arpa` (ASCII case ignored).
+fn under_in_addr(text: &[u8]) -> bool {
+    text.len() > 13 && text.get(text.len().saturating_sub(13)..).is_some_and(|t| t.eq_ignore_ascii_case(b".in-addr.arpa"))
+}
+
+/// One `PTR` question for the `networks` source; `seen` gets each answer `PTR` record's target
+/// (text) until it returns `false`. The answer count is never trusted beyond the packet: a
+/// record that does not fit ends the walk. A target that cannot be read is a miss (NOT_FOUND);
+/// an error code maps as for hosts (SERVFAIL, REFUSED and no answer: TRY_AGAIN; NXDOMAIN:
+/// NOT_FOUND; NOERROR without records: NO_DATA).
+fn net_query<S: Sys>(sys: &S, c: &Config, qname: &[u8], unreachable: &mut bool, mut seen: impl FnMut(&[u8]) -> core::result::Result<bool, Miss>) -> core::result::Result<(), Miss> {
+    let q = build_query(sys, c, qname, 1, T_PTR).map_err(|_| Miss::NoRecovery)?;
+    let resp = match client::exchange(sys, &transport(sys, c), &[&q]) {
+        Ok([Some(a), _]) => a,
+        Err(Failure::Unreachable(_)) => {
+            *unreachable = true;
+            return Err(Miss::TryAgain);
+        }
+        Ok(_) | Err(_) => return Err(Miss::TryAgain),
+    };
+    let h = Header::of(&resp).ok_or(Miss::NoRecovery)?;
+    match h.rcode() {
+        rcode::NOERROR => {}
+        rcode::NXDOMAIN => return Err(Miss::NotFound),
+        rcode::SERVFAIL | rcode::REFUSED => return Err(Miss::TryAgain),
+        _ => return Err(Miss::NoRecovery),
+    }
+    let [qd, an, ..] = h.counts;
+    if an == 0 {
+        return Err(Miss::NoData);
+    }
+    let mut at = HFIXEDSZ;
+    for _ in 0..qd {
+        at = msg::rr_at(&resp, at, 0).map_err(|_| Miss::NotFound)?.next;
+    }
+    let mut wire = [0u8; name::MAXDNAME];
+    let mut text = [0u8; name::MAXDNAME];
+    for _ in 0..an {
+        let Ok(rr) = msg::rr_at(&resp, at, 1) else { break };
+        at = rr.next;
+        if rr.rtype != T_PTR {
+            continue;
+        }
+        let target = rr.rdata.ok_or(Miss::NotFound)?;
+        let (wl, _) = name::unpack(&resp, target, &mut wire).map_err(|_| Miss::NotFound)?;
+        let tl = name::expand_text(wire.get(..wl).unwrap_or(&[]), &mut text).map_err(|_| Miss::NotFound)?;
+        if !seen(text.get(..tl.saturating_sub(1)).unwrap_or(&[]))? {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// The `dns` source of `getnetbyname` (observed): a `PTR` question for `name` through the search
+/// rules; the first answer target under `in-addr.arpa` gives the number and is the alias, the
+/// official name is `name`. Answers without such a target: TRY_AGAIN. Nothing is kept per
+/// record beyond the one returned.
+pub fn net_by_name<S: Sys>(sys: &S, r: &Resolver, name: &[u8]) -> Answer<DnsNet> {
+    if name.is_empty() {
+        return Err(LookupError::Unavailable);
+    }
+    let c = &r.conf;
+    let mut unreachable = false;
+    let mut domains: TryVec<&[u8]> = TryVec::new();
+    for s in c.search.iter() {
+        domains.push(s.as_slice())?;
+    }
+    let found = client::search(name, c.ndots, &domains, c.options, |n| {
+        let mut hit: Option<TryVec<u8>> = None;
+        net_query(sys, c, n, &mut unreachable, |t| {
+            if under_in_addr(t) {
+                hit = Some(TryVec::from_slice(t).map_err(|_| Miss::NoRecovery)?);
+                return Ok(false);
+            }
+            Ok(true)
+        })?;
+        hit.ok_or(Miss::TryAgain)
+    });
+    let target = found.map_err(|m| lookup_error(m, unreachable))?.0;
+    Ok(DnsNet { name: TryVec::from_slice(name)?, number: net_of_reverse(&target), aliases: target })
+}
+
+/// The `dns` source of `getnetbyaddr` (observed): one `PTR` question for [`net_ptr_name`]; the
+/// first target is the official name, the others the aliases; the number is `net` without its
+/// trailing zero octets. Answers without a `PTR` record: TRY_AGAIN.
+pub fn net_by_addr<S: Sys>(sys: &S, r: &Resolver, net: u32) -> Answer<DnsNet> {
+    let (qname, number) = net_ptr_name(net);
+    let mut unreachable = false;
+    let mut out = DnsNet { name: TryVec::new(), number, aliases: TryVec::new() };
+    let mut first = true;
+    net_query(sys, &r.conf, &qname, &mut unreachable, |t| {
+        let to = if first { &mut out.name } else { &mut out.aliases };
+        if !first && !to.is_empty() {
+            to.push(b' ').map_err(|_| Miss::NoRecovery)?;
+        }
+        to.extend_from_slice(t).map_err(|_| Miss::NoRecovery)?;
+        first = false;
+        Ok(true)
+    })
+    .map_err(|m| lookup_error(m, unreachable))?;
+    if first {
+        return Err(LookupError::TryAgain);
+    }
+    Ok(out)
+}
+
 /// `RES_INIT` and the default options of a state no one initialized.
 pub fn initialized(options: u64) -> bool {
     options & RES_INIT != 0

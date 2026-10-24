@@ -182,8 +182,40 @@ fn parsed<'a, V>(line: &'a TryVec<u8>, parse: fn(&'a [u8]) -> Option<V>) -> Answ
     parse(line).ok_or(LookupError::NotFound)
 }
 
+/// The resolver for the `networks` `dns` source, when the context has one and the line names it.
+fn net_dns<'a, S: Sys>(ctx: &Ctx<'a, S>) -> Option<&'a resolv::Resolver> {
+    ctx.dns.filter(|_| ctx.spec(Database::Networks).has(Service::Dns))
+}
+
+/// A `networks` lookup through `files` (the first line `pred` accepts) and `dns` (`dns`), not
+/// through the name-service cache (a DNS answer has its own lifetime).
+fn net_sources<S: Sys, T>(ctx: &Ctx<'_, S>, mut pred: impl FnMut(&[u8]) -> bool, dns: impl FnOnce(&S) -> Answer<resolv::DnsNet>, f: impl FnOnce(&Numbered<'_, u32>) -> T) -> Answer<T> {
+    enum Rec {
+        Line(TryVec<u8>),
+        Dns(resolv::DnsNet),
+    }
+    let mut dns = Some(dns);
+    let rec = nss::run(
+        &ctx.spec(Database::Networks),
+        |svc| match svc {
+            Service::Files => files::find_line(ctx.sys, ctx.paths.networks, &mut pred).map(Rec::Line),
+            Service::Dns => dns.take().map_or(Err(LookupError::Unavailable), |d| d(ctx.sys).map(Rec::Dns)),
+            _ => Err(LookupError::Unavailable),
+        },
+        |_, _| Ok(()),
+    )?;
+    match rec {
+        Rec::Line(l) => Ok(f(&parsed(&l, db::net_line)?)),
+        Rec::Dns(d) => Ok(f(&Numbered { name: &d.name, number: d.number, aliases: db::Words::of(&d.aliases) })),
+    }
+}
+
 /// `getnetbyname(name)`, given to `f`.
 pub fn net_by_name<S: Sys, T>(ctx: &Ctx<'_, S>, name: &[u8], f: impl FnOnce(&Numbered<'_, u32>) -> T) -> Answer<T> {
+    if let Some(r) = net_dns(ctx) {
+        let pred = |l: &[u8]| db::net_line(l).is_some_and(|n| n.names(name, db::same_nocase));
+        return net_sources(ctx, pred, |sys| resolv::net_by_name(sys, r, name), f);
+    }
     let line = nscache::line(ctx, Category::Networks, 1, &[name], || ctx.line(Database::Networks, ctx.paths.networks, |l| db::net_line(l).is_some_and(|n| n.names(name, db::same_nocase))))?;
     Ok(f(&parsed(&line, db::net_line)?))
 }
@@ -192,6 +224,10 @@ pub fn net_by_name<S: Sys, T>(ctx: &Ctx<'_, S>, name: &[u8], f: impl FnOnce(&Num
 pub fn net_by_addr<S: Sys, T>(ctx: &Ctx<'_, S>, net: u32, kind: i32, f: impl FnOnce(&Numbered<'_, u32>) -> T) -> Answer<T> {
     if kind != 2 {
         return Err(LookupError::NotFound);
+    }
+    if let Some(r) = net_dns(ctx) {
+        let pred = |l: &[u8]| db::net_line(l).is_some_and(|n| n.number == net);
+        return net_sources(ctx, pred, |sys| resolv::net_by_addr(sys, r, net), f);
     }
     let line = nscache::line(ctx, Category::Networks, 2, &[&net.to_le_bytes()], || ctx.line(Database::Networks, ctx.paths.networks, |l| db::net_line(l).is_some_and(|n| n.number == net)))?;
     Ok(f(&parsed(&line, db::net_line)?))

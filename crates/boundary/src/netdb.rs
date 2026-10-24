@@ -519,6 +519,15 @@ pub fn compat_gethtent() -> usize {
 
 // ------------------------------------------------------------------------------ networks (§16.3)
 
+/// A `networks` lookup's context: the calling thread's resolver when the `networks` line names
+/// `dns` (its answers bypass the name-service cache).
+fn with_networks<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
+    let mut c = ctx();
+    let resolver = if c.spec(liella::names::nss::Database::Networks).has(liella::names::nss::Service::Dns) { crate::resolv::host_resolver_pristine() } else { None };
+    c.dns = resolver.as_ref().map(|(r, _)| r);
+    f(&c)
+}
+
 /// The non-`_r` network result (`h_errno` for failures).
 fn own_net(a: Answer<KResult<usize>>) -> usize {
     match a.and_then(|r| r.map_err(LookupError::Os)) {
@@ -532,22 +541,22 @@ fn own_net(a: Answer<KResult<usize>>) -> usize {
 
 /// `getnetbyname(name)`.
 pub fn getnetbyname(name: KResult<&[u8]>) -> usize {
-    own_net(name.map_err(LookupError::Os).and_then(|n| netdb::net_by_name(&ctx(), n, |e| users::own(NET, |k| pack_net(e, k)))))
+    own_net(name.map_err(LookupError::Os).and_then(|n| with_networks(|c| netdb::net_by_name(c, n, |e| users::own(NET, |k| pack_net(e, k))))))
 }
 
 /// `getnetbyname_r(name, ret, buf, buflen, result, h_errnop)`.
 pub fn getnetbyname_r(name: KResult<&[u8]>, out: Option<&mut struct_netent>, buf: KResult<&mut [u8]>, result: Option<&mut usize>, herr: Option<&mut i32>) -> i32 {
-    r_form(out, buf, result, herr, false, |buf, base| netdb::net_by_name(&ctx(), name?, |e| pack_net(e, &mut Packer::new(buf, base))))
+    r_form(out, buf, result, herr, false, |buf, base| with_networks(|c| netdb::net_by_name(c, name?, |e| pack_net(e, &mut Packer::new(buf, base)))))
 }
 
 /// `getnetbyaddr(net, type)`.
 pub fn getnetbyaddr(net: u32, kind: i32) -> usize {
-    own_net(netdb::net_by_addr(&ctx(), net, kind, |e| users::own(NET, |k| pack_net(e, k))))
+    own_net(with_networks(|c| netdb::net_by_addr(c, net, kind, |e| users::own(NET, |k| pack_net(e, k)))))
 }
 
 /// `getnetbyaddr_r(net, type, ret, buf, buflen, result, h_errnop)`.
 pub fn getnetbyaddr_r(net: u32, kind: i32, out: Option<&mut struct_netent>, buf: KResult<&mut [u8]>, result: Option<&mut usize>, herr: Option<&mut i32>) -> i32 {
-    r_form(out, buf, result, herr, false, |buf, base| netdb::net_by_addr(&ctx(), net, kind, |e| pack_net(e, &mut Packer::new(buf, base))))
+    r_form(out, buf, result, herr, false, |buf, base| with_networks(|c| netdb::net_by_addr(c, net, kind, |e| pack_net(e, &mut Packer::new(buf, base)))))
 }
 
 /// `setnetent(stayopen)`.

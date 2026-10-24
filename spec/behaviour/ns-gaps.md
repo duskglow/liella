@@ -20,17 +20,18 @@ fixed in `text::nquery` (one line), pinned by `ns_gaps_nquery_headings`.
 Names print with a trailing dot (`r. e.`, `mbox. txt.`); a root name prints as `.`. Liella matches
 (`ns_gaps_minfo_rp_single_label`).
 
-## `networks` through `dns` (gap, follow-up story)
+## `networks` through `dns` (settled, NS-NETWORKS-DNS)
 
-glibc: `getnetbyaddr(192.0.2.0)` sends a PTR query for `0.2.0.192.in-addr.arpa` (the number padded
-to four octets), returns the answer's name with `n_addrtype` 2 and `n_net` 0xc00002; `10` asks
-`0.0.0.10.in-addr.arpa`. `getnetbyname(x)` sends a PTR query for `x` itself; a PTR answer there gave
-TRY_AGAIN, a NOERROR answer with no records NO_DATA. Liella has no `dns` source for `networks`: every
-lookup misses and sends nothing. Gain of the difference: none (a missing source, not a design choice), so
-glibc's behaviour should be followed; but it needs a PTR query builder for the padded in-addr.arpa name, an
-answer reader and the TRY_AGAIN/NO_DATA mapping in the networks lookup (roughly 100-150 lines in
-`names`/`nss`), far over a few lines: **RULING NEEDED / a new story** (NS-NETWORKS-DNS). The test pins
-the present state.
+Probe `crates/core/tests/oracle/net_dns.c`. `getnetbyaddr(n)` sends one PTR question: `n` without its
+trailing zero octets, padded with zero octets to four and reversed under `in-addr.arpa` (`10` and
+`0x0a000000` ask `0.0.0.10`, `0xac10` and `0xac100000` ask `0.0.16.172`; no class rule); `n_net` is
+the number without those octets, the first PTR target the name, the others aliases. `getnetbyname(x)`
+sends a PTR question for `x` through the search rules; the first target under `in-addr.arpa` gives
+`n_net` (labels reversed, `2.0.192.in-addr.arpa` is 0xc00002) and is the alias. NXDOMAIN gives
+HOST_NOT_FOUND, NOERROR without records NO_DATA, SERVFAIL, REFUSED, a truncated answer that cannot be
+retried, or an answer without a usable PTR record TRY_AGAIN. An answer count beyond the packet gives
+the records that fit. Liella follows this (`ns_networks_dns_case_table`, `ns_networks_dns_damaged_answers`);
+its official name for `getnetbyname` is the name asked.
 
 ## Group-list merge (settled)
 
