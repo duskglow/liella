@@ -221,7 +221,8 @@ fn math_double_fast_entry_sweep() {
         let args = double_fast_arguments_seeded(1_000_000, 0x5eed_0000_0000_0001 ^ c.wrapping_mul(0x9e37_79b9_7f4a_7c15));
         for (which, row) in stages.iter_mut().enumerate() {
             for &(x, y) in &args {
-                row[usize::from(liella_math::fast64::nearest_stage(which, x, y))] += 1;
+                let code = usize::from(liella_math::fast64::nearest_stage(which, x, y));
+                *row.get_mut(code).expect("stage code 0..=4") += 1;
             }
         }
         let (n, b) = double_fast_entry_mismatches(&args);
