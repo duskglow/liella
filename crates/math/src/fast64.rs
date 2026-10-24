@@ -855,6 +855,20 @@ mod bounds {
     }
 
     #[test]
+    fn near_miss_goes_to_the_exact_test() {
+        // A miss of `near` (y.hi + y.lo·c leaves y.hi) is decided by `settle`, never handed to the
+        // accurate path: y = 1 + 0.4999999·2^-52 misses with every multiplier (w > 2^-53) and, with
+        // eps = 2^-102 far below its distance to the midpoint (~2^-75), settles to 1.
+        let y = Dd { hi: 1.0, lo: 0.499_999_9 * f64::EPSILON };
+        for c in [C_EXP, C_POW, C_LOG] {
+            assert!(near(y, c, 0).is_none(), "near({c:e}) did not miss");
+            let mut st = 4;
+            let v = finish(y, Some(c), 0, || f64::from_bits(0x3990_0000_0000_0000), &mut st);
+            assert_eq!((v, st), (Some(1.0), 1), "near miss not settled by the exact test");
+        }
+    }
+
+    #[test]
     fn exp2_product_stays_within_its_bound() {
         for x in operands(20_000, -1075.0, 1024.0).chain(operands(4000, -0.02, 0.02)) {
             let kf = dd::nearest_int(x * 64.0);

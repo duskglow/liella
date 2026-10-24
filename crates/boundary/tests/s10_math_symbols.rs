@@ -209,16 +209,39 @@ fn math_double_fast_entry_sweep() {
     // Clauses: s10_0_f_0. The fast-domain agreement sweep (MATH-M6-F64-FAST-ENTRY-2): LIELLA_FE_SWEEP_CHUNKS
     // chunks (default 200) of 2·10^6 random pairs each, every one through all six fast entries as above.
     let chunks: u64 = std::env::var("LIELLA_FE_SWEEP_CHUNKS").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
+    // MATH-M6-F64-GAP-ROUND-TEST: also count which rounding step answers each in-place call
+    // (liella_math::fast64::nearest_stage: 0 the constant test, 1 its miss settled by the exact
+    // test, 2 the exact test alone, 3 the accurate path, 4 refused). The cap (coordinator #2071): a
+    // miss rate (1 over 0 + 1) of at most 2^-12 per function; a miss costs one exact test (~30
+    // instructions), so 2^-12 bounds its cost below 0.01 instructions per call.
+    let names = ["exp", "exp2", "log", "log2", "log10", "pow"];
+    let mut stages = [[0u64; 5]; 6];
     let (mut checked, mut bad) = (0usize, Vec::new());
     for c in 0..chunks {
-        let (n, b) = double_fast_entry_mismatches(&double_fast_arguments_seeded(1_000_000, 0x5eed_0000_0000_0001 ^ c.wrapping_mul(0x9e37_79b9_7f4a_7c15)));
+        let args = double_fast_arguments_seeded(1_000_000, 0x5eed_0000_0000_0001 ^ c.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        for (which, row) in stages.iter_mut().enumerate() {
+            for &(x, y) in &args {
+                row[usize::from(liella_math::fast64::nearest_stage(which, x, y))] += 1;
+            }
+        }
+        let (n, b) = double_fast_entry_mismatches(&args);
         checked += n;
         bad.extend(b);
         println!("chunk {c}: {checked} checked, {} mismatches", bad.len());
     }
+    let mut over = Vec::new();
+    for (name, s) in names.iter().zip(stages) {
+        let tried = (s[0] + s[1]).max(1);
+        let ppm = s[1] * 1_000_000 / tried;
+        println!("stages {name}: near {} miss {} exact-only {} accurate {} refused {}; miss rate {ppm} ppm (cap 2^-12 = 244 ppm)", s[0], s[1], s[2], s[3], s[4]);
+        if s[1] * 4096 > tried || s[0] == 0 {
+            over.push(format!("{name} miss rate {ppm} ppm (near {})", s[0]));
+        }
+    }
     let n = bad.len();
     bad.truncate(24);
     assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(over.is_empty(), "near-test miss rate above the 2^-12 cap: {}", over.join("; "));
     fpu::clear(&CSys, Flags::ALL);
 }
 
