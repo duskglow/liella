@@ -92,8 +92,8 @@ Delivered blocks, not here.
 | `setitimer(which, NULL, old)` | `EFAULT`. | Treated as zero (disarms). | D-23.2 | `s23_4_c_2` |
 | `ualarm` remainder above `UINT_MAX` microseconds | Saturates at `UINT_MAX - 1`. | Wraps modulo 2^32. | D-23.2 | `s23_4_c_1` |
 | `SIGEV_THREAD` thread's signal mask | Signal 33 blocked too (it is Liella's `SIGRTMIN`, D-20.1). | 33 unblocked. | D-23.3 | `s23_4_c_3_3`, `s20_1_c_2` |
-| `mktime` with `tm_isdst = -1` in a repeated hour | The first occurrence, always. | Depends on the previous `mktime` call of the process. | D-23.5 | `s23_5_c_2` |
-| A POSIX `TZ` rule before 1970 | The rule applies in every year. | The state of 1970 holds for all earlier times. | D-23.6 | `s23_6_c_1` |
+| `mktime` with `tm_isdst = -1` in a repeated hour | The first occurrence, always. Gain: the answer does not depend on earlier calls (one rule for the edge case), so a result can be reproduced from its inputs alone. | Depends on the previous `mktime` call of the process. | D-23.5 | `s23_5_c_2` |
+| A POSIX `TZ` rule before 1970 | The rule applies in every year. Gain: correctness (POSIX gives the rule no starting year), and `localtime` and `mktime` stay inverse across 1970. | The state of 1970 holds for all earlier times. | D-23.6 | `s23_6_c_1` |
 | Out-of-range `TZ` rule dates (`M13.1.0`, `M3.6.0`, `J0`, `366`) and offsets beyond 24 h | Invalid: the default date; UTC for an offset. | Accepted, with odd transitions; offsets clamped to 24 h. | D-23.6 | `s23_6_c_1` |
 | `asctime` of fields wider than the fixed layout | `EOVERFLOW`, as `asctime_r`. | Prints the wider text. | D-23.5 | `s23_5_c_5`, `s23_5_f_3` |
 | `mktime` succeeding for year `INT_MAX` in some zones | `errno` untouched. | Sets `EOVERFLOW` on a successful return. | D-23.5 | `s23_5_f_1`, `s0_6_c0_1_2` |
@@ -107,10 +107,11 @@ Delivered blocks, not here.
 | `strptime` `%E`/`%O` in a locale without the alternative | The unmodified conversion, as POSIX says. | Fails. | D-23.7 | `s23_7_c_2`, `s23_7_c_1_3` |
 | `strptime` `tm_wday`/`tm_yday` | Computed only from fields the input gave. | Also from the caller's untouched fields. | D-23.7 | `s23_7_c_2` |
 | `strptime` `%G`/`%V` | With a weekday (`%u`/`%w`/`%a`), compute the ISO week date's `tm_mon`/`tm_mday`/`tm_yday` (and `tm_year` without `%Y`), as for `%U`/`%W`. | Parsed and range-checked, no field set. | D-23.7 | `s23_7_c_2` |
-| `strptime` `%Y`, `%C`, `%y`, `%s` with a sign | Accepted (POSIX). | Rejected. | D-23.7 | `s23_7_c_2` |
+| `strptime` `%Y`, `%C`, `%y`, `%s` with a sign | Accepted (POSIX). Gain: correctness (POSIX signs for these numbers), so signed years and epoch seconds read back. | Rejected. | D-23.7 | `s23_7_c_2` |
 | `strptime` `%r` with an empty `T_FMT_AMPM` | `%I:%M:%S %p`, so `strftime`'s output reads back. | Fails. | D-23.7 | `s23_7_c_2`, `s23_7_c_1_2` |
 | `strptime` `%c %x %X %r` that do not match the locale's format | Fail. | Retry the C locale's format. | D-23.7 | `s23_7_c_2` |
 | `getdate` with a `DATEMSK` file that cannot be opened | `getdate_err` 2 (POSIX). | 3. | D-23.7 | `s23_7_c_3` |
+| `getdate` with a template that gives the month but no day (`%Y-%m`) | The first of the month (POSIX). Gain: correctness and a result that does not depend on the date of the call. | Another day of that month (the 5th for `2030-06` on 2026-10-24). | D-23.7 | `s23_7_c_3` |
 | `snprintf` and the other printf forms into a caller's buffer | Allocate while formatting (the format is parsed into heap tables), so they fail with `ENOMEM` when no memory can be mapped. A known characteristic, accepted by the owner (2026-10-02); the spec does not promise allocation-free formatting. | Format small results without allocating. | D-12.12 | `s12_6_c_r4`, `s12_6_f_2` |
 | `fileno` of a stream without a descriptor (memory, cookie) | -1 with `errno` `EBADF`, as §12.2 says. | -1, `errno` unchanged. | §12.2 | `s12_2_c_5` |
 | `scanf` integer out of range (`%d` reading `2147483648`, `%hhd` reading `300`) | Stores the type's minimum or maximum. | Stores the value converted to the type (wrapped), or `LONG_MAX`/`LONG_MIN` converted when the text exceeds `long`. ISO C leaves it undefined; the spec allows either. | D-12.6 | `s12_7_f_0` |
