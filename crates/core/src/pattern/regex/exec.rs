@@ -974,7 +974,7 @@ impl<P: Policy> Matcher<'_, P> {
             OP_BYTE | OP_SET => [prog.node(i.b, 0), NONE],
             OP_BACKREF => [prog.node(i.b, j), prog.node(i.b, 0)],
             OP_OPEN | OP_CLOSE | OP_ASSERT => [prog.node(i.b, j), NONE],
-            OP_ENTER => [prog.node(i.b, j + 1), NONE],
+            OP_ENTER => [prog.node(i.b, super::program::enter_j(i, j)), NONE],
             OP_MATCH => [NONE, NONE],
             _ => {
                 let mut out = [NONE, NONE];
@@ -1092,7 +1092,7 @@ impl<P: Policy> Matcher<'_, P> {
                             Self::set_cap(caps, at + 1, -1);
                         }
                     }
-                    prog.node(inst.b, j + 1)
+                    prog.node(inst.b, super::program::enter_j(inst, j))
                 }
                 OP_ASSERT if !self.assert_ok(inst.a, pos) => return Ok(()),
                 OP_ASSERT => prog.node(inst.b, j),
@@ -1210,7 +1210,7 @@ impl<P: Policy> Matcher<'_, P> {
                         Self::set_cap(caps, at + 1, -1);
                     }
                 }
-                self.insert(st, p, prog.node(inst.b, j + 1), start, caps)?;
+                self.insert(st, p, prog.node(inst.b, super::program::enter_j(inst, j)), start, caps)?;
             }
             OP_ASSERT => {
                 if self.assert_ok(inst.a, p) {
@@ -1418,7 +1418,7 @@ pub(super) fn eps_of(inst: super::program::Inst, j: u32) -> impl Iterator<Item =
     let pair = match inst.op {
         super::program::OP_SPLIT => [(inst.a, j), (inst.b, j)],
         super::program::OP_JMP => [(inst.a, j), none],
-        super::program::OP_EXIT if j >= 1 => [(inst.b, j - 1), none],
+        super::program::OP_EXIT if j >= 1 => [(inst.b, super::program::exit_j(inst, j)), none],
         super::program::OP_EXIT => [(inst.c, 0), none],
         _ => [none, none],
     };
@@ -1558,7 +1558,7 @@ impl<P: Policy> Matcher<'_, P> {
             }
             OP_OPEN | OP_CLOSE | OP_ASSERT if inst.op != OP_ASSERT || self.assert_ok(inst.a, p) => self.fast_insert(st, p, prog.node(inst.b, j), start),
             OP_ASSERT => {}
-            OP_ENTER => self.fast_insert(st, p, prog.node(inst.b, j + 1), start),
+            OP_ENTER => self.fast_insert(st, p, prog.node(inst.b, super::program::enter_j(inst, j)), start),
             OP_MATCH => {
                 if st.run.end.is_none_or(|e| e == p) {
                     let better = match st.best {
@@ -1585,7 +1585,13 @@ impl<P: Policy> Matcher<'_, P> {
     /// nothing else tells threads apart), kept in flat arrays instead of buckets and capture
     /// vectors. The same positions are visited and the same threads kept, so the answer is
     /// [`Matcher::run`]'s. Memory: two words per state per ring position (16), for this call.
-    fn run_fast(&self, run: &Run, room: &Room, pools: &mut Pools<'_>) -> Result<Option<(usize, usize)>, Fail> {
+    /// With `CAP` (a call with [`Run::budget`], FUZZ-REGEX-TIMEOUTS-4) one unit of work is
+    /// charged per state advanced and the budget is checked once per position: past it the
+    /// call answers `REG_ESPACE`, as the thread-set pass does. Without `CAP` (every call that
+    /// carries no budget) the loop is the uncapped one, so the default search pays nothing.
+    fn run_fast<const CAP: bool>(&self, run: &Run, room: &Room, pools: &mut Pools<'_>) -> Result<Option<(usize, usize)>, Fail> {
+        let limit = if CAP { run.budget.unwrap_or(u64::MAX) } else { u64::MAX };
+        let mut work = 0u64;
         let len = self.subject.len();
         if run.first_start > len || run.first_start > run.last_start {
             return Ok(None);
@@ -1628,7 +1634,13 @@ impl<P: Policy> Matcher<'_, P> {
                 if node != NONE {
                     let s = st.start.get(f * st.nodes + idx(node)).copied().unwrap_or(p);
                     self.fast_advance(&mut st, p, node, s);
+                    if CAP {
+                        work += 1;
+                    }
                 }
+            }
+            if CAP && work > limit {
+                return Err(Fail::Re(ReError::ESpace));
             }
             st.clear(f);
             if run.end == Some(p) || p >= len {
@@ -1787,7 +1799,8 @@ impl<P: Policy> Matcher<'_, P> {
             super::paths::hit(super::paths::Path::ThreadSet);
             *base
         } else {
-            let Some((start, end)) = self.run_fast(base, room, &mut mem.pools())? else { return Ok(None) };
+            let fast = if base.budget.is_some() { self.run_fast::<true>(base, room, &mut mem.pools()) } else { self.run_fast::<false>(base, room, &mut mem.pools()) };
+            let Some((start, end)) = fast? else { return Ok(None) };
             if !caps {
                 #[cfg(feature = "selftest")]
                 super::paths::hit(super::paths::Path::FastOnly);
@@ -1803,7 +1816,7 @@ impl<P: Policy> Matcher<'_, P> {
             }
             #[cfg(feature = "selftest")]
             super::paths::hit(super::paths::Path::ThreadSet);
-            Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: None }
+            Run { caps: true, first_start: start, last_start: start, late: false, end: Some(end), budget: base.budget }
         };
         let mut pools = mem.pools();
         let Some(f) = self.run(&run, room, &mut pools)? else { return Ok(None) };
@@ -1936,7 +1949,7 @@ impl<P: Policy> Matcher<'_, P> {
                         *slot = tag | inst.a;
                         lp += 1;
                         if inst.op == OP_ENTER {
-                            j += 1;
+                            j = super::program::enter_j(inst, j);
                         }
                         inst.b
                     }
