@@ -851,7 +851,7 @@ mod bounds {
                 assert!(log_c(y).is_none() || log_eps(y, tail) <= RHO_LOG * dd::abs(y.hi), "log(2^{x:e})");
             }
         }
-        assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= RHO_POW);
+        assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= std::hint::black_box(RHO_POW));
     }
 
     #[test]
