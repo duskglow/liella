@@ -6756,8 +6756,8 @@ liella_machine_strpair:
 	subq %rsi, %r9
 	vpcmpeqb (%r9), %ymm0, %ymm4
 	vpcmpeqb %ymm3, %ymm2, %ymm5
-	vpcmpeqb %ymm3, %ymm1, %ymm3
-	vpand %ymm4, %ymm3, %ymm3
+	vpcmpeqb %ymm3, %ymm1, %ymm6
+	vpand %ymm4, %ymm6, %ymm3
 	vpmovmskb %ymm3, %r10d
 	vpmovmskb %ymm5, %r11d
 	leal -1(%r11), %r9d
@@ -6766,6 +6766,10 @@ liella_machine_strpair:
 	jnz .Lliella_machine_strpair_avx_cand
 	testl %r11d, %r11d
 	jnz .Lliella_machine_strpair_avx_nul
+	/* Filter mode (STRSTR-ADAPTIVE-FILTER-EXP): r8 = 0 (one stream, c1 or 0 only) when the head
+	 * block holds no c1, else nonzero (pair). rdx = where the last one-stream stop was (p). */
+	vpmovmskb %ymm6, %r8d
+	movq %rax, %rdx
 	andq $-32, %rax
 	addq $32, %rax
 	.p2align 4
@@ -6793,6 +6797,9 @@ liella_machine_strpair:
 	negq %r9
 	testl $64, %eax
 	jnz .Lliella_machine_strpair_avx_loop64
+.Lliella_machine_strpair_avx_mode:
+	testl %r8d, %r8d
+	jz .Lliella_machine_strpair_avx_loop128s
 	/* 128-byte aligned: the same test over a group of four blocks (all in one page), memory operands
 	 * so a block costs four instructions, the step before one vptest per 128 bytes (STRSTR-HIT-4K).
 	 * A hit sends the run back to the block loop from the group's start, which resolves it. From a
@@ -6841,6 +6848,36 @@ liella_machine_strpair:
 	testl %r10d, %r10d
 	jnz .Lliella_machine_strpair_avx_loop
 	addq $64, %rax
+	jmp .Lliella_machine_strpair_avx_mode
+	.p2align 4
+.Lliella_machine_strpair_avx_loop128s:
+	/* One stream (STRSTR-ADAPTIVE-FILTER-EXP): unit q is c1 or 0 exactly when min(Y ^ c1, Y) is 0;
+	 * 16 instructions per 128 bytes and no load at q - off. */
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor 64(%rax), %ymm1, %ymm9
+	vpxor 96(%rax), %ymm1, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	subq $-128, %rax
+	vptest %ymm5, %ymm5
+	jz .Lliella_machine_strpair_avx_loop128s
+	addq $-128, %rax
+	/* A stop: c1 or 0 in this group. Sparse (1024 bytes or more after the last stop): the block
+	 * loop resolves the group and the run comes back through avx_mode. Dense: the pair filter for
+	 * the rest of this call, from this group's start. */
+	movq %rax, %r10
+	subq %rdx, %r10
+	movq %rax, %rdx
+	cmpq $1024, %r10
+	jae .Lliella_machine_strpair_avx_loop
+	movl $1, %r8d
 	jmp .Lliella_machine_strpair_avx_loop128
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper

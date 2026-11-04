@@ -39,6 +39,16 @@ CASE(strstr_scan_4k, 0, 1) {
     long at = run(hay_scan, n);
     PC_CHECKING pc_check("%ld", at);
 }
+/* strstr_dense_4k: 'a' * 200, then "xe" repeated (the last needle byte every 2 bytes, never a
+ * candidate), then the needle: a clean start, then a dense run (STRSTR-ADAPTIVE-FILTER-EXP). */
+CASE(strstr_dense_4k, 0, 1) {
+    static char hay_dense[HAY];
+    memset(hay_dense, 'a', HAY);
+    for (size_t i = 200; i + 2 <= HAY - 7; i += 2) { hay_dense[i] = 'x'; hay_dense[i + 1] = 'e'; }
+    memcpy(hay_dense + HAY - 7, "needle", 7);
+    long at = run(hay_dense, n);
+    PC_CHECKING pc_check("%ld", at);
+}
 CASE(strstr_verify_4k, 0, 1) {
     size_t i = 0;
     while (i + 6 <= HAY - 7) { memcpy(hay_verify + i, "needlf", 6); i += 6; }
