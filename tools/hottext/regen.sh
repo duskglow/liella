@@ -50,7 +50,7 @@ for p in $probes; do
     LIELLA_PRODUCTS=$T/target/liella "$T/scripts/liella-cc" -O2 -o "$p" "$p.c"
     if [ "$p" = p_cat ]; then
         # HOT-ORDER-3: p_cat's read path here (empty stdin), its write path (fwrite) at the end of the
-        # group below: fwrite ahead of the printf group cost the first snprintf one fault (kotori:
+        # group below: fwrite ahead of the printf group cost the first snprintf one fault (Ivy Bridge host B:
         # cold.c snprintf 12 -> 13, cold2 first snprintf 8 -> 9).
         stdin=/dev/null trace en_US.UTF-8 ./p_cat
     else

@@ -127,7 +127,7 @@ for name, v in rows.items():
     tb, tn = num(b, "cpu_s"), num(n, "cpu_s")
     tchg = f"{(tn / tb - 1) * 100:+.1f}%" if tb and tn is not None else "-"
     # FALLBACK-CYCLES (advisory, never a verdict): cycles NEW vs BASE and each side's clock (cycles / CPU time); on the
-    # bimodal-clock fallback hosts (nico, kotori) the time column is only meaningful next to the GHz.
+    # bimodal-clock fallback hosts (Ivy Bridge host A, Ivy Bridge host B) the time column is only meaningful next to the GHz.
     cb, cn = num(b, "cycles"), num(n, "cycles")
     cchg = f"{(cn / cb - 1) * 100:+.1f}%" if cb and cn is not None else "-"
     def cchg_of(k):

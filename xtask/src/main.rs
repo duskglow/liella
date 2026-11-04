@@ -161,7 +161,7 @@ fn arch_tools() -> arch::Tools {
 
 /// `cargo xtask static`: the gate's static checks (the first steps of `test`: arch-audit (ARCH-SEAMS), purity, unsafe-audit, csys-audit,
 /// env-audit, opaque-audit, crash-audit, k5 (ffi.rs against liella_csys.h), align, trace, fuzz-check, compat-probes) in one command, all of them run (a failure does not hide the next), so they can be run
-/// on keke before a long gate. `~/bin/static-checks` on the VMs is the same list.
+/// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
     let checks: [(&str, Check); 18] =

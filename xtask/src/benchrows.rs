@@ -1,5 +1,5 @@
 //! `cargo xtask bench-rows [--base <ref>] [--range <a>..<b>] [--files <path>,...] [--out <file>] [--all-rows]`:
-//! the bench rows a change can move (BENCH-AFF; owner 2026-10-10: "more targeted time tests on shiki, only
+//! the bench rows a change can move (BENCH-AFF; owner 2026-10-10: "more targeted time tests on Haswell-EP host, only
 //! testing the things that are different in the merge").
 //!
 //! The selection, CONSERVATIVE like `affected` (an extra row costs time, a missed row hides a regression):

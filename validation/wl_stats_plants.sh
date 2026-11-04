@@ -14,7 +14,7 @@ rc=0
 for p in futex offby1 nofutex first nomt allmt; do
     if WL_STATS_PLANT=$p bash "$here/wl_stats_test.sh" > /dev/null; then echo "SURVIVED $p"; rc=1; else echo "CAUGHT $p"; fi
 done
-top=${WL_PLANT_TMP:-/dev/shm/claude}/WLCOUNT-MTMEM-2   # RAM; on sumire WL_PLANT_TMP=/mnt/zram/claude
+top=${WL_PLANT_TMP:-/dev/shm/claude}/WLCOUNT-MTMEM-2   # RAM; on Skylake-SP host WL_PLANT_TMP=/mnt/zram/claude
 rm -rf "$top"; mkdir -p "$top" || exit 1
 trap 'rm -rf "$top"' EXIT
 fplant() { # name file perl-substitution   (the copy is fresh for every plant)

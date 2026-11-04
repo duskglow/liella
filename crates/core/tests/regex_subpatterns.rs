@@ -3,7 +3,7 @@
 //! string", subpatterns that are not subexpressions included. Validation finding T5: coreutils'
 //! test harness runs `expr 'a/b/c' : '.*/\(.*\)'` and needs `c`; the engine, which weighed only
 //! the subexpressions, gave `b/c`. The expected values were checked against glibc 2.39 (a
-//! black-box probe on shiki); where glibc's alternation priority departs from XBD 9.1 the line
+//! black-box probe on Haswell-EP host); where glibc's alternation priority departs from XBD 9.1 the line
 //! says so and the POSIX value is expected.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, clippy::type_complexity, missing_docs)]
 
@@ -36,7 +36,7 @@ fn a_subpattern_before_a_subexpression_takes_the_longest_string() {
         (r".*\(b\)\(.*\)\1", 0, "abcbab", &[(0, 6), (3, 4), (4, 5)]),
         (r"^\([^=]*\)=\(.*\)$", 0, "key=val=x", &[(0, 9), (0, 3), (4, 9)]),
         (r"[a-z]*\(..\)", 0, "abcde", &[(0, 5), (3, 5)]),
-        (r".*|\([KIO]\)\([^|]*\).*|?[KIO]", 0, "10.0.0.1|I|ABC|?K", &[(0, 17), (9, 10), (10, 10)]),
+        (r".*|\([KIO]\)\([^|]*\).*|?[KIO]", 0, "11.0.0.1|I|ABC|?K", &[(0, 17), (9, 10), (10, 10)]),
         ("x*(a|b)*(b*)", cflags::EXTENDED, "xxabb", &[(0, 5), (4, 5), (5, 5)]),
         // glibc gives (1,2) (2,4): its alternation priority; XBD 9.1 takes the longer alternative.
         (r"x*\(x\|xy\)\(y*\)", 0, "xxyy", &[(0, 4), (1, 3), (3, 4)]),
@@ -58,7 +58,7 @@ fn alternatives_are_weighed_by_their_subexpressions() {
 /// Validation finding T6: sed's binary.sed converts numbers through unary strings with patterns
 /// like these, and never finished. Their threads (one per start and group length) were found by
 /// walking every bucket of a state and every waiting thread at every position; the work is now
-/// proportional to the threads. The results were checked against glibc 2.39 (shiki); the time
+/// proportional to the threads. The results were checked against glibc 2.39 (Haswell-EP host); the time
 /// bound only catches the old cubic behaviour (seconds in a release build at 302 bytes, minutes
 /// at 1,025 in this test build).
 #[test]

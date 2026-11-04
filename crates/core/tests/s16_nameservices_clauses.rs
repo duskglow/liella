@@ -966,7 +966,7 @@ fn s16_4_c_1_1() {
     assert_eq!(shown.servers.len(), 3, "MAXNS");
     resolv::extend(&mut shown, &full).unwrap();
     assert_eq!(shown.servers.len(), 4, "the file's fourth server is used behind the first three");
-    let mut other = RConf::parse(Some(b"nameserver 10.0.0.1\nnameserver 10.0.0.2\nnameserver 10.0.0.3\n"), None, None, b"h", |_| None).unwrap();
+    let mut other = RConf::parse(Some(b"nameserver 11.0.0.1\nnameserver 11.0.0.2\nnameserver 11.0.0.3\n"), None, None, b"h", |_| None).unwrap();
     resolv::extend(&mut other, &full).unwrap();
     assert_eq!(other.servers.len(), 3, "a state with other servers is not extended");
 }
@@ -1012,7 +1012,7 @@ fn s16_4_c_1_3() {
 fn s16_4_c_1_4() {
     // The sort list orders the IPv4 addresses of host lookups (resolv.conf(5)): the first
     // matching pair's position, the unmatched last in their order.
-    let c = RConf::parse(Some(b"sortlist 130.155.160.0/255.255.240.0 10.0.0.0 192.168.0.0/8\n"), None, None, b"h", |_| None).unwrap();
+    let c = RConf::parse(Some(b"sortlist 130.155.160.0/255.255.240.0 11.0.0.0 192.168.0.0/8\n"), None, None, b"h", |_| None).unwrap();
     assert_eq!(c.sort[0], ([130, 155, 160, 0], [255, 255, 240, 0]));
     assert_eq!(c.sort[1], ([10, 0, 0, 0], [255, 0, 0, 0]), "the class mask by default");
     assert_eq!(c.sort[2].1, [0, 0, 0, 8], "the mask as inet_aton reads it (observed)");
@@ -1361,7 +1361,7 @@ fn rpc_malformed_line_corpus() {
 }
 
 /// Files whose last entry has no trailing newline (no spec clause: probe-settled on glibc 2.39,
-/// shiki, a bind mount over /etc/rpc in an unprivileged namespace). Each case: the file, the
+/// Haswell-EP host, a bind mount over /etc/rpc in an unprivileged namespace). Each case: the file, the
 /// getrpcent sequence, then (name or alias, number) lookups that must find the last entry, and
 /// names/numbers that must find nothing.
 fn rpc_last_line_without_newline() {

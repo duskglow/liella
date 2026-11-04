@@ -311,8 +311,8 @@ mod tests {
     #[test]
     fn file() {
         let t = b"# c\n; c\nnameserver 127.0.0.1\nnameserver ::1\nnameserver 999.1.1.1\nnameserver 127.0.0.3 x\ndomain d.test\nsearch a.test b.test\n\
-                  sortlist 130.155.160.0/255.255.240.0 130.155.0.0 10.0.0.0/8\noptions ndots:20 timeout:99 attempts:9 rotate inet6 debug bogus\noptions edns0\n";
-        let c = Config::parse(Some(t), None, None, b"keke", |_| None).unwrap();
+                  sortlist 130.155.160.0/255.255.240.0 130.155.0.0 11.0.0.0/8\noptions ndots:20 timeout:99 attempts:9 rotate inet6 debug bogus\noptions edns0\n";
+        let c = Config::parse(Some(t), None, None, b"Zen 1 host", |_| None).unwrap();
         assert_eq!(c.servers.len(), 3);
         assert_eq!(c.search.len(), 2);
         assert_eq!((c.ndots, c.timeout, c.attempts), (15, 30, 5));

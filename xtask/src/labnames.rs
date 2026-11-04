@@ -20,8 +20,7 @@ use std::process::Command;
 const NAMES: [&str; 13] = ["keke", "shiki", "kanon", "mei", "sumire", "nico", "kotori", "nozomi", "natsumi", "chisato", "alma", "nijika", "hayase"];
 
 /// Whole files exempt from the scan: `(path or directory prefix, reason)`.
-const ALLOW: [(&str, &str); 16] = [
-    ("xtask/lab-names-pending.tsv", "lists file paths, and some tracked file NAMES carry a host name (names are not checked)"),
+const ALLOW: [(&str, &str); 15] = [
     ("xtask/src/labnames.rs", "this check's own name list and its tests"),
     ("validation/wl_gate.sh", "tool host map: maps a role to its host address"),
     ("validation/wl_thresholds.tsv", "table keyed by the host that measured; the tools look rows up by host name"),
@@ -38,10 +37,6 @@ const ALLOW: [(&str, &str); 16] = [
     ("tools/probe/remote.sh", "tool host map: reaches a host by address"),
     ("tools/neutral_hosts.sh", "tool that maps lab names to neutral ones; it has to know the names"),
 ];
-
-/// Files with hits not yet turned into prose, `path<TAB>most hits allowed` (a ratchet: the count may only fall; a
-/// file not listed here gets none). Follow-up: LAB-NAMES-CLEAN empties this file.
-const PENDING: &str = include_str!("../lab-names-pending.tsv");
 
 fn is_word(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
@@ -79,18 +74,12 @@ fn allowed(path: &str) -> bool {
     ALLOW.iter().any(|(p, _)| if p.ends_with('/') { path.starts_with(p) } else { path == *p })
 }
 
-/// The ratchet cap for a file in the pending list.
-fn cap(path: &str) -> usize {
-    PENDING.lines().filter_map(|l| l.split_once('\t')).find(|(p, _)| *p == path).and_then(|(_, n)| n.trim().parse().ok()).unwrap_or(0)
-}
-
 /// Findings (`path:line: what`) in one file's text; empty for an allowlisted path.
 fn scan(path: &str, text: &str) -> Vec<String> {
     if path.starts_with("handoff/") || allowed(path) {
         return Vec::new();
     }
-    let found: Vec<String> = text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect();
-    if found.len() <= cap(path) { Vec::new() } else { found }
+    text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect()
 }
 
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {

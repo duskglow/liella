@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Cycle limits for a cycles CPU (FALLBACK-CYCLES) from a full calibration bench log.
 
-    gen_cycle_limits.py CALIB.log "CPU MODEL" SHA HOST >> bench/host_cycle_limits.tsv
+    gen_cycle_limits.py CALIB.log "CPU MODEL" SHA CLASS >> bench/host_cycle_limits.tsv
 
-Same rule as the ns limits of bench/host_limits.tsv (work/hostlimits/gen.py; kanon fe1f24a, kotori 5236e77):
+CLASS is the processor class the notes name ("Ivy Bridge host B", "Zen 1 host"), never a lab host name:
+the lab-names check rejects those.
+
+Same rule as the ns limits of bench/host_limits.tsv (work/hostlimits/gen.py; Broadwell-EP host fe1f24a, Ivy Bridge host B 5236e77):
 limit = 1.25 x the same-run value, 3 decimals, status gate. The value here is the CYCLES ratio of the
 counters table ("counters per operation", median of 3 counted runs per side, user+kernel cycles) for each
 row of the log's "ratio_host rows" section. A row whose cycles column is `-` (no counter) gets no cycle
@@ -46,7 +49,7 @@ def main(argv):
     log, cpu, sha, host = argv[1:5]
     with open(log, encoding="utf-8", errors="replace") as f:
         host_rows, cyc = parse(f)
-    # A ratio that prints as 0.000 gives no usable limit (kotori: regexec_pathological_4k, left out of the ns limits too).
+    # A ratio that prints as 0.000 gives no usable limit (Ivy Bridge host B: regexec_pathological_4k, left out of the ns limits too).
     out = [(b, r, cyc[(b, r)]) for (b, r) in sorted(host_rows) if (b, r) in cyc and round(cyc[(b, r)] * 1.25, 3) > 0]
     if not out:
         print(f"gen_cycle_limits: no cycles ratios for ratio_host rows in {log} (run the calibration with --counters)", file=sys.stderr)

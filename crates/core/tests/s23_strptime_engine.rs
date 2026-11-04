@@ -165,7 +165,7 @@ fn s23_7_c_2_neighbouring_year() {
     // Clauses: s23_7_c_2 (D-23.7, D-23.14 (4),
     // coordinator rulings 2026-10-21: match glibc's probed field values). A %U/%W week or %j day in
     // the next or previous year keeps the given year; yday counts from its January 1.
-    // glibc 2.39, black-box probe on keke 2026-10-21 (strptime into a zeroed struct tm and into one
+    // glibc 2.39, black-box probe on Zen 1 host 2026-10-21 (strptime into a zeroed struct tm and into one
     // preset to mon=5 mday=15 yday=200 wday=3, same answers; then timegm of a copy):
     // After the year: "%Y %U %w" "2024 53 6" -> mday=42 mon=11 year=124 wday=6 yday=376, timegm
     // 2025-01-11; "%Y %W %w" "2024 53 3" -> 32/11/366, 2025-01-01; "%Y %j" "2023 366" -> 32/11

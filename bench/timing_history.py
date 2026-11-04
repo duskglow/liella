@@ -79,10 +79,10 @@ def selftest():
         # Run 1-4 on two hosts: `drag` passes cycles with time > 1.05 three times; `fine` never drags; `clock` keeps
         # Liella at a lower GHz every time; `failed` has slow time but FAILED on cycles (a gate failure, not a drag).
         canned = [
-            ("nico", "drag\tcycles\t1.30\t1.01\t1.6\t2.4\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.80\t2.10\t1.2\tok"),
-            ("kotori", "drag\tcycles\t1.10\t1.00\t2.0\t2.0\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.70\t2.00\t1.2\tok"),
-            ("nico", "drag\tcycles\t1.02\t1.00\t2.0\t2.0\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.60\t2.20\t1.2\tok"),
-            ("kotori", "drag\tcycles\t1.20\t1.02\t1.7\t2.3\t1.2\tok", "failed\tcycles\t1.40\t1.30\t2.0\t2.0\t1.2\tFAIL"),
+            ("Ivy Bridge host A", "drag\tcycles\t1.30\t1.01\t1.6\t2.4\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.80\t2.10\t1.2\tok"),
+            ("Ivy Bridge host B", "drag\tcycles\t1.10\t1.00\t2.0\t2.0\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.70\t2.00\t1.2\tok"),
+            ("Ivy Bridge host A", "drag\tcycles\t1.02\t1.00\t2.0\t2.0\t1.2\tok", "clock\tcycles\t1.00\t1.00\t1.60\t2.20\t1.2\tok"),
+            ("Ivy Bridge host B", "drag\tcycles\t1.20\t1.02\t1.7\t2.3\t1.2\tok", "failed\tcycles\t1.40\t1.30\t2.0\t2.0\t1.2\tFAIL"),
         ]
         for i, (host, a, b) in enumerate(canned):
             p = os.path.join(d, f"dec{i}.tsv")
@@ -93,13 +93,13 @@ def selftest():
             p = os.path.join(d, "decf.tsv")
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(hdr + "cbench_x\tfailed\tcycles\t1.40\t1.30\t2.0\t2.0\t1.2\tFAIL\n")
-            append(hist, p, "nico", "task/t", "cf", "lf", date="df")
+            append(hist, p, "Ivy Bridge host A", "task/t", "cf", "lf", date="df")
         # A missing counter: metric ns, cycles `-`: never counted as "passed on cycles".
         p = os.path.join(d, "decm.tsv")
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write(hdr + "cbench_x\tnocyc\tns (cycles counter missing)\t1.30\t-\t-\t-\t1.2\tFAIL\n")
         for _ in range(3):
-            append(hist, p, "nico", "task/t", "cm", "lm", date="dm")
+            append(hist, p, "Ivy Bridge host A", "task/t", "cm", "lm", date="dm")
         out = summary(hist)
         text = "\n".join(out)
         assert any(x.startswith("DRAG cbench_x/drag: time ratio > 1.05 in 3 of the last 4 runs") for x in out), text

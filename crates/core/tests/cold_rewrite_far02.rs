@@ -224,7 +224,7 @@ fn tunables_probed_shapes() {
         ("glibc.pthread.rseq= 0", N, N, None, f, None),
         ("glibc.pthread.rseq=2", N, N, None, N, None),
         ("glibc.pthread.rseq=0=1", N, N, None, N, None),
-        // Re-probed on glibc 2.39 (keke, TUNABLES-WARNING-3, #1374): the original row expected
+        // Re-probed on glibc 2.39 (Zen 1 host, TUNABLES-WARNING-3, #1374): the original row expected
         // rseq=0 to still apply after the malformed item. glibc drops the WHOLE string:
         //   GLIBC_TUNABLES='a=b=c:glibc.pthread.rseq=0' /lib64/ld.so.1 --list-tunables
         // printed the "WARNING: ld.so: invalid GLIBC_TUNABLES ...: ignored." line and

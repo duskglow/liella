@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn v0_keys_do_not_depend_on_disambiguator_lengths() {
-        // HOTTEXT-FAULT-ENV: the same function from two checkouts (sumire diag-/d2-cold-table-idna):
+        // HOTTEXT-FAULT-ENV: the same function from two checkouts (Skylake-SP host diag-/d2-cold-table-idna):
         // liella_legacy's disambiguator is one character shorter in the second, so its trailing
         // back-reference reads BU_ instead of BV_. Both expand to the same key.
         let a = "_RINvNtCs1k36ruIItxX_13liella_legacy12stdio_compat5flushNtNtCse0ehmhVAZlt_15liella_boundary5stdio4GlueEBV_";

@@ -183,7 +183,7 @@ Not measured: `qsort` with a C comparator (no such row in the nine benches), `ge
 
 ## 13. Next: perf stories from the 10-23 numbers (PERF-NEXT-BATCH, 2026-10-23)
 
-PLANNING ONLY: nothing was measured or changed for this section. Gaps are the section 10 and 12 numbers (`bench/parity-measure.tsv` rows of 10-23, and for the `memref`/`malloc` rows `handoff/bench-refresh-1023-logs/Ivy Bridge host A-compare.log`). Owner bar: at least glibc's speed; parity is not a ceiling.
+PLANNING ONLY: nothing was measured or changed for this section. Gaps are the section 10 and 12 numbers (`bench/parity-measure.tsv` rows of 10-23, and for the `memref`/`malloc` rows `handoff/bench-refresh-1023-logs/<host>-compare.log`). Owner bar: at least glibc's speed; parity is not a ceiling.
 
 **How hot.** No per-function workload call counts are stored in the tree (`wl_count` gives totals per workload, not per function). Hotness is the share of samples in the Liella profiles `validation/results/profiles/*.top` (milestone 2, 2026-10-04) and `validation/results/m6/profiles/*.top` (2026-10-05). Those builds predate the optimization thread, so a share says *the workload calls this a lot*, not how big the gap is today. Rank = gap x that share; where no profile names the function the hotness is "none seen" and the row ranks low whatever its gap.
 
@@ -227,7 +227,7 @@ Below the cut (ranked low by hotness or noise, for the record): `regexec_backref
 
 ### 13.3 PERF-STRLEN-NONAVX2 (2026-10-23, Ivy Bridge host A, measured)
 
-Paired `xtask bench --compare --no-build --counters --runs 5 cbench_memref` on Ivy Bridge host A (Ivy Bridge, booked host idle), A = branch base, B = 93846aaf, job `Ivy Bridge host A:perf-strlen-nonavx2-Ivy Bridge host A` (its A/B interleave step failed: libc.a was not shipped; both compare runs completed, logs Ivy Bridge host A:~/work/perf-strlen-nonavx2/compare{A,B}.log).
+Paired `xtask bench --compare --no-build --counters --runs 5 cbench_memref` on Ivy Bridge host A (Ivy Bridge, booked host idle), A = branch base, B = 93846aaf, job `perf-strlen-nonavx2` (its A/B interleave step failed: libc.a was not shipped; both compare runs completed, logs Ivy Bridge host A:~/work/perf-strlen-nonavx2/compare{A,B}.log).
 
 * A reproduced the row: strlen_64 t 1.20 / i 0.91, strnlen_64 1.41 / 1.39, rawmemchr_64 1.28 / 1.34.
 * Cause found (strlen): not a dependency chain or the unaligned head. On the SSE2 level a 64-79 B string missed the [s+32, s+64) fold and went through the aligned 64-byte group fold, then the locate step (62.4 instr/op incl. the bench loop). Branch-miss and store-forwarding counters were NOT read (instructions and cycles only).
