@@ -1,40 +1,50 @@
-# PERF-RC1024-STRLEN handoff (WIP, no code change yet)
+# PERF-RC1024-STRLEN handoff (WIP after run 2, PERF-RC1024-STRLEN-2; no code change yet)
 
-State: branch task/perf-rc1024-strlen, base origin/next 125c0ccc. No product code changed. Status: NOT READY,
-the bisect count is still in the queue on keke.
+State: branch task/perf-rc1024-strlen-2 (on top of run 1's task/perf-rc1024-strlen WIP), base origin/next 125c0ccc.
+No product code changed. Status: NOT READY. The cause is found to one merge, but there is no fix yet.
 
-## What the RC-1024 A/B shows (liella-ops results/rc-1024, 76041c21 vs fa678f74)
-- bash-loop +0.87% instr:u, `liella_machine_strlen` 1381M -> 1516M samples.
-- make-n +0.54%: strlen 31M -> 52M, memmove 6M -> 18M, `__libc_calloc` 10M -> 21M. Because memmove and calloc grew
-  too, the cause may be on the caller side (longer or more strlen inputs), not only scan.S.
-- du +0.65%: this is NOT the strlen cause. Its growth is in `fts_build` (+12M) and `fts_alloc` (+3M), and strlen fell
-  (4M -> 1M). Going by commit titles, the candidates are perf-fts-nochdir (5dd88211) and perf-fts-nochdir-2 (e45c4758).
-  I did not count them. It needs its own story, or one more bisect pair.
-- scan.S on origin/next is the same blob as at 76041c21 (6c161660), so next still carries whatever changed there.
+## Result: the regression is one merge, 4b31a189 "Merge task/perf-heap-pair-check into next"
+wl_count on keke (WL_BASE_EXACT=1, --base fa678f74, instructions:u ratio new/base):
 
-## Candidates (first-parent merges fa678f74..76041c21 that touch csys/src/machine/scan.S)
-5b915eec perf-strnlen-mid-3, c92cd5c7 perf-memrchr-nonavx2, ba069873 perf-strcasecmp-sse2-2,
-e5e48aa2 perf-strcasecmp-sse2-long-4, fee0d7f1 perf-strcmp-loop. The chain counted is each merge and its first
-parent (10 commits). Together with fa678f74 (base) and 76041c21 (the RC count), this puts any jump either on one
-scan.S merge or in the stretch between two of them. Commit list: keke `~/work/perf-rc1024-strlen/shas.txt`.
+| commit | bash-loop | make-n |
+|---|---|---|
+| the 5 scan.S merges and their first parents (run 1, bisect2) | 0.9994 .. 1.0002 | 0.9987 .. 1.0007 |
+| 094b61a5 perf-execvp-missing | 0.9996 | 0.9987 |
+| b3108350 perf-wctype-l-cold | 0.9996 | 0.9987 |
+| **4b31a189 perf-heap-pair-check** | **1.0088** | **1.0052** |
+| 5abebe52, 10734b43, b6f8d1e6, 9131d50e, c874901f, 78e911bc, 9d9bc8fb | 1.0085 .. 1.0089 | 1.0052 .. 1.0053 |
+| 76041c21 (the RC) | 1.0084 | 1.0053 |
 
-## Jobs (keke)
-- perf-rc1024-strlen-bisect: SUPERSEDED. rc 1, because wl_count refuses a directory with no `.synced`
-  (`~/wl/src/<sha>` has none).
-- perf-rc1024-strlen-bisect2: queued at 02:39Z, still queued at 02:49Z (load ~19-22). The script is
-  `~/work/perf-rc1024-strlen/bisect2.sh`. It runs `WL_BASE_EXACT=1 wl_count.sh --base fa678f74 --rev <sha>
-  ~/work/perf-rc1024-strlen/t/<sha> bash-loop make-n` for each commit. The `t/<sha>` stubs are role-like directories
-  that hold only a `.synced` (head=<sha>); the sources were primed into `~/wl/src/<sha>` with wl_prime_base.sh.
-  Per-commit logs go to `~/work/perf-rc1024-strlen/count-<sha>.log`.
-  To read the results: `ssh claude@10.0.100.53 'grep -P "^perf-rc1024-strlen-bisect2\t" ~/logs/jobs.tsv; cat ~/logs/perf-rc1024-strlen-bisect2.log'`
+- The scan.S merges are NOT the cause. The strlen growth in the profiles comes from the heap change, through strlen's inputs.
+- There is no other step between fa678f74 and 76041c21. 4b31a189 accounts for all of the RC-1024 growth in bash-loop
+  (+0.87%) and make-n (+0.54%).
+- du is not this cause (run 1: fts_build/fts_alloc growth, candidates 5dd88211 / e45c4758, not counted).
+
+## What does not explain it
+- Probe (keke ~/work/perf-rc1024-strlen-2/align.c, static against ~/wl/products/<sha>): for 64 fresh live blocks
+  of each size 1..200, the user-pointer offsets mod 64 are IDENTICAL in b3108350 and 4b31a189. Alignment of fresh
+  blocks therefore does not explain it. Untested: offsets after free/reuse (bash and make free and reallocate
+  constantly), and a change in how many strlen calls are made or how long the strings are.
 
 ## Next step
-1. Read bisect2: find the first commit in the chain where bash-loop or make-n instr:u jumps.
-2. If the jump is on a scan.S merge, compare the current strlen paths (scan.S lines 121-515: the AVX2 SMALL-STR head
-   D-4.45, h64/h96, and the 128-byte loop) at the string lengths bash and make pass. Fix the strlen path, then check
-   `cargo xtask bench --compare --counters strlen` (no strlen row worse) and wl_count bash-loop make-n against
-   fa678f74. If the jump is in a stretch between merges, bisect that stretch the same way. It is then probably a
-   caller-input change, which matches the memmove/calloc growth in make-n.
-3. Gate (direct tier) and plants on the fix, as the brief says.
+1. Find what changed in strlen's inputs between b3108350 and 4b31a189. Record strlen call shapes (count, length,
+   address mod 64 and page offset) for bash-loop at both shas with validation/wl_shapes.sh or wl_trace.sh (both
+   products are already built in keke ~/wl/products/<sha>). Also profile make-n's memmove and calloc, which grew too.
+2. Read the current heap code (crates/rt/src/heap.rs, crates/boundary/src/heap.rs) for what pair-check changed in the
+   reuse path. Its own record is row N2-2 in docs/saturation/14-next-ranked-perf-stories-after-perf.md.
+   Do not read other people's commit diffs: work from the code as it is and from counts.
+3. The fix must keep perf-heap-pair-check's malloc+free pair gain (`cargo xtask bench --compare --counters` for the
+   malloc/free pair rows and the strlen rows). Target: bash-loop and make-n at or below fa678f74.
+   If the pair gain and the workloads conflict, report the numbers and write RULING NEEDED.
+4. Gate (direct tier) and plants on the fix.
 
-Do not redo: priming (all 10 sources are in keke ~/wl/src), the stub directories, or the du breakdown (above).
+Do not redo: the bisect (all points above), priming (sources for all counted shas are in keke ~/wl/src, products
+in ~/wl/products), the du breakdown, the fresh-block alignment probe.
+
+## Jobs (keke)
+- perf-rc1024-strlen-bisect2 (run 1): rc 0, the scan.S chain.
+- perf-rc1024-strlen-2-bisect3: rc 0, 10 points 094b61a5..76041c21. Log: ~/logs/perf-rc1024-strlen-2-bisect3.log
+- perf-rc1024-strlen-2-bisect4: rc 0, b3108350. Log: ~/logs/perf-rc1024-strlen-2-bisect4.log
+- Script: ~/work/perf-rc1024-strlen-2/bisect3.sh <list> (lines "<name> <sha>"; it makes the `.synced` stubs under
+  t/<sha>). Prime each sha first with validation/wl_prime_base.sh keke <sha>. A second count for a different sha can
+  run in parallel: wl builds each sha under its own flock in ~/wl, outside the role.
