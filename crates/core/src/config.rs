@@ -46,6 +46,8 @@ pub struct Tunables {
     pub avx2: Option<bool>,
     /// The same for `rep movsb`/`rep stosb`.
     pub erms: Option<bool>,
+    /// The same for the math kernels' FMA builds (`glibc.cpu.hwcaps` name `FMA`, D-10.48).
+    pub fma: Option<bool>,
     /// Bytes from which copies use `rep movsb`.
     pub rep_movsb_threshold: Option<usize>,
     /// Bytes from which fills use `rep stosb`.
@@ -262,6 +264,8 @@ impl Tunables {
                             t.avx2 = Some(on);
                         } else if name.eq_ignore_ascii_case(b"ERMS") {
                             t.erms = Some(on);
+                        } else if name.eq_ignore_ascii_case(b"FMA") {
+                            t.fma = Some(on);
                         }
                     }
                 }

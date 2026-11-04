@@ -1,0 +1,6 @@
+{"task": "MATH-F64-FMA-PATH", "model": "opus", "tokens": null, "result": "WIP: FMA build of f64 exp/log fast paths written (bit-identical by construction), not yet compiled or counted", "branch": "task/math-f64-fma-path", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "UNSAFE(hot-kernel) covers calls to the math FMA builds in hot.rs", "recommendation": "widen the category text to CPU-variant builds behind a dispatch flag"}],
+ "informational": ["keke queue wait >15 min for the first build job", "D-10.48 id provisional; s10_math_gen.rs not regenerated in commit"], "refused": [],
+ "improvement": "a local rustc (or a fast no-queue cargo check slot) would catch compile errors before a queued job", "next_step": "read keke:~/work/math-f64-fma-path/build1.log, fix, regenerate math-gen, plants, counts vs glibc -FMA", "report_file": "handoff/math-f64-fma-path.md",
+ "jobs": ["keke:math-f64-fma-path-build1"]}

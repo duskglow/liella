@@ -34,6 +34,39 @@ const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// 1.5·2^52: adding and subtracting it rounds a value below 2^51 to an integer.
 const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 
+// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.48): `$prod` is the exact product,
+// [`two_prod`] (Dekker) or [`dd::two_prod_fma`] (one FMA). Both return the same pair bit for bit
+// wherever the product is exact, which holds for every product below (operands far from overflow;
+// the smallest, `rh²` with `|rh| >= 2^-64`, has its error above 2^-240), so the two builds compute
+// the same `y` and `eps`, take the same `None` branches and return the same results: the bounds
+// below are those of either build.
+macro_rules! kernels {
+    ($(#[$a:meta])*; $prod:path) => {
+/// [`Dd::mul`] with this build's exact product (the same arithmetic).
+$(#[$a])*
+#[inline]
+fn mul(a: Dd, b: Dd) -> Dd {
+    let p = $prod(a.hi, b.hi);
+    dd::fast_two_sum(p.hi, p.lo + (a.hi * b.lo + a.lo * b.hi))
+}
+
+/// [`Dd::mul_f64`] with this build's exact product.
+$(#[$a])*
+#[inline]
+fn mul_f64(a: Dd, b: f64) -> Dd {
+    let p = $prod(a.hi, b);
+    dd::fast_two_sum(p.hi, p.lo + a.lo * b)
+}
+
+/// `crate::exp_log::reduce` with this build's exact product (the same arithmetic).
+$(#[$a])*
+#[inline]
+fn reduce(x: Dd, kf: f64, c: &[u64; 4]) -> Dd {
+    let c = c.map(f64::from_bits);
+    let r0 = x.hi - kf * c[0];
+    two_sum(r0, -(kf * c[1])).add_f64(-(kf * c[2])).add($prod(kf, c[3]).neg()).add_f64(x.lo)
+}
+
 /// `e^r` times `2^(k/64)` as `(y, m, eps)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m`, for the
 /// reduced `r = rh + rl` (`|rh| <= 0.006`, `|rl| <= 2^-52·|rh|`).
 ///
@@ -46,6 +79,7 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// double-double (error `< 2^-104`), and `y = t + t·p` is formed with `Dd::mul`/`Dd::add`
 /// (`< 2^-100` relative). So `|e^r·2^(j/64) − y| <= 2^(j/64)·(2^-50·|T| + 2^-74) + 2^-99 <=
 /// 2^-49·|T|·|y| + 2^-70·|y|` (`|y| >= 2^(j/64)·0.994`).
+$(#[$a])*
 fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
@@ -53,12 +87,12 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     }
     const C: [f64; 6] = [1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0, 1.0 / 40320.0];
     let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * C[5]))));
-    let s = two_prod(rh, rh);
+    let s = $prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, 0.5 * s.hi);
     let p = Dd { hi: a.hi, lo: a.lo + ((0.5 * s.lo + rl * (1.0 + rh)) + tail) };
     let tj = Dd::of(t::EXP2_J64[usize::try_from(k & 63).unwrap_or(0)]);
-    let y = tj.add(tj.mul(p));
+    let y = tj.add(mul(tj, p));
     let eps = dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN);
     Some((y, k >> 6, eps))
 }
@@ -66,7 +100,7 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
 pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-    let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LN2_64_CW);
+    let r = reduce(Dd::from(x), kf, &t::LN2_64_CW);
     let (y, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
     settle(y, eps, m, mode)
 }
@@ -83,7 +117,7 @@ pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
 pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
-    let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
+    let r = reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
     // (x − k·log10(2)/64)·ln10: the reduction is within 2^-95 and the product within 2^-100.
     let (y, m, eps) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
     settle(y, eps, m, mode)
@@ -99,11 +133,12 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// [`exp_kernel`]. `e·ln2` and `−ln c` are stored double-doubles (`< 2^-104` relative), summed by
 /// `Dd::add`. Either `e = 0` and `c = 1` (then `y ≈ r`), or `|y| >= 2^-8.1` while `|r| <= 2^-7`,
 /// so the absolute errors other than `T`'s are below `2^-72·|y|`.
+$(#[$a])*
 fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let (e, m) = crate::exp_log::decompose(x);
     let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
     let idx = usize::try_from(i + 37).unwrap_or(37);
-    let p = two_prod(m, f64::from_bits(t::LOG_C[idx]));
+    let p = $prod(m, f64::from_bits(t::LOG_C[idx]));
     let r = two_sum(p.hi - 1.0, p.lo);
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.007_812_5 {
@@ -111,12 +146,52 @@ fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     }
     const C: [f64; 8] = [1.0 / 3.0, -1.0 / 4.0, 1.0 / 5.0, -1.0 / 6.0, 1.0 / 7.0, -1.0 / 8.0, 1.0 / 9.0, -1.0 / 10.0];
     let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * (C[5] + rh * (C[6] + rh * C[7]))))));
-    let s = two_prod(rh, rh);
+    let s = $prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
     let lr = Dd { hi: a.hi, lo: a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail) };
-    let y = Dd::of(t::LN2).mul_f64(f64::from(e)).add(Dd::of(t::LOG_L[idx])).add(lr);
+    let y = mul_f64(Dd::of(t::LN2), f64::from(e)).add(Dd::of(t::LOG_L[idx])).add(lr);
     Some((y, TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)))
+}
+    };
+}
+
+kernels!(; two_prod);
+
+/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.48): the same
+/// arithmetic as [`exp_nearest`] and [`log_nearest`] with every exact product a single FMA, so the
+/// same results bit for bit (see `kernels!`). Callable only on a CPU with FMA and the OS-enabled
+/// AVX state; the boundary selects it once at startup (`dispatch::fma`).
+#[cfg(target_arch = "x86_64")]
+pub mod fused {
+    use super::{settle, t, two_sum, Dd, Rounding};
+    use crate::dd;
+
+    kernels!(#[target_feature(enable = "fma")]; dd::two_prod_fma);
+
+    /// [`super::exp_nearest`], FMA build.
+    #[target_feature(enable = "fma")]
+    #[inline]
+    pub fn exp_nearest(x: f64) -> Option<f64> {
+        if !(crate::exp_log::TINY..708.0).contains(&dd::abs(x)) {
+            return None;
+        }
+        let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+        let r = reduce(Dd::from(x), kf, &t::LN2_64_CW);
+        let (y, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
+        settle(y, eps, m, Rounding::Nearest).map(|(v, _)| v)
+    }
+
+    /// [`super::log_nearest`], FMA build.
+    #[target_feature(enable = "fma")]
+    #[inline]
+    pub fn log_nearest(x: f64) -> Option<f64> {
+        if !super::log_domain(x) {
+            return None;
+        }
+        let (y, eps) = log_kernel(x)?;
+        settle(y, eps, 0, Rounding::Nearest).map(|(v, _)| v)
+    }
 }
 
 /// `ln x` for a positive finite `x != 1`.
@@ -344,7 +419,7 @@ pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)> {
         return None; // 2^-30
     }
     let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
-    let r = crate::exp_log::reduce(z, kf, &t::LN2_64_CW);
+    let r = reduce(z, kf, &t::LN2_64_CW);
     let (v, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
     let eps = eps + 1.02 * dd::abs(v.hi) * dz;
     if !neg {
