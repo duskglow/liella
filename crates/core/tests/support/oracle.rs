@@ -62,7 +62,14 @@ pub(crate) fn locale(dest: &Path, lang: &str, charset: &str, probe: &str) -> boo
     }
     let tmp = sibling(dest, &format!(".tmp-{}-{}", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed)));
     let _ = std::fs::remove_dir_all(&tmp);
-    let made = Command::new("localedef").args(["-i", lang, "-f", charset]).arg(&tmp).output().is_ok_and(|o| o.status.code().is_some_and(|c| c <= 1));
+    // Absent (cannot be started) is a skip for the caller; present but failing is a failure (TEST-SILENT-SKIPS).
+    let made = match Command::new("localedef").args(["-i", lang, "-f", charset]).arg(&tmp).output() {
+        Err(_) => false,
+        Ok(o) => {
+            assert!(o.status.code().is_some_and(|c| c <= 1) && tmp.join(probe).exists(), "localedef is present but failed for {lang}.{charset} ({}): {}", o.status, String::from_utf8_lossy(&o.stderr));
+            true
+        }
+    };
     if made && tmp.join(probe).exists() {
         // Losing a race with a builder that holds no lock is fine: its locale is complete too.
         let _ = std::fs::rename(&tmp, dest);
@@ -187,7 +194,18 @@ fn build_with(mut cmd: Command, out: &Path, quiet: bool) -> bool {
     let tag = format!(".tmp-{}-{}", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed));
     let tmp = sibling(out, &tag);
     cmd.arg("-o").arg(&tmp);
-    let ok = if quiet { cmd.output().is_ok_and(|o| o.status.success()) } else { cmd.status().is_ok_and(|s| s.success()) };
+    let ok = if quiet {
+        cmd.output().is_ok_and(|o| o.status.success())
+    } else {
+        // Not startable = the tool is absent (a skip for the caller); started and failed = a failure (TEST-SILENT-SKIPS).
+        match cmd.status() {
+            Err(_) => false,
+            Ok(s) => {
+                assert!(s.success(), "{:?} is present but failed ({s})", cmd.get_program());
+                true
+            }
+        }
+    };
     if !ok || std::fs::rename(&tmp, out).is_err() {
         let _ = std::fs::remove_file(&tmp);
         return false;

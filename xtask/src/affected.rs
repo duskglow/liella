@@ -1981,6 +1981,22 @@ fn classify_step(success: bool, step_out: &str, allow_skip: bool) -> Outcome {
     }
 }
 
+/// The number of `SKIPPED <test>: <reason>` lines a log holds (TEST-SILENT-SKIPS): raw lines count once
+/// each; a line the nextest report folded (`... (xN)`) counts N. The report's own heading and the
+/// `SKIPPED lines:` summary do not start with `SKIPPED <word>:`.
+fn count_skips(log: &str) -> u64 {
+    log.lines()
+        .filter_map(|l| {
+            let l = l.trim_start().strip_prefix("SKIPPED ")?;
+            if !l.contains(": ") || l.starts_with("lines:") {
+                return None;
+            }
+            let n = l.strip_suffix(')').and_then(|r| r.rsplit_once(" (x")).and_then(|(_, n)| n.parse::<u64>().ok());
+            Some(n.unwrap_or(1))
+        })
+        .sum()
+}
+
 fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, allow_skip: bool) -> Outcome {
     let started = Instant::now();
     // This step's own output starts where the log ends now (the classification never reads earlier steps).
@@ -2248,7 +2264,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
         }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
-    print!("{}", summary(&read(&log)));
+    let text = read(&log);
+    print!("{}", summary(&text));
+    println!("SKIPPED lines: {} (tests that skipped part of their checks because a tool or capability was absent; they tested less)", count_skips(&text));
     if !skipped.is_empty() {
         println!("skipped (no test matched the selection; counted apart, not a failure): {} - {}", skipped.len(), skipped.join("; "));
     }
@@ -2410,6 +2428,13 @@ mod tests {
 
     // TOOLS-7 (1): a failed step's FULL output lands in target/<name> (only that step's, not earlier steps'), and a
     // stale file from an earlier run is replaced; a passing step leaves its (short) output there too.
+    #[test]
+    fn skipped_lines_are_counted_with_their_repeats() {
+        // Trace: no spec clause (test-harness reporting; TEST-SILENT-SKIPS).
+        let log = "SKIPPED a: no cc\n  SKIPPED b: no msgfmt (x2)\nSKIPPED lines: 9 (x)\nskipped: old\n";
+        assert_eq!(count_skips(log), 3);
+    }
+
     #[test]
     fn step_saving_keeps_the_whole_output_of_the_failed_step() {
         let root = std::env::temp_dir().join(format!("xtask-stepsave-{}", std::process::id()));
