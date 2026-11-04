@@ -3,11 +3,202 @@
 // Once a file contains specified tests, `cargo xtask stubs` stops rewriting it and only checks coverage.
 
 //! Clause tests for spec §28 (5 clauses).
+#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::as_conversions, clippy::panic, missing_docs)]
 
+#[path = "support/timeout.rs"]
+mod timeout;
+
+use core::ffi::c_int;
+use std::sync::atomic::{AtomicU16, AtomicU32, Ordering::Relaxed};
+use std::time::{Duration, Instant};
+
+use liella_boundary::posix::{s20_signals as sg, s23_time as tm, s28_profiling as pr};
+use liella_kernel::uapi::{Itimerval, SigSet, SIGPROF};
+use liella_legacy::signal_compat::CSigaction;
 use spectest::clause;
 
 clause!(s28_1_c_1, "28.1", "Contract", r##"**`monstartup(lowpc, highpc)`** allocates histogram and arc tables for a text range and starts PC sampling. `_mcleanup` writes `gmon.out` (or `$GMON_OUT_PREFIX.<pid>`) at exit."##);
 clause!(s28_1_c_2, "28.1", "Contract", r##"**`mcount`/`_mcount`** is called at every function entry of `-pg` code and records the call arc."##);
-clause!(s28_1_c_3, "28.1", "Contract", r##"**`profil(buf, size, offset, scale)`** samples the PC into a histogram on every `ITIMER_PROF` tick. **`sprofil`** takes multiple regions."##);
+
+const ITIMER_PROF: c_int = 2;
+/// One counter per 4 bytes of text (0x10000 would be one per 2 bytes).
+const SCALE: u32 = 0x8000;
+/// The histogram starts this far below `spin`, so a wrong bucket formula moves `spin`'s samples
+/// to other counters of the same buffer instead of dropping them.
+const BELOW: usize = 0x4000;
+/// Counters in the buffer that covers `spin` (64 KiB of text at `SCALE`).
+const NBUF: usize = 0x4000;
+/// `spin`'s code lies within this many bytes of its address.
+const SPAN: usize = 1024;
+/// Iterations between two looks at the histogram.
+const CHUNK: u64 = 2_000_000;
+
+static HITS0: AtomicU32 = AtomicU32::new(0);
+static HITS1: AtomicU32 = AtomicU32::new(0);
+extern "C" fn count0(_: c_int) {
+    HITS0.fetch_add(1, Relaxed);
+}
+extern "C" fn count1(_: c_int) {
+    HITS1.fetch_add(1, Relaxed);
+}
+
+/// The profiled code: a loop of plain arithmetic, no calls and no system calls.
+#[inline(never)]
+fn spin(n: u64) -> u64 {
+    let mut a = 0u64;
+    let mut i = 0u64;
+    while i < n {
+        a = std::hint::black_box(a.wrapping_add(i));
+        i += 1;
+    }
+    a
+}
+
+fn addr_of_spin() -> usize {
+    spin as fn(u64) -> u64 as usize
+}
+fn addr(h: extern "C" fn(c_int)) -> usize {
+    h as usize
+}
+
+fn counters(n: usize) -> Vec<AtomicU16> {
+    (0..n).map(|_| AtomicU16::new(0)).collect()
+}
+fn snapshot(buf: &[AtomicU16]) -> Vec<u16> {
+    buf.iter().map(|c| c.load(Relaxed)).collect()
+}
+
+/// Samples in the buckets whose text (bucket `i` covers `2 * 65536 / scale` bytes from
+/// `off + i * 2 * 65536 / scale`) meets `[spin, spin + SPAN)`, the samples elsewhere, and the
+/// first non-zero buckets.
+fn tally(buf: &[AtomicU16], off: usize, scale: u32) -> (u64, u64, Vec<(usize, u16)>) {
+    let width = (2 * 65536) / usize::try_from(scale).unwrap();
+    let (lo, hi) = (addr_of_spin(), addr_of_spin() + SPAN);
+    let (mut inside, mut outside, mut seen) = (0, 0, Vec::new());
+    for (i, c) in buf.iter().enumerate() {
+        let v = c.load(Relaxed);
+        if v == 0 {
+            continue;
+        }
+        let start = off + i * width;
+        if start < hi && start + width > lo {
+            inside += u64::from(v);
+        } else {
+            outside += u64::from(v);
+        }
+        if seen.len() < 8 {
+            seen.push((i, v));
+        }
+    }
+    (inside, outside, seen)
+}
+
+/// Spin until `want` samples fall in `spin`'s buckets; returns the iterations spent. A fixed
+/// iteration budget per look; the clock only bounds a hang.
+fn spin_until(what: &str, buf: &[AtomicU16], off: usize, want: u64) -> u64 {
+    let start = Instant::now();
+    let deadline = timeout::deadline(Duration::from_secs(10));
+    let mut n = 0;
+    loop {
+        spin(CHUNK);
+        n += CHUNK;
+        let (inside, outside, seen) = tally(buf, off, SCALE);
+        if inside >= want {
+            assert!(inside > outside, "{what}: most samples land in spin's buckets: inside {inside}, outside {outside}, {seen:?}");
+            return n;
+        }
+        if Instant::now() > deadline {
+            let spin_bucket = (addr_of_spin() - off) / 4;
+            panic!(
+                "{what}: no samples in spin's buckets (from {spin_bucket}): inside {inside}, outside {outside}, non-zero {seen:?}; {}",
+                timeout::expired("profil sampling", 10, start.elapsed())
+            );
+        }
+    }
+}
+
+fn itimer() -> Itimerval {
+    let mut it = Itimerval::default();
+    assert_eq!(tm::getitimer(ITIMER_PROF, Some(&mut it)), 0);
+    it
+}
+fn disposition() -> usize {
+    let mut old = CSigaction::new(0, SigSet::empty(), 0);
+    assert_eq!(sg::sigaction(SIGPROF, None, Some(&mut old)), 0);
+    old.handler
+}
+fn assert_stopped(what: &str, handler: usize) {
+    assert_eq!(itimer(), Itimerval::default(), "{what}: ITIMER_PROF is disarmed");
+    assert_eq!(disposition(), handler, "{what}: the SIGPROF action from before profiling is back");
+}
+/// After a stop: spin `n` more iterations; no counter moves and no SIGPROF arrives.
+fn assert_quiet(what: &str, bufs: &[&[AtomicU16]], n: u64) {
+    let before: Vec<Vec<u16>> = bufs.iter().map(|b| snapshot(b)).collect();
+    let hits = (HITS0.load(Relaxed), HITS1.load(Relaxed));
+    spin(n);
+    let after: Vec<Vec<u16>> = bufs.iter().map(|b| snapshot(b)).collect();
+    assert!(before == after, "{what}: the histogram is unchanged after the stop");
+    assert_eq!((HITS0.load(Relaxed), HITS1.load(Relaxed)), hits, "{what}: no SIGPROF after the stop");
+}
+
+/// The caller's `struct prof` (`<sys/profil.h>`): base, size in bytes, offset, scale.
+#[repr(C)]
+struct Region {
+    base: usize,
+    size: usize,
+    off: usize,
+    scale: u64,
+}
+
+/// §28.1 Contract: **`profil(buf, size, offset, scale)`** samples the PC into a histogram on every `ITIMER_PROF` tick. **`sprofil`** takes multiple regions.
+#[test]
+fn s28_1_c_3() {
+    // Probe of glibc 2.39 (PROFIL-SIGPROF-HISTOGRAM): profil arms ITIMER_PROF at 10 ms with its own
+    // SIGPROF action; profil(NULL, ...) and sprofil(NULL, 0, ...) disarm it and restore the action
+    // that was there before; a stop while idle changes nothing.
+    assert_eq!(sg::signal(SIGPROF, addr(count0)), 0, "SIGPROF starts at SIG_DFL");
+    let spin_at = addr_of_spin();
+    let off = spin_at - BELOW;
+
+    // profil: spin's samples land in the buckets that the offset and scale map spin to.
+    let buf = counters(NBUF);
+    assert_eq!(pr::profil(buf.as_ptr().cast::<u16>().cast_mut(), NBUF * 2, off, SCALE), 0);
+    assert_ne!(itimer().interval.usec, 0, "profil arms ITIMER_PROF");
+    assert_ne!(disposition(), addr(count0), "profil installs its own SIGPROF action");
+    let n = spin_until("profil", &buf, off, 3);
+    assert_eq!(HITS0.load(Relaxed), 0, "the caller's handler is out while profil samples");
+
+    // profil(NULL, 0, 0, 0) stops: timer disarmed, the caller's action back, nothing more counted.
+    assert_eq!(pr::profil(core::ptr::null_mut(), 0, 0, 0), 0);
+    assert_stopped("profil stop", addr(count0));
+    let quiet = (2 * n).max(25 * CHUNK);
+    assert_quiet("profil stop", &[&buf], quiet);
+
+    // A handler the caller installs after the stop stays installed through another stop.
+    assert_eq!(sg::signal(SIGPROF, addr(count1)), addr(count0));
+    assert_eq!(pr::profil(core::ptr::null_mut(), 0, 0, 0), 0);
+    assert_stopped("second profil stop", addr(count1));
+    assert_quiet("second profil stop", &[&buf], quiet);
+
+    // sprofil with two regions: the first covers the text just below the second, the second
+    // covers spin; a sample goes to the region whose range holds the pc.
+    for round in ["sprofil", "sprofil again"] {
+        let low = counters(NBUF / 4);
+        let high = counters(NBUF);
+        let regions = [
+            Region { base: low.as_ptr().addr(), size: NBUF / 2, off: off - BELOW, scale: u64::from(SCALE) },
+            Region { base: high.as_ptr().addr(), size: NBUF * 2, off, scale: u64::from(SCALE) },
+        ];
+        assert_eq!(pr::sprofil(regions.as_ptr().cast::<pr::Prof>(), 2, None, 0), 0, "{round}");
+        assert_ne!(itimer().interval.usec, 0, "{round} arms ITIMER_PROF");
+        spin_until(round, &high, off, 3);
+        assert_eq!(pr::sprofil(core::ptr::null(), 0, None, 0), 0, "{round} stop");
+        assert_stopped(round, addr(count1));
+        assert_quiet(round, &[&low, &high], quiet);
+    }
+    assert_eq!(HITS1.load(Relaxed), 0);
+    assert_eq!(sg::signal(SIGPROF, 0), addr(count1));
+}
+
 clause!(s28_1_c_4, "28.1", "Contract", r##"**`__cyg_profile_func_enter/_exit`** are empty hooks called by `-finstrument-functions` code, for the application to interpose."##);
 clause!(s28_3_c_0, "28.3", "Contract", r##"`__fentry__` is the profiling counter call that `-pg -mfentry` code makes before the function prologue; it records the call arc as `mcount` does (§28.1). The others are covered in their sections."##);
