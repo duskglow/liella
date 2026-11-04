@@ -1947,18 +1947,28 @@ pub fn read_record<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, delim: 
 /// a wide or unset stream): the general [`getdelim`] decides. `p` is `_IO_read_ptr` as
 /// [`read_room`] read it, the lock is held or needed by none.
 #[inline(always)]
-pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, lineptr: usize, cap_var: usize, delim: u8) -> Option<usize> {
-    let window: &[u8] = read_window(env, file, ext, p)?;
+pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, lineptr: usize, cap_var: usize, delim: u8) -> Result<usize, WindowMiss> {
+    let window: &[u8] = read_window(env, file, ext, p).ok_or(WindowMiss(false))?;
     let buf = env.load_word(lineptr);
     if buf == 0 {
-        return None;
+        return Err(WindowMiss(false));
     }
     // The record and its NUL must fit `*n` bytes; more than the window and a NUL is never needed.
     let room = env.load_word(cap_var).min(window.len().saturating_add(1));
-    let n = env.find_copy(window, env.bytes(buf, room), delim)?;
-    set(file, word::READ_PTR, p + n);
-    Some(n)
+    match env.find_copy(window, env.bytes(buf, room), delim) {
+        Some(n) => {
+            set(file, word::READ_PTR, p + n);
+            Ok(n)
+        }
+        // GETLINE-LONG: the whole window was scanned (`room` held all of it and a NUL).
+        None => Err(WindowMiss(room == window.len().saturating_add(1) && room > 1)),
+    }
 }
+
+/// [`getdelim_front`] did not apply. `.0`: the delimiter is known to be absent from the whole
+/// unread window, which the general path then does not scan again ([`getdelim`]'s `known_miss`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct WindowMiss(pub bool);
 
 /// [`Env::find_copy`] in two passes: [`Env::find`] over the bytes that fit, then the copy.
 #[inline(always)]
@@ -2023,7 +2033,9 @@ pub fn read_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, ou
 
 /// `getdelim`: a record up to and including `delim` into the caller's `malloc` buffer
 /// (`*lineptr`, `*n`), grown as needed and terminated. The length, or `None` at end of input.
-pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8) -> KResult<Option<usize>> {
+/// With `known_miss` the front path has just scanned the unread window, with nothing changed
+/// since, and found no `delim`: the first scan is skipped (the window is the first piece).
+pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8, known_miss: bool) -> KResult<Option<usize>> {
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
     let mut len = 0usize;
@@ -2040,8 +2052,9 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     if input_flushes(ext) {
         flush_line_buffered(env, true);
     }
+    let skip = core::cell::Cell::new(known_miss);
     let r = run(env, file, ext, |s, b, back| {
-        s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {
+        s.read_until_with(b, back, delim, &|w, c| if skip.replace(false) { None } else { env.find(w, c) }, &mut |piece| {
             let Some(need) = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)) else {
                 grow_failed = true;
                 return Err(Errno::EOVERFLOW);

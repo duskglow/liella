@@ -351,6 +351,17 @@ enum Front {
     General,
 }
 
+/// What [`delim_front`] did when it did not finish the record.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DelimMiss {
+    /// Try again under the stream's lock ([`delim_locked`]).
+    Locked,
+    /// The general path.
+    General,
+    /// The general path, the delimiter known absent from the unread window ([`sc::getdelim`]).
+    Missed,
+}
+
 /// [`put_front`], then [`put_front_locked`] when the lock is needed: whether the bytes went in.
 #[inline(always)]
 fn front_done(fp: usize, how: Locking, data: &[u8]) -> bool {
@@ -1240,31 +1251,32 @@ pub fn getdelim(line: KResult<usize>, cap: KResult<usize>, delim: i32, fp: usize
     let d = low_byte(delim);
     match delim_front(fp, line, cap, d) {
         Ok(n) => Ok(Some(n)),
-        Err(Front::Locked) => delim_locked(fp, line, cap, d),
-        Err(_) => getdelim_general(fp, line, cap, d),
+        Err(DelimMiss::Locked) => delim_locked(fp, line, cap, d),
+        Err(DelimMiss::Missed) => getdelim_general(fp, line, cap, d, true),
+        Err(DelimMiss::General) => getdelim_general(fp, line, cap, d, false),
     }
 }
 
 /// [`getdelim`] past its front path: the engine's.
 #[inline(never)]
-fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8) -> KResult<Option<usize>> {
-    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d))?
+fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8, known_miss: bool) -> KResult<Option<usize>> {
+    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d, known_miss))?
 }
 
 /// The `getdelim` front path (GETDELIM, D-12.19), the mirror of [`read_front`]: a whole record
 /// in an open published read window on a sealed record that fits the caller's buffer.
 #[inline(always)]
-fn delim_front(fp: usize, line: usize, cap: usize, d: u8) -> Result<usize, Front> {
-    let Some(file) = tb::file_words(fp) else { return Err(Front::General) };
-    let Some(p) = sc::read_room(file) else { return Err(Front::General) };
+fn delim_front(fp: usize, line: usize, cap: usize, d: u8) -> Result<usize, DelimMiss> {
+    let Some(file) = tb::file_words(fp) else { return Err(DelimMiss::General) };
+    let Some(p) = sc::read_room(file) else { return Err(DelimMiss::General) };
     let ext = sc::ext_word(file);
     if !Glue.record(fp, ext) {
-        return Err(Front::General);
+        return Err(DelimMiss::General);
     }
     if crate::thread::alone() || sc::by_caller(file) {
-        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d).ok_or(Front::General);
+        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d).map_err(|m| if m.0 { DelimMiss::Missed } else { DelimMiss::General });
     }
-    Err(Front::Locked)
+    Err(DelimMiss::Locked)
 }
 
 /// [`delim_front`] under the stream's lock (another thread may use the stream): everything is
@@ -1276,13 +1288,14 @@ fn delim_locked(fp: usize, line: usize, cap: usize, d: u8) -> KResult<Option<usi
         let (lock, ext) = sc::parts(&Glue, file)?;
         let me = Glue.tid();
         lock.lock(&CSys, me);
-        let n = sc::read_room(file).and_then(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d));
+        let n = sc::read_room(file).map(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d));
         lock.unlock(&CSys, me);
         n
     })();
+    // The lock was released: the window may have changed, so a miss is not carried over.
     match front {
-        Some(n) => Ok(Some(n)),
-        None => getdelim_general(fp, line, cap, d),
+        Some(Ok(n)) => Ok(Some(n)),
+        _ => getdelim_general(fp, line, cap, d, false),
     }
 }
 
