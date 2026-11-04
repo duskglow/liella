@@ -236,7 +236,7 @@ liella_machine_move_mid:
 	.globl liella_machine_mempcpy
 	.hidden liella_machine_mempcpy
 	.type liella_machine_mempcpy, @function
-	.p2align 4
+	.p2align 6			/* exported entries are 64-byte aligned (D-4.33); own section since HOTTEXT-ASM-ORDER */
 liella_machine_mempcpy:
 #ifdef LIELLA_EXPORT
 	.globl mempcpy
