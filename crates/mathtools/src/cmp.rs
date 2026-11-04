@@ -24,6 +24,26 @@ pub fn format(letter: char) -> Option<Fmt> {
     })
 }
 
+/// The names a format is accepted under on the command line, with the probe letter of each format.
+/// A name must match whole: `f128` is binary128 and never binary32 by its first letter.
+pub const FORMAT_NAMES: &[(char, &[&str])] = &[
+    ('f', &["f", "f32", "float", "binary32"]),
+    ('d', &["d", "f64", "double", "binary64"]),
+    ('l', &["l", "f80", "ld", "long-double", "binary80"]),
+    ('q', &["q", "f128", "_Float128", "binary128"]),
+];
+
+/// The probe letter and format of a command-line format name, or an error listing the valid names.
+pub fn parse_format(name: &str) -> Result<(char, Fmt), String> {
+    for (letter, names) in FORMAT_NAMES {
+        if names.contains(&name) {
+            return Ok((*letter, format(*letter).expect("every listed letter is a format")));
+        }
+    }
+    let valid: Vec<&str> = FORMAT_NAMES.iter().flat_map(|(_, n)| n.iter().copied()).collect();
+    Err(format!("unknown format {name:?}; valid names: {}", valid.join(", ")))
+}
+
 /// A rounding mode by the probe's letters.
 pub fn round(letter: char) -> Option<Round> {
     Some(match letter {
@@ -366,4 +386,37 @@ pub fn shard(run: &Run<'_>, records: &[Vec<u128>]) -> Result<Tally, String> {
         p.finish()?;
     }
     Ok(t)
+}
+
+#[cfg(test)]
+mod format_name_tests {
+    use super::*;
+
+    // no spec clause (measurement tool)
+    #[test]
+    fn every_alias_maps_to_its_format() {
+        for (letter, names) in FORMAT_NAMES {
+            for n in *names {
+                let (l, f) = parse_format(n).unwrap();
+                assert_eq!(l, *letter, "{n}");
+                assert_eq!(f, format(*letter).unwrap(), "{n}");
+            }
+        }
+    }
+
+    #[test]
+    fn f128_is_not_f32() {
+        assert_eq!(parse_format("f128").unwrap().0, 'q');
+        assert_eq!(parse_format("f32").unwrap().0, 'f');
+        assert_eq!(parse_format("_Float128").unwrap().0, 'q');
+        assert_eq!(parse_format("f80").unwrap().0, 'l');
+    }
+
+    #[test]
+    fn unknown_names_are_rejected_with_the_list() {
+        for bad in ["", "f1", "f12", "f1280", "float128", "doubles", "F32", "x"] {
+            let e = parse_format(bad).unwrap_err();
+            assert!(e.contains("f128") && e.contains("long-double"), "{bad}: {e}");
+        }
+    }
 }
