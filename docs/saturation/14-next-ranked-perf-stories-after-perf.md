@@ -84,6 +84,31 @@ made in this run (budget); next step: cut the `LANGUAGE`-only work (remember the
 compare the list by the address the memo already proved fresh) and then the shared hit path, proving each with the
 counters above, the gettext tests and plants.
 
+**Row 6 run 2 (PERF-GETTEXT-STEADY-2, 2026-11-04, Zen 1 host, code = next 5d55aecf; jobs `perf-gettext-steady-2-before`
+(`cargo xtask bench --compare --counters --runs 5 cbench_opt`), `perf-gettext-steady-2-prof` (perf record instructions:u
+-c 10007, CBENCH_ONLY=gettext_language_steady), both rc 0; NO library change in this run).** Instructions per operation,
+Liella / glibc dynamic (default level): `gettext_found` 602.8 / 452.6 (1.33), `gettext_language_steady` 712.8 / 452.6
+(1.58), `_alternating` 1102.2 / 939.0 (1.17), `ngettext_found` 736.8 / 684.7 (1.08). Time ratios on this run (not a
+booked timing host): found 1.17, steady 1.35. So the steady row costs 110 instructions more than the found row in
+Liella and 0 more in glibc: the gap to glibc is 150 (shared found path) plus 110 (`LANGUAGE` work). Profile of the
+steady row (share of the profile, setup included): `translate` 27.8%, `Resolution::hit` 16.5%, `strlen` 9.1% (two
+calls per gettext: the msgid and the `LANGUAGE` value), `rdtsc` 8.1% (the TSC gate that keeps the one-second catalog
+recheck; one instruction, sample skid makes it look larger; it is the only clock read and glibc has no counterpart),
+`find_in_hinted` 5.4%, `Resolution::matches` 1.8%, `env_find` 1.2%; the rest is the bench's setup (regex, charmap).
+Where the 110 go, by construction: the memo hit of `LANGUAGE` (about 25), the `strlen` of its value (about 25), the
+key length and word compare of the list in `matches` (about 30) and the longer key setup in `translate` (the rest).
+**Why not removed, first-principles bound:** the list text is environment text the program may rewrite in place, so
+its content must be read each call (at least its length by `strlen`, or a compare that stops at the first NUL). A
+fused compare of the stored key words against the value, without `strlen`, can read the first NUL's word only with
+aligned loads (an unaligned 8-byte read at a short value can cross into an unmapped page), which is `unsafe` in
+`liella-boundary` plus an audit row; the saving is about 40 of 110 instructions (steady 1.58 to about 1.50), and the
+remaining 150 of the gap sits in the shared found path (`translate`, `hit`, `find_in_hinted`), which GETTEXT-HIT,
+-HIT-2/3, -4 and -FOUND already shaved. Tried and rejected here: remembering the value's length with the memo
+(unsound: an in-place rewrite changes the length without a writer call, and a new shorter `putenv` value would make a
+remembered length read past its NUL), comparing by address only (same unsoundness). Next step: the aligned fused
+compare (needs an unsafe category decision) and a clock-free recheck (needs a ruling: the one-second recheck needs
+some time source).
+
 Row 8 status (PERF-FNMATCH-CLASS, 10-23, Zen 1 host): BEFORE (this head's parent, 5 rounds): default level i 1.34 (2256.5/1686.0), cyc 1.27; `-AVX2` i 1.26 (2261.6/1800.8), cyc 1.17. Change: `Class::by_name` dispatches on the first byte (a name cost up to twelve 5-byte compares; `upper` is the 11th) and `wclasses` reads the ASCII table for c < 128 in `C.UTF-8` (test: equal to the code point table for 0..=130). The cause was a GUESS and no profile separated the two parts, so the AFTER figures (jobs `perf-fnmatch-class-after-def`, `-after-noavx2`) decide; if the ratio stays above 1, the remaining bound is not yet written.
 
 Row 8 status (PERF-FNMATCH-CLASS-3, 10-24, Haswell-EP host, 5 rounds, default level): CAUSE MEASURED, the guess was wrong. `perf record` of `fnmatch_names_class` put 57% of the samples in `CtypeFile::in_class` (the locale-file class table lookup), 16% in `fnmatch::direct`, 5% in `wclasses`; the class-name lookup (`wctype`/`by_name`) was 1.6%. The bench runs in `en_US.UTF-8` (a compiled locale): `is_wclass` built the full class set of the character (`wclasses`: twelve `in_class` calls, each re-parsing a table header) to test one class. Fix: `is_wclass` calls `is_w`, which reads only the class named (one table). BEFORE: i 1.34 (2256.9/1685.2), cyc 1.35 (time ratio). AFTER: i 0.53 (893.3/1685.2), time ratio 0.58 (173.12 vs 168.34 ns/call is glibc's side; Liella's own time fell 234.88 to about 98). No other fnmatch row moved (star_c 574.2, ch 742.3, lib_so 475.8, period 647.7, question 573.2, casefold 1471.8, pathname 737.4, leading_dir 459.6 instructions: identical to before). The class-name first-byte dispatch and the C.UTF-8 ASCII shortcut of runs 1 and 2 changed nothing and are reverted. The same change speeds every regex and fnmatch class test in a compiled locale. NOT VERIFIED: the `-AVX2` counters (not run: budget; fnmatch has no vector path). Timing hosts not booked (counters decide).
@@ -91,3 +116,12 @@ Row 8 status (PERF-FNMATCH-CLASS-3, 10-24, Haswell-EP host, 5 rounds, default le
 **Result (PERF-EXECVP-MISSING, Broadwell-EP host, 2026-10-23, job `perf-execvp-missing-ctr`, `cargo xtask bench --compare --counters --runs 5 cbench_opt`):** `execvp_missing` is 17427.6 instr/op against glibc 17268.9, ratio 1.009 (the 1.02/1.03 in the table above predates SMALL-OPEN-ROWS, which made the `Exec` closure generic). The gap is 159 instructions per call, about 53 per PATH directory (3 directories), under 1% of the call; the call is dominated by 3 failing execve syscalls in the kernel. The GUESS (per-entry path build) is not the cause: EXECVP-PATH-2 already builds each candidate in place with one element copy, and its ablation put the remainder at the execve wrapper plus errno decode. Nothing left to remove without making another row slower, so no code changed. Kept as is; parity within 1% is the bound reached by the user-space path, the rest is kernel work.
 
 Below the cut: `ngettext_found` (i 1.08 default and 1.00 SSE2: fold into N2-6), `strcmp_names` (i 1.10 default with cycles 1.27, but 0.96 with SSE2: re-measure under N2-4), `regexec_backref` and `regexec_class_nomatch_1k` (1.29 and 1.12 by cycles on 10-23; neither is among the cbench_opt rows above 1.05 here, and whatever bench carries them is re-measured by the follow-up), and the `fts`/`nftw` physical walks (10-23 t 1.08, du 82% kernel; not re-measured).
+**Row 6 run 3 (GETTEXT-LANGUAGE-ALIGNED-COMPARE-2, 2026-11-04, Zen 1 host; NEGATIVE RESULT, the fused compare is slower).**
+Same-host, same-tree paired counts (`cargo xtask bench --compare --counters --runs 5 cbench_opt`, `CBENCH_ONLY=gettext_language_steady`),
+instructions per operation, Liella / glibc dynamic: tree without the fused compare 731.6 / 452.6 (1.62; job
+`gettext-language-aligned-compare-2-basecount`); tree with it 862.9 / 452.6 (1.91; job `gettext-language-aligned-compare-2-final`).
+The fused aligned compare (`strz::text_equals_words`, correct under its tests and plants) adds about 131 instructions per call
+instead of removing the estimated 40: the per-word closure reads, the shift-and-merge of two aligned words and the extra
+key state cost more than the `strlen` plus word compare they replace for the short list values the row uses. Not for landing
+as it stands; a retry would need a kernel measured at the instruction level first (for example a value of at most 8 bytes
+read as one aligned word pair, no closure), against the 731.6 base.
