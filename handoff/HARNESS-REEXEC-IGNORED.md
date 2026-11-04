@@ -23,3 +23,10 @@ Whether any child was silently filtered out (name typo) is answered by the gate:
   (filter matches nothing) in s17_users_clauses: CAUGHT; P3 assertion removed from s12_stdio_clauses: CAUGHT by the static check.
 - harness-reexec-ignored-gate-2: FULL tier (the xtask change escalates it), detached; the dispatcher reads it.
 - Superseded: harness-reexec-ignored-gate (killed by me, rc 143, older head), harness-reexec-ignored-plants (P1 static plant survived: the enomem harness had an allow comment).
+
+## HARNESS-REEXEC-IGNORED-2 (port onto the new root)
+Branch task/harness-reexec-ignored-2. Ported the historic branch's commits (the static-count commit f5418eae was dropped: next's own check list now has 20 entries incl. reexec-audit).
+Four re-exec tests that landed on next since (search_nomem, strto_internal_group, popen_system_eintr, syslog_stream) were flagged by reexec-audit and fixed the same way.
+Jobs on kanon: harness-reexec-ignored-2-plants (rc 0; 4 plants on those four files, each caught by reexec-audit), harness-reexec-ignored-2-gate (escalates to FULL, detached; dispatcher reads it).
+clippy --workspace --all-targets --all-features -D warnings and cargo xtask static: clean on the final code head.
+Next step: none beyond the gate result.
