@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 use liella_boundary::posix::{s20_signals as sg, s23_time as tm, s28_profiling as pr};
 use liella_kernel::uapi::{Itimerval, SigSet, SIGPROF};
 use liella_legacy::signal_compat::CSigaction;
-use spectest::clause;
 
 
 const ITIMER_PROF: c_int = 2;
@@ -352,7 +351,7 @@ fn s28_1_c_1() {
         let want = prefix.map_or_else(|| "gmon.out".to_string(), |p| format!("{p}.{pid}"));
         let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
         names.sort();
-        assert_eq!(names, [want.clone()], "GMON_OUT_PREFIX={prefix:?}: the one file written");
+        assert_eq!(names, core::slice::from_ref(&want), "GMON_OUT_PREFIX={prefix:?}: the one file written");
         let (lo, hi, bins, arcs) = parse_gmon(&std::fs::read(dir.join(&want)).unwrap());
         assert_eq!((lo, hi), ((low & !3) as u64, ((high + 3) & !3) as u64), "the histogram covers the range given to monstartup");
         assert!(bins > 0, "monstartup allocated a histogram");
