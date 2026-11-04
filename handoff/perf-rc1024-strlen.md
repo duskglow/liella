@@ -1,50 +1,39 @@
-# PERF-RC1024-STRLEN handoff (WIP after run 2, PERF-RC1024-STRLEN-2; no code change yet)
+# PERF-RC1024-STRLEN handoff (run 3, PERF-RC1024-STRLEN-3: RESOLVED by PERF-RC1024-HEAP-FREE; no code)
 
-State: branch task/perf-rc1024-strlen-2 (on top of run 1's task/perf-rc1024-strlen WIP), base origin/next 125c0ccc.
-No product code changed. Status: NOT READY. The cause is found to one merge, but there is no fix yet.
+State: branch task/perf-rc1024-strlen-3 (on top of runs 1 and 2: task/perf-rc1024-strlen, task/perf-rc1024-strlen-2).
+No product code was changed in any of the three runs. Status: resolved by PERF-RC1024-HEAP-FREE (branch
+task/perf-rc1024-heap-free, head 29a5b91f, queued for CI). Nothing is left to do here once HEAP-FREE lands.
 
-## Result: the regression is one merge, 4b31a189 "Merge task/perf-heap-pair-check into next"
-wl_count on keke (WL_BASE_EXACT=1, --base fa678f74, instructions:u ratio new/base):
+## Result (run 3): HEAP-FREE removes the regression
+wl_count on keke, job perf-rc1024-strlen-3-count1 (rc 0), same method as run 2 (WL_BASE_EXACT=1, --base fa678f74,
+instructions:u, ratio new/base):
 
-| commit | bash-loop | make-n |
+| tree | bash-loop | make-n |
 |---|---|---|
-| the 5 scan.S merges and their first parents (run 1, bisect2) | 0.9994 .. 1.0002 | 0.9987 .. 1.0007 |
-| 094b61a5 perf-execvp-missing | 0.9996 | 0.9987 |
-| b3108350 perf-wctype-l-cold | 0.9996 | 0.9987 |
-| **4b31a189 perf-heap-pair-check** | **1.0088** | **1.0052** |
-| 5abebe52, 10734b43, b6f8d1e6, 9131d50e, c874901f, 78e911bc, 9d9bc8fb | 1.0085 .. 1.0089 | 1.0052 .. 1.0053 |
-| 76041c21 (the RC) | 1.0084 | 1.0053 |
+| 29a5b91f (HEAP-FREE head, heap.rs back to fa678f74) | **0.9997** | **0.9989** |
+| ce0a9ce6 (HEAP-FREE's base, still has perf-heap-pair-check's heap.rs) | 1.0087 | 1.0053 |
 
-- The scan.S merges are NOT the cause. The strlen growth in the profiles comes from the heap change, through strlen's inputs.
-- There is no other step between fa678f74 and 76041c21. 4b31a189 accounts for all of the RC-1024 growth in bash-loop
-  (+0.87%) and make-n (+0.54%).
-- du is not this cause (run 1: fts_build/fts_alloc growth, candidates 5dd88211 / e45c4758, not counted).
+Raw instructions:u: bash-loop 19066619518 (29a5b91f) / 19243837907 (ce0a9ce6) / 19072619131 (fa678f74);
+make-n 758931584 / 763809105 / 759762382. Both workloads are below fa678f74 with HEAP-FREE: the story target is met.
+`git diff --stat fa678f74 29a5b91f -- crates/rt/src/heap.rs crates/boundary/src/heap.rs` is empty (byte-identical).
 
-## What does not explain it
-- Probe (keke ~/work/perf-rc1024-strlen-2/align.c, static against ~/wl/products/<sha>): for 64 fresh live blocks
-  of each size 1..200, the user-pointer offsets mod 64 are IDENTICAL in b3108350 and 4b31a189. Alignment of fresh
-  blocks therefore does not explain it. Untested: offsets after free/reuse (bash and make free and reallocate
-  constantly), and a change in how many strlen calls are made or how long the strings are.
+## Earlier findings (runs 1 and 2)
+- Run 2 bisected all the RC-1024 growth in bash-loop (+0.87%) and make-n (+0.54%) to one merge, 4b31a189
+  perf-heap-pair-check. The scan.S merges are not the cause (run 1, 0.9987 .. 1.0007).
+- The fresh-block alignment probe showed identical user-pointer offsets mod 64, so alignment of fresh blocks is not the
+  mechanism. The exact mechanism (reuse path, strlen input shapes) was NOT found and is not needed now that the heap change is
+  reverted.
+- du's growth (fts_build/fts_alloc, candidates 5dd88211 / e45c4758) is a separate item, not counted.
 
-## Next step
-1. Find what changed in strlen's inputs between b3108350 and 4b31a189. Record strlen call shapes (count, length,
-   address mod 64 and page offset) for bash-loop at both shas with validation/wl_shapes.sh or wl_trace.sh (both
-   products are already built in keke ~/wl/products/<sha>). Also profile make-n's memmove and calloc, which grew too.
-2. Read the current heap code (crates/rt/src/heap.rs, crates/boundary/src/heap.rs) for what pair-check changed in the
-   reuse path. Its own record is row N2-2 in docs/saturation/14-next-ranked-perf-stories-after-perf.md.
-   Do not read other people's commit diffs: work from the code as it is and from counts.
-3. The fix must keep perf-heap-pair-check's malloc+free pair gain (`cargo xtask bench --compare --counters` for the
-   malloc/free pair rows and the strlen rows). Target: bash-loop and make-n at or below fa678f74.
-   If the pair gain and the workloads conflict, report the numbers and write RULING NEEDED.
-4. Gate (direct tier) and plants on the fix.
+## Open / next step
+- Nothing for this story. If perf-heap-pair-check's malloc+free pair gain is attempted again, count bash-loop and
+  make-n against fa678f74 before landing (these two workloads caught it); the reuse-path strlen input shapes are the
+  first thing to record (validation/wl_shapes.sh).
+- du's fts growth may deserve its own story (coordinator's call).
 
-Do not redo: the bisect (all points above), priming (sources for all counted shas are in keke ~/wl/src, products
-in ~/wl/products), the du breakdown, the fresh-block alignment probe.
+Do not redo: the bisect, the alignment probe, the HEAP-FREE count above.
 
 ## Jobs (keke)
-- perf-rc1024-strlen-bisect2 (run 1): rc 0, the scan.S chain.
-- perf-rc1024-strlen-2-bisect3: rc 0, 10 points 094b61a5..76041c21. Log: ~/logs/perf-rc1024-strlen-2-bisect3.log
-- perf-rc1024-strlen-2-bisect4: rc 0, b3108350. Log: ~/logs/perf-rc1024-strlen-2-bisect4.log
-- Script: ~/work/perf-rc1024-strlen-2/bisect3.sh <list> (lines "<name> <sha>"; it makes the `.synced` stubs under
-  t/<sha>). Prime each sha first with validation/wl_prime_base.sh keke <sha>. A second count for a different sha can
-  run in parallel: wl builds each sha under its own flock in ~/wl, outside the role.
+- perf-rc1024-strlen-3-count1: rc 0. Log ~/logs/perf-rc1024-strlen-3-count1.log; per-sha logs
+  ~/work/perf-rc1024-strlen-3/count-<sha>.log. Script ~/work/perf-rc1024-strlen-3/count.sh <list>.
+- Runs 1-2: perf-rc1024-strlen-bisect2, perf-rc1024-strlen-2-bisect3, perf-rc1024-strlen-2-bisect4 (all rc 0).
