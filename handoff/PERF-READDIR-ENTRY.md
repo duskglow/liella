@@ -1,8 +1,23 @@
-# PERF-READDIR-ENTRY (branch task/perf-readdir-entry-3, continued from -2 and task/perf-readdir-entry)
+# PERF-READDIR-ENTRY (branch task/perf-readdir-entry-4, continued from -3, -2 and task/perf-readdir-entry)
 
 State: code commit 8dee0d52 on top of cdf9880a (lock_alone swap, record-walk tests) and 232388b7. Stacked on
-task/perf-fswalk-phys, which is not in next yet. Run 3 (PERF-READDIR-ENTRY-3, role keke ~/w/n3): NO code change,
-NOT READY, ruling needed (below). Runs 2 and 1 used keke ~/w/n4.
+task/perf-fswalk-phys, which is not in next yet. Run 4 (PERF-READDIR-ENTRY-4, mei ~/w/s1): bound commit 54be5237,
+ruling #2619 carried out (below). Run 3 (keke ~/w/n3): no code change. Runs 2 and 1 used keke ~/w/n4.
+
+## Run 4: ruling #2619 carried out on mei (the CI host, Skylake-SP)
+
+Job perf-readdir-entry-4-hotcount (+ -hotcount-merged): four trees from `git archive` (the merged one from
+`git merge-tree --write-tree origin/next HEAD`; no branch was merged), extracted at equal-length paths under
+/mnt/zram/claude/PERF-READDIR-ENTRY-4/count-{1,2}/<4 chars>, `cargo xtask so`, then the hot_text_products test 5 times
+each. Every run is identical. tool / locale / startup: origin/next c3424c99 67 / 65 / 18; merge base b1f1f9f3
+61 / 58 / 18; branch 7bde29e3 62 / 59 / 18; branch on top of next (tree a0e5c2e6) 68 / 66 / 19 (CI's role path: 69).
+Next already sits one under the bound, and the branch adds one fault on both bases. So the delta is layout-only:
+TOOL_BOUND 68 -> 71 (HOTTEXT-VARIANCE: highest count 69 plus 2), with the counts recorded in the test's doc comment. Regen
+NOT committed. The `.S` layout fix (run 3's RULING (a)) goes to HOTTEXT-ASM-ORDER, not here.
+Logs: mei ~/logs/perf-readdir-entry-4-hotcount*.log, per-run logs ~/work/perf-readdir-entry-4/run-<tree>-<n>.log.
+Jobs on 54be5237 (mei): perf-readdir-entry-4-static (clippy --all-features -D warnings + xtask static),
+perf-readdir-entry-4-plants (run 2's 3 readdir plants + tool-bound-low, fresh zram copy plants-1),
+perf-readdir-entry-4-gate2 (direct tier). Superseded: perf-readdir-entry-4-gate (rc 0, on 7bde29e3, before the bound).
 
 ## Run 3: CI red on hot_text_products (tool 69 > 68 on CI's host), diagnosis only
 
@@ -69,8 +84,8 @@ Run 2 jobs (keke ~/logs/jobs.tsv; driver ~/work/perf-readdir-entry-2/driver.sh, 
   under timeout 600. Exits 1 on a survivor or a plant that did not apply.
 
 Open / next step:
-0. First the run 3 ruling above (CI's hot_text_products red). The branch cannot land until the tool row passes
-   on CI's host.
+0. Done in run 4 (TOOL_BOUND 71). Next: CI on 54be5237. Separately HOTTEXT-ASM-ORDER (`.S` kernels in list order),
+   then a regen with the tool program can bring the tool bound back down.
 1. The readdir user-instruction gap is closed (1.004). The remaining fts_entry_flat gap (1.88x user) is not a
    readdir question: a separate story. The register paragraph in docs/saturation/17 records the counts.
 2. What is left on the hit path (after/readdir.dis): null and alignment test of the handle (setcc/or form), the
