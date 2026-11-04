@@ -98,10 +98,25 @@ static program or non-ELF, 2 shared library. `--list` of a program with a missin
 static, 666 dynamic with BIND_NOW (DT_FLAGS `BIND_NOW` or DT_FLAGS_1 `NOW`), 14 lazy; 667 are
 `ET_DYN`. Lazy binding is the rare case for system programs (input to R14-13 / DL-10).
 
+**Special handles** (`s27_1_c_3`, `s27_1_c_1_3`; probe `tools/probe/dl/handles/run.sh SCRATCH`,
+same reference system and environment as above). A program linked `-rdynamic` against
+`libhandle1.so` then `libhandle2.so`, both defining `f` (returning 1 and 2):
+`dlsym(RTLD_DEFAULT, "f")` is helper 1's `f`, the same address the program itself binds to;
+`dlsym(RTLD_NEXT, "f")` called from helper 1 is helper 2's `f`; `dlsym(dlopen(NULL, RTLD_NOW),
+"main_sym")` is the program's exported `main_sym`, and `f` through that handle is helper 1's.
+A missing name gives NULL and a dlerror text (a second `dlerror()` gives NULL), with the object
+prefix: the program for `RTLD_DEFAULT` and for the `dlopen(NULL)` handle, the **calling object**
+(`<dir>/libhandle1.so`) for `RTLD_NEXT`. Its two planted variants are caught: a "next" lookup that
+starts at the caller's own object gives `f` = 1, and a program linked without `-rdynamic` has no
+`main_sym` in the global handle.
+
 ## Notes for the implementation stories
 
 - DL-16: the texts above are the targets; the `e_machine` case reports a file-missing text for
-  an existing file (follow it, or record a difference with its gain).
+  an existing file (follow it, or record a difference with its gain). `tools/probe/dl/handles/`
+  (`handles.c` with its helper `handle.c`) is the clause test for `s27_1_c_3` and `s27_1_c_1_3`:
+  adopt it as a conformance program once the harness links dynamic programs with helper
+  objects, and plant on Liella's `RTLD_NEXT` start object and on the `dlopen(NULL)` scope.
 - DL-17: `dlclose(NULL)` and an unknown handle: the reference crashes; returning non-zero with a
   dlerror text costs nothing and gains robustness (a difference row is needed).
 - DL-30/R14-16: the version-not-found status 1 differs from every other load failure (127).
