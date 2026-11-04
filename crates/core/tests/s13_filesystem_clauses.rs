@@ -257,6 +257,7 @@ mod p12 {
         }
     }
 
+    // FS-ORDER: chmod of every entry; the order of visiting is irrelevant
     fn unlock(p: &Path) {
         let Ok(rd) = std::fs::read_dir(p) else { return };
         for e in rd.flatten() {
@@ -580,6 +581,7 @@ const S_IFDIR_: u32 = 0o040000;
 const S_IFREG_: u32 = 0o100000;
 const S_IFLNK_: u32 = 0o120000;
 
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn walk(path: &CString, flags: c_int) -> (c_int, i32, Vec<Rec>) {
     take();
     errno::set_raw(0);
@@ -933,6 +935,7 @@ fn s13_2_c_2() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_2_c_2_1() {
     // Each stream has its own storage: two streams on one directory, read alternately or from
     // two threads, each return every entry; an entry stays intact while the other stream reads.
@@ -972,6 +975,7 @@ fn s13_2_c_2_1() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_2_c_2_2() {
     // d_type is the entry's type when the file system knows it; DT_UNKNOWN only tells the caller
     // to stat. Every known type here agrees with lstat.
@@ -1192,6 +1196,7 @@ fn s13_2_c_6() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_2_g_0() {
     // Exactly once: 1,500 entries that exist throughout are each returned once while 600 others
     // are created and 300 removed during the scan (every 50 entries read, 15 created and 8
@@ -1497,6 +1502,7 @@ fn s13_3_c_2_3() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_3_c_3() {
     // ftw: links always followed (no SL/SLN codes): a link to a directory is walked under the
     // link's path, a dangling link is FTW_NS.
@@ -1797,6 +1803,7 @@ fn s13_3_c_4() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_3_c_4_deep_paths() {
     // FTS-SHARED-PATH (ruling #615): one path buffer per stream, as fts(3) allows. Pin its
     // rules in a tree 40 levels of 32-byte names down, under a root given with a trailing
@@ -1886,6 +1893,7 @@ fn s13_3_c_4_deep_paths() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_3_i_0() {
     // nopenfd does not bound the walk (D-13.4): a tree deeper than PATH_MAX is walked whole
     // with nopenfd 1, every callback's path naming its entry; the same with FTW_CHDIR (D-13.13)
@@ -1952,6 +1960,7 @@ fn s13_3_i_0() {
 }
 
 #[test]
+// FS-ORDER: tests the listing call itself: assertions use membership, counts or structural order (parent first/last), not the order of siblings
 fn s13_3_f_0() {
     // Failures are -1 with errno and no callback (missing root, a loop when links are
     // followed); entries that cannot be examined are FTW_NS / FTS_NS. The walkers never abort

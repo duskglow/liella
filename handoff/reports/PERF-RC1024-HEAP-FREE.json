@@ -1,0 +1,12 @@
+{"task": "PERF-RC1024-HEAP-FREE", "model": "opus", "tokens": null,
+ "result": "Removed the fast malloc's K_HINTV hint-value copy (heap.rs back to fa678f74): gawk-regex/gawk-utf8 instructions:u 1.0000 vs fa678f74 (release 1.0110/1.0073), no workload worse",
+ "branch": "task/perf-rc1024-heap-free", "head": "d5f37b33",
+ "gate": {"affected": "766 passed / 0 failed (7 suites, conformance 9/0)", "peak": "9.8G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Removing K_HINTV gives back the Ivy Bridge malloc+free pair cycle gain of PERF-HEAP-PAIR-IVB-2/3 for -1.08% gawk-regex / -0.72% gawk-utf8 instructions:u", "recommendation": "land the removal; any IVB latency gain wanted back must not add work to every free"}],
+ "informational": ["per-step bisect (df879f4a vs fda78913 separately) not run: wl_count refuses ~/wl/src/<sha> dirs (no .synced); not needed since heap.rs at fa678f74 restores both workloads to 1.0000", "no plants: the change only removes code and leaves heap.rs byte-identical to fa678f74", "per-call heap pair rows (cargo xtask bench --counters) not run: budget"],
+ "refused": [],
+ "jobs": ["perf-rc1024-heap-free-gate", "perf-rc1024-heap-free-count"],
+ "improvement": "wl_count could accept --rev <sha> with a cached ~/wl/src/<sha> directly; a bisect over cached shas then needs no git tree or fake role dir",
+ "next_step": "coordinator ruling on the IVB pair trade-off; optionally run the heap pair per-call counters on d5f37b33",
+ "report_file": "handoff/perf-rc1024-heap-free.md"}
