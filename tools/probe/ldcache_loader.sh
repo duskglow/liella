@@ -65,7 +65,7 @@ w mine-hwcaps <<EOF
 0303	libalpha.so.1	$P/usr/lib/x86_64-linux-gnu/libalpha.so.1
 EOF
 echo "CHECK writer-hwcaps-flags: $(list "$L/mine-hwcaps.cache")"
-# Which glibc-hwcaps entry the loader takes (keke: x86-64-v3 supported, x86-64-v4 not).
+# Which glibc-hwcaps entry the loader takes (Zen 1 host: x86-64-v3 supported, x86-64-v4 not).
 G=$P/usr/local/lib
 hw() { # name, then the libgamma rows on stdin; the other three libraries as in mine-same
 	{ printf '0303\tlibv.so.1.9\t%s/opt/sort/libv.so.1.9\n' "$P"; cat

@@ -379,7 +379,7 @@ pub fn copy_units<T: Unit>(dst: &mut [T], src: &[T]) -> usize {
 
 /// [`copy_units`] from [`LOOPS_ONLY_BELOW`] bytes on: kept out of line so that small copies
 /// pay none of the path choice (no flag load, no saved registers; PJ-7 measured 1.5 ns at 64
-/// bytes on shiki with it inline).
+/// bytes on Haswell-EP host with it inline).
 #[inline(never)]
 fn copy_large<T: Unit>(dst: &mut [T], src: &[T], n: usize, bytes: usize) -> usize {
     let (da, sa) = (dst.as_ptr().addr(), src.as_ptr().addr());
@@ -432,20 +432,20 @@ const LOOPS_ONLY_BELOW: usize = 128;
 /// Whether the loops should copy from the end: the destination starts 1 to 255 bytes after the
 /// source modulo 4 KiB, where an ascending copy's loads share their low 12 address bits with
 /// stores issued shortly before (4 KiB aliasing). Measured (PJ-7), 4 KiB at +100 bytes: 161
-/// against 85 ns on Haswell (shiki), 116 against 98 on Zen 1 (keke); at +16 and +511 the two
+/// against 85 ns on Haswell (Haswell-EP host), 116 against 98 on Zen 1 (Zen 1 host); at +16 and +511 the two
 /// orders are within 6% on both, the descending one the slower at +511 on Zen 1.
 fn back_better(dst: usize, src: usize) -> bool {
     dst.wrapping_sub(src).wrapping_sub(1) & 4095 < 255
 }
 
 /// Bytes above which `rep movsb` is used whatever the placement: beyond the largest size
-/// measured. On Haswell (shiki, PJ-7) the slow placements stay slow up to 64 KiB: 16 KiB at
+/// measured. On Haswell (Haswell-EP host, PJ-7) the slow placements stay slow up to 64 KiB: 16 KiB at
 /// +16 bytes took 1045 ns against 344 for the loops.
 const ERMS_ANY_PLACEMENT: usize = 65_537;
 
 /// Whether `rep movsb` is fast for `n` bytes to `dst` from `src`. It is not when the destination
 /// starts less than 512 bytes after the source, modulo 4 KiB, at a distance that is not a
-/// multiple of 32, and the copy is 64 KiB or shorter: measured on Haswell (shiki, Xeon
+/// multiple of 32, and the copy is 64 KiB or shorter: measured on Haswell (Haswell-EP host, Xeon
 /// E5-2697 v3), 4 KiB at +16 bytes took 345 ns against 83 ns for the loops (glibc: 49), 2 KiB
 /// 194 against 47, 512 bytes 50 against 14, 16 KiB 1045 against 344 (PJ-7); at multiples of 32
 /// (0 included) the reference library and `rep movsb` agree. Such copies use the loops.
@@ -466,7 +466,7 @@ pub(crate) fn copy_out(src: &[u8], out: &mut [u8]) -> usize {
 
 /// Set every byte of `dst` to `v` (`memset`): `rep stosb` for large fills on ERMS CPUs. The
 /// bytes before the first 64-byte boundary are set by the loops first, so `rep stosb` always
-/// starts aligned: measured on Haswell (shiki), 4 KiB at 16 bytes past a boundary took 86 ns
+/// starts aligned: measured on Haswell (Haswell-EP host), 4 KiB at 16 bytes past a boundary took 86 ns
 /// against 42 aligned (glibc: 82 there).
 pub fn fill(dst: &mut [u8], v: u8) {
     if dst.len() >= crate::cpu::fill_erms_min() && crate::cpu::erms() {

@@ -22,4 +22,5 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [13. Next: perf stories from the 10-23 numbers (PERF-NEXT-BATCH, 2026-10-23)](saturation/13-next-perf-stories-from-the-10.md): section 13
 - [14. Next ranked perf stories after PERF-NEXT-BATCH (PERF-NEXT-BATCH-2, 2026-10-23)](saturation/14-next-ranked-perf-stories-after-perf.md): section 14
 - [15. The seven benches section 14 skipped, re-measured and ranked (PERF-NEXT-BATCH-3, 2026-10-24)](saturation/15-the-seven-benches-section-14-skipped.md): section 15
-- [16. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)](saturation/16-sse2-level-re-measure-after-bench-tunables.md): section 16
+- [16. f64 exp/log/pow: where the 3.4-5.4x over glibc goes (MATH-M6-F64-GAP-BREAKDOWN, 2026-10-24, counted)](saturation/16-f64-exp-log-pow-gap-breakdown.md): section 16
+- [18. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)](saturation/18-sse2-level-re-measure-after-bench-tunables.md): section 18

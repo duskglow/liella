@@ -25,7 +25,7 @@
  * GenuineIntel CPU (the same raw code means something else on AMD); -1 where the PMU lacks it (VMs). */
 /* Events 0 (instructions), 1 (cycles) and 5 (uops) form ONE pinned group: they are always counted together over the
  * whole row. Without it, 6 events on a CPU with 3-4 programmable counters were multiplexed and the scaled values of
- * short rows were wrong (nico, Ivy Bridge: memcmp_16 showed 0.4 cycles/op). The other three events may multiplex. */
+ * short rows were wrong (Ivy Bridge host A, Ivy Bridge: memcmp_16 showed 0.4 cycles/op). The other three events may multiplex. */
 #define CTR_N 6
 static int ctr_fd[CTR_N] = {-1, -1, -1, -1, -1, -1};
 static int ctr_on = -1;

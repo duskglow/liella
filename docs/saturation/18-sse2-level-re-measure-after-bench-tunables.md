@@ -1,4 +1,4 @@
-## 16. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)
+## 18. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)
 
 Why: before BENCH-TUNABLES, `xtask bench` dropped GLIBC_TUNABLES (the METHOD FINDING in 13.4), so "SSE2 forced" bench numbers taken through it on AVX2 hosts were AVX2 numbers on both sides (Liella reads the tunable too). All numbers below are instructions:u, SSE2 forced with `glibc.cpu.hwcaps=-AVX2` on BOTH sides, checked: the glibc column changes against the default run in every tool used. Jobs on Zen 1 host: `perf-sse2-remeasure-bench4` (`cargo xtask bench --compare --counters --runs 3 [--tunables glibc.cpu.hwcaps=-AVX2] cbench_opt cbench_hot`, paired, alternating builds, forced pass then default pass, rc 0), `perf-sse2-remeasure-counts2` (wl_percall, GLIBC_TUNABLES exported to every column, COUNT_FRESH=1; wl_count with WLC_ENV; rc 0). Tree measured: ca804fb8 (next of 10-23 plus BENCH-TUNABLES; it holds neither PERF-STRCMP-NONAVX2-3 nor PERF-MEMRCHR-NONAVX2, so their heads d4ed9370 / 912bfbba were the `base` column of wl_percall and wl_count). The strcmp / memrchr percall cases (spec `sse2_rows.c` in the story's scratch on Zen 1 host) follow the shapes of the bench rows, not their exact strings.
 
@@ -15,7 +15,7 @@ Tools: wl_count was already fixed by SSE2-GAP-4 (WLC_ENV reaches all three colum
 | PERF-GETLINE-SHORT-2/-3 (landed) | percall gl_80 / gl_long / gl_long_win | 193.1 / 4251.8 / 3645.2 | (landed) | 205.8 / 5680.1 / 3990.2 | gl_80 HOLDS (Skylake-SP host 204.8 vs 195.0 then; its percall forced glibc correctly). gl_long_win 3990.2 here vs 2777.7 on Skylake-SP host: host-dependent (GUESS: the copy policy differs on Zen 1), not a forcing error |
 | PERF-STRCOLL-UTF8 (NEGATIVE) | bench strcoll_en_us_utf8_16 | 35311.7 | 45874.9 (1.30) | - | NEGATIVE STANDS: the Haswell-EP host numbers in 13.2 row 9 (45621.6 / 35251.4) match the true SSE2 numbers; the row is not in the string kernels, so the dropped tunable changed nothing |
 
-### 16.1 The cbench_hot rows of bench4 (PERF-SSE2-REMEASURE-3, read 2026-11-04)
+### 18.1 The cbench_hot rows of bench4 (PERF-SSE2-REMEASURE-3, read 2026-11-04)
 
 Same job and tree as above (Liella = ca804fb8, so "before" for the strcmp-3 and memrchr stories, which were measured as percall shapes above). instr/op Liella / glibc (ratio), SSE2 forced and default:
 
@@ -31,7 +31,7 @@ Same job and tree as above (Liella = ca804fb8, so "before" for the strcmp-3 and 
 
 Forcing check: the glibc column moves between the passes in every row (strncmp_diff8 39.0 vs 34.0, memrchr_4k 1144.6 vs 475.5, getline_80 229.0 vs 214.1), and the bench4 log prints `tunables: GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2 (both sides)` for the forced pass. Every verdict in the table above stands: the bench rows show the same gaps as the percall shapes. Open at SSE2 (Liella above glibc): strncmp_diff8 (1.44), memrchr_64_hit (1.29, 36 -> about 31 with PERF-MEMRCHR-NONAVX2 by the shape's -5), getline_long (1.15).
 
-### 16.2 Other "SSE2 forced" / "AVX2 off" results in the register
+### 18.2 Other "SSE2 forced" / "AVX2 off" results in the register
 
 * Section 13.2 rows 1-3, 5 and 10 were measured on Ivy Bridge host A (no AVX2: a native SSE2 level, not affected); 13.3 PERF-STRLEN-NONAVX2 likewise. Row 7 PERF-WCTYPE-L ran at the default level (not affected).
 * 13.4 PERF-STRCHR-NONAVX2 found the problem itself and was re-measured by PERF-STRCHR-NONAVX2-2 with `--tunables` (not affected).

@@ -153,7 +153,7 @@ fn skip_report(log: &str) -> String {
 /// Test threads per CPU the process may use, as `(numerator, denominator)` (GATE-TEST-THREADS).
 /// `~/bin/gate` resets the environment, so the slot's `NEXTEST_TEST_THREADS` never reached
 /// nextest and the fixed `test-threads` of the config ran 24 tests on a 7- or 12-CPU slot.
-/// The ratio is the one measured fastest for the FULL gate on sumire's 12-CPU slots with the products
+/// The ratio is the one measured fastest for the FULL gate on Skylake-SP host's 12-CPU slots with the products
 /// shards' `threads-required = 4`: 12 threads 1445 s, 18 threads 1218 s, 24 threads 1206 s
 /// (handoff/gate-test-threads.md); many tests wait on children, pipes and timers, so 2 per CPU pays.
 pub const TEST_THREADS_PER_CPU: (usize, usize) = (2, 1);

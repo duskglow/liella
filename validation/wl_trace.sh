@@ -1,7 +1,7 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
 # Exact per-function instruction split of ONE libc call in Liella (TOOLS-PERCALL; was STRCOLL-3/STDIO-3 trace.py).
-# gdb single-steps one call of FUNCTION inside a wl_percall case, Liella only (never glibc), on keke, and prints
+# gdb single-steps one call of FUNCTION inside a wl_percall case, Liella only (never glibc), on Zen 1 host, and prints
 # the instructions executed per function (most first) and the call sequence. Use it after wl_percall.sh named
 # the gap, to see WHERE inside the call the instructions go.
 #
