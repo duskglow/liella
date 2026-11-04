@@ -1,42 +1,40 @@
-# MATH-M5-CPLX-F128-ZIV-C-2: handoff (one page)
+# MATH-M5-CPLX-F128-ZIV-C-3: handoff (one page)
 
-State: branch task/math-m5-cplx-f128-ziv-c-2, code head 6ef07138 (on ZIV-C's 63fb8a2f). Checkpoint hand-back at the
-context ceiling: NOT READY (no plants, no counts, origin/next not merged yet). Decisions: D-10.17 (updated), #1719, #1758, #1905.
+State: branch task/math-m5-cplx-f128-ziv-c-3 (continues ZIV-C-2), code head 5e088b66 (merge of origin/next at
+8a7e9e6a). Decisions in force: D-10.17, owner rulings #1719, #1758, #1905. Role kanon:~/w/kn1.
 
-## Done this run (ZIV-C items 1-4)
-- mpx.rs (24 limbs, 1536) and mpy.rs (48 limbs, 3072): mp_core!/mp_kernels!; MPX_/MPY_ PI, LN2, EULER from
-  `cargo xtask tables` at 1600/3150 bits; TWO_OVER_PI 272 -> 312 words (word 307 at e=16383, RW=51).
-- mp.rs: `NEWTON` from BITS (max(4, k: 49*2^k >= B+8)): 4 at 384/768 (unchanged), 5 at 1536, 6 at 3072.
-- complex_body.rs: `WIDTH_SLACK` = log2(B/768)+1 bits on every bound above 800 bits (series term counts scale with B;
-  each bound is a sum over terms). Proof is the scaling argument in mpx.rs/D-10.17; not re-derived kernel by kernel.
-- complex.rs: modules wx, wy; `ziv` -> cold `ladder` (768) -> cold `wider` (1536) -> 3072; counters
-  retries/wide_retries/wider_retries/residual. TODO(ZIV-C) markers gone. cpow starts at 384 (start-step choice
-  from ex(c), ex(d) NOT done: only saves the narrow evaluations; recorded in D-10.17).
-- Tests: `forced_undecided_climbs_each_step_of_the_ladder` (forced offset 2^4000: 2^1000 decides at 1536+),
-  `cpow_huge_exponents_decide_on_the_ladder` (decides before the residual), products count test per step.
-  kanon unit run: complex:: + mpw:: 46 passed.
+## This run
+- ZIV-C-2's gate2 rc 101 was NOT a test panic: clippy `indexing_slicing` (-D warnings, lib test) on `&f[..k]` in
+  complex.rs `force()`; the build stopped before any test. Fixed with `f.iter().take(k)` (commit 1a fix).
+- Merged origin/next once (48 commits, no conflicts). `s10_math_gen.rs` auto-merged; regenerated with
+  `cargo xtask math-gen` on the role: byte-identical.
+- New tests (mp.rs `wide_width_tests!`, expanded in mpx.rs and mpy.rs): recip/sqrt relative bounds (3, 5 ulp of
+  2^-B) and `reduce_wide` at e = 4000 and 16 271 (largest binary128 exponent) against the oracle at B+500 bits. Before
+  them nothing tested the 1536/3072 kernels' width-dependent parts: NEWTON fixed at 4 and the 2/pi table cut back to
+  272 words both passed every test (the 768 tests cannot see them). 4 tests, 0.09 s.
+- clippy --workspace --all-targets --all-features -D warnings and xtask static: clean on 5e088b66 (kanon).
+- Jobs on 5e088b66 (kanon): gate `math-m5-cplx-f128-ziv-c-3-gate2`, plants `math-m5-cplx-f128-ziv-c-3-plants`
+  then `math-m5-cplx-f128-ziv-c-3-plants2` rc 0: newton, wider, twopi CAUGHT by the named tests; slack EQUIVALENT
+  (proof margin: WIDTH_SLACK widens a proven bound by <= 4 bits; the kernels' true errors lie far below the bound, and
+  the boundary test is written in terms of WIDTH_SLACK, so no test can see it; coordinator: judge). The gate2 job
+  escalated to FULL (the merged next files are in its changed list); it was still running at hand-back (detached).
+  Superseded: `-gate` (stopped by me: on 8a7e9e6a, before the new tests), `-plants` rc 1 (slack counted SURVIVED
+  before the EQUIVALENT classification; same head).
 
-## Exact next step
-1. Read gate `math-m5-cplx-f128-ziv-c-2-gate` (kanon; clippy --all-features, static, affected --base origin/next).
-2. Plants (RAM copy, new dir): NEWTON fixed at 4; WIDTH_SLACK 0; drop the `wider` step (y never called);
-   TWO_OVER_PI_WORDS back to 272 (expect the 3072 reduce at huge e to differ: may need a test with e near 16383).
-3. Counts job math-m5-cplx-f128-ziv-c-counts: products count test + random_sample_retry_count (--ignored
-   --nocapture), per step; fast-path instructions:u vs B2-3 (validation/percall/cplx_f128.c).
-4. Merge origin/next once, final gate, report.
+## Plants (script ~/work/math-m5-cplx-f128-ziv-c-3/plants.sh on kanon; RAM copy, restores by cat)
+newton (NEWTON = 4), slack (WIDTH_SLACK = 0), wider (1536 step never climbs to 3072), twopi (2/pi table read as 272
+words). Tests run: `cargo test -p liella-math --lib -- complex:: width_tests`.
 
-## Earlier run (ZIV-C, Step 0)
-## Step 0 result (settled; do not redo)
-- Reproduced B2-3's count: 2219 parts undecided at 768 bits, all in cexp, csinh, ccosh, csin, ccos, ctan, ctanh
-  (cpow 0 on the suite). Printed inputs (count job, `ziv-c-input` lines): every one had a subnormal or minimum-normal
-  sine/cosine operand. Class: **bound too loose**. The trig factor's absolute bound `2^(10-B)` (`trig_abs`) exceeds
-  `|sin t|` for such `t`, so the part was undecided at every width. These were not hard cases and not exact parts.
-- Fix: `small_trig` in complex_body.rs. Below `2^(-B/2)`, sin = operand within `2^(max(a, 3e-2)+1)` and cos = 1
-  within `2^(max(a, 2e-1)+1)` (alternating Taylor remainder; both functions 1-Lipschitz). Used by `Op::trig` (cexp,
-  circ, tan_core) and by cpow's `sin_cos_any`. tan_core no longer computes sin_cos twice.
-- After it (job math-m5-cplx-f128-ziv-c-diag3, keke, rc 0): **0 parts undecided at 768** on the suite; 105 of 84 308
-  calls still retry at 384 (cexp 9, ccos 12, ccosh 12, csin/csinh/ctan/ctanh 18 each), all decided at 768. Those
-  105 are not diagnosed: they cost one 768-bit evaluation each and are correct. The eight differential shards against
-  glibc pass. The rate is still above the ~2^-250 per part a random input would give, so a second loose bound may
-  remain (candidate: huge/tiny `e^x` clamps or results at the subnormal edge). Worth one diagnostic in the next run.
-- Test: `complex::ziv_tests::tiny_trig_operands_decide_at_384` (7 families x 3 tiny operands x 3 others x 4 modes, plus cpow).
+## Not done (next run)
+1. Counts job math-m5-cplx-f128-ziv-c-counts: products count test + random_sample_retry_count (--ignored
+   --nocapture), per step; fast-path instructions:u vs B2-3 (validation/percall/cplx_f128.c). Budget ran out here.
+2. Optional (perf only): cpow start step from ex(c), ex(d) (D-10.17).
+3. The 105 calls of 84 308 that retry at 384 (ZIV-C Step 0) are still undiagnosed (correct; one 768 evaluation each).
 
+## Do not redo
+Step 0 (small_trig fix, settled), the ladder code (ZIV-C-2), the origin/next merge, the gate2 diagnosis.
+
+## Earlier runs
+ZIV-C Step 0: 2219 parts undecided at 768 were all subnormal/min-normal sine/cosine operands (bound too loose);
+`small_trig` in complex_body.rs fixed it; 0 undecided at 768 after it. ZIV-C-2: mpx (1536), mpy (3072), NEWTON from
+BITS, WIDTH_SLACK, cold `ladder` -> `wider` steps, TWO_OVER_PI 312 words, ladder tests.
