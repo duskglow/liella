@@ -1438,7 +1438,7 @@ fn s12_5_c_5_long_records_cross_the_window() {
     // (file or cookie, bytes per read, the stream's buffer size)
     let sources = [(true, None, file_block), (false, None, 8192), (false, Some(7), 8192), (false, Some(4097), 8192)];
     for (si, &(is_file, chunk, block)) in sources.iter().enumerate() {
-        for delim in [b'\n', b':'] {
+        for delim in *b"\n:" {
             for by_caller in [true, false] {
                 for warm in [true, false] {
                     for shift in [0usize, 5, 31, 33, 100] {
@@ -1479,7 +1479,7 @@ fn s12_5_c_5_long_records_cross_the_window() {
                                 }
                                 let mut p: *mut c_char = null_mut();
                                 let mut cap = 0usize;
-                                let mut next = |p: &mut *mut c_char, cap: &mut usize| -> isize {
+                                let next = |p: &mut *mut c_char, cap: &mut usize| -> isize {
                                     if delim == b'\n' { x::getline(Some(p), Some(cap), fp) } else { x::getdelim(Some(p), Some(cap), c_int::from(delim), fp) }
                                 };
                                 let what = format!("src {si} delim {delim} by_caller {by_caller} warm {warm} shift {shift} len {len} tail {with_tail}");
