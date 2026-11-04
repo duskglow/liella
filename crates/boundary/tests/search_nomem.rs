@@ -80,10 +80,11 @@ fn in_child(name: &str, body: fn() -> i32) {
         CSys.exit_group(body());
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1", "--nocapture"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_SEARCH_NOMEM", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "the child failed: {:?}\n{}", o.status, String::from_utf8_lossy(&o.stderr));
 }
 

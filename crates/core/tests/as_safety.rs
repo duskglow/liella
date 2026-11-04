@@ -353,7 +353,8 @@ fn run_child(name: &str, var: &str) -> (std::process::Output, std::time::Duratio
     let dir = Scratch::new(name);
     let scale = timeout::scale();
     let t = std::time::Instant::now();
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1"]).env(var, "1").env(SCRATCH, &dir.0).env("LIELLA_TEST_TIMEOUT_SCALE", scale.to_string()).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1"]).env(var, "1").env(SCRATCH, &dir.0).env("LIELLA_TEST_TIMEOUT_SCALE", scale.to_string()).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     (o, t.elapsed(), scale)
 }
 

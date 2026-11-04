@@ -888,3 +888,93 @@ fn builtin_calls(root: &Path, files: &[PathBuf]) -> Vec<String> {
     }
     errors
 }
+
+/// Findings for one test source: each re-execution of the test binary that names a test
+/// (`current_exe()` with `"--exact"` in the same statement) must (1) pass `--include-ignored` (or
+/// `--ignored`) so an `#[ignore]`d case still runs, and (2) have its function assert
+/// `running 1 test` in the child's output, so a child in which libtest ran nothing fails instead
+/// of passing empty (MEMSTREAM-FERROR-INTERMITTENT: seven empty passes hid a failure). A reviewed
+/// exception carries `// reexec-guard: allow(<why>)` on the call, within three lines above it, or in its statement.
+fn reexec_findings(src: &str) -> Vec<(usize, String)> {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut out = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        if l.trim_start().starts_with("//") || !l.contains("current_exe()") {
+            continue;
+        }
+        let stmt_end = (i..lines.len().min(i + 12)).find(|&j| lines[j].trim_end().ends_with(';')).unwrap_or(i);
+        let stmt = &lines[i..=stmt_end];
+        if !stmt.iter().any(|s| s.contains("\"--exact\"")) {
+            continue;
+        }
+        let from = i.saturating_sub(3);
+        if lines[from..=stmt_end].iter().any(|s| s.contains("reexec-guard: allow(")) {
+            continue;
+        }
+        let fn_end = (i..lines.len()).find(|&j| lines[j] == "}").unwrap_or(lines.len() - 1);
+        if !stmt.iter().any(|s| s.contains("--include-ignored") || s.contains("\"--ignored\"")) {
+            out.push((i + 1, "re-executes a named test without --include-ignored: an #[ignore]d case runs nothing and the child exits 0".to_string()));
+        }
+        if !lines[i..=fn_end].iter().any(|s| !s.trim_start().starts_with("//") && s.contains("running 1 test")) {
+            out.push((i + 1, "never asserts the child ran one test (\"running 1 test\" in its output): an empty child run would pass".to_string()));
+        }
+    }
+    out
+}
+
+/// Every test that re-executes its own binary runs the named case and checks it ran (see
+/// [`reexec_findings`]).
+pub fn reexec_audit(root: &Path) -> Result<(), String> {
+    let mut files = Vec::new();
+    for e in fs::read_dir(root.join("crates")).map_err(|e| e.to_string())?.flatten() {
+        rust_files(&e.path().join("tests"), &mut files);
+    }
+    files.sort();
+    let mut errors = Vec::new();
+    for f in &files {
+        let Ok(src) = fs::read_to_string(f) else { continue };
+        for (n, why) in reexec_findings(&src) {
+            errors.push(format!("{}:{n}: {why} (or `// reexec-guard: allow(<why>)`)", f.strip_prefix(root).unwrap_or(f).display()));
+        }
+    }
+    if errors.is_empty() {
+        println!("reexec-audit: ok ({} test files)", files.len());
+        Ok(())
+    } else {
+        Err(format!("reexec-audit: {} problem(s):\n{}", errors.len(), errors.join("\n")))
+    }
+}
+
+#[cfg(test)]
+mod reexec_tests {
+    use super::reexec_findings;
+
+    const GOOD: &str = "fn run(n: &str) {\n    let o = Command::new(std::env::current_exe().unwrap())\n        .args([n, \"--exact\", \"--include-ignored\"])\n        .output()\n        .unwrap();\n    assert!(String::from_utf8_lossy(&o.stdout).contains(\"running 1 test\"));\n}\n";
+
+    #[test]
+    fn a_guarded_reexec_passes() {
+        assert!(reexec_findings(GOOD).is_empty());
+    }
+
+    #[test]
+    fn a_reexec_without_include_ignored_is_flagged() {
+        let src = GOOD.replace(", \"--include-ignored\"", "");
+        let f = reexec_findings(&src);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].1.contains("--include-ignored"));
+    }
+
+    #[test]
+    fn a_reexec_that_never_checks_the_child_ran_is_flagged() {
+        let src = GOOD.replace("    assert!(String::from_utf8_lossy(&o.stdout).contains(\"running 1 test\"));\n", "");
+        let f = reexec_findings(&src);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].1.contains("running 1 test"));
+    }
+
+    #[test]
+    fn an_unguarded_reexec_with_an_allow_comment_passes() {
+        let src = GOOD.replace("assert!(String::from_utf8_lossy(&o.stdout).contains(\"running 1 test\"));", "").replace("    let o", "    // reexec-guard: allow(reviewed)\n    let o").replace(", \"--include-ignored\"", "");
+        assert!(reexec_findings(&src).is_empty());
+    }
+}

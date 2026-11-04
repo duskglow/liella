@@ -53,10 +53,11 @@ fn alone(name: &str, body: impl FnOnce() -> bool) {
         CSys.exit_group(if body() { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_C24_ALONE", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{name} failed in its child: {}", child_report(&o));
 }
 

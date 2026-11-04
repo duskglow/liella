@@ -63,12 +63,13 @@ fn in_child(test: &str, name: &str, body: impl FnOnce()) -> Option<(Option<i32>,
         Some(_) => None,
         None => {
             let o = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([test, "--exact", "--test-threads=1", "--nocapture"])
+                .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
                 .env(PROBE, name)
                 .env_remove("MSGVERB")
                 .env_remove("SEV_LEVEL")
                 .output()
                 .unwrap();
+            assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
             Some((o.status.code(), stderr_of(&o)))
         }
     }
@@ -95,11 +96,13 @@ fn zs(n: usize) -> Vec<c_char> {
 
 /// Re-execute this test binary running only `test` with the probe `name` set.
 fn run_probe(test: &str, name: &str) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 fn stderr_of(o: &std::process::Output) -> String {

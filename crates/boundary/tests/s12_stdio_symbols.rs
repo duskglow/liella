@@ -505,13 +505,15 @@ fn waits(fp: *mut FILE, op: impl FnOnce(*mut FILE)) -> bool {
 fn reexec(test: &str, name: &str, input: &[u8]) -> std::process::Output {
     let t = tmp_with("stdin", input);
     let scratch = child_scratch();
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .env(CHILD_TMP, &scratch.0)
         .stdin(std::fs::File::open(&t.0).unwrap())
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 /// The variable naming a re-executed child's scratch directory ([`child_scratch`]).
