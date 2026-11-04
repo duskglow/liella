@@ -38,6 +38,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
+#include <sys/syscall.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -1456,6 +1457,96 @@ static void sec_exactly_once(void)
     printf("created during the scan: %d, removed during the scan: %d\n", created, removed);
     printf("(directory order, fs %s) removed entries seen before removal: %d of %d; created entries seen: %d of %d\n", fsname,
            vseen - survivors, removed, nseen, created);
+}
+
+/* Spec §13.2 (readdir returns each entry of an unchanged directory once, then NULL): a directory of
+ * names whose lengths run from 5 to 239 bytes, so records of many sizes land across the ends of
+ * every getdents64 batch, read through readdir and, as the reference, through getdents64 itself
+ * (a 4096-byte buffer). Each name is counted per index, so the lines hold in any directory order on
+ * any file system; the two counts must agree name for name. In a single-threaded program this
+ * walks the stream's no-lock path for nearly every entry (PERF-READDIR-ENTRY). */
+struct raw_dirent64 {
+    unsigned long long d_ino;
+    long long d_off;
+    unsigned short d_reclen;
+    unsigned char d_type;
+    char d_name[];
+};
+
+enum { NVL = 900 };
+
+static void varied_name(char *p, size_t size, int i)
+{
+    int len = 5 + (i * 53) % 235; /* 5..239 bytes */
+    int at = snprintf(p, size, "vl/v%04d", i);
+    while (at - 3 < len && (size_t)at + 1 < size)
+        p[at++] = (char)('a' + (i + at) % 26);
+    p[at] = 0;
+}
+
+/* Count one directory entry name into seen[], or into *dots / *other. */
+static void count_varied(const char *name, int *seen, int *dots, int *other)
+{
+    int k;
+    char want[300];
+    if (!strcmp(name, ".") || !strcmp(name, ".."))
+        (*dots)++;
+    else if (sscanf(name, "v%4d", &k) == 1 && k >= 0 && k < NVL &&
+             (varied_name(want, sizeof want, k), !strcmp(want + 3, name)))
+        seen[k]++;
+    else
+        (*other)++;
+}
+
+static void sec_varied_names(void)
+{
+    printf("== readdir over names of varied lengths\n");
+    mkd("vl", 0755);
+    char p[300];
+    for (int i = 0; i < NVL; i++) {
+        varied_name(p, sizeof p, i);
+        mkf(p);
+    }
+    static int seen_r[NVL], seen_k[NVL];
+    int dots_r = 0, other_r = 0, dots_k = 0, other_k = 0;
+    DIR *d = opendir("vl");
+    if (!d) {
+        printf("opendir(vl) failed %s\n", en(errno));
+        return;
+    }
+    struct dirent *e;
+    errno = 0;
+    while ((e = readdir(d))) {
+        count_varied(e->d_name, seen_r, &dots_r, &other_r);
+        errno = 0;
+    }
+    int err = errno;
+    closedir(d);
+    int fd = open("vl", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    static _Alignas(8) char kbuf[4096];
+    long got, kerr = 0;
+    while ((got = syscall(SYS_getdents64, fd, kbuf, sizeof kbuf)) > 0) {
+        for (long at = 0; at < got;) {
+            const struct raw_dirent64 *r = (const struct raw_dirent64 *)(kbuf + at);
+            count_varied(r->d_name, seen_k, &dots_k, &other_k);
+            at += r->d_reclen;
+        }
+    }
+    if (got < 0)
+        kerr = errno;
+    close(fd);
+    int once = 0, never = 0, more = 0, agree = 0;
+    for (int i = 0; i < NVL; i++) {
+        once += seen_r[i] == 1;
+        never += seen_r[i] == 0;
+        more += seen_r[i] > 1;
+        agree += seen_r[i] == seen_k[i];
+    }
+    printf("readdir: %d names of 5-239 bytes, seen exactly once %d, never %d, more than once %d; '.'/'..' %d; unexpected "
+           "names %d; end errno=%s\n",
+           NVL, once, never, more, dots_r, other_r, en(err));
+    printf("getdents64 directly: '.'/'..' %d, unexpected names %d, error %s; names counted the same by both: %d of %d\n",
+           dots_k, other_k, en((int)kerr), agree, NVL);
 }
 
 /* ---------------------------------------------------------------- §13.3 scandir */
@@ -3324,6 +3415,8 @@ int main(int argc, char **argv)
     sec_removed_dir();
     back_to_top();
     sec_exactly_once();
+    back_to_top();
+    sec_varied_names();
     back_to_top();
     sec_scandir();
     back_to_top();
