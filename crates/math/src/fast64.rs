@@ -444,10 +444,24 @@ pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8 {
     st
 }
 
+/// A refused argument the in-place entries still answer before the cold call (ruling #2378): a
+/// quiet NaN is its own result, `+∞` is `+∞` (exp, exp2, log, log2, log10) and `-∞` gives
+/// `neg_inf` (`+0` for exp and exp2, none for the logarithms, which are invalid there). Each is
+/// exact and raises nothing, so the caller's default MXCSR already holds what it must see and no
+/// errno is set. A signalling NaN (invalid) and every other refusal still go to the accurate path.
+#[inline(always)]
+fn special(x: f64, neg_inf: Option<f64>) -> Option<f64> {
+    let b = x.to_bits();
+    if b & 0x7ff8_0000_0000_0000 == 0x7ff8_0000_0000_0000 || b == f64::INFINITY.to_bits() {
+        return Some(x);
+    }
+    if b == f64::NEG_INFINITY.to_bits() { neg_inf } else { None }
+}
+
 /// `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn exp_nearest(x: f64) -> Option<f64> {
-    exp_near(x, &mut 0)
+    exp_near(x, &mut 0).or_else(|| special(x, Some(0.0)))
 }
 
 #[inline(always)]
@@ -463,7 +477,7 @@ fn exp_near(x: f64, st: &mut u8) -> Option<f64> {
 /// `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn exp2_nearest(x: f64) -> Option<f64> {
-    exp2_near(x, &mut 0)
+    exp2_near(x, &mut 0).or_else(|| special(x, Some(0.0)))
 }
 
 #[inline(always)]
@@ -489,7 +503,7 @@ fn log_domain(x: f64) -> bool {
 /// `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log_nearest(x: f64) -> Option<f64> {
-    log_near(x, &mut 0)
+    log_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]
@@ -518,7 +532,7 @@ fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Opt
 /// `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log2_nearest(x: f64) -> Option<f64> {
-    log2_near(x, &mut 0)
+    log2_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]
@@ -533,7 +547,7 @@ fn log2_near(x: f64, st: &mut u8) -> Option<f64> {
 /// `10^1 ..= 10^22` (exact; only integers in that range are compared).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log10_nearest(x: f64) -> Option<f64> {
-    log10_near(x, &mut 0)
+    log10_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]

@@ -880,7 +880,8 @@ pub fn elem<A: Denorm, R: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rou
 /// prototype): one MXCSR read; when the caller's control word is the default one (round to
 /// nearest, every trap masked, no FTZ/DAZ), `fast` runs in place and its answer is returned with
 /// nothing else to do. `fast` must answer only where its hardware arithmetic raises exactly the
-/// inexact flag and nothing else (the result is inexact by its rounding test), so MXCSR already
+/// inexact flag and nothing else (the result is inexact by its rounding test), or nothing at all
+/// for an exact result that raises nothing (a quiet NaN or an infinity, ruling #2378), so MXCSR already
 /// holds what the caller must see and no write, no flag merge and no errno are needed. Any other
 /// mode goes to [`elem`]; a refusal in the default mode runs `f` in place against the MXCSR read
 /// on entry (the attempt may have raised inexact or denormal-operand in hardware: both are in the
