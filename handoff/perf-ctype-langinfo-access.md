@@ -30,3 +30,14 @@ saturation-register notes): run validation/percall before/after, then those item
 - Superseded: pcla5-gate (died with my killed ssh while queued), pcla5-percall (rc 2: --base sources absent).
 - Still not done: percall before/after, nl_langinfo flat per-category array, isalpha masked class, wcwidth early narrow
   answer, saturation-register notes. Next: read pcla5-percall2, run a --base count with a git checkout, then those items.
+
+## -6 run (merge only)
+- Branch task/perf-ctype-langinfo-access-6, role keke:~/w/n4. Merged origin/next: the conflict in crates/boundary/src/locale.rs
+  was the ctype_slot accessor edit both sides had made (next calls the helper `ctype_off`; this branch called it
+  `slot_address`). Took next's form; this branch's byte_class single-range-test edit is kept. No other code change.
+- Jobs on the merged head: perf-ctype-langinfo-access-6-gate (clippy workspace -D warnings, static, affected --base origin/next --run)
+  and perf-ctype-langinfo-access-6-plants (fresh RAM copy plants-1; fill-skipped, range-test-dropped, wrong-slot-offset;
+  each test run under timeout 600; the script exits non-zero on SURVIVED or a plant that does not apply).
+- Superseded: perf-ctype-langinfo-access-6-lint (cancelled while queued; folded into the gate job).
+- Still not done (out of scope for this story): percall before/after, nl_langinfo flat array, isalpha masked class,
+  wcwidth early narrow answer, saturation-register notes.
