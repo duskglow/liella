@@ -160,14 +160,14 @@ pub(crate) fn emit(parts: &[&[u8]], orient: bool, saved: i32) {
 }
 
 /// `perror(s)`: `s: text` (just the text when `s` is NULL or empty) and a newline, for the
-/// current `errno`.
+/// current `errno`. An undecided `stderr` becomes byte-oriented; `errno` is the caller's afterwards.
 pub fn perror(s: KResult<Option<&[u8]>>) {
     let saved = errno::get();
     let mut b = [0u8; 32];
     let text = error_text(saved, &mut b);
     match s.ok().flatten().filter(|s| !s.is_empty()) {
-        Some(s) => emit(&[s, b": ", text, b"\n"], false, saved),
-        None => emit(&[text, b"\n"], false, saved),
+        Some(s) => emit(&[s, b": ", text, b"\n"], true, saved),
+        None => emit(&[text, b"\n"], true, saved),
     }
 }
 

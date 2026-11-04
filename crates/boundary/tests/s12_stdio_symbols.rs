@@ -3997,9 +3997,9 @@ fn sym_perror() {
         diag::perror(null());
         errno::set_raw(EINVAL);
         diag::perror(c"".as_ptr());
-        kept && x::fwide(fp, 0) == 0
+        kept && x::fwide(fp, 0) < 0
     }) {
-        assert_eq!(st, Some(0), "errno kept, stderr left unoriented: {err}");
+        assert_eq!(st, Some(0), "errno kept, stderr byte-oriented by perror (s2_2_c_6): {err}");
         assert!(err.ends_with("ctx: No such file or directory\nNo such file or directory\nInvalid argument\n"), "{err}");
     }
 }
