@@ -20,7 +20,8 @@ use std::process::Command;
 const NAMES: [&str; 13] = ["keke", "shiki", "kanon", "mei", "sumire", "nico", "kotori", "nozomi", "natsumi", "chisato", "alma", "nijika", "hayase"];
 
 /// Whole files exempt from the scan: `(path or directory prefix, reason)`.
-const ALLOW: [(&str, &str); 15] = [
+const ALLOW: [(&str, &str); 16] = [
+    ("xtask/lab-names-pending.tsv", "lists file paths, and some tracked file NAMES carry a host name (names are not checked)"),
     ("xtask/src/labnames.rs", "this check's own name list and its tests"),
     ("validation/wl_gate.sh", "tool host map: maps a role to its host address"),
     ("validation/wl_thresholds.tsv", "table keyed by the host that measured; the tools look rows up by host name"),
