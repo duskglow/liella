@@ -29,3 +29,10 @@ Clippy (workspace, all targets, all features, -D warnings) clean; `cargo xtask s
 - origin/next already has two rows named COMPAT-11 (`__libc_freeres`, `fnmatch` FNM_EXTMATCH+FNM_LEADING_DIR);
   static does not reject it. Not mine; flagged.
 - Next step: coordinator closes the four stories as landed through this branch.
+
+## INTEGRATE-HCONF-2 (2026-11-04)
+Merged origin/next into task/integrate-hconf-2. Only conflict: crates/core/tests/time_gaps_probe.rs (add/add); next's version
+(fixed test instant, midnight test) taken whole, since this branch held only the older copy of the same code. No hconf change
+was in that file. Jobs on keke:n1: integrate-hconf-2-clippy (clippy --all-features -D warnings + xtask static) rc 0;
+integrate-hconf-2-gate (affected --base origin/next --run) rc 0. No plants: the change is a merge resolution in a test file, no product code.
+Next step: none; CI.
