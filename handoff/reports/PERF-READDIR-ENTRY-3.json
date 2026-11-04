@@ -1,0 +1,18 @@
+{"task": "PERF-READDIR-ENTRY-3", "model": "opus", "tokens": null,
+ "result": "NOT READY: CI's tool fault red (69>68) not reproducible on keke (61); regen with the tool program fixes tool/locale/startup counts on keke but makes the strings test red (strncmp crosses a 64 KiB window because .S kernels sit after all hot Rust code); regen not committed, ruling needed",
+ "branch": "task/perf-readdir-entry-3", "head": null,
+ "gate": {"affected": "not run (no code change; run 2's direct gate green on the same code)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [
+  {"item": "hot_text_products tool row red on CI's host (69 > 68) after the readdir change", "recommendation": "separate story: lay out the .S hot sections in list order with the Rust ones (xtask/src/hottext.rs), then regen with the coreutils-shaped tool program; or cheaper: count the tool row on CI's host for origin/next vs this branch and, if next already reads 67-68, set the bound by the HOTTEXT-VARIANCE rule with a recorded reason"}
+ ],
+ "informational": [
+  "keke same head: tool 61, locale 58, startup 18, strings 0 (all pass)",
+  "regen (fast profile, tool program as extra): tool 58, locale 56, startup 17, strings 1 (red); strncmp 0x47ef00 -> 0x480880",
+  "perf-readdir-entry-3-regen rc 0 does not mean pass: the job script did not pass on the test's rc"
+ ],
+ "refused": [],
+ "jobs": ["perf-readdir-entry-3-regen", "perf-readdir-entry-3-layout"],
+ "improvement": "the hot-text group puts .S kernels after all Rust hot code regardless of list order, so any regen that adds keys moves the string kernels across a fault-around window; also, the CI red's host differs from the developer host, so a host-specific fault count cannot be reproduced or fixed from the story's host",
+ "next_step": "owner/coordinator ruling between the .S hot-order story and a tool-row count on CI's host for origin/next vs this branch",
+ "report_file": "handoff/PERF-READDIR-ENTRY.md"}

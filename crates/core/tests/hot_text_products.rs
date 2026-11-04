@@ -71,7 +71,15 @@ const TRUE_BOUND: u64 = 23;
 const LOCALE_BOUND: u64 = 68;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
-const TOOL_BOUND: u64 = 68;
+/// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
+/// fast-path branch on top of origin/next. Skylake-SP host, four trees built at equal-length paths, 5 runs of
+/// this test each, every run identical (tool / locale / startup): origin/next c3424c99 67 / 65 / 18, the
+/// branch's merge base b1f1f9f3 61 / 58 / 18, the branch alone 62 / 59 / 18, the branch on top of
+/// c3424c99 68 / 66 / 19 (CI's longer role path reads one more). The readdir code has no key in the hot
+/// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
+/// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
+/// (66 plus 2), TRUE_BOUND stays 23.
+const TOOL_BOUND: u64 = 71;
 const RUNS: usize = 5;
 
 fn root() -> PathBuf {
