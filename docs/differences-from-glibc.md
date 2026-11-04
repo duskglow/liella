@@ -430,6 +430,14 @@ accuracy against the oracle is the baseline. The full table is
   downward), 103 ulp (`j1l`). Up to 10.5% of a directed-mode sample (tiny arguments of `erfcl`,
   `j0l`, `j1l`) is undetermined by the oracle at its default precision; `special_cr.rs` and the
   differential test decide those cases at up to 65,536 bits.
+* **Milestone-5 `_Float128` special functions** (`erf`, `erfc`, `tgamma`, `lgamma`, `j0`, `j1`, `y0`, `y1`;
+  1,000 random operands per function and mode, 2026-11-04): every classified Liella result correctly
+  rounded in every mode (Liella max 0.500 ulp in round-to-nearest, 1.000 in the directed modes).
+  glibc bit-identical in round-to-nearest from 66.1% (`lgamma`) to 99.1% (`erfc`), up to 4.9 ulp
+  (`y0`) there and 34.4 ulp (`y1`, toward zero) in the directed modes. `cosh` of `_Float128` is now
+  measured at 1.000 ulp in mode U (the 2.000 before was the reference, see the table header). For
+  tiny operands Liella raises inexact with a result of exactly 1 (`cosh`) where glibc raises nothing
+  (D-10.14). The undetermined records in the directed modes are operands the oracle cannot decide.
 * **Milestone-4a complex functions** (`float` and `double`, 2,000 random operands per function
   and format in round-to-nearest, a quarter anywhere in the finite range, `cpow`'s exponent
   within 2^±4; `complex_products.rs`, 2026-10-05): every Liella part correctly rounded, so
