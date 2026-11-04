@@ -1,0 +1,14 @@
+{"task": "ZIV-CHAIN-PLAN", "model": "opus", "tokens": null,
+ "result": "Plan written: ZIV-C continues B2-3 and lands the chain; WIDE-LN-PROVEN runs in parallel from next plus B2-3's mp.rs/mpw.rs/special.rs; then CPOW-EXACT, CLOSE, CPLX-DIRECTED from next",
+ "branch": "task/ziv-chain-plan", "head": "09310c4a",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "After the cutover each chain branch is one squash commit on root 7374bf3f; merging older chain branches adds nothing and risks add/add conflicts, so the briefs' Earlier-runs merge lines must be dropped",
+   "B2-3 counts2 rc 101: cexp/csinh/ccosh/csin/ccos/ctan/ctanh leave about 7% of accuracy-suite parts undecided at 768 bits (cpow 0); ZIV-C step 0 must find out why (likely exact parts missed or loose R3/R4 bounds) before it builds the ladder, and its own counts job supersedes counts2",
+   "NOT VERIFIED: that root complex.rs builds against B2-3's mp.rs/mpw.rs (inferred from the pub fn lists)"],
+ "refused": [],
+ "improvement": "The cutover removed handoff/ from every branch; a per-branch handoff copy in liella-ops would have saved reading run logs",
+ "next_step": "Coordinator: change Stacks-on and briefs as in handoff/ziv-chain-plan.md, release ZIV-C and WIDE-LN-PROVEN, hold CPOW-EXACT -> CLOSE -> CPLX-DIRECTED behind them",
+ "report_file": "handoff/ziv-chain-plan.md",
+ "jobs": []}

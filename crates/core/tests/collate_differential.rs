@@ -123,14 +123,6 @@ fn collation_agrees_with_the_reference() {
             let mut buf = vec![0u8; want.len() + 1];
             let len = collate::key_bytes(&c, a, &mut buf);
             if len != Some(want.len()) || buf[..want.len()] != want[..] {
-                // OPEN (MUTATION-CAMPAIGN-1B, handoff/mutation-campaign-1b.md): in da_DK.UTF-8 the
-                // reference writes a last-level weight of 0x80..0xff deep in a long string's key as
-                // two bytes (c2 97 where Liella writes 97), so Liella's key is shorter. The order
-                // (strcoll, wcscoll, key order) agrees; only these keys' bytes are reported.
-                if name == "da_DK.UTF-8" && a.len() > 256 {
-                    skip_note::skipped(&format!("open: {name} strxfrm of a {}-byte string differs (liella {len:?}, reference {})", a.len(), want.len()));
-                    continue;
-                }
                 bad.push(format!("{name}: strxfrm {}: liella {len:?} {}, reference {} {}", show(a), hex(&buf[..want.len().min(buf.len())]), want.len(), lines[i]));
             }
             for (j, (b, bw)) in strs.iter().enumerate() {

@@ -44,8 +44,8 @@ fn run_child(tag: &str, envs: &[(&str, &str)]) -> (String, String, String) {
 fn a_skip_prints_one_line_and_is_logged() {
     // Trace: no spec clause (test-harness behaviour; owner rule 2026-10-21, no avoidable environment dependence).
     let (_, err, log) = run_child("line", &[]);
-    let want = "skipped: skip_note_visible: no msgfmt (probe)\n";
-    assert_eq!(err.lines().filter(|l| l.starts_with("skipped: ")).count(), 1, "stderr: {err}");
+    let want = "SKIPPED skip_note_visible: no msgfmt (probe)\n";
+    assert_eq!(err.lines().filter(|l| l.starts_with("SKIPPED ")).count(), 1, "stderr: {err}");
     assert!(err.contains(want), "stderr: {err}");
     assert_eq!(log, want);
 }

@@ -5,6 +5,7 @@
 //! | `stubs`        | Parse `glibc-functional-spec.md`; (re)generate pending test stubs per clause, per exported symbol and per kernel primitive; write `spec/clauses.tsv`, `spec/symbols.tsv`, `spec/primitives.tsv`. Files that already contain specified tests are never overwritten; instead their coverage of the spec is checked. |
 //! | `trace`        | Clause traceability: every test, every row of `docs/differences-from-glibc.md` and every behaviour document names the clause IDs it bears on (or says why it has none), and every clause ID named exists in `spec/clauses.tsv`. Also run by `stubs` and `test`. |
 //! | `symgap`       | Report the ABI names glibc's installed `libc.a` defines and Liella's does not, apart from those phases 14 and 15 own (report only). Also run by `test`. |
+//! | `register`     | Check the saturation register layout (`docs/saturation-register.md` index, one file per section in `docs/saturation/`: all listed, numbers unique and contiguous, row ids unique across files); also part of `static`. |
 //! | `compat-plan`  | Check that `spec/abi/compat-plan.tsv` (the phase-15 dispatch table: kind, owning story and D-row of every compat version, LG-0a) matches the `compat` rows of `spec/abi/versions.tsv` row for row; also part of `static`. |
 //! | `symcov`       | Report every name and version of `spec/abi/versions.tsv` (all libraries) that `target/liella` does not define, grouped by library, version class and owning phase or milestone; `--tsv <file>` writes the per-name table (report only). |
 //! | `status`       | Pending versus specified tests, per spec section, then the schedule report (`spec/schedule.tsv`: the owner of the pending tests). `--schedule` lists each pending test with its owner and fails when one belongs to a finished phase, a track not started or past its join point, or nobody. |
@@ -21,7 +22,7 @@
 //! | `remez`        | The minimax (Remez) fitting tool: generate or `--check` the coefficient files of `crates/math/fits/*.fit` (D-10.3). |
 //! | `tables`       | Generate or `--check` the elementary functions' constant tables, `crates/math/src/coeffs/tables.rs` (D-10.3). |
 
-//! | `bench`        | Run the release-mode benchmarks and check `bench/budgets.tsv` (rule P6); `ratio_host` rows are gated on the median Liella/glibc ratio against the limit for this CPU model in `bench/host_limits.tsv` (`--runs N`, default 5 rounds; `--build-only` builds everything and stops, `--no-build` measures only and fails on a missing or stale program (the timing-lock split of `vm_bench.sh`), `BENCH_SETTLE_SECS` (default 12) idles before the first round; `--only a,b` runs just those benchmarks and says PARTIAL BENCH, not a merge bench); a CPU without entries is reported, not gated. With `--compare [--runs N] [<cbench>...]` (rule P10 (9)): build each C benchmark (default `cbench_opt`) against the products and against the host C library (dynamic and static), run them alternately N times after a discarded warm-up run (default 5), and print medians with min and max and the same-run ratio; no budgets are checked. Measurement columns (MEASURE-1): `--v3` (archive built with `-Ctarget-cpu=x86-64-v3`), `--sorted` (Liella linked with `--sort-section=name`: layout effect), `--counters` (per-row aggregate perf counters, `CBENCH_COUNTERS=1`; the summary table shows instr/op for Liella and glibc and the ratio); all columns in `target/liella/bench/measure.tsv`. `--stress env,path,fds,names,locale,deep,threads` (or `all`, STRESS-ENV-AUDIT, -2): advisory runs of the C benchmarks in a large environment (2,000 extra variables, a 200-directory `PATH`, 10,000 open descriptors; `names`: 50,000 users and groups, `locale`: 500 more names in the locale archive, both through an unprivileged user and mount namespace; `deep`: the fstree rows 64 directories down; `threads`: 64 idle threads), normally with `--counters-only`, compared with the same command without `--stress` to find costs that grow with the environment; limits are not set for it. |
+//! | `bench`        | Run the release-mode benchmarks and check `bench/budgets.tsv` (rule P6); `ratio_host` rows are gated on the median Liella/glibc ratio against the limit for this CPU model in `bench/host_limits.tsv` (`--runs N`, default 5 rounds; `--build-only` builds everything and stops, `--no-build` measures only and fails on a missing or stale program (the timing-lock split of `vm_bench.sh`), `BENCH_SETTLE_SECS` (default 12) idles before the first round; `--only a,b` runs just those benchmarks and says PARTIAL BENCH, not a merge bench); a CPU without entries is reported, not gated. With `--compare [--runs N] [<cbench>...]` (rule P10 (9); names are checked against `bench/c/*.c` before anything is built; `--compare` has no row filter: `--rows`/`--affected` are plain-`bench` only): build each C benchmark (default `cbench_opt`) against the products and against the host C library (dynamic and static), run them alternately N times after a discarded warm-up run (default 5), and print medians with min and max and the same-run ratio; no budgets are checked. Measurement columns (MEASURE-1): `--v3` (archive built with `-Ctarget-cpu=x86-64-v3`), `--sorted` (Liella linked with `--sort-section=name`: layout effect), `--counters` (per-row aggregate perf counters, `CBENCH_COUNTERS=1`; the summary table shows instr/op for Liella and glibc and the ratio); all columns in `target/liella/bench/measure.tsv`. `--stress env,path,fds,names,locale,deep,threads` (or `all`, STRESS-ENV-AUDIT, -2): advisory runs of the C benchmarks in a large environment (2,000 extra variables, a 200-directory `PATH`, 10,000 open descriptors; `names`: 50,000 users and groups, `locale`: 500 more names in the locale archive, both through an unprivileged user and mount namespace; `deep`: the fstree rows 64 directories down; `threads`: 64 idle threads), normally with `--counters-only`, compared with the same command without `--stress` to find costs that grow with the environment; limits are not set for it. |
 //! | `csys-audit`   | Enforce the C syscall layer's rules: single-statement wrappers, freestanding, assembly only in machine/ (plan §2.5). |
 //! | `env-audit`    | Reject an in-process `setenv`/`putenv`/`unsetenv`/`clearenv` in a test binary that also starts processes, unless it runs in `in_child`/`alone` or carries `// env-ok: <why>` (FL-1: the library's `environ` is the process's). |
 //! | `opaque-audit` | Reject a direct call to an exported allocator-family name (`malloc`, `free`, ...) in a test file unless it goes through `selftest::opaque` or the file says `// opaque-ok: <why>` (GATE-SPEED-5: LLVM folds those names at opt-level >= 1); and a test file linking `liella_boundary` that calls any LLVM-builtin libc name (`labs`, `strlen`, `fabs`, ...) directly unless it is `#![no_builtins]` (OPAQUE-AUDIT). |
@@ -37,6 +38,7 @@
 //! | `bench-rows`   | The bench rows a change can move plus the sentinel rows (`bench/sentinels.tsv`), for a TARGETED bench (`benchrows.rs`, BENCH-AFF): `--base <ref>` / `--range <a>..<b>` / `--files <p>,...`, `--out <file>` for `bench --rows-file`. `bench --affected <base>` selects and times only those rows (`bench/c/cbench_rows.h`). FULL for build, link, allocator, startup and harness changes. The full bench on main stays the safety net. |
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
+//! | `plants`       | Run a story's plants from a plants file (`plants.rs`, `docs/plants.md`): `<file> --dir <new RAM dir>` copies the tree there without `target/` (an existing `--dir` is refused), runs `cargo xtask so` and the baseline (failed: exit 2), applies each plant (exactly one site; `.S` plants name their `liella_machine_<fn>:` label), runs its command, restores by writing, and prints CAUGHT / SURVIVED / EQUIVALENT / WARN-RC-ONLY / WARN-NO-MSG; any SURVIVED exits 1. |
 #![allow(clippy::disallowed_methods)] // a host tool: S8 governs the library crates only
 
 #![forbid(unsafe_code)]
@@ -45,13 +47,13 @@ mod abbench;
 mod abi;
 mod affected;
 mod align;
+mod arch;
 mod bench;
 mod forkalloc;
+mod fs_order;
 mod benchrows;
 mod coldbss;
 mod compat;
-mod compatprobe;
-mod compat_objects;
 mod copies;
 mod csys;
 mod fuzz;
@@ -74,7 +76,10 @@ mod symgap;
 mod trace;
 mod unicode;
 mod compat_plan;
-mod arch;
+mod compatprobe;
+mod compat_objects;
+mod register;
+mod plants;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -101,6 +106,7 @@ fn main() -> ExitCode {
         "trace" => trace::run(&root),
         "static" => static_checks(&root),
         "compat-plan" => compat_plan::check(&root),
+        "register" => register::check(&root),
         "machine-exports" if args.iter().any(|a| a == "--list") => affected::machine_exports_list(args.iter().skip(1).find(|a| !a.starts_with("--")).map_or(root.as_path(), |d| Path::new(d.as_str()))),
         "machine-exports" => affected::machine_exports_check(&root),
         "clippy" => clippy_gate(&root),
@@ -134,8 +140,9 @@ fn main() -> ExitCode {
         "repro" => repro::run(&root, &args[1..]),
         "native" => native_examples::run_native(&root),
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
+        "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [<cbench>...]] | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [<cbench>...]] | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -162,8 +169,8 @@ fn arch_tools() -> arch::Tools {
 /// on keke before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 17] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-probes", compatprobe::check), ("compat-plan", compat_plan::check)];
+    let checks: [(&str, Check); 19] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
