@@ -17,7 +17,7 @@ type Stub = Box<dyn Fn(*mut c_char) -> i64>;
 
 /// The open descriptor numbers, as a set: listing order is the file system's, so only membership is compared.
 fn open_fds() -> BTreeSet<OsString> {
-    std::fs::read_dir("/proc/self/fd").unwrap().map(|e| e.unwrap().file_name()).collect()
+    std::fs::read_dir("/proc/self/fd").unwrap().map(|e| e.unwrap().file_name()).collect::<BTreeSet<_>>()
 }
 
 /// Runs `f` with a canary buffer; returns (result, errno, buffer after).
