@@ -35,7 +35,7 @@ const CATEGORIES: &[(&str, &[&str])] = &[
 const ALLOWED: &[(&str, &[&str], &str)] = &[
     ("crates/boundary/src/ffi.rs", &[], "the one declaration of the csys/src/machine/*.S entry points (K5 matches it against liella_csys.h); per-arch assembly, A-6"),
     ("crates/boundary/src/ffi_sys.rs", &["thread-pointer"], "generated from csys/syscalls.tsv (arch_prctl); per-arch table, A-3"),
-    ("crates/abi/", &["fpu"], "generated from spec/abi/layouts.tsv (fenv_t, ucontext_t) and its layout tests; aarch64 layouts probed, A-5"),
+    ("crates/abi/", &["fpu", "cfg"], "generated from spec/abi/layouts.tsv (fenv_t, ucontext_t) and its layout tests, picked per target_arch (layouts-aarch64.tsv probed, A-5)"),
     ("crates/kernel/src/uapi.rs", &["thread-pointer"], "x86_64 UAPI constants (asm/prctl.h); A-3"),
     ("crates/kernel/src/machine.rs", &["fpu"], "the Machine trait's x87/MXCSR accessors; FPCR/FPSR on aarch64, A-9"),
     ("crates/kernel/src/testing.rs", &["fpu"], "delegating Machine impl of the test kernel; follows the trait, A-9"),

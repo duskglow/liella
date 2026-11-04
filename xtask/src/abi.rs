@@ -36,8 +36,34 @@ struct Ty {
     rows: Vec<Row>,
 }
 
-fn load(root: &Path) -> Result<Vec<Ty>, String> {
-    let text = fs::read_to_string(root.join("spec/abi/layouts.tsv")).map_err(|e| format!("layouts.tsv: {e}"))?;
+/// One architecture's tables and generated files (A-5: the aarch64 tables come from the arm64 reference by the same
+/// compile-only probes, `spec/tools/abi_extract.py --arch aarch64`).
+#[derive(Clone, Copy)]
+struct Arch {
+    /// `target_arch` value.
+    name: &'static str,
+    /// Suffix of the spec/abi tables (`layouts{sfx}.tsv`, `initializers{sfx}.tsv`).
+    sfx: &'static str,
+    /// The generated definitions (crates/abi/src/lib.rs picks one by `target_arch`).
+    layout_rs: &'static str,
+    /// The generated layout tests (compiled only for their `target_arch`).
+    tests_rs: &'static str,
+}
+
+const ARCHES: [Arch; 2] = [
+    Arch { name: "x86_64", sfx: "", layout_rs: "crates/abi/src/layout.rs", tests_rs: "crates/abi/tests/appendix_c_layouts.rs" },
+    Arch { name: "aarch64", sfx: "-aarch64", layout_rs: "crates/abi/src/layout_aarch64.rs", tests_rs: "crates/abi/tests/appendix_c_layouts_aarch64.rs" },
+];
+
+impl Arch {
+    fn x86_64(self) -> bool {
+        self.name == "x86_64"
+    }
+}
+
+fn load(root: &Path, arch: Arch) -> Result<Vec<Ty>, String> {
+    let file = format!("layouts{}.tsv", arch.sfx);
+    let text = fs::read_to_string(root.join("spec/abi").join(&file)).map_err(|e| format!("{file}: {e}"))?;
     let mut out: Vec<Ty> = Vec::new();
     for (n, line) in text.lines().enumerate().skip(1) {
         let f: Vec<&str> = line.split('\t').collect();
@@ -96,6 +122,37 @@ fn scalar(c: &str) -> Option<&'static str> {
     })
 }
 
+/// `scalar` for one architecture. On aarch64 (probed with compile-only constants against the arm64 reference)
+/// plain `char` and `wchar_t` are unsigned; every other scalar of the tables maps as on x86_64 (both LP64).
+fn scalar_on(arch: Arch, c: &str) -> Option<&'static str> {
+    if !arch.x86_64() {
+        match c.trim_start_matches("const ").trim_start_matches("volatile ").trim() {
+            "char" => return Some("u8"),
+            "wchar_t" => return Some("u32"),
+            _ => {}
+        }
+    }
+    scalar(c)
+}
+
+/// `alias` for one architecture: aarch64's `__jmp_buf` is 22 unsigned 8-byte words (probed: element size 8,
+/// unsigned; the table gives the array's 176 bytes); x86_64's typedefs below do not occur in its table.
+fn alias_on(arch: Arch, c: &str) -> Option<&'static str> {
+    if !arch.x86_64() {
+        return match c {
+            "__jmp_buf" => Some("[u64; 22]"),
+            "gregset_t" | "fpregset_t" => None,
+            _ => alias(c),
+        };
+    }
+    alias(c)
+}
+
+/// Members with an alignment attribute that rustc cannot infer from their type: (arch, type, member, alignment).
+/// The member is declared as a newtype of its Rust type with `#[repr(C, align(n))]`; the layout tests check its
+/// offset. aarch64 `mcontext_t.__reserved` sits at 288, past the natural end (280) of the member before it.
+const ALIGNED_MEMBERS: &[(&str, &str, &str, u64)] = &[("aarch64", "mcontext_t", "__reserved", 16)];
+
 /// Typedefs of the reference headers that name a table type or a fixed array (⚑ ABI).
 fn alias(c: &str) -> Option<&'static str> {
     Some(match c {
@@ -136,6 +193,7 @@ fn split_array(c: &str) -> (String, Option<u64>) {
 }
 
 struct Gen<'a> {
+    arch: Arch,
     known: &'a BTreeMap<String, ()>,
     out: String,
     opaque: Vec<String>,
@@ -205,12 +263,12 @@ impl Gen<'_> {
         let base = base.trim();
         let elem = if base.ends_with('*') || base.starts_with("fn(") || base.contains("(*)") || base == "__sighandler_t" || base == "__compar_fn_t" {
             "usize".to_string()
-        } else if let Some(s) = scalar(base) {
+        } else if let Some(s) = scalar_on(self.arch, base) {
             s.to_string()
         } else if self.known.contains_key(base) {
             rust_name(base)
         } else {
-            alias(base)?.to_string()
+            alias_on(self.arch, base)?.to_string()
         };
         Some(match count {
             Some(n) => format!("[{elem}; {n}]"),
@@ -237,7 +295,12 @@ impl Gen<'_> {
         }
         for (i, c) in sorted.iter().enumerate() {
             let extent_end = if union { end } else { sorted[i + 1..].iter().map(|n| n.offset).find(|&o| o > c.offset).unwrap_or(end) };
-            let ty = self.member_type(name, c, extent_end);
+            let mut ty = self.member_type(name, c, extent_end);
+            if let Some(&(_, _, _, a)) = ALIGNED_MEMBERS.iter().find(|m| m.0 == self.arch.name && m.1 == name && m.2 == c.name) {
+                let wrap = format!("{name}__{}", c.name.trim_start_matches('_'));
+                let _ = writeln!(self.out, "/// `{name}.{}`: aligned({a}) in the C definition.\n#[repr(C, align({a}))]\n#[derive(Clone, Copy)]\npub struct {wrap}(pub {ty});\n", c.name);
+                ty = wrap;
+            }
             fields.push((field(&c.name), ty));
         }
         let kw = if union { "union" } else { "struct" };
@@ -299,10 +362,10 @@ fn rebase(n: &Node, base: u64) -> Node {
     }
 }
 
-fn render(root: &Path) -> Result<(String, String), String> {
-    let types = load(root)?;
+fn render(root: &Path, arch: Arch) -> Result<(String, String), String> {
+    let types = load(root, arch)?;
     let known: BTreeMap<String, ()> = types.iter().map(|t| (t.name.clone(), ())).collect();
-    let mut g = Gen { known: &known, out: String::new(), opaque: Vec::new(), tail: None, underaligned: Vec::new() };
+    let mut g = Gen { arch, known: &known, out: String::new(), opaque: Vec::new(), tail: None, underaligned: Vec::new() };
     for t in &types {
         let nodes = build(&t.rows, 0);
         let name = rust_name(&t.name);
@@ -321,7 +384,7 @@ fn render(root: &Path) -> Result<(String, String), String> {
         let union = t.name.starts_with("union ") || is_union("", &nodes);
         // Types whose alignment is smaller than their members' natural alignment are packed
         // (struct epoll_event on x86_64).
-        let packed = t.align == 1 && t.size > 1 && nodes.iter().any(|n| scalar(&n.ctype).is_some_and(|s| s != "u8" && s != "i8"));
+        let packed = t.align == 1 && t.size > 1 && nodes.iter().any(|n| scalar_on(arch, &n.ctype).is_some_and(|s| s != "u8" && s != "i8"));
         // A typedef with an alignment attribute can have a size that is not a multiple of its
         // alignment (`__pthread_unwind_buf_t`: 104 bytes, aligned to 16). Rust cannot express
         // that; such types get the largest alignment that divides their size, and the tests
@@ -335,12 +398,14 @@ fn render(root: &Path) -> Result<(String, String), String> {
         g.composite(&name, union, &nodes, t.size, Some(align), packed);
     }
 
-    let mut layout = String::from("// @generated by `cargo xtask abi-gen` from spec/abi/layouts.tsv. Do not edit.\n\
-//! Rust definitions of the glibc ABI types of spec Appendix C (x86_64).\n\
+    let (sfx, tests_name) = (arch.sfx, arch.tests_rs.trim_start_matches("crates/abi/tests/"));
+    let mut layout = format!("// @generated by `cargo xtask abi-gen` from spec/abi/layouts{sfx}.tsv. Do not edit.\n\
+//! Rust definitions of the glibc ABI types of spec Appendix C ({}).\n\
 //!\n\
 //! Members are declared with the Rust type of their C type and laid out by rustc (`#[repr(C)]`);\n\
-//! `crates/abi/tests/appendix_c_layouts.rs` checks every size, alignment and member offset against\n\
-//! the table. Pointers are `usize` (an address the boundary converts), C unions are Rust unions\n\
+//! `crates/abi/tests/{tests_name}` checks every size, alignment and member offset against\n\
+//! the table.", arch.name);
+    layout.push_str(" Pointers are `usize` (an address the boundary converts), C unions are Rust unions\n\
 //! (declaring and building one is safe; reading a field is the boundary's business).\n//!\n");
     let _ = writeln!(layout, "//! Bitfields: each run of bitfields sharing a storage unit is one `[u8; n]` member named after\n//! its first bitfield, `n` covering the summed widths (the table gives only the storage unit's\n//! offset, so bitfield offsets are not tested; the members after them are).\n//!");
     let _ = writeln!(layout, "//! Opaque members (inner layout not checked; declared from their table extent):");
@@ -351,15 +416,19 @@ fn render(root: &Path) -> Result<(String, String), String> {
     layout.push_str(&g.out);
 
     // Tests.
-    let mut tests = String::from("// @generated by `cargo xtask abi-gen` from spec/abi/layouts.tsv (spec Appendix C).\n\
+    let ini_file = format!("initializers{sfx}.tsv");
+    let ini = fs::read_to_string(root.join("spec/abi").join(&ini_file)).map_err(|e| format!("{ini_file}: {e}"))?;
+    let items = types.len() + ini.lines().skip(1).filter(|l| l.split('\t').count() >= 4).count();
+    let mut tests = format!("// @generated by `cargo xtask abi-gen` from spec/abi/layouts{sfx}.tsv (spec Appendix C).\n\
 // Each test checks one type: rustc's size, alignment and member offsets of the\n\
 // `liella_abi::layout` definition against the spec table, read at test time.\n\
 \n\
-//! ABI data tests, one per type layout and static initializer of spec Appendix C (171 items).\n\
+//! ABI data tests, one per type layout and static initializer of spec Appendix C ({items} items, {}).\n\
 \n\
+#![cfg(target_arch = \"{}\")]\n\
 #![allow(non_snake_case, clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]\n\
-\n\
-use core::mem::{align_of, offset_of, size_of};\n\
+\n", arch.name, arch.name);
+    tests.push_str("use core::mem::{align_of, offset_of, size_of};\n\
 use liella_abi::layout::*;\n\
 \n\
 #[path = \"appendix_c/table.rs\"]\n\
@@ -392,7 +461,6 @@ use table::{expect_initializer, expect_member, expect_type};\n\n");
     }
     // Static initializers (spec/abi/initializers.tsv): Liella's values, built from the typed
     // definitions in `liella_abi::layout_init`, against the reference bytes.
-    let ini = fs::read_to_string(root.join("spec/abi/initializers.tsv")).map_err(|e| format!("initializers.tsv: {e}"))?;
     for line in ini.lines().skip(1) {
         let f: Vec<&str> = line.split('\t').collect();
         if f.len() < 4 {
@@ -424,8 +492,12 @@ fn collect_paths(nodes: &[Node], prefix: &mut Vec<(Option<String>, String)>, out
 }
 
 pub fn run(root: &Path, check: bool) -> Result<(), String> {
-    let (layout, tests) = render(root)?;
-    let files = [("crates/abi/src/layout.rs", layout), ("crates/abi/tests/appendix_c_layouts.rs", tests)];
+    let mut files = Vec::new();
+    for arch in ARCHES {
+        let (layout, tests) = render(root, arch)?;
+        files.push((arch.layout_rs, layout));
+        files.push((arch.tests_rs, tests));
+    }
     let mut stale = Vec::new();
     for (rel, content) in &files {
         let path = root.join(rel);
