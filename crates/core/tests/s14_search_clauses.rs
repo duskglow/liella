@@ -1609,7 +1609,7 @@ fn s14_8_c_2_1() {
     assert_eq!(paths(&mut t, "~/*", gb::TILDE_CHECK), v(&["v/a", "v/b", "v/d", "v/dang", "v/ld", "v/locked", "v/u"]));
 }
 
-/// Spec §14.8 (Contract), clause s14_8_c_2_1 (`GLOB_BRACE`), D-NEW: a pattern that would expand
+/// Spec §14.8 (Contract), clause s14_8_c_2_1 (`GLOB_BRACE`), D-14.20: a pattern that would expand
 /// to more than `BRACE_MAX_ALTERNATIVES` patterns (or need more than `BRACE_MAX_BYTES`) is
 /// `GLOB_NOSPACE` before any expansion; ordinary patterns are unchanged; both sides of the edge.
 #[test]
