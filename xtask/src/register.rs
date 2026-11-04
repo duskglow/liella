@@ -124,9 +124,26 @@ fn register_refs(text: &str) -> Vec<(usize, u32, String)> {
 /// Every tracked text file outside the register itself that cites a register section number which does not
 /// exist (`max` is the highest section). Reported with file and line.
 fn stale_references(root: &Path, max: u32) -> Result<Vec<String>, String> {
-    let ls = std::process::Command::new("git").arg("-C").arg(root).args(["ls-files", "-z"]).output().map_err(|e| format!("git ls-files: {e}"))?;
+    // Walk the directory (a synced role tree has no .git), skipping build output and hidden directories.
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let path = e.path();
+            if path.is_dir() {
+                if !name.starts_with('.') && name != "target" {
+                    walk(root, &path, out);
+                }
+            } else if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().into_owned());
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(root, root, &mut files);
+    files.sort();
     let mut bad = Vec::new();
-    for rel in String::from_utf8_lossy(&ls.stdout).split('\0').filter(|r| !r.is_empty()) {
+    for rel in files.iter().map(String::as_str) {
         if rel.starts_with("docs/saturation/") || rel.starts_with("spec/") || rel == "glibc-functional-spec.md" || rel.ends_with(".tsv") || rel.starts_with("xtask/src/register.rs") {
             continue;
         }
