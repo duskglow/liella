@@ -1479,8 +1479,8 @@ static void varied_name(char *p, size_t size, int i)
 {
     int len = 5 + (i * 53) % 235; /* 5..239 bytes */
     int at = snprintf(p, size, "vl/v%04d", i);
-    while (at - 3 < len && (size_t)at + 1 < size)
-        p[at++] = (char)('a' + (i + at) % 26);
+    for (; at - 3 < len && (size_t)at + 1 < size; at++)
+        p[at] = (char)('a' + (i + at) % 26);
     p[at] = 0;
 }
 
