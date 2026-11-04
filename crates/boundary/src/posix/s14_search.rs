@@ -24,64 +24,23 @@ use crate::regex::{self, GnuArgs};
 use crate::ret;
 use crate::strz;
 
-/// `REG_NOTEOL`: `<regexp.h>` searches never let `$` match at the end of the subject (probe).
-const REGEXP_H_EFLAGS: c_int = 2;
-
-/// `<regexp.h>` `step`/`advance` (LG-10; compat only, probe-settled on glibc 2.39,
-/// `spec/behaviour/regexp-h.md`): `expbuf` holds a `regex_t` at its first 8-aligned byte after
-/// `expbuf[0]`, and the search runs with `REG_NOTEOL`. A match sets `*loc2` to its end and, for
-/// `step`, `*loc1` to its start, and returns 1; no match returns 0 and leaves both. `advance`
-/// (`anchored`) matches only at `string` itself. `locs` is never read or written. The generated
-/// stubs pass the addresses of `loc1`/`loc2` through the GOT (`xtask/src/compat.rs` `LOADS`), so
-/// an old non-PIE binary's copy is the one written.
-fn regexp_h(string: *const c_char, expbuf: *const c_char, anchored: bool, loc1: Option<&mut *const c_char>, loc2: Option<&mut *const c_char>) -> c_int {
-    if string.is_null() || expbuf.is_null() {
-        return 0;
-    }
-    let Some(at) = conv::addr(expbuf).checked_add(1).and_then(|a| a.checked_next_multiple_of(8)) else { return 0 };
-    let re = regex_t_at(at);
-    let mut m = [regmatch_t { rm_so: -1, rm_eo: -1 }];
-    let pmatch = core::ptr::from_mut(&mut m).expose_provenance();
-    if regex::regexec(Some(re), conv::addr(string), 1, pmatch, REGEXP_H_EFLAGS) != 0 {
-        return 0;
-    }
-    let (so, eo) = (m[0].rm_so, m[0].rm_eo);
-    if anchored && so != 0 {
-        return 0;
-    }
-    let at_off = |o: i32| string.wrapping_add(usize::try_from(o).unwrap_or(0));
-    if let Some(l1) = loc1 {
-        if !anchored && so >= 0 {
-            *l1 = at_off(so);
-        }
-    }
-    if let Some(l2) = loc2 {
-        // REG_NOSUB reports no offsets: loc2 is the subject's start (glibc gives the same).
-        *l2 = at_off(eo);
-    }
-    1
-}
-
-/// The `regex_t` that `<regexp.h>`'s `expbuf` holds, at address `at`.
-// UNSAFE(slice): the compiled expression inside the caller's `expbuf`.
-#[allow(unsafe_code)]
-fn regex_t_at<'a>(at: usize) -> &'a regex_t {
-    // SAFETY: <regexp.h>'s contract: `expbuf` holds a compiled expression, whose regex_t starts
-    // at the first 8-aligned byte after `expbuf[0]` (probe-settled); `at` is that address.
-    unsafe { &*core::ptr::with_exposed_provenance::<regex_t>(at) }
-}
+/// `<regexp.h>` `step`/`advance` (LG-10 deferred; compat only; owner ruling R6, 2026-11-04):
+/// stubs. Neither inspects its arguments: both return 0 (no match) and leave `*loc1`, `*loc2`
+/// and `locs` untouched. The generated stubs (`xtask/src/compat.rs` `LOADS`) and the exported
+/// `loc1`/`loc2`/`locs` objects are unchanged.
+const REGEXP_H_NO_MATCH: c_int = 0;
 
 crate::internal_entry! {
-/// `step@GLIBC_2.2.5` (compat only): the leftmost match of `expbuf` in `string` (see [`regexp_h`]).
-pub extern "C" fn liella_compat_step(string: *const c_char, expbuf: *const c_char, loc1: Option<&mut *const c_char>, loc2: Option<&mut *const c_char>) -> c_int {
-    regexp_h(string, expbuf, false, loc1, loc2)
+/// `step@GLIBC_2.2.5` (compat only): stub, never matches (see [`REGEXP_H_NO_MATCH`]).
+pub extern "C" fn liella_compat_step(_string: *const c_char, _expbuf: *const c_char, _loc1: Option<&mut *const c_char>, _loc2: Option<&mut *const c_char>) -> c_int {
+    REGEXP_H_NO_MATCH
 }
 }
 
 crate::internal_entry! {
-/// `advance@GLIBC_2.2.5` (compat only): a match of `expbuf` starting at `string` (see [`regexp_h`]).
-pub extern "C" fn liella_compat_advance(string: *const c_char, expbuf: *const c_char, loc1: Option<&mut *const c_char>, loc2: Option<&mut *const c_char>) -> c_int {
-    regexp_h(string, expbuf, true, loc1, loc2)
+/// `advance@GLIBC_2.2.5` (compat only): stub, never matches (see [`REGEXP_H_NO_MATCH`]).
+pub extern "C" fn liella_compat_advance(_string: *const c_char, _expbuf: *const c_char, _loc1: Option<&mut *const c_char>, _loc2: Option<&mut *const c_char>) -> c_int {
+    REGEXP_H_NO_MATCH
 }
 }
 
@@ -89,53 +48,29 @@ pub extern "C" fn liella_compat_advance(string: *const c_char, expbuf: *const c_
 mod regexp_h_tests {
     use super::*;
 
-    /// The test buffer's `regex_t` at `at` (8-aligned, inside a buffer larger than a `regex_t`).
-    // UNSAFE(slice): test storage.
-    #[allow(unsafe_code)]
-    fn regex_t_mut<'a>(at: usize) -> &'a mut regex_t {
-        // SAFETY: the callers pass an 8-aligned address inside a live zeroed buffer big enough for a regex_t.
-        unsafe { &mut *core::ptr::with_exposed_provenance_mut::<regex_t>(at) }
-    }
-
-    /// Runs `f` on `s` with `pat` compiled at offset 8 of an 8-aligned buffer and `expbuf` at
-    /// `buf + 8 - k` (glibc reads the regex_t at the next 8-aligned byte after expbuf[0]).
-    fn run(pat: &core::ffi::CStr, cflags: c_int, s: &core::ffi::CStr, k: usize, step: bool) -> (c_int, Option<usize>, Option<usize>) {
-        let mut buf = [0u64; 32];
-        let base = buf.as_mut_ptr().expose_provenance();
-        let re = regex_t_mut(base.saturating_add(8));
-        assert_eq!(regcomp(Some(&mut *re), pat.as_ptr(), cflags), 0);
-        let sent = c"sentinel".as_ptr();
-        let (mut l1, mut l2) = (sent, sent);
-        let e = core::ptr::with_exposed_provenance::<c_char>(base.saturating_add(8).saturating_sub(k));
-        let r = if step { liella_compat_step(s.as_ptr(), e, Some(&mut l1), Some(&mut l2)) } else { liella_compat_advance(s.as_ptr(), e, Some(&mut l1), Some(&mut l2)) };
-        regfree(Some(re));
-        let off = |p: *const c_char| (p != sent).then(|| p.addr().saturating_sub(s.as_ptr().addr()));
-        (r, off(l1), off(l2))
-    }
-
+    /// `step`/`advance` are stubs (owner ruling R6; no spec clause beyond the ruling,
+    /// `spec/behaviour/regexp-h.md`): whatever the arguments, the result is 0 and neither
+    /// `*loc1` nor `*loc2` is written. Table: (string, expbuf, with-outputs).
     #[test]
-    fn step_finds_the_leftmost_match_as_glibc_does() {
-        for k in 1..=8 {
-            assert_eq!(run(c"abc", 0, c"xxabcyy", k, true), (1, Some(2), Some(5)), "k {k}");
+    fn step_and_advance_return_no_match_and_leave_the_outputs() {
+        let subject = c"xxabcyy";
+        let zeroed = [0u8; 64];
+        let cases: [(*const c_char, *const c_char); 4] = [
+            (subject.as_ptr(), zeroed.as_ptr().cast()),
+            (subject.as_ptr(), core::ptr::null()),
+            (core::ptr::null(), zeroed.as_ptr().cast()),
+            (c"".as_ptr(), zeroed.as_ptr().cast()),
+        ];
+        for (i, &(string, expbuf)) in cases.iter().enumerate() {
+            for advance in [false, true] {
+                let sent = c"sentinel".as_ptr();
+                let (mut l1, mut l2) = (sent, sent);
+                let f = if advance { liella_compat_advance } else { liella_compat_step };
+                assert_eq!(f(string, expbuf, Some(&mut l1), Some(&mut l2)), 0, "case {i} advance {advance}");
+                assert!(l1 == sent && l2 == sent, "case {i} advance {advance}: outputs untouched");
+                assert_eq!(f(string, expbuf, None, None), 0, "case {i} advance {advance}: no outputs");
+            }
         }
-        assert_eq!(run(c"abc", 0, c"xxab", 8, true), (0, None, None));
-        assert_eq!(run(c"a*", 0, c"bbb", 8, true), (1, Some(0), Some(0)));
-        assert_eq!(run(c"^abc", 0, c"xabc", 8, true), (0, None, None));
-        assert_eq!(run(c"bc", 0, c"abc", 8, true), (1, Some(1), Some(3)));
-        // `$` never matches at the end of the subject (REG_NOTEOL), but does before a newline.
-        assert_eq!(run(c"c$", 0, c"abc", 8, true), (0, None, None));
-        assert_eq!(run(c"b$", 4, c"ab\nc", 8, true), (1, Some(1), Some(2)));
-        assert_eq!(run(c"ABC", 2, c"xabcx", 8, true), (1, Some(1), Some(4)));
-        assert_eq!(run(c"x*", 0, c"", 8, true), (1, Some(0), Some(0)));
-    }
-
-    #[test]
-    fn advance_matches_only_at_the_start_and_sets_only_loc2() {
-        assert_eq!(run(c"abc", 0, c"abcyy", 8, false), (1, None, Some(3)));
-        assert_eq!(run(c"abc", 0, c"xabc", 8, false), (0, None, None));
-        assert_eq!(run(c"x*abc", 0, c"xxabcyy", 8, false), (1, None, Some(5)));
-        assert_eq!(run(c"a*", 0, c"bbb", 8, false), (1, None, Some(0)));
-        assert_eq!(run(c"abc$", 0, c"abc", 8, false), (0, None, None));
     }
 }
 
