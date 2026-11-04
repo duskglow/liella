@@ -107,12 +107,14 @@ Versioned entry points:
    `clock_*@2.2.5` family land here. Compat-only names stay out of `libc.a` (R15-2). Proof: `xtask so`
    version check; readelf shows every `alias` row; plant "drop one alias" fails the check.
 7. **LG-2 `COMPAT-BEHAVIOUR`** (M, after LG-0b and LG-1). `liella-legacy::versioned`: the old
+    **Corpus-gated 2026-11-04 (R14):** build an old-behaviour version only for a user the LG-19 corpus finds.
    contracts of `memcpy@2.2.5` (overlap-safe), `glob@2.2.5` (ledger: `gl_stat` for a
    metacharacter-free pattern under `GLOB_ALTDIRFUNC`), `fmemopen@2.2.5`, `realpath@2.2.5`,
    `nftw@2.2.5`, `regexec@2.2.5`, `quick_exit@2.10`, `posix_spawn@2.2.5`, the affinity pairs, each
    exported by LG-1's generator. Proof: host-side unit tests against LG-0b's lines; a plant per entry.
    Risk of overrun: split point after `glob`/`fmemopen`.
 8. **LG-3 `COMPAT-CONDVAR-OLD`** (M, after LG-0b, HIGH). `pthread_cond_*@GLIBC_2.2.5` (s22_5_c_1_2):
+    **Corpus-gated 2026-11-04 (R14):** build only for a user the LG-19 corpus finds.
    the old-ABI object layout as the clause and LG-0b's probes define it, mapped onto Liella's
    condvar. Proof: in-process stress in RAM (signal/broadcast/timedwait across threads); a plant
    that loses a wakeup must fail.
@@ -146,10 +148,12 @@ Versioned entry points:
     and split if Liella does not ship one.
 15. **LG-10 `REGEXP-H`** (S, after LG-1). `<regexp.h>` `step`/`advance`/`loc1`/`loc2`/`locs` over the
     regex engine. Proof: LG-0b-style probe lines; host-side tests.
+    **DEFERRED 2026-11-04 (R6):** until the corpus finds a user, `step`/`advance` are a STUB (no match) with a differences row.
 16. **LG-11 `MALLOC-COMPAT`** (S, after LG-1; libc_malloc_debug part after DL-1). `__libc_freeres`
     (s29_4_c_1), `__libc_malloc` and friends (s29_4_c_2), libc_malloc_debug's 28 compat rows
     beyond DL-1's `malloc_get_state`/`malloc_set_state`. Proof: clause tests; `xtask so` for both
     libraries.
+    **Ruled 2026-11-04 (R9):** the `libc_malloc_debug.so.0` part is lowest priority, after DL-1; `malloc_get_state` is a STUB.
 
 ONC RPC, XDR and NIS (§29.1, §29.2; all HIGH, all in `liella-legacy`):
 
@@ -157,25 +161,32 @@ ONC RPC, XDR and NIS (§29.1, §29.2; all HIGH, all in `liella-legacy`):
     bool, float/double, opaque, string, bytes, `xdr_free`. Pure logic. Proof: RFC vectors and
     byte-exact probe lines from the host glibc; an `xdr` fuzz target (decode never reads out of
     bounds); plants on length checks.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** exported XDR names are stubs that fail cleanly; no XDR logic, fuzz target or probe corpus is built.
 18. **LG-13 `XDR-STREAMS`** (M, after LG-12). `xdrrec` (record marking), `xdrstdio`, arrays,
     vectors, unions, `xdr_reference`/`xdr_pointer`, `xdr_sizeof`, the remaining xdr_* names
     (100 in all). Proof: as LG-12; record-fragment corpus.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** stubs only (as LG-12); no `xdrrec`/`xdrstdio` logic.
 19. **LG-14 `RPC-SERVER`** (M, after LG-13). `svc_*` (UDP, TCP, Unix), `registerrpc`, `svc_run`,
     `xprt_*`, `svcerr_*`, `_seterr_reply`, `_authenticate`. Proof: interop with a client built on the
     host glibc (black box); malformed-call corpus; fuzz on call decode.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** `svc_*` and friends are stubs that fail cleanly; no server, no interop test.
 20. **LG-15 `RPC-CLIENT`** (M, after LG-14). `clnt_*`, `callrpc`, `pmap_*`, `rtime`,
     `bindresvport`, `_rpc_dtablesize`. Proof: Liella client against Liella server and against the
     host-glibc server; timeouts and truncated replies.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** `clnt_*`, `pmap_*`, `callrpc`, `rtime` are stubs that fail cleanly; no client.
 21. **LG-16 `RPC-AUTH-NETNAME`** (M, after LG-15, R15-4). `auth_*`/`authunix_*`, `authdes_*`,
     `key_*`, `ecb_crypt`/`cbc_crypt`/`xencrypt`/`xdecrypt`/`passwd2des`, `netname*`/`*2netname`,
     `getrpcent`/`byname`/`bynumber` (`/etc/rpc` parsing). Proof: probe lines (no keyserv running ⇒
     the same failures); FIPS-46 DES vectors; `/etc/rpc` malformed-line corpus.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** `auth_*`, `key_*`, netname and RPC DES helpers are stubs; `getrpcent` family per the stub ruling; no DES vectors.
 22. **LG-17 `NIS-YP`** (M, after LG-15 and DL-1, R15-5). `libnsl.so.1` as a product (DL-1's
     placeholder generator), `yp_*`/`__yp*`. Proof: the no-domain and no-server paths equal the
     probes; `yp_match` against a test `ypserv` built on LG-14.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** `yp_*` are stubs that fail cleanly (no domain / no server); `libnsl.so.1` stays a DL-1 placeholder.
 23. **LG-18 `NIS-PLUS`** (M, after LG-17, R15-5). The 72 `nis_*`/`__nis*` names and
     `readColdStartFile`/`writeColdStartFile`: name/string helpers fully, server operations as the
     ruling says. Proof: probes with no cold-start file; `xtask so` for libnsl.
+    **Re-scoped 2026-11-04 (SCOPE-REVIEW-LEGACY R13, LEGACY-RPC-NIS-STUBS):** `nis_*`/`__nis*` are stubs that fail cleanly; no name/string helper logic beyond the stubs.
 
 Acceptance:
 
