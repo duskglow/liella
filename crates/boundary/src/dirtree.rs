@@ -246,7 +246,11 @@ pub fn closedir(d: usize) -> KResult<()> {
 #[inline(always)]
 pub fn readdir(d: usize) -> KResult<Option<usize>> {
     let slot = dir_slot(d)?;
-    if crate::thread::alone() {
+    // `lock_alone` (one relaxed load of a private byte, as the mutex fast paths ask it) implies
+    // `alone`: it is set from `__libc_single_threaded` only once Liella owns the process and is
+    // cleared for good by the first thread or shared task. When it is false the slow path asks
+    // `alone` itself, so no case takes a lock it did not take before (PERF-READDIR-ENTRY).
+    if crate::thread::lock_alone() {
         let st = tb::dir_state_at::<DirState>(slot.state.load(Relaxed));
         if let Some(Ok(Some(a))) = st.stream.as_mut().map(DirStream::buffered_addr) {
             return Ok(Some(a));
