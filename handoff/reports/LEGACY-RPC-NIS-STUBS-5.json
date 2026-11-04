@@ -1,0 +1,28 @@
+{
+ "task": "LEGACY-RPC-NIS-STUBS-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "NOT READY: rcmd family stubbed (incl. ruserpass, __ivaliduser), D-15.7 + differences row, tests rewritten; clippy+static clean; direct gate2 running; no plants",
+ "branch": "task/legacy-rpc-nis-stubs-5",
+ "head": "4ec40d9b",
+ "gate": {
+  "affected": "running (keke:legacy-rpc-nis-stubs-5-gate2)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "regex_enomem interposed: 10/10 pass on keke (5 origin/next 5a695260, 5 branch); the -4 mei failure under gate 16G not reproduced, not explained"
+ ],
+ "refused": [],
+ "improvement": "Both keke jobs sat in the slot queue for the whole run; a queue-depth/ETA line at admission would let an agent size its waits before spending budget",
+ "next_step": "Read gate2; fix what it finds; plants on s15_sockets.rs (fd returned, errno not set, *port written, ruserok 0, __ivaliduser reads)",
+ "report_file": "handoff/legacy-rpc-nis.md",
+ "jobs": [
+  "keke:legacy-rpc-nis-stubs-5-gate2"
+ ],
+ "superseded": [
+  "keke:legacy-rpc-nis-stubs-5-gate (ab60300d, clippy red: unused EACCES)",
+  "keke:legacy-rpc-nis-stubs-5-regexcmp (probe, rc 0, not a gate of the final head)"
+ ]
+}

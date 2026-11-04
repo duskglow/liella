@@ -1,0 +1,10 @@
+{
+ "id": "INTEGRATE-REGISTER-MATH",
+ "result": "f64 gap chain ported: BREAKDOWN, ASSEMBLY-2, EXP-REDUCE-2, ROUND-TEST-2 all PORTED; FULL gate and clippy/static green on keke",
+ "branch": "task/integrate-register-math",
+ "jobs": ["irm-gate", "irm-lint"],
+ "ported": ["MATH-M6-F64-GAP-BREAKDOWN", "MATH-M6-F64-GAP-ASSEMBLY-2", "MATH-M6-F64-GAP-EXP-REDUCE-2", "MATH-M6-F64-GAP-ROUND-TEST-2"],
+ "contained": [],
+ "not_done": ["plants and counts not re-run on next", "register rows 2 and 5 have no DONE note (pending in the originals)"],
+ "next_step": "optional continuation: percall counts for rows 2 and 5 and a plants run"
+}

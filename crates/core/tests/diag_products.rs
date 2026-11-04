@@ -42,7 +42,7 @@ fn build(out: &Path, liella: bool) -> bool {
 const KNOWN: [(&str, &str, &str); 1] = [(
     "before=0 after_perror=",
     "*",
-    "spec §2.2: perror does not change the orientation of an unoriented stderr; glibc makes it byte-oriented",
+    "orientation after the first perror on a descriptor 2 redirected after start-up: the reference leaves the stream undecided, Liella makes it byte-oriented (a fresh stderr: both byte-oriented, pinned in conformance/c/s20_psignal_stream.c)",
 )];
 
 #[test]

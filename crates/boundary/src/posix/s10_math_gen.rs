@@ -4,7 +4,8 @@
 //! The math exports (spec §10): one per symbol, each a call into `liella-math` (D-10.1) with the
 //! conversions of `crate::mathret` (D-10.2). Symbols with `long double` or `_Float128` values are the
 //! `liella_<name>_bits` functions behind the C forwarders `csys/src/adapter/math_*.c` (OD-C4).
-#![allow(non_snake_case, clippy::too_many_lines)]
+//! The f64 fast rows pass closures, not fn items, so the kernel inlines into the entry.
+#![allow(non_snake_case, clippy::too_many_lines, clippy::redundant_closure)]
 
 use liella_abi::ctypes::{c_char, c_int, c_long, c_longlong, c_uint, F128Bits, LdBits};
 use liella_math as math;
@@ -1756,7 +1757,7 @@ pub extern "C" fn liella_erfl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn exp(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp_nearest, math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.39";
@@ -1801,7 +1802,7 @@ pub extern "C" fn liella_exp10l_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn exp2(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp2_nearest, math::real::Real::exp2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp2_nearest(x), math::real::Real::exp2)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1821,12 +1822,12 @@ pub extern "C" fn exp2f32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp2f32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp2_nearest, math::real::Real::exp2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp2_nearest(x), math::real::Real::exp2)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp2f64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp2_nearest, math::real::Real::exp2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp2_nearest(x), math::real::Real::exp2)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1856,12 +1857,12 @@ pub extern "C" fn expf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp_nearest, math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::exp_nearest, math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3802,12 +3803,12 @@ pub extern "C" fn liella_llroundl_bits(x: LdBits) -> c_longlong {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn log(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log_nearest, math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn log10(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log10_nearest, math::real::Real::log10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log10_nearest(x), math::real::Real::log10)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -3827,12 +3828,12 @@ pub extern "C" fn log10f32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log10f32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log10_nearest, math::real::Real::log10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log10_nearest(x), math::real::Real::log10)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log10f64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log10_nearest, math::real::Real::log10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log10_nearest(x), math::real::Real::log10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3887,7 +3888,7 @@ pub extern "C" fn liella_log1pl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn log2(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log2_nearest, math::real::Real::log2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log2_nearest(x), math::real::Real::log2)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3907,12 +3908,12 @@ pub extern "C" fn log2f32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log2_nearest, math::real::Real::log2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log2_nearest(x), math::real::Real::log2)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log2_nearest, math::real::Real::log2)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log2_nearest(x), math::real::Real::log2)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3987,12 +3988,12 @@ pub extern "C" fn logf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log_nearest, math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, math::fast64::log_nearest, math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
 }}
 
 export! { libm "LIELLA_PRIVATE";

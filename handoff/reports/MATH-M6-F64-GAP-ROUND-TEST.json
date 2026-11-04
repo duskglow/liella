@@ -1,0 +1,7 @@
+{"task": "MATH-M6-F64-GAP-ROUND-TEST", "model": "opus", "tokens": null, "result": "constant-multiplier nearest rounding test coded and unit-tested; checkpoint at the context ceiling, gate started, sweep/plants/counts not run", "branch": "task/math-m6-f64-gap-round-test", "head": "fe86cff1",
+ "gate": {"affected": "running (math-m6-f64-gap-round-test-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "fallback cap for the constant test", "recommendation": "miss rate <= 2^-12 per function; misses go to the exact test, not the accurate path"}],
+ "informational": ["origin/next not merged this run (stacked base exp-reduce-2 not landed)"], "refused": [],
+ "improvement": "a 120k context budget does not fit read-rules + design + proof + sweep + plants + counts; split story C into code+proof and verification runs",
+ "next_step": "read gate; add stage counts to the sweep; plants; counts; register 13.5 #5 and D-10.13", "report_file": "handoff/math-m6-f64-gap-round-test.md",
+ "jobs": ["keke:math-m6-f64-gap-round-test-gate"]}

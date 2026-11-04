@@ -546,16 +546,55 @@ fn sym___h_errno_location() {
 #[test]
 fn sym_herror() {
     let Some(err) = in_child("sym_herror") else {
+        // Covers: the caller's errno is the same after herror (s2_2_c_6, COMPAT-15).
+        let mut kept = true;
         liella_boundary::netdb::set_h_errno(HOST_NOT_FOUND);
+        errno::set_raw(ENOENT);
         s::herror(c"liella".as_ptr());
+        kept &= errno::get() == ENOENT;
         liella_boundary::netdb::set_h_errno(4);
+        errno::set_raw(EINVAL);
         s::herror(core::ptr::null());
+        kept &= errno::get() == EINVAL;
         liella_boundary::netdb::set_h_errno(-1);
         s::herror(c"".as_ptr());
         liella_boundary::posix::s12_stdio::fflush(null_mut());
+        eprintln!("errno kept={kept}");
         return;
     };
+    assert!(err.ends_with("errno kept=true\n"), "{err}");
     assert!(err.contains("liella: Unknown host\nNo address associated with name\nResolver internal error\n"), "{err}");
+}
+
+/// Covers: the caller's errno is the same after herror also when the write to descriptor 2 fails
+/// (s2_2_c_6, COMPAT-15). A successful write leaves errno alone, so only a failing one shows the
+/// restore: the child's descriptor 2 is `/dev/full` (writes fail with ENOSPC); it reports on stdout.
+#[test]
+fn sym_herror_failed_write_keeps_errno() {
+    const NAME: &str = "sym_herror_failed_write_keeps_errno";
+    if std::env::var("LIELLA_S16_CHILD").is_ok_and(|v| v == NAME) {
+        liella_boundary::selftest::mark_own_process();
+        liella_boundary::netdb::set_h_errno(HOST_NOT_FOUND);
+        errno::set_raw(ENOENT);
+        s::herror(c"liella".as_ptr());
+        let first = errno::get();
+        errno::set_raw(EINVAL);
+        s::herror(core::ptr::null());
+        println!("errno after={first},{}", errno::get());
+        return;
+    }
+    let Ok(full) = std::fs::OpenOptions::new().write(true).open("/dev/full") else {
+        eprintln!("skipped: /dev/full cannot be opened for writing here");
+        return;
+    };
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([NAME, "--exact", "--test-threads=1", "--nocapture"])
+        .env("LIELLA_S16_CHILD", NAME)
+        .stderr(full)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains(&format!("errno after={ENOENT},{EINVAL}\n")), "{out}");
 }
 
 #[test]
@@ -1378,7 +1417,7 @@ fn sym__res() {
 #[test]
 fn sym__res_hconf() {
     assert_eq!(size_of_val(&liella_boundary::data::_res_hconf), 72);
-    liella_boundary::data::set_hconf(true);
+    liella_boundary::data::set_hconf(true, false);
     assert_eq!(liella_boundary::data::_res_hconf[0].load(std::sync::atomic::Ordering::Relaxed), 1);
     assert_eq!(liella_boundary::data::_res_hconf[8].load(std::sync::atomic::Ordering::Relaxed), 0x10, "multi");
 }

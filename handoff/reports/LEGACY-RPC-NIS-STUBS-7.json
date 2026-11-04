@@ -1,0 +1,12 @@
+{"task": "LEGACY-RPC-NIS-STUBS-7", "model": "opus", "tokens": null,
+ "result": "fs-order CI red fixed: s29_rpc_auth_stubs compares /proc/self/fd as a BTreeSet; origin/next merged; direct gate green, 2/2 plants caught",
+ "branch": "task/legacy-rpc-nis-stubs-7", "head": "4174064d",
+ "gate": {"affected": "6386 passed / 0 failed", "peak": "13G (oom_kill 0)"}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["merge conflict in plan/07-decisions/s26-29.md (next's D-29.3 vs this branch's D-29.4) resolved by keeping both rows in id order",
+                   "fs-order looks only at the function body: a BTreeSet named only in the return type does not satisfy it (gate 1 red)"],
+ "refused": [],
+ "improvement": "fs-order could treat a BTreeSet/HashSet in the function signature as ordering (or say 'body only' in its message); that cost one gate cycle here",
+ "next_step": "RPC client/server stubs (handoff step 1), a full L-size run",
+ "report_file": "handoff/legacy-rpc-nis.md",
+ "jobs": ["mei:legacy-rpc-nis-stubs-7-gate2", "mei:legacy-rpc-nis-stubs-7-plants2"]}
