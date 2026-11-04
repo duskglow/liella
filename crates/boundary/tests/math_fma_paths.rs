@@ -16,7 +16,7 @@ fn next(s: &mut u64) -> u64 {
     *s
 }
 
-fn both(f: fn(f64) -> f64, exact: fn(f64) -> f64, xs: &[f64]) -> usize {
+fn both(f: extern "C" fn(f64) -> f64, exact: fn(f64) -> f64, xs: &[f64]) -> usize {
     assert!(selftest::set_math_fma(true));
     let fused: Vec<u64> = xs.iter().map(|&x| f(x).to_bits()).collect();
     assert!(selftest::set_math_fma(false));
