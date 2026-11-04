@@ -126,13 +126,57 @@ LIBS = ["libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2", "librt.so.1",
         "libanl.so.1", "libresolv.so.2", "libnsl.so.1", "libthread_db.so.1", "libBrokenLocale.so.1",
         "libc_malloc_debug.so.0", "ld-linux-x86-64.so.2"]
 
+# Target selection. The default is the native x86_64 reference (programs are built and run).
+# `--arch aarch64 --sysroot DIR` probes an unpacked, not installed, arm64 reference (ledger A-5):
+# compile-only, because nothing built for aarch64 runs here. Sizes, alignments and initializer
+# bytes are object-file constants read back with readelf; members come from DWARF as for x86_64.
+ARCH = "x86_64"
+CC = ["gcc"]
+SYSROOT = ""
+TRIPLET = "x86_64-linux-gnu"
+SUFFIX = ""
+
+def configure(argv):
+    global ARCH, CC, SYSROOT, TRIPLET, SUFFIX, LIBDIR, LIBS
+    if "--arch" not in argv:
+        return
+    ARCH = argv[argv.index("--arch") + 1]
+    if ARCH != "aarch64":
+        sys.exit(f"--arch {ARCH}: only aarch64 is supported")
+    if "--sysroot" not in argv:
+        sys.exit("--arch aarch64 needs --sysroot DIR (the unpacked arm64 libc6 + libc6-dev)")
+    SYSROOT = os.path.abspath(argv[argv.index("--sysroot") + 1])
+    TRIPLET = "aarch64-linux-gnu"
+    CC = ["aarch64-linux-gnu-gcc", f"--sysroot={SYSROOT}"]
+    SUFFIX = "-aarch64"
+    LIBDIR = next((d for d in (f"{SYSROOT}/lib/{TRIPLET}", f"{SYSROOT}/usr/lib/{TRIPLET}")
+                   if os.path.exists(os.path.join(d, "libc.so.6"))), None)
+    if LIBDIR is None:
+        sys.exit(f"{SYSROOT}: no lib/{TRIPLET}/libc.so.6")
+    LIBS = [l if not l.startswith("ld-linux") else "ld-linux-aarch64.so.1" for l in LIBS]
+
+def cross():
+    return ARCH != "x86_64"
+
+def section_bytes(obj, section):
+    """The contents of one section of an object file, from `readelf -x` (hex dump)."""
+    text = sh(["readelf", "-x", section, "-W", obj])
+    out = bytearray()
+    for line in text.splitlines():
+        m = re.match(r"\s+0x[0-9a-f]+ ", line)
+        if m:
+            out += bytes.fromhex(line[m.end():m.end() + 35].replace(" ", ""))
+    if not out:
+        raise SystemExit(f"{obj}: section {section} has no data:\n{text}")
+    return bytes(out)
+
 def sh(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, check=True, **kw).stdout
 
 def prelude():
     return "#define _GNU_SOURCE 1\n#define _DYNAMIC_STACK_SIZE_SOURCE 1\n" + \
-           "".join(f"#include <{h}>\n" for h in HEADERS if os.path.exists("/usr/include/" + h) or
-                   os.path.exists("/usr/include/x86_64-linux-gnu/" + h))
+           "".join(f"#include <{h}>\n" for h in HEADERS if os.path.exists(SYSROOT + "/usr/include/" + h) or
+                   os.path.exists(f"{SYSROOT}/usr/include/{TRIPLET}/" + h))
 
 def available_types(tmp):
     """Keep only types the headers actually declare (probe each one)."""
@@ -141,7 +185,7 @@ def available_types(tmp):
         src = prelude() + f"extern char probe[sizeof({expr})];\n"
         p = os.path.join(tmp, "t.c")
         open(p, "w").write(src)
-        r = subprocess.run(["gcc", "-std=gnu17", "-fsyntax-only", p], capture_output=True, text=True)
+        r = subprocess.run(CC + ["-std=gnu17", "-fsyntax-only", p], capture_output=True, text=True)
         if r.returncode == 0:
             ok.append((label, expr))
         else:
@@ -149,6 +193,20 @@ def available_types(tmp):
     return ok
 
 def sizes(tmp, types):
+    if cross():
+        # One 8-byte little-endian pair (sizeof, _Alignof) per type, in a section of its own.
+        src = prelude() + '__attribute__((used, section(".probe_sz"))) const unsigned long long probe_sz[] = {\n'
+        for label, expr in types:
+            src += f"  sizeof({expr}), _Alignof({expr}),\n"
+        src += "};\n"
+        p = os.path.join(tmp, "sz.c"); open(p, "w").write(src)
+        o = os.path.join(tmp, "sz.o")
+        sh(CC + ["-std=gnu17", "-O0", "-c", p, "-o", o])
+        raw = section_bytes(o, ".probe_sz")
+        vals = [int.from_bytes(raw[i:i + 8], "little") for i in range(0, len(raw), 8)]
+        if len(vals) != 2 * len(types):
+            raise SystemExit(f"sz.o: {len(vals)} values for {len(types)} types")
+        return {label: (vals[2 * i], vals[2 * i + 1]) for i, (label, _) in enumerate(types)}
     src = prelude() + "#include <stdio.h>\nint main(void){\n"
     for label, expr in types:
         src += f'  printf("%s\\t%zu\\t%zu\\n", "{label}", sizeof({expr}), _Alignof({expr}));\n'
@@ -165,7 +223,7 @@ def dwarf(tmp, types):
         src += f"{expr} probe_{i};\n"
     p = os.path.join(tmp, "dw.c"); open(p, "w").write(src)
     o = os.path.join(tmp, "dw.o")
-    sh(["gcc", "-std=gnu17", "-g", "-gdwarf-4", "-O0", "-fno-eliminate-unused-debug-types", "-c", p, "-o", o])
+    sh(CC + ["-std=gnu17", "-g", "-gdwarf-4", "-O0", "-fno-eliminate-unused-debug-types", "-c", p, "-o", o])
     text = sh(["readelf", "--debug-dump=info", "-W", o])
     dies = {}      # offset -> dict
     stack = []     # (depth, offset)
@@ -294,6 +352,19 @@ def layouts(tmp, types, szmap):
     return rows
 
 def initializers(tmp):
+    if cross():
+        # Each initialised object in a section of its own; the section's bytes are the object's.
+        src = prelude()
+        for i, (ty, init) in enumerate(INITIALIZERS):
+            src += f'__attribute__((used, section(".probe_init{i}"))) const {ty} probe_init{i} = {init};\n'
+        p = os.path.join(tmp, "init.c"); open(p, "w").write(src)
+        o = os.path.join(tmp, "init.o")
+        sh(CC + ["-std=gnu17", "-O0", "-c", p, "-o", o])
+        rows = []
+        for i, (ty, init) in enumerate(INITIALIZERS):
+            b = section_bytes(o, f".probe_init{i}")
+            rows.append([ty, init, str(len(b)), "all-zero" if not any(b) else "nonzero", b.hex()])
+        return rows
     src = prelude() + "#include <stdio.h>\n#include <string.h>\nint main(void){\n"
     for ty, init in INITIALIZERS:
         var = re.sub(r"\W", "_", init)
@@ -397,7 +468,61 @@ def write(name, header, rows):
         for r in rows:
             f.write("\t".join(str(x) for x in r) + "\n")
 
+def exports_diff(syms):
+    """Exports present on only one of x86_64 (versions.tsv) and this arch, by library and name."""
+    norm = lambda lib: "ld-linux" if lib.startswith("ld-linux") else lib
+    mine = {(norm(r[0]), r[1]) for r in syms}
+    x86 = set()
+    for line in open(os.path.join(OUT, "versions.tsv")).read().splitlines()[1:]:
+        f = line.split("\t")
+        x86.add((norm(f[0]), f[1]))
+    return sorted([(l, s, "x86_64") for l, s in x86 - mine] + [(l, s, ARCH) for l, s in mine - x86])
+
+def main_cross():
+    # Package identity of the reference (RL-3): the first line of its Debian changelog (documentation).
+    ch = os.path.join(SYSROOT, "usr/share/doc/libc6/changelog.Debian.gz")
+    ver = sh(["sh", "-c", f"gzip -dc '{ch}' | head -1"]).strip() if os.path.exists(ch) else "(no changelog)"
+    types, lay, ini = [], [], []
+    layouts_note = ""
+    with tempfile.TemporaryDirectory() as tmp:
+        # The headers must compile as a set before any type is probed: a missing header (the
+        # kernel UAPI asm/ headers are not part of libc6-dev) would otherwise drop every type
+        # silently instead of failing.
+        p = os.path.join(tmp, "pre.c"); open(p, "w").write(prelude())
+        r = subprocess.run(CC + ["-std=gnu17", "-fsyntax-only", p], capture_output=True, text=True)
+        if r.returncode != 0:
+            first = next((l for l in r.stderr.splitlines() if "error" in l), r.stderr.strip())
+            if "--symbols-only" not in sys.argv:
+                sys.exit(f"the reference headers do not compile: {first}\n(--symbols-only writes the symbol tables alone)")
+            layouts_note = f"Layouts and initializers NOT generated: the reference headers do not compile ({first.split(': ', 1)[-1]}).\n"
+        elif "--symbols-only" in sys.argv:
+            layouts_note = "Layouts and initializers not generated (--symbols-only).\n"
+        else:
+            types = available_types(tmp)
+            szmap = sizes(tmp, types)
+            lay = layouts(tmp, types, szmap)
+            write(f"layouts{SUFFIX}.tsv", ["type", "member", "offset_or_size", "align", "member_type", "bitfield"], lay)
+            ini = initializers(tmp)
+            write(f"initializers{SUFFIX}.tsv", ["type", "initializer", "size", "zero", "bytes_hex"], ini)
+    syms = symbols()
+    write(f"versions{SUFFIX}.tsv", ["library", "symbol", "version", "binding", "type", "scope", "size"], syms)
+    diff = exports_diff(syms)
+    write(f"exports-diff{SUFFIX}.tsv", ["library", "symbol", "only_on"], diff)
+    oldest = sorted({r[2] for r in syms if r[2].startswith("GLIBC_2.")},
+                    key=lambda v: [int(x) for x in v[6:].split(".")])[0]
+    with open(os.path.join(OUT, f"PROVENANCE{SUFFIX}"), "w", newline="\n") as f:
+        f.write(f"Generated by spec/tools/abi_extract.py --arch {ARCH} --sysroot <ref> (compile-only probes,\n"
+                f"{CC[0]}; readelf of the object files and of the reference's shared objects).\n"
+                f"Reference: Ubuntu arm64 libc6 + libc6-dev, unpacked, not installed (RL-3): {ver}\n"
+                f"{layouts_note}Types: {len(types)}  layout rows: {len(lay)}  initializers: {len(ini)}\n"
+                f"Versioned symbol rows: {len(syms)}  oldest version node: {oldest}  "
+                f"exports on one arch only: {len(diff)}\n")
+    print(open(os.path.join(OUT, f"PROVENANCE{SUFFIX}")).read())
+
 def main():
+    configure(sys.argv)
+    if cross():
+        return main_cross()
     os.makedirs(OUT, exist_ok=True)
     ver = sh(["ldd", "--version"]).splitlines()[0]
     if "--constants-only" in sys.argv:
