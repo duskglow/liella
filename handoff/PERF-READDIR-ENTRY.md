@@ -17,7 +17,7 @@ an error). Every miss (bad handle, lock_alone false, empty buffer, bad record) i
 `readdir_cold`, which checks the handle again, runs `readdir_slow` and sets errno only on an error. The record
 walk (`DirStream::buffered_addr`) and its bounds checks are unchanged. Measured (perf-readdir-entry-2-percall, user-mode
 instructions per entry, 3 runs per side, spread 0): readdir_entry_flat 50.293 -> 46.324, glibc 46.122 (ratio
-1.09 -> 1.004; the register's 54.3 predates PERF-FSWALK-PHYS and the lock_alone swap). fts_entry_flat
+1.09 -> 1.004; the 54.3 recorded in the register predates PERF-FSWALK-PHYS and the lock_alone swap). fts_entry_flat
 1493.19 -> 1493.19 (glibc 793.6, unchanged). Totals unchanged within noise: opendir_readdir_closedir_1000,
 fdopendir_99, scandir_alphasort_1000, nftw_phys_1000 6271364 -> 6269368, fts_physical_1000 6877174 -> 6876117,
 fts_nochdir_flat_1000 6905129 -> 6917627 (+0.2%, kernel-dominated total; glibc moved by the same amount: 7960554 ->
