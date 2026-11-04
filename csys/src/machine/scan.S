@@ -6515,11 +6515,10 @@ strncmp:
 	cmpl liella_machine_rshort_mask(%rip), %eax
 	jae .Lsnc_pt
 .Lsnc_head:
-	vpxor %xmm0, %xmm0, %xmm0
 	vmovdqu (%rdi), %ymm1
 	vpcmpeqb (%rsi), %ymm1, %ymm2
 	vpminub %ymm1, %ymm2, %ymm2
-	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %eax
 	bsfl %eax, %eax
 	jz .Lsnc_h32
@@ -6527,27 +6526,37 @@ strncmp:
 	vzeroupper
 	cmpq %rdx, %rax
 	jae .Lsnc_zero
-	movq %rax, %rcx
 	/* .Lsnc_byte inline; re-read equal and not NUL (a writer) resumes there. */
-	movzbl (%rdi,%rax), %eax
-	movzbl (%rsi,%rcx), %r8d
-	cmpl %r8d, %eax
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
 	jne .Lsnc_order
-	testl %eax, %eax
+	testl %ecx, %ecx
 	jz .Lsnc_ret
+	movq %rax, %rcx
 	jmp .Lsnc_byte
 .Lsnc_h32:
-	cmpq $32, %rdx
-	jbe .Lsnc_hzero
+	/* No n <= 32 exit here: the second block lies in the same pages as the first (the 64-byte
+	 * page test), and a hit at or past n gives 0 as the first block's does (PERF-STRNCMP-ROWS). */
 	vmovdqu 32(%rdi), %ymm1
 	vpcmpeqb 32(%rsi), %ymm1, %ymm2
 	vpminub %ymm1, %ymm2, %ymm2
-	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %eax
 	bsfl %eax, %eax
 	jz .Lsnc_h64
+	vzeroupper
 	addl $32, %eax
-	jmp .Lsnc_hhit
+	cmpq %rdx, %rax
+	jae .Lsnc_zero
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
+	jne .Lsnc_order
+	testl %ecx, %ecx
+	jz .Lsnc_ret
+	movq %rax, %rcx
+	jmp .Lsnc_byte
 .Lsnc_h64:
 	vzeroupper
 	cmpq $64, %rdx
@@ -6555,10 +6564,6 @@ strncmp:
 	pxor %xmm3, %xmm3
 	movl $64, %ecx
 	jmp .Lsnc_step
-.Lsnc_hzero:
-	vzeroupper
-	xorl %eax, %eax
-	ret
 .Lsnc_pt:
 	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected (or the SSE2
 	 * level: limit 0). */
