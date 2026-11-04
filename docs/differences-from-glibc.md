@@ -145,6 +145,7 @@ Delivered blocks, not here.
 | `gethostbyname("")`, `getaddrinfo("")` | Not found: an empty name is no host name (RFC 1123). | Matches a hosts line that has an address and no name. | D-16.2 | `s16_2_c_1`, `s16_3_c_0` |
 | `gethostent` and IPv6 lines | Each hosts line in its own family. | `::1` returned as `127.0.0.1`; other IPv6 lines skipped. | D-16.2 | `s16_3_c_0` |
 | `n_net` of `getnetbyname`/`getnetent`, and `getnetbyaddr` | The right-aligned number `inet_network` gives (127 is `0x7f`), so `getnetbyaddr` finds what `getnetbyname` returns. | Left-aligned (`0x7f000000`), which `inet_network`'s numbers cannot find. | D-16.2 | `s16_3_c_0` |
+| `getnetbyaddr`/`getnetbyname` through `dns`, answer whose PTR target cannot be read (damaged answer) | NULL with `h_errno` HOST_NOT_FOUND (NSS status NOTFOUND), so the caller can tell the lookup failed. | NULL with `h_errno` 0. (COMPAT-13) | D-16.2 | `s16_3_c_0` (`ns_networks_dns_damaged_answers`) |
 | A networks line with a non-numeric number, a services line with a port above 65535 | No record. | `0xffffffff`; the port's low 16 bits. | D-16.2 | `s16_3_c_0`, `s16_5_c_0` |
 | `getaddrinfo` service `"65536"`, `" 80"`, `"+80"`, `""` | `EAI_SERVICE`: decimal digits up to 65535 only. | Port 0 for 65536; accepted. | D-16.2 | `s16_2_c_1`, `s16_2_f_0` |
 | `getaddrinfo` when every source is unavailable, or the hosts file is missing | `EAI_FAIL`; `EAI_SYSTEM` with `errno` (h_errno `NO_RECOVERY`) for an unreadable file. | `EAI_SYSTEM` with `EBUSY`; not found. | D-16.2 | `s16_2_f_0`, `s16_1_c_2` |

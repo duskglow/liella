@@ -149,24 +149,101 @@ impl Drop for Fx {
     }
 }
 
-/// Spec: s16_3_c_0. The `networks` database through `dns` (the probe: `getnetbyaddr` asks a PTR
-/// query under `in-addr.arpa` and returns the answer's name; `getnetbyname` asks a PTR query for
-/// the name itself). KNOWN GAP, recorded in ns-gaps.md as a follow-up story: Liella's `networks`
-/// has no `dns` source, so every lookup is a miss and no query is sent. This test pins that
-/// present state so that the follow-up story must change it knowingly.
-#[test]
-fn ns_gaps_networks_dns_is_not_a_source_yet() {
-    let srv = dns_server::start(vec![dns_server::ptr("0.2.0.192.in-addr.arpa", "netx.test")]);
-    let fx = Fx::new("net", "");
+fn net_resolver(port: u16) -> Resolver {
     let mut conf = liella::names::dns::conf::Config::defaults();
-    conf.servers.push(liella::names::dns::conf::Server { ip: liella::names::Ip::V4([127, 0, 0, 1]), port: srv.port, scope: 0 }).unwrap();
+    conf.servers.push(liella::names::dns::conf::Server { ip: liella::names::Ip::V4([127, 0, 0, 1]), port, scope: 0 }).unwrap();
     conf.timeout = 1;
     conf.attempts = 1;
-    let r = Resolver { conf, aliases: None };
+    Resolver { conf, aliases: None }
+}
+
+type Net = Result<(String, u32, String), liella::names::nss::LookupError>;
+
+fn net_show(n: &liella::names::db::Numbered<'_, u32>) -> (String, u32, String) {
+    let al: Vec<String> = n.aliases.clone().map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+    (String::from_utf8_lossy(n.name).into_owned(), n.number, al.join(" "))
+}
+
+fn ok(name: &str, number: u32, aliases: &str) -> Net {
+    Ok((name.into(), number, aliases.into()))
+}
+
+/// Spec: s16_3_c_0. The `networks` database through `dns`, as the reference does (the probe
+/// `tests/oracle/net_dns.c`): `getnetbyaddr` asks a PTR question for the number without its
+/// trailing zero octets, padded to four and reversed under `in-addr.arpa`; the first target is
+/// the name, the others aliases. `getnetbyname` asks a PTR question for the name (search rules);
+/// a target under `in-addr.arpa` gives the number. NXDOMAIN: NOT_FOUND; NOERROR without
+/// records: NO_DATA; SERVFAIL, REFUSED, or an answer without a usable PTR: TRY_AGAIN.
+#[test]
+fn ns_networks_dns_case_table() {
+    use liella::names::nss::LookupError::{NoData, NotFound, TryAgain};
+    let srv = dns_server::start(vec![
+        dns_server::ptr("0.2.0.192.in-addr.arpa", "netx.test"),
+        dns_server::ptr("0.0.0.10.in-addr.arpa", "ten.test"),
+        dns_server::ptr("0.0.16.172.in-addr.arpa", "b1.test"),
+        dns_server::ptr("0.0.16.172.in-addr.arpa", "b2.test"),
+        dns_server::ptr("1.0.0.224.in-addr.arpa", "d.test"),
+        dns_server::ptr("p3.test", "2.0.192.in-addr.arpa"),
+        dns_server::ptr("p5.test", "16.172.IN-ADDR.ARPA"),
+        dns_server::ptr("p1.test", "netx.test"),
+    ]);
+    let fx = Fx::new("net", "");
+    let r = net_resolver(srv.port);
     let ctx = Ctx { dns: Some(&r), ..fx.ctx("networks: dns\n") };
-    assert!(netdb::net_by_addr(&ctx, 0xc0_0002, 2, |n| n.number).is_err());
-    assert!(netdb::net_by_name(&ctx, b"foo.test", |n| n.number).is_err());
-    assert!(srv.take_log().is_empty(), "no query is sent today (glibc sends PTR queries)");
+    let by_addr = |n: u32| -> Net { netdb::net_by_addr(&ctx, n, 2, net_show) };
+    let by_name = |n: &str| -> Net { netdb::net_by_name(&ctx, n.as_bytes(), net_show) };
+    assert_eq!(by_addr(0xc0_0002), ok("netx.test", 0xc0_0002, ""));
+    assert_eq!(by_addr(0xc000_0200), ok("netx.test", 0xc0_0002, ""));
+    assert_eq!(by_addr(10), ok("ten.test", 10, ""));
+    assert_eq!(by_addr(0x0a00_0000), ok("ten.test", 10, ""));
+    assert_eq!(by_addr(0xac10_0000), ok("b1.test", 0xac10, "b2.test"));
+    assert_eq!(by_addr(0xe000_0001), ok("d.test", 0xe000_0001, ""));
+    assert_eq!(by_addr(0xffff), Err(NoData));
+    assert!(netdb::net_by_addr(&ctx, 10, 10, net_show).is_err());
+    assert_eq!(by_name("p3.test"), ok("p3.test", 0xc0_0002, "2.0.192.in-addr.arpa"));
+    assert_eq!(by_name("P5.TEST"), ok("P5.TEST", 0xac10, "16.172.IN-ADDR.ARPA"));
+    assert_eq!(by_name("p1.test"), Err(TryAgain));
+    assert_eq!(by_name("nx.test"), Err(NotFound));
+    assert_eq!(by_name("nodata.test"), Err(NoData));
+    assert_eq!(by_name("servfail.test"), Err(TryAgain));
+    assert_eq!(by_name("refused.test"), Err(TryAgain));
+    let log = srv.take_log();
+    for q in ["0.2.0.192.in-addr.arpa", "0.0.0.10.in-addr.arpa", "0.0.16.172.in-addr.arpa", "1.0.0.224.in-addr.arpa", "0.0.255.255.in-addr.arpa", "p3.test", "nx.test"] {
+        assert!(log.iter().any(|l| l.contains(&format!(" {q} ")) && l.contains("12") || l.contains(&format!(" {q} PTR"))), "no PTR question for {q}: {log:?}");
+    }
+    assert!(netdb::net_by_name(&Ctx { dns: Some(&r), ..fx.ctx("networks: files\n") }, b"p3.test", net_show).is_err());
+}
+
+/// Spec: s16_3_c_0. A damaged `networks` answer: an answer count beyond the packet gives the
+/// records that fit; a PTR target that cannot be read is NOT_FOUND; nothing crashes.
+#[test]
+fn ns_networks_dns_damaged_answers() {
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let port = sock.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let mut b = [0u8; 512];
+        while let Ok((n, from)) = sock.recv_from(&mut b) {
+            let mut o = b[..n].to_vec();
+            o[2] = 0x85;
+            o[3] = 0x80;
+            o[7] = 3;
+            o.extend_from_slice(&[0xc0, 0x0c, 0, 12, 0, 1, 0, 0, 0, 60]);
+            if b[13] == b'1' {
+                o.extend_from_slice(&[0, 2, 0xc5, 0xff]);
+            } else {
+                let mut rd = Vec::new();
+                name(&mut rd, "short.test");
+                o.extend_from_slice(&[0, rd.len() as u8]);
+                o.extend_from_slice(&rd);
+            }
+            let _ = sock.send_to(&o, from);
+        }
+    });
+    let fx = Fx::new("net", "");
+    let r = net_resolver(port);
+    let ctx = Ctx { dns: Some(&r), ..fx.ctx("networks: dns\n") };
+    assert_eq!(netdb::net_by_addr(&ctx, 0xc0_0002, 2, net_show), ok("short.test", 0xc0_0002, ""));
+    assert_eq!(netdb::net_by_addr(&ctx, 0x0100_0001, 2, net_show), Err(liella::names::nss::LookupError::NotFound));
 }
 
 const GROUPS: &str = "a:x:50:u\nb:x:50:u\nc:x:60:u\nc:x:61:u\nd:x:60:v\ne:x:70:u,u\nf:x:99:u\n";
