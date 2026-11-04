@@ -24,7 +24,6 @@ use liella_kernel::sys::Sys;
 use liella_kernel::testing::Faulty;
 use liella_kernel::uapi::{Rlimit, Rusage};
 use liella_legacy::sys_compat;
-use spectest::clause;
 
 const RLIM_INFINITY: u64 = u64::MAX;
 
@@ -645,7 +644,40 @@ fn s24_3_c_5() {
     assert!(c != u32::MAX && n != u32::MAX);
 }
 
-clause!(s24_5_c_3, "24.5", "Contract", r##"**`getdomainname`** returns the NIS domain name, not the DNS domain. ⚑ HIST: a common confusion."##);
+/// §24.5 Contract: **`getdomainname`** returns the NIS domain name, not the DNS domain. In a
+/// private user and UTS namespace (`unshare -r -u`) the test sets the NIS domain `nis.example`
+/// and a host name whose DNS domain would be `dns.example`; `getdomainname` (the export and
+/// `system::domainname`) returns `nis.example`. The glibc reference gives the same (probed).
+/// Skipped, with the reason printed, where unprivileged user namespaces are unavailable.
+#[test]
+fn s24_5_c_3() {
+    const NAME: &str = "s24_5_c_3";
+    if std::env::var("LIELLA_C24_NIS").is_ok_and(|v| v == NAME) {
+        let ok = x::setdomainname(c"nis.example".as_ptr(), 11) == 0 && x::sethostname(c"h.dns.example".as_ptr(), 13) == 0 && {
+            let mut b = [0x55u8; 64];
+            let mut d = [0x55u8; 64];
+            x::getdomainname(b.as_mut_ptr().cast(), b.len()) == 0
+                && b[..12] == *b"nis.example\0"
+                && system::domainname(&CSys, &mut d).is_ok()
+                && d[..12] == *b"nis.example\0"
+        };
+        CSys.exit_group(if ok { 0 } else { 1 });
+    }
+    let probe = std::process::Command::new("unshare").args(["-r", "-u", "true"]).output();
+    if !probe.as_ref().is_ok_and(|o| o.status.success()) {
+        println!("SKIP {NAME}: no unprivileged user+UTS namespace (`unshare -r -u true`: {probe:?})");
+        return;
+    }
+    let o = std::process::Command::new("unshare")
+        .args(["-r", "-u"])
+        .arg(std::env::current_exe().unwrap())
+        .args([NAME, "--exact", "--include-ignored", "--test-threads=1"])
+        .env("LIELLA_C24_NIS", NAME)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
+    assert_eq!(o.status.code(), Some(0), "getdomainname did not return the NIS domain: {}", child_report(&o));
+}
 
 #[test]
 fn s24_5_c_4() {
