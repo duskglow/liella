@@ -11,4 +11,8 @@ Decisions: 129-160 B four blocks, 161-256 B seven blocks, no loop; first differe
 to drop the NULL tests and cmp_mid word (the remaining 1 instruction at 256).
 First plants run: bad-bsf in a middle block survived because the old sweep makes all later bytes differ; the new test
 (one difference among equal bytes) was added to catch it.
-Next step: read jobs perf-memcmp-256-avx2-gate2 and -plants2 in keke ~/logs/jobs.tsv.
+Continuation (PERF-MEMCMP-256-AVX2-2): the plants2 PLANT-NOOP was a bad regex (`lastblock-offset` looked for a label and
+instruction sequence that is not in `.Lcmp_256_g`). The plant now rewrites `leaq -32(%rdx,%rcx)` to `-31` in `.Lcmp_256_g`.
+Plants (fresh RAM copy plants-4, 9 plants): all 9 CAUGHT, rc 0 (keke job perf-memcmp-256-avx2-2-plants). Direct-tier gate
+perf-memcmp-256-avx2-2-gate rc 0. No code change in this run; clippy and static run on the final head.
+Next step: none; remaining idea is the per-ISA entry (see Not done).

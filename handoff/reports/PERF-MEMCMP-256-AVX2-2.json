@@ -1,0 +1,23 @@
+{
+ "task": "PERF-MEMCMP-256-AVX2-2",
+ "model": "sonnet",
+ "tokens": null,
+ "result": "Fixed lastblock-offset plant; 9/9 plants caught, direct gate green; no code change",
+ "branch": "task/perf-memcmp-256-avx2-2",
+ "head": null,
+ "gate": {
+  "affected": "ok (rc 0)",
+  "peak": "9.9G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [],
+ "refused": [],
+ "improvement": "plants scripts should print the diff size of each plant so a no-op is spotted when the script is written",
+ "next_step": "none",
+ "report_file": "handoff/memcmp-256-avx2.md",
+ "jobs": [
+  "perf-memcmp-256-avx2-2-plants",
+  "perf-memcmp-256-avx2-2-gate"
+ ]
+}
