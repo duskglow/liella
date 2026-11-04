@@ -352,3 +352,33 @@ fn strstr_rejects_candidates_differing_in_one_byte() {
         }
     }
 }
+
+#[test]
+fn strstr_large_haystacks_find_every_position_in_the_wide_groups() {
+    // Clauses: s4_6_c_0 (D-4.28). PERF-STRSTR-LONG: the 128-byte (AVX2) and 64-byte (SSE2) groups of
+    // the scanner: a match, and the terminator, at every offset of a group, four start alignments.
+    let _g = level();
+    set_ctype(b"C\0");
+    let mut buf = vec![0xEEu8; 64 + 800 + 80 + 8];
+    let mut nbuf = Vec::new();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for m in [1usize, 2, 5, 9] {
+            let nd = needle(m, false, false);
+            for n in (300..=780usize).step_by(7) {
+                let last = n - m;
+                for pos in std::iter::once(None).chain((0..=last).step_by(3).chain([last]).map(Some)) {
+                    let h = haystack(n, &nd, pos, m + n, false);
+                    let want = naive(&h, &nd, false);
+                    for align in [0usize, 5, 31, 64] {
+                        buf.fill(0xEE);
+                        let got = call(buf[align..].as_mut_ptr(), &h, &nd, &mut nbuf, false, true);
+                        assert_eq!(got, want, "avx2={avx2} m={m} n={n} pos={pos:?} align={align}");
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}

@@ -195,7 +195,7 @@ impl Parser<'_> {
         self.at(j) == Some(ch(b'[')) && j + 1 < to && matches!(self.at(j + 1), Some(c) if c == ch(b':') || c == ch(b'=') || c == ch(b'.'))
     }
 
-    /// The bracket expression whose `[` is just before `i`: the set and the index after its `]`,
+/// The bracket expression whose `[` is just before `i`: the set and the index after its `]`,
     /// or `None` when no valid bracket expression follows.
     fn bracket(&self, i: usize, to: usize, build: bool) -> Result<Option<(Set, usize)>> {
         if self.last_close < i + 2 {
@@ -938,7 +938,9 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
     let escapes = flags & NOESCAPE == 0;
     // A `[` with no `]` after it can never close: it is a literal, decided in O(1) (C1-TRIAGE:
     // looking for the `]` from every `[` of a long unclosed run was quadratic).
-    let last_close = p.iter().rposition(|&c| c == b']');
+    // Looked for only when the pattern has a `[` (most patterns have none).
+    // `usize::MAX`: not looked for yet; 0: no `]` (a `[` at `pi` is never before it).
+    let mut last_close = usize::MAX;
     let (mut pi, mut si) = (0usize, 0usize);
     // The last star: the pattern after it, and where its match ends now.
     let mut star: Option<(usize, usize)> = None;
@@ -964,12 +966,28 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
                 // A trailing `\`: nothing matches.
                 None => return Some(false),
             },
-            Some(b'[') if last_close.is_none_or(|k| k <= pi) => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
+            Some(b'[') if close_before(p, &mut last_close) <= pi => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
             Some(b'[') => match bracket_has(p, pi + 1, escapes, &mt, at(si).filter(|_| wild(si)))? {
                 Some((hit, after)) => hit.then_some((after, si + 1)),
                 None => at(si).is_some_and(|c| mt.same(u32::from(b'['), c)).then_some((pi + 1, si + 1)),
             },
-            Some(&c) => at(si).is_some_and(|x| mt.same(u32::from(c), x)).then_some((pi + 1, si + 1)),
+            Some(&c) => at(si).is_some_and(|x| mt.same(u32::from(c), x)).then(|| {
+                // A run of further ordinary characters that equal the string's: compared straight,
+                // without the per-step dispatch (a mismatch, or any other pattern character, ends
+                // the run and the next step decides). Ordinary characters match only themselves,
+                // bytewise. Only here, so that steps for `*`, `?` and `[` pay nothing for it.
+                let (mut a, mut b) = (pi + 1, si + 1);
+                if flags & CASEFOLD == 0 {
+                    while let (Some(&c), Some(&x)) = (p.get(a), s.get(b)) {
+                        if c != x || matches!(c, b'*' | b'?' | b'[' | b'\\') {
+                            break;
+                        }
+                        a += 1;
+                        b += 1;
+                    }
+                }
+                (a, b)
+            }),
         };
         match step {
             Some((np, ns)) => {
@@ -1003,6 +1021,15 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
             }
         }
     }
+}
+
+/// The position of the last `]` in `p` (0 when there is none), looked for on first use and kept in `memo`.
+#[inline(always)]
+fn close_before(p: &[u8], memo: &mut usize) -> usize {
+    if *memo == usize::MAX {
+        *memo = p.iter().rposition(|&c| c == b']').unwrap_or(0);
+    }
+    *memo
 }
 
 /// The bracket expression whose `[` is just before `i` in the ASCII pattern `p`, tested against
@@ -1089,6 +1116,25 @@ mod tests {
 
     extern crate std;
     use std::vec::Vec;
+
+    /// A `[` after the first `]` still opens a bracket: the last `]` of the pattern decides, and a
+    /// run of equal ordinary characters stops before `*`, `?`, `[` and `\\` (the string holds the
+    /// metacharacter itself there).
+    // no spec clause: speed-up of the direct matcher; the general matcher defines the behaviour.
+    #[test]
+    fn direct_brackets_after_a_first_close_and_runs_stop_at_metacharacters() {
+        let c = |p: &[u8], s: &[u8]| direct(p, s, 0, &Locale::C);
+        assert_eq!(c(b"[ab][ab]", b"ba"), Some(true));
+        assert_eq!(c(b"x[ab]y[cd]z", b"xbycz"), Some(true));
+        assert_eq!(c(b"ab*c", b"ab*xc"), Some(true));
+        assert_eq!(c(b"ab?c", b"ab?c"), Some(true));
+        assert_eq!(c(b"ab?c", b"abxc"), Some(true));
+        assert_eq!(c(b"ab[xy]", b"ab["), Some(false));
+        assert_eq!(c(b"a[x]", b"a[x]"), Some(false));
+        assert_eq!(c(b"ab[xy]", b"aby"), Some(true));
+        assert_eq!(c(b"ab\\*", b"ab*"), Some(true));
+        assert_eq!(c(b"ab\\*", b"abxy"), Some(false));
+    }
 
     /// The direct matcher agrees with the general one on every pattern of up to three tokens
     /// over every string of up to three characters of `a b . / A`, under every combination of

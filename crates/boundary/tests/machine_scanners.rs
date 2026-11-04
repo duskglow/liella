@@ -1610,7 +1610,7 @@ fn bulk_kernel_choice_follows_the_cpu_flags() {
             assert_eq!(selftest::bulk_move_kernel(base + (1 << 18) - 7, base, n), misaligned, "disjoint -7 {n} erms {erms}");
             assert_eq!(selftest::bulk_move_kernel(base + (1 << 18) + 16, base, n), "sse2", "disjoint +16 {n} erms {erms}");
             assert_eq!(selftest::bulk_move_kernel(base + (1 << 18) + 32, base, n), misaligned, "disjoint +32 {n} erms {erms}");
-            assert_eq!(selftest::bulk_fill_kernel(n), if erms && n >= 1280 { "erms" } else { "checked" }, "fill {n} erms {erms}");
+            assert_eq!(selftest::bulk_fill_kernel(n), if erms && n >= 1280 { "erms" } else if n > 128 { "sse2" } else { "checked" }, "fill {n} erms {erms}");
         }
         // FSRM with the AVX2 copy keeps the AVX2 copy up to 1 MiB (N100); other classes `rep movsb`
         // from 64 KiB + 1; a tunable threshold keeps 64 KiB + 1.
