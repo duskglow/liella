@@ -269,7 +269,7 @@ mod ziv_tests {
     fn force(k: usize, on: bool) {
         let v = if on { 4000 } else { 0 }; // past every boundary at 3072 bits too
         let f: [fn(i64); 4] = [n::force_loose, w::force_loose, wx::force_loose, wy::force_loose];
-        for g in &f[..k] {
+        for g in f.iter().take(k) {
             g(v);
         }
     }
