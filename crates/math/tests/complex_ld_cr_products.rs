@@ -365,9 +365,12 @@ macro_rules! shards {
     };
 }
 
-/// The shards of the sweep (`shard::SHARDS`): 20 since CI-GATE-DIET (8 shards ran 330-500 s each
-/// in the CI gate); the inputs are the same lines, split 20 ways instead of 8.
-const SHARDS: usize = 20;
+/// The shards of the sweep: 20 since CI-GATE-DIET (8 shards ran 330-500 s each in the CI gate);
+/// the inputs are the same lines, split 20 ways instead of 8. The number is this target's entry in
+/// `shard.rs`'s `WIDE` table; the check in `shards!` holds the list below to it, and this one
+/// fails the build if the target ever falls back to the default.
+const SHARDS: usize = shard::SHARDS;
+const _: () = assert!(SHARDS == 20 && SHARDS != shard::DEFAULT_SHARDS);
 
 #[test]
 fn the_shards_check_every_line_exactly_once() {

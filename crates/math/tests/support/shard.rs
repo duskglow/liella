@@ -13,9 +13,46 @@ use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 
-/// The number of shards of each products test: the including test's own `SHARDS` (CI-GATE-DIET:
-/// complex_ld_cr_products takes 20 so no shard runs past ~3 min in the gate, the others 8).
-pub(crate)const SHARDS: usize = super::SHARDS;
+/// The number of shards of the including test: its entry in `WIDE` by test target name, else
+/// `DEFAULT_SHARDS`. The helper needs nothing from the file that includes it, so a new products
+/// test can include it as it is. A test with a hand-written shard list checks the list against
+/// this value at compile time (complex_ld_cr_products), so a renamed target cannot quietly drop
+/// back to the default.
+pub(crate)const SHARDS: usize = shards_of(env!("CARGO_CRATE_NAME"));
+
+/// The shards of a products test with no entry in `WIDE`.
+pub(crate)const DEFAULT_SHARDS: usize = 8;
+
+/// Tests split into more than `DEFAULT_SHARDS` shards (CI-GATE-DIET: complex_ld_cr_products takes
+/// 20 so no shard runs past ~3 min in the gate).
+const WIDE: &[(&str, usize)] = &[("complex_ld_cr_products", 20)];
+
+/// The shards of test target `name` (`WIDE`, else `DEFAULT_SHARDS`).
+pub(crate)const fn shards_of(name: &str) -> usize {
+    let mut i = 0;
+    while i < WIDE.len() {
+        if same(WIDE[i].0.as_bytes(), name.as_bytes()) {
+            return WIDE[i].1;
+        }
+        i += 1;
+    }
+    DEFAULT_SHARDS
+}
+
+/// Byte equality usable in a const context.
+const fn same(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
 
 /// Every line index goes to exactly one shard and the shares sum to `len`: the shards of a test
 /// together check exactly the lines the unsharded test checked.
