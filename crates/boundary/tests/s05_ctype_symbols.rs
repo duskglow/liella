@@ -751,7 +751,7 @@ fn sym_wctype_l() {
 /// beyond both ends and the extreme ints all answer false for every class.
 #[test]
 fn byte_class_out_of_range_is_false() {
-    let fs: [(&str, fn(c_int) -> c_int); 12] = [
+    let fs: [(&str, extern "C" fn(c_int) -> c_int); 12] = [
         ("alnum", s::isalnum),
         ("alpha", s::isalpha),
         ("blank", s::isblank),
