@@ -39,6 +39,23 @@ pub(crate)const fn shards_of(name: &str) -> usize {
     DEFAULT_SHARDS
 }
 
+/// True when a test's hand-written shard list `ks` is exactly shards `0..SHARDS`, in order: none
+/// missing, none twice, none past the end. Each `shards!` list asserts this at compile time, so
+/// the list and `SHARDS` cannot disagree (a short list would leave lines unchecked).
+pub(crate)const fn list_is_exact(ks: &[usize]) -> bool {
+    if ks.len() != SHARDS {
+        return false;
+    }
+    let mut i = 0;
+    while i < ks.len() {
+        if ks[i] != i {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// Byte equality usable in a const context.
 const fn same(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {

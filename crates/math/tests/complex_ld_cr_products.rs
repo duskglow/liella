@@ -353,15 +353,7 @@ macro_rules! shards {
         }
     )*
         /// The shard tests are exactly shards `0..SHARDS`, in order: none missing, none twice.
-        const _: () = {
-            let ks = [$($k),*];
-            assert!(ks.len() == SHARDS);
-            let mut i = 0;
-            while i < ks.len() {
-                assert!(ks[i] == i);
-                i += 1;
-            }
-        };
+        const _: () = assert!(shard::list_is_exact(&[$($k),*]));
     };
 }
 
