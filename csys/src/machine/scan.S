@@ -6744,6 +6744,41 @@ liella_machine_strpair:
 	jnz .Lliella_machine_strpair_avx_loop
 	movq %rsi, %r9
 	negq %r9
+	testl $64, %eax
+	jnz .Lliella_machine_strpair_avx_loop64
+	/* 128-byte aligned: four blocks per test (STRSTR-HIT-4K). A 128-byte aligned run stays in its
+	 * page; a hit sends the run back to the block loop from its start, which resolves it. */
+	.p2align 4
+.Lliella_machine_strpair_avx_loop128:
+	vmovdqa (%rax), %ymm3
+	vmovdqa 32(%rax), %ymm6
+	vmovdqa 64(%rax), %ymm9
+	vmovdqa 96(%rax), %ymm12
+	vpxor (%rax,%r9), %ymm0, %ymm4
+	vpxor 32(%rax,%r9), %ymm0, %ymm7
+	vpxor 64(%rax,%r9), %ymm0, %ymm10
+	vpxor 96(%rax,%r9), %ymm0, %ymm13
+	vpxor %ymm3, %ymm1, %ymm5
+	vpxor %ymm6, %ymm1, %ymm8
+	vpxor %ymm9, %ymm1, %ymm11
+	vpxor %ymm12, %ymm1, %ymm14
+	vpor %ymm4, %ymm5, %ymm4
+	vpor %ymm7, %ymm8, %ymm7
+	vpor %ymm10, %ymm11, %ymm10
+	vpor %ymm13, %ymm14, %ymm13
+	vpminub %ymm3, %ymm4, %ymm4
+	vpminub %ymm6, %ymm7, %ymm7
+	vpminub %ymm9, %ymm10, %ymm10
+	vpminub %ymm12, %ymm13, %ymm13
+	vpminub %ymm4, %ymm7, %ymm4
+	vpminub %ymm10, %ymm13, %ymm10
+	vpminub %ymm4, %ymm10, %ymm4
+	vpcmpeqb %ymm4, %ymm2, %ymm4
+	addq $128, %rax
+	vptest %ymm4, %ymm4
+	jz .Lliella_machine_strpair_avx_loop128
+	subq $128, %rax
+	jmp .Lliella_machine_strpair_avx_loop
 	.p2align 4
 .Lliella_machine_strpair_avx_loop64:
 	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
@@ -6763,7 +6798,9 @@ liella_machine_strpair:
 	testl %r10d, %r10d
 	jnz .Lliella_machine_strpair_avx_loop
 	addq $64, %rax
-	jmp .Lliella_machine_strpair_avx_loop64
+	testl $64, %eax
+	jnz .Lliella_machine_strpair_avx_loop64
+	jmp .Lliella_machine_strpair_avx_loop128
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
 .Lliella_machine_strpair_sse_cand:
