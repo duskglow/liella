@@ -52,6 +52,15 @@ The complete table is in [plan section 1.2](plan/01-ground-rules.md).
 If the specification and probes are not enough to decide a behaviour, that is a spec gap: raise
 it in an issue, and the decision is made and recorded for Liella's own reasons.
 
+## Legacy interfaces
+
+Liella generally does not implement interfaces that are deprecated, removed upstream, or
+insecure by design, or it provides them only in a reduced form (a compatibility-only symbol or
+a failing stub). [plan/scope-review-legacy.md](plan/scope-review-legacy.md) lists the decisions
+made so far. Use your judgement about whether an interface falls into this category; if you're
+unsure, go ahead and contribute. Maintainers may ask for changes or decline an implementation on
+these grounds.
+
 ## Setup
 
 Linux x86-64 or WSL, Rust stable (`rust-toolchain.toml`), `cc`, `ar`. The reference system and
