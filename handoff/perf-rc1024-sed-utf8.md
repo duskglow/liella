@@ -74,3 +74,6 @@ No row is slower. sed-utf8 is still +0.40% (+9.7M) over fa678f74.
 Gate perf-rc1024-sed-utf8-gate (direct tier), plants perf-rc1024-sed-utf8-plants (p1 skip first byte, p2
 empty window answers Some(0): expected CAUGHT; p3 drop the hit test: EQUIVALENT, an earlier lower bound
 only costs time because the reverse pass still finds the start). Results: see the report json / hand-back.
+
+## PERF-RC1024-SED-UTF8-4 (2026-11-04)
+CI lab-names fix only: register row in docs/saturation/06 now says "Zen 1 host, 60 vCPU" (was keke). Job: keke perf-rc1024-sed-utf8-4-static (xtask static + clippy). Next step: CI.
