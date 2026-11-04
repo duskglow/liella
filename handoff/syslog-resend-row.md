@@ -5,3 +5,5 @@ Decisions: D-26.1 (#2052). The compat id is the placeholder COMPAT-NEW in both r
 Ported from the historic branch by hand (the two doc rows), not merged; the other historic commits were only handoff/report files.
 Not to redo: the test already exists on next and pins the behaviour.
 Next step: coordinator assigns the COMPAT id; CI gate.
+
+Update (ROW-3): the placeholder is now COMPAT-17 in docs/compat-flags.md and docs/differences-from-glibc.md. Renumber only; no plants.
