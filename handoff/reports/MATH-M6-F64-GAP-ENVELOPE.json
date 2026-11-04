@@ -8,4 +8,5 @@
  "improvement": "the brief's proof set (gate, plants, two-level counts, digest, detached sweep) plus a code change does not fit 55 calls; a story of this kind needs about 90, or split the measurement into its own story",
  "next_step": "convert the five tsv rows to closures, cargo xtask math-gen, re-check the disassembly, then digest, counts, plants, gate (handoff steps 1-6)",
  "report_file": "handoff/math-m6-f64-gap-envelope.md",
- "jobs": []}
+ "code_head": "5915dfc6",
+ "jobs": ["shiki:math-m6-f64-gap-envelope-clippy (clippy --workspace --all-targets --all-features -D warnings + xtask static, rc 0 on 5915dfc6)"]}
