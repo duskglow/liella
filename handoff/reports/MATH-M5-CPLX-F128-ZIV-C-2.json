@@ -4,9 +4,9 @@
  "tokens": null,
  "result": "NOT READY: 1536/3072 Ziv ladder implemented and unit-tested; gate running; plants, counts, next merge pending",
  "branch": "task/math-m5-cplx-f128-ziv-c-2",
- "head": "6ef07138",
+ "head": "68e1f799",
  "gate": {
-  "affected": "running (kanon math-m5-cplx-f128-ziv-c-2-gate)",
+  "affected": "running (kanon math-m5-cplx-f128-ziv-c-2-gate2); gate rc 101 superseded (clippy large_enum_variant)",
   "peak": null
  },
  "accepted_first_attempt": null,
@@ -20,6 +20,6 @@
  "next_step": "read gate, run plants and counts job, merge origin/next, final gate",
  "report_file": "handoff/math-m5-cplx-f128-ziv.md",
  "jobs": [
-  "kanon:math-m5-cplx-f128-ziv-c-2-gate"
+  "kanon:math-m5-cplx-f128-ziv-c-2-gate2"
  ]
 }
