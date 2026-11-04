@@ -1,0 +1,4 @@
+# LAB-NAMES-CLEAN handoff
+Branch task/lab-names-clean, code head fca9a86. Every tracked file outside handoff/ now names processor classes (mapping of tools/neutral_hosts.sh); bench TSVs keep columns (keyed by CPU model, note text only); gen_cycle_limits.py takes a CLASS; test addresses 10.0.0.x -> 11.0.0.x (0X10.0.0.1 -> 0X11.0.0.1, expected values updated); xtask/lab-names-pending.tsv and its ratchet code deleted; the walk skips the .changed sync marker. 15 host-map files stay on ALLOW with reasons.
+Run: lab-names-clean-gate3 (keke) = static, lab-names, clippy -D warnings, xtask labnames tests (4 passed, seen), affected --run. Still running at hand-back, NOT VERIFIED to the end. No separate plants job: the labnames unit tests plant names and addresses. Earlier gate and gate2 were red on remaining hits (superseded).
+Next: read lab-names-clean-gate3 from keke jobs.tsv; fix any hit it names.
