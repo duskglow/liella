@@ -157,14 +157,14 @@ fn open_path<S: Sys>(sys: &S, path: &[u8], flags: u32) -> Result<Fd> {
 /// The current time as `ut_tv` holds it, for the records the library stamps itself (`logwtmp`,
 /// `logout`): the 32-bit field holds unsigned seconds to 2106-02-07 06:28:15 UTC (D-17.5); after
 /// that, or before 1970, the record carries no time, `(0, 0)`, never a wrapped one (F38).
-pub fn now<S: Sys>(sys: &S) -> Result<(i64, i32)> {
+pub fn now<S: Sys>(sys: &S) -> Result<(i64, i64)> {
     let t = sys.clock_gettime(CLOCK_REALTIME)?;
     Ok(stamp(t.sec, t.nsec))
 }
 
 /// The `ut_tv` of a reading of the realtime clock (`sec`, `nsec`): see [`now`].
-pub fn stamp(sec: i64, nsec: i64) -> (i64, i32) {
-    if (0..=users::UT_SEC_MAX).contains(&sec) { (sec, i32::try_from(nsec / 1000).unwrap_or(0)) } else { (0, 0) }
+pub fn stamp(sec: i64, nsec: i64) -> (i64, i64) {
+    if (0..=users::UT_SEC_MAX).contains(&sec) { (sec, nsec / 1000) } else { (0, 0) }
 }
 
 /// The process-wide `utmp` cursor and file name (`setutent`, `getutent`, `getutid`,
@@ -345,7 +345,7 @@ pub fn put_in<S: Sys>(sys: &S, file: &[u8], rec: &Utmp) -> Result<()> {
 
 /// `logout(line)` on the `utmp` file `file`: the login or user process on `line` becomes a
 /// dead process with no user or host, stamped `time`. Whether one was found and written.
-pub fn logout_in<S: Sys>(sys: &S, file: &[u8], line: &[u8], time: (i64, i32)) -> Result<bool> {
+pub fn logout_in<S: Sys>(sys: &S, file: &[u8], line: &[u8], time: (i64, i64)) -> Result<bool> {
     let fd = open_path(sys, file, O_RDWR)?;
     let mut key = Utmp::default();
     users::set_field(&mut key.line, line);
@@ -365,7 +365,7 @@ pub fn logout_in<S: Sys>(sys: &S, file: &[u8], line: &[u8], time: (i64, i32)) ->
 
 /// The record `logwtmp(line, name, host)` appends: a user process, or a dead one when `name`
 /// is empty (a logout), of process `pid` at `time`.
-pub fn wtmp_record(line: &[u8], name: &[u8], host: &[u8], pid: i32, time: (i64, i32)) -> Utmp {
+pub fn wtmp_record(line: &[u8], name: &[u8], host: &[u8], pid: i32, time: (i64, i64)) -> Utmp {
     let mut u = Utmp { kind: if name.is_empty() { users::DEAD_PROCESS } else { users::USER_PROCESS }, pid, time, ..Utmp::default() };
     users::set_field(&mut u.line, line);
     users::set_field(&mut u.user, name);
