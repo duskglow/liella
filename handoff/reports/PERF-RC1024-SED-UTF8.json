@@ -1,0 +1,12 @@
+{"task": "PERF-RC1024-SED-UTF8", "model": "opus", "tokens": null,
+ "result": "PARTIAL/NOT READY: first_start first-byte fast path cuts sed-utf8 -0.15% and sed-s -0.29% vs head (no row slower), still +0.40% vs fa678f74; gate green, plants not verified",
+ "branch": "task/perf-rc1024-sed-utf8", "head": "fa513bd3",
+ "gate": {"affected": "1055 passed / 0 failed (3 suites, conformance 2/0)", "peak": "1.3G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "remaining sed-utf8 gap (+9.7M, the prefilter's per-re_search memchr of the required byte)", "recommendation": "allow a per-thread cache of the prefilter's presence answer for a non-leading, non-whole required string (an Engine answer is always correct), or accept +0.40% on sed-utf8"}],
+ "informational": ["fa678f74, 12e93df9 and 76041c21 are not ancestors of post-cutover origin/next (76041c21 not in the clone): per-landing counts need their sources primed on keke", "gawk-regex +1.10% and gawk-utf8 +0.72% vs fa678f74 at head, unchanged by this fix", "plants run 1 (perf-rc1024-sed-utf8-plants) failed its baseline: regex_corpus_products needs built products in a source-only RAM copy"],
+ "refused": [],
+ "jobs": ["perf-rc1024-sed-utf8-gate", "perf-rc1024-sed-utf8-count0", "perf-rc1024-sed-utf8-count1", "perf-rc1024-sed-utf8-plants2"],
+ "improvement": "wl_count should cache a role tree's product under its head sha so a later --base <head> does not rebuild (count1 rebuilt 125c0ccc); a plants helper should know which integration tests need products",
+ "next_step": "read perf-rc1024-sed-utf8-plants2 (p1 expected CAUGHT); then rule on the prefilter presence cache or prime the three landings for per-candidate counts",
+ "report_file": "handoff/perf-rc1024-sed-utf8.md"}

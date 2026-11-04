@@ -17,7 +17,7 @@ use liella_boundary::sys::CSys;
 use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 
-/// Upper bounds on the lowest of [`RUNS`] counts. Calibrated (HOTTEXT-FAULT-TEST-4, keke, release
+/// Upper bounds on the lowest of [`RUNS`] counts. Calibrated (HOTTEXT-FAULT-TEST-4, Zen 1 host, release
 /// list, 20 groups of 5 runs from a posix_spawn launcher; bash fork loops add ~120 COW faults and
 /// must not be used): single runs startup 15-17, setlocale + printf 59-61, tool 62-64, strings 0;
 /// the lowest of five: 15-16, 59-60, 62-63. Each bound is the highest single run seen plus one,
@@ -25,23 +25,23 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// run seen). The stale list that preceded PRINTF-LOOP-FAULTS reads +1 (startup), +2 (setlocale)
 /// and +4 (tool) over these, so the tool bound is the one that catches it. Earlier bounds were
 /// 31 / 95 (grouped vs ungrouped: 26 / 85 on older products), too loose to see a few lost pages.
-/// HOTTEXT-FAULT-ENV (fixed run path, keys independent of the checkout; keke n1 and a 94-character
-/// role, sumire 94-character role, 20 groups of 5 from a posix_spawn launcher): single runs 16-18,
+/// HOTTEXT-FAULT-ENV (fixed run path, keys independent of the checkout; Zen 1 host n1 and a 94-character
+/// role, Skylake-SP host 94-character role, 20 groups of 5 from a posix_spawn launcher): single runs 16-18,
 /// 56-59, 59-62, lowest-of-5 16-17, 56-59, 59-61; inside this test the lowest-of-5 read 17-18,
 /// 57-58, 60-62 (one above the launcher, not explained yet). TRUE_BOUND 18 -> 20 (margin 2 over
 /// the highest in-test value); LOCALE/TOOL unchanged (margin 4 and 3). Plants: first 120 keys only
 /// 71 / 80, no keys 24 / 86, generic keys with stale back-references 21 / 68: all fail.
 /// HOTTEXT-VARIANCE: the runs are now deterministic (no randomisation, one discarded warm-up run,
 /// see [`faults`]). origin/next 7129b059, one static build, 200 runs each from a posix_spawn
-/// launcher, every run after the first identical: keke 18 / 62 / 65, sumire 18 / 63 / 66 (the
-/// same binary, so the host adds one; inside this test on sumire role s4 also 18 / 63 / 66).
-/// Randomised, the same runs spread over three to four values (sumire 18-20, 63-66, 66-68).
+/// launcher, every run after the first identical: Zen 1 host 18 / 62 / 65, Skylake-SP host 18 / 63 / 66 (the
+/// same binary, so the host adds one; inside this test on Skylake-SP host role s4 also 18 / 63 / 66).
+/// Randomised, the same runs spread over three to four values (Skylake-SP host 18-20, 63-66, 66-68).
 /// Each bound is the highest deterministic count of the two hosts plus 2: room for layout-only
-/// deltas (the role path is embedded in .rodata; origin/next read 61 / 64 in another sumire role),
+/// deltas (the role path is embedded in .rodata; origin/next read 61 / 64 in another Skylake-SP host role),
 /// while lost grouping costs far more (the plants above: +6 to +21).
 /// TIMER-SIGEV-THREAD-NOSPAWN-4 (layout-only delta, owner rule): origin/next e54ddb3b read 20 in
-/// "true" mode in CI on sumire (bound 20, no margin left); with the SIGEV_THREAD retry change it
-/// read 21. Both trees built in sumire role s4: 18 / 62 / 64 (next), 20 / 62 / 64 (change).
+/// "true" mode in CI on Skylake-SP host (bound 20, no margin left); with the SIGEV_THREAD retry change it
+/// read 21. Both trees built in Skylake-SP host role s4: 18 / 62 / 64 (next), 20 / 62 / 64 (change).
 /// The change adds no writable data reached from startup (one AtomicBool in .bss, +8 bytes; the
 /// RW segment is 928 bytes SMALLER) and no startup code. It perturbs code generation: timer
 /// helper_main +3 KiB, and about 16 KiB of inlining churn elsewhere in liella_boundary (glob,
@@ -58,7 +58,7 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// 21, plus 2). LOCALE/TOOL stay at their origin/next values (the change reads the same as next).
 /// UTMP-Y2038-UNSIGNED-2 (layout-only delta, owner rule): with the unsigned login-record seconds
 /// (users, abi pack, accounting) CI read setlocale + printf 66 (bound 65), deterministic; startup
-/// 21. origin/next 635bb7aa vs the change, both built on keke from the same tree, perf page-fault
+/// 21. origin/next 635bb7aa vs the change, both built on Zen 1 host from the same tree, perf page-fault
 /// addresses after exec without randomisation: 61 vs 62, one more in .data, every other section
 /// the same. The changed code adds anonymous constants, .data grows 16 bytes (0x83b1 -> 0x83c1)
 /// and its objects are reordered: `liella_legacy::nscache::NSCACHE`, which
@@ -95,7 +95,7 @@ fn build(out: &Path) {
 
 /// HOTTEXT-VARIANCE: address-space randomisation (random stack offset, mmap base, vDSO) moves the
 /// stack strings and the 64 KiB fault-around windows of the file mappings across page boundaries,
-/// so one build read 18-20 / 63-66 / 66-68 (sumire, 200 runs each). With `ADDR_NO_RANDOMIZE` the
+/// so one build read 18-20 / 63-66 / 66-68 (Skylake-SP host, 200 runs each). With `ADDR_NO_RANDOMIZE` the
 /// same runs gave one value each. The persona is per thread and inherited at fork/spawn, so the
 /// calling (test) thread sets it before it starts the program.
 fn no_randomisation() {
@@ -121,7 +121,7 @@ fn stage(exe: &Path, run: &Path) {
 /// 200-run series without randomisation), so it is not counted.
 /// HOTTEXT-FAULT-ENV: the exec path, argv and environment strings sit at the top of the initial
 /// stack, so their length decides (with the kernel's random sub-page offset) whether the stack
-/// spans one more page; on keke argv[0] or env of 2.5 KiB moved every count by +1. The program
+/// spans one more page; on Zen 1 host argv[0] or env of 2.5 KiB moved every count by +1. The program
 /// therefore runs from a copy at a fixed-length private path, with a fixed argv[0], cwd and
 /// environment, so the count does not depend on where the tree is checked out.
 fn faults(exe: &Path, mode: &str) -> u64 {
@@ -176,7 +176,7 @@ fn init_short_programs_stay_within_their_page_fault_bounds() {
 #[test]
 fn init_first_string_calls_after_printf_take_no_text_fault() {
     // RC1-FIRST: strlen, strncmp, memchr, memcmp and strcpy are in the hot group, so their first
-    // calls after printf find their text mapped (main before the change: 2 faults on keke).
+    // calls after printf find their text mapped (main before the change: 2 faults on Zen 1 host).
     let r = root();
     assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
     let dir = r.join("target/test-oracles");

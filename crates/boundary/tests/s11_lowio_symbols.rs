@@ -291,7 +291,7 @@ fn check_write(write: extern "C" fn(*mut c_void) -> c_int) {
 fn check_fsync(fsync: extern "C" fn(c_int, *mut c_void) -> c_int) {
     // A memory file, not one under the target directory: on ext4 (data=ordered) an fsync of a
     // 4-byte file waits for the journal commit and with it every other dirty file on the disk.
-    // Measured on keke (FLAKES-6): 8 s with 4 GB dirty, 39 s under a 12 GB write, and in gates
+    // Measured on Zen 1 host (FLAKES-6): 8 s with 4 GB dirty, 39 s under a 12 GB write, and in gates
     // over 60 s (sym_fsync and sym_fdatasync took 100 s in the same run). The library's part -
     // queue, run, status words - is the same on any descriptor; a memfd's fsync returns at once.
     let fd = s::memfd_create(c"aio_fsync".as_ptr(), 1);

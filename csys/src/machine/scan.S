@@ -2230,7 +2230,7 @@ liella_machine_rawmemchr:
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
 	/* SSE2 (STR-K1), as strlen's with compares against the broadcast byte. STR-K2 measured the
-	 * alternatives for 64-byte strings on nico (cycles/call, best of 5): the old aligned
+	 * alternatives for 64-byte strings on Ivy Bridge host A (cycles/call, best of 5): the old aligned
 	 * 16-byte-step head 30-32, one unaligned 64-byte fold 27, this 16 + 48 head 27 (glibc 15);
 	 * most of the gap is the fixed cost (17 vs 9 at length 0), hence the pointer return.
 	 * SAFETY: as strlen's, with "no earlier byte matched" in place of "no earlier NUL": a loaded
@@ -3552,7 +3552,7 @@ liella_machine_strcmp:
 	 * random pairs, an unpredictable branch). The zero vector comes from memory; the equal
 	 * return gives a's byte (0) as the answer. A miss goes on at index 128 through the general
 	 * page test: the blocks keep their positions relative to the strings' starts (32-byte
-	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on keke), and
+	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on Zen 1 host), and
 	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
 	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
 	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
@@ -5079,7 +5079,50 @@ liella_machine_casecmp_ord_avx2:
 	jbe .Lcord_head_load
 	jmp .Lcord_generic
 .Lcord_head_next:
-	/* No stop in the first 32 bytes: the loop from offset 32, as after its own 32-byte step. */
+	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
+	 * no bound test there). A bound of 64 or less (PERF-STRNCASECMP-64-AVX2) needs one more
+	 * 32-byte step and no loop (a bound of 32 or less is met in it: any stop is at 32 or above,
+	 * which answers 0): taken here with the
+	 * head's memory-operand constants when both offsets are at most 4032 (so the block at +32
+	 * ends inside both pages; else the exact tests of the loop), and a stop, if any, goes to the
+	 * common exit with rax = 32 (an index at or above n answers 0 there). */
+	cmpq $64, %rdx
+	ja .Lcord_long
+	movl %edi, %r8d
+	orl %esi, %r8d
+	andl $4095, %r8d
+	cmpl $4032, %r8d
+	ja .Lcord_loop_in
+	vmovdqu 32(%rdi), %ymm1
+	vmovdqu 32(%rsi), %ymm2
+	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
+	vpaddb .Lcasecmp_k3f(%rip), %ymm2, %ymm4
+	vpcmpgtb .Lcasecmp_km103(%rip), %ymm3, %ymm3
+	vpcmpgtb .Lcasecmp_km103(%rip), %ymm4, %ymm4
+	vpandn .Lcasecmp_k20(%rip), %ymm3, %ymm3
+	vpandn .Lcasecmp_k20(%rip), %ymm4, %ymm4
+	vpor %ymm3, %ymm1, %ymm1
+	vpor %ymm4, %ymm2, %ymm2
+	vpcmpeqb %ymm1, %ymm2, %ymm3
+	vpminub %ymm1, %ymm3, %ymm4
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm4, %ymm4
+	vpmovmskb %ymm4, %r8d
+	movl $32, %eax
+	testl %r8d, %r8d
+	jnz .Lcord_found
+	vzeroupper
+	xorl %eax, %eax
+	ret
+.Lcord_long:
+	/* The loop from offset 32 with a bound above 64: its next 64-byte step is due. */
+	movl $32, %eax
+	vmovdqa .Lcasecmp_k3f(%rip), %ymm5
+	vmovdqa .Lcasecmp_km102(%rip), %ymm6
+	vmovdqa .Lcasecmp_k20(%rip), %ymm7
+	vpxor %xmm0, %xmm0, %xmm0
+	jmp .Lcord_top64
+.Lcord_loop_in:
+	/* The loop from offset 32, as after its own 32-byte step. */
 	xorl %eax, %eax
 	vmovdqa .Lcasecmp_k3f(%rip), %ymm5
 	vmovdqa .Lcasecmp_km102(%rip), %ymm6
@@ -5979,7 +6022,7 @@ index:
 	andl $4095, %ecx
 	cmpl $4080, %ecx
 	ja .Lschr_masked
-	/* [s, s + 16) inside s's page: one unaligned vector, no shift (measured on keke: the
+	/* [s, s + 16) inside s's page: one unaligned vector, no shift (measured on Zen 1 host: the
 	 * masked head's variable shift cost ~40 cycles per call when the count was 0). */
 	movdqu (%rdi), %xmm1
 	movdqa %xmm1, %xmm2

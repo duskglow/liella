@@ -66,7 +66,7 @@ static DETECTIONS: AtomicUsize = AtomicUsize::new(0);
 
 /// Bytes from which a disjoint copy that the AVX2 copy does not take uses `rep movsb` on an ERMS
 /// CPU (in practice a CPU without AVX2; `liella.cpu.rep_movsb_threshold` overrides it). Measured
-/// (MEMCPY-NONAVX2-THRESHOLD, D-4.14) on Ivy Bridge (nico, kotori; ERMS, no AVX2) against the
+/// (MEMCPY-NONAVX2-THRESHOLD, D-4.14) on Ivy Bridge (Ivy Bridge host A, Ivy Bridge host B; ERMS, no AVX2) against the
 /// SSE2 move, cycles per call with the kernels interleaved in one pinned process
 /// (tools/probe/memcpy_cycles.c): at 2-4 KiB `rep movsb` lost at every placement (1.03-1.07
 /// mutually aligned, 1.28-1.47 otherwise); from 6 KiB the head-aligned kernel won at mutually
@@ -80,7 +80,7 @@ pub const COPY_ERMS_MIN: usize = 6144;
 /// plain 1.01-1.31 there; from 24 KiB head-aligned 1.04-1.05 at +600, plain 0.98-1.00.
 pub const ERMS_A64_MISALIGNED_END: usize = 16_385;
 /// Bytes from which `rep movsb` takes copies above the AVX2 copy's range on an ERMS CPU, at any
-/// placement (`conv::ERMS_ANY_PLACEMENT`). With FSRM and AVX2 (N100, nozomi) it starts above
+/// placement (`conv::ERMS_ANY_PLACEMENT`). With FSRM and AVX2 (N100, AVX2 timing host) it starts above
 /// 1 MiB, the largest size measured: there `rep movsb` against the AVX2 copy was 0.99-1.01 at
 /// mutually aligned placements and 1.08-1.73 at others (destination 600 bytes after the source
 /// 1.73, plain or head-aligned); larger copies keep `rep movsb` (not measured). Ivy Bridge and
@@ -92,10 +92,10 @@ pub const FILL_ERMS_MIN: usize = 1280;
 
 /// The size range, in bytes, of the AVX2 copy: from `AVX2_COPY_MIN` up to, not including,
 /// `AVX2_COPY_END` (64 KiB, the largest size measured, included). Measured (D-4.14, PJ-7) on
-/// Haswell (shiki) and Zen 1 (keke), worst placement: at 128 bytes 12.2 against 12.8 ns for
-/// the loops (keke 10.2 against 14.9), at 64 bytes the loops win (7.2 against 12.8); up to
-/// 64 KiB it is the fastest path at every placement on shiki (16 KiB: 273 ns against 387 for
-/// the loops and 1045 for `rep movsb`) and within 5% of the best one on keke.
+/// Haswell (Haswell-EP host) and Zen 1 (Zen 1 host), worst placement: at 128 bytes 12.2 against 12.8 ns for
+/// the loops (Zen 1 host 10.2 against 14.9), at 64 bytes the loops win (7.2 against 12.8); up to
+/// 64 KiB it is the fastest path at every placement on Haswell-EP host (16 KiB: 273 ns against 387 for
+/// the loops and 1045 for `rep movsb`) and within 5% of the best one on Zen 1 host.
 pub const AVX2_COPY_MIN: usize = 128;
 /// See [`AVX2_COPY_MIN`].
 pub const AVX2_COPY_END: usize = 65_537;
@@ -105,13 +105,13 @@ pub const AVX2_COPY_END: usize = 65_537;
 /// `liella_machine_copy_erms_a64` (one 64-byte head store, then `rep movsb` from the aligned
 /// destination) instead of the AVX2 copy. Decided by cycles:u per call, the kernels interleaved
 /// in one pinned process (tools/probe/memcpy_cycles.c; paired per-round ratios, 10-90% range):
-/// - ERMS, no FSRM, AVX-512F (Skylake-SP, sumire, booked): rep movsb / AVX2 0.90 at 4 KiB, 0.66
+/// - ERMS, no FSRM, AVX-512F (Skylake-SP, Skylake-SP host, booked): rep movsb / AVX2 0.90 at 4 KiB, 0.66
 ///   at 10 KiB, 0.43-0.46 at 16 KiB, 0.93-0.98 at 20-64 KiB; a loss at 2 KiB (1.21): [`AVX2_ERMS_WIDE`].
-/// - ERMS, no FSRM, no AVX-512 (Broadwell, kanon): a 1-4% loss at 6-12 KiB, a win only at 16 KiB
+/// - ERMS, no FSRM, no AVX-512 (Broadwell, Broadwell-EP host): a 1-4% loss at 6-12 KiB, a win only at 16 KiB
 ///   (0.72-0.82; at 14 KiB 0.77 at one placement, a 1% loss at another), a tie from 20 KiB:
 ///   [`AVX2_ERMS_NARROW`]. Haswell (same class) not measured.
-/// - FSRM (N100, nozomi): rep movsb loses 1.4-2x up to 16 KiB and ties at best above: no window.
-/// - No ERMS (Zen 1, keke): no window.
+/// - FSRM (N100, AVX2 timing host): rep movsb loses 1.4-2x up to 16 KiB and ties at best above: no window.
+/// - No ERMS (Zen 1, Zen 1 host): no window.
 ///
 /// Destinations that differ from the source modulo 64 keep the AVX2 copy: there rep movsb
 /// (head-aligned or not) lost on every class (dst 600 bytes after the source modulo 4 KiB:

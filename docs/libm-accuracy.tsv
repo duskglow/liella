@@ -1,8 +1,9 @@
-# Track M accuracy measurements (D-10.3), `cargo xtask mathcmp`, margarete and keke (16 vCPUs, glibc 2.39): milestone 1 2026-10-04, milestones 2 to 5b 2026-10-05.
+# Track M accuracy measurements (D-10.3), `cargo xtask mathcmp`, margarete and Zen 1 host (16 vCPUs, glibc 2.39): milestone 1 2026-10-04, milestones 2 to 5b 2026-10-05.
 # Rows with Liella compared: the milestone-1 functions, the elementary functions of float and double (milestone 2) and hypot in every format. The special functions of float and double (milestone 3, 2026-10-05): 5,000 random operands per function, format and mode. The long double special functions (milestone 5b, margarete, 2026-10-05): 5,000 random operands per function and mode; records the oracle cannot decide within its default precision (tiny arguments of erfc, j0, j1 in the directed modes) are counted undetermined. The long double elementary functions (milestone 5a, margarete, 2026-10-05): 20,000 random operands per function in round-to-nearest, 5,000 per directed mode, half of them moderate and the rest anywhere in the format; records the oracle cannot decide within 4,096 bits (huge trigonometric and tiny arguments in the directed modes) are counted undetermined. Rows of glibc alone against the oracle (the _Float128 elementary functions) are the baseline of later milestones.
 # binary32 unary elementary functions: exhaustive (all 2^32 inputs) in round-to-nearest, and for exp2, exp10, expm1, log2, log10 also downward; the directed modes otherwise on 1,000,000 random operands per function and mode (coordinator decision 2026-10-05). binary64: 100,000 random operands per function and mode.
 # Columns: function, format, mode, records, identical, identical fraction, identical with different flags, classified by the oracle,
 # glibc correctly rounded, Liella correctly rounded (= glibc in glibc-only rows), mismatches glibc-not-CR, Liella-not-CR, neither, undetermined, glibc max ulp, Liella max ulp.
+# _Float128 (format q, 2026-11-04, Zen 1 host, 1,000 random operands per function and mode, seed 1): the elementary functions (milestone 5) and erf, erfc, tgamma, lgamma, j0, j1, y0, y1. The max-ulp reference is the oracle at 2p+40 bits, raised to the round-toward-zero result when it falls below it in magnitude (cosh of a tiny x: 1 + x^2/2 came out just under 1 and the Liella mode-U result nextup(1) scored 2.000 ulp in the binade below 1). The 98 to 113 undetermined records per 1000 in the directed modes of cosh, erfc, j0 and j1 are operands so tiny that 4096 oracle bits cannot place the result against its neighbouring representable values (|x| far below 2^-2000); round-to-nearest decides them. Not measured by mathcmp (no probe arity): sincos, jn, yn, lgamma_r and the complex functions; their tests are special_cr.rs, the *_products.rs differential tests and s10_math_symbols.rs.
 sqrt	f	N	100000	100000	1.000000	0	100000	100000	100000	0	0	0	0	0.000	0.000
 sqrt	f	U	100000	100000	1.000000	0	100000	100000	100000	0	0	0	0	0.000	0.000
 sqrt	f	D	100000	100000	1.000000	0	100000	100000	100000	0	0	0	0	0.000	0.000
@@ -570,7 +571,7 @@ ctan	d	N	2000	1085	0.542500	718	2000	1085	2000	915	0	0	0	4.280	0.500
 ctan	f	N	2000	1270	0.635000	831	2000	1270	2000	730	0	0	0	3.412	0.500
 ctanh	d	N	2000	1088	0.544000	705	2000	1088	2000	912	0	0	0	3.159	0.500
 ctanh	f	N	2000	1278	0.639000	849	2000	1278	2000	722	0	0	0	3.897	0.500
-# _Float128 elementary functions with Liella compared (M5-5 and M5-6, shiki, 2026-10-22): 1,000 random operands per function and mode, oracle on every record; Liella not correctly rounded 0, neither 0. Undetermined: records the oracle did not settle in directed modes. The q N rows of exp, log, sin, cos and pow above were replaced by rows of this run.
+# _Float128 elementary functions with Liella compared (M5-5 and M5-6, Haswell-EP host, 2026-10-22): 1,000 random operands per function and mode, oracle on every record; Liella not correctly rounded 0, neither 0. Undetermined: records the oracle did not settle in directed modes. The q N rows of exp, log, sin, cos and pow above were replaced by rows of this run.
 exp	q	U	1000	1000	1.000000	0	902	902	902	0	0	0	98	0.000	0.000
 exp	q	D	1000	1000	1.000000	0	902	902	902	0	0	0	98	0.000	0.000
 exp	q	Z	1000	1000	1.000000	0	902	902	902	0	0	0	98	0.000	0.000
@@ -639,7 +640,7 @@ sinh	q	U	1000	644	0.644000	0	887	575	887	312	0	0	113	2.062	1.000
 sinh	q	D	1000	617	0.617000	0	887	573	887	314	0	0	113	2.009	1.000
 sinh	q	Z	1000	818	0.818000	0	887	705	887	182	0	0	113	2.009	0.953
 cosh	q	N	1000	991	0.991000	129	1000	991	1000	9	0	0	0	0.720	0.490
-cosh	q	U	1000	853	0.853000	0	887	853	887	34	0	0	113	1.661	2.000
+cosh	q	U	1000	853	0.853000	0	887	853	887	34	0	0	113	1.661	1.000
 cosh	q	D	1000	984	0.984000	129	887	871	887	16	0	0	113	1.607	0.607
 cosh	q	Z	1000	984	0.984000	129	887	871	887	16	0	0	113	1.607	0.607
 tanh	q	N	1000	906	0.906000	0	1000	906	1000	94	0	0	0	1.891	0.497
@@ -658,3 +659,35 @@ atanh	q	N	1000	915	0.915000	0	1000	915	1000	85	0	0	0	1.970	0.500
 atanh	q	U	1000	683	0.683000	0	887	614	887	273	0	0	113	2.363	1.000
 atanh	q	D	1000	658	0.658000	0	887	614	887	273	0	0	113	3.386	1.000
 atanh	q	Z	1000	851	0.851000	0	887	738	887	149	0	0	113	2.386	0.900
+erf	q	N	1000	937	0.937000	257	1000	937	1000	63	0	0	0	0.996	0.500
+erf	q	U	1000	574	0.574000	257	1000	574	1000	426	0	0	0	1.711	1.000
+erf	q	D	1000	307	0.307000	0	1000	307	1000	693	0	0	0	2.000	1.000
+erf	q	Z	1000	438	0.438000	0	1000	438	1000	562	0	0	0	2.000	1.000
+erfc	q	N	1000	991	0.991000	0	1000	991	1000	9	0	0	0	1.133	0.476
+erfc	q	U	1000	971	0.971000	0	902	873	902	29	0	0	98	3.823	0.984
+erfc	q	D	1000	971	0.971000	0	902	873	902	29	0	0	98	3.337	0.963
+erfc	q	Z	1000	970	0.970000	0	902	872	902	30	0	0	98	2.617	0.963
+tgamma	q	N	1000	829	0.829000	0	1000	829	1000	171	0	0	0	3.224	0.495
+tgamma	q	U	1000	679	0.679000	0	1000	679	1000	321	0	0	0	3.224	1.000
+tgamma	q	D	1000	705	0.705000	0	1000	705	1000	295	0	0	0	3.224	0.998
+tgamma	q	Z	1000	701	0.701000	0	1000	701	1000	299	0	0	0	3.224	0.994
+lgamma	q	N	1000	661	0.661000	0	1000	661	1000	339	0	0	0	2.726	0.499
+lgamma	q	U	1000	273	0.273000	0	1000	273	1000	727	0	0	0	4.670	0.999
+lgamma	q	D	1000	274	0.274000	0	1000	274	1000	726	0	0	0	4.443	0.999
+lgamma	q	Z	1000	416	0.416000	0	1000	416	1000	584	0	0	0	4.597	0.998
+j0	q	N	1000	662	0.662000	162	1000	662	1000	338	0	0	0	3.358	0.500
+j0	q	U	1000	571	0.571000	162	887	458	887	429	0	0	113	7.183	1.000
+j0	q	D	1000	387	0.387000	0	887	387	887	500	0	0	113	7.899	1.000
+j0	q	Z	1000	442	0.442000	0	887	442	887	445	0	0	113	4.584	1.000
+j1	q	N	1000	668	0.668000	152	1000	668	1000	332	0	0	0	4.442	0.499
+j1	q	U	1000	278	0.278000	65	887	234	887	653	0	0	113	7.445	1.000
+j1	q	D	1000	301	0.301000	87	887	232	887	655	0	0	113	6.558	1.000
+j1	q	Z	1000	460	0.460000	0	887	460	887	427	0	0	113	6.167	1.000
+y0	q	N	1000	726	0.726000	0	1000	726	1000	274	0	0	0	4.900	0.499
+y0	q	U	1000	600	0.600000	0	1000	600	1000	400	0	0	0	6.885	0.997
+y0	q	D	1000	567	0.567000	0	1000	567	1000	433	0	0	0	6.448	0.999
+y0	q	Z	1000	583	0.583000	0	1000	583	1000	417	0	0	0	5.885	0.998
+y1	q	N	1000	725	0.725000	0	1000	725	1000	275	0	0	0	3.554	0.500
+y1	q	U	1000	629	0.629000	0	1000	629	1000	371	0	0	0	19.446	0.998
+y1	q	D	1000	689	0.689000	0	1000	689	1000	311	0	0	0	11.446	1.000
+y1	q	Z	1000	658	0.658000	0	1000	658	1000	342	0	0	0	34.446	1.000

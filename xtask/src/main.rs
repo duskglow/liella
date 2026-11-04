@@ -50,7 +50,6 @@ mod align;
 mod arch;
 mod bench;
 mod forkalloc;
-mod fs_order;
 mod benchrows;
 mod coldbss;
 mod compat;
@@ -58,6 +57,7 @@ mod copies;
 mod csys;
 mod fuzz;
 mod hottext;
+mod labnames;
 mod langinfo;
 mod math;
 mod native;
@@ -76,10 +76,11 @@ mod symgap;
 mod trace;
 mod unicode;
 mod compat_plan;
+mod plants;
 mod compatprobe;
 mod compat_objects;
 mod register;
-mod plants;
+mod fs_order;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -117,6 +118,7 @@ fn main() -> ExitCode {
         "env-audit" => policy::env_audit(&root),
         "opaque-audit" => policy::opaque_audit(&root),
         "crash-audit" => policy::crash_audit(&root),
+        "lab-names" => labnames::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),
         "unicode-gen" => unicode::run(&root, args.iter().any(|a| a == "--check")),
@@ -142,7 +144,7 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [<cbench>...]] | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -166,11 +168,11 @@ fn arch_tools() -> arch::Tools {
 
 /// `cargo xtask static`: the gate's static checks (the first steps of `test`: arch-audit (ARCH-SEAMS), purity, unsafe-audit, csys-audit,
 /// env-audit, opaque-audit, crash-audit, k5 (ffi.rs against liella_csys.h), align, trace, fuzz-check, compat-probes) in one command, all of them run (a failure does not hide the next), so they can be run
-/// on keke before a long gate. `~/bin/static-checks` on the VMs is the same list.
+/// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 19] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check)];
+    let checks: [(&str, Check); 20] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("lab-names", labnames::check), ("fs-order", fs_order::fs_order)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
@@ -237,8 +239,10 @@ fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[St
     let mut args = vec!["--workspace".to_string()];
     args.extend(feat.iter().cloned());
     // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889).
+    // Binaries without liella-boundary code are the same in both passes and run once (CI-GATE-DIET).
     if features.is_some() {
-        args.extend(nextest::pass1_filter(extra).unwrap_or_default());
+        let once = if nextest::pass1_filter(extra, &[]).is_some() { nextest::unchanged_binaries(cargo, root, &feat) } else { Vec::new() };
+        args.extend(nextest::pass1_filter(extra, &once).unwrap_or_default());
     }
     args.extend(extra.iter().cloned());
     // Every failure of both steps is reported before the gate stops.

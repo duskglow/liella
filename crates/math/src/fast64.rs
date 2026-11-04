@@ -60,6 +60,7 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// the assembly's `2u` that is `9u·th·|T| < 2^-49.8·th·|T|`. So `|e^r·2^(j/64) − y| <=
 /// 2^-49.8·th·|T| + th·2^-74 + 2^-101 <= 2^-49·|T|·|y| + 2^-70·|y|` (`|y| >= 0.994·th`; the
 /// computed `|tail|` is within `5u` of `|T|`).
+#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
 fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
@@ -187,6 +188,7 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// `e = 0` and `c = 1` (then `y = r` up to the series' errors), or `e = 0`, `|m − 1| >= 2^-8` and
 /// `|y| >= 2^-8.01`, or `e != 0` and `|y| >= |e|·ln2 − ln√2 >= 0.34·|e|`: so the absolute errors
 /// other than `T`'s are below `2^-72·|y|`.
+#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
 fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let (e, idx, lh, ll, tail) = log_series(x)?;
     Some((log_assemble(e, idx, lh, ll), tail))
@@ -296,6 +298,7 @@ fn logb_assemble<const TEN: bool>(e: i32, idx: usize, lh: f64, ll: f64) -> Dd {
 
 /// `log_b x` as `(y, tail)` (`b = 10` when `TEN`) for a positive finite `x != 1`, within
 /// [`logb_eps`] (proof at [`logb_assemble`]).
+#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
 fn logb_kernel<const TEN: bool>(x: f64) -> Option<(Dd, f64)> {
     let (e, idx, lh, ll, tail) = log_series(x)?;
     Some((logb_assemble::<TEN>(e, idx, lh, ll), tail))
@@ -441,10 +444,24 @@ pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8 {
     st
 }
 
+/// A refused argument the in-place entries still answer before the cold call (ruling #2378): a
+/// quiet NaN is its own result, `+∞` is `+∞` (exp, exp2, log, log2, log10) and `-∞` gives
+/// `neg_inf` (`+0` for exp and exp2, none for the logarithms, which are invalid there). Each is
+/// exact and raises nothing, so the caller's default MXCSR already holds what it must see and no
+/// errno is set. A signalling NaN (invalid) and every other refusal still go to the accurate path.
+#[inline(always)]
+fn special(x: f64, neg_inf: Option<f64>) -> Option<f64> {
+    let b = x.to_bits();
+    if b & 0x7ff8_0000_0000_0000 == 0x7ff8_0000_0000_0000 || b == f64::INFINITY.to_bits() {
+        return Some(x);
+    }
+    if b == f64::NEG_INFINITY.to_bits() { neg_inf } else { None }
+}
+
 /// `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn exp_nearest(x: f64) -> Option<f64> {
-    exp_near(x, &mut 0)
+    exp_near(x, &mut 0).or_else(|| special(x, Some(0.0)))
 }
 
 #[inline(always)]
@@ -458,9 +475,9 @@ fn exp_near(x: f64, st: &mut u8) -> Option<f64> {
 }
 
 /// `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn exp2_nearest(x: f64) -> Option<f64> {
-    exp2_near(x, &mut 0)
+    exp2_near(x, &mut 0).or_else(|| special(x, Some(0.0)))
 }
 
 #[inline(always)]
@@ -484,9 +501,9 @@ fn log_domain(x: f64) -> bool {
 }
 
 /// `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log_nearest(x: f64) -> Option<f64> {
-    log_near(x, &mut 0)
+    log_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]
@@ -513,9 +530,9 @@ fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Opt
 }
 
 /// `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log2_nearest(x: f64) -> Option<f64> {
-    log2_near(x, &mut 0)
+    log2_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]
@@ -528,9 +545,9 @@ fn log2_near(x: f64, st: &mut u8) -> Option<f64> {
 
 /// `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten
 /// `10^1 ..= 10^22` (exact; only integers in that range are compared).
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn log10_nearest(x: f64) -> Option<f64> {
-    log10_near(x, &mut 0)
+    log10_near(x, &mut 0).or_else(|| special(x, None))
 }
 
 #[inline(always)]
@@ -562,7 +579,7 @@ fn log10_near(x: f64, st: &mut u8) -> Option<f64> {
 /// 2^53` again. Every `y` with `y·2^11` integral is refused. `y·2^11` integral also covers every
 /// `|y| >= 2^40`, so `|y·ln x| < 745·2^41` (no overflow of the estimate in [`pow`]), and `|y| >=
 /// 2^-200` keeps `|y·ln x| >= 2^-253`: the exp kernel's `r²·2^-53` stays above 2^-560.
-#[inline]
+#[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
 pub fn pow_nearest(x: f64, y: f64) -> Option<f64> {
     pow_near(x, y, &mut 0)
 }
@@ -620,6 +637,7 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// <= 2^-49·|T| + 2^-101·|rh|`. When `e = 0` and `c = 1` the result is `lh + ll` normalized by
 /// Fast2Sum (exact: `|ll| <= 2^-28·|lh|`). Otherwise [`log_assemble`] adds `u·|T|` (still
 /// within `2^-48·|T|`) and below `2^-95·|e| + 2^-103`, charged as `DD94·|e| + DD100`.
+#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
 fn log_pow(x: f64) -> Option<(Dd, f64)> {
     let (e, m) = crate::exp_log::decompose(x);
     let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);

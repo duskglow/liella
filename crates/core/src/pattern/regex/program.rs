@@ -1390,6 +1390,14 @@ impl<'a> ProgRef<'a> {
         }
         let f = self.first;
         let hit = |b: u8| f.get(usize::from(b >> 6)).is_some_and(|w| (w >> (b & 63)) & 1 != 0);
+        // A match that can begin at the window's first byte is settled by one test, not the
+        // five of a chunk and its rescan (a repeated search, such as sed's `s///g`, mostly
+        // starts on a word's first byte).
+        match r.first() {
+            None => return None,
+            Some(&b) if hit(b) => return Some(0),
+            Some(_) => {}
+        }
         let mut base = 0usize;
         let mut chunks = r.chunks_exact(4);
         for c in &mut chunks {

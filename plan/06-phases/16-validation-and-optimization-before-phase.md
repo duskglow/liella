@@ -77,7 +77,7 @@ phase-14 *implementation* story, "overlap" = may run alongside phase 14):
    (benchmark rows), so the change needs a `wl_percall` count of the regex rows.
 3. **V-3 `PRE14-FUZZ-CAMPAIGN`** (M, after V-2 for the regex targets, before P14; long jobs start
    detached). Run every target for a fixed time each (one shared budget, e.g. 30 min per target,
-   in RAM on sumire), record corpus size, coverage and crashes per target in
+   in RAM on Skylake-SP host), record corpus size, coverage and crashes per target in
    `docs/fuzzing.md` (new); a crash becomes its own fix story. Security-relevant: any crash that
    may be a weakness goes to SECURITY-PRIVATE in the hand-back only.
 4. **V-4 `PRE14-BENCH-RERUN`** (M, timing booking, before P14). A fresh full bench of the merged

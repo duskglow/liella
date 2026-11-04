@@ -1,0 +1,26 @@
+{
+ "task": "MATH-M5-CPOW-EXACT",
+ "model": "opus",
+ "tokens": null,
+ "result": "cpow integer powers beyond the exact width decided from the exact value (pow_int_far), all formats and modes",
+ "branch": "task/math-m5-cpow-exact",
+ "head": "dac5281d",
+ "gate": {
+  "affected": "164 passed / 0 failed (direct tier, 2 targets + 1 lib)",
+  "peak": "1071489024 B RSS"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Dense integer powers (no dominant part) needing more than 3072 bits still rely on D-10.17's assumption",
+  "plants: old-cutoff, one-limb-short (add_x width +64), directed-flipped: all CAUGHT"
+ ],
+ "refused": [],
+ "improvement": "A shared plants-script template (copy to RAM, perl plant, msg check, restore) would save each story about 2 calls",
+ "next_step": "CI landing, then MATH-M5-CLOSE",
+ "report_file": "handoff/math-m5-cpow-exact.md",
+ "jobs": [
+  "kanon:math-m5-cpow-exact-gate",
+  "kanon:math-m5-cpow-exact-plants"
+ ]
+}

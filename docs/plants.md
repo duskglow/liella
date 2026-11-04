@@ -10,8 +10,8 @@ cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]
 ```
 
 Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/gate`, which gives the job a private
-`/dev/shm`). Use a directory that is NEW for every run and that is in RAM: `/dev/shm/claude/<story>/plants-<n>` on keke,
-`/mnt/zram/claude/<story>/plants-<n>` on sumire. Do not delete it: ram-sweep removes it later.
+`/dev/shm`). Use a directory that is NEW for every run and that is in RAM: `/dev/shm/claude/<story>/plants-<n>` on Zen 1 host,
+`/mnt/zram/claude/<story>/plants-<n>` on Skylake-SP host (the RAM-disk host). Do not delete it: ram-sweep removes it later.
 
 ## What it does
 

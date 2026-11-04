@@ -35,10 +35,10 @@ typedef unsigned char u8;
 #define UNARY_SPECIAL_WIDE(X) UNARY_SPECIAL(X)
 #else
 /* _Float128: the exponentials, logarithms, cbrt and pow since milestone 5 (M5-5), the trigonometric and
- * hyperbolic functions and atan2 since M5-6: every elementary function. */
+ * hyperbolic functions and atan2 since M5-6: every elementary function; the real special functions since milestone 5 too. */
 #define UNARY_ELEM_WIDE(X) UNARY_ELEM(X)
 #define BINARY_ELEM_WIDE(X) BINARY_ELEM(X)
-#define UNARY_SPECIAL_WIDE(X)
+#define UNARY_SPECIAL_WIDE(X) UNARY_SPECIAL(X)
 #endif
 
 

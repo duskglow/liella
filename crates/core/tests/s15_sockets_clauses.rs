@@ -578,7 +578,7 @@ fn s15_3_c_3() {
         (c"1.2.3.4", [1, 2, 3, 4]),
         (c"0x7f.1", [127, 0, 0, 1]),
         (c"0177.0.0.1", [127, 0, 0, 1]),
-        (c"0X10.0.0.1", [16, 0, 0, 1]),
+        (c"0X11.0.0.1", [17, 0, 0, 1]),
         (c"4294967295", [255; 4]),
         (c"1.16777215", [1, 255, 255, 255]),
         (c"1.2.65535", [1, 2, 255, 255]),
@@ -970,85 +970,84 @@ fn me() -> Option<(String, String)> {
 
 #[test]
 fn s15_8_c_1() {
-    // rcmd needs a privileged source port (below 1024): an unprivileged caller is refused at
-    // rresvport, after the host is looked up (and *ahost set to its canonical name).
-    if liella_boundary::posix::s17_users::geteuid() == 0 {
-        skip_note::skipped("skipped: run unprivileged (the privileged path needs a real rshd)");
-        return;
+    // Trace: s15_8_c_1 (rcmd is a failing stub: D-15.7, owner ruling R10 2026-11-04).
+    // Whatever the host (known, unknown, any family) and privilege: -1, errno EOPNOTSUPP, no
+    // lookup (*ahost keeps its pointer) and *fd2p untouched.
+    for name in [c"LOCALHOST", c"127.0.0.1", c"nosuchhost.invalid"] {
+        for af in [None, Some(AF_INET as u16), Some(AF_INET6 as u16), Some(AF_UNIX as u16)] {
+            let mut host = name.as_ptr() as usize;
+            let before = host;
+            let mut fd2 = -7;
+            errno::set_raw(0);
+            let r = match af {
+                None => x::rcmd(Some(&mut host), 514u16.to_be(), c"me".as_ptr(), c"you".as_ptr(), c"true".as_ptr(), Some(&mut fd2)),
+                Some(af) => x::rcmd_af(Some(&mut host), 514u16.to_be(), c"me".as_ptr(), c"you".as_ptr(), c"true".as_ptr(), Some(&mut fd2), af),
+            };
+            assert_eq!((r, errno::get()), (-1, Errno::EOPNOTSUPP.get()), "{name:?} {af:?}");
+            assert_eq!((host, fd2), (before, -7), "{name:?} {af:?}: *ahost and *fd2p untouched");
+        }
     }
-    let mut host = c"LOCALHOST".as_ptr() as usize;
-    let mut fd2 = -1;
-    errno::set_raw(0);
-    let r = x::rcmd(Some(&mut host), 514u16.to_be(), c"me".as_ptr(), c"you".as_ptr(), c"true".as_ptr(), Some(&mut fd2));
-    assert_eq!((r, errno::get()), (-1, Errno::EACCES.get()), "no privileged port");
-    assert_eq!(text_at(host), "localhost", "the canonical name of the hosts entry");
-    let mut unknown = c"nosuchhost.invalid".as_ptr() as usize;
-    let before = unknown;
-    assert_eq!(x::rcmd(Some(&mut unknown), 514u16.to_be(), c"me".as_ptr(), c"you".as_ptr(), c"true".as_ptr(), None), -1);
-    assert_eq!(unknown, before, "an unknown host leaves *ahost");
-    errno::set_raw(0);
-    assert_eq!(x::rcmd_af(Some(&mut host), 514u16.to_be(), c"me".as_ptr(), c"you".as_ptr(), c"true".as_ptr(), None, AF_UNIX as u16), -1);
-    assert_eq!(errno::get(), Errno::EAFNOSUPPORT.get());
 }
 
 #[test]
 fn s15_8_c_2() {
-    if liella_boundary::posix::s17_users::geteuid() == 0 {
-        let mut port = 1023;
-        let fd = x::rresvport(Some(&mut port));
-        assert!(fd >= 0 && (512..=1023).contains(&port));
-        io::close(fd);
-        return;
+    // Trace: s15_8_c_2 (rresvport is a failing stub: D-15.7, owner ruling R10 2026-11-04;
+    // bindresvport is unchanged and tested in userns_paths).
+    // Any start port, any family, any privilege: -1, errno EOPNOTSUPP, *port untouched.
+    for start in [0, 600, 1023, 2000, -5] {
+        for af in [None, Some(AF_INET as u16), Some(AF_INET6 as u16), Some(AF_UNIX as u16)] {
+            let mut port = start;
+            errno::set_raw(0);
+            let r = match af {
+                None => x::rresvport(Some(&mut port)),
+                Some(af) => x::rresvport_af(Some(&mut port), af),
+            };
+            assert_eq!((r, errno::get(), port), (-1, Errno::EOPNOTSUPP.get(), start), "from {start} {af:?}");
+        }
     }
-    // The search starts at *port, taken into 512–1023; an unprivileged caller is refused there.
-    for (start, tried) in [(0, 512), (2000, 1023), (600, 600), (-5, 512)] {
-        let mut port = start;
-        errno::set_raw(0);
-        assert_eq!(x::rresvport(Some(&mut port)), -1);
-        assert_eq!((errno::get(), port), (Errno::EACCES.get(), tried), "from {start}");
-    }
-    let mut port = 1023;
-    assert_eq!(x::rresvport_af(Some(&mut port), AF_INET6 as u16), -1);
-    assert_eq!(errno::get(), Errno::EACCES.get());
-    let mut port = 7;
-    assert_eq!(x::rresvport_af(Some(&mut port), AF_UNIX as u16), -1);
-    assert_eq!((errno::get(), port), (Errno::EAFNOSUPPORT.get(), 7), "an unknown family leaves *port");
+    errno::set_raw(0);
+    assert_eq!((x::rresvport(None), errno::get()), (-1, Errno::EOPNOTSUPP.get()), "a NULL port");
 }
 
-/// `__ivaliduser` over a trust file's lines.
-fn ivalid(text: &str, from: [u8; 4], luser: &CStr, ruser: &CStr) -> c_int {
+/// errno value planted around a call whose errno must stay untouched (non-zero, so a call
+/// that clears errno is caught too).
+const ERRNO_SENTINEL: i32 = 0x5a5a;
+
+/// `__ivaliduser` over a trust file's lines: its result, the stream's offset afterwards and
+/// errno right after the call. errno is planted immediately before the call, after the
+/// fixture's own file I/O (which may leave errno set).
+fn ivalid(text: &str, from: [u8; 4], luser: &CStr, ruser: &CStr) -> (c_int, i64, i32) {
     let path = scratch::Scratch::path("c15-equiv");
     std::fs::write(&path, text).unwrap();
     let fp = sio::fopen(path.c().as_ptr(), c"r".as_ptr());
     assert!(!fp.is_null());
+    errno::set_raw(ERRNO_SENTINEL);
     let r = x::__ivaliduser(fp.cast(), in_addr(from), luser.as_ptr(), ruser.as_ptr());
+    let e = errno::get();
+    let at = sio::ftell(fp);
     sio::fclose(fp);
-    r
+    (r, at, e)
 }
 
 #[test]
 fn s15_8_c_3() {
+    // Trace: s15_8_c_3 (the trust checks are denying stubs: D-15.7, owner rulings R10/R11 2026-11-04).
     const LO: [u8; 4] = [127, 0, 0, 1];
     const OTHER: [u8; 4] = [192, 0, 2, 7];
-    // The trust lines (hosts.equiv(5)).
-    assert_eq!(ivalid("localhost\n", LO, c"u", c"u"), 0, "a host alone: the same user name");
-    assert_eq!(ivalid("localhost\n", LO, c"u", c"v"), -1);
-    assert_eq!(ivalid("127.0.0.1 alice\n", LO, c"u", c"alice"), 0, "a host and a user");
-    assert_eq!(ivalid("127.0.0.1 alice\n", OTHER, c"u", c"alice"), -1, "another host");
-    assert_eq!(ivalid("127.0.0.1 ALICE\n", LO, c"u", c"alice"), -1, "user names match exactly");
-    assert_eq!(ivalid("LOCALHOST\n", LO, c"u", c"u"), 0, "host names match without regard to case");
-    assert_eq!(ivalid("+\n", OTHER, c"u", c"u"), 0, "+: any host");
-    assert_eq!(ivalid("+ +\n", OTHER, c"u", c"v"), 0, "+ +: any host and user");
-    assert_eq!(ivalid("-localhost\n+ +\n", LO, c"u", c"u"), -1, "-host: denied, the first deciding line wins");
-    assert_eq!(ivalid("-localhost\n+ +\n", OTHER, c"u", c"u"), 0);
-    assert_eq!(ivalid("localhost -bob\nlocalhost +\n", LO, c"u", c"bob"), -1, "-user: denied");
-    assert_eq!(ivalid("localhost -bob\nlocalhost +\n", LO, c"u", c"carol"), 0);
-    assert_eq!(ivalid("  localhost\n", LO, c"u", c"u"), -1, "the host field starts the line");
-    assert_eq!(ivalid("localhost\talice # c\n", LO, c"u", c"alice"), 0);
-    if !std::path::Path::new("/etc/netgroup").exists() {
-        assert_eq!(ivalid("+@group\n", LO, c"u", c"u"), -1, "no netgroups: +@group matches nobody");
-        assert_eq!(ivalid("-@group\n+\n", LO, c"u", c"u"), 0, "-@group denies nobody");
+    // __ivaliduser denies every line, even one that admits anyone, without reading the stream
+    // and without touching errno.
+    for (text, from, ruser) in [("localhost\n", LO, c"u"), ("127.0.0.1 alice\n", LO, c"alice"), ("+\n", OTHER, c"u"), ("+ +\n", OTHER, c"v")] {
+        // (result, stream offset, errno after the call): deny, stream unread, errno untouched.
+        assert_eq!(ivalid(text, from, c"u", ruser), (-1, 0, ERRNO_SENTINEL), "{text:?}");
     }
+    // ruserok, ruserok_af, iruserok and iruserok_af deny, errno untouched, whatever the files hold.
+    let lo = u32::from_ne_bytes(LO);
+    errno::set_raw(ERRNO_SENTINEL);
+    assert_eq!(x::ruserok(c"localhost".as_ptr(), 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
+    assert_eq!(x::ruserok_af(c"localhost".as_ptr(), 1, c"alice".as_ptr(), c"alice".as_ptr(), AF_INET as u16), -1);
+    assert_eq!(x::iruserok(lo, 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
+    assert_eq!(x::iruserok_af((&raw const lo).cast(), 0, c"alice".as_ptr(), c"alice".as_ptr(), AF_INET as u16), -1);
+    assert_eq!(errno::get(), ERRNO_SENTINEL, "the trust checks leave errno alone");
     // The files' checks (rcmd(3)), on fixture files in a private directory (owned by an
     // unprivileged user, so that the system-wide file's owner check fails).
     if liella_boundary::posix::s17_users::geteuid() == 0 {
@@ -1105,83 +1104,26 @@ fn s15_8_c_3() {
     assert_eq!(x::ruserok(c"nosuchhost.invalid".as_ptr(), 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
 }
 
-/// Read a NUL-terminated field from `c`.
-fn read_z(c: &mut std::net::TcpStream) -> String {
-    use std::io::Read;
-    let mut v = Vec::new();
-    let mut b = [0u8; 1];
-    while c.read(&mut b).unwrap() == 1 && b[0] != 0 {
-        v.push(b[0]);
-    }
-    String::from_utf8(v).unwrap()
-}
-
-/// A one-connection rexecd on loopback: its port, and the fields it received. `reply`: 0
-/// success (then "out" on the connection and "err" on the error channel), 1 refusal, 2 close.
-fn fake_rexecd(reply: u8) -> (u16, std::thread::JoinHandle<Vec<String>>) {
-    use std::io::Write;
-    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = l.local_addr().unwrap().port();
-    let t = std::thread::spawn(move || {
-        let (mut c, _) = l.accept().unwrap();
-        let mut fields = vec![read_z(&mut c)];
-        let mut back = (!fields[0].is_empty()).then(|| std::net::TcpStream::connect(("127.0.0.1", fields[0].parse::<u16>().unwrap())).unwrap());
-        for _ in 1..4 {
-            fields.push(read_z(&mut c));
-        }
-        match reply {
-            0 => {
-                c.write_all(b"\0out").unwrap();
-                if let Some(b) = &mut back {
-                    b.write_all(b"err").unwrap();
-                }
-            }
-            1 => c.write_all(b"\x01refused by the test server\n").unwrap(),
-            _ => {}
-        }
-        fields
-    });
-    (port, t)
-}
-
 #[test]
 fn s15_8_c_4() {
-    // The protocol: the error channel's port (empty for none), the user, the password in clear
-    // text and the command, each NUL-terminated; one byte answers.
-    let (port, server) = fake_rexecd(0);
-    let mut host = c"LOCALHOST".as_ptr() as usize;
-    let mut fd2 = -1;
-    let s = x::rexec(Some(&mut host), c_int::from(port.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"cmd arg".as_ptr(), Some(&mut fd2));
-    assert!(s >= 0 && fd2 >= 0);
-    let fields = server.join().unwrap();
-    assert!(fields[0].parse::<u16>().is_ok(), "the error channel's port: {fields:?}");
-    assert_eq!(fields[1..], ["user", "secret", "cmd arg"], "the password in clear text");
-    assert_eq!(text_at(host), "localhost", "*ahost: the canonical name");
-    let mut b = [0u8; 3];
-    assert_eq!(io::read(s, b.as_mut_ptr().cast(), 3), 3);
-    assert_eq!(&b, b"out");
-    assert_eq!(io::read(fd2, b.as_mut_ptr().cast(), 3), 3);
-    assert_eq!(&b, b"err", "the error channel");
-    close(&[s, fd2]);
-    let (port, server) = fake_rexecd(0);
-    let mut host = c"127.0.0.1".as_ptr() as usize;
-    let s = x::rexec(Some(&mut host), c_int::from(port.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"ls".as_ptr(), None);
-    assert!(s >= 0);
-    assert_eq!(server.join().unwrap(), ["", "user", "secret", "ls"], "no error channel: an empty port");
-    io::close(s);
-    for reply in [1, 2] {
-        let (port, server) = fake_rexecd(reply);
+    // Trace: s15_8_c_4 (rexec and ruserpass are failing stubs: D-15.7, owner rulings R10/R11 2026-11-04).
+    // -1 with errno EOPNOTSUPP; nothing connects, no .netrc is read, no argument is written.
+    for af in [None, Some(AF_INET as u16), Some(AF_INET6 as u16)] {
         let mut host = c"localhost".as_ptr() as usize;
-        assert_eq!(x::rexec(Some(&mut host), c_int::from(port.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"ls".as_ptr(), None), -1, "reply {reply}");
-        server.join().unwrap();
+        let before = host;
+        let mut fd2 = -7;
+        errno::set_raw(0);
+        let r = match af {
+            None => x::rexec(Some(&mut host), c_int::from(512u16.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"ls".as_ptr(), Some(&mut fd2)),
+            Some(af) => x::rexec_af(Some(&mut host), c_int::from(512u16.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"ls".as_ptr(), Some(&mut fd2), af),
+        };
+        assert_eq!((r, errno::get()), (-1, Errno::EOPNOTSUPP.get()), "{af:?}");
+        assert_eq!((host, fd2), (before, -7), "{af:?}: *ahost and *fd2p untouched");
     }
-    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = l.local_addr().unwrap().port();
-    drop(l);
-    let mut host = c"localhost".as_ptr() as usize;
+    let (mut name, mut pass) = (7usize, 9usize);
     errno::set_raw(0);
-    assert_eq!(x::rexec(Some(&mut host), c_int::from(port.to_be()), c"user".as_ptr(), c"secret".as_ptr(), c"ls".as_ptr(), None), -1);
-    assert_eq!(errno::get(), Errno::ECONNREFUSED.get());
+    assert_eq!(x::ruserpass(c"localhost".as_ptr(), Some(&mut name), Some(&mut pass)), -1);
+    assert_eq!((errno::get(), name, pass), (Errno::EOPNOTSUPP.get(), 7, 9), "ruserpass: *aname and *apass untouched");
 }
 
 // ------------------------------------------------------------------------------ clauses after a flag line (2026-10-04)

@@ -135,6 +135,20 @@ impl intl::Host for Catalogs {
         if process::secure() { None } else { LANGUAGE.getenv(b"LANGUAGE") }.map(strz::env_value)
     }
 
+    fn language_probe(&self) -> Option<Option<usize>> {
+        // Remembered across lookups, as in `language` (one memo: this is the only reader).
+        static LANGUAGE: process::EnvMemo = process::EnvMemo::new();
+        Some(if process::secure() { None } else { LANGUAGE.getenv(b"LANGUAGE") })
+    }
+
+    fn text_at(&self, addr: usize) -> &'static [u8] {
+        strz::env_value(addr)
+    }
+
+    fn text_equals(&self, addr: usize, len: usize, stored: &dyn Fn(usize) -> u64) -> Option<&'static [u8]> {
+        strz::text_equals_words(addr, len, stored)
+    }
+
     fn locale(&self) -> &'static Locale {
         locale::current()
     }

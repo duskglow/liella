@@ -276,19 +276,19 @@ fn s2_2_c_5() {
 }
 
 /// §2.2: `perror(s)` writes `s: <message>\n` (the message alone when `s` is NULL or empty) to
-/// `stderr`; an unoriented `stderr` stays unoriented, a wide one is honoured.
+/// `stderr`; a wide `stderr` is honoured (an unoriented one becomes byte-oriented, as the reference
+/// does: pinned by `conformance/c/s20_psignal_stream.c`, test `psignal_stderr_stream_cases`).
 #[test]
 fn s2_2_c_6() {
     let err = in_child("s2_2_c_6", "s2_2_c_6", &[], || {
         let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        assert!(io::fwide(fp, 1) > 0);
         errno::set_raw(ENOENT);
         x::perror(cs("ctx").as_ptr());
         assert_eq!(errno::get(), ENOENT, "errno unchanged");
         x::perror(null());
         errno::set_raw(EINVAL);
         x::perror(cs("").as_ptr());
-        assert_eq!(io::fwide(fp, 0), 0, "still unoriented");
-        assert!(io::fwide(fp, 1) > 0);
         errno::set_raw(ERANGE);
         x::perror(cs("wide").as_ptr());
         assert!(io::fwide(fp, 0) > 0, "still wide");

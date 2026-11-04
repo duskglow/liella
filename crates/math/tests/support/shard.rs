@@ -13,8 +13,69 @@ use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 
-/// The number of shards of each products test.
-pub(crate)const SHARDS: usize = 8;
+/// The number of shards of the including test: its entry in `WIDE` by test target name, else
+/// `DEFAULT_SHARDS`. The helper needs nothing from the file that includes it, so a new products
+/// test can include it as it is. A test with a hand-written shard list checks the list against
+/// this value at compile time (complex_ld_cr_products), so a renamed target cannot quietly drop
+/// back to the default.
+pub(crate)const SHARDS: usize = shards_of(env!("CARGO_CRATE_NAME"));
+
+/// The shards of a products test with no entry in `WIDE`.
+pub(crate)const DEFAULT_SHARDS: usize = 8;
+
+/// Tests split into more than `DEFAULT_SHARDS` shards (CI-GATE-DIET: complex_ld_cr_products takes
+/// 20 so no shard runs past ~3 min in the gate).
+const WIDE: &[(&str, usize)] = &[("complex_ld_cr_products", 20)];
+
+/// The shards of test target `name` (`WIDE`, else `DEFAULT_SHARDS`).
+pub(crate)const fn shards_of(name: &str) -> usize {
+    let mut i = 0;
+    while i < WIDE.len() {
+        if same(WIDE[i].0.as_bytes(), name.as_bytes()) {
+            return WIDE[i].1;
+        }
+        i += 1;
+    }
+    DEFAULT_SHARDS
+}
+
+/// True when a test's hand-written shard list `ks` is exactly shards `0..SHARDS`, in order: none
+/// missing, none twice, none past the end. Each `shards!` list asserts this at compile time, so
+/// the list and `SHARDS` cannot disagree (a short list would leave lines unchecked).
+pub(crate)const fn list_is_exact(ks: &[usize]) -> bool {
+    if ks.len() != SHARDS {
+        return false;
+    }
+    let mut i = 0;
+    while i < ks.len() {
+        if ks[i] != i {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Byte equality usable in a const context.
+const fn same(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Every line index goes to exactly one shard and the shares sum to `len`: the shards of a test
+/// together check exactly the lines the unsharded test checked.
+pub(crate)fn partition_holds(len: usize) -> bool {
+    (0..len).all(|i| (0..SHARDS).filter(|&k| mine(i, k)).count() == 1) && (0..SHARDS).map(|k| share(len, k)).sum::<usize>() == len && (0..SHARDS).all(|k| (0..len).filter(|&i| mine(i, k)).count() == share(len, k))
+}
 
 /// Whether line `i` belongs to shard `shard`.
 pub(crate)fn mine(i: usize, shard: usize) -> bool {
