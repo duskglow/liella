@@ -74,7 +74,8 @@ fn probe() -> Option<String> {
 /// state (the enumeration cursors, the utmp file name, the shell list, the password lock); the
 /// child's own assertions decide.
 fn in_child(test: &str) {
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(PROBE, test).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(PROBE, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "child {test}: {:?}\n{}{}", o.status, String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
 }
 
@@ -654,10 +655,11 @@ fn sym___getgroups_chk() {
     errno::set_raw(0);
     assert_eq!((s::__getgroups_chk(-1, list.as_mut_ptr(), list.len() * 4), errno::get()), (-1, 22));
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym___getgroups_chk", "--exact", "--test-threads=1"])
+        .args(["sym___getgroups_chk", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S17_CHK", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "more entries than the buffer holds: the fortify abort");
 }
 
@@ -705,7 +707,8 @@ fn sym___getlogin_r_chk() {
         Err(e) => e,
     };
     assert_eq!(s::__getlogin_r_chk(buf.as_mut_ptr().cast(), 300, 300), want);
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getlogin_r_chk", "--exact", "--test-threads=1"]).env(PROBE, "chk").output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getlogin_r_chk", "--exact", "--include-ignored", "--test-threads=1"]).env(PROBE, "chk").output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "a size beyond the object: the fortify abort");
 }
 
@@ -739,8 +742,9 @@ fn sym_getpass() {
     }
     // Without a terminal (in a child of a new session, so /dev/tty cannot be opened).
     let mut child = std::process::Command::new("setsid")
+        // reexec-guard: allow(spawned; the child's marker output is asserted below)
         .arg(std::env::current_exe().unwrap())
-        .args(["sym_getpass", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["sym_getpass", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, "pipe")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -756,8 +760,9 @@ fn sym_getpass() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("Prompt: Again: Last: "), "the prompts on standard error");
     // On a terminal: echo off while reading, restored afterwards, and a newline after the line.
     let (m, tty) = pty();
+    // reexec-guard: allow(spawned; the child's marker output is asserted below)
     let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_getpass", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["sym_getpass", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, &tty)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -847,8 +852,9 @@ fn sym_getpass_bound() {
     }
     let run = |mode: &str, input: Vec<u8>| -> Vec<String> {
         let mut child = std::process::Command::new("setsid")
+            // reexec-guard: allow(spawned; the child's marker output is asserted below)
             .arg(std::env::current_exe().unwrap())
-            .args(["sym_getpass_bound", "--exact", "--test-threads=1", "--nocapture"])
+            .args(["sym_getpass_bound", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
             .env(PROBE, mode)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -892,8 +898,9 @@ fn sym_getpass_bound() {
     assert!(r[2].starts_with("len=2 fill=false "), "{}", r[2]);
     // The override on a terminal (read in chunks: the chunk is zeroed too).
     let (m, tty) = pty();
+    // reexec-guard: allow(spawned; the child's marker output is asserted below)
     let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_getpass_bound", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["sym_getpass_bound", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, format!("bound-tty:{tty}"))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -1463,7 +1470,8 @@ fn sym_login_tty() {
         CSys.exit_group(0);
     }
     let (m, tty) = pty();
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym_login_tty", "--exact", "--test-threads=1"]).env(PROBE, &tty).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym_login_tty", "--exact", "--include-ignored", "--test-threads=1"]).env(PROBE, &tty).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{:?}\n{}{}", o.status, String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     errno::set_raw(0);
     assert_eq!(s::login_tty(0x7fff_0000), -1, "not a descriptor");

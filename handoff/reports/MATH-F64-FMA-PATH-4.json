@@ -1,0 +1,11 @@
+{"task": "MATH-F64-FMA-PATH-4", "model": "opus", "tokens": null,
+ "result": "origin/next merged; fast64 conflict resolved keeping next's log-table kernels with the FMA build of exp_kernel/log_kernel/log_series; FMA row renumbered D-10.23; build/gate/plants chain started on keke",
+ "branch": "task/math-f64-fma-path-4", "head": "4f8d85fe",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "D-row id collision: next's sqrt row and this story's FMA row were both D-10.22", "recommendation": "keep the FMA row as D-10.23 (done in the decisions file); update code comments next run"}],
+ "informational": ["code comments still cite D-10.22 for the FMA build (list in handoff)", "jobs not finished at hand-back: read keke jobs.tsv"],
+ "refused": [],
+ "jobs": ["math-f64-fma-path-4-build1", "math-f64-fma-path-4-gate1", "math-f64-fma-path-4-plants1"],
+ "improvement": "a D-row id reservation (like COMPAT-NEW) would avoid parallel stories colliding on D-10.<n> and the rename churn in code comments",
+ "next_step": "check the three keke jobs; rename D-10.22 -> D-10.23 in FMA comments; then counts",
+ "report_file": "handoff/math-f64-fma-path.md"}

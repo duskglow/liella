@@ -131,7 +131,8 @@ fn in_child(name: &str) -> bool {
         liella_boundary::selftest::mark_own_process();
         return true;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1"]).env("LIELLA_C16_CHILD", name).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_C16_CHILD", name).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{name} in a child:\n{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     false
 }

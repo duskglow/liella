@@ -58,11 +58,13 @@ fn probe() -> Option<String> {
 
 /// Re-execute this test binary running only `test` with the probe `name` set.
 fn run_probe(test: &str, name: &str) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 fn stderr_of(o: &std::process::Output) -> String {
@@ -137,11 +139,12 @@ fn in_child(test: &str, name: &str, env: &[(&str, &str)], body: impl FnOnce()) -
         None => {}
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .envs(env.iter().copied())
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{test}/{name} failed in its child: {}", child_report(&o));
     stderr_of(&o)
 }
@@ -613,11 +616,12 @@ fn s1_2_c_4_4() {
     let path = scratch::Scratch::path("s01-abort");
     std::fs::write(&path, b"").unwrap();
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["s1_2_c_4_4", "--exact", "--test-threads=1", "--nocapture"])
+        .args(["s1_2_c_4_4", "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, "pending")
         .env(FILE_ENV, &*path)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let file = std::fs::read(&path).unwrap();
     assert_eq!(o.status.signal(), Some(6), "{}", stderr_of(&o));
     assert_eq!(file, b"", "the file stream's buffer was not written");
@@ -1464,7 +1468,7 @@ fn s1_7_f_0() {
 #[test]
 fn s1_8_c_0() {
     let t = Tunables::parse(b"glibc.cpu.hwcaps=-AVX2,ERMS:glibc.cpu.x86_rep_movsb_threshold=0x800:liella.cpu.rep_stosb_threshold=4096:bogus=1:glibc.malloc.arena_max=2", false);
-    assert_eq!(t, Tunables { avx2: Some(false), erms: Some(true), rep_movsb_threshold: Some(2048), rep_stosb_threshold: Some(4096), rseq: None, rpc_reply_any_source: None });
+    assert_eq!(t, Tunables { avx2: Some(false), erms: Some(true), fma: None, rep_movsb_threshold: Some(2048), rep_stosb_threshold: Some(4096), rseq: None, rpc_reply_any_source: None });
     assert_eq!(Tunables::parse(b"glibc.pthread.rseq=0", false).rseq, Some(false), "rseq registration off (§22.9)");
     assert_eq!(Tunables::parse(b"glibc.cpu.hwcaps=-AVX2_Usable", false).avx2, Some(false), "2.26-era names");
     assert_eq!(Tunables::parse(b"glibc.cpu.x86_rep_movsb_threshold=lots", false).rep_movsb_threshold, None, "invalid values are ignored");

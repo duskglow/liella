@@ -30,6 +30,23 @@ pub(crate) fn avx2() -> bool {
     AVX2.load(Relaxed)
 }
 
+/// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.25):
+/// the same mechanism as [`avx2`] (one byte decided at startup, `false` until then), read only
+/// by Rust (`hot::exp_nearest`, `hot::log_nearest`), so it lives here rather than in fold.S.
+static FMA: AtomicBool = AtomicBool::new(false);
+
+/// Whether the math kernels run their FMA builds.
+#[inline(always)]
+pub(crate) fn fma() -> bool {
+    FMA.load(Relaxed)
+}
+
+/// Select the math kernels' builds. `true` only when the CPU has FMA and the OS saves the AVX
+/// state (`liella_rt::cpu::Features::fma`); both builds return the same results.
+pub(crate) fn select_fma(fma: bool) {
+    FMA.store(fma, Relaxed);
+}
+
 /// Select the kernels' builds. `true` only when the CPU has AVX2 and the OS saves the YMM state
 /// (module proof obligation).
 pub(crate) fn select(avx2: bool) {

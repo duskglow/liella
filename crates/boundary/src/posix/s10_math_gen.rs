@@ -1757,7 +1757,7 @@ pub extern "C" fn liella_erfl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn exp(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.39";
@@ -1857,12 +1857,12 @@ pub extern "C" fn expf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::exp_nearest(x), math::real::Real::exp)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp_nearest, math::real::Real::exp)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3803,7 +3803,7 @@ pub extern "C" fn liella_llroundl_bits(x: LdBits) -> c_longlong {
 
 export! { libm "GLIBC_2.29";
 pub extern "C" fn log(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::log_nearest, math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -3988,12 +3988,12 @@ pub extern "C" fn logf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf32x(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::log_nearest, math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf64(x: f64) -> f64 {
-    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast64::log_nearest(x), math::real::Real::log)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::log_nearest, math::real::Real::log)
 }}
 
 export! { libm "LIELLA_PRIVATE";

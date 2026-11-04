@@ -274,7 +274,8 @@ fn alone(test: &str, body: impl FnOnce()) -> Option<String> {
         body();
         return None;
     }
-    let o = Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(ALONE, test).output().unwrap();
+    let o = Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(ALONE, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let out = String::from_utf8_lossy(&o.stdout);
     let err = String::from_utf8_lossy(&o.stderr).into_owned();
     assert!(o.status.success() && out.contains("1 passed"), "{test} in its own process: {:?}\n{out}{err}", o.status);
@@ -929,7 +930,8 @@ fn in_ipc_ns(test: &str, body: impl FnOnce()) {
         skip_note::skipped("skipped: no private IPC namespace (unshare --user --ipc --map-current-user)");
         return;
     }
-    let o = Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(IPCNS, test).output().unwrap();
+    let o = Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(IPCNS, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(o.status.success() && out.contains("1 passed"), "{test} in its namespace: {:?}\n{out}{}", o.status, String::from_utf8_lossy(&o.stderr));
 }
@@ -1114,10 +1116,11 @@ fn per_engine(test: &str) -> Option<String> {
     let Ok(engine) = std::env::var(ENGINE) else {
         for engine in ["ring", "workers"] {
             let o = Command::new(std::env::current_exe().unwrap())
-                .args([test, "--exact", "--test-threads=1", "--nocapture"])
+                .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
                 .env(ENGINE, engine)
                 .output()
                 .unwrap();
+            assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
             let out = String::from_utf8_lossy(&o.stdout);
             assert!(o.status.success() && out.contains("1 passed"), "{engine}: {:?}\n{out}{}", o.status, String::from_utf8_lossy(&o.stderr));
         }

@@ -333,7 +333,9 @@ fn run(name: &'static str, body: fn() -> i32) {
         .env("LIELLA_ENOMEM_STREAM", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let err = String::from_utf8_lossy(&o.stderr);
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(err.contains(&format!("{RAN}{name}\n")), "the child did not run the case (libtest ran no test in it): {:?}\n{}\n{err}", o.status, String::from_utf8_lossy(&o.stdout));
     assert_eq!(o.status.code(), Some(0), "the child failed (its exit code names the check): {:?}\n{err}", o.status);
 }

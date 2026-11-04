@@ -159,11 +159,13 @@ fn s9_2_c_0() {
         assert!(first.iter().all(|&v| (0..=0x7fff_ffff).contains(&v)), "in [0, RAND_MAX]");
         return;
     }
-    let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["s9_2_c_0", "--exact", "--test-threads=1"])
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["s9_2_c_0", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S9_2_C_0", "1")
-        .status()
+        .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
+    let status = o.status;
     assert!(status.success(), "the default seed is 1 (fresh process)");
     let _g = GLOBAL.lock().unwrap();
     prng_global::srandom(7, NoMem);

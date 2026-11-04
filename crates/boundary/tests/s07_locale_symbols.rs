@@ -336,12 +336,13 @@ fn translating(test: &str, check: impl FnOnce()) {
     write(&dir, "de_DE.UTF-8/LC_MESSAGES/sym.mo", &mo_image(&[(b"", header), (b"where", b"wo"), (b"file\0files", b"Datei\0Dateien")]));
     write(&dir, "de_DE.UTF-8/LC_TIME/sym.mo", &mo_image(&[(b"", header), (b"where", b"wann")]));
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, test)
         .env(FIXTURES, &dir)
         .env("LOCPATH", &locales)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let _ = std::fs::remove_dir_all(&dir);
     assert!(o.status.success(), "{test} failed in its child: {}", child_report(&o));
 }
@@ -730,10 +731,11 @@ fn latin1_wide_answers_after_setlocale() {
         return skip_note::skipped(&format!("skipped: no localedef; {TEST} not run"));
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([TEST, "--exact", "--test-threads=1", "--nocapture"])
+        .args([TEST, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, TEST)
         .env("LOCPATH", &locales)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{TEST} failed in its child: {}", child_report(&o));
 }
