@@ -19,7 +19,6 @@ use liella_kernel::ops::ArchGet;
 use liella_kernel::sys::{FutexArg, Sys};
 use liella_kernel::uapi::*;
 use liella_kernel::{auxv, Errno, Fd, KPathBuf, KStr};
-use spectest::clause;
 
 const K: CSys = CSys;
 
@@ -211,7 +210,57 @@ fn s0_6_c0_5_0() {
     assert_eq!(c.map(|v| v as u8), src);
     conformance(&["s02_chk_fail", "s12_symbols_printf_chk"]);
 }
-clause!(s0_6_c0_6_0, "0.6", "Convention", r##"Every exported name carries a version node (`GLIBC_2.2.5` is the x86_64 baseline). Some names have several versions with different contracts (for example `memcpy@GLIBC_2.2.5` permits overlapping arguments, while `memcpy@GLIBC_2.14` does not guarantee it; `realpath`, `sched_setaffinity`, `pthread_cond_*`, `regexec`, `glob`, `posix_spawn`, `nftw`, `fmemopen`, `quick_exit` all have older versioned contracts). Some names are exported only for old binaries and can no longer be linked against (`gets`, `matherr`, `__malloc_hook`, `sys_errlist`, `pow10`, `sigvec`, `ustat`, `stime`, `_sys_siglist`, the RPC/NIS stack moved to `libtirpc`/`libnsl`, ...). ⚑ COMPAT: an ABI-compatible replacement must keep every versioned contract that old binaries were linked against. Appendix B lists these."##);
+/// C0.6 (versioned names): the products keep both `memcpy` contracts (`memcpy@GLIBC_2.2.5`, the
+/// overlap-safe old version checked by `s04_strings_symbols.rs`
+/// `compat_memcpy_2_2_5_is_overlap_safe`, and the default `memcpy@@GLIBC_2.14`), and every name
+/// the clause lists as exported only for old binaries that has a row in `spec/abi/compat-plan.tsv`
+/// is exported, where Liella exports it, with non-default versions only (`name@V`, never
+/// `name@@V`), so a program linked anew cannot bind it. Read from the products' dynamic symbol
+/// tables with `readelf --dyn-syms`.
+#[test]
+fn s0_6_c0_6_0() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let products: Vec<_> = ["libc.so.6", "libm.so.6"].iter().map(|l| root.join("target/liella").join(l)).filter(|p| p.exists()).collect();
+    assert!(products.iter().any(|p| p.ends_with("libc.so.6")), "target/liella/libc.so.6 is built by `cargo xtask so`");
+    let mut dynsyms = String::new();
+    for p in &products {
+        let o = std::process::Command::new("readelf").args(["--dyn-syms", "-W"]).arg(p).output().expect("readelf runs");
+        assert!(o.status.success(), "readelf --dyn-syms {}: {}", p.display(), String::from_utf8_lossy(&o.stderr));
+        dynsyms.push_str(&String::from_utf8_lossy(&o.stdout));
+    }
+    // Every `name@V` / `name@@V` the products define (an undefined reference is not an export).
+    let versions = |name: &str| -> Vec<String> {
+        dynsyms
+            .lines()
+            .filter(|l| !l.split_whitespace().nth(6).is_some_and(|ndx| ndx == "UND"))
+            .filter_map(|l| l.split_whitespace().nth(7))
+            .filter(|s| s.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
+            .map(str::to_owned)
+            .collect()
+    };
+    let memcpy = versions("memcpy");
+    for want in ["memcpy@GLIBC_2.2.5", "memcpy@@GLIBC_2.14"] {
+        assert!(memcpy.iter().any(|v| v == want), "{want} is exported: {memcpy:?}");
+    }
+    // The clause's list of names exported only for old binaries; checked where the compat plan has them.
+    let clause_list = ["gets", "matherr", "__malloc_hook", "sys_errlist", "pow10", "sigvec", "ustat", "stime", "_sys_siglist"];
+    let plan = std::fs::read_to_string(root.join("spec/abi/compat-plan.tsv")).unwrap();
+    let planned: std::collections::BTreeSet<&str> = plan
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f.len() > 2 && (f[0] == "libc.so.6" || f[0] == "libm.so.6")).then_some(f[1])
+        })
+        .filter(|n| clause_list.contains(n))
+        .collect();
+    let mut checked = 0;
+    for name in &planned {
+        let v = versions(name);
+        assert!(v.iter().all(|s| !s.contains("@@")), "{name} is exported only for old binaries, yet has a default version: {v:?}");
+        checked += usize::from(!v.is_empty());
+    }
+    assert!(checked >= 5, "most of the clause's old-binary names are exported ({checked} of {planned:?})");
+}
 /// C0.7: borrowed arguments are copied (`setenv`, `regcomp`, `fopen`'s mode; `putenv` states
 /// otherwise and keeps the string); returned pointers are caller-owned heap blocks (`strdup`,
 /// `realpath(p, NULL)`, `getcwd(NULL, 0)`, `asprintf`, `open_memstream`, `scandir`), library

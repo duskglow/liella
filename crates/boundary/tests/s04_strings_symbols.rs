@@ -417,10 +417,11 @@ fn sym_rawmemchr() {
     assert_eq!(off(s::rawmemchr(v.as_ptr().cast(), c_int::from(b'b')).cast::<c_char>(), v.as_ptr()), 1);
 }
 
-// no spec clause: compat-plan.tsv behaviour row memcpy@GLIBC_2.2.5 (LG-2; overlap-safe, probe-settled).
+/// s0_6_c0_6_0: `memcpy@GLIBC_2.2.5` permits overlapping arguments (compat-plan.tsv behaviour row
+/// memcpy@GLIBC_2.2.5, LG-2, probe-settled): every overlap gives memmove's result.
 #[test]
 fn compat_memcpy_2_2_5_is_overlap_safe() {
-    // Trace: no spec clause (compat-plan.tsv behaviour row memcpy@GLIBC_2.2.5; LG-2).
+    // Trace: s0_6_c0_6_0 (the old version's overlap contract).
     for n in [1usize, 7, 16, 33, 100, 255, 1000] {
         for shift in [-17isize, -1, 1, 8, 64] {
             let mut a: Vec<u8> = (0..4096u32).map(|k| (k * 7 + 1) as u8).collect();

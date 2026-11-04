@@ -226,8 +226,15 @@ fn s22_5_c_1() {
 fn s22_5_c_1_1() {
     conformance(&["s22_sync", "s22_order"]);
 }
-// Pending: phase 15 (compat versions).
-clause!(s22_5_c_1_2, "22.5", "Contract", r##"⚑ COMPAT: `pthread_cond_*@GLIBC_2.2.5` implement the pre-2.3.2 condvar ABI for old binaries."##);
+/// §22.5 Contract: ⚑ COMPAT: `pthread_cond_*@GLIBC_2.2.5` implement the pre-2.3.2 condvar ABI for
+/// old binaries. `conformance/c/s22_compat_condvar.c` drives the translations behind those versions
+/// (`liella_compat_pthread_cond_*`, on the old one-word object) across Liella's threads: signal
+/// hands each item to one consumer, broadcast releases every waiter, timedwait meets its deadline,
+/// destroy zeroes the word; a lost wakeup hangs the program until its alarm fails it (LG-3, D-22.13).
+#[test]
+fn s22_5_c_1_2() {
+    conformance(&["s22_compat_condvar"]);
+}
 /// §22.5 Contract: **Read-write locks.** Many readers or one writer. The preference is set by `kind_np`: `PREFER_READER` (the default; ⚑ HIST: writer starvation is possible), `PREFER_WRITER_NONRECURSIVE`. A recursive re
 #[test]
 fn s22_5_c_2() {
