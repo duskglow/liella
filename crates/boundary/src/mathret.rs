@@ -905,7 +905,7 @@ pub fn elem32_fast<const HW: u8>(
 /// log, log2, log10 and pow entries use it with the `*_nearest` functions of
 /// `liella_math::fast64` (MATH-M6-F64-FAST-ENTRY), under the same contract (including `HW`).
 #[inline(always)]
-pub fn elem_fast<const HW: u8, A: Copy, R: CVal<C = R>>(
+pub fn elem_fast<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
     x: A,
     fast: impl FnOnce(A) -> Option<R>,
     f: impl FnOnce(A, Rounding) -> (R, Status),
