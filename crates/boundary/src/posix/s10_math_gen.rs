@@ -4,7 +4,8 @@
 //! The math exports (spec §10): one per symbol, each a call into `liella-math` (D-10.1) with the
 //! conversions of `crate::mathret` (D-10.2). Symbols with `long double` or `_Float128` values are the
 //! `liella_<name>_bits` functions behind the C forwarders `csys/src/adapter/math_*.c` (OD-C4).
-#![allow(non_snake_case, clippy::too_many_lines)]
+//! The f64 fast rows pass closures, not fn items, so the kernel inlines into the entry.
+#![allow(non_snake_case, clippy::too_many_lines, clippy::redundant_closure)]
 
 use liella_abi::ctypes::{c_char, c_int, c_long, c_longlong, c_uint, F128Bits, LdBits};
 use liella_math as math;
