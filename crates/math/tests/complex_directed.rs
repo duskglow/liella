@@ -18,10 +18,12 @@
 //! operands.
 //!
 //! `float` and `double` pass in every mode. The `long double` and `_Float128` grids are
-//! `#[ignore]`d: on them some parts reach the 3072-bit residual path, some operands are beyond
-//! the oracle's 2^14 bits, and `catan`/`catanh`/`ctan`/`ctanh` parts differ (open findings,
-//! `handoff/math-m6-cplx-directed.md`); run them with `--ignored` as the follow-up's probe. The counters are global, so under the parallel harness a test's counts include its
-//! neighbours' (run with `--test-threads=1` for exact per-test counts).
+//! `#[ignore]`d: on them `catan`/`catanh` reach the 3072-bit residual path and differ in the
+//! directed modes at the grid's `y = 2^4096` (`catan` part 1, `catanh` part 0), and operands at
+//! the subnormal end are beyond the oracle's 2^14 bits (open findings,
+//! `handoff/math-m6-cplx-directed.md`); run them with `--ignored` as the follow-up's probe. The
+//! counters are global, so under the parallel harness a test's counts include its neighbours'
+//! (run with `--test-threads=1` for exact per-test counts).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss, clippy::arithmetic_side_effects, missing_docs)]
 
 use liella_math::complex::{self, Res};
