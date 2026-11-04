@@ -26,7 +26,8 @@
 //! **Testability.** Every lookup takes a [`Ctx`]: the files to read ([`Paths`], fixtures in the
 //! tests) and the configuration to use ([`Config`], built from text in the tests).
 
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering::{Acquire, Relaxed, Release}};
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, AtomicU8, Ordering::{Acquire, Relaxed, Release}};
+use liella::names::hostconf::{self, Domains, Env, Settings};
 
 use liella::error::{Errno, Result};
 use liella::mem::TryVec;
@@ -124,6 +125,11 @@ impl Watched {
     /// Never read.
     pub const fn new() -> Watched {
         Watched { lock: RawMutex::new(), loaded: AtomicBool::new(false), stamp: [const { AtomicU64::new(0) }; 8], epoch: AtomicU64::new(u64::MAX) }
+    }
+
+    /// Make the next [`Watched::with`] load the file again.
+    pub fn forget(&self) {
+        self.loaded.store(false, Relaxed);
     }
 
     /// Under the lock: when `path` was never read, or (`recheck`) changed since, `load` with its
@@ -258,11 +264,106 @@ impl Switch {
 /// The process's switch.
 pub static SWITCH: Switch = Switch::new();
 
-/// `host.conf`'s `multi` (off unless the file says `multi on`).
+/// Domains in atomics (read and written under [`HostConf`]'s locks).
+#[derive(Debug)]
+struct AtomicDomains {
+    n: AtomicU8,
+    lens: [AtomicU8; hostconf::MAX_TRIM],
+    text: [AtomicU8; hostconf::MAX_TRIM * hostconf::MAX_DOMAIN],
+}
+
+impl AtomicDomains {
+    const fn new() -> AtomicDomains {
+        AtomicDomains { n: AtomicU8::new(0), lens: [const { AtomicU8::new(0) }; hostconf::MAX_TRIM], text: [const { AtomicU8::new(0) }; hostconf::MAX_TRIM * hostconf::MAX_DOMAIN] }
+    }
+
+    fn store(&self, d: &Domains) {
+        let mut n = 0u8;
+        for ((x, len), chunk) in d.iter().zip(&self.lens).zip(self.text.chunks(hostconf::MAX_DOMAIN)) {
+            len.store(u8::try_from(x.len()).unwrap_or(0), Relaxed);
+            for (a, &b) in chunk.iter().zip(x) {
+                a.store(b, Relaxed);
+            }
+            n = n.saturating_add(1);
+        }
+        self.n.store(n, Relaxed);
+    }
+
+    fn load(&self) -> Domains {
+        let mut d = Domains::EMPTY;
+        let mut buf = [0u8; hostconf::MAX_DOMAIN];
+        for (len, chunk) in self.lens.iter().zip(self.text.chunks(hostconf::MAX_DOMAIN)).take(usize::from(self.n.load(Relaxed))) {
+            let l = usize::from(len.load(Relaxed));
+            for (b, a) in buf.iter_mut().zip(chunk).take(l) {
+                *b = a.load(Relaxed);
+            }
+            d.add_list(buf.get(..l).unwrap_or(&[]));
+        }
+        d
+    }
+}
+
+/// The longest `RESOLV_HOST_CONF` kept, with its NUL (the kernel's `PATH_MAX`: a longer path
+/// cannot be opened, so it is kept as the empty path, which cannot be opened either).
+const HOST_CONF_PATH_MAX: usize = 4096;
+
+/// A path in atomics, NUL-terminated (written once under [`HostConf`]'s environment lock,
+/// before the `Release` store that publishes it).
+#[derive(Debug)]
+struct AtomicPath {
+    /// Bytes before the NUL; `u16::MAX`: no path.
+    len: AtomicU16,
+    text: [AtomicU8; HOST_CONF_PATH_MAX],
+}
+
+impl AtomicPath {
+    const fn new() -> AtomicPath {
+        AtomicPath { len: AtomicU16::new(u16::MAX), text: [const { AtomicU8::new(0) }; HOST_CONF_PATH_MAX] }
+    }
+
+    fn store(&self, p: &[u8]) {
+        let p = if p.len() < HOST_CONF_PATH_MAX { p } else { &[] };
+        for (a, &b) in self.text.iter().zip(p.iter().chain(&[0])) {
+            a.store(b, Relaxed);
+        }
+        self.len.store(u16::try_from(p.len()).unwrap_or(0), Relaxed);
+    }
+
+    /// The path with its NUL into `buf` (`None`: no path).
+    fn load<'b>(&self, buf: &'b mut [u8; HOST_CONF_PATH_MAX]) -> Option<&'b [u8]> {
+        let l = usize::from(self.len.load(Relaxed));
+        if l >= HOST_CONF_PATH_MAX {
+            return None;
+        }
+        for (b, a) in buf.iter_mut().zip(&self.text).take(l.saturating_add(1)) {
+            *b = a.load(Relaxed);
+        }
+        buf.get(..=l)
+    }
+}
+
+/// `host.conf`'s settings (`liella::names::hostconf`, D-16.13): the file's, re-read when it
+/// changes, with the `RESOLV_*` environment the process gave once ([`HostConf::env_once`]).
 #[derive(Debug)]
 pub struct HostConf {
     file: Watched,
+    /// `RESOLV_HOST_CONF`: the file read in place of the system's `host.conf`.
+    env_path: AtomicPath,
     multi: AtomicBool,
+    reorder: AtomicBool,
+    trim: AtomicDomains,
+    env_lock: RawMutex,
+    env_read: AtomicBool,
+    /// 0 unset (or neither `on` nor `off`), 1 off, 2 on: `RESOLV_MULTI`, `RESOLV_REORDER`.
+    env_flags: [AtomicU8; 2],
+    env_override: AtomicBool,
+    env_override_trim: AtomicDomains,
+    env_add_trim: AtomicDomains,
+    /// Bit 0: the file read last has a problem to report; bits 1 and 2: `RESOLV_MULTI`,
+    /// `RESOLV_REORDER` hold a bad value ([`hostconf::BAD_MULTI`], [`hostconf::BAD_REORDER`], shifted by one).
+    diag_flags: AtomicU8,
+    /// The diagnostics' one chance has passed (the first host lookup).
+    diag_done: AtomicBool,
 }
 
 impl Default for HostConf {
@@ -271,28 +372,207 @@ impl Default for HostConf {
     }
 }
 
-/// `multi on` in a `host.conf` text (`host.conf(5)`; the last `multi` line counts; the other
-/// keywords concern DNS answers and are part 4's).
+/// `multi on` in a `host.conf` text (no environment).
 pub fn multi_of(text: &[u8]) -> bool {
-    let mut on = false;
-    for line in text.split(|&c| c == b'\n') {
-        let mut w = db::Words::of(line);
-        if w.next() == Some(b"multi") {
-            on = w.next().is_some_and(|v| v.eq_ignore_ascii_case(b"on"));
-        }
-    }
-    on
+    hostconf::parse(Some(text), &Env::default()).multi
 }
 
 impl HostConf {
     /// Never read.
     pub const fn new() -> HostConf {
-        HostConf { file: Watched::new(), multi: AtomicBool::new(false) }
+        HostConf {
+            file: Watched::new(),
+            env_path: AtomicPath::new(),
+            multi: AtomicBool::new(false),
+            reorder: AtomicBool::new(false),
+            trim: AtomicDomains::new(),
+            env_lock: RawMutex::new(),
+            env_read: AtomicBool::new(false),
+            env_flags: [const { AtomicU8::new(0) }; 2],
+            env_override: AtomicBool::new(false),
+            env_override_trim: AtomicDomains::new(),
+            env_add_trim: AtomicDomains::new(),
+            diag_flags: AtomicU8::new(0),
+            diag_done: AtomicBool::new(false),
+        }
+    }
+
+    /// Record the environment `read` gives, the first time only (one load per lookup after it:
+    /// no lookup walks the environment): the `RESOLV_*` values and the `RESOLV_HOST_CONF` path.
+    /// A file loaded before it is loaded again.
+    pub fn env_once<'p, S: Sys>(&self, sys: &S, read: impl FnOnce() -> (Env, Option<&'p [u8]>)) {
+        if self.env_read.load(Acquire) {
+            return;
+        }
+        let _g = self.env_lock.lock(sys);
+        if self.env_read.load(Relaxed) {
+            return;
+        }
+        let (e, path) = read();
+        if let Some(p) = path {
+            self.env_path.store(p);
+        }
+        let code = |v: Option<Option<bool>>| match v {
+            Some(Some(true)) => 2,
+            Some(Some(false)) => 1,
+            _ => 0,
+        };
+        let [m, r] = &self.env_flags;
+        m.store(code(e.multi), Relaxed);
+        r.store(code(e.reorder), Relaxed);
+        self.env_override.store(e.override_trim.is_some(), Relaxed);
+        self.env_override_trim.store(&e.override_trim.unwrap_or_default());
+        self.env_add_trim.store(&e.add_trim.unwrap_or_default());
+        self.diag_flags.fetch_or(e.bad().wrapping_shl(1), Relaxed);
+        self.file.forget();
+        self.env_read.store(true, Release);
+    }
+
+    fn env(&self) -> Env {
+        let [m, r] = &self.env_flags;
+        let flag = |f: &AtomicU8| match f.load(Relaxed) {
+            2 => Some(Some(true)),
+            1 => Some(Some(false)),
+            _ => None,
+        };
+        let add = self.env_add_trim.load();
+        Env {
+            multi: flag(m),
+            reorder: flag(r),
+            override_trim: self.env_override.load(Relaxed).then(|| self.env_override_trim.load()),
+            add_trim: (!add.is_empty()).then_some(add),
+        }
+    }
+
+    /// The settings now (the file `path` re-read when it changed; `RESOLV_HOST_CONF`'s file in
+    /// place of the system's).
+    pub fn settings<S: Sys>(&self, sys: &S, path: &[u8]) -> Settings {
+        // One load in the common case (no `RESOLV_HOST_CONF`): the buffer only when it is set.
+        if self.env_read.load(Acquire) && self.env_path.len.load(Relaxed) != u16::MAX && path == SYSTEM.host_conf {
+            let mut buf = [0u8; HOST_CONF_PATH_MAX];
+            if let Some(p) = self.env_path.load(&mut buf) {
+                return self.settings_of(sys, p);
+            }
+        }
+        self.settings_of(sys, path)
+    }
+
+    fn settings_of<S: Sys>(&self, sys: &S, path: &[u8]) -> Settings {
+        self.file.with(
+            sys,
+            path,
+            true,
+            |t| {
+                let s = hostconf::parse(t, &self.env());
+                if !self.diag_done.load(Relaxed) {
+                    let bad = t.is_some_and(hostconf::has_problem);
+                    self.diag_flags.fetch_and(!1, Relaxed);
+                    self.diag_flags.fetch_or(u8::from(bad), Relaxed);
+                }
+                self.multi.store(s.multi, Relaxed);
+                self.reorder.store(s.reorder, Relaxed);
+                self.trim.store(&s.trim);
+            },
+            || Settings { multi: self.multi.load(Relaxed), reorder: self.reorder.load(Relaxed), trim: self.trim.load() },
+        )
+    }
+
+    /// Print the reference's diagnostics for a bad `host.conf` line or `RESOLV_*` value on
+    /// standard error: once per process, at the first host lookup (`get` gives the environment
+    /// value of a name). The normal path is one load.
+    pub fn diagnose<'e, S: Sys>(&self, sys: &S, path: &[u8], get: impl Fn(&[u8]) -> Option<&'e [u8]>) {
+        if self.diag_done.load(Acquire) || self.diag_done.swap(true, Acquire) {
+            return;
+        }
+        let flags = self.diag_flags.load(Relaxed);
+        if flags == 0 {
+            return;
+        }
+        let mut out = Diag { sys, buf: [0; 512], len: 0 };
+        if flags & 1 != 0 {
+            let mut pbuf = [0u8; HOST_CONF_PATH_MAX];
+            let env_p = if self.env_path.len.load(Relaxed) != u16::MAX && path == SYSTEM.host_conf { self.env_path.load(&mut pbuf) } else { None };
+            let p = env_p.unwrap_or(path);
+            if let Ok(text) = liella::system::read_file(sys, p) {
+                let name = p.strip_suffix(&[0]).unwrap_or(p);
+                hostconf::problems(&text, |n, prob| {
+                    out.put(name);
+                    out.put(b": line ");
+                    out.num(n);
+                    out.put(b": ");
+                    out.message(&prob.pieces());
+                });
+            }
+        }
+        for (bit, var) in [(hostconf::BAD_MULTI, &b"RESOLV_MULTI"[..]), (hostconf::BAD_REORDER, &b"RESOLV_REORDER"[..])] {
+            if (flags >> 1) & bit != 0 {
+                out.put(var);
+                out.put(b": line 1: ");
+                out.message(&[b"expected `on' or `off', found `", get(var).unwrap_or(&[]), b"'"]);
+            }
+        }
+        out.flush();
     }
 
     /// `multi` now (the file `path` re-read when it changed).
     pub fn multi<S: Sys>(&self, sys: &S, path: &[u8]) -> bool {
-        self.file.with(sys, path, true, |t| self.multi.store(t.is_some_and(multi_of), Relaxed), || self.multi.load(Relaxed))
+        self.settings(sys, path).multi
+    }
+}
+
+/// Standard error output of the diagnostics, in a small buffer (flushed when full).
+struct Diag<'s, S: Sys> {
+    sys: &'s S,
+    buf: [u8; 512],
+    len: usize,
+}
+
+impl<S: Sys> Diag<'_, S> {
+    fn put(&mut self, data: &[u8]) {
+        for &b in data {
+            if self.len == self.buf.len() {
+                self.flush();
+            }
+            if let Some(c) = self.buf.get_mut(self.len) {
+                *c = b;
+                self.len = self.len.saturating_add(1);
+            }
+        }
+    }
+
+    fn num(&mut self, mut n: usize) {
+        let mut d = [0u8; 20];
+        let mut i = d.len();
+        loop {
+            i = i.saturating_sub(1);
+            if let Some(c) = d.get_mut(i) {
+                *c = b'0'.saturating_add(u8::try_from(n.checked_rem(10).unwrap_or(0)).unwrap_or(0));
+            }
+            n = n.checked_div(10).unwrap_or(0);
+            if n == 0 || i == 0 {
+                break;
+            }
+        }
+        self.put(d.get(i..).unwrap_or(&[]));
+    }
+
+    /// The pieces of a message and the newline.
+    fn message(&mut self, pieces: &[&[u8]]) {
+        for p in pieces {
+            self.put(p);
+        }
+        self.put(b"\n");
+    }
+
+    fn flush(&mut self) {
+        let mut data = self.buf.get(..self.len).unwrap_or(&[]);
+        while !data.is_empty() {
+            match self.sys.write(Fd::STDERR, data) {
+                Ok(n) if n > 0 => data = data.get(n..).unwrap_or(&[]),
+                _ => break,
+            }
+        }
+        self.len = 0;
     }
 }
 
@@ -313,6 +593,8 @@ pub struct Ctx<'a, S: Sys> {
     pub config: Config,
     /// `multi on`.
     pub multi: bool,
+    /// `host.conf`'s other settings (`reorder`, `trim`), filled by [`Ctx::with_multi`].
+    pub hconf: Option<Settings>,
     /// The resolver of the `dns` source (`None`: the source is unavailable).
     pub dns: Option<&'a crate::resolv_compat::Resolver>,
     /// The locale whose character set `AI_IDN`, `AI_CANONIDN` and `NI_IDN` texts are in
@@ -327,7 +609,7 @@ impl<'a, S: Sys> Ctx<'a, S> {
     /// The process's configuration with the files `paths` (`multi` off: only host lookups by
     /// name read `host.conf`, through [`Ctx::with_multi`]).
     pub fn with_paths(sys: &'a S, paths: &'a Paths<'a>) -> Ctx<'a, S> {
-        Ctx { sys, paths, config: SWITCH.config(sys, paths.nsswitch), multi: false, dns: None, locale: None, cache: None }
+        Ctx { sys, paths, config: SWITCH.config(sys, paths.nsswitch), multi: false, hconf: None, dns: None, locale: None, cache: None }
     }
 
     /// This context with the name-service cache (D-16.10), which serves it only while it reads
@@ -344,7 +626,8 @@ impl<'a, S: Sys> Ctx<'a, S> {
     /// This context with `host.conf`'s `multi` (the file re-read when it changed), for host
     /// lookups.
     pub fn with_multi(self) -> Ctx<'a, S> {
-        Ctx { multi: HOST_CONF.multi(self.sys, self.paths.host_conf), ..self }
+        let s = HOST_CONF.settings(self.sys, self.paths.host_conf);
+        Ctx { multi: s.multi, hconf: (s.reorder || !s.trim.is_empty()).then_some(s), ..self }
     }
 
     /// A context that reads no configuration file, for a call that consults no database
@@ -352,7 +635,7 @@ impl<'a, S: Sys> Ctx<'a, S> {
     /// `crate::gai::ni_uses_switch`). Its configuration is empty, so it must not be used for a
     /// lookup.
     pub fn bare(sys: &'a S, paths: &'a Paths<'a>) -> Ctx<'a, S> {
-        Ctx { sys, paths, config: Config::EMPTY, multi: false, dns: None, locale: None, cache: None }
+        Ctx { sys, paths, config: Config::EMPTY, multi: false, hconf: None, dns: None, locale: None, cache: None }
     }
 
     /// The sources of `db`.

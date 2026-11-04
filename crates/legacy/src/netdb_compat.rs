@@ -120,7 +120,46 @@ pub fn host_by_name<S: Sys>(ctx: &Ctx<'_, S>, name: &[u8], family: Family) -> An
         h.add_addr(ip)?;
         return Ok(h);
     }
-    host_lookup(ctx, name, family)
+    let mut h = host_lookup(ctx, name, family)?;
+    if ctx.hconf.is_some_and(|s| s.reorder) && h.addrs.len() > 1 {
+        reorder(ctx.sys, &mut h);
+    }
+    Ok(h)
+}
+
+/// `host.conf`'s `reorder` (D-16.13): the first IPv4 address on a local interface's network
+/// swaps places with the first address. The interfaces are asked only when it is on.
+fn reorder<S: Sys>(sys: &S, h: &mut Host) {
+    const MAX: usize = 64;
+    let mut v4 = [[0u8; 4]; MAX];
+    let mut n = 0usize;
+    if h.addrs.len() > MAX {
+        return;
+    }
+    for (slot, a) in v4.iter_mut().zip(h.addrs.iter()) {
+        let Ip::V4(x) = *a else { return };
+        *slot = x;
+        n = n.saturating_add(1);
+    }
+    let Ok(ifs) = liella::net::iface::addrs(sys) else { return };
+    let mut nets = [([0u8; 4], 0u8); MAX];
+    let mut k = 0usize;
+    let v4_nets = ifs.iter().filter(|a| a.family == 2).filter_map(|a| a.local.or(a.address).map(|x| ([x[0], x[1], x[2], x[3]], a.prefix)));
+    for (slot, net) in nets.iter_mut().zip(v4_nets) {
+        *slot = net;
+        k = k.saturating_add(1);
+    }
+    if let Some(i) = liella::names::hostconf::reorder_index(v4.get(..n).unwrap_or(&[]), nets.get(..k).unwrap_or(&[])) {
+        h.addrs.swap(0, i);
+    }
+}
+
+/// `host.conf`'s `trim` (D-16.13) on a by-address answer.
+fn trimmed<S: Sys>(ctx: &Ctx<'_, S>, h: Answer<Host>) -> Answer<Host> {
+    match (h, ctx.hconf) {
+        (Ok(h), Some(s)) if !s.trim.is_empty() => Ok(h.map_names(|n| liella::names::hostconf::trim(n, &s.trim))?),
+        (h, _) => h,
+    }
 }
 
 /// `gethostbyaddr(a)`: an IPv4-mapped address is looked up as its IPv4 address and answered
@@ -129,7 +168,7 @@ pub fn host_by_addr<S: Sys>(ctx: &Ctx<'_, S>, a: Ip) -> Answer<Host> {
     match a {
         Ip::V6(v6) => match Ip::unmapped(&v6) {
             Some(v4) => {
-                let h = host_lookup_addr(ctx, Ip::V4(v4))?;
+                let h = trimmed(ctx, host_lookup_addr(ctx, Ip::V4(v4)))?;
                 let mut out = Host::new(h.name())?;
                 for n in h.aliases() {
                     out.add_name(n)?;
@@ -139,9 +178,9 @@ pub fn host_by_addr<S: Sys>(ctx: &Ctx<'_, S>, a: Ip) -> Answer<Host> {
                 }
                 Ok(out)
             }
-            None => host_lookup_addr(ctx, a),
+            None => trimmed(ctx, host_lookup_addr(ctx, a)),
         },
-        Ip::V4(_) => host_lookup_addr(ctx, a),
+        Ip::V4(_) => trimmed(ctx, host_lookup_addr(ctx, a)),
     }
 }
 
