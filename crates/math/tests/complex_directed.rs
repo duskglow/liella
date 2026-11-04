@@ -160,7 +160,7 @@ macro_rules! grid_tests {
     ([$($attr:tt)*] $f:ty, $fmt:expr;) => {};
     ([$($attr:tt)*] $f:ty, $fmt:expr; $test:ident = $fam:expr $(, $rt:ident = $rf:expr)*) => {
         /// One family in one format over the asymptotic grid, all four modes (spec §10.5;
-        /// D-10.17).
+        /// D-10.17). Clauses: s10_5_c_0, s10_0_g_0.
         #[test]
         $($attr)*
         fn $test() {
