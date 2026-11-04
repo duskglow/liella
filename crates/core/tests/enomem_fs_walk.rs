@@ -39,6 +39,7 @@ use liella_kernel::Errno;
 
 const FILES: usize = 300;
 
+#[derive(Debug)]
 enum Verdict {
     Complete,
     /// Every entry, but not in the comparator's order (fts after a sort allocation failure).
@@ -80,6 +81,7 @@ static CWD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// message, empty when all is as documented.
 fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
     let mut failures = 0u64;
+    let mut absorbed = 0u64;
     for n in 1..=20_000u64 {
         let before = s03_memory::mallinfo2().uordblks;
         let hit = failinject::injected();
@@ -94,19 +96,20 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
         if !injected {
             // The walk made fewer than n allocations: it must have succeeded completely.
             if !matches!(verdict, Verdict::Complete) {
-                return format!("{walker}: no injection at {n}, yet the result is not the complete success");
+                return format!("{walker}: no injection at {n}, yet the result is not the complete success ({verdict:?})");
             }
             if failures == 0 {
                 eprintln!("NOT TESTABLE YET: {walker} makes no global-allocator allocation (C heap only)");
             } else {
-                eprintln!("{walker}: {failures} allocation failures injected, all reported as documented");
+                eprintln!("{walker}: {failures} allocation failures injected, all reported as documented ({absorbed} absorbed with the complete result)");
             }
             return String::new();
         }
         match verdict {
             Verdict::Failed => failures += 1,
-            Verdict::Unsorted => eprintln!("INFO {walker}: allocation {n} failed: complete but unsorted, reported as success"),
-            Verdict::Complete => return format!("{walker}: allocation {n} failed but the call reported success"),
+            Verdict::Unsorted => return format!("{walker}: allocation {n} failed: complete but out of order, reported as success"),
+            // The failed allocation was absorbed (a fallback): the result is still the complete one.
+            Verdict::Complete => absorbed += 1,
             Verdict::Truncated => return format!("{walker}: allocation {n} failed: truncated success"),
             Verdict::BadFailure => return format!("{walker}: allocation {n} failed: failure without the documented ENOMEM"),
         }
@@ -226,7 +229,9 @@ const PATH: usize = core::mem::offset_of!(FTSENT, fts_path);
 extern "C" fn by_path(a: *const *const c_void, b: *const *const c_void) -> c_int {
     // Two pointers to FTSENT pointers.
     let (ea, eb) = (rd(a as usize, 0), rd(b as usize, 0));
-    cmp_text(rd(ea, PATH), rd(eb, PATH))
+    // The children's `fts_path` is not set while sorting: compare the inline `fts_name`.
+    let name = core::mem::offset_of!(FTSENT, fts_name);
+    cmp_text(ea + name, eb + name)
 }
 
 fn case_fts(dir: &std::path::Path) -> String {
