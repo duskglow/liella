@@ -77,7 +77,7 @@ fn child_files(test: &str) -> Vec<(String, Vec<u8>)> {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(CHILD, "1")
         .env_remove("GMON_OUT_PREFIX")
         .current_dir(&dir)

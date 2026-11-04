@@ -228,7 +228,7 @@ fn fresh(tag: &str) -> std::path::PathBuf {
 fn run_child(test: &str, dir: &std::path::Path, prefix: Option<&str>) -> (u32, String) {
     use std::process::{Command, Stdio};
     let mut cmd = Command::new(std::env::current_exe().unwrap());
-    cmd.args([test, "--exact", "--test-threads=1", "--nocapture"]).env(CHILD, "1").env_remove("GMON_OUT_PREFIX").current_dir(dir);
+    cmd.args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(CHILD, "1").env_remove("GMON_OUT_PREFIX").current_dir(dir);
     if let Some(p) = prefix {
         cmd.env("GMON_OUT_PREFIX", p);
     }
