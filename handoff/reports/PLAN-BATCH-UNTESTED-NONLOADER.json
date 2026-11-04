@@ -1,0 +1,10 @@
+{"task": "PLAN-BATCH-UNTESTED-NONLOADER", "model": "opus", "tokens": null,
+ "result": "3 briefs (PROFILING-GMON-CLAUSES, FINITE-ALIAS-CONTRACT, TRACE-TAG-COVERED-STUBS); fewer than eight qualify",
+ "branch": "task/plan-batch-untested-nonloader", "head": "d804fccb",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cargo xtask trace --untested is not on origin/next (SPEC-UNTESTED-CLAUSES unmerged); a scratch stand-in used pending clause! stubs as the untested set", "PROFILING-GMON-CLAUSES must stack on PROFIL-SIGPROF-HISTOGRAM (same test file)"],
+ "refused": [], "jobs": ["kanon:plan-batch-untested-nonloader-static"],
+ "improvement": "A brief should not call a tool 'landed' until it is on the base branch; this one cost ~6 calls to rebuild the untested list",
+ "next_step": "Submit the three briefs; re-run trace --untested after SPEC-UNTESTED-CLAUSES lands and diff with the handoff table",
+ "report_file": "handoff/plan-batch-untested-nonloader.md"}
