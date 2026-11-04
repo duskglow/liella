@@ -1,8 +1,18 @@
-# MATH-F64-FMA-PATH handoff (run 5 = MATH-F64-FMA-PATH-5)
+# MATH-F64-FMA-PATH handoff (run 6 = MATH-F64-FMA-PATH-6)
 
-Branch task/math-f64-fma-path-5 (= run 4's branch + merge of origin/next b0296d28). Role keke:~/w/r5.
-Code head ffb22ca6 (merge commit; the handoff/report commit follows it). Decisions in force: **D-10.23**
-(plan/07-decisions/s10-mathematics.md, now after next's D-10.22), ruling #2261 (UNSAFE(hot-kernel) widened).
+Branch task/math-f64-fma-path-6 (= run 5's branch + merge of origin/next 97f63f4b). Role keke:~/w/n3.
+Code head 87a0a047 (merge commit; the handoff/report commit follows it). Decisions in force: **D-10.25**
+(plan/07-decisions/s10-mathematics.md, after next's D-10.23 cpow and D-10.24 wide-ln), ruling #2261 (UNSAFE(hot-kernel) widened).
+
+## Run 6
+- Run 5's CI precheck was red on trace: D-10.23 defined twice (next landed MATH-M5-CPOW-EXACT as D-10.23).
+- Merged origin/next (one conflict, the decisions file: next's D-10.23/D-10.24 kept, the FMA row appended as D-10.25).
+  Every FMA citation renumbered D-10.23 -> D-10.25 (the same 11 sites listed under run 5, plus the row). No other change.
+- On keke n3: `cargo xtask static` rc 0 (trace passes), `cargo clippy --workspace --all-targets --all-features -D warnings` rc 0.
+- Gate: plain `affected --base origin/next --run` ESCALATED to FULL (the branch diff, 20 files, includes
+  docs/architecture.md and core files); killed it (label math-f64-fma-path-6-gate, rc 143, superseded) and reran with
+  `--tier direct`: label `math-f64-fma-path-6-gate-direct` (result in the report json / hand-back).
+- Plants not rerun: the run only renumbers comments and merges next; run 5's plants1 covered the code.
 
 ## Run 5
 - Run 4's jobs were all green (build1, gate1, plants1 rc 0 on keke). The CI red was a real conflict with
@@ -32,5 +42,5 @@ Code head ffb22ca6 (merge commit; the handoff/report commit follows it). Decisio
 3. Rest of the family (exp2, exp10, log2, log10, pow) via the same macro + selectors in hot.rs + tsv + math-gen.
 
 ## Not to redo
-The macro scope fix, the decision row and its D-10.23 renumbering (code and plan), the category widening, run 3's
+The macro scope fix, the decision row and its D-10.25 renumbering (code and plan), the category widening, run 3's
 lint/static fixes, the two merge resolutions.
