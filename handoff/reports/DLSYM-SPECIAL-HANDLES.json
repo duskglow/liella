@@ -1,0 +1,15 @@
+{"task": "DLSYM-SPECIAL-HANDLES", "model": "opus", "tokens": null,
+ "result": "BLOCKED on DL-16 (Liella has no dlopen/dlsym; conformance is static-only): delivered a glibc-verified probe/clause program for s27_1_c_3 and s27_1_c_1_3 with both probe-side plants CAUGHT, behaviour recorded in spec/behaviour/dynlink.md",
+ "branch": "task/dlsym-special-handles", "head": "5d2b70ba",
+ "gate": {"affected": "0 passed / 0 failed (0 suites selected: probe and docs only; audits ok)", "peak": "635M"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Story cannot be done as briefed: the plants target Liella RTLD_NEXT / dlopen(NULL) code that does not exist (DL-16, after DL-14)", "recommendation": "fold into DL-16, which already names these clause tests as its proof; DL-16 adopts tools/probe/dl/handles/ as conformance programs"},
+  {"item": "conformance/run.sh links static programs only; a §27 handle test needs a dynamic-link mode with helper shared objects", "recommendation": "a small harness story (e.g. a LINK-HELPERS directive) ahead of DL-16's tests"}
+ ],
+ "informational": ["RTLD_NEXT missing-name dlerror prefix is the calling object (libhandle1.so), not the program; recorded in dynlink.md", "plants ran on the probe (show the checks catch the two wrong shapes), not on Liella code"],
+ "refused": [],
+ "improvement": "the dispatcher could check that a test-only story's target symbols exist in libc.a (validation/results/libc-a-missing-manifest-symbols.txt) before issuing it",
+ "next_step": "DL-16: implement special handles, move handles.c/handle.c into conformance with a helper-object harness mode, plant on RTLD_NEXT start object and dlopen(NULL) scope",
+ "report_file": "handoff/DLSYM-SPECIAL-HANDLES.md",
+ "jobs": ["shiki:dlsym-special-handles-gate-2", "shiki:dlsym-special-handles-plants-2"]}
