@@ -9,7 +9,7 @@
 //! `fts_read(`, `ftw(`, `nftw(` and the flag `GLOB_NOSORT`. A definition or declaration (`fn readdir(`) is not
 //! a use. A use is clean when the function that contains it also orders the listing or reduces it to
 //! something order-free: one of [`ORDERED`] (a sort, `alphasort`/`versionsort`, a `BTreeSet`/`BTreeMap`/
-//! `HashSet`, a plain `.count()`). A deliberate case carries `// FS-ORDER: <reason>` on its line or on one of
+//! `HashSet`, a plain `.count()`, an emptiness test `.next().is_none()`). A deliberate case carries `// FS-ORDER: <reason>` on its line or on one of
 //! the two lines above it or above the enclosing function's `fn` line (which covers the whole function). A token-level tripwire, like the other policy checks: a sort in a helper the function
 //! calls is not followed (put the marker there).
 
@@ -21,7 +21,7 @@ use std::path::Path;
 const SOURCES: &[&str] = &["read_dir(", "readdir(", "readdir64(", "scandir(", "scandir64(", "fts_read(", "nftw(", "nftw64(", "ftw(", "ftw64(", "GLOB_NOSORT"];
 
 /// Tokens that order a listing or make its order irrelevant.
-const ORDERED: &[&str] = &[".sort", "sort_by", "sort_unstable", "alphasort", "versionsort", "BTreeSet", "BTreeMap", "HashSet", ".count()", ".is_empty()"];
+const ORDERED: &[&str] = &[".sort", "sort_by", "sort_unstable", "alphasort", "versionsort", "BTreeSet", "BTreeMap", "HashSet", ".count()", ".is_empty()", ".next().is_none()", ".next().is_some()"];
 
 /// The waiver marker.
 const WAIVER: &str = "FS-ORDER:";
@@ -172,6 +172,11 @@ mod tests {
         assert!(check_file("x.rs", fn_waived).is_empty());
         let null_only = "fn t() { assert!(x::readdir(d).is_null()); }\nfn u() { let e = x::readdir(d); }\n";
         assert_eq!(check_file("x.rs", null_only).len(), 1);
+        // An emptiness test sees no order; taking the first entry does.
+        let empty = "fn e(d: &str) -> bool { std::fs::read_dir(d).is_ok_and(|mut e| e.next().is_none()) }\n";
+        assert!(check_file("x.rs", empty).is_empty());
+        let first = "fn f(d: &str) -> String { std::fs::read_dir(d).unwrap().next().unwrap().unwrap().file_name().into_string().unwrap() }\n";
+        assert_eq!(check_file("x.rs", first).len(), 1);
         // Comments, string literals and declarations are not uses.
         let text = "// read_dir( is mentioned\nextern \"C\" { fn readdir(d: *mut D) -> *mut E; }\nfn t() { let s = \"scandir(\"; }\n";
         assert!(check_file("x.rs", text).is_empty());
