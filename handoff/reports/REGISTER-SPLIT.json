@@ -1,0 +1,5 @@
+{"task": "REGISTER-SPLIT", "model": "sonnet", "tokens": null, "result": "saturation register split into docs/saturation/NN-slug.md with an index and cargo xtask register --check in static", "branch": "task/register-split", "head": "HEADSHA",
+ "gate": {"affected": "FULL escalated (xtask changed); register-split-gate-2 running on mei", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["register-split-gate-2", "register-split-plants-2"],
+ "rulings": [], "informational": ["affected --run escalates to FULL for any xtask change"], "refused": [],
+ "improvement": "affected could treat docs-only plus a self-contained xtask module as direct tier", "next_step": "read register-split-gate-2", "report_file": "handoff/register-split.md"}
