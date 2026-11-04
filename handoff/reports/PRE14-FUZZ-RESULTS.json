@@ -1,0 +1,12 @@
+{"task": "PRE14-FUZZ-RESULTS", "model": "sonnet", "tokens": null,
+ "result": "Recorded V-3 campaign results (20 targets, 30 min each, 2026-10-23, keke) in docs/fuzzing.md: 16 clean, 4 time-outs (regex, regex_dfa, glob, locale); coverage was never recorded",
+ "branch": "task/pre14-fuzz-results", "head": "see git",
+ "gate": {"affected": "docs only, no jobs run", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Results recovered from ~/work/pre14-fuzz-campaign/run-*/results.tsv on keke; cov/ft column is '?' for every target (not recorded); head sha not recorded.",
+  "Four time-out findings need fix stories (regex, regex_dfa, glob, locale); whether fixed since 10-23 is unverified. No crash recorded."],
+ "refused": [], "jobs": [],
+ "improvement": "campaign.sh should keep libFuzzer's last cov:/ft: line and the git head in results.tsv",
+ "next_step": "Fix stories for the four time-outs (or confirm fixed by --repro on current next); optional rerun that records coverage",
+ "report_file": "handoff/PRE14-FUZZ-RESULTS.md"}

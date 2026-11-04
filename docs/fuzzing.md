@@ -54,12 +54,39 @@ target fails without an artifact (a build or harness failure).
 
 ### Results
 
-**Pending.** Both jobs were still running when the story was handed back. Copy the per-target rows from the two
-`results.tsv` files into this table (corpus start -> end, libFuzzer `cov`/`ft` at the end, executions, finding):
+Recovered 2026-11-04 (PRE14-FUZZ-RESULTS) from the two `results.tsv` and `.stats` files in `~/work/pre14-fuzz-campaign/` on keke
+(jobs `pre14-fuzz-campaign-a`, 2026-10-23 06:55:48Z to 07:59:26Z, and `-b`, 06:58:39Z to 07:31:42Z, both rc 0). The campaign ran on the
+tree of the PRE14-FUZZ-CAMPAIGN branch on 2026-10-23; the head sha was not recorded in the results files.
 
-| Target | Time | Corpus (start -> end) | cov / ft | Executions | Finding |
-|---|---|---|---|---|---|
-| (from `results.tsv`) | | | | | |
+**Coverage was not recorded.** The campaign script kept only libFuzzer's final stats, so the `cov`/`ft` column of `results.tsv` is `?`
+for every target. Per-target coverage is open: a rerun that keeps libFuzzer's last `cov:`/`ft:` status line would fill it.
+Corpus size, executions and peak RSS are as recorded. Time is in seconds (1801-1803 s is the 30 minute budget); a target with a
+finding stopped at its first finding.
+
+| Target | Job | Time | Corpus (start -> end) | Executions | Peak RSS (MB) | Finding |
+|---|---|---|---|---|---|---|
+| group | a | 1802s | 21329->22759 | 32,986,389 | 44 | none |
+| shadow | a | 1802s | 21237->22394 | 50,292,652 | 41 | none |
+| passwd | a | 1802s | 18209->18488 | 87,050,577 | 37 | none |
+| netdb_files | a | 1802s | 31186->32219 | 57,636,207 | 62 | none |
+| nsswitch | a | 1802s | 27601->28795 | 35,655,834 | 54 | none |
+| hosts | a | 1802s | 26909->28900 | 13,202,374 | 42 | none |
+| resolv_conf | a | 1801s | 67989->70539 | 65,557,510 | 59 | none |
+| nscache | a | 1802s | 4576->4707 | 32,524,699 | 32 | none |
+| digits_dots | a | 1802s | 847->848 | 77,175,933 | 36 | none |
+| dns | a | 1802s | 5073->5361 | 53,460,943 | 36 | none |
+| regex | b | 762s | 4450->5308 | 103,103 | 199 | FINDING: time-out |
+| regex_dfa | b | 67s | 2698->2698 | 2,410 | 118 | FINDING: time-out + slow unit |
+| glob | b | 367s | 3124->5315 | 546,982 | 1192 | FINDING: time-out |
+| locale | b | 232s | 2135->2773 | 365,301 | 1003 | FINDING: time-out |
+| scanners | b | 1801s | 394->422 | 174,042,781 | 28 | none |
+| iconv | b | 1801s | 19893->22991 | 47,038,225 | 54 | none |
+| scanf | b | 1801s | 19488->22666 | 82,313,632 | 37 | none |
+| wordexp | b | 1801s | 26091->35221 | 11,660,822 | 54 | none |
+| printf | b | 1802s | 20469->22740 | 1,176,367 | 38 | none |
+| charmap | b | 1803s | 13491->14781 | 618,398 | 258 | none |
+
+Sixteen targets ran their full 30 minutes clean; four (regex, regex_dfa, glob, locale) stopped on a time-out artifact.
 
 ### Findings
 
@@ -67,4 +94,15 @@ Each finding (crash, hang/time-out, OOM) is a defect and gets its own fix story,
 `cargo xtask fuzz <target> --repro <artifact>` and minimise it with `--tmin`. A finding that may be a security weakness is not
 described here (owner rule SECURITY-PRIVATE).
 
-None recorded yet (campaign pending).
+The 2026-10-23 campaign found four time-outs, each ending its target early (artifacts under `run-<stamp>-b/artifacts/<target>/` on
+keke, not in the tree):
+
+| Target | Stopped at | Kind |
+|---|---|---|
+| regex | 762 s | time-out (libFuzzer 11 s limit) |
+| regex_dfa | 67 s | time-out and slow unit (11 s) |
+| glob | 367 s | time-out |
+| locale | 232 s | time-out |
+
+Each needs its own fix story; whether they were fixed after 2026-10-23 is not established here. Check with
+`cargo xtask fuzz <target> --repro <artifact>` on the current `next`. No crash or sanitizer report was recorded.
