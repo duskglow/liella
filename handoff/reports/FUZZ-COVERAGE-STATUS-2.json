@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "rerun of all 26 fuzz targets done, cov/ft table in docs/fuzzing.md; 2 findings (group duplicate GID assertion, xdr_mem memory growth OOM) for fix stories",
  "branch": "task/fuzz-coverage-status-2",
- "head": null,
+ "head": "f0262796",
  "gate": {
   "affected": "docs/handoff only on this branch; clippy and static green; fuzz run rc 0",
   "peak": null
