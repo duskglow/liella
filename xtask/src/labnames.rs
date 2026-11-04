@@ -87,7 +87,7 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for e in rd.flatten() {
         let p = e.path();
         let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
-        if rel == "target" || rel == ".git" || rel.starts_with("handoff") || rel == ".synced" {
+        if rel == "target" || rel == ".git" || rel.starts_with("handoff") || rel == ".synced" || rel == ".changed" {
             continue;
         }
         if p.is_dir() {
