@@ -446,6 +446,12 @@ pub trait Env {
     fn find_copy(&self, s: &[u8], d: &mut [u8], c: u8) -> Option<usize> {
         find_copy(self, s, d, c)
     }
+    /// After [`Env::find_copy`] returned `None` for a source of `n` bytes that fit `d`: how many
+    /// leading bytes of `s` it has already stored in `d` (0 when it keeps no such promise).
+    #[inline(always)]
+    fn find_copy_done(&self, _n: usize) -> usize {
+        0
+    }
     /// `realloc` (0 when out of memory; the block is kept).
     fn realloc(&self, addr: usize, n: usize) -> usize;
     /// `free`.
@@ -1947,18 +1953,39 @@ pub fn read_record<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, delim: 
 /// a wide or unset stream): the general [`getdelim`] decides. `p` is `_IO_read_ptr` as
 /// [`read_room`] read it, the lock is held or needed by none.
 #[inline(always)]
-pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, lineptr: usize, cap_var: usize, delim: u8) -> Option<usize> {
-    let window: &[u8] = read_window(env, file, ext, p)?;
+pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, (lineptr, cap_var): (usize, usize), delim: u8, partial: bool) -> Result<usize, Partial> {
+    let window: &[u8] = read_window(env, file, ext, p).ok_or(Partial(0))?;
     let buf = env.load_word(lineptr);
     if buf == 0 {
-        return None;
+        return Err(Partial(0));
     }
     // The record and its NUL must fit `*n` bytes; more than the window and a NUL is never needed.
     let room = env.load_word(cap_var).min(window.len().saturating_add(1));
-    let n = env.find_copy(window, env.bytes(buf, room), delim)?;
-    set(file, word::READ_PTR, p + n);
-    Some(n)
+    let dst = env.bytes(buf, room);
+    if let Some(n) = env.find_copy(window, dst, delim) {
+        set(file, word::READ_PTR, p + n);
+        return Ok(n);
+    }
+    // GETLINE-LONG: no delimiter in the whole window and all of it fits: the window is the
+    // record's first piece. Its bytes are put in place (the scan stored the first `done` of them)
+    // and consumed; the general path goes on from there. Not with the error indicator set (the
+    // general path fails first) and only when the caller holds the stream (`partial`).
+    let n = window.len();
+    if partial && n > 0 && room == n.saturating_add(1) && get(file, word::FLAGS) & ERR_SEEN == 0 {
+        let done = env.find_copy_done(n).min(n);
+        if let (Some(d), Some(s)) = (dst.get_mut(done..n), window.get(done..n)) {
+            liella::mem::copy(d, s);
+        }
+        set(file, word::READ_PTR, p + n);
+        return Err(Partial(n));
+    }
+    Err(Partial(0))
 }
+
+/// [`getdelim_front`] did not finish the record. `.0` bytes of it are in `*lineptr` and consumed
+/// (the unread window, which held no delimiter); the general path continues after them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Partial(pub usize);
 
 /// [`Env::find_copy`] in two passes: [`Env::find`] over the bytes that fit, then the copy.
 #[inline(always)]
@@ -2023,10 +2050,12 @@ pub fn read_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, ou
 
 /// `getdelim`: a record up to and including `delim` into the caller's `malloc` buffer
 /// (`*lineptr`, `*n`), grown as needed and terminated. The length, or `None` at end of input.
-pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8) -> KResult<Option<usize>> {
+/// With `prefix` > 0 the front path has already moved the first `prefix` bytes of the record
+/// into `*lineptr` ([`Partial`]); the record continues at the stream's position.
+pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8, prefix: usize) -> KResult<Option<usize>> {
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
-    let mut len = 0usize;
+    let mut len = prefix;
     // Set when the growth of the caller's buffer failed: that error is the result, not a read error.
     let mut grow_failed = false;
     if !byte_oriented(file) {
@@ -2066,7 +2095,7 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         })
     })?;
     match r {
-        Ok(0) => Ok(None),
+        Ok(0) if len == 0 => Ok(None),
         Ok(_) => {
             if let Some(t) = env.bytes(buf, cap).get_mut(len) {
                 *t = 0;
