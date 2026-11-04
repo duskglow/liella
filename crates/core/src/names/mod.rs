@@ -20,6 +20,7 @@
 pub mod cache;
 pub mod db;
 pub mod dns;
+pub mod hostconf;
 pub mod msg;
 pub mod nss;
 pub mod sort;

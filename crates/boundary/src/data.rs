@@ -523,11 +523,12 @@ pub fn hconf_filled() -> bool {
     _res_hconf[0].load(core::sync::atomic::Ordering::Relaxed) != 0
 }
 
-/// Record the `host.conf` settings in `_res_hconf` (`multi`).
-pub fn set_hconf(multi: bool) {
+/// Record the `host.conf` settings in `_res_hconf` (`multi`, `reorder`; the trim domains are
+/// not laid out, D-16.13).
+pub fn set_hconf(multi: bool, reorder: bool) {
     use core::sync::atomic::Ordering::Relaxed;
     _res_hconf[0].store(1, Relaxed);
-    _res_hconf[8].store(if multi { 0x10 } else { 0 }, Relaxed);
+    _res_hconf[8].store(if multi { 0x10 } else { 0 } | if reorder { 0x08 } else { 0 }, Relaxed);
 }
 
 // ------------------------------------------------------------------------------ §7.7 objects
