@@ -5,7 +5,7 @@
 //! Clause tests for spec §10 (56 clauses).
 
 #![no_builtins] // calls to libc names (labs, strlen, ...) reach Liella's export, not LLVM's folding (OPAQUE-AUDIT)
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::float_cmp, clippy::cast_possible_truncation, missing_docs)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::float_cmp, clippy::cast_possible_truncation, clippy::panic, clippy::cast_possible_wrap, missing_docs)]
 
 #[path = "../../core/tests/support/skip_note.rs"]
 mod skip_note;
@@ -15,35 +15,35 @@ mod skip_note;
 mod elf {
     /// One dynamic symbol: name, version name, whether that version is hidden (non-default,
     /// `name@V`), section index and value.
-    pub struct Sym {
-        pub name: String,
-        pub version: String,
-        pub hidden: bool,
-        pub shndx: u16,
-        pub value: u64,
+    pub(crate)struct Sym {
+        pub(crate)name: String,
+        pub(crate)version: String,
+        pub(crate)hidden: bool,
+        pub(crate)shndx: u16,
+        pub(crate)value: u64,
     }
-    pub struct Section {
-        pub name: String,
-        pub kind: u32,
-        pub addr: u64,
-        pub offset: u64,
-        pub size: u64,
-        pub link: u32,
+    pub(crate)struct Section {
+        pub(crate)name: String,
+        pub(crate)kind: u32,
+        pub(crate)addr: u64,
+        pub(crate)offset: u64,
+        pub(crate)size: u64,
+        pub(crate)link: u32,
     }
-    pub struct Elf {
-        pub bytes: Vec<u8>,
-        pub sections: Vec<Section>,
-        pub syms: Vec<Sym>,
+    pub(crate)struct Elf {
+        pub(crate)bytes: Vec<u8>,
+        pub(crate)sections: Vec<Section>,
+        pub(crate)syms: Vec<Sym>,
         /// `R_X86_64_JUMP_SLOT` relocations: (GOT slot address, dynamic symbol index).
-        pub jump_slots: Vec<(u64, usize)>,
+        pub(crate)jump_slots: Vec<(u64, usize)>,
     }
-    pub fn u16_at(b: &[u8], o: usize) -> u16 {
+    pub(crate)fn u16_at(b: &[u8], o: usize) -> u16 {
         u16::from_le_bytes(b[o..o + 2].try_into().unwrap())
     }
-    pub fn u32_at(b: &[u8], o: usize) -> u32 {
+    pub(crate)fn u32_at(b: &[u8], o: usize) -> u32 {
         u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
     }
-    pub fn u64_at(b: &[u8], o: usize) -> u64 {
+    pub(crate)fn u64_at(b: &[u8], o: usize) -> u64 {
         u64::from_le_bytes(b[o..o + 8].try_into().unwrap())
     }
     fn cstr(b: &[u8], o: usize) -> String {
@@ -57,7 +57,7 @@ mod elf {
     const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
     const R_X86_64_JUMP_SLOT: u64 = 7;
     impl Elf {
-        pub fn parse(bytes: Vec<u8>) -> Elf {
+        pub(crate)fn parse(bytes: Vec<u8>) -> Elf {
             assert_eq!(&bytes[..6], b"\x7fELF\x02\x01", "not an ELF64 little-endian object");
             let b = &bytes;
             let (shoff, shentsize, shnum, shstrndx) = (u64_at(b, 0x28) as usize, u16_at(b, 0x3a) as usize, u16_at(b, 0x3c) as usize, u16_at(b, 0x3e) as usize);
@@ -106,7 +106,7 @@ mod elf {
             Elf { bytes, sections, syms, jump_slots }
         }
         /// The section holding address `va` (with file contents) and the file offset of `va`.
-        pub fn at(&self, va: u64) -> (&Section, usize) {
+        pub(crate)fn at(&self, va: u64) -> (&Section, usize) {
             let s = self.sections.iter().find(|s| s.kind != SHT_NOBITS && s.addr != 0 && (s.addr..s.addr + s.size).contains(&va)).unwrap_or_else(|| panic!("{va:#x} is in no section"));
             (s, (s.offset + (va - s.addr)) as usize)
         }
@@ -161,7 +161,8 @@ fn s10_0_c2_0() {
     assert!(missing.is_empty() && extra.is_empty(), "libm.so.6 `_finite` exports differ from Appendix B: missing {missing:?}, extra {extra:?}");
 
     for s in &finite {
-        let name = base(&s.name).unwrap();
+        // `gamma` is the old name of `lgamma` (gamma(3)); `<x>gamma*_r` is exported as `lgamma*_r` only.
+        let name = base(&s.name).map(|b| if b.starts_with("gamma") { format!("l{b}") } else { b }).unwrap();
         // (1) The Appendix B version, non-default.
         assert_eq!(s.version, spec[&s.name], "{}: version", s.name);
         assert!(s.hidden, "{}@@{} is a default version: new links would bind it", s.name, s.version);
