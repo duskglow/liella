@@ -1,19 +1,20 @@
-//! The file-system walkers run out of memory (ENOMEM-FS-WALK).
+//! The file-system walkers run out of memory (ENOMEM-FS-WALK-2, on the ALLOC-FAIL-INJECT hook).
 //!
-//! Each case runs in a re-executed child of the test binary. The child prepares everything it
-//! needs, sets `RLIMIT_AS` to its current size plus a margin (calibrated from `/proc/self/statm`,
-//! never a fixed number), then hoards the heap with `malloc` until `malloc(1)` fails. The
-//! walker is then called at growing headroom: none at all, then 1, 2, 4, ... of the hoarded
-//! blocks given back, then all of them. At EVERY stage the call must either
+//! For each walker the test fails the 1st, 2nd, 3rd ... allocation the call makes (the hook,
+//! `liella_boundary::selftest::failinject`, fails one chosen allocation of the calling thread's
+//! global-allocator traffic, once), until a call finishes without reaching the planned failure.
+//! At every injected failure the call must report its documented failure (`-1`/`NULL` with
+//! `ENOMEM`; `glob`: `GLOB_NOSPACE` with the structure empty; `fts_read` ends the walk with
+//! `ENOMEM`), never a truncated success, and the C heap's in-use bytes (`mallinfo2().uordblks`)
+//! must be what they were before the call (no partial result stays allocated). The call without
+//! any injection must succeed with the COMPLETE result.
 //!
-//! * report its documented failure (`-1`/`NULL` with `ENOMEM`; `glob`: `GLOB_NOSPACE` with the
-//!   structure empty), or
-//! * succeed with the COMPLETE result (a truncated success is the bug these tests catch),
-//!
-//! and once the result is released, the heap's in-use bytes (`mallinfo2().uordblks`) must be what
-//! they were before the call: no partial result stays allocated. With no headroom the call must
-//! fail; with all of it, it must succeed. The child reports through its exit status only (no
-//! allocation after the limit is set).
+//! The hook reaches only global-allocator allocations (`liella::mem` collections,
+//! `try_reserve`), not the caller-owned `malloc` family, the C heap, `KernelPages` or `OLD_HEAP`
+//! (coordinator #2101/#2102). A walker none of whose allocations is reachable has nothing to
+//! inject: the test then prints "NOT TESTABLE YET: <walker>" and passes (an ENOMEM path on the C
+//! heap needs a product-code hook, which needs an owner ruling). The global-allocator side of
+//! "no leak" is not measured here (no live-byte accounting in the hook).
 //!
 //! The scratch tree is built by the test; names are compared in sorted order or as counts
 //! (no file-system dependence). `nftw` is compared by its number of callbacks.
@@ -32,23 +33,11 @@ use liella_abi::ctypes::{c_char, c_int};
 use liella_abi::layout::{struct_dirent, FTSENT};
 use liella_boundary::errno;
 use liella_boundary::posix::{s03_memory, s04_strings as st, s13_filesystem as x, s14_search as g};
+use liella_boundary::selftest::failinject::{self, FailAlloc};
 use liella_boundary::selftest::opaque;
-use liella_boundary::sys::CSys;
-use liella_kernel::sys::Sys;
-use liella_kernel::uapi::{Rlimit, RLIMIT_AS, RLIM_INFINITY};
 use liella_kernel::Errno;
 
 const FILES: usize = 300;
-const ENV_CASE: &str = "LIELLA_ENOMEM_FS_DIR";
-
-/// Exit statuses of the child.
-const OK: i32 = 0;
-const NOT_FAILING_EMPTY: i32 = 10;
-const NOT_SUCCEEDING_FULL: i32 = 11;
-const LEAK: i32 = 12;
-const BAD_FAILURE: i32 = 13;
-const TRUNCATED: i32 = 14;
-const NO_HOARD: i32 = 15;
 
 enum Verdict {
     Complete,
@@ -79,56 +68,47 @@ fn cstr(p: &std::path::Path) -> CString {
     CString::new(p.as_os_str().as_encoded_bytes()).unwrap()
 }
 
-/// Run `attempt` under the exhausted heap at growing headroom; the exit status of the child.
-fn staged(mut attempt: impl FnMut() -> Verdict) -> i32 {
-    let statm = std::fs::read_to_string("/proc/self/statm").unwrap();
-    let pages: u64 = statm.split_whitespace().next().unwrap().parse().unwrap();
-    let mut hoard: Vec<*mut c_void> = Vec::with_capacity(1 << 20);
-    CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur: pages * 4096 + (32 << 20), max: RLIM_INFINITY })).unwrap();
-    for size in [1usize << 20, 1 << 16, 1 << 12, 256, 16, 1] {
-        loop {
-            let p = opaque::malloc(size);
-            if p.is_null() || hoard.len() == hoard.capacity() {
-                break;
-            }
-            hoard.push(p);
-        }
-    }
-    if hoard.is_empty() || !opaque::malloc(1).is_null() {
-        eprintln!("DEBUG hoard {} cap {} pages {pages}", hoard.len(), hoard.capacity());
-        return NO_HOARD;
-    }
-    let mut next_free = 0usize;
-    let mut stage = 0usize;
-    loop {
-        eprintln!("DEBUG stage {stage} hoard {}", hoard.len());
+#[global_allocator]
+static ALLOC: FailAlloc = FailAlloc;
+
+/// Serialises the cases that change or read the process working directory.
+static CWD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Fail the 1st, 2nd, ... allocation of `attempt` in turn (see the file header); the verdict
+/// message, empty when all is as documented.
+fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
+    let mut failures = 0u64;
+    for n in 1..=20_000u64 {
         let before = s03_memory::mallinfo2().uordblks;
+        let hit = failinject::injected();
+        failinject::fail_nth(n);
         let verdict = attempt();
+        failinject::off();
+        let injected = failinject::injected() != hit;
         let after = s03_memory::mallinfo2().uordblks;
-        let all_back = hoard.is_empty();
         if after != before {
-            return LEAK;
+            return format!("{walker}: allocation {n}: a partial result stays allocated ({before} -> {after})");
+        }
+        if !injected {
+            // The walk made fewer than n allocations: it must have succeeded completely.
+            if !matches!(verdict, Verdict::Complete) {
+                return format!("{walker}: no injection at {n}, yet the result is not the complete success");
+            }
+            if failures == 0 {
+                eprintln!("NOT TESTABLE YET: {walker} makes no global-allocator allocation (C heap only)");
+            } else {
+                eprintln!("{walker}: {failures} allocation failures injected, all reported as documented");
+            }
+            return String::new();
         }
         match verdict {
-            Verdict::Truncated => return TRUNCATED,
-            Verdict::BadFailure => return BAD_FAILURE,
-            Verdict::Failed if all_back => return NOT_SUCCEEDING_FULL,
-            Verdict::Complete if stage == 0 => return NOT_FAILING_EMPTY,
-            _ => {}
+            Verdict::Failed => failures += 1,
+            Verdict::Complete => return format!("{walker}: allocation {n} failed but the call reported success"),
+            Verdict::Truncated => return format!("{walker}: allocation {n} failed: truncated success"),
+            Verdict::BadFailure => return format!("{walker}: allocation {n} failed: failure without the documented ENOMEM"),
         }
-        if all_back {
-            return OK;
-        }
-        // Give back 1, 2, 4, ... blocks (the last hoarded, smallest first); at the end all of them.
-        next_free = if next_free == 0 { 1 } else { next_free * 2 };
-        for _ in 0..next_free {
-            match hoard.pop() {
-                Some(p) => opaque::free(p),
-                None => break,
-            }
-        }
-        stage += 1;
     }
+    format!("{walker}: more than 20000 allocations")
 }
 
 /// `true` when `errno` is `ENOMEM`.
@@ -192,11 +172,11 @@ extern "C" fn by_name(a: *const *const c_void, b: *const *const c_void) -> c_int
     x::alphasort(a, b)
 }
 
-fn case_scandir(dir: &std::path::Path) -> i32 {
+fn case_scandir(dir: &std::path::Path) -> String {
     let d = cstr(dir);
     let want: Vec<CString> = (0..FILES).map(|i| CString::new(name(i)).unwrap()).collect();
     let cmp: liella_abi::callback::SlotCompareFn = by_name;
-    staged(|| {
+    sweep("scandir", || {
         let mut list: *mut *mut struct_dirent = null_mut();
         errno::set_raw(0);
         let n = x::scandir(d.as_ptr(), Some(&mut list), Some(keep_f), Some(cmp));
@@ -220,11 +200,11 @@ fn case_scandir(dir: &std::path::Path) -> i32 {
     })
 }
 
-fn case_glob(dir: &std::path::Path) -> i32 {
+fn case_glob(dir: &std::path::Path) -> String {
     let pat = CString::new(format!("{}/f*", dir.display())).unwrap();
     let prefix = format!("{}/", dir.display());
     let want: Vec<CString> = (0..FILES).map(|i| CString::new(format!("{prefix}{}", name(i))).unwrap()).collect();
-    staged(|| {
+    sweep("glob", || {
         let mut gl = GlobT { gl_pathc: 0, gl_pathv: 0, gl_offs: 0, gl_flags: 0, gl_closedir: None, gl_readdir: None, gl_opendir: None, gl_lstat: None, gl_stat: None };
         let r = g::glob(pat.as_ptr(), 0, None, Some(&mut gl));
         if r != 0 {
@@ -250,7 +230,7 @@ extern "C" fn by_path(a: *const *const c_void, b: *const *const c_void) -> c_int
     cmp_text(rd(ea, PATH), rd(eb, PATH))
 }
 
-fn case_fts(dir: &std::path::Path) -> i32 {
+fn case_fts(dir: &std::path::Path) -> String {
     let d = cstr(dir);
     let argv: [*mut c_char; 2] = [d.as_ptr().cast_mut(), null_mut()];
     let mut want: Vec<CString> = vec![CString::new(dir.as_os_str().as_encoded_bytes()).unwrap()];
@@ -261,7 +241,7 @@ fn case_fts(dir: &std::path::Path) -> i32 {
         want.push(CString::new(format!("{}/{n}", dir.display())).unwrap());
     }
     let cmp: liella_abi::callback::SlotCompareFn = by_path;
-    staged(|| {
+    sweep("fts", || {
         errno::set_raw(0);
         // FTS_PHYSICAL | FTS_NOCHDIR
         let t = x::fts_open(argv.as_ptr(), 0x10 | 0x04, Some(cmp));
@@ -311,9 +291,9 @@ extern "C" fn count_cb(_p: *const c_char, _st: *const c_void, _flag: c_int, _f: 
     0
 }
 
-fn case_nftw(dir: &std::path::Path) -> i32 {
+fn case_nftw(dir: &std::path::Path) -> String {
     let d = cstr(dir);
-    staged(|| {
+    sweep("nftw", || {
         CALLS.store(0, Ordering::Relaxed);
         errno::set_raw(0);
         let r = x::nftw(d.as_ptr(), Some(count_cb), 10, 1);
@@ -325,11 +305,11 @@ fn case_nftw(dir: &std::path::Path) -> i32 {
     })
 }
 
-fn case_realpath(dir: &std::path::Path) -> i32 {
+fn case_realpath(dir: &std::path::Path) -> String {
     std::fs::create_dir_all(dir.join("sub")).unwrap();
     let given = CString::new(format!("{}/./sub/../{}", dir.display(), name(7))).unwrap();
     let want = CString::new(format!("{}/{}", dir.display(), name(7))).unwrap();
-    staged(|| {
+    sweep("realpath", || {
         errno::set_raw(0);
         let p = x::realpath(given.as_ptr(), null_mut());
         if p.is_null() {
@@ -341,11 +321,11 @@ fn case_realpath(dir: &std::path::Path) -> i32 {
     })
 }
 
-fn case_canonicalize(dir: &std::path::Path) -> i32 {
+fn case_canonicalize(dir: &std::path::Path) -> String {
     std::fs::create_dir_all(dir.join("sub")).unwrap();
     let given = CString::new(format!("{}/./sub/../{}", dir.display(), name(7))).unwrap();
     let want = CString::new(format!("{}/{}", dir.display(), name(7))).unwrap();
-    staged(|| {
+    sweep("canonicalize", || {
         errno::set_raw(0);
         let p = x::canonicalize_file_name(given.as_ptr());
         if p.is_null() {
@@ -357,13 +337,12 @@ fn case_canonicalize(dir: &std::path::Path) -> i32 {
     })
 }
 
-fn case_getcwd(dir: &std::path::Path) -> i32 {
+fn case_getcwd(dir: &std::path::Path) -> String {
     std::env::set_current_dir(dir).unwrap();
     let want = CString::new(dir.as_os_str().as_encoded_bytes()).unwrap();
-    staged(|| {
+    sweep("getcwd", || {
         errno::set_raw(0);
         let p = x::getcwd(null_mut(), 0);
-        eprintln!("DEBUG getcwd p={p:?} errno={} used={}", errno::get(), s03_memory::mallinfo2().uordblks);
         if p.is_null() {
             return failed_or(false, enomem());
         }
@@ -373,10 +352,10 @@ fn case_getcwd(dir: &std::path::Path) -> i32 {
     })
 }
 
-fn case_current_dir_name(dir: &std::path::Path) -> i32 {
+fn case_current_dir_name(dir: &std::path::Path) -> String {
     std::env::set_current_dir(dir).unwrap();
     let want = CString::new(dir.as_os_str().as_encoded_bytes()).unwrap();
-    staged(|| {
+    sweep("current_dir_name", || {
         errno::set_raw(0);
         let p = x::get_current_dir_name();
         if p.is_null() {
@@ -388,21 +367,13 @@ fn case_current_dir_name(dir: &std::path::Path) -> i32 {
     })
 }
 
-/// The parent: build the tree, run the case in a child of this binary; the child's status is the verdict.
-fn drive(test: &str, case: fn(&std::path::Path) -> i32) {
-    if let Ok(dir) = std::env::var(ENV_CASE) {
-        let code = case(std::path::Path::new(&dir));
-        std::process::exit(code);
-    }
+/// Build the tree, run the case in this process; any message is a failure.
+fn drive(test: &str, case: fn(&std::path::Path) -> String) {
+    let _cwd = CWD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let dir = build_tree(test);
-    let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
-        .env(ENV_CASE, &dir)
-        .env_remove("PWD")
-        .status()
-        .unwrap();
+    let msg = case(&dir);
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(status.code(), Some(OK), "{test}: child status (10 not failing with no memory, 11 not succeeding with all of it, 12 a partial result stays allocated, 13 failure without ENOMEM/GLOB_NOSPACE, 14 truncated success, 15 heap not exhausted)");
+    assert!(msg.is_empty(), "{test}: {msg}");
 }
 
 // s13_3_f_0, s0_6_c0_1_1
