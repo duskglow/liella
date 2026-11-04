@@ -17,3 +17,8 @@ fnmatch_differential.rs comment); next's COMPAT-11 fnmatch row and our duplicate
 Ids 1-17 unique. Job: compat-flag-ids-unique-5-gate on kanon (static + workspace clippy + affected --base origin/next).
 No code change since the plants in -3 (compat_ids.rs untouched), so no new plants. NOT VERIFIED at hand-back: gate result.
 Not to redo: renumbering beyond 17. Next: CI.
+
+## Run 6
+Merged origin/next again (right before push). next's syslog option took COMPAT-17, so the fnmatch option is now COMPAT-18
+(compat-flags.md row, differences row, fnmatch_differential.rs comment); next's duplicate COMPAT-14 row dropped (ours identical).
+Ids 1-18 unique. Job: compat-flag-ids-unique-6-static on shiki (cargo xtask static). Next: CI.

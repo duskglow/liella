@@ -1,0 +1,12 @@
+{"task": "REGEX-LAZY-DFA", "model": "opus", "tokens": null,
+ "result": "X-3a note written: only regexec_backref is above parity (instr 1.11); a lazy DFA cannot decide back-references, recorded as a negative; one-pass capture DFA designed (16 KiB cap, fallback, bound) and deferred",
+ "branch": "task/regex-lazy-dfa", "head": "48dad27f",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Kind: planning says JOBS: none, but the brief asks for a profile job and static; both were run and named",
+                   "the ledger's X-3 figures (t 3.1 to 5.8) are stale since D-14.13/D-14.16; the ledger row could be updated by the coordinator"],
+ "refused": [],
+ "improvement": "briefs for ledger items should carry the latest counter ratios; this one's premise was already met by D-14.13/D-14.16, and a 20-minute slot queue was spent learning that",
+ "next_step": "X-3b REGEX-BACKREF-FIXED (S): cut the backref matcher's fixed cost per call; JOBS gate, plants, percall, static",
+ "report_file": "handoff/regex-lazy-dfa.md",
+ "jobs": ["regex-lazy-dfa-profile", "regex-lazy-dfa-static"]}

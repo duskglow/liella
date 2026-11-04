@@ -50,8 +50,17 @@ Only `boundary` has a build script, and it compiles `csys/` (C and the x86_64 as
 depend on `boundary` (normal dependencies, from their `Cargo.toml`) therefore build without csys: `kernel`, `mem`,
 `rt`, `abi`, `math`, `legacy`, `core`, `ld`, `native`, `thread-db`, `mathtools`, `spectest`. `libc-so` and `libm-so`
 link `boundary`. Of those, `rt` (fpu.rs), `kernel` (machine.rs, uapi.rs), `math` (x87 format, by type) and `abi`
-(x86_64 layouts) carry seams above; whether each passes `cargo check --target aarch64-unknown-linux-gnu` is A-2's
-job (not tried here: no aarch64 target installed, RL-1).
+(x86_64 layouts) carry seams above.
+
+`cargo xtask arch-check` (A-2) runs `cargo check --target aarch64-unknown-linux-gnu` (plain armv8.0-a, no
+target-feature flags until RL-1 is ruled) over all twelve: every target and feature of `kernel`, `mem`, `abi`,
+`legacy`, `ld`, `native`, `thread-db`, `mathtools` and `spectest`, and the library of `rt`, `math` and `core`, whose
+tests take `boundary` as a dev-dependency. It passes without any `cfg` change: the seams in these crates are data
+(bit layouts, constants, trait methods over MXCSR and x87 words, software float models), not instructions. Passing
+means they compile, not that they are ported: the `abi` layouts, the `Machine` trait's FPU words and the
+`arch_prctl` items are still x86_64's on aarch64 until A-3, A-5, A-9 and A-10 replace them. `boundary` (and so
+`libc-so`, `libm-so`) stops in its build script on any target other than x86_64 with the stories that port it,
+because csys is x86_64 C and assembly and the build script compiles it with the host `cc`.
 
 ## String and memory kernels without a portable Rust path
 

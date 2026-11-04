@@ -1609,6 +1609,51 @@ fn s14_8_c_2_1() {
     assert_eq!(paths(&mut t, "~/*", gb::TILDE_CHECK), v(&["v/a", "v/b", "v/d", "v/dang", "v/ld", "v/locked", "v/u"]));
 }
 
+/// Spec §14.8 (Contract), clause s14_8_c_2_1 (`GLOB_BRACE`), D-14.20: a pattern that would expand
+/// to more than `BRACE_MAX_ALTERNATIVES` patterns (or need more than `BRACE_MAX_BYTES`) is
+/// `GLOB_NOSPACE` before any expansion; ordinary patterns are unchanged; both sides of the edge.
+#[test]
+fn s14_8_c_2_1_brace_bound() {
+    use pat::*;
+    let mut t = Tree::sample();
+    let flags = gb::BRACE;
+    let max = gb::BRACE_MAX_ALTERNATIVES;
+    // A group of `n` distinct alternatives (`{a0,a1,...}`).
+    let group = |n: usize| format!("{{{}}}", (0..n).map(|i| format!("q{i}")).collect::<Vec<_>>().join(","));
+    // Ordinary patterns, unchanged: nested, empty alternatives, escapes, unbalanced.
+    assert_eq!(paths(&mut t, "v/{b,a}", flags), v(&["v/b", "v/a"]));
+    assert_eq!(paths(&mut t, "v/{,a}{b,}", flags), v(&["v/b", "v/", "v/a"]), "empty alternatives (v/ab names nothing)");
+    assert_eq!(paths(&mut t, "v/{a,{b,{nomatch,}}}", flags), v(&["v/a", "v/b", "v/"]));
+    assert_eq!(g(&mut t, "v/\\{a,b\\}", flags, &c()), Err(3), "escaped braces are ordinary");
+    assert_eq!(g(&mut t, "v/{x,y}{a", flags, &c()), Err(3), "unbalanced");
+    // The edge: exactly `max` patterns is expanded (nothing matches: GLOB_NOMATCH), one more is not.
+    let at = format!("v/{}{}{}", group(4), group(64), group(max / 256)); // 4 * 64 * 64
+    assert_eq!(g(&mut t, &at, flags, &c()), Err(3), "{max} patterns");
+    let over = format!("v/{}{}{}", group(1), group(max / 2 + 1), group(2));
+    assert_eq!(g(&mut t, &over, flags, &c()), Err(1), "{} patterns", max + 2);
+    let just_over = format!("v/{}{}{}", group(5), group(29), group(113)); // 16385
+    assert_eq!(just_over.matches('q').count(), 147);
+    assert_eq!(g(&mut t, &just_over, flags, &c()), Err(1), "{} patterns", 5 * 29 * 113);
+    // Nesting counts too: alternatives add inside a group, groups multiply.
+    let nested = format!("v/{{{},{}}}{}", group(100), group(100), group(100)); // 200 * 100
+    assert_eq!(g(&mut t, &nested, flags, &c()), Err(1), "20000 patterns, over {max}");
+    let nested_ok = format!("v/{{{},{}}}{}", group(20), group(20), group(100)); // 40 * 100
+    assert_eq!(g(&mut t, &nested_ok, flags, &c()), Err(3));
+    // Overflow of the product does not wrap.
+    let many = format!("v/{}", group(100).repeat(40));
+    assert_eq!(g(&mut t, &many, flags, &c()), Err(1));
+    // The bound is checked even with GLOB_NOCHECK, and without GLOB_BRACE nothing is counted.
+    assert_eq!(g(&mut t, &many, flags | gb::NOCHECK, &c()), Err(1));
+    assert!(g(&mut t, &many, gb::NOCHECK, &c()).is_ok());
+    // The fuzz input fuzz/seeds/glob/timeout-5351ade2 had this shape: two groups of about 45
+    // alternatives (empty ones among them) and several two-way groups. It must fail at once.
+    let empties = format!("{{a{},*}}", ",".repeat(44));
+    let pathological = format!("{empties}{empties}{empties}{{a,b}}{{a,b}}{{a,b}}{{a,b}}");
+    let start = std::time::Instant::now();
+    assert_eq!(g(&mut t, &pathological, flags, &c()), Err(1));
+    crate::timeout::assert_within("pathological GLOB_BRACE (hang guard)", std::time::Duration::from_secs(5), start.elapsed());
+}
+
 /// Spec §14.8 (Contract): `GLOB_ONLYDIR`;
 #[test]
 fn s14_8_c_2_2() {

@@ -130,7 +130,7 @@ fn fnmatch_agrees_with_the_reference_on_the_corpus() {
             Err(_) => "-1",
         };
         // A kept difference (docs/differences-from-glibc.md, the FNM_EXTMATCH with FNM_LEADING_DIR
-        // row; compat flag COMPAT-17; patterns_products.rs pins the same 16 pairs as KNOWN): with
+        // row; compat flag COMPAT-18; patterns_products.rs pins the same 16 pairs as KNOWN): with
         // both flags, Liella answers these pairs by the documented definition. Liella's answer is
         // still checked here; only the reference's differing answer is accepted.
         let both = flags & (fm::EXTMATCH | fm::LEADING_DIR) == fm::EXTMATCH | fm::LEADING_DIR;
