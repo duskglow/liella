@@ -6,3 +6,7 @@ Change: PairS plan (core printf.rs pair_s/is_pair) + render_pair_s (boundary pri
 NOT VERIFIED: the last commit's clippy/test not re-run after the saturating_sub fix; no counts after, no gate, no plants, no static.
 Next: sync, cargo xtask clippy + static, test pair_s_pieces, gate, plants (pair_s conditions, fill, star sign), percall chk_ls + bench cbench_opt before/after, saturation row 3 update.
 Not done: kept-plan (stream) path does not use render_pair_s.
+
+## Run 3 (budget hit early; the two brief files cost ~35k context)
+Added 17 ineligible look-alikes to pair_s_pieces_are_what_render_simple_writes (not list). Synced to keke:~/w/n3. NOT RUN: clippy, static, test, gate, plants (rerun, all 4 must be CAUGHT, esp. gate-kinds), counts. Plants script from run 2: ~/logs/perf-sprintf-chk-nlink-2-plants.log on keke (ssh 10.0.100.53, hostnames do not resolve from the agent shell).
+Next: clippy+static on n3, run core test, gate, plants in /dev/shm/claude/PERF-SPRINTF-CHK-NLINK-3/plants-1, percall chk_ls.
