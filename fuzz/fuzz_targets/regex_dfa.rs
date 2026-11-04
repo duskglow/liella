@@ -27,6 +27,11 @@ const BUDGET: u64 = 16 * regex::BUDGET_PER_FAILURE;
 /// ordinary inputs (all of the corpus finishes far below it).
 const SWEEP_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// The same limit inside one call (FUZZ-REGEX-TIMEOUTS-2): a work cap on every search (thread
+/// insertions; about 0.1 s of the instrumented capture pass), past which the call answers
+/// `REG_ESPACE` and is not compared. Between calls `SWEEP_LIMIT` still ends the sweep.
+const CALL_CAP: u64 = 1 << 22;
+
 /// Store sizes in words: the per-thread block (`DFA_STORE_U32S` = 8192) most often, then sizes
 /// that flush early, hold one entry or are too small for any.
 const SIZES: [usize; 16] = [8192, 8192, 8192, 8192, 8192, 8192, 4000, 3600, 2800, 1600, 1400, 1330, 1000, 100, 8, 0];
@@ -65,8 +70,8 @@ fuzz_target!(|data: &[u8]| {
             // the capture pass is the cost, and the other combinations repeat it ~6 times);
             // existence is checked on every combination.
             let spans = na == (eflags & 4 != 0) && combo == 0;
-            let opts = Options { not_bol, not_eol, newline_anchor: na, budget: BUDGET, ..Options::default() };
-            let off = Options { accel: Accel::OFF, ..opts };
+            let opts = Options { not_bol, not_eol, newline_anchor: na, budget: BUDGET, accel: regex::Accel { cap: CALL_CAP, ..regex::Accel::default() } };
+            let off = Options { accel: Accel { cap: CALL_CAP, ..Accel::OFF }, ..opts };
             for first in [n, n / 2, 0] {
                 if started.elapsed() > SWEEP_LIMIT {
                     return;
