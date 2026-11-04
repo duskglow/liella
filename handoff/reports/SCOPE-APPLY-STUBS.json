@@ -1,0 +1,5 @@
+{"task": "SCOPE-APPLY-STUBS", "model": "sonnet", "tokens": null, "result": "step/advance are no-match stubs; malloc_get_state/set_state stub tests tightened", "branch": "task/scope-apply-stubs", "head": "9a4ab5f",
+ "gate": {"affected": "gate rc 0 (clippy, static, affected --run)", "peak": "1.9G"}, "accepted_first_attempt": null,
+ "rulings": [{"item": "No COMPAT flag for step/advance stub", "recommendation": "keep none (obsolete interface; row records why)"}], "informational": ["malloc_get_state already failed before this change"], "refused": [],
+ "improvement": "brief could say which parts are already done (R9 was)", "next_step": "none", "report_file": "handoff/scope-apply-stubs.md",
+ "jobs": ["shiki:scope-apply-stubs-gate2", "shiki:scope-apply-stubs-plants"]}
