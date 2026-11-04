@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn longer_words_are_not_host_names() {
-        assert!(scan("docs/x.md", "nicotine, meiosis, shikimi, alma_mater, keke2").is_empty());
+        assert!(scan("docs/x.md", "nicotine, meiosis, shikimi, alma_mater, keke2, xmei, 3keke, _nico, Rakanon").is_empty());
     }
 
     #[test]
