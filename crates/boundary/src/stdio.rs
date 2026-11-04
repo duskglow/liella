@@ -91,6 +91,12 @@ impl Env for Glue {
         sc::find_copy(self, s, d, c)
     }
 
+    #[inline(always)]
+    fn find_copy_done(&self, n: usize) -> usize {
+        // The AVX2 scan stores every whole 32-byte block it compared (`hot::delim_copy`).
+        if n >= 32 && crate::dispatch::avx2() { n & !31 } else { 0 }
+    }
+
     fn sys(&self) -> &CSys {
         &CSys
     }
@@ -358,8 +364,8 @@ enum DelimMiss {
     Locked,
     /// The general path.
     General,
-    /// The general path, the delimiter known absent from the unread window ([`sc::getdelim`]).
-    Missed,
+    /// The general path, the first `.0` bytes of the record already in `*lineptr` ([`sc::Partial`]).
+    Missed(usize),
 }
 
 /// [`put_front`], then [`put_front_locked`] when the lock is needed: whether the bytes went in.
@@ -1252,15 +1258,15 @@ pub fn getdelim(line: KResult<usize>, cap: KResult<usize>, delim: i32, fp: usize
     match delim_front(fp, line, cap, d) {
         Ok(n) => Ok(Some(n)),
         Err(DelimMiss::Locked) => delim_locked(fp, line, cap, d),
-        Err(DelimMiss::Missed) => getdelim_general(fp, line, cap, d, true),
-        Err(DelimMiss::General) => getdelim_general(fp, line, cap, d, false),
+        Err(DelimMiss::Missed(k)) => getdelim_general(fp, line, cap, d, k),
+        Err(DelimMiss::General) => getdelim_general(fp, line, cap, d, 0),
     }
 }
 
 /// [`getdelim`] past its front path: the engine's.
 #[inline(never)]
-fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8, known_miss: bool) -> KResult<Option<usize>> {
-    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d, known_miss))?
+fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8, prefix: usize) -> KResult<Option<usize>> {
+    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d, prefix))?
 }
 
 /// The `getdelim` front path (GETDELIM, D-12.19), the mirror of [`read_front`]: a whole record
@@ -1274,7 +1280,7 @@ fn delim_front(fp: usize, line: usize, cap: usize, d: u8) -> Result<usize, Delim
         return Err(DelimMiss::General);
     }
     if crate::thread::alone() || sc::by_caller(file) {
-        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d).map_err(|m| if m.0 { DelimMiss::Missed } else { DelimMiss::General });
+        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, (line, cap), d, true).map_err(|m| if m.0 > 0 { DelimMiss::Missed(m.0) } else { DelimMiss::General });
     }
     Err(DelimMiss::Locked)
 }
@@ -1288,14 +1294,14 @@ fn delim_locked(fp: usize, line: usize, cap: usize, d: u8) -> KResult<Option<usi
         let (lock, ext) = sc::parts(&Glue, file)?;
         let me = Glue.tid();
         lock.lock(&CSys, me);
-        let n = sc::read_room(file).map(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d));
+        let n = sc::read_room(file).map(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, (line, cap), d, false));
         lock.unlock(&CSys, me);
         n
     })();
     // The lock was released: the window may have changed, so a miss is not carried over.
     match front {
         Some(Ok(n)) => Ok(Some(n)),
-        _ => getdelim_general(fp, line, cap, d, false),
+        _ => getdelim_general(fp, line, cap, d, 0),
     }
 }
 
