@@ -59,7 +59,10 @@ Recovered 2026-11-04 (PRE14-FUZZ-RESULTS) from the two `results.tsv` and `.stats
 tree of the PRE14-FUZZ-CAMPAIGN branch on 2026-10-23; the head sha was not recorded in the results files.
 
 **Coverage was not recorded.** The campaign script kept only libFuzzer's final stats, so the `cov`/`ft` column of `results.tsv` is `?`
-for every target. Per-target coverage is open: a rerun that keeps libFuzzer's last `cov:`/`ft:` status line would fill it.
+for every target. Per-target coverage is still open: `cargo xtask fuzz` now keeps the last libFuzzer status line of each
+target's run (across chunks) and ends with one row per target, `<target> cov=<n> ft=<n> corpus=<n> execs=<n>`; `--summary <file>`
+writes the same rows as TSV (`target cov ft corpus execs`). A run that printed no status line (a crash before the first one) says
+`none` in every column that depends on it, never 0. The rerun that fills the column has not been done yet.
 Corpus size, executions and peak RSS are as recorded. Time is in seconds (1801-1803 s is the 30 minute budget); a target with a
 finding stopped at its first finding.
 
