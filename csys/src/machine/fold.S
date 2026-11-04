@@ -25,7 +25,7 @@
  * paths in one line whatever code is added elsewhere). No .macro (the affected map reads this file
  * for the symbols it defines and uses). */
 
-	.text
+	.section .text.liella_machine_memmove,"ax",@progbits
 	.hidden liella_hot_move_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.hidden liella_hot_fill_rest
 
@@ -232,10 +232,11 @@ liella_machine_move_mid:
  * 6 of mempcpy(8)'s 20 instructions, seq calls it once per line). The folded classes are entered
  * directly with %rax = d + n (they never write %rax); every other size calls the copy entry, which
  * returns d, and adds n (saved on the stack across the call; the push also aligns the stack). */
+	.section .text.liella_machine_mempcpy,"ax",@progbits
 	.globl liella_machine_mempcpy
 	.hidden liella_machine_mempcpy
 	.type liella_machine_mempcpy, @function
-	.p2align 4
+	.p2align 6			/* exported entries are 64-byte aligned (D-4.33); own section since HOTTEXT-ASM-ORDER */
 liella_machine_mempcpy:
 #ifdef LIELLA_EXPORT
 	.globl mempcpy
@@ -264,6 +265,7 @@ __mempcpy:
  * only, whatever the int's other bytes) and store 16-byte blocks from each end (1, 2, 4 or 8 per end
  * for 16-32, 33-64, 65-128, 129-256; with AVX2 129-256 four 32-byte blocks per end instead); 8-15 two 4-byte words from each end, 4-7 one 4-byte word from each
  * end, 2-3 one 2-byte word from each end, 1 one byte, 0 nothing; other sizes in Rust. */
+	.section .text.liella_machine_memset,"ax",@progbits
 	.globl liella_machine_memset
 	.hidden liella_machine_memset
 	.type liella_machine_memset, @function
@@ -444,6 +446,7 @@ memset:
  * `liella_hot_compare_rest`, the checked entry with the explicit S6 NULL tests), 2-3 one 2-byte word
  * from each end (compared from memory; an unequal word is re-read from b and ordered by bswap; re-read
  * equal (D-4.21) -> the checked entry), 1 the byte, 0 returns 0. Reads only [a, a + n) and [b, b + n). */
+	.section .text.liella_machine_compare,"ax",@progbits
 	.hidden liella_hot_compare_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.hidden liella_hot_compare_tail
 	.hidden liella_hot_compare_big
@@ -1283,7 +1286,7 @@ __memcmpeq:
 	.size bcmp, .-bcmp
 #endif
 	.size liella_machine_equal, .-liella_machine_equal
-	.text
+	.section .text.liella_machine_compare,"ax",@progbits
 
 /* The fold limit: 64 while NULL folding is on, 0 otherwise (crates/boundary/src/dispatch.rs,
  * through `ffi::liella_machine_fold_limit`), and the AVX2 flag byte of the kernels (D-4.25: 1 only

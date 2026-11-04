@@ -218,6 +218,10 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// its `.S` file) and its `#[cold]` functions (rustc's `.text.unlikely.<f>`) are in the hot group
 /// of `libc.a`. Outside it, they sat in windows that moved with unrelated code (a 0-60 KiB `.text`
 /// pad moved the startup / setlocale / tool counts by 1-3 faults).
+/// HOTTEXT-ASM-ORDER: the string and memory kernels of scan.S and fold.S (each in its own
+/// `.text.<f>` section since then; in plain `.text` they landed after the whole hot group) are
+/// grouped too: strncmp, the memchr entry gates, the strcpy family, memcmp, memmove and memset.
+/// No spec clause (layout of the products).
 #[test]
 fn init_cold_startup_functions_are_grouped() {
     let out = Command::new("readelf").arg("-SW").arg(root().join("target/liella/libc.a")).output().expect("readelf");
@@ -228,7 +232,19 @@ fn init_cold_startup_functions_are_grouped() {
         .filter_map(|a| a.strip_prefix(".text.sorted.h"))
         .filter_map(|a| a.split_whitespace().next())
         .collect();
-    for f in ["liella_machine_set_scan_level", "liella_machine_env_find", "liella_machine_strlen", "liella_machine_vcall3", "15liella_boundary3cpu4init"] {
+    for f in [
+        "liella_machine_set_scan_level",
+        "liella_machine_env_find",
+        "liella_machine_strlen",
+        "liella_machine_vcall3",
+        "15liella_boundary3cpu4init",
+        "liella_machine_strncmp",
+        "liella_machine_memchr_entry",
+        "liella_machine_strcpy",
+        "liella_machine_compare",
+        "liella_machine_memmove",
+        "liella_machine_memset",
+    ] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"

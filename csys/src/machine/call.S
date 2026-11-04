@@ -1,13 +1,13 @@
 /* Class machine: call code at an address (owner decision OD-C1): ELF constructors and entry points
  * in ld.so. liella_machine_callN(fn, args...) tail-calls fn with the arguments shifted down. */
-	.text
+	.section .text.liella_machine_call0,"ax",@progbits
 	.globl liella_machine_call0
 	.type liella_machine_call0, @function
 	.p2align 6
 liella_machine_call0:
 	jmp *%rdi
 	.size liella_machine_call0, .-liella_machine_call0
-	.text
+	.section .text.liella_machine_call0,"ax",@progbits
 	.section .text.liella_machine_call3,"ax",@progbits
 	.globl liella_machine_call3
 	.type liella_machine_call3, @function
@@ -19,8 +19,8 @@ liella_machine_call3:
 	movq %rcx, %rdx
 	jmp *%rax
 	.size liella_machine_call3, .-liella_machine_call3
-	.text
-	.text
+	.section .text.liella_machine_call0,"ax",@progbits
+	.section .text.liella_machine_call4,"ax",@progbits
 	.globl liella_machine_call4
 	.type liella_machine_call4, @function
 	.p2align 6

@@ -1,6 +1,6 @@
 /* Class machine: MXCSR and x87 control/status/environment access (owner decision OD-C1).
  * Values pass in registers; memory operands use the red zone below %rsp (SysV ABI). */
-	.text
+	.section .text.liella_machine_mxcsr_get,"ax",@progbits
 	.globl liella_machine_mxcsr_get
 	.type liella_machine_mxcsr_get, @function
 	.p2align 6
@@ -9,7 +9,7 @@ liella_machine_mxcsr_get:
 	movl -4(%rsp), %eax
 	ret
 	.size liella_machine_mxcsr_get, .-liella_machine_mxcsr_get
-	.text
+	.section .text.liella_machine_mxcsr_set,"ax",@progbits
 	.globl liella_machine_mxcsr_set
 	.type liella_machine_mxcsr_set, @function
 	.p2align 6
@@ -18,7 +18,7 @@ liella_machine_mxcsr_set:
 	ldmxcsr -4(%rsp)
 	ret
 	.size liella_machine_mxcsr_set, .-liella_machine_mxcsr_set
-	.text
+	.section .text.liella_machine_x87_cw_get,"ax",@progbits
 	.globl liella_machine_x87_cw_get
 	.type liella_machine_x87_cw_get, @function
 	.p2align 6
@@ -27,7 +27,7 @@ liella_machine_x87_cw_get:
 	movzwl -2(%rsp), %eax
 	ret
 	.size liella_machine_x87_cw_get, .-liella_machine_x87_cw_get
-	.text
+	.section .text.liella_machine_x87_cw_set,"ax",@progbits
 	.globl liella_machine_x87_cw_set
 	.type liella_machine_x87_cw_set, @function
 	.p2align 6
@@ -36,7 +36,7 @@ liella_machine_x87_cw_set:
 	fldcw -2(%rsp)
 	ret
 	.size liella_machine_x87_cw_set, .-liella_machine_x87_cw_set
-	.text
+	.section .text.liella_machine_x87_sw_get,"ax",@progbits
 	.globl liella_machine_x87_sw_get
 	.type liella_machine_x87_sw_get, @function
 	.p2align 6
@@ -45,7 +45,7 @@ liella_machine_x87_sw_get:
 	movzwl %ax, %eax
 	ret
 	.size liella_machine_x87_sw_get, .-liella_machine_x87_sw_get
-	.text
+	.section .text.liella_machine_x87_clex,"ax",@progbits
 	.globl liella_machine_x87_clex
 	.type liella_machine_x87_clex, @function
 	.p2align 6
@@ -53,7 +53,7 @@ liella_machine_x87_clex:
 	fnclex
 	ret
 	.size liella_machine_x87_clex, .-liella_machine_x87_clex
-	.text
+	.section .text.liella_machine_x87_env_store,"ax",@progbits
 	.globl liella_machine_x87_env_store
 	.type liella_machine_x87_env_store, @function
 	.p2align 6
@@ -62,7 +62,7 @@ liella_machine_x87_env_store:
 	fldenv (%rdi)
 	ret
 	.size liella_machine_x87_env_store, .-liella_machine_x87_env_store
-	.text
+	.section .text.liella_machine_x87_env_load,"ax",@progbits
 	.globl liella_machine_x87_env_load
 	.type liella_machine_x87_env_load, @function
 	.p2align 6
@@ -70,7 +70,7 @@ liella_machine_x87_env_load:
 	fldenv (%rdi)
 	ret
 	.size liella_machine_x87_env_load, .-liella_machine_x87_env_load
-	.text
+	.section .text.liella_machine_mxcsr_mask,"ax",@progbits
 	.globl liella_machine_mxcsr_mask
 	.type liella_machine_mxcsr_mask, @function
 	.p2align 6
@@ -85,7 +85,7 @@ liella_machine_mxcsr_mask:
 	.size liella_machine_mxcsr_mask, .-liella_machine_mxcsr_mask
 /* The hardware square roots (M6-2): correctly rounded in the unit's current rounding direction,
  * raising their flags in that unit (IEEE 754 squareRoot; Intel SDM SQRTSS/SQRTSD/FSQRT). */
-	.text
+	.section .text.liella_machine_sqrtsd,"ax",@progbits
 	.globl liella_machine_sqrtsd
 	.type liella_machine_sqrtsd, @function
 	.p2align 4
@@ -93,7 +93,7 @@ liella_machine_sqrtsd:
 	sqrtsd %xmm0, %xmm0
 	ret
 	.size liella_machine_sqrtsd, .-liella_machine_sqrtsd
-	.text
+	.section .text.liella_machine_sqrtss,"ax",@progbits
 	.globl liella_machine_sqrtss
 	.type liella_machine_sqrtss, @function
 	.p2align 4
@@ -101,7 +101,7 @@ liella_machine_sqrtss:
 	sqrtss %xmm0, %xmm0
 	ret
 	.size liella_machine_sqrtss, .-liella_machine_sqrtss
-	.text
+	.section .text.liella_machine_fsqrt,"ax",@progbits
 	.globl liella_machine_fsqrt
 	.type liella_machine_fsqrt, @function
 	.p2align 4

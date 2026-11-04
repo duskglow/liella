@@ -90,7 +90,7 @@ liella_machine_set_scan_level:
 	movq %rax, liella_machine_schr_mask(%rip)
 	ret
 	.size liella_machine_set_scan_level, .-liella_machine_set_scan_level
-	.text
+	.section .text.liella_machine_scan_level_get,"ax",@progbits
 
 /* uint32_t liella_machine_scan_level_get(void): the current path, for the self-tests (SHORT-3). */
 	.globl liella_machine_scan_level_get
@@ -493,7 +493,7 @@ liella_machine_strlen:
 	bsfq %rdx, %rax
 	ret
 	.size liella_machine_strlen, .-liella_machine_strlen
-	.text
+	.section .text.liella_machine_strcpy,"ax",@progbits
 
 /* The direct strcpy entry (STRCPY-SHORT-2, D-4.22): in the products this IS `strcpy` (second
  * label under LIELLA_EXPORT); the Rust export is its twin and calls it (ffi). One pass for a
@@ -693,6 +693,7 @@ strcpy:
  * [s, s + 64) leaving s's page tail-jump to the Rust rest entry with nothing written and %rdi,
  * %rsi, %rdx unchanged (it reports NULLs (S6) and a failed check).
  * SAFETY: as liella_machine_strcpy; every store lies in [d, d + len + 1) with len < room. */
+	.section .text.liella_machine_stpcpy,"ax",@progbits
 	.hidden liella_hot_stpcpy_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.hidden liella_hot_strcpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 
@@ -909,6 +910,7 @@ __stpcpy_chk:
  * len < destlen (%rdx) is checked BEFORE any store; else, for a NULL, or for [s, s + 64)
  * leaving s's page, a tail jump to the Rust rest with nothing written and %rdi, %rsi, %rdx
  * unchanged. SAFETY: as liella_machine_stpcpy_chk. */
+	.section .text.liella_machine_strcpy_chk,"ax",@progbits
 	.globl liella_machine_strcpy_chk
 	.hidden liella_machine_strcpy_chk
 	.type liella_machine_strcpy_chk, @function
@@ -1110,7 +1112,7 @@ __strcpy_chk:
 .Lsn_keep:
 	.fill 64, 1, 0xff
 	.fill 64, 1, 0
-	.text
+	.section .text.liella_machine_strncpy,"ax",@progbits
 
 /* The one-pass body (.Lsn_*) is written out here and again, returning d + min(first NUL, n),
  * in stpncpy (.Lspn_*): no .macro in .S files (the affected map scans them for symbols). */
@@ -1251,6 +1253,7 @@ strncpy:
  * check n <= destlen comes before any load or store; n > destlen or a NULL d or s: tail jump to
  * the Rust rest entry with the arguments unchanged (it fails the check / reports S6). Else the
  * strncpy body, whose own general path (n > 64, page edge) then sees n <= destlen. */
+	.section .text.liella_machine_strncpy_chk,"ax",@progbits
 	.hidden liella_hot_strncpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncpy_chk
 	.hidden liella_machine_strncpy_chk
@@ -1277,6 +1280,7 @@ __strncpy_chk:
 /* The direct stpncpy entry (STRNCPY-FAMILY; `stpncpy` and, STPNCPY-ALIAS, `__stpncpy` in the
  * products): the strncpy body returning d + min(strlen(s), n); NULLs and the general path:
  * liella_hot_stpncpy_rest. */
+	.section .text.liella_machine_stpncpy,"ax",@progbits
 	.hidden liella_hot_stpncpy_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_stpncpy
 	.hidden liella_machine_stpncpy
@@ -1424,6 +1428,7 @@ __stpncpy:
  * check n <= destlen comes before any load or store; n > destlen or a NULL d or s: tail jump to
  * the Rust rest entry with the arguments unchanged (it fails the check / reports S6). Else the
  * stpncpy body, whose own general path (n > 64, page edge) then sees n <= destlen. */
+	.section .text.liella_machine_stpncpy_chk,"ax",@progbits
 	.hidden liella_hot_stpncpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_stpncpy_chk
 	.hidden liella_machine_stpncpy_chk
@@ -2025,7 +2030,7 @@ liella_machine_strnlen:
 	xorl %eax, %eax
 	ret
 	.size liella_machine_strnlen, .-liella_machine_strnlen
-	.text
+	.section .text.liella_machine_rawmemchr_entry,"ax",@progbits
 
 /* const void *liella_machine_rawmemchr(const void *s, int c): a POINTER to the first byte equal
  * to (unsigned char)c, which the caller asserts exists (STR-K2: a pointer, so the rawmemchr
@@ -2508,6 +2513,7 @@ liella_machine_rawmemchr:
  * 64 KiB, whatever n is (no later load is reached). n == 0 (wraps to the maximum), n > isize::MAX
  * and folding off (limit 0: every n fails the gate) tail-jump to `liella_hot_memchr_rest`, the
  * checked entry (explicit S6 abort, the lazy folding decision). Reads nothing itself. */
+	.section .text.liella_machine_memchr_entry,"ax",@progbits
 	.hidden liella_hot_memchr_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_memchr_entry
 	.hidden liella_machine_memchr_entry
@@ -2985,6 +2991,7 @@ liella_machine_memchr:
 
 /* size_t liella_machine_memcmp(const void *a, const void *b, size_t n): the index of the first
  * byte where [a, a + n) and [b, b + n) differ, or n. */
+	.section .text.liella_machine_memcmp,"ax",@progbits
 	.globl liella_machine_memcmp
 	.type liella_machine_memcmp, @function
 	.p2align 6
@@ -3796,7 +3803,7 @@ liella_machine_strcmp:
 	incq %rax
 	jmp .Lstrcmp_v_top
 	.size liella_machine_strcmp, .-liella_machine_strcmp
-	.text
+	.section .text.liella_machine_strcmp_rescan_count,"ax",@progbits
 
 /* uint64_t liella_machine_strcmp_rescan_count(void): how often liella_machine_strcmp found the
  * bytes at its index changed by a writer and scanned on (the selftest reads it). */
@@ -3828,6 +3835,7 @@ liella_machine_strcmp_rescan_count:
  * is zero in min(a, a == b ? 0xFF : 0) iff the bytes differ or a's byte is the terminator.
  *
  * The caller reads the bytes at the index itself (the answer is never taken from this scan). */
+	.section .text.liella_machine_strdiff,"ax",@progbits
 	.globl liella_machine_strdiff
 	.type liella_machine_strdiff, @function
 	.p2align 5
@@ -3897,6 +3905,7 @@ liella_machine_strdiff:
  * in between, its result stored at *result, and the OR of the upper halves of ymm0..ymm15 returned:
  * 0 = f left no upper state behind (a caller that came in clean leaves clean). AVX2 only.
  * liella_machine_ymm15_dirty_cmp is its positive control: it sets ymm15 to all ones, returns 0. */
+	.section .text.liella_machine_clean_upper_call,"ax",@progbits
 	.globl liella_machine_clean_upper_call
 	.type liella_machine_clean_upper_call, @function
 	.p2align 4
@@ -3960,6 +3969,7 @@ liella_machine_clean_upper_call:
 	orq -8(%rsp), %rax
 	ret
 	.size liella_machine_clean_upper_call, .-liella_machine_clean_upper_call
+	.section .text.liella_machine_ymm15_dirty_cmp,"ax",@progbits
 
 	.globl liella_machine_ymm15_dirty_cmp
 	.type liella_machine_ymm15_dirty_cmp, @function
@@ -3978,7 +3988,7 @@ liella_machine_ymm15_dirty_cmp:
 	.size liella_machine_strcmp_rescans, 8
 liella_machine_strcmp_rescans:
 	.zero 8
-	.text
+	.section .text.liella_machine_ymm15_dirty_cmp,"ax",@progbits
 
 /* size_t liella_machine_env_find(const char *const *env, const char *name, size_t len)
  * (PJ-8): the address of the first entry of the NULL-terminated array env (0 = no array)
@@ -4119,7 +4129,7 @@ liella_machine_env_find:
 	jnz .Lenv_name_loop
 	jmp .Lenv_name_word
 	.size liella_machine_env_find, .-liella_machine_env_find
-	.text
+	.section .text.liella_machine_env_slot,"ax",@progbits
 
 /* struct liella_env_slot liella_machine_env_slot(const char *const *env, const char *name, size_t len)
  * (ENVIRON-SMALL-CYCLE): liella_machine_env_find's scan, answering also where it stopped.
@@ -4264,6 +4274,7 @@ liella_machine_env_slot:
 
 /* ERMS copy and fill (OD-C2 b): `rep movsb` / `rep stosb`. Rust calls them only for disjoint,
  * validated regions above the measured threshold, and only when CPUID reports ERMS. */
+	.section .text.liella_machine_copy_erms,"ax",@progbits
 
 /* void *liella_machine_copy_erms(void *dst, const void *src, size_t n): returns dst */
 	.globl liella_machine_copy_erms
@@ -4281,6 +4292,7 @@ liella_machine_copy_erms:
  * rest from the next 64-byte-aligned destination (h = -dst & 63 bytes in; h = 0 when aligned,
  * the head store is then rewritten). MEMCPY-POLICY-2: rep movsb from a misaligned destination
  * lost 1.8x on Broadwell, aligned it won (D-4.14). */
+	.section .text.liella_machine_copy_erms_a64,"ax",@progbits
 	.globl liella_machine_copy_erms_a64
 	.type liella_machine_copy_erms_a64, @function
 	.p2align 6
@@ -4304,6 +4316,7 @@ liella_machine_copy_erms_a64:
 	rep movsb
 	ret
 	.size liella_machine_copy_erms_a64, .-liella_machine_copy_erms_a64
+	.section .text.liella_machine_fill_erms,"ax",@progbits
 
 /* void liella_machine_fill_erms(void *dst, int c, size_t n) */
 	.globl liella_machine_fill_erms
@@ -4443,7 +4456,7 @@ liella_machine_move_avx2:
 	ret
 	.size liella_machine_copy_avx2, .-liella_machine_copy_avx2
 	.size liella_machine_move_avx2, .-liella_machine_move_avx2
-	.text
+	.section .text.liella_machine_move_sse2,"ax",@progbits
 
 /* SSE2 move (MEM-FALLBACK, D-4.14 Amendment MEM-FALLBACK): the AVX2 copy above in 16-byte vectors,
  * for CPUs without AVX2 (SSE2 is the x86-64 baseline). The same rules: the first and last 16
@@ -4660,7 +4673,7 @@ liella_machine_fill_sse2:
 	movups %xmm0, 112(%r10)
 	ret
 	.size liella_machine_fill_sse2, .-liella_machine_fill_sse2
-	.text
+	.section .text.liella_machine_move_sse2,"ax",@progbits
 
 /* size_t liella_machine_casecmp_avx2(const char *a, const char *b, size_t n) (CASECMP-K1): the
  * first index i < n where a[i] and b[i] differ after folding the ASCII letters A-Z to a-z, or
@@ -4691,7 +4704,7 @@ liella_machine_fill_sse2:
 	.fill 32, 1, 0x20
 .Lcasecmp_km103:
 	.fill 32, 1, 0x99
-	.text
+	.section .text.liella_machine_casecmp_avx2,"ax",@progbits
 	.globl liella_machine_casecmp_avx2
 	.type liella_machine_casecmp_avx2, @function
 	.p2align 6
@@ -4830,7 +4843,7 @@ liella_machine_casecmp_avx2:
 	.fill 16, 1, 0x25
 .Lcasecmp_k65:
 	.fill 16, 1, 0x65
-	.text
+	.section .text.liella_machine_casecmp_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_sse2
 	.type liella_machine_casecmp_sse2, @function
 	.p2align 6
@@ -5015,7 +5028,7 @@ liella_machine_casecmp_sse2:
  * call (no second call level); equal non-NUL bytes there mean a writer changed the text (open).
  * Scratch: rax, r8-r11, ymm0-ymm11. */
 	.hidden liella_hot_casecmp_rest  /* crates/boundary/src/posix/s04_strings.rs */
-	.text
+	.section .text.liella_machine_casecmp_ord_avx2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_avx2
 	.type liella_machine_casecmp_ord_avx2, @function
 	.p2align 6
@@ -5296,6 +5309,7 @@ liella_machine_casecmp_ord_avx2:
  * bytes takes two blocks. Same page rule (the larger page offset <= 4064 reads 32 bytes, <= 4032
  * reads 64, otherwise one byte), same stop: the two deciding bytes read again and ordered here.
  * Scratch: rax, r8-r10, xmm1-xmm15; rcx (loc) is kept for the rest entry. */
+	.section .text.liella_machine_casecmp_ord_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_sse2
 	.type liella_machine_casecmp_ord_sse2, @function
 	.p2align 6
@@ -5533,6 +5547,7 @@ liella_machine_casecmp_ord_sse2:
  * the previous blocks cleared have no candidate, so the overlap cannot change the first hit).
  * Rust verifies the whole needle at the answer, so a too-small answer is harmless and a
  * too-large one is caught by the tests. */
+	.section .text.liella_machine_pairscan,"ax",@progbits
 	.globl liella_machine_pairscan
 	.type liella_machine_pairscan, @function
 	.p2align 4
@@ -5616,6 +5631,7 @@ liella_machine_pairscan:
  * for the upper and lower case of that letter) and only when the locale's byte fold is plain
  * ASCII. Contract and load pattern are those of `liella_machine_pairscan` (count >= 16,
  * [h, h + count + off) readable); Rust verifies the whole needle at the answer. */
+	.section .text.liella_machine_pairscan_ci,"ax",@progbits
 	.globl liella_machine_pairscan_ci
 	.type liella_machine_pairscan_ci, @function
 	.p2align 4
@@ -5733,6 +5749,7 @@ liella_machine_pairscan_ci:
  * kernels, with no Rust wrapper. The head's page test takes (s - 1) & 4095 below
  * liella_machine_rshort_mask, which a NULL s never passes; the slow path tests s for NULL and
  * tail-jumps to `liella_hot_strchr_null` (the S6 abort) before any read. */
+	.section .text.liella_machine_strchrnul,"ax",@progbits
 	.hidden liella_hot_strchr_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strchrnul
 	.type liella_machine_strchrnul, @function
@@ -5856,6 +5873,7 @@ strchrnul:
 	xorl %r11d, %r11d
 	jmp .Lschr_body
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
+	.section .text.liella_machine_strchr,"ax",@progbits
 
 	.globl liella_machine_strchr
 	.type liella_machine_strchr, @function
@@ -6144,6 +6162,7 @@ index:
  * `liella_hot_memrchr_rest` (strz::rfind_n: NULL for n == 0, else the explicit abort); any other
  * call falls through into the kernel below, saving the Rust entry's tests and jump. Reads
  * nothing itself. */
+	.section .text.liella_machine_memrchr_entry,"ax",@progbits
 	.hidden liella_hot_memrchr_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_memrchr_entry
 	.hidden liella_machine_memrchr_entry
@@ -6488,6 +6507,7 @@ liella_machine_memrchr:
  * wrapper: n == 0 returns 0 before any read; the head's page test takes (a - 1) | (b - 1) & 4095
  * below liella_machine_rshort_mask, which a NULL a or b never passes; .Lsnc_pt tests both for
  * NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
+	.section .text.liella_machine_strncmp,"ax",@progbits
 	.hidden liella_hot_strncmp_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncmp
 	.type liella_machine_strncmp, @function
@@ -6718,7 +6738,7 @@ strncmp:
  * for "any candidate or 0 unit" per pair; a pair that has one is resolved block by block.
  * Units past the terminator are read only inside the terminator's page and are masked off
  * (the bits from the first 0 unit on). Rust verifies the needle at every candidate. */
-	.text
+	.section .text.liella_machine_strpair,"ax",@progbits
 	.globl liella_machine_strpair
 	.type liella_machine_strpair, @function
 	.p2align 4
@@ -6958,6 +6978,7 @@ liella_machine_strpair:
 	addq $64, %rax
 	jmp .Lliella_machine_strpair_sse_loop64
 	.size liella_machine_strpair, .-liella_machine_strpair
+	.section .text.liella_machine_wcspair,"ax",@progbits
 
 	.globl liella_machine_wcspair
 	.type liella_machine_wcspair, @function
