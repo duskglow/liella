@@ -55,7 +55,7 @@ mod elf {
     const SHT_NOBITS: u32 = 8;
     const SHT_GNU_VERDEF: u32 = 0x6fff_fffd;
     const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
-    const R_X86_64_JUMP_SLOT: u64 = 7;
+    const R_X86_64_JUMP_SLOT: u64 = 7; // ARCH(x86_64): the PLT relocation type of the x86-64 libm.so.6 under test
     impl Elf {
         pub(crate)fn parse(bytes: Vec<u8>) -> Elf {
             assert_eq!(&bytes[..6], b"\x7fELF\x02\x01", "not an ELF64 little-endian object");
@@ -98,7 +98,7 @@ mod elf {
                 for k in 0..(r.size / 24) as usize {
                     let e = r.offset as usize + k * 24;
                     let info = u64_at(b, e + 8);
-                    if info & 0xffff_ffff == R_X86_64_JUMP_SLOT {
+                    if info & 0xffff_ffff == R_X86_64_JUMP_SLOT { // ARCH(x86_64): PLT slots of the x86-64 libm.so.6 under test
                         jump_slots.push((u64_at(b, e), (info >> 32) as usize));
                     }
                 }
