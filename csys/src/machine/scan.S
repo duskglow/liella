@@ -6532,7 +6532,7 @@ strncmp:
 	cmpl %r8d, %ecx
 	jne .Lsnc_order
 	testl %ecx, %ecx
-	jz .Lsnc_ret
+	jz .Lsnc_zero
 	movq %rax, %rcx
 	jmp .Lsnc_byte
 .Lsnc_h32:
@@ -6554,7 +6554,7 @@ strncmp:
 	cmpl %r8d, %ecx
 	jne .Lsnc_order
 	testl %ecx, %ecx
-	jz .Lsnc_ret
+	jz .Lsnc_zero
 	movq %rax, %rcx
 	jmp .Lsnc_byte
 .Lsnc_h64:
