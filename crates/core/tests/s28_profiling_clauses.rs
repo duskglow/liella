@@ -253,6 +253,7 @@ fn start_and_run(mcount: bool, n: u32) -> (usize, usize) {
     pr::monstartup(low, high);
     pr::probe_run(mcount, n);
     let site = if mcount { mc } else { fentry };
+    // libtest has printed `test <name> ... ` without a newline: the line may follow it.
     println!("S28 {low} {high} {site} {caller}");
     (site, caller)
 }
@@ -345,7 +346,7 @@ fn s28_1_c_1() {
     for prefix in [None, Some("p")] {
         let dir = fresh(if prefix.is_some() { "gmon_prefix" } else { "gmon_plain" });
         let (pid, out) = run_child("s28_1_c_1", &dir, prefix);
-        let line = out.lines().find_map(|l| l.strip_prefix("S28 ")).expect("the child's range line");
+        let line = out.lines().find_map(|l| l.split_once("S28 ").map(|(_, r)| r)).expect("the child's range line");
         let v: Vec<usize> = line.split(' ').map(|w| w.parse().unwrap()).collect();
         let (low, high, site, caller) = (v[0], v[1], v[2], v[3]);
         let want = prefix.map_or_else(|| "gmon.out".to_string(), |p| format!("{p}.{pid}"));
