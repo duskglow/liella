@@ -6494,6 +6494,9 @@ liella_machine_memrchr:
 	.hidden liella_hot_strncmp_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncmp
 	.type liella_machine_strncmp, @function
+	/* Its own section, named by the hot-text key `strncmp`: the first call after printf lands in the
+	 * hot group whatever the size of the code linked before this object's shared text. */
+	.section .text.strncmp,"ax",@progbits
 	.p2align 6
 liella_machine_strncmp:
 #ifdef LIELLA_EXPORT
@@ -6694,6 +6697,7 @@ strncmp:
 	orl $1, %eax
 	ret
 	.size liella_machine_strncmp, .-liella_machine_strncmp
+	.text
 
 
 /* size_t liella_machine_strpair(const char *p, size_t off, int c0, int c1) and
