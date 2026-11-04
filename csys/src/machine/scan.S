@@ -6747,7 +6747,8 @@ liella_machine_strpair:
 	testl $64, %eax
 	jnz .Lliella_machine_strpair_avx_loop64
 	/* 128-byte aligned: four blocks per test (STRSTR-HIT-4K). A 128-byte aligned run stays in its
-	 * page; a hit sends the run back to the block loop from its start, which resolves it. */
+	 * page; a hit sends the run back to the block loop from its start, which resolves it. From a
+	 * 64-byte boundary that is not a 128-byte one, one pair (loop64) first reaches the next. */
 	.p2align 4
 .Lliella_machine_strpair_avx_loop128:
 	vmovdqa (%rax), %ymm3
@@ -6798,8 +6799,6 @@ liella_machine_strpair:
 	testl %r10d, %r10d
 	jnz .Lliella_machine_strpair_avx_loop
 	addq $64, %rax
-	testl $64, %eax
-	jnz .Lliella_machine_strpair_avx_loop64
 	jmp .Lliella_machine_strpair_avx_loop128
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
