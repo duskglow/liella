@@ -721,6 +721,12 @@ pub fn unresolve_null_fold() {
     crate::dispatch::unresolve_null_fold();
 }
 
+/// Whether the portable scanners (`crate::strz::portable`, cfg `liella_portable_scan`, A-8) stand
+/// in for the scan.S kernels in this build: never NULL-folded (D-4.22 PORTABLE-SCAN).
+pub fn portable_scan() -> bool {
+    cfg!(liella_portable_scan)
+}
+
 /// Whether the NULL-folding decision (the `vm.mmap_min_addr` read) has been taken.
 pub fn null_fold_resolved() -> bool {
     crate::dispatch::fold_resolved()

@@ -74,6 +74,12 @@ kernels in Rust (with AVX2 intrinsics, see above). No portable Rust function was
 This is a name-level search (`fn <name>` in `mem`, `core`, `rt`, `legacy`), not a per-kernel review; A-8
 confirms each before writing the portable path.
 
+A-8 progress (D-4.22 PORTABLE-SCAN): `crates/boundary/src/strz.rs` module `portable` (cfg `liella_portable_scan`:
+every target but x86_64, or the test-only feature `portable-scan`) holds word-at-a-time Rust versions of `strlen`,
+`strnlen`, `rawmemchr`, `memchr`, `memrchr`, `strchr`, `strchrnul`, `strcmp` and `strncmp` with their entries.
+Still without one: the copy family (`strcpy` ... `stpncpy`, `_chk`), `strdiff`, `casecmp_ord_*`, `pairscan`,
+`pairscan_ci`, `strpair`, `wcspair` and `env_slot`.
+
 Other machine entry points that need an aarch64 version (A-6): `tp`, `cpuid`/`xgetbv0` (HWCAP from auxv instead,
 RL-1), `rdpkru`/`wrpkru` (POE, or none), `barrier`, `once`, `guard`, `call*`/`vcall*`, the vDSO calls, `clone_*`,
 `syscall_cancel*`, the cancellable I/O wrappers, `setjmp`/`longjmp`, the context functions and the signal
