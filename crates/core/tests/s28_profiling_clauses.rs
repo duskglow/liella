@@ -3,9 +3,9 @@
 // Once a file contains specified tests, `cargo xtask stubs` stops rewriting it and only checks coverage.
 
 //! Clause tests for spec §28 (5 clauses).
+#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::as_conversions, clippy::panic, missing_docs)]
 
 #[path = "support/timeout.rs"]
-#[allow(dead_code)]
 mod timeout;
 
 use core::ffi::c_int;
@@ -54,11 +54,9 @@ fn spin(n: u64) -> u64 {
     a
 }
 
-#[allow(clippy::as_conversions)] // a function's address: the only spelling Rust has
 fn addr_of_spin() -> usize {
     spin as fn(u64) -> u64 as usize
 }
-#[allow(clippy::as_conversions)]
 fn addr(h: extern "C" fn(c_int)) -> usize {
     h as usize
 }
