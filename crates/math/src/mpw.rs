@@ -23,7 +23,7 @@
 //!   `< 2^(e_big−B)` absolute (any cancellation keeps it absolute). Both: `< 2^(e_big+2−B)`.
 //! - `recip`: the `f64` start has a relative error `δ₀ < 2^-51`; Newton's step gives
 //!   `δ' < δ² + 4ε` (three operations): `2^-102, 2^-204, 2^-408, 2^-816 + 4ε`, so `< 2^(3−B)`
-//!   after four steps for `B ≤ 800`. `div = mul(recip)`: `< 2^(4−B)`. `sqrt`: the reciprocal-root
+//!   after four steps for `B ≤ 800` (`NEWTON` in `mp_core` adds steps above that). `div = mul(recip)`: `< 2^(4−B)`. `sqrt`: the reciprocal-root
 //!   step gives `δ' ≤ 1.5·δ² + 6ε` from `δ₀ < 2^-50`, and the final product: `< 2^(5−B)`.
 //! - `exp(x)`, `|x| < 2^40`, `k = trunc(x/ln 2)`: `ln 2`'s constant is truncated (`< ε`), so
 //!   `r = x − k·ln 2` has an absolute error `< (|k| + 2)·2^(2−B)`, `|r| < 1`; the series of
@@ -51,7 +51,7 @@
 //!   the bits after it weigh `< sig·2^(e − j0 − 64·RW + 1) < 2^(116 − 64·RW) = 2^(−B − 76)`
 //!   quadrants. The kept fraction of `RW + 1` words is exact; its truncation to `B` bits and the
 //!   product with `π/2` add `< 2^(3−B)` relative: `r`'s absolute error `< 2^(3−B)·|r| + 2^(−B−74)`,
-//!   and `(sin r, cos r)` rotated by `k` then `< 2^(11−B)`. The table holds 272 words, enough for
+//!   and `(sin r, cos r)` rotated by `k` then `< 2^(11−B)`. The table holds 312 words, enough for
 //!   `e ≤ 16 383` at `RW = 15` (word 269).
 //! - `exact_sqrt`, `mul_x`, `add_x`, `round_exact` are exact or say they are not: `exact_sqrt`
 //!   returns a root only when its square equals `v` exactly; a product of `s_a + s_b ≤ B`

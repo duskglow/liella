@@ -27,6 +27,17 @@ macro_rules! mp_core {
     () => {
 /// Bits of the significand.
 const BITS: i64 = 64 * LIMBS as i64;
+/// Newton steps of `recip` and `sqrt`: from a start good to 49 bits (`δ₀ < 2^-50`; `recip`'s is
+/// `< 2^-51`) the error squares each step, so `k` steps reach `2^(−49·2^k)`, below `2^(−B−8)` once
+/// `49·2^k ≥ B + 8`; never fewer than the four the 384- and 768-bit proofs use (4 at 768, 5 at
+/// 1536, 6 at 3072).
+const NEWTON: usize = {
+    let mut k = 4;
+    while (49i64 << k) < BITS + 8 {
+        k += 1;
+    }
+    k
+};
 
 /// A fixed-precision binary floating-point value (see the module documentation).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -263,7 +274,7 @@ impl Mp {
         let mut y = Mp::from_f64(1.0 / f).ldexp(-self.exp);
         let a = self.abs();
         let one = Mp::from_i64(1);
-        for _ in 0..4 {
+        for _ in 0..NEWTON {
             let e = one.sub(a.mul(y));
             y = y.add(y.mul(e));
         }
@@ -285,7 +296,7 @@ impl Mp {
         let f = Mp { neg: false, exp: self.exp - 2 * h, m: self.m };
         let mut y = Mp::from_f64(1.0 / libm_sqrt(f.to_f64()));
         let one = Mp::from_i64(1);
-        for _ in 0..4 {
+        for _ in 0..NEWTON {
             let e = one.sub(f.mul(y.sqr()));
             y = y.add(y.mul(e).ldexp(-1));
         }

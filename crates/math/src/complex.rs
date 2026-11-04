@@ -41,14 +41,16 @@ use crate::real::Real;
 use crate::status::{Rounding, Status};
 use core::sync::atomic::Ordering;
 
-// Ziv's strategy (owner #1719, D-10.17): the evaluation below is compiled twice, in the 384-bit
-// arithmetic of `crate::mp` (`n`) and the 768-bit arithmetic of `crate::mpw` (`w`). Each
-// approximate part carries a proven bound on its absolute error (`Part::Mp(v, err)`); a part
-// whose interval `v ± 2^err` straddles a rounding boundary in the current mode is undecided.
-// `n` counts it, and the function is evaluated again in `w`; a part still undecided there takes
-// the counted `TODO(ZIV-C)` path (`w`'s counter, [`ziv_c_pending`]). The loop has at most two
-// steps, so it always ends; exact parts (`Part::Exact`, `Dev`, `Near`, `Zero`) never take the
-// test.
+// Ziv's strategy (owner #1719, #1758, D-10.17): the evaluation below is compiled four times, in
+// the 384-bit arithmetic of `crate::mp` (`n`), the 768-bit of `crate::mpw` (`w`), the 1536-bit of
+// `crate::mpx` (`wx`) and the 3072-bit of `crate::mpy` (`wy`). Each approximate part carries a
+// proven bound on its absolute error (`Part::Mp(v, err)`); a part whose interval `v ± 2^err`
+// straddles a rounding boundary in the current mode is undecided. Each width counts its undecided
+// parts, and an undecided part makes the function evaluate again at the next width (`ladder`,
+// entered cold so the 384-bit frame does not grow). At 3072 bits an undecided part is the
+// 3072-bit value rounded once and counted ([`residual`]): the one assumption of the guarantee is
+// that no binary128 input needs more (D-10.17). The ladder has at most four steps, so it always
+// ends; exact parts (`Part::Exact`, `Dev`, `Near`, `Zero`) never take the test.
 
 /// The evaluation in 384 bits.
 mod n {
@@ -61,6 +63,20 @@ mod n {
 #[allow(dead_code)]
 mod w {
     use crate::mpw as mp;
+    include!("complex_body.rs");
+}
+
+/// The same evaluation in 1536 bits (the third step).
+#[allow(dead_code)]
+mod wx {
+    use crate::mpx as mp;
+    include!("complex_body.rs");
+}
+
+/// The same evaluation in 3072 bits (the last step).
+#[allow(dead_code)]
+mod wy {
+    use crate::mpy as mp;
     include!("complex_body.rs");
 }
 
@@ -97,26 +113,57 @@ pub fn retries() -> u64 {
     n::UNDECIDED.load(Ordering::Relaxed)
 }
 
-/// How many parts were still undecided at 768 bits: the path ZIV-C extends (`TODO(ZIV-C)`); each
-/// such part is the 768-bit value rounded once.
-pub fn ziv_c_pending() -> u64 {
+/// How many evaluations had a part undecided at 768 bits (and were evaluated again at 1536).
+pub fn wide_retries() -> u64 {
     w::UNDECIDED.load(Ordering::Relaxed)
 }
 
-/// `fast`, or `wide` when one of `fast`'s parts was undecided. The counter only grows; another
-/// thread's increment at worst causes one extra (still correct) evaluation in 768 bits.
+/// How many evaluations had a part undecided at 1536 bits (and were evaluated again at 3072).
+pub fn wider_retries() -> u64 {
+    wx::UNDECIDED.load(Ordering::Relaxed)
+}
+
+/// How many parts were still undecided at 3072 bits: each is the 3072-bit value rounded once,
+/// the case D-10.17's assumption excludes (zero on every suite and sample run).
+pub fn residual() -> u64 {
+    wy::UNDECIDED.load(Ordering::Relaxed)
+}
+
+/// `this`, or `next` when one of `this`'s parts was undecided (`c`, the counter of `this`'s
+/// width, grew). The counters only grow; another thread's increment at worst causes one extra
+/// (still correct) evaluation at the next width.
+#[inline(always)]
+fn step<T>(c: &core::sync::atomic::AtomicU64, this: impl FnOnce() -> T, next: impl FnOnce() -> T) -> T {
+    let before = c.load(Ordering::Relaxed);
+    let r = this();
+    if c.load(Ordering::Relaxed) == before { r } else { next() }
+}
+
+/// The 384-bit evaluation, and the ladder when it leaves a part undecided.
 #[inline]
-fn ziv<T>(fast: impl FnOnce() -> T, wide: impl FnOnce() -> T) -> T {
-    let before = n::UNDECIDED.load(Ordering::Relaxed);
-    let r = fast();
-    if n::UNDECIDED.load(Ordering::Relaxed) == before { r } else { wide() }
+fn ziv<T>(fast: impl FnOnce() -> T, w: impl FnOnce() -> T, x: impl FnOnce() -> T, y: impl FnOnce() -> T) -> T {
+    step(&n::UNDECIDED, fast, || ladder(w, x, y))
+}
+
+/// The 768-bit step, then 1536 when it leaves a part undecided.
+#[cold]
+#[inline(never)]
+fn ladder<T>(w: impl FnOnce() -> T, x: impl FnOnce() -> T, y: impl FnOnce() -> T) -> T {
+    step(&w::UNDECIDED, w, || wider(x, y))
+}
+
+/// The 1536-bit step, then 3072 when it leaves a part undecided.
+#[cold]
+#[inline(never)]
+fn wider<T>(x: impl FnOnce() -> T, y: impl FnOnce() -> T) -> T {
+    step(&wx::UNDECIDED, x, y)
 }
 
 macro_rules! ziv_fns {
     ($($(#[$m:meta])* $name:ident;)*) => {$(
         $(#[$m])*
         pub fn $name<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
-            ziv(|| n::$name(x, y, mode), || w::$name(x, y, mode))
+            ziv(|| n::$name(x, y, mode), || w::$name(x, y, mode), || wx::$name(x, y, mode), || wy::$name(x, y, mode))
         }
     )*};
 }
@@ -158,12 +205,12 @@ ziv_fns! {
 
 /// `carg`.
 pub fn carg<F: Real>(x: F, y: F, mode: Rounding) -> (F, Status) {
-    ziv(|| n::carg(x, y, mode), || w::carg(x, y, mode))
+    ziv(|| n::carg(x, y, mode), || w::carg(x, y, mode), || wx::carg(x, y, mode), || wy::carg(x, y, mode))
 }
 
 /// `cpow(x + iy, c + id)`.
 pub fn cpow<F: Real>(x: F, y: F, c: F, d: F, mode: Rounding) -> Res<F> {
-    ziv(|| n::cpow(x, y, c, d, mode), || w::cpow(x, y, c, d, mode))
+    ziv(|| n::cpow(x, y, c, d, mode), || w::cpow(x, y, c, d, mode), || wx::cpow(x, y, c, d, mode), || wy::cpow(x, y, c, d, mode))
 }
 
 /// The retry of Ziv's strategy, forced through the test-only bound offset of each width
@@ -218,21 +265,45 @@ mod ziv_tests {
         }
     }
 
-    /// Undecided at both widths: the counted `TODO(ZIV-C)` path is taken and returns the 768-bit
-    /// value rounded once (no spec clause; D-10.17).
-    #[test]
-    fn forced_768_undecided_takes_the_ziv_c_path() {
-        for (name, f, x, y) in cases() {
-            let want = f(q(x), q(y), Rounding::Nearest);
-            let before = ziv_c_pending();
-            n::force_loose(1000);
-            w::force_loose(1000);
-            let got = f(q(x), q(y), Rounding::Nearest);
-            n::force_loose(0);
-            w::force_loose(0);
-            assert!(ziv_c_pending() > before, "{name}: ZIV-C path not counted");
-            assert!(same(got, want), "{name}: ZIV-C path changed the result");
+    /// Loosen the bounds of the first `k` widths (384, 768, 1536, 3072) by `2^1000`, or undo it.
+    fn force(k: usize, on: bool) {
+        let v = if on { 1000 } else { 0 };
+        let f: [fn(i64); 4] = [n::force_loose, w::force_loose, wx::force_loose, wy::force_loose];
+        for g in &f[..k] {
+            g(v);
         }
+    }
+
+    /// Each step of the ladder, forced: undecided at the first `k` widths, every family takes
+    /// the next step (its counter grows), and the result is the same correctly rounded parts; at
+    /// `k = 4` the counted residual path returns the 3072-bit value rounded once (no spec
+    /// clause; D-10.17).
+    #[test]
+    fn forced_undecided_climbs_each_step_of_the_ladder() {
+        let counters: [fn() -> u64; 3] = [wide_retries, wider_retries, residual];
+        for (k, counter) in (2..=4).zip(counters) {
+            for (name, f, x, y) in cases() {
+                for m in MODES {
+                    let want = f(q(x), q(y), m);
+                    let before = counter();
+                    force(k, true);
+                    let got = f(q(x), q(y), m);
+                    force(k, false);
+                    assert!(counter() > before, "{name} {m:?}: step {k} not taken");
+                    assert!(same(got, want), "{name} {m:?}: step {k} changed the result");
+                }
+            }
+        }
+        // carg and cpow take the same ladder.
+        let want = carg::<F128>(q(0.3), q(0.7), Rounding::Up);
+        let before = residual();
+        force(4, true);
+        let got = carg::<F128>(q(0.3), q(0.7), Rounding::Up);
+        let pw = cpow::<F128>(q(0.3), q(0.7), q(1.5), q(0.25), Rounding::Down);
+        force(4, false);
+        assert!(residual() >= before + 2, "carg/cpow: residual path not taken");
+        assert_eq!(got.0.to_bits(), want.0.to_bits());
+        assert!(same(pw, cpow::<F128>(q(0.3), q(0.7), q(1.5), q(0.25), Rounding::Down)), "cpow: ladder changed the result");
     }
 
     /// A subnormal or minimum-normal operand of a sine or cosine decides at 384 bits in all four
@@ -409,7 +480,7 @@ mod ziv_tests {
     /// The retry count on a random sample (#1761: expected about zero): every family, all four
     /// modes, operands of random sign, 53-bit significand and exponent in [−12, 12]. Run by
     /// hand or as a count job (`-- --ignored --nocapture`); it prints the counts and requires
-    /// no part to reach the `TODO(ZIV-C)` path (no spec clause; D-10.17).
+    /// no part to stay undecided at 768 bits (no spec clause; D-10.17).
     #[test]
     #[ignore = "count job: random-sample retry rate"]
     fn random_sample_retry_count() {
@@ -429,7 +500,7 @@ mod ziv_tests {
             if s & 1 == 1 { -m * 2f64.powi(e) } else { m * 2f64.powi(e) }
         };
         const N: u64 = 500;
-        let (n0, w0) = (n::misses(), w::misses());
+        let (n0, w0, x0, y0) = (n::misses(), w::misses(), wx::misses(), wy::misses());
         for (name, f) in fams {
             let before = n::misses();
             for _ in 0..N {
@@ -448,19 +519,20 @@ mod ziv_tests {
             }
         }
         std::println!("retry-count cpow: {} of {} calls retried", n::misses() - before, N * 4);
-        std::println!("retry-count total: {} retried of {} calls; ziv-c {}", n::misses() - n0, N * 4 * 16, w::misses() - w0);
-        assert_eq!(w::misses(), w0, "a random part reached the TODO(ZIV-C) path");
+        std::println!("retry-count total: {} retried of {} calls; at 768 {}, 1536 {}, 3072 {}", n::misses() - n0, N * 4 * 16, w::misses() - w0, wx::misses() - x0, wy::misses() - y0);
+        assert_eq!(w::misses(), w0, "a random part was undecided at 768 bits");
     }
 
-    /// #1905: `cpow` with huge `|c|`, `|d|` is not decidable at 768 bits; it takes the counted
-    /// `TODO(ZIV-C)` path, visible here (no spec clause; D-10.17).
+    /// #1905: `cpow` with huge `|c|`, `|d|` is not decidable at 768 bits; the ladder decides it
+    /// at 1536 or 3072 bits, before the residual path (no spec clause; D-10.17).
     #[test]
-    fn cpow_huge_exponents_take_the_ziv_c_path() {
+    fn cpow_huge_exponents_decide_on_the_ladder() {
         let big = 2f64.powi(1000);
         for m in MODES {
-            let (n0, w0) = (n::misses(), w::misses());
+            let (n0, w0, y0) = (n::misses(), w::misses(), wy::misses());
             let _ = cpow::<F128>(q(0.3), q(0.7), q(big), q(big * 0.75), m);
-            assert!(n::misses() > n0 && w::misses() > w0, "{m:?}: huge exponents decided without ZIV-C");
+            assert!(n::misses() > n0 && w::misses() > w0, "{m:?}: huge exponents decided at 768 bits");
+            assert_eq!(wy::misses(), y0, "{m:?}: huge exponents undecided at 3072 bits");
         }
     }
 

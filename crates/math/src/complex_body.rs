@@ -98,7 +98,7 @@ impl Part {
 
     fn round<F: Float>(self, mode: Rounding) -> (F, Status) {
         match self {
-            Part::Mp(v, err) if !v.is_zero() => crate::mp::decided(crate::mp::Bounded { v, err: err + loose() }, mode).unwrap_or_else(|| undecided(v, mode)),
+            Part::Mp(v, err) if !v.is_zero() => crate::mp::decided(crate::mp::Bounded { v, err: err + loose() + WIDTH_SLACK }, mode).unwrap_or_else(|| undecided(v, mode)),
             Part::Exact(v) if !v.is_zero() => mp::round_exact(v, mode),
             // Only `±1` is ever near (`ctan`, `ctanh`): toward +∞ is above in magnitude for a
             // positive value, below for a negative one.
@@ -112,16 +112,22 @@ impl Part {
     }
 }
 
-/// The significand width of this evaluation: 384 bits in `n`, 768 in `w`.
+/// The significand width of this evaluation: 384 bits in `n`, 768 in `w`, 1536 in `wx`, 3072
+/// in `wy`.
 const B: i64 = (mp::LIMBS * 64) as i64;
 
-/// Parts left undecided by Ziv's test at this width. In `n` (384 bits) a change makes the caller
-/// evaluate again in `w`; in `w` (768 bits) it counts the parts that take the `TODO(ZIV-C)` path.
+/// Bits added to every bound above 768 bits (`crate::mpx`): the kernels' bounds are proved for
+/// `B ≤ 800`, and their series take up to `B/768` times as many terms at a wider `B`, which
+/// multiplies a bound by that factor at most: `log2(B/768) + 1` bits (2 at 1536, 3 at 3072).
+const WIDTH_SLACK: i64 = if B <= 800 { 0 } else { (B / 768).ilog2() as i64 + 1 };
+
+/// Parts left undecided by Ziv's test at this width. Below 3072 bits a change makes the caller
+/// evaluate again at the next width (`complex::ladder`); at 3072 it counts the residual parts.
 pub(super) static UNDECIDED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
-/// An undecided part: counted, then rounded once. In `n` the caller discards the result and
-/// evaluates again in 768 bits. TODO(ZIV-C): in `w` this is the end of the loop for now; ZIV-C
-/// (#1758) continues with a precision that grows until the part is decided.
+/// An undecided part: counted, then rounded once. Below 3072 bits the caller discards the result
+/// and evaluates again at the next width; at 3072 this is the result (D-10.17's assumption: no
+/// binary128 input needs more).
 #[cold]
 #[inline(never)]
 fn undecided<F: Float>(v: Mp, mode: Rounding) -> (F, Status) {
@@ -2059,8 +2065,8 @@ fn pow_general<F: Float>(a: &Op<F>, b: &Op<F>, p: &Op<F>, q: &Op<F>, mode: Round
     }
     let (s, co) = sin_cos_any(dm.mul(lr).add(cm.mul(th)));
     // #1905: with huge `|c|`, `|d|` (E and Φ cancelling between terms up to about 2^1000) the
-    // bounds exceed what 768 bits can decide: the part takes the counted `TODO(ZIV-C)` path,
-    // where ZIV-C's ladder chooses the precision from the exponents of `c` and `d`.
+    // bounds exceed what 768 bits can decide: the ladder (`complex::ladder`) decides it at 1536
+    // or 3072 bits.
     pair(mulf(mag, Fac::V(co)), mulf(mag, Fac::V(s)), mode)
 }
 

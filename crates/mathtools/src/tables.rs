@@ -100,7 +100,7 @@ fn fraction_words(x: &Big, words: usize) -> Vec<u64> {
 /// (exponents up to 16383, plus the fraction bits the reduction keeps): the 384-bit reduction
 /// (`mp::reduce_wide`, 9 words from bit 16270) reads up to word 263, the 768-bit one
 /// (`mpw::reduce_wide`, 15 words) up to word 269.
-pub const TWO_OVER_PI_WORDS: usize = 272;
+pub const TWO_OVER_PI_WORDS: usize = 312;
 
 /// The generated source.
 pub fn generate() -> String {
@@ -242,6 +242,13 @@ impl Out {
         let _ = writeln!(self.src, "\n/// {doc} (about {:e})\npub(crate) const {name}: crate::mpw::MpConst = ({e}, [{}]);", v.to_f64(), s.join(", "));
     }
 
+    /// A constant of a wider Ziv step (`mpx`, 1536 bits; `mpy`, 3072 bits): `L` limbs.
+    fn mpn_const<const L: usize>(&mut self, module: &str, name: &str, doc: &str, v: &Big) {
+        let (e, l) = mp_words_n::<L>(v);
+        let s: Vec<String> = l.iter().map(|w| format!("{w:#018x}")).collect();
+        let _ = writeln!(self.src, "\n/// {doc} (about {:e})\npub(crate) const {name}: crate::{module}::MpConst = ({e}, [{}]);", v.to_f64(), s.join(", "));
+    }
+
     fn mp_table(&mut self, name: &str, doc: &str, values: &[Big]) {
         let _ = writeln!(self.src, "\n/// {doc}\npub(crate) static {name}: [crate::mp::MpConst; {}] = [", values.len());
         for v in values {
@@ -343,6 +350,14 @@ fn mp_constants(o: &mut Out) {
     o.mpw_const("MPW_PI", "`π` (mp::pi, 768 bits)", &mp::pi(pw));
     o.mpw_const("MPW_LN2", "`ln 2` (mp::ln2, 768 bits)", &mp::ln2(pw));
     o.mpw_const("MPW_EULER", "Euler's constant `γ` (`euler_gamma`, 768 bits)", &euler_gamma(pw));
+    // The 1536- and 3072-bit steps of the complex `_Float128` functions (`mpx`, `mpy`, D-10.17),
+    // from 1600 and 3150 bits.
+    let px = 1600;
+    o.mpn_const::<24>("mpx", "MPX_PI", "`π` (mp::pi, 1536 bits)", &mp::pi(px));
+    o.mpn_const::<24>("mpx", "MPX_LN2", "`ln 2` (mp::ln2, 1536 bits)", &mp::ln2(px));
+    let py = 3150;
+    o.mpn_const::<48>("mpy", "MPY_PI", "`π` (mp::pi, 3072 bits)", &mp::pi(py));
+    o.mpn_const::<48>("mpy", "MPY_LN2", "`ln 2` (mp::ln2, 3072 bits)", &mp::ln2(py));
     let ck: Vec<Big> = (1..=STIRLING_TERMS as i64).map(|k| b[2 * k as usize].div(&Big::from_i64(2 * k * (2 * k - 1)), p, Round::Nearest)).collect();
     o.mp_table("MP_STIRLING", &format!("`|B_2k| / (2k(2k − 1))` for k = 1..{STIRLING_TERMS} (Bernoulli numbers from `bernoulli`); the term's sign is `(−1)^(k+1)`."), &ck);
 }

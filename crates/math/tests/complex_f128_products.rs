@@ -361,8 +361,8 @@ shards! {
 }
 
 /// The Ziv retry count on the accuracy suite's inputs (#1761, expected about zero): every line
-/// of the reference run is evaluated in-process; prints the counts and requires no part on the
-/// `TODO(ZIV-C)` path. A count job (`-- --ignored --nocapture`).
+/// of the reference run is evaluated in-process; prints the counts per step, requires every
+/// function but cpow (#1905) to decide by 768 bits and no part to reach the residual 3072-bit path (D-10.17). A count job (`-- --ignored --nocapture`).
 /// no spec clause (D-10.17)
 #[test]
 #[ignore = "count job: Ziv retries on the accuracy suite"]
@@ -379,14 +379,14 @@ fn accuracy_suite_retry_count() {
     let host = dir.join("complex_f128_retry_host");
     assert!(build(&host, false), "complex_f128_diff.c does not build against the host C library");
     let text = String::from_utf8(Command::new(&host).env_clear().output().unwrap().stdout).unwrap();
-    let (r0, z0) = (c::retries(), c::ziv_c_pending());
+    let (r0, z0, x0, y0) = (c::retries(), c::wide_retries(), c::wider_retries(), c::residual());
     let (mut calls, mut other) = (0u64, BTreeMap::<String, u64>::new());
-    // Per function: (calls, retries, parts on the TODO(ZIV-C) path).
+    // Per function: (calls, retries at 384, retries at 768).
     let mut per = BTreeMap::<String, (u64, u64, u64)>::new();
     for l in text.lines() {
         let ln = parse(l);
         let (_, base) = format_of(ln.func);
-        let (rr, zz) = (c::retries(), c::ziv_c_pending());
+        let (rr, zz) = (c::retries(), c::wide_retries());
         let m = match ln.mode.to_ascii_uppercase() { 'U' => R::Up, 'D' => R::Down, 'Z' => R::Zero, _ => R::Nearest };
         let o: Vec<F128> = ln.ops.iter().map(|b| F128::from_bits(*b)).collect();
         let f: Option<Fun> = match base {
@@ -408,19 +408,20 @@ fn accuracy_suite_retry_count() {
             }
         }
         calls += 1;
-        if c::ziv_c_pending() > zz && per.get(base).map_or(0, |v| v.2) < 12 {
+        if c::wide_retries() > zz && per.get(base).map_or(0, |v| v.2) < 12 {
             // Step 0 diagnostic: the operands (sign, unbiased exponent, bits) of a part left undecided at 768 bits.
             let d: Vec<String> = ln.ops.iter().map(|b| format!("{}2^{}:{b:032x}", if b >> 127 == 1 { '-' } else { '+' }, ((b >> 112) & 0x7fff) as i64 - 16383)).collect();
             println!("ziv-c-input {base} {} {} res {:032x?} {}", ln.mode, d.join(" "), ln.res, ln.flags);
         }
         let e = per.entry(base.to_string()).or_default();
-        *e = (e.0 + 1, e.1 + (c::retries() - rr), e.2 + (c::ziv_c_pending() - zz));
+        *e = (e.0 + 1, e.1 + (c::retries() - rr), e.2 + (c::wide_retries() - zz));
     }
     for (b, (n, r, z)) in &per {
         println!("retry-count accuracy-suite {b}: {r} retries, {z} ziv-c parts in {n} calls");
     }
-    println!("retry-count accuracy-suite: {} of {calls} calls retried; ziv-c {}; not counted {other:?}", c::retries() - r0, c::ziv_c_pending() - z0);
-    // cpow with huge |c|,|d| is the counted TODO(ZIV-C) path by ruling #1905; every other function must stay below it.
+    println!("retry-count accuracy-suite: {} of {calls} calls retried; at 768 {}, 1536 {}, 3072 {}; not counted {other:?}", c::retries() - r0, c::wide_retries() - z0, c::wider_retries() - x0, c::residual() - y0);
+    // cpow with huge |c|,|d| climbs past 768 bits by ruling #1905; every other function decides by 768, and no part reaches the residual path.
+    assert_eq!(c::residual(), y0, "an accuracy-suite part was undecided at 3072 bits");
     let others: u64 = per.iter().filter(|(b, _)| b.as_str() != "cpow").map(|(_, v)| v.2).sum();
-    assert_eq!(others, 0, "an accuracy-suite part of a function other than cpow reached the TODO(ZIV-C) path");
+    assert_eq!(others, 0, "an accuracy-suite part of a function other than cpow was undecided at 768 bits");
 }
