@@ -1,6 +1,6 @@
 # libio compat entries (§12.13, F32): black-box probes
 
-IO-VTABLES, 2026-10-23. Probe: a C program built on keke against the host glibc 2.39
+IO-VTABLES, 2026-10-23. Probe: a C program built on Zen 1 host against the host glibc 2.39
 (Ubuntu 2.39-0ubuntu8.9), black box only.
 
 **Clauses:** `s12_13_c_0`.

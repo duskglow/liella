@@ -686,7 +686,7 @@ pub fn set_kernel_avx2(avx2: bool) -> bool {
     true
 }
 
-/// Force the `double` exp/log fast paths' build (D-10.22): `true` for FMA, `false` for the
+/// Force the `double` exp/log fast paths' build (D-10.23): `true` for FMA, `false` for the
 /// baseline. Returns `false` (and changes nothing) if FMA is asked for on a CPU or OS without it.
 /// Test-only: the startup decision (`cpu::init_with`) is the only other writer.
 pub fn set_math_fma(fma: bool) -> bool {
@@ -697,7 +697,7 @@ pub fn set_math_fma(fma: bool) -> bool {
     true
 }
 
-/// Which build of the `double` exp/log fast paths is in force (D-10.22): `true` for FMA. Lets a
+/// Which build of the `double` exp/log fast paths is in force (D-10.23): `true` for FMA. Lets a
 /// test confirm that [`set_math_fma`] took effect, since both builds return the same results.
 pub fn math_fma() -> bool {
     crate::dispatch::fma()

@@ -65,7 +65,7 @@ pub fn two_prod(a: f64, b: f64) -> Dd {
 /// # Safety
 ///
 /// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
-// ARCH(x86_64): FMA is optional on x86-64 and chosen at run time (D-10.22); base ISA on aarch64
+// ARCH(x86_64): FMA is optional on x86-64 and chosen at run time (D-10.23); base ISA on aarch64
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "fma")]
 #[inline]

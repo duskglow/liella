@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# Summarise validation results on keke (validation/README.md): per build, the counts of the
+# Summarise validation results on Zen 1 host (validation/README.md): per build, the counts of the
 # package's own tests and of its gnulib tests, the failures, the hung tests, the check time and
 # the load, and the gnulib replacements configure chose for one C library and not the other.
 #

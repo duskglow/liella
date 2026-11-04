@@ -1,0 +1,10 @@
+{"task": "MATH-M6-FPENV-HONOR-REST-4", "model": "sonnet", "tokens": null,
+ "result": "Nothing to port: next already carries all of REST-3's FTZ/DAZ work (Soft, kept/pick/step/raw, x87 unflushed, 57-row table test, spec doc, D-10.22); proved by gate and 5 CAUGHT plants.",
+ "branch": "task/math-m6-fpenv-honor-rest-4", "head": "432f1ef7",
+ "gate": {"affected": "affected ok; s10_math_symbols 164 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["_Float128 narrowing never probed against the reference (Liella applies both rules)", "first plants run math-m6-fpenv-honor-rest-4-plants had a plant that failed to compile (superseded by plants2)"],
+ "refused": [], "improvement": "Unrelated-history ports: compare blobs file by file first; a branch with no merge base cannot be diffed or cherry-picked by commit.",
+ "next_step": "none; historic REST-3 is fully integrated",
+ "report_file": "handoff/math-m6-fpenv-honor-rest-4.md",
+ "jobs": ["math-m6-fpenv-honor-rest-4-gate", "math-m6-fpenv-honor-rest-4-plants2"]}

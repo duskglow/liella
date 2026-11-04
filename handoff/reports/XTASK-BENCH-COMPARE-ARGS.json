@@ -1,0 +1,2 @@
+{"id":"XTASK-BENCH-COMPARE-ARGS","status":"ready","branch":"task/xtask-bench-compare-args","jobs":["cmpargs-gate"],
+"summary":"bench --compare args parsed by parse_compare_args (flags anywhere, unknown --flag is an error, names validated); unit test added; usage line updated. GLIBC_TUNABLES from the caller is ignored deliberately (BENCH-TUNABLES: reproducible runs, only --tunables V), so behaviour unchanged and documented in usage. Tool-only: no plants. Gate (clippy --workspace, static, xtask compare tests, affected escalated to FULL) rc 0."}

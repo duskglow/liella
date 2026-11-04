@@ -46,7 +46,7 @@ pub struct Tunables {
     pub avx2: Option<bool>,
     /// The same for `rep movsb`/`rep stosb`.
     pub erms: Option<bool>,
-    /// The same for the math kernels' FMA builds (`glibc.cpu.hwcaps` name `FMA`, D-10.22).
+    /// The same for the math kernels' FMA builds (`glibc.cpu.hwcaps` name `FMA`, D-10.23).
     pub fma: Option<bool>,
     /// Bytes from which copies use `rep movsb`.
     pub rep_movsb_threshold: Option<usize>,
@@ -139,7 +139,7 @@ const fn size(min: u64) -> TunableType {
     TunableType::Size { min, max: u64::MAX }
 }
 
-/// The 41 tunables of glibc 2.39 on x86_64 (`ld.so --list-tunables`, probed on keke,
+/// The 41 tunables of glibc 2.39 on x86_64 (`ld.so --list-tunables`, probed on Zen 1 host,
 /// LEGACY-TUNABLES-POLICY 2026-10-23). A malformed value of any numeric one draws a warning
 /// ([`warnings`]); the dynamic loader of phase 14 reuses this table and the text.
 pub const GLIBC_TUNABLE_TYPES: [(&[u8], TunableType); 41] = [

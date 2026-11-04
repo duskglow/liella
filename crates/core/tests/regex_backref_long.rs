@@ -60,7 +60,7 @@ fn nested_optional(levels: usize) -> Vec<u8> {
 
 /// D-14.4; spec §14.9: the closure walk (BACKREF-EPS) follows splits, group opens and closes,
 /// joins and assertions without buckets, and falls back to buckets past its copy depth and
-/// stride. Offsets probe-settled against glibc 2.39 on keke (BACKREF-EPS-2; the long subject is
+/// stride. Offsets probe-settled against glibc 2.39 on Zen 1 host (BACKREF-EPS-2; the long subject is
 /// derived: each group takes at most one byte); where glibc's later
 /// groups differ from the subexpression rule, only the match and group 1 are checked.
 #[test]
@@ -97,7 +97,7 @@ fn backref_closure_walk_keeps_offsets() {
 
 /// D-14.4; DFA-TIMEOUT: the closure walk charges each hop to the work budget as the per-bucket
 /// walk charged each insertion. 30 nested groups: every "a" of the subject walks 30 opens and 30
-/// closes for two insertions. Measured on keke (BACKREF-EPS-2): the search needs 62,280 units,
+/// closes for two insertions. Measured on Zen 1 host (BACKREF-EPS-2): the search needs 62,280 units,
 /// 32,160 without the hop charge (998,122 with a bucket per epsilon node), so 45,000 must end in
 /// ESPACE. The match is derived: the only "aa" is at 1000.
 #[test]

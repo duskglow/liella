@@ -4,7 +4,7 @@
 # Runs the tests of `liella` (crates/core) and `liella-boundary` (crates/boundary) twice, each inside an unprivileged
 # user + mount namespace (`unshare -r -m`: no sudo, nothing on the host changes):
 #   base run : a directory of the reference file system (ext4 on our hosts, --base-dir) is bind-mounted over `target/tmp`
-#              and `/tmp` (a bind mount, because target/ itself may be on a RAM disk, as on keke);
+#              and `/tmp` (a bind mount, because target/ itself may be on a RAM disk, as on Zen 1 host);
 #   tmpfs run: a fresh tmpfs (RAM) is mounted over the same two places.
 # `target/tmp` is CARGO_TARGET_TMPDIR, baked into the tests at compile time, so only a mount can move it; TMPDIR=/tmp.
 # The mounts are made as root of the first namespace; the tests then run in a second user namespace that maps the
