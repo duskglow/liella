@@ -454,6 +454,8 @@ pub trait Env {
     fn call3(&self, f: usize, a: usize, b: usize, c: usize) -> isize;
     /// The calling thread's `errno` (what a cookie hook left after returning -1).
     fn errno(&self) -> i32;
+    /// Set the calling thread's `errno` (a partial record returned with the read error left in it).
+    fn set_errno(&self, e: Errno);
     /// The head of the open-streams list (`_IO_list_all`).
     fn list_head(&self) -> &AtomicUsize;
     /// The words of the stream at `addr` (a `FILE *` from the list).
@@ -2052,6 +2054,7 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
             if len == 0 || grow_failed {
                 return Err(e);
             }
+            env.set_errno(e);
             if let Some(t) = env.bytes(buf, cap).get_mut(len) {
                 *t = 0;
             }
