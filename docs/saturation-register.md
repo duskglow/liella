@@ -24,3 +24,5 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [15. The seven benches section 14 skipped, re-measured and ranked (PERF-NEXT-BATCH-3, 2026-10-24)](saturation/15-the-seven-benches-section-14-skipped.md): section 15
 - [16. f64 exp/log/pow: where the 3.4-5.4x over glibc goes (MATH-M6-F64-GAP-BREAKDOWN, 2026-10-24, counted)](saturation/16-f64-exp-log-pow-gap-breakdown.md): section 16
 - [17. First counts of the three unmeasured rows (BENCH-ROWS-UNMEASURED, 2026-10-24)](saturation/17-first-counts-of-the-three-unmeasured-rows.md): section 17
+
+- [18. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)](saturation/18-sse2-level-re-measure-after-bench-tunables.md): section 18
