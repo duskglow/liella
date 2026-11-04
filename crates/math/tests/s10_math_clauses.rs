@@ -7,15 +7,198 @@
 #![no_builtins] // calls to libc names (labs, strlen, ...) reach Liella's export, not LLVM's folding (OPAQUE-AUDIT)
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::float_cmp, clippy::cast_possible_truncation, missing_docs)]
 
-use spectest::clause;
+#[path = "../../core/tests/support/skip_note.rs"]
+mod skip_note;
 
-// Pending: the compat `__*_finite` entry points (phase 15).
-clause!(s10_0_c2_0, "10.0", "Contract", r##"`__<name>_finite` (for example `__exp_finite`) were emitted by `-ffinite-math-only` builds before 2.31. They remain as compat symbols with the same contract as `<name>`, restricted to finite arguments."##);
+/// The section headers, dynamic symbols (with versions) and bytes of an ELF64 little-endian
+/// shared object: only what `s10_0_c2_0` reads. Reads Liella's own `libm.so.6`.
+mod elf {
+    /// One dynamic symbol: name, version name, whether that version is hidden (non-default,
+    /// `name@V`), section index and value.
+    pub struct Sym {
+        pub name: String,
+        pub version: String,
+        pub hidden: bool,
+        pub shndx: u16,
+        pub value: u64,
+    }
+    pub struct Section {
+        pub name: String,
+        pub kind: u32,
+        pub addr: u64,
+        pub offset: u64,
+        pub size: u64,
+        pub link: u32,
+    }
+    pub struct Elf {
+        pub bytes: Vec<u8>,
+        pub sections: Vec<Section>,
+        pub syms: Vec<Sym>,
+        /// `R_X86_64_JUMP_SLOT` relocations: (GOT slot address, dynamic symbol index).
+        pub jump_slots: Vec<(u64, usize)>,
+    }
+    pub fn u16_at(b: &[u8], o: usize) -> u16 {
+        u16::from_le_bytes(b[o..o + 2].try_into().unwrap())
+    }
+    pub fn u32_at(b: &[u8], o: usize) -> u32 {
+        u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
+    }
+    pub fn u64_at(b: &[u8], o: usize) -> u64 {
+        u64::from_le_bytes(b[o..o + 8].try_into().unwrap())
+    }
+    fn cstr(b: &[u8], o: usize) -> String {
+        let end = b[o..].iter().position(|&c| c == 0).unwrap();
+        String::from_utf8_lossy(&b[o..o + end]).into_owned()
+    }
+    const SHT_RELA: u32 = 4;
+    const SHT_DYNSYM: u32 = 11;
+    const SHT_NOBITS: u32 = 8;
+    const SHT_GNU_VERDEF: u32 = 0x6fff_fffd;
+    const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
+    const R_X86_64_JUMP_SLOT: u64 = 7;
+    impl Elf {
+        pub fn parse(bytes: Vec<u8>) -> Elf {
+            assert_eq!(&bytes[..6], b"\x7fELF\x02\x01", "not an ELF64 little-endian object");
+            let b = &bytes;
+            let (shoff, shentsize, shnum, shstrndx) = (u64_at(b, 0x28) as usize, u16_at(b, 0x3a) as usize, u16_at(b, 0x3c) as usize, u16_at(b, 0x3e) as usize);
+            let raw: Vec<(u32, Section)> = (0..shnum)
+                .map(|i| {
+                    let h = shoff + i * shentsize;
+                    (u32_at(b, h), Section { name: String::new(), kind: u32_at(b, h + 4), addr: u64_at(b, h + 16), offset: u64_at(b, h + 24), size: u64_at(b, h + 32), link: u32_at(b, h + 40) })
+                })
+                .collect();
+            let shstr = raw[shstrndx].1.offset as usize;
+            let sections: Vec<Section> = raw.into_iter().map(|(n, s)| Section { name: cstr(b, shstr + n as usize), ..s }).collect();
+            let find = |k: u32| sections.iter().find(|s| s.kind == k).unwrap_or_else(|| panic!("no section of type {k:#x}"));
+            let dynsym = find(SHT_DYNSYM);
+            let dynstr = sections[dynsym.link as usize].offset as usize;
+            // Version index -> name, from the version definitions (this object defines all its versions).
+            let verdef = find(SHT_GNU_VERDEF);
+            let vstr = sections[verdef.link as usize].offset as usize;
+            let mut vnames = std::collections::BTreeMap::new();
+            let mut d = verdef.offset as usize;
+            loop {
+                let (ndx, aux, next) = (u16_at(b, d + 4), u32_at(b, d + 12) as usize, u32_at(b, d + 16) as usize);
+                vnames.insert(ndx, cstr(b, vstr + u32_at(b, d + aux) as usize));
+                if next == 0 {
+                    break;
+                }
+                d += next;
+            }
+            let versym = find(SHT_GNU_VERSYM).offset as usize;
+            let syms = (0..(dynsym.size / 24) as usize)
+                .map(|i| {
+                    let e = dynsym.offset as usize + i * 24;
+                    let v = u16_at(b, versym + 2 * i);
+                    Sym { name: cstr(b, dynstr + u32_at(b, e) as usize), version: vnames.get(&(v & 0x7fff)).cloned().unwrap_or_default(), hidden: v & 0x8000 != 0, shndx: u16_at(b, e + 6), value: u64_at(b, e + 8) }
+                })
+                .collect();
+            let mut jump_slots = Vec::new();
+            for r in sections.iter().filter(|s| s.kind == SHT_RELA) {
+                for k in 0..(r.size / 24) as usize {
+                    let e = r.offset as usize + k * 24;
+                    let info = u64_at(b, e + 8);
+                    if info & 0xffff_ffff == R_X86_64_JUMP_SLOT {
+                        jump_slots.push((u64_at(b, e), (info >> 32) as usize));
+                    }
+                }
+            }
+            Elf { bytes, sections, syms, jump_slots }
+        }
+        /// The section holding address `va` (with file contents) and the file offset of `va`.
+        pub fn at(&self, va: u64) -> (&Section, usize) {
+            let s = self.sections.iter().find(|s| s.kind != SHT_NOBITS && s.addr != 0 && (s.addr..s.addr + s.size).contains(&va)).unwrap_or_else(|| panic!("{va:#x} is in no section"));
+            (s, (s.offset + (va - s.addr)) as usize)
+        }
+    }
+}
+
+/// `__<name>_finite` (Appendix B §10, compat versions 2.15 and, for `f128`, 2.26) carries the
+/// contract of `<name>`. Proven on the built `libm.so.6` (D-10.2: each is a frame-free stub that
+/// jumps to `<name>`): (1) every `__<name>_finite` is exported at its Appendix B version and only
+/// as a non-default version (`name@V`), so nothing new links against it; (2) the `alias` row of
+/// `spec/abi/compat-plan.tsv` names `<name>` as its target; (3) the stub is one `jmp rel32` whose
+/// destination is `<name>` at its default version: either `<name>`'s address, or a PLT entry
+/// whose GOT slot carries the `R_X86_64_JUMP_SLOT` relocation of `<name>@@V`; (4) the set of
+/// `__*_finite` exports is exactly Appendix B's `_finite` rows. The value check of the targets
+/// themselves is the `<name>` clauses' (finite arguments are a subset of their domain).
+#[test]
+fn s10_0_c2_0() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let lib = root.join("target/liella/libm.so.6");
+    let Ok(bytes) = std::fs::read(&lib) else {
+        skip_note::skipped("target/liella/libm.so.6 is not built (cargo xtask so)");
+        return;
+    };
+    let elf = elf::Elf::parse(bytes);
+    let read = |p: &str| std::fs::read_to_string(root.join(p)).unwrap_or_else(|e| panic!("{p}: {e}"));
+    let base = |n: &str| n.strip_prefix("__").and_then(|r| r.strip_suffix("_finite")).filter(|b| !b.is_empty()).map(str::to_string);
+
+    // (4) Appendix B: symbol, section, first version.
+    let spec: std::collections::BTreeMap<String, String> = read("spec/symbols.tsv")
+        .lines()
+        .skip(1)
+        .filter_map(|l| match l.split('\t').collect::<Vec<_>>()[..] {
+            [sym, "10", ver, ..] if base(sym).is_some() => Some((sym.to_string(), format!("GLIBC_{ver}"))),
+            _ => None,
+        })
+        .collect();
+    assert!(spec.len() > 100, "Appendix B has only {} `_finite` rows", spec.len());
+    // (2) The alias rows: (symbol, version) -> target.
+    let plan: std::collections::BTreeMap<(String, String), String> = read("spec/abi/compat-plan.tsv")
+        .lines()
+        .filter_map(|l| match l.split('\t').collect::<Vec<_>>()[..] {
+            ["libm.so.6", sym, ver, "alias", _, _, note, ..] => Some(((sym.to_string(), ver.to_string()), note.split_whitespace().find_map(|w| w.strip_prefix("target=")).unwrap_or(sym).to_string())),
+            _ => None,
+        })
+        .collect();
+
+    let finite: Vec<&elf::Sym> = elf.syms.iter().filter(|s| s.shndx != 0 && base(&s.name).is_some()).collect();
+    let exported: std::collections::BTreeMap<String, String> = finite.iter().map(|s| (s.name.clone(), s.version.clone())).collect();
+    assert_eq!(exported.len(), finite.len(), "a `_finite` name is exported at more than one version");
+    let missing: Vec<&String> = spec.keys().filter(|n| !exported.contains_key(*n)).collect();
+    let extra: Vec<&String> = exported.keys().filter(|n| !spec.contains_key(*n)).collect();
+    assert!(missing.is_empty() && extra.is_empty(), "libm.so.6 `_finite` exports differ from Appendix B: missing {missing:?}, extra {extra:?}");
+
+    for s in &finite {
+        let name = base(&s.name).unwrap();
+        // (1) The Appendix B version, non-default.
+        assert_eq!(s.version, spec[&s.name], "{}: version", s.name);
+        assert!(s.hidden, "{}@@{} is a default version: new links would bind it", s.name, s.version);
+        // (2) The plan row.
+        let target = plan.get(&(s.name.clone(), s.version.clone())).unwrap_or_else(|| panic!("{}@{}: no libm.so.6 alias row in compat-plan.tsv", s.name, s.version));
+        assert_eq!(*target, name, "{}@{}: the compat-plan.tsv alias row targets {target}", s.name, s.version);
+        // (3) The stub's one jump reaches `name`'s default version.
+        let want = elf.syms.iter().find(|t| t.name == name && t.shndx != 0 && !t.hidden).unwrap_or_else(|| panic!("{name} has no default version in libm.so.6"));
+        let (_, off) = elf.at(s.value);
+        assert_eq!(elf.bytes[off], 0xe9, "{}: the stub is not a `jmp rel32`", s.name);
+        let dest = s.value.wrapping_add(5).wrapping_add_signed(i64::from(elf::u32_at(&elf.bytes, off + 1) as i32));
+        if dest == want.value {
+            continue;
+        }
+        let (sec, doff) = elf.at(dest);
+        assert!(sec.name.starts_with(".plt"), "{}: the stub jumps to {dest:#x} in {}, not to {name} ({:#x})", s.name, sec.name, want.value);
+        // The PLT entry's `jmp *slot(%rip)` (ff 25 disp32), possibly after an endbr64 / bnd prefix.
+        let k = (0..12).find(|&k| elf.bytes[doff + k] == 0xff && elf.bytes[doff + k + 1] == 0x25).unwrap_or_else(|| panic!("{}: no `jmp *rel(%rip)` in the PLT entry at {dest:#x}", s.name));
+        let slot = (dest + k as u64 + 6).wrapping_add_signed(i64::from(elf::u32_at(&elf.bytes, doff + k + 2) as i32));
+        let &(_, idx) = elf.jump_slots.iter().find(|(o, _)| *o == slot).unwrap_or_else(|| panic!("{}: no JUMP_SLOT relocation for GOT slot {slot:#x}", s.name));
+        let bound = &elf.syms[idx];
+        assert!(
+            bound.name == name && !bound.hidden && bound.version == want.version && bound.value == want.value,
+            "{}: the stub's PLT slot binds {}@{} ({:#x}), not {name}@@{} ({:#x})",
+            s.name,
+            bound.name,
+            bound.version,
+            bound.value,
+            want.version,
+            want.value
+        );
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Specified clauses (Track M milestone 1: formats, classification, the exact and correctly
-// rounded operations, the environment). The elementary, special and complex functions (§10.3,
-// §10.5) and the compat `__*_finite` names (phase 15) are pending above.
+// rounded operations, the environment). The compat `__*_finite` names (s10_0_c2_0) are above.
 // ---------------------------------------------------------------------------------------------
 
 use liella_boundary::selftest::{self, ChildEnd};
