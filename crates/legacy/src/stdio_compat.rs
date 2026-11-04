@@ -1319,7 +1319,11 @@ pub fn refill<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext) -> Option<KR
         return None;
     }
     let flags = get(words, word::FLAGS);
-    s.eof = flags & EOF_SEEN != 0;
+    if flags & EOF_SEEN != 0 {
+        // Sticky end of input: the general path answers without reading.
+        return None;
+    }
+    s.eof = false;
     s.err = flags & ERR_SEEN != 0;
     s.role = Role::Reading;
     s.rpos = RESERVE;
@@ -1434,7 +1438,7 @@ enum Direct {
 fn read_direct<E: Env>(env: &E, ext: &mut Ext, out: &mut [u8]) -> Direct {
     let cap = ext.buf_len.saturating_sub(RESERVE);
     let s = &mut ext.state;
-    if ext.buf == 0 || cap == 0 || out.len() < cap || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
+    if ext.buf == 0 || cap == 0 || out.len() < cap || s.eof || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
         return Direct::No;
     }
     match s.role {
@@ -1863,16 +1867,14 @@ pub fn gets_into<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, out: &mut
                         break;
                     }
                 }
-                Err(e) => {
-                    if n == 0 {
-                        return Err(e);
-                    }
-                    break;
-                }
+                // A read error is NULL even after some bytes (the reference; the bytes stay in
+                // `out`, not terminated).
+                Err(e) => return Err(e),
             }
         }
     }
-    if let Some(t) = out.get_mut(n) {
+    // Nothing stored (end of input first): the buffer is left as it was (the reference).
+    if let Some(t) = out.get_mut(n).filter(|_| n > 0 || room == 0) {
         *t = 0;
     }
     Ok((n > 0 || room == 0).then_some(n))
@@ -1995,6 +1997,10 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         return Ok(None);
     }
     load(file, ext);
+    // The error indicator stops a record read before it reads (the reference).
+    if ext.state.err {
+        return Err(Errno::EIO);
+    }
     if input_flushes(ext) {
         flush_line_buffered(env, true);
     }
@@ -2030,7 +2036,15 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         Err(e) => {
             ext.state.err = true;
             store(file, ext);
-            Err(e)
+            // The bytes read before the error are the record (the reference), the error
+            // indicator is set.
+            if len == 0 {
+                return Err(e);
+            }
+            if let Some(t) = env.bytes(buf, cap).get_mut(len) {
+                *t = 0;
+            }
+            Ok(Some(len))
         }
     }
 }
