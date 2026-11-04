@@ -40,7 +40,23 @@ bound was touched.
   suite is green 5/5. Re-attach: `grep -P "^hottext-asm-order-faults-mei\t" ~/logs/jobs.tsv`, output
   in ~/logs/hottext-asm-order-faults-mei.log (jobrun's log) and ~/work/hottext-asm-order/run-*.log.
 
+## Results so far (mei, Skylake-SP, 5 runs each, every run identical)
+
+- before (next's .S): tool 68 / locale 66 / startup 19, strings 0 faults, suite 6/6 green.
+- split (4cc83213, old list): tool 68 / locale 66 / startup 19, strings 0, 6/6 green: the split
+  alone changes no count.
+- regen (fast profile, `pf_tool tool`): 407 keys traced, list 503 -> 530 keys
+  (~/work/hottext-asm-order/hot-text.list.regen). Its `cargo xtask so` FAILED the D-4.33 export
+  alignment check: mempcpy/__mempcpy (fold.S, `.p2align 4` in their new own section; inside
+  memmove's section they sat 64-aligned by position). Fixed in bff0ac96 (`.p2align 6`). Not yet
+  re-counted. Next run: also grep every new section that holds an exported entry for `.p2align`
+  < 6 (only these two were reported, but others can be aligned by luck in this layout).
+- faults-mei rc 1 (the regn build failure above): SUPERSEDED. hottext-asm-order-gate on 4cc83213:
+  stopped at hand-back (head moved; its sync blocked the bff0ac96 sync, sync_role rc 4): SUPERSEDED.
+
 ## Exact next step
+
+0. Sync bff0ac96 to mei s1, rerun count.sh as hottext-asm-order-faults-mei-2 (new zram dir count-2).
 
 1. Read the faults-mei result. If regen 5/5 is green with margin on every bound: copy
    hot-text.list.regen to crates/libc-so/hot-text.list, also run regen once with
