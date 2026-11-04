@@ -911,13 +911,32 @@ pub fn elem_fast<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
     f: impl FnOnce(A, Rounding) -> (R, Status),
 ) -> R {
     let (saved, in_place) = fpu::peek(&CSys);
-    if in_place {
+    let x = if in_place {
         // The barrier keeps the fast path's arithmetic after the read and behind the branch: a
         // caller with an unmasked trap must never see it run before the switch.
         let x = core::hint::black_box(x);
         if let Some(v) = fast(x) {
             return v;
         }
+        x
+    } else {
+        x
+    };
+    elem_fast_cold::<HW, A, R>(x, saved, in_place, f)
+}
+
+/// [`elem_fast`]'s fallback, out of line and cold (register 16.5 #4) so the fast path keeps
+/// nothing in callee-saved registers for it: the accurate path in place against the MXCSR value
+/// read on entry (`in_place`), or the full envelope [`elem`].
+#[cold]
+#[inline(never)]
+fn elem_fast_cold<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
+    x: A,
+    saved: u32,
+    in_place: bool,
+    f: impl FnOnce(A, Rounding) -> (R, Status),
+) -> R {
+    if in_place {
         let (v, st) = core::hint::black_box(f(x, Rounding::Nearest));
         debug_assert!(st.hw.0 & !HW == 0, "the compile-time hw set misses a bit the computation reports");
         fpu::settle(&CSys, saved, st.flags, fpu::Flags(HW | FAST_ATTEMPT_HW.0));
