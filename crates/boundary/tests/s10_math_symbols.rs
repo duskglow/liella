@@ -325,7 +325,7 @@ fn math_envelope_keeps_the_callers_mxcsr() {
 #[test]
 fn math_envelope_keeps_a_result_that_is_not_tiny_under_the_callers_ftz() {
     // Clauses: s10_0_f_0.
-    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on shiki,
+    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on Haswell-EP host,
     // see `ftz_flushes_the_tininess_edge` in mathret.rs). A result that is exactly the smallest
     // normal and not tiny is kept under the caller's FTZ, without underflow.
     let edge = f64::MIN_POSITIVE;

@@ -177,7 +177,7 @@ workloads are identical under both libraries; timings and profiles: `validation/
 
 Fifth runs (milestone 5, item B, 2026-10-05): **as is after the correctness fixes**, built from
 branch d2d4630 = main 75c0f5c (contains 12fdf19: T5, T6, T7, T8, T15) merged into
-test/validation (`built-from` line in each `results/m5/keke-liella-m-*.summary`; Zen 1; check times at
+test/validation (`built-from` line in each `results/m5/<host>-liella-m-*.summary`; Zen 1; check times at
 load 30 to 40, so not comparable):
 
 | Suite | glibc (dynamic) | Liella as is (`liella-m`) |
@@ -191,7 +191,7 @@ load 30 to 40, so not comparable):
 
 T5 and T6 are fixed as far as these suites see (the coreutils harness, `test-regex` in all three
 packages, sed's runaways); T7 and T8 too: configure no longer replaces `memchr`, `strstr`,
-`strcasestr` or the printf family (`results/m5/keke-liella-m-*.replace`). sed and findutils now equal
+`strcasestr` or the printf family (`results/m5/<host>-liella-m-*.replace`). sed and findutils now equal
 glibc as is. bash was not re-run (no regex or printf change reaches its six differences).
 
 Fourth runs (milestone 4, main 246ae7f, 2026-10-05), **as is** (no

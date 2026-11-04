@@ -124,7 +124,7 @@ const REFERENCE_ENV: &[(&str, &str, &str, &str)] = &[(
     r##"glob"##,
     r##"glob [~/x] NOCHECK|TILDE -> 0 pathc=1 offs=0 magchar=0 [<home>/x] $"##,
     r##"glob [~/x] NOCHECK|TILDE -> 0 pathc=1 offs=0 magchar=0 [~/x] $"##,
-    "`~/x` with HOME set and empty: whether the reference falls back to the login user's home varies with the environment of the job (keke gates 2026-10-11: <home>/x in two jobs, [~/x] in others and in the record; same source, no Liella code in the reference process)",
+    "`~/x` with HOME set and empty: whether the reference falls back to the login user's home varies with the environment of the job (Zen 1 host gates 2026-10-11: <home>/x in two jobs, [~/x] in others and in the record; same source, no Liella code in the reference process)",
 )];
 
 /// Rewrites every `REFERENCE_ENV` alternative line in `out` to its recorded line.

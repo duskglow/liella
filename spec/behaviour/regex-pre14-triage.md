@@ -1,7 +1,7 @@
 # Regex triage T28, T29, T30 (PRE14-REGEX-TRIAGE, 2026-10-23)
 
-Black-box probes against glibc 2.39 (Ubuntu 2.39-0ubuntu8.9, x86_64, kanon), en_US.UTF-8.
-Probe sources: `re_triage.c` and `re_icase2.c` in the task scratch (`~/work/pre14-regex-triage/` on kanon).
+Black-box probes against glibc 2.39 (Ubuntu 2.39-0ubuntu8.9, x86_64, Broadwell-EP host), en_US.UTF-8.
+Probe sources: `re_triage.c` and `re_icase2.c` in the task scratch (`~/work/pre14-regex-triage/` on Broadwell-EP host).
 Test: `crates/core/tests/regex_pre14_triage.rs`.
 
 **Clauses:** `s14_9_c_1_2`.

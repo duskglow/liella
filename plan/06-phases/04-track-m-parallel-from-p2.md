@@ -212,7 +212,7 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     `LdBits`/`F128Bits`. No assembly is needed.
   * **Proof, the same for every story:**
     * Accuracy against glibc: a differential test in `crates/math/tests/`, built against the host
-      C library and statically against Liella's products, on keke. It runs every function in every
+      C library and statically against Liella's products, on Zen 1 host. It runs every function in every
       rounding direction on special, boundary and random operands. Every differing line is checked
       against the `liella-mathtools` oracle: Liella must be correctly rounded, and invalid,
       division-by-zero, NaNs and `errno` must follow D-10.14/D-10.18.
@@ -299,9 +299,9 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     M5-5 → M5-6, and finally M5-8. Names: 17 + 11 + 24 + 18 + 10 + 14 + 11 = 105.
 * **Milestone 6: speed, stories** (planned by MATH-M6-PLAN 2026-10-23; owner 2026-10-23: glibc's speed is the bar to
   reach per function, not a ceiling, and correct rounding in every mode stays, D-10.13/D-10.15/D-10.17).
-  * **Where we stand** (keke, AMD EPYC 7551 (Zen 1, FMA and AVX2), idle (load 1.3 to 2.8 on 80 threads), not booked;
+  * **Where we stand** (Zen 1 host, AMD EPYC 7551 (Zen 1, FMA and AVX2), idle (load 1.3 to 2.8 on 80 threads), not booked;
     origin/next 42e682a3; job `math-m6-plan-bench-2`). The harness is a scratch C program
-    (`~/work/math-m6-plan/libm_ns.c` on keke). It is built the way `cargo xtask mathcmp` builds: `-O2 -fno-builtin`,
+    (`~/work/math-m6-plan/libm_ns.c` on Zen 1 host). It is built the way `cargo xtask mathcmp` builds: `-O2 -fno-builtin`,
     statically against `target/liella/{libm,libc}.a`, and against host glibc 2.39 both statically and dynamically.
     It measures throughput: 256 independent uniform operands in the range given, round-to-nearest, pinned to one CPU.
     Each function is run 5 times for ≥ 20 ms; the median is taken, and the whole thing runs twice per library. Cells

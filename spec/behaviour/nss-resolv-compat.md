@@ -34,7 +34,7 @@ fourth argument to `__nss_database_lookup` is not written instead of faulting (t
 for NULL out-pointers, as in `digits-dots.md`).
 Tests: `crates/boundary/tests/s16_nameservices_symbols.rs` `sym___nss_*`.
 
-## libresolv.so.2 hosts-file walkers (LG-7 part 2, probe rerun on shiki 2026-10-23, job compat-nss-resolv-pt2-probe)
+## libresolv.so.2 hosts-file walkers (LG-7 part 2, probe rerun on Haswell-EP host 2026-10-23, job compat-nss-resolv-pt2-probe)
 
 * **`_gethtbyname(name)`, `_gethtbyname2(name, af)`:** the first hosts-file line of family `af`
   (`AF_INET` for `_gethtbyname`) naming `name`; no switch, no DNS, no numeric parsing
@@ -42,12 +42,12 @@ Tests: `crates/boundary/tests/s16_nameservices_symbols.rs` `sym___nss_*`.
   family (`gethostbyname2` gives `NO_RECOVERY` there). `errno` is never changed.
 * **`_gethtbyaddr(addr, len, af)`:** the first line of family `af` whose address begins with the
   `len` bytes (a 3-byte `127.0.0` finds the `127.0.0.1` line, where `gethostbyaddr` fails).
-* **`_gethtent()`:** every hosts line, both families (7 on shiki where `gethostent` gave 3); NULL
+* **`_gethtent()`:** every hosts line, both families (7 on Haswell-EP host where `gethostent` gave 3); NULL
   with `HOST_NOT_FOUND` at the end and after it; **`_sethtent(1)`** rewinds.
 * All results are one static entry of their own (never `gethostbyname`'s buffer).
 * **`res_gethostbyname`, `res_gethostbyname2`, `res_gethostbyaddr`:** DNS only (the hosts file is
   not read: `localhost` came back as the DNS search-domain name); numeric names are parsed.
-  Settled on keke 2026-10-23 (COMPAT-NSS-RESOLV-PT2-2; probe under strace, and a controlled DNS
+  Settled on Zen 1 host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-2; probe under strace, and a controlled DNS
   answer from a responder in an unprivileged user+network namespace with its own resolv.conf):
   `res_gethostbyname2` ignores `af`: only an `A` query is sent and the entry is `AF_INET`, also for
   `AF_INET6` or 99. A name of digits and dots not ending in `.` is a dotted quad (`127.0.0.1`

@@ -4,7 +4,7 @@
 # from the work directory ($WL/work) and writes its result to standard output (the runner
 # sends it to /dev/null for timing and to md5sum for the output check). Inputs are generated
 # once by wl_prep.sh and shipped to every host, so every host and every variant sees the same
-# bytes. tree = /usr/include and /usr/share/man of keke. en_US.UTF-8 rows exercise rule-based collation (strcoll); the locale is in the hosts' locale archive.
+# bytes. tree = /usr/include and /usr/share/man of Zen 1 host. en_US.UTF-8 rows exercise rule-based collation (strcoll); the locale is in the hosts' locale archive.
 WL_DEFS=(
     "sort-C|env LC_ALL=C @/sort words.txt"
     "sort-utf8|env LC_ALL=C.UTF-8 @/sort -k1,1 words.txt"

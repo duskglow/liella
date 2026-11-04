@@ -1,0 +1,8 @@
+{"task": "MATH-M6-F64-GAP-LOG-TABLES-3", "model": "sonnet", "tokens": null,
+ "result": "Merged origin/next; register section moved to docs/saturation/16-f64-exp-log-pow-gap-breakdown.md; gate green",
+ "branch": "task/math-m6-f64-gap-log-tables-3", "head": "see git log",
+ "gate": {"affected": "32 suites ok; 11312 passed / 0 failed; conformance 114 passed", "peak": "12G"}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["code comments say 'register 13.5 #n', now 16.5; not changed", "no plants re-run: no code differs from -2"],
+ "refused": [], "improvement": "a foreground ssh jobrun call is killed by the harness timeout; the brief could say to start jobrun detached",
+ "next_step": "landing", "report_file": "handoff/math-m6-f64-gap-log-tables-3.md",
+ "jobs": ["math-m6-f64-gap-log-tables-3-gate"]}
