@@ -49,9 +49,15 @@ fn parse_status(line: &str) -> Option<Status> {
     Some(Status { execs, cov: cov?, ft: ft? })
 }
 
+/// Fold one output line into the status kept so far: a status line replaces it, anything else leaves it.
+fn keep_last(prev: Option<Status>, line: &str) -> Option<Status> {
+    parse_status(line).or(prev)
+}
+
 /// The last status line of a run's output; `None` when it printed none (a crash before the first one).
+#[cfg(test)]
 fn last_status(output: &str) -> Option<Status> {
-    output.lines().filter_map(parse_status).last()
+    output.lines().fold(None, keep_last)
 }
 
 /// One summary row: `<target> cov=<n> ft=<n> corpus=<n> execs=<n>`; `none` (never 0) without a status line.
@@ -76,9 +82,7 @@ fn run_status(c: &mut Command) -> Result<(bool, Option<Status>), String> {
         let mut buf = Vec::new();
         while rd.read_until(b'\n', &mut buf).map_err(|e| format!("reading fuzzer output: {e}"))? > 0 {
             let _ = std::io::stderr().write_all(&buf);
-            if let Some(s) = parse_status(&String::from_utf8_lossy(&buf)) {
-                last = Some(s);
-            }
+            last = keep_last(last, &String::from_utf8_lossy(&buf));
             buf.clear();
         }
     }
