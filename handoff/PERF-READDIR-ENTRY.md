@@ -1,7 +1,38 @@
-# PERF-READDIR-ENTRY (branch task/perf-readdir-entry-2, continued from task/perf-readdir-entry)
+# PERF-READDIR-ENTRY (branch task/perf-readdir-entry-3, continued from -2 and task/perf-readdir-entry)
 
 State: code commit 8dee0d52 on top of cdf9880a (lock_alone swap, record-walk tests) and 232388b7. Stacked on
-task/perf-fswalk-phys, which is not in next yet. Role keke ~/w/n4. Run 2 (PERF-READDIR-ENTRY-2).
+task/perf-fswalk-phys, which is not in next yet. Run 3 (PERF-READDIR-ENTRY-3, role keke ~/w/n3): NO code change,
+NOT READY, ruling needed (below). Runs 2 and 1 used keke ~/w/n4.
+
+## Run 3: CI red on hot_text_products (tool 69 > 68 on CI's host), diagnosis only
+
+What CI saw: init_coreutils_shaped_program_stays_within_its_page_fault_bound read 69 minor faults vs bound 68 (CI host,
+f3af63a0, steady). Keke (Zen 1 host) on the same head reads tool 61, locale 58, startup 18, strings 0: all pass,
+so keke does not reproduce the red. Its margin is 7 faults, CI's host is over by 1. The two hosts run different machine
+paths, so counts differ by host.
+Regen tried as the coordinator asked (job perf-readdir-entry-3-regen; script, logs and list.diff in keke
+~/work/perf-readdir-entry-3/): `tools/hottext/regen.sh ~/w/n3 "<page_faults built like the test> tool"` (fast
+profile only). It adds startup keys (rt start::program, liella_link_rela_iplt_start/end, liella_sys_mprotect) and the
+tool's gettext keys (intl record/translate/textdomain, catalog lang, heap take_held, lctime Time::string,
+Locale::compare_bytes) and moves a few keys (getrusage and _IO_fflush to the end, Locale::with later). Keke after:
+tool 61 -> 58, locale 58 -> 56, startup 18 -> 17, but **init_first_string_calls_after_printf_take_no_text_fault goes
+0 -> 1 (red)**. That job's rc is 0 only because my script did not pass on the test's rc: the job proves nothing.
+Cause (job perf-readdir-entry-3-layout plus the scratch probe strprobe.c, per-call minflt deltas, setarch -R): the
+hot group starts 64 KiB-aligned (0x410240) and runs to about 0x481000. The `.S` machine kernels (strcpy, memchr,
+memcmp, strncmp, ...) come AFTER all the hot Rust functions, wherever their keys are in the list. Original list:
+strncmp at 0x47ef00 (window 71, same window as the other string kernels). Regen list: the Rust part is 0x1980 bytes
+bigger and strncmp is at 0x480880, alone at the start of window 72, so its first call faults. The readdir code is not
+in the hot group (no readdir/dirtree key in the list), so on keke the readdir change does not move the group.
+I did not commit the regen: it turns a passing direct test red, and I cannot check CI's host from here.
+
+RULING NEEDED: (a) recommended: a separate story to lay out the `.S` hot sections in list order with the Rust ones
+(xtask/src/hottext.rs numbering; check what the link does with `.text.sorted.h<n>` from the .S objects). Then the
+string kernels sit with the probes that use them first, and adding keys no longer pushes them across a window. After
+that, regen with the tool program as here. (b) cheaper: count the tool row on CI's host for origin/next and for this
+branch (one job each). If next already reads 67-68 there, this branch's +1 is layout noise within the
+HOTTEXT-VARIANCE rule ("highest count plus 2"), and the bound should be set by that rule with a recorded reason. Not
+recommended: committing this regen as it is (strings test red on keke).
+Not to redo: the regen run on keke (list.diff kept in ~/work/perf-readdir-entry-3/), the layout probe.
 
 Run 1 jobs (keke, all rc 0): perf-readdir-entry-percall, PERF-READDIR-ENTRY-static, perf-readdir-entry-gate,
 perf-readdir-entry-plants (3 record-walk plants CAUGHT). Run 1's total instructions per entry: readdir_entry_flat
@@ -38,6 +69,8 @@ Run 2 jobs (keke ~/logs/jobs.tsv; driver ~/work/perf-readdir-entry-2/driver.sh, 
   under timeout 600. Exits 1 on a survivor or a plant that did not apply.
 
 Open / next step:
+0. First the run 3 ruling above (CI's hot_text_products red). The branch cannot land until the tool row passes
+   on CI's host.
 1. The readdir user-instruction gap is closed (1.004). The remaining fts_entry_flat gap (1.88x user) is not a
    readdir question: a separate story. The register paragraph in docs/saturation/17 records the counts.
 2. What is left on the hit path (after/readdir.dis): null and alignment test of the handle (setcc/or form), the
