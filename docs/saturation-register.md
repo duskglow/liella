@@ -23,3 +23,4 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [14. Next ranked perf stories after PERF-NEXT-BATCH (PERF-NEXT-BATCH-2, 2026-10-23)](saturation/14-next-ranked-perf-stories-after-perf.md): section 14
 - [15. The seven benches section 14 skipped, re-measured and ranked (PERF-NEXT-BATCH-3, 2026-10-24)](saturation/15-the-seven-benches-section-14-skipped.md): section 15
 - [16. f64 exp/log/pow: where the 3.4-5.4x over glibc goes (MATH-M6-F64-GAP-BREAKDOWN, 2026-10-24, keke, counted)](saturation/16-f64-exp-log-pow-gap-to-glibc.md): section 16
+- [17. First counts of the three unmeasured rows (BENCH-ROWS-UNMEASURED, 2026-10-24)](saturation/17-first-counts-of-the-three-unmeasured-rows.md): section 17
