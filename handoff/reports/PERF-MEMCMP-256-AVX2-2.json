@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "Fixed lastblock-offset plant; 9/9 plants caught, direct gate green; no code change",
  "branch": "task/perf-memcmp-256-avx2-2",
- "head": null,
+ "head": "577016bc",
  "gate": {
   "affected": "ok (rc 0)",
   "peak": "9.9G"
