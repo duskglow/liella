@@ -404,7 +404,7 @@ fn strstr_filter_switch_keeps_every_candidate() {
                     h[align + d] = b'e';
                     let at = align + d + gap;
                     h[at..at + nd.len()].copy_from_slice(nd);
-                    let r = s::strstr(h[align..].as_ptr().cast(), b"needle\0".as_ptr().cast());
+                    let r = s::strstr(h[align..].as_ptr().cast(), c"needle".as_ptr());
                     assert_eq!(r as usize, h.as_ptr() as usize + at, "avx2={avx2} d={d} gap={gap} align={align}");
                 }
             }
