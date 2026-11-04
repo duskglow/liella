@@ -1,0 +1,25 @@
+{
+ "task": "MATH-M5-CPLX-F128-ZIV-C-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "NOT READY: 1536/3072 Ziv ladder implemented and unit-tested; gate running; plants, counts, next merge pending",
+ "branch": "task/math-m5-cplx-f128-ziv-c-2",
+ "head": "68e1f799",
+ "gate": {
+  "affected": "running (kanon math-m5-cplx-f128-ziv-c-2-gate2); gate rc 101 superseded (clippy large_enum_variant)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "WIDTH_SLACK proves wider bounds by a scaling argument (series counts <= B/768 times), not kernel-by-kernel re-derivation",
+  "cpow start-step selection from ex(c), ex(d) not done (perf only)"
+ ],
+ "refused": [],
+ "improvement": "Brief budget 90k context for an L story with a 4-width ladder is too small; split ladder code and plants/counts into two stories",
+ "next_step": "read gate, run plants and counts job, merge origin/next, final gate",
+ "report_file": "handoff/math-m5-cplx-f128-ziv.md",
+ "jobs": [
+  "kanon:math-m5-cplx-f128-ziv-c-2-gate2"
+ ]
+}
