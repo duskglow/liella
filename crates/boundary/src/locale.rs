@@ -335,8 +335,13 @@ pub fn byte_class(c: i32) -> Class {
     if w == 0 {
         return class_unstored(c);
     }
-    let Some(o) = entry_offset::<2>(c) else { return Class(0) };
-    table_bytes::<2>(w).get(o..o.wrapping_add(2)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(Class(0), |b| Class(u16::from_ne_bytes(b)))
+    // The entry's address is the word plus twice the (signed) character: one range test, no
+    // rebasing of the word to the table's first entry.
+    if entry_offset::<2>(c).is_none() {
+        return Class(0);
+    }
+    let at = w.wrapping_add_signed(isize::try_from(c).unwrap_or(0).wrapping_mul(2));
+    conv::mapped_bytes(at, 2).first_chunk::<2>().map_or(Class(0), |b| Class(u16::from_ne_bytes(*b)))
 }
 
 /// `toupper` (`upper`) or `tolower` of `c` through the calling thread's word `w` (D-5.5);

@@ -1,0 +1,12 @@
+{"task": "PERF-CTYPE-LANGINFO-ACCESS-6", "model": "sonnet", "tokens": null,
+ "result": "merged origin/next (locale.rs conflict resolved to next's ctype_off form, byte_class edit kept); gate and plants queued on the merged head",
+ "branch": "task/perf-ctype-langinfo-access-6", "head": "see hand-back",
+ "gate": {"affected": "perf-ctype-langinfo-access-6-gate", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["perf-ctype-langinfo-access-6-lint was cancelled while queued and folded into the gate job", "the perf items from -3 remain undone, by the coordinator's merge-only instruction"],
+ "refused": [],
+ "jobs": ["keke:perf-ctype-langinfo-access-6-gate", "keke:perf-ctype-langinfo-access-6-plants"],
+ "improvement": "a merge-only story could carry its plants script in the brief so each run does not rewrite it after the helper rename",
+ "next_step": "read the two jobs; then the percall before/after and the remaining perf items in a new story",
+ "report_file": "handoff/perf-ctype-langinfo-access.md"}
