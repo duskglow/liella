@@ -50,19 +50,24 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
     text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| !w.is_empty())
 }
 
+/// The clause ID a clause-shaped word `w` names, if any. A test named after its clause with a word appended
+/// (`s3_2_c_1_perturb`) names it.
+fn resolve<'a>(w: &'a str, ids: &BTreeSet<String>) -> Option<&'a str> {
+    let mut base = w;
+    while !ids.contains(base) {
+        match base.rsplit_once('_') {
+            Some((b, tail)) if tail.len() >= 3 && tail.bytes().all(|c| c.is_ascii_lowercase()) => base = b,
+            _ => break,
+        }
+    }
+    ids.contains(base).then_some(base)
+}
+
 /// What `text` names: (valid clause IDs, clause-shaped words that are not IDs).
 fn named<'a>(text: &'a str, ids: &BTreeSet<String>) -> (usize, Vec<&'a str>) {
     let (mut valid, mut stale) = (0, Vec::new());
     for w in words(text).filter(|w| clause_shaped(w)) {
-        // A test named after its clause with a word appended (`s3_2_c_1_perturb`) names it.
-        let mut base = w;
-        while !ids.contains(base) {
-            match base.rsplit_once('_') {
-                Some((b, tail)) if tail.len() >= 3 && tail.bytes().all(|c| c.is_ascii_lowercase()) => base = b,
-                _ => break,
-            }
-        }
-        if ids.contains(base) {
+        if resolve(w, ids).is_some() {
             valid += 1;
         } else {
             stale.push(w);
@@ -72,16 +77,139 @@ fn named<'a>(text: &'a str, ids: &BTreeSet<String>) -> (usize, Vec<&'a str>) {
 }
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    files_with(dir, &["rs"], out);
+}
+
+/// The files under `dir` whose extension is one of `exts`, in sorted path order.
+fn files_with(dir: &Path, exts: &[&str], out: &mut Vec<PathBuf>) {
     let Ok(rd) = fs::read_dir(dir) else { return };
     let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
     entries.sort();
     for p in entries {
         if p.is_dir() {
-            rust_files(&p, out);
-        } else if p.extension().is_some_and(|e| e == "rs") {
+            files_with(&p, exts, out);
+        } else if p.extension().and_then(|e| e.to_str()).is_some_and(|e| exts.contains(&e)) {
             out.push(p);
         }
     }
+}
+
+/// `src` without its `clause!(...)` / `commentary!(...)` items (a pending stub or a commentary item is an ignored
+/// test or a constant, not a test, so it must not credit its ID to the test above it), plus the IDs of the
+/// commentary items it held. An item runs from its macro name at a line start to the `"##);` closing its raw string.
+fn strip_items(src: &str) -> (String, Vec<String>) {
+    let (mut out, mut commentary, mut rest) = (String::with_capacity(src.len()), Vec::new(), src);
+    loop {
+        let at = ["clause!(", "commentary!("].iter().filter_map(|m| rest.match_indices(m).find(|(i, _)| *i == 0 || rest.as_bytes()[i - 1] == b'\n').map(|(i, _)| (i, *m))).min();
+        let Some((i, m)) = at else { break };
+        out.push_str(&rest[..i]);
+        let item = &rest[i..];
+        let end = item.find("\"##);").map_or(item.len(), |e| e + 5);
+        if m == "commentary!(" {
+            commentary.extend(words(&item[m.len()..]).next().map(String::from));
+        }
+        rest = &item[end..];
+    }
+    out.push_str(rest);
+    (out, commentary)
+}
+
+/// Sort key of a spec section number (`11` < `11.1` < `11.2` < `11.10`, `12.5` < `12.5a`).
+fn section_key(s: &str) -> Vec<(u32, String)> {
+    s.split('.')
+        .map(|part| {
+            let d = part.bytes().take_while(u8::is_ascii_digit).count();
+            (part[..d].parse().unwrap_or(u32::MAX), part[d..].to_string())
+        })
+        .collect()
+}
+
+/// `cargo xtask trace --untested [--out <file>]`: report only, never fails on what it finds. Lists every clause of
+/// `spec/clauses.tsv` that no test names, grouped by spec section with a count per section. A clause counts as
+/// tested when a Rust `#[test]` under `crates/*/tests` or `crates/*/src` names its ID in its own text (as
+/// [`test_texts`] splits a file: its name, leading comment block or body), or a conformance program under
+/// `conformance/` names it anywhere. Prints the per-section summary; `--out` also writes the full list as Markdown.
+pub fn untested(root: &Path, out: Option<&Path>) -> Result<(), String> {
+    let tsv = fs::read_to_string(root.join("spec/clauses.tsv")).map_err(|e| format!("spec/clauses.tsv: {e}"))?;
+    let rows: Vec<Vec<&str>> = tsv.lines().skip(1).map(|l| l.splitn(4, '\t').collect::<Vec<_>>()).filter(|r| r.len() == 4).collect();
+    let ids: BTreeSet<String> = rows.iter().map(|r| r[0].to_string()).collect();
+    let mut credited: BTreeSet<String> = BTreeSet::new();
+    let credit = |credited: &mut BTreeSet<String>, text: &str| {
+        for w in words(text).filter(|w| clause_shaped(w)) {
+            if let Some(id) = resolve(w, &ids) {
+                credited.insert(id.to_string());
+            }
+        }
+    };
+    let mut files = Vec::new();
+    let mut krates: Vec<PathBuf> = fs::read_dir(root.join("crates")).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect();
+    krates.sort();
+    for k in &krates {
+        rust_files(&k.join("tests"), &mut files);
+        rust_files(&k.join("src"), &mut files);
+    }
+    let mut commentary: BTreeSet<String> = BTreeSet::new();
+    for f in &files {
+        let (src, items) = strip_items(&fs::read_to_string(f).map_err(|e| format!("{}: {e}", f.display()))?);
+        commentary.extend(items);
+        test_texts(&src).iter().for_each(|t| credit(&mut credited, t));
+    }
+    let by_rust = credited.len();
+    let mut progs = Vec::new();
+    files_with(&root.join("conformance"), &["c", "h", "sh", "rs"], &mut progs);
+    for f in &progs {
+        credit(&mut credited, &fs::read_to_string(f).map_err(|e| format!("{}: {e}", f.display()))?);
+    }
+
+    // Section -> (clauses, untested rows), in section order.
+    let mut sections: Vec<(&str, usize, Vec<&Vec<&str>>)> = Vec::new();
+    for r in &rows {
+        let i = match sections.iter().position(|s| s.0 == r[1]) {
+            Some(i) => i,
+            None => {
+                sections.push((r[1], 0, Vec::new()));
+                sections.len() - 1
+            }
+        };
+        sections[i].1 += 1;
+        if !credited.contains(r[0]) && !commentary.contains(r[0]) {
+            sections[i].2.push(r);
+        }
+    }
+    sections.sort_by_key(|s| section_key(s.0));
+    let untested: usize = sections.iter().map(|s| s.2.len()).sum();
+    let summary = format!(
+        "trace --untested: {} clauses, {} tested ({by_rust} by Rust tests, {} more by conformance programs), {} commentary (not testable), {untested} untested in {} of {} sections",
+        rows.len(),
+        credited.len(),
+        credited.len() - by_rust,
+        commentary.iter().filter(|c| !credited.contains(*c)).count(),
+        sections.iter().filter(|s| !s.2.is_empty()).count(),
+        sections.len()
+    );
+    println!("{summary}");
+    for s in sections.iter().filter(|s| !s.2.is_empty()) {
+        println!("  {:<6} {:>3} of {:>3} untested", s.0, s.2.len(), s.1);
+    }
+    let Some(out) = out else { return Ok(()) };
+    let mut md = String::from("# Spec clauses with no traced test\n\nProduced by `cargo xtask trace --untested --out <this file>` (report only: it never fails the build). ");
+    md.push_str("A clause counts as tested when a Rust `#[test]` (`crates/*/tests`, `crates/*/src`) names its ID in its own text ");
+    md.push_str("(name, leading comment block or body), or a program under `conformance/` names it. A test named only after a ");
+    md.push_str("symbol (`sym_`, `fam_`) credits no clause, so a clause listed here may still be exercised by a test that lacks its tag.\n\n");
+    md.push_str(&format!("{summary}.\n\n## Per section\n\n| Section | Clauses | Untested |\n|---|---|---|\n"));
+    for s in &sections {
+        md.push_str(&format!("| {} | {} | {} |\n", s.0, s.1, s.2.len()));
+    }
+    md.push_str("\n## Untested clauses\n");
+    for s in sections.iter().filter(|s| !s.2.is_empty()) {
+        md.push_str(&format!("\n### {} ({} of {})\n\n", s.0, s.2.len(), s.1));
+        for r in &s.2 {
+            let text: String = r[3].chars().take(200).collect();
+            let more = if r[3].chars().count() > 200 { " ..." } else { "" };
+            md.push_str(&format!("- `{}` ({}): {text}{more}\n", r[0], r[2]));
+        }
+    }
+    fs::write(out, md).map_err(|e| format!("{}: {e}", out.display()))
 }
 
 /// How a test is traced.
@@ -347,7 +475,8 @@ fn duplicate_rows(files: &[(String, String)]) -> Vec<(String, Vec<String>)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{clause_shaped, decision_ids, duplicate_rows, test_texts};
+    use super::{clause_shaped, decision_ids, duplicate_rows, resolve, section_key, strip_items, test_texts};
+    use std::collections::BTreeSet;
 
     #[test]
     fn a_tag_is_credited_to_the_test_it_belongs_to() {
@@ -408,5 +537,31 @@ fn none() {}
         for w in ["s04_strings", "s12_stdio", "sym_getpass", "s1", "s1_2", "s1_2_", "s1_2a3_c"] {
             assert!(!clause_shaped(w), "{w}");
         }
+    }
+
+    // no spec clause: the report's section order (numeric, a letter suffix after its number).
+    #[test]
+    fn sections_sort_by_number() {
+        let mut s = vec!["11.10", "2.1", "11", "12.5a", "11.2", "12.5", "0.6"];
+        s.sort_by_key(|x| section_key(x));
+        assert_eq!(s, ["0.6", "2.1", "11", "11.2", "11.10", "12.5", "12.5a"]);
+    }
+
+    // no spec clause: a clause-named test with a word appended credits its clause; an unknown ID credits nothing.
+    #[test]
+    fn resolve_strips_appended_words() {
+        let ids: BTreeSet<String> = ["s3_2_c_1".to_string()].into();
+        assert_eq!(resolve("s3_2_c_1_perturb", &ids), Some("s3_2_c_1"));
+        assert_eq!(resolve("s3_2_c_1", &ids), Some("s3_2_c_1"));
+        assert_eq!(resolve("s3_2_c_2", &ids), None);
+    }
+
+    // no spec clause: a pending `clause!` stub after a test is not credited to it; a commentary item is reported.
+    #[test]
+    fn stubs_are_not_tests() {
+        let src = "#[test]\nfn s1_1_c_0() {}\nclause!(s1_1_c_1, \"1.1\", \"Contract\", r##\"two\nlines\"##);\ncommentary!(s1_1_n_0, \"1.1\", \"Notes\", r##\"x\"##);\nfn tail() { s1_1_c_2(); }\n";
+        let (out, commentary) = strip_items(src);
+        assert!(!out.contains("s1_1_c_1") && !out.contains("s1_1_n_0") && out.contains("s1_1_c_2"), "{out}");
+        assert_eq!(commentary, ["s1_1_n_0"]);
     }
 }
