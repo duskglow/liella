@@ -30,3 +30,10 @@ Four re-exec tests that landed on next since (search_nomem, strto_internal_group
 Jobs on kanon: harness-reexec-ignored-2-plants (rc 0; 4 plants on those four files, each caught by reexec-audit), harness-reexec-ignored-2-gate (escalates to FULL, detached; dispatcher reads it).
 clippy --workspace --all-targets --all-features -D warnings and cargo xtask static: clean on the final code head.
 Next step: none beyond the gate result.
+
+## HARNESS-REEXEC-IGNORED-3 (merge conflict)
+Branch task/harness-reexec-ignored-3. Merged origin/next; the only conflict was xtask/src/main.rs (dispatch arms and the static check list). Kept both sides:
+next's `lab-names` and `fs-order` plus this branch's `reexec-audit`; the list is now 21 entries. No other file needed a change.
+Jobs on keke: harness-reexec-ignored-3-lint (clippy --workspace --all-targets --all-features -D warnings, then cargo xtask static: rc 0),
+harness-reexec-ignored-3-gate (affected --base origin/next --run, detached; the dispatcher reads it). Plants were not rerun: the plant files are unchanged by the merge (4/4 caught on the -2 head).
+Next step: none beyond the gate result.
