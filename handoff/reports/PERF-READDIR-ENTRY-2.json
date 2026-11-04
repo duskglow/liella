@@ -1,0 +1,11 @@
+{"task": "PERF-READDIR-ENTRY-2", "model": "opus", "tokens": null,
+ "result": "readdir hit path made frameless (miss path one cold call that sets errno): readdir_entry_flat user instructions 50.29 -> 46.32 per entry vs glibc 46.12; plants 3/3 CAUGHT, static green, gate queued",
+ "branch": "task/perf-readdir-entry-2", "head": "8dee0d52 (code; this report commit on top)",
+ "gate": {"affected": "perf-readdir-entry-2-gate queued at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["branch stacks on task/perf-fswalk-phys, which is not in origin/next yet", "fts_entry_flat stays 1493 vs 794 user instructions per entry; not a readdir cost, candidate for its own story"],
+ "refused": [],
+ "improvement": "the host's job queue (4 jobs ahead, 10+ min) took most of the wall time; the cbench binaries' CBENCH_COUNTERS ctr lines give user-mode counts directly and should be in `xtask bench --counters` output so a story need not run them by hand",
+ "next_step": "none for readdir (gap 1.004); fts_entry_flat user gap as a separate story",
+ "report_file": "handoff/PERF-READDIR-ENTRY.md",
+ "jobs": ["perf-readdir-entry-2-gate", "perf-readdir-entry-2-plants", "perf-readdir-entry-2-percall", "perf-readdir-entry-2-static"]}
