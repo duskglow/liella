@@ -11,7 +11,7 @@
 //! and `_Float128`, in all four modes. Liella calls the library core (`liella_math::complex`)
 //! directly, so no C compiler or product build is needed. An operand the oracle cannot decide
 //! within 2^14 bits is listed and counted, never passed silently; the test fails on any part
-//! that differs or on more than `UNDECIDED_MAX` such operands per family and format.
+//! that differs or on any such operand (none is expected on this grid).
 //!
 //! The ladder counters (`retries`, `wide_retries`, `wider_retries`, `residual`) are printed per
 //! test (`--nocapture`): a part decided only through the residual path is printed with its
@@ -29,10 +29,6 @@ use liella_math::real::Real;
 use liella_math::{Rounding, F128, F80};
 use liella_mathtools::cplx;
 use liella_mathtools::mp::{self, Big, Fmt, Round};
-
-/// An operand pair the oracle cannot decide within 2^14 bits (each is printed). None is
-/// expected on this grid; the allowance keeps a future oracle limit visible but bounded.
-const UNDECIDED_MAX: usize = 0;
 
 const MODES: [(Rounding, Round); 4] =
     [(Rounding::Nearest, Round::Nearest), (Rounding::Up, Round::Up), (Rounding::Down, Round::Down), (Rounding::Zero, Round::Zero)];
@@ -157,7 +153,7 @@ fn check<F: Real>(fmt: Fmt, fam: usize) {
         println!("  {b}");
     }
     assert!(bad.is_empty(), "{name} p{}: {} parts differ from the correct rounding", fmt.prec, bad.len());
-    assert!(undecided <= UNDECIDED_MAX, "{name} p{}: {undecided} parts the oracle cannot decide", fmt.prec);
+    assert_eq!(undecided, 0, "{name} p{}: {undecided} parts the oracle cannot decide", fmt.prec);
 }
 
 macro_rules! grid_tests {
