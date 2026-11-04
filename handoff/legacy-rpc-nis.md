@@ -1,36 +1,33 @@
-# Handoff: LEGACY-RPC-NIS-STUBS-6 (rcmd family stubbed and verified: gate green, plants run; RPC clnt/svc stubs next)
+# Handoff: LEGACY-RPC-NIS-STUBS-7 (fs-order CI red fixed; rcmd family and auth stubs done; RPC clnt/svc stubs next)
 
-**State:** branch `task/legacy-rpc-nis-stubs-6` (continues -5/-4/-3/-2). Code head **a51b0a96** (s15_8_c_3 errno fix);
-the commit after it is this handoff and the report. Role **mei:~/w/s2** (synced at a51b0a96).
+**State:** branch `task/legacy-rpc-nis-stubs-7` (continues -6/-5/-4/-3/-2). Code head **4174064d**; the commit after it
+is this handoff and the report. Role **mei:~/w/s2** (synced at 4174064d). origin/next (432f1ef7) merged in at 53a988e7.
 **Decisions in force:** D-15.7 (rcmd family = stubs; no compat flag, owner ruling #2292; ruserpass/__ivaliduser stubbed,
 #2293), D-29.4 (failing stubs: -1, errno EOPNOTSUPP). Differences row after the secure-RPC row.
 
 ## Done this run
-- Why -5's gate2 was red: `s15_8_c_3` set errno to 0 *before* the `ivalid` fixture helper, whose own file I/O
-  (scratch path, `fs::write`, `fopen`) left ENOENT (2) behind; the stub (`__ivaliduser` = bare `-1`) never writes
-  errno. Fixed in the test (a51b0a96): `ivalid` plants a non-zero sentinel (0x5a5a) immediately before the call and
-  returns errno read immediately after; the ruserok/iruserok part uses the same sentinel (a stub that clears errno
-  is now caught too). The test already cites D-15.7. No product code changed.
-- Gate `legacy-rpc-nis-stubs-6-gate` (mei, a51b0a96, `~/work/legacy-rpc-nis-stubs-6/check.sh` under `~/bin/gate 16G`:
+- Cause of -6's CI red: the `fs-order` lint (it landed on next after -6 was cut) flagged `open_fds()` in
+  `crates/boundary/tests/s29_rpc_auth_stubs.rs`, which counted `/proc/self/fd` with `.map(Iterator::count)`.
+  Fix: `open_fds()` collects the descriptor names into a `BTreeSet<OsString>` and the test compares sets. This removes
+  the order dependence and also catches a stub that closes one descriptor and opens another. The lint reads only
+  the function body, so the set has to be named in the body (`collect::<BTreeSet<_>>()`); a type that appears only
+  in the signature does not count (that was gate 1's red, 4174064d fixes it).
+- Merge conflict in `plan/07-decisions/s26-29.md`: next added D-29.3 at the place this branch has D-29.4. Kept both, in id order.
+- Gate `legacy-rpc-nis-stubs-7-gate2` (mei, 4174064d, `~/work/legacy-rpc-nis-stubs-7/check.sh` under `~/bin/gate 16G`:
   clippy --all-targets --all-features -D warnings, `cargo xtask static`, `cargo xtask affected --base origin/next --run`):
-  **rc 0, 6350 passed / 0 failed / 1114 ignored, 4 suites ok, peak 13G, oom_kill 0.**
-- regex_enomem (`regcomp_out_of_memory_returns_reg_espace_and_releases_its_work`) **PASSES** in that gate on mei
-  under `gate 16G`, both modes. The -4 failure is not reproduced on keke or on mei: treat as closed unless it recurs.
-- Plants: `~/work/legacy-rpc-nis-stubs-6/plants.sh <copy-name>` (RAM copy `/mnt/zram/claude/legacy-rpc-nis-stubs-6/<name>`,
-  runs `cargo test -p liella --test s15_sockets_clauses`, CAUGHT needs `test <name> ... FAILED`, exit 1 on any survivor).
-  10 plants on crates/boundary/src/posix/s15_sockets.rs: EINVAL instead of EOPNOTSUPP, rresvport writes *port,
-  rresvport_af returns an fd, rcmd writes *fd2p, ruserok allows, iruserok_af allows, __ivaliduser clears errno,
-  __ivaliduser allows, rexec sets no errno, ruserpass writes *aname. Result: **`legacy-rpc-nis-stubs-6-plants4` rc 0,
-  10/10 CAUGHT** with the expected test (s15_8_c_1 for rcmd, _2 for rresvport, _3 for the trust checks, _4 for rexec/ruserpass).
-  Superseded: `-plants` (baseline named `s15_sockets_symbols`, a liella-boundary target), `-plants2` (baseline red: the suite
-  needs `cargo xtask so`), `-plants3` (10/10 caught, but the rcmd plant's expected name was wrong: _1, not _2).
+  **rc 0, 6386 passed / 0 failed / 1114 ignored, 4 suites ok, fs-order ok, peak 13G, oom_kill 0.** Superseded: `-gate` (static red, see above).
+- Plants `~/work/legacy-rpc-nis-stubs-7/plants.sh <copy-name>` (RAM copy under `/mnt/zram/claude/legacy-rpc-nis-stubs-7/`,
+  `cargo test -p liella-boundary --test s29_rpc_auth_stubs`): getnetname and key_setnet each leak a `dup(2)`.
+  **`legacy-rpc-nis-stubs-7-plants2` (final head) rc 0, 2/2 CAUGHT** with `<name>: opened a descriptor`. Superseded: `-plants`
+  (same result, on the older head 2e0a8012).
 
 ## Things not to redo
 - Compat entries need `crate::internal_entry!` (internal names) or `export!` (public names).
 - Role dirs are not git repos. sync_role.sh takes the host NAME (`mei`), not the address. Default ssh key reaches mei.
-- `s15_sockets_symbols` is a liella-boundary test target; `s15_sockets_clauses` is liella's.
+- `s15_sockets_symbols` is a liella-boundary test target; `s15_sockets_clauses` is liella's (it needs `cargo xtask so`).
+- fs-order: put the ordering token (`BTreeSet`, `.sort`, `.count()` ...) in the body of the function that lists the directory.
 - Dead code still to review (clippy is clean, so it is either used or allowed): netaddr::rresvport/rcmd_af/rexec_af/
-  ruserok/iruserok/ruserpass/ivaliduser wrappers and helpers; legacy crate `rcmd` (step 4).
+  ruserok/iruserok/ruserpass/ivaliduser wrappers and helpers; legacy crate `rcmd` (step 3).
 
 ## Next steps (in order)
 1. RPC client/server stubs (s29_rpc_clnt.rs keeping CreateErrC, createerr storage, __rpc_thread_createerr and the
