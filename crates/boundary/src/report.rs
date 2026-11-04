@@ -21,8 +21,7 @@
 //! status, since the headers declare that form `noreturn` (the reference returns).
 //!
 //! **Output** goes through the `stderr` stream as one piece of text: through its codec when it
-//! is wide-oriented; `perror` leaves an unoriented stream unoriented (§2.2), the others make it
-//! byte-oriented. `errno` is left as it was, except that a failed write stores its error.
+//! is wide-oriented; an unoriented stream becomes byte-oriented (§2.2). `errno` is left as it was, except that a failed write stores its error.
 
 use core::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering::Relaxed};
 
