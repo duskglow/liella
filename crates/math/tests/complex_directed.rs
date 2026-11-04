@@ -125,17 +125,17 @@ fn check<F: Real>(fmt: Fmt, fam: usize) {
                         println!("{name} p{} {lm:?}: residual path at x = {}{mx}·2^{kx}, y = 2^{ky}", fmt.prec, if neg { "-" } else { "" });
                     }
                     lines += 1;
-                    for j in 0..2 {
+                    for (j, &g) in got.iter().enumerate() {
                         match oracle(name, fmt, om, &ops, j) {
                             None => {
                                 undecided += 1;
                                 println!("{name} p{} {lm:?} part {j}: oracle undecided at x = {}{mx}·2^{kx}, y = 2^{ky}", fmt.prec, if neg { "-" } else { "" });
                             }
-                            Some(want) if !same(fmt, got[j], want) => bad.push(format!(
+                            Some(want) if !same(fmt, g, want) => bad.push(format!(
                                 "{name} p{} {lm:?} part {j}: x = {}{mx}·2^{kx}, y = 2^{ky}: got {:#x}, want {want:#x}",
                                 fmt.prec,
                                 if neg { "-" } else { "" },
-                                got[j]
+                                g
                             )),
                             Some(_) => {}
                         }
