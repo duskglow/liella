@@ -1,0 +1,12 @@
+{"task": "DL-THREAT-TEXT-2", "model": "opus", "tokens": null,
+ "result": "Draft section A (env additions, TZ row, GLIBC_TUNABLES, loader variables) folded into the threat model; COMPAT-NEW -> COMPAT-19; COMPAT-19 ignored in a secure process as COMPAT-12",
+ "branch": "task/dl-threat-text-2", "head": "9f6aa513",
+ "gate": {"affected": "no gate (docs only); static + workspace clippy rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Implementation note on the TZ rule for secure processes sent privately with the hand-back"],
+ "refused": [],
+ "jobs": ["kanon:dl-threat-text-2-static", "kanon:dl-threat-text-2-static-2"],
+ "improvement": "tools/vm_ssh.sh is a sourced library (vm_ssh_cmd); the thread rules still show it as an executable wrapper, which cost a call",
+ "next_step": "Land; DL-29 adds a TZ secure-mode checklist row; DL-8 may start after landing",
+ "report_file": "handoff/dl-threat-text.md"}
