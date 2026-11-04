@@ -135,6 +135,10 @@ impl Env for Glue {
         isize::try_from(ffi::liella_machine_call3(f, w(a), w(b), w(c))).unwrap_or(-1)
     }
 
+    fn errno(&self) -> i32 {
+        crate::errno::get()
+    }
+
     fn list_head(&self) -> &AtomicUsize {
         &data::_IO_list_all
     }
