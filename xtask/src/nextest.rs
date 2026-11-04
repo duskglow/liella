@@ -31,12 +31,54 @@ pub fn pass0_only(krate: &str, target: &str) -> bool {
 /// The nextest filter of the exports-interposed pass: every test but those of `PASS0_ONLY`.
 /// `None` when `extra` brings its own filter expression (nextest ORs several `-E`s, so adding one
 /// would widen the caller's selection): the pass then runs as the caller asked.
-pub fn pass1_filter(extra: &[String]) -> Option<Vec<String>> {
+/// `once` adds the binary ids `unchanged_binaries` found (CI-GATE-DIET).
+pub fn pass1_filter(extra: &[String], once: &[String]) -> Option<Vec<String>> {
     if extra.iter().any(|a| a == "-E" || a.starts_with("--filter") || a.starts_with("-E")) {
         return None;
     }
-    let ids: Vec<String> = PASS0_ONLY.iter().map(|(c, t)| format!("binary_id({c}::{t})")).collect();
+    let mut ids: Vec<String> = PASS0_ONLY.iter().map(|(c, t)| format!("binary_id({c}::{t})")).collect();
+    ids.extend(once.iter().filter(|b| !PASS0_ONLY.iter().any(|(c, t)| **b == format!("{c}::{t}"))).map(|b| format!("binary_id({b})")));
     Some(vec!["-E".to_string(), format!("not ({})", ids.join(" | "))])
+}
+
+/// The marker of liella-boundary's code in a test binary: its crate name, which every symbol
+/// (legacy and v0 mangling) and debug-info unit of that crate's code carries.
+const BOUNDARY_MARK: &[u8] = b"liella_boundary";
+
+/// Whether a binary's bytes may hold liella-boundary code. The exports-interposed pass changes
+/// only liella-boundary's features (`export = []` enables nothing in any other crate), and rustc
+/// links a dependency only into binaries that use it, so a binary without the marker is the same
+/// code in both passes and runs once (CI-GATE-DIET). Unreadable or empty = may hold it.
+pub fn may_hold_boundary_code(bytes: Option<&[u8]>) -> bool {
+    match bytes {
+        Some(b) if !b.is_empty() => b.windows(BOUNDARY_MARK.len()).any(|w| w == BOUNDARY_MARK),
+        _ => true,
+    }
+}
+
+/// `(binary id, binary path)` of every test binary in `cargo nextest list --list-type
+/// binaries-only --message-format json` output.
+fn listed_binaries(json: &str) -> Vec<(String, String)> {
+    let field = |chunk: &str, key: &str| chunk.split_once(key).and_then(|(_, r)| r.split_once('"')).map(|(v, _)| v.to_string());
+    json.split("\"binary-id\":\"").skip(1).filter_map(|c| Some((c.split_once('"')?.0.to_string(), field(c, "\"binary-path\":\"")?))).collect()
+}
+
+/// The test binaries of the exports-interposed build (`features`) that hold no liella-boundary
+/// code, printed with the reason. Any failure to list = none (every binary runs in both passes).
+pub fn unchanged_binaries(cargo: &str, root: &std::path::Path, features: &[String]) -> Vec<String> {
+    let out = poison(&mut Command::new(cargo)).current_dir(root).args(["nextest", "list", "--workspace"]).args(features).args(["--list-type", "binaries-only", "--message-format", "json"]).stderr(Stdio::inherit()).output();
+    let Ok(out) = out.map_err(|e| eprintln!("export pass: cannot list the binaries ({e}); all run")) else { return Vec::new() };
+    if !out.status.success() {
+        eprintln!("export pass: listing the binaries failed ({}); all run", out.status);
+        return Vec::new();
+    }
+    let mut once: Vec<String> = listed_binaries(&String::from_utf8_lossy(&out.stdout)).into_iter().filter(|(_, p)| !may_hold_boundary_code(std::fs::read(p).ok().as_deref())).map(|(id, _)| id).collect();
+    once.sort();
+    eprintln!("export pass: {} test binaries hold no liella-boundary code (no `{}` in the binary), so the export features cannot change them; they ran in the first pass and do not run again:", once.len(), String::from_utf8_lossy(BOUNDARY_MARK));
+    for b in &once {
+        eprintln!("  once: {b}");
+    }
+    once
 }
 
 /// Whether the workspace tests run under nextest: installed, and not switched off.
@@ -249,8 +291,25 @@ mod tests {
             }
         }
         assert!(pass0_only("liella-math", "special_cr") && !pass0_only("liella-math", "special_ld_products"));
-        assert_eq!(pass1_filter(&[]).unwrap_or_default(), ["-E", "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels))"]);
-        assert_eq!(pass1_filter(&["-E".to_string(), "test(x)".to_string()]), None);
+        assert_eq!(pass1_filter(&[], &[]).unwrap_or_default(), ["-E", "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels))"]);
+        assert_eq!(pass1_filter(&["-E".to_string(), "test(x)".to_string()], &[]), None);
+        let once = ["liella-math::special_cr".to_string(), "liella-math::fast64".to_string()];
+        assert_eq!(pass1_filter(&[], &once).unwrap_or_default()[1], "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | binary_id(liella-math::fast64))");
+    }
+
+    #[test]
+    fn a_binary_holding_boundary_code_is_never_run_once() {
+        // no spec clause: gate tooling (CI-GATE-DIET), not libc behaviour.
+        assert!(may_hold_boundary_code(Some(b"\x7fELF..._ZN15liella_boundary6export6malloc17h0E...")));
+        assert!(may_hold_boundary_code(Some(b"_RNvNtCs1_15liella_boundary4exp6malloc")));
+        assert!(may_hold_boundary_code(Some(b"")), "an empty binary is not proof of anything");
+        assert!(may_hold_boundary_code(None), "an unreadable binary runs in both passes");
+        assert!(!may_hold_boundary_code(Some(b"\x7fELF..._ZN11liella_math7special2j017h0E liella-boundary crates/boundary")));
+        // This test binary is xtask's: it names the marker in its literals, so it is never skipped.
+        assert!(may_hold_boundary_code(std::fs::read(std::env::current_exe().unwrap_or_default()).ok().as_deref()));
+        let json = r#"{"rust-build-meta":{},"rust-binaries":{"liella-math::fast64":{"binary-id":"liella-math::fast64","binary-name":"fast64","package-id":"p","kind":"test","binary-path":"/t/fast64-ab","build-platform":"target"},"liella":{"binary-id":"liella","binary-name":"liella","package-id":"q","kind":"lib","binary-path":"/t/liella-cd","build-platform":"target"}}}"#;
+        assert_eq!(listed_binaries(json), [("liella-math::fast64".to_string(), "/t/fast64-ab".to_string()), ("liella".to_string(), "/t/liella-cd".to_string())]);
+        assert!(listed_binaries("not json").is_empty());
     }
 
     #[test]

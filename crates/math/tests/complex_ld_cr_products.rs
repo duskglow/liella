@@ -351,7 +351,30 @@ macro_rules! shards {
             // Clauses: s10_5_c_0, s10_0_f_0, s10_0_g_0 (D-10.17, D-10.18, D-10.21).
             complex_long_double_functions($k);
         }
-    )*};
+    )*
+        /// The shard tests are exactly shards `0..SHARDS`, in order: none missing, none twice.
+        const _: () = {
+            let ks = [$($k),*];
+            assert!(ks.len() == SHARDS);
+            let mut i = 0;
+            while i < ks.len() {
+                assert!(ks[i] == i);
+                i += 1;
+            }
+        };
+    };
+}
+
+/// The shards of the sweep (`shard::SHARDS`): 20 since CI-GATE-DIET (8 shards ran 330-500 s each
+/// in the CI gate); the inputs are the same lines, split 20 ways instead of 8.
+const SHARDS: usize = 20;
+
+#[test]
+fn the_shards_check_every_line_exactly_once() {
+    // no spec clause: the sharding of the sweep (CI-GATE-DIET) covers the unsharded test's lines.
+    for len in [0, 1, 19, 20, 21, 35_001, 36_017] {
+        assert!(shard::partition_holds(len), "{len} lines");
+    }
 }
 shards! {
     complex_long_double_functions_against_the_reference_and_the_oracle_s0 = 0;
@@ -362,4 +385,16 @@ shards! {
     complex_long_double_functions_against_the_reference_and_the_oracle_s5 = 5;
     complex_long_double_functions_against_the_reference_and_the_oracle_s6 = 6;
     complex_long_double_functions_against_the_reference_and_the_oracle_s7 = 7;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s8 = 8;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s9 = 9;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s10 = 10;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s11 = 11;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s12 = 12;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s13 = 13;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s14 = 14;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s15 = 15;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s16 = 16;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s17 = 17;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s18 = 18;
+    complex_long_double_functions_against_the_reference_and_the_oracle_s19 = 19;
 }

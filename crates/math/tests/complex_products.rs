@@ -30,6 +30,8 @@ mod oracle;
 
 #[path = "support/shard.rs"]
 mod shard;
+/// The shards of this test (`shard::SHARDS`).
+const SHARDS: usize = 8;
 use shard::Tally;
 
 use std::collections::BTreeMap;

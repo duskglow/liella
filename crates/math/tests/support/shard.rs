@@ -13,8 +13,15 @@ use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 
-/// The number of shards of each products test.
-pub(crate)const SHARDS: usize = 8;
+/// The number of shards of each products test: the including test's own `SHARDS` (CI-GATE-DIET:
+/// complex_ld_cr_products takes 20 so no shard runs past ~3 min in the gate, the others 8).
+pub(crate)const SHARDS: usize = super::SHARDS;
+
+/// Every line index goes to exactly one shard and the shares sum to `len`: the shards of a test
+/// together check exactly the lines the unsharded test checked.
+pub(crate)fn partition_holds(len: usize) -> bool {
+    (0..len).all(|i| (0..SHARDS).filter(|&k| mine(i, k)).count() == 1) && (0..SHARDS).map(|k| share(len, k)).sum::<usize>() == len && (0..SHARDS).all(|k| (0..len).filter(|&i| mine(i, k)).count() == share(len, k))
+}
 
 /// Whether line `i` belongs to shard `shard`.
 pub(crate)fn mine(i: usize, shard: usize) -> bool {

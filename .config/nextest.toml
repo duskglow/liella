@@ -62,6 +62,7 @@ test(/^pattern::regex::plain_tests::required_strings_are_in_every_match_/)
 | (binary(=strstr_find) & test(/^str(case)?str_matches_a_naive_search/))
 | (binary(=small_compare) & test(/^compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_/))
 | (binary(=special_cr) & test(/^long_double_bessel_functions_are_correctly_rounded_/))
+| (binary(=complex_ld_cr_products) & test(/^complex_long_double_functions_against_the_reference_and_the_oracle_s/))
 | (binary(=casecmp_avx2) & test(=casecmp_equals_the_path_of_before_at_every_alignment_pair_length_and_difference))
 | test(=affected::tests::csys_assembly_selects_the_users_of_its_symbols)
 """

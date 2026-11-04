@@ -312,7 +312,55 @@ const BESSEL_FUNCTIONS: [&str; 4] = ["j0", "j1", "y0", "y1"];
 /// are split into `BESSEL_SHARDS` shards by index (operand `i` goes to shard `i % BESSEL_SHARDS`);
 /// y0 and y1 run whole (`shards` = 1). Each shard checks that it took exactly its share of the
 /// operand list, so the shards together check the same operands in the same modes as one test.
-const BESSEL_SHARDS: usize = 8;
+/// CI-GATE-DIET: 17 (was 8; j0's shard 0 took 432 s, the others ~200 s). A prime count spreads
+/// operands that recur at a fixed stride in the list over all shards; the operands are unchanged.
+const BESSEL_SHARDS: usize = 17;
+
+macro_rules! bessel_shards {
+    ($($name:ident = $which:expr, $k:expr;)*) => {$(
+        #[test]
+        fn $name() {
+            // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+            long_double_bessel_function($which, $k, BESSEL_SHARDS);
+        }
+    )*};
+}
+// Shards 0..8 of j0 and j1 are the functions below; these are shards 8..BESSEL_SHARDS.
+bessel_shards! {
+    long_double_bessel_functions_are_correctly_rounded_j0_s8 = 0, 8;
+    long_double_bessel_functions_are_correctly_rounded_j0_s9 = 0, 9;
+    long_double_bessel_functions_are_correctly_rounded_j0_s10 = 0, 10;
+    long_double_bessel_functions_are_correctly_rounded_j0_s11 = 0, 11;
+    long_double_bessel_functions_are_correctly_rounded_j0_s12 = 0, 12;
+    long_double_bessel_functions_are_correctly_rounded_j0_s13 = 0, 13;
+    long_double_bessel_functions_are_correctly_rounded_j0_s14 = 0, 14;
+    long_double_bessel_functions_are_correctly_rounded_j0_s15 = 0, 15;
+    long_double_bessel_functions_are_correctly_rounded_j0_s16 = 0, 16;
+    long_double_bessel_functions_are_correctly_rounded_j1_s8 = 1, 8;
+    long_double_bessel_functions_are_correctly_rounded_j1_s9 = 1, 9;
+    long_double_bessel_functions_are_correctly_rounded_j1_s10 = 1, 10;
+    long_double_bessel_functions_are_correctly_rounded_j1_s11 = 1, 11;
+    long_double_bessel_functions_are_correctly_rounded_j1_s12 = 1, 12;
+    long_double_bessel_functions_are_correctly_rounded_j1_s13 = 1, 13;
+    long_double_bessel_functions_are_correctly_rounded_j1_s14 = 1, 14;
+    long_double_bessel_functions_are_correctly_rounded_j1_s15 = 1, 15;
+    long_double_bessel_functions_are_correctly_rounded_j1_s16 = 1, 16;
+}
+const _: () = assert!(BESSEL_SHARDS == 17, "shards 8..17 above are listed by hand: change them together");
+
+#[test]
+fn the_bessel_shards_take_every_operand_exactly_once() {
+    // no spec clause: the sharding of the sweep (CI-GATE-DIET) covers the unsharded operand list.
+    for len in [0usize, 1, 16, 17, 18, 1_000, 1_337] {
+        let mut seen = vec![0u8; len];
+        for k in 0..BESSEL_SHARDS {
+            let mine: Vec<usize> = (0..len).filter(|i| i % BESSEL_SHARDS == k).collect();
+            assert_eq!(mine.len(), (len + BESSEL_SHARDS - 1 - k) / BESSEL_SHARDS, "share of shard {k} of {len}");
+            mine.iter().for_each(|&i| seen[i] += 1);
+        }
+        assert!(seen.iter().all(|&n| n == 1), "{len} operands");
+    }
+}
 
 fn long_double_bessel_function(which: usize, shard: usize, shards: usize) {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.20).
