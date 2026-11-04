@@ -224,7 +224,7 @@ fn s0_6_c0_6_0() {
     assert!(products.iter().any(|p| p.ends_with("libc.so.6")), "target/liella/libc.so.6 is built by `cargo xtask so`");
     let mut dynsyms = String::new();
     for p in &products {
-        let o = std::process::Command::new("readelf").args(["--dyn-syms", "-W"]).arg(p).output().expect("readelf runs");
+        let o = std::process::Command::new("readelf").args(["--dyn-syms", "-W"]).arg(p).output().unwrap();
         assert!(o.status.success(), "readelf --dyn-syms {}: {}", p.display(), String::from_utf8_lossy(&o.stderr));
         dynsyms.push_str(&String::from_utf8_lossy(&o.stdout));
     }
