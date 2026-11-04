@@ -1,0 +1,8 @@
+{"task": "CI-GATE-DIET", "model": "opus", "tokens": null,
+ "result": "export pass skips test binaries without liella-boundary code; complex_ld_cr 20 shards, Bessel j0/j1 17 shards; after-numbers pending in the gate job",
+ "branch": "task/ci-gate-diet", "head": "see hand-back", "gate": {"affected": null, "peak": null},
+ "accepted_first_attempt": null, "rulings": [], "informational": ["before: xtask test 1537.5 s (pass 1 618 s, pass 2 709 s) from ci-gate-ce0a9ce6b on mei"],
+ "refused": [], "jobs": ["mei:ci-gate-diet-gate", "mei:ci-gate-diet-plants"],
+ "improvement": "a test's shard count lives in the test file now; the gate log could print the 10 longest tests per pass so the tail is visible without grepping",
+ "next_step": "read ci-gate-diet-gate's per-pass Summary lines and once: list; record the after-numbers in handoff/ci-gate-diet.md",
+ "report_file": "handoff/ci-gate-diet.md"}
