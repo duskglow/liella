@@ -23,7 +23,7 @@ fdopendir_99, scandir_alphasort_1000, nftw_phys_1000 6271364 -> 6269368, fts_phy
 fts_nochdir_flat_1000 6905129 -> 6917627 (+0.2%, kernel-dominated total; glibc moved by the same amount: 7960554 ->
 7969779). The hit path is 41 instructions in after/readdir.dis. Plants: 3/3 CAUGHT (sym_readdir lines 1801 and
 1804; fast-skips-record by s13_filesystem_clauses). Static (clippy -D warnings + xtask static): rc 0. Gate:
-perf-readdir-entry-2-gate was queued at hand-back.
+perf-readdir-entry-2-gate rc 0 (5 suites ok, 2192 passed, 0 failed; conformance 2/2).
 
 Run 2 jobs (keke ~/logs/jobs.tsv; driver ~/work/perf-readdir-entry-2/driver.sh, log driver.log):
 - perf-readdir-entry-2-percall: in n4, `patch -R` change.patch -> count.sh before -> `patch` -> count.sh after.
