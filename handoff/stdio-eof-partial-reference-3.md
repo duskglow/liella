@@ -9,3 +9,10 @@ Verified: gate (eofp3-gate2: 4475 passed, 0 failed), plants (eofp3-plants: stick
 clippy and static clean.
 Still open (not done): the instructions:u check of the getc/fgets/getline bench rows (origin/next vs head vs glibc) was never run;
 getdelim also returns a partial record on an ENOMEM from the sink (not reference-checked).
+
+## STDIO-EOF-PARTIAL-REFERENCE-4
+CI red cause: the port made getdelim return the bytes read so far on ANY error, including a failed buffer growth (ENOMEM from
+the sink), so `enomem_stream_grow getdelim_out_of_memory_keeps_a_valid_buffer` got a partial record instead of -1/ENOMEM and
+kept reading /dev/zero. Fix: the partial record applies to read errors only; a failed growth (ENOMEM/EOVERFLOW) is the error
+as before (`grow_failed` in `stdio_compat::getdelim`). Merged origin/next. Still open: the instructions:u check of the
+getc/fgets/getline bench rows (next vs head vs glibc) was never run.
