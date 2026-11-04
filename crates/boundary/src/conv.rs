@@ -579,18 +579,7 @@ fn find_core(hay: &[u8], needle: &[u8], ci: bool) -> Option<usize> {
     let count = hay.len().checked_sub(m)?.saturating_add(1);
     let fold = |c: u8| if ci { c.to_ascii_lowercase() } else { c };
     if m == 1 {
-        if ci {
-            return hay.iter().position(|&c| fold(c) == fold(b0));
-        }
-        // A short window (the regex prefilter's repeated searches from the end of the last match)
-        // is scanned byte by byte first; only a window longer than `SHORT` without the byte in
-        // its first `SHORT` bytes reaches the `memchr` scanner, for the rest.
-        const SHORT: usize = 16;
-        let (head, tail) = hay.split_at(hay.len().min(SHORT));
-        if let Some(i) = head.iter().position(|&c| c == b0) {
-            return Some(i);
-        }
-        return if tail.is_empty() { None } else { crate::strz::find_in(tail, b0).map(|i| i.saturating_add(SHORT)) };
+        return if ci { hay.iter().position(|&c| fold(c) == fold(b0)) } else { crate::strz::find_in(hay, b0) };
     }
     let last = m.saturating_sub(1);
     // The candidate at `at`: the whole needle there (a writer may have changed the scanned bytes).

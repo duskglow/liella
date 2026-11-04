@@ -1,7 +1,18 @@
 # PERF-RC1024-SED-UTF8: sed-utf8 instructions vs fa678f74
 
-State: branch `task/perf-rc1024-sed-utf8-2` (continues `task/perf-rc1024-sed-utf8`), code commit fa513bd3
-(on origin/next 125c0ccc); the -2 run added no code. PARTIAL: one change, gap narrowed, not closed.
+State: branch `task/perf-rc1024-sed-utf8-3` (continues -2 and the first run), code identical to fa513bd3
+(on origin/next 125c0ccc). READY: the remaining sed-utf8 +0.40% vs fa678f74 is accepted (ruling #2333) and
+recorded in docs/saturation/06 (register row "sed-utf8 workload, regex prefilter one-byte search").
+
+## PERF-RC1024-SED-UTF8-3 (2026-11-04): the short-window pre-scan loses, reverted
+
+Ruling #2333: one bounded try of a scalar pre-scan in `conv::find_core` (m == 1) before `memchr`. Tried:
+the first 16 bytes byte by byte, the rest (if any) by `strz::find_in` (commit 4c568bd7). Job
+perf-rc1024-sed-utf8-3-count (keke, wl_count, instructions:u, output SAME everywhere): sed-utf8 2485913088
+vs 2456411104 at fa513bd3 (+1.20%) and vs 2446684937 at fa678f74 (+1.60%); sed-s 9664611389 (+0.22% vs
+fa513bd3); gawk-regex, gawk-utf8, grep-E, grep-i-utf8 1.0000. Reverted (the scanner is already cheaper on
+these windows). Do not retry a scalar pre-scan here. Gate and plants rerun on the reverted head (report json).
+Next: nothing on sed-utf8; gawk-regex/gawk-utf8 are PERF-RC1024-GAWK-REST.
 
 ## PERF-RC1024-SED-UTF8-2 (2026-11-04): the presence cache cannot be hit on sed-utf8
 
