@@ -37,3 +37,12 @@ next's `lab-names` and `fs-order` plus this branch's `reexec-audit`; the list is
 Jobs on keke: harness-reexec-ignored-3-lint (clippy --workspace --all-targets --all-features -D warnings, then cargo xtask static: rc 0),
 harness-reexec-ignored-3-gate (affected --base origin/next --run, detached; the dispatcher reads it). Plants were not rerun: the plant files are unchanged by the merge (4/4 caught on the -2 head).
 Next step: none beyond the gate result.
+
+## HARNESS-REEXEC-IGNORED-4 (CI precheck red on reexec-audit)
+Branch task/harness-reexec-ignored-4. Merged origin/next (clean). cargo xtask static reported two problems, both for one test next added:
+`s16_nameservices_symbols.rs` `sym_herror_failed_write_keeps_errno` (the /dev/full re-exec): no `--include-ignored`, no `running 1 test` assertion. Fixed both, like the other sites.
+Jobs on shiki (role sh2): harness-reexec-ignored-4-lint (clippy --workspace --all-targets --all-features -D warnings + static: rc 0),
+harness-reexec-ignored-4-plants (P1 flag removed, P2 assertion removed: both CAUGHT by reexec-audit with the expected message),
+harness-reexec-ignored-4-gate (affected --base origin/next --run).
+Superseded: harness-reexec-ignored-4-static (rc 1; the failure above, before the fix).
+Next step: none beyond the gate result.
