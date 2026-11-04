@@ -82,6 +82,10 @@ static CWD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
     let mut failures = 0u64;
     let mut absorbed = 0u64;
+    // One uninjected run first: a walker may keep a bounded pool of its own state (fts keeps the
+    // slot of a closed or failed stream on a free list for the next open). That pool is filled
+    // here, so the leak checks below see only what a failed call leaves behind.
+    let _ = attempt();
     for n in 1..=20_000u64 {
         let before = s03_memory::mallinfo2().uordblks;
         let live_before = failinject::live_bytes();
