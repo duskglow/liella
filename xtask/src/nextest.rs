@@ -131,11 +131,11 @@ pub fn poison(cmd: &mut Command) -> &mut Command {
 }
 
 /// The tests that returned early because a tool or capability was missing (MSGFMT-SILENT-PASS): they pass,
-/// and nextest hides a passing test's output, so each wrote its `skipped: <binary>: <cause>` line to the
+/// and nextest hides a passing test's output, so each wrote its `SKIPPED <binary>: <cause>` line to the
 /// file `LIELLA_SKIP_LOG` names. One heading line with the count, then the sorted distinct lines with how
 /// often each occurred; empty when nothing skipped.
 fn skip_report(log: &str) -> String {
-    let mut lines: Vec<&str> = log.lines().filter(|l| l.starts_with("skipped: ")).collect();
+    let mut lines: Vec<&str> = log.lines().filter(|l| l.starts_with("SKIPPED ")).collect();
     if lines.is_empty() {
         return String::new();
     }
@@ -257,8 +257,8 @@ mod tests {
     fn skips_are_listed_with_counts() {
         assert_eq!(skip_report(""), "");
         assert_eq!(skip_report("noise\n"), "");
-        let r = skip_report("skipped: b: no msgfmt\nskipped: a: no cc\nskipped: b: no msgfmt\n");
-        assert_eq!(r, "tests that skipped part of their checks at run time: 3\n  skipped: a: no cc\n  skipped: b: no msgfmt (x2)\n");
+        let r = skip_report("SKIPPED b: no msgfmt\nSKIPPED a: no cc\nSKIPPED b: no msgfmt\n");
+        assert_eq!(r, "tests that skipped part of their checks at run time: 3\n  SKIPPED a: no cc\n  SKIPPED b: no msgfmt (x2)\n");
     }
 
     #[test]

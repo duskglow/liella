@@ -76,12 +76,14 @@ pub extern "C" fn liella___iscanonicall_bits(x: LdBits) -> c_int {
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn __iseqsig(x: f64, y: f64) -> c_int {
-    mret::ret(math::classify::iseqsig(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::classify::iseqsig(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn __iseqsigf(x: f32, y: f32) -> c_int {
-    mret::ret(math::classify::iseqsig(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::classify::iseqsig(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -891,12 +893,14 @@ pub extern "C" fn liella_ccosl_bits(x: mret::Complex<LdBits>) -> mret::Complex<L
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ceil(x: f64) -> f64 {
-    mret::ret(math::round::ceil(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::ceil(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ceilf(x: f32) -> f32 {
-    mret::ret(math::round::ceil(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::ceil(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -906,17 +910,20 @@ pub extern "C" fn liella_ceilf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ceilf32(x: f32) -> f32 {
-    mret::ret(math::round::ceil(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::ceil(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ceilf32x(x: f64) -> f64 {
-    mret::ret(math::round::ceil(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::ceil(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ceilf64(x: f64) -> f64 {
-    mret::ret(math::round::ceil(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::ceil(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1526,32 +1533,38 @@ pub extern "C" fn liella_ctanl_bits(x: mret::Complex<LdBits>) -> mret::Complex<L
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_daddl_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_ddivl_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_dfmal_bits(x: LdBits, y: LdBits, z: LdBits) -> f64 {
-    mret::ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), mret::mode87(), false))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_dmull_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn drem(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn dremf(x: f32, y: f32) -> f32 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1561,12 +1574,14 @@ pub extern "C" fn liella_dreml_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_dsqrtl_bits(x: LdBits) -> f64 {
-    mret::ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_dsubl_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -1811,272 +1826,326 @@ pub extern "C" fn liella_expm1l_bits(x: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32addf128_bits(x: F128Bits, y: F128Bits) -> f32 {
-    mret::ret(math::fused::add::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<math::F128, f32>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32addf32x(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::add::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32addf64(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::add::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32addf64x_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::add::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::add::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32divf128_bits(x: F128Bits, y: F128Bits) -> f32 {
-    mret::ret(math::fused::div::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<math::F128, f32>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32divf32x(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::div::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32divf64(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::div::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32divf64x_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::div::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::div::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32fmaf128_bits(x: F128Bits, y: F128Bits, z: F128Bits) -> f32 {
-    mret::ret(math::fused::fma_to::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::f128(z), mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::f128(z), c.mode(), false))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32fmaf32x(x: f64, y: f64, z: f64) -> f32 {
-    mret::ret(math::fused::fma_to::<f64, f32>(x, y, z, mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<f64, f32>(c.daz(x), c.daz(y), c.daz(z), c.mode(), false))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32fmaf64(x: f64, y: f64, z: f64) -> f32 {
-    mret::ret(math::fused::fma_to::<f64, f32>(x, y, z, mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<f64, f32>(c.daz(x), c.daz(y), c.daz(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32fmaf64x_bits(x: LdBits, y: LdBits, z: LdBits) -> f32 {
-    mret::ret(math::fused::fma_to::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::f80(z), mret::mode87(), false))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::fma_to::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::f80(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32mulf128_bits(x: F128Bits, y: F128Bits) -> f32 {
-    mret::ret(math::fused::mul::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<math::F128, f32>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32mulf32x(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::mul::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32mulf64(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::mul::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32mulf64x_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::mul::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::mul::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32sqrtf128_bits(x: F128Bits) -> f32 {
-    mret::ret(math::fused::sqrt::<math::F128, f32>(mret::f128(x), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<math::F128, f32>(mret::f128(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32sqrtf32x(x: f64) -> f32 {
-    mret::ret(math::fused::sqrt::<f64, f32>(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<f64, f32>(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32sqrtf64(x: f64) -> f32 {
-    mret::ret(math::fused::sqrt::<f64, f32>(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<f64, f32>(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32sqrtf64x_bits(x: LdBits) -> f32 {
-    mret::ret(math::fused::sqrt::<math::F80, f32>(mret::f80(x), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sqrt::<math::F80, f32>(mret::f80(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32subf128_bits(x: F128Bits, y: F128Bits) -> f32 {
-    mret::ret(math::fused::sub::<math::F128, f32>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<math::F128, f32>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32subf32x(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::sub::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32subf64(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::sub::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32subf64x_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::sub::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sub::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xaddf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::add::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32xaddf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::fused::add::<f64, f64>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<f64, f64>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xaddf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xdivf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::div::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32xdivf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::fused::div::<f64, f64>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<f64, f64>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xdivf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xfmaf128_bits(x: F128Bits, y: F128Bits, z: F128Bits) -> f64 {
-    mret::ret(math::fused::fma_to::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::f128(z), mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::f128(z), c.mode(), false))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32xfmaf64(x: f64, y: f64, z: f64) -> f64 {
-    mret::ret(math::fused::fma_to::<f64, f64>(x, y, z, mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<f64, f64>(c.daz(x), c.daz(y), c.daz(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xfmaf64x_bits(x: LdBits, y: LdBits, z: LdBits) -> f64 {
-    mret::ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), mret::mode87(), false))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xmulf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::mul::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32xmulf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::fused::mul::<f64, f64>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<f64, f64>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xmulf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xsqrtf128_bits(x: F128Bits) -> f64 {
-    mret::ret(math::fused::sqrt::<math::F128, f64>(mret::f128(x), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<math::F128, f64>(mret::f128(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn f32xsqrtf64(x: f64) -> f64 {
-    mret::ret(math::fused::sqrt::<f64, f64>(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<f64, f64>(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xsqrtf64x_bits(x: LdBits) -> f64 {
-    mret::ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xsubf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::sub::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn f32xsubf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::fused::sub::<f64, f64>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<f64, f64>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f32xsubf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64addf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::add::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64addf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::add::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64divf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::div::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64divf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::div::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64fmaf128_bits(x: F128Bits, y: F128Bits, z: F128Bits) -> f64 {
-    mret::ret(math::fused::fma_to::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::f128(z), mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::f128(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64fmaf64x_bits(x: LdBits, y: LdBits, z: LdBits) -> f64 {
-    mret::ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), mret::mode87(), false))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::fma_to::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::f80(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64mulf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::mul::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64mulf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::mul::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64sqrtf128_bits(x: F128Bits) -> f64 {
-    mret::ret(math::fused::sqrt::<math::F128, f64>(mret::f128(x), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<math::F128, f64>(mret::f128(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64sqrtf64x_bits(x: LdBits) -> f64 {
-    mret::ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sqrt::<math::F80, f64>(mret::f80(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64subf128_bits(x: F128Bits, y: F128Bits) -> f64 {
-    mret::ret(math::fused::sub::<math::F128, f64>(mret::f128(x), mret::f128(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<math::F128, f64>(mret::f128(x), mret::f128(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_f64subf64x_bits(x: LdBits, y: LdBits) -> f64 {
-    mret::ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sub::<math::F80, f64>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2151,22 +2220,26 @@ pub extern "C" fn liella_fabsl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn fadd(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::add::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::add::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_faddl_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::add::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::add::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fdim(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::fdim(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::minmax::fdim(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fdimf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::fdim(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::minmax::fdim(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2176,17 +2249,20 @@ pub extern "C" fn liella_fdimf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fdimf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::fdim(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::minmax::fdim(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fdimf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::fdim(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::minmax::fdim(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fdimf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::fdim(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::minmax::fdim(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2201,22 +2277,26 @@ pub extern "C" fn liella_fdiml_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn fdiv(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::div::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::div::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fdivl_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::div::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::div::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn ffma(x: f64, y: f64, z: f64) -> f32 {
-    mret::ret(math::fused::fma_to::<f64, f32>(x, y, z, mret::mode(), false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma_to::<f64, f32>(c.daz(x), c.daz(y), c.daz(z), c.mode(), false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_ffmal_bits(x: LdBits, y: LdBits, z: LdBits) -> f32 {
-    mret::ret(math::fused::fma_to::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::f80(z), mret::mode87(), false))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::fma_to::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::f80(z), c.mode(), false))
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
@@ -2236,12 +2316,14 @@ pub extern "C" fn liella_finitel_bits(x: LdBits) -> c_int {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn floor(x: f64) -> f64 {
-    mret::ret(math::round::floor(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::floor(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn floorf(x: f32) -> f32 {
-    mret::ret(math::round::floor(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::floor(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2251,17 +2333,20 @@ pub extern "C" fn liella_floorf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn floorf32(x: f32) -> f32 {
-    mret::ret(math::round::floor(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::floor(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn floorf32x(x: f64) -> f64 {
-    mret::ret(math::round::floor(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::floor(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn floorf64(x: f64) -> f64 {
-    mret::ret(math::round::floor(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::floor(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2276,12 +2361,14 @@ pub extern "C" fn liella_floorl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fma(x: f64, y: f64, z: f64) -> f64 {
-    mret::ret(math::fused::fma(x, y, z, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma(c.daz(x), c.daz(y), c.daz(z), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fmaf(x: f32, y: f32, z: f32) -> f32 {
-    mret::ret(math::fused::fma(x, y, z, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma(c.daz(x), c.daz(y), c.daz(z), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2291,17 +2378,20 @@ pub extern "C" fn liella_fmaf128_bits(x: F128Bits, y: F128Bits, z: F128Bits) -> 
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaf32(x: f32, y: f32, z: f32) -> f32 {
-    mret::ret(math::fused::fma(x, y, z, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma(c.daz(x), c.daz(y), c.daz(z), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaf32x(x: f64, y: f64, z: f64) -> f64 {
-    mret::ret(math::fused::fma(x, y, z, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma(c.daz(x), c.daz(y), c.daz(z), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaf64(x: f64, y: f64, z: f64) -> f64 {
-    mret::ret(math::fused::fma(x, y, z, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::fma(c.daz(x), c.daz(y), c.daz(z), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2316,492 +2406,554 @@ pub extern "C" fn liella_fmal_bits(x: LdBits, y: LdBits, z: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fmax(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAX))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fmaxf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAX))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAX))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAX))
+    mret::kept(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAX))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAX))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAX))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAX))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAX))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag_num(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag_numf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_mag_numf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXIMUM_MAG_NUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag_numf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag_numf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_mag_numf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_mag_numf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_MAG_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_mag_numl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_MAG_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_magf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_magf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXIMUM_MAG))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_magf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_magf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_magf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_magf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_MAG))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_magl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_MAG))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_num(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_numf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_numf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXIMUM_NUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_numf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_numf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximum_numf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_numf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximum_numl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximumf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximumf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXIMUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximumf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximumf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fmaximumf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximumf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaximuml_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXIMUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMAXIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAX))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAX))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fmaxmag(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fmaxmagf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxmagf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXMAG))
+    mret::kept(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxmagf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxmagf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmaxmagf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMAXMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxmagf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXMAG))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmaxmagl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXMAG))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMAXMAG))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fmin(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMIN))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn fminf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMIN))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMIN))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMIN))
+    mret::kept(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMIN))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMIN))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMIN))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMIN))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMIN))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag_num(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag_numf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_mag_numf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINIMUM_MAG_NUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag_numf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag_numf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_mag_numf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_mag_numf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_MAG_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_mag_numl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_MAG_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_magf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_magf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINIMUM_MAG))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_magf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_magf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_magf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_magf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_MAG))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_magl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_MAG))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_MAG))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_num(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_numf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_numf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINIMUM_NUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_numf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_numf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimum_numf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_numf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimum_numl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM_NUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM_NUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimumf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimumf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINIMUM))
+    mret::pick(mret::f128(x), mret::f128(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimumf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimumf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fminimumf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINIMUM))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.pick(x, y, |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimumf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminimuml_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINIMUM))
+    mret::pick(mret::f80(x), mret::f80(y), |x, y| math::minmax::select(x, y, math::minmax::FMINIMUM))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMIN))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMIN))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fminmag(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fminmagf(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminmagf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINMAG))
+    mret::kept(math::minmax::select(mret::f128(x), mret::f128(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminmagf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminmagf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fminmagf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::minmax::select(x, y, math::minmax::FMINMAG))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.kept(math::minmax::select(c.daz(x), c.daz(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminmagf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINMAG))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fminmagl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINMAG))
+    mret::kept(math::minmax::select(mret::f80(x), mret::f80(y), math::minmax::FMINMAG))
 }}
 
 export! { libm "GLIBC_2.38";
 pub extern "C" fn fmod(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::fmod(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::fmod(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.38";
 pub extern "C" fn fmodf(x: f32, y: f32) -> f32 {
-    mret::ret(math::rem::fmod(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::fmod(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2811,17 +2963,20 @@ pub extern "C" fn liella_fmodf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmodf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::rem::fmod(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::fmod(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmodf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::fmod(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::fmod(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fmodf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::fmod(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::fmod(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2836,22 +2991,26 @@ pub extern "C" fn liella_fmodl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn fmul(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::mul::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::mul::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fmull_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::mul::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::mul::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn frexp(x: f64, y: Option<&mut c_int>) -> f64 {
-    mret::ret_out(math::manip::frexp(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::manip::frexp(c.daz(x)), y)
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn frexpf(x: f32, y: Option<&mut c_int>) -> f32 {
-    mret::ret_out(math::manip::frexp(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::manip::frexp(c.daz(x)), y)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2861,17 +3020,20 @@ pub extern "C" fn liella_frexpf128_bits(x: F128Bits, y: Option<&mut c_int>) -> F
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn frexpf32(x: f32, y: Option<&mut c_int>) -> f32 {
-    mret::ret_out(math::manip::frexp(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::manip::frexp(c.daz(x)), y)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn frexpf32x(x: f64, y: Option<&mut c_int>) -> f64 {
-    mret::ret_out(math::manip::frexp(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::manip::frexp(c.daz(x)), y)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn frexpf64(x: f64, y: Option<&mut c_int>) -> f64 {
-    mret::ret_out(math::manip::frexp(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::manip::frexp(c.daz(x)), y)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2886,12 +3048,14 @@ pub extern "C" fn liella_frexpl_bits(x: LdBits, y: Option<&mut c_int>) -> LdBits
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fromfp(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, false))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fromfpf(x: f32, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2901,17 +3065,20 @@ pub extern "C" fn liella_fromfpf128_bits(x: F128Bits, y: c_int, z: c_uint) -> i6
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpf32(x: f32, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpf32x(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpf64(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2926,12 +3093,14 @@ pub extern "C" fn liella_fromfpl_bits(x: LdBits, y: c_int, z: c_uint) -> i64 {
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fromfpx(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, true))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn fromfpxf(x: f32, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2941,17 +3110,20 @@ pub extern "C" fn liella_fromfpxf128_bits(x: F128Bits, y: c_int, z: c_uint) -> i
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpxf32(x: f32, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpxf32x(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn fromfpxf64(x: f64, y: c_int, z: c_uint) -> i64 {
-    mret::intmax(math::round::fromfp(x, y, z, true, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.intmax(math::round::fromfp(c.daz(x), y, z, true, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -2966,22 +3138,26 @@ pub extern "C" fn liella_fromfpxl_bits(x: LdBits, y: c_int, z: c_uint) -> i64 {
 
 export! { libm "GLIBC_2.35";
 pub extern "C" fn fsqrt(x: f64) -> f32 {
-    mret::ret(math::fused::sqrt::<f64, f32>(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sqrt::<f64, f32>(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fsqrtl_bits(x: LdBits) -> f32 {
-    mret::ret(math::fused::sqrt::<math::F80, f32>(mret::f80(x), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sqrt::<math::F80, f32>(mret::f80(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.28";
 pub extern "C" fn fsub(x: f64, y: f64) -> f32 {
-    mret::ret(math::fused::sub::<f64, f32>(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::fused::sub::<f64, f32>(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_fsubl_bits(x: LdBits, y: LdBits) -> f32 {
-    mret::ret(math::fused::sub::<math::F80, f32>(mret::f80(x), mret::f80(y), mret::mode87()))
+    let c = mret::Soft::enter(mret::Unit::X87);
+    c.ret(math::fused::sub::<math::F80, f32>(mret::f80(x), mret::f80(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -3081,12 +3257,14 @@ pub extern "C" fn liella_hypotl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ilogb(x: f64) -> c_int {
-    mret::ret(math::manip::ilogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::ilogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn ilogbf(x: f32) -> c_int {
-    mret::ret(math::manip::ilogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::ilogb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3096,17 +3274,20 @@ pub extern "C" fn liella_ilogbf128_bits(x: F128Bits) -> c_int {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ilogbf32(x: f32) -> c_int {
-    mret::ret(math::manip::ilogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::ilogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ilogbf32x(x: f64) -> c_int {
-    mret::ret(math::manip::ilogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::ilogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ilogbf64(x: f64) -> c_int {
-    mret::ret(math::manip::ilogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::ilogb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3271,12 +3452,14 @@ pub extern "C" fn liella_jnl_bits(x: c_int, y: LdBits) -> LdBits {
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn ldexp(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn ldexpf(x: f32, y: c_int) -> f32 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3286,17 +3469,20 @@ pub extern "C" fn liella_ldexpf128_bits(x: F128Bits, y: c_int) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ldexpf32(x: f32, y: c_int) -> f32 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ldexpf32x(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ldexpf64(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3391,12 +3577,14 @@ pub extern "C" fn liella_lgammal_r_bits(x: LdBits, y: Option<&mut c_int>) -> LdB
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn llogb(x: f64) -> c_long {
-    mret::ret(math::manip::llogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::llogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn llogbf(x: f32) -> c_long {
-    mret::ret(math::manip::llogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::llogb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3406,17 +3594,20 @@ pub extern "C" fn liella_llogbf128_bits(x: F128Bits) -> c_long {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llogbf32(x: f32) -> c_long {
-    mret::ret(math::manip::llogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::llogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llogbf32x(x: f64) -> c_long {
-    mret::ret(math::manip::llogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::llogb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llogbf64(x: f64) -> c_long {
-    mret::ret(math::manip::llogb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::llogb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3431,12 +3622,14 @@ pub extern "C" fn liella_llogbl_bits(x: LdBits) -> c_long {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn llrint(x: f64) -> c_longlong {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn llrintf(x: f32) -> c_longlong {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3446,17 +3639,20 @@ pub extern "C" fn liella_llrintf128_bits(x: F128Bits) -> c_longlong {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llrintf32(x: f32) -> c_longlong {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llrintf32x(x: f64) -> c_longlong {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llrintf64(x: f64) -> c_longlong {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3471,12 +3667,14 @@ pub extern "C" fn liella_llrintl_bits(x: LdBits) -> c_longlong {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn llround(x: f64) -> c_longlong {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn llroundf(x: f32) -> c_longlong {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3486,17 +3684,20 @@ pub extern "C" fn liella_llroundf128_bits(x: F128Bits) -> c_longlong {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llroundf32(x: f32) -> c_longlong {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llroundf32x(x: f64) -> c_longlong {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn llroundf64(x: f64) -> c_longlong {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3636,12 +3837,14 @@ pub extern "C" fn liella_log2l_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn logb(x: f64) -> f64 {
-    mret::ret(math::manip::logb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::logb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn logbf(x: f32) -> f32 {
-    mret::ret(math::manip::logb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::logb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3651,17 +3854,20 @@ pub extern "C" fn liella_logbf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logbf32(x: f32) -> f32 {
-    mret::ret(math::manip::logb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::logb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logbf32x(x: f64) -> f64 {
-    mret::ret(math::manip::logb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::logb(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logbf64(x: f64) -> f64 {
-    mret::ret(math::manip::logb(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::logb(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3711,12 +3917,14 @@ pub extern "C" fn liella_logl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn lrint(x: f64) -> c_long {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn lrintf(x: f32) -> c_long {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3726,17 +3934,20 @@ pub extern "C" fn liella_lrintf128_bits(x: F128Bits) -> c_long {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lrintf32(x: f32) -> c_long {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lrintf32x(x: f64) -> c_long {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lrintf64(x: f64) -> c_long {
-    mret::ret(math::round::lrint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lrint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3751,12 +3962,14 @@ pub extern "C" fn liella_lrintl_bits(x: LdBits) -> c_long {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn lround(x: f64) -> c_long {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn lroundf(x: f32) -> c_long {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3766,17 +3979,20 @@ pub extern "C" fn liella_lroundf128_bits(x: F128Bits) -> c_long {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lroundf32(x: f32) -> c_long {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lroundf32x(x: f64) -> c_long {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn lroundf64(x: f64) -> c_long {
-    mret::ret(math::round::lround(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::lround(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3791,12 +4007,14 @@ pub extern "C" fn liella_lroundl_bits(x: LdBits) -> c_long {
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn modf(x: f64, y: Option<&mut f64>) -> f64 {
-    mret::ret_out(math::round::modf(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::round::modf(c.daz(x)), y)
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn modff(x: f32, y: Option<&mut f32>) -> f32 {
-    mret::ret_out(math::round::modf(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::round::modf(c.daz(x)), y)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3806,17 +4024,20 @@ pub extern "C" fn liella_modff128_bits(x: F128Bits, y: Option<&mut F128Bits>) ->
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn modff32(x: f32, y: Option<&mut f32>) -> f32 {
-    mret::ret_out(math::round::modf(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::round::modf(c.daz(x)), y)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn modff32x(x: f64, y: Option<&mut f64>) -> f64 {
-    mret::ret_out(math::round::modf(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::round::modf(c.daz(x)), y)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn modff64(x: f64, y: Option<&mut f64>) -> f64 {
-    mret::ret_out(math::round::modf(x), y)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret_out(math::round::modf(c.daz(x)), y)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3879,12 +4100,14 @@ pub extern "C" fn liella_nanl_bits(x: *const c_char) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn nearbyint(x: f64) -> f64 {
-    mret::ret(math::round::nearbyint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::nearbyint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn nearbyintf(x: f32) -> f32 {
-    mret::ret(math::round::nearbyint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::nearbyint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3894,17 +4117,20 @@ pub extern "C" fn liella_nearbyintf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nearbyintf32(x: f32) -> f32 {
-    mret::ret(math::round::nearbyint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::nearbyint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nearbyintf32x(x: f64) -> f64 {
-    mret::ret(math::round::nearbyint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::nearbyint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nearbyintf64(x: f64) -> f64 {
-    mret::ret(math::round::nearbyint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::nearbyint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3919,137 +4145,154 @@ pub extern "C" fn liella_nearbyintl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn nextafter(x: f64, y: f64) -> f64 {
-    mret::ret(math::manip::nextafter(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.step(x, y, math::manip::nextafter)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn nextafterf(x: f32, y: f32) -> f32 {
-    mret::ret(math::manip::nextafter(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.step(x, y, math::manip::nextafter)
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextafterf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
-    mret::ret(math::manip::nextafter(mret::f128(x), mret::f128(y)))
+    mret::step(mret::f128(x), mret::f128(y), math::manip::nextafter)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextafterf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::manip::nextafter(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.step(x, y, math::manip::nextafter)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextafterf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::manip::nextafter(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.step(x, y, math::manip::nextafter)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextafterf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::manip::nextafter(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.step(x, y, math::manip::nextafter)
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextafterf64x_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::manip::nextafter(mret::f80(x), mret::f80(y)))
+    mret::step(mret::f80(x), mret::f80(y), math::manip::nextafter)
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextafterl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::manip::nextafter(mret::f80(x), mret::f80(y)))
+    mret::step(mret::f80(x), mret::f80(y), math::manip::nextafter)
 }}
 
 export! { libm "GLIBC_2.24";
 pub extern "C" fn nextdown(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, false))
 }}
 
 export! { libm "GLIBC_2.24";
 pub extern "C" fn nextdownf(x: f32) -> f32 {
-    mret::ret(math::manip::next(x, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextdownf128_bits(x: F128Bits) -> F128Bits {
-    mret::ret(math::manip::next(mret::f128(x), false))
+    mret::raw(mret::f128(x), |x| math::manip::next(x, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextdownf32(x: f32) -> f32 {
-    mret::ret(math::manip::next(x, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextdownf32x(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextdownf64(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextdownf64x_bits(x: LdBits) -> LdBits {
-    mret::ret(math::manip::next(mret::f80(x), false))
+    mret::raw(mret::f80(x), |x| math::manip::next(x, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextdownl_bits(x: LdBits) -> LdBits {
-    mret::ret(math::manip::next(mret::f80(x), false))
+    mret::raw(mret::f80(x), |x| math::manip::next(x, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nexttoward_bits(x: f64, y: LdBits) -> f64 {
-    mret::ret(math::manip::nexttoward(x, mret::f80(y)))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::nexttoward(x, mret::f80(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nexttowardf_bits(x: f32, y: LdBits) -> f32 {
-    mret::ret(math::manip::nexttoward(x, mret::f80(y)))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::nexttoward(x, mret::f80(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nexttowardl_bits(x: LdBits, y: LdBits) -> LdBits {
-    mret::ret(math::manip::nexttoward(mret::f80(x), mret::f80(y)))
+    mret::raw(mret::f80(x), |x| math::manip::nexttoward(x, mret::f80(y)))
 }}
 
 export! { libm "GLIBC_2.24";
 pub extern "C" fn nextup(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, true))
 }}
 
 export! { libm "GLIBC_2.24";
 pub extern "C" fn nextupf(x: f32) -> f32 {
-    mret::ret(math::manip::next(x, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextupf128_bits(x: F128Bits) -> F128Bits {
-    mret::ret(math::manip::next(mret::f128(x), true))
+    mret::raw(mret::f128(x), |x| math::manip::next(x, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextupf32(x: f32) -> f32 {
-    mret::ret(math::manip::next(x, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextupf32x(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn nextupf64(x: f64) -> f64 {
-    mret::ret(math::manip::next(x, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.raw(x, |x| math::manip::next(x, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextupf64x_bits(x: LdBits) -> LdBits {
-    mret::ret(math::manip::next(mret::f80(x), true))
+    mret::raw(mret::f80(x), |x| math::manip::next(x, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_nextupl_bits(x: LdBits) -> LdBits {
-    mret::ret(math::manip::next(mret::f80(x), true))
+    mret::raw(mret::f80(x), |x| math::manip::next(x, true))
 }}
 
 export! { libm "GLIBC_2.29";
@@ -4094,12 +4337,14 @@ pub extern "C" fn liella_powl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn remainder(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn remainderf(x: f32, y: f32) -> f32 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4109,17 +4354,20 @@ pub extern "C" fn liella_remainderf128_bits(x: F128Bits, y: F128Bits) -> F128Bit
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remainderf32(x: f32, y: f32) -> f32 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remainderf32x(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remainderf64(x: f64, y: f64) -> f64 {
-    mret::ret(math::rem::remainder(x, y))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::rem::remainder(c.daz(x), c.daz(y)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4134,12 +4382,14 @@ pub extern "C" fn liella_remainderl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn remquo(x: f64, y: f64, z: Option<&mut c_int>) -> f64 {
-    mret::remquo(math::rem::remquo(x, y), z)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.remquo(math::rem::remquo(c.daz(x), c.daz(y)), z)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn remquof(x: f32, y: f32, z: Option<&mut c_int>) -> f32 {
-    mret::remquo(math::rem::remquo(x, y), z)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.remquo(math::rem::remquo(c.daz(x), c.daz(y)), z)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4149,17 +4399,20 @@ pub extern "C" fn liella_remquof128_bits(x: F128Bits, y: F128Bits, z: Option<&mu
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remquof32(x: f32, y: f32, z: Option<&mut c_int>) -> f32 {
-    mret::remquo(math::rem::remquo(x, y), z)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.remquo(math::rem::remquo(c.daz(x), c.daz(y)), z)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remquof32x(x: f64, y: f64, z: Option<&mut c_int>) -> f64 {
-    mret::remquo(math::rem::remquo(x, y), z)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.remquo(math::rem::remquo(c.daz(x), c.daz(y)), z)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn remquof64(x: f64, y: f64, z: Option<&mut c_int>) -> f64 {
-    mret::remquo(math::rem::remquo(x, y), z)
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.remquo(math::rem::remquo(c.daz(x), c.daz(y)), z)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4174,12 +4427,14 @@ pub extern "C" fn liella_remquol_bits(x: LdBits, y: LdBits, z: Option<&mut c_int
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn rint(x: f64) -> f64 {
-    mret::ret(math::round::rint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::rint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn rintf(x: f32) -> f32 {
-    mret::ret(math::round::rint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::rint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4189,17 +4444,20 @@ pub extern "C" fn liella_rintf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn rintf32(x: f32) -> f32 {
-    mret::ret(math::round::rint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::rint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn rintf32x(x: f64) -> f64 {
-    mret::ret(math::round::rint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::rint(c.daz(x), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn rintf64(x: f64) -> f64 {
-    mret::ret(math::round::rint(x, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::rint(c.daz(x), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4214,17 +4472,20 @@ pub extern "C" fn liella_rintl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn round(x: f64) -> f64 {
-    mret::ret(math::round::round(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::round(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn roundeven(x: f64) -> f64 {
-    mret::ret(math::round::roundeven(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::roundeven(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn roundevenf(x: f32) -> f32 {
-    mret::ret(math::round::roundeven(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::roundeven(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4234,17 +4495,20 @@ pub extern "C" fn liella_roundevenf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundevenf32(x: f32) -> f32 {
-    mret::ret(math::round::roundeven(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::roundeven(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundevenf32x(x: f64) -> f64 {
-    mret::ret(math::round::roundeven(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::roundeven(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundevenf64(x: f64) -> f64 {
-    mret::ret(math::round::roundeven(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::roundeven(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4259,7 +4523,8 @@ pub extern "C" fn liella_roundevenl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn roundf(x: f32) -> f32 {
-    mret::ret(math::round::round(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::round(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4269,17 +4534,20 @@ pub extern "C" fn liella_roundf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundf32(x: f32) -> f32 {
-    mret::ret(math::round::round(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::round(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundf32x(x: f64) -> f64 {
-    mret::ret(math::round::round(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::round(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn roundf64(x: f64) -> f64 {
-    mret::ret(math::round::round(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::round(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4294,12 +4562,14 @@ pub extern "C" fn liella_roundl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn scalb(x: f64, y: f64) -> f64 {
-    mret::ret(math::manip::scalb(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scalb(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn scalbf(x: f32, y: f32) -> f32 {
-    mret::ret(math::manip::scalb(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scalb(c.daz(x), c.daz(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4309,12 +4579,14 @@ pub extern "C" fn liella_scalbl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn scalbln(x: f64, y: c_long) -> f64 {
-    mret::ret(math::manip::scale(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), y, c.mode()))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn scalblnf(x: f32, y: c_long) -> f32 {
-    mret::ret(math::manip::scale(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), y, c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4324,17 +4596,20 @@ pub extern "C" fn liella_scalblnf128_bits(x: F128Bits, y: c_long) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalblnf32(x: f32, y: c_long) -> f32 {
-    mret::ret(math::manip::scale(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), y, c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalblnf32x(x: f64, y: c_long) -> f64 {
-    mret::ret(math::manip::scale(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), y, c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalblnf64(x: f64, y: c_long) -> f64 {
-    mret::ret(math::manip::scale(x, y, mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), y, c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4349,12 +4624,14 @@ pub extern "C" fn liella_scalblnl_bits(x: LdBits, y: c_long) -> LdBits {
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn scalbn(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libc_libm "GLIBC_2.2.5";
 pub extern "C" fn scalbnf(x: f32, y: c_int) -> f32 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4364,17 +4641,20 @@ pub extern "C" fn liella_scalbnf128_bits(x: F128Bits, y: c_int) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalbnf32(x: f32, y: c_int) -> f32 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalbnf32x(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn scalbnf64(x: f64, y: c_int) -> f64 {
-    mret::ret(math::manip::scale(x, i64::from(y), mret::mode()))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::scale(c.daz(x), i64::from(y), c.mode()))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4469,12 +4749,14 @@ pub extern "C" fn liella_setpayloadsigl_bits(x: Option<&mut LdBits>, y: LdBits) 
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn significand(x: f64) -> f64 {
-    mret::ret(math::manip::significand(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::significand(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn significandf(x: f32) -> f32 {
-    mret::ret(math::manip::significand(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::manip::significand(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4844,12 +5126,14 @@ pub extern "C" fn totalordermagl(x: Option<&LdBits>, y: Option<&LdBits>) -> c_in
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn trunc(x: f64) -> f64 {
-    mret::ret(math::round::trunc(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::trunc(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn truncf(x: f32) -> f32 {
-    mret::ret(math::round::trunc(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::trunc(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4859,17 +5143,20 @@ pub extern "C" fn liella_truncf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn truncf32(x: f32) -> f32 {
-    mret::ret(math::round::trunc(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::trunc(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn truncf32x(x: f64) -> f64 {
-    mret::ret(math::round::trunc(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::trunc(c.daz(x)))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn truncf64(x: f64) -> f64 {
-    mret::ret(math::round::trunc(x))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.ret(math::round::trunc(c.daz(x)))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4884,12 +5171,14 @@ pub extern "C" fn liella_truncl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn ufromfp(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, false))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn ufromfpf(x: f32, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4899,17 +5188,20 @@ pub extern "C" fn liella_ufromfpf128_bits(x: F128Bits, y: c_int, z: c_uint) -> u
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpf32(x: f32, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpf32x(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, false))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpf64(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, false))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, false))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4924,12 +5216,14 @@ pub extern "C" fn liella_ufromfpl_bits(x: LdBits, y: c_int, z: c_uint) -> u64 {
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn ufromfpx(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, true))
 }}
 
 export! { libm "GLIBC_2.25";
 pub extern "C" fn ufromfpxf(x: f32, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4939,17 +5233,20 @@ pub extern "C" fn liella_ufromfpxf128_bits(x: F128Bits, y: c_int, z: c_uint) -> 
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpxf32(x: f32, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpxf32x(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, true))
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn ufromfpxf64(x: f64, y: c_int, z: c_uint) -> u64 {
-    mret::uintmax(math::round::fromfp(x, y, z, false, true))
+    let c = mret::Soft::enter(mret::Unit::Sse);
+    c.uintmax(math::round::fromfp(c.daz(x), y, z, false, true))
 }}
 
 export! { libm "LIELLA_PRIVATE";

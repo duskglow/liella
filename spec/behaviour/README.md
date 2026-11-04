@@ -33,6 +33,7 @@ directory argument; its output shows that directory as `<dir>`.
 | [timers.md](timers.md) | §23.4 timers (phase 9, written under the same rules before implementation) |
 | [zones.md](zones.md) | §23.5-23.6 broken-down time and time zones (phase 9, same rules) |
 | [timefmt.md](timefmt.md) | §23.7 strftime, strptime, getdate (phase 9, same rules) |
+| [time-gaps.md](time-gaps.md) | §23.5-23.7 the phase 9 gaps settled by probe: `mktime` in skipped and repeated hours, POSIX rules before 1970, `TZ` unset with `/etc/localtime` unreadable, `getdate` with `%Z` and partial times, a signed `%y` (TIME-SPEC-GAPS-SETTLE; probe in `time_gaps_probe.rs`) |
 | [netaddr.md](netaddr.md) | §15.3-15.8 address conversion, interfaces, IPv6 options, Ethernet addresses (phase 10, same rules) |
 | [users.md](users.md) | §17.3-17.6 user, group, shadow databases, shells, utmp (phase 10, same rules; run with `users_run.sh`) |
 | [netdb.md](netdb.md) | §16 netdb databases through `files`, getaddrinfo without DNS (phase 10, same rules; run with `netdb_run.sh`) |
@@ -53,6 +54,7 @@ directory argument; its output shows that directory as `<dir>`.
 | [digits-dots.md](digits-dots.md) | §16.1 `__nss_hostname_digits_dots` (milestone 5, 2026-10-04: a signature for a spec gap; RULING NEEDED) |
 | [libm-exact.md](libm-exact.md) | §10.1, §10.2, §10.4, §10.6 classification, the exact and correctly rounded functions in all four formats, the floating-point environment (Track M milestone 1, same rules; probe `crates/math/tests/oracle/exact_diff.c`, record gzipped) |
 | [libm-elem.md](libm-elem.md) | §10.3 the elementary functions of `float` and `double`: special operands, flags, `errno`, NaN signs (Track M milestone 2; probe `crates/math/tests/oracle/elem_diff.c`, record gzipped) |
+| [math-ftz-daz.md](math-ftz-daz.md) | §10.3, §10.6 libm under the caller's MXCSR FTZ/DAZ: the software, operand-returning and x87-narrowing forms (D-10.22, MATH-M6-FPENV-HONOR-REST) |
 | [libm-elem-ld.md](libm-elem-ld.md) | §10.3 the elementary functions of `long double`: special operands, NaN signs, flags, `errno` (Track M milestone 5a; probe `crates/math/tests/oracle/elem_ld_diff.c`, record gzipped) |
 | [libm-special.md](libm-special.md) | §10.3 the special functions (`erf`, `erfc`, the gamma functions and `signgam`, the Bessel functions) of `float` and `double` (Track M milestone 3; probe `crates/math/tests/oracle/special_diff.c`, record gzipped) |
 | [libm-special-ld.md](libm-special-ld.md) | §10.3 the special functions of `long double`: special operands, the sign of Γ(x), zero limits, flags, `errno` (Track M milestone 5b; probe `crates/math/tests/oracle/special_ld_diff.c`, record gzipped) |
