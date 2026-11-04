@@ -1,0 +1,12 @@
+{"task": "HOTTEXT-ASM-ORDER", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT (not ready): .S kernels split into 34 per-function sections (WIP 4cc83213); regen + fault counts running on mei, keke counts, regen commit, test and plants remain",
+ "branch": "task/hottext-asm-order", "head": "4cc83213",
+ "gate": {"affected": "running (hottext-asm-order-gate, mei)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["context, setjmp, mcount, entry and vdso .S left in their current sections (cold or already sectioned)",
+                   "entry gates that fall through (rawmemchr/memchr/memrchr), stpcpy+stpcpy_chk, memmove+move_mid, syscall_cancel+syscall_cancel4 share a section by design"],
+ "refused": [],
+ "improvement": "regen.sh silently drops traced names that are not function sections; it should list the traced libc symbols it dropped, which would have exposed the stranded .S kernels at once",
+ "next_step": "read hottext-asm-order-faults-mei; commit the regenerated list (both profiles), add a grouped-kernels test + plant, count on keke, gate on the final head",
+ "report_file": "handoff/HOTTEXT-ASM-ORDER.md",
+ "jobs": ["mei:hottext-asm-order-static", "mei:hottext-asm-order-gate", "mei:hottext-asm-order-faults-mei"]}
