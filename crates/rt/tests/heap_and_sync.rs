@@ -611,7 +611,7 @@ fn a_shard_that_cannot_map_takes_free_slabs_of_another_shard() {
     let mut got = Vec::new();
     // Small, odd-class, aligned and larger-small requests all share the slab refill.
     for (size, align) in [(100, ALIGN), (24, ALIGN), (1000, ALIGN), (64, 64), (200, 256), (5000, ALIGN), (MAX_SMALL, ALIGN)] {
-        let b = heap.alloc(&CSys, &pages, size, align).unwrap_or_else(|| panic!("size {size} align {align}: no spurious ENOMEM"));
+        let b = heap.alloc(&CSys, &pages, size, align).expect("no spurious ENOMEM while another shard holds free slabs");
         assert_eq!(b.addr % align, 0);
         assert_eq!(b.addr / SEG, first.addr / SEG, "the slab is shard 0's, handed to the caller on shard 1");
         got.push(b.addr);
