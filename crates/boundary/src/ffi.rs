@@ -307,6 +307,11 @@ unsafe extern "C" {
     /// `n` bytes (from a `&mut [u8]`: `crate::conv::fill`; or the `memset` contract after its NULL
     /// test: `crate::hot::fill_large`).
     pub(crate) safe fn liella_machine_fill_avx2(d: *mut u8, c: i32, n: usize) -> *mut u8;
+    /// The SSE2 fill (MEMSET-4K-SSE2; machine/scan.S), for CPUs or levels without the AVX2 fill
+    /// where `rep stosb` is not chosen: `n` bytes at `d` set to `c`; returns `d`. Proof
+    /// obligation: `n >= 128` and `d` valid for writing `n` bytes (from a `&mut [u8]`:
+    /// `crate::conv::fill`; or the `memset` contract after its NULL test: `crate::hot::fill_large`).
+    pub(crate) safe fn liella_machine_fill_sse2(d: *mut u8, c: i32, n: usize) -> *mut u8;
     /// `rep stosb`. Proof obligation: `dst` is valid for writing `n` bytes (from a
     /// `&mut [u8]`: `crate::conv::fill`; or the `memset` contract after its NULL test, for a
     /// range inside the caller's region: `crate::hot::fill_rest`).

@@ -9,7 +9,7 @@
 //!
 //! Tables: the existing `EXP2_J64` (2^(j/64), 1 KiB), `LOG_C`/`LOG_L` (728 B + 1,456 B) and the
 //! constants of the accurate path; this story adds no table (#933). `LOG2_L`/`LOG10_L` (1,456 B
-//! each) and `LOG10_2_E` are `LOG_L` pre-scaled by `1/ln b` for `log2`/`log10` (register 13.5 #7).
+//! each) and `LOG10_2_E` are `LOG_L` pre-scaled by `1/ln b` for `log2`/`log10` (register 16.5 #7).
 //!
 //! **Bounds.** Write `u = 2^-53`. The double-double operations ([`Dd::add`], [`Dd::mul`],
 //! [`Dd::mul_f64`]) and the stored double-double constants are accurate to a few `2^-104` of
@@ -66,7 +66,7 @@ macro_rules! kernels {
 /// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64) = th + tl` is stored as a
 /// double-double (error `< 2^-104`, `1 <= th < 2`, `|tl| <= 2^-53·th`).
 ///
-/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 13.5 #1; Fast2Sum and Dekker's
+/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1; Fast2Sum and Dekker's
 /// product as in Muller et al., Handbook of Floating-Point Arithmetic, 2018, ch. 4): `p = ph + pl`
 /// with `|ph| <= 0.00602`, `pl = a.lo + small` (`|a.lo| <= 2^-53·|ph|`, the small sum carrying `T`).
 /// `q = th·ph` exactly (`two_prod`); `th + q.hi` by Fast2Sum, exact since `|q.hi| <= 0.0121 < th`;
@@ -160,7 +160,7 @@ const C0: f64 = f64::from_bits(t::LN2_64_CW[0]);
 const NC1: f64 = f64::from_bits(t::LN2_64_CW[1] ^ 0x8000_0000_0000_0000);
 const NC2: f64 = f64::from_bits(t::LN2_64_CW[2] ^ 0x8000_0000_0000_0000);
 
-/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 13.5 #2):
+/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2):
 /// `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, for
 /// `k = kf = nearest(xh·64/ln2)` and `|xh| <= 746` (`|k| <= 68,880 < 2^17`). The caller adds its
 /// low part to `l` and joins the two by Fast2Sum.
@@ -298,7 +298,7 @@ const LN2H: f64 = f64::from_bits(0x3fe6_2e42_fefa_3800);
 const LN2L: f64 = f64::from_bits(0x3d2e_f357_93c7_6730);
 
 /// `e·ln2 + (−ln c) + (lh + ll)`, the logarithms' assembly (MATH-M6-F64-GAP-ASSEMBLY, register
-/// 13.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <= 0.347`, `|cl| <=
+/// 16.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <= 0.347`, `|cl| <=
 /// 2^-53·|ch|`) and `log1p r = lh + ll` (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
 ///
 /// Proof. `H = e·LN2H` is exact; `H + ch` by Fast2Sum is exact (`|H| >= 0.693 > |ch|`, or
@@ -332,7 +332,7 @@ const LOG2_SCALE: f64 = f64::from_bits(0x3ff7_1547_652b_82ff);
 const LOG10_SCALE: f64 = f64::from_bits(0x3fdb_cb7b_1526_e50f);
 
 /// `log_b x = e·log_b 2 + (−log_b c) + (lh + ll)/ln b` for `b = 2` (`TEN` false) or `10`, from
-/// [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GAP-LOG-TABLES, register 13.5
+/// [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GAP-LOG-TABLES, register 16.5
 /// #7): `−log_b c = LOG2_L`/`LOG10_L[idx] = ch + cl` (`|ch| <= 0.501` / `0.151`, `|cl| <=
 /// 2^-53·|ch|`, within `2^-104·|ch|` of exact), `1/ln b = ih + il` (`INV_LN2`/`INV_LN10`, within
 /// `2^-105.9·ih`), `log10 2 = kh + kl` (`LOG10_2_E`: `kh` of 42 bits, `|kl| < 2^-43`,
@@ -420,7 +420,7 @@ fn integral(x: f64) -> bool {
 //   more would separate them), so at least one of the two additions is inexact in hardware. When
 //   [`near`] answers, `y.hi + w` rounded to `y.hi` with `w != 0`: that addition was inexact.
 
-/// The relative bounds `rho` behind the constant rounding test [`near`] (register 13.5 #5): every
+/// The relative bounds `rho` behind the constant rounding test [`near`] (register 16.5 #5): every
 /// `eps/|y.hi|` where the test is used is at most `rho`. Each is stated with slack and checked on
 /// operands by the `bounds` tests.
 /// [`exp`] and [`exp2`]: `eps/|y.hi| = 2^-49·|tail| + 2^-70` ([`exp_eps`]). For `|rh| <= 0.006`
@@ -687,7 +687,7 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// `ln(1 + rh) = rh − rh²/2 + rh³/3 + T + δ` with `T = rh⁴·(−1/4 + rh/5 − … − rh⁷/11)` and
 /// `|δ| <= rh¹²/12·1.01 <= 2^-56·|T|` (`|T| >= 0.24·rh⁴`). Then:
 /// * `rh − rh²/2`: `two_prod` and `two_sum`, exact as a double-double.
-/// * `rh³/3` (register 13.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
+/// * `rh³/3` (register 16.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
 ///   s.lo·rh`; `g = c.hi·THIRD.hi` exactly (`two_prod`, Dekker's split of the constant folded);
 ///   `cube = g.hi + cube_lo`, `cube_lo = g.lo + ((c.lo + s.lo·rh)·THIRD.hi + c.hi·THIRD.lo)`.
 ///   Dropped `(c.lo + s.lo·rh)·THIRD.lo` and `1/3 − THIRD` (`< 2^-110`): `< 2^-105·|rh³|`; six
@@ -1019,7 +1019,7 @@ mod bounds {
         assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= std::hint::black_box(RHO_POW));
     }
 
-    /// The pre-scaled logarithm tables and constants (register 13.5 #7): `LOG2_L`/`LOG10_L` within
+    /// The pre-scaled logarithm tables and constants (register 16.5 #7): `LOG2_L`/`LOG10_L` within
     /// `2^-104` of `-ln(c_i)/ln b`, the low parts within `2^-53` of the high parts, `LOG10_2_E`'s
     /// high part of 42 bits and the pair within `2^-97` of `log10 2`; `LOG2_SCALE`/`LOG10_SCALE`
     /// the least doubles at or above `1/ln b`, `LOG2_NEAR`/`LOG10_NEAR` the least at or above

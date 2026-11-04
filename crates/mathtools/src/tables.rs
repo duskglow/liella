@@ -146,7 +146,7 @@ pub fn generate() -> String {
     }
     o.f64_table("LOG_C", "`c_i` = 1/(1 + i/128) rounded to 12 significant bits, for i = -37..53 (index i + 37); `c_0` = 1.", &c);
     o.dd_table("LOG_L", "`-ln(c_i)` for the `c_i` of `LOG_C` (mp::log; `-ln(c_0)` = 0).", &l);
-    // log2/log10: the same table pre-scaled by 1/ln b (register 13.5 #7), and log10(2) split for e·log10(2).
+    // log2/log10: the same table pre-scaled by 1/ln b (register 16.5 #7), and log10(2) split for e·log10(2).
     let l2: Vec<Big> = l.iter().map(|v| v.div(&ln2, p, Round::Nearest)).collect();
     o.dd_table("LOG2_L", "`-log2(c_i)` = `-ln(c_i)/ln 2` for the `c_i` of `LOG_C` (`-log2(c_0)` = 0).", &l2);
     let l10: Vec<Big> = l.iter().map(|v| v.div(&ln10, p, Round::Nearest)).collect();
