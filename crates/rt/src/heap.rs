@@ -997,7 +997,10 @@ impl Heap {
     #[cold]
     fn first_cache<'p, S: Sys, P: Pages>(&self, sys: &S, pages: &'p P) -> Option<Cache<'p>> {
         let shard = pages.shard() % SHARDS;
-        let id = self.unpark(sys, pages, shard).or_else(|| self.new_cache(sys, pages, shard))?;
+        let id = self
+            .unpark(sys, pages, shard)
+            .or_else(|| self.new_cache(sys, pages, shard))
+            .or_else(|| self.unpark_elsewhere(sys, pages, shard))?;
         let k = self.cache_at(pages, id)?;
         pages.cache_slot().store(self.cache_addr(pages, id), Relaxed);
         Some(k)
@@ -1012,6 +1015,15 @@ impl Heap {
         c.set(C_POOL, 0);
         c.set(C_PARKED, 0);
         Some(id)
+    }
+
+    /// Failure path only: no cache could be made for `shard` (its chunk cannot be mapped, as under
+    /// an address-space limit), so take over a parked cache of another shard, each once under its
+    /// own lock alone. The cache keeps its recorded shard, to which it is parked again; its slabs
+    /// come from the shard of the thread using it (`refill`) and return to their segments' homes.
+    #[cold]
+    fn unpark_elsewhere<S: Sys, P: Pages>(&self, sys: &S, pages: &P, shard: usize) -> Option<u64> {
+        (1..SHARDS).find_map(|i| self.unpark(sys, pages, (shard + i) % SHARDS))
     }
 
     fn new_cache<S: Sys, P: Pages>(&self, sys: &S, pages: &P, shard: usize) -> Option<u64> {

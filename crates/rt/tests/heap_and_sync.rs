@@ -640,6 +640,46 @@ fn borrow_from_another_shard(donor: usize, caller: usize) {
 }
 
 #[test]
+fn a_thread_whose_cache_cannot_be_made_takes_a_parked_cache_of_another_shard() {
+    // Trace: no spec clause (allocation under an address-space limit: no spurious ENOMEM when a new
+    // thread's cache chunk cannot be mapped but another shard has a parked cache); D-3.10, D-3.11.
+    let _wd = Watchdog::new("a_thread_whose_cache_cannot_be_made_takes_a_parked_cache_of_another_shard", 30);
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    // Thread 0 on shard 0 has a cache and a segment; thread 1 on shard 3 gets its segment.
+    pages.shard.set(0);
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    pages.thread.set(1);
+    pages.shard.set(3);
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    // No room for any further mapping. "New threads" (their cache word cleared, nothing parked) use up
+    // the cache chunk and then cannot make a cache.
+    let mapped: usize = pages.maps.borrow().values().map(|m| m.len).sum();
+    pages.limit.set(Some(mapped));
+    let mut last = Some(());
+    for _ in 0..64 {
+        pages.slots[1].store(0, Ordering::Relaxed);
+        last = heap.alloc(&CSys, &pages, 100, ALIGN).map(|_| ());
+        if last.is_none() {
+            break;
+        }
+    }
+    assert!(last.is_none(), "the cache chunk is spent and no cache can be made");
+    // Thread 0 exits: its cache is parked on shard 0. A new thread on shard 3 takes it.
+    pages.thread.set(0);
+    pages.shard.set(0);
+    heap.park(&CSys, &pages);
+    pages.thread.set(1);
+    pages.shard.set(3);
+    pages.slots[1].store(0, Ordering::Relaxed);
+    let b = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap(); // no spurious ENOMEM
+    heap.free(&CSys, &pages, b.addr).unwrap();
+    // Nothing is left to take now: the next new thread fails, bounded.
+    pages.slots[1].store(0, Ordering::Relaxed);
+    assert!(heap.alloc(&CSys, &pages, 100, ALIGN).is_none());
+}
+
+#[test]
 fn blocks_return_to_their_owner_whoever_frees_them() {
     let _wd = Watchdog::new("blocks_return_to_their_owner_whoever_frees_them", 30);
     // Clauses: s3_1_t_0, s3_1_f_3 (D-3.11, M4).
