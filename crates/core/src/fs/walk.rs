@@ -468,7 +468,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
             let (dir_level, path_len) = (frame.level, frame.path_len);
             let base = set_path(&mut path, path_len, name)?;
             let dir = levels.fd(sys, dir_level)?;
-            let (kind, cst) = examine(sys, dir, KStr::from_nul_terminated(&namez)?, opt.physical)?;
+            let (kind, cst) = examine(sys, dir, KStr::from_nul_terminated(namez)?, opt.physical)?;
             if opt.mount && cst.as_ref().is_some_and(|s| s.dev != root_dev) {
                 continue;
             }
@@ -478,7 +478,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 if !fresh {
                     continue;
                 }
-                let cfd = match levels.push(sys, &namez, !opt.physical) {
+                let cfd = match levels.push(sys, namez, !opt.physical) {
                     Ok((fd, _)) => fd,
                     Err(Errno::EACCES) => {
                         let a = visit(&path, base, level, Kind::DirUnreadable, Some(&cst), f)?;
