@@ -445,8 +445,42 @@ fn sym_regcomp() {
     assert_eq!(s::regcomp(Some(&mut re), core::ptr::null(), 0), 2, "a NULL pattern is REG_BADPAT");
 }
 
-/// `regexec@@GLIBC_2.3.4` (the default version). `regexec@GLIBC_2.2.5` is a compat-only version
-/// and comes with phase 15.
+// no spec clause: compat-plan.tsv behaviour row regexec@GLIBC_2.2.5 (LG-2; probe-settled).
+#[test]
+fn compat_regexec_2_2_5_ignores_startend_and_unknown_eflags() {
+    // Trace: no spec clause (compat-plan.tsv behaviour row regexec@GLIBC_2.2.5; LG-2).
+    use rx::*;
+    let mut re = blank();
+    assert_eq!(s::regcomp(Some(&mut re), z("b").as_ptr(), 0), 0);
+    let run = |old: bool, s0: i32, e0: i32, nmatch: usize, ef: c_int, subject: &[u8]| {
+        let mut m = [regmatch_t { rm_so: s0, rm_eo: e0 }, regmatch_t { rm_so: -7, rm_eo: -7 }];
+        let f = if old { s::liella_compat_regexec } else { s::regexec };
+        let r = f(Some(&re), subject.as_ptr().cast(), nmatch, m.as_mut_ptr(), ef);
+        (r, m[0].rm_so, m[0].rm_eo, m[1].rm_so)
+    };
+    // Record: "b" in "abcb" STARTEND [1,3) / [2,4) / [2,3) nmatch1: old always m=(1,2), ret=0.
+    for (so, eo, default) in [(1, 3, (0, 1, 2, -7)), (2, 4, (0, 3, 4, -7)), (2, 3, (1, 2, 3, -7))] {
+        assert_eq!(run(true, so, eo, 1, 4, b"abcb\0"), (0, 1, 2, -7), "old [{so},{eo})");
+        assert_eq!(run(false, so, eo, 1, 4, b"abcb\0"), default, "default [{so},{eo})");
+    }
+    // Record: "a\0b" STARTEND [0,3) nul inside: old ret=1 (stops at the NUL), default ret=0 (2,3).
+    assert_eq!(run(true, 0, 3, 1, 4, b"a\0b\0"), (1, 0, 3, -7));
+    assert_eq!(run(false, 0, 3, 1, 4, b"a\0b\0"), (0, 2, 3, -7));
+    // Record: "a" eflags 0x80 unknown: old ret=0, default ret=2.
+    assert_eq!(run(true, 0, 0, 1, 0x80, b"xb\0"), (0, 1, 2, -7));
+    assert_eq!(run(false, 0, 0, 1, 0x80, b"xb\0").0, 2);
+    s::regfree(Some(&mut re));
+    let mut re = blank();
+    assert_eq!(s::regcomp(Some(&mut re), z("^c").as_ptr(), 0), 0);
+    // Record: "^c" NOTBOL / plain: ret=1 both; NOTBOL still counts in the old version.
+    let mut m = [regmatch_t { rm_so: 0, rm_eo: 0 }];
+    assert_eq!(s::liella_compat_regexec(Some(&re), z("cx").as_ptr(), 1, m.as_mut_ptr(), 1), 1, "REG_NOTBOL honoured");
+    assert_eq!(s::liella_compat_regexec(Some(&re), z("cx").as_ptr(), 1, m.as_mut_ptr(), 0), 0);
+    s::regfree(Some(&mut re));
+}
+
+/// `regexec@@GLIBC_2.3.4` (the default version); `regexec@GLIBC_2.2.5` is
+/// [`compat_regexec_2_2_5_ignores_startend_and_unknown_eflags`].
 #[test]
 fn sym_regexec() {
     use rx::*;

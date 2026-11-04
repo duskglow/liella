@@ -379,6 +379,13 @@ pub extern "C" fn regexec(preg: Option<&regex_t>, string: *const c_char, nmatch:
     regex::regexec(preg, conv::addr(string), nmatch, conv::addr(pmatch), eflags)
 }}
 
+crate::internal_entry! {
+/// `regexec@GLIBC_2.2.5`: only `REG_NOTBOL` and `REG_NOTEOL` count; `REG_STARTEND` and unknown
+/// bits are ignored (probe-settled, LG-2). Exported only under that compat version.
+pub extern "C" fn liella_compat_regexec(preg: Option<&regex_t>, string: *const c_char, nmatch: size_t, pmatch: *mut regmatch_t, eflags: c_int) -> c_int {
+    regex::regexec(preg, conv::addr(string), nmatch, conv::addr(pmatch), liella_legacy::versioned::regexec_2_2_5_eflags(eflags))
+}}
+
 export! { "GLIBC_2.2.5";
 pub extern "C" fn regerror(errcode: c_int, _preg: Option<&regex_t>, errbuf: *mut c_char, errbuf_size: size_t) -> size_t {
     // UNSAFE(slice) SAFETY: errbuf is NULL or holds errbuf_size writable bytes (§14.9); preg does not change the text.

@@ -61,6 +61,13 @@ pub extern "C" fn quick_exit(status: c_int) {
     process::quick_exit(status)
 }}
 
+crate::internal_entry! {
+/// `quick_exit@GLIBC_2.10`: the calling thread's C++ `thread_local` destructors, then the
+/// quick-exit entries (probe-settled, LG-2). Exported only under that compat version.
+pub extern "C" fn liella_compat_quick_exit(status: c_int) {
+    process::quick_exit_2_10(status)
+}}
+
 export! { "GLIBC_2.2.5";
 pub extern "C" fn abort() {
     ret::abort()

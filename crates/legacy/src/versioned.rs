@@ -15,9 +15,39 @@
 //! * `fmemopen@GLIBC_2.2.5`: the `old` buffer rules of `stdio_compat::mem_backing` (size 0 is
 //!   `EINVAL`, reads run to the size, `a` places only the first position, `w` stores a NUL first).
 //!
-//! The other `behaviour` rows assigned to LG-2 are still missing (see the handoff).
+//! * `regexec@GLIBC_2.2.5`: [`regexec_2_2_5_eflags`], only `REG_NOTBOL` and `REG_NOTEOL` count
+//!   (`REG_STARTEND` and unknown bits are ignored: the subject is the NUL-terminated string);
+//! * `nftw@GLIBC_2.2.5` and `nftw64@GLIBC_2.2.5`: [`nftw_2_2_5_flags`], only `FTW_PHYS`,
+//!   `FTW_MOUNT`, `FTW_CHDIR` and `FTW_DEPTH` count (`FTW_ACTIONRETVAL` and unknown bits are
+//!   ignored, never `EINVAL`);
+//! * `quick_exit@GLIBC_2.10`: the calling thread's C++ `thread_local` destructors run first,
+//!   then the quick-exit entries (the entry calls the boundary's `quick_exit_2_10`).
+//!
+//! The other `behaviour` rows assigned to LG-2 (`posix_spawn@GLIBC_2.2.5`,
+//! `posix_spawnp@GLIBC_2.2.5`) are still missing (see the handoff).
 
 use liella::error::{Errno, Result};
+
+use crate::fs_tree::{FTW_CHDIR, FTW_DEPTH, FTW_MOUNT, FTW_PHYS};
+
+/// `REG_NOTBOL` and `REG_NOTEOL` (`<regex.h>`, x86-64 values).
+const REG_NOTBOL_NOTEOL: i32 = 1 | 2;
+
+/// `regexec@GLIBC_2.2.5`'s execution flags: the bits it honours of `eflags`. Probe-settled
+/// (`spec/behaviour/compat.glibc.txt`, `regexec@GLIBC_2.2.5` lines): `REG_STARTEND` (4) is
+/// not honoured (the subject runs to its NUL, the match is reported from the string start) and
+/// an unknown bit (0x80) is not an error.
+pub const fn regexec_2_2_5_eflags(eflags: i32) -> i32 {
+    eflags & REG_NOTBOL_NOTEOL
+}
+
+/// `nftw@GLIBC_2.2.5`'s flags: the bits it honours of `flags`. Probe-settled
+/// (`nftw@GLIBC_2.2.5` lines): `FTW_ACTIONRETVAL` is not honoured (a callback's value ends the
+/// walk and is returned, as without it) and an unknown bit (0x20, 0x100, 0x40000000) is ignored
+/// rather than `EINVAL`.
+pub const fn nftw_2_2_5_flags(flags: i32) -> i32 {
+    flags & (FTW_PHYS | FTW_MOUNT | FTW_CHDIR | FTW_DEPTH)
+}
 
 /// `realpath@GLIBC_2.2.5`'s own rule: a NULL `resolved` buffer is an error (`EINVAL`), checked
 /// before anything else (a NULL path included); with a buffer the call is the default
@@ -72,5 +102,19 @@ mod tests {
     fn glob_existence_follows_the_version() {
         assert_eq!(GlobExistence::for_version(true).pick("lstat", "stat"), "stat");
         assert_eq!(GlobExistence::for_version(false).pick("lstat", "stat"), "lstat");
+    }
+
+    // no spec clause: compat-plan.tsv behaviour row regexec@GLIBC_2.2.5 (LG-2; probe-settled).
+    #[test]
+    fn regexec_2_2_5_keeps_only_notbol_noteol() {
+        assert_eq!(regexec_2_2_5_eflags(1 | 2 | 4 | 0x80), 3);
+        assert_eq!(regexec_2_2_5_eflags(4), 0);
+    }
+
+    // no spec clause: compat-plan.tsv behaviour row nftw@GLIBC_2.2.5 (LG-2; probe-settled).
+    #[test]
+    fn nftw_2_2_5_drops_actionretval_and_unknown_bits() {
+        assert_eq!(nftw_2_2_5_flags(1 | 2 | 4 | 8), 15);
+        assert_eq!(nftw_2_2_5_flags(16 | 0x20 | 0x100 | 0x4000_0000 | 1), 1);
     }
 }

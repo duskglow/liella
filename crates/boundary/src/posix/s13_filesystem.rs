@@ -844,6 +844,21 @@ pub extern "C" fn nftw64(path: *const c_char, f: Option<NftwFn>, _nopenfd: c_int
     ret::signed(unsafe { strz::strz(path) }.and_then(|p| conv::req(f).and_then(|f| walk_guarded(|st| fs_tree::nftw(&CSys, p, f, flags, st)))).map(i64::from))
 }}
 
+crate::internal_entry! {
+/// `nftw@GLIBC_2.2.5`: only `FTW_PHYS`, `FTW_MOUNT`, `FTW_CHDIR` and `FTW_DEPTH` count;
+/// `FTW_ACTIONRETVAL` and unknown bits are ignored (probe-settled, LG-2). Exported only under
+/// that compat version.
+pub extern "C" fn liella_compat_nftw(path: *const c_char, f: Option<NftwFn>, nopenfd: c_int, flags: c_int) -> c_int {
+    nftw(path, f, nopenfd, liella_legacy::versioned::nftw_2_2_5_flags(flags))
+}}
+
+crate::internal_entry! {
+/// `nftw64@GLIBC_2.2.5`: the same contract as [`liella_compat_nftw`]; its own entry so the
+/// plan's behaviour row finds `liella_compat_nftw64` (compat-gen).
+pub extern "C" fn liella_compat_nftw64(path: *const c_char, f: Option<NftwFn>, nopenfd: c_int, flags: c_int) -> c_int {
+    nftw64(path, f, nopenfd, liella_legacy::versioned::nftw_2_2_5_flags(flags))
+}}
+
 export! { "GLIBC_2.2.5";
 pub extern "C" fn fts_open(argv: *const *mut c_char, options: c_int, compar: Option<SlotCompareFn>) -> *mut c_void {
     // UNSAFE(slice) SAFETY: argv is a NULL-terminated array of NUL-terminated strings (§13.3).

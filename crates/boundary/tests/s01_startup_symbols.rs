@@ -432,6 +432,27 @@ fn sym___cxa_at_quick_exit() {
     assert!(e.ends_with("[q1]") && !e.contains("[q2]"), "{e}");
 }
 
+// no spec clause: compat-plan.tsv behaviour row quick_exit@GLIBC_2.10 (LG-2; probe-settled).
+#[test]
+fn compat_quick_exit_2_10_runs_thread_dtors_first() {
+    // Trace: no spec clause (compat-plan.tsv behaviour row quick_exit@GLIBC_2.10; LG-2).
+    // The record: "with thread_local dtor: output=[tls-dtor][qh2][qh1]", the default without it.
+    if let Some(p) = probe().filter(|p| p == "qe210" || p == "qedefault") {
+        s::__cxa_at_quick_exit(mark_quick1 as *const () as usize, null_mut());
+        s::__cxa_at_quick_exit(mark_quick2 as *const () as usize, null_mut());
+        assert_eq!(s::__cxa_thread_atexit_impl(mark_thread as *const () as usize, 0x11 as *mut c_void, null_mut()), 0);
+        if p == "qe210" { s::liella_compat_quick_exit(3) } else { s::quick_exit(3) }
+    }
+    let o = run_probe("compat_quick_exit_2_10_runs_thread_dtors_first", "qe210");
+    assert_eq!(o.status.code(), Some(3));
+    let e = stderr_of(&o);
+    assert!(e.ends_with("[t1][q2][q1]"), "thread dtor first, then quick-exit entries newest first: {e}");
+    let o = run_probe("compat_quick_exit_2_10_runs_thread_dtors_first", "qedefault");
+    assert_eq!(o.status.code(), Some(3));
+    let e = stderr_of(&o);
+    assert!(e.ends_with("[q2][q1]") && !e.contains("[t1]"), "the default runs no thread dtor: {e}");
+}
+
 #[test]
 fn sym___cxa_atexit() {
     if probe().as_deref() == Some("many") {

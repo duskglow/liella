@@ -1727,6 +1727,41 @@ fn sym_nftw() {
     assert!(fails(s::nftw(cpath(&t.at("missing")).as_ptr(), Some(count_nftw), 4, 0) as isize, ENOENT));
 }
 
+/// Returns `FTW_SKIP_SUBTREE` (2) at the second visit when it is a directory, 0 otherwise.
+extern "C" fn skip_second_dir_nftw(_: *const c_char, _: *const c_void, kind: c_int, _: *mut c_void) -> c_int {
+    CALLS.set(CALLS.get() + 1);
+    if kind == 1 && CALLS.get() == 2 { 2 } else { 0 }
+}
+
+// no spec clause: compat-plan.tsv behaviour rows nftw@GLIBC_2.2.5, nftw64@GLIBC_2.2.5 (LG-2; probe-settled).
+#[test]
+fn compat_nftw_2_2_5_ignores_actionretval_and_unknown_flags() {
+    // Trace: no spec clause (compat-plan.tsv behaviour rows nftw@GLIBC_2.2.5, nftw64@GLIBC_2.2.5; LG-2).
+    // One child per directory (t/d/f), so the pre-order visits are t, t/d, t/d/f on any file system.
+    let t = Tmp::new("nftw225");
+    t.dir("d");
+    t.file("d/f");
+    type Nftw = extern "C" fn(*const c_char, Option<liella_abi::callback::NftwFn>, c_int, c_int) -> c_int;
+    for (name, old) in [("nftw", s::liella_compat_nftw as Nftw), ("nftw64", s::liella_compat_nftw64 as Nftw)] {
+        // Record: "flags=0x20 unknown: ret=0 errno=0" with every visit (also 0x100, 0x40000000).
+        for unknown in [0x20, 0x100, 0x4000_0000] {
+            CALLS.set(0);
+            assert_eq!(old(cpath(&t.path).as_ptr(), Some(count_nftw), 8, unknown), 0, "{name} {unknown:#x}");
+            assert_eq!(CALLS.get(), 3, "{name} {unknown:#x} walks everything");
+        }
+        // Record: "ACTIONRETVAL skip-subtree at t/d: ret=2 visits=t/d t" (the default walks on, ret=0).
+        CALLS.set(0);
+        assert_eq!(old(cpath(&t.path).as_ptr(), Some(skip_second_dir_nftw), 8, 16 | 1), 2, "{name}: FTW_SKIP_SUBTREE ends the walk");
+        assert_eq!(CALLS.get(), 2, "{name}: nothing after t/d");
+        // Record: "missing root: ret=-1 errno=ENOENT".
+        errno::set_raw(0);
+        assert!(fails(old(cpath(&t.at("missing")).as_ptr(), Some(count_nftw), 8, 1) as isize, ENOENT));
+    }
+    CALLS.set(0);
+    assert_eq!(s::nftw(cpath(&t.path).as_ptr(), Some(skip_second_dir_nftw), 8, 16 | 1), 0, "the default skips d's subtree and goes on");
+    assert_eq!(CALLS.get(), 2);
+}
+
 #[test]
 fn sym_nftw64() {
     let t = Tmp::new("nftw64");

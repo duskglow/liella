@@ -517,6 +517,13 @@ pub fn quick_exit(status: i32) -> ! {
     CSys.exit_group(status)
 }
 
+/// `quick_exit@GLIBC_2.10(status)`: the calling thread's `thread_local` destructors, then
+/// [`quick_exit`] (the old contract, LG-2; `crates/legacy/src/versioned.rs`).
+pub fn quick_exit_2_10(status: i32) -> ! {
+    run_thread_dtors();
+    quick_exit(status)
+}
+
 /// `__cxa_finalize(dso)`.
 pub fn finalize(dso: usize) {
     exit_handlers::finalize(&EXIT_HANDLERS, &QUICK_HANDLERS, &CSys, &KernelPages, dso, &mut conv::CCalls);
