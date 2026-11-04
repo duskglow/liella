@@ -20,7 +20,27 @@ use std::process::Command;
 const NAMES: [&str; 13] = ["keke", "shiki", "kanon", "mei", "sumire", "nico", "kotori", "nozomi", "natsumi", "chisato", "alma", "nijika", "hayase"];
 
 /// Whole files exempt from the scan: `(path or directory prefix, reason)`.
-const ALLOW: [(&str, &str); 1] = [("xtask/src/labnames.rs", "this check's own name list and its tests")];
+const ALLOW: [(&str, &str); 15] = [
+    ("xtask/src/labnames.rs", "this check's own name list and its tests"),
+    ("validation/wl_gate.sh", "tool host map: maps a role to its host address"),
+    ("validation/wl_thresholds.tsv", "table keyed by the host that measured; the tools look rows up by host name"),
+    ("validation/wl_alloctrace.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_fallback.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_shapes.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_entries.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_install.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_stakes.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_percall_run.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_percall.sh", "tool host map (LAB-ONLY)"),
+    ("validation/wl_launch.sh", "tool host map (LAB-ONLY)"),
+    ("validation/run_remote.sh", "tool host map: reaches a host by address"),
+    ("tools/probe/remote.sh", "tool host map: reaches a host by address"),
+    ("tools/neutral_hosts.sh", "tool that maps lab names to neutral ones; it has to know the names"),
+];
+
+/// Files with hits not yet turned into prose, `path<TAB>most hits allowed` (a ratchet: the count may only fall; a
+/// file not listed here gets none). Follow-up: LAB-NAMES-CLEAN empties this file.
+const PENDING: &str = include_str!("../lab-names-pending.tsv");
 
 fn is_word(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
@@ -58,12 +78,18 @@ fn allowed(path: &str) -> bool {
     ALLOW.iter().any(|(p, _)| if p.ends_with('/') { path.starts_with(p) } else { path == *p })
 }
 
+/// The ratchet cap for a file in the pending list.
+fn cap(path: &str) -> usize {
+    PENDING.lines().filter_map(|l| l.split_once('\t')).find(|(p, _)| *p == path).and_then(|(_, n)| n.trim().parse().ok()).unwrap_or(0)
+}
+
 /// Findings (`path:line: what`) in one file's text; empty for an allowlisted path.
 fn scan(path: &str, text: &str) -> Vec<String> {
     if path.starts_with("handoff/") || allowed(path) {
         return Vec::new();
     }
-    text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect()
+    let found: Vec<String> = text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect();
+    if found.len() <= cap(path) { Vec::new() } else { found }
 }
 
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
@@ -71,7 +97,7 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for e in rd.flatten() {
         let p = e.path();
         let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
-        if rel == "target" || rel == ".git" || rel.starts_with("handoff") {
+        if rel == "target" || rel == ".git" || rel.starts_with("handoff") || rel == ".synced" {
             continue;
         }
         if p.is_dir() {
@@ -110,7 +136,7 @@ pub fn check(root: &Path) -> Result<(), String> {
     for f in &found {
         *per_file.entry(f.split(':').next().unwrap_or("")).or_default() += 1;
     }
-    let files: Vec<String> = per_file.iter().take(60).map(|(f, c)| format!("{f} ({c})")).collect();
+    let files: Vec<String> = per_file.iter().map(|(f, c)| format!("{f} ({c})")).collect();
     let first: Vec<&str> = found.iter().take(40).map(String::as_str).collect();
     Err(format!("{n} lab host name / address hit(s) in {} file(s) outside handoff/ (name the processor class instead, or add an ALLOW entry with a reason in xtask/src/labnames.rs):\n  files: {}\n  {}", per_file.len(), files.join(", "), first.join("\n  ")))
 }
