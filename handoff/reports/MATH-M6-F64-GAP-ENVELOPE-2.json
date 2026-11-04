@@ -1,5 +1,5 @@
 {"task": "MATH-M6-F64-GAP-ENVELOPE-2", "model": "opus", "tokens": null,
- "result": "all six f64 exp/log/pow entries fused (closure rows); exp -22, exp2 -28, log -29, log2/log10 -13, pow -40 instructions per call; exp_qnan/overflow/tiny and expf_qnan +9..+14 (trade-off); gate (escalated FULL) and plants-2 running",
+ "result": "all six f64 exp/log/pow entries fused (closure rows); exp -22, exp2 -28, log -29, log2/log10 -13, pow -40 instructions per call; exp_qnan/overflow/tiny and expf_qnan +9..+14 (trade-off); NOT READY: plants-2 rc 1 (skip-mode-check SURVIVED); gate (escalated FULL) running",
  "branch": "task/math-m6-f64-gap-envelope-2", "head": "f901a9e4",
  "gate": {"affected": "running (escalated to FULL by affected; job math-m6-f64-gap-envelope-2-gate)", "peak": null},
  "accepted_first_attempt": null,

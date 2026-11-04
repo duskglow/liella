@@ -34,8 +34,16 @@ large share; no asm category proposed.
 - NOT DONE: the sweep digest (step 3 of run 1's list) and the detached full sweep; register 13.5/16.5 rows and the D-10.13
   note with the measured saving; the remaining `push rbx` (step 2).
 
+## Plants-2 result (rc 1, RED)
+- skip-mode-check (`let x = if in_place {` -> `if true {` in elem_fast): SURVIVED s10_math_symbols. Either the
+  every-mode / FTZ-DAZ tests live in another target, or the fast path in a non-default mode gives results the tests
+  accept: find out which before anything else.
+- wrong-rounding-dispatch (cold call gets 0x1f80 instead of `saved`): CAUGHT (math_envelope_keeps_the_callers_mxcsr).
+- drop-black-box: EQUIVALENT as expected.
+
 ## Exact next step
-1. Read the gate and plants-2 rows in shiki ~/logs/jobs.tsv; fix any red in the direct math tests.
+1. Explain the skip-mode-check survivor (which test should catch it; add one under directed rounding and FTZ/DAZ if
+   none does), rerun plants on a fresh RAM copy; read the gate row in shiki ~/logs/jobs.tsv.
 2. Explain expf_qnan; try the pre-check for the special-input rows; recount (counts.sh, base copy is in
    /dev/shm/claude/MATH-M6-F64-GAP-ENVELOPE-2/base, already built).
 3. Digest in double_fast_entry_mismatches, base vs after with LIELLA_FE_SWEEP_CHUNKS=10, then the full sweep detached.
