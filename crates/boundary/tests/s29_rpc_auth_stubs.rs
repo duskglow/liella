@@ -5,6 +5,8 @@
 
 use core::ffi::{c_char, c_int, c_uint, c_void};
 use core::ptr::null_mut;
+use std::collections::BTreeSet;
+use std::ffi::OsString;
 
 use liella_boundary::errno;
 use liella_boundary::posix::s29_rpc_auth as a;
@@ -13,8 +15,9 @@ const CANARY: u8 = 0xA5;
 
 type Stub = Box<dyn Fn(*mut c_char) -> i64>;
 
-fn open_fds() -> usize {
-    std::fs::read_dir("/proc/self/fd").map(Iterator::count).unwrap_or(0)
+/// The open descriptor numbers, as a set: listing order is the file system's, so only membership is compared.
+fn open_fds() -> BTreeSet<OsString> {
+    std::fs::read_dir("/proc/self/fd").unwrap().map(|e| e.unwrap().file_name()).collect()
 }
 
 /// Runs `f` with a canary buffer; returns (result, errno, buffer after).
