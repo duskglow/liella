@@ -592,16 +592,23 @@ fn shards_place_their_memory_on_their_node() {
 
 #[test]
 fn a_shard_that_cannot_map_takes_free_slabs_of_another_shard() {
+    // The donor is the caller's next shard, its previous shard, and a distant one.
+    for (donor, caller) in [(0, 1), (1, 0), (0, 5)] {
+        borrow_from_another_shard(donor, caller);
+    }
+}
+
+fn borrow_from_another_shard(donor: usize, caller: usize) {
     // Trace: no spec clause (allocation under an address-space limit: no spurious ENOMEM while
     // another shard holds free slabs); D-3.10, D-3.12.
     let _wd = Watchdog::new("a_shard_that_cannot_map_takes_free_slabs_of_another_shard", 30);
     let heap = Heap::new();
     let pages = FakePages::new();
     // Shard 0 maps its segment; thread 1 on shard 1 gets its cache (via a large block) but no segment.
-    pages.shard.set(0);
+    pages.shard.set(donor);
     let first = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
     pages.thread.set(1);
-    pages.shard.set(1);
+    pages.shard.set(caller);
     let big = heap.alloc(&CSys, &pages, 1 << 20, ALIGN).unwrap();
     heap.free(&CSys, &pages, big.addr).unwrap();
     // The limit now leaves no room for another segment.
@@ -613,7 +620,7 @@ fn a_shard_that_cannot_map_takes_free_slabs_of_another_shard() {
     for (size, align) in [(100, ALIGN), (24, ALIGN), (1000, ALIGN), (64, 64), (200, 256), (5000, ALIGN), (MAX_SMALL, ALIGN)] {
         let b = heap.alloc(&CSys, &pages, size, align).unwrap(); // no spurious ENOMEM while another shard holds free slabs
         assert_eq!(b.addr % align, 0);
-        assert_eq!(b.addr / SEG, first.addr / SEG, "the slab is shard 0's, handed to the caller on shard 1");
+        assert_eq!(b.addr / SEG, first.addr / SEG, "the slab is the donor shard's, handed to the caller on another shard");
         got.push(b.addr);
     }
     assert_eq!(segment_nodes(&pages).len(), segs_before, "nothing was mapped");
@@ -622,13 +629,13 @@ fn a_shard_that_cannot_map_takes_free_slabs_of_another_shard() {
         heap.free(&CSys, &pages, a).unwrap();
     }
     pages.thread.set(0);
-    pages.shard.set(0);
+    pages.shard.set(donor);
     for _ in 0..50 {
         heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
     }
     // A request no shard can serve still fails (the fallback is bounded).
     pages.thread.set(1);
-    pages.shard.set(1);
+    pages.shard.set(caller);
     assert!(heap.alloc(&CSys, &pages, 1 << 24, ALIGN).is_none());
 }
 
