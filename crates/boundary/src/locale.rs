@@ -266,10 +266,17 @@ fn publish_global() {
 #[inline]
 pub fn ctype_slot(slot: usize) -> usize {
     // TINY-HOT: the filled case is one `%fs` load and a test, then the thread pointer plus the
-    // word's offset (`__ctype_b_loc` = two loads and an add, no call).
+    // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case is a
+    // tail call, so the filled path keeps no frame.
     if tb::read::<tb::CtypeB>() == 0 {
-        ctype_fill();
+        return ctype_fill(slot);
     }
+    slot_address(slot)
+}
+
+/// The address of the calling thread's pointer `slot` (see [`ctype_slot`]).
+#[inline(always)]
+fn slot_address(slot: usize) -> usize {
     let off = match slot {
         0 => core::mem::offset_of!(liella_rt::tls::ThreadBlock, ctype_b),
         1 => core::mem::offset_of!(liella_rt::tls::ThreadBlock, ctype_tolower),
@@ -281,9 +288,10 @@ pub fn ctype_slot(slot: usize) -> usize {
 /// [`ctype_slot`]'s first call in a thread whose words are not stored yet.
 #[cold]
 #[inline(never)]
-fn ctype_fill() {
+fn ctype_fill(slot: usize) -> usize {
     let b = tb::current();
     crate::thread::serialized(|| refresh_words(b));
+    slot_address(slot)
 }
 
 /// The table at `word` (the entry for character 0, `ZERO` entries of `UNIT` bytes before it),
@@ -326,8 +334,13 @@ pub fn byte_class(c: i32) -> Class {
     if w == 0 {
         return class_unstored(c);
     }
-    let Some(o) = entry_offset::<2>(c) else { return Class(0) };
-    table_bytes::<2>(w).get(o..o.wrapping_add(2)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(Class(0), |b| Class(u16::from_ne_bytes(b)))
+    // The entry's address is the word plus twice the (signed) character: one range test, no
+    // rebasing of the word to the table's first entry.
+    if entry_offset::<2>(c).is_none() {
+        return Class(0);
+    }
+    let at = w.wrapping_add_signed(isize::try_from(c).unwrap_or(0).wrapping_mul(2));
+    conv::mapped_bytes(at, 2).first_chunk::<2>().map_or(Class(0), |b| Class(u16::from_ne_bytes(*b)))
 }
 
 /// `toupper` (`upper`) or `tolower` of `c` through the calling thread's word `w` (D-5.5);
