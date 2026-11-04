@@ -22,7 +22,7 @@ use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
 use crate::float::{self, Exact, Float, Kind, Num};
-use crate::mp::{self, c, Arith, Mp};
+use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
 use crate::mpw;
 use crate::status::{Rounding, Status};
 use crate::wide::{self, beside, near_one, one};
@@ -366,18 +366,6 @@ fn bitlen(k: u64) -> i64 {
     64 - i64::from(k.leading_zeros())
 }
 
-/// The exponent of `v` (far below everything for zero), for error bounds.
-fn ex<M: Arith>(v: M) -> i64 {
-    if v.is_zero() { -(1 << 40) } else { v.expo() }
-}
-
-/// A result and the exponent `err` of a bound `2^err` on its absolute error.
-#[derive(Clone, Copy)]
-struct Bounded<M> {
-    v: M,
-    err: i64,
-}
-
 /// `J_n(x)` and, when `want_y`, `Y_n(x)` by the power series (any `x > 0`; used below 100 in
 /// 384 bits and below [`WIDE_SERIES_MAX`] in 768), each with a bound on its absolute error.
 /// `p = (x/2)^n / n!` and `tx = (2/x)^n` come from the caller with relative errors below
@@ -497,17 +485,6 @@ fn bessel_wide(n: u64, a: &Arg, want_y: bool) -> Option<Bounded<mpw::Mp>> {
     let (p, tx) = powers(n, x, want_y);
     let (j, y) = bessel_series(n, x, want_y, p, tx, bitlen(4 * n) + 1 - mpw::Mp::BITS);
     Some(if want_y { y } else { j })
-}
-
-/// The rounding test of Ziv's strategy: `v` rounded in `mode` when every value within
-/// `2^err` of it rounds alike (the same encoding and the same flags; rounding is monotone, so
-/// both ends of the interval suffice). The ends are widened by four last places of `v` for the
-/// truncation of `v ± 2^err` itself.
-fn decided<F: Float, M: Arith>(v: Bounded<M>, mode: Rounding) -> Option<(F, Status)> {
-    let e = M::int(1).ldexp(v.err.max(ex(v.v) + 4 - M::BITS) + 1);
-    let lo = v.v.sub(e).round::<F>(mode);
-    let hi = v.v.add(e).round::<F>(mode);
-    (lo.0.to_bits() == hi.0.to_bits() && lo.1 == hi.1).then_some(lo)
 }
 
 /// Round a Bessel value (`signed` by `neg`): directly when it has no error bound (the
