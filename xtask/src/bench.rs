@@ -517,6 +517,35 @@ fn positional_name(n: &str) -> Result<String, String> {
     Ok(n.to_string())
 }
 
+/// The bench names: the stems of the `*.c` files in `bench/c` (sorted).
+fn c_bench_names(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter_map(|f| f.strip_suffix(".c").map(str::to_string))
+        .collect();
+    v.sort();
+    v
+}
+
+/// XTASK-BENCH-NAMES: every positional name of `--compare` must be a bench file, checked before anything is
+/// built (a row or function name such as `exp` used to become `bench/c/exp.c` and fail in cc1 after the product build).
+fn check_bench_names(names: &[String], valid: &[String]) -> Result<(), String> {
+    for n in names {
+        if !valid.iter().any(|v| v == n) {
+            return Err(format!(
+                "bench --compare: `{n}` is not a benchmark (no bench/c/{n}.c). Valid names: {}. A row or function name does not belong here: \
+                 --compare takes bench names only, positionally or as `--only a,b`, and accepts --runs N, --v3, --sorted, --counters, --tunables V, \
+                 --build-only, --no-build. It has no row filter (`--rows`/`--affected` exist only on the plain `bench` command)",
+                valid.join(", ")
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The value of `--only`: a comma list of benchmark names (the same meaning as in a normal run).
 fn only_list(v: Option<&str>) -> Result<Vec<String>, String> {
     let v = v.ok_or("--only needs a comma list of bench names")?;
@@ -572,6 +601,7 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     if names.is_empty() {
         names.push("cbench_opt".into());
     }
+    check_bench_names(&names, &c_bench_names(&root.join("bench/c")))?;
     COMPARE_NO_BUILD.store(no_build, std::sync::atomic::Ordering::Relaxed);
     // Measurements always use the shipped profile (fat LTO), never the fast test profile.
     if !no_build {
@@ -1594,6 +1624,21 @@ mod tests {
     }
 
     use super::*;
+
+    // XTASK-BENCH-NAMES: no spec clause (developer tooling). An unknown name fails at once, naming itself and the
+    // valid benches, before any build; a valid name passes.
+    #[test]
+    fn compare_rejects_unknown_bench_name_listing_valid_ones() {
+        let valid = vec!["cbench_libm".to_string(), "cbench_opt".to_string()];
+        let e = check_bench_names(&["exp".to_string()], &valid).unwrap_err();
+        assert!(e.contains("`exp`") && e.contains("cbench_libm, cbench_opt") && e.contains("--only"), "{e}");
+        assert!(check_bench_names(&["cbench_libm".to_string()], &valid).is_ok());
+        // the real tree: nothing is built by the check, and the shipped benches are found
+        let real = c_bench_names(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../bench/c"));
+        assert!(real.iter().any(|n| n == "cbench_libm"), "{real:?}");
+        assert!(check_bench_names(&["cbench_libm".to_string()], &real).is_ok());
+        assert!(check_bench_names(&["exp".to_string()], &real).is_err());
+    }
 
     // TEST-BENCH-TUNABLES-LEAK: no spec clause (developer tooling). Tests build commands with an explicit
     // `tunables` argument (None here) and never read or set the process-global `TUNABLES`, so no test order
