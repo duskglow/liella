@@ -1,10 +1,6 @@
-# VALIDATION-ROWS-STALE: NOT DONE (blocked on the keke job queue)
-State: branch task/validation-rows-stale, no edit to validation/README.md yet.
-Job `validation-rows-stale-so` (cargo xtask so on keke:~/w/r4, output ~/work/vrs-so.txt) was queued at 2026-11-04T17:15:37Z and
-was still QUEUED at 18:52Z (jobrun log: "QUEUED ... for a slot"); it never started, so no nm/readelf evidence exists.
-Rows to refresh once it runs (validation/README.md, lines ~467 T23, ~477 T34; T24 stays as is):
-- T23: nm libc.a / libm.a for frexp ldexp modf scalbn finite isinf isnan (+ __, f, l forms), __signbit*, __fpu_control.
-- T34: nm libc.a for fmod (expect absent from libc.a, present in libm.a); cite PRE14-LIBC-FMOD / LIBC-A-PLACEMENT.
-- Other rows naming a merge/story: line ~423-431 "After V-5" item 0/1 and the provisional-results section mention Track M's libm
-  merge and the modf/gawk stand-ins; check against the tree before rewriting. Unsettled rows: "rechecked 2026-11-04: unchanged".
-Next step: when the job finishes, `nm -A target/liella/libc.a | grep ...` on keke:~/w/r4, edit, `cargo xtask static`.
+# VALIDATION-ROWS-STALE: done (validation/README.md refreshed)
+Branch task/validation-rows-stale-2. Job validation-rows-stale-so ran on shiki:~/w/sh2 (rc 0, 79 s).
+Evidence (nm -A --defined-only target/liella/libc.a / libm.a): libc.a has all T23 names (frexp ldexp modf scalbn finite isinf isnan,
+__ forms, f/l forms, __signbit/f/l as W; __fpu_control as V); libc.a has no fmod/fmodf/fmodl; libm.a has T fmod/fmodf/fmodl.
+Edited: T23 and T34 status cells (fixed, cited check), T24 "Rechecked 2026-11-04: unchanged", next-steps item 0.
+Not done / not redone: suites (findutils, gawk as is) were not re-run; item 1 of the next-steps list still stands.
