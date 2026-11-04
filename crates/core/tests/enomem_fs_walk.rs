@@ -6,16 +6,15 @@
 //! At every injected failure the call must report its documented failure (`-1`/`NULL` with
 //! `ENOMEM`; `glob`: `GLOB_NOSPACE` with the structure empty; `fts_read` ends the walk with
 //! `ENOMEM`), never a truncated success, and the C heap's in-use bytes (`mallinfo2().uordblks`)
-//! must be what they were before the call (no partial result stays allocated on the Liella heap; blocks from the caller-owned `malloc`
-//! family are the host C library's in this build, so neither freed nor counted). The call without
+//! must be what they were before the call (no partial result stays allocated on the Liella heap), as must, after a reported failure, the hook's live-byte
+//! count of the global allocator (`failinject::live_bytes`) and the caller-owned block count (`selftest::caller_blocks`). The call without
 //! any injection must succeed with the COMPLETE result.
 //!
 //! The hook reaches only global-allocator allocations (`liella::mem` collections,
 //! `try_reserve`), not the caller-owned `malloc` family, the C heap, `KernelPages` or `OLD_HEAP`
 //! (coordinator #2101/#2102). A walker none of whose allocations is reachable has nothing to
 //! inject: the test then prints "NOT TESTABLE YET: <walker>" and passes (an ENOMEM path on the C
-//! heap needs a product-code hook, which needs an owner ruling). The global-allocator side of
-//! "no leak" is not measured here (no live-byte accounting in the hook).
+//! heap needs a product-code hook, which needs an owner ruling).
 //!
 //! The scratch tree is built by the test; names are compared in sorted order or as counts
 //! (no file-system dependence). `nftw` is compared by its number of callbacks.
@@ -35,6 +34,7 @@ use liella_abi::layout::{struct_dirent, FTSENT};
 use liella_boundary::errno;
 use liella_boundary::posix::{s03_memory, s04_strings as st, s13_filesystem as x, s14_search as g};
 use liella_boundary::selftest::failinject::{self, FailAlloc};
+use liella_boundary::selftest;
 use liella_kernel::Errno;
 
 const FILES: usize = 300;
@@ -84,12 +84,21 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
     let mut absorbed = 0u64;
     for n in 1..=20_000u64 {
         let before = s03_memory::mallinfo2().uordblks;
+        let live_before = failinject::live_bytes();
+        let caller_before = selftest::caller_blocks();
         let hit = failinject::injected();
         failinject::fail_nth(n);
         let verdict = attempt();
         failinject::off();
         let injected = failinject::injected() != hit;
         let after = s03_memory::mallinfo2().uordblks;
+        let failed = matches!(verdict, Verdict::Failed);
+        if failed && failinject::live_bytes() != live_before {
+            return format!("{walker}: allocation {n}: a partial result stays allocated on the global allocator ({live_before} -> {})", failinject::live_bytes());
+        }
+        if failed && selftest::caller_blocks() != caller_before {
+            return format!("{walker}: allocation {n}: a caller-owned block stays allocated ({caller_before} -> {})", selftest::caller_blocks());
+        }
         if after != before {
             return format!("{walker}: allocation {n}: a partial result stays allocated ({before} -> {after})");
         }
