@@ -1,0 +1,11 @@
+{"task": "DLERROR-THREAD-STATE", "model": "opus", "tokens": null,
+ "result": "BLOCKED: Liella has no dlerror/dlsym yet (phase 14, xtask compat DEFERRED), so there is nothing to test or plant; no code change",
+ "branch": "task/dlerror-thread-state", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "s27_1_c_5 test + plants need an implementation of dlerror per-thread state (D-27.2), which is deferred to phase 14", "recommendation": "re-queue after (or fold into) the phase-14 story that implements dlerror/dlsym; the test design is in handoff/dlerror-thread-state.md"}],
+ "informational": ["The dispatcher admitted a story whose target symbol is on xtask/src/compat.rs DEFERRED; such stories cannot be verified"],
+ "refused": [],
+ "improvement": "Before queueing an 'untested clause' story, check that the clause's symbols are not in xtask/src/compat.rs DEFERRED or marked 'Not yet implemented' in their module",
+ "next_step": "Coordinator ruling: re-queue after phase-14 dlerror, or fold the test design into that story",
+ "report_file": "handoff/dlerror-thread-state.md",
+ "jobs": []}
