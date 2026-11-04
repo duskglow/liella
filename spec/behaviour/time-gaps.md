@@ -10,7 +10,7 @@ written to `target/test-oracles/time_gaps_probe.c`), built against the host C li
 Ubuntu 24.04, x86_64) and statically against Liella's products, run with an empty environment.
 Every zone is a POSIX rule string; `TZDIR` names an empty directory of the test's own, so no zone
 file of the host is read. The `/etc/localtime` cases run in a private user and mount namespace
-(`unshare -r -m`) with a tmpfs over `/etc`. Recorded on keke, 2026-10-24.
+(`unshare -r -m`) with a tmpfs over `/etc`. Recorded on the Zen 1 host, 2026-10-24.
 
 ## Settled
 

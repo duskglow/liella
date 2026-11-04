@@ -2,7 +2,7 @@
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
 # admin_stress.sh <bin> <warm-runs> <cold-batches> <jobs> <cpu-burners> <dd-burners> <deadline-secs>
 # Usage: ORACLES=<role>/target/test-oracles tools/probe/admin_stress.sh <admin_products test binary> 3000 150 12 12 3 1500
-# Runs under jobrun on an otherwise idle host; see tools/probe/README.md (admin reference). Namespace modes need unprivileged userns (not on sumire).
+# Runs under jobrun on an otherwise idle host; see tools/probe/README.md (admin reference). Namespace modes need unprivileged userns (not on Skylake-SP host).
 # All scratch under $STRESS_BASE (RAM). Bounded by deadline-secs. It does NOT watch for other jobs: check ~/bin/slots-status first.
 bin=$1; warm=${2:-600}; cold=${3:-60}; J=${4:-8}; load=${5:-32}; ddn=${6:-4}; dl=${7:-1500}
 base=${STRESS_BASE:-/mnt/zram/claude/ari2}   # must be RAM (zram/tmpfs)

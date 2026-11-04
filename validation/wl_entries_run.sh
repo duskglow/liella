@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# keke side of validation/wl_entries.sh (WL-ENTRIES): exact counts of the calls each workload's programs make
+# Zen 1 host side of validation/wl_entries.sh (WL-ENTRIES): exact counts of the calls each workload's programs make
 # into the C library's exported functions, measured on the glibc kit.
 #   wl_entries_run.sh <outdir> [<workload>...]     (default: every workload of wl_workloads.sh)
 # Env: WLE_KIT (~/wl/kit/glibc/bin), WLE_WORK (~/wl/work).

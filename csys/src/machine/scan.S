@@ -2230,7 +2230,7 @@ liella_machine_rawmemchr:
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
 	/* SSE2 (STR-K1), as strlen's with compares against the broadcast byte. STR-K2 measured the
-	 * alternatives for 64-byte strings on nico (cycles/call, best of 5): the old aligned
+	 * alternatives for 64-byte strings on Ivy Bridge host A (cycles/call, best of 5): the old aligned
 	 * 16-byte-step head 30-32, one unaligned 64-byte fold 27, this 16 + 48 head 27 (glibc 15);
 	 * most of the gap is the fixed cost (17 vs 9 at length 0), hence the pointer return.
 	 * SAFETY: as strlen's, with "no earlier byte matched" in place of "no earlier NUL": a loaded
@@ -3552,7 +3552,7 @@ liella_machine_strcmp:
 	 * random pairs, an unpredictable branch). The zero vector comes from memory; the equal
 	 * return gives a's byte (0) as the answer. A miss goes on at index 128 through the general
 	 * page test: the blocks keep their positions relative to the strings' starts (32-byte
-	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on keke), and
+	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on Zen 1 host), and
 	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
 	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
 	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
@@ -5930,7 +5930,7 @@ index:
 	andl $4095, %ecx
 	cmpl $4080, %ecx
 	ja .Lschr_masked
-	/* [s, s + 16) inside s's page: one unaligned vector, no shift (measured on keke: the
+	/* [s, s + 16) inside s's page: one unaligned vector, no shift (measured on Zen 1 host: the
 	 * masked head's variable shift cost ~40 cycles per call when the count was 0). */
 	movdqu (%rdi), %xmm1
 	movdqa %xmm1, %xmm2

@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# Workload gate, step 2 (runs on a timing host, or keke): measure every workload for each variant.
+# Workload gate, step 2 (runs on a timing host, or Zen 1 host): measure every workload for each variant.
 #
 #   wl_run.sh OUT.tsv VARIANT...        (variants: glibc, <sha>, ...; kits in $WL/kit/VARIANT/bin)
 #

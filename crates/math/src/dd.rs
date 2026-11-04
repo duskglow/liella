@@ -40,7 +40,7 @@ pub fn fast_two_sum(a: f64, b: f64) -> Dd {
 
 /// Dekker's split of `a` into two halves of 26 bits each.
 #[inline]
-fn split(a: f64) -> (f64, f64) {
+pub(crate) fn split(a: f64) -> (f64, f64) {
     const C: f64 = 134_217_729.0; // 2^27 + 1
     let t = C * a;
     let hi = t - (t - a);

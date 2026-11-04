@@ -27,7 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Per-call ceilings (instructions, loop bookkeeping included), measured on keke (CANCEL-FAST):
+/* Per-call ceilings (instructions, loop bookkeeping included), measured on Zen 1 host (CANCEL-FAST):
  * read/write/pread/pwrite 58-63 on the fast path, read 79 through the former path
  * (cancel::point after the eight-argument window); close 72-75. CANCEL-FAST-2 (direct entries,
  * machine/points.S): read 36, write 39, pread 36, pwrite 39, close 32; the Rust path (liella_read_rest) 59. */

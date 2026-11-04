@@ -5,7 +5,7 @@
 version need on a glibc ABI library (the `library` column of `spec/abi/versions.tsv`) with the
 manifest (default / compat / private / absent) and with the exports of Liella's built products
 (`target/liella/*.so*`). The script's docstring gives the rules; `--self-test` checks them on fixed
-readelf texts (8 plants, all caught, job `bincompat-sweep-static-plants*` on kanon).
+readelf texts (8 plants, all caught, job `bincompat-sweep-static-plants*` on Broadwell-EP host).
 
 Rerun (a later story, e.g. after DL-14 or LG-1), from a role tree after `cargo xtask so`:
 
@@ -25,15 +25,15 @@ Two runs on one host diff clean (except `run.txt`); every output is sorted.
 | `version-nodes.tsv` | every needed (library, version node) and whether Liella defines it |
 | `programs.tsv` | every program (ELF with PT_INTERP): direct / transitive status, first blocker |
 | `glibc-components.txt` | ELFs counted apart as glibc's own files (glibc soname or a GLIBC_PRIVATE need) |
-| `liella-exports.tsv` | (kanon) the export set of the products used; shiki's run used this file |
+| `liella-exports.tsv` | (Broadwell-EP host) the export set of the products used; Haswell-EP host's run used this file |
 | `run.txt` | host, date, host glibc, product hashes |
 
 ## Results (2026-10-23, Liella products of `task/bincompat-sweep-static` = origin/next `01a1d6d0` + this script)
 
 Both hosts: Ubuntu 24.04.5, glibc 2.39. Products: `libc.so.6=0f78e1cfca5abdec`, `libm.so.6=8dd3e056a257ebbf`,
-`libpthread.so.0=9fa91a1dcba1b2f7` (sha256 prefixes, kanon `run.txt`).
+`libpthread.so.0=9fa91a1dcba1b2f7` (sha256 prefixes, Broadwell-EP host `run.txt`).
 
-| | kanon | shiki |
+| | Broadwell-EP host | Haswell-EP host |
 |---|---|---|
 | ELFs / dynamic (non-glibc) / programs | 2811 / 1930 / 1036 | 2838 / 1957 / 1059 |
 | glibc components counted apart | 259 | 259 |
@@ -63,8 +63,8 @@ Programs present on both hosts have the same status on both (checked with `join`
 4. **Transitive blockers**: most programs that are ok directly fail through a library that needs
    `ld-linux-x86-64.so.2` (`libsystemd-shared`, `libselinux`, `libuuid`: `__tls_get_addr`) or
    `dlerror` (`libcrypto.so.3`). These go away with DL-14's ld.so and the `dl*` exports.
-5. **LG-22's first corpus**: the programs with `transitive` = `ok` in `programs.tsv` (483 on kanon).
+5. **LG-22's first corpus**: the programs with `transitive` = `ok` in `programs.tsv` (483 on Broadwell-EP host).
 
-Not judged (stated in the script): unversioned references (2 ELFs on kanon, 3 on shiki), the
+Not judged (stated in the script): unversioned references (2 ELFs on Broadwell-EP host, 3 on Haswell-EP host), the
 program interpreter itself, `dlopen`ed plugins, and library lookup beyond RUNPATH/`$ORIGIN` and
 the standard directories (no `ld.so.cache`).

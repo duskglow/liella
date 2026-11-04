@@ -169,6 +169,56 @@ fn math_double_fast_entry_matches_the_envelope_in_every_mode() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+// ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
+    // Clauses: s10_0_f_0.
+    // The fast path may run in place only under the default control word; under any other word
+    // the entry switches to the default one before computing (D-10.13). Every rounding direction,
+    // with and without FTZ and DAZ: the result is liella-math's accurate one in that direction and
+    // MXCSR after the call is the caller's word with exactly the reference flags added, nothing
+    // else. Values alone cannot show which path ran (the kernels' rounding tests also hold in the
+    // caller's direction); a subnormal argument can: the fast domain tests compare it, raising the
+    // denormal-operand bit in hardware, which the entry never leaves in the caller's word.
+    use liella_math::Rounding;
+    use liella_math::real::Real;
+    let args = [(0.75, 2.5), (1.5, 0.3), (3.7, -1.7), (10.5, 7.25), (123.456, 0.1), (1e-310, 0.3), (5e-320, -0.3)]; // every result normal (FTZ)
+    // The refused specials answered in place in the default word (ruling #2378) and the signalling NaN that is not.
+    let specials = [(f64::NAN, 0.3), (f64::from_bits(0x7ff4_0000_0000_0000), 0.3), (f64::INFINITY, 0.3), (f64::NEG_INFINITY, 0.3)];
+    let args: Vec<(f64, f64)> = args.into_iter().chain(specials).collect();
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for (name, f, _) in double_fast_entries() {
+        for &(x, y) in &args {
+            for (rc, &mode) in (0u32..).zip(modes.iter()) {
+                let (want, st) = match name {
+                    "exp" => Real::exp(x, mode),
+                    "exp2" => Real::exp2(x, mode),
+                    "log" => Real::log(x, mode),
+                    "log2" => Real::log2(x, mode),
+                    "log10" => Real::log10(x, mode),
+                    _ => Real::pow(x, y, mode),
+                };
+                for extra in [0, 0x8000, 0x40, 0x8040] {
+                    if extra & 0x40 != 0 && x < f64::MIN_POSITIVE {
+                        continue; // DAZ reads a subnormal argument as zero: another function value
+                    }
+                    let word = 0x1f80 | (rc << 13) | extra;
+                    let got = around(word, || f(x, y).to_bits());
+                    let need = (want.to_bits(), word | u32::from(st.flags.0));
+                    if got != need {
+                        bad.push(format!("{name}({x:e}, {y:e}) word {word:x}: {got:x?} vs {need:x?}"));
+                    }
+                    checked = checked.saturating_add(1);
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} mismatches:\n{}", bad.len(), bad.join("\n"));
+    assert!(checked > 500, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// Every argument of `args` through each double fast entry ([`math_double_fast_entry_matches_the_envelope_in_every_mode`]):
 /// the number checked and one line per mismatch.
 #[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
@@ -325,7 +375,7 @@ fn math_envelope_keeps_the_callers_mxcsr() {
 #[test]
 fn math_envelope_keeps_a_result_that_is_not_tiny_under_the_callers_ftz() {
     // Clauses: s10_0_f_0.
-    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on shiki,
+    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on Haswell-EP host,
     // see `ftz_flushes_the_tininess_edge` in mathret.rs). A result that is exactly the smallest
     // normal and not tiny is kept under the caller's FTZ, without underflow.
     let edge = f64::MIN_POSITIVE;

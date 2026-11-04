@@ -517,6 +517,35 @@ fn positional_name(n: &str) -> Result<String, String> {
     Ok(n.to_string())
 }
 
+/// The bench names: the stems of the `*.c` files in `bench/c` (sorted).
+fn c_bench_names(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter_map(|f| f.strip_suffix(".c").map(str::to_string))
+        .collect();
+    v.sort();
+    v
+}
+
+/// XTASK-BENCH-NAMES: every positional name of `--compare` must be a bench file, checked before anything is
+/// built (a row or function name such as `exp` used to become `bench/c/exp.c` and fail in cc1 after the product build).
+fn check_bench_names(names: &[String], valid: &[String]) -> Result<(), String> {
+    for n in names {
+        if !valid.iter().any(|v| v == n) {
+            return Err(format!(
+                "bench --compare: `{n}` is not a benchmark (no bench/c/{n}.c). Valid names: {}. A row or function name does not belong here: \
+                 --compare takes bench names only, positionally or as `--only a,b`, and accepts --runs N, --v3, --sorted, --counters, --tunables V, \
+                 --build-only, --no-build. It has no row filter (`--rows`/`--affected` exist only on the plain `bench` command)",
+                valid.join(", ")
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The value of `--only`: a comma list of benchmark names (the same meaning as in a normal run).
 fn only_list(v: Option<&str>) -> Result<Vec<String>, String> {
     let v = v.ok_or("--only needs a comma list of bench names")?;
@@ -546,32 +575,52 @@ fn only_list(v: Option<&str>) -> Result<Vec<String>, String> {
 /// `target/liella/bench/measure.tsv`. Liella's `libc.so.6` is not measured: it needs Liella's
 /// dynamic loader (phase 14); the host loader refuses it (it requires its own libc's private
 /// start-up interface).
-pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
-    let mut runs = 5usize;
-    let mut names: Vec<String> = Vec::new();
-    let (mut v3, mut sorted, mut counters) = (false, false, false);
-    let (mut build_only, mut no_build) = (false, false);
+/// The options of `bench --compare`, parsed from the words after `bench` (flags may stand before or after
+/// `--compare` and between bench names; a `-`word that is not a known flag is an error, never a bench name).
+#[derive(Debug, Default, PartialEq)]
+struct CompareArgs {
+    runs: usize,
+    names: Vec<String>,
+    v3: bool,
+    sorted: bool,
+    counters: bool,
+    build_only: bool,
+    no_build: bool,
+    tunables: Option<String>,
+}
+
+fn parse_compare_args(args: &[String]) -> Result<CompareArgs, String> {
+    let mut o = CompareArgs { runs: 5, ..Default::default() };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--compare" => {}
-            "--build-only" => build_only = true,
-            "--no-build" => no_build = true,
-            "--v3" => v3 = true,
-            "--sorted" => sorted = true,
-            "--counters" => counters = true,
-            "--runs" => runs = it.next().and_then(|v| v.parse().ok()).filter(|&n| n > 0).ok_or("--runs needs a positive number")?,
+            "--build-only" => o.build_only = true,
+            "--no-build" => o.no_build = true,
+            "--v3" => o.v3 = true,
+            "--sorted" => o.sorted = true,
+            "--counters" => o.counters = true,
+            "--runs" => o.runs = it.next().and_then(|v| v.parse().ok()).filter(|&n| n > 0).ok_or("--runs needs a positive number")?,
             "--tunables" => {
                 let v = it.next().ok_or("--tunables needs a GLIBC_TUNABLES value (for example glibc.cpu.hwcaps=-AVX2)")?;
-                let _ = TUNABLES.set(v.clone());
+                o.tunables = Some(v.clone());
             }
-            "--only" => names.extend(only_list(it.next().map(String::as_str))?),
-            n => names.push(positional_name(n)?),
+            "--only" => o.names.extend(only_list(it.next().map(String::as_str))?),
+            n => o.names.push(positional_name(n)?),
         }
     }
-    if names.is_empty() {
-        names.push("cbench_opt".into());
+    if o.names.is_empty() {
+        o.names.push("cbench_opt".into());
     }
+    Ok(o)
+}
+
+pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
+    let CompareArgs { runs, names, v3, sorted, counters, build_only, no_build, tunables } = parse_compare_args(args)?;
+    if let Some(v) = tunables {
+        let _ = TUNABLES.set(v);
+    }
+    check_bench_names(&names, &c_bench_names(&root.join("bench/c")))?;
     COMPARE_NO_BUILD.store(no_build, std::sync::atomic::Ordering::Relaxed);
     // Measurements always use the shipped profile (fat LTO), never the fast test profile.
     if !no_build {
@@ -1595,6 +1644,21 @@ mod tests {
 
     use super::*;
 
+    // XTASK-BENCH-NAMES: no spec clause (developer tooling). An unknown name fails at once, naming itself and the
+    // valid benches, before any build; a valid name passes.
+    #[test]
+    fn compare_rejects_unknown_bench_name_listing_valid_ones() {
+        let valid = vec!["cbench_libm".to_string(), "cbench_opt".to_string()];
+        let e = check_bench_names(&["exp".to_string()], &valid).unwrap_err();
+        assert!(e.contains("`exp`") && e.contains("cbench_libm, cbench_opt") && e.contains("--only"), "{e}");
+        assert!(check_bench_names(&["cbench_libm".to_string()], &valid).is_ok());
+        // the real tree: nothing is built by the check, and the shipped benches are found
+        let real = c_bench_names(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../bench/c"));
+        assert!(real.iter().any(|n| n == "cbench_libm"), "{real:?}");
+        assert!(check_bench_names(&["cbench_libm".to_string()], &real).is_ok());
+        assert!(check_bench_names(&["exp".to_string()], &real).is_err());
+    }
+
     // TEST-BENCH-TUNABLES-LEAK: no spec clause (developer tooling). Tests build commands with an explicit
     // `tunables` argument (None here) and never read or set the process-global `TUNABLES`, so no test order
     // or parallel run changes what another test sees.
@@ -1792,6 +1856,19 @@ ctr	short	1
         per.insert("cbench_a".into(), (3, vec![])); // three rows in the binary
         let env = row_env(&mut per, &rows[..1]);
         assert_eq!(env.get("cbench_a").map(String::as_str), Some("r,out"));
+    }
+
+    #[test]
+    fn compare_args_flags_anywhere_and_unknown_flag_is_an_error() {
+        // no spec clause: xtask argument parsing
+        let v = |a: &[&str]| parse_compare_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let o = v(&["--counters", "--compare", "--runs", "3", "cbench_a", "--v3", "cbench_b"]).unwrap();
+        assert_eq!((o.runs, o.counters, o.v3, o.names.clone()), (3, true, true, vec!["cbench_a".to_string(), "cbench_b".to_string()]));
+        let o = v(&["--compare", "--no-build", "--tunables", "glibc.cpu.hwcaps=-AVX2"]).unwrap();
+        assert!(o.no_build && o.names == ["cbench_opt"] && o.tunables.as_deref() == Some("glibc.cpu.hwcaps=-AVX2"));
+        assert!(v(&["--compare", "cbench_a", "--rows", "x/y"]).unwrap_err().contains("unknown option --rows"));
+        assert!(v(&["--compare", "--no-archive"]).is_err());
+        assert!(v(&["--compare", "--runs", "0"]).is_err() && v(&["--compare", "--tunables"]).is_err());
     }
 
     #[test]

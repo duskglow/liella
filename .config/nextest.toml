@@ -44,7 +44,7 @@ filter = "binary(=aio_products)"
 test-group = "privileged-aio"
 
 # GATE-SPEED: the privileged group is the longest chain of a pass (17 tests one at a time,
-# ~635 s of a ~645 s pass on keke, aio_products alone ~290 s): its tests start first, so the chain
+# ~635 s of a ~645 s pass on Zen 1 host, aio_products alone ~290 s): its tests start first, so the chain
 # begins at once and is never queued behind other tests.
 [[profile.default.overrides]]
 filter = "binary(=admin_products) | binary(=aio_products) | binary(=catalogs_products) | binary(=dns_products) | binary(=fstree_products) | binary(=mntent_products) | binary(=netdb_products) | binary(=noproc_products) | binary(=nscache_products) | binary(=patterns_products) | binary(=posixipc_products) | binary(=process_products) | binary(=syslog_products) | binary(=terminals_products) | binary(=users_products)"

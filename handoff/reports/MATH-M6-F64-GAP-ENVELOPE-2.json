@@ -1,0 +1,12 @@
+{"task": "MATH-M6-F64-GAP-ENVELOPE-2", "model": "opus", "tokens": null,
+ "result": "all six f64 exp/log/pow entries fused (closure rows); exp -22, exp2 -28, log -29, log2/log10 -13, pow -40 instructions per call; exp_qnan/overflow/tiny and expf_qnan +9..+14 (trade-off); NOT READY: plants-2 rc 1 (skip-mode-check SURVIVED); gate (escalated FULL) running",
+ "branch": "task/math-m6-f64-gap-envelope-2", "head": "f901a9e4",
+ "gate": {"affected": "running (escalated to FULL by affected; job math-m6-f64-gap-envelope-2-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "trade-off: common f64 rows 13-40 instructions faster, exp_qnan/exp_overflow_errno/exp_tiny +12..+14 and expf_qnan +9 slower", "recommendation": "keep (favour the common case); next run adds a special-input pre-check before the cold call and explains expf_qnan"}],
+ "informational": ["MXCSR read stays a call (ruling #2350): about 4 of 172 instructions on exp, no asm category proposed", "affected escalated the direct gate to FULL because the tsv, the generated file and xtask/src/math.rs changed", "sweep digest and full sweep not run; register rows not updated"],
+ "refused": [],
+ "jobs": ["shiki:math-m6-f64-gap-envelope-2-gate", "shiki:math-m6-f64-gap-envelope-2-plants-2", "shiki:math-m6-f64-gap-envelope-2-counts"],
+ "improvement": "the plants recipe should say that s10_math_symbols needs cargo xtask so first (a first plants job lost its baseline to it)",
+ "next_step": "read gate/plants-2 results, explain expf_qnan, try a pre-check for the special-input rows, then the sweep digest and register rows",
+ "report_file": "handoff/math-m6-f64-gap-envelope.md"}

@@ -5,7 +5,7 @@ Probes: `tools/probe/compat/compat_libc.c`, `compat_thread.c`, `compat_libm.c`; 
 `tools/probe/compat/LIST.tsv` (library, symbol, version, probe), checked by `cargo xtask static` (`compat-probes`:
 every row is a `compat` row of `spec/abi/versions.tsv`, its probe binds `symbol@version` with `.symver`, and the record
 has a line for it; once `spec/abi/compat-plan.tsv` exists, every `behaviour` row of it must be listed).
-Record: [compat.glibc.txt](compat.glibc.txt), made with `sh tools/probe/compat/run.sh SCRATCH` on shiki (glibc 2.39,
+Record: [compat.glibc.txt](compat.glibc.txt), made with `sh tools/probe/compat/run.sh SCRATCH` on Haswell-EP host (glibc 2.39,
 Ubuntu 24.04, 26 CPUs, kernel affinity mask 8 bytes), twice with identical output. Black-box only: each old version is
 bound with `.symver` and called; nothing here derives from the reference library's source.
 
@@ -52,7 +52,7 @@ part are what the reference library wrote to stderr itself (the SVID-mode messag
 
 **Probe:** `crates/core/tests/oracle/legacy_stubs_probe.c`, a black-box C program that binds each
 name by its compat version (`.symver name,name@GLIBC_2.2.5`) and calls it on the host glibc
-(2.39, keke, kernel 6.8, job `legacy-stubs-probe`). Mode `seccomp` first installs a filter that
+(2.39, Zen 1 host, kernel 6.8, job `legacy-stubs-probe`). Mode `seccomp` first installs a filter that
 makes the old x86_64 system-call numbers (134 `uselib`, 156 `_sysctl`, 174 `create_module`, 177
 `get_kernel_syms`, 178 `query_module`, 180 `nfsservctl`, 181 `getpmsg`, 182 `putpmsg`, 183-185) fail
 with `EXDEV`: a name that answers `EXDEV` there makes its system call; one that answers `ENOSYS`

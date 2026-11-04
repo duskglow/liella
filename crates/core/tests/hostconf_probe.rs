@@ -49,9 +49,9 @@ fn reorder_keyword_and_env() {
     assert!(!parse(Some(b"reorder on\n"), &env(&[("RESOLV_REORDER", "off")])).reorder);
 }
 
-const NETS: [([u8; 4], u8); 2] = [([127, 0, 0, 1], 8), ([10, 0, 100, 53], 24)];
+const NETS: [([u8; 4], u8); 2] = [([127, 0, 0, 1], 8), ([192, 0, 2, 53], 24)];
 
-/// Trace: no spec clause (D-16.13). Record (interfaces lo 127.0.0.1/8, 10.0.100.53/24): the first address on
+/// Trace: no spec clause (D-16.13). Record (interfaces lo 127.0.0.1/8, 192.0.2.53/24): the first address on
 /// a local network swaps with the first; netmask honoured; loopback counts.
 #[test]
 fn reorder_order() {
@@ -63,11 +63,11 @@ fn reorder_order() {
         v
     };
     let (a, b) = ([203, 0, 113, 9], [198, 51, 100, 1]);
-    assert_eq!(swap(&[a, [10, 0, 100, 200], [127, 0, 0, 5]]), [[10, 0, 100, 200], a, [127, 0, 0, 5]]);
-    assert_eq!(swap(&[a, b, [10, 0, 100, 203]]), [[10, 0, 100, 203], b, a]);
+    assert_eq!(swap(&[a, [192, 0, 2, 200], [127, 0, 0, 5]]), [[192, 0, 2, 200], a, [127, 0, 0, 5]]);
+    assert_eq!(swap(&[a, b, [192, 0, 2, 203]]), [[192, 0, 2, 203], b, a]);
     assert_eq!(swap(&[a, b, [127, 0, 0, 7]]), [[127, 0, 0, 7], b, a]);
-    assert_eq!(swap(&[a, [10, 0, 101, 6], [10, 0, 100, 204]]), [[10, 0, 100, 204], [10, 0, 101, 6], a]);
-    assert_eq!(swap(&[[10, 0, 100, 1], a]), [[10, 0, 100, 1], a]);
+    assert_eq!(swap(&[a, [192, 0, 3, 6], [192, 0, 2, 204]]), [[192, 0, 2, 204], [192, 0, 3, 6], a]);
+    assert_eq!(swap(&[[192, 0, 2, 1], a]), [[192, 0, 2, 1], a]);
     assert_eq!(swap(&[a, b]), [a, b]);
 }
 

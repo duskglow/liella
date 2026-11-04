@@ -30,7 +30,7 @@
 
 #### Stories (PHASE-15-PLAN, 2026-10-23)
 
-**What exists today** (checked at `6abb25d6`, `cargo xtask status` on kanon): 691 pending in the
+**What exists today** (checked at `6abb25d6`, `cargo xtask status` on Broadwell-EP host): 691 pending in the
 whole tree. Phase 15 owns about 540 of them: s29 311 (303 symbols, 8 clauses), s12 74 (`_IO_*`,
 §12.13), s28 17 (profiling), s16 13 (compat-only resolver/NSS names, D-16.6), s24 11 (removed
 syscalls), s10 117 (112 `__*_finite`, `__clog10*`, `_LIB_VERSION`, `__signgam`; the M6 compat
