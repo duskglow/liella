@@ -40,3 +40,13 @@ Plants unproven: perror-herror-reference-3-plants/-plants2 used a wrong package 
 - NOT VERIFIED at hand-back: jobs perror-herror-reference-5-gate2 and -plants2 (keke) were still running on a5d8c126.
   Next step: read both from ~/logs/jobs.tsv on keke; plants2 must print CAUGHT for orient1, orient2, errno_restore, fd1
   (log ~/logs/perror-herror-reference-5-plants2.log). A SURVIVED line means the new test does not reach that path.
+
+## Run 6 (PERROR-HERROR-REFERENCE-6)
+- Run 5 plants2: orient1, orient2, fd1 CAUGHT; errno_restore (netdb.rs herror, `errno::set_raw(saved)`) SURVIVED.
+- Cause: `Sys::write` is a raw syscall wrapper returning `KResult`; it never writes errno, so a failing write cannot change errno and
+  the restore is unobservable today. Added `sym_herror_failed_write_keeps_errno` (child's fd 2 = /dev/full, ENOSPC) as a contract check
+  for the failing path; it passes with or without the restore. errno_restore is therefore an EQUIVALENT mutant (kept as defensive code
+  so herror keeps errno if the write path ever sets it).
+- Jobs on shiki (role sh1): perror-herror-reference-6-gate rc 0, perror-herror-reference-6-plants2 rc 0 (orient1/orient2/fd1 CAUGHT,
+  errno_restore EQUIVALENT). clippy --workspace --all-targets --all-features and cargo xtask static pass.
+- Next step: none.
