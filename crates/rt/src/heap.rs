@@ -877,6 +877,18 @@ impl Heap {
     /// An empty or never-used slab of `shard` (its lock held), mapping a new segment when the
     /// current one is spent.
     fn take_slab<S: Sys, P: Pages>(&self, sys: &S, pages: &P, shard: usize) -> Option<u64> {
+        if let Some(s) = self.take_held(pages, shard) {
+            return Some(s);
+        }
+        let sh = &self.shards[shard];
+        let idx = self.new_segment(sys, pages, shard)?;
+        sh.seg.store(idx + 1, Relaxed);
+        sh.next_slab.store(1, Relaxed);
+        Some(w64(idx * SLABS))
+    }
+
+    /// An empty or never-used slab `shard` already holds (its lock held); maps nothing.
+    fn take_held<P: Pages>(&self, pages: &P, shard: usize) -> Option<u64> {
         let sh = &self.shards[shard];
         if let Some(s) = sh.empty.load(Relaxed).checked_sub(1) {
             sh.empty.store(rec_next(self.record(pages, s).head[R_HEAD].load(Relaxed)), Relaxed);
@@ -888,10 +900,20 @@ impl Heap {
             sh.next_slab.store(next + 1, Relaxed);
             return Some(w64((seg - 1) * SLABS + next));
         }
-        let idx = self.new_segment(sys, pages, shard)?;
-        sh.seg.store(idx + 1, Relaxed);
-        sh.next_slab.store(1, Relaxed);
-        Some(w64(idx * SLABS))
+        None
+    }
+
+    /// Failure path only: `shard` could not supply a slab (no segment fits, as under an
+    /// address-space limit), so take one the other shards already hold, each once and under its
+    /// own lock alone (no lock is held across the visits, so the lock order is untouched). The
+    /// slab keeps its segment's home shard (`adopt`), so a free returns it there (`release_slab`).
+    #[cold]
+    fn take_elsewhere<S: Sys, P: Pages>(&self, sys: &S, pages: &P, shard: usize) -> Option<u64> {
+        (1..SHARDS).find_map(|i| {
+            let other = (shard + i) % SHARDS;
+            let _g = self.shards[other].lock.lock(sys);
+            self.take_held(pages, other)
+        })
     }
 
     /// Give the empty slab `s` (no live block, nothing pending) back to its home shard.
@@ -1175,8 +1197,11 @@ impl Heap {
         }
         let shard = pages.shard() % SHARDS;
         let s = {
-            let _g = self.shards[shard].lock.lock(sys);
-            self.take_slab(sys, pages, shard)?
+            let own = {
+                let _g = self.shards[shard].lock.lock(sys);
+                self.take_slab(sys, pages, shard)
+            };
+            own.or_else(|| self.take_elsewhere(sys, pages, shard))?
         };
         self.adopt(pages, k, c, s);
         self.make_current(pages, k, c, s);
