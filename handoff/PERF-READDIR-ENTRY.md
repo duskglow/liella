@@ -84,7 +84,13 @@ Run 2 jobs (keke ~/logs/jobs.tsv; driver ~/work/perf-readdir-entry-2/driver.sh, 
   under timeout 600. Exits 1 on a survivor or a plant that did not apply.
 
 Open / next step:
-0. Done in run 4 (TOOL_BOUND 71). Next: CI on 54be5237. Separately HOTTEXT-ASM-ORDER (`.S` kernels in list order),
+0. Bound done in run 4 (TOOL_BOUND 71). Results on 87b78a57 (mei): static rc 0, gate2 rc 0 (affected: ok, peak
+   1.3G), plants rc 1: no-errno, end-sets-errno, tool-bound-low CAUGHT; **fast-skips-record SURVIVED** (all 4
+   readdir symbol tests and 77 s13_filesystem_clauses pass; run 2 on keke reported it CAUGHT). Both hosts /tmp ext4.
+   NEXT STEP: find out whether `buffered_addr` advances the position before returning (then the plant drops one
+   entry per call and a test must see it: add a clause test that counts every entry of a known directory, sorted, no
+   order dependence) or only peeks (then the plant is EQUIVALENT: write the reason, replace it with a plant that
+   really drops a record). Rerun plants in a NEW zram copy (plants-2). Then CI. Separately HOTTEXT-ASM-ORDER (`.S` kernels in list order),
    then a regen with the tool program can bring the tool bound back down.
 1. The readdir user-instruction gap is closed (1.004). The remaining fts_entry_flat gap (1.88x user) is not a
    readdir question: a separate story. The register paragraph in docs/saturation/17 records the counts.

@@ -9,5 +9,6 @@
  "refused": [],
  "jobs": ["mei:perf-readdir-entry-4-hotcount", "mei:perf-readdir-entry-4-hotcount-merged", "mei:perf-readdir-entry-4-static", "mei:perf-readdir-entry-4-plants", "mei:perf-readdir-entry-4-gate2"],
  "improvement": "Count hot_text rows for next, base, branch and branch-on-next (git merge-tree, equal-length zram paths) in one job: 8 min for all four, which settled run 3's question at once",
- "next_step": "CI on this branch; HOTTEXT-ASM-ORDER as its own story",
+ "plants": "perf-readdir-entry-4-plants rc 1: 3 CAUGHT, fast-skips-record SURVIVED on mei (CAUGHT on keke in run 2); NOT READY",
+ "next_step": "Settle fast-skips-record (real gap -> add an entry-count clause test; equivalent -> reasoned + a better plant), rerun plants in plants-2, then CI; HOTTEXT-ASM-ORDER as its own story",
  "report_file": "handoff/PERF-READDIR-ENTRY.md"}
