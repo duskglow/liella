@@ -1,43 +1,43 @@
-# DL-THREAT-TEXT (phase 14 DL-0d): loader threat-model rules folded in
+# DL-THREAT-TEXT (phase 14 DL-0d): loader threat-model rules and environment additions folded in
 
-**State.** Branch `task/dl-threat-text` from `origin/next` c3424c99. Docs commits 30974b1b and 81f978db (clause cell), then the
-handoff/report commits. Planning story: no loader code.
+**State.** Run 1 on `task/dl-threat-text` (docs 30974b1b, 81f978db). Run 2 (DL-THREAT-TEXT-2) on
+`task/dl-threat-text-2`, cut from run 1's head 5c773a20. `origin/next` merged first (already up to
+date). Run 2's docs commit is 9f6aa513, then this handoff/report commit. Planning-type change: no
+loader code.
 
-**Done.**
-- `spec/security/threat-model.md`, "The dynamic loader": rules 1-3 and 5-7 in the checkable form of
-  `plan/ph14/threat-model-draft.md` section B, rules 9-12 from section C (owner approval R14-15,
-  ruling #2549, 2026-11-04), rules 4 and 8 kept, each with the DL-0a probe answers
-  (`spec/behaviour/dynlink-secure.md`). The old open-questions paragraph became "Still open"; the
-  old test paragraph became the DL-29 checklist table (rule -> test it needs, all 12 rules).
-- Rule 1's open point (set-user-ID / set-group-ID bit admitting an `LD_PRELOAD`/`LD_AUDIT` entry)
-  is marked **Open**, needs a root probe on the owner's say-so; not guessed.
-- Rule 10 (executable-stack object refused) is a deliberate difference: row in
-  `docs/differences-from-glibc.md` ("Deliberate user-facing incompatibilities") and a registered row
-  in `docs/compat-flags.md`.
-- Rule 4 text kept, plus one sentence "For a `PT_GNU_STACK` that asks for an executable stack, rule
-  10 applies" (its "`PT_GNU_STACK` honoured" would otherwise contradict rule 10).
+**Done (run 1).** `spec/security/threat-model.md`, "The dynamic loader": rules 1-12 in checkable
+form (draft sections B and C, owner approval R14-15, #2549), with the DL-0a probe answers
+(`spec/behaviour/dynlink-secure.md`), "Still open" paragraph, the DL-29 checklist table. Rule 10
+(executable stack refused) is a deliberate difference with a differences row and a compat row.
 
-**Probe settled here** (`tools/probe/execstack/`, `run.sh DIR` builds `es.c` in DIR; run on the
-keke role host, Ubuntu GLIBC 2.39-0ubuntu8.9): library and program linked with `-z execstack`
-(GNU_STACK RWE checked with readelf). `dlopen("./libx.so")` succeeds; before it the main stack and a
-thread stack are `rw-p`, after it both are `rwxp`. A `-z noexecstack` library changes nothing. A
-program linked `-z execstack` starts with `rwxp` main and thread stacks.
+**Done (run 2, owner rulings 2026-11-04).**
+- #2661: draft section A folded into "Environment variables in secure-execution mode": the loader
+  applies the same `rt::start::UNSECURE` list at bootstrap (libc pass then a no-op); secure mode
+  is `AT_SECURE` only in the products; `GLIBC_TUNABLES` row says the variable is not passed on and
+  no tunable is honoured by loader or libc; the `TZ` row now says: name or POSIX rule honoured,
+  a path only inside `/usr/share/zoneinfo`, a path outside it or any `..` component reads no file
+  and gives offset 0; new row `LD_ASSUME_KERNEL`, `LD_PROFILE_OUTPUT`, `LD_TRACE_LOADED_OBJECTS`
+  (kept, the loader does not act on them in secure mode); closing sentence on loader variables.
+  The "Still open" paragraph and the Status line now say section A is approved and folded in.
+- #2660: both `COMPAT-NEW` placeholders (compat-flags and differences rows) and the threat-model
+  rule 10 text now say COMPAT-19.
+- #2662: the COMPAT-19 row says the future flag is ignored in a secure process, as COMPAT-12.
 
-**RULING NEEDED.**
-1. Compat id: the brief assigns COMPAT-18, but on `origin/next` COMPAT-18 is already the `fnmatch`
-   `FNM_EXTMATCH`+`FNM_LEADING_DIR` row (the static check rejects a duplicate). The new row carries
-   `COMPAT-NEW` (compat-flags row and differences row). Recommend the coordinator assign COMPAT-19
-   (next free) and replace both placeholders.
-2. Section A of the draft (environment-section additions: `TZ` treatment, `GLIBC_TUNABLES` removal,
-   the loader's new variables in the table) was not in the approval (B and C only), so it is not
-   folded in; the `TZ` row still says "to be reviewed with the loader". Recommend approving A as
-   drafted: the DL-0a probe shows the reference does exactly what A proposes, no differences row.
-3. The compat row recommends that the future flag be ignored in a secure process (as COMPAT-12).
+**Open questions.** Rule 1's set-ID bit for `LD_PRELOAD`/`LD_AUDIT` entries is still Open (it needs
+a root probe on the owner's say-so). `LD_USE_LOAD_BIAS` stays in the "kept, not read" row because
+section A does not list it; the loader story that reads it adds its row.
 
-**Not to redo.** The DL-0a probe answers are already in the rules; the execstack probe output is above.
+**Not to redo.** The DL-0a answers and the execstack probe (`tools/probe/execstack/`, run 1) are in
+the text. The compat id and the secure-process rule are settled.
 
-**Next step.** Coordinator: number the compat id, then land. DL-29 uses the checklist table; DL-8 may
-start once this lands.
+**Next step.** Land. The `TZ` rule is now a spec requirement for §23.6 zone selection in a secure
+process: the coordinator has the implementation note (sent privately with the hand-back). DL-29
+should add a checklist row for the `TZ` rule (tests `s23_6_c_0`, `s23_6_c_2` in secure mode).
+DL-8 may start once this lands.
 
-**Jobs.** `dl-threat-text-static-3` (cargo xtask static on keke r1, via jobrun, final head). Superseded: `dl-threat-text-static` (rc 1: the new differences row had no clause cell; fixed in 81f978db), `dl-threat-text-static-2` (rc 0 on 81f978db, before this report commit). No gate, plants or
-counts: docs only.
+**Plan rows to read.** R14-13, R14-15 (`plan/ph14/`), `plan/ph14/threat-model-draft.md`.
+
+**Jobs (run 2, kanon kn1).** `dl-threat-text-2-static`: `cargo xtask static`, then
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`, on 9f6aa513. Result:
+see `handoff/reports/DL-THREAT-TEXT-2.json`. No gate, plants or counts: docs only, no code.
+Run 1's jobs (keke r1) cover run 1's head only.
