@@ -602,15 +602,30 @@ fn getc_forms(f: GetC, locked: bool) {
     assert_eq!(waits(fp, |fp| assert_eq!(f(fp), EOF)), locked, "the stream lock, an empty window on a buffer (STDIO-6)");
     assert_eq!(x::fclose(fp), 0);
     read_front(f, locked);
-    // PUTC-FRONT: a read window the program widened past the data. The front path (under the
-    // lock for the locked forms: the test harness has several threads) refuses the bytes past
-    // the engine's end of data; the general path answers EOF with the indicator.
+    // PUTC-FRONT: a read window the program widened past the data. The locked forms validate
+    // under the lock (the test harness has several threads) and refuse the bytes past the
+    // engine's end of data; the general path answers EOF with the indicator.
     let fp = open(&tmp_with("getc-widened", b"abc"), "r");
     assert_eq!(f(fp), ch(b'a'));
     let end = core::mem::offset_of!(FILE, _IO_read_end);
-    set_field(fp, end, field(fp, end) + 16);
-    assert_eq!((f(fp), f(fp)), (ch(b'b'), ch(b'c')));
-    assert_eq!(f(fp), EOF, "no byte past the data");
+    if locked {
+        set_field(fp, end, field(fp, end) + 16);
+        assert_eq!((f(fp), f(fp)), (ch(b'b'), ch(b'c')));
+        assert_eq!(f(fp), EOF, "no byte past the data");
+    } else {
+        // GETC-PUTC-FASTPATH (D-12.19): the `_unlocked` forms trust the window as the program
+        // left it (validated at the refill, not per call), as header-inline `getc` reads it: a
+        // byte the program placed in its own buffer just past the data is taken. With the
+        // window put back at its end, the refill path answers EOF.
+        let e = field(fp, end);
+        let z = b'Z';
+        st::memcpy(with_exposed_provenance_mut::<u8>(e).cast(), (&raw const z).cast(), 1);
+        set_field(fp, end, e + 1);
+        assert_eq!((f(fp), f(fp), f(fp)), (ch(b'b'), ch(b'c'), ch(b'Z')), "the trusted window");
+        set_field(fp, core::mem::offset_of!(FILE, _IO_read_ptr), e);
+        set_field(fp, end, e);
+        assert_eq!(f(fp), EOF, "no byte past the restored window");
+    }
     assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, from the general path");
     assert_eq!(x::fclose(fp), 0);
 }
@@ -759,17 +774,21 @@ fn putc_forms(f: PutC, locked: bool) {
     assert_eq!(t.read(), b"A\xfez");
     // The `_unlocked` forms take the trusted fast path here (a test process never runs alone).
     front_corners(|fp, s| s.iter().all(|&b| f(ch(b), fp) == ch(b)), !locked);
-    // PUTC-FRONT: a write window the program widened past the buffer. The front path (under
-    // the lock for the locked forms) refuses the bytes past the buffer; the general path writes
-    // them, so every byte arrives.
-    let fp = open(&t, "w");
-    assert_eq!(f(ch(b'0'), fp), ch(b'0'));
-    let end = core::mem::offset_of!(FILE, _IO_write_end);
-    set_field(fp, end, field(fp, end) + 64);
-    let data: Vec<u8> = (0..70_000u32).map(|i| b'a' + u8::try_from(i % 26).unwrap()).collect();
-    assert!(data.iter().all(|&b| f(ch(b), fp) == ch(b)), "each byte answered");
-    assert_eq!(x::fclose(fp), 0);
-    assert!(t.read().get(1..) == Some(&data[..]), "every byte written, past the buffer too");
+    // PUTC-FRONT: a write window the program widened past the buffer. The locked forms validate
+    // under the lock and refuse the bytes past the buffer; the general path writes them, so
+    // every byte arrives. The `_unlocked` forms trust the window as the program left it
+    // (GETC-PUTC-FASTPATH, D-12.19: validated at the flush, not per call), as header-inline
+    // `putc` does, so past the buffer they would store into memory the program named: not run.
+    if locked {
+        let fp = open(&t, "w");
+        assert_eq!(f(ch(b'0'), fp), ch(b'0'));
+        let end = core::mem::offset_of!(FILE, _IO_write_end);
+        set_field(fp, end, field(fp, end) + 64);
+        let data: Vec<u8> = (0..70_000u32).map(|i| b'a' + u8::try_from(i % 26).unwrap()).collect();
+        assert!(data.iter().all(|&b| f(ch(b), fp) == ch(b)), "each byte answered");
+        assert_eq!(x::fclose(fp), 0);
+        assert!(t.read().get(1..) == Some(&data[..]), "every byte written, past the buffer too");
+    }
     let fp = open(&t, "r");
     assert_eq!(f(ch(b'x'), fp), EOF);
     assert!(x::ferror(fp) != 0, "the error indicator");
