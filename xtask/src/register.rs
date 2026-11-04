@@ -73,9 +73,84 @@ pub fn check(root: &Path) -> Result<(), String> {
             }
         }
     }
+    bad.extend(stale_references(root, max)?);
     if bad.is_empty() {
         Ok(())
     } else {
         Err(bad.join("\n"))
+    }
+}
+
+/// Section numbers cited by register references in `text`: a "register" (also "saturation register",
+/// "register's") followed by `§N`, `section N` or `N.M`. Returns (1-based line, cited section, the cited text).
+fn register_refs(text: &str) -> Vec<(usize, u32, String)> {
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let lower = line.to_ascii_lowercase();
+        let mut from = 0;
+        while let Some(at) = lower[from..].find("register") {
+            let start = from + at;
+            from = start + "register".len();
+            if line[..start].chars().next_back().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                continue;
+            }
+            let mut rest = &line[from..];
+            rest = rest.strip_prefix("'s").or_else(|| rest.strip_prefix("\u{2019}s")).unwrap_or(rest);
+            let rest = rest.trim_start_matches(' ');
+            let (rest, marked) = if let Some(r) = rest.strip_prefix('\u{a7}') {
+                (r.trim_start_matches(' '), true)
+            } else if let Some(r) = rest.strip_prefix("section ") {
+                (r.trim_start_matches(' '), true)
+            } else {
+                (rest, false)
+            };
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            if digits.is_empty() || digits.len() > 3 {
+                continue;
+            }
+            let after = &rest[digits.len()..];
+            let dotted = after.strip_prefix('.').is_some_and(|a| a.chars().next().is_some_and(|c| c.is_ascii_digit()));
+            if !marked && !dotted {
+                continue;
+            }
+            if let Ok(n) = digits.parse() {
+                out.push((i + 1, n, format!("register {}{}", if marked { "\u{a7}" } else { "" }, digits)));
+            }
+        }
+    }
+    out
+}
+
+/// Every tracked text file outside the register itself that cites a register section number which does not
+/// exist (`max` is the highest section). Reported with file and line.
+fn stale_references(root: &Path, max: u32) -> Result<Vec<String>, String> {
+    let ls = std::process::Command::new("git").arg("-C").arg(root).args(["ls-files", "-z"]).output().map_err(|e| format!("git ls-files: {e}"))?;
+    let mut bad = Vec::new();
+    for rel in String::from_utf8_lossy(&ls.stdout).split('\0').filter(|r| !r.is_empty()) {
+        if rel.starts_with("docs/saturation/") || rel.starts_with("spec/") || rel == "glibc-functional-spec.md" || rel.ends_with(".tsv") || rel.starts_with("xtask/src/register.rs") {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(root.join(rel)) else { continue };
+        for (line, n, what) in register_refs(&text) {
+            if n < 1 || n > max {
+                bad.push(format!("{rel}:{line}: {what} cites register section {n}, but the register has sections 1..={max}"));
+            }
+        }
+    }
+    Ok(bad)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::register_refs;
+
+    #[test]
+    fn current_and_stale_references() {
+        // Plant: a comment citing a section number the register no longer has.
+        let refs = register_refs("// see register 13.5 #8\n// the register's \u{a7}7 and saturation register section 16\n// unregister 99.1, register_x 5.5, register a\n");
+        assert_eq!(refs.iter().map(|r| (r.0, r.1)).collect::<Vec<_>>(), vec![(1, 13), (2, 7), (2, 16)]);
+        let stale: Vec<_> = refs.iter().filter(|r| r.1 > 15).collect();
+        assert_eq!(stale.len(), 1);
+        assert_eq!(stale[0].0, 2);
     }
 }
