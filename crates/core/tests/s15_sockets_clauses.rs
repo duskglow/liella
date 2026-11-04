@@ -1009,16 +1009,24 @@ fn s15_8_c_2() {
     assert_eq!((x::rresvport(None), errno::get()), (-1, Errno::EOPNOTSUPP.get()), "a NULL port");
 }
 
-/// `__ivaliduser` over a trust file's lines: its result and the stream's offset afterwards.
-fn ivalid(text: &str, from: [u8; 4], luser: &CStr, ruser: &CStr) -> (c_int, i64) {
+/// errno value planted around a call whose errno must stay untouched (non-zero, so a call
+/// that clears errno is caught too).
+const ERRNO_SENTINEL: i32 = 0x5a5a;
+
+/// `__ivaliduser` over a trust file's lines: its result, the stream's offset afterwards and
+/// errno right after the call. errno is planted immediately before the call, after the
+/// fixture's own file I/O (which may leave errno set).
+fn ivalid(text: &str, from: [u8; 4], luser: &CStr, ruser: &CStr) -> (c_int, i64, i32) {
     let path = scratch::Scratch::path("c15-equiv");
     std::fs::write(&path, text).unwrap();
     let fp = sio::fopen(path.c().as_ptr(), c"r".as_ptr());
     assert!(!fp.is_null());
+    errno::set_raw(ERRNO_SENTINEL);
     let r = x::__ivaliduser(fp.cast(), in_addr(from), luser.as_ptr(), ruser.as_ptr());
+    let e = errno::get();
     let at = sio::ftell(fp);
     sio::fclose(fp);
-    (r, at)
+    (r, at, e)
 }
 
 #[test]
@@ -1029,18 +1037,17 @@ fn s15_8_c_3() {
     // __ivaliduser denies every line, even one that admits anyone, without reading the stream
     // and without touching errno.
     for (text, from, ruser) in [("localhost\n", LO, c"u"), ("127.0.0.1 alice\n", LO, c"alice"), ("+\n", OTHER, c"u"), ("+ +\n", OTHER, c"v")] {
-        errno::set_raw(0);
-        assert_eq!(ivalid(text, from, c"u", ruser), (-1, 0), "{text:?}");
-        assert_eq!(errno::get(), 0, "{text:?}: errno untouched");
+        // (result, stream offset, errno after the call): deny, stream unread, errno untouched.
+        assert_eq!(ivalid(text, from, c"u", ruser), (-1, 0, ERRNO_SENTINEL), "{text:?}");
     }
     // ruserok, ruserok_af, iruserok and iruserok_af deny, errno untouched, whatever the files hold.
     let lo = u32::from_ne_bytes(LO);
-    errno::set_raw(0);
+    errno::set_raw(ERRNO_SENTINEL);
     assert_eq!(x::ruserok(c"localhost".as_ptr(), 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
     assert_eq!(x::ruserok_af(c"localhost".as_ptr(), 1, c"alice".as_ptr(), c"alice".as_ptr(), AF_INET as u16), -1);
     assert_eq!(x::iruserok(lo, 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
     assert_eq!(x::iruserok_af((&raw const lo).cast(), 0, c"alice".as_ptr(), c"alice".as_ptr(), AF_INET as u16), -1);
-    assert_eq!(errno::get(), 0, "the trust checks leave errno alone");
+    assert_eq!(errno::get(), ERRNO_SENTINEL, "the trust checks leave errno alone");
     // The files' checks (rcmd(3)), on fixture files in a private directory (owned by an
     // unprivileged user, so that the system-wide file's owner check fails).
     if liella_boundary::posix::s17_users::geteuid() == 0 {
