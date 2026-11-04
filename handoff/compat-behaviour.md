@@ -10,8 +10,8 @@ liella_compat_* in boundary s13/s14/s01 + process::quick_exit_2_10, rows removed
 compat_aliases.S regenerated (compat-gen on shiki sh1). Tests: compat_* in boundary tests s01/s13/s14 and versioned.rs
 unit tests, each tied to the compat.glibc.txt probe lines.
 
-Verification: gate job shiki:compat-behaviour-g2-gate (clippy, static, so, affected --base origin/next) started detached;
-result NOT READ by this run. Plants NOT RUN (context budget).
+Verification: gate job shiki:compat-behaviour-g2-gate2 on 16d00791 (clippy, static, so, affected --base origin/next) started detached;
+still running at hand-back; superseded gate1 failed to compile a test (fixed). Plants NOT RUN (context budget).
 
 Remaining: posix_spawn@ and posix_spawnp@GLIBC_2.2.5 (old: a file the kernel refuses with ENOEXEC runs with /bin/sh;
 spawnp hands sh the bare name, record line "no #! script on PATH: child exit 2"; whether sh gets `file` or `argv[0]`
