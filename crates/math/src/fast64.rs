@@ -162,6 +162,7 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// arithmetic as [`exp_nearest`] and [`log_nearest`] with every exact product a single FMA, so the
 /// same results bit for bit (see `kernels!`). Callable only on a CPU with FMA and the OS-enabled
 /// AVX state; the boundary selects it once at startup (`dispatch::fma`).
+// ARCH(x86_64): the run-time FMA build (D-10.22); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{settle, t, two_sum, Dd, Rounding, MARGIN, TAIL};

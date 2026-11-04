@@ -5,6 +5,8 @@
 
 // Sample generation is bit-level arithmetic on bounded values; indexing is over equal-length vectors.
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing, clippy::as_conversions)]
+// exp/log are Liella's own C entries (m::exp, m::log): keep LLVM from treating them as builtins.
+#![no_builtins]
 
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
@@ -37,6 +39,7 @@ fn both(f: extern "C" fn(f64) -> f64, exact: fn(f64) -> f64, xs: &[f64]) -> usiz
     checked
 }
 
+// s10_3_c_0, s10_0_g_0: every build of exp/log computes the same, correctly rounded result.
 #[test]
 fn exp_and_log_fma_build_matches_baseline_bit_for_bit() {
     if !selftest::set_math_fma(true) {
