@@ -4,6 +4,26 @@ State: code commit 8dee0d52 on top of cdf9880a (lock_alone swap, record-walk tes
 task/perf-fswalk-phys, which is not in next yet. Run 4 (PERF-READDIR-ENTRY-4, mei ~/w/s1): bound commit 54be5237,
 ruling #2619 carried out (below). Run 3 (keke ~/w/n3): no code change. Runs 2 and 1 used keke ~/w/n4.
 
+## Run 5 (PERF-READDIR-ENTRY-5, branch task/perf-readdir-entry-5, mei ~/w/s1): the fast-skips-record survivor
+
+Why it survived: `buffered_addr` ADVANCES `pos` (dir.rs: `self.pos += n` before returning), so the plant (fast
+path throws its record away, then `readdir_cold` reads the next) drops every record the fast path returns. Not
+equivalent. But the fast path runs only when `lock_alone()` is true, which needs a process Liella started
+single-threaded; a cargo test process is neither (libtest threads), so s13_filesystem_symbols/_clauses never reach
+it. Run 2's "CAUGHT" on keke cannot be explained from the record (its log is on keke); treat it as unproven.
+Fix (commits 9bc1709d, de559a11): fstree_diff.c section `sec_varied_names` (spec §13.2): 900 names of 5-239 bytes
+(records of many sizes straddle every getdents64 batch end), read through readdir and through raw getdents64
+(4096-byte buffer); per-name counts, so no order or file-system dependence; the counts must agree name for name and
+match glibc's output line for line (fstree_products::fstree_equals_the_reference, static libc.a = Liella-started,
+single-threaded, so the fast path runs). Plants script (mei ~/work/perf-readdir-entry-5/plants.sh, copy
+/mnt/zram/claude/PERF-READDIR-ENTRY-5/plants-1) now rebuilds the products per plant and adds fstree_products.
+Jobs on de559a11 (mei): perf-readdir-entry-5-gate (workspace clippy --all-features -D warnings, xtask static,
+direct tier --base origin/next), perf-readdir-entry-5-plants2 (plants-2 copy). Superseded: perf-readdir-entry-5-plants
+rc 2: its UNPLANTED baseline failed s13_filesystem_clauses s13_8_c_0 (`kernel_cwd`: getcwd ENOENT, line 325), which
+passed 5 times in run 4: suspected cross-test cwd race in the threaded suite (open defect, own story). plants2 runs
+that suite with --test-threads=1. Both were still running at hand-back. Results: see the run 5 report
+(handoff/reports/PERF-READDIR-ENTRY-5.json).
+
 ## Run 4: ruling #2619 carried out on mei (the CI host, Skylake-SP)
 
 Job perf-readdir-entry-4-hotcount (+ -hotcount-merged): four trees from `git archive` (the merged one from
@@ -87,10 +107,7 @@ Open / next step:
 0. Bound done in run 4 (TOOL_BOUND 71). Results on 87b78a57 (mei): static rc 0, gate2 rc 0 (affected: ok, peak
    1.3G), plants rc 1: no-errno, end-sets-errno, tool-bound-low CAUGHT; **fast-skips-record SURVIVED** (all 4
    readdir symbol tests and 77 s13_filesystem_clauses pass; run 2 on keke reported it CAUGHT). Both hosts /tmp ext4.
-   NEXT STEP: find out whether `buffered_addr` advances the position before returning (then the plant drops one
-   entry per call and a test must see it: add a clause test that counts every entry of a known directory, sorted, no
-   order dependence) or only peeks (then the plant is EQUIVALENT: write the reason, replace it with a plant that
-   really drops a record). Rerun plants in a NEW zram copy (plants-2). Then CI. Separately HOTTEXT-ASM-ORDER (`.S` kernels in list order),
+   Done in run 5 (above). NEXT STEP: if run 5's gate and plants are green, CI. Then Separately HOTTEXT-ASM-ORDER (`.S` kernels in list order),
    then a regen with the tool program can bring the tool bound back down.
 1. The readdir user-instruction gap is closed (1.004). The remaining fts_entry_flat gap (1.88x user) is not a
    readdir question: a separate story. The register paragraph in docs/saturation/17 records the counts.
