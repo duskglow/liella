@@ -92,6 +92,25 @@ fn x86_64_record_is_unchanged_and_never_wraps() {
     wide.encode(&UtmpShape::X86_64, &mut b);
     let back = Utmp::decode(&UtmpShape::X86_64, &b);
     assert_eq!((back.time, back.session), ((0, 0), 0));
+    // Sessions whose low 32 bits are non-zero: a wrapped store would read back as 7 or as a negative number.
+    for s in [0x1_0000_0007_i64, 0x8000_0000, -0x8000_0001, i64::MAX] {
+        Utmp { session: s, ..u }.encode(&UtmpShape::X86_64, &mut b);
+        assert_eq!(Utmp::decode(&UtmpShape::X86_64, &b).session, 0, "session {s:#x} is stored as 0, not wrapped");
+    }
+    for s in [i64::from(i32::MIN), -1, 0, i64::from(i32::MAX)] {
+        Utmp { session: s, ..u }.encode(&UtmpShape::X86_64, &mut b);
+        assert_eq!(Utmp::decode(&UtmpShape::X86_64, &b).session, s, "session {s} fits and is kept");
+    }
+}
+
+#[test]
+fn aarch64_session_outside_i32_survives_the_codec() {
+    // no spec clause: ARCH-UTMP-LAYOUT, the record layouts of spec/abi/layouts*.tsv.
+    let mut b = vec![0u8; UtmpShape::AARCH64.size];
+    for s in [0x1_0000_0007_i64, 0x8000_0000, -0x8000_0001, i64::MAX, i64::MIN] {
+        Utmp { session: s, ..sample() }.encode(&UtmpShape::AARCH64, &mut b);
+        assert_eq!(Utmp::decode(&UtmpShape::AARCH64, &b).session, s, "session {s:#x} kept");
+    }
 }
 
 #[test]
