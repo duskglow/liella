@@ -80,8 +80,6 @@ mod compat_ids;
 mod compat_plan;
 mod register;
 mod arch;
-mod compatprobe;
-mod compat_objects;
 mod plants;
 
 use std::path::{Path, PathBuf};
