@@ -11,7 +11,7 @@ contents are ABI. This is a fact record.
 
 **Probe:** `compat-objects.probe.c` binds every version with `.symver` and prints the contents;
 `readelf --dyn-syms` of the probe gives the sizes it copied. **Record:** `compat-objects.glibc.txt`
-(sumire, glibc 2.39, 2026-10-23, job `legacy-objects-probe`).
+(Skylake-SP host, glibc 2.39, 2026-10-23, job `legacy-objects-probe`).
 
 **Findings:**
 

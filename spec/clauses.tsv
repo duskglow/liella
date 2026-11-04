@@ -820,7 +820,7 @@ s15_2_f_0	15.2	Failure	As §11.3, plus `ECONNRESET`, `EMSGSIZE`, `EDESTADDRREQ`,
 s15_2_x_0	15.2	Cancellation	Yes.
 s15_3_c_1	15.3	Contract	**`inet_pton(af, text, dst)`** parses dotted-quad IPv4 (exactly four decimal parts) or IPv6 text (RFC 4291 forms, including embedded IPv4) into network byte order. It returns 1 on success, 0 for invalid text, and -1 with `EAFNOSUPPORT`.
 s15_3_c_2	15.3	Contract	**`inet_ntop(af, src, dst, size)`** formats an address, using RFC 5952 compressed form for IPv6. It fails with `ENOSPC` if the buffer is too small.
-s15_3_c_3	15.3	Contract	**`inet_aton`** accepts the historical forms: 1 to 4 parts, each in octal, decimal or hex, so `"10.1"` means 10.0.0.1. ⚑ HIST: this lenient syntax has caused security bugs through inconsistent parsing between programs.
+s15_3_c_3	15.3	Contract	**`inet_aton`** accepts the historical forms: 1 to 4 parts, each in octal, decimal or hex, so `"11.1"` means 11.0.0.1. ⚑ HIST: this lenient syntax has caused security bugs through inconsistent parsing between programs.
 s15_3_c_4	15.3	Contract	**`inet_addr`** is `inet_aton` returning `INADDR_NONE` (0xFFFFFFFF) on error. ⚑ HIST, ⚑ ARB: that value is also the valid address 255.255.255.255.
 s15_3_c_5	15.3	Contract	**`inet_ntoa`** formats into a static per-thread buffer. ⚑ HIST.
 s15_3_c_6	15.3	Contract	**`inet_network`, `inet_makeaddr`, `inet_lnaof` and `inet_netof`** manipulate classful (A/B/C) network and host parts. ⚑ HIST: classful addressing has been obsolete since 1993 (CIDR).

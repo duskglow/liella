@@ -1506,7 +1506,7 @@ fn memset_matches_a_byte_loop_around_the_rep_stosb_threshold_at_every_alignment(
     // and runs `rep stosb` from the next 64-byte boundary; every start offset modulo 64, sizes
     // around the threshold and 4 KiB, nothing outside the region written.
     // Both paths on every machine: ERMS forced off (the loops) and on (`rep stosb`, correct
-    // without ERMS too; keke's Zen 1 has none).
+    // without ERMS too; Zen 1 host's Zen 1 has none).
     let _g = level();
     liella_boundary::cpu::init();
     for (erms, n) in [false, true].into_iter().flat_map(|e| [129usize, 1279, 1280, 1281, 4095, 4096, 4097, 65_537].map(|n| (e, n))) {

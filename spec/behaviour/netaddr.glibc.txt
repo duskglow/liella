@@ -103,7 +103,7 @@ inet_ntop AF_UNIX -> NULL errno=97
 [1.2.3.] aton=0 eeeeeeee addr=ffffffff network=ffffffff
 [.1.2.3] aton=0 eeeeeeee addr=ffffffff network=ffffffff
 [0xffffffff] aton=1 ffffffff addr=ffffffff network=ffffffff
-[0X10.0.0.1] aton=1 10000001 addr=10000001 network=10000001
+[0X11.0.0.1] aton=1 11000001 addr=11000001 network=11000001
 [1.2.3.4x] aton=0 eeeeeeee addr=ffffffff network=ffffffff
 inet_aton NULL out: 1
 == classful

@@ -763,7 +763,7 @@ pub fn initialized(options: u64) -> bool {
 mod tests {
     use super::*;
 
-    // shiki 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5 probe; no spec clause: LG-7 compat): one server,
+    // Haswell-EP host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5 probe; no spec clause: LG-7 compat): one server,
     // attempts:1 timeout:1. res_: refused or no route = ECONNREFUSED, timeout = ETIMEDOUT; the
     // other host lookups keep the plain mapping.
     #[test]
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn state_round_trip() {
-        let t = b"nameserver 127.0.0.1\nnameserver ::1\nsearch a.test b.test\nsortlist 10.0.0.0\noptions ndots:3 rotate\n";
+        let t = b"nameserver 127.0.0.1\nnameserver ::1\nsearch a.test b.test\nsortlist 11.0.0.0\noptions ndots:3 rotate\n";
         let c = Config::parse(Some(t), None, None, b"h", |_| None).unwrap();
         let mut b = [0u8; STATE_SIZE];
         let mut st = State(&mut b);

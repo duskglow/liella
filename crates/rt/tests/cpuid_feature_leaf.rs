@@ -64,7 +64,7 @@ fn sumire_skylake_avx512_tsx_force_abort() {
     // no clause ID (spec §27.5 states no clause for the table; probe X86-CPUID-FEATURE-LEAF)
     // spec §27.5: AVX-512 active with XCR0 AVX-512 state; RTM/HLE present but inactive under
     // TSX_FORCE_ABORT, RTM_ALWAYS_ABORT reported active; XSAVES present but inactive.
-    replay("sumire", 0x16, 0x2ff, &[
+    replay("Skylake-SP host", 0x16, 0x2ff, &[
         (0, [0x0005_0654, 0x5640_0800, 0x7ffe_fbff, 0xbfeb_fbff, 0, 0, 0x7ed8_3203, 0x1788_8110]),
         (1, [0, 0xd39f_fffb, 0x18, 0xbc00_2400, 0, 0xd18f_0329, 0x18, 0x800]),
         (2, [0, 0, 0x121, 0x2c10_0800, 0, 0, 0x121, 0x0800_0000]),
@@ -79,7 +79,7 @@ fn sumire_skylake_avx512_tsx_force_abort() {
 fn shiki_haswell() {
     // no clause ID (spec §27.5 states no clause for the table; probe X86-CPUID-FEATURE-LEAF)
     // spec §27.5
-    replay("shiki", 0xd, 0x7, &[
+    replay("Haswell-EP host", 0xd, 0x7, &[
         (0, [0x0003_06f2, 0x1720_0800, 0xfffa_b223, 0x1f8b_fbff, 0, 0, 0x7ed8_3203, 0x1788_8110]),
         (1, [0, 0x27ab, 4, 0xbc00_0400, 0, 0x329, 0, 0]),
         (2, [0x0003_06f2, 0, 0x21, 0x2c10_0800, 0, 0, 0x21, 0x0800_0000]),
@@ -92,7 +92,7 @@ fn shiki_haswell() {
 fn kanon_broadwell_tsx_active() {
     // no clause ID (spec §27.5 states no clause for the table; probe X86-CPUID-FEATURE-LEAF)
     // spec §27.5: HLE and RTM active without an abort bit.
-    replay("kanon", 0xd, 0x7, &[
+    replay("Broadwell-EP host", 0xd, 0x7, &[
         (0, [0x0004_06f1, 0x0f20_0800, 0xfffa_b223, 0x1f8b_fbff, 0, 0, 0x7ed8_3203, 0x1788_8110]),
         (1, [0, 0x001c_2fbb, 4, 0xbc00_0400, 0, 0x000c_0b39, 0, 0]),
         (2, [0x0004_06f1, 0, 0x121, 0x2c10_0800, 0, 0, 0x121, 0x0800_0000]),
@@ -105,7 +105,7 @@ fn kanon_broadwell_tsx_active() {
 fn keke_epyc_zen1() {
     // no clause ID (spec §27.5 states no clause for the table; probe X86-CPUID-FEATURE-LEAF)
     // spec §27.5: SHA and SSE4A active; CLZERO etc. (0x80000008) present only.
-    replay("keke", 0xd, 0x7, &[
+    replay("Zen 1 host", 0xd, 0x7, &[
         (0, [0x0080_0f12, 0x1728_0800, 0xfff8_3203, 0x178b_fbff, 0, 0, 0x7ed8_3203, 0x1788_8110]),
         (1, [0, 0x209c_01ab, 0, 0, 0, 0x208c_0129, 0, 0]),
         (2, [0x0080_0f12, 0, 0x0080_03f7, 0x2fd3_fbff, 0, 0, 0x161, 0x0800_0000]),

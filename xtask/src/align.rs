@@ -3,7 +3,7 @@
 //! Every product crate is built with `-Cllvm-args=-align-all-functions=6` (`PRODUCT_RUSTFLAGS`):
 //! the first instruction of a function then never straddles a cache line by accident, and a
 //! small kernel such as `memset_16` does not run 13% slower because the linker happened to place
-//! it at 0x30 mod 64 (MEM-K5c, measured on shiki). Stable Rust cannot align a single function,
+//! it at 0x30 mod 64 (MEM-K5c, measured on Haswell-EP host). Stable Rust cannot align a single function,
 //! so the flag is product-wide.
 //!
 //! `check` reads the dynamic symbol table of a built `libc.so.6` and fails when an exported

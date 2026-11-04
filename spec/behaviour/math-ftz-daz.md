@@ -5,8 +5,8 @@
 Spec: §10.3, §10.6; decision D-10.22 (owner ruling 2026-10-23: the caller's FTZ/DAZ is honoured).
 Probes: black-box C programs calling glibc 2.39 (Ubuntu 24.04, x86_64) after `ldmxcsr` with
 0x1f80 (default), 0x9f80 (FTZ), 0x1fc0 (DAZ) and 0x9fc0 (both), printing result bits and the
-raised underflow/inexact flags (MATH-M6-FPENV-HONOR-REST-2 on keke; the `faddl` family
-MATH-M6-FPENV-HONOR-REST-3 on sumire). The probe sources are kept in the coordinator's
+raised underflow/inexact flags (MATH-M6-FPENV-HONOR-REST-2 on Zen 1 host; the `faddl` family
+MATH-M6-FPENV-HONOR-REST-3 on Skylake-SP host). The probe sources are kept in the coordinator's
 scratchpad (work/MATH-M6-FPENV-HONOR-REST-2, -3), not in the tree. Pinned by the table in
 `crates/boundary/tests/s10_math_symbols.rs::math_software_paths_honour_the_callers_ftz_and_daz`.
 

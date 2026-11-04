@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <wchar.h>
 
-/* Per-call ceiling (instructions, loop bookkeeping included). Measured on keke (WL-HOT-SEQ4), the same in
+/* Per-call ceiling (instructions, loop bookkeeping included). Measured on Zen 1 host (WL-HOT-SEQ4), the same in
  * both locales: quick path 48-54 (mbrlen) and 64-71 (mbrtowc, mbrtoc32); with the quick path planted
  * off, the general decoder costs 143-198 per call. */
 #define CEILING 100

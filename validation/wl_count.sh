@@ -1,7 +1,7 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
 # One-call deterministic workload counters for a branch (WL-COUNT). Counts, never time: instructions:u,
-# instructions:k, page faults, syscalls and an output check, for glibc / BASE / NEW, measured on keke.
+# instructions:k, page faults, syscalls and an output check, for glibc / BASE / NEW, measured on Zen 1 host.
 #
 #   validation/wl_count.sh [--base REV] [--rev REV] <dir|rev> <workload>...
 #
