@@ -30,7 +30,7 @@ pub(crate) fn avx2() -> bool {
     AVX2.load(Relaxed)
 }
 
-/// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.48):
+/// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.22):
 /// the same mechanism as [`avx2`] (one byte decided at startup, `false` until then), read only
 /// by Rust (`hot::exp_nearest`, `hot::log_nearest`), so it lives here rather than in fold.S.
 static FMA: AtomicBool = AtomicBool::new(false);

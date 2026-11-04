@@ -61,6 +61,10 @@ pub fn two_prod(a: f64, b: f64) -> Dd {
 /// Wherever [`two_prod`] is exact (no overflow, `a·b` error representable), that error is a
 /// `double`, so the FMA returns it unrounded: the SAME pair `(hi, lo)` bit for bit. Callable only
 /// from code built for FMA (the caller proves the CPU has it).
+///
+/// # Safety
+///
+/// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "fma")]
 #[inline]

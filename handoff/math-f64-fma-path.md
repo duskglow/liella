@@ -3,7 +3,7 @@
 Branch task/math-f64-fma-path (from origin/next 125c0ccc). State: code for exp/log written, never compiled (no local
 rustc; keke build job math-f64-fma-path-build1 queued >15 min when the run hit its context budget).
 
-## Design (decision row needed: D-10.48 is a PROVISIONAL id, check plan/07-decisions for the next free D-10.n and add it)
+## Design (decision row needed: D-10.22 is a PROVISIONAL id, check plan/07-decisions for the next free D-10.n and add it)
 - crates/math/src/dd.rs: `two_prod_fma` (safe `#[target_feature(enable="fma")]` fn, `_mm_fmsub_sd`), same pair as Dekker
   `two_prod` bit for bit wherever the product is exact.
 - crates/math/src/fast64.rs: `kernels!` macro builds `mul`, `mul_f64`, `reduce`, `exp_kernel`, `log_kernel` twice: plain

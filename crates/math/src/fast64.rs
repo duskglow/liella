@@ -34,7 +34,7 @@ const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// 1.5·2^52: adding and subtracting it rounds a value below 2^51 to an integer.
 const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 
-// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.48): `$prod` is the exact product,
+// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.22): `$prod` is the exact product,
 // [`two_prod`] (Dekker) or [`dd::two_prod_fma`] (one FMA). Both return the same pair bit for bit
 // wherever the product is exact, which holds for every product below (operands far from overflow;
 // the smallest, `rh²` with `|rh| >= 2^-64`, has its error above 2^-240), so the two builds compute
@@ -97,32 +97,6 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     Some((y, k >> 6, eps))
 }
 
-/// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
-pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-    let r = reduce(Dd::from(x), kf, &t::LN2_64_CW);
-    let (y, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
-    settle(y, eps, m, mode)
-}
-
-/// `2^x` for `x` in the accurate path's finite range, `x` not an integer.
-pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let kf = dd::nearest_int(x * 64.0);
-    let r = x - kf / 64.0; // exact
-    // r·ln2: `Dd::mul_f64` of the stored double-double, relative error < 2^-103.
-    let (y, m, eps) = exp_kernel(Dd::of(t::LN2).mul_f64(r), dd::to_i32(kf))?;
-    settle(y, eps, m, mode)
-}
-
-/// `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
-pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
-    let r = reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
-    // (x − k·log10(2)/64)·ln10: the reduction is within 2^-95 and the product within 2^-100.
-    let (y, m, eps) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
-    settle(y, eps, m, mode)
-}
-
 /// `ln x` as `(y, eps)` for a positive finite `x != 1`.
 ///
 /// Proof. `x = 2^e·m`, `c ≈ 1/m` from `LOG_C` (12 bits, so `m·c` is exact as `two_prod`), and
@@ -158,18 +132,48 @@ fn log_kernel(x: f64) -> Option<(Dd, f64)> {
 
 kernels!(; two_prod);
 
-/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.48): the same
+/// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
+pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)> {
+    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+    let r = reduce(Dd::from(x), kf, &t::LN2_64_CW);
+    let (y, m, eps) = exp_kernel(r, dd::to_i32(kf))?;
+    settle(y, eps, m, mode)
+}
+
+/// `2^x` for `x` in the accurate path's finite range, `x` not an integer.
+pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
+    let kf = dd::nearest_int(x * 64.0);
+    let r = x - kf / 64.0; // exact
+    // r·ln2: `Dd::mul_f64` of the stored double-double, relative error < 2^-103.
+    let (y, m, eps) = exp_kernel(Dd::of(t::LN2).mul_f64(r), dd::to_i32(kf))?;
+    settle(y, eps, m, mode)
+}
+
+/// `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
+pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
+    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
+    let r = reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
+    // (x − k·log10(2)/64)·ln10: the reduction is within 2^-95 and the product within 2^-100.
+    let (y, m, eps) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
+    settle(y, eps, m, mode)
+}
+
+/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.22): the same
 /// arithmetic as [`exp_nearest`] and [`log_nearest`] with every exact product a single FMA, so the
 /// same results bit for bit (see `kernels!`). Callable only on a CPU with FMA and the OS-enabled
 /// AVX state; the boundary selects it once at startup (`dispatch::fma`).
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{settle, t, two_sum, Dd, Rounding};
+    use super::{settle, t, two_sum, Dd, Rounding, MARGIN, TAIL};
     use crate::dd;
 
     kernels!(#[target_feature(enable = "fma")]; dd::two_prod_fma);
 
     /// [`super::exp_nearest`], FMA build.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
     #[target_feature(enable = "fma")]
     #[inline]
     pub fn exp_nearest(x: f64) -> Option<f64> {
@@ -183,6 +187,10 @@ pub mod fused {
     }
 
     /// [`super::log_nearest`], FMA build.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
     #[target_feature(enable = "fma")]
     #[inline]
     pub fn log_nearest(x: f64) -> Option<f64> {

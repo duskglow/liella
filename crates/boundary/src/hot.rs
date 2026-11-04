@@ -2499,7 +2499,7 @@ mod fuse {
     }
 }
 
-/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.48):
+/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.22):
 /// both builds return the same results bit for bit; the FMA one is shorter.
 #[inline(always)]
 pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
