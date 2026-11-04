@@ -589,12 +589,13 @@ fn sym_herror_failed_write_keeps_errno() {
         return;
     };
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([NAME, "--exact", "--test-threads=1", "--nocapture"])
+        .args([NAME, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_S16_CHILD", NAME)
         .stderr(full)
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("running 1 test"), "the child ran no test: {out}");
     assert!(out.contains(&format!("errno after={ENOENT},{EINVAL}\n")), "{out}");
 }
 
