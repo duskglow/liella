@@ -2013,13 +2013,13 @@ fn pow_int_far<F: Float>(x: Mp, y: Mp, n: i64, mode: Rounding) -> Option<Res<F>>
     let unit = Mp::from_i64(if u.neg { -1 } else { 1 });
     let lead = if m % 2 == 1 { unit } else { unit.abs() }.ldexp(-(m as i64) * (u.exp - 1));
     let step = if n > 0 { v } else { mp::mul_x(v, unit).0.ldexp(1 - u.exp) };
-    let mut acc = [Mp::ZERO; 2];
-    // Some(sign of the omitted rest) once a part is decided.
-    let mut tail: [Option<bool>; 2] = [None; 2];
+    // The real and imaginary partial sums, and Some(sign of the omitted rest) once decided.
+    let (mut acc_re, mut acc_im) = (Mp::ZERO, Mp::ZERO);
+    let (mut tail_re, mut tail_im): (Option<bool>, Option<bool>) = (None, None);
     let (mut c, mut vk, mut k) = (1u128, Mp::from_i64(1), 0u64);
     loop {
-        let part = (k & 1) as usize;
-        if tail[part].is_none() {
+        let (acc, tail) = if k & 1 == 0 { (&mut acc_re, &mut tail_re) } else { (&mut acc_im, &mut tail_im) };
+        if tail.is_none() {
             let base = if n > 0 { ipow(u, m - k)? } else { lead };
             let (p, e1) = mp::mul_x(base, vk);
             let (term, e2) = mp::mul_x(p, Mp::from_u128(false, c, 0));
@@ -2028,16 +2028,16 @@ fn pow_int_far<F: Float>(x: Mp, y: Mp, n: i64, mode: Rounding) -> Option<Res<F>>
             }
             // i^k (k = 2, 3 mod 4 negative), and (−1)^k for n < 0.
             let term = if (k & 2 != 0) != (n < 0 && k & 1 != 0) { term.neg() } else { term };
-            let (s, exact) = mp::add_x(acc[part], term);
+            let (s, exact) = mp::add_x(*acc, term);
             if exact {
-                acc[part] = s;
-            } else if term.exp <= acc[part].exp - B && acc[part].sig_bits() <= B - 4 {
-                tail[part] = Some(term.neg);
+                *acc = s;
+            } else if term.exp <= acc.exp - B && acc.sig_bits() <= B - 4 {
+                *tail = Some(term.neg);
             } else {
                 return None;
             }
         }
-        if (n > 0 && k == m) || (tail[0].is_some() && tail[1].is_some()) {
+        if (n > 0 && k == m) || (tail_re.is_some() && tail_im.is_some()) {
             break;
         }
         if n < 0 && k >= 4 * B as u64 {
@@ -2057,7 +2057,7 @@ fn pow_int_far<F: Float>(x: Mp, y: Mp, n: i64, mode: Rounding) -> Option<Res<F>>
         let (v, exact) = mp::add_x(a, nudge);
         exact.then_some(Part::Dev(v, true))
     };
-    let (re, im) = (decide(acc[0], tail[0])?, decide(acc[1], tail[1])?);
+    let (re, im) = (decide(acc_re, tail_re)?, decide(acc_im, tail_im)?);
     // z^n = i^n (u + iv)^n when the parts were swapped.
     let (re, im) = if !swap {
         (re, im)
