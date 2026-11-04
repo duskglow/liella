@@ -446,7 +446,7 @@ pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8 {
 
 /// `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnexp_nearest(x: f64) -> Option<f64> {
+pub fn exp_nearest(x: f64) -> Option<f64> {
     exp_near(x, &mut 0)
 }
 
@@ -462,7 +462,7 @@ fn exp_near(x: f64, st: &mut u8) -> Option<f64> {
 
 /// `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnexp2_nearest(x: f64) -> Option<f64> {
+pub fn exp2_nearest(x: f64) -> Option<f64> {
     exp2_near(x, &mut 0)
 }
 
@@ -488,7 +488,7 @@ fn log_domain(x: f64) -> bool {
 
 /// `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnlog_nearest(x: f64) -> Option<f64> {
+pub fn log_nearest(x: f64) -> Option<f64> {
     log_near(x, &mut 0)
 }
 
@@ -517,7 +517,7 @@ fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Opt
 
 /// `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnlog2_nearest(x: f64) -> Option<f64> {
+pub fn log2_nearest(x: f64) -> Option<f64> {
     log2_near(x, &mut 0)
 }
 
@@ -532,7 +532,7 @@ fn log2_near(x: f64, st: &mut u8) -> Option<f64> {
 /// `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten
 /// `10^1 ..= 10^22` (exact; only integers in that range are compared).
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnlog10_nearest(x: f64) -> Option<f64> {
+pub fn log10_nearest(x: f64) -> Option<f64> {
     log10_near(x, &mut 0)
 }
 
@@ -566,7 +566,7 @@ fn log10_near(x: f64, st: &mut u8) -> Option<f64> {
 /// `|y| >= 2^40`, so `|y·ln x| < 745·2^41` (no overflow of the estimate in [`pow`]), and `|y| >=
 /// 2^-200` keeps `|y·ln x| >= 2^-253`: the exp kernel's `r²·2^-53` stays above 2^-560.
 #[inline(always)] // one fused function per entry, no calls on the hot path (register 16.5 #3)
-pub fnpow_nearest(x: f64, y: f64) -> Option<f64> {
+pub fn pow_nearest(x: f64, y: f64) -> Option<f64> {
     pow_near(x, y, &mut 0)
 }
 
