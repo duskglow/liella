@@ -171,7 +171,7 @@ Forced SSE2 by running the built `cbench_hot` binaries directly with `GLIBC_TUNA
 * Causes found (from the code path, counted): the head recomputed s + n - 1 and ran a 4-instruction page test before its first 16-byte look (now `testl $0xfc0` on the entry's r8, 5 instructions fewer); the 4k row was the 64-byte SSE2 loop (18 instr / 64 B), now 128-byte blocks (29 instr / 128 B, the AVX2 block shape). Branch-miss and store-forwarding counters NOT read; no timing run (release A/B covers it).
 * Open: memrchr_64_hit is still +3 over glibc (entry tests 4 + AVX2 mask test 3 + 4-instruction byte broadcast). No workload counts read yet (jobs Zen 1 host:perf-memrchr-nonavx2-wlc / -wlc-sse2, grep-E grep-F).
 
-### 13.13 PERF-FSWALK-PHYS (2026-11-04, Skylake-class AVX2 host, `cargo xtask bench --compare --counters --runs 3 cbench_fstree`)
+### 13.13 PERF-FSWALK-PHYS (2026-11-04, AVX2 host without AVX-512, `cargo xtask bench --compare --counters --runs 3 cbench_fstree`)
 
 The physical walks of 1000 entries (`nftw_phys_1000`, `fts_physical_1000`) sat at 1.13 and 1.08 of the reference in instructions per operation.
 
