@@ -3,7 +3,14 @@
 //! Each function is evaluated in the 384-bit arithmetic of [`crate::mp`] (relative error near
 //! 2^-370 for every kernel used) and rounded once into the format in the caller's direction, so
 //! every result is correctly rounded in every mode unless the exact value lies within about
-//! 2^-370 of a rounding boundary. That happens only for exact results, which are detected and
+//! 2^-370 of a rounding boundary. The logarithms and `pow` take `ln` from [`mp::ln_atanh`],
+//! whose bound is proved (absolute `< 2^(max(e, 0) + 12 − 384)` for `|ln x| < 2^e`, D-10.22):
+//! as `|ln x| ≥ 2^-114` for every `x ≠ 1` of `_Float128` (`2^-65` for x87), `log`, `log2` and
+//! `log10` are within `2^-257` relative and `y·ln|x|` of `pow` within `2^-244` absolute
+//! (`|y·ln|x|| < 2^14` short of overflow), far inside the `2·113 + 10` bits that correct
+//! rounding is claimed on. That claim rests on an estimate, not a proof: the closest approach of
+//! these functions to a rounding boundary is not known for `_Float128`. Exact results do lie on
+//! a boundary; they are detected and
 //! computed exactly (`exp2` and `log2` at powers of two, `exp10` and `log10` at powers of ten,
 //! perfect cubes, the exact powers of `pow`), and for arguments so small or large that the
 //! function differs from a representable value by less than its last place: those are rounded
@@ -252,7 +259,7 @@ pub fn log<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd_part(&n) == (1, 0) {
         return (float::zero(false), Status::OK);
     }
-    approx(mp::ln(value(&n)), mode)
+    approx(mp::ln_atanh(value(&n)), mode)
 }
 
 /// `log2(x)`; exact for powers of two. Its domain NaN is positive (glibc's `log2l`, D-10.19).
@@ -265,7 +272,7 @@ pub fn log2<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd == 1 {
         return exact(Mp::from_i64(e), mode);
     }
-    approx(mp::ln(value(&n)).div(mp::ln2()), mode)
+    approx(mp::ln_atanh(value(&n)).div(mp::ln2()), mode)
 }
 
 /// `log10(x)`; exact for the powers of ten the format holds.
@@ -282,7 +289,7 @@ pub fn log10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         }
         five = five.saturating_mul(5);
     }
-    approx(mp::ln(value(&n)).div(mp::ln10()), mode)
+    approx(mp::ln_atanh(value(&n)).div(mp::ln10()), mode)
 }
 
 /// `log1p(x)` = ln(1 + x), accurate near 0.
@@ -396,7 +403,7 @@ pub fn pow<F: Float>(x: F, y: F, mode: Rounding) -> (F, Status) {
         return r;
     }
     // The general case: e^(y·ln|x|).
-    let z = mp::ln(value(&ax)).mul(vy);
+    let z = mp::ln_atanh(value(&ax)).mul(vy);
     let zf = z.to_f64();
     if zf > exp_limit::<F>() {
         return elem::overflow(neg, mode);
