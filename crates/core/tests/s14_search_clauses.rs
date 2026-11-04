@@ -1623,7 +1623,7 @@ fn s14_8_c_2_1_brace_bound() {
     // Ordinary patterns, unchanged: nested, empty alternatives, escapes, unbalanced.
     assert_eq!(paths(&mut t, "v/{b,a}", flags), v(&["v/b", "v/a"]));
     assert_eq!(paths(&mut t, "v/{,a}{b,}", flags), v(&["v/b", "v/", "v/a"]), "empty alternatives (v/ab names nothing)");
-    assert_eq!(paths(&mut t, "v/{a,{b,{nomatch,}}}", flags), v(&["v/a", "v/b"]));
+    assert_eq!(paths(&mut t, "v/{a,{b,{nomatch,}}}", flags), v(&["v/a", "v/b", "v/"]));
     assert_eq!(g(&mut t, "v/\\{a,b\\}", flags, &c()), Err(3), "escaped braces are ordinary");
     assert_eq!(g(&mut t, "v/{x,y}{a", flags, &c()), Err(3), "unbalanced");
     // The edge: exactly `max` patterns is expanded (nothing matches: GLOB_NOMATCH), one more is not.
