@@ -74,7 +74,7 @@ fn check(v: &[Rec], n: usize) {
 fn run(n: usize, with_ctx: bool, expect_injected: bool) {
     let mut v = make(n);
     let mut marker = 1u8;
-    peek32(0x1000.min(std::ptr::addr_of!(marker) as usize)); // open /proc/self/mem before arming
+    peek32(std::ptr::addr_of!(marker) as usize); // open /proc/self/mem before arming
     let before = failinject::injected();
     failinject::fail_at_least(1);
     if with_ctx {
