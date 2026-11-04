@@ -27,6 +27,6 @@ saturation-register notes): run validation/percall before/after, then those item
   range-test-dropped CAUGHT, wrong-slot-offset CAUGHT. rc 0.
 - pcla5-gate2: clippy, static, affected --base origin/next --run. pcla5-percall2: wl_percall locale.c cases toupper_ascii,
   wcwidth_2byte, iswalpha_2byte, no base column (origin/next sources not present on the host for --base).
-- Superseded: pcla5-gate, pcla5-percall (jobrun died with my killed ssh while queued, never ran).
+- Superseded: pcla5-gate (died with my killed ssh while queued), pcla5-percall (rc 2: --base sources absent).
 - Still not done: percall before/after, nl_langinfo flat per-category array, isalpha masked class, wcwidth early narrow
   answer, saturation-register notes. Next: read pcla5-percall2, run a --base count with a git checkout, then those items.

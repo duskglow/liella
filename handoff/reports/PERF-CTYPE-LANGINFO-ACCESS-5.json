@@ -4,7 +4,7 @@
  "gate": {"affected": "pcla5-gate2", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["pcla5-gate and pcla5-percall were queued jobs killed with my ssh; superseded by -gate2 and -percall2", "fill-skipped caught with a different message (WARN-NO-MSG)"],
+ "informational": ["pcla5-gate was a queued job killed with my ssh; pcla5-percall ran rc 2 (--base sources absent on the host); superseded by -gate2 and -percall2. Both -2 jobs were still queued at hand-back (host load ~30)", "fill-skipped caught with a different message (WARN-NO-MSG)"],
  "refused": [],
  "jobs": ["keke:pcla5-plants", "keke:pcla5-gate2", "keke:pcla5-percall2"],
  "improvement": "jobrun in the foreground of an ssh dies with the ssh; submit via a script with setsid nohup",
