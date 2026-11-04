@@ -66,14 +66,37 @@ fn scan(path: &str, text: &str) -> Vec<String> {
     text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect()
 }
 
-pub fn check(root: &Path) -> Result<(), String> {
-    let out = Command::new("git").current_dir(root).args(["ls-files", "-z"]).output().map_err(|e| format!("git ls-files: {e}"))?;
-    if !out.status.success() {
-        return Err("git ls-files failed".into());
+fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for e in rd.flatten() {
+        let p = e.path();
+        let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
+        if rel == "target" || rel == ".git" || rel.starts_with("handoff") {
+            continue;
+        }
+        if p.is_dir() {
+            walk(root, &p, out);
+        } else if p.is_file() {
+            out.push(rel);
+        }
     }
+}
+
+/// The files to scan: `git ls-files`; in a synced role tree without git metadata, every file outside `target/`.
+fn tracked(root: &Path) -> Result<Vec<String>, String> {
+    match Command::new("git").current_dir(root).args(["ls-files", "-z"]).output() {
+        Ok(o) if o.status.success() => Ok(o.stdout.split(|&b| b == 0).filter(|n| !n.is_empty()).map(|n| String::from_utf8_lossy(n).into_owned()).collect()),
+        _ => {
+            let mut v = Vec::new();
+            walk(root, root, &mut v);
+            Ok(v)
+        }
+    }
+}
+
+pub fn check(root: &Path) -> Result<(), String> {
     let mut found = Vec::new();
-    for name in out.stdout.split(|&b| b == 0).filter(|n| !n.is_empty()) {
-        let path = String::from_utf8_lossy(name).into_owned();
+    for path in tracked(root)? {
         // Files that are not UTF-8 text (binaries, fuzz seeds) are skipped; a deleted-but-listed file too.
         if let Ok(text) = std::fs::read_to_string(root.join(&path)) {
             found.extend(scan(&path, &text));
@@ -83,8 +106,13 @@ pub fn check(root: &Path) -> Result<(), String> {
         return Ok(());
     }
     let n = found.len();
-    found.truncate(40);
-    Err(format!("{n} lab host name / address hit(s) outside handoff/ (name the processor class instead, or add an ALLOW entry with a reason in xtask/src/labnames.rs):\n  {}", found.join("\n  ")))
+    let mut per_file: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for f in &found {
+        *per_file.entry(f.split(':').next().unwrap_or("")).or_default() += 1;
+    }
+    let files: Vec<String> = per_file.iter().take(60).map(|(f, c)| format!("{f} ({c})")).collect();
+    let first: Vec<&str> = found.iter().take(40).map(String::as_str).collect();
+    Err(format!("{n} lab host name / address hit(s) in {} file(s) outside handoff/ (name the processor class instead, or add an ALLOW entry with a reason in xtask/src/labnames.rs):\n  files: {}\n  {}", per_file.len(), files.join(", "), first.join("\n  ")))
 }
 
 #[cfg(test)]
