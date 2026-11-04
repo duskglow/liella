@@ -258,7 +258,6 @@ impl Tally {
     }
 }
 
-/// Is `b` a NaN encoding of `fmt`?
 /// The reference value a result's ulp error is measured against: `func` at `2p+40` bits, raised to
 /// the round-toward-zero result when it falls below that in magnitude. The value is never smaller in
 /// magnitude than its round-toward-zero result; a reference that is (cosh of a tiny x: 1 + x^2/2 at
@@ -283,6 +282,7 @@ pub fn ulp_reference(func: &str, fmt: Fmt, mode: Round, args: &[Big], cr: u128) 
     exact
 }
 
+/// Is `b` a NaN encoding of `fmt`?
 pub fn is_nan(fmt: Fmt, b: u128) -> bool {
     Big::from_bits(fmt, b).is_nan()
 }
