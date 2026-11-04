@@ -1134,6 +1134,26 @@ mod tests {
         assert_eq!(c(b"ab[xy]", b"aby"), Some(true));
         assert_eq!(c(b"ab\\*", b"ab*"), Some(true));
         assert_eq!(c(b"ab\\*", b"abxy"), Some(false));
+        // A backslash in the string equal to the pattern's escape is not an ordinary run character:
+        // the escape quotes the `*`, so `a\*` matches `a*` only.
+        assert_eq!(c(b"a\\*", b"a\\*"), Some(false));
+        assert_eq!(c(b"a\\*", b"a*"), Some(true));
+    }
+
+    /// The last-`]` memo is filled on first use, also when the pattern has no `]` (0), and then
+    /// kept: a later call does not look again. (A pattern with no `]` gives the same match result
+    /// either way, so only the memo itself shows it.)
+    // no spec clause: speed-up of the direct matcher (the memo has no visible effect on results).
+    #[test]
+    fn the_last_close_memo_is_filled_once_and_kept() {
+        let mut m = usize::MAX;
+        assert_eq!(close_before(b"a[b", &mut m), 0);
+        assert_eq!(m, 0);
+        assert_eq!(close_before(b"a[b]c]", &mut m), 0, "kept, not looked for again");
+        let mut m = usize::MAX;
+        assert_eq!(close_before(b"a[b]c]", &mut m), 5);
+        assert_eq!(m, 5);
+        assert_eq!(close_before(b"[", &mut m), 5);
     }
 
     /// The direct matcher agrees with the general one on every pattern of up to three tokens
