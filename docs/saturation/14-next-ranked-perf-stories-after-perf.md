@@ -116,3 +116,12 @@ Row 8 status (PERF-FNMATCH-CLASS-3, 10-24, Haswell-EP host, 5 rounds, default le
 **Result (PERF-EXECVP-MISSING, Broadwell-EP host, 2026-10-23, job `perf-execvp-missing-ctr`, `cargo xtask bench --compare --counters --runs 5 cbench_opt`):** `execvp_missing` is 17427.6 instr/op against glibc 17268.9, ratio 1.009 (the 1.02/1.03 in the table above predates SMALL-OPEN-ROWS, which made the `Exec` closure generic). The gap is 159 instructions per call, about 53 per PATH directory (3 directories), under 1% of the call; the call is dominated by 3 failing execve syscalls in the kernel. The GUESS (per-entry path build) is not the cause: EXECVP-PATH-2 already builds each candidate in place with one element copy, and its ablation put the remainder at the execve wrapper plus errno decode. Nothing left to remove without making another row slower, so no code changed. Kept as is; parity within 1% is the bound reached by the user-space path, the rest is kernel work.
 
 Below the cut: `ngettext_found` (i 1.08 default and 1.00 SSE2: fold into N2-6), `strcmp_names` (i 1.10 default with cycles 1.27, but 0.96 with SSE2: re-measure under N2-4), `regexec_backref` and `regexec_class_nomatch_1k` (1.29 and 1.12 by cycles on 10-23; neither is among the cbench_opt rows above 1.05 here, and whatever bench carries them is re-measured by the follow-up), and the `fts`/`nftw` physical walks (10-23 t 1.08, du 82% kernel; not re-measured).
+**Row 6 run 3 (GETTEXT-LANGUAGE-ALIGNED-COMPARE-2, 2026-11-04, Zen 1 host; NEGATIVE RESULT, the fused compare is slower).**
+Same-host, same-tree paired counts (`cargo xtask bench --compare --counters --runs 5 cbench_opt`, `CBENCH_ONLY=gettext_language_steady`),
+instructions per operation, Liella / glibc dynamic: tree without the fused compare 731.6 / 452.6 (1.62; job
+`gettext-language-aligned-compare-2-basecount`); tree with it 862.9 / 452.6 (1.91; job `gettext-language-aligned-compare-2-final`).
+The fused aligned compare (`strz::text_equals_words`, correct under its tests and plants) adds about 131 instructions per call
+instead of removing the estimated 40: the per-word closure reads, the shift-and-merge of two aligned words and the extra
+key state cost more than the `strlen` plus word compare they replace for the short list values the row uses. Not for landing
+as it stands; a retry would need a kernel measured at the instruction level first (for example a value of at most 8 bytes
+read as one aligned word pair, no closure), against the 731.6 base.
