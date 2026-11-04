@@ -1,7 +1,6 @@
 // §29.1 secure-RPC authentication, key server and DES API as failing stubs (D-29.3, owner ruling 2026-10-27).
 //! Every stub in `s29_rpc_auth` is called from one table: each must return its family's failure
-//! value, set `errno` to `EOPNOTSUPP`, leave caller buffers as they were (except `passwd2des`,
-//! which clears its output key), and open no file descriptor (no socket, no file).
+//! value, set `errno` to `EOPNOTSUPP`, leave caller buffers as they were and open no file descriptor (no socket, no file).
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::indexing_slicing, unreachable_pub)]
 
 use core::ffi::{c_char, c_int, c_uint, c_void};
@@ -70,13 +69,13 @@ fn every_auth_stub_fails_cleanly() {
 }
 
 #[test]
-fn passwd2des_clears_its_key_and_fails() {
+fn passwd2des_leaves_its_key_and_fails() {
     // Trace: no spec clause (§29.1 `passwd2des` stub; D-29.3, owner ruling 2026-10-27).
     let mut key = [CANARY; 8];
     let mut pw = *b"secret\0";
     errno::set_raw(0);
     a::liella_compat_passwd2des(pw.as_mut_ptr().cast(), key.as_mut_ptr().cast());
-    assert_eq!(key, [0; 8]);
+    assert_eq!(key, [CANARY; 8]);
     assert_eq!(errno::get(), a::EOPNOTSUPP);
     assert_eq!(&pw, b"secret\0");
 }

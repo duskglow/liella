@@ -5,8 +5,8 @@
 //! the `key_*` calls, `getpublickey`, `getsecretkey`, `authdes_*`, `authunix_*` and the
 //! `netname` helpers. Each name stays exported at its compat version so an old program still
 //! loads; a call fails with its family's failure value (the table in D-29.3), sets `errno` to
-//! `EOPNOTSUPP`, and never touches the network, a file, a key server or its arguments' contents
-//! beyond clearing an output key a `void` function would otherwise leave undefined.
+//! `EOPNOTSUPP`, and never touches the network, a file, a key server or the memory its arguments
+//! point at.
 
 use liella_abi::ctypes::{c_char, c_int, c_uint, c_void};
 
@@ -33,15 +33,6 @@ fn fail_zero() -> c_int {
     0
 }
 
-/// Clears the 8-byte DES key at `key` (a `void` stub's only output).
-fn clear_key(key: *mut c_char) {
-    if !key.is_null() {
-        // UNSAFE(slice) SAFETY: the caller passes a `des_block` (8 bytes) per the
-        // interface; null was rejected above.
-        unsafe { core::ptr::write_bytes(key, 0, 8) };
-    }
-}
-
 /// `ecb_crypt`: `DESERR_HWERROR`, the buffer untouched.
 pub extern "C" fn liella_compat_ecb_crypt(_key: *mut c_char, _buf: *mut c_char, _len: c_uint, _mode: c_uint) -> c_int {
     unsupported();
@@ -59,10 +50,9 @@ pub extern "C" fn liella_compat_des_setparity(_key: *mut c_char) {
     unsupported();
 }
 
-/// `passwd2des`: clears the output key.
-pub extern "C" fn liella_compat_passwd2des(_passwd: *mut c_char, key: *mut c_char) {
+/// `passwd2des`: no effect, the key untouched.
+pub extern "C" fn liella_compat_passwd2des(_passwd: *mut c_char, _key: *mut c_char) {
     unsupported();
-    clear_key(key);
 }
 
 /// `xencrypt`: `0` (failure), the text untouched.
