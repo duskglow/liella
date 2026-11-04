@@ -1,8 +1,7 @@
-# PERF-SPRINTF-CHK-NLINK (WIP, NOT READY)
-Branch task/perf-sprintf-chk-nlink. Trace (job perf-sprintf-chk-nlink-trace0, keke): chk_ls 893 instr/call: render_simple<false,true> 324,
-boundary vsnprintf (inlined simple_into) 224, simple_conv 100, printf_text 60, vsnprintf6 49, simple_star 37, strlen 33, va_long 29.
-The _chk entry is not the gap (confirms the 10-23 result).
-Change: PairS plan (core printf.rs pair_s/is_pair) + render_pair_s (boundary printf.rs) writes "%s %*s " as pieces; core test pair_s_pieces_are_what_render_simple_writes.
-NOT VERIFIED: the last commit's clippy/test not re-run after the saturating_sub fix; no counts after, no gate, no plants, no static.
-Next: sync, cargo xtask clippy + static, test pair_s_pieces, gate, plants (pair_s conditions, fill, star sign), percall chk_ls + bench cbench_opt before/after, saturation row 3 update.
-Not done: kept-plan (stream) path does not use render_pair_s.
+# PERF-SPRINTF-CHK-NLINK (-2 run): pair-of-%s fast path, verification queued
+Branch task/perf-sprintf-chk-nlink. Trace (job perf-sprintf-chk-nlink-trace0, keke): chk_ls 893 instr/call: render_simple 324, boundary vsnprintf 224, simple_conv 100, printf_text 60 ... The _chk entry is not the gap.
+Change: PairS plan (core printf.rs pair_s/is_pair) + render_pair_s (boundary printf.rs) writes "%s %*s " as pieces; core test pair_s_pieces_are_what_render_simple_writes; -2 added end-to-end cases in conformance/c/s12_symbols_printf.c (fill, left, negative star, wide string, NULL).
+-2 run results (keke, r2): clippy --workspace -D warnings and cargo xtask static: passed (job perf-sprintf-chk-nlink-2-lint rc 101 only because its last step named the wrong package `liella-core`; the package is `liella`; SUPERSEDED).
+Gate (perf-sprintf-chk-nlink-2-gate) and plants (perf-sprintf-chk-nlink-2-plants: 4 core plants, run from a RAM copy) were queued on a loaded keke (slot wait over 30 min) and were not finished when the budget ran out: the dispatcher reads them.
+NOT DONE: percall/bench counts before/after (no instr numbers for the new path), boundary-level plants for fill/left (the conformance cases are meant to catch them; not planted), saturation row 3 update, kept-plan (stream) path.
+Next: read the two jobs; run validation/wl_percall.sh chk_ls and `cargo xtask bench --compare --counters` for sprintf_chk_ls_nlink and snprintf_ls_line; plant fill (width.saturating_sub) and left order in render_pair_s against `cargo xtask affected --run`; update docs/saturation row.

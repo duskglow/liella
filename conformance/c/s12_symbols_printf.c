@@ -504,8 +504,14 @@ int main(void)
         /* SPRINTF-LS-2 (§12.6, C0.5): ls -l's shape; an overflow aborts only as the general route does. */
         char b[16];
         CHECK(__sprintf_chk(b, FLAG, sizeof b, "%s %*s ", "-rw-r--r--", 2, "1") == 14 && eq(b, "-rw-r--r--  1 "));
+        /* SPRINTF-CHK-NLINK: the two-string forms (field fill, left-justify, negative `*`, a string wider than its field, NULL). */
+        CHECK(__sprintf_chk(b, FLAG, sizeof b, "%s %*s ", "ab", -4, "1") == 8 && eq(b, "ab 1    "));
+        CHECK(__sprintf_chk(b, FLAG, sizeof b, "%s %*s ", "ab", 1, "xyz") == 7 && eq(b, "ab xyz "));
+        CHECK(__sprintf_chk(b, FLAG, sizeof b, "%s %*s|", "ab", 0, "1") == 5 && eq(b, "ab 1|"));
+        CHECK(__sprintf_chk(b, FLAG, sizeof b, "%s|%-3s|", "ab", "1") == 7 && eq(b, "ab|1  |"));
+        CHECK(__sprintf_chk(b, FLAG, sizeof b, "[%s]%5s", (char *)0, "1") == 13 && eq(b, "[(null)]    1"));
         CHECK(aborts(over_ls_chk));
-        CHECK(aborts(bad_ls_chk) == aborts(bad_ls_chk_usual));
+        CHECK(aborts(bad_ls_chk)== aborts(bad_ls_chk_usual));
         CHECK(!aborts(bad_pos_chk));
         /* An invalid conversion after a valid prefix: the usual route's result and errno, the
          * buffer terminated where it terminates it, nothing beyond the object touched. The
