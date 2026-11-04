@@ -103,7 +103,9 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
         if failed && selftest::caller_blocks() != caller_before {
             return format!("{walker}: allocation {n}: a caller-owned block stays allocated ({caller_before} -> {})", selftest::caller_blocks());
         }
-        if after != before {
+        // Only after a reported failure: a success hands the caller its result block, which with
+        // the exports interposed is a block of the Liella heap that the caller owns.
+        if failed && after != before {
             return format!("{walker}: allocation {n}: a partial result stays allocated ({before} -> {after})");
         }
         if !injected {
