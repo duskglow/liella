@@ -1,0 +1,26 @@
+{
+ "task": "PERF-CTYPE-LANGINFO-ACCESS-3",
+ "model": "sonnet",
+ "tokens": null,
+ "result": "added out-of-range byte-class test for the surviving range-test-dropped plant; plants and gate queued, results pending",
+ "branch": "task/perf-ctype-langinfo-access-3",
+ "head": "50faf5bc+report",
+ "gate": {
+  "affected": "not run (queued)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "test not compiled or run by me: no cargo in the worktree and keke slot queue held both jobs 20+ min",
+  "first jobs pcla3-plants/pcla3-gate died with a killed foreground ssh; restarted as -b detached"
+ ],
+ "refused": [],
+ "improvement": "jobrun in the foreground ssh blocks on the slot queue; a detached start should be the documented form",
+ "next_step": "read pcla3-plants-b and pcla3-gate-b in keke ~/logs/jobs.tsv; then percall and the remaining handoff items",
+ "report_file": "handoff/perf-ctype-langinfo-access.md",
+ "jobs": [
+  "pcla3-plants-b",
+  "pcla3-gate-b"
+ ]
+}
