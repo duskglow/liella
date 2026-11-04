@@ -18,7 +18,7 @@ fn groups(pat: &[u8], subject: &[u8]) -> Found {
     regex::exec(&prog, &loc, subject, w, &opts, true).unwrap().map(|m| (m.start, m.end, m.groups.iter().copied().collect()))
 }
 
-/// Spec §14.9 (regexec offsets); D-14.4: `\(a*\)@\1` on `a^n @ a^n` for n across the ring size.
+/// Spec s14_9_c_1_2 (regexec offsets); D-14.4: `\(a*\)@\1` on `a^n @ a^n` for n across the ring size.
 #[test]
 fn regex_backref_ring_lengths_around_the_ring() {
     for n in 0usize..=40 {
@@ -31,7 +31,7 @@ fn regex_backref_ring_lengths_around_the_ring() {
     }
 }
 
-/// The same with a match that starts late and two groups (the literal dot keeps the earlier
+/// Spec s14_9_c_1_2: the same with a match that starts late and two groups (the literal dot keeps the earlier
 /// positions from matching).
 #[test]
 fn regex_backref_ring_late_start_two_groups() {
