@@ -80,6 +80,6 @@ cargo xtask bench --compare --counters <bench name>   # instructions per call, L
   symbol.
 * The plan and decision register: `plan/06-phases/`, `plan/07-decisions/`.
 * Performance: [docs/benchmarks.md](docs/benchmarks.md), `benchmarks/`, `validation/`, and the
-  saturation register [docs/saturation-register.md](docs/saturation-register.md) (what was tried
-  per row, including negative results).
+  saturation register [docs/saturation-register.md](docs/saturation-register.md) (index; one file per
+  section under `docs/saturation/`; what was tried per row, including negative results).
 * Toolchain and reference system: [docs/toolchain.md](docs/toolchain.md).
