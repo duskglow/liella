@@ -6,13 +6,13 @@ Branch task/perror-herror-reference-3, cut from origin/next.
 Ported from the pre-release history (task/perror-herror-reference-2, which had no merge base with next): one commit with
 the product change, tests and docs of runs 1 and 2. Conflicts resolved:
 - docs/compat-flags.md: next already has two rows numbered COMPAT-11 (`__libc_freeres`, `fnmatch`); both kept as on next.
-  The perror errno row is now COMPAT-13 (next free id; differences row in docs/differences-from-glibc.md points to it).
+  The perror errno row is now COMPAT-15 (next free id; differences row in docs/differences-from-glibc.md points to it).
   RULING NEEDED (informational): the duplicate COMPAT-11 on next should be renumbered by whoever owns it.
 - Everything else applied cleanly (next had no competing change to report.rs, netdb.rs, the tests or spec).
 
 ## Decisions in force
 - perror byte-orients an undecided stderr (a wide one stays wide); herror writes one text straight to descriptor 2;
-  perror/herror keep the caller's errno (D-2.2, D-2.3; COMPAT-13 registered).
+  perror/herror keep the caller's errno (D-2.2, D-2.3; COMPAT-15 registered).
 
 ## The sym_perror failure (trains 234/236)
 `liella-boundary::s12_stdio_symbols sym_perror` asserted `fwide(stderr, 0) == 0` after perror, the old "perror leaves stderr
