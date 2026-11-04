@@ -1,19 +1,32 @@
-# PERROR-HERROR-REFERENCE
+# PERROR-HERROR-REFERENCE (ported by PERROR-HERROR-REFERENCE-3)
 
-Branch task/perror-herror-reference (stacked on task/psignal-stderr-stream).
+Branch task/perror-herror-reference-3, cut from origin/next.
 
-## Done
-- #2041: perror byte-orients an undecided stderr (`report::perror` passes orient=true); a wide stream stays wide.
-- #2042: herror writes one text straight to descriptor 2 (no stream, no ordering with pending stderr text, no
-  error flag, no orientation); errno is the caller's afterwards, also when the write fails.
-- #2043: perror keeps the caller's errno (deliberate; differences row updated, COMPAT-11 registered).
-- Pinned in conformance/c/s20_psignal_stream.c (run by psignal_stderr_stream_cases): perror and herror, cases a-d, f
-  no longer KNOWN-DIFF. s2_2_c_6 now checks a wide stream; diag_products' orientation line is now a known line only
-  for a redirected-after-start-up descriptor 2 (see below).
+## State
+Ported from the pre-release history (task/perror-herror-reference-2, which had no merge base with next): one commit with
+the product change, tests and docs of runs 1 and 2. Conflicts resolved:
+- docs/compat-flags.md: next already has two rows numbered COMPAT-11 (`__libc_freeres`, `fnmatch`); both kept as on next.
+  The perror errno row is now COMPAT-13 (next free id; differences row in docs/differences-from-glibc.md points to it).
+  RULING NEEDED (informational): the duplicate COMPAT-11 on next should be renumbered by whoever owns it.
+- Everything else applied cleanly (next had no competing change to report.rs, netdb.rs, the tests or spec).
+
+## Decisions in force
+- perror byte-orients an undecided stderr (a wide one stays wide); herror writes one text straight to descriptor 2;
+  perror/herror keep the caller's errno (D-2.2, D-2.3; COMPAT-13 registered).
+
+## The sym_perror failure (trains 234/236)
+`liella-boundary::s12_stdio_symbols sym_perror` asserted `fwide(stderr, 0) == 0` after perror, the old "perror leaves stderr
+unoriented" rule that this change reverses. It now expects `< 0` (byte-oriented; the child's stderr is a pipe, a fresh stream).
+For MEMSTREAM-FERROR-ROW (same failure): check whether that test asserts an unoriented stream or an error flag after a
+perror/herror-like write; if so it is the same stale expectation, not a product bug.
 
 ## Open
-- diag_diff oracle: after the first perror on a descriptor 2 redirected by dup2 after start-up, the reference leaves
-  stderr undecided (a later perror then orients); a fresh stderr (started with 2 as a file, pipe or /dev/null) is
-  byte-oriented after the first perror, which Liella matches. Liella orients in both. Recorded as a KNOWN line in
-  diag_products; the dup2 state dependence was not traced further. Recommend: leave (needs a ruling if the owner wants it).
-- spec/clauses.tsv s2_2_c_6 still says perror leaves an unoriented stderr unoriented (spec text unchanged here).
+- diag_diff: after the first perror on a descriptor 2 redirected by dup2 after start-up, the reference leaves stderr
+  undecided; Liella orients in both cases (KNOWN line in diag_products). Leave unless the owner rules otherwise.
+- spec/clauses.tsv s2_2_c_6 text is unchanged (still describes the old rule); regenerate/edit via the spec owner.
+
+## Next step
+None for this story beyond the verification jobs named in the hand-back.
+
+## NOT READY
+Plants unproven: perror-herror-reference-3-plants/-plants2 used a wrong package name; -plants3 baseline was red because the RAM copy lacks `cargo xtask so` output. Rerun the four plants (report.rs orient true->false twice, netdb.rs errno restore, netdb.rs fd 2->1) after building the product in a fresh copy.
