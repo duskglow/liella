@@ -12,3 +12,17 @@ CASE(fwrite_4k, 200000, 1) {
     for (long i = 0; i < n; i++) pc_sink += fwrite(f4_blk, 1, sizeof f4_blk, f);
     PC_CHECKING pc_check("%zu", fwrite(f4_blk, 1, sizeof f4_blk, f));
 }
+
+#include <unistd.h>
+static void *(*volatile f4_memcpy)(void *, const void *, size_t) = memcpy;
+static char f4_dst[8192];
+
+CASE(memcpy_4k_ref, 200000, 1) {
+    memset(f4_blk, 'x', sizeof f4_blk);
+    for (long i = 0; i < n; i++) { f4_memcpy(f4_dst + ((i & 1) << 12), f4_blk, 4096); pc_sink += f4_dst[0]; }
+    PC_CHECKING pc_check("%d", (int)f4_dst[4095]);
+}
+CASE(write_4k_ref, 200000, 1) {
+    for (long i = 0; i < n; i++) pc_sink += (unsigned long)write(1 + 0 * i, f4_blk, 0);
+    PC_CHECKING pc_check("%d", 0);
+}
