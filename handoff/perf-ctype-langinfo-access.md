@@ -11,3 +11,12 @@ ctype_fill; byte_class indexes from the stored word with one range test.
 ## Next step
 Not done (percall counts, nl_langinfo flat per-category array, isalpha masked class, wcwidth early narrow answer,
 saturation-register notes): run validation/percall before/after, then those items.
+
+## -4 run
+- Cause of pcla3-plants-b rc=3: the new test's table was typed `fn(c_int)` but held `extern "C"` fn items (E0308). Fixed.
+- Second cause (found by pcla4-plants, range-test-dropped SURVIVED): the test thread had no stored ctype word, so the
+  answer came from the locale (`class_unstored`), never the range test. The test now calls `__ctype_b_loc()` first.
+- pcla4-plants-b (fresh RAM copy plants-5): fill-skipped CAUGHT, range-test-dropped CAUGHT, wrong-slot-offset CAUGHT. rc 0.
+- Gate: pcla4-gate-b (affected --run). Superseded: pcla4-plants (range-test-dropped SURVIVED, before the fix).
+- Still not done (no budget): percall before/after counts, nl_langinfo flat per-category array, isalpha masked class,
+  wcwidth early narrow answer, saturation-register notes.
