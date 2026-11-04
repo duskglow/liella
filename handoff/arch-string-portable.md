@@ -1,38 +1,41 @@
-# ARCH-STRING-PORTABLE (A-8): portable SWAR scanners - CHECKPOINT, NOT READY
+# ARCH-STRING-PORTABLE (A-8): portable SWAR scanners - run 2 (ARCH-STRING-PORTABLE-2)
 
-State: branch task/arch-string-portable, WIP code commit cc21d5e1 (from origin/next). Role shiki:~/w/sh2.
-Plan row: plan/06-phases/20-post-release-ledger-and-experiments.md A-8. No D-row written yet (use D-NEW).
+State: branch task/arch-string-portable-2 (stacks on task/arch-string-portable), HEAD 397b3592 (+ this report commit).
+Role shiki:~/w/sh2. Plan row A-8 (plan/06-phases/20-post-release-ledger-and-experiments.md); decision D-4.22 amendment
+PORTABLE-SCAN (plan/07-decisions/s04-byte-arrays-and-strings.md).
 
-## Done
-* crates/boundary/src/strz.rs, mod portable (cfg(liella_portable_scan)): SWAR strlen, strnlen, rawmemchr(+_entry),
-  memchr(+_entry), memrchr(+_entry), strchr, strchrnul, strcmp(+_entry, extern "C" because selftest passes it to
-  clean_upper_call), strncmp. Exact per-byte zero mask (works on both endians), aligned word loads only
-  (read_volatile), head/tail bytes masked. strcmp/strncmp use words when both strings have the same offset in a
-  word, bytes otherwise (a follow-up can add the shifted-word path).
-* ffi.rs: the 13 declarations carry cfg(not(liella_portable_scan)); a cfg'd pub(crate) use takes the portable ones.
-* build.rs: emits cfg liella_portable_scan on non-x86_64 or with feature portable-scan (Cargo.toml, test-only).
+## Done (run 1, cc21d5e1)
+strz.rs `mod portable` (cfg liella_portable_scan: non-x86_64 or test feature `portable-scan`): strlen, strnlen,
+rawmemchr, memchr, memrchr, strchr, strchrnul, strcmp, strncmp (+ entries); ffi.rs cfg swap; build.rs cfg.
 
-## Results (foreground on sh2, not jobrun)
-* cargo test -p liella-boundary --features portable-scan --test machine_scanners: 45 passed, 2 FAILED:
-  memchr_answers_alike_with_null_folding_on_and_off_and_takes_the_folding_decision (line 1988),
-  null_faults_in_the_folded_memchr_sizes_and_aborts_in_every_other (line 1771). Cause: with folding on the asm
-  memchr entry faults on page zero for NULL; the portable entry sends NULL to find_n_edge (abort), since a NULL read
-  is UB in Rust. small_copy did not run (cargo stopped at the first failing target).
-* NOT RUN: default suites, small_copy forced, plants, cargo xtask clippy/static, gate. Unknown whether the two
-  "never used" warnings in the log are pre-existing.
+## Done (run 2)
+* Ruling #2561: memchr gate (`liella_machine_chr_limit`) stays 0 under the cfg (dispatch.rs); the two memchr NULL-fold
+  tests expect the S6 abort and the untaken decision there (`selftest::portable_scan()`).
+* Ruling #2562: word read stays UNSAFE(slice); new test
+  `every_scanner_reads_only_the_pages_of_an_object_at_either_page_edge` (all 9 scanners, both page edges, len 1..=24).
+* D-4.22 PORTABLE-SCAN amendment; docs/arch-seams.md A-8 progress paragraph.
+* static fixes (397b3592): xtask/src/arch.rs ALLOWED gets strz.rs [machine-decl] (reason in the table); the word read's
+  SAFETY comment carries UNSAFE(slice).
 
-## RULING NEEDED
-1. NULL folding on portable targets: recommend the dispatcher reports folding OFF whenever liella_portable_scan is set
-   (so every path aborts alike), and the two tests expect that decision under portable-scan.
-2. Unsafe category: the aligned word over-read sits under UNSAFE(slice) in strz.rs (no policy change). Recommend
-   the owner confirm, or rule a dedicated category/file for word scans.
+## Results
+* On dc1f0009 (superseded only by the comment/xtask-only commit 397b3592): arch-string-portable-2-portable rc 0
+  (machine_scanners 48 passed, small_copy 9 passed, forced portable); arch-string-portable-2-plants rc 0, all 6 CAUGHT:
+  zeros-mask (machine_scanners:798/844 panics), scan-n-tail (SIGABRT), scan-read-ahead (SIGSEGV, page end),
+  memrchr-head (SIGABRT), order-terminator (SIGSEGV), scan-n-unaligned (SIGSEGV). No WARN lines (own script, not plant.sh).
+  arch-string-portable-2-cross rc 0. arch-string-portable-2-static rc 1 (arch-audit 13 seams, unsafe-audit strz.rs:1853):
+  fixed in 397b3592.
+* On 397b3592, started detached (not waited, budget): arch-string-portable-2-{static,cross,portable,gate}-r2 (chain
+  ~/work/arch-string-portable-2/chain3.sh, sequential) and arch-string-portable-2-plants-r2 (RAM copy
+  /dev/shm/claude/arch-string-portable-2/plants-2). Read them in shiki ~/logs/jobs.tsv.
+
+## Open / RULING NEEDED
+* The arch-audit allowance covers all of strz.rs for machine-decl (precise today: no other `fn liella_machine_` there).
+  Alternative: move `mod portable` to its own file and allow only that (cleaner; needs a file split).
 
 ## Not done (scope left)
-strcpy/stpcpy/strncpy/stpncpy and the _chk forms, strdiff, casecmp_ord_*, pairscan(_ci), strpair, wcspair,
-env_slot (docs/arch-seams.md list); docs/arch-seams.md and the D-row are not updated.
+strcpy/stpcpy/strncpy/stpncpy and _chk, strdiff, casecmp_ord_*, pairscan(_ci), strpair, wcspair, env_slot; the
+shifted-word strcmp path (different offsets) is bytewise for now.
 
 ## Next step
-Settle ruling 1, then: forced and default runs of machine_scanners + small_copy; plants in a RAM copy (zeros() drop
-"| x"; scan_n below(rem) -> below(rem+1); scan reading the next word before the test; memrchr from(s-q) -> from(s-q-1);
-order() dropping zeros(x)); cargo xtask clippy and static; gate via jobrun. Then the remaining kernels.
-Note: one edit to strz.rs was done with a python rewrite instead of the Edit tool (rule breach, reported).
+If any -r2 job is red, fix and rerun only it. Then the copy family portable versions, same test/plant pattern
+(plants script: shiki ~/work/arch-string-portable-2/plants.sh).
