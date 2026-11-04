@@ -54,7 +54,7 @@ target fails without an artifact (a build or harness failure).
 
 ### Results
 
-Recovered 2026-11-04 (PRE14-FUZZ-RESULTS) from the two `results.tsv` and `.stats` files in `~/work/pre14-fuzz-campaign/` on keke
+Recovered 2026-11-04 (PRE14-FUZZ-RESULTS) from the two `results.tsv` and `.stats` files in `~/work/pre14-fuzz-campaign/` on the lab VM that ran the campaign
 (jobs `pre14-fuzz-campaign-a`, 2026-10-23 06:55:48Z to 07:59:26Z, and `-b`, 06:58:39Z to 07:31:42Z, both rc 0). The campaign ran on the
 tree of the PRE14-FUZZ-CAMPAIGN branch on 2026-10-23; the head sha was not recorded in the results files.
 
@@ -95,7 +95,7 @@ Each finding (crash, hang/time-out, OOM) is a defect and gets its own fix story,
 described here (owner rule SECURITY-PRIVATE).
 
 The 2026-10-23 campaign found four time-outs, each ending its target early (artifacts under `run-<stamp>-b/artifacts/<target>/` on
-keke, not in the tree):
+the lab VM, not in the tree):
 
 | Target | Stopped at | Kind |
 |---|---|---|
