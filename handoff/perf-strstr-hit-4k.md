@@ -30,3 +30,26 @@ run in `timeout -k 10 600` and counts rc 124 as CAUGHT (by timeout); build is se
 in RAM copies; p5 EQUIVALENT (weaker filter, Rust compare rejects extras).
 Jobs: perf-strstr-hit-4k-2-gate (affected, base origin/next), perf-strstr-hit-4k-2-plants. clippy and static clean on the role.
 Next step: none.
+
+## Run 3 (PERF-STRSTR-HIT-4K-3)
+State: branch task/perf-strstr-hit-4k-3, merge of origin/next aac6956b0 (commit 79cf2a92) plus this handoff commit.
+CI conflict cause: next had also landed a 128-byte group loop in liella_machine_strpair (memory operands, vpmovmskb+test+jnz at
+the top, sub+jmp at the bottom: 26 instr per 128 B). Resolution combines both: next's memory-operand blocks (no separate loads)
+plus this branch's loop bottom (step, then one vptest+jz; hit = step back + jmp to the block loop; 64-byte pair out of line):
+23 instr per 128 B. Behaviour on a hit is the same on both sides (the run resumes in the block loop at the group's start).
+No other file conflicted (docs/saturation/03 auto-merged).
+Counts (perf-strstr-hit-4k-3-percall3, instructions:u per call, Zen 1 host; base = origin/next aac6956b0):
+| row | glibc | next | this branch | ratio |
+| strstr_scan_4k | 830 | 1073 | 1014 | 1.22 |
+| strstr_verify_4k | 18536 | 1073 | 1014 | 0.05 |
+| strstr_miss_4k | 10158 | 1055 | 996 | 0.10 |
+| strstr_hit_4k | 10167 | 1323 | 1264 | 0.12 |
+| strstr_hit_short | 153 | 173 | 173 | 1.13 (unchanged) |
+No row is slower. strstr_scan_4k stays closed under ruling #2521 (1.05x not reachable without slowing text rows).
+Plants (perf-strstr-hit-4k-3-plants, keke:~/work/PERF-STRSTR-HIT-4K-3/plants.sh, RAM copies under /dev/shm, each test run
+`timeout -k 10 600`, patterns anchored after the loop128 label, a pattern that does not apply fails the run): baseline ok;
+CAUGHT p1_dropblock4, p2_noreset, p3_last96, p3b_nul96 (SIGSEGV in strstr_find: missed NUL runs into the guard page),
+p4_step (by timeout), p6_offset96, p7_pairstep (loop64 step 96); p5 weaker filter EQUIVALENT (Rust compare rejects extra candidates).
+Superseded: perf-strstr-hit-4k-3-percall (rc 2, --base sha run from ~/x, an empty repo), perf-strstr-hit-4k-3-percall2 (rc 2, base
+not primed on keke; primed with validation/wl_prime_base.sh keke aac6956b0).
+Next step: none (CI merge of next).
