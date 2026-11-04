@@ -1728,7 +1728,7 @@ fn sym_nftw() {
 }
 
 /// Returns `FTW_SKIP_SUBTREE` (2) at the second visit when it is a directory, 0 otherwise.
-extern "C" fn skip_second_dir_nftw(_: *const c_char, _: *const c_void, kind: c_int, _: *mut c_void) -> c_int {
+extern "C" fn skip_second_dir_nftw(_: *const c_char, _: *const core::ffi::c_void, kind: c_int, _: *mut core::ffi::c_void) -> c_int {
     CALLS.set(CALLS.get() + 1);
     if kind == 1 && CALLS.get() == 2 { 2 } else { 0 }
 }
