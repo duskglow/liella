@@ -1,0 +1,37 @@
+{
+ "task": "PLAN-NEXT-BATCH-NOV",
+ "model": "opus",
+ "tokens": null,
+ "result": "5 of 10 briefs written (budget-limited, evidence-checked); 3 RULING NEEDED",
+ "branch": "task/plan-next-batch-nov",
+ "head": "035b7cd7",
+ "gate": {
+  "affected": "n/a (planning); static job PLAN-NEXT-BATCH-NOV-static",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "DL-THREAT-TEXT needs R14-15 approval of threat-model-draft.md",
+   "recommendation": "approve B/C rules, then brief DL-THREAT-TEXT"
+  },
+  {
+   "item": "T22 stdio needs the heap to print: assignment",
+   "recommendation": "stdio story after STDIO-SHORT-IO-5: static slots for the 3 std streams"
+  },
+  {
+   "item": "T24 __nss_hostname_digits_dots signature spec gap",
+   "recommendation": "spec-gap ruling before any story"
+  }
+ ],
+ "informational": [
+  "PERF-READDIR-ENTRY shares dirtree.rs with running PERF-FSWALK-PHYS: Stacks-on set"
+ ],
+ "refused": [],
+ "improvement": "a script listing spec clauses with no traced test (and plan rows with no story) would make planning runs cheaper than grepping by hand",
+ "next_step": "submit the five briefs; a short follow-up planning run for the other five",
+ "report_file": "handoff/plan-next-batch-nov.md",
+ "jobs": [
+  "PLAN-NEXT-BATCH-NOV-static"
+ ]
+}
