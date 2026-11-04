@@ -1421,6 +1421,50 @@ fn s12_5_c_5() {
     x::fclose(fp);
 }
 
+/// §12.5: a record longer than the unread window (a line crossing the stream's buffer boundary,
+/// with the caller's buffer already big enough) comes back whole, byte for byte, whether it ends
+/// in the delimiter or at end of file, and the next record starts right after it.
+#[test]
+fn s12_5_c_5_long_records_cross_the_window() {
+    // §12.5 getline/getdelim: the count, the bytes and the terminator of every record.
+    let pattern = |n: usize, seed: u8| -> Vec<u8> { (0..n).map(|i| b'a' + ((i as u8).wrapping_mul(7).wrapping_add(seed) % 26)).collect() };
+    for (idx, len) in [1usize, 4000, 4090, 4091, 4092, 4093, 4094, 4095, 4096, 4097, 4101, 8190, 8192, 8200, 12289].into_iter().enumerate() {
+        for tail in [&b"\n"[..], &b""[..]] {
+            for window_shift in [0usize, 5, 31, 33] {
+                // A warm-up record grows the caller's buffer; a short one then shifts the window.
+                let mut data = pattern(20000, 1);
+                data.push(b'\n');
+                data.extend(std::iter::repeat_n(b'q', window_shift));
+                data.push(b'\n');
+                let rec = pattern(len, idx as u8);
+                data.extend_from_slice(&rec);
+                data.extend_from_slice(tail);
+                let after = if tail.is_empty() { None } else { Some(b"next\n") };
+                if let Some(a) = after {
+                    data.extend_from_slice(a);
+                }
+                let t = tmp_with(&format!("c55l{idx}{window_shift}{}", tail.len()), &data);
+                let fp = fopen(&t, "r");
+                let mut p: *mut c_char = null_mut();
+                let mut cap = 0usize;
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 20001);
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(window_shift + 1).unwrap());
+                let want = len + tail.len();
+                let got = x::getline(Some(&mut p), Some(&mut cap), fp);
+                assert_eq!(got, isize::try_from(want).unwrap(), "len {len} tail {} shift {window_shift}", tail.len());
+                assert_eq!(bytes(p.cast(), want), [&rec[..], tail].concat(), "len {len} shift {window_shift}");
+                assert_eq!(bytes(p.cast(), want + 1)[want], 0, "terminated");
+                if let Some(a) = after {
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 5);
+                    assert_eq!(text(p), &a[..]);
+                }
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file");
+                x::fclose(fp);
+            }
+        }
+    }
+}
+
 /// §12.5: `fputs` writes a Text without a newline; `puts` writes it to `stdout` with one.
 #[test]
 fn s12_5_c_6() {
