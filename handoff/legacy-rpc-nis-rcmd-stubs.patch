@@ -1,0 +1,109 @@
+diff --git a/crates/boundary/src/posix/s15_sockets.rs b/crates/boundary/src/posix/s15_sockets.rs
+index 410060a..d65196c 100644
+--- a/crates/boundary/src/posix/s15_sockets.rs
++++ b/crates/boundary/src/posix/s15_sockets.rs
+@@ -506,62 +506,76 @@ pub extern "C" fn ether_ntohost(hostname: *mut c_char, addr: Option<&[u8; 6]>) -
+ 
+ // ------------------------------------------------------------------------------ §15.8
+ 
++// The rcmd family is a set of stubs (D-15.8-STUB, owner rulings R10/R11 2026-11-04): the
++// connecting calls fail like the secure-RPC stubs (`-1`, `errno` `EOPNOTSUPP`, D-29.3) without a
++// socket, a lookup or a write through any argument; the trust checks always deny (`-1`, `errno`
++// untouched: a refusal is an answer, not an error), so address-based trust never succeeds while a
++// module that links them (pam_rhosts) still loads.
++
++/// The connecting calls' failure: `-1` with `errno` `EOPNOTSUPP` (the D-29.3 rule).
++fn rcmd_unsupported() -> c_int {
++    crate::errno::set_raw(crate::posix::s29_rpc_auth::EOPNOTSUPP);
++    -1
++}
++
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rresvport(port: Option<&mut c_int>) -> c_int {
+-    ret::fd(netaddr::rresvport(port, 2))
++/// `rresvport`: fails (no socket is made, `*port` untouched).
++pub extern "C" fn rresvport(_port: Option<&mut c_int>) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rresvport_af(port: Option<&mut c_int>, af: c_ushort) -> c_int {
+-    ret::fd(netaddr::rresvport(port, i32::from(af)))
++/// `rresvport_af`: fails (no socket is made, `*port` untouched).
++pub extern "C" fn rresvport_af(_port: Option<&mut c_int>, _af: c_ushort) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rcmd(ahost: Option<&mut usize>, rport: c_ushort, locuser: *const c_char, remuser: *const c_char, cmd: *const c_char, fd2p: Option<&mut c_int>) -> c_int {
+-    // UNSAFE(slice) SAFETY: *ahost and the user and command arguments are strings (§15.8).
+-    netaddr::rcmd_af(ahost, |a| unsafe { strz::strz(core::ptr::with_exposed_provenance(a)) }, rport, unsafe { strz::strz(locuser) }, unsafe { strz::strz(remuser) }, unsafe { strz::strz(cmd) }, fd2p, 2)
++/// `rcmd`: fails (no lookup, `*ahost` and `*fd2p` untouched).
++pub extern "C" fn rcmd(_ahost: Option<&mut usize>, _rport: c_ushort, _locuser: *const c_char, _remuser: *const c_char, _cmd: *const c_char, _fd2p: Option<&mut c_int>) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rcmd_af(ahost: Option<&mut usize>, rport: c_ushort, locuser: *const c_char, remuser: *const c_char, cmd: *const c_char, fd2p: Option<&mut c_int>, af: c_ushort) -> c_int {
+-    // UNSAFE(slice) SAFETY: *ahost and the user and command arguments are strings (§15.8).
+-    netaddr::rcmd_af(ahost, |a| unsafe { strz::strz(core::ptr::with_exposed_provenance(a)) }, rport, unsafe { strz::strz(locuser) }, unsafe { strz::strz(remuser) }, unsafe { strz::strz(cmd) }, fd2p, af)
++/// `rcmd_af`: fails (no lookup, `*ahost` and `*fd2p` untouched).
++pub extern "C" fn rcmd_af(_ahost: Option<&mut usize>, _rport: c_ushort, _locuser: *const c_char, _remuser: *const c_char, _cmd: *const c_char, _fd2p: Option<&mut c_int>, _af: c_ushort) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rexec(ahost: Option<&mut usize>, rport: c_int, name: *const c_char, pass: *const c_char, cmd: *const c_char, fd2p: Option<&mut c_int>) -> c_int {
+-    // UNSAFE(slice) SAFETY: *ahost and cmd are strings; name and pass are NULL or strings (§15.8).
+-    netaddr::rexec_af(ahost, |a| unsafe { strz::strz(core::ptr::with_exposed_provenance(a)) }, rport, unsafe { strz::strz_opt(name) }, unsafe { strz::strz_opt(pass) }, unsafe { strz::strz(cmd) }, fd2p, 2)
++/// `rexec`: fails (no lookup, no `.netrc` read, `*ahost` and `*fd2p` untouched).
++pub extern "C" fn rexec(_ahost: Option<&mut usize>, _rport: c_int, _name: *const c_char, _pass: *const c_char, _cmd: *const c_char, _fd2p: Option<&mut c_int>) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn rexec_af(ahost: Option<&mut usize>, rport: c_int, name: *const c_char, pass: *const c_char, cmd: *const c_char, fd2p: Option<&mut c_int>, af: c_ushort) -> c_int {
+-    // UNSAFE(slice) SAFETY: *ahost and cmd are strings; name and pass are NULL or strings (§15.8).
+-    netaddr::rexec_af(ahost, |a| unsafe { strz::strz(core::ptr::with_exposed_provenance(a)) }, rport, unsafe { strz::strz_opt(name) }, unsafe { strz::strz_opt(pass) }, unsafe { strz::strz(cmd) }, fd2p, af)
++/// `rexec_af`: fails (no lookup, no `.netrc` read, `*ahost` and `*fd2p` untouched).
++pub extern "C" fn rexec_af(_ahost: Option<&mut usize>, _rport: c_int, _name: *const c_char, _pass: *const c_char, _cmd: *const c_char, _fd2p: Option<&mut c_int>, _af: c_ushort) -> c_int {
++    rcmd_unsupported()
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn ruserok(rhost: *const c_char, superuser: c_int, ruser: *const c_char, luser: *const c_char) -> c_int {
+-    // UNSAFE(slice) SAFETY: the arguments are strings (§15.8).
+-    netaddr::ruserok(unsafe { strz::strz(rhost) }, superuser, unsafe { strz::strz(ruser) }, unsafe { strz::strz(luser) }, 2)
++/// `ruserok`: always denies (no file is read).
++pub extern "C" fn ruserok(_rhost: *const c_char, _superuser: c_int, _ruser: *const c_char, _luser: *const c_char) -> c_int {
++    -1
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn ruserok_af(rhost: *const c_char, superuser: c_int, ruser: *const c_char, luser: *const c_char, af: c_ushort) -> c_int {
+-    // UNSAFE(slice) SAFETY: the arguments are strings (§15.8).
+-    netaddr::ruserok(unsafe { strz::strz(rhost) }, superuser, unsafe { strz::strz(ruser) }, unsafe { strz::strz(luser) }, af)
++/// `ruserok_af`: always denies (no file is read).
++pub extern "C" fn ruserok_af(_rhost: *const c_char, _superuser: c_int, _ruser: *const c_char, _luser: *const c_char, _af: c_ushort) -> c_int {
++    -1
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn iruserok(raddr: u32, superuser: c_int, ruser: *const c_char, luser: *const c_char) -> c_int {
+-    // UNSAFE(slice) SAFETY: the user names are strings (§15.8).
+-    netaddr::iruserok_v4(raddr, superuser, unsafe { strz::strz(ruser) }, unsafe { strz::strz(luser) })
++/// `iruserok`: always denies (no file is read).
++pub extern "C" fn iruserok(_raddr: u32, _superuser: c_int, _ruser: *const c_char, _luser: *const c_char) -> c_int {
++    -1
+ }}
+ 
+ export! { "GLIBC_2.2.5";
+-pub extern "C" fn iruserok_af(raddr: *const c_void, superuser: c_int, ruser: *const c_char, luser: *const c_char, af: c_ushort) -> c_int {
+-    // UNSAFE(slice) SAFETY: raddr holds an address of family af; the user names are strings (§15.8).
+-    netaddr::iruserok(|n| unsafe { conv::buf(raddr, n) }, superuser, unsafe { strz::strz(ruser) }, unsafe { strz::strz(luser) }, af)
++/// `iruserok_af`: always denies (no file is read).
++pub extern "C" fn iruserok_af(_raddr: *const c_void, _superuser: c_int, _ruser: *const c_char, _luser: *const c_char, _af: c_ushort) -> c_int {
++    -1
+ }}
+ 
+ export! { "GLIBC_2.2.5";

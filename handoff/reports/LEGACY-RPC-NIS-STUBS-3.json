@@ -1,0 +1,18 @@
+{"task": "LEGACY-RPC-NIS-STUBS-3", "model": "opus", "tokens": null,
+ "result": "Run 2's red gate explained and fixed (the stubs were not exported, so cargo xtask so failed); 27 secure-RPC stubs verified: gate green, 6/6 plants caught; rcmd stubs drafted as a patch, client/server stubs not started (context budget)",
+ "branch": "task/legacy-rpc-nis-stubs-3", "head": "ce8f9fb",
+ "gate": {"affected": "6266 passed / 0 failed (4 suites ok, 1114 ignored)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "R10 asks for a COMPAT flag restoring rexec; D-29.3 offers no restore option for the same class (cleartext password over the network)", "recommendation": "no flag; record the reason in the single rcmd-family differences row, consistent with D-29.3"},
+  {"item": "ruserpass and __ivaliduser are not named in R11 but belong to the rcmd family (ruserpass reads ~/.netrc passwords)", "recommendation": "stub them with the family: ruserpass fails with EOPNOTSUPP, __ivaliduser always denies"}
+ ],
+ "informational": [
+  "Run 2's red gate was not stale products: cargo xtask so refused the build because libc.a defined none of the 27 liella_compat_* targets (plain pub extern fns with no no_mangle); the product-linking tests then failed. The unit test calls the Rust fns directly and cannot see a missing export; plant 'unexported' now shows xtask so catches it.",
+  "The full-features clippy job finished in seconds because the gate had just built the same tree; rc 0, and cargo xtask static (unsafe-audit, compat-gen) ok."
+ ],
+ "refused": [],
+ "jobs": ["kanon:legacy-rpc-nis-stubs-3-gate", "kanon:legacy-rpc-nis-stubs-3-plants", "kanon:legacy-rpc-nis-stubs-3-lint", "kanon:legacy-rpc-nis-stubs-3-so"],
+ "improvement": "xtask static could check that every liella_compat_* fn in crates/boundary/src sits inside internal_entry!/export!, so the failure shows up in seconds at lint time, not as a product-build failure that fails 1366 tests",
+ "next_step": "LEGACY-RPC-NIS-STUBS-4: apply handoff/legacy-rpc-nis-rcmd-stubs.patch, rewrite the rcmd tests listed in the handoff, add the D-row and differences row, then do the RPC client/server stubs",
+ "report_file": "handoff/legacy-rpc-nis.md"}
