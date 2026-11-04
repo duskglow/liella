@@ -1183,6 +1183,9 @@ fn classify(path: &str) -> Option<Class> {
     if path.ends_with(".map") || path.ends_with(".ld") || path.ends_with(".lds") || path.ends_with(".version") || path.starts_with("scripts/") {
         return full("linker or export list, or a script");
     }
+    if path == "conformance/README.md" {
+        return Some(Class::Docs);
+    }
     if path == "conformance/run.sh" || path.starts_with("conformance/tools/") {
         return Some(Class::AllConf);
     }
@@ -1297,6 +1300,12 @@ pub fn select_only(repo: &Repo, list: &str) -> Result<Selection, String> {
 }
 
 fn classify_path(repo: &Repo, f: &str, sel: &mut Selection) {
+    // A LINK-HELPERS helper source: the programs that link it are found by directive, not by name
+    // (every conformance program is the safe selection).
+    if f.starts_with("conformance/c/helpers/") && f.ends_with(".c") {
+        sel.all_conf(repo, &format!("{f}: a dynamic-link helper source (every conformance program)"));
+        return;
+    }
     if let Some(name) = f.strip_prefix("conformance/c/") {
         let stem = name.strip_suffix(".c").unwrap_or(name);
         if f.ends_with(".c") {
