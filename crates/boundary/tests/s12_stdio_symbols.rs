@@ -823,10 +823,10 @@ fn fgets_pieces(f: Fgets) {
     assert_eq!(script_seen(fp), [0, 1, 2, 3], "flushed before every read inside the line");
     assert_eq!(x::fclose(fp), 0);
     assert_eq!(x::fclose(out), 0);
-    // A read error after some bytes ends the line with the error indicator set.
+    // A read error after some bytes is NULL with the error indicator set; the bytes stay in the
+    // buffer, unterminated (the reference; STDIO-EOF-PARTIAL-REFERENCE).
     let fp = script(Script { data: b"ab".to_vec(), step: 1, fail: true, ..Script::default() });
-    assert_eq!(f(p, 100, fp), p);
-    assert!(text(p) == "ab" && x::ferror(fp) != 0, "the bytes before the error");
+    assert!(f(p, 100, fp).is_null() && x::ferror(fp) != 0, "NULL on the error after some bytes");
     assert!(f(p, 100, fp).is_null(), "the error before any byte");
     assert_eq!(x::fclose(fp), 0);
     let fp = open(&t, "r");

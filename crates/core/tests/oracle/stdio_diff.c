@@ -666,6 +666,59 @@ static void refills(void) {
     unlink(p);
 }
 
+/* Partial lines on a failing read and sticky end of input (STDIO-EOF-PARTIAL-REFERENCE, #2080):
+   a cookie stream scripted as read results (n > 0 bytes of "abcdefgh", 0 = end, -1 = error),
+   then a table of reader calls: g fgets(32), l getline, c getc, r fread(3), k clearerr. */
+static const int *eof_script;
+static int eof_at, eof_reads;
+static ssize_t eof_read(void *c, char *b, size_t n) {
+    (void)c; (void)n; eof_reads++;
+    int s = eof_script[eof_at];
+    if (s == -2) return 0;
+    eof_at++;
+    if (s < 0) { errno = EIO; return -1; }
+    for (int i = 0; i < s; i++) b[i] = "abcdefgh"[i];
+    return s;
+}
+static void eofs(void) {
+    static const struct { const char *name; int script[6]; const char *ops; } cases[] = {
+        { "fgets partial then error", { 2, -1, -2 }, "gg" },
+        { "getline partial then error", { 2, -1, -2 }, "ll" },
+        { "fgets partial then end then data", { 2, 0, 3, -2 }, "ggkg" },
+        { "getline partial then end then data", { 2, 0, 3, -2 }, "llkl" },
+        { "getc end then data", { 0, 3, -2 }, "ccgl" },
+        { "fread end then data", { 0, 3, -2 }, "rrk" "r" },
+        { "getc end then data then clearerr", { 0, 3, -2 }, "ckc" },
+        { "fgets end after line then data", { 4, 0, 3, -2 }, "gggk" "g" },
+        { "fread big end then data", { 0, 3, -2 }, "Rr" },
+    };
+    str("== eofs"); nl();
+    for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+        eof_script = cases[k].script; eof_at = 0; eof_reads = 0;
+        cookie_io_functions_t io = { eof_read, 0, 0, 0 };
+        FILE *f = fopencookie(0, "r", io);
+        static char buf[4096];
+        setvbuf(f, buf, _IOFBF, sizeof buf);
+        str(cases[k].name); nl();
+        char *line = 0; size_t cap = 0;
+        for (const char *o = cases[k].ops; *o; o++) {
+            char b[32]; memset(b, 'z', sizeof b);
+            str(" "); ch(*o);
+            errno = 0;
+            switch (*o) {
+            case 'g': { char *r = fgets(b, sizeof b, f); kv("r", r != 0); bytes(b, 5); break; }
+            case 'l': { ssize_t r = getline(&line, &cap, f); kv("r", r); if (r > 0) bytes(line, (size_t)r); break; }
+            case 'c': kv("r", getc(f)); break;
+            case 'r': { size_t r = fread(b, 1, 3, f); kv("r", (long)r); bytes(b, r); break; }
+            case 'R': { static char big[16384]; size_t r = fread(big, 1, sizeof big, f); kv("r", (long)r); break; }
+            case 'k': clearerr(f); break;
+            }
+            kv("eof", feof(f) != 0); kv("err", ferror(f) != 0); kv("reads", eof_reads); nl();
+        }
+        fclose(f);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) return 2;
     strcpy(dir, argv[1]);
@@ -681,6 +734,7 @@ int main(int argc, char **argv) {
     libio();
     seeks();
     refills();
+    eofs();
     flush_out();
     return 0;
 }

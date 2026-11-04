@@ -236,6 +236,12 @@ impl State {
     fn fill(&mut self, buf: &mut [u8], back: &mut dyn Backing) -> Result<usize> {
         self.rpos = RESERVE;
         self.rend = RESERVE;
+        // End of input is sticky (as the reference): the backing is not asked again until the
+        // indicator is cleared (`clearerr`, a seek, `ungetc`).
+        if self.eof {
+            self.win_known = false;
+            return Ok(0);
+        }
         let r = back.read(buf.get_mut(RESERVE..).unwrap_or(&mut []));
         self.mark_window(back.position(), &r, buf.len());
         match r {
@@ -296,6 +302,9 @@ impl State {
                 continue;
             }
             if out.len() - done >= buf.len().saturating_sub(RESERVE) {
+                if self.eof {
+                    break;
+                }
                 // A direct read moves the backing past the window (D-12.22).
                 self.win_known = false;
                 match back.read(out.get_mut(done..).unwrap_or(&mut [])) {
@@ -549,9 +558,9 @@ impl State {
 
     /// Up to `out.len()` bytes into `out`, stopping after `delim` (`fgets`, STDIO-FGETS: the
     /// buffered window is scanned with `find` and copied in pieces instead of byte by byte).
-    /// The bytes stored and whether the line is complete: `delim` stored, `out` full, end of
-    /// input, or a read error after some bytes (the error indicator is set). An error before
-    /// any byte is the result. With `once`, the backing is read only when the window is empty
+    /// The bytes stored and whether the line is complete: `delim` stored, `out` full, or end of
+    /// input. A read error is the result, with any bytes already stored left in `out` (the
+    /// reference's `fgets` returns NULL then; the error indicator is set). With `once`, the backing is read only when the window is empty
     /// on entry; the call then ends incomplete when the window runs dry, so that the caller
     /// can flush the line-buffered streams before the next read, as ISO C asks of input.
     pub fn read_line_into(&mut self, buf: &mut [u8], back: &mut dyn Backing, delim: u8, find: &dyn Fn(&[u8], u8) -> Option<usize>, out: &mut [u8], once: bool) -> Result<(usize, bool)> {
@@ -566,8 +575,7 @@ impl State {
                 match self.fill(buf, back) {
                     Ok(0) => return Ok((total, true)),
                     Ok(_) => {}
-                    Err(e) if total == 0 => return Err(e),
-                    Err(_) => return Ok((total, true)),
+                    Err(e) => return Err(e),
                 }
             }
             may_fill = !once;
