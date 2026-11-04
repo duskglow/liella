@@ -1,6 +1,6 @@
-# MATH-M5-CLOSE (runs 1-4): handoff
+# MATH-M5-CLOSE (runs 1-5): handoff
 
-State: branch task/math-m5-close-4 (stacks on task/math-m5-close-3 16fb2b58 -> close-2 -> close). HEAD: see
+State: branch task/math-m5-close-5 (on close-4 626595c7) (stacks on task/math-m5-close-3 16fb2b58 -> close-2 -> close). HEAD: see
 handoff/reports/MATH-M5-CLOSE-4.json. Not merged with origin/next. Decisions in force: D-10.3, D-10.14, D-10.17, D-10.21.
 
 ## Done (runs 1-3, unchanged)
@@ -22,9 +22,23 @@ differences summary; plan M5 Delivered; s10_math_symbols.rs f128/complex family 
     eprintln in ulp_reference while a local mathcmp run for cosh q U executes) and use that operand in the test. If no
     clamped record can be found, the clamp may not be what changed the row: re-check before keeping it.
 - Job scripts: shiki ~/work/MATH-M5-CLOSE-4/{gate,plants}.sh (plant = drop the `exact = z;` line in a RAM copy, expects
-  the test to fail on its assertion messages). Use a NEW plants-<n> dir next time.
+  the test to fail on its assertion messages). Use a NEW plant## Run 5 (commit ffd8b5af)
+- is_nan doc moved back above `pub fn is_nan` (the missing-docs red).
+- Clamp precondition, derived: with an oracle that rounds monotonically, the 2p+40-bit value of v can never lie below
+  RZ(v) (RZ(v) is on the finer grid and <= v), so `exact = z;` is reached only if the oracle errs. Probe (temporary scan
+  test on kanon kn1, jobs math-m5-close-5-scan, -scan2): cosh at 2^-k (k 100..200, 1000..16300, 4 mantissas) and the six
+  logged seed-1 operands (CLOSE-2 cosh.log on mei s2): the 2p+40-bit value is never below 1. No operand reaches the clamp.
+  So the clamp is not what changed the cosh q U max ulp 2.000 -> 1.000; the handoff-3 explanation is unproven.
+- cmp_reference.rs now asserts what holds on those operands: reference = 2p+40-bit value, >= 1, nextup(1) within 1 ulp.
+- Plant `drop exact = z;` is EQUIVALENT on every input found (unreachable branch); no plants job run.
+- Gate kanon kn1 math-m5-close-5-gate: clippy and static green; `cargo xtask affected` ESCALATED TO FULL (running at hand-back).
+
+## RULING NEEDED
+Keep or drop the clamp in cmp::ulp_reference. Recommend: drop it (dead for a sound oracle, costs one RZ Ziv evaluation per
+record) and re-measure cosh q U to find what really moved the max ulp (likely the ulp_error definition at a reference of
+exactly 1, a power of two). Coordinator note forbade further refactoring this run, so it is left in.
 
 ## Next step
-1. Fix the is_nan doc placement. 2. Find a real clamped operand and fix the test. 3. Sync to the role, run gate.sh and
-plants.sh (plants-2 dir), then `cargo xtask status`. Then the story can close.
+1. Read math-m5-close-5-gate on kanon (~/work/MATH-M5-CLOSE-5/affected.log). 2. Rule on the clamp; if dropped, revert it and
+re-run the cosh q U measurement. 3. The story can then close.
 Read: plan/06-phases/04-track-m-parallel-from-p2.md "M5-8" and the milestone 5 Delivered entry.
