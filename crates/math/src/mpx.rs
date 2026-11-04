@@ -44,3 +44,6 @@ pub fn euler() -> Mp {
 pub fn ln(x: Mp) -> Mp {
     ln_atanh(x)
 }
+
+#[cfg(test)]
+crate::mp::wide_width_tests!();

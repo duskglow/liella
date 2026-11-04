@@ -959,6 +959,68 @@ pub fn sin_cos_wide(neg: bool, sig: u128, e: i64) -> (Mp, Mp) {
     };
 }
 pub(crate) use mp_kernels;
+
+/// Tests of the width-dependent parts of a ladder step expanded with `mp_core!`/`mp_kernels!`
+/// at `BITS` above 768 (`mpx`, `mpy`): the Newton count of `recip`/`sqrt` and the window of
+/// `reduce_wide` up to the largest binary128 exponent, against the oracle `BITS + 500` bits
+/// wide (no spec clause; D-10.17, the bounds [`crate::mpw`] proves at 768 with `B` general).
+#[cfg(test)]
+macro_rules! wide_width_tests {
+    () => {
+        #[cfg(test)]
+        #[allow(clippy::unwrap_used)]
+        mod width_tests {
+            use super::*;
+            use liella_mathtools::mp::{self as o, Big};
+
+            const P: u32 = BITS as u32 + 500;
+
+            fn big(v: Mp) -> Big {
+                let mut b = Big::zero(false);
+                for (i, &l) in v.m.iter().enumerate() {
+                    b = b.add(&Big::from_u64(l).mul_pow2(v.exp - BITS + 64 * i as i64));
+                }
+                if v.neg { b.neg() } else { b }
+            }
+
+            /// `|v − x| < 2^k` exactly.
+            fn below(v: Mp, x: &Big, k: i64) -> bool {
+                big(v).sub(x).cmp_abs(&Big::one().mul_pow2(k)).is_lt()
+            }
+
+            /// `|v − x| < 2^(k − B)·|x|`.
+            fn rel(v: Mp, x: &Big, k: i64) -> bool {
+                big(v).sub(x).cmp_abs(&x.abs().mul_pow2(k - BITS)).is_lt()
+            }
+
+            #[test]
+            fn recip_and_sqrt_reach_the_full_width() {
+                for x in [0.75, 3.0, -9.5, 1e-30, 13.0, 2.0f64.powi(-60)] {
+                    let m = Mp::from_f64(x);
+                    let b = big(m);
+                    let want = b.abs().sqrt(P, o::Round::Nearest);
+                    assert!(rel(m.recip(), &Big::one().div(&b, P, o::Round::Nearest), 3), "recip {x} at {BITS}");
+                    assert!(rel(m.abs().sqrt(), &want, 5), "sqrt {x} at {BITS}");
+                }
+            }
+
+            #[test]
+            fn reduce_wide_reaches_the_largest_exponent() {
+                let sig = 0x1_2345_6789_abcd_ef01_2345_6789_abcdu128;
+                for e in [4000i64, 16_271] {
+                    let x = Big::from_u128(sig).mul_pow2(e);
+                    let (k, r) = reduce_wide(sig, e);
+                    let (s, c) = sin_cos_small(r);
+                    let (s, c) = match k.rem_euclid(4) { 0 => (s, c), 1 => (c, s.neg()), 2 => (s.neg(), c.neg()), _ => (c.neg(), s) };
+                    let (es, ec) = (o::sin(&x, P).value, o::cos(&x, P).value);
+                    assert!(below(s, &es, 11 - BITS) && below(c, &ec, 11 - BITS), "reduce_wide {e} at {BITS}");
+                }
+            }
+        }
+    };
+}
+#[cfg(test)]
+pub(crate) use wide_width_tests;
 mp_kernels!();
 
 #[cfg(test)]
