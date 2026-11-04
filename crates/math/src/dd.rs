@@ -57,6 +57,26 @@ pub fn two_prod(a: f64, b: f64) -> Dd {
     Dd { hi: p, lo: e }
 }
 
+/// [`two_prod`] by one fused multiply-add (MATH-F64-FMA-PATH): `lo = a·b − hi` rounded once.
+/// Wherever [`two_prod`] is exact (no overflow, `a·b` error representable), that error is a
+/// `double`, so the FMA returns it unrounded: the SAME pair `(hi, lo)` bit for bit. Callable only
+/// from code built for FMA (the caller proves the CPU has it).
+///
+/// # Safety
+///
+/// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
+// ARCH(x86_64): FMA is optional on x86-64 and chosen at run time (D-10.25); base ISA on aarch64
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "fma")]
+#[inline]
+pub fn two_prod_fma(a: f64, b: f64) -> Dd {
+    // ARCH(x86_64): the scalar FMA intrinsic (vfmsub); aarch64 would use fmsub from the base ISA
+    use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmsub_sd, _mm_set_sd};
+    let p = a * b;
+    let e = _mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(a), _mm_set_sd(b), _mm_set_sd(p)));
+    Dd { hi: p, lo: e }
+}
+
 // Named methods, not the operator traits: chains read in evaluation order, and each name is a
 // double-double operation of known cost.
 #[allow(clippy::should_implement_trait)]

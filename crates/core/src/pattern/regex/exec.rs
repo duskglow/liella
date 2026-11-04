@@ -36,6 +36,9 @@ use super::ReError;
 /// ([`Matcher::run_fast`]).
 const RING: usize = 16;
 
+/// The ring a pattern with back-references starts with (the pending list takes what is further).
+const BR_RING: usize = 8;
+
 /// Words per node of [`State::info`]: instruction index, chain index, best slots, their offset
 /// (with back-references: the closure-walk word of [`Matcher::mark_inline`] instead).
 const INFO: usize = 4;
@@ -1686,7 +1689,10 @@ impl<P: Policy> Matcher<'_, P> {
             widest = widest.max(k);
         }
         let ring = if BR {
-            RING
+            // Eight frontiers cover every single-character step and the backreferences of up
+            // to seven bytes; a longer one waits on the pending list ([`Matcher::insert`]).
+            // Sixteen cost a per-call setup of all of them on subjects of a few dozen bytes.
+            BR_RING
         } else if matches!(self.mode, Mode::Bytes) {
             2
         } else {

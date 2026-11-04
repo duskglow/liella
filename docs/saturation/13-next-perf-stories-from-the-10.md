@@ -170,3 +170,26 @@ is now caught. That test binary runs in about 9 s on Zen 1 host.
 Forced SSE2 by running the built `cbench_hot` binaries directly with `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2` (both libraries). `xtask bench` clears the environment (BENCH-FIXED-ENV), so the tunable never reaches it: run through xtask, the rows were the AVX2 numbers. In-process instructions:u per call, base (origin/next) -> 88a1ff34, glibc dynamic in brackets: memrchr_64_hit 36.0 -> **31.0** [28.0]; memrchr_64 53.0 -> 48.0 [53.0]; memrchr_4k 1200.7 -> **983.7** [1144.7]. AVX2 (default) unchanged: 27.0, 33.0, 459.5 -> 458.4. Base reproduces Ivy Bridge host A's 36/28 exactly.
 * Causes found (from the code path, counted): the head recomputed s + n - 1 and ran a 4-instruction page test before its first 16-byte look (now `testl $0xfc0` on the entry's r8, 5 instructions fewer); the 4k row was the 64-byte SSE2 loop (18 instr / 64 B), now 128-byte blocks (29 instr / 128 B, the AVX2 block shape). Branch-miss and store-forwarding counters NOT read; no timing run (release A/B covers it).
 * Open: memrchr_64_hit is still +3 over glibc (entry tests 4 + AVX2 mask test 3 + 4-instruction byte broadcast). No workload counts read yet (jobs Zen 1 host:perf-memrchr-nonavx2-wlc / -wlc-sse2, grep-E grep-F).
+
+### PERF-FWRITE-4K (2026-11-04, Broadwell-EP host, instructions:u per call, `validation/percall/fwrite4k.c`, dynamic glibc, no code change)
+
+`fwrite_4k` is the 4096-byte block written through an 8192-byte full buffer to `/dev/null`: Liella 798.7, glibc 645.0 (1.24 per call; the cbench ratio is 1.14). Per-call counts of the pieces (Liella / glibc):
+
+| case | Liella | glibc |
+|---|---|---|
+| `fwrite_4k` (8 KiB buffer, every second call straddles the buffer end) | 798.7 | 645.0 |
+| `fwrite_4k_win` (64 KiB buffer: window copy, one flush in fifteen) | 562.0 | 559.3 |
+| `fwrite_4k_thru` (4 KiB buffer: written through, no copy) | 507.0 | 455.5 |
+| `memcpy` 4088 B, destination 8 bytes off alignment | 434.0 | 422.0 |
+| `memcpy` 4096 B, aligned | 83.0 | 426.0 |
+| `write(fd, p, 0)` wrapper | 53.0 | 21.0 |
+
+Findings. (1) The window path is at parity (1.00): the copy is not the gap. (2) The 8-byte stream reserve puts every copy 8 bytes off alignment, so the copy is the AVX2 loop (434, glibc 422), not the 83-instruction `rep movsb` an aligned copy gets; moving that threshold is the memcpy policy (MEMCPY-POLICY-2, D-4.14: `rep movsb` measured slower in cycles at 2 to 4 KiB off the 64-byte placement), not a stdio change, and was not touched. (3) The excess is in the straddling call (about 470 instructions over a window call, glibc about 160 over): the engine's set-up and write-back around `State::write`, the write wrapper (+32 per syscall) and the split copy. These are 25 to 30 instructions per piece, spread over several functions; no single site accounts for more than the 16 per call of the write wrapper. Not changed: a change would be speculative from counts alone (sampling on the VM loses most samples) and the row cannot reach parity without the copy threshold. Next candidate if wanted: a straddle fast path in `write_raw` (copy the head, drain, copy the tail without the engine's `run` set-up), and the `write` wrapper's 53 instructions.
+
+
+### 13.13 PERF-FSWALK-PHYS (2026-11-04, AVX2 host without AVX-512, `cargo xtask bench --compare --counters --runs 3 cbench_fstree`)
+
+The physical walks of 1000 entries (`nftw_phys_1000`, `fts_physical_1000`) sat at 1.13 and 1.08 of the reference in instructions per operation.
+
+* Done: the walk copied every entry's name into a fresh allocation (a malloc and free per entry); it now reuses one buffer for the whole walk. Counts (instr ratio / time-column ratio), before then after on the final head: `nftw_phys_1000` 1.13 / 1.04 then 1.10 / 1.03; `fts_physical_1000` 1.08 / 1.03 then 1.08 / 1.04. The nftw row improved by about 0.5 to 1 percent of its instructions; the fts row did not move beyond run-to-run spread (the fts walk is a different path, reached through `fts_open`/`fts_read`, so the shared walk loop is a small part of it).
+* Not at parity: the remaining gap is about 20 to 40 instructions per entry. Not yet located by a profile (no `perf annotate` was run in this story); candidates still open: the 144-byte status copied through `Result<(Kind, Option<Stat>)>` per entry, the per-entry `set_path` rebuild of the path (truncate, separator test, copy, terminator, `i32` length check), and the per-directory `Listing` copy of the directory buffer.

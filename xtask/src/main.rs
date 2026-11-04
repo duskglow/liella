@@ -47,17 +47,18 @@ mod abbench;
 mod abi;
 mod affected;
 mod align;
-mod arch;
 mod bench;
 mod forkalloc;
+mod fs_order;
 mod benchrows;
 mod coldbss;
 mod compat;
+mod compatprobe;
+mod compat_objects;
 mod copies;
 mod csys;
 mod fuzz;
 mod hottext;
-mod labnames;
 mod langinfo;
 mod math;
 mod native;
@@ -75,12 +76,12 @@ mod symcov;
 mod symgap;
 mod trace;
 mod unicode;
+mod compat_ids;
 mod compat_plan;
-mod plants;
-mod compatprobe;
-mod compat_objects;
 mod register;
-mod fs_order;
+mod arch;
+mod plants;
+mod labnames;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -107,17 +108,20 @@ fn main() -> ExitCode {
         "trace" => trace::run(&root),
         "static" => static_checks(&root),
         "compat-plan" => compat_plan::check(&root),
+        "compat-ids" => compat_ids::check(&root),
         "register" => register::check(&root),
         "machine-exports" if args.iter().any(|a| a == "--list") => affected::machine_exports_list(args.iter().skip(1).find(|a| !a.starts_with("--")).map_or(root.as_path(), |d| Path::new(d.as_str()))),
         "machine-exports" => affected::machine_exports_check(&root),
         "clippy" => clippy_gate(&root),
         "arch-audit" => arch::audit(&root, args.iter().any(|a| a == "--list"), &arch_tools()),
+        "arch-check" => arch_check(&root),
         "purity" => policy::purity(&root),
         "unsafe-audit" => policy::unsafe_audit(&root),
         "csys-audit" => policy::csys_audit(&root),
         "env-audit" => policy::env_audit(&root),
         "opaque-audit" => policy::opaque_audit(&root),
         "crash-audit" => policy::crash_audit(&root),
+        "reexec-audit" => policy::reexec_audit(&root),
         "lab-names" => labnames::check(&root),
         "csys-gen" => csys::run(&root, args.iter().any(|a| a == "--check")),
         "abi-gen" => abi::run(&root, args.iter().any(|a| a == "--check")),
@@ -144,7 +148,7 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -162,6 +166,17 @@ fn run(cmd: &mut Command) -> Result<(), String> {
     if status.success() { Ok(()) } else { Err(format!("{cmd:?} failed: {status}")) }
 }
 
+/// `cargo xtask arch-check` (ARCH-RUST-CHECK, A-2): `cargo check` for aarch64 over the crates that build without
+/// csys (the check set in xtask/src/arch.rs).
+fn arch_check(root: &Path) -> Result<(), String> {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    for args in arch::cross_check_args() {
+        run(Command::new(&cargo).current_dir(root).args(&args))?;
+    }
+    println!("arch-check: ok ({} check-set crates, {})", arch::CHECK_ALL_TARGETS.len() + arch::CHECK_LIB_ONLY.len(), arch::CROSS_TARGET);
+    Ok(())
+}
+
 fn arch_tools() -> arch::Tools {
     arch::Tools { rust_files: policy::rust_files, strip: policy::strip }
 }
@@ -171,8 +186,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 20] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("lab-names", labnames::check), ("fs-order", fs_order::fs_order)];
+    let checks: [(&str, Check); 22] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
@@ -192,6 +207,7 @@ fn test_all(root: &Path, extra: &[String]) -> Result<(), String> {
     policy::env_audit(root)?;
     policy::opaque_audit(root)?;
     policy::crash_audit(root)?;
+    policy::reexec_audit(root)?;
     trace::run(root)?;
     // The fuzz harnesses still compile against the libraries (HYGIENE-1).
     fuzz::check(root)?;

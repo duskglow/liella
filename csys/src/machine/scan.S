@@ -3556,6 +3556,8 @@ liella_machine_strcmp:
 	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
 	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
 	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
+	/* Each block's "no stop" test is the bsf itself (ZF set when the mask is empty; the register is
+	 * not read on that path): one instruction fewer per block passed (PERF-STRCMP-MIX). */
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl $3967, %ecx
@@ -3569,9 +3571,8 @@ liella_machine_strcmp:
 	vpminub %xmm1, %xmm2, %xmm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
 	vpmovmskb %xmm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head16
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head16
 	movzbl (%rdi,%rdx), %eax
 	cmpb (%rsi,%rdx), %al
 	jne .Lstrcmp_v_ret_head_differ
@@ -3595,9 +3596,8 @@ liella_machine_strcmp:
 	vpminub %xmm1, %xmm2, %xmm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
 	vpmovmskb %xmm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head32
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head32
 	movzbl 16(%rdi,%rdx), %eax
 	cmpb 16(%rsi,%rdx), %al
 	jne .Lstrcmp_v_ret_head_differ
@@ -3612,9 +3612,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head64
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head64
 	movzbl 32(%rdi,%rdx), %eax
 	cmpb 32(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
@@ -3632,9 +3631,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head96
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head96
 	movzbl 64(%rdi,%rdx), %eax
 	cmpb 64(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
@@ -3649,9 +3647,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head_miss
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head_miss
 	movzbl 96(%rdi,%rdx), %eax
 	cmpb 96(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
@@ -4614,6 +4611,55 @@ liella_machine_fill_avx2:
 	vzeroupper
 	ret
 	.size liella_machine_fill_avx2, .-liella_machine_fill_avx2
+
+/* SSE2 fill (MEMSET-4K-SSE2): the AVX2 fill's shape with 16-byte vectors, for CPUs (or the
+ * hwcaps=-AVX2 level) without the AVX2 kernel: the first 16 bytes as one unaligned vector, then
+ * eight 16-byte-aligned vectors per step from the first 16-byte boundary above dst while a whole
+ * step fits, then the last 128 bytes as eight unaligned vectors ending at the end (overlap is
+ * harmless: every store writes the same value). SSE2 is the x86-64 baseline; no state to clean.
+ *
+ * void *liella_machine_fill_sse2(void *dst, int c, size_t n), n >= 128; returns dst */
+	.section .text.liella_machine_fill_sse2,"ax",@progbits
+	.globl liella_machine_fill_sse2
+	.type liella_machine_fill_sse2, @function
+	.p2align 6
+liella_machine_fill_sse2:
+	movd %esi, %xmm0
+	punpcklbw %xmm0, %xmm0
+	pshuflw $0, %xmm0, %xmm0
+	punpcklqdq %xmm0, %xmm0
+	movq %rdi, %rax				/* dst */
+	leaq (%rdi,%rdx), %r9			/* the end */
+	movups %xmm0, (%rdi)			/* the first 16 bytes */
+	leaq 16(%rdi), %rcx
+	andq $-16, %rcx				/* the first 16-byte boundary above dst: dst < rcx <= dst + 16 */
+	leaq -128(%r9), %r10			/* the last 128 bytes start here (n >= 128: not below dst) */
+	cmpq %r10, %rcx
+	ja .Lfill_sse2_ends
+	.p2align 4
+.Lfill_sse2_128:				/* while a whole step ends at or before the end */
+	movdqa %xmm0, (%rcx)
+	movdqa %xmm0, 16(%rcx)
+	movdqa %xmm0, 32(%rcx)
+	movdqa %xmm0, 48(%rcx)
+	movdqa %xmm0, 64(%rcx)
+	movdqa %xmm0, 80(%rcx)
+	movdqa %xmm0, 96(%rcx)
+	movdqa %xmm0, 112(%rcx)
+	subq $-128, %rcx
+	cmpq %r10, %rcx
+	jbe .Lfill_sse2_128
+.Lfill_sse2_ends:				/* fewer than 128 bytes left from rcx: the last 128 */
+	movups %xmm0, (%r10)
+	movups %xmm0, 16(%r10)
+	movups %xmm0, 32(%r10)
+	movups %xmm0, 48(%r10)
+	movups %xmm0, 64(%r10)
+	movups %xmm0, 80(%r10)
+	movups %xmm0, 96(%r10)
+	movups %xmm0, 112(%r10)
+	ret
+	.size liella_machine_fill_sse2, .-liella_machine_fill_sse2
 	.text
 
 /* size_t liella_machine_casecmp_avx2(const char *a, const char *b, size_t n) (CASECMP-K1): the
@@ -6742,57 +6788,53 @@ liella_machine_strpair:
 	addq $32, %rax
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_avx_loop
+	/* rax is 64-aligned. One 64-byte group first when it is not 128-aligned (PERF-STRSTR-LONG). */
 	movq %rsi, %r9
 	negq %r9
 	testl $64, %eax
 	jnz .Lliella_machine_strpair_avx_loop64
-	/* 128-byte aligned: four blocks per test (STRSTR-HIT-4K). A 128-byte aligned run stays in its
-	 * page; a hit sends the run back to the block loop from its start, which resolves it. From a
+	/* 128-byte aligned: the same test over a group of four blocks (all in one page), memory operands
+	 * so a block costs four instructions, the step before one vptest per 128 bytes (STRSTR-HIT-4K).
+	 * A hit sends the run back to the block loop from the group's start, which resolves it. From a
 	 * 64-byte boundary that is not a 128-byte one, one pair (loop64) first reaches the next. */
 	.p2align 4
 .Lliella_machine_strpair_avx_loop128:
-	vmovdqa (%rax), %ymm3
-	vmovdqa 32(%rax), %ymm6
-	vmovdqa 64(%rax), %ymm9
-	vmovdqa 96(%rax), %ymm12
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor 64(%rax), %ymm1, %ymm9
+	vpxor 96(%rax), %ymm1, %ymm10
 	vpxor (%rax,%r9), %ymm0, %ymm4
 	vpxor 32(%rax,%r9), %ymm0, %ymm7
-	vpxor 64(%rax,%r9), %ymm0, %ymm10
-	vpxor 96(%rax,%r9), %ymm0, %ymm13
-	vpxor %ymm3, %ymm1, %ymm5
-	vpxor %ymm6, %ymm1, %ymm8
-	vpxor %ymm9, %ymm1, %ymm11
-	vpxor %ymm12, %ymm1, %ymm14
+	vpxor 64(%rax,%r9), %ymm0, %ymm11
+	vpxor 96(%rax,%r9), %ymm0, %ymm12
 	vpor %ymm4, %ymm5, %ymm4
 	vpor %ymm7, %ymm8, %ymm7
-	vpor %ymm10, %ymm11, %ymm10
-	vpor %ymm13, %ymm14, %ymm13
-	vpminub %ymm3, %ymm4, %ymm4
-	vpminub %ymm6, %ymm7, %ymm7
-	vpminub %ymm9, %ymm10, %ymm10
-	vpminub %ymm12, %ymm13, %ymm13
+	vpor %ymm11, %ymm9, %ymm11
+	vpor %ymm12, %ymm10, %ymm12
+	vpminub (%rax), %ymm4, %ymm4
+	vpminub 32(%rax), %ymm7, %ymm7
+	vpminub 64(%rax), %ymm11, %ymm11
+	vpminub 96(%rax), %ymm12, %ymm12
 	vpminub %ymm4, %ymm7, %ymm4
-	vpminub %ymm10, %ymm13, %ymm10
-	vpminub %ymm4, %ymm10, %ymm4
+	vpminub %ymm11, %ymm12, %ymm11
+	vpminub %ymm4, %ymm11, %ymm4
 	vpcmpeqb %ymm4, %ymm2, %ymm4
-	addq $128, %rax
+	subq $-128, %rax
 	vptest %ymm4, %ymm4
 	jz .Lliella_machine_strpair_avx_loop128
-	subq $128, %rax
+	addq $-128, %rax
 	jmp .Lliella_machine_strpair_avx_loop
 	.p2align 4
 .Lliella_machine_strpair_avx_loop64:
 	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
-	vmovdqa (%rax), %ymm3
-	vmovdqa 32(%rax), %ymm6
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
 	vpxor (%rax,%r9), %ymm0, %ymm4
 	vpxor 32(%rax,%r9), %ymm0, %ymm7
-	vpxor %ymm3, %ymm1, %ymm5
-	vpxor %ymm6, %ymm1, %ymm8
 	vpor %ymm4, %ymm5, %ymm4
 	vpor %ymm7, %ymm8, %ymm7
-	vpminub %ymm3, %ymm4, %ymm4
-	vpminub %ymm6, %ymm7, %ymm7
+	vpminub (%rax), %ymm4, %ymm4
+	vpminub 32(%rax), %ymm7, %ymm7
 	vpminub %ymm4, %ymm7, %ymm4
 	vpcmpeqb %ymm4, %ymm2, %ymm4
 	vpmovmskb %ymm4, %r10d
@@ -6869,7 +6911,47 @@ liella_machine_strpair:
 	testl %r11d, %r11d
 	jnz .Lliella_machine_strpair_sse_nul
 	addq $16, %rax
-	jmp .Lliella_machine_strpair_sse_loop
+	testl $63, %eax
+	jnz .Lliella_machine_strpair_sse_loop
+	movq %rsi, %r9
+	negq %r9
+	.p2align 4
+.Lliella_machine_strpair_sse_loop64:
+	/* PERF-STRSTR-LONG: a 64-aligned group of four blocks (one page) tested at once: unit q is a
+	 * candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0, as on AVX2. */
+	movdqa (%rax), %xmm3
+	movdqa 16(%rax), %xmm4
+	movdqa 32(%rax), %xmm5
+	movdqa 48(%rax), %xmm6
+	pxor %xmm1, %xmm3
+	pxor %xmm1, %xmm4
+	pxor %xmm1, %xmm5
+	pxor %xmm1, %xmm6
+	movdqu (%rax,%r9), %xmm7
+	movdqu 16(%rax,%r9), %xmm8
+	movdqu 32(%rax,%r9), %xmm9
+	movdqu 48(%rax,%r9), %xmm10
+	pxor %xmm0, %xmm7
+	pxor %xmm0, %xmm8
+	pxor %xmm0, %xmm9
+	pxor %xmm0, %xmm10
+	por %xmm7, %xmm3
+	por %xmm8, %xmm4
+	por %xmm9, %xmm5
+	por %xmm10, %xmm6
+	pminub (%rax), %xmm3
+	pminub 16(%rax), %xmm4
+	pminub 32(%rax), %xmm5
+	pminub 48(%rax), %xmm6
+	pminub %xmm4, %xmm3
+	pminub %xmm6, %xmm5
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_loop
+	addq $64, %rax
+	jmp .Lliella_machine_strpair_sse_loop64
 	.size liella_machine_strpair, .-liella_machine_strpair
 
 	.globl liella_machine_wcspair

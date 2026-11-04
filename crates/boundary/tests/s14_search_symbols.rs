@@ -123,13 +123,13 @@ fn sym_qsort() {
         return;
     }
     use std::os::unix::process::ExitStatusExt;
-    let st = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_qsort", "--exact", "--test-threads=1"])
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["sym_qsort", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_QSORT_UNWIND", "1")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
+        .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
+    let st = o.status;
     assert_eq!(st.signal(), Some(6), "an exception through the comparator aborts (OD-6)");
 }
 

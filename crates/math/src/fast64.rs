@@ -9,7 +9,7 @@
 //!
 //! Tables: the existing `EXP2_J64` (2^(j/64), 1 KiB), `LOG_C`/`LOG_L` (728 B + 1,456 B) and the
 //! constants of the accurate path; this story adds no table (#933). `LOG2_L`/`LOG10_L` (1,456 B
-//! each) and `LOG10_2_E` are `LOG_L` pre-scaled by `1/ln b` for `log2`/`log10` (register 13.5 #7).
+//! each) and `LOG10_2_E` are `LOG_L` pre-scaled by `1/ln b` for `log2`/`log10` (register 16.5 #7).
 //!
 //! **Bounds.** Write `u = 2^-53`. The double-double operations ([`Dd::add`], [`Dd::mul`],
 //! [`Dd::mul_f64`]) and the stored double-double constants are accurate to a few `2^-104` of
@@ -35,6 +35,24 @@ const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// 1.5·2^52: adding and subtracting it rounds a value below 2^51 to an integer.
 const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 
+/// `x − k·c` for the stored Cody–Waite parts `c` (the arithmetic of `crate::exp_log::reduce`), for
+/// [`exp10`].
+#[inline]
+fn reduce(x: Dd, kf: f64, c: &[u64; 4]) -> Dd {
+    let c = c.map(f64::from_bits);
+    let r0 = x.hi - kf * c[0];
+    two_sum(r0, -(kf * c[1])).add_f64(-(kf * c[2])).add(two_prod(kf, c[3]).neg()).add_f64(x.lo)
+}
+
+// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.25): `$prod` is the exact product,
+// [`two_prod`] (Dekker) or [`dd::two_prod_fma`] (one FMA). Both return the same pair bit for bit
+// wherever the product is exact, which holds for every product below (operands far from overflow;
+// the smallest, `rh²` with `|rh| >= 2^-64`, has its error above 2^-240), so the two builds compute
+// the same `y` and tail, take the same `None` branches and return the same results: the bounds
+// below are those of either build. `$i` is the inlining of the three kernels: `#[inline(always)]`
+// cannot be combined with `#[target_feature]`.
+macro_rules! kernels {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path) => {
 /// `e^r` times `2^(k/64)` as `(y, m, tail)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m` for
 /// `eps = `[`exp_eps`]`(y, tail)`, for the reduced `r = rh + rl` (`|rh| <= 0.006`,
 /// `|rl| <= 2^-52·|rh|`). The computed series tail is returned rather than `eps`, so that the
@@ -48,7 +66,7 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64) = th + tl` is stored as a
 /// double-double (error `< 2^-104`, `1 <= th < 2`, `|tl| <= 2^-53·th`).
 ///
-/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 13.5 #1; Fast2Sum and Dekker's
+/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1; Fast2Sum and Dekker's
 /// product as in Muller et al., Handbook of Floating-Point Arithmetic, 2018, ch. 4): `p = ph + pl`
 /// with `|ph| <= 0.00602`, `pl = a.lo + small` (`|a.lo| <= 2^-53·|ph|`, the small sum carrying `T`).
 /// `q = th·ph` exactly (`two_prod`); `th + q.hi` by Fast2Sum, exact since `|q.hi| <= 0.0121 < th`;
@@ -60,7 +78,9 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// the assembly's `2u` that is `9u·th·|T| < 2^-49.8·th·|T|`. So `|e^r·2^(j/64) − y| <=
 /// 2^-49.8·th·|T| + th·2^-74 + 2^-101 <= 2^-49·|T|·|y| + 2^-70·|y|` (`|y| >= 0.994·th`; the
 /// computed `|tail|` is within `5u` of `|T|`).
-#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
+// fused into each entry (register 16.5 #3); no numeric change
+$(#[$a])*
+$(#[$i])*
 fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
@@ -68,17 +88,64 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     }
     const C: [f64; 6] = [1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0, 1.0 / 40320.0];
     let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * C[5]))));
-    let s = two_prod(rh, rh);
+    let s = $prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, 0.5 * s.hi);
     let (ph, pl) = (a.hi, a.lo + ((0.5 * s.lo + rl * (1.0 + rh)) + tail));
     let tj = t::EXP2_J64[usize::try_from(k & 63).unwrap_or(0)];
     let (th, tl) = (f64::from_bits(tj[0]), f64::from_bits(tj[1]));
-    let q = two_prod(th, ph);
+    let q = $prod(th, ph);
     let b = fast_two_sum(th, q.hi);
     let y = fast_two_sum(b.hi, (b.lo + (tl + (q.lo + tl * ph))) + th * pl);
     Some((y, k >> 6, tail))
 }
+
+/// `ln x` as `(y, tail)` for a positive finite `x != 1`: `|ln x − y| <= eps` for
+/// `eps = `[`log_eps`]`(y, tail)` (the computed series tail returned, as in [`exp_kernel`]).
+///
+/// Proof. `x = 2^e·m`, `c ≈ 1/m` from `LOG_C` (12 bits, so `m·c` is exact as `two_prod`), and
+/// `r = m·c − 1` exact as a double-double (`p.hi − 1` is exact by Sterbenz). Requiring
+/// `|rh| <= 2^-7`: `ln(1 + r) = r − r²/2 + r³·(1/3 − r/4 + … − r⁷/10) + δ` with
+/// `|δ| <= |r|¹¹/11·1.01 < 2^-80·|r|`. `rh − rh²/2` is exact as a double-double; `rl` enters as
+/// `rl·(1 − rh + rh²)` (dropping `< 2^-74·|r|`); the tail `T` costs `< 2^-50·|T|` as in
+/// [`exp_kernel`], and the one addition that carries it in [`log_assemble`] costs `u·|T|`: `6u·|T|`
+/// in all. The assembly's other errors are below `2^-95·|e| + 2^-103` ([`log_assemble`]). Either
+/// `e = 0` and `c = 1` (then `y = r` up to the series' errors), or `e = 0`, `|m − 1| >= 2^-8` and
+/// `|y| >= 2^-8.01`, or `e != 0` and `|y| >= |e|·ln2 − ln√2 >= 0.34·|e|`: so the absolute errors
+/// other than `T`'s are below `2^-72·|y|`.
+// fused into each entry (register 16.5 #3); no numeric change
+$(#[$a])*
+$(#[$i])*
+fn log_kernel(x: f64) -> Option<(Dd, f64)> {
+    let (e, idx, lh, ll, tail) = log_series(x)?;
+    Some((log_assemble(e, idx, lh, ll), tail))
+}
+
+/// [`log_kernel`] before its assembly: `(e, idx, lh, ll, tail)` with `log1p r = lh + ll` within
+/// the series' errors stated there (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
+$(#[$a])*
+$(#[$i])*
+fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)> {
+    let (e, m) = crate::exp_log::decompose(x);
+    let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
+    let idx = usize::try_from(i + 37).unwrap_or(37);
+    let p = $prod(m, f64::from_bits(t::LOG_C[idx]));
+    let r = two_sum(p.hi - 1.0, p.lo);
+    let (rh, rl) = (r.hi, r.lo);
+    if dd::abs(rh) > 0.007_812_5 {
+        return None;
+    }
+    const C: [f64; 8] = [1.0 / 3.0, -1.0 / 4.0, 1.0 / 5.0, -1.0 / 6.0, 1.0 / 7.0, -1.0 / 8.0, 1.0 / 9.0, -1.0 / 10.0];
+    let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * (C[5] + rh * (C[6] + rh * C[7]))))));
+    let s = $prod(rh, rh);
+    let tail = rh * s.hi * q;
+    let a = two_sum(rh, -0.5 * s.hi);
+    Some((e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail), tail))
+}
+    };
+}
+
+kernels!(; #[inline(always)]; two_prod);
 
 /// [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
 #[inline(always)]
@@ -93,7 +160,7 @@ const C0: f64 = f64::from_bits(t::LN2_64_CW[0]);
 const NC1: f64 = f64::from_bits(t::LN2_64_CW[1] ^ 0x8000_0000_0000_0000);
 const NC2: f64 = f64::from_bits(t::LN2_64_CW[2] ^ 0x8000_0000_0000_0000);
 
-/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 13.5 #2):
+/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2):
 /// `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, for
 /// `k = kf = nearest(xh·64/ln2)` and `|xh| <= 746` (`|k| <= 68,880 < 2^17`). The caller adds its
 /// low part to `l` and joins the two by Fast2Sum.
@@ -169,50 +236,54 @@ fn ln2_times(r: f64) -> Dd {
 /// `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
 pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
-    let r = crate::exp_log::reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
+    let r = reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
     // (x − k·log10(2)/64)·ln10: the reduction is within 2^-95 and the product within 2^-100.
     let (y, m, tail) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
     settle(y, exp_eps(y, tail), m, mode)
 }
 
-/// `ln x` as `(y, tail)` for a positive finite `x != 1`: `|ln x − y| <= eps` for
-/// `eps = `[`log_eps`]`(y, tail)` (the computed series tail returned, as in [`exp_kernel`]).
-///
-/// Proof. `x = 2^e·m`, `c ≈ 1/m` from `LOG_C` (12 bits, so `m·c` is exact as `two_prod`), and
-/// `r = m·c − 1` exact as a double-double (`p.hi − 1` is exact by Sterbenz). Requiring
-/// `|rh| <= 2^-7`: `ln(1 + r) = r − r²/2 + r³·(1/3 − r/4 + … − r⁷/10) + δ` with
-/// `|δ| <= |r|¹¹/11·1.01 < 2^-80·|r|`. `rh − rh²/2` is exact as a double-double; `rl` enters as
-/// `rl·(1 − rh + rh²)` (dropping `< 2^-74·|r|`); the tail `T` costs `< 2^-50·|T|` as in
-/// [`exp_kernel`], and the one addition that carries it in [`log_assemble`] costs `u·|T|`: `6u·|T|`
-/// in all. The assembly's other errors are below `2^-95·|e| + 2^-103` ([`log_assemble`]). Either
-/// `e = 0` and `c = 1` (then `y = r` up to the series' errors), or `e = 0`, `|m − 1| >= 2^-8` and
-/// `|y| >= 2^-8.01`, or `e != 0` and `|y| >= |e|·ln2 − ln√2 >= 0.34·|e|`: so the absolute errors
-/// other than `T`'s are below `2^-72·|y|`.
-#[inline(always)] // fused into each entry (register 16.5 #3); no numeric change
-fn log_kernel(x: f64) -> Option<(Dd, f64)> {
-    let (e, idx, lh, ll, tail) = log_series(x)?;
-    Some((log_assemble(e, idx, lh, ll), tail))
-}
+/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.25): the same
+/// arithmetic as [`exp_nearest`] and [`log_nearest`] with every exact product a single FMA, so the
+/// same results bit for bit (see `kernels!`). Callable only on a CPU with FMA and the OS-enabled
+/// AVX state; the boundary selects it once at startup (`dispatch::fma`).
+// ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
+#[cfg(target_arch = "x86_64")]
+pub mod fused {
+    use super::{exp_eps, fast_two_sum, finish, log_assemble, log_c, log_eps, reduce_exp, t, two_sum, Dd, C_EXP};
+    use crate::dd;
 
-/// [`log_kernel`] before its assembly: `(e, idx, lh, ll, tail)` with `log1p r = lh + ll` within
-/// the series' errors stated there (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
-#[inline(always)]
-fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)> {
-    let (e, m) = crate::exp_log::decompose(x);
-    let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
-    let idx = usize::try_from(i + 37).unwrap_or(37);
-    let p = two_prod(m, f64::from_bits(t::LOG_C[idx]));
-    let r = two_sum(p.hi - 1.0, p.lo);
-    let (rh, rl) = (r.hi, r.lo);
-    if dd::abs(rh) > 0.007_812_5 {
-        return None;
+    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma);
+
+    /// [`super::exp_nearest`], FMA build.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
+    #[target_feature(enable = "fma")]
+    #[inline]
+    pub fn exp_nearest(x: f64) -> Option<f64> {
+        if !(crate::exp_log::TINY..708.0).contains(&dd::abs(x)) {
+            return None;
+        }
+        let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+        let (y, m, tail) = exp_kernel(reduce_exp(x, kf), dd::to_i32(kf))?;
+        finish(y, Some(C_EXP), m, || exp_eps(y, tail), &mut 0)
     }
-    const C: [f64; 8] = [1.0 / 3.0, -1.0 / 4.0, 1.0 / 5.0, -1.0 / 6.0, 1.0 / 7.0, -1.0 / 8.0, 1.0 / 9.0, -1.0 / 10.0];
-    let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * (C[5] + rh * (C[6] + rh * C[7]))))));
-    let s = two_prod(rh, rh);
-    let tail = rh * s.hi * q;
-    let a = two_sum(rh, -0.5 * s.hi);
-    Some((e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail), tail))
+
+    /// [`super::log_nearest`], FMA build.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract).
+    #[target_feature(enable = "fma")]
+    #[inline]
+    pub fn log_nearest(x: f64) -> Option<f64> {
+        if !super::log_domain(x) {
+            return None;
+        }
+        let (y, tail) = log_kernel(x)?;
+        finish(y, log_c(y), 0, || log_eps(y, tail), &mut 0)
+    }
 }
 
 /// [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
@@ -227,7 +298,7 @@ const LN2H: f64 = f64::from_bits(0x3fe6_2e42_fefa_3800);
 const LN2L: f64 = f64::from_bits(0x3d2e_f357_93c7_6730);
 
 /// `e·ln2 + (−ln c) + (lh + ll)`, the logarithms' assembly (MATH-M6-F64-GAP-ASSEMBLY, register
-/// 13.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <= 0.347`, `|cl| <=
+/// 16.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <= 0.347`, `|cl| <=
 /// 2^-53·|ch|`) and `log1p r = lh + ll` (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
 ///
 /// Proof. `H = e·LN2H` is exact; `H + ch` by Fast2Sum is exact (`|H| >= 0.693 > |ch|`, or
@@ -261,7 +332,7 @@ const LOG2_SCALE: f64 = f64::from_bits(0x3ff7_1547_652b_82ff);
 const LOG10_SCALE: f64 = f64::from_bits(0x3fdb_cb7b_1526_e50f);
 
 /// `log_b x = e·log_b 2 + (−log_b c) + (lh + ll)/ln b` for `b = 2` (`TEN` false) or `10`, from
-/// [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GAP-LOG-TABLES, register 13.5
+/// [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GAP-LOG-TABLES, register 16.5
 /// #7): `−log_b c = LOG2_L`/`LOG10_L[idx] = ch + cl` (`|ch| <= 0.501` / `0.151`, `|cl| <=
 /// 2^-53·|ch|`, within `2^-104·|ch|` of exact), `1/ln b = ih + il` (`INV_LN2`/`INV_LN10`, within
 /// `2^-105.9·ih`), `log10 2 = kh + kl` (`LOG10_2_E`: `kh` of 42 bits, `|kl| < 2^-43`,
@@ -349,7 +420,7 @@ fn integral(x: f64) -> bool {
 //   more would separate them), so at least one of the two additions is inexact in hardware. When
 //   [`near`] answers, `y.hi + w` rounded to `y.hi` with `w != 0`: that addition was inexact.
 
-/// The relative bounds `rho` behind the constant rounding test [`near`] (register 13.5 #5): every
+/// The relative bounds `rho` behind the constant rounding test [`near`] (register 16.5 #5): every
 /// `eps/|y.hi|` where the test is used is at most `rho`. Each is stated with slack and checked on
 /// operands by the `bounds` tests.
 /// [`exp`] and [`exp2`]: `eps/|y.hi| = 2^-49·|tail| + 2^-70` ([`exp_eps`]). For `|rh| <= 0.006`
@@ -616,7 +687,7 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// `ln(1 + rh) = rh − rh²/2 + rh³/3 + T + δ` with `T = rh⁴·(−1/4 + rh/5 − … − rh⁷/11)` and
 /// `|δ| <= rh¹²/12·1.01 <= 2^-56·|T|` (`|T| >= 0.24·rh⁴`). Then:
 /// * `rh − rh²/2`: `two_prod` and `two_sum`, exact as a double-double.
-/// * `rh³/3` (register 13.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
+/// * `rh³/3` (register 16.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
 ///   s.lo·rh`; `g = c.hi·THIRD.hi` exactly (`two_prod`, Dekker's split of the constant folded);
 ///   `cube = g.hi + cube_lo`, `cube_lo = g.lo + ((c.lo + s.lo·rh)·THIRD.hi + c.hi·THIRD.lo)`.
 ///   Dropped `(c.lo + s.lo·rh)·THIRD.lo` and `1/3 − THIRD` (`< 2^-110`): `< 2^-105·|rh³|`; six
@@ -948,7 +1019,7 @@ mod bounds {
         assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= std::hint::black_box(RHO_POW));
     }
 
-    /// The pre-scaled logarithm tables and constants (register 13.5 #7): `LOG2_L`/`LOG10_L` within
+    /// The pre-scaled logarithm tables and constants (register 16.5 #7): `LOG2_L`/`LOG10_L` within
     /// `2^-104` of `-ln(c_i)/ln b`, the low parts within `2^-53` of the high parts, `LOG10_2_E`'s
     /// high part of 42 bits and the pair within `2^-97` of `log10 2`; `LOG2_SCALE`/`LOG10_SCALE`
     /// the least doubles at or above `1/ln b`, `LOG2_NEAR`/`LOG10_NEAR` the least at or above

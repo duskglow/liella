@@ -1,0 +1,12 @@
+{"task": "PERF-STRSTR-LONG", "model": "sonnet", "tokens": null,
+ "result": "strstr scanner now tests 128 B (AVX2) / 64 B (SSE2) per pass: hit_4k instr 1278 to 1052 default, 5007 to 2376 with -AVX2 (sumire); keke not measured",
+ "branch": "task/perf-strstr-long", "head": "see git (code commit 6d7b0dbc, docs after)",
+ "gate": {"affected": "running at hand-back (perf-strstr-long-gate); the build, boundary and exports-interposed tests were ok", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "-AVX2 miss_64 +35 instr (225 to 260) for halving hit_4k", "recommendation": "keep (instructions are the decision metric; AVX2 hosts never take that path)"}],
+ "informational": ["keke (Zen 1, glibc 826 instr) was not measured: no keke role; parity there NOT VERIFIED", "strstr_hit_64 1.7x glibc instr is call setup, not the scan", "-AVX2 ns is noisy on sumire (551 / 351 / 414 for near-identical code)", "plants run 1 had one survivor (a weaker candidate mask is output-equivalent); replaced by a suppressing mutant, the weaker one reported EQUIVALENT in plants2"],
+ "refused": [],
+ "improvement": "bench --compare takes the bench as a positional name, not --only: the brief text says --only",
+ "next_step": "measure strstr_hit_4k on keke and decide on the -AVX2 miss_64 cost",
+ "report_file": "handoff/strstr-long.md",
+ "jobs": ["perf-strstr-long-gate", "perf-strstr-long-plants2", "perf-strstr-long-after2"]}

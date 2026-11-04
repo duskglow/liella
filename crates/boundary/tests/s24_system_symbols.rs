@@ -53,7 +53,8 @@ fn in_uts_namespace(test: &str, body: impl FnOnce()) -> bool {
         eprintln!("note: no private UTS namespace (unshare --user --uts --map-root-user); only the refusal was checked");
         return false;
     }
-    let o = std::process::Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(VAR, test).output().unwrap();
+    let o = std::process::Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(VAR, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(o.status.success() && out.contains("1 passed"), "{test} in its namespace: {:?}\n{out}{}", o.status, String::from_utf8_lossy(&o.stderr));
     false
@@ -651,10 +652,11 @@ fn sym_nice() {
         std::process::exit(if b == a + 3 && c == -1 && refused { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_nice", "--exact", "--test-threads=1"])
+        .args(["sym_nice", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S24_NICE", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "the new value; lowering needs privilege (EPERM, not EACCES)");
 }
 
@@ -987,10 +989,11 @@ fn sym_setrlimit() {
         std::process::exit(if ok && after.cur == 0 && raise { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_setrlimit", "--exact", "--test-threads=1"])
+        .args(["sym_setrlimit", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S24_RL", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "lowered in a child; raising the hard limit needs privilege");
 }
 
@@ -1007,10 +1010,11 @@ fn sym_setrlimit64() {
         std::process::exit(if ok && after.cur == 0 && raise { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_setrlimit64", "--exact", "--test-threads=1"])
+        .args(["sym_setrlimit64", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S24_RL", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "lowered in a child; raising the hard limit needs privilege");
 }
 
@@ -1121,10 +1125,11 @@ fn sym_vlimit() {
         std::process::exit(if ok && l.cur == 0 { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_vlimit", "--exact", "--test-threads=1"])
+        .args(["sym_vlimit", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S24_VL", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0));
 }
 

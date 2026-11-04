@@ -33,6 +33,7 @@ const CATEGORIES: &[(&str, &[&str])] = &[
 /// replaces it). Whole units only (a model, a trait, generated code, a test double); scattered sites are tagged instead.
 /// A category not listed for a module still needs a tag there.
 const ALLOWED: &[(&str, &[&str], &str)] = &[
+    ("crates/boundary/src/strz.rs", &["machine-decl"], "module `portable` (cfg liella_portable_scan): the portable Rust stand-ins, named after the machine entries they replace on targets without scan.S; the file has no other machine declaration (A-8, D-4.22 PORTABLE-SCAN)"),
     ("crates/boundary/src/ffi.rs", &[], "the one declaration of the csys/src/machine/*.S entry points (K5 matches it against liella_csys.h); per-arch assembly, A-6"),
     ("crates/boundary/src/ffi_sys.rs", &["thread-pointer"], "generated from csys/syscalls.tsv (arch_prctl); per-arch table, A-3"),
     ("crates/abi/", &["fpu"], "generated from spec/abi/layouts.tsv (fenv_t, ucontext_t) and its layout tests; aarch64 layouts probed, A-5"),
@@ -99,6 +100,32 @@ fn scan(root: &Path, t: &Tools) -> Result<Vec<Seam>, String> {
         }
     }
     Ok(seams)
+}
+
+/// The second architecture's target for `cargo xtask arch-check` (ARCH-RUST-CHECK, story A-2; plain armv8.0-a,
+/// no target-feature flags, until RL-1 is ruled). Listed in rust-toolchain.toml.
+pub const CROSS_TARGET: &str = "aarch64-unknown-linux-gnu";
+
+/// The check set, every target and feature: the crates that build without csys (no `liella-boundary` among their
+/// normal or dev dependencies; docs/arch-seams.md). A crate that gains that dependency fails the check at the
+/// boundary build script, which refuses a non-x86_64 target.
+pub const CHECK_ALL_TARGETS: &[&str] =
+    &["liella-kernel", "liella-mem", "liella-abi", "liella-legacy", "liella-ld", "liella-native", "liella-thread-db", "liella-mathtools", "spectest"];
+
+/// The check set, library only: these crates build without csys, but their tests take `liella-boundary` as a
+/// dev-dependency (csys), so only the library target is checked.
+pub const CHECK_LIB_ONLY: &[&str] = &["liella-rt", "liella-math", "liella"];
+
+/// `cargo xtask arch-check`: the cargo argument lists of the cross check, one `cargo check` each.
+pub fn cross_check_args() -> Vec<Vec<String>> {
+    let one = |scope: &[&str], crates: &[&str]| {
+        let mut a: Vec<String> = ["check", "--target", CROSS_TARGET].iter().chain(scope).map(|s| (*s).to_string()).collect();
+        for c in crates {
+            a.extend(["-p".to_string(), (*c).to_string()]);
+        }
+        a
+    };
+    vec![one(&["--all-targets", "--all-features"], CHECK_ALL_TARGETS), one(&["--lib", "--all-features"], CHECK_LIB_ONLY)]
 }
 
 /// `cargo xtask arch-audit`: fails on any untagged seam outside the allowed modules; `--list` prints all of them.

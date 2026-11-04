@@ -542,20 +542,20 @@ memcmp:
 	vmovdqu -32(%rdi,%rdx), %ymm1
 	vpcmpeqb (%rsi), %ymm0, %ymm0
 	vpcmpeqb -32(%rsi,%rdx), %ymm1, %ymm1
-	vpand %ymm1, %ymm0, %ymm2
-	vpmovmskb %ymm2, %eax
-	incl %eax
-	jne .Lcmp_diff32
-	vzeroupper
-	ret
-.Lcmp_diff32:
 	vpmovmskb %ymm0, %ecx
-	vzeroupper
 	incl %ecx
-	jnz .Lcmp_first
+	jnz .Lcmp_first_w
+	vpmovmskb %ymm1, %eax
+	vzeroupper
+	incl %eax
+	jne .Lcmp_last
+	ret
+.Lcmp_last:
 	bsfl %eax, %ecx
 	leaq -32(%rdx,%rcx), %rcx
 	jmp .Lcmp_byte
+.Lcmp_first_w:
+	vzeroupper
 .Lcmp_first:
 	bsfl %ecx, %ecx
 .Lcmp_byte:

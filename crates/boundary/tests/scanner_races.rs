@@ -58,7 +58,8 @@ fn alone(test: &str, body: impl FnOnce()) {
         body();
         return;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1"]).env(ALONE, test).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1"]).env(ALONE, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{test}: {:?}
 {}{}", o.status, String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     assert!(String::from_utf8_lossy(&o.stdout).contains("1 passed"), "{test}: the child ran no test");

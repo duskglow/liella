@@ -1,0 +1,4 @@
+{"task":"PERF-WCTYPE-UTF8-REST","status":"INCOMPLETE","branch":"task/perf-wctype-utf8-rest","jobs":["perf-wctype-utf8-rest-counts-base"],
+ "summary":"Measured the three rows after L-COLD: towupper_utf8 83.0 vs 40.0, iswalpha_utf8 71.1 vs 49.0, wcwidth_utf8 54.0 vs 43.0, iswalpha_en_us 66.0 vs 49.0 (identical at -AVX2). Two code attempts (props by reference; built-in/file arm split) left every count unchanged, so both were reverted. No code kept; register row updated with measurements. No gate or plants run (nothing to gate).",
+ "improvement":"The brief's 'plants for every check touched' conflicts with a measure-first story that keeps nothing; a no-change outcome should skip plants explicitly.",
+ "next_step":"Disassemble the C.UTF-8 towupper path through ctype::wtrans and unicode::to_upper; confirm the bench row reaches the built-in arm.","report_file":"handoff/reports/PERF-WCTYPE-UTF8-REST.json"}

@@ -310,6 +310,11 @@ impl<U: Unit> Out<U> for Sink<'_, U> {
 
 impl<U: Unit> Out<U> for Buf<U> {
     fn field(&mut self, lead: &[U], n: usize, fill: U, body: &[U]) -> Result<()> {
+        // A composite's text is built in memory: a width that cannot fit is refused before
+        // any padding is written (ENOMEM), not after filling memory one unit at a time.
+        if n > COMPOSITE_MAX.saturating_sub(self.len()) {
+            return Err(crate::error::Errno::ENOMEM);
+        }
         self.extend_from_slice(lead)?;
         for _ in 0..n {
             self.push(fill)?;
@@ -325,6 +330,9 @@ impl<U: Unit> Out<U> for Buf<U> {
         self.extend_from_slice(s)
     }
 }
+
+/// The most units a composite conversion's text (and so one padded field in it) may take.
+const COMPOSITE_MAX: usize = 1 << 20;
 
 /// The deepest nesting of locale formats (a format naming itself must not recurse forever).
 pub(super) const DEPTH: u8 = 8;
@@ -990,6 +998,20 @@ fn decimal(mut v: u64, buf: &mut [u8; 24]) -> usize {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::as_conversions)]
 mod tests {
     use super::*;
+
+    /// A composite conversion's text with a padding width no memory could hold ends in ENOMEM
+    /// at once (the fuzz time-out of a locale whose `d_t_fmt` has a width of 60 digits); a
+    /// width that fits still pads. Clause: no spec clause (resource bound, FUZZ-TIMEOUTS-RECHECK).
+    #[test]
+    fn composite_field_width_is_bounded_before_padding() {
+        let mut b: Buf<u8> = InlineVec::new();
+        assert_eq!(b.field(b"", usize::MAX, b' ', b"x"), Err(crate::error::Errno::ENOMEM));
+        assert_eq!(b.len(), 0, "nothing written before the refusal");
+        assert_eq!(b.field(b"", COMPOSITE_MAX + 1, b' ', b"x"), Err(crate::error::Errno::ENOMEM));
+        b.field(b"", 3, b'0', b"x").unwrap();
+        assert_eq!(&b[..], b"000x");
+        assert_eq!(b.field(b"", COMPOSITE_MAX - 3, b' ', b""), Err(crate::error::Errno::ENOMEM));
+    }
 
     struct Utc;
 

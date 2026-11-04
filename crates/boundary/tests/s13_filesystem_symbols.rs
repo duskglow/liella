@@ -1029,7 +1029,8 @@ fn sym___getcwd_chk() {
     assert_eq!(ctext(s::__getcwd_chk(b.as_mut_ptr(), 4096, 4096)), k);
     errno::set_raw(0);
     assert!(s::__getcwd_chk(b.as_mut_ptr(), 2, 4096).is_null() && errno::get() == ERANGE, "a size too small: ERANGE");
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getcwd_chk", "--exact", "--test-threads=1"]).env("LIELLA_S13_CHK", "1").output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getcwd_chk", "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_S13_CHK", "1").output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "a path written beyond the object: the fortify abort");
     assert!(String::from_utf8_lossy(&o.stderr).contains("buffer overflow detected"));
 }
@@ -1189,7 +1190,8 @@ fn sym___getwd_chk() {
     }
     let mut b = vec![0 as c_char; 4096];
     assert_eq!(ctext(s::__getwd_chk(b.as_mut_ptr(), 4096)), kernel_cwd());
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getwd_chk", "--exact", "--test-threads=1"]).env("LIELLA_S13_CHK", "1").output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___getwd_chk", "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_S13_CHK", "1").output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "the fortify abort");
 }
 
@@ -1874,10 +1876,11 @@ fn sym___readlink_chk() {
     let mut b = [0u8; 8];
     assert_eq!(s::__readlink_chk(l.as_ptr(), b.as_mut_ptr().cast(), 8, 8), 3);
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym___readlink_chk", "--exact", "--test-threads=1"])
+        .args(["sym___readlink_chk", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S13_CHK", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "n beyond the buffer: the fortify abort");
     assert!(String::from_utf8_lossy(&o.stderr).contains("buffer overflow detected"));
 }
@@ -1896,10 +1899,11 @@ fn sym___readlinkat_chk() {
     let mut b = [0u8; 8];
     assert_eq!(s::__readlinkat_chk(AT_FDCWD, l.as_ptr(), b.as_mut_ptr().cast(), 8, 8), 3);
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym___readlinkat_chk", "--exact", "--test-threads=1"])
+        .args(["sym___readlinkat_chk", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S13_CHK", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "n beyond the buffer: the fortify abort");
     assert!(String::from_utf8_lossy(&o.stderr).contains("buffer overflow detected"));
 }
@@ -1967,7 +1971,8 @@ fn sym___realpath_chk() {
     let t = Tmp::new("realpath_chk");
     let mut b = vec![0 as c_char; 4096];
     assert_eq!(ctext(s::__realpath_chk(cpath(&t.path).as_ptr(), b.as_mut_ptr(), 4096)), t.path.as_os_str().as_encoded_bytes());
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___realpath_chk", "--exact", "--test-threads=1"]).env("LIELLA_S13_CHK", &t.path).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args(["sym___realpath_chk", "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_S13_CHK", &t.path).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "a result beyond a 4-byte object: the fortify abort");
 }
 
@@ -2348,10 +2353,11 @@ fn sym_umask() {
         std::process::exit(if ok { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym_umask", "--exact", "--test-threads=1"])
+        .args(["sym_umask", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S13_UMASK", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "returns the old mask; masks creation; only the 0777 bits are kept");
 }
 
@@ -2717,11 +2723,12 @@ mod p12 {
             liella_kernel::sys::Sys::exit_group(&liella_boundary::sys::CSys, 0);
         }
         let o = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([name, "--exact", "--test-threads=1", "--nocapture"])
+            .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
             .env(CHILD, name)
             .env(CHILD_DIR, &t.path)
             .output()
             .unwrap();
+        assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
         let (out, err) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
         assert!(o.status.success() && out.contains(&format!("child {name}: done")), "{name} failed in its child ({:?}):\n{out}\n{err}", o.status);
     }

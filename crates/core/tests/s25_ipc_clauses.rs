@@ -71,11 +71,13 @@ fn send(q: c_int, mtype: i64, text: &[u8; 1]) {
 }
 
 fn child(name: &str, var: &str) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([name, "--exact", "--include-ignored", "--test-threads=1"])
         .env(var, "1")
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 #[test]
@@ -241,10 +243,11 @@ fn s25_2_c_3() {
     }
     assert!(r == -1 && e == Errno::EAGAIN.get(), "semtimedop's timeout: r={r} errno={e} after {:?}, {tries} tries (id {id})", t0.elapsed());
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["s25_2_c_3", "--exact", "--test-threads=1"])
+        .args(["s25_2_c_3", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_C25_UNDO", id.to_string())
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(x::liella_semctl4(id, 0, GETVAL, 0), 0, "undone at exit");
     // The union semun's members by command: an int (SETVAL), a pointer (IPC_STAT).
@@ -367,7 +370,8 @@ fn in_ipc_ns(test: &str, body: impl FnOnce()) {
         skip_note::skipped("skipped: no private IPC namespace (unshare --user --ipc --map-current-user)");
         return;
     }
-    let o = Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(IPCNS, test).output().unwrap();
+    let o = Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(IPCNS, test).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(o.status.success() && out.contains("1 passed"), "{test} in its namespace: {:?}\n{out}{}", o.status, String::from_utf8_lossy(&o.stderr));
 }

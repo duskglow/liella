@@ -18,6 +18,16 @@ use liella_kernel::machine::X87Env;
 // parameters are sound for every argument (they touch registers, or exactly the referenced
 // object); the call-at-address items are pub(crate) and documented below.
 //
+/// The portable scanners stand in for the assembly ones on a target without tuned kernels, or
+/// when the test-only feature `portable-scan` forces them (A-8; `crate::strz::portable`).
+#[cfg(liella_portable_scan)]
+pub(crate) use crate::strz::portable::{
+    liella_machine_memchr, liella_machine_memchr_entry, liella_machine_memrchr, liella_machine_memrchr_entry,
+    liella_machine_rawmemchr, liella_machine_rawmemchr_entry, liella_machine_strchr, liella_machine_strchrnul,
+    liella_machine_strcmp, liella_machine_strcmp_entry, liella_machine_strlen, liella_machine_strncmp,
+    liella_machine_strnlen,
+};
+
 /// A spawn child's entry function (see `liella_machine_clone3_run`).
 pub(crate) type SpawnEntry = extern "C" fn(usize) -> !;
 
@@ -125,9 +135,11 @@ unsafe extern "C" {
     pub(crate) safe fn liella_machine_scan_level_get() -> u32;
     /// Bytes before the first NUL at `s` (aligned vector reads, never across a page). Proof
     /// obligation: `s` is non-NULL and a NUL-terminated string (`crate::strz`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strlen(s: *const u8) -> usize;
     /// As `liella_machine_strlen`, at most `max`. Proof obligation: `s` is non-NULL, readable
     /// up to a NUL or `max` bytes.
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strnlen(s: *const u8, max: usize) -> usize;
     /// The direct `strcpy` entry (machine/scan.S, STRCPY-SHORT-2; the product's `strcpy`): the
     /// one-pass copy for a terminator in the first 64 bytes of `s`'s page, else (and for a NULL)
@@ -166,16 +178,19 @@ unsafe extern "C" {
     /// A pointer to the first byte `c` at `s` (STR-K2: a pointer, not an index, so `rawmemchr`
     /// tail-calls it). Proof obligation: `s` is non-NULL and readable up to and including such a
     /// byte.
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_rawmemchr(s: *const u8, c: i32) -> *const u8;
     /// The direct rawmemchr entry (machine/scan.S, SCAN-TAIL; `rawmemchr` and `__rawmemchr` in
     /// the products): a NULL `s` goes to `strz::find` (abort), any other enters
     /// `liella_machine_rawmemchr`. Proof obligation (`crate::strz::find_direct`): the rawmemchr
     /// contract (`s` readable up to and including a byte `c`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_rawmemchr_entry(s: *const u8, c: i32) -> *const u8;
     /// A pointer to the first byte `c` in `[s, s + n)`, or NULL (STR-K3: a pointer, so `memchr`
     /// tail-calls it). Proof obligation: `s` is non-NULL, `1 <= n <= isize::MAX` (the kernel
     /// reads `s`'s page without testing `n`), and the bytes of `[s, s + n)` are readable up to the first `c`
     /// (C17 7.24.5.1p2; `crate::strz::find_n`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_memchr(s: *const u8, c: i32, n: usize) -> *const u8;
     /// The direct memchr entry (machine/scan.S, MEMCHR-FOLD; `memchr` in the products): as
     /// `liella_machine_memchr` behind one gate. Proof obligation (`crate::strz::find_n_direct`):
@@ -183,6 +198,7 @@ unsafe extern "C" {
     /// `1 <= n <= isize::MAX` only while NULL folding is on (`crate::dispatch`: the first load of
     /// every path lies in `[s & -64, s + 64)`, page zero for a NULL `s`); every other case goes to
     /// `strz::find_n`. In assembly because a NULL access is UB in Rust.
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_memchr_entry(s: *const u8, c: i32, n: usize) -> *const u8;
     /// The index of the first byte where `[a, a + n)` and `[b, b + n)` differ, or `n` (loads
     /// stay inside both). Proof obligation: both are readable for `n` bytes (from two `&[u8]`:
@@ -192,8 +208,10 @@ unsafe extern "C" {
     /// (loads never leave the page holding an unended byte; the bytes deciding the order are
     /// read again and a writer's change rescanned in the kernel, D-4.29). Proof obligation: `a`
     /// and `b` are non-NULL NUL-terminated strings (`crate::strz::order`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strcmp(a: *const u8, b: *const u8) -> i32;
     /// The direct strcmp entry: the S6 NULL tests, then the kernel (STRCMP-ENTRY, machine/scan.S).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strcmp_entry(a: *const u8, b: *const u8) -> i32;
     /// The first index at which the strings at `a` and `b` differ or `a`'s byte is the
     /// terminator, and whether a byte of `a` up to it has bit 7 set ([`StrDiff`]; loads never
@@ -204,22 +222,27 @@ unsafe extern "C" {
     /// (SHORT-1, D-4.35; aligned 16-byte blocks, never across a page). Proof obligation: `s` is
     /// NULL (the kernel takes the S6 abort through `liella_hot_strchr_null`, STR-CHR-CMP-SHORT) or a
     /// NUL-terminated string (`crate::strz::chr`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strchr(s: *const u8, c: i32) -> *const u8;
     /// As `liella_machine_strchr`, but the terminator's address when `c` does not occur.
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strchrnul(s: *const u8, c: i32) -> *const u8;
     /// A pointer to the last byte `c` in `[s, s + n)`, or NULL (SHORT-1, D-4.35). Proof
     /// obligation: `s` is non-NULL, `1 <= n <= isize::MAX`, and `[s, s + n)` is readable
     /// (`crate::strz::rfind_n`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_memrchr(s: *const u8, c: i32, n: usize) -> *const u8;
     /// The direct memrchr entry (machine/scan.S, SCAN-RAW; `memrchr` in the products): `n == 0`,
     /// `n > isize::MAX` and a NULL `s` go to `strz::rfind_n` (NULL or abort), any other call
     /// enters `liella_machine_memrchr`. Proof obligation (`crate::strz::rfind_n_direct`): the
     /// memrchr contract (`s` readable for `n` bytes).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_memrchr_entry(s: *const u8, c: i32, n: usize) -> *const u8;
     /// The order of at most `n` bytes of the strings at `a` and `b` as `strncmp` defines it,
     /// -1, 0 or 1, in one pass (SHORT-1, D-4.35). Proof obligation: `n == 0` (reads nothing), or each
     /// of `a` and `b` is NULL (the S6 abort through `liella_hot_strncmp_null`, STR-CHR-CMP-SHORT) or
     /// readable up to its terminator or `n` bytes (`crate::strz::order_n`).
+    #[cfg(not(liella_portable_scan))]
     pub(crate) safe fn liella_machine_strncmp(a: *const u8, b: *const u8, n: usize) -> i32;
     /// How often `liella_machine_strcmp` rescanned after a writer's change (selftest).
     #[cfg(feature = "selftest")]
@@ -307,6 +330,11 @@ unsafe extern "C" {
     /// `n` bytes (from a `&mut [u8]`: `crate::conv::fill`; or the `memset` contract after its NULL
     /// test: `crate::hot::fill_large`).
     pub(crate) safe fn liella_machine_fill_avx2(d: *mut u8, c: i32, n: usize) -> *mut u8;
+    /// The SSE2 fill (MEMSET-4K-SSE2; machine/scan.S), for CPUs or levels without the AVX2 fill
+    /// where `rep stosb` is not chosen: `n` bytes at `d` set to `c`; returns `d`. Proof
+    /// obligation: `n >= 128` and `d` valid for writing `n` bytes (from a `&mut [u8]`:
+    /// `crate::conv::fill`; or the `memset` contract after its NULL test: `crate::hot::fill_large`).
+    pub(crate) safe fn liella_machine_fill_sse2(d: *mut u8, c: i32, n: usize) -> *mut u8;
     /// `rep stosb`. Proof obligation: `dst` is valid for writing `n` bytes (from a
     /// `&mut [u8]`: `crate::conv::fill`; or the `memset` contract after its NULL test, for a
     /// range inside the caller's region: `crate::hot::fill_rest`).

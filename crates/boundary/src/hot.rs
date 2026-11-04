@@ -469,6 +469,14 @@ unsafe fn fill_large(d: *mut c_void, c: u8, n: usize) -> *mut c_void {
             // kernel flag, `dispatch`), 128 < n, `d` non-NULL (tested above), the caller's contract.
             crate::ffi::liella_machine_fill_avx2(d.cast(), i32::from(c), n).cast()
         }
+        Bulk::Sse2 => {
+            if d.is_null() {
+                null_region();
+            }
+            // Proof obligation of the declaration (`ffi`): SMALL_MAX (128) < n, `d` non-NULL
+            // (tested above), the caller's contract.
+            crate::ffi::liella_machine_fill_sse2(d.cast(), i32::from(c), n).cast()
+        }
         // UNSAFE(hot-kernel) SAFETY: the function's contract, unchanged.
         #[allow(unsafe_code)]
         _ => unsafe { fill_checked(d, c, n) },
@@ -641,7 +649,8 @@ pub(crate) fn bulk_fill(n: usize, avx2: bool, erms: bool, erms_min: usize) -> Bu
     } else if avx2 {
         Bulk::Avx2
     } else {
-        Bulk::Checked
+        // MEMSET-4K-SSE2: the SSE2 fill (the baseline; also the level before the startup decision).
+        Bulk::Sse2
     }
 }
 
@@ -2497,4 +2506,28 @@ mod fuse {
         unsafe { d.wrapping_add(n).write(0) };
         n
     }
+}
+
+/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.25):
+/// both builds return the same results bit for bit; the FMA one is shorter.
+#[inline(always)]
+pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: a call to the FMA build; the flag is set only on a CPU with
+        // FMA whose AVX state the OS saves (`dispatch::select_fma`'s callers).
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp_nearest(x) };
+    }
+    liella_math::fast64::exp_nearest(x)
+}
+
+/// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log_nearest(x) };
+    }
+    liella_math::fast64::log_nearest(x)
 }

@@ -273,12 +273,14 @@ fn probe() -> Option<String> {
 
 /// Run this test binary's `test` alone in a child with the probe `name` set.
 fn child(test: &str, name: &str, env: &[(&str, &str)]) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .envs(env.iter().copied())
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 fn run_child(test: &str, name: &str, env: &[(&str, &str)]) {
@@ -2184,7 +2186,8 @@ fn s12_12_c_4() {
         eprintln!("note: no user namespace; the nameless case was not checked");
         return;
     }
-    let o = std::process::Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args(["s12_12_c_4", "--exact", "--test-threads=1"]).env(VAR, "1").output().unwrap();
+    let o = std::process::Command::new("unshare").args(ns).arg(std::env::current_exe().unwrap()).args(["s12_12_c_4", "--exact", "--include-ignored", "--test-threads=1"]).env(VAR, "1").output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "a user without a name: {:?}", o.status);
 }
 

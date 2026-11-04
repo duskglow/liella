@@ -98,7 +98,8 @@ fn in_child(name: &str) -> Option<String> {
         liella_boundary::selftest::mark_own_process();
         return None;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1", "--nocapture"]).env("LIELLA_S16_CHILD", name).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env("LIELLA_S16_CHILD", name).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{name} in a child:\n{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     Some(String::from_utf8_lossy(&o.stderr).into_owned())
 }
@@ -588,12 +589,13 @@ fn sym_herror_failed_write_keeps_errno() {
         return;
     };
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([NAME, "--exact", "--test-threads=1", "--nocapture"])
+        .args([NAME, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_S16_CHILD", NAME)
         .stderr(full)
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("running 1 test"), "the child ran no test: {out}");
     assert!(out.contains(&format!("errno after={ENOENT},{EINVAL}\n")), "{out}");
 }
 

@@ -1,0 +1,6 @@
+{"task": "GLOB-BRACE-EXPANSION-BOUND", "model": "sonnet", "tokens": null, "result": "GLOB_BRACE expansion bounded: GLOB_NOSPACE before expanding more than 2^14 patterns or 64 MiB", "branch": "task/glob-brace-expansion-bound", "head": "3a13fb14",
+ "gate": {"affected": "1062 passed / 0 failed (conformance 2/0)", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["glob-brace-expansion-bound-lint3", "glob-brace-expansion-bound-gate", "glob-brace-expansion-bound-plants2"],
+ "rulings": [{"item": "D-id for the D-NEW rows (decision row and differences row); bound 2^14 patterns / 64 MiB is a judgement, not measured against real patterns", "recommendation": "assign D-14.20 or next free; keep the bound"}],
+ "informational": ["plants (first run, rc 1) had a wrapping-product plant that is equivalent by design: the product is checked after every step, so it never overflows; superseded by plants2", "fuzz harness MAX_BRACES=8 is no longer needed for time"],
+ "refused": [], "improvement": "jobrun blocks until the job ends, so two jobrun calls in one ssh run in sequence; document it", "next_step": "coordinator assigns the D-id", "report_file": "handoff/glob-brace-expansion-bound.md"}

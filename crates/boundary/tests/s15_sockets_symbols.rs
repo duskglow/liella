@@ -1060,10 +1060,11 @@ fn sym___recv_chk() {
     assert_eq!(s::__recv_chk(b, r.as_mut_ptr().cast(), 4, 4, 0), 2);
     close(&[a, b]);
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["sym___recv_chk", "--exact", "--test-threads=1"])
+        .args(["sym___recv_chk", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S15_CHK", "1")
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(std::os::unix::process::ExitStatusExt::signal(&o.status), Some(6), "n beyond the buffer: the fortify abort");
 }
 
