@@ -1847,7 +1847,7 @@ pub(crate) mod portable {
     #[allow(unsafe_code)]
     fn word(q: *const u8) -> usize {
         debug_assert!(q.addr() & WM == 0, "portable scanner load not aligned to the word");
-        // SAFETY: q is word-aligned and its word holds a byte of the caller's readable object
+        // UNSAFE(slice) SAFETY: q is word-aligned and its word holds a byte of the caller's readable object
         // (every caller below), so the word lies in that byte's page; volatile keeps the
         // compiler from reasoning about the bytes outside the object.
         unsafe { q.cast::<usize>().read_volatile() }
