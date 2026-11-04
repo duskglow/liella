@@ -40,6 +40,7 @@ const EACCES: i32 = 13;
 const ENODEV: i32 = 19;
 const ENOSPC: i32 = 28;
 const EMSGSIZE: i32 = 90;
+const EOPNOTSUPP: i32 = 95;
 const EADDRNOTAVAIL: i32 = 99;
 const EAGAIN: i32 = 11;
 const EFAULT: i32 = 14;
@@ -288,8 +289,9 @@ fn sym___check_rhosts_file() {
     }
     let u = std::ffi::CString::new(user).unwrap();
     assert_eq!(data::__check_rhosts_file.load(Relaxed), 1, "on by default");
+    // iruserok always denies (D-15.7): no file is read with the switch on either.
     assert_eq!(s::iruserok(LOOPBACK, 1, u.as_ptr(), u.as_ptr()), -1);
-    assert_eq!(errstr(), Some("lstat failed".to_string()), "~/.rhosts was looked for");
+    assert_eq!(errstr(), None, "on: no file is read (the stub)");
     data::__check_rhosts_file.store(0, Relaxed);
     data::__rcmd_errstr.store(core::ptr::null_mut(), Relaxed);
     assert_eq!(s::iruserok(LOOPBACK, 1, u.as_ptr(), u.as_ptr()), -1);
@@ -931,15 +933,19 @@ fn sym_inet_pton() {
 
 #[test]
 fn sym_iruserok() {
-    // 192.0.2.0/24 (TEST-NET-1) is in no trust file a test machine has.
-    assert_eq!(s::iruserok(u32::from_ne_bytes([192, 0, 2, 1]), 0, c"nobody".as_ptr(), c"nobody".as_ptr()), -1);
+    // A denying stub (D-15.7): -1, errno untouched.
+    errno::set_raw(0);
+    assert_eq!(s::iruserok(u32::from_ne_bytes([127, 0, 0, 1]), 0, c"nobody".as_ptr(), c"nobody".as_ptr()), -1);
+    assert_eq!(errno::get(), 0);
 }
 
 #[test]
 fn sym_iruserok_af() {
-    let a = [192u8, 0, 2, 1];
+    let a = [127u8, 0, 0, 1];
+    errno::set_raw(0);
     assert_eq!(s::iruserok_af(a.as_ptr().cast(), 0, c"nobody".as_ptr(), c"nobody".as_ptr(), AF_INET as u16), -1);
     assert_eq!(s::iruserok_af(a.as_ptr().cast(), 0, c"nobody".as_ptr(), c"nobody".as_ptr(), AF_UNIX as u16), -1, "not an address family");
+    assert_eq!(errno::get(), 0);
 }
 
 #[test]
@@ -957,14 +963,14 @@ fn sym_isfdtype() {
 
 #[test]
 fn sym___ivaliduser() {
+    // A denying stub (D-15.7): even a line that admits anyone; the stream is not read.
     let path = scratch::Scratch::path("s15-ivalid");
-    std::fs::write(&path, "192.0.2.1 alice\n").unwrap();
-    let p = path.c();
-    for (ruser, want) in [(c"alice", 0), (c"bob", -1)] {
-        let fp = sio::fopen(p.as_ptr(), c"r".as_ptr());
-        assert_eq!(s::__ivaliduser(fp.cast(), u32::from_ne_bytes([192, 0, 2, 1]), c"me".as_ptr(), ruser.as_ptr()), want, "{ruser:?}");
-        sio::fclose(fp);
-    }
+    std::fs::write(&path, "+ +\n").unwrap();
+    let fp = sio::fopen(path.c().as_ptr(), c"r".as_ptr());
+    errno::set_raw(0);
+    assert_eq!(s::__ivaliduser(fp.cast(), u32::from_ne_bytes([192, 0, 2, 1]), c"me".as_ptr(), c"alice".as_ptr()), -1);
+    assert_eq!((errno::get(), sio::ftell(fp)), (0, 0), "errno untouched, nothing read");
+    sio::fclose(fp);
 }
 
 #[test]
@@ -989,28 +995,26 @@ fn sym_ntohs() {
 
 #[test]
 fn sym_rcmd() {
-    if s17::geteuid() == 0 {
-        return;
-    }
+    // A failing stub (D-15.7): -1, errno EOPNOTSUPP, *ahost untouched, NULL ahost included.
     let mut host = c"localhost".as_ptr() as usize;
+    let before = host;
     errno::set_raw(0);
     assert_eq!(s::rcmd(Some(&mut host), 514u16.to_be(), c"a".as_ptr(), c"b".as_ptr(), c"true".as_ptr(), None), -1);
-    assert_eq!(errno::get(), EACCES, "unprivileged: no reserved port");
+    assert_eq!((errno::get(), host), (EOPNOTSUPP, before));
+    errno::set_raw(0);
     assert_eq!(s::rcmd(None, 514u16.to_be(), c"a".as_ptr(), c"b".as_ptr(), c"true".as_ptr(), None), -1);
-    assert_eq!(errno::get(), EFAULT);
+    assert_eq!(errno::get(), EOPNOTSUPP);
 }
 
 #[test]
 fn sym_rcmd_af() {
-    if s17::geteuid() == 0 {
-        return;
-    }
     let mut host = c"localhost".as_ptr() as usize;
-    errno::set_raw(0);
-    assert_eq!(s::rcmd_af(Some(&mut host), 514u16.to_be(), c"a".as_ptr(), c"b".as_ptr(), c"true".as_ptr(), None, AF_INET as u16), -1);
-    assert_eq!(errno::get(), EACCES);
-    assert_eq!(s::rcmd_af(Some(&mut host), 514u16.to_be(), c"a".as_ptr(), c"b".as_ptr(), c"true".as_ptr(), None, AF_UNIX as u16), -1);
-    assert_eq!(errno::get(), EAFNOSUPPORT);
+    let before = host;
+    for af in [AF_INET as u16, AF_UNIX as u16] {
+        errno::set_raw(0);
+        assert_eq!(s::rcmd_af(Some(&mut host), 514u16.to_be(), c"a".as_ptr(), c"b".as_ptr(), c"true".as_ptr(), None, af), -1);
+        assert_eq!((errno::get(), host), (EOPNOTSUPP, before), "family {af}");
+    }
 }
 
 #[test]
@@ -1027,7 +1031,7 @@ fn sym___rcmd_errstr() {
     }
     let u = std::ffi::CString::new(user).unwrap();
     assert_eq!(s::iruserok(LOOPBACK, 1, u.as_ptr(), u.as_ptr()), -1);
-    assert_eq!(errstr(), Some("lstat failed".to_string()), "the user's .rhosts does not exist");
+    assert_eq!(errstr(), None, "iruserok always denies without reading a file (D-15.7)");
 }
 
 #[test]
@@ -1162,50 +1166,29 @@ fn sym_recvmsg() {
     close(&[a, b]);
 }
 
-/// A one-connection rexecd on loopback that accepts: its port, and the fields it received.
-fn rexecd() -> (u16, std::thread::JoinHandle<Vec<Vec<u8>>>) {
-    use std::io::{Read, Write};
-    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = l.local_addr().unwrap().port();
-    let t = std::thread::spawn(move || {
-        let (mut c, _) = l.accept().unwrap();
-        let mut fields = vec![Vec::new()];
-        let mut b = [0u8; 1];
-        while fields.len() <= 4 && c.read(&mut b).unwrap() == 1 {
-            if b[0] == 0 {
-                fields.push(Vec::new());
-            } else {
-                fields.last_mut().unwrap().push(b[0]);
-            }
-        }
-        fields.pop();
-        c.write_all(b"\0").unwrap();
-        fields
-    });
-    (port, t)
-}
-
 #[test]
 fn sym_rexec() {
-    let (port, server) = rexecd();
+    // A failing stub (D-15.7): -1, errno EOPNOTSUPP, *ahost and *fd2p untouched.
     let mut host = c"localhost".as_ptr() as usize;
-    let fd = s::rexec(Some(&mut host), c_int::from(port.to_be()), c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), None);
-    assert!(fd >= 0);
-    assert_eq!(server.join().unwrap(), [&b""[..], b"u", b"p", b"c"]);
-    io::close(fd);
+    let before = host;
+    let mut fd2 = -7;
+    errno::set_raw(0);
+    assert_eq!(s::rexec(Some(&mut host), c_int::from(512u16.to_be()), c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), Some(&mut fd2)), -1);
+    assert_eq!((errno::get(), host, fd2), (EOPNOTSUPP, before, -7));
+    errno::set_raw(0);
     assert_eq!(s::rexec(None, 0, c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), None), -1);
+    assert_eq!(errno::get(), EOPNOTSUPP, "a NULL ahost");
 }
 
 #[test]
 fn sym_rexec_af() {
-    let (port, server) = rexecd();
-    let mut host = c"localhost".as_ptr() as usize;
-    let fd = s::rexec_af(Some(&mut host), c_int::from(port.to_be()), c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), None, AF_INET as u16);
-    assert!(fd >= 0);
-    server.join().unwrap();
-    io::close(fd);
-    let mut host = c"localhost".as_ptr() as usize;
-    assert_eq!(s::rexec_af(Some(&mut host), c_int::from(port.to_be()), c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), None, AF_UNIX as u16), -1, "not an address family");
+    for af in [AF_INET as u16, AF_UNIX as u16] {
+        let mut host = c"localhost".as_ptr() as usize;
+        let before = host;
+        errno::set_raw(0);
+        assert_eq!(s::rexec_af(Some(&mut host), c_int::from(512u16.to_be()), c"u".as_ptr(), c"p".as_ptr(), c"c".as_ptr(), None, af), -1);
+        assert_eq!((errno::get(), host), (EOPNOTSUPP, before), "family {af}");
+    }
 }
 
 #[test]
@@ -1216,67 +1199,50 @@ fn sym_rexecoptions() {
 
 #[test]
 fn sym_rresvport() {
-    if s17::geteuid() == 0 {
-        return;
-    }
-    let mut port = 0;
+    // A failing stub (D-15.7): -1, errno EOPNOTSUPP, *port untouched, privileged or not.
+    let mut port = 600;
     errno::set_raw(0);
     assert_eq!(s::rresvport(Some(&mut port)), -1);
-    assert_eq!((errno::get(), port), (EACCES, 512), "unprivileged; the search starts at 512 or above");
-    assert!(fails(s::rresvport(None) as isize, EFAULT));
+    assert_eq!((errno::get(), port), (EOPNOTSUPP, 600));
+    errno::set_raw(0);
+    assert_eq!(s::rresvport(None), -1);
+    assert_eq!(errno::get(), EOPNOTSUPP, "a NULL port");
 }
 
 #[test]
 fn sym_rresvport_af() {
-    if s17::geteuid() == 0 {
-        return;
+    for af in [AF_INET as u16, AF_INET6 as u16, AF_UNIX as u16] {
+        let mut port = 5000;
+        errno::set_raw(0);
+        assert_eq!(s::rresvport_af(Some(&mut port), af), -1);
+        assert_eq!((errno::get(), port), (EOPNOTSUPP, 5000), "family {af}");
     }
-    let mut port = 5000;
-    errno::set_raw(0);
-    assert_eq!(s::rresvport_af(Some(&mut port), AF_INET6 as u16), -1);
-    assert_eq!((errno::get(), port), (EACCES, 1023), "at most 1023");
-    assert_eq!(s::rresvport_af(Some(&mut port), AF_UNIX as u16), -1);
-    assert_eq!(errno::get(), EAFNOSUPPORT);
 }
 
 #[test]
 fn sym_ruserok() {
-    assert_eq!(s::ruserok(c"nosuchhost.invalid".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr()), -1, "an unknown host");
-    assert_eq!(s::ruserok(c"192.0.2.1".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr()), -1, "a numeric host no file trusts");
+    // A denying stub (D-15.7): -1, errno untouched.
+    errno::set_raw(0);
+    assert_eq!(s::ruserok(c"localhost".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr()), -1);
+    assert_eq!(s::ruserok(c"127.0.0.1".as_ptr(), 1, c"root".as_ptr(), c"root".as_ptr()), -1);
+    assert_eq!(errno::get(), 0);
 }
 
 #[test]
 fn sym_ruserok_af() {
-    assert_eq!(s::ruserok_af(c"192.0.2.1".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr(), AF_INET as u16), -1);
+    errno::set_raw(0);
+    assert_eq!(s::ruserok_af(c"localhost".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr(), AF_INET as u16), -1);
     assert_eq!(s::ruserok_af(c"localhost".as_ptr(), 0, c"nobody".as_ptr(), c"nobody".as_ptr(), AF_UNIX as u16), -1, "not an address family");
+    assert_eq!(errno::get(), 0);
 }
 
 #[test]
 fn sym_ruserpass() {
-    // The fixture is the test process's (removed when `home` goes); the child only reads it.
-    let home = scratch::Scratch::path("s15-netrc");
-    if !in_child_env("sym_ruserpass", &[("HOME", home.to_str().unwrap())], || {
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::write(home.join(".netrc"), "machine h1 login u1 password p1\ndefault login du\n").unwrap();
-        std::fs::set_permissions(home.join(".netrc"), std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
-    }) {
-        return;
-    }
-    // In a child with HOME at a fixture: the login and password of the host's entry.
-    let (mut name, mut pass) = (0usize, 0usize);
-    assert_eq!(s::ruserpass(c"H1".as_ptr(), Some(&mut name), Some(&mut pass)), 0);
-    assert_eq!((text_at(name), text_at(pass)), ("u1".to_string(), "p1".to_string()), "host names match without regard to case");
-    let (mut name, mut pass) = (0usize, 0usize);
-    assert_eq!(s::ruserpass(c"other".as_ptr(), Some(&mut name), Some(&mut pass)), 0);
-    assert_eq!((text_at(name), pass), ("du".to_string(), 0), "the default entry; no password");
-    let given = c"u2";
-    let (mut name, mut pass) = (given.as_ptr() as usize, 0usize);
-    assert_eq!(s::ruserpass(c"h1".as_ptr(), Some(&mut name), Some(&mut pass)), 0);
-    assert_eq!((name, pass), (given.as_ptr() as usize, 0), "another login: the entry does not apply");
-    std::fs::set_permissions(std::path::Path::new(&std::env::var("HOME").unwrap()).join(".netrc"), std::os::unix::fs::PermissionsExt::from_mode(0o644)).unwrap();
-    let (mut name, mut pass) = (0usize, 0usize);
-    assert_eq!(s::ruserpass(c"h1".as_ptr(), Some(&mut name), Some(&mut pass)), -1, "a password others may read");
-    assert_eq!((text_at(name), pass), ("u1".to_string(), 0), "the login is still learned");
+    // A failing stub (D-15.7): -1, errno EOPNOTSUPP, no .netrc read, *aname and *apass untouched.
+    let (mut name, mut pass) = (7usize, 9usize);
+    errno::set_raw(0);
+    assert_eq!(s::ruserpass(c"h1".as_ptr(), Some(&mut name), Some(&mut pass)), -1);
+    assert_eq!((errno::get(), name, pass), (EOPNOTSUPP, 7, 9));
 }
 
 #[test]
