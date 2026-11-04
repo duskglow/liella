@@ -1,9 +1,30 @@
-# MATH-M5-CPLX-F128-ZIV-C: handoff (one page)
+# MATH-M5-CPLX-F128-ZIV-C-2: handoff (one page)
 
-State: branch task/math-m5-cplx-f128-ziv-c, cut from origin/task/math-m5-cplx-f128-ziv-b2-3 (fed89fc5, the whole chain).
-Step 0 is done and committed (63fb8a2f). The ladder (items 1-5 of the brief) is NOT started: this run handed back at
-its budget checkpoint. Decisions in force: D-10.17 (s10-mathematics.md), rulings #1719, #1758, #1905; ZIV-CHAIN-PLAN §1.
+State: branch task/math-m5-cplx-f128-ziv-c-2, code head 6ef07138 (on ZIV-C's 63fb8a2f). Checkpoint hand-back at the
+context ceiling: NOT READY (no plants, no counts, origin/next not merged yet). Decisions: D-10.17 (updated), #1719, #1758, #1905.
 
+## Done this run (ZIV-C items 1-4)
+- mpx.rs (24 limbs, 1536) and mpy.rs (48 limbs, 3072): mp_core!/mp_kernels!; MPX_/MPY_ PI, LN2, EULER from
+  `cargo xtask tables` at 1600/3150 bits; TWO_OVER_PI 272 -> 312 words (word 307 at e=16383, RW=51).
+- mp.rs: `NEWTON` from BITS (max(4, k: 49*2^k >= B+8)): 4 at 384/768 (unchanged), 5 at 1536, 6 at 3072.
+- complex_body.rs: `WIDTH_SLACK` = log2(B/768)+1 bits on every bound above 800 bits (series term counts scale with B;
+  each bound is a sum over terms). Proof is the scaling argument in mpx.rs/D-10.17; not re-derived kernel by kernel.
+- complex.rs: modules wx, wy; `ziv` -> cold `ladder` (768) -> cold `wider` (1536) -> 3072; counters
+  retries/wide_retries/wider_retries/residual. TODO(ZIV-C) markers gone. cpow starts at 384 (start-step choice
+  from ex(c), ex(d) NOT done: only saves the narrow evaluations; recorded in D-10.17).
+- Tests: `forced_undecided_climbs_each_step_of_the_ladder` (forced offset 2^4000: 2^1000 decides at 1536+),
+  `cpow_huge_exponents_decide_on_the_ladder` (decides before the residual), products count test per step.
+  kanon unit run: complex:: + mpw:: 46 passed.
+
+## Exact next step
+1. Read gate `math-m5-cplx-f128-ziv-c-2-gate` (kanon; clippy --all-features, static, affected --base origin/next).
+2. Plants (RAM copy, new dir): NEWTON fixed at 4; WIDTH_SLACK 0; drop the `wider` step (y never called);
+   TWO_OVER_PI_WORDS back to 272 (expect the 3072 reduce at huge e to differ: may need a test with e near 16383).
+3. Counts job math-m5-cplx-f128-ziv-c-counts: products count test + random_sample_retry_count (--ignored
+   --nocapture), per step; fast-path instructions:u vs B2-3 (validation/percall/cplx_f128.c).
+4. Merge origin/next once, final gate, report.
+
+## Earlier run (ZIV-C, Step 0)
 ## Step 0 result (settled; do not redo)
 - Reproduced B2-3's count: 2219 parts undecided at 768 bits, all in cexp, csinh, ccosh, csin, ccos, ctan, ctanh
   (cpow 0 on the suite). Printed inputs (count job, `ziv-c-input` lines): every one had a subnormal or minimum-normal
@@ -19,34 +40,3 @@ its budget checkpoint. Decisions in force: D-10.17 (s10-mathematics.md), rulings
   remain (candidate: huge/tiny `e^x` clamps or results at the subnormal edge). Worth one diagnostic in the next run.
 - Test: `complex::ziv_tests::tiny_trig_operands_decide_at_384` (7 families x 3 tiny operands x 3 others x 4 modes, plus cpow).
 
-## Exact next step (the ladder, ZIV-C items 1-5)
-1. New modules for 1536 and 3072 bits like mpw.rs (`mp_core!`/`mp_kernels!` with LIMBS 24 and 48). Constants
-   `MP?_PI/LN2/EULER` from `cargo xtask tables` at >= 1600 / 3150 bits. The 2/pi table must cover `RW = LIMBS + 3`
-   words past bit 16383: about 285 / 309 words (it holds 272 now).
-2. Re-prove the fixed iteration counts in mp.rs for larger B. Newton `recip`/`sqrt` `for _ in 0..4` holds only for
-   B <= 800: 1536 needs 5, 3072 needs 6, so derive the count from LIMBS. Also check the loops at mp.rs ~396 (0..6),
-   ~585 (0..20), ~674 (12 squarings) and the atan halvings (~738) against B. The mpw.rs header lists each bound.
-3. Expand complex_body.rs twice more, entered through `#[cold] #[inline(never)]` functions so the fast frame does
-   not grow. Chain `ziv()` with one counter per step. At the top, return the 3072-bit value rounded, count it, and
-   add a test-only hook that forces it. cpow (#1905): choose the start step from ex(c), ex(d) (needs more than
-   1000 + 113 bits plus the margin).
-4. D-10.17: the guarantee as ruled in #1758 (every step proven; one assumption: no binary128 input needs more than
-   3072 bits). Remove every TODO(ZIV-C) marker (complex.rs, complex_body.rs, tests).
-5. Counts job `math-m5-cplx-f128-ziv-c-counts`: per step, suite plus random sample. Compare the fast path's
-   instructions:u with B2-3 (validation/percall/cplx_f128.c).
-Merge origin/next once before the final gate. Merge no other chain branch.
-
-## Jobs of this run (keke)
-See the report below and handoff/reports/MATH-M5-CPLX-F128-ZIV-C.json.
-JOBS: math-m5-cplx-f128-ziv-c-gate (rc 0, 129 passed), math-m5-cplx-f128-ziv-c-plants2 (skip-small-trig,
-sine-value-off, threshold-wide; sine-exact/cosine-exact EQUIVALENT), math-m5-cplx-f128-ziv-c-diag3 (counts, rc 0).
-SUPERSEDED: diag0 (pre-fix reproduction, rc 101 by design: the old assertion), diag1/diag2 (script errors: per-package
-clippy, missing products), plants (rc 1: sine-exact and cosine-exact survived, equivalent by design: at e <= -B/2 the
-Taylor term is a relative <= 2^(-B-1), below Approx::mul's +2 slack; replaced by value plants in plants2).
-
-## Report
-- Commit 63fb8a2f "Bound the sine of a tiny operand relatively in the f128 complex Ziv step".
-- Gate math-m5-cplx-f128-ziv-c-gate (direct tier, base ziv-b2-3) and plants math-m5-cplx-f128-ziv-c-plants
-  (skip-small-trig, sine-exact, cosine-exact): results in the json.
-- INFORMATIONAL: `cargo clippy -p liella-math` alone fails in liella-boundary (`set_sysinfo_ehdr`, `start` never used
-  under the package-only feature set). `cargo xtask clippy` is clean. This is pre-existing and not caused by this change.
