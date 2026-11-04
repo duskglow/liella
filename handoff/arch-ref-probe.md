@@ -1,45 +1,42 @@
-# ARCH-REF-PROBE (A-5, OD-10): aarch64 symbol versions done; layouts BLOCKED on missing UAPI headers
+# ARCH-REF-PROBE (A-5, OD-10): layouts-aarch64 generated, abi-gen per-arch; aarch64 cross check RED in pack.rs
 
-State: branch `task/arch-ref-probe` (from origin/next 00a8aa87). Plan item: plan/06-phases/20-post-release-ledger-and-experiments.md
-A-5 (marked partly done). Rulings in force: RL-2 (cross tools on keke), RL-3 (reference = Ubuntu arm64 libc6 + libc6-dev
-2.39-0ubuntu8.9, unpacked at keke:~/ref/aarch64). No D-row (the plan item records it).
+State: branch `task/arch-ref-probe-2` (run 2; carries run 1's commits from `task/arch-ref-probe`, base origin/next
+00a8aa87). HEAD: see `git log -1` (WIP commit). Plan item: plan/06-phases/20 A-5. Rulings in force: RL-2, RL-3, and the
+coordinator note #2574 (arm64 linux-libc-dev 6.8.0-147.147 unpacked into keke:~/ref/aarch64). No D-row yet.
 
-## What was done
+## Done (runs 1 and 2)
 
-* `spec/tools/abi_extract.py --arch aarch64 --sysroot DIR [--symbols-only]`: a cross mode. Everything is compile-only:
-  sizes and alignments are a `const unsigned long long[]` in its own section and initializer bytes are one object per
-  section, read back with `readelf -x`; members come from DWARF (`readelf --debug-dump`), the same as x86_64. Symbols come
-  from `readelf --dyn-syms` of the reference's shared objects (the loader is `ld-linux-aarch64.so.1`). Before probing any
-  type, the headers must compile as a set. Without that check a missing header drops every type without an error (the
-  first run skipped all 165).
-  The default mode (no `--arch`) is unchanged: it was rerun on keke and its output compared with the committed tables
-  (see the report).
-* Generated (keke, `--symbols-only`): `spec/abi/versions-aarch64.tsv` (4486 rows, same shape as versions.tsv),
-  `spec/abi/exports-diff-aarch64.tsv` (60 exports found on only one arch, by library and name; the loader name is
-  normalised), `spec/abi/PROVENANCE-aarch64`.
+* Run 1: `spec/tools/abi_extract.py --arch aarch64` (compile-only cross mode); versions-aarch64.tsv,
+  exports-diff-aarch64.tsv. Rerun in run 2: both byte-identical.
+* Run 2: `python3 -I spec/tools/abi_extract.py --arch aarch64 --sysroot ~/ref/aarch64` on keke (scratch copy of spec/ in
+  ~/work/arch-ref-probe-2): `spec/abi/layouts-aarch64.tsv` (160 types, 1313 rows), `initializers-aarch64.tsv` (10),
+  PROVENANCE-aarch64 updated. Skips: user_fpregs_struct (x86_64 only), plus ustat, vtimes, vlimit and cpu_features, which
+  x86_64 also skips. Type set = x86_64's minus `struct user_fpregs_struct`.
+* Probe-settled (compile-only constants, aarch64-linux-gnu-gcc --sysroot ref): plain `char` unsigned, `wchar_t` unsigned,
+  `__jmp_buf` element 8 bytes unsigned (array 176 bytes: 22 words). `mcontext_t.__reserved` is at 288 with the type
+  aligned 16 (past the natural end 280 of `pstate`).
+* xtask/src/abi.rs: `Arch` table (x86_64, aarch64); `load`/`render` per arch; `scalar_on`/`alias_on` (aarch64 char -> u8,
+  wchar_t -> u32, __jmp_buf -> [u64; 22]); `ALIGNED_MEMBERS` (newtype with repr(align)) for mcontext_t.__reserved; the test
+  header item count is computed; each test file carries `#![cfg(target_arch = ...)]`. Generated:
+  crates/abi/src/layout_aarch64.rs, crates/abi/tests/appendix_c_layouts_aarch64.rs. x86_64 layout.rs byte-identical;
+  appendix_c_layouts.rs gains only the cfg line and ", x86_64" in the count line. `abi-gen --check` up to date on keke.
+* crates/abi/src/lib.rs `#[cfg_attr(target_arch = "aarch64", path = "layout_aarch64.rs")] pub mod layout;`;
+  appendix_c/table.rs includes the per-arch tsv; xtask/src/arch.rs allows "cfg" in crates/abi/.
 
-## Probe-settled facts
+## RED: `cargo xtask arch-check` (liella-abi, aarch64): 15 errors, all in crates/abi/src/pack.rs
 
-* The oldest aarch64 version node is `GLIBC_2.17` (x86_64: `GLIBC_2.2.5`).
-* 57 exports exist only on x86_64, among them `ioperm`, `iopl`, `modify_ldt` and `arch_prctl` (RL-8), and 3 exist only on aarch64
-  (see the tsv). This is the export list A-3/RL-8 asked for.
+pack.rs is hand-written against the x86_64 layout: `use crate::layout::struct_utmp__ut_tv` (no such type on aarch64),
+`chars()` returns `[i8; N]` where aarch64 `char[N]` is `[u8; N]` (ut_line/ut_id/ut_user/ut_host), `ut_session` i64 on
+aarch64 vs i32. Only the first 6 errors were read (log: keke:~/work/arch-ref-probe-2/cross.log).
 
-## BLOCKED: part (a), layouts-aarch64.tsv
+## Next step
 
-The arm64 reference headers do not compile: `bits/sigcontext.h` includes `asm/sigcontext.h`, which is kernel UAPI
-(package linux-libc-dev), not libc6-dev. keke has no arm64 UAPI headers (not in ~/ref-arm64, not under
-/usr/aarch64-linux-gnu). The brief forbids downloading. Using the x86_64 or generic `asm/` headers would give wrong
-ucontext/sigcontext layouts, so it was not done. RULING NEEDED: add Ubuntu noble `linux-libc-dev_<ver>_arm64.deb` (the
-version that pairs with the x86_64 reference's linux-libc-dev), verified like RL-3, unpacked into the same root.
+1. Read cross.log fully; make pack.rs arch-neutral: char arrays through a per-arch `c_char` (check ctypes.rs), utmp's
+   ut_tv/ut_session per `target_arch` (generated names differ), each site `ARCH(x86_64):`-tagged or allowed.
+2. keke: `sh ~/work/arch-ref-probe-2/gen.sh` (the role is not a git repo: drop its `git diff` lines; diff locally after
+   scp). It runs abi-gen, arch-check, and the aarch64 layout tests under `qemu-aarch64 -L /usr/aarch64-linux-gnu`
+   (that run never produced qemu.log in run 2, so check why). Those tests are the real proof of the layouts.
+3. Check `cargo xtask stubs` does not rewrite appendix_c_layouts.rs (xtask/src/spec.rs:599 emits that path too).
+4. Jobs: arch-ref-probe-2-static, -cross (`cargo xtask arch-check`), the direct-tier gate; clippy and static in the foreground.
 
-## Next step (after the ruling)
-
-1. keke: `python3 -I spec/tools/abi_extract.py --arch aarch64 --sysroot ~/ref/aarch64` (from a scratch copy of spec/;
-   it writes layouts-aarch64.tsv and initializers-aarch64.tsv next to the script's ../abi).
-2. abi-gen: parameterise `render()` in xtask/src/abi.rs by arch. Emit `crates/abi/src/layout_aarch64.rs` (lib.rs picks it
-   with `#[cfg(target_arch)] #[path]`) and `tests/appendix_c_layouts_aarch64.rs` (`#![cfg(target_arch = "aarch64")]`, and
-   the x86_64 file gets `x86_64`). appendix_c/table.rs `include_str!`s the per-arch tsv. Add "cfg" to the crates/abi/
-   ALLOWED entry in xtask/src/arch.rs. Check that layout_init.rs builds against the aarch64 types.
-3. Jobs: arch-ref-probe-static, arch-ref-probe-cross (`cargo xtask arch-check`), the direct-tier gate.
-
-Not to redo: the cross probe mechanics, the symbol tables, the UAPI search on keke.
+Not to redo: the probes (tables are final), the signedness probe, the generator's arch split.
