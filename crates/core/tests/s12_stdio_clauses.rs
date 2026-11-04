@@ -1430,7 +1430,8 @@ fn s12_5_c_5_long_records_cross_the_window() {
     let pattern = |n: usize, seed: u8| -> Vec<u8> { (0..n).map(|i| b'a' + ((i as u8).wrapping_mul(7).wrapping_add(seed) % 26)).collect() };
     for (idx, len) in [1usize, 4000, 4090, 4091, 4092, 4093, 4094, 4095, 4096, 4097, 4101, 8190, 8192, 8200, 12289].into_iter().enumerate() {
         for tail in [&b"\n"[..], &b""[..]] {
-            for window_shift in [0usize, 5, 31, 33] {
+            for (window_shift, held) in [(0usize, false), (5, true), (31, true), (33, false), (0, true)] {
+                // `held`: the caller owns the stream (flockfile), the path a single-threaded or locking caller takes.
                 // A warm-up record grows the caller's buffer; a short one then shifts the window.
                 let mut data = pattern(20000, 1);
                 data.push(b'\n');
@@ -1443,8 +1444,11 @@ fn s12_5_c_5_long_records_cross_the_window() {
                 if let Some(a) = after {
                     data.extend_from_slice(a);
                 }
-                let t = tmp_with(&format!("c55l{idx}{window_shift}{}", tail.len()), &data);
+                let t = tmp_with(&format!("c55l{idx}{window_shift}{held}{}", tail.len()), &data);
                 let fp = fopen(&t, "r");
+                if held {
+                    x::flockfile(fp);
+                }
                 let mut p: *mut c_char = null_mut();
                 let mut cap = 0usize;
                 assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 20001);
@@ -1459,6 +1463,9 @@ fn s12_5_c_5_long_records_cross_the_window() {
                     assert_eq!(text(p), &a[..]);
                 }
                 assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file");
+                if held {
+                    x::funlockfile(fp);
+                }
                 x::fclose(fp);
             }
         }
