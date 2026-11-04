@@ -1,34 +1,42 @@
 # MATH-M6-CPLX-DIRECTED (M6-10): handoff (one page)
 
-State: branch task/math-m6-cplx-directed from origin/next 442429ab (CLOSE landed, per ZIV-CHAIN-PLAN 2-4). Code head
-d254f3c4 (test + D-10.17 text only; no product code changed). Role kanon:~/w/kn1. Decisions: D-10.17.
+State: branch task/math-m6-cplx-directed-2 (continues task/math-m6-cplx-directed; from origin/next 442429ab). Code head
+74920905 (test + D-10.17 text only; no product code changed). Role shiki:~/w/sh1. Decisions: D-10.17. Ruling #2486:
+M6-11 (float/double) may go ahead before the wide-format findings close.
 
 ## Done
-- crates/math/tests/complex_directed.rs: the 16 two-operand families against the oracle (Ziv loop to 2^14 bits) on a
-  grid of part exponents over each format's range (smallest subnormal and normal, -emax/2 and -emax/8 capped at 4096/600,
-  +-2p, +-p/2, 0, those positive, emax where <= 4096), x significand 1 and 1+ulp, both signs, all four modes. Pure Rust
-  (no products build). float and double: 0 differing parts, 0 oracle-undecided (probe job math-m6-cplx-directed-probe).
-  So D-10.17's milestone-4a known limit (directed modes in the asymptotic regimes) is covered by the ladder for float
-  and double; D-10.17 now says so.
-- Plants (complex.rs ladder): noladder (384 only) CAUGHT, nowider (stop at 768) CAUGHT (plants2 on 94dd8cba; plants3 on
-  d254f3c4 started detached).
+- crates/math/tests/complex_directed.rs: the 16 two-operand families against the oracle (Ziv loop to 2^14 bits) on a grid
+  of part exponents over each format's range, both signs, all four modes; float and double pass (0 differing, 0
+  undecided). Plants on complex.rs's ladder (noladder, nowider) CAUGHT.
+- Run 2: gate3's red was clippy `absurd_extreme_comparisons` (`undecided <= UNDECIDED_MAX` with the constant 0; the
+  toolchain on the role flags it): now `assert_eq!(undecided, 0)`. The trace check found no clause ID on the
+  macro-generated tests: they name s10_5_c_0, s10_0_g_0. Module comment corrected to the probe below.
 
-## Open findings (the follow-up story; grids are #[ignore]d with the reason, run with --ignored)
-Probe on 42d46240 (oracle `complex` for all; wide formats should use `complex_wide`, fixed after the probe, not rerun):
-- long double and _Float128: many parts reach the 3072-bit residual path (casin/casinh/cacos/cacosh/catanh/catan, cexp,
-  clog, ccos/ccosh at p64), e.g. catan p113 x = 2^-16494, y = 2^4096 in Up/Down/Zero. That contradicts ZIV-C's
-  "no binary128 input needs more than 3072 bits" on this grid. Counters were global under parallel threads, so counts
-  are inflated; the per-call lines still show it. NOT diagnosed: exact/Dev part missed or bound too loose.
-- catan 102 / catanh 126 differing parts at p64 and p113; ctan/ctanh 576 each (all modes incl. nearest, x = +-2^-4096:
-  likely the oracle without `complex_wide`). 36-182 operands per family beyond the oracle's 2^14 bits.
-- f64 ctanh reached the residual path at x = +-2^511 (parts still correct).
+## Open findings (the follow-up story; long double/_Float128 grids are #[ignore]d, run with --ignored)
+Probe on 13381a9f, `--ignored --test-threads=1` (exact counters, wide oracle), shiki ~/work/math-m6-cplx-directed-2/probe.log:
+- ONLY catan and catanh (p64 and p113) differ: 102 / 126 parts, all at the grid's y = 2^4096 (catan part 1, catanh
+  part 0), Up/Down/Zero only (58 each at catan p64), never Nearest. They are also the only families that reach the
+  residual path (catan 174, catanh 162 per format). Every other family: 0 residual, 0 differing. The earlier "many
+  families reach the residual path" was the global counters under parallel threads; ctan/ctanh's differences were
+  the narrow oracle (gone with complex_wide).
+- Diagnosis (by series, not yet proven in code): for catan(x + i·y), y = 2^4096, Im = (1/2)·atanh(2y/(x²+y²+1)) =
+  1/y + (1/3 − x²)/y³ + O(y^-5). The correction is ~2^-8192 relative, beyond the 3072-bit ladder, so only its SIGN
+  decides directed rounding: below 1/y when x² > 1/3, above when x² < 1/3. Observed: x = ±1, ±(1+ulp), 2^32 ... get
+  the "above" answer (Up = succ(2^-4096), Down/Zero = 2^-4096); the oracle wants 2^-4096 / pred. The tiny-x operands
+  (x = 2^-16445 ...) reach the residual path and come out right. So: an exact sign rule for this asymptotic part is
+  missing (the residual path assumes the x = 0 sign). catanh mirrors it.
+- Oracle undecided (beyond 2^14 bits) at the subnormal end, e.g. x = y = 2^-16445 (ctan 624, csqrt 182, casin 102 ...
+  per format, clog10 0): corrections ~2^-32890 relative. Liella's parts there are unverified, not known wrong.
 
 ## Next step
-Run `cargo test -p liella-math --test complex_directed -- --ignored --nocapture --test-threads=1` on this head, list
-the differing and residual operands per family, classify (oracle, exact part missed, loose bound) and fix as ZIV-C
-Step 0 did. Then drop the #[ignore]s. RULING NEEDED: whether M6-11 may start before the wide-format findings close
-(recommend yes: M6-11 is float/double, whose fallback is now checked in every mode).
+1. complex.rs catan/catanh: for |y| (resp. the catanh analogue) so large that 1/y³ is below the ladder, decide the
+   directed rounding from sign(1/3 − x²) (exact in the format: compare x² with 1/3 by exact arithmetic), plus the
+   general |z| ≫ 1 form Im ≈ y/|z|² with its next term; prove with the grid (drop the catan/catanh shortfall).
+2. Oracle: raise the cap or add exact-correction handling at the subnormal end so `oracle undecided` reaches 0, then
+   drop the #[ignore]s (UNDECIDED is asserted 0).
+Plan rows to read: D-10.17 (plan/07-decisions/s10-mathematics.md), ZIV-C notes in handoff/math-m5-cplx-f128-ziv.md.
 
-## Jobs (kanon)
-probe (rc 101, findings above), gate rc 4 / gate2 rc 4 (clippy in my test: macro depth, needless_range_loop; fixed),
-plants rc 3 (baseline did not compile), plants2 rc 0 (94dd8cba). Final: gate3, plants3 (d254f3c4), started detached.
+## Jobs (shiki, head 74920905)
+math-m6-cplx-directed-2-gate2 (direct tier: complex_directed), math-m6-cplx-directed-2-plants2. Superseded: -gate and
+-plants (rc 0 on 13381a9f, before the comment fix), -probe (rc 101 by design: the ignored wide grids; informational),
+kanon gate3 (rc 4, clippy).
