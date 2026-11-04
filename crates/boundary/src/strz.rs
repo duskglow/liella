@@ -552,6 +552,8 @@ pub fn text_equals_words(addr: usize, len: usize, stored: &dyn Fn(usize) -> u64)
     let skew = addr & 7;
     let base = addr.wrapping_sub(skew);
     let words = len.div_ceil(8);
+    // Eight times a byte count below eight, as a shift amount.
+    let bits = |n: usize| u32::try_from(n.wrapping_mul(8)).unwrap_or(0);
     let word = |k: usize| if k < words { stored(k) } else { 0 };
     // Checked indices are 0..=len (the text and its terminator); word `j` holds indices `8j - skew ..`.
     let mut j = 0usize;
@@ -564,14 +566,14 @@ pub fn text_equals_words(addr: usize, len: usize, stored: &dyn Fn(usize) -> u64)
         }
         // The stored text's bytes `first..first + 8`, zero beyond its end (a word 0 is shifted up).
         let expect = if j == 0 {
-            word(0).wrapping_shl(skew.wrapping_mul(8) as u32)
+            word(0).wrapping_shl(bits(skew))
         } else {
-            let (k, sh) = (first / 8, (first % 8).wrapping_mul(8) as u32);
+            let (k, sh) = (first / 8, bits(first % 8));
             if sh == 0 { word(k) } else { word(k).wrapping_shr(sh) | word(k.wrapping_add(1)).wrapping_shl(64u32.wrapping_sub(sh)) }
         };
         // Bytes `lo..hi` of this word are checked: not before the text, not after the terminator.
         let hi = len.wrapping_sub(start).wrapping_add(1).wrapping_add(lo).min(8);
-        let mask = if hi >= 8 { u64::MAX } else { 1u64.wrapping_shl(hi.wrapping_mul(8) as u32).wrapping_sub(1) } & u64::MAX.wrapping_shl(lo.wrapping_mul(8) as u32);
+        let mask = if hi >= 8 { u64::MAX } else { 1u64.wrapping_shl(bits(hi)).wrapping_sub(1) } & u64::MAX.wrapping_shl(bits(lo));
         // UNSAFE(slice): one aligned word read; it holds a byte of the string (index at most
         // `len`, reached only if every earlier checked byte matched text without a NUL), and an
         // aligned word never crosses a page, so the read cannot fault.
