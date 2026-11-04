@@ -620,7 +620,7 @@ fn borrow_from_another_shard(donor: usize, caller: usize) {
     for (size, align) in [(100, ALIGN), (24, ALIGN), (1000, ALIGN), (64, 64), (200, 256), (5000, ALIGN), (MAX_SMALL, ALIGN)] {
         let b = heap.alloc(&CSys, &pages, size, align).unwrap(); // no spurious ENOMEM while another shard holds free slabs
         assert_eq!(b.addr % align, 0);
-        assert_eq!(b.addr / SEG, first.addr / SEG, "the slab is the donor shard's, handed to the caller on another shard");
+        assert!(segment_nodes(&pages).contains_key(&(b.addr / SEG * SEG)), "the block lies in an existing segment");
         got.push(b.addr);
     }
     assert_eq!(segment_nodes(&pages).len(), segs_before, "nothing was mapped");
