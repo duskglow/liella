@@ -22,3 +22,14 @@ Plants: fnmatch direct-matcher plants only (run-loop stops, last-`]` memo and bo
 ctype/wctype changes have no plants here (perf-only changes, covered by their historic plants, not re-run).
 
 Next step: dispatcher reads the gate and plants jobs; re-count the rows above when convenient.
+
+## INTEGRATE-REGISTER-PERF-2 (continuation, branch task/integrate-register-perf-2, role mei:~/w/s1)
+
+Predecessor merged (one conflict: the register index, both section 16/17 lines kept). Plants failure: the three fnmatch survivors were
+- run-backslash-stop: CAUGHT now (`a\*` against the string `a\*` must not match; added to direct_brackets_after_a_first_close_and_runs_stop_at_metacharacters);
+- no-close-memo (`.unwrap_or(0)` -> `usize::MAX`): CAUGHT by the new `the_last_close_memo_is_filled_once_and_kept` (the memo is invisible in match results, so the test reads close_before and its memo directly); an extra plant memo-never-kept is also CAUGHT;
+- close-bound (`<= pi` -> `< pi`): EQUIVALENT. `p[pi]` is `[`, so the last `]` is never at `pi`; the only value that could differ is the "no `]`" 0 at pi = 0, which then goes to bracket_has, which reports no valid bracket and the `[` is a literal: same result. Job integrate-register-perf-2-plants prints CAUGHT/EQUIVALENT per plant.
+Also: comments "register 13.5" -> 16.5 (fast64.rs, tables.rs); register section 16 rows 2 and 5 have DONE notes (no separate counts: those savings were counted together with neighbouring rows).
+Counts: strstr and memset re-measured (section 15 appendix). ctype/wctype/fnmatch/libm counts: job integrate-register-perf-2-counts (output ~/work/INTEGRATE-REGISTER-PERF-2/counts-*.txt on mei); their register rows are NOT yet updated.
+Not done: re-plants of the asm (scan.S), ctype, wctype and memset ports (budget). Gate: affected escalated to FULL, rc 0. clippy --workspace --all-targets and cargo xtask static: ok (job -lint).
+Next step: read counts-*.txt, update the ctype/wctype/fnmatch rows in section 15/14, plant the four non-fnmatch ports.
