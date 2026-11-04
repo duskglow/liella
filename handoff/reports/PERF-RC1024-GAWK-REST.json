@@ -1,0 +1,8 @@
+{"task": "PERF-RC1024-GAWK-REST", "model": "sonnet", "tokens": null,
+ "result": "No remaining delta: gawk-regex and gawk-utf8 are at 1.0000 vs fa678f74 on origin/next (HEAP-FREE); on this base they are +1.10%/+0.73% from heap.rs only",
+ "branch": "task/perf-rc1024-gawk-rest", "head": "7e6d96a2",
+ "gate": {"affected": "none run, no product code changed", "peak": null},
+ "jobs": ["perf-rc1024-gawk-rest-counts3"],
+ "accepted_first_attempt": null, "rulings": [], "informational": ["wl_count with an unprimed sha leaves an empty ~/wl/src/<sha>, after which wl_prime_base.sh reports present"],
+ "refused": [], "improvement": "wl_count should fail fast on an empty ~/wl/src/<sha>; wl_prime_base should test for content, not the directory",
+ "next_step": "none; land after HEAP-FREE (already in next)", "report_file": "handoff/perf-rc1024-gawk-rest.md"}
