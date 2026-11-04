@@ -145,7 +145,7 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [<cbench>...]] | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -241,8 +241,10 @@ fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[St
     let mut args = vec!["--workspace".to_string()];
     args.extend(feat.iter().cloned());
     // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889).
+    // Binaries without liella-boundary code are the same in both passes and run once (CI-GATE-DIET).
     if features.is_some() {
-        args.extend(nextest::pass1_filter(extra).unwrap_or_default());
+        let once = if nextest::pass1_filter(extra, &[]).is_some() { nextest::unchanged_binaries(cargo, root, &feat) } else { Vec::new() };
+        args.extend(nextest::pass1_filter(extra, &once).unwrap_or_default());
     }
     args.extend(extra.iter().cloned());
     // Every failure of both steps is reported before the gate stops.

@@ -1,0 +1,12 @@
+{"task": "PERF-RC1024-STRLEN", "model": "opus", "tokens": null,
+ "result": "NOT READY: no fix yet; bisect count of bash-loop/make-n over the 5 scan.S merges (10 commits) queued on keke; du ruled out as a strlen cause (fts_build growth)",
+ "branch": "task/perf-rc1024-strlen", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["du +0.65% is fts_build/fts_alloc growth, not strlen (strlen fell 4M->1M); by title the candidates are perf-fts-nochdir / perf-fts-nochdir-2; needs its own count",
+                   "make-n also grew in memmove and calloc, so the strlen growth may come from callers' inputs rather than scan.S"],
+ "refused": [],
+ "improvement": "wl_count should accept a primed ~/wl/src/<sha> with --rev directly (it refuses a dir with no .synced), so bisecting historic commits needs no stub role dirs",
+ "next_step": "read keke perf-rc1024-strlen-bisect2, locate the jump, fix strlen or the caller, then percall strlen rows + wl_count vs fa678f74 + gate + plants",
+ "report_file": "handoff/perf-rc1024-strlen.md",
+ "jobs": ["keke:perf-rc1024-strlen-bisect2"]}

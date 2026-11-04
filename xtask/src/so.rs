@@ -932,10 +932,25 @@ fn check_placement(root: &Path, release: &Path) -> Result<(), String> {
     errors.extend(libm_only.iter().filter(|s| libc_a.contains(**s)).map(|s| format!("libc.a defines {s}, which glibc's libc.a does not (libm.so.6 only)")));
     errors.extend(libm_only.iter().filter(|s| needs.contains(**s) && !libc_a.contains(**s)).map(|s| format!("libc.a refers to {s}, which only libm.a defines")));
     errors.extend(libm_a.iter().filter(|s| libc.contains(*s)).map(|s| format!("libm.a defines {s}, which glibc's libm.a does not (a libc.so.6 name)")));
+    // The shared objects follow the same split: libc.so.6 exports no libm.so.6-only name, libm.so.6 none
+    // that only libc.so.6 exports (PRE14-LIBC-FMOD). Compat versions (`name@VERSION`) count by their name.
+    for (so, wrong, own, other) in [("libc.so.6", &libm, &libc, "libm.so.6"), ("libm.so.6", &libc, &libm, "libc.so.6")] {
+        let dynsyms = dynamic_names(&release.join(so))?;
+        errors.extend(dynsyms.iter().filter(|s| wrong.contains(*s) && !own.contains(*s)).map(|s| format!("{so} exports {s}, which glibc exports from {other} only")));
+    }
     // The names both libraries export (`copysign`, `frexp`, `__finite`, ...: 24) are libc.a's: glibc's
     // libc.a defines every one of them, its libm.a none (LIBC-A-PLACEMENT-2).
     errors.extend(libm.iter().filter(|s| libc.contains(*s) && !libc_a.contains(*s)).map(|s| format!("libc.a does not define {s}, which glibc's libc.a does (libc.so.6 and libm.so.6)")));
     if errors.is_empty() { Ok(()) } else { Err(format!("archive placement differs from glibc's:\n{}", errors.join("\n"))) }
+}
+
+/// The names a shared object defines in its dynamic symbol table, without `@VERSION` suffixes.
+fn dynamic_names(path: &Path) -> Result<BTreeSet<String>, String> {
+    let out = Command::new("nm").args(["-D", "--defined-only", "-P"]).arg(path).output().map_err(|e| format!("nm: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("nm -D {} failed", path.display()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).lines().filter_map(|l| l.split_whitespace().next()).map(|s| s.split('@').next().unwrap_or(s).to_string()).collect())
 }
 
 /// An empty `ar` archive at `dst`, written under a temporary name and renamed into place.

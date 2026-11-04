@@ -383,7 +383,7 @@ fn setvbuf_with_a_huge_size_defers_the_allocation() {
 }
 
 /// A deliberate difference (docs/differences-from-glibc.md): the failed growth is a write error,
-/// so the error indicator is set; glibc leaves it clear. Deterministic: exit 18 means clear.
+/// so the error indicator is set (POSIX: a write error sets it; COMPAT-16). Deterministic: exit 18 means clear.
 #[test]
 fn open_memstream_out_of_memory_sets_the_error_indicator() {
     // Trace: D-12.3

@@ -1,0 +1,30 @@
+{
+ "task": "MATH-M5-CLOSE-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "is_nan doc fixed; clamp test replaced: no operand reaches the cosh clamp (unreachable for a monotone oracle); gate escalated to FULL, running",
+ "branch": "task/math-m5-close-5",
+ "head": "ffd8b5af",
+ "gate": {
+  "affected": "running (escalated to FULL); clippy+static green",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [
+  {
+   "item": "keep or drop the max-ulp reference clamp in cmp::ulp_reference (unreachable on every probed input)",
+   "recommendation": "drop it and re-measure cosh q U to find what moved 2.000 -> 1.000"
+  }
+ ],
+ "informational": [
+  "plant drop-exact=z is EQUIVALENT (branch unreachable); no plants job run",
+  "affected --base origin/next escalated to FULL tier"
+ ],
+ "refused": [],
+ "improvement": "the coordinator note asked for a derived input; deriving first (monotone rounding) would have shown in one step that no input exists, saving run 4's guess",
+ "next_step": "read kanon math-m5-close-5-gate; rule on the clamp",
+ "report_file": "handoff/math-m5-close.md",
+ "jobs": [
+  "kanon:math-m5-close-5-gate"
+ ]
+}

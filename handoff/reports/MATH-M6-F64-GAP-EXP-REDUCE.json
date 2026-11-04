@@ -1,0 +1,12 @@
+{"task": "MATH-M6-F64-GAP-EXP-REDUCE", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT: exp/pow reduction (3 exact Cody-Waite parts, Fast2Sums) and exp2's pre-split ln2 product coded, bounds restated and mp-checked; direct gate not run (escalates to FULL on the stacked base), counts and sweep running",
+ "branch": "task/math-m6-f64-gap-exp-reduce", "head": "80b39d15",
+ "gate": {"affected": "not run (gate, gate2 escalated to FULL and were stopped, rc 143; gate3 stopped while queued)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["saturation-register.md now has several sections numbered 13 after the origin/next merge", "cargo xtask affected escalates to FULL for a story stacked on an unlanded parent that changed a generated source; --base on the role tree needs a re-sync"],
+ "refused": ["bash ~/src/liella-ops/tools/sync_role.sh --story MATH-M6-F64-GAP-EXP-REDUCE --base 7ff703c7 /home/claude/w/MATH-M6-F64-GAP-EXP-REDUCE keke n4 (rc 4, role busy with the queued gate3)"],
+ "jobs": ["math-m6-f64-gap-exp-reduce-plants", "math-m6-f64-gap-exp-reduce-percall", "math-m6-f64-gap-exp-reduce-sweep"],
+ "improvement": "jobrun blocks (no detach): the developer flow should say to start detached jobs with setsid nohup, and sync_role should accept a stacked story's own merge commit as base without a second sync",
+ "next_step": "re-sync n4 with --base 7ff703c7, run the direct gate, read percall, update register 13.5 #2 and D-10.13 with the measured saving",
+ "report_file": "handoff/math-m6-f64-gap-exp-reduce.md"}

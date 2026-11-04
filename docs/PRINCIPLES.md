@@ -60,6 +60,13 @@ that was a reasonable design decision in a more trusting era (for example accept
 reply from any address), Liella may choose the stricter behaviour by default, document the
 reason plainly, and offer the old behaviour behind an explicit opt-in.
 
+**When glibc drops or deprecates something, that is a strong reason to make an active decision,
+not the decision itself.** An interface that glibc has removed from its public API, deprecated,
+or that is insecure by design is not carried over just because glibc once had it, and it is not
+dropped just because glibc dropped it. It gets a recorded decision (implement, keep for old
+binaries only, keep as a stub that fails cleanly, or drop), with the reason, before any work on
+it.
+
 ## 3. Safety, and what a C library is for
 
 **libc is a helper library, not a security boundary.** Liella enforces safety in its *own*

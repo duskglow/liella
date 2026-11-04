@@ -13,7 +13,8 @@ set -eu
 host=$1
 sha=$(git rev-parse --verify "$2^{commit}")
 . "${LIELLA_OPS:-$HOME/src/liella-ops}/tools/vm_ssh.sh"; vm_ssh_cmd "$host"
-if "${VSSH[@]}" "[ -d ~/wl/src/$sha ] || [ -f ~/wl/products/$sha/libc.a ]"; then echo "present $host:~/wl/src/$sha"; exit 0; fi
-"${VSSH[@]}" "mkdir -p ~/wl/src && rm -rf ~/wl/src/.$sha.p && mkdir ~/wl/src/.$sha.p"
-git archive --format=tar "$sha" | "${VSSH[@]}" "tar -x -C ~/wl/src/.$sha.p && mv -T ~/wl/src/.$sha.p ~/wl/src/$sha"
+if "${VSSH[@]}" "[ -f ~/wl/src/$sha/Cargo.toml ] || [ -f ~/wl/products/$sha/libc.a ]"; then echo "present $host:~/wl/src/$sha"; exit 0; fi
+"${VSSH[@]}" "mkdir -p ~/wl/src && rm -rf ~/wl/src/$sha ~/wl/src/.$sha.p && mkdir ~/wl/src/.$sha.p"
+set -o pipefail   # a failed git archive must not move an empty tree into the cache
+git archive --format=tar "$sha" | "${VSSH[@]}" "tar -x -C ~/wl/src/.$sha.p && [ -f ~/wl/src/.$sha.p/Cargo.toml ] && mv -T ~/wl/src/.$sha.p ~/wl/src/$sha" || { "${VSSH[@]}" "rm -rf ~/wl/src/.$sha.p"; echo "wl_prime_base: could not unpack $sha" >&2; exit 1; }
 echo "primed $host:~/wl/src/$sha"

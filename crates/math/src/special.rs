@@ -22,7 +22,7 @@ use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
 use crate::float::{self, Exact, Float, Kind, Num};
-use crate::mp::{self, c, Arith, Mp};
+use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
 use crate::mpw;
 use crate::status::{Rounding, Status};
 use crate::wide::{self, beside, near_one, one};
@@ -175,7 +175,7 @@ const EXACT_FACTORIAL_MAX: i64 = 92;
 /// `lnΓ(y)` for `y >= 40` by Stirling's series.
 fn stirling(y: Mp) -> Mp {
     let half = Mp::from_i64(1).ldexp(-1);
-    let mut s = y.sub(half).mul(mp::ln(y)).sub(y).add(c(&t::MP_HALF_LN_2PI));
+    let mut s = y.sub(half).mul(mp::ln_atanh(y)).sub(y).add(c(&t::MP_HALF_LN_2PI));
     let inv = y.recip();
     let inv2 = inv.sqr();
     let mut p = inv;
@@ -202,7 +202,7 @@ fn lgamma_pos(xm: Mp) -> Mp {
     for k in 1..n {
         prod = prod.mul(xm.add(Mp::from_i64(k)));
     }
-    stirling(xm.add(Mp::from_i64(n))).sub(mp::ln(prod))
+    stirling(xm.add(Mp::from_i64(n))).sub(mp::ln_atanh(prod))
 }
 
 /// `sin(πx)` for a finite `x` that is not an integer: `x = m + f` with `|f| <= ½` (both exact),
@@ -229,7 +229,7 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     }
     // Γ(x) = π / (sin(πx) Γ(1 − x)).
     let s = sin_pi(x);
-    let lg = mp::ln(mp::pi()).sub(mp::ln(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
+    let lg = mp::ln_atanh(mp::pi()).sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
     (lg, if s.neg { -1 } else { 1 })
 }
 
@@ -339,7 +339,7 @@ fn half_pow_over_fact(n: u64, x: Mp) -> Mp {
         return p;
     }
     let lg = lgamma_pos(Mp::from_i64(n as i64 + 1));
-    let z = mp::ln(h).mul(Mp::from_i64(n as i64)).sub(lg);
+    let z = mp::ln_atanh(h).mul(Mp::from_i64(n as i64)).sub(lg);
     if z.to_f64() < -1.0e9 {
         return far_below();
     }
@@ -364,18 +364,6 @@ fn powers<M: Arith>(n: u64, x: M, want_y: bool) -> (M, M) {
 /// The bits of `k` (0 for 0).
 fn bitlen(k: u64) -> i64 {
     64 - i64::from(k.leading_zeros())
-}
-
-/// The exponent of `v` (far below everything for zero), for error bounds.
-fn ex<M: Arith>(v: M) -> i64 {
-    if v.is_zero() { -(1 << 40) } else { v.expo() }
-}
-
-/// A result and the exponent `err` of a bound `2^err` on its absolute error.
-#[derive(Clone, Copy)]
-struct Bounded<M> {
-    v: M,
-    err: i64,
 }
 
 /// `J_n(x)` and, when `want_y`, `Y_n(x)` by the power series (any `x > 0`; used below 100 in
@@ -473,7 +461,7 @@ fn bessel_series_mp(n: u64, x: Mp, want_y: bool) -> (Bounded<Mp>, Bounded<Mp>) {
         return bessel_series(n, x, want_y, p, tx, bitlen(4 * n) + 1 - bits);
     }
     let p = half_pow_over_fact(n, x);
-    let tx = if want_y { mp::exp(mp::ln(x.recip().ldexp(1)).mul(Mp::from_i64(n as i64))) } else { Mp::ZERO };
+    let tx = if want_y { mp::exp(mp::ln_atanh(x.recip().ldexp(1)).mul(Mp::from_i64(n as i64))) } else { Mp::ZERO };
     // exp of an argument up to about 2^37 and Stirling's lgamma: about 2^-338 relative.
     bessel_series(n, x, want_y, p, tx, 52 - bits)
 }
@@ -497,17 +485,6 @@ fn bessel_wide(n: u64, a: &Arg, want_y: bool) -> Option<Bounded<mpw::Mp>> {
     let (p, tx) = powers(n, x, want_y);
     let (j, y) = bessel_series(n, x, want_y, p, tx, bitlen(4 * n) + 1 - mpw::Mp::BITS);
     Some(if want_y { y } else { j })
-}
-
-/// The rounding test of Ziv's strategy: `v` rounded in `mode` when every value within
-/// `2^err` of it rounds alike (the same encoding and the same flags; rounding is monotone, so
-/// both ends of the interval suffice). The ends are widened by four last places of `v` for the
-/// truncation of `v ± 2^err` itself.
-fn decided<F: Float, M: Arith>(v: Bounded<M>, mode: Rounding) -> Option<(F, Status)> {
-    let e = M::int(1).ldexp(v.err.max(ex(v.v) + 4 - M::BITS) + 1);
-    let lo = v.v.sub(e).round::<F>(mode);
-    let hi = v.v.add(e).round::<F>(mode);
-    (lo.0.to_bits() == hi.0.to_bits() && lo.1 == hi.1).then_some(lo)
 }
 
 /// Round a Bessel value (`signed` by `neg`): directly when it has no error bound (the

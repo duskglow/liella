@@ -1,0 +1,2 @@
+# XTASK-BENCH-COMPARE-ARGS
+Extracted `parse_compare_args` in xtask/src/bench.rs (flags anywhere, unknown --flag errors, names validated by check_bench_names); unit test added; usage line in main.rs updated. The existing code already rejected dash words; the change makes that testable. Caller's GLIBC_TUNABLES is ignored on purpose (BENCH-TUNABLES), now stated in usage. Tool-only, no plants. Job: cmpargs-gate (rc 0).

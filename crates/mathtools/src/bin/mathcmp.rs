@@ -35,8 +35,7 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let func = args.first().ok_or("usage: mathcmp FUNC FMT [options]")?.clone();
-    let fmt_letter = args.get(1).and_then(|s| s.chars().next()).ok_or("missing format")?;
-    let fmt = cmp::format(fmt_letter).ok_or("format must be f, d, l or q")?;
+    let (fmt_letter, fmt) = cmp::parse_format(args.get(1).ok_or("missing format")?)?;
     let arity = cmp::arity(&func);
     if arity == 0 {
         return Err(format!("unknown function {func}"));

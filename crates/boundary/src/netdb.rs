@@ -29,6 +29,7 @@ use liella_abi::ctypes::c_int;
 use liella_abi::layout::{struct_addrinfo, struct_aliasent, struct_hostent, struct_netent, struct_protoent, struct_rpcent, struct_servent};
 use liella_abi::pack::Packer;
 use liella_kernel::errno::KResult;
+use liella_kernel::sys::Sys;
 use liella_legacy::cursors::{self, Step};
 use liella_legacy::gai::{self, GaiError, Hints};
 use liella_legacy::netdb_compat::{self as netdb, HOST_NOT_FOUND, NETDB_INTERNAL};
@@ -40,7 +41,6 @@ use liella_rt::tls::H_ERRNO_OFFSET;
 use crate::caller_alloc;
 use crate::conv;
 use crate::errno;
-use crate::report;
 use crate::sys::CSys;
 use crate::tb;
 use crate::users::{self, ALIAS, HOST, NET, PROTO, RPC, SERV};
@@ -55,7 +55,9 @@ fn ctx() -> Ctx<'static, CSys> {
 /// A host lookup's context: the process's switch, the calling thread's resolver for the `dns`
 /// source when the `hosts` line names it (D-16.3), and the thread's locale for IDNA texts.
 fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
+    hconf_env();
     let mut c = ctx().with_multi();
+    nss::HOST_CONF.diagnose(&CSys, c.paths.host_conf, |n| crate::process::secure_getenv(n).map(crate::strz::env_value));
     let resolver = if c.spec(liella::names::nss::Database::Hosts).has(liella::names::nss::Service::Dns) { crate::resolv::host_resolver_pristine() } else { None };
     // A thread whose program changed `_res` bypasses the name-service cache (D-16.10).
     if resolver.as_ref().is_some_and(|(_, clean)| !clean) {
@@ -63,8 +65,18 @@ fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
     }
     c.dns = resolver.as_ref().map(|(r, _)| r);
     c.locale = Some(crate::locale::current());
-    crate::data::set_hconf(c.multi);
+    crate::data::set_hconf(c.multi, c.hconf.is_some_and(|s| s.reorder));
     f(&c)
+}
+
+/// The `RESOLV_*` variables `host.conf`'s settings take (D-16.13), read at the first host
+/// lookup only, and like `HOSTALIASES` not in secure-execution mode; `RESOLV_HOST_CONF` names
+/// the file read in place of `/etc/host.conf` (observed: a missing one gives the defaults).
+fn hconf_env() {
+    nss::HOST_CONF.env_once(&CSys, || {
+        let get = |n: &[u8]| crate::process::secure_getenv(n).map(crate::strz::env_value);
+        (liella::names::hostconf::Env::read(get), get(b"RESOLV_HOST_CONF"))
+    });
 }
 
 /// The context of a `getaddrinfo` or `getnameinfo` call that consults no database (numeric
@@ -72,7 +84,9 @@ fn with_hosts<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
 /// observed). `_res_hconf` is still filled at the first such call when no host lookup has.
 fn without_switch<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
     if !crate::data::hconf_filled() {
-        crate::data::set_hconf(ctx().with_multi().multi);
+        hconf_env();
+        let c = ctx().with_multi();
+        crate::data::set_hconf(c.multi, c.hconf.is_some_and(|s| s.reorder));
     }
     f(&Ctx::bare(&CSys, &nss::SYSTEM))
 }
@@ -116,16 +130,28 @@ pub fn hstrerror(code: i32) -> usize {
     msg::h_error(code).as_ptr().expose_provenance()
 }
 
-/// `herror(s)`: `s: text` (just the text when `s` is NULL or empty) and a newline on standard
-/// error, for the current `h_errno` (observed).
+/// `herror(s)`: `s: text` (just the text when `s` is NULL or empty) and a newline, for the
+/// current `h_errno`, written straight to descriptor 2 behind the `stderr` stream (not ordered
+/// with its pending text, no orientation, no error flag); `errno` is the caller's afterwards,
+/// also when the write fails.
 pub fn herror(s: KResult<Option<&[u8]>>) {
     let saved = errno::get();
     let t = msg::h_error(h_errno());
     let text = t.strip_suffix(b"\0").unwrap_or(t);
-    match s.ok().flatten().filter(|s| !s.is_empty()) {
-        Some(s) => report::emit(&[s, b": ", text, b"\n"], false, saved),
-        None => report::emit(&[text, b"\n"], false, saved),
+    let s = s.ok().flatten().filter(|s| !s.is_empty());
+    let parts: [&[u8]; 4] = match s {
+        Some(s) => [s, b": ", text, b"\n"],
+        None => [b"", b"", text, b"\n"],
+    };
+    let mut whole = liella::mem::TryVec::new();
+    if parts.iter().try_for_each(|p| whole.extend_from_slice(p)).is_ok() {
+        let _ = Sys::write(&CSys, liella_kernel::Fd::new(2), whole.as_slice());
+    } else {
+        for p in parts {
+            let _ = Sys::write(&CSys, liella_kernel::Fd::new(2), p);
+        }
     }
+    errno::set_raw(saved);
 }
 
 // ------------------------------------------------------------------------------ packing
@@ -519,6 +545,15 @@ pub fn compat_gethtent() -> usize {
 
 // ------------------------------------------------------------------------------ networks (§16.3)
 
+/// A `networks` lookup's context: the calling thread's resolver when the `networks` line names
+/// `dns` (its answers bypass the name-service cache).
+fn with_networks<R>(f: impl FnOnce(&Ctx<'_, CSys>) -> R) -> R {
+    let mut c = ctx();
+    let resolver = if c.spec(liella::names::nss::Database::Networks).has(liella::names::nss::Service::Dns) { crate::resolv::host_resolver_pristine() } else { None };
+    c.dns = resolver.as_ref().map(|(r, _)| r);
+    f(&c)
+}
+
 /// The non-`_r` network result (`h_errno` for failures).
 fn own_net(a: Answer<KResult<usize>>) -> usize {
     match a.and_then(|r| r.map_err(LookupError::Os)) {
@@ -532,22 +567,22 @@ fn own_net(a: Answer<KResult<usize>>) -> usize {
 
 /// `getnetbyname(name)`.
 pub fn getnetbyname(name: KResult<&[u8]>) -> usize {
-    own_net(name.map_err(LookupError::Os).and_then(|n| netdb::net_by_name(&ctx(), n, |e| users::own(NET, |k| pack_net(e, k)))))
+    own_net(name.map_err(LookupError::Os).and_then(|n| with_networks(|c| netdb::net_by_name(c, n, |e| users::own(NET, |k| pack_net(e, k))))))
 }
 
 /// `getnetbyname_r(name, ret, buf, buflen, result, h_errnop)`.
 pub fn getnetbyname_r(name: KResult<&[u8]>, out: Option<&mut struct_netent>, buf: KResult<&mut [u8]>, result: Option<&mut usize>, herr: Option<&mut i32>) -> i32 {
-    r_form(out, buf, result, herr, false, |buf, base| netdb::net_by_name(&ctx(), name?, |e| pack_net(e, &mut Packer::new(buf, base))))
+    r_form(out, buf, result, herr, false, |buf, base| with_networks(|c| netdb::net_by_name(c, name?, |e| pack_net(e, &mut Packer::new(buf, base)))))
 }
 
 /// `getnetbyaddr(net, type)`.
 pub fn getnetbyaddr(net: u32, kind: i32) -> usize {
-    own_net(netdb::net_by_addr(&ctx(), net, kind, |e| users::own(NET, |k| pack_net(e, k))))
+    own_net(with_networks(|c| netdb::net_by_addr(c, net, kind, |e| users::own(NET, |k| pack_net(e, k)))))
 }
 
 /// `getnetbyaddr_r(net, type, ret, buf, buflen, result, h_errnop)`.
 pub fn getnetbyaddr_r(net: u32, kind: i32, out: Option<&mut struct_netent>, buf: KResult<&mut [u8]>, result: Option<&mut usize>, herr: Option<&mut i32>) -> i32 {
-    r_form(out, buf, result, herr, false, |buf, base| netdb::net_by_addr(&ctx(), net, kind, |e| pack_net(e, &mut Packer::new(buf, base))))
+    r_form(out, buf, result, herr, false, |buf, base| with_networks(|c| netdb::net_by_addr(c, net, kind, |e| pack_net(e, &mut Packer::new(buf, base)))))
 }
 
 /// `setnetent(stayopen)`.

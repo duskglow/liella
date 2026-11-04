@@ -5030,7 +5030,50 @@ liella_machine_casecmp_ord_avx2:
 	jbe .Lcord_head_load
 	jmp .Lcord_generic
 .Lcord_head_next:
-	/* No stop in the first 32 bytes: the loop from offset 32, as after its own 32-byte step. */
+	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
+	 * no bound test there). A bound of 64 or less (PERF-STRNCASECMP-64-AVX2) needs one more
+	 * 32-byte step and no loop (a bound of 32 or less is met in it: any stop is at 32 or above,
+	 * which answers 0): taken here with the
+	 * head's memory-operand constants when both offsets are at most 4032 (so the block at +32
+	 * ends inside both pages; else the exact tests of the loop), and a stop, if any, goes to the
+	 * common exit with rax = 32 (an index at or above n answers 0 there). */
+	cmpq $64, %rdx
+	ja .Lcord_long
+	movl %edi, %r8d
+	orl %esi, %r8d
+	andl $4095, %r8d
+	cmpl $4032, %r8d
+	ja .Lcord_loop_in
+	vmovdqu 32(%rdi), %ymm1
+	vmovdqu 32(%rsi), %ymm2
+	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
+	vpaddb .Lcasecmp_k3f(%rip), %ymm2, %ymm4
+	vpcmpgtb .Lcasecmp_km103(%rip), %ymm3, %ymm3
+	vpcmpgtb .Lcasecmp_km103(%rip), %ymm4, %ymm4
+	vpandn .Lcasecmp_k20(%rip), %ymm3, %ymm3
+	vpandn .Lcasecmp_k20(%rip), %ymm4, %ymm4
+	vpor %ymm3, %ymm1, %ymm1
+	vpor %ymm4, %ymm2, %ymm2
+	vpcmpeqb %ymm1, %ymm2, %ymm3
+	vpminub %ymm1, %ymm3, %ymm4
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm4, %ymm4
+	vpmovmskb %ymm4, %r8d
+	movl $32, %eax
+	testl %r8d, %r8d
+	jnz .Lcord_found
+	vzeroupper
+	xorl %eax, %eax
+	ret
+.Lcord_long:
+	/* The loop from offset 32 with a bound above 64: its next 64-byte step is due. */
+	movl $32, %eax
+	vmovdqa .Lcasecmp_k3f(%rip), %ymm5
+	vmovdqa .Lcasecmp_km102(%rip), %ymm6
+	vmovdqa .Lcasecmp_k20(%rip), %ymm7
+	vpxor %xmm0, %xmm0, %xmm0
+	jmp .Lcord_top64
+.Lcord_loop_in:
+	/* The loop from offset 32, as after its own 32-byte step. */
 	xorl %eax, %eax
 	vmovdqa .Lcasecmp_k3f(%rip), %ymm5
 	vmovdqa .Lcasecmp_km102(%rip), %ymm6
