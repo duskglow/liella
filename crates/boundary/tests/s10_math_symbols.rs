@@ -183,6 +183,9 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     use liella_math::Rounding;
     use liella_math::real::Real;
     let args = [(0.75, 2.5), (1.5, 0.3), (3.7, -1.7), (10.5, 7.25), (123.456, 0.1), (1e-310, 0.3), (5e-320, -0.3)]; // every result normal (FTZ)
+    // The refused specials answered in place in the default word (ruling #2378) and the signalling NaN that is not.
+    let specials = [(f64::NAN, 0.3), (f64::from_bits(0x7ff4_0000_0000_0000), 0.3), (f64::INFINITY, 0.3), (f64::NEG_INFINITY, 0.3)];
+    let args: Vec<(f64, f64)> = args.into_iter().chain(specials).collect();
     let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     let (mut checked, mut bad) = (0usize, Vec::new());
     for (name, f, _) in double_fast_entries() {
