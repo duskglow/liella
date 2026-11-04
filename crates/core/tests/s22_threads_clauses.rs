@@ -37,7 +37,9 @@ fn s22_n_1() {
 /// §22 Notes: Pthread functions return **error numbers** and do not set `errno` (C0.1). The exceptions are `sem_*`, which use `errno`.
 #[test]
 fn s22_n_2() {
-    conformance(&["s22_more", "s22_sync"]);
+    // s22_errno: a table of failing pthread calls returns the error number with an errno sentinel
+    // left in place; sem_trywait reports EAGAIN through errno.
+    conformance(&["s22_errno", "s22_more", "s22_sync"]);
 }
 /// §22 Notes: **Kernel (section-wide).** Thread synchronization rests on one primitive, the **futex** (`futex`/`futex_time64`), with operations `FUTEX_WAIT`, `FUTEX_WAKE`, `FUTEX_WAIT_BITSET` (absolute timeouts on 
 #[test]
