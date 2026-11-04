@@ -217,7 +217,7 @@ pub fn init_with(t: &Tunables) -> u8 {
     ffi::liella_machine_set_scan_level(u32::from(avx2));
     // The hot kernels' builds (D-4.25): the same decision as the scanners'.
     crate::dispatch::select(avx2);
-    // The math kernels' FMA builds (D-10.22): `glibc.cpu.hwcaps=-FMA` keeps the baseline.
+    // The math kernels' FMA builds (D-10.23): `glibc.cpu.hwcaps=-FMA` keeps the baseline.
     crate::dispatch::select_fma(f.fma() && t.fma.unwrap_or(true));
     if let Some(n) = t.rep_movsb_threshold {
         COPY_MIN.store(n, Relaxed);
