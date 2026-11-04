@@ -47,7 +47,7 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64) = th + tl` is stored as a
 /// double-double (error `< 2^-104`, `1 <= th < 2`, `|tl| <= 2^-53·th`).
 ///
-/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 13.5 #1; Fast2Sum and Dekker's
+/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1; Fast2Sum and Dekker's
 /// product as in Muller et al., Handbook of Floating-Point Arithmetic, 2018, ch. 4): `p = ph + pl`
 /// with `|ph| <= 0.00602`, `pl = a.lo + small` (`|a.lo| <= 2^-53·|ph|`, the small sum carrying `T`).
 /// `q = th·ph` exactly (`two_prod`); `th + q.hi` by Fast2Sum, exact since `|q.hi| <= 0.0121 < th`;
@@ -91,7 +91,7 @@ const C0: f64 = f64::from_bits(t::LN2_64_CW[0]);
 const NC1: f64 = f64::from_bits(t::LN2_64_CW[1] ^ 0x8000_0000_0000_0000);
 const NC2: f64 = f64::from_bits(t::LN2_64_CW[2] ^ 0x8000_0000_0000_0000);
 
-/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 13.5 #2):
+/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2):
 /// `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, for
 /// `k = kf = nearest(xh·64/ln2)` and `|xh| <= 746` (`|k| <= 68,880 < 2^17`). The caller adds its
 /// low part to `l` and joins the two by Fast2Sum.
@@ -287,7 +287,7 @@ fn integral(x: f64) -> bool {
 //   more would separate them), so at least one of the two additions is inexact in hardware. When
 //   [`near`] answers, `y.hi + w` rounded to `y.hi` with `w != 0`: that addition was inexact.
 
-/// The relative bounds `rho` behind the constant rounding test [`near`] (register 13.5 #5): every
+/// The relative bounds `rho` behind the constant rounding test [`near`] (register 16.5 #5): every
 /// `eps/|y.hi|` where the test is used is at most `rho`. Each is stated with slack and checked on
 /// operands by the `bounds` tests.
 /// [`exp`] and [`exp2`]: `eps/|y.hi| = 2^-49·|tail| + 2^-70` ([`exp_eps`]). For `|rh| <= 0.006`
@@ -538,7 +538,7 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// `ln(1 + rh) = rh − rh²/2 + rh³/3 + T + δ` with `T = rh⁴·(−1/4 + rh/5 − … − rh⁷/11)` and
 /// `|δ| <= rh¹²/12·1.01 <= 2^-56·|T|` (`|T| >= 0.24·rh⁴`). Then:
 /// * `rh − rh²/2`: `two_prod` and `two_sum`, exact as a double-double.
-/// * `rh³/3` (register 13.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
+/// * `rh³/3` (register 16.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
 ///   s.lo·rh`; `g = c.hi·THIRD.hi` exactly (`two_prod`, Dekker's split of the constant folded);
 ///   `cube = g.hi + cube_lo`, `cube_lo = g.lo + ((c.lo + s.lo·rh)·THIRD.hi + c.hi·THIRD.lo)`.
 ///   Dropped `(c.lo + s.lo·rh)·THIRD.lo` and `1/3 − THIRD` (`< 2^-110`): `< 2^-105·|rh³|`; six
