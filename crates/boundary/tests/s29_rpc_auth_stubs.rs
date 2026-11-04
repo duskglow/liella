@@ -11,6 +11,8 @@ use liella_boundary::posix::s29_rpc_auth as a;
 
 const CANARY: u8 = 0xA5;
 
+type Stub = Box<dyn Fn(*mut c_char) -> i64>;
+
 fn open_fds() -> usize {
     std::fs::read_dir("/proc/self/fd").map(Iterator::count).unwrap_or(0)
 }
@@ -30,7 +32,7 @@ fn every_auth_stub_fails_cleanly() {
     let v: *mut c_void = null_mut();
     let u: *mut c_uint = null_mut();
     let p = |q: *mut c_void| i64::from(!q.is_null());
-    let table: Vec<(&str, i64, Box<dyn Fn(*mut c_char) -> i64>)> = vec![
+    let table: Vec<(&str, i64, Stub)> = vec![
         ("ecb_crypt", 2, Box::new(|b| i64::from(a::liella_compat_ecb_crypt(b, b.wrapping_add(8), 8, 0)))),
         ("cbc_crypt", 2, Box::new(|b| i64::from(a::liella_compat_cbc_crypt(b, b.wrapping_add(8), 8, 0, b.wrapping_add(16))))),
         ("des_setparity", 0, Box::new(|b| { a::liella_compat_des_setparity(b); 0 })),
