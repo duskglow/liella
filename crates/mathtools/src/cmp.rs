@@ -259,6 +259,30 @@ impl Tally {
 }
 
 /// Is `b` a NaN encoding of `fmt`?
+/// The reference value a result's ulp error is measured against: `func` at `2p+40` bits, raised to
+/// the round-toward-zero result when it falls below that in magnitude. The value is never smaller in
+/// magnitude than its round-toward-zero result; a reference that is (cosh of a tiny x: 1 + x^2/2 at
+/// 2p+40 bits can come out just below 1) would count errors in the binade below, doubling them, and the
+/// decided result is the better reference there. `cr` is the correctly rounded result in `mode`.
+pub fn ulp_reference(func: &str, fmt: Fmt, mode: Round, args: &[Big], cr: u128) -> Big {
+    let mut exact = oracle(func, args, 2 * fmt.prec + 40).map(|a| a.value).unwrap_or_else(Big::nan);
+    let rz = if mode == Round::Zero {
+        Ok(cr)
+    } else {
+        mp::correctly_rounded(fmt, Round::Zero, 4096, |p| {
+            oracle(func, args, p).unwrap_or(Approx { value: Big::nan(), exact: true })
+        })
+        .map(|r| r.0)
+    };
+    if let Ok(rz) = rz {
+        let z = Big::from_bits(fmt, rz);
+        if z.is_finite() && exact.is_finite() && exact.cmp_abs(&z).is_lt() {
+            exact = z;
+        }
+    }
+    exact
+}
+
 pub fn is_nan(fmt: Fmt, b: u128) -> bool {
     Big::from_bits(fmt, b).is_nan()
 }
@@ -356,24 +380,7 @@ pub fn shard(run: &Run<'_>, records: &[Vec<u128>]) -> Result<Tally, String> {
             }
         }
         if !gok || !lok {
-            let mut exact = oracle(run.func, &args, 2 * fmt.prec + 40).map(|a| a.value).unwrap_or_else(Big::nan);
-            // The value is never smaller in magnitude than its round-toward-zero result. A reference that is
-            // (cosh of a tiny x: 1 + x^2/2 at 2p+40 bits can come out just below 1) would count errors in the
-            // binade below, doubling them; the decided result is the better reference there.
-            let rz = if mode == Round::Zero {
-                Ok(cr)
-            } else {
-                mp::correctly_rounded(fmt, Round::Zero, 4096, |p| {
-                    oracle(run.func, &args, p).unwrap_or(Approx { value: Big::nan(), exact: true })
-                })
-                .map(|r| r.0)
-            };
-            if let Ok(rz) = rz {
-                let z = Big::from_bits(fmt, rz);
-                if z.is_finite() && exact.is_finite() && exact.cmp_abs(&z).is_lt() {
-                    exact = z;
-                }
-            }
+            let exact = ulp_reference(run.func, fmt, mode, &args, cr);
             t.glibc_max_ulp = t.glibc_max_ulp.max(mp::ulp_error(fmt, g, &exact));
             t.liella_max_ulp = t.liella_max_ulp.max(mp::ulp_error(fmt, l, &exact));
         }
