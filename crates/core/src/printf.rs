@@ -1502,7 +1502,9 @@ impl SimpleFormat {
     /// `"%s %*s "`: the mode column and the link count), nothing else to convert. The caller may write
     /// the pieces as [`render_simple`] would (SPRINTF-CHK-NLINK).
     pub fn pair_s(&self) -> Option<PairS> {
-        if self.n != 2 || self.kinds & !F_STAR != 0 {
+        // Exactly two kept conversions leaves no room for [`F_MORE`], and two `s` leave none for
+        // [`F_FLOAT`]: only a `*` width can be among the kinds.
+        if self.n != 2 {
             return None;
         }
         let &(c0, len0, lit0) = self.convs.first()?;
