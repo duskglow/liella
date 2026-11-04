@@ -10,7 +10,7 @@
  * signal frame: the frame it returns to is the interrupted one, whose address is the next
  * instruction to run rather than a return address. The FDE starts at the nop, where an
  * unwinder looks this trampoline up. */
-	.text
+	.section .text.liella_machine_restorer,"ax",@progbits
 	.globl liella_machine_restorer
 	.type liella_machine_restorer, @function
 	.p2align 6

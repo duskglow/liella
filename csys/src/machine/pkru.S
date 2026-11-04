@@ -1,5 +1,5 @@
 /* Class machine: PKRU read and write (owner decision OD-C1). Callers check CPUID.7:ECX.OSPKE. */
-	.text
+	.section .text.liella_machine_rdpkru,"ax",@progbits
 	.globl liella_machine_rdpkru
 	.type liella_machine_rdpkru, @function
 	.p2align 6
@@ -8,7 +8,7 @@ liella_machine_rdpkru:
 	rdpkru
 	ret
 	.size liella_machine_rdpkru, .-liella_machine_rdpkru
-	.text
+	.section .text.liella_machine_wrpkru,"ax",@progbits
 	.globl liella_machine_wrpkru
 	.type liella_machine_wrpkru, @function
 	.p2align 6
