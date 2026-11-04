@@ -91,6 +91,8 @@ fn words(line: &str) -> impl Iterator<Item = &str> {
     line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| !w.is_empty())
 }
 
+/// The files where the `allocator` category (`unsafe impl GlobalAlloc` and its host calls) may appear.
+const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs"];
 const CATEGORIES: [&str; 6] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel"];
 
 /// Whether the (stripped) `unsafe {` block at `lines[n]` is an inline-assembly block: the
@@ -311,7 +313,9 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                 } else if l.contains("unsafe(no_mangle)") || l.contains("unsafe(export_name") {
                     ("export", &["src/export.rs", "src/data.rs"])
                 } else if l.contains("unsafe impl") {
-                    ("allocator", &["src/heap.rs"])
+                    // ALLOC-FAIL-INJECT-4 (#2101): the test-only `FailAlloc` (`selftest` feature, never
+                    // in a product) lives outside every product-compiled file.
+                    ("allocator", ALLOCATOR_FILES)
                 } else if l.contains("unsafe {") && is_asm_block(&code_lines, n) {
                     // Owner ruling 2026-10-06 (plan S2): the one `%fs`-relative field load.
                     ("tb-field", &["src/tb.rs"])
@@ -319,7 +323,7 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     // Owner ruling 2026-10-08 (plan S2, D-4.22): the small copy and fill kernels.
                     ("hot-kernel", &["src/hot.rs"])
                 } else if l.contains("unsafe fn") || l.contains("unsafe {") {
-                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/posix/", "src/native/"])
+                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
                 } else {
                     errors.push(format!("{}:{}: `unsafe` form not in any permitted category", f.display(), n + 1));
                     continue;
@@ -330,7 +334,7 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                 }
                 match tag_above(&src_lines, n, 6) {
                     Some(t) if CATEGORIES.contains(&t.as_str()) => {
-                        let ok = t == cat || (cat == "slice" && t == "allocator" && rel == "src/heap.rs");
+                        let ok = t == cat || (cat == "slice" && t == "allocator" && ALLOCATOR_FILES.contains(&rel.as_str()));
                         if !ok {
                             errors.push(format!("{}:{}: site is `{cat}` but documented as UNSAFE({t})", f.display(), n + 1));
                         }

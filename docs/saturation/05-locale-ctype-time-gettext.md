@@ -1,0 +1,14 @@
+## 5. Locale, ctype, time, gettext
+
+| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |
+|---|---|---|---|---|---|---|---|
+| `isalpha` (C locale) | t 1.000 (Haswell-EP host after PJ-22 1.000; 2026-10-07 table 1.000); i 1.375 | at parity in time | hardware | M | PJ-22 (`ctype-cache`) | LOCALE-CTYPE-L: `nl_langinfo` +6% and `towupper_utf8` +3.6% instr (saved-register push in every caller), reverted | none |
+| `toupper` (C locale) | t 1.000, i 1.050 | at parity | hardware | M | PJ-21, PJ-22 | see above | none |
+| `uselocale(0)` query | i 18.0 vs glibc 22.0 (0.82x; 2026-10-20 spot check in `docs/perf-ledger.md`) | ahead of glibc | n/a | M | NO-ROW | none | none |
+| `iswalpha`, `towupper`, `wcwidth` (UTF-8) | t 0.89, 0.89, 0.77; i 1.5, 1.6, 1.3 | faster in time, more instructions: IPC advantage | hardware | M | LV-2 | WCTYPE-LOCALE: no gain, outlined walk, CJK rows regressed until fixed | **measured 2026-10-23** (section 10) (10-07 table) |
+| `mbrtowc` UTF-8 | t 1.655 (Haswell-EP host median 1.49 after AUD-FIX); i 1.84 | not at a limit | n/a | C | AUD-FIX, MB-K2 | LV-4: names -24 but `strftime_iso` +180 (inlining shifts); cold fallback adds push/pop (+2 in `nl_langinfo`) | **measured 2026-10-23** (section 10) |
+| `strftime` (iso, `%c`, log) | t 1.78 to 2.26; i 1.4 to 1.7 | not at a limit | n/a | R | STRFTIME-FAST | STRFTIME-FAST: names -10 but `iso` +70 to +350, reverted | **measured 2026-10-23** (section 10) |
+| `setlocale` alias lookup | "one setlocale per exec" | a parsed alias cache gains nothing and adds invalidation; a name-shape skip is unsound (real keys contain `.` and `_`); skipping alias breaks D-7.7 | spec / ABI | R | ALIAS-FAST | bitmask sweep 12.6k instr and 4.6k cycles vs 10.8k and 2.6k chosen | none |
+| locale data page faults | n/a | data pre-read raised `du` and `printf` faults; `MADV_POPULATE_READ` costs tens of microseconds per exec | hardware (kernel) | R | RC2-FAULT | both rejected | none |
+| `gettext` hit with a memo | +0.4 to 0.6% instr accepted | the memo needs the env writer calls seen (`with_env`); accepted as the cost | design | M | GETTEXT-MEMO-HIT-COST (`handoff/gettext-memo-hit-cost.md`) | none | **measured 2026-10-23** (section 10): `gettext_found` t 2.80 (10-07) |
+| `localtime_r` New York | t 0.13 | faster than glibc | n/a | M | | none | **measured 2026-10-23** (section 10) (10-07) |
