@@ -1,0 +1,5 @@
+{"id":"QSORT-SEARCH-NOMEM-2","status":"COMPLETE","branch":"task/qsort-search-nomem-2",
+"summary":"crates/boundary/tests/qsort_alloc_fail.rs fails qsort/qsort_r's TryVec position buffer with the alloc-fail hook (global-allocator domain, hookable); checks sorted + permutation for n below (0..85, no heap buffer, 0 injections) and above (86..4097, injection>=1) the threshold. Plants fallback_skipped and fallback_partial CAUGHT. Merged origin/task/qsort-search-nomem.",
+"jobs":["qsort-search-nomem-2-gate","qsort-search-nomem-2-plants"],
+"not_testable":"none: qsort buffer is a TryVec on the global allocator",
+"improvement":"none"}

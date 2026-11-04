@@ -164,7 +164,9 @@ evidence that it cannot. Host limits in the benchmark files are regression guard
 targets. Benchmarks and the method are in [docs/benchmarks.md](docs/benchmarks.md) and
 `benchmarks/`; run them with `cargo xtask bench`. Timing needs a quiet machine; instruction
 counts are steadier. Do not claim a speedup without the before and after numbers and the
-machine.
+machine. A performance row (what was tried, measured, negative results) goes in the section file it belongs to under
+`docs/saturation/`, never in the index `docs/saturation-register.md`; add a new section as a new file and let
+`cargo xtask register --check` (part of `cargo xtask static`) validate the numbering.
 
 ## Conduct
 

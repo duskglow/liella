@@ -706,8 +706,15 @@ fn s3_3_c_3() {
 fn s3_3_c_4() {
     errno::set_raw(0);
     assert!(m::malloc_get_state().is_null());
-    assert_ne!(errno::get(), 0);
-    assert_eq!(m::malloc_set_state(null_mut()), -1, "they fail");
+    assert_eq!(errno::get(), 38, "malloc_get_state fails with ENOSYS (owner ruling R9)");
+    // Table: the argument given to malloc_set_state; it fails with -1/ENOSYS and reads nothing.
+    let mut block = [0xffu8; 64];
+    for (i, arg) in [null_mut(), block.as_mut_ptr().cast()].into_iter().enumerate() {
+        errno::set_raw(0);
+        assert_eq!(m::malloc_set_state(arg), -1, "case {i}: they fail");
+        assert_eq!(errno::get(), 38, "case {i}: ENOSYS");
+    }
+    assert!(block.iter().all(|&b| b == 0xff), "the buffer is untouched");
 }
 
 // ------------------------------------------------------------------------------ §3.4
