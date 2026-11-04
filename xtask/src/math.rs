@@ -205,7 +205,13 @@ struct Sym {
     body: String,
 }
 
-const SUFFIXES: [&str; 8] = ["f128", "f32x", "f64x", "f32", "f64", "f", "l", ""];
+/// The `mathret` forms of the software paths that `mret::Soft` has methods for (D-10.22).
+const SOFT_FORMS: [&str; 9] = ["ret", "ret_out", "remquo", "intmax", "uintmax", "kept", "pick", "step", "raw"];
+/// The operand-returning forms that take the caller's raw `float`/`double` operands: they apply
+/// its DAZ themselves (to compare), and return an operand unflushed (probed, D-10.22).
+const RAW_FORMS: [&str; 3] = ["pick", "step", "raw"];
+
+const SUFFIXES: [&str; 8]= ["f128", "f32x", "f64x", "f32", "f64", "f", "l", ""];
 
 /// A parsed symbol name: the family row, the narrowing source and destination, the format.
 type Parsed = (String, Option<(Fmt, Fmt)>, Fmt);
@@ -346,18 +352,29 @@ fn generate(root: &Path) -> Result<(String, [String; 3], String), String> {
         // A `\n` in the table continues the body on the next line.
         let row = per_fmt.get(&(family.clone(), letter)).unwrap_or(&families[&family]);
         let mut body = row.replace("\\n", "\n");
+        // A software form with a `float` or `double` operand or result runs under `mret::Soft`
+        // (D-10.22): the caller's DAZ on those operands, its FTZ on the result, the internal
+        // arithmetic in the default word.
+        let is_sse = |t: &CType| matches!(t, CType::Float(Fmt::F32 | Fmt::F64));
+        let soft = SOFT_FORMS.iter().any(|f| body.starts_with(&format!("mret::{f}("))) && (is_sse(&ret) || params.iter().any(is_sse));
+        let raw = RAW_FORMS.iter().any(|f| body.starts_with(&format!("mret::{f}(")));
         for (i, p) in params.iter().enumerate() {
             let arg = ["x", "y", "z"].get(i).copied().ok_or_else(|| format!("{name}: too many parameters"))?;
             let conv = match p {
                 CType::Float(Fmt::F80) => format!("mret::f80({arg})"),
                 CType::Float(Fmt::F128) => format!("mret::f128({arg})"),
+                p if soft && is_sse(p) && !raw => format!("c.daz({arg})"),
                 _ => arg.to_string(),
             };
             body = body.replace(&format!("{{{arg}}}"), &conv);
         }
         let x87 = fmt == Fmt::F80 || narrow.is_some_and(|(s, d)| s == Fmt::F80 || d == Fmt::F80);
+        let unit = if x87 { "mret::Unit::X87" } else { "mret::Unit::Sse" };
+        if soft {
+            body = format!("let c = mret::Soft::enter({unit});\n    c.{}", &body["mret::".len()..]).replace("{M}", "c.mode()");
+        }
         body = body.replace("{M}", if x87 { "mret::mode87()" } else { "mret::mode()" }).replace("{T}", fmt.internal());
-        body = body.replace("{E}", if x87 { "mret::Unit::X87" } else { "mret::Unit::Sse" });
+        body = body.replace("{E}", unit);
         if let Some((s, d)) = narrow {
             body = body.replace("{S}", s.internal()).replace("{D}", d.internal());
         }
