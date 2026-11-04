@@ -27,3 +27,17 @@ all-targets all-features + cargo xtask static, rc 0). Gate arch-utmp-layout-2-ga
 changes): 5863 passed, 1 failed: liella::hot_text_products init_first_string_calls_after_printf_take_no_text_fault ("1 page faults",
 hot_text_products.rs:187); arch-utmp-layout-2-gate2 reran only that test: same failure (deterministic, rc 101). Unrelated to utmp
 (no utmp code in that path); not investigated further (outside my change). Check whether it also fails on origin/next.
+
+## ARCH-UTMP-LAYOUT-3 (continuation)
+Cause of the red gate (hot_text_products init_first_string_calls_after_printf_take_no_text_fault, 1 fault): same role/host
+(keke n2), same test: origin/next 0 faults (job arch-utmp-layout-3-hot-next), merge-base 00a8aa87 0 faults
+(arch-utmp-layout-3-hot-base), this branch 1 fault (arch-utmp-layout-3-hot-branch, -branch2). So the branch caused it, not next.
+Mechanism (nm of the linked probe): printf/memcmp/memchr sit in one 64 KiB window (0x47xxxx) but strncmp, part of scan.o's
+shared `.text` chunk (not a hot section), landed at 0x480200 in the next window; the chunk's address follows the size of
+the code linked before it, which the utmp changes moved. Fix (csys/src/machine/scan.S, commit 5927d6c9): strncmp gets its own
+section `.text.strncmp` (the list key at hot-text.list:116), so the hot rename places it by list order. No list edit, no bound raised.
+Result: hot_text_products 6 passed (job arch-utmp-layout-3-gate, first step), clippy + static ok in the same job.
+Not done / NOT VERIFIED: no plants job for the scan.S change (the failing state before the edit, jobs -hot-branch/-branch2, is
+the evidence that the test catches its absence); memcmp/memchr stay in shared chunks and could cross a window the same way later
+(next step: give them own sections the same way, keys memcmp / memchr). The gate escalated to FULL (branch 129 commits behind
+next; rebase/merge is the coordinator's); its result is whatever jobs.tsv shows for arch-utmp-layout-3-gate.
