@@ -26,3 +26,4 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [17. First counts of the three unmeasured rows (BENCH-ROWS-UNMEASURED, 2026-10-24)](saturation/17-first-counts-of-the-three-unmeasured-rows.md): section 17
 
 - [18. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)](saturation/18-sse2-level-re-measure-after-bench-tunables.md): section 18
+- [19. qsort at five element sizes and fts under a 2 KiB path (BENCH-UNMEASURED-WIDEN, 2026-11-04, Zen 1 host)](saturation/19-qsort-element-sizes-and-fts-at-2-kib.md): section 19
