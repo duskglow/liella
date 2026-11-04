@@ -1,0 +1,6 @@
+{"task": "PRE14-GATE-REPORT", "model": "sonnet", "tokens": null, "result": "V-6 gate report written from the tree; V-3 fuzz results and V-4 before/after table are missing from the tree and #939/#940/#941/#955 text was not found", "branch": "task/pre14-gate-report", "head": null,
+ "gate": {"affected": "none (planning story, document only)", "peak": null}, "accepted_first_attempt": null,
+ "jobs": [],
+ "rulings": [{"item": "Held phase-14 rulings R14-1/2/3/12/13/15 (+ #939/#940/#941/#955)", "recommendation": "plan's recommendations listed in handoff/pre14-gate-report.md section 7; #939-#955 text not in the tree"}],
+ "informational": ["V-3 results still Pending in docs/fuzzing.md", "V-4 bench rerun not in the tree: docs/benchmarks.md still 5cc49dc", "T34 fix story PRE14-LIBC-FMOD only proposed"], "refused": [],
+ "improvement": "a V-n story should land its numbers in the tree before the report story is dispatched; V-3 and V-4 left results on hosts only", "next_step": "owner reviews the report and the saturation register; coordinator decides on re-running V-3 collection and V-4", "report_file": "handoff/pre14-gate-report.md"}

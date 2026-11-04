@@ -175,7 +175,7 @@ const EXACT_FACTORIAL_MAX: i64 = 92;
 /// `lnΓ(y)` for `y >= 40` by Stirling's series.
 fn stirling(y: Mp) -> Mp {
     let half = Mp::from_i64(1).ldexp(-1);
-    let mut s = y.sub(half).mul(mp::ln(y)).sub(y).add(c(&t::MP_HALF_LN_2PI));
+    let mut s = y.sub(half).mul(mp::ln_atanh(y)).sub(y).add(c(&t::MP_HALF_LN_2PI));
     let inv = y.recip();
     let inv2 = inv.sqr();
     let mut p = inv;
@@ -202,7 +202,7 @@ fn lgamma_pos(xm: Mp) -> Mp {
     for k in 1..n {
         prod = prod.mul(xm.add(Mp::from_i64(k)));
     }
-    stirling(xm.add(Mp::from_i64(n))).sub(mp::ln(prod))
+    stirling(xm.add(Mp::from_i64(n))).sub(mp::ln_atanh(prod))
 }
 
 /// `sin(πx)` for a finite `x` that is not an integer: `x = m + f` with `|f| <= ½` (both exact),
@@ -229,7 +229,7 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     }
     // Γ(x) = π / (sin(πx) Γ(1 − x)).
     let s = sin_pi(x);
-    let lg = mp::ln(mp::pi()).sub(mp::ln(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
+    let lg = mp::ln_atanh(mp::pi()).sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
     (lg, if s.neg { -1 } else { 1 })
 }
 
@@ -339,7 +339,7 @@ fn half_pow_over_fact(n: u64, x: Mp) -> Mp {
         return p;
     }
     let lg = lgamma_pos(Mp::from_i64(n as i64 + 1));
-    let z = mp::ln(h).mul(Mp::from_i64(n as i64)).sub(lg);
+    let z = mp::ln_atanh(h).mul(Mp::from_i64(n as i64)).sub(lg);
     if z.to_f64() < -1.0e9 {
         return far_below();
     }
@@ -461,7 +461,7 @@ fn bessel_series_mp(n: u64, x: Mp, want_y: bool) -> (Bounded<Mp>, Bounded<Mp>) {
         return bessel_series(n, x, want_y, p, tx, bitlen(4 * n) + 1 - bits);
     }
     let p = half_pow_over_fact(n, x);
-    let tx = if want_y { mp::exp(mp::ln(x.recip().ldexp(1)).mul(Mp::from_i64(n as i64))) } else { Mp::ZERO };
+    let tx = if want_y { mp::exp(mp::ln_atanh(x.recip().ldexp(1)).mul(Mp::from_i64(n as i64))) } else { Mp::ZERO };
     // exp of an argument up to about 2^37 and Stirling's lgamma: about 2^-338 relative.
     bessel_series(n, x, want_y, p, tx, 52 - bits)
 }

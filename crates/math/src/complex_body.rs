@@ -1965,7 +1965,7 @@ fn pow_int<F: Float>(a: &Op<F>, b: &Op<F>, p: &Op<F>, mode: Rounding) -> Option<
         let (nr, e5) = mp::add_x(rx, iy.neg());
         let (ni, e6) = mp::add_x(ry, ix);
         if !(e1 && e2 && e3 && e4 && e5 && e6) {
-            return None;
+            return pow_int_far(x, y, n, mode);
         }
         (re, im) = (nr, ni);
     }
@@ -1977,9 +1977,112 @@ fn pow_int<F: Float>(a: &Op<F>, b: &Op<F>, p: &Op<F>, mode: Rounding) -> Option<
     let (ii, e2) = mp::mul_x(im, im);
     let (nn, e3) = mp::add_x(rr, ii);
     if !(e1 && e2 && e3) {
-        return None;
+        return pow_int_far(x, y, n, mode);
     }
     Some(pair(quot(re, nn), quot(im.neg(), nn), mode))
+}
+
+/// `z^n` for an integer `0 < |n| <= 64` whose exact parts need more than `B` bits because one
+/// part of `z` dominates the other (D-10.17; #1720): `(1 + i·2^-2000)²` has the real part
+/// `1 − 2^-4000`, which no width of the ladder holds and the `exp`/`log` path cannot place
+/// beside 1. Decided here from the exact value instead, at every width.
+///
+/// With `|u| >= 2^6·|v|` (`u` the dominant part, `v` the other, `z = u + iv` or `z = i(u + iv)`
+/// with `u = y`, `v = −x`, then `z^n = i^n (u + iv)^n`), each part of `(u + iv)^n` is a series of
+/// exact terms, `T_k = C(n, k)·u^(n−k)·(iv)^k` for `n > 0` (finite) and, for `n = −m < 0` with
+/// `u = ±2^j` (so that `u^-m` and `t = v/u` are exact),
+/// `T_k = (−1)^k·C(m+k−1, k)·u^-m·(it)^k` (convergent, `|t| < 2^-6`). Within one part (`k` even
+/// for the real part, odd for the imaginary) the signs alternate, and the magnitudes decrease:
+/// `|T_(k+2)/T_k|` is at most `n(n−1)/2·t² <= 2016·2^-12` (`n > 0`) or `(m+1)m/2·t² <= 2080·2^-12`
+/// (`n < 0`). So the terms not yet added (from `T_k` on) sum to a value of `T_k`'s sign and at
+/// most `|T_k|` (Leibniz). The exact partial sum `A` (at most `B − 4` bits) stops at the first
+/// term `T_k` with `|T_k| < 2^(ex A − B)`: every rounding boundary of a format of at most 113
+/// bits near `A` lies on the grid `2^(ex A − B + 4)`, of which `A` is a point, so `A + tail` and
+/// `A ± 2^(ex A − B + 2)` (the side of `T_k`'s sign) round alike in every mode. A part whose
+/// series ends (`n > 0`) is exact. Anything else (no dominant part, an inexact term or partial
+/// sum, an `n < 0` lead that is not a power of two) returns `None`: the next width, or at 3072
+/// bits the general path under D-10.17's assumption.
+fn pow_int_far<F: Float>(x: Mp, y: Mp, n: i64, mode: Rounding) -> Option<Res<F>> {
+    let swap = y.exp > x.exp;
+    let (u, v) = if swap { (y, x.neg()) } else { (x, y) };
+    let m = n.unsigned_abs();
+    if u.is_zero() || v.is_zero() || u.exp - v.exp < 7 || (n < 0 && u.sig_bits() != 1) {
+        return None;
+    }
+    // n < 0: u = ±2^(ex u − 1), u^-m = (±1)^m·2^(−m(ex u − 1)), t = v/u.
+    let unit = Mp::from_i64(if u.neg { -1 } else { 1 });
+    let lead = if m % 2 == 1 { unit } else { unit.abs() }.ldexp(-(m as i64) * (u.exp - 1));
+    let step = if n > 0 { v } else { mp::mul_x(v, unit).0.ldexp(1 - u.exp) };
+    // The real and imaginary partial sums, and Some(sign of the omitted rest) once decided.
+    let (mut acc_re, mut acc_im) = (Mp::ZERO, Mp::ZERO);
+    let (mut tail_re, mut tail_im): (Option<bool>, Option<bool>) = (None, None);
+    let (mut c, mut vk, mut k) = (1u128, Mp::from_i64(1), 0u64);
+    loop {
+        let (acc, tail) = if k & 1 == 0 { (&mut acc_re, &mut tail_re) } else { (&mut acc_im, &mut tail_im) };
+        if tail.is_none() {
+            let base = if n > 0 { ipow(u, m - k)? } else { lead };
+            let (p, e1) = mp::mul_x(base, vk);
+            let (term, e2) = mp::mul_x(p, Mp::from_u128(false, c, 0));
+            if !(e1 && e2) {
+                return None;
+            }
+            // i^k (k = 2, 3 mod 4 negative), and (−1)^k for n < 0.
+            let term = if (k & 2 != 0) != (n < 0 && k & 1 != 0) { term.neg() } else { term };
+            let (s, exact) = mp::add_x(*acc, term);
+            if exact {
+                *acc = s;
+            } else if term.exp <= acc.exp - B && acc.sig_bits() <= B - 4 {
+                *tail = Some(term.neg);
+            } else {
+                return None;
+            }
+        }
+        if (n > 0 && k == m) || (tail_re.is_some() && tail_im.is_some()) {
+            break;
+        }
+        if n < 0 && k >= 4 * B as u64 {
+            return None;
+        }
+        k += 1;
+        c = if n > 0 { c * u128::from(m - k + 1) / u128::from(k) } else { c.checked_mul(u128::from(m + k - 1))? / u128::from(k) };
+        let (nv, e) = mp::mul_x(vk, step);
+        if !e {
+            return None;
+        }
+        vk = nv;
+    }
+    let decide = |a: Mp, t: Option<bool>| -> Option<Part> {
+        let Some(neg) = t else { return Some(exact_part(a)) };
+        let nudge = Mp::from_i64(if neg { -1 } else { 1 }).ldexp(a.exp - B + 2);
+        let (v, exact) = mp::add_x(a, nudge);
+        exact.then_some(Part::Dev(v, true))
+    };
+    let (re, im) = (decide(acc_re, tail_re)?, decide(acc_im, tail_im)?);
+    // z^n = i^n (u + iv)^n when the parts were swapped.
+    let (re, im) = if !swap {
+        (re, im)
+    } else {
+        match n.rem_euclid(4) {
+            0 => (re, im),
+            1 => (im.neg(), re),
+            2 => (re.neg(), im.neg()),
+            _ => (im, re.neg()),
+        }
+    };
+    Some(pair(re, im, mode))
+}
+
+/// `u^j` when it is exact in `B` bits.
+fn ipow(u: Mp, j: u64) -> Option<Mp> {
+    let mut r = Mp::from_i64(1);
+    for _ in 0..j {
+        let (p, e) = mp::mul_x(r, u);
+        if !e {
+            return None;
+        }
+        r = p;
+    }
+    Some(r)
 }
 
 /// `(sin φ, cos φ)` of any finite `φ` (beyond 2^40, reduced by whole turns in this precision:

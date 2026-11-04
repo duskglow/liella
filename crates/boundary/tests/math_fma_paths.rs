@@ -1,4 +1,4 @@
-//! The `double` exp/log fast paths' two builds (MATH-F64-FMA-PATH, D-10.23): the FMA build and
+//! The `double` exp/log fast paths' two builds (MATH-F64-FMA-PATH, D-10.25): the FMA build and
 //! the baseline must return the same results bit for bit, so a random sample goes through both
 //! (forced by `selftest::set_math_fma`) and through the accurate path. Clause: s10_0_f_0 (the
 //! functions are correctly rounded in every build).

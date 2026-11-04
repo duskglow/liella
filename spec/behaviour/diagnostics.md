@@ -39,6 +39,5 @@ The probe sets `program_invocation_name` to `/usr/bin/prog` and
   * `hook`: `error_print_progname` set to a function writing `HOOK|`; `error`,
     `error_at_line` and `warnx`.
   * `orient`: the orientation of `stderr` (`fwide(stderr, 0)`) before and after `perror` and
-    `warnx`. Liella keeps `stderr` unoriented after `perror`, as §2.2 says; this line is a
-    recorded difference.
+    `warnx`. `perror` makes an undecided `stderr` byte-oriented, as the reference does.
   * `wide`: `stderr` made wide-oriented, then `perror`, `warnx`, `error`.

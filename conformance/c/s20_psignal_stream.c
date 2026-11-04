@@ -34,6 +34,7 @@ struct row {
 #define INT "P: Interrupt\n"
 #define SI "P: Interrupt (Signal sent by kill() 0 0)\n"
 #define ENO "P: No such file or directory\n"
+#define ENO0 "No such file or directory\n"
 #define WARN "@: P: No such file or directory\n"
 
 static const struct row rows[] = {
@@ -47,15 +48,17 @@ static const struct row rows[] = {
 	{"psiginfo", 'c', SI, NULL, NULL},
 	{"psiginfo", 'd', "", "[ferror=0 fwide=0 errno=9]\n", NULL},
 	{"psiginfo", 'f', SI, "[ferror=0 fwide=0 errno=2]\n", NULL},
+	{"perror0", 'b', ENO0, "[ferror=0 fwide=1 errno=2]\n", NULL},
+	{"perror0", 'f', ENO0, "[ferror=0 fwide=-1 errno=2]\n", NULL}, /* NULL prefix: the stream is oriented too */
 	{"perror", 'a', "A\n" ENO "B\n", NULL, NULL},
 	{"perror", 'b', ENO, "[ferror=0 fwide=1 errno=2]\n", NULL},
 	{"perror", 'c', "", NULL, NULL},
-	{"perror", 'd', "", "[ferror=1 fwide=-1 errno=9]\n", "(perror does not orient an undecided stream)"},
-	{"perror", 'f', ENO, "[ferror=0 fwide=-1 errno=22]\n", "(perror orientation; glibc leaves errno 22, not followed)"},
-	{"herror", 'a', "P: Unknown host\nA\nB\n", NULL, "(herror goes through the stream)"},
+	{"perror", 'd', "", "[ferror=1 fwide=-1 errno=9]\n", NULL},
+	{"perror", 'f', ENO, "[ferror=0 fwide=-1 errno=2]\n", NULL}, /* errno stays the caller's (deliberate: docs/differences-from-glibc.md) */
+	{"herror", 'a', "P: Unknown host\nA\nB\n", NULL, NULL},
 	{"herror", 'b', "P: Unknown host\n", "[ferror=0 fwide=1 errno=2]\n", NULL},
-	{"herror", 'c', "P: Unknown host\n", NULL, "(herror goes through the stream)"},
-	{"herror", 'd', "", "[ferror=0 fwide=0 errno=2]\n", "(herror sets the error flag)"},
+	{"herror", 'c', "P: Unknown host\n", NULL, NULL},
+	{"herror", 'd', "", "[ferror=0 fwide=0 errno=2]\n", NULL},
 	{"herror", 'f', "P: Unknown host\n", "[ferror=0 fwide=0 errno=2]\n", NULL},
 	{"warn", 'a', "A\n" WARN "B\n", NULL, NULL},
 	{"warn", 'b', WARN, "[ferror=0 fwide=1 errno=2]\n", NULL},
@@ -81,6 +84,7 @@ static void call(void)
 	if (!strcmp(op, "psignal")) psignal(SIGINT, "P");
 	else if (!strcmp(op, "psiginfo")) psiginfo(&si, "P");
 	else if (!strcmp(op, "perror")) perror("P");
+	else if (!strcmp(op, "perror0")) perror(NULL);
 	else if (!strcmp(op, "herror")) herror("P");
 	else if (!strcmp(op, "warn")) warn("P");
 	else if (!strcmp(op, "warnx")) warnx("P");

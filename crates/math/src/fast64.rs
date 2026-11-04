@@ -44,7 +44,7 @@ fn reduce(x: Dd, kf: f64, c: &[u64; 4]) -> Dd {
     two_sum(r0, -(kf * c[1])).add_f64(-(kf * c[2])).add(two_prod(kf, c[3]).neg()).add_f64(x.lo)
 }
 
-// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.23): `$prod` is the exact product,
+// The kernels exist in two builds (MATH-F64-FMA-PATH, D-10.25): `$prod` is the exact product,
 // [`two_prod`] (Dekker) or [`dd::two_prod_fma`] (one FMA). Both return the same pair bit for bit
 // wherever the product is exact, which holds for every product below (operands far from overflow;
 // the smallest, `rh²` with `|rh| >= 2^-64`, has its error above 2^-240), so the two builds compute
@@ -242,11 +242,11 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     settle(y, exp_eps(y, tail), m, mode)
 }
 
-/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.23): the same
+/// The FMA build of the `exp` and `log` in-place entries (MATH-F64-FMA-PATH, D-10.25): the same
 /// arithmetic as [`exp_nearest`] and [`log_nearest`] with every exact product a single FMA, so the
 /// same results bit for bit (see `kernels!`). Callable only on a CPU with FMA and the OS-enabled
 /// AVX state; the boundary selects it once at startup (`dispatch::fma`).
-// ARCH(x86_64): the run-time FMA build (D-10.23); FMA is base ISA on aarch64, so one build there
+// ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{exp_eps, fast_two_sum, finish, log_assemble, log_c, log_eps, reduce_exp, t, two_sum, Dd, C_EXP};
