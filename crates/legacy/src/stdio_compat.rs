@@ -1993,6 +1993,8 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
     let mut len = 0usize;
+    // Set when the growth of the caller's buffer failed: that error is the result, not a read error.
+    let mut grow_failed = false;
     if !byte_oriented(file) {
         return Ok(None);
     }
@@ -2006,11 +2008,15 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {
-            let need = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)).ok_or(Errno::EOVERFLOW)?;
+            let Some(need) = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)) else {
+                grow_failed = true;
+                return Err(Errno::EOVERFLOW);
+            };
             if need > cap {
                 let ncap = need.max(cap.saturating_mul(2)).max(120);
                 let nb = env.realloc(buf, ncap);
                 if nb == 0 {
+                    grow_failed = true;
                     return Err(Errno::ENOMEM);
                 }
                 buf = nb;
@@ -2038,7 +2044,7 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
             store(file, ext);
             // The bytes read before the error are the record (the reference), the error
             // indicator is set.
-            if len == 0 {
+            if len == 0 || grow_failed {
                 return Err(e);
             }
             if let Some(t) = env.bytes(buf, cap).get_mut(len) {
