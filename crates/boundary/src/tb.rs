@@ -457,7 +457,9 @@ pub(crate) fn locale_object(addr: usize) -> Option<&'static [AtomicUsize]> {
 /// of `FILE_WORDS` words, a library-allocated stream or an exported standard stream. Such
 /// memory is never unmapped (closed streams are recycled, not freed).
 pub(crate) fn file_words(addr: usize) -> Option<&'static [AtomicUsize]> {
-    if addr == 0 || addr % 8 != 0 {
+    // Alignment as one bit test on the low byte (no copy of the address into a scratch register
+    // for a mask, as `% 8` on the whole word compiled to): PERF-STDIO-CHAR-FAST.
+    if addr == 0 || (addr.to_ne_bytes()[0] & 7) != 0 {
         return None;
     }
     // UNSAFE(slice): the contract above.
