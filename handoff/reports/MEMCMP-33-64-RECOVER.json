@@ -1,0 +1,13 @@
+{"task": "MEMCMP-33-64-RECOVER", "model": "opus", "tokens": null,
+ "result": "Negative result recorded: sort-C's 33-64 memcmp calls (17.8M of 18.7M) differ in bytes 0-7 in 99.9996% of cases; the pre-check saves 9 instr there (x17.8M = the 160M rise) and costs 4 elsewhere, so no 33-64 path wins both; code unchanged, register row added",
+ "branch": "task/memcmp-33-64-recover", "head": "827278ca",
+ "gate": {"affected": "0 passed / 0 failed (docs-only: 0 suites selected); lint (clippy -D warnings + xtask static) rc 0", "peak": "157M"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The brief says bd02ee3a gained on early-difference shapes; by path count it gained 4 instr on equal/late-difference heads and lost 9 on head differences",
+                   "fold.S's 65-128 comment says sort -C differs within bytes 8-31; on words.txt sort-C makes no memcmp call above 64 bytes and 33-64 calls differ in bytes 0-7"],
+ "refused": [],
+ "jobs": ["memcmp-33-64-recover-shapes", "memcmp-33-64-recover-lint", "memcmp-33-64-recover-gate"],
+ "improvement": "A per-workload shape table (n x first-difference) kept current in the repo would have settled this before bd02ee3a landed; the break-even is one division",
+ "next_step": "none for 33-64; for equal-heavy 33-64 workloads, measure their head-difference rate first (break-even 31%)",
+ "report_file": "handoff/memcmp-33-64-recover.md"}

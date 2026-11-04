@@ -799,7 +799,7 @@ impl Dfa<'_> {
                     None
                 }
                 OP_ENTER => {
-                    push(scr, prog.node(inst.b, j + 1), &mut top);
+                    push(scr, prog.node(inst.b, super::program::enter_j(inst, j)), &mut top);
                     None
                 }
                 _ => {
@@ -913,7 +913,7 @@ mod tests {
                             for first in 0..=s.len().min(2) {
                                 for (not_bol, not_eol) in [(false, false), (true, false), (false, true)] {
                                     for nl in [extra & cflags::NEWLINE != 0, extra & cflags::NEWLINE == 0] {
-                                        let opts = Options { not_bol, not_eol, newline_anchor: nl, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true } };
+                                        let opts = Options { not_bol, not_eol, newline_anchor: nl, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 } };
                                         let want = nfa(&prog, loc, s, first, &opts);
                                         for st in &mut stores {
                                             let f0 = get(&counters::FALLBACKS);
@@ -965,19 +965,31 @@ mod tests {
         }
     }
 
-    /// The D-14.8 stacked repetitions never take the DFA (their programs exceed the node cap):
-    /// zero DFA work, today's path exactly.
+    /// The D-14.8 stacked repetitions: their nodes grow linearly in the stack (the shared
+    /// empty-iteration level, FUZZ-REGEX-TIMEOUTS-3), so a 60-deep stack fits the node cap and
+    /// the DFA answers as the matcher; a stack past the cap takes the matcher with zero DFA work.
     #[test]
     fn stacked_repetitions_take_the_matcher() {
         // Trace: D-14.13, D-14.8
-        let mut pat = b"((|)a".to_vec();
-        pat.extend(core::iter::repeat_n(b'*', 60));
-        pat.extend_from_slice(b".****?*(b))+");
-        let prog = compile(&pat, regcomp_syntax(cflags::EXTENDED), &Locale::C).unwrap();
+        let stack = |depth: usize| {
+            let mut pat = b"((|)a".to_vec();
+            pat.extend(core::iter::repeat_n(b'*', depth));
+            pat.extend_from_slice(b".****?*(b))+");
+            compile(&pat, regcomp_syntax(cflags::EXTENDED), &Locale::C).unwrap()
+        };
+        let opts = Options { budget: 1 << 20, ..Options::default() };
+        let fits = stack(60);
+        assert!(fits.view().nodes as usize <= NODE_CAP, "{} nodes", fits.view().nodes);
+        for s in [&b"aab"[..], b"b", b"a.b", b"xaaa.bab", b"aaaa"] {
+            let mut store = Store(std::vec![0; 8192]);
+            let w = Window { first: 0, last: s.len(), backward: false };
+            let got = exists_with(&fits.view(), &Locale::C, s, w, &opts, 9, &mut store).unwrap();
+            assert_eq!(got, nfa(&fits, &Locale::C, s, 0, &opts), "{s:?}");
+        }
+        let prog = stack(150);
         assert!(prog.view().nodes as usize > NODE_CAP, "{} nodes", prog.view().nodes);
         let mut store = Store(std::vec![0; 8192]);
         let (b0, f0) = (get(&counters::BUILT), get(&counters::FALLBACKS));
-        let opts = Options { budget: 1 << 20, ..Options::default() };
         let s = b"aab";
         let got = exists_with(&prog.view(), &Locale::C, s, Window { first: 0, last: 3, backward: false }, &opts, 9, &mut store).unwrap();
         assert_eq!(got, nfa(&prog, &Locale::C, s, 0, &opts));
@@ -1026,7 +1038,7 @@ mod tests {
                                 {
                                     for (not_bol, not_eol) in [(false, false), (true, false), (false, true)] {
                                         let window = Window { first, last, backward: false };
-                                        let opts = Options { not_bol, not_eol, newline_anchor: extra & cflags::NEWLINE != 0, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true } };
+                                        let opts = Options { not_bol, not_eol, newline_anchor: extra & cflags::NEWLINE != 0, budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 } };
                                         for caps in [false, true] {
                                             let off = Options { accel: Accel::OFF, ..opts };
                                             let want: Got = exec(&prog, loc, s, window, &off, caps).unwrap().map(|m| (m.start, m.end, m.groups.to_vec()));
@@ -1090,7 +1102,7 @@ mod tests {
             let prog = compile(pat, regcomp_syntax(cflags::EXTENDED), &Locale::C).unwrap();
             assert!(prog.view().one_pass, "{k}: one-pass program expected");
             let window = Window { first: 0, last: s.len(), backward: false };
-            let opts = Options { budget: 1 << 20, accel: Accel { prefilter: false, dfa: true }, ..Options::default() };
+            let opts = Options { budget: 1 << 20, accel: Accel { prefilter: false, dfa: true, cap: 0 }, ..Options::default() };
             let off = Options { accel: Accel::OFF, ..opts };
             let want = exec(&prog, &Locale::C, s, window, &off, true).unwrap().map(|m| (m.start, m.end, m.groups.to_vec()));
             let n0 = get(&counters::SPAN_ONE_PASS);

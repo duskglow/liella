@@ -247,12 +247,8 @@ const K_END: usize = 6;
 /// Bitmap words per `K_FREE` bit: 64 bits cover a whole bitmap.
 const GROUP_SHIFT: u32 = 2;
 const _: () = assert!(BITMAP_WORDS >> GROUP_SHIFT <= 64);
-/// A copy of the `K_HINT` word's value, written by the fast malloc and free (PERF-HEAP-PAIR-IVB-2).
-/// Only a shortcut: the fast malloc uses it only while it equals the bitmap word, so a stale copy
-/// (another path wrote the word or moved `K_HINT`) costs one pass through the plain path.
-const K_HINTV: usize = 7;
 /// Eight words (one cache line) per class: the index is a shift, and a class's words never
-/// straddle two lines.
+/// straddle two lines. Word 7 is unused.
 const CLASS_WORDS: usize = 8;
 const C_LARGE: usize = C_CLASS + 44 * CLASS_WORDS;
 const CACHE_WORDS: usize = 384;
@@ -1564,24 +1560,7 @@ impl Heap {
         let r = Self::record_words(pages, uz(k.class(c, K_REC)))?;
         // A valid hint is a bitmap word index; the mask only keeps a corrupt one in the bitmap.
         let j = uz(k.class(c, K_HINT)) & (BITMAP_WORDS - 1);
-        // The hint word's value as the last fast malloc or free left it (PERF-HEAP-PAIR-IVB-2):
-        // loaded beside `K_HINT`, not after it, so the block address does not wait for the
-        // bitmap load that `K_HINT` addresses (a load-to-load chain carried from each free to the
-        // next malloc). The bitmap word stays the truth: a copy that differs from it (any other
-        // writer of the word) only sends this call down the path that uses the word itself.
-        let vc = k.class(c, K_HINTV);
         let v = r.local[j].load(Relaxed);
-        // A plain compare: `black_box` here spilled the flag to the stack (PERF-HEAP-PAIR-IVB-3).
-        if v == vc && vc != u64::MAX {
-            let b = (!vc).trailing_zeros();
-            let n = vc | (1u64 << b);
-            r.local[j].store(n, Relaxed);
-            k.set_class(c, K_HINTV, n);
-            let i = j * 64 + uz(u64::from(b));
-            let base = k.class(c, K_BASE);
-            k.set(slab_hint(uz(base)), base | w64(c));
-            return Some(Block { addr: uz(base) + i * CLASSES[c], usable: CLASSES[c], zeroed: false });
-        }
         if v == u64::MAX {
             // The hint word is full: `alloc_group` (malloc) or the slow path takes the lowest
             // free block of the groups that may have one (D-3.16). Not here: inlined, the group
@@ -1590,9 +1569,7 @@ impl Heap {
             return None;
         }
         let b = (!v).trailing_zeros();
-        let n = v | (1u64 << b);
-        r.local[j].store(n, Relaxed);
-        k.set_class(c, K_HINTV, n);
+        r.local[j].store(v | (1u64 << b), Relaxed);
         let i = j * 64 + uz(u64::from(b));
         let base = k.class(c, K_BASE);
         k.set(slab_hint(uz(base)), base | w64(c));
@@ -1730,7 +1707,6 @@ impl Heap {
                     if v & b != 0 && !(k.remote_any() && r.remote_has(j, b)) {
                         r.local[j].store(v & !b, Relaxed);
                         k.freed_into(c, j);
-                        k.set_class(c, K_HINTV, v & !b);
                         return true;
                     }
                 }
@@ -1757,7 +1733,6 @@ impl Heap {
                     if v & b != 0 && !(k.remote_any() && r.remote_has(j, b, Relaxed)) {
                         r.local[j].store(v & !b, Relaxed);
                         k.freed_into(c, j);
-                        k.set_class(c, K_HINTV, v & !b);
                         return true;
                     }
                 }

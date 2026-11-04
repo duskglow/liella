@@ -26,6 +26,11 @@ values below; there is no separate `.glibc.txt` record (the values here are the 
 
 ## Liella
 
+**Owner ruling R6 (2026-11-04): `step` and `advance` are stubs.** Both return 0 (no match) for every
+argument and never write `loc1`, `loc2` or `locs`; the paragraphs below describe the glibc values
+that LG-10 would match if the matcher is ever implemented (deferred until the corpus finds a user).
+The text after this paragraph is therefore the deferred design, not current behaviour.
+
 `step`/`advance` are compat-only (`xtask/src/compat.rs`: `BEHAVIOUR`, `DATA`, `LOADS`). The generated
 stubs load the addresses of `loc1`/`loc2` through the GOT and pass them to
 `liella_compat_step`/`liella_compat_advance` (`crates/boundary/src/posix/s14_search.rs`), which run

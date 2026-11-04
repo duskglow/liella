@@ -5,7 +5,7 @@
 //! by `LIELLA_SKIP_LOG` when that is set (`cargo xtask nextest` sets it, because nextest hides the
 //! output of a passing test, and prints the collected lines after its report).
 //!
-//! The line is `skipped: <test binary>: <what is missing>`: the convention of the namespace tests.
+//! The line is `SKIPPED <test binary>: <what is missing>` (TEST-SILENT-SKIPS; `cargo xtask affected` counts them): the convention of the namespace tests.
 //! [`missing`] answers "is this tool absent", and `LIELLA_FORCE_NO_TOOLS=msgfmt,gencat` makes it
 //! answer yes for the named tools (no root, no uninstalling), to see the skip path on any host.
 //! A tool that exists is never reported missing unless it is named there.
@@ -31,7 +31,7 @@ pub(crate) fn skipped(msg: &str) {
     let exe = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default();
     let exe = exe.rsplit_once('-').map_or(exe.as_str(), |(stem, hash)| if hash.len() == 16 { stem } else { exe.as_str() });
     let body = msg.strip_prefix("skipped: ").unwrap_or(msg);
-    let line = format!("skipped: {exe}: {body}\n");
+    let line = format!("SKIPPED {exe}: {body}\n");
     let _ = std::io::stderr().write_all(line.as_bytes());
     if let Some(path) = std::env::var_os("LIELLA_SKIP_LOG") {
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {

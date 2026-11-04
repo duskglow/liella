@@ -141,7 +141,10 @@ fn replay(data: &[u8]) -> (i32, std::time::Duration, std::time::Duration) {
     (code, tw, t.elapsed())
 }
 
-const BOUND_SECS: u64 = 1;
+/// HANG GUARD, not a speed measurement (WALLCLOCK-ASSERT-SWEEP): the idle-machine base is far above any
+/// honest run (they take milliseconds), so a loaded host cannot trip it; only a call that does not end
+/// does. The work counts that bound the speed are in `s14_search_clauses` (`Pattern::work`).
+const BOUND_SECS: u64 = 30;
 
 /// Run `work` on its own thread and fail, rather than hang, if it has not ended after four bounds
 /// (a wordexp that does not end would otherwise run until the harness kills the whole test binary).
@@ -197,6 +200,9 @@ fn suffix_removal_with_a_trailing_backslash_keeps_the_value_in_linear_time() {
             wordexp::wordexp(&w, 0, &Locale::C, &mut env, &mut out).unwrap();
             (out.0, t.elapsed())
         });
+        // HANG GUARD, not a speed measurement (WALLCLOCK-ASSERT-SWEEP): the work count for these patterns
+        // is `s14_search_clauses` (fz2_prefix_removal_is_linear, wordexp_suffix_removal_is_bounded); a
+        // hang is caught here.
         timeout::assert_within(&format!("{}: wordexp", String::from_utf8_lossy(word)), std::time::Duration::from_secs(BOUND_SECS), elapsed);
         assert_eq!(words, vec![long.clone()], "{} (prefix {prefix_op}): the value is kept", String::from_utf8_lossy(word));
     }
