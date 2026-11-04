@@ -1,0 +1,11 @@
+{"task": "MATH-F64-FMA-PATH-2", "model": "opus", "tokens": null,
+ "result": "WIP: build1 cause fixed (macro scope), clippy safety docs and test fn-pointer type fixed, D-10.22 and ruling #2261 recorded; build3/gate1/plants1 chained detached; s10_math_gen.rs regeneration not yet committed",
+ "branch": "task/math-f64-fma-path-2", "head": null,
+ "gate": {"affected": "running (math-f64-fma-path-2-gate1, chained after build3)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["math_fma_paths cannot see which build ran: a set_math_fma that ignores its argument would survive; a selftest getter would close it", "keke queue wait ~20 min per job ate most of the run"],
+ "refused": [],
+ "jobs": ["math-f64-fma-path-2-build3", "math-f64-fma-path-2-gate1", "math-f64-fma-path-2-plants1"],
+ "improvement": "a local cargo (or a no-queue quick-check slot) would have caught three compile errors in seconds instead of three ~20-minute queue cycles",
+ "next_step": "commit the regenerated s10_math_gen.rs from keke r5 after build3, confirm gate1/plants1, then counts for both paths vs glibc",
+ "report_file": "handoff/math-f64-fma-path.md"}
