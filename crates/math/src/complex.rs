@@ -610,4 +610,71 @@ mod ziv_tests {
             }
         }
     }
+
+    /// The exact value of `a + side·tiny` in format `F` and mode `m`: `a` (at most 113 bits) moved
+    /// by `|a|·2^-200` toward `side` (or not at all for `side = 0`), which lies strictly between
+    /// `a` and its neighbour on that side, as any deviation far below the last place does.
+    fn beside<F: Real>(a: crate::mp::Mp, side: i64, m: Rounding) -> F {
+        let d = a.abs().ldexp(-200);
+        let v = if side > 0 { a.add(d) } else if side < 0 { a.sub(d) } else { a };
+        crate::mp::round_exact::<F>(v, m).0
+    }
+
+    /// `cpow(x + iy, n)` against parts given as an exact anchor and the side the exact value
+    /// lies on, in all four modes, and decided at 384 bits (no residual, no retry).
+    fn far_pow<F: Real>(name: &str, x: crate::mp::Mp, y: crate::mp::Mp, n: i64, re: (crate::mp::Mp, i64), im: (crate::mp::Mp, i64)) {
+        use crate::mp::Mp;
+        for m in MODES {
+            let r = |v: Mp| crate::mp::round_exact::<F>(v, Rounding::Nearest).0;
+            let (before, res) = (n::misses(), residual());
+            let ((a, b), _) = cpow::<F>(r(x), r(y), r(Mp::from_i64(n)), r(Mp::ZERO), m);
+            let (wa, wb) = (beside::<F>(re.0, re.1, m), beside::<F>(im.0, im.1, m));
+            assert!(a.to_bits() == wa.to_bits() && b.to_bits() == wb.to_bits(), "{name}^{n} {m:?}: got ({a:?}, {b:?}) want ({wa:?}, {wb:?})");
+            assert_eq!((n::misses(), residual()), (before, res), "{name}^{n} {m:?}: not decided at 384 bits");
+        }
+    }
+
+    /// cpow with a small integer exponent whose exact parts need more than 384 bits (and more
+    /// than 3072 for the long double and `_Float128` ones) because one part dominates: the
+    /// directed modes round on the side of the exact value, in every format (no spec clause;
+    /// D-10.17, #1720).
+    #[test]
+    fn cpow_integer_powers_beyond_the_exact_width() {
+        use crate::float::F80;
+        use crate::mp::Mp;
+        let one = Mp::from_i64(1);
+        let p2 = |k: i64| one.ldexp(k);
+        let small = |c: i64, k: i64| Mp::from_i64(c).ldexp(k);
+        // (1 + it)^2 = (1 − t²) + 2it; (1 + it)^3 = (1 − 3t²) + i(3t − t³);
+        // (1 + it)^-2 = ((1 − t²) − 2it)/(1 + t²)²: the real part below 1, the imaginary part
+        // above −2t; (1 + it)^-3: the real part below 1, the imaginary part above −3t;
+        // (t + i)^2 = −(1 − t²) + 2it; (t + i)^3 = (t³ − 3t) + i(3t² − 1); (1 + it)^5: below 1
+        // and below 5t.
+        macro_rules! family {
+            ($f:ty, $k:expr) => {{
+                let k: i64 = $k;
+                let t = p2(-k);
+                let name = concat!(stringify!($f), " (1 + i·2^-k)");
+                far_pow::<$f>(name, one, t, 2, (one, -1), (small(2, -k), 0));
+                far_pow::<$f>(name, one, t, 3, (one, -1), (small(3, -k), -1));
+                far_pow::<$f>(name, one, t, 5, (one, -1), (small(5, -k), -1));
+                far_pow::<$f>(name, one, t, -2, (one, -1), (small(-2, -k), 1));
+                far_pow::<$f>(name, one, t, -3, (one, -1), (small(-3, -k), 1));
+                let name = concat!(stringify!($f), " (2^-k + i)");
+                far_pow::<$f>(name, t, one, 2, (Mp::from_i64(-1), 1), (small(2, -k), 0));
+                far_pow::<$f>(name, t, one, 3, (small(-3, -k), 1), (Mp::from_i64(-1), 1));
+                // Scaled: (2^40 + i·2^(40−k))^2 = 2^80·(1 + it)^2.
+                far_pow::<$f>(name, p2(40), p2(40 - k), 2, (p2(80), -1), (small(2, 80 - k), 0));
+            }};
+        }
+        family!(f32, 100);
+        family!(f64, 200);
+        family!(f64, 1000);
+        family!(F80, 200);
+        family!(F80, 2000);
+        family!(F80, 16000);
+        family!(F128, 200);
+        family!(F128, 2000);
+        family!(F128, 16000);
+    }
 }
