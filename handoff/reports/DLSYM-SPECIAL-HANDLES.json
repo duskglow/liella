@@ -1,7 +1,7 @@
 {"task": "DLSYM-SPECIAL-HANDLES", "model": "opus", "tokens": null,
  "result": "BLOCKED on DL-16 (Liella has no dlopen/dlsym; conformance is static-only): delivered a glibc-verified probe/clause program for s27_1_c_3 and s27_1_c_1_3 with both probe-side plants CAUGHT, behaviour recorded in spec/behaviour/dynlink.md",
  "branch": "task/dlsym-special-handles", "head": "5d2b70ba",
- "gate": {"affected": "0 passed / 0 failed (0 suites selected: probe and docs only; audits ok)", "peak": "635M"},
+ "gate": {"affected": "0 passed / 0 failed (0 suites selected: probe and docs only; audits ok; clippy -D warnings and xtask static clean on the role)", "peak": "164M"},
  "accepted_first_attempt": null,
  "rulings": [
   {"item": "Story cannot be done as briefed: the plants target Liella RTLD_NEXT / dlopen(NULL) code that does not exist (DL-16, after DL-14)", "recommendation": "fold into DL-16, which already names these clause tests as its proof; DL-16 adopts tools/probe/dl/handles/ as conformance programs"},
