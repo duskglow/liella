@@ -26,6 +26,9 @@ libm = []
 # Test-only helpers (`selftest`): forked children, a signal round trip. Enabled for this
 # crate's own tests through the self dev-dependency below; never by a product.
 selftest = ["liella/selftest", "liella-legacy/selftest"]
+# Test-only (A-8): run the portable Rust scanners (`strz::portable`) in place of machine/scan.S's
+# on x86_64, so the kernel suites test both paths. Never enabled by a product.
+portable-scan = []
 
 [dependencies]
 liella-kernel = { workspace = true }

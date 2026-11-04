@@ -33,6 +33,12 @@ fn main() {
     // the host `cc` below would put x86_64 objects into a foreign target's build. Stop here with the stories that
     // port it (docs/arch-seams.md) instead. The x86_64 build is unchanged.
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    // A-8: the portable scanners (`strz::portable`) replace the assembly ones on a target without
+    // tuned kernels; the test-only feature `portable-scan` forces them on x86_64.
+    println!("cargo::rustc-check-cfg=cfg(liella_portable_scan)");
+    if arch != "x86_64" || env::var_os("CARGO_FEATURE_PORTABLE_SCAN").is_some() {
+        println!("cargo::rustc-cfg=liella_portable_scan");
+    }
     if arch != "x86_64" {
         fail(&format!("not ported to target_arch {arch}: csys and the machine kernels are x86_64 only (aarch64: syscalls A-3, csys A-6, string kernels A-8); `cargo xtask arch-check` checks the crates that build without csys"));
     }

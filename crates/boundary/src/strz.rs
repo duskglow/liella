@@ -1770,3 +1770,288 @@ fn check_answer(p: *const u8, r: *const u8, want: Option<usize>) {
         scanner_fault();
     }
 }
+
+/// Portable word-at-a-time (SWAR) versions of the `machine/scan.S` scanners (A-8,
+/// ARCH-STRING-PORTABLE): the build uses them on a target without tuned kernels, and the
+/// test-only feature `portable-scan` forces them on x86_64 (`crate::ffi` takes these in place
+/// of the assembly under `cfg(liella_portable_scan)`). Each answers bit for bit what its
+/// assembly twin answers, with the same edge routing (NULL, `n == 0`, `n > isize::MAX`).
+///
+/// Every load is one aligned `usize` word holding at least one byte the byte-wise scan would
+/// read, so a load never leaves the page holding such a byte (an aligned word never crosses a
+/// page). The bytes of that word outside the object are read but never decide the answer:
+/// they are masked off before the first-match search.
+#[cfg(liella_portable_scan)]
+pub(crate) mod portable {
+    use core::cmp::Ordering;
+
+    const W: usize = size_of::<usize>();
+    const LO: usize = usize::MAX / 255;
+    const M7: usize = LO.wrapping_mul(0x7f);
+    const HI: usize = LO.wrapping_mul(0x80);
+    const WM: usize = W - 1;
+
+    /// Bit 7 of each byte of the answer set exactly where that byte of `x` is zero (no carry
+    /// crosses a byte: `(b & 0x7f) + 0x7f <= 0xfe`, so higher bytes see no false zero).
+    fn zeros(x: usize) -> usize {
+        !((x & M7).wrapping_add(M7) | x | M7)
+    }
+
+    /// `c`'s low byte in every byte of a word.
+    fn splat(c: i32) -> usize {
+        LO.wrapping_mul(usize::from(crate::conv::byte(c)))
+    }
+
+    /// The bytes at memory index `off..W` of a word (`off < W`).
+    fn from(off: usize) -> usize {
+        let s = u32::try_from(off.wrapping_mul(8)).unwrap_or(0);
+        if cfg!(target_endian = "little") { usize::MAX.wrapping_shl(s) } else { usize::MAX.wrapping_shr(s) }
+    }
+
+    /// The bytes at memory index `0..k` of a word (`k < W`; none for 0).
+    fn below(k: usize) -> usize {
+        !from(k)
+    }
+
+    /// The bytes at memory index `0..=k` of a word (`k < W`).
+    fn upto(k: usize) -> usize {
+        if k == WM { usize::MAX } else { below(k.wrapping_add(1)) }
+    }
+
+    /// The memory index of the first flagged byte of `m` (non-zero).
+    fn first(m: usize) -> usize {
+        let z = if cfg!(target_endian = "little") { m.trailing_zeros() } else { m.leading_zeros() };
+        usize::try_from(z >> 3).unwrap_or(0)
+    }
+
+    /// The memory index of the last flagged byte of `m` (non-zero).
+    fn last(m: usize) -> usize {
+        let z = if cfg!(target_endian = "little") { m.leading_zeros() } else { m.trailing_zeros() };
+        WM.wrapping_sub(usize::try_from(z >> 3).unwrap_or(0))
+    }
+
+    /// Byte `k` (memory order) of `x`.
+    fn byte_at(x: usize, k: usize) -> u8 {
+        x.to_ne_bytes().get(k).copied().unwrap_or(0)
+    }
+
+    fn sign(a: u8, b: u8) -> i32 {
+        match a.cmp(&b) {
+            Ordering::Less => -1,
+            Ordering::Equal => 0,
+            Ordering::Greater => 1,
+        }
+    }
+
+    // UNSAFE(slice): one aligned word of a C object, as the module comment states.
+    #[allow(unsafe_code)]
+    fn word(q: *const u8) -> usize {
+        debug_assert!(q.addr() & WM == 0, "portable scanner load not aligned to the word");
+        // SAFETY: q is word-aligned and its word holds a byte of the caller's readable object
+        // (every caller below), so the word lies in that byte's page; volatile keeps the
+        // compiler from reasoning about the bytes outside the object.
+        unsafe { q.cast::<usize>().read_volatile() }
+    }
+
+    // UNSAFE(slice): one byte of a C string, inside the object.
+    #[allow(unsafe_code)]
+    fn byte(p: *const u8) -> u8 {
+        // SAFETY: the callers read p only up to its string's terminator or bound.
+        unsafe { p.read() }
+    }
+
+    /// The index from `s` of the first byte that `hit` flags, with no bound: the caller's
+    /// contract puts such a byte in the object.
+    fn scan(s: *const u8, hit: impl Fn(usize) -> usize) -> usize {
+        let off = s.addr() & WM;
+        let mut q = s.wrapping_sub(off);
+        let mut m = hit(word(q)) & from(off);
+        while m == 0 {
+            q = q.wrapping_add(W);
+            m = hit(word(q));
+        }
+        q.addr().wrapping_sub(s.addr()).wrapping_add(first(m))
+    }
+
+    /// As [`scan`], within `[s, s + n)` (`n >= 1`): the index, or `None`.
+    fn scan_n(s: *const u8, n: usize, hit: impl Fn(usize) -> usize) -> Option<usize> {
+        let off = s.addr() & WM;
+        let mut q = s.wrapping_sub(off);
+        // Bytes of the object from q on, the head's skipped bytes included.
+        let mut rem = n.saturating_add(off);
+        let mut m = hit(word(q)) & from(off);
+        loop {
+            if rem < W {
+                m &= below(rem);
+            }
+            if m != 0 {
+                return Some(q.addr().wrapping_sub(s.addr()).wrapping_add(first(m)));
+            }
+            rem = rem.saturating_sub(W);
+            if rem == 0 {
+                return None;
+            }
+            q = q.wrapping_add(W);
+            m = hit(word(q));
+        }
+    }
+
+    /// Portable `liella_machine_strlen`.
+    pub(crate) fn liella_machine_strlen(s: *const u8) -> usize {
+        scan(s, zeros)
+    }
+
+    /// Portable `liella_machine_strnlen`.
+    pub(crate) fn liella_machine_strnlen(s: *const u8, max: usize) -> usize {
+        if max == 0 {
+            return 0;
+        }
+        scan_n(s, max, zeros).unwrap_or(max)
+    }
+
+    /// Portable `liella_machine_rawmemchr`.
+    pub(crate) fn liella_machine_rawmemchr(s: *const u8, c: i32) -> *const u8 {
+        let k = splat(c);
+        s.wrapping_add(scan(s, |x| zeros(x ^ k)))
+    }
+
+    /// Portable `liella_machine_rawmemchr_entry`: a NULL `s` takes the S6 abort.
+    pub(crate) fn liella_machine_rawmemchr_entry(s: *const u8, c: i32) -> *const u8 {
+        if s.is_null() {
+            super::null_fault();
+        }
+        liella_machine_rawmemchr(s, c)
+    }
+
+    /// Portable `liella_machine_memchr` (`1 <= n <= isize::MAX`).
+    pub(crate) fn liella_machine_memchr(s: *const u8, c: i32, n: usize) -> *const u8 {
+        let k = splat(c);
+        scan_n(s, n, |x| zeros(x ^ k)).map_or(core::ptr::null(), |i| s.wrapping_add(i))
+    }
+
+    /// Portable `liella_machine_memchr_entry`: the edges and NULL as [`super::find_n`].
+    pub(crate) fn liella_machine_memchr_entry(s: *const u8, c: i32, n: usize) -> *const u8 {
+        if n.wrapping_sub(1) >= usize::MAX >> 1 || s.is_null() {
+            return super::find_n_edge(n);
+        }
+        liella_machine_memchr(s, c, n)
+    }
+
+    /// Portable `liella_machine_memrchr` (`1 <= n <= isize::MAX`): words from the last byte
+    /// down, the first and last word masked to the object.
+    pub(crate) fn liella_machine_memrchr(s: *const u8, c: i32, n: usize) -> *const u8 {
+        let k = splat(c);
+        let end = s.wrapping_add(n.wrapping_sub(1));
+        let eoff = end.addr() & WM;
+        let mut q = end.wrapping_sub(eoff);
+        let mut m = zeros(word(q) ^ k) & upto(eoff);
+        loop {
+            if q.addr() <= s.addr() {
+                m &= from(s.addr().wrapping_sub(q.addr()));
+                return if m == 0 { core::ptr::null() } else { q.wrapping_add(last(m)) };
+            }
+            if m != 0 {
+                return q.wrapping_add(last(m));
+            }
+            q = q.wrapping_sub(W);
+            m = zeros(word(q) ^ k);
+        }
+    }
+
+    /// Portable `liella_machine_memrchr_entry`: the edges and NULL as [`super::rfind_n`].
+    pub(crate) fn liella_machine_memrchr_entry(s: *const u8, c: i32, n: usize) -> *const u8 {
+        if n.wrapping_sub(1) >= usize::MAX >> 1 || s.is_null() {
+            return super::find_n_edge(n);
+        }
+        liella_machine_memrchr(s, c, n)
+    }
+
+    /// The index of the first byte that is `c` or the terminator.
+    fn chr_index(s: *const u8, c: i32) -> usize {
+        let k = splat(c);
+        scan(s, |x| zeros(x) | zeros(x ^ k))
+    }
+
+    /// Portable `liella_machine_strchr`: a NULL `s` takes the S6 abort before any read.
+    pub(crate) fn liella_machine_strchr(s: *const u8, c: i32) -> *const u8 {
+        if s.is_null() {
+            super::null_abort();
+        }
+        let p = s.wrapping_add(chr_index(s, c));
+        if byte(p) == crate::conv::byte(c) { p } else { core::ptr::null() }
+    }
+
+    /// Portable `liella_machine_strchrnul`: as [`liella_machine_strchr`], the terminator's
+    /// address when `c` does not occur.
+    pub(crate) fn liella_machine_strchrnul(s: *const u8, c: i32) -> *const u8 {
+        if s.is_null() {
+            super::null_abort();
+        }
+        s.wrapping_add(chr_index(s, c))
+    }
+
+    /// The order of at most `n` bytes (`n >= 1`) of `a` and `b`, -1, 0 or 1: words when both
+    /// have the same offset in a word, else bytes.
+    fn order(a: *const u8, b: *const u8, n: usize) -> i32 {
+        if (a.addr() ^ b.addr()) & WM != 0 {
+            let mut i = 0;
+            while i < n {
+                let (x, y) = (byte(a.wrapping_add(i)), byte(b.wrapping_add(i)));
+                if x != y || x == 0 {
+                    return sign(x, y);
+                }
+                i = i.wrapping_add(1);
+            }
+            return 0;
+        }
+        let off = a.addr() & WM;
+        let (mut qa, mut qb) = (a.wrapping_sub(off), b.wrapping_sub(off));
+        let mut rem = n.saturating_add(off);
+        let mut head = from(off);
+        loop {
+            let (x, y) = (word(qa), word(qb));
+            // A terminator in a, or a difference (bit 7 clear in zeros(x ^ y)).
+            let mut m = (zeros(x) | (zeros(x ^ y) ^ HI)) & head;
+            if rem < W {
+                m &= below(rem);
+            }
+            if m != 0 {
+                let k = first(m);
+                return sign(byte_at(x, k), byte_at(y, k));
+            }
+            rem = rem.saturating_sub(W);
+            if rem == 0 {
+                return 0;
+            }
+            head = usize::MAX;
+            qa = qa.wrapping_add(W);
+            qb = qb.wrapping_add(W);
+        }
+    }
+
+    /// Portable `liella_machine_strcmp` (C ABI: the selftest passes it to
+    /// `liella_machine_clean_upper_call` as a function pointer, as it does the assembly one).
+    pub(crate) extern "C" fn liella_machine_strcmp(a: *const u8, b: *const u8) -> i32 {
+        order(a, b, usize::MAX)
+    }
+
+    /// Portable `liella_machine_strcmp_entry`: a NULL takes the S6 abort.
+    pub(crate) fn liella_machine_strcmp_entry(a: *const u8, b: *const u8) -> i32 {
+        if a.is_null() || b.is_null() {
+            super::null_fault();
+        }
+        order(a, b, usize::MAX)
+    }
+
+    /// Portable `liella_machine_strncmp`: `n == 0` reads nothing; a NULL with `n > 0` takes the
+    /// S6 abort.
+    pub(crate) fn liella_machine_strncmp(a: *const u8, b: *const u8, n: usize) -> i32 {
+        if n == 0 {
+            return 0;
+        }
+        if a.is_null() || b.is_null() {
+            super::null_abort();
+        }
+        order(a, b, n)
+    }
+}
