@@ -161,32 +161,26 @@ fn check<F: Real>(fmt: Fmt, fam: usize) {
 }
 
 macro_rules! grid_tests {
-    ($($(#[$a:meta])* $test:ident => $f:ty, $fmt:expr, $fam:expr;)*) => {$(
+    ([$($attr:tt)*] $f:ty, $fmt:expr;) => {};
+    ([$($attr:tt)*] $f:ty, $fmt:expr; $test:ident = $fam:expr $(, $rt:ident = $rf:expr)*) => {
         /// One family in one format over the asymptotic grid, all four modes (spec §10.5;
         /// D-10.17).
         #[test]
-        $(#[$a])*
+        $($attr)*
         fn $test() {
             check::<$f>($fmt, $fam);
         }
-    )*};
-}
-
-macro_rules! per_format {
-    ($($(#[$a:meta])* $f:ty, $fmt:expr, [$($test:ident = $fam:expr),*];)*) => {
-        grid_tests! { $($($(#[$a])* $test => $f, $fmt, $fam;)*)* }
+        grid_tests! { [$($attr)*] $f, $fmt; $($rt = $rf),* }
     };
 }
 
-per_format! {
-    f32, Fmt::F32, [f32_cexp = 0, f32_clog = 1, f32_clog10 = 2, f32_csqrt = 3, f32_csinh = 4, f32_ccosh = 5, f32_csin = 6, f32_ccos = 7,
-        f32_ctanh = 8, f32_ctan = 9, f32_casin = 10, f32_cacos = 11, f32_casinh = 12, f32_cacosh = 13, f32_catanh = 14, f32_catan = 15];
-    f64, Fmt::F64, [f64_cexp = 0, f64_clog = 1, f64_clog10 = 2, f64_csqrt = 3, f64_csinh = 4, f64_ccosh = 5, f64_csin = 6, f64_ccos = 7,
-        f64_ctanh = 8, f64_ctan = 9, f64_casin = 10, f64_cacos = 11, f64_casinh = 12, f64_cacosh = 13, f64_catanh = 14, f64_catan = 15];
-    #[ignore = "the open long double findings of M6-10 (handoff/math-m6-cplx-directed.md); run by hand with --ignored"]
-    F80, Fmt::F80, [ld_cexp = 0, ld_clog = 1, ld_clog10 = 2, ld_csqrt = 3, ld_csinh = 4, ld_ccosh = 5, ld_csin = 6, ld_ccos = 7,
-        ld_ctanh = 8, ld_ctan = 9, ld_casin = 10, ld_cacos = 11, ld_casinh = 12, ld_cacosh = 13, ld_catanh = 14, ld_catan = 15];
-    #[ignore = "the open _Float128 findings of M6-10 (handoff/math-m6-cplx-directed.md); run by hand with --ignored"]
-    F128, Fmt::F128, [q_cexp = 0, q_clog = 1, q_clog10 = 2, q_csqrt = 3, q_csinh = 4, q_ccosh = 5, q_csin = 6, q_ccos = 7,
-        q_ctanh = 8, q_ctan = 9, q_casin = 10, q_cacos = 11, q_casinh = 12, q_cacosh = 13, q_catanh = 14, q_catan = 15];
-}
+grid_tests! { [] f32, Fmt::F32; f32_cexp = 0, f32_clog = 1, f32_clog10 = 2, f32_csqrt = 3, f32_csinh = 4, f32_ccosh = 5, f32_csin = 6,
+    f32_ccos = 7, f32_ctanh = 8, f32_ctan = 9, f32_casin = 10, f32_cacos = 11, f32_casinh = 12, f32_cacosh = 13, f32_catanh = 14, f32_catan = 15 }
+grid_tests! { [] f64, Fmt::F64; f64_cexp = 0, f64_clog = 1, f64_clog10 = 2, f64_csqrt = 3, f64_csinh = 4, f64_ccosh = 5, f64_csin = 6,
+    f64_ccos = 7, f64_ctanh = 8, f64_ctan = 9, f64_casin = 10, f64_cacos = 11, f64_casinh = 12, f64_cacosh = 13, f64_catanh = 14, f64_catan = 15 }
+grid_tests! { [#[ignore = "the open long double findings of M6-10 (handoff/math-m6-cplx-directed.md); run by hand with --ignored"]] F80, Fmt::F80;
+    ld_cexp = 0, ld_clog = 1, ld_clog10 = 2, ld_csqrt = 3, ld_csinh = 4, ld_ccosh = 5, ld_csin = 6, ld_ccos = 7,
+    ld_ctanh = 8, ld_ctan = 9, ld_casin = 10, ld_cacos = 11, ld_casinh = 12, ld_cacosh = 13, ld_catanh = 14, ld_catan = 15 }
+grid_tests! { [#[ignore = "the open _Float128 findings of M6-10 (handoff/math-m6-cplx-directed.md); run by hand with --ignored"]] F128, Fmt::F128;
+    q_cexp = 0, q_clog = 1, q_clog10 = 2, q_csqrt = 3, q_csinh = 4, q_ccosh = 5, q_csin = 6, q_ccos = 7,
+    q_ctanh = 8, q_ctan = 9, q_casin = 10, q_cacos = 11, q_casinh = 12, q_cacosh = 13, q_catanh = 14, q_catan = 15 }
