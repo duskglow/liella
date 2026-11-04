@@ -226,7 +226,7 @@ fn sym_getnameinfo() {
 fn sym_gethostbyname() {
     let p = s::gethostbyname(c"127.0.0.1".as_ptr());
     assert_eq!(host_at(p), "127.0.0.1 2 4 127.0.0.1", "a numeric name is answered without a lookup");
-    assert_eq!(host_at(s::gethostbyname(c"10.1".as_ptr())), "10.1 2 4 10.0.0.1", "inet_aton's forms");
+    assert_eq!(host_at(s::gethostbyname(c"11.1".as_ptr())), "11.1 2 4 11.0.0.1", "inet_aton's forms");
     assert!(s::gethostbyname(c"".as_ptr()).is_null());
     assert_eq!(liella_boundary::netdb::h_errno(), HOST_NOT_FOUND);
 }
@@ -2229,7 +2229,7 @@ fn sym_res_gethostbyname() {
     assert_eq!(liella_boundary::netdb::h_errno(), 3, "NO_RECOVERY (errno: EMSGSIZE only with a search list)");
 }
 
-// The probe table (keke 2026-10-23, COMPAT-NSS-RESOLV-PT2-3; no spec clause: LG-7 compat,
+// The probe table (Zen 1 host 2026-10-23, COMPAT-NSS-RESOLV-PT2-3; no spec clause: LG-7 compat,
 // spec/behaviour/nss-resolv-compat.md): which names are asked for (None), read as a quad, or fail
 // before any query. The asked names are not resolved here (no DNS server in process).
 #[test]
@@ -2240,7 +2240,7 @@ fn sym_res_gethostbyname_names() {
     let label63 = [&[b'a'; 63][..], b".example."].concat();
     let long = b"b.".repeat(150);
     type Want = liella::names::nss::Answer<Option<[u8; 4]>>;
-    // shiki 2026-10-23 (COMPAT-NSS-RESOLV-PT2-4): a part with a leading zero is not found, `0` is
+    // Haswell-EP host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-4): a part with a leading zero is not found, `0` is
     // read; "" without a search list leaves errno alone (Unavailable: NO_RECOVERY, no errno).
     for (n, want) in [
         (&b"012.0.0.1"[..], Err(NotFound)),
@@ -2256,7 +2256,7 @@ fn sym_res_gethostbyname_names() {
     assert_eq!(liella_boundary::netdb::res_codes(liella::names::nss::LookupError::Unavailable), (3, None), "NO_RECOVERY, errno alone");
     let refused = liella_boundary::netdb::res_codes(Os(liella::error::Errno::ECONNREFUSED));
     assert_eq!(refused, (HOST_NOT_FOUND, Some(liella::error::Errno::ECONNREFUSED)), "a refusing server");
-    // shiki 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5): a server that times out is TRY_AGAIN (2) with ETIMEDOUT.
+    // Haswell-EP host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5): a server that times out is TRY_AGAIN (2) with ETIMEDOUT.
     let timed_out = liella_boundary::netdb::res_codes(Os(liella::error::Errno::ETIMEDOUT));
     assert_eq!(timed_out, (2, Some(liella::error::Errno::ETIMEDOUT)), "a server that times out");
     let table: [(&[u8], Want); 16] = [

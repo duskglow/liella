@@ -1,6 +1,6 @@
 # LG-0e LEDGER-COREUTILS: the two coreutils ledger items of phase 15
 
-Run 2026-10-23 on shiki (Ubuntu 24.04, glibc 2.39, gcc 13), in a fresh tmpfs scratch tree, by
+Run 2026-10-23 on Haswell-EP host (Ubuntu 24.04, glibc 2.39, gcc 13), in a fresh tmpfs scratch tree, by
 job `ledger-coreutils-validate` (rc 0, 244 s). Liella: `cargo xtask so` on the story branch
 (base origin/next `01a1d6d0`; synced tree `3b3e3f64`), linked through `scripts/liella-cc` as is (no
 stand-ins, no `--allow-multiple-definition`). glibc: the host `gcc`, dynamic. Sources: coreutils 9.12

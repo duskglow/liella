@@ -1,0 +1,8 @@
+{"task": "MATH-M6-F64-GAP-LOG-TABLES-2", "model": "sonnet", "tokens": null,
+ "result": "Ported the f64 exp/log/pow gap chain and the log2/log10 pre-scaled tables onto the public tree; plants all caught; static clean; gate (escalated to FULL) pending",
+ "branch": "task/math-m6-f64-gap-log-tables-2", "head": "cce65fca",
+ "gate": {"affected": "see jobs.tsv", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["affected escalated to FULL on the synced role (no git base there)", "register 13.5 #8 (FMA path) needs a ruling"],
+ "refused": [], "improvement": "sync_role could give the host a base ref so affected --base works there",
+ "next_step": "read gate rc; then landing", "report_file": "handoff/math-m6-f64-gap-log-tables-2.md",
+ "jobs": ["math-m6-f64-gap-log-tables-2-gate", "math-m6-f64-gap-log-tables-2-plants"]}
