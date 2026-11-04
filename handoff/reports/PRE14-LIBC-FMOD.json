@@ -1,0 +1,5 @@
+{"task": "PRE14-LIBC-FMOD", "model": "sonnet", "tokens": null, "result": "libc.a/libm.a split was already fixed on next (LIBC-A-PLACEMENT); added libc.so.6/libm.so.6 placement check; gawk configure keeps -lm; plant caught", "branch": "task/pre14-libc-fmod", "head": "d6340253",
+ "gate": {"affected": "no affected tests run (xtask-only change); so build, gawk build, clippy, static green", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["pre14-libc-fmod-so1", "pre14-libc-fmod-gawk", "pre14-libc-fmod-plants2"],
+ "rulings": [], "informational": ["T34 in validation/README.md was already fixed by LIBC-A-PLACEMENT on next; row is stale", "no plant for the new .so check"], "refused": [],
+ "improvement": "briefs should be checked against next before dispatch: this one was already done", "next_step": "land; refresh the T34 row at the next validation run", "report_file": "handoff/pre14-libc-fmod.md"}

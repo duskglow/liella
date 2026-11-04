@@ -109,10 +109,11 @@ fn alone(name: &str, body: impl FnOnce() -> bool) {
         CSys.exit_group(if body() { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1", "--nocapture"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_SYSLOG_STREAM_ALONE", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let err = String::from_utf8_lossy(&o.stderr);
     let tail: String = err.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
     use std::os::unix::process::ExitStatusExt;

@@ -136,10 +136,11 @@ fn single(test: &str, body: fn(&CSys) -> i32) {
         CSys.exit_group(if end == Ok(ChildEnd::Exited(0)) { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, test)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{test} failed in its child: {}", child_report(&o));
 }
 
@@ -1135,10 +1136,11 @@ fn zoned(test: &str, body: impl FnOnce()) {
         CSys.exit_group(0);
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, test)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{test} failed in its child: {}", child_report(&o));
 }
 

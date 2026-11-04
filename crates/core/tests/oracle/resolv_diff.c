@@ -56,7 +56,7 @@ static const struct {
     {"conf",
      "# comment\n; comment\nnameserver 127.0.0.1\nnameserver ::1\nnameserver 127.0.0.3\nnameserver 127.0.0.4\n"
      "domain dom.test\nsearch s1.test s2.test s3.test s4.test s5.test s6.test s7.test\n"
-     "sortlist 130.155.160.0/255.255.240.0 130.155.0.0 10.0.0.0/8 192.0.2.0/255.255.255.0 1.0.0.0 2.0.0.0 3.0.0.0 4.0.0.0 5.0.0.0 6.0.0.0 7.0.0.0\n"
+     "sortlist 130.155.160.0/255.255.240.0 130.155.0.0 11.0.0.0/8 192.0.2.0/255.255.255.0 1.0.0.0 2.0.0.0 3.0.0.0 4.0.0.0 5.0.0.0 6.0.0.0 7.0.0.0\n"
      "options ndots:20 timeout:99 attempts:9 rotate edns0 single-request single-request-reopen no-tld-query use-vc no-reload trust-ad no-aaaa inet6 debug no-check-names bogus\n",
      "hosts: dns\n", NULL},
     {"conf2", "nameserver 127.0.0.1\nsearch a.test\ndomain b.test\noptions ndots:0 timeout:0 attempts:0\noptions rotate\n", "hosts: dns\n", NULL},

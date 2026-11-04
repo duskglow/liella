@@ -333,7 +333,9 @@ fn run(name: &'static str, body: fn() -> i32) {
         .env("LIELLA_ENOMEM_STREAM", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let err = String::from_utf8_lossy(&o.stderr);
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(err.contains(&format!("{RAN}{name}\n")), "the child did not run the case (libtest ran no test in it): {:?}\n{}\n{err}", o.status, String::from_utf8_lossy(&o.stdout));
     assert_eq!(o.status.code(), Some(0), "the child failed (its exit code names the check): {:?}\n{err}", o.status);
 }
@@ -381,7 +383,7 @@ fn setvbuf_with_a_huge_size_defers_the_allocation() {
 }
 
 /// A deliberate difference (docs/differences-from-glibc.md): the failed growth is a write error,
-/// so the error indicator is set; glibc leaves it clear. Deterministic: exit 18 means clear.
+/// so the error indicator is set (POSIX: a write error sets it; COMPAT-16). Deterministic: exit 18 means clear.
 #[test]
 fn open_memstream_out_of_memory_sets_the_error_indicator() {
     // Trace: D-12.3

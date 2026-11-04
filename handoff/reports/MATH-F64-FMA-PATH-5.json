@@ -1,0 +1,11 @@
+{"task": "MATH-F64-FMA-PATH-5", "model": "opus", "tokens": null,
+ "result": "second origin/next merge resolved (fast64 kernels take next's inline(always) via the macro's per-build inline attr; tsv keeps crate::hot selectors; gen.rs regenerated; D-10.22 next row then D-10.23); FMA comments cite D-10.23; build/gate/plants chain queued on keke",
+ "branch": "task/math-f64-fma-path-5", "head": "ffb22ca6",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["run 4's build1/gate1/plants1 were all rc 0; the CI red was a real conflict with 77 newer next commits", "jobs queued on keke behind other stories' gates for 30+ min at hand-back: read keke ~/logs/jobs.tsv", "inline attributes on the kernels and hot.rs selecting the baseline are equivalent by design (no bit change), not planted"],
+ "refused": [],
+ "jobs": ["math-f64-fma-path-5-build1", "math-f64-fma-path-5-gate1", "math-f64-fma-path-5-plants1"],
+ "improvement": "a long-lived branch that only waits in the CI queue picks up a new next conflict each run; landing the exp/log part now and doing the rest of the family as a new story would avoid a third merge",
+ "next_step": "read the three keke jobs; on green run the cbench_libm counts (default and hwcaps=-FMA) and update saturation 13.5 #8",
+ "report_file": "handoff/math-f64-fma-path.md"}

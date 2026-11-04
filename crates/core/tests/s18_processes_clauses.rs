@@ -214,7 +214,8 @@ fn alone(test: &str, case: &str, body: impl FnOnce() -> bool) -> Option<(String,
         Ok(_) => return None,
         Err(_) => {}
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(VAR, case).env(BASE, base()).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(VAR, case).env(BASE, base()).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     let mut text = String::from_utf8_lossy(&o.stdout).into_owned();
     if o.status.code() != Some(0) {
         text.push_str(&String::from_utf8_lossy(&o.stderr));

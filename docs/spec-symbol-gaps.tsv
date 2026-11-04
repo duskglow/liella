@@ -478,24 +478,6 @@ a	realloc	libc_malloc_debug.so.0	compat	GLIBC_2.2.5	so	phase 14	3
 a	valloc	libc_malloc_debug.so.0	compat	GLIBC_2.2.5	so	phase 14	3
 a	__libdl_version_placeholder	libdl.so.2	compat	GLIBC_2.2.5,GLIBC_2.3.4,GLIBC_2.3.3	so	phase 14	29
 b	_LIB_VERSION	libm.so.6	compat	GLIBC_2.2.5	so	phase 15	10
-m	cacosf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	cacoshf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	cargf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	casinf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	casinhf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	catanf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	catanhf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	ccosf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	ccoshf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	cexpf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	clog10f128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	clogf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	cpowf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	csinf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	csinhf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	csqrtf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	ctanf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
-m	ctanhf128	libm.so.6	default	GLIBC_2.26	so+a	milestone 5 (libm)	
 b	exp	libm.so.6	compat	GLIBC_2.2.5	so	phase 15	10
 b	exp10	libm.so.6	compat	GLIBC_2.2.5	so	phase 15	10
 b	exp10f	libm.so.6	compat	GLIBC_2.2.5	so	phase 15	

@@ -98,7 +98,8 @@ fn in_child(name: &str) -> Option<String> {
         liella_boundary::selftest::mark_own_process();
         return None;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1", "--nocapture"]).env("LIELLA_S16_CHILD", name).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env("LIELLA_S16_CHILD", name).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{name} in a child:\n{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     Some(String::from_utf8_lossy(&o.stderr).into_owned())
 }
@@ -226,7 +227,7 @@ fn sym_getnameinfo() {
 fn sym_gethostbyname() {
     let p = s::gethostbyname(c"127.0.0.1".as_ptr());
     assert_eq!(host_at(p), "127.0.0.1 2 4 127.0.0.1", "a numeric name is answered without a lookup");
-    assert_eq!(host_at(s::gethostbyname(c"10.1".as_ptr())), "10.1 2 4 10.0.0.1", "inet_aton's forms");
+    assert_eq!(host_at(s::gethostbyname(c"11.1".as_ptr())), "11.1 2 4 11.0.0.1", "inet_aton's forms");
     assert!(s::gethostbyname(c"".as_ptr()).is_null());
     assert_eq!(liella_boundary::netdb::h_errno(), HOST_NOT_FOUND);
 }
@@ -546,16 +547,56 @@ fn sym___h_errno_location() {
 #[test]
 fn sym_herror() {
     let Some(err) = in_child("sym_herror") else {
+        // Covers: the caller's errno is the same after herror (s2_2_c_6, COMPAT-15).
+        let mut kept = true;
         liella_boundary::netdb::set_h_errno(HOST_NOT_FOUND);
+        errno::set_raw(ENOENT);
         s::herror(c"liella".as_ptr());
+        kept &= errno::get() == ENOENT;
         liella_boundary::netdb::set_h_errno(4);
+        errno::set_raw(EINVAL);
         s::herror(core::ptr::null());
+        kept &= errno::get() == EINVAL;
         liella_boundary::netdb::set_h_errno(-1);
         s::herror(c"".as_ptr());
         liella_boundary::posix::s12_stdio::fflush(null_mut());
+        eprintln!("errno kept={kept}");
         return;
     };
+    assert!(err.ends_with("errno kept=true\n"), "{err}");
     assert!(err.contains("liella: Unknown host\nNo address associated with name\nResolver internal error\n"), "{err}");
+}
+
+/// Covers: the caller's errno is the same after herror also when the write to descriptor 2 fails
+/// (s2_2_c_6, COMPAT-15). A successful write leaves errno alone, so only a failing one shows the
+/// restore: the child's descriptor 2 is `/dev/full` (writes fail with ENOSPC); it reports on stdout.
+#[test]
+fn sym_herror_failed_write_keeps_errno() {
+    const NAME: &str = "sym_herror_failed_write_keeps_errno";
+    if std::env::var("LIELLA_S16_CHILD").is_ok_and(|v| v == NAME) {
+        liella_boundary::selftest::mark_own_process();
+        liella_boundary::netdb::set_h_errno(HOST_NOT_FOUND);
+        errno::set_raw(ENOENT);
+        s::herror(c"liella".as_ptr());
+        let first = errno::get();
+        errno::set_raw(EINVAL);
+        s::herror(core::ptr::null());
+        println!("errno after={first},{}", errno::get());
+        return;
+    }
+    let Ok(full) = std::fs::OpenOptions::new().write(true).open("/dev/full") else {
+        eprintln!("skipped: /dev/full cannot be opened for writing here");
+        return;
+    };
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([NAME, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
+        .env("LIELLA_S16_CHILD", NAME)
+        .stderr(full)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("running 1 test"), "the child ran no test: {out}");
+    assert!(out.contains(&format!("errno after={ENOENT},{EINVAL}\n")), "{out}");
 }
 
 #[test]
@@ -1378,7 +1419,7 @@ fn sym__res() {
 #[test]
 fn sym__res_hconf() {
     assert_eq!(size_of_val(&liella_boundary::data::_res_hconf), 72);
-    liella_boundary::data::set_hconf(true);
+    liella_boundary::data::set_hconf(true, false);
     assert_eq!(liella_boundary::data::_res_hconf[0].load(std::sync::atomic::Ordering::Relaxed), 1);
     assert_eq!(liella_boundary::data::_res_hconf[8].load(std::sync::atomic::Ordering::Relaxed), 0x10, "multi");
 }
@@ -2229,7 +2270,7 @@ fn sym_res_gethostbyname() {
     assert_eq!(liella_boundary::netdb::h_errno(), 3, "NO_RECOVERY (errno: EMSGSIZE only with a search list)");
 }
 
-// The probe table (keke 2026-10-23, COMPAT-NSS-RESOLV-PT2-3; no spec clause: LG-7 compat,
+// The probe table (Zen 1 host 2026-10-23, COMPAT-NSS-RESOLV-PT2-3; no spec clause: LG-7 compat,
 // spec/behaviour/nss-resolv-compat.md): which names are asked for (None), read as a quad, or fail
 // before any query. The asked names are not resolved here (no DNS server in process).
 #[test]
@@ -2240,7 +2281,7 @@ fn sym_res_gethostbyname_names() {
     let label63 = [&[b'a'; 63][..], b".example."].concat();
     let long = b"b.".repeat(150);
     type Want = liella::names::nss::Answer<Option<[u8; 4]>>;
-    // shiki 2026-10-23 (COMPAT-NSS-RESOLV-PT2-4): a part with a leading zero is not found, `0` is
+    // Haswell-EP host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-4): a part with a leading zero is not found, `0` is
     // read; "" without a search list leaves errno alone (Unavailable: NO_RECOVERY, no errno).
     for (n, want) in [
         (&b"012.0.0.1"[..], Err(NotFound)),
@@ -2256,7 +2297,7 @@ fn sym_res_gethostbyname_names() {
     assert_eq!(liella_boundary::netdb::res_codes(liella::names::nss::LookupError::Unavailable), (3, None), "NO_RECOVERY, errno alone");
     let refused = liella_boundary::netdb::res_codes(Os(liella::error::Errno::ECONNREFUSED));
     assert_eq!(refused, (HOST_NOT_FOUND, Some(liella::error::Errno::ECONNREFUSED)), "a refusing server");
-    // shiki 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5): a server that times out is TRY_AGAIN (2) with ETIMEDOUT.
+    // Haswell-EP host 2026-10-23 (COMPAT-NSS-RESOLV-PT2-5): a server that times out is TRY_AGAIN (2) with ETIMEDOUT.
     let timed_out = liella_boundary::netdb::res_codes(Os(liella::error::Errno::ETIMEDOUT));
     assert_eq!(timed_out, (2, Some(liella::error::Errno::ETIMEDOUT)), "a server that times out");
     let table: [(&[u8], Want); 16] = [

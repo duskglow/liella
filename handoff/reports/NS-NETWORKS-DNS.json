@@ -1,0 +1,29 @@
+{
+ "task": "NS-NETWORKS-DNS",
+ "model": "opus",
+ "tokens": null,
+ "result": "networks dns source implemented and probe-settled; gate running, plants not run (checkpoint)",
+ "branch": "task/ns-networks-dns",
+ "head": "df14dfde",
+ "gate": {
+  "affected": "running (kanon ns-networks-dns-gate)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "getnetbyaddr damaged answer: HOST_NOT_FOUND instead of the reference's NULL with h_errno 0",
+   "recommendation": "keep (an error code on failure); add a differences row"
+  }
+ ],
+ "informational": [
+  "kanon forbids unprivileged user namespaces (AppArmor); the oracle ran on keke"
+ ],
+ "refused": [],
+ "improvement": "brief budget (50 calls/110k) is short for an M story with probe+code+plants; give probe-settled M stories ~70 calls or split probe and plants",
+ "next_step": "run the three planned plants on df14dfde, wait for gate and plants, hand back COMPLETE",
+ "report_file": "handoff/ns-networks-dns.md",
+ "jobs": [
+  "kanon:ns-networks-dns-gate"
+ ]
+}

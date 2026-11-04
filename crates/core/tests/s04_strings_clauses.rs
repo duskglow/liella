@@ -536,11 +536,13 @@ fn s4_10_f_0() {
         assert_eq!(liella_boundary::errno::get(), Errno::ENOMEM.get(), "ENOMEM");
         return;
     }
-    let status = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["s4_10_f_0", "--exact", "--test-threads=1"])
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["s4_10_f_0", "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_S4_10_F_0", "1")
-        .status()
+        .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
+    let status = o.status;
     assert!(status.success(), "strdup without memory: NULL with ENOMEM");
 }
 

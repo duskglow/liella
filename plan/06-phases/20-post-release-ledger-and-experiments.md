@@ -27,7 +27,7 @@ EQUIVALENT with a reason). Owner rule (2026-10-23): rulings never block work tha
 unwind, so each story says what it can do before its ruling.
 
 **What exists today for a second architecture.** Checked in the tree, and with `command -v` on
-sumire and keke on 2026-10-23:
+Skylake-SP host and Zen 1 host on 2026-10-23:
 
 * **Assembly.** 21 files, 8416 lines, all in `csys/src/machine/*.S` and all x86_64 (K2: no
   logic in assembly). `scan.S` (6150 lines, 117 labels) and `fold.S` (1026) are the SIMD string
@@ -59,7 +59,7 @@ sumire and keke on 2026-10-23:
   and `ld-linux-x86-64.so.2`; the aarch64 loader is `ld-linux-aarch64.so.1`.
 * **Symbol versions.** `versions.tsv` is x86_64. aarch64's oldest version node is newer than
   x86_64's `GLIBC_2.2.5`; A-5 reads it from the reference.
-* **Tools.** `rust-toolchain.toml` lists only `x86_64-unknown-linux-gnu`. Neither sumire nor keke
+* **Tools.** `rust-toolchain.toml` lists only `x86_64-unknown-linux-gnu`. Neither Skylake-SP host nor Zen 1 host
   (both x86_64) has `aarch64-linux-gnu-gcc`, clang or lld, qemu (user or system), an aarch64
   sysroot or a binfmt entry, and rustup there has the x86_64 target only. No other lab host was
   checked; all are believed to be x86_64.
@@ -135,6 +135,10 @@ crashes before `main`, where nothing inside it can be debugged.
    an aarch64 `compile_error!` stub marks each item that is not ported. Proof: job
    `arch-rust-check-cross` (the cross `cargo check`, rc 0), plus `-gate` (x86_64 direct tier
    unchanged). Risk: medium (wide `cfg` churn). Before RL-1 is ruled, use plain armv8.0-a.
+   *Done (ARCH-RUST-CHECK, 2026-11-04):* `cargo xtask arch-check` over all twelve crates that build without csys
+   (the check set is in `xtask/src/arch.rs`; `rt`, `math`, `core` library only). No `cfg` churn was needed: their
+   seams are data, which compile but are not ported (docs/arch-seams.md). The not-ported stub is one guard in
+   `boundary/build.rs` (a build script runs before any item, so a `compile_error!` there would never be reached).
 4. **A-3 `ARCH-SYSCALLS`** (M, after A-0). Give `csys/syscalls.tsv` an arch column (or a second
    number column) taken from the kernel's `asm-generic/unistd.h` (kernel UAPI, which is allowed).
    `csys-gen` emits per-arch `liella_sysnr.h` and `ffi_sys.rs`. The calls missing on aarch64
@@ -235,7 +239,7 @@ crashes before `main`, where nothing inside it can be debugged.
    instructions per call fall with no other row slower.
    **Outcome (STRCASE-AVX2, 2026-10-23): already built.** The kernel exists (D-4.27: CASECMP-K1,
    CASECMP, STRCASECMP-SHORT, -2); the register's figures were from before it. Recount
-   (`strcase-avx2-percall0`, keke): cycles 0.93 to 1.42x, instructions 1.12 to 1.74x glibc. The
+   (`strcase-avx2-percall0`, Zen 1 host): cycles 0.93 to 1.42x, instructions 1.12 to 1.74x glibc. The
    story added fold-boundary plants on `liella_machine_casecmp_ord_avx2` and corrected the
    register and `docs/benchmarks.md`. What is left is the fixed cost of short calls
    (`strcasecmp_c_16`, `strncasecmp_c_64`). That is a possible small story (S) after X-1, not
@@ -269,9 +273,9 @@ crashes before `main`, where nothing inside it can be debugged.
 
 * **RL-1 aarch64 baseline.** Recommend armv8.0-a with ASIMD (NEON is mandatory there), and runtime
   HWCAP dispatch for LSE atomics, SVE and the rest, so Raspberry Pi 4-class cores still run.
-* **RL-2 cross tools on keke** (root). The owner runs or approves:
+* **RL-2 cross tools on Zen 1 host** (root). The owner runs or approves:
   `sudo apt-get install --no-install-recommends gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user`.
-  This is keke only, never shiki. Recommend yes: it is distro-maintained and cheap to remove. Without
+  This is Zen 1 host only, never Haswell-EP host. Recommend yes: it is distro-maintained and cheap to remove. Without
   it, an LLVM release tarball in `~claude` (no root) covers the freestanding csys and the probes,
   and qemu can be built from source in `~claude`.
 * **RL-3 the aarch64 reference.** Name the glibc 2.39 arm64 build that is the reference

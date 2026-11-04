@@ -36,8 +36,21 @@ fn size_bytes() -> u64 {
     statm.split_whitespace().next().unwrap().parse::<u64>().unwrap() * 4096
 }
 
+/// Keep this thread on the CPU it is on now. The heap serves a thread from the shard of its NUMA
+/// node, and a shard with no segment yet needs a whole new segment, far more than the headroom
+/// the limit leaves; on a machine with several nodes a thread that moved to another node between
+/// the warm-up and the limit failed a small allocation (Rust aborts the process on that), which
+/// made this test fail now and then. The current CPU is always one the thread may use.
+fn pin_to_current_cpu() {
+    let (cpu, _node) = CSys.getcpu().unwrap();
+    let mut mask = [0u8; 128];
+    mask[(cpu / 8) as usize] = 1 << (cpu % 8);
+    CSys.sched_setaffinity(0, &mask).unwrap();
+}
+
 /// Exit code of the child: 0 passes; each failure has its own code.
 fn body() -> i32 {
+    pin_to_current_cpu();
     // Warm the allocator and the formatting paths before the limit goes on.
     let (mut warm, _) = compile("(a|b)c");
     rx::regfree(Some(&mut warm));
@@ -112,9 +125,10 @@ fn regcomp_out_of_memory_returns_reg_espace_and_releases_its_work() {
         CSys.exit_group(body());
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([NAME, "--exact", "--test-threads=1", "--nocapture"])
+        .args([NAME, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env("LIELLA_REGCOMP_ENOMEM", NAME)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "the child failed: {:?}\n{}", o.status, String::from_utf8_lossy(&o.stderr));
 }

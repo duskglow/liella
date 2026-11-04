@@ -5,7 +5,7 @@
 //!
 //! PROBE RECORD: `tests/data/strto_internal_group.txt` is the unedited output of
 //! `crates/core/tests/oracle/strto_group_table.c` built against the reference (glibc 2.39,
-//! Ubuntu 2.39-0ubuntu8.9, kanon, 2026-10-24) with `LOCPATH` naming the locales below. Each line:
+//! Ubuntu 2.39-0ubuntu8.9, 2026-10-24) with `LOCPATH` naming the locales below. Each line:
 //! locale, flag, input, then value/end(/errno) per form. Settled there, besides run 1's table:
 //! - C locale: the flag is a no-op (the `g=1` lines equal the `g=0` lines).
 //! - `grpsame` (thousands_sep == decimal_point == `.`): integers still group (`1.234.567` ->
@@ -92,7 +92,8 @@ fn in_child(test: &str, check: impl FnOnce()) {
     let Some(dir) = locales() else {
         return skip_note::skipped(&format!("skipped: no localedef; {test} not run"));
     };
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(PROBE, test).env("LOCPATH", &dir).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(PROBE, test).env("LOCPATH", &dir).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{test} failed in its child: {:?}\n{}\n{}", o.status, String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
 }
 

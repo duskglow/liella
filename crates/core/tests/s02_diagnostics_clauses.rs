@@ -41,11 +41,13 @@ fn probe() -> Option<String> {
 
 /// Re-execute this test binary running only `test` with the probe `name` set.
 fn run_probe(test: &str, name: &str) -> std::process::Output {
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 fn stderr_of(o: &std::process::Output) -> String {
@@ -121,11 +123,12 @@ fn in_child(test: &str, name: &str, env: &[(&str, &str)], body: impl FnOnce()) -
         None => {}
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .envs(env.iter().copied())
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{test}/{name} failed in its child: {}", child_report(&o));
     stderr_of(&o)
 }
@@ -276,19 +279,19 @@ fn s2_2_c_5() {
 }
 
 /// §2.2: `perror(s)` writes `s: <message>\n` (the message alone when `s` is NULL or empty) to
-/// `stderr`; an unoriented `stderr` stays unoriented, a wide one is honoured.
+/// `stderr`; a wide `stderr` is honoured (an unoriented one becomes byte-oriented, as the reference
+/// does: pinned by `conformance/c/s20_psignal_stream.c`, test `psignal_stderr_stream_cases`).
 #[test]
 fn s2_2_c_6() {
     let err = in_child("s2_2_c_6", "s2_2_c_6", &[], || {
         let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        assert!(io::fwide(fp, 1) > 0);
         errno::set_raw(ENOENT);
         x::perror(cs("ctx").as_ptr());
         assert_eq!(errno::get(), ENOENT, "errno unchanged");
         x::perror(null());
         errno::set_raw(EINVAL);
         x::perror(cs("").as_ptr());
-        assert_eq!(io::fwide(fp, 0), 0, "still unoriented");
-        assert!(io::fwide(fp, 1) > 0);
         errno::set_raw(ERANGE);
         x::perror(cs("wide").as_ptr());
         assert!(io::fwide(fp, 0) > 0, "still wide");

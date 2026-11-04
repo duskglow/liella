@@ -454,6 +454,8 @@ pub trait Env {
     fn call3(&self, f: usize, a: usize, b: usize, c: usize) -> isize;
     /// The calling thread's `errno` (what a cookie hook left after returning -1).
     fn errno(&self) -> i32;
+    /// Set the calling thread's `errno` (a partial record returned with the read error left in it).
+    fn set_errno(&self, e: Errno);
     /// The head of the open-streams list (`_IO_list_all`).
     fn list_head(&self) -> &AtomicUsize;
     /// The words of the stream at `addr` (a `FILE *` from the list).
@@ -1324,7 +1326,11 @@ pub fn refill<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext) -> Option<KR
         return None;
     }
     let flags = get(words, word::FLAGS);
-    s.eof = flags & EOF_SEEN != 0;
+    if flags & EOF_SEEN != 0 {
+        // Sticky end of input: the general path answers without reading.
+        return None;
+    }
+    s.eof = false;
     s.err = flags & ERR_SEEN != 0;
     s.role = Role::Reading;
     s.rpos = RESERVE;
@@ -1439,7 +1445,7 @@ enum Direct {
 fn read_direct<E: Env>(env: &E, ext: &mut Ext, out: &mut [u8]) -> Direct {
     let cap = ext.buf_len.saturating_sub(RESERVE);
     let s = &mut ext.state;
-    if ext.buf == 0 || cap == 0 || out.len() < cap || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
+    if ext.buf == 0 || cap == 0 || out.len() < cap || s.eof || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
         return Direct::No;
     }
     match s.role {
@@ -1868,16 +1874,14 @@ pub fn gets_into<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, out: &mut
                         break;
                     }
                 }
-                Err(e) => {
-                    if n == 0 {
-                        return Err(e);
-                    }
-                    break;
-                }
+                // A read error is NULL even after some bytes (the reference; the bytes stay in
+                // `out`, not terminated).
+                Err(e) => return Err(e),
             }
         }
     }
-    if let Some(t) = out.get_mut(n) {
+    // Nothing stored (end of input first): the buffer is left as it was (the reference).
+    if let Some(t) = out.get_mut(n).filter(|_| n > 0 || room == 0) {
         *t = 0;
     }
     Ok((n > 0 || room == 0).then_some(n))
@@ -1996,20 +2000,30 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
     let mut len = 0usize;
+    // Set when the growth of the caller's buffer failed: that error is the result, not a read error.
+    let mut grow_failed = false;
     if !byte_oriented(file) {
         return Ok(None);
     }
     load(file, ext);
+    // The error indicator stops a record read before it reads (the reference).
+    if ext.state.err {
+        return Err(Errno::EIO);
+    }
     if input_flushes(ext) {
         flush_line_buffered(env, true);
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {
-            let need = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)).ok_or(Errno::EOVERFLOW)?;
+            let Some(need) = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)) else {
+                grow_failed = true;
+                return Err(Errno::EOVERFLOW);
+            };
             if need > cap {
                 let ncap = need.max(cap.saturating_mul(2)).max(120);
                 let nb = env.realloc(buf, ncap);
                 if nb == 0 {
+                    grow_failed = true;
                     return Err(Errno::ENOMEM);
                 }
                 buf = nb;
@@ -2035,7 +2049,16 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         Err(e) => {
             ext.state.err = true;
             store(file, ext);
-            Err(e)
+            // The bytes read before the error are the record (the reference), the error
+            // indicator is set.
+            if len == 0 || grow_failed {
+                return Err(e);
+            }
+            env.set_errno(e);
+            if let Some(t) = env.bytes(buf, cap).get_mut(len) {
+                *t = 0;
+            }
+            Ok(Some(len))
         }
     }
 }

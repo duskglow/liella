@@ -523,6 +523,41 @@ fn cmp3(a: &mut [u8], ia: usize, b: &mut [u8], ib: usize, n: usize) -> (c_int, c
 }
 
 #[test]
+fn memcmp_129_to_256_one_difference_among_equal_bytes_and_two_differences() {
+    // Clauses: s4_3_c_1, s4_3_c_2 (PERF-MEMCMP-256-AVX2). One differing byte with equal bytes
+    // after it (every other test makes all later bytes differ), and two differing bytes where the
+    // earlier one decides, for every length 129-256 and position, at misaligned starts.
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        let mut a = vec![0u8; 64 + 256 + 64];
+        let mut b = a.clone();
+        for (ia, ib) in [(0usize, 0usize), (3, 17), (31, 1)] {
+            for n in 129..=256usize {
+                for pos in 0..n {
+                    a.fill(5);
+                    b.fill(5);
+                    for i in 0..n {
+                        a[ia + i] = (i * 7) as u8;
+                        b[ib + i] = (i * 7) as u8;
+                    }
+                    (a[ia + pos], b[ib + pos]) = (0x80, 0x7F);
+                    assert_eq!(cmp3(&mut a, ia, &mut b, ib, n).0.signum(), 1, "one difference, avx2={avx2}, n {n}, pos {pos}");
+                    // A second, opposite difference later (at the end and in the middle).
+                    for later in [pos + 1, (pos + n) / 2, n - 1] {
+                        if later > pos && later < n {
+                            (a[ia + later], b[ib + later]) = (0x01, 0xF0);
+                            assert_eq!(cmp3(&mut a, ia, &mut b, ib, n).0.signum(), 1, "two differences, avx2={avx2}, n {n}, pos {pos}, later {later}");
+                            (a[ia + later], b[ib + later]) = ((later * 7) as u8, (later * 7) as u8);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn memcmp_finds_the_first_difference_at_every_alignment_length_and_position() {
     // Clauses: s4_3_c_1, s4_3_c_2, s4_3_c_3 (D-4.14, P7).
     let _g = level();
@@ -1506,7 +1541,7 @@ fn memset_matches_a_byte_loop_around_the_rep_stosb_threshold_at_every_alignment(
     // and runs `rep stosb` from the next 64-byte boundary; every start offset modulo 64, sizes
     // around the threshold and 4 KiB, nothing outside the region written.
     // Both paths on every machine: ERMS forced off (the loops) and on (`rep stosb`, correct
-    // without ERMS too; keke's Zen 1 has none).
+    // without ERMS too; Zen 1 host's Zen 1 has none).
     let _g = level();
     liella_boundary::cpu::init();
     for (erms, n) in [false, true].into_iter().flat_map(|e| [129usize, 1279, 1280, 1281, 4095, 4096, 4097, 65_537].map(|n| (e, n))) {

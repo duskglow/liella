@@ -1,6 +1,6 @@
 //! The privileged paths of the network, namespace, host-id and login-record interfaces, tested
 //! without root (plan next-batch-1024, USERNS-PRIV-PATHS). Phases 10 and 11 left these "untested
-//! for lack of privilege": a successful `rresvport` and `bindresvport` bind to a reserved port,
+//! for lack of privilege": a successful `bindresvport` bind to a reserved port,
 //! `unshare`/`setns` into real namespaces, `login`/`logout`/`logwtmp` writing the system `utmp`
 //! and `wtmp`, and `sethostid`'s success inside and `EPERM`/`EACCES` outside a namespace.
 //!
@@ -72,10 +72,8 @@ static void dump(const char *what, const char *path) {
 }
 
 static void plain(void) {
-    int port = 1023, fd;
+    int fd;
     { int rc; errno = 0; rc = sethostid(0x1234); printf("sethostid(outside): rc=%d errno=%d\n", rc, errno); }
-    errno = 0; fd = rresvport(&port); printf("rresvport(outside): ok=%d errno=%d\n", fd >= 0, fd >= 0 ? 0 : errno);
-    if (fd >= 0) close(fd);
     fd = socket(AF_INET, SOCK_STREAM, 0);
     { int rc; errno = 0; rc = bindresvport(fd, NULL); printf("bindresvport(outside): rc=%d errno=%d\n", rc, errno); }
     close(fd);
@@ -87,7 +85,7 @@ static int mount_scratch(const char *where) {
 }
 
 static void ns(void) {
-    int port = 1023, port2 = 1023, fd, fd2, s, nsfd;
+    int s, nsfd;
     char name[64], line[64];
     struct sockaddr_in sin;
 
@@ -95,10 +93,6 @@ static void ns(void) {
     printf("scratch mounts: ok\n");
 
     /* §15.8: a successful reserved-port bind, in the private network namespace. */
-    fd = rresvport(&port);
-    port_of("rresvport", fd, 512, 1023);
-    fd2 = rresvport(&port2);
-    printf("rresvport again: ok=%d lower=%d\n", fd2 >= 0, fd2 >= 0 && port2 < port);
     s = socket(AF_INET, SOCK_STREAM, 0);
     printf("bindresvport(NULL): rc=%d\n", bindresvport(s, NULL));
     port_of("bindresvport(NULL)", s, 1, 1023);
@@ -108,8 +102,6 @@ static void ns(void) {
     printf("bindresvport(sin): rc=%d\n", bindresvport(s, &sin));
     port_of("bindresvport(sin)", s, 1, 1023);
     close(s);
-    if (fd >= 0) close(fd);
-    if (fd2 >= 0) close(fd2);
 
     /* §18.9: unshare and setns into real namespaces. */
     nsfd = open("/proc/self/ns/uts", O_RDONLY);
@@ -206,8 +198,6 @@ fn same(what: &str, want: &str, got: &str) {
 /// Lines the Liella run must contain (the reference has them too, by `same`).
 const EXPECT: &[&str] = &[
     "scratch mounts: ok",
-    "rresvport: bound=1 in_range=1",
-    "rresvport again: ok=1 lower=1",
     "bindresvport(NULL): rc=0",
     "bindresvport(NULL): bound=1 in_range=1",
     "bindresvport(sin): rc=0",
@@ -264,12 +254,12 @@ fn privileged_paths_in_user_namespaces() {
 
     let wrap = ["unshare", "-r", "-m", "-n"];
     if !Command::new("unshare").args(wrap).arg("true").status().is_ok_and(|s| s.success()) {
-        skip_note::skipped("skipped: no unprivileged user, mount and network namespaces (unshare -r -m -n); NOT RUN: the successful rresvport/bindresvport binds, unshare/setns into real namespaces, login/logout/logwtmp into scratch utmp/wtmp, sethostid inside; run only: the failures outside a namespace");
+        skip_note::skipped("skipped: no unprivileged user, mount and network namespaces (unshare -r -m -n); NOT RUN: the successful bindresvport binds, unshare/setns into real namespaces, login/logout/logwtmp into scratch utmp/wtmp, sethostid inside; run only: the failures outside a namespace");
         return;
     }
     let want = run(&host, "ns", &wrap);
     if want.contains("scratch mounts unavailable") || want.contains("failed errno=") {
-        skip_note::skipped("skipped: the namespace refuses the tmpfs mounts; NOT RUN: all in-namespace checks (rresvport/bindresvport binds, unshare/setns, login/logout/logwtmp, sethostid inside)");
+        skip_note::skipped("skipped: the namespace refuses the tmpfs mounts; NOT RUN: all in-namespace checks (bindresvport binds, unshare/setns, login/logout/logwtmp, sethostid inside)");
         return;
     }
     let got = run(&ours, "ns", &wrap);

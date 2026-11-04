@@ -352,7 +352,10 @@ macro_rules! shards {
             // Clauses: s10_5_c_0, s10_0_f_0, s10_0_g_0 (D-10.17, D-10.18).
             complex_functions($k);
         }
-    )*};
+    )*
+        /// The shard tests are exactly shards `0..shard::SHARDS`, in order.
+        const _: () = assert!(shard::list_is_exact(&[$($k),*]));
+    };
 }
 shards! {
     complex_functions_against_the_reference_and_the_oracle_s0 = 0;

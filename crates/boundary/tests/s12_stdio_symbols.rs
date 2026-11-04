@@ -505,13 +505,15 @@ fn waits(fp: *mut FILE, op: impl FnOnce(*mut FILE)) -> bool {
 fn reexec(test: &str, name: &str, input: &[u8]) -> std::process::Output {
     let t = tmp_with("stdin", input);
     let scratch = child_scratch();
-    std::process::Command::new(std::env::current_exe().unwrap())
-        .args([test, "--exact", "--test-threads=1", "--nocapture"])
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
         .env(PROBE, name)
         .env(CHILD_TMP, &scratch.0)
         .stdin(std::fs::File::open(&t.0).unwrap())
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
+    out
 }
 
 /// The variable naming a re-executed child's scratch directory ([`child_scratch`]).
@@ -823,10 +825,10 @@ fn fgets_pieces(f: Fgets) {
     assert_eq!(script_seen(fp), [0, 1, 2, 3], "flushed before every read inside the line");
     assert_eq!(x::fclose(fp), 0);
     assert_eq!(x::fclose(out), 0);
-    // A read error after some bytes ends the line with the error indicator set.
+    // A read error after some bytes is NULL with the error indicator set; the bytes stay in the
+    // buffer, unterminated (the reference; STDIO-EOF-PARTIAL-REFERENCE).
     let fp = script(Script { data: b"ab".to_vec(), step: 1, fail: true, ..Script::default() });
-    assert_eq!(f(p, 100, fp), p);
-    assert!(text(p) == "ab" && x::ferror(fp) != 0, "the bytes before the error");
+    assert!(f(p, 100, fp).is_null() && x::ferror(fp) != 0, "NULL on the error after some bytes");
     assert!(f(p, 100, fp).is_null(), "the error before any byte");
     assert_eq!(x::fclose(fp), 0);
     let fp = open(&t, "r");
@@ -3997,10 +3999,36 @@ fn sym_perror() {
         diag::perror(null());
         errno::set_raw(EINVAL);
         diag::perror(c"".as_ptr());
-        kept && x::fwide(fp, 0) == 0
+        kept && x::fwide(fp, 0) < 0
     }) {
-        assert_eq!(st, Some(0), "errno kept, stderr left unoriented: {err}");
+        assert_eq!(st, Some(0), "errno kept, stderr byte-oriented by perror (s2_2_c_6): {err}");
         assert!(err.ends_with("ctx: No such file or directory\nNo such file or directory\nInvalid argument\n"), "{err}");
+    }
+}
+
+// Covers: s2_2_c_6. Each text form byte-orients an undecided stderr on its own: a child per form,
+// so one form cannot mask the other.
+#[test]
+fn sym_perror_text_orients() {
+    if let Some((st, err)) = in_child("sym_perror_text_orients", "perror_text", &[], || {
+        let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        errno::set_raw(ENOENT);
+        diag::perror(c"ctx".as_ptr());
+        x::fwide(fp, 0) < 0
+    }) {
+        assert_eq!(st, Some(0), "perror with text byte-orients stderr: {err}");
+    }
+}
+
+#[test]
+fn sym_perror_bare_orients() {
+    if let Some((st, err)) = in_child("sym_perror_bare_orients", "perror_bare", &[], || {
+        let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        errno::set_raw(ENOENT);
+        diag::perror(null());
+        x::fwide(fp, 0) < 0
+    }) {
+        assert_eq!(st, Some(0), "perror without text byte-orients stderr: {err}");
     }
 }
 

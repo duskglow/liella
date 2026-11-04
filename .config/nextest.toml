@@ -44,7 +44,7 @@ filter = "binary(=aio_products)"
 test-group = "privileged-aio"
 
 # GATE-SPEED: the privileged group is the longest chain of a pass (17 tests one at a time,
-# ~635 s of a ~645 s pass on keke, aio_products alone ~290 s): its tests start first, so the chain
+# ~635 s of a ~645 s pass on Zen 1 host, aio_products alone ~290 s): its tests start first, so the chain
 # begins at once and is never queued behind other tests.
 [[profile.default.overrides]]
 filter = "binary(=admin_products) | binary(=aio_products) | binary(=catalogs_products) | binary(=dns_products) | binary(=fstree_products) | binary(=mntent_products) | binary(=netdb_products) | binary(=noproc_products) | binary(=nscache_products) | binary(=patterns_products) | binary(=posixipc_products) | binary(=process_products) | binary(=syslog_products) | binary(=terminals_products) | binary(=users_products)"
@@ -62,6 +62,7 @@ test(/^pattern::regex::plain_tests::required_strings_are_in_every_match_/)
 | (binary(=strstr_find) & test(/^str(case)?str_matches_a_naive_search/))
 | (binary(=small_compare) & test(/^compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_/))
 | (binary(=special_cr) & test(/^long_double_bessel_functions_are_correctly_rounded_/))
+| (binary(=complex_ld_cr_products) & test(/^complex_long_double_functions_against_the_reference_and_the_oracle_s/))
 | (binary(=casecmp_avx2) & test(=casecmp_equals_the_path_of_before_at_every_alignment_pair_length_and_difference))
 | test(=affected::tests::csys_assembly_selects_the_users_of_its_symbols)
 """

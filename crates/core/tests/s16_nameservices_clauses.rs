@@ -96,7 +96,7 @@ impl Fx {
 
     /// A lookup context: the fixture's files and the configuration `conf` (an nsswitch.conf text).
     fn ctx(&self, conf: &str) -> Ctx<'_, CSys> {
-        Ctx { sys: &CSys, paths: &self.paths, config: Config::parse(conf.as_bytes()), multi: false, dns: None, locale: None, cache: None }
+        Ctx { sys: &CSys, paths: &self.paths, config: Config::parse(conf.as_bytes()), multi: false, hconf: None, dns: None, locale: None, cache: None }
     }
 }
 
@@ -131,7 +131,8 @@ fn in_child(name: &str) -> bool {
         liella_boundary::selftest::mark_own_process();
         return true;
     }
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1"]).env("LIELLA_C16_CHILD", name).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1"]).env("LIELLA_C16_CHILD", name).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{name} in a child:\n{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     false
 }
@@ -875,7 +876,7 @@ fn zone() -> Vec<dns_server::Record> {
         aaaa("both.test", "2001:db8::21".parse().unwrap()),
         cname("cname.test", "a.test"),
         a("multi.test", [192, 0, 2, 12]),
-        a("multi.test", [10, 1, 1, 1]),
+        a("multi.test", [11, 1, 1, 1]),
         a("multi.test", [130, 155, 161, 1]),
         a("x.s2.test", [192, 0, 2, 60]),
         a("ad.test", [192, 0, 2, 33]),
@@ -966,7 +967,7 @@ fn s16_4_c_1_1() {
     assert_eq!(shown.servers.len(), 3, "MAXNS");
     resolv::extend(&mut shown, &full).unwrap();
     assert_eq!(shown.servers.len(), 4, "the file's fourth server is used behind the first three");
-    let mut other = RConf::parse(Some(b"nameserver 10.0.0.1\nnameserver 10.0.0.2\nnameserver 10.0.0.3\n"), None, None, b"h", |_| None).unwrap();
+    let mut other = RConf::parse(Some(b"nameserver 11.0.0.1\nnameserver 11.0.0.2\nnameserver 11.0.0.3\n"), None, None, b"h", |_| None).unwrap();
     resolv::extend(&mut other, &full).unwrap();
     assert_eq!(other.servers.len(), 3, "a state with other servers is not extended");
 }
@@ -1012,9 +1013,9 @@ fn s16_4_c_1_3() {
 fn s16_4_c_1_4() {
     // The sort list orders the IPv4 addresses of host lookups (resolv.conf(5)): the first
     // matching pair's position, the unmatched last in their order.
-    let c = RConf::parse(Some(b"sortlist 130.155.160.0/255.255.240.0 10.0.0.0 192.168.0.0/8\n"), None, None, b"h", |_| None).unwrap();
+    let c = RConf::parse(Some(b"sortlist 130.155.160.0/255.255.240.0 11.0.0.0 192.168.0.0/8\n"), None, None, b"h", |_| None).unwrap();
     assert_eq!(c.sort[0], ([130, 155, 160, 0], [255, 255, 240, 0]));
-    assert_eq!(c.sort[1], ([10, 0, 0, 0], [255, 0, 0, 0]), "the class mask by default");
+    assert_eq!(c.sort[1], ([11, 0, 0, 0], [255, 0, 0, 0]), "the class mask by default");
     assert_eq!(c.sort[2].1, [0, 0, 0, 8], "the mask as inet_aton reads it (observed)");
     let srv = dns_server::start(zone());
     let mut conf = rconf(srv.port);
@@ -1022,7 +1023,7 @@ fn s16_4_c_1_4() {
     let fx = Fx::new("sortlist");
     let r = Resolver { conf, aliases: None };
     let ctx = Ctx { dns: Some(&r), ..fx.ctx("hosts: dns\n") };
-    assert_eq!(host(netdb::host_lookup(&ctx, b"multi.test", Family::V4)), Ok("multi.test [] 130.155.161.1,10.1.1.1,192.0.2.12".into()));
+    assert_eq!(host(netdb::host_lookup(&ctx, b"multi.test", Family::V4)), Ok("multi.test [] 130.155.161.1,11.1.1.1,192.0.2.12".into()));
 }
 
 #[test]
@@ -1361,7 +1362,7 @@ fn rpc_malformed_line_corpus() {
 }
 
 /// Files whose last entry has no trailing newline (no spec clause: probe-settled on glibc 2.39,
-/// shiki, a bind mount over /etc/rpc in an unprivileged namespace). Each case: the file, the
+/// Haswell-EP host, a bind mount over /etc/rpc in an unprivileged namespace). Each case: the file, the
 /// getrpcent sequence, then (name or alias, number) lookups that must find the last entry, and
 /// names/numbers that must find nothing.
 fn rpc_last_line_without_newline() {

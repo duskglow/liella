@@ -169,6 +169,56 @@ fn math_double_fast_entry_matches_the_envelope_in_every_mode() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+// ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
+    // Clauses: s10_0_f_0.
+    // The fast path may run in place only under the default control word; under any other word
+    // the entry switches to the default one before computing (D-10.13). Every rounding direction,
+    // with and without FTZ and DAZ: the result is liella-math's accurate one in that direction and
+    // MXCSR after the call is the caller's word with exactly the reference flags added, nothing
+    // else. Values alone cannot show which path ran (the kernels' rounding tests also hold in the
+    // caller's direction); a subnormal argument can: the fast domain tests compare it, raising the
+    // denormal-operand bit in hardware, which the entry never leaves in the caller's word.
+    use liella_math::Rounding;
+    use liella_math::real::Real;
+    let args = [(0.75, 2.5), (1.5, 0.3), (3.7, -1.7), (10.5, 7.25), (123.456, 0.1), (1e-310, 0.3), (5e-320, -0.3)]; // every result normal (FTZ)
+    // The refused specials answered in place in the default word (ruling #2378) and the signalling NaN that is not.
+    let specials = [(f64::NAN, 0.3), (f64::from_bits(0x7ff4_0000_0000_0000), 0.3), (f64::INFINITY, 0.3), (f64::NEG_INFINITY, 0.3)];
+    let args: Vec<(f64, f64)> = args.into_iter().chain(specials).collect();
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for (name, f, _) in double_fast_entries() {
+        for &(x, y) in &args {
+            for (rc, &mode) in (0u32..).zip(modes.iter()) {
+                let (want, st) = match name {
+                    "exp" => Real::exp(x, mode),
+                    "exp2" => Real::exp2(x, mode),
+                    "log" => Real::log(x, mode),
+                    "log2" => Real::log2(x, mode),
+                    "log10" => Real::log10(x, mode),
+                    _ => Real::pow(x, y, mode),
+                };
+                for extra in [0, 0x8000, 0x40, 0x8040] {
+                    if extra & 0x40 != 0 && x < f64::MIN_POSITIVE {
+                        continue; // DAZ reads a subnormal argument as zero: another function value
+                    }
+                    let word = 0x1f80 | (rc << 13) | extra;
+                    let got = around(word, || f(x, y).to_bits());
+                    let need = (want.to_bits(), word | u32::from(st.flags.0));
+                    if got != need {
+                        bad.push(format!("{name}({x:e}, {y:e}) word {word:x}: {got:x?} vs {need:x?}"));
+                    }
+                    checked = checked.saturating_add(1);
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} mismatches:\n{}", bad.len(), bad.join("\n"));
+    assert!(checked > 500, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// Every argument of `args` through each double fast entry ([`math_double_fast_entry_matches_the_envelope_in_every_mode`]):
 /// the number checked and one line per mismatch.
 #[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
@@ -351,7 +401,7 @@ fn math_envelope_keeps_the_callers_mxcsr() {
 #[test]
 fn math_envelope_keeps_a_result_that_is_not_tiny_under_the_callers_ftz() {
     // Clauses: s10_0_f_0.
-    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on shiki,
+    // The tininess edge is x86's: tiny AFTER rounding with an unbounded exponent (probed on Haswell-EP host,
     // see `ftz_flushes_the_tininess_edge` in mathret.rs). A result that is exactly the smallest
     // normal and not tiny is kept under the caller's FTZ, without underflow.
     let edge = f64::MIN_POSITIVE;
@@ -1312,8 +1362,8 @@ symbol!(sym___ynf128_finite, "__ynf128_finite", "10", "2.26", r##""##);
 symbol!(sym___ynf_finite, "__ynf_finite", "10", "2.15", r##""##);
 symbol!(sym___ynl_finite, "__ynl_finite", "10", "2.15", r##""##);
 
-/// The elementary functions of `float`, `double` (Track M milestone 2) and `long double`
-/// (milestone 5a; `_Float128` follows, and with it the family tests): each name of those formats
+/// The elementary functions of `float`, `double` (Track M milestone 2), `long double`
+/// (milestone 5a) and `_Float128` (milestone 5, M5-5 and M5-6): each name of every family member
 /// is exported, and the translation layer reports the result, the flags and errno of the
 /// implementation.
 #[test]
@@ -1324,7 +1374,7 @@ fn elementary_float_double_and_long_double_members() {
         "atan", "atan2", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
     ];
     for base in families {
-        for suffix in ["", "f", "f32", "f64", "f32x", "l", "f64x"] {
+        for suffix in ["", "f", "f32", "f64", "f32x", "l", "f64x", "f128"] {
             products::math_exported(&format!("{base}{suffix}"));
         }
     }
@@ -1337,6 +1387,9 @@ fn elementary_float_double_and_long_double_members() {
     let (mut sl, mut cl) = (LdBits::from_bits(9), LdBits::from_bits(9));
     assert_eq!(observe(|| m::liella_sincosl_bits(LdBits::from_bits(0), Some(&mut sl), Some(&mut cl))), (0, Flags(0)));
     assert_eq!((sl.to_bits(), cl.to_bits()), (0, one));
+    // _Float128: exp(0) = 1 exactly, through the bit-level forwarder the C wrapper calls.
+    let q = |hi: u64| liella_abi::ctypes::F128Bits::from_bits(u128::from(hi) << 64);
+    assert_eq!(observe(|| assert_eq!(m::liella_expf128_bits(q(0)).to_bits(), q(0x3fff_0000_0000_0000).to_bits())), (0, Flags(0)));
     assert_eq!(observe(|| assert!(m::expf(100.0).is_infinite())), (34, Flags(0x28))); // ERANGE, overflow
     assert_eq!(observe(|| assert_eq!(m::exp(-1000.0), 0.0)), (34, Flags(0x30))); // ERANGE, underflow
     assert_eq!(observe(|| assert!(m::log(-1.0).is_nan())), (33, Flags::INVALID)); // EDOM
@@ -1353,15 +1406,15 @@ fn elementary_float_double_and_long_double_members() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
-/// The special functions of `float`, `double` (Track M milestone 3) and `long double`
-/// (milestone 5b; `_Float128` follows, and with it the family tests): each name of those formats
-/// is exported, `lgamma` and `gamma` store the sign of Γ(x) in `signgam` and `lgamma_r` through
+/// The special functions of `float`, `double` (Track M milestone 3), `long double` (milestone 5b)
+/// and `_Float128` (milestone 5, M5-7; glibc 2.39 has no `gammaf128`): each name of every family
+/// member is exported, `lgamma` and `gamma` store the sign of Γ(x) in `signgam` and `lgamma_r` through
 /// its pointer.
 #[test]
 fn special_float_double_and_long_double_members() {
     // Clauses: s10_3_c_0, s10_0_c_0.
     for base in ["erf", "erfc", "tgamma", "lgamma", "j0", "j1", "y0", "y1", "jn", "yn"] {
-        for suffix in ["", "f", "f32", "f64", "f32x", "l", "f64x"] {
+        for suffix in ["", "f", "f32", "f64", "f32x", "l", "f64x", "f128"] {
             products::math_exported(&format!("{base}{suffix}"));
         }
     }
@@ -1405,6 +1458,10 @@ fn special_float_double_and_long_double_members() {
     assert_eq!(observe(|| assert_eq!(m::liella_jnl_bits(-3, half).to_bits(), m::liella_jnl_bits(3, half).to_bits() ^ (1 << 79))), (0, Flags::INEXACT));
     // Γ(1756) is above LDBL_MAX: ERANGE with overflow.
     assert_eq!(observe(|| assert_eq!(m::liella_tgammal_bits(ld(0x4009, 0xdb80_0000_0000_0000)).to_bits(), ld(0x7fff, 1 << 63).to_bits())), (34, Flags(0x28)));
+    // _Float128: Γ(5) = 24 and erf(−0) = −0, exact, through the bit-level forwarders.
+    let q = |hi: u64| liella_abi::ctypes::F128Bits::from_bits(u128::from(hi) << 64);
+    assert_eq!(observe(|| assert_eq!(m::liella_tgammaf128_bits(q(0x4001_4000_0000_0000)).to_bits(), q(0x4003_8000_0000_0000).to_bits())), (0, Flags(0)));
+    assert_eq!(observe(|| assert_eq!(m::liella_erff128_bits(q(0x8000_0000_0000_0000)).to_bits(), q(0x8000_0000_0000_0000).to_bits())), (0, Flags(0)));
     fpu::clear(&CSys, Flags::ALL);
 }
 
@@ -1444,8 +1501,8 @@ fn complex_float_and_double_members() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
-/// The complex forwarders of `long double`, `_Float64x` and `_Float128` (D-10.21): each name is
-/// exported, and the bit-level functions behind the C forwarders keep the parts in their order
+/// The complex functions of `long double`, `_Float64x` and `_Float128` (D-10.21; milestone 5,
+/// M5-1 to M5-4): each name of every family member is exported, and the bit-level functions behind the C forwarders keep the parts in their order
 /// and report the flags of the implementation.
 #[test]
 fn complex_long_double_and_float128_forwarded_members() {
@@ -1457,6 +1514,15 @@ fn complex_long_double_and_float128_forwarded_members() {
     }
     products::math_exported("cargl");
     products::math_exported("cargf64x");
+    for base in [
+        "carg", "cexp", "clog", "clog10", "cpow", "csqrt", "csin", "ccos", "ctan", "csinh", "ccosh", "ctanh", "casin", "cacos", "catan",
+        "casinh", "cacosh", "catanh",
+    ] {
+        for suffix in ["l", "f64x", "f128"] {
+            products::math_exported(&format!("{base}{suffix}"));
+        }
+    }
+    products::math_exported("__clog10l");
     use liella_abi::ctypes::F128Bits;
     use liella_boundary::mathret::Complex;
     let ld = |e: u128, sig: u64| LdBits::from_bits((e << 64) | u128::from(sig));
@@ -1479,6 +1545,7 @@ fn complex_long_double_and_float128_forwarded_members() {
     assert_eq!(observe(|| assert_eq!(m::liella_crealf128_bits(w), w.re)), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::liella_cimagf128_bits(w), w.im)), (0, Flags(0)));
     assert_eq!(observe(|| assert_eq!(m::liella_conjf128_bits(w), Complex { re: w.re, im: q(0xc000_0000_0000_0000) })), (0, Flags(0)));
+    assert_eq!(observe(|| assert_eq!(m::liella_cexpf128_bits(Complex { re: q(0), im: q(0) }), Complex { re: q(0x3fff_0000_0000_0000), im: q(0) })), (0, Flags(0)));
     let three_four = Complex { re: q(0x4000_8000_0000_0000), im: q(0x4001_0000_0000_0000) };
     assert_eq!(observe(|| assert_eq!(m::liella_cabsf128_bits(three_four), q(0x4001_4000_0000_0000))), (0, Flags(0)));
     let qinf = Complex { re: q(0xffff_0000_0000_0000), im: q(0x8000_0000_0000_0000) };

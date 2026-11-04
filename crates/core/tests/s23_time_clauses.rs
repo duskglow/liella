@@ -79,10 +79,11 @@ fn alone(name: &str, body: impl FnOnce() -> bool) {
         CSys.exit_group(if body() { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([name, "--exact", "--test-threads=1"])
+        .args([name, "--exact", "--include-ignored", "--test-threads=1"])
         .env("LIELLA_C23_ALONE", name)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert_eq!(o.status.code(), Some(0), "{name} failed in its child: {}", child_report(&o));
 }
 
@@ -463,10 +464,11 @@ fn single(test: &str, probe: &str, body: fn(&CSys) -> i32) {
         Ok(_) => {}
         Err(_) => {
             let o = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([test, "--exact", "--test-threads=1", "--nocapture"])
+                .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
                 .env("LIELLA_C23_ALONE", probe)
                 .output()
                 .unwrap();
+            assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
             assert_eq!(o.status.code(), Some(0), "{probe} failed in its child: {}", child_report(&o));
         }
     }
@@ -1818,11 +1820,13 @@ fn s23_7_c_3() {
     }
     let d = scratch::Scratch::dir("c73");
     std::fs::write(d.join("templates"), "%Y-%m-%d\n").unwrap();
+    // reexec-guard: allow(the child prints the getdate_r line, asserted below)
     let r = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["s23_7_c_3_child", "--exact", "--test-threads=1", "--nocapture", "--ignored"])
         .env("DATEMSK", d.join("templates"))
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&r.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", r.status);
     assert!(String::from_utf8_lossy(&r.stdout).contains("getdate_r=0 mday=4 mon=6"), "{}", String::from_utf8_lossy(&r.stdout));
 }
 

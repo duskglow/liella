@@ -48,7 +48,7 @@ static DONE: AtomicBool = AtomicBool::new(false);
 /// The control's request: a LARGE block (above `MAX_SMALL`, 64 KiB). A small request is served from
 /// the calling thread's cache (D-3.12) without any lock once an earlier allocation in the child
 /// (std's own, via the exported `malloc`) has given that class a slab, so `malloc(64)` returned
-/// at once and the control saw no blocked lock (b21 gates, keke and the 5.10 guest). A large
+/// at once and the control saw no blocked lock (b21 gates, Zen 1 host and the 5.10 guest). A large
 /// block always needs its own mapping and an entry in the large-block table, taken under the
 /// large lock, which `with_all_locks` holds; the child never frees a large block first, so no
 /// kept block (D-3.13) can answer it either.
@@ -353,7 +353,8 @@ fn run_child(name: &str, var: &str) -> (std::process::Output, std::time::Duratio
     let dir = Scratch::new(name);
     let scale = timeout::scale();
     let t = std::time::Instant::now();
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--test-threads=1"]).env(var, "1").env(SCRATCH, &dir.0).env("LIELLA_TEST_TIMEOUT_SCALE", scale.to_string()).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([name, "--exact", "--include-ignored", "--test-threads=1"]).env(var, "1").env(SCRATCH, &dir.0).env("LIELLA_TEST_TIMEOUT_SCALE", scale.to_string()).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     (o, t.elapsed(), scale)
 }
 

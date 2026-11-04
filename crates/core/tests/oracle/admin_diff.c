@@ -137,8 +137,8 @@ static void modules_io_log(void)
     printf("  entry 0: %02x%02x%02x%02x%02x%02x%02x%02x\n", ldt[0], ldt[1], ldt[2], ldt[3], ldt[4], ldt[5], ldt[6], ldt[7]);
     R("modify_ldt(read, 0)", modify_ldt(0, ldt, 0));
     R("quotactl(Q_GETINFO, /)", quotactl(QCMD(Q_GETINFO, USRQUOTA), "/", 0, (caddr_t)kb));
-    /* No device: the kernel's NULL path. A valid Q_SYNC there is a whole-machine writeback (keke:
-       3.8 s with 4 GB dirty; in one shiki gate the reference hung past its watchdog in it), so
+    /* No device: the kernel's NULL path. A valid Q_SYNC there is a whole-machine writeback (Zen 1 host:
+       3.8 s with 4 GB dirty; in one Haswell-EP host gate the reference hung past its watchdog in it), so
        its time is the machine's dirty backlog, not the library's. The invalid quota type 7
        reaches the same NULL path and fails with EINVAL without syncing anything. */
     R("quotactl(Q_SYNC, NULL, type 7)", quotactl(QCMD(Q_SYNC, 7), NULL, 0, NULL));

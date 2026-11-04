@@ -192,7 +192,7 @@ The policy is rules S1-S11 in [plan/02-design-rules.md](../plan/02-design-rules.
 | slice | converting a C pointer and length into a Rust slice or reference | `conv.rs`, `strz.rs`, `heap.rs`, `tb.rs`, `runtime.rs`, single conversions in `posix/*` and `native/*` |
 | allocator | `unsafe impl GlobalAlloc` | `heap.rs` |
 | tb-field | one `%fs`-relative load of a field of the current thread's own block, by a compile-time checked offset; the only inline assembly in Rust (owner ruling 2026-10-06) | `tb.rs` |
-| hot-kernel | unaligned SSE2 loads and stores for small copies, fills and compares over ranges the entry has already validated (owner ruling 2026-10-08, D-4.22) | `hot.rs` |
+| hot-kernel | unaligned SSE2 loads and stores for small copies, fills and compares over ranges the entry has already validated (owner ruling 2026-10-08, D-4.22); calls to CPU-variant `#[target_feature]` builds behind a run-time dispatch flag set only when the CPU and OS provide the feature, each returning the baseline build's results (ruling #2261, 2026-11-04) | `hot.rs` |
 
 * **S3.** Everything else that needs the machine (system calls, process entry, the signal
   restorer, `setjmp`/`longjmp`, context switches, thread start, CPUID, the vDSO call) is in

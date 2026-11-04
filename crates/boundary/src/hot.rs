@@ -959,7 +959,7 @@ fn low_bit(bits: u64) -> usize {
 /// tail's plus its offset `t = n - 16 * K` (MEMCMP-ORDER: no second pass over the bytes; -3: a
 /// branch instead of a variable shift). Bytes the head and tail blocks share are equal in the
 /// tail when the head is, so that is the first difference. No separate
-/// head probe: it cost equal inputs a cycle on shiki (MEMCMP-ORDER-3 bench) while the loads are
+/// head probe: it cost equal inputs a cycle on Haswell-EP host (MEMCMP-ORDER-3 bench) while the loads are
 /// issued together anyway.
 ///
 /// # Safety
@@ -1868,7 +1868,7 @@ pub(crate) unsafe fn equal_tail(a: *const c_void, b: *const c_void, n: usize) ->
 
 /// The AVX2 builds of the hot copy and compare kernels' block classes (D-4.25). Copy: 65 to 128
 /// bytes as two 32-byte blocks from each end, against four 16-byte blocks in the SSE2 build: half
-/// the loads and stores. Measured on Haswell (shiki, MEM-IFUNC size sweep): faster at 65 and 96
+/// the loads and stores. Measured on Haswell (Haswell-EP host, MEM-IFUNC size sweep): faster at 65 and 96
 /// bytes, even at 128; an AVX2 copy at 33 to 64 bytes and an AVX2 fill at 33 to 128 bytes were
 /// slower than SSE2 at every size, so they have none.
 ///
@@ -2506,4 +2506,28 @@ mod fuse {
         unsafe { d.wrapping_add(n).write(0) };
         n
     }
+}
+
+/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.25):
+/// both builds return the same results bit for bit; the FMA one is shorter.
+#[inline(always)]
+pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: a call to the FMA build; the flag is set only on a CPU with
+        // FMA whose AVX state the OS saves (`dispatch::select_fma`'s callers).
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp_nearest(x) };
+    }
+    liella_math::fast64::exp_nearest(x)
+}
+
+/// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log_nearest(x) };
+    }
+    liella_math::fast64::log_nearest(x)
 }

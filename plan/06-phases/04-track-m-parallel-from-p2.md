@@ -188,6 +188,16 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     on the Liella side).
   * **Left for milestone 5:** the `_Float128` elementary and special functions, the complex
     `long double`/`_Float128` members, then the family tests.
+* **Delivered** (milestone 5, 2026-11-04; stories M5-1 to M5-8):
+  * **Functions:** the 105 symcov class-m names: the 23 complex functions for `long double`, `_Float64x`
+    and `_Float128` (D-10.21), `__clog10l`, the 24 `_Float128` elementary and the 11 `_Float128`
+    special functions. `cargo xtask symcov`: class m = 0; `docs/spec-symbol-gaps.tsv` regenerated.
+  * **Tests:** the M5 differential `*_products.rs` tests (listed in `docs/codemap/README.md`),
+    `special_cr.rs`, and the family tests of `s10_math_symbols.rs` (`elementary_...`, `special_...`
+    and `complex_long_double_and_float128_forwarded_members` check every `f128`, `l` and `f64x` name).
+  * **Tooling:** `mathcmp` calls the `_Float128` special functions on the Liella side, and its max-ulp
+    reference is never below the round-toward-zero result.
+  * **Measurements:** `docs/libm-accuracy.tsv` format q, summary in `docs/differences-from-glibc.md`.
 * **Milestone 5 remainder: stories** (ruling #808, planned by MATH-M5-PLAN 2026-10-22). The list is
   `cargo xtask symcov` class m: 105 default-version `libm` names, all missing from both `libm.so.6`
   and `libm.a`. They are 69 complex names (23 functions × `l`, `f64x`, `f128`), `__clog10l`, 24
@@ -212,7 +222,7 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     `LdBits`/`F128Bits`. No assembly is needed.
   * **Proof, the same for every story:**
     * Accuracy against glibc: a differential test in `crates/math/tests/`, built against the host
-      C library and statically against Liella's products, on keke. It runs every function in every
+      C library and statically against Liella's products, on Zen 1 host. It runs every function in every
       rounding direction on special, boundary and random operands. Every differing line is checked
       against the `liella-mathtools` oracle: Liella must be correctly rounded, and invalid,
       division-by-zero, NaNs and `errno` must follow D-10.14/D-10.18.
@@ -299,9 +309,9 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     M5-5 → M5-6, and finally M5-8. Names: 17 + 11 + 24 + 18 + 10 + 14 + 11 = 105.
 * **Milestone 6: speed, stories** (planned by MATH-M6-PLAN 2026-10-23; owner 2026-10-23: glibc's speed is the bar to
   reach per function, not a ceiling, and correct rounding in every mode stays, D-10.13/D-10.15/D-10.17).
-  * **Where we stand** (keke, AMD EPYC 7551 (Zen 1, FMA and AVX2), idle (load 1.3 to 2.8 on 80 threads), not booked;
+  * **Where we stand** (Zen 1 host, AMD EPYC 7551 (Zen 1, FMA and AVX2), idle (load 1.3 to 2.8 on 80 threads), not booked;
     origin/next 42e682a3; job `math-m6-plan-bench-2`). The harness is a scratch C program
-    (`~/work/math-m6-plan/libm_ns.c` on keke). It is built the way `cargo xtask mathcmp` builds: `-O2 -fno-builtin`,
+    (`~/work/math-m6-plan/libm_ns.c` on Zen 1 host). It is built the way `cargo xtask mathcmp` builds: `-O2 -fno-builtin`,
     statically against `target/liella/{libm,libc}.a`, and against host glibc 2.39 both statically and dynamically.
     It measures throughput: 256 independent uniform operands in the range given, round-to-nearest, pinned to one CPU.
     Each function is run 5 times for ≥ 20 ms; the median is taken, and the whole thing runs twice per library. Cells

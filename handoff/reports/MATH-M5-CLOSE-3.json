@@ -1,0 +1,12 @@
+{"task": "MATH-M5-CLOSE-3", "model": "opus", "tokens": null,
+ "result": "M5 plan item docs/tests done (q rows, header note, differences summary, Delivered, f128/complex family tests); check2 rc 0; cmp.rs clamp plant and the affected gate not run (budget)",
+ "branch": "task/math-m5-close-3", "head": null,
+ "gate": {"affected": "not run; check2: clippy, static, so, 3 s10 tests passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["coshf128 tiny x in mode N: Liella raises inexact with result 1 (correct, cosh x != 1), glibc raises nothing; mode U Liella returns nextup(1) (CR), glibc 1", "98-113 undetermined per 1000 in directed modes (cosh, erfc, j0, j1 q) are operands too tiny for 4096 oracle bits; explained in the table header, not fixed", "docs/spec-symbol-gaps.md from run 1 named a lab host (static lab-names); fixed"],
+ "refused": [],
+ "jobs": ["shiki:math-m5-close-3-check2"],
+ "improvement": "a continuation run should get the handoff written by its predecessor: CLOSE-2 left none, and its rows were only on mei's scratch",
+ "next_step": "plant the cmp.rs reference clamp (remove `exact = z;`), run cargo xtask status, then the direct gate with --base origin/next",
+ "report_file": "handoff/math-m5-close.md"}

@@ -33,3 +33,9 @@ Also: comments "register 13.5" -> 16.5 (fast64.rs, tables.rs); register section 
 Counts: strstr and memset re-measured (section 15 appendix). ctype/wctype/fnmatch/libm counts: job integrate-register-perf-2-counts (output ~/work/INTEGRATE-REGISTER-PERF-2/counts-*.txt on mei); their register rows are NOT yet updated.
 Not done: re-plants of the asm (scan.S), ctype, wctype and memset ports (budget). Gate: affected escalated to FULL, rc 0. clippy --workspace --all-targets and cargo xtask static: ok (job -lint).
 Next step: read counts-*.txt, update the ctype/wctype/fnmatch rows in section 15/14, plant the four non-fnmatch ports.
+
+## INTEGRATE-REGISTER-PERF-3 (11-04)
+Merged origin/next (one conflict in docs/saturation/14, kept both sides). Replaced lab host names with processor classes
+(tools/neutral_hosts.sh plus mei -> Skylake-SP host) in bench/instr_limits.tsv and docs/saturation/14,15,16,17.
+NOT VERIFIED: no cargo here, and ssh/vm_common.sh/jobrun were unavailable (no host name resolution, no key, no tools/vm_common.sh), so cargo xtask static has NOT been run. A manual grep showed one possible leftover hit in docs/saturation/14 line 135 (not identified).
+Next: run cargo xtask static on the role (shiki:~/w/sh1 is synced to this head) and fix any lab-names hit, then push.

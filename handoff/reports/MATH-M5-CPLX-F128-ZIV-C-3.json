@@ -1,0 +1,21 @@
+{
+ "task": "MATH-M5-CPLX-F128-ZIV-C-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "gate2 rc 101 was clippy indexing_slicing (fixed); origin/next merged; 1536/3072 width tests added; plants 3 caught + 1 equivalent; FULL gate running; counts not done",
+ "branch": "task/math-m5-cplx-f128-ziv-c-3",
+ "head": "5e088b66",
+ "gate": {"affected": "running (kanon math-m5-cplx-f128-ziv-c-3-gate2, escalated to FULL)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "slack plant (WIDTH_SLACK = 0) EQUIVALENT as proof margin: no test can observe a looser-than-needed proven bound",
+  "gate escalated to FULL because the origin/next merge puts next's files in the changed list",
+  "counts job (retry rates per step, fast-path instructions vs B2-3) not run: budget"
+ ],
+ "refused": [],
+ "improvement": "sync_role/affected treat files brought in by a merge of the base as changed, so a merged branch's direct gate escalates to FULL; diff against the merge's first parent",
+ "next_step": "read FULL gate math-m5-cplx-f128-ziv-c-3-gate2; run the counts job (handoff Not done 1)",
+ "report_file": "handoff/math-m5-cplx-f128-ziv.md",
+ "jobs": ["kanon:math-m5-cplx-f128-ziv-c-3-gate2", "kanon:math-m5-cplx-f128-ziv-c-3-plants2"]
+}

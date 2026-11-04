@@ -1,0 +1,11 @@
+{"task": "PERF-MEMCMP-256-AVX2", "model": "sonnet", "tokens": null,
+ "result": "memcmp 129-256 B AVX2: memcmp_256 70.5 -> 58.4 instr (glibc 57.4), memcmp_144 53.5 -> 47.5; other rows unchanged",
+ "branch": "task/perf-memcmp-256-avx2", "head": "HEADSHA",
+ "gate": {"affected": "gate2 pending at hand-back (first gate, on the pre-160-class head, rc 0)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["-AVX2 level not recounted (new code only reached with cmp_long non-zero)", "256 B remains 1 instruction (1.02x) above glibc: 160-class test costs 2 on 161-256 B"],
+ "refused": [],
+ "improvement": "jobrun runs in the foreground: starting it from a tool call needs a background wrapper; a detached mode would save calls",
+ "next_step": "read perf-memcmp-256-avx2-gate2 on keke",
+ "jobs": ["perf-memcmp-256-avx2-gate2", "perf-memcmp-256-avx2-plants2", "perf-memcmp-256-avx2-plants3", "perf-memcmp-256-avx2-cnt-before", "perf-memcmp-256-avx2-cnt-after2"],
+ "report_file": "handoff/memcmp-256-avx2.md"}

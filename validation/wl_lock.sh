@@ -1,5 +1,5 @@
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# Sourced by wl_prep.sh and wl_percall_run.sh (copied to keke:~/wl/bin with them).
+# Sourced by wl_prep.sh and wl_percall_run.sh (copied to the Zen 1 host (~/wl/bin) with them).
 # BUILD LOCK (TOOLS-SYNC, 2026-10-10): ~/wl/src/<sha> and ~/wl/products/<sha> are shared by every wl_count/wl_percall/
 # wl_gate run; two concurrent `cargo xtask so` in one tree crashed `ar` with SIGBUS. One flock per sha serialises the
 # build and the kit links; the second caller waits, then finds the products. Products appear atomically (tmp + mv).
