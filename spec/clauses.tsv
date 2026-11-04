@@ -87,7 +87,7 @@ s1_7_c_0	1.7	Contract	A declarative command-line parser. The caller supplies a t
 s1_7_c_1	1.7	Contract	parses the list and calls the callback for each option, each operand, and the initialization/finalization events;
 s1_7_c_2	1.7	Contract	generates `--help`, `--usage` and `--version` output, formatted to the terminal width (`ARGP_HELP_FMT` tunes this);
 s1_7_c_3	1.7	Contract	reports errors in the standard `program: message` format.
-s1_7_i_0	1.7	Inputs	Option descriptors (`name`, `key`, `arg`, `flags`, `doc`, `group`). Flags such as `ARGP_NO_EXIT`, `ARGP_IN_ORDER`, `ARGP_NO_HELP`, `ARGP_PARSE_ARGV0`, `ARGP_SILENT`.
+s1_7_i_0	1.7	Inputs	Option descriptors (`name`, `key`, `arg`, `flags`, `doc`, `group`). Flags such as `ARGP_NO_EXIT`, `ARGP_IN_ORDER`, `ARGP_NO_HELP`, `ARGP_PARSE_ARGV0` (honoured only together with `ARGP_NO_ERRS`), `ARGP_SILENT`.
 s1_7_g_0	1.7	Guarantees	On success returns 0 and optionally the index of the first unparsed argument. By default the process exits with `argp_err_exit_status` (default `EX_USAGE`) on a usage error.
 s1_7_f_0	1.7	Failure	An error code returned from the callback aborts the parse. `ARGP_ERR_UNKNOWN` means "not mine; try child parsers".
 s1_8_c_0	1.8	Contract	The `GLIBC_TUNABLES` environment variable (`name=value:name=value`) adjusts library parameters at startup: malloc arena counts and thresholds, tcache sizes, thread stack cache, CPU feature masks (`glibc.cpu.hwcaps`), `glibc.rtld.*`, `glibc.pthread.rseq`, and others. Unknown or invalid tunables are ignored. In secure-execution mode, only tunables marked safe are honoured.
@@ -101,7 +101,7 @@ s2_2_c_3_1	2.2	Contract	**XSI form (`__xpg_strerror_r`)** writes into `buf` and 
 s2_2_c_3_2	2.2	Contract	**GNU form** returns a `char *` that *may or may not* point into `buf` (it points at a static string for known codes).
 s2_2_c_4	2.2	Contract	**`strerrorname_np(e)`** returns the symbolic name (`"EINVAL"`), or `NULL` for an unknown code.
 s2_2_c_5	2.2	Contract	**`strerrordesc_np(e)`** returns the untranslated English description.
-s2_2_c_6	2.2	Contract	**`perror(s)`** writes `s: <message>\n` (or just the message if `s` is NULL or empty) to `stderr`. If `stderr` is unoriented, it makes it byte-oriented; it honours the orientation if already set.
+s2_2_c_6	2.2	Contract	**`perror(s)`** writes `s: <message>\n` (or just the message if `s` is NULL or empty) to `stderr`. It does not change the orientation of `stderr` if the stream is unoriented, and honours it if wide.
 s2_2_f_0	2.2	Failure	Unknown codes yield `"Unknown error N"`.
 s2_3_c_0	2.3	Contract	Print `progname: <formatted message>[: <strerror(errno)>]\n` to `stderr`.
 s2_3_c_1	2.3	Contract	`err*` then call `exit(status)`.
@@ -951,7 +951,7 @@ s18_5_f_0	18.5	Failure	`ESRCH` (the process is gone), `EPERM`, `EINVAL`.
 s18_6_c_0	18.6	Contract	Wait for a state change of a child and collect its status.
 s18_6_c_1	18.6	Contract	The state changes are: exited, killed by a signal, stopped, or continued (`WUNTRACED`, `WCONTINUED`).
 s18_6_c_2	18.6	Contract	**`waitpid(pid, &status, options)`** selects by PID, process group (`-pgid` or 0), or any child (-1).
-s18_6_c_3	18.6	Contract	**`waitid(idtype, id, &info, options)`** returns a `siginfo_t` with the full status. `idtype` may be `P_PID`, `P_PGID`, `P_ALL` or `P_PIDFD`, and options include `WEXITED`, `WSTOPPED`, `WCONTINUED` and `WNOWAIT`.
+s18_6_c_3	18.6	Contract	**`waitid(idtype, id, &info, options)`** returns a `siginfo_t`; `si_status` carries 8 bits of exit status. `idtype` may be `P_PID`, `P_PGID`, `P_ALL` or `P_PIDFD`, and options include `WEXITED`, `WSTOPPED`, `WCONTINUED` and `WNOWAIT`.
 s18_6_c_4	18.6	Contract	**`wait3`/`wait4`** also return the child's resource usage.
 s18_6_g_0	18.6	Guarantees	Status macros decode the value: `WEXITSTATUS` gives the 8-bit exit code, `WTERMSIG` the signal, and `WCOREDUMP`, `WSTOPSIG` and `WIFCONTINUED` the rest. A reaped child no longer exists as a zombie.
 s18_6_f_0	18.6	Failure	`ECHILD` (no matching children, or `SIGCHLD` is ignored so children are auto-reaped), `EINTR`, `EINVAL`.

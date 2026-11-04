@@ -17,7 +17,7 @@ interface: an owner ruling before any is added.
 #### Stories (LEDGER-PLAN, 2026-10-23)
 
 This is a plan only; no code was written for it. The tree was checked at `6abb25d6` (origin/next). It covers the three ledger items above and
-the open rows of `docs/saturation-register.md` (§7 "not near the limit (for the brainstorm)", §8
+the open rows of the saturation register (`docs/saturation/07-rows-that-are-not-near-the.md`, `08-claims-with-no-measurement-behind-them.md`, `09-method-notes-and-gaps.md`; §7 "not near the limit (for the brainstorm)", §8
 unmeasured claims, §9 gaps; the register has no section literally titled "out of the box", so
 those three are its idea rows). Each story fits one 50-call run unless sized **L**; split an L
 story before dispatch. **Every story names its verified jobs.** The floor for all of them, docs-only

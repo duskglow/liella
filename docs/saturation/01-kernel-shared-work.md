@@ -1,0 +1,9 @@
+## 1. Kernel-shared work (the remainder is the kernel's)
+
+| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |
+|---|---|---|---|---|---|---|---|
+| `realpath`, deep paths (64 components) | i 1.0019 per component: 23,862 vs 23,815 instr, 46 instr (0.19%) above | at the limit: the per-component cost is the kernel's `readlinkat` of the whole prefix; syscall count equals glibc's (1 per component) | hardware / kernel | M | REALPATH-DEPTH, REALPATH-DEPTH-2 (`handoff/realpath-depth-2.md`) | The 46-instr residual was not ablated: 0.19% is below the 1% cycle spread | none (supported by a slope over 64 components) |
+| `scandir_alphasort_1000`, normal and deep | i 1.003 normal and deep (was 1.29x before the comparator change) | at parity; the deep profile's extra +36k per phase at depth 64 is the kernel's `openat` path walk, identical user counts on both sides | kernel | M | SCANDIR-ALPHASORT-DEEP (`handoff/scandir-alphasort-deep.md`) | none recorded | none |
+| `readdir` / `getdents64` loop | t 1.01 and 0.99 (Zen 1 host, ns); user instr per entry 75.9 vs glibc 64.8 (1.17x) | "already at parity, kernel `getdents64` dominated" | kernel | M (ns), C (instr) | READDIR-1, DU-3 (`bench/perf-ledger.tsv`) | DIR-SYSCALLS: no safe-Rust buffer policy gives both fewer calls and fewer faults; a zero-fill-free buffer needs `unsafe` in the boundary (RULING NEEDED, never ruled) | **measured 2026-10-23** (section 10): parity is a time ratio; the instruction gap (75.9 vs 64.8) was real when recorded and was not re-counted |
+| `posix_spawn`, `posix_spawnp` (`cbench_process`) | not gated; run spread 7 to 47% | kernel-dominated (clone, wait); no instruction limit possible | kernel | M | POSIX-SPAWNP-ROW (`handoff/posix-spawnp-row.md`) | A user-only instruction column would give a gate; separate story, not done | none |
+| `opendir_closedir` | i 0.61x glibc | faster than glibc | n/a | M | DU-3 | none | none |
