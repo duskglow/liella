@@ -4004,6 +4004,32 @@ fn sym_perror() {
     }
 }
 
+// Covers: s2_2_c_6. Each text form byte-orients an undecided stderr on its own: a child per form,
+// so one form cannot mask the other.
+#[test]
+fn sym_perror_text_orients() {
+    if let Some((st, err)) = in_child("sym_perror_text_orients", "perror_text", &[], || {
+        let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        errno::set_raw(ENOENT);
+        diag::perror(c"ctx".as_ptr());
+        x::fwide(fp, 0) < 0
+    }) {
+        assert_eq!(st, Some(0), "perror with text byte-orients stderr: {err}");
+    }
+}
+
+#[test]
+fn sym_perror_bare_orients() {
+    if let Some((st, err)) = in_child("sym_perror_bare_orients", "perror_bare", &[], || {
+        let fp = with_exposed_provenance_mut(liella_boundary::stdio::stderr());
+        errno::set_raw(ENOENT);
+        diag::perror(null());
+        x::fwide(fp, 0) < 0
+    }) {
+        assert_eq!(st, Some(0), "perror without text byte-orients stderr: {err}");
+    }
+}
+
 #[test]
 fn sym_popen() {
     // The export is in posix::s18_processes (its contract is §18.7): a stream on the command's

@@ -546,15 +546,23 @@ fn sym___h_errno_location() {
 #[test]
 fn sym_herror() {
     let Some(err) = in_child("sym_herror") else {
+        // Covers: the caller's errno is the same after herror (s2_2_c_6, COMPAT-15).
+        let mut kept = true;
         liella_boundary::netdb::set_h_errno(HOST_NOT_FOUND);
+        errno::set_raw(ENOENT);
         s::herror(c"liella".as_ptr());
+        kept &= errno::get() == ENOENT;
         liella_boundary::netdb::set_h_errno(4);
+        errno::set_raw(EINVAL);
         s::herror(core::ptr::null());
+        kept &= errno::get() == EINVAL;
         liella_boundary::netdb::set_h_errno(-1);
         s::herror(c"".as_ptr());
         liella_boundary::posix::s12_stdio::fflush(null_mut());
+        eprintln!("errno kept={kept}");
         return;
     };
+    assert!(err.ends_with("errno kept=true\n"), "{err}");
     assert!(err.contains("liella: Unknown host\nNo address associated with name\nResolver internal error\n"), "{err}");
 }
 
