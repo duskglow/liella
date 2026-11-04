@@ -8,7 +8,8 @@
 //! [`two_prod`] (Dekker, no FMA needed), so the bounds below hold with or without FMA (#932).
 //!
 //! Tables: the existing `EXP2_J64` (2^(j/64), 1 KiB), `LOG_C`/`LOG_L` (728 B + 1,456 B) and the
-//! constants of the accurate path; this story adds no table (#933).
+//! constants of the accurate path; this story adds no table (#933). `LOG2_L`/`LOG10_L` (1,456 B
+//! each) and `LOG10_2_E` are `LOG_L` pre-scaled by `1/ln b` for `log2`/`log10` (register 13.5 #7).
 //!
 //! **Bounds.** Write `u = 2^-53`. The double-double operations ([`Dd::add`], [`Dd::mul`],
 //! [`Dd::mul_f64`]) and the stored double-double constants are accurate to a few `2^-104` of
@@ -47,7 +48,7 @@ const ROUND_INT: f64 = 6_755_399_441_055_744.0;
 /// `rh` instead of `r` in `T` costs `< |rh|²·|rl| < 2^-74`. `2^(j/64) = th + tl` is stored as a
 /// double-double (error `< 2^-104`, `1 <= th < 2`, `|tl| <= 2^-53·th`).
 ///
-/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1; Fast2Sum and Dekker's
+/// Assembly `y = t + t·p` (MATH-M6-F64-GAP-ASSEMBLY, register 13.5 #1; Fast2Sum and Dekker's
 /// product as in Muller et al., Handbook of Floating-Point Arithmetic, 2018, ch. 4): `p = ph + pl`
 /// with `|ph| <= 0.00602`, `pl = a.lo + small` (`|a.lo| <= 2^-53·|ph|`, the small sum carrying `T`).
 /// `q = th·ph` exactly (`two_prod`); `th + q.hi` by Fast2Sum, exact since `|q.hi| <= 0.0121 < th`;
@@ -91,7 +92,7 @@ const C0: f64 = f64::from_bits(t::LN2_64_CW[0]);
 const NC1: f64 = f64::from_bits(t::LN2_64_CW[1] ^ 0x8000_0000_0000_0000);
 const NC2: f64 = f64::from_bits(t::LN2_64_CW[2] ^ 0x8000_0000_0000_0000);
 
-/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2):
+/// The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 13.5 #2):
 /// `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, for
 /// `k = kf = nearest(xh·64/ln2)` and `|xh| <= 746` (`|k| <= 68,880 < 2^17`). The caller adds its
 /// low part to `l` and joins the two by Fast2Sum.
@@ -187,6 +188,14 @@ pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// `|y| >= 2^-8.01`, or `e != 0` and `|y| >= |e|·ln2 − ln√2 >= 0.34·|e|`: so the absolute errors
 /// other than `T`'s are below `2^-72·|y|`.
 fn log_kernel(x: f64) -> Option<(Dd, f64)> {
+    let (e, idx, lh, ll, tail) = log_series(x)?;
+    Some((log_assemble(e, idx, lh, ll), tail))
+}
+
+/// [`log_kernel`] before its assembly: `(e, idx, lh, ll, tail)` with `log1p r = lh + ll` within
+/// the series' errors stated there (`|lh| <= 2^-7·1.01`, `|ll| <= |T| + 2^-51·|lh|`).
+#[inline(always)]
+fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)> {
     let (e, m) = crate::exp_log::decompose(x);
     let i = dd::to_i32(dd::nearest_int((m - 1.0) * 128.0)).clamp(-37, 53);
     let idx = usize::try_from(i + 37).unwrap_or(37);
@@ -201,8 +210,7 @@ fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let s = two_prod(rh, rh);
     let tail = rh * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
-    let y = log_assemble(e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail));
-    Some((y, tail))
+    Some((e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail), tail))
 }
 
 /// [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
@@ -245,19 +253,70 @@ pub fn log(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     settle(y, log_eps(y, tail), 0, mode)
 }
 
-/// `log2 x` for a positive finite `x` not a power of two: `ln x · (1/ln2)` (the product's error
-/// `< 2^-100·|y|`, the bound scaled by `1/ln2 < 1.5`).
-pub fn log2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let (l, tail) = log_kernel(x)?;
-    let y = l.mul(Dd::of(t::INV_LN2));
-    settle(y, 1.5 * log_eps(l, tail) + MARGIN * dd::abs(y.hi), 0, mode)
+/// The least `double`s at or above `1/ln 2` and `1/ln 10`: the series tail's factor in
+/// [`logb_eps`] (checked exactly by the `bounds` tests).
+const LOG2_SCALE: f64 = f64::from_bits(0x3ff7_1547_652b_82ff);
+const LOG10_SCALE: f64 = f64::from_bits(0x3fdb_cb7b_1526_e50f);
+
+/// `log_b x = e·log_b 2 + (−log_b c) + (lh + ll)/ln b` for `b = 2` (`TEN` false) or `10`, from
+/// [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GAP-LOG-TABLES, register 13.5
+/// #7): `−log_b c = LOG2_L`/`LOG10_L[idx] = ch + cl` (`|ch| <= 0.501` / `0.151`, `|cl| <=
+/// 2^-53·|ch|`, within `2^-104·|ch|` of exact), `1/ln b = ih + il` (`INV_LN2`/`INV_LN10`, within
+/// `2^-105.9·ih`), `log10 2 = kh + kl` (`LOG10_2_E`: `kh` of 42 bits, `|kl| < 2^-43`,
+/// `|log10 2 − kh − kl| <= 2^-97`; for `b = 2`, `kh = 1`, `kl = 0`).
+///
+/// Proof. `P = lh·ih` is exact (`two_prod`); `H = e·kh` is exact (`|e| <= 1075 < 2^11`); `H + ch`
+/// by Fast2Sum is exact (`|H| >= 1 > 0.501` / `|H| >= 0.301 > 0.151`, or `H = 0`); `b.hi + P.hi`
+/// by 2Sum is exact. `y` = Fast2Sum of `u.hi` and `lo = ((((u.lo + b.lo) + cl) + e·kl) + pl)`,
+/// `pl = P.lo + (lh·il + ll·ih)`, exact since `|lo| < 2^-40·(|e| + 1) + 2^-27·|lh|` is below
+/// `|u.hi|` by the cases of [`log_kernel`] (scaled by `1/ln b`). Errors, in units of `log_b`, with
+/// `S = |H| + |ch| + |P.hi|`: the series' errors of [`log_kernel`] scaled by `1/ln b` (relative
+/// bounds unchanged); `e·(log10 2 − kh − kl)`: `|e|·2^-97`; `RN(e·kl)`: `|e|·2^-96`; `ih + il`
+/// for `1/ln b`: `2^-105.9·|P.hi|`; `RN(lh·il)`: `2^-105.9·|P.hi|`; `ll·ih` for `ll/ln b`
+/// (rounding, and `ll·il` dropped): `2u·ih·|ll| <= 2u·ih·|T| + 2^-102.9·|P.hi|`; the two additions
+/// of `pl`: `2u·ih·|T| + 2^-103·|P.hi|`; the first three additions of `lo`: `2^-103.4·S +
+/// |e|·2^-96`; the last: `u·ih·|T| + 2^-104.9·S`; the stored `ch + cl`: `2^-104·|ch|`. With the
+/// tail's evaluation (`5u·|T|` in `ln` units), `T` costs `10u·ih·|T| < 2^-49·ih·|T|`; the rest is
+/// below `2^-94.5·|e| + 2^-101·S`, under `2^-80·|y|` in every case of [`log_kernel`], so
+/// [`logb_eps`] `= 2^-49·|T|·scale + 2^-70·|y.hi|` with `scale >= 1/ln b > ih·(1 − 2^-52)`.
+#[inline(always)]
+fn logb_assemble<const TEN: bool>(e: i32, idx: usize, lh: f64, ll: f64) -> Dd {
+    let ef = f64::from(e);
+    let (c, inv) = if TEN { (t::LOG10_L[idx], t::INV_LN10) } else { (t::LOG2_L[idx], t::INV_LN2) };
+    let (ih, il) = (f64::from_bits(inv[0]), f64::from_bits(inv[1]));
+    let p = two_prod(lh, ih);
+    let pl = p.lo + (lh * il + ll * ih);
+    let h = if TEN { ef * f64::from_bits(t::LOG10_2_E[0]) } else { ef };
+    let b = fast_two_sum(h, f64::from_bits(c[0]));
+    let u = two_sum(b.hi, p.hi);
+    let lo = (u.lo + b.lo) + f64::from_bits(c[1]);
+    let lo = if TEN { lo + ef * f64::from_bits(t::LOG10_2_E[1]) } else { lo };
+    fast_two_sum(u.hi, lo + pl)
 }
 
-/// `log10 x` for a positive finite `x` not a power of ten (`1/ln10 < 0.5`).
+/// `log_b x` as `(y, tail)` (`b = 10` when `TEN`) for a positive finite `x != 1`, within
+/// [`logb_eps`] (proof at [`logb_assemble`]).
+fn logb_kernel<const TEN: bool>(x: f64) -> Option<(Dd, f64)> {
+    let (e, idx, lh, ll, tail) = log_series(x)?;
+    Some((logb_assemble::<TEN>(e, idx, lh, ll), tail))
+}
+
+/// [`logb_kernel`]'s bound `2^-49·|tail|·scale + 2^-70·|y|` (`scale` = `LOG2_SCALE`/`LOG10_SCALE`).
+#[inline(always)]
+fn logb_eps(y: Dd, tail: f64, scale: f64) -> f64 {
+    TAIL * dd::abs(tail) * scale + MARGIN * dd::abs(y.hi)
+}
+
+/// `log2 x` for a positive finite `x` not a power of two.
+pub fn log2(x: f64, mode: Rounding) -> Option<(f64, Status)> {
+    let (y, tail) = logb_kernel::<false>(x)?;
+    settle(y, logb_eps(y, tail, LOG2_SCALE), 0, mode)
+}
+
+/// `log10 x` for a positive finite `x` not a power of ten.
 pub fn log10(x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    let (l, tail) = log_kernel(x)?;
-    let y = l.mul(Dd::of(t::INV_LN10));
-    settle(y, 0.5 * log_eps(l, tail) + MARGIN * dd::abs(y.hi), 0, mode)
+    let (y, tail) = logb_kernel::<true>(x)?;
+    settle(y, logb_eps(y, tail, LOG10_SCALE), 0, mode)
 }
 
 /// 2^51: at and above it every `double` is an integer (and [`dd::nearest_int`] no longer applies).
@@ -287,7 +346,7 @@ fn integral(x: f64) -> bool {
 //   more would separate them), so at least one of the two additions is inexact in hardware. When
 //   [`near`] answers, `y.hi + w` rounded to `y.hi` with `w != 0`: that addition was inexact.
 
-/// The relative bounds `rho` behind the constant rounding test [`near`] (register 16.5 #5): every
+/// The relative bounds `rho` behind the constant rounding test [`near`] (register 13.5 #5): every
 /// `eps/|y.hi|` where the test is used is at most `rho`. Each is stated with slack and checked on
 /// operands by the `bounds` tests.
 /// [`exp`] and [`exp2`]: `eps/|y.hi| = 2^-49·|tail| + 2^-70` ([`exp_eps`]). For `|rh| <= 0.006`
@@ -305,13 +364,16 @@ const DZ_NEAR: f64 = f64::from_bits(0x3b70_0000_0000_0000);
 /// The logarithms with `|l.hi| >= LOG_NEAR = 0.34` for `ln x = l` (every `x` outside about
 /// `[0.71, 1.41]`, so every `e != 0`): `|rh| <= 2^-7` gives a computed `|q| < 0.3354`,
 /// `|tail| < 2^-21·0.3354·(1 + 3u) < 2^-22.57`, so `eps/|l.hi| = 2^-49·|tail|/|l.hi| + 2^-70 <
-/// 2^-71.57/0.34 + 2^-70 < 1.99·2^-70` ([`log_eps`]). `log2` and `log10` multiply `l` by `1/ln b`
-/// (error `< 2^-100·|y|`); the bound `eps·(1/ln b)` keeps the ratio: `eps'/|y.hi| <
-/// 1.99·2^-70·(1 + 2^-99) + 2^-99.9`. (Near 1 the ratio reaches 2^-64, so there the exact test
-/// decides.) `RHO_LOG = 2^-69`.
+/// 2^-71.57/0.34 + 2^-70 < 1.99·2^-70` ([`log_eps`]). `log2` and `log10` ([`logb_eps`]) use it
+/// with `|y.hi| >= near_b`, the least double at or above `0.34·scale` (`LOG2_NEAR`, `LOG10_NEAR`;
+/// every `e != 0` has `|log_b x| >= (0.34/ln b)·|e|`): `eps/|y.hi| <= 2^-71.57·scale/near_b + 2^-70 <=
+/// 2^-71.57/0.34 + 2^-70`, the same ratio. (Near 1 the ratio reaches 2^-64, so there the exact
+/// test decides.) `RHO_LOG = 2^-69`.
 #[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
 const RHO_LOG: f64 = f64::from_bits(0x3ba0_0000_0000_0000);
 const LOG_NEAR: f64 = 0.34;
+const LOG2_NEAR: f64 = f64::from_bits(0x3fdf_649e_8997_5600);
+const LOG10_NEAR: f64 = f64::from_bits(0x3fc2_e686_e56c_5e53);
 /// The multipliers of [`near`]: for each `rho` above, the least `double` `C` with
 /// `C·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests): `1 + 1.12502·2^-16`,
 /// `1 + 1.37503·2^-16` and `1 + 2.00006·2^-16`.
@@ -442,13 +504,12 @@ fn log_c(l: Dd) -> Option<f64> {
     (dd::abs(l.hi) >= LOG_NEAR).then_some(C_LOG)
 }
 
-/// `ln x · (1/ln b)` rounded for [`log2_near`] and [`log10_near`], with the bound of [`log2`] and
-/// [`log10`] (`scale·eps + 2^-70·|y|`) for the exact test.
+/// `log_b x` rounded for [`log2_near`] and [`log10_near`]: [`near`] with `C_LOG` when `|y.hi| >=
+/// near` (see [`RHO_LOG`]), else the exact test with [`logb_eps`].
 #[inline(always)]
-fn logb_near(x: f64, inv: [u64; 2], scale: f64, st: &mut u8) -> Option<f64> {
-    let (l, tail) = log_kernel(x)?;
-    let y = l.mul(Dd::of(inv));
-    finish(y, log_c(l), 0, || scale * log_eps(l, tail) + MARGIN * dd::abs(y.hi), st)
+fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Option<f64> {
+    let (y, tail) = logb_kernel::<TEN>(x)?;
+    finish(y, (dd::abs(y.hi) >= near).then_some(C_LOG), 0, || logb_eps(y, tail, scale), st)
 }
 
 /// `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
@@ -462,7 +523,7 @@ fn log2_near(x: f64, st: &mut u8) -> Option<f64> {
     if !log_domain(x) || x.to_bits() & 0x000f_ffff_ffff_ffff == 0 {
         return None;
     }
-    logb_near(x, t::INV_LN2, 1.5, st)
+    logb_near::<false>(x, LOG2_SCALE, LOG2_NEAR, st)
 }
 
 /// `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten
@@ -486,7 +547,7 @@ fn log10_near(x: f64, st: &mut u8) -> Option<f64> {
             }
         }
     }
-    logb_near(x, t::INV_LN10, 0.5, st)
+    logb_near::<true>(x, LOG10_SCALE, LOG10_NEAR, st)
 }
 
 /// `x^y` for the in-place entry: `x` positive, normal, finite, not 1; `2^-200 <= |y|`, and
@@ -538,7 +599,7 @@ const THIRD: Dd = Dd { hi: f64::from_bits(0x3fd5_5555_5555_5555), lo: f64::from_
 /// `ln(1 + rh) = rh − rh²/2 + rh³/3 + T + δ` with `T = rh⁴·(−1/4 + rh/5 − … − rh⁷/11)` and
 /// `|δ| <= rh¹²/12·1.01 <= 2^-56·|T|` (`|T| >= 0.24·rh⁴`). Then:
 /// * `rh − rh²/2`: `two_prod` and `two_sum`, exact as a double-double.
-/// * `rh³/3` (register 16.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
+/// * `rh³/3` (register 13.5 #6): `c = s.hi·rh` exactly (`two_prod`), `rh³ = c.hi + c.lo +
 ///   s.lo·rh`; `g = c.hi·THIRD.hi` exactly (`two_prod`, Dekker's split of the constant folded);
 ///   `cube = g.hi + cube_lo`, `cube_lo = g.lo + ((c.lo + s.lo·rh)·THIRD.hi + c.hi·THIRD.lo)`.
 ///   Dropped `(c.lo + s.lo·rh)·THIRD.lo` and `1/3 − THIRD` (`< 2^-110`): `< 2^-105·|rh³|`; six
@@ -784,6 +845,12 @@ mod bounds {
             if let Some((y, el)) = log_pow(x) {
                 within(exact, y, el, "log_pow", x);
             }
+            if let Some((y, tail)) = logb_kernel::<false>(x) {
+                within(exact.div(mp::ln2()), y, logb_eps(y, tail, LOG2_SCALE), "log2 kernel", x);
+            }
+            if let Some((y, tail)) = logb_kernel::<true>(x) {
+                within(exact.div(mp::ln10()), y, logb_eps(y, tail, LOG10_SCALE), "log10 kernel", x);
+            }
         }
     }
 
@@ -850,8 +917,48 @@ mod bounds {
             if let Some((y, tail)) = log_kernel(dd::abs(x).exp2()) {
                 assert!(log_c(y).is_none() || log_eps(y, tail) <= RHO_LOG * dd::abs(y.hi), "log(2^{x:e})");
             }
+            for (y, tail, scale, near) in [
+                logb_kernel::<false>(x.exp2()).map(|(y, tl)| (y, tl, LOG2_SCALE, LOG2_NEAR)),
+                logb_kernel::<true>(x.exp2()).map(|(y, tl)| (y, tl, LOG10_SCALE, LOG10_NEAR)),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                assert!(dd::abs(y.hi) < near || logb_eps(y, tail, scale) <= RHO_LOG * dd::abs(y.hi), "log_b(2^{x:e})");
+            }
         }
         assert!(1.0757 * MARGIN + 1.02 * 1.0001 * DZ_NEAR <= std::hint::black_box(RHO_POW));
+    }
+
+    /// The pre-scaled logarithm tables and constants (register 13.5 #7): `LOG2_L`/`LOG10_L` within
+    /// `2^-104` of `-ln(c_i)/ln b`, the low parts within `2^-53` of the high parts, `LOG10_2_E`'s
+    /// high part of 42 bits and the pair within `2^-97` of `log10 2`; `LOG2_SCALE`/`LOG10_SCALE`
+    /// the least doubles at or above `1/ln b`, `LOG2_NEAR`/`LOG10_NEAR` the least at or above
+    /// `0.34·scale` (exact in Mp; one ulp lower breaks the stated bound).
+    #[test]
+    fn log_tables_cover_their_bounds() {
+        for (tab, ln) in [(&t::LOG2_L, mp::ln2()), (&t::LOG10_L, mp::ln10())] {
+            for (i, (ent, c)) in tab.iter().zip(t::LOG_C).enumerate() {
+                let (h, l) = (f64::from_bits(ent[0]), f64::from_bits(ent[1]));
+                let err = mp::ln(Mp::from_f64(f64::from_bits(c))).div(ln).add(Mp::from_f64(h)).add(Mp::from_f64(l));
+                assert!(err.cmp_abs(Mp::from_f64(dd::abs(h) * dd::pow2(-104))).is_le(), "log_b table entry {i} beyond 2^-104");
+                assert!(dd::abs(l) <= dd::abs(h) * dd::pow2(-53), "log_b table entry {i} not normalized");
+            }
+        }
+        let (kh, kl) = (f64::from_bits(t::LOG10_2_E[0]), f64::from_bits(t::LOG10_2_E[1]));
+        assert_eq!(kh.to_bits() & 0x7ff, 0, "LOG10_2_E high part wider than 42 bits");
+        let err = mp::ln2().div(mp::ln10()).sub(Mp::from_f64(kh)).sub(Mp::from_f64(kl));
+        assert!(err.cmp_abs(Mp::from_f64(dd::pow2(-97))).is_le() && dd::abs(kl) < dd::pow2(-43), "LOG10_2_E beyond its bound");
+        let one = Mp::from_f64(1.0);
+        for (s, ln) in [(LOG2_SCALE, mp::ln2()), (LOG10_SCALE, mp::ln10())] {
+            assert!(Mp::from_f64(s).mul(ln).cmp_abs(one).is_ge(), "{s:e} below its bound");
+            assert!(Mp::from_f64(f64::from_bits(s.to_bits() - 1)).mul(ln).cmp_abs(one).is_lt(), "{s:e} not the least");
+        }
+        for (n, s) in [(LOG2_NEAR, LOG2_SCALE), (LOG10_NEAR, LOG10_SCALE)] {
+            let k = Mp::from_f64(LOG_NEAR).mul(Mp::from_f64(s));
+            assert!(Mp::from_f64(n).cmp_abs(k).is_ge(), "{n:e} below its bound");
+            assert!(Mp::from_f64(f64::from_bits(n.to_bits() - 1)).cmp_abs(k).is_lt(), "{n:e} not the least");
+        }
     }
 
     #[test]
