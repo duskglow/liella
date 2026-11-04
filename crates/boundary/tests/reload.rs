@@ -330,7 +330,14 @@ fn compile_locale_atomic(dest: &std::path::Path, lang: &str, charset: &str, prob
     let _ = std::fs::create_dir_all(parent);
     let tmp = parent.join(format!(".build-{}-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed), dest.file_name().unwrap().to_string_lossy()));
     let _ = std::fs::remove_dir_all(&tmp);
-    let made = std::process::Command::new("localedef").args(["-i", lang, "-f", charset]).arg(&tmp).output().is_ok_and(|o| o.status.code().is_some_and(|c| c <= 1));
+    // Absent (cannot be started) is a skip for the caller; present but failing is a failure (TEST-SILENT-SKIPS).
+    let made = match std::process::Command::new("localedef").args(["-i", lang, "-f", charset]).arg(&tmp).output() {
+        Err(_) => false,
+        Ok(o) => {
+            assert!(o.status.code().is_some_and(|c| c <= 1) && tmp.join(probe).exists(), "localedef is present but failed for {lang}.{charset} ({}): {}", o.status, String::from_utf8_lossy(&o.stderr));
+            true
+        }
+    };
     if made && tmp.join(probe).exists() {
         // Losing the race (the destination appeared meanwhile) is fine: theirs is complete too.
         let _ = std::fs::rename(&tmp, dest);

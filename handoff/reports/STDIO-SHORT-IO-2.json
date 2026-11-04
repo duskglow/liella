@@ -1,0 +1,8 @@
+{"task": "STDIO-SHORT-IO-2", "model": "sonnet", "tokens": null,
+ "result": "Hook errno kept (fixes eintr-as-eof survivor), 3 pipe+SIGALRM tests, short-write retry kept as COMPAT-11; fscanf and fflush-on-full-pipe not done",
+ "branch": "task/stdio-short-io-2", "head": "see git", "jobs": ["stdio-short-io-2-gate", "stdio-short-io-2-plants"],
+ "gate": {"affected": "see jobs.tsv stdio-short-io-2-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "differences 3-5 (fgets partial vs NULL, getline partial, sticky EOF) live in stream.rs", "recommendation": "follow glibc in a new story after the getc/putc perf rows land"}],
+ "informational": ["fscanf and fflush-on-full-pipe cases not done", "pipe tests assert invariants, no new glibc probe"],
+ "refused": [], "improvement": "plants that depend on a lower layer passing the error through should have a baseline check that the mutated line is reached",
+ "next_step": "fscanf C program over a pipe with SIGALRM; fflush on a full pipe", "report_file": "handoff/stdio-short-io.md"}
