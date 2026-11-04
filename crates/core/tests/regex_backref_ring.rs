@@ -7,7 +7,10 @@
 use liella::locale::Locale;
 use liella::pattern::regex::{self, Accel, Options, Window};
 
-fn groups(pat: &[u8], subject: &[u8]) -> Option<(usize, usize, Vec<(i64, i64)>)> {
+/// A match: start, end and the group offsets.
+type Found = Option<(usize, usize, Vec<(i64, i64)>)>;
+
+fn groups(pat: &[u8], subject: &[u8]) -> Found {
     let loc = Locale::C;
     let prog = regex::compile(pat, regex::regcomp_syntax(0), &loc).unwrap();
     let opts = Options { not_bol: false, not_eol: false, newline_anchor: false, budget: 16 * regex::BUDGET_PER_FAILURE, accel: Accel::OFF };
