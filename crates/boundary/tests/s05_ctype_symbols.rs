@@ -751,6 +751,9 @@ fn sym_wctype_l() {
 /// beyond both ends and the extreme ints all answer false for every class.
 #[test]
 fn byte_class_out_of_range_is_false() {
+    // Store the thread's table words first: with none stored the answer comes from the locale, not
+    // from the range test under test.
+    let _ = s::__ctype_b_loc();
     let fs: [(&str, extern "C" fn(c_int) -> c_int); 12] = [
         ("alnum", s::isalnum),
         ("alpha", s::isalpha),
