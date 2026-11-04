@@ -19,7 +19,7 @@ is a compatibility version, so new programs cannot link against it), else `defau
 
 ## Counts
 
-4,305 names (4,600 version rows) in the table; 716 are not defined. Counts as of 2026-10-24, the release tree (`cargo xtask so` then `cargo xtask symcov --tsv docs/spec-symbol-gaps.tsv`, Zen 1 host). Earlier counts in the notes below are kept as history: 954 on the morning of 2026-10-24, before the compatibility, RPC and libm landings of that day.
+4,305 names (4,600 version rows) in the table; 698 are not defined. Counts as of 2026-11-04 (MATH-M5-CLOSE, `cargo xtask so` then `cargo xtask symcov --tsv docs/spec-symbol-gaps.tsv`, Zen 1 host). Earlier: 716 on 2026-10-24 (Zen 1 host), before the complex `_Float128` landing. Earlier counts in the notes below are kept as history: 954 on the morning of 2026-10-24, before the compatibility, RPC and libm landings of that day.
 
 | Class | Names | What it is | Owner in the plan |
 |---|---:|---|---|
@@ -27,12 +27,12 @@ is a compatibility version, so new programs cannot link against it), else `defau
 | (b) compat-only, in a library Liella ships | 176 | `libc.so.6` 128, `libm.so.6` 37, `libresolv.so.2` 11 (compatibility versions only: new programs cannot link against them) | Phase 15 |
 | (c) library Liella does not replace yet | 127 | `libnsl.so.1` (121 compat, 6 private) | Phase 15 (§29.2) |
 | (e) legacy tier, default version | 2 | `libc.so.6`: `__libc_sa_len`, `bindresvport` (the 86 other `_IO_*`, profiling and §29 names of 2026-10-22 are defined now) | Phase 15 |
-| **milestone 5 (libm)** (m) | **18** | `libm.so.6` default names: the complex `_Float128` members (`cacosf128`, `cacoshf128`, `cargf128`, `casinf128`, ...; the other 87 names of 2026-10-22 are defined now) | Track M milestone 5 (plan/06-phases/04-track-m-parallel-from-p2.md, "Left for milestone 5") |
+| **milestone 5 (libm)** (m) | **0** | none left: the 18 complex `_Float128` members of 2026-10-24 are defined now (Track M milestone 5 closed by MATH-M5-CLOSE, 2026-11-04) | Track M milestone 5 (plan/06-phases/04-track-m-parallel-from-p2.md) |
 | (p) GLIBC_PRIVATE | 280 | `libc.so.6` 278, `libresolv.so.2` 2: interfaces between glibc's own libraries, not linkable by programs | Out of scope (ruling #822; see Notes) |
-| **Total** | **716** | | |
+| **Total** | **698** | | |
 
-The (m) row is why the README qualifies "Phases 1 to 13 implemented": those `libm` names (105 on 2026-10-22, 18 on 2026-10-24) are part of the math
-library's claimed scope and are not yet implemented. Their `float`, `double` and `long double` (`l`, `f64x`)
+The (m) row was why the README qualified "Phases 1 to 13 implemented": those `libm` names (105 on 2026-10-22, 18 on 2026-10-24, 0 on 2026-11-04) are part of the math
+library's claimed scope; all are implemented now and the qualifier is removed. Their `float`, `double` and `long double` (`l`, `f64x`)
 real-valued counterparts and the `float`/`double` complex members are implemented.
 
 **Correction (SPEC-GAPS-3, 2026-10-22).** Items 2 and 3 are not isolated gaps. Their base functions

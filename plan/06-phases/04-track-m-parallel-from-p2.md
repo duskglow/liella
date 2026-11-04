@@ -188,6 +188,16 @@ fall under the existing owner-ruling rule for unsafe and assembly (P10 (6)).
     on the Liella side).
   * **Left for milestone 5:** the `_Float128` elementary and special functions, the complex
     `long double`/`_Float128` members, then the family tests.
+* **Delivered** (milestone 5, 2026-11-04; stories M5-1 to M5-8):
+  * **Functions:** the 105 symcov class-m names: the 23 complex functions for `long double`, `_Float64x`
+    and `_Float128` (D-10.21), `__clog10l`, the 24 `_Float128` elementary and the 11 `_Float128`
+    special functions. `cargo xtask symcov`: class m = 0; `docs/spec-symbol-gaps.tsv` regenerated.
+  * **Tests:** the M5 differential `*_products.rs` tests (listed in `docs/codemap/README.md`),
+    `special_cr.rs`, and the family tests of `s10_math_symbols.rs` (`elementary_...`, `special_...`
+    and `complex_long_double_and_float128_forwarded_members` check every `f128`, `l` and `f64x` name).
+  * **Tooling:** `mathcmp` calls the `_Float128` special functions on the Liella side, and its max-ulp
+    reference is never below the round-toward-zero result.
+  * **Measurements:** `docs/libm-accuracy.tsv` format q, summary in `docs/differences-from-glibc.md`.
 * **Milestone 5 remainder: stories** (ruling #808, planned by MATH-M5-PLAN 2026-10-22). The list is
   `cargo xtask symcov` class m: 105 default-version `libm` names, all missing from both `libm.so.6`
   and `libm.a`. They are 69 complex names (23 functions × `l`, `f64x`, `f128`), `__clog10l`, 24
