@@ -19,3 +19,12 @@ Lint (clippy --all-targets + xtask static) was green on the previous head (job -
 Jobs queued on keke at hand-back (host busy, 20+ min queue; all still QUEUED): perf-sprintf-chk-nlink-4-lint2, -plants2 (script ~/work/PERF-SPRINTF-CHK-NLINK-4/plants2.sh, 4 plants),
 -gate2 (affected --base origin/next), -percall (wl_percall chk_ls vs origin/next). Earlier -plants (rc1: gate-kinds survived), -gate (killed, old head) are superseded.
 NOT VERIFIED: everything on the final head until those jobs finish. Next: read their rows in ~/logs/jobs.tsv; fix only what fails; update saturation row 3 with the percall numbers.
+
+## Run 5 (keke, role n2; code head 08429b74, unchanged this run)
+Cause of run 4's gate-n "NOT APPLIED": plants2 copied the stale role n3, not the final head. The pattern `if self.n != 2 {` matches printf.rs:1507; no script change needed (the script already exits 1 on NOT APPLIED, now also prints a CAUGHT-count line).
+Jobs on the final head (all rc 0, keke): perf-sprintf-chk-nlink-5-lint (clippy --all-targets --all-features -D warnings + xtask static), -plants (first-flags, star-sign, gate-n, after-off: 4 CAUGHT, 0 WARN; script ~/work/PERF-SPRINTF-CHK-NLINK-5/plants5.sh),
+-gate (affected --base origin/next --run: ok, 2 SKIPPED lines), -percall3 (wl_percall --base merge-base, instructions:u per call, base -> new / glibc): chk_ls 932.5 -> 907.0 / 731.5 (1.24), spr_ls 929.5 -> 904.0 / 714.5 (1.27), chk_cpc 372.0 -> 372.0 / 361.0, chk_lu 436.4 -> 437.4 / 531.7.
+INFORMATIONAL: chk_lu is +1.0 instr/call (0.2%) on this change; not investigated (the lone-%lu path shares the plan check). Parity with glibc on chk_ls is NOT reached (1.24).
+Superseded: -percall (rc 2, --base needed a full sha), -percall2 (rc 2, missing tree argument), and run 4's -plants2/-gate2/-lint2.
+Not done: kept-plan (stream) path does not use render_pair_s. Saturation row 3 text in docs/saturation/14-... not updated with these numbers.
+Next: coordinator may land; optionally add the numbers to the saturation row and look at the chk_lu +1.
