@@ -26,3 +26,6 @@ the error indicator is set as before. Not changed: the test (its expectation, er
 Merged origin/next. Plants: `noerrno` (drop the set_errno), `growpartial` (partial record on a failed growth).
 Bench check (instructions:u, cbench_hot, next vs head, glibc): job `stdio-eof-partial-reference-5-bench`; results in keke
 ~/work/stdio-eof-partial-reference-5/bench-{next,head}.log. Next step: read those logs against the getc/fgets/getline rows.
+Results (final head): gate stdio-eof-partial-reference-5-gate (FULL affected: 5117 passed, 0 failed, conformance 14/0), plants CAUGHT x2,
+bench (cbench_hot, liella_instr_user, next vs head): getc 50.0/50.0, getc_unlocked 43.0/43.0, getline_80 175.8/175.8, getline_long 3390.2/3390.2
+(glibc 27.4/15.3/214.0/6914); no fgets row exists in cbench_hot, so fgets was not counted. No row slower.
