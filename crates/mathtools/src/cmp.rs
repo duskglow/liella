@@ -356,7 +356,24 @@ pub fn shard(run: &Run<'_>, records: &[Vec<u128>]) -> Result<Tally, String> {
             }
         }
         if !gok || !lok {
-            let exact = oracle(run.func, &args, 2 * fmt.prec + 40).map(|a| a.value).unwrap_or_else(Big::nan);
+            let mut exact = oracle(run.func, &args, 2 * fmt.prec + 40).map(|a| a.value).unwrap_or_else(Big::nan);
+            // The value is never smaller in magnitude than its round-toward-zero result. A reference that is
+            // (cosh of a tiny x: 1 + x^2/2 at 2p+40 bits can come out just below 1) would count errors in the
+            // binade below, doubling them; the decided result is the better reference there.
+            let rz = if mode == Round::Zero {
+                Ok(cr)
+            } else {
+                mp::correctly_rounded(fmt, Round::Zero, 4096, |p| {
+                    oracle(run.func, &args, p).unwrap_or(Approx { value: Big::nan(), exact: true })
+                })
+                .map(|r| r.0)
+            };
+            if let Ok(rz) = rz {
+                let z = Big::from_bits(fmt, rz);
+                if z.is_finite() && exact.is_finite() && exact.cmp_abs(&z).is_lt() {
+                    exact = z;
+                }
+            }
             t.glibc_max_ulp = t.glibc_max_ulp.max(mp::ulp_error(fmt, g, &exact));
             t.liella_max_ulp = t.liella_max_ulp.max(mp::ulp_error(fmt, l, &exact));
         }
