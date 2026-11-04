@@ -70,7 +70,7 @@ fn variants(t: &[u8]) -> Vec<Vec<u8>> {
     v.push(longer);
     // Bytes that look like a terminator to a word test.
     let mut tricky = t.to_vec();
-    tricky.extend_from_slice(&[0x01, 0x00 + 0x80, 0xff, 0x01]);
+    tricky.extend_from_slice(&[0x01, 0x80, 0xff, 0x01]);
     v.push(tricky);
     v
 }
