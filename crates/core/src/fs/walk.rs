@@ -451,13 +451,18 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     }
     let listing = list(sys, fd, false)?;
     let mut frames: TryVec<Frame> = TryVec::with_capacity(16)?;
+    let mut namebuf: TryVec<u8> = TryVec::with_capacity(256)?;
     frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false })?;
     while let Some(top) = frames.len().checked_sub(1) {
         let Some(frame) = frames.get_mut(top) else { break };
         if !frame.skip && frame.next < frame.listing.len() {
             let Some((namez, _)) = frame.listing.get(frame.next) else { break };
             frame.next = frame.next.saturating_add(1);
-            let namez = TryVec::from_slice(namez)?;
+            // One buffer for every entry's name: the listing is borrowed from `frames`, which the
+            // body below changes, so the name is copied, but not into a fresh allocation each time.
+            namebuf.truncate(0);
+            namebuf.extend_from_slice(namez)?;
+            let namez = &namebuf;
             let name = namez.get(..namez.len().saturating_sub(1)).unwrap_or(&[]);
             let level = frame.level.saturating_add(1);
             let (dir_level, path_len) = (frame.level, frame.path_len);
