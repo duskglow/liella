@@ -123,6 +123,7 @@ fn headers_under_flat(dir: &Path, files: &mut Vec<PathBuf>) {
             files.push(p);
         }
     }
+    files.sort();
 }
 
 fn headers_under(dir: &Path, files: &mut Vec<PathBuf>) -> Option<()> {
@@ -133,6 +134,7 @@ fn headers_under(dir: &Path, files: &mut Vec<PathBuf>) -> Option<()> {
             files.push(p);
         }
     }
+    files.sort();
     Some(())
 }
 
