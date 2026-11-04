@@ -3,6 +3,9 @@
 //! (forced by `selftest::set_math_fma`) and through the accurate path. Clause: s10_0_f_0 (the
 //! functions are correctly rounded in every build).
 
+// Sample generation is bit-level arithmetic on bounded values; indexing is over equal-length vectors.
+#![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing, clippy::as_conversions)]
+
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
 use liella_math::real::Real;
@@ -18,8 +21,10 @@ fn next(s: &mut u64) -> u64 {
 
 fn both(f: extern "C" fn(f64) -> f64, exact: fn(f64) -> f64, xs: &[f64]) -> usize {
     assert!(selftest::set_math_fma(true));
+    assert!(selftest::math_fma(), "set_math_fma(true) did not select the FMA build");
     let fused: Vec<u64> = xs.iter().map(|&x| f(x).to_bits()).collect();
     assert!(selftest::set_math_fma(false));
+    assert!(!selftest::math_fma(), "set_math_fma(false) did not select the baseline build");
     let mut checked = 0;
     for (i, &x) in xs.iter().enumerate() {
         let plain = f(x).to_bits();

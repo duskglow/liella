@@ -697,6 +697,12 @@ pub fn set_math_fma(fma: bool) -> bool {
     true
 }
 
+/// Which build of the `double` exp/log fast paths is in force (D-10.22): `true` for FMA. Lets a
+/// test confirm that [`set_math_fma`] took effect, since both builds return the same results.
+pub fn math_fma() -> bool {
+    crate::dispatch::fma()
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it
