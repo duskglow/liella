@@ -1,0 +1,11 @@
+{"task": "MATH-M6-F64-GAP-ENVELOPE", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT, NOT READY: kernels and entries inlined (#3), envelope fallback cold out of line (#4); pow fully fused; five entries still call a FnOnce shim (tsv closure fix + math-gen next); no gate/plants/counts/sweep run",
+ "branch": "task/math-m6-f64-gap-envelope", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "#4 inline MXCSR read and register dependency need inline asm in liella-boundary, which policy permits only at the tb-field site (owner ruling S2/S3)", "recommendation": "keep the csys call unless the counts after #3/#4 show the read as a visible share; then a one-site documented mxcsr-read asm category"}],
+ "informational": ["fn-item fast closures (s10_math.tsv rows for exp/exp2/log/log2/log10) leave an out-of-line FnOnce shim once the entry is inline(always); pow's closure form inlines fully"],
+ "refused": [],
+ "improvement": "the brief's proof set (gate, plants, two-level counts, digest, detached sweep) plus a code change does not fit 55 calls; a story of this kind needs about 90, or split the measurement into its own story",
+ "next_step": "convert the five tsv rows to closures, cargo xtask math-gen, re-check the disassembly, then digest, counts, plants, gate (handoff steps 1-6)",
+ "report_file": "handoff/math-m6-f64-gap-envelope.md",
+ "jobs": []}
