@@ -67,4 +67,15 @@ Each finding (crash, hang/time-out, OOM) is a defect and gets its own fix story,
 `cargo xtask fuzz <target> --repro <artifact>` and minimise it with `--tmin`. A finding that may be a security weakness is not
 described here (owner rule SECURITY-PRIVATE).
 
-None recorded yet (campaign pending).
+Time-outs of the 2026-10-23 campaign, re-run on `next` (FUZZ-TIMEOUTS-RECHECK, 2026-11-04) with the campaign's limits
+(`xtask/src/fuzz.rs` `settings`): `--repro` of each artifact.
+
+| Target | Artifact | Limit | On `next` | Status |
+|---|---|---|---|---|
+| regex | `timeout-af9dfee4...` | 10 s | 9 ms | fixed (before this check; FUZZ-REGEX-TIMEOUTS) |
+| regex_dfa | `timeout-d8d6be50...` | 10 s | 0.47 s | fixed (before this check; FUZZ-REGEX-TIMEOUTS) |
+| regex_dfa | `slow-unit-d977c8d7...` | 10 s | 0.64 s | fixed (before this check; FUZZ-REGEX-TIMEOUTS) |
+| locale | `timeout-bf6ed537...` | 20 s | still timed out before this change | fixed by this story: a composite conversion's padded field is bounded (`COMPOSITE_MAX`) and refused with `ENOMEM` before padding; test `composite_field_width_is_bounded_before_padding`; input pinned in `fuzz/seeds/locale` |
+| glob | `timeout-5351ade2...` | 10 s | still times out | open: fix story proposed (cause and brief in the hand-back) |
+
+The regex artifacts are pinned in `fuzz/seeds/regex`.
