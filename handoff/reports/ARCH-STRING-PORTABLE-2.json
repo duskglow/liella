@@ -1,0 +1,12 @@
+{"task": "ARCH-STRING-PORTABLE-2", "model": "opus", "tokens": null,
+ "result": "Rulings #2561/#2562 applied (portable memchr never folds NULL; page-edge test for the word read), static fixed; final-head jobs started detached",
+ "branch": "task/arch-string-portable-2", "head": "397b3592",
+ "gate": {"affected": "pending (arch-string-portable-2-gate-r2, shiki)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "arch-audit allowance for machine-decl covers all of crates/boundary/src/strz.rs", "recommendation": "accept for now; split mod portable into its own file when the copy family is added"}],
+ "informational": ["dc1f0009: forced portable suites green (48+9), 6/6 plants CAUGHT, cross rc 0; static rc 1 fixed in 397b3592 (comment + xtask table only)"],
+ "refused": [],
+ "improvement": "a ready-made plants runner for RAM copies (baseline, perl plant, cat restore, CAUGHT/SURVIVED) would save each story writing one",
+ "next_step": "check the -r2 jobs on shiki; then portable versions of the copy family",
+ "report_file": "handoff/arch-string-portable.md",
+ "jobs": ["arch-string-portable-2-static-r2", "arch-string-portable-2-cross-r2", "arch-string-portable-2-portable-r2", "arch-string-portable-2-gate-r2", "arch-string-portable-2-plants-r2"]}

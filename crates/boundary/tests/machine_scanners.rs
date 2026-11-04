@@ -264,6 +264,66 @@ fn scanners_never_read_below_the_page_holding_the_start() {
 }
 
 #[test]
+fn every_scanner_reads_only_the_pages_of_an_object_at_either_page_edge() {
+    // Clauses: s4_8_c_0, s4_5_c_3 (D-4.14 page rule). D-4.22 PORTABLE-SCAN (coordinator ruling
+    // 2026-11-04): the portable scanners' aligned word reads stay UNSAFE(slice) with this test
+    // as the proof that a word never leaves the page of the object byte it holds. Every scanner
+    // the portable module replaces, on whichever build runs: the object is `len` bytes at the
+    // first byte of a page after an inaccessible page, or ending at the last byte of a page before
+    // one, len 1..=24 (every word offset at both ends, up to three words).
+    let _g = level();
+    let r = CSys.mmap(0, 3 * PAGE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, None, 0).unwrap();
+    let (mut lo, rest) = r.split_at(PAGE).ok().unwrap();
+    let (mid, mut hi) = rest.split_at(PAGE).ok().unwrap();
+    CSys.mprotect(&mut lo, PROT_NONE).unwrap();
+    CSys.mprotect(&mut hi, PROT_NONE).unwrap();
+    let base = mid.addr();
+    let (hash, bang) = (c_int::from(b'#'), c_int::from(b'!'));
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for len in 1..=24usize {
+            for start in [base, base + PAGE - len] {
+                // The object's last byte: the terminator, the bound's last byte or the match.
+                let end = start + len - 1;
+                let (p, v) = (start as *const c_char, start as *const c_void);
+                let w = format!("avx2={avx2}, len {len}, offset {}", start - base);
+                s::memset(base as *mut c_void, c_int::from(b'.'), PAGE);
+                s::memset(end as *mut c_void, 0, 1);
+                let mut twin = vec![b'.'; len];
+                twin[len - 1] = 0;
+                let t = twin.as_ptr().cast::<c_char>();
+                assert_eq!(s::strlen(p), len - 1, "strlen, {w}");
+                assert_eq!(s::strnlen(p, usize::MAX), len - 1, "strnlen, {w}");
+                assert!(s::strchr(p, hash).is_null(), "strchr, {w}");
+                assert_eq!(s::strchrnul(p, hash) as usize, end, "strchrnul, {w}");
+                assert_eq!(s::strcmp(p, t), 0, "strcmp first, {w}");
+                assert_eq!(s::strcmp(t, p), 0, "strcmp second, {w}");
+                assert_eq!(s::strncmp(p, t, usize::MAX), 0, "strncmp, {w}");
+                // No terminator: the bound ends at the object's last byte, or that byte matches.
+                s::memset(end as *mut c_void, hash, 1);
+                twin[len - 1] = b'#';
+                let t = twin.as_ptr().cast::<c_char>();
+                assert_eq!(s::strnlen(p, len), len, "strnlen bound, {w}");
+                assert_eq!(s::strncmp(p, t, len), 0, "strncmp bound, {w}");
+                assert_eq!(s::rawmemchr(v, hash) as usize, end, "rawmemchr, {w}");
+                assert_eq!(s::memchr(v, hash, len) as usize, end, "memchr, {w}");
+                assert!(s::memchr(v, bang, len).is_null(), "memchr none, {w}");
+                assert_eq!(s::memrchr(v, hash, len) as usize, end, "memrchr, {w}");
+                assert!(s::memrchr(v, bang, len).is_null(), "memrchr none, {w}");
+                // The first byte matches: memrchr reads down to it.
+                s::memset(start as *mut c_void, bang, 1);
+                assert_eq!(s::memrchr(v, bang, len) as usize, start, "memrchr first, {w}");
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+    CSys.munmap(hi).unwrap();
+    CSys.munmap(mid).unwrap();
+    CSys.munmap(lo).unwrap();
+}
+
+#[test]
 fn erms_copy_and_fill_match_the_loops_at_every_size_and_alignment() {
     // Clauses: s4_1_c_1, s4_1_g_0, s4_2_c_1 (D-4.14, P7).
     for n in (0..600).chain([1279, 1280, 1281, 4096, 4097, 65_536 + 3]) {
@@ -1756,10 +1816,13 @@ fn null_faults_in_the_folded_memchr_sizes_and_aborts_in_every_other() {
     // Clause: s4_5_c_1 with S6 (NULL with n > 0 is the EFAULT abort) and the memchr fold
     // (MEMCHR-FOLD, owner ruling 2026-10-11): with folding on, NULL with 1 <= n <= isize::MAX dies by
     // SIGSEGV on page zero (the kernel's first load); n > isize::MAX and every n with folding off take
-    // the S6 abort; n == 0 returns NULL without a read, in each path.
+    // the S6 abort; n == 0 returns NULL without a read, in each path. The portable scanners
+    // (D-4.22 PORTABLE-SCAN, coordinator ruling 2026-11-04) never fold: a NULL read is UB in
+    // Rust, so NULL with n > 0 takes the S6 abort there with folding on too.
     use std::sync::atomic::Ordering::SeqCst;
     let _g = level();
     let big = isize::MAX.unsigned_abs();
+    let folds = !selftest::portable_scan();
     for fold in [false, true] {
         for avx2 in paths() {
             CHR_FOLD.store(fold, SeqCst);
@@ -1767,7 +1830,7 @@ fn null_faults_in_the_folded_memchr_sizes_and_aborts_in_every_other() {
             for n in [1, 2, 16, 17, 32, 33, 64, 65, 4096, big - 1, big, big + 1, usize::MAX] {
                 CHR_CASE.store(n, SeqCst);
                 let end = selftest::in_child_quiet(null_memchr).unwrap();
-                let want = if fold && n <= big { 11 } else { 6 };
+                let want = if folds && fold && n <= big { 11 } else { 6 };
                 assert_eq!(end, selftest::ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} n {n}");
             }
             assert!(selftest::set_null_fold(fold));
@@ -1958,6 +2021,7 @@ fn memchr_answers_alike_with_null_folding_on_and_off_and_takes_the_folding_decis
     // Clauses: s4_5_c_1. The direct entry's gate (MEMCHR-FOLD): folding off sends every n through the
     // checked entry, on enters the kernel; the answers are the same at every alignment, n and
     // position. An undecided process takes the decision on its first checked memchr, of any n.
+    // The portable memchr has no fold (D-4.22 PORTABLE-SCAN), so it leaves the decision untaken.
     let _g = level();
     let mut buf = vec![b'.'; 64 + 300 + 64];
     for fold in [false, true] {
@@ -1985,7 +2049,7 @@ fn memchr_answers_alike_with_null_folding_on_and_off_and_takes_the_folding_decis
     assert!(!selftest::null_fold_resolved());
     let p = buf.as_ptr().cast::<c_void>();
     assert!(s::memchr(p, c_int::from(b'#'), 0).is_null());
-    assert!(selftest::null_fold_resolved(), "the checked memchr did not take the folding decision");
+    assert_eq!(selftest::null_fold_resolved(), !selftest::portable_scan(), "the folding decision after the first checked memchr");
 }
 
 #[test]

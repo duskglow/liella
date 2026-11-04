@@ -33,6 +33,7 @@ const CATEGORIES: &[(&str, &[&str])] = &[
 /// replaces it). Whole units only (a model, a trait, generated code, a test double); scattered sites are tagged instead.
 /// A category not listed for a module still needs a tag there.
 const ALLOWED: &[(&str, &[&str], &str)] = &[
+    ("crates/boundary/src/strz.rs", &["machine-decl"], "module `portable` (cfg liella_portable_scan): the portable Rust stand-ins, named after the machine entries they replace on targets without scan.S; the file has no other machine declaration (A-8, D-4.22 PORTABLE-SCAN)"),
     ("crates/boundary/src/ffi.rs", &[], "the one declaration of the csys/src/machine/*.S entry points (K5 matches it against liella_csys.h); per-arch assembly, A-6"),
     ("crates/boundary/src/ffi_sys.rs", &["thread-pointer"], "generated from csys/syscalls.tsv (arch_prctl); per-arch table, A-3"),
     ("crates/abi/", &["fpu"], "generated from spec/abi/layouts.tsv (fenv_t, ucontext_t) and its layout tests; aarch64 layouts probed, A-5"),
