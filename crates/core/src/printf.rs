@@ -1430,13 +1430,17 @@ pub struct SimpleFormat {
 pub struct PairS {
     /// Start of the first `%s`, and the start of the text after it.
     pub at0: usize,
+    /// The text after the first `%s` starts here.
     pub after0: usize,
     /// Start of the second conversion, and the start of the text after it.
     pub at1: usize,
+    /// The text after the second conversion starts here.
     pub after1: usize,
+    /// The written width (0 with a `*`).
     width: usize,
     /// Whether the second conversion's width is a `*` (an `int` argument before its string).
     pub star: bool,
+    /// Whether the conversion has `-`.
     left: bool,
 }
 

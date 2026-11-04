@@ -404,18 +404,17 @@ fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out
     put(head);
     put(s0);
     put(mid);
-    let mut pad = |mut left: usize| {
-        while left > 0 {
-            let k = left.min(SPACES.len());
-            put(SPACES.get(..k).unwrap_or(&[]));
-            left -= k;
-        }
-    };
+    // The string first when left-justified; the padding (at most 16 bytes a write) around it.
     if left {
         put(s1);
-        pad(fill);
-    } else {
-        pad(fill);
+    }
+    let mut rest = fill;
+    while rest > 0 {
+        let k = rest.min(SPACES.len());
+        put(SPACES.get(..k).unwrap_or(&[]));
+        rest = rest.saturating_sub(k);
+    }
+    if !left {
         put(s1);
     }
     put(tail);
