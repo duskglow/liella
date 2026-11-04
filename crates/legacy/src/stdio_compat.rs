@@ -798,9 +798,9 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
         return;
     }
     let at = |o: usize| b + o;
-    let (rp, re) = if s.role == Role::Reading { (at(s.rpos), at(s.rend)) } else { (at(RESERVE), at(RESERVE)) };
+    let (rp, re) = published_read_window(file, ext);
     let (wp, we) = match s.role {
-        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos), at(s.wend)),
+        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos.min(ext.buf_len)), at(s.wend.min(ext.buf_len))),
         Role::Writing => (at(s.wpos), at(s.wpos)),
         _ => (at(RESERVE), at(RESERVE)),
     };
@@ -813,6 +813,22 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
     set(file, word::BUF_BASE, at(RESERVE));
     set(file, word::BUF_END, b + ext.buf_len);
     store_flags(file, s);
+}
+
+/// The read window to publish (GETC-PUTC-FASTPATH, D-12.19): the engine's `rpos..rend`,
+/// bounded by the buffer, on a byte-oriented stream that is reading; on any other stream (wide
+/// or undecided orientation included) closed at `rpos` (`_IO_read_ptr == _IO_read_end`), so the
+/// trusted getc fast path (`ptr < end`, one load) never applies there. [`load`] reads only
+/// `_IO_read_ptr` back, so the wide layer's position survives. `ext.buf` is not 0.
+#[inline(always)]
+fn published_read_window(file: &[AtomicUsize], ext: &Ext) -> (usize, usize) {
+    let (s, b) = (&ext.state, ext.buf);
+    if s.role != Role::Reading {
+        return (b + RESERVE, b + RESERVE);
+    }
+    let end = s.rend.min(ext.buf_len);
+    let at = s.rpos.min(end);
+    if low_int(get(file, word::MODE)) < 0 { (b + at, b + end) } else { (b + at, b + at) }
 }
 
 /// The end-of-file and error indicators into `_flags`.
@@ -840,8 +856,7 @@ fn store_read(file: &[AtomicUsize], ext: &Ext) {
 #[inline(always)]
 fn store_read_words(file: &[AtomicUsize], ext: &Ext) {
     let s = &ext.state;
-    let b = ext.buf;
-    let (rp, re) = if s.role == Role::Reading { (b + s.rpos, b + s.rend) } else { (b + RESERVE, b + RESERVE) };
+    let (rp, re) = published_read_window(file, ext);
     set(file, word::READ_PTR, rp);
     set(file, word::READ_END, re);
     store_flags(file, s);
@@ -1777,6 +1792,18 @@ pub fn window_room(file: &[AtomicUsize], n: usize) -> Option<usize> {
 pub fn read_room(file: &[AtomicUsize]) -> Option<usize> {
     let (p, e) = (get(file, word::READ_PTR), get(file, word::READ_END));
     (p < e).then_some(p)
+}
+
+/// Advance the published read window to `p` (the trusted getc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_read_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::READ_PTR, p);
+}
+
+/// Advance the published write window to `p` (the trusted putc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_write_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::WRITE_PTR, p);
 }
 
 /// Whether the published `_IO_buf_base` names a buffer (STDIO-6): a hint only, so that a stream
