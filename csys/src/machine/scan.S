@@ -3556,6 +3556,8 @@ liella_machine_strcmp:
 	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
 	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
 	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
+	/* Each block's "no stop" test is the bsf itself (ZF set when the mask is empty; the register is
+	 * not read on that path): one instruction fewer per block passed (PERF-STRCMP-MIX). */
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl $3967, %ecx
@@ -3569,9 +3571,8 @@ liella_machine_strcmp:
 	vpminub %xmm1, %xmm2, %xmm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
 	vpmovmskb %xmm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head16
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head16
 	movzbl (%rdi,%rdx), %eax
 	cmpb (%rsi,%rdx), %al
 	jne .Lstrcmp_v_ret_head_differ
@@ -3595,9 +3596,8 @@ liella_machine_strcmp:
 	vpminub %xmm1, %xmm2, %xmm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
 	vpmovmskb %xmm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head32
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head32
 	movzbl 16(%rdi,%rdx), %eax
 	cmpb 16(%rsi,%rdx), %al
 	jne .Lstrcmp_v_ret_head_differ
@@ -3612,9 +3612,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head64
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head64
 	movzbl 32(%rdi,%rdx), %eax
 	cmpb 32(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
@@ -3632,9 +3631,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head96
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head96
 	movzbl 64(%rdi,%rdx), %eax
 	cmpb 64(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
@@ -3649,9 +3647,8 @@ liella_machine_strcmp:
 	vpminub %ymm1, %ymm2, %ymm2
 	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %edx
-	testl %edx, %edx
-	jz .Lstrcmp_v_head_miss
 	bsfl %edx, %edx
+	jz .Lstrcmp_v_head_miss
 	movzbl 96(%rdi,%rdx), %eax
 	cmpb 96(%rsi,%rdx), %al
 	jne .Lstrcmp_v_differ
