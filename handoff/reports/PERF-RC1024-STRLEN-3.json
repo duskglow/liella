@@ -1,0 +1,12 @@
+{"task": "PERF-RC1024-STRLEN-3", "model": "opus", "tokens": null,
+ "result": "Resolved by PERF-RC1024-HEAP-FREE (29a5b91f): bash-loop 0.9997, make-n 0.9989 vs fa678f74 (its base ce0a9ce6: 1.0087 / 1.0053); no code",
+ "branch": "task/perf-rc1024-strlen-3", "head": null,
+ "gate": {"affected": "not run (no code change)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The heap reuse-path mechanism behind the strlen growth was not identified; not needed once heap.rs is reverted. Recount bash-loop/make-n if pair-check is retried.", "du fts_build/fts_alloc growth (run 1) is separate and uncounted."],
+ "refused": [],
+ "improvement": "Ask the coordinator to check a sibling revert story first: one 6-minute count closed this story, after two bisect runs",
+ "next_step": "None for this story; land PERF-RC1024-HEAP-FREE",
+ "report_file": "handoff/perf-rc1024-strlen.md",
+ "jobs": ["perf-rc1024-strlen-3-count1", "perf-rc1024-strlen-3-lint"]}
