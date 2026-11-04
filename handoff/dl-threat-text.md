@@ -1,7 +1,7 @@
 # DL-THREAT-TEXT (phase 14 DL-0d): loader threat-model rules folded in
 
-**State.** Branch `task/dl-threat-text` from `origin/next` c3424c99. Docs commit 30974b1b, then this
-handoff/report commit. Planning story: no loader code.
+**State.** Branch `task/dl-threat-text` from `origin/next` c3424c99. Docs commits 30974b1b and 81f978db (clause cell), then the
+handoff/report commits. Planning story: no loader code.
 
 **Done.**
 - `spec/security/threat-model.md`, "The dynamic loader": rules 1-3 and 5-7 in the checkable form of
@@ -39,5 +39,5 @@ program linked `-z execstack` starts with `rwxp` main and thread stacks.
 **Next step.** Coordinator: number the compat id, then land. DL-29 uses the checklist table; DL-8 may
 start once this lands.
 
-**Jobs.** `dl-threat-text-static` (cargo xtask static on keke r1, via jobrun). No gate, plants or
+**Jobs.** `dl-threat-text-static-3` (cargo xtask static on keke r1, via jobrun, final head). Superseded: `dl-threat-text-static` (rc 1: the new differences row had no clause cell; fixed in 81f978db), `dl-threat-text-static-2` (rc 0 on 81f978db, before this report commit). No gate, plants or
 counts: docs only.
