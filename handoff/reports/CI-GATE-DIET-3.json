@@ -1,0 +1,13 @@
+{"task": "CI-GATE-DIET-3", "model": "opus", "tokens": null,
+ "result": "CI red fixed: support/shard.rs no longer needs SHARDS from its includer (WIDE table by CARGO_CRATE_NAME, default 8); every shards! list checked at compile time; plants 5/5 CAUGHT; FULL gate running detached",
+ "branch": "task/ci-gate-diet-3", "head": "17f3825e (code; the handoff commit above it changes only handoff/)",
+ "gate": {"affected": "FULL gate ci-gate-diet-3-gate running at hand-back (mei)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Not verified against next merged: complex_f128_products exists only on next; a scratch target that includes shard.rs and defines no SHARDS stands in for it (builds, gets 8)",
+                   "Wall time of the diet still NOT VERIFIED (CI overlaps every measurement on mei)"],
+ "refused": [],
+ "jobs": ["ci-gate-diet-3-gate", "ci-gate-diet-3-plants"],
+ "improvement": "jobrun runs in the foreground; the brief's jobrun line reads as if it detaches, which tied a FULL gate to an ssh session. Say so in the brief, or give jobrun a --detach flag",
+ "next_step": "When CI is green, compare CI FULL gate logs before/after on mei; widen any shard over ~180 s via the WIDE table",
+ "report_file": "handoff/ci-gate-diet.md"}

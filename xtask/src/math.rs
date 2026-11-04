@@ -391,7 +391,11 @@ fn generate(root: &Path) -> Result<(String, [String; 3], String), String> {
     rs.push_str("//! The math exports (spec §10): one per symbol, each a call into `liella-math` (D-10.1) with the\n");
     rs.push_str("//! conversions of `crate::mathret` (D-10.2). Symbols with `long double` or `_Float128` values are the\n");
     rs.push_str("//! `liella_<name>_bits` functions behind the C forwarders `csys/src/adapter/math_*.c` (OD-C4).\n");
-    rs.push_str("#![allow(non_snake_case, clippy::too_many_lines)]\n\n");
+    // redundant_closure: the f64 fast rows pass `|x| math::fast64::exp_nearest(x)` on purpose. A fn
+    // item reaches `elem_fast`'s `impl FnOnce` through the `call_once` shim, which LLVM leaves as a
+    // call on the hot path; the closure is inlined (MATH-M6-F64-GAP-ENVELOPE, disassembly of libm.a).
+    rs.push_str("//! The f64 fast rows pass closures, not fn items, so the kernel inlines into the entry.\n");
+    rs.push_str("#![allow(non_snake_case, clippy::too_many_lines, clippy::redundant_closure)]\n\n");
     rs.push_str("use liella_abi::ctypes::{c_char, c_int, c_long, c_longlong, c_uint, F128Bits, LdBits};\n");
     rs.push_str("use liella_math as math;\n\n");
     rs.push_str("use crate::export;\nuse crate::mathret as mret;\nuse crate::ret;\nuse crate::strz;\n");

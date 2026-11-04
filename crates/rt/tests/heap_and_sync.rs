@@ -591,6 +591,95 @@ fn shards_place_their_memory_on_their_node() {
 }
 
 #[test]
+fn a_shard_that_cannot_map_takes_free_slabs_of_another_shard() {
+    // The donor is the caller's next shard, its previous shard, and a distant one.
+    for (donor, caller) in [(0, 1), (1, 0), (0, 5)] {
+        borrow_from_another_shard(donor, caller);
+    }
+}
+
+fn borrow_from_another_shard(donor: usize, caller: usize) {
+    // Trace: no spec clause (allocation under an address-space limit: no spurious ENOMEM while
+    // another shard holds free slabs); D-3.10, D-3.12.
+    let _wd = Watchdog::new("a_shard_that_cannot_map_takes_free_slabs_of_another_shard", 30);
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    // Shard 0 maps its segment; thread 1 on shard 1 gets its cache (via a large block) but no segment.
+    pages.shard.set(donor);
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    pages.thread.set(1);
+    pages.shard.set(caller);
+    let big = heap.alloc(&CSys, &pages, 1 << 20, ALIGN).unwrap();
+    heap.free(&CSys, &pages, big.addr).unwrap();
+    // The limit now leaves no room for another segment.
+    let mapped: usize = pages.maps.borrow().values().map(|m| m.len).sum();
+    pages.limit.set(Some(mapped));
+    let segs_before = segment_nodes(&pages).len();
+    let mut got = Vec::new();
+    // Small, odd-class, aligned and larger-small requests all share the slab refill.
+    for (size, align) in [(100, ALIGN), (24, ALIGN), (1000, ALIGN), (64, 64), (200, 256), (5000, ALIGN), (MAX_SMALL, ALIGN)] {
+        let b = heap.alloc(&CSys, &pages, size, align).unwrap(); // no spurious ENOMEM while another shard holds free slabs
+        assert_eq!(b.addr % align, 0);
+        assert!(segment_nodes(&pages).contains_key(&(b.addr / SEG * SEG)), "the block lies in an existing segment");
+        got.push(b.addr);
+    }
+    assert_eq!(segment_nodes(&pages).len(), segs_before, "nothing was mapped");
+    // Blocks freed by the borrowing thread go home: shard 0 serves them again afterwards.
+    for &a in &got {
+        heap.free(&CSys, &pages, a).unwrap();
+    }
+    pages.thread.set(0);
+    pages.shard.set(donor);
+    for _ in 0..50 {
+        heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    }
+    // A request no shard can serve still fails (the fallback is bounded).
+    pages.thread.set(1);
+    pages.shard.set(caller);
+    assert!(heap.alloc(&CSys, &pages, 1 << 24, ALIGN).is_none());
+}
+
+#[test]
+fn a_thread_whose_cache_cannot_be_made_takes_a_parked_cache_of_another_shard() {
+    // Trace: no spec clause (allocation under an address-space limit: no spurious ENOMEM when a new
+    // thread's cache chunk cannot be mapped but another shard has a parked cache); D-3.10, D-3.11.
+    let _wd = Watchdog::new("a_thread_whose_cache_cannot_be_made_takes_a_parked_cache_of_another_shard", 30);
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    // Thread 0 on shard 0 has a cache and a segment; thread 1 on shard 3 gets its segment.
+    pages.shard.set(0);
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    pages.thread.set(1);
+    pages.shard.set(3);
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    // No room for any further mapping. "New threads" (their cache word cleared, nothing parked) use up
+    // the cache chunk and then cannot make a cache.
+    let mapped: usize = pages.maps.borrow().values().map(|m| m.len).sum();
+    pages.limit.set(Some(mapped));
+    let mut last = Some(());
+    for _ in 0..64 {
+        pages.slots[1].store(0, Ordering::Relaxed);
+        last = heap.alloc(&CSys, &pages, 100, ALIGN).map(|_| ());
+        if last.is_none() {
+            break;
+        }
+    }
+    assert!(last.is_none(), "the cache chunk is spent and no cache can be made");
+    // Thread 0 exits: its cache is parked on shard 0. A new thread on shard 3 takes it.
+    pages.thread.set(0);
+    pages.shard.set(0);
+    heap.park(&CSys, &pages);
+    pages.thread.set(1);
+    pages.shard.set(3);
+    pages.slots[1].store(0, Ordering::Relaxed);
+    let b = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap(); // no spurious ENOMEM
+    heap.free(&CSys, &pages, b.addr).unwrap();
+    // Nothing is left to take now: the next new thread fails, bounded.
+    pages.slots[1].store(0, Ordering::Relaxed);
+    assert!(heap.alloc(&CSys, &pages, 100, ALIGN).is_none());
+}
+
+#[test]
 fn blocks_return_to_their_owner_whoever_frees_them() {
     let _wd = Watchdog::new("blocks_return_to_their_owner_whoever_frees_them", 30);
     // Clauses: s3_1_t_0, s3_1_f_3 (D-3.11, M4).

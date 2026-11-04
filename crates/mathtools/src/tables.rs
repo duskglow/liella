@@ -97,8 +97,10 @@ fn fraction_words(x: &Big, words: usize) -> Vec<u64> {
 }
 
 /// Words of `2/π` stored: enough for Payne–Hanek reduction of every finite binary128 value
-/// (exponents up to 16383, plus the fraction bits the reduction keeps).
-pub const TWO_OVER_PI_WORDS: usize = 264;
+/// (exponents up to 16383, plus the fraction bits the reduction keeps): the 384-bit reduction
+/// (`mp::reduce_wide`, 9 words from bit 16270) reads up to word 263, the 768-bit one
+/// (`mpw::reduce_wide`, 15 words) up to word 269.
+pub const TWO_OVER_PI_WORDS: usize = 312;
 
 /// The generated source.
 pub fn generate() -> String {
@@ -167,9 +169,10 @@ pub fn generate() -> String {
     o.dd_const("PI", "`π` (mp::pi).", &pi);
     o.dd_const("PI_2", "`π/2`.", &pi.mul_pow2(-1));
     o.dd_const("PI_4", "`π/4`.", &pi.mul_pow2(-2));
-    let two_over_pi = Big::from_i64(2).div(&pi, 64 * TWO_OVER_PI_WORDS as u32 + 128, Round::Zero);
+    let pi_bits = 64 * TWO_OVER_PI_WORDS as u32 + 512;
+    let two_over_pi = Big::from_i64(2).div(&mp::pi(pi_bits), 64 * TWO_OVER_PI_WORDS as u32 + 128, Round::Zero);
     let words = fraction_words(&two_over_pi, TWO_OVER_PI_WORDS);
-    let _ = writeln!(o.src, "\n/// The bits of `2/π` after the binary point (2/π < 1), most significant first: {TWO_OVER_PI_WORDS} words, truncated (mp::pi at 17 400 bits).\npub(crate) static TWO_OVER_PI: [u64; {TWO_OVER_PI_WORDS}] = [");
+    let _ = writeln!(o.src, "\n/// The bits of `2/π` after the binary point (2/π < 1), most significant first: {TWO_OVER_PI_WORDS} words, truncated (mp::pi at {pi_bits} bits).\npub(crate) static TWO_OVER_PI: [u64; {TWO_OVER_PI_WORDS}] = [");
     for chunk in words.chunks(4) {
         let s: Vec<String> = chunk.iter().map(|w| format!("{w:#018x}")).collect();
         let _ = writeln!(o.src, "    {},", s.join(", "));
@@ -243,6 +246,13 @@ impl Out {
         let (e, l) = mp_words_n::<MPW_LIMBS>(v);
         let s: Vec<String> = l.iter().map(|w| format!("{w:#018x}")).collect();
         let _ = writeln!(self.src, "\n/// {doc} (about {:e})\npub(crate) const {name}: crate::mpw::MpConst = ({e}, [{}]);", v.to_f64(), s.join(", "));
+    }
+
+    /// A constant of a wider Ziv step (`mpx`, 1536 bits; `mpy`, 3072 bits): `L` limbs.
+    fn mpn_const<const L: usize>(&mut self, module: &str, name: &str, doc: &str, v: &Big) {
+        let (e, l) = mp_words_n::<L>(v);
+        let s: Vec<String> = l.iter().map(|w| format!("{w:#018x}")).collect();
+        let _ = writeln!(self.src, "\n/// {doc} (about {:e})\npub(crate) const {name}: crate::{module}::MpConst = ({e}, [{}]);", v.to_f64(), s.join(", "));
     }
 
     fn mp_table(&mut self, name: &str, doc: &str, values: &[Big]) {
@@ -346,6 +356,16 @@ fn mp_constants(o: &mut Out) {
     o.mpw_const("MPW_PI", "`π` (mp::pi, 768 bits)", &mp::pi(pw));
     o.mpw_const("MPW_LN2", "`ln 2` (mp::ln2, 768 bits)", &mp::ln2(pw));
     o.mpw_const("MPW_EULER", "Euler's constant `γ` (`euler_gamma`, 768 bits)", &euler_gamma(pw));
+    // The 1536- and 3072-bit steps of the complex `_Float128` functions (`mpx`, `mpy`, D-10.17),
+    // from 1600 and 3150 bits.
+    let px = 1600;
+    o.mpn_const::<24>("mpx", "MPX_PI", "`π` (mp::pi, 1536 bits)", &mp::pi(px));
+    o.mpn_const::<24>("mpx", "MPX_LN2", "`ln 2` (mp::ln2, 1536 bits)", &mp::ln2(px));
+    o.mpn_const::<24>("mpx", "MPX_EULER", "Euler's constant `γ` (`euler_gamma`, 1536 bits)", &euler_gamma(px));
+    let py = 3150;
+    o.mpn_const::<48>("mpy", "MPY_PI", "`π` (mp::pi, 3072 bits)", &mp::pi(py));
+    o.mpn_const::<48>("mpy", "MPY_LN2", "`ln 2` (mp::ln2, 3072 bits)", &mp::ln2(py));
+    o.mpn_const::<48>("mpy", "MPY_EULER", "Euler's constant `γ` (`euler_gamma`, 3072 bits)", &euler_gamma(py));
     let ck: Vec<Big> = (1..=STIRLING_TERMS as i64).map(|k| b[2 * k as usize].div(&Big::from_i64(2 * k * (2 * k - 1)), p, Round::Nearest)).collect();
     o.mp_table("MP_STIRLING", &format!("`|B_2k| / (2k(2k − 1))` for k = 1..{STIRLING_TERMS} (Bernoulli numbers from `bernoulli`); the term's sign is `(−1)^(k+1)`."), &ck);
 }

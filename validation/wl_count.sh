@@ -123,9 +123,15 @@ prep() {
     wl_install_local || return 1   # B = ~/wl/bin/v-<hash>, never overwritten
     for s in $new $base; do
         if [ "$s" = "$new" ]; then k=$srckey; else k=$s; fi
-        [ -f ~/wl/products/$k/libc.a ] || [ -d ~/wl/src/$k ] && continue
+        [ -f ~/wl/products/$k/libc.a ] || [ -f ~/wl/src/$k/Cargo.toml ] && continue
+        [ -d ~/wl/src/$k ] && rm -rf ~/wl/src/$k   # empty or partial tree from an earlier failed unpack: unpack again
         if [ $gitmode = 1 ]; then
-            t=~/wl/src/.$k.$$; rm -rf "$t"; mkdir -p "$t" && git -C "$repo" archive --format=tar "$s" | tar -x -C "$t" && { mv -T "$t" ~/wl/src/$k 2>/dev/null || rm -rf "$t"; } || return 1
+            t=~/wl/src/.$k.$$; rm -rf "$t"; mkdir -p "$t" || return 1
+            # pipefail: a failed git archive (unknown sha) must not leave an empty tree in the cache
+            if ! ( set -o pipefail; git -C "$repo" archive --format=tar "$s" | tar -x -C "$t" ) || [ ! -f "$t/Cargo.toml" ]; then
+                rm -rf "$t"; echo "wl_count: no source for $s: the repository here does not have it; fetch it, or prime it with: bash validation/wl_prime_base.sh <host> <sha>" >&2; return 1
+            fi
+            mv -T "$t" ~/wl/src/$k 2>/dev/null || rm -rf "$t"
         else
             wl_local_src "$root" "$k" || return 1
         fi

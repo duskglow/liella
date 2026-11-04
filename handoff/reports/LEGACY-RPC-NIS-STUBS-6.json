@@ -1,0 +1,12 @@
+{"task": "LEGACY-RPC-NIS-STUBS-6", "model": "opus", "tokens": null,
+ "result": "rcmd-family stubs verified: s15_8_c_3 errno check fixed (test-side), direct gate green, 10/10 plants caught; RPC clnt/svc stubs not started",
+ "branch": "task/legacy-rpc-nis-stubs-6", "head": "a51b0a96",
+ "gate": {"affected": "6350 passed / 0 failed", "peak": "13G (oom_kill 0)"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["regex_enomem passes on this branch in the mei gate under gate 16G, both modes (the -4 failure is not reproduced on keke or mei)",
+                   "gate2 red cause: the test set errno before fixture file I/O that left ENOENT; the __ivaliduser stub never writes errno"],
+ "refused": [],
+ "improvement": "plant scripts should do a dry baseline before the job (target package and products): two plant jobs here died on baseline setup",
+ "next_step": "RPC client/server stubs (handoff step 1), a full L-size run",
+ "report_file": "handoff/legacy-rpc-nis.md",
+ "jobs": ["mei:legacy-rpc-nis-stubs-6-gate", "mei:legacy-rpc-nis-stubs-6-plants4"]}

@@ -50,6 +50,19 @@ enum Plan {
 std::thread_local! {
     static PLAN: Cell<Plan> = const { Cell::new(Plan::Off) };
     static INJECTED: Cell<u64> = const { Cell::new(0) };
+    static LIVE: Cell<i64> = const { Cell::new(0) };
+}
+
+/// Bytes the calling thread has obtained through [`FailAlloc`] and not given back (allocations
+/// minus deallocations, by requested size, since the thread started). A leak test compares it before
+/// and after a call; blocks another thread frees move that thread's count, so use it on one thread.
+pub fn live_bytes() -> i64 {
+    LIVE.try_with(Cell::get).unwrap_or(0)
+}
+
+/// [`live_bytes`] moves by `d`. Called by [`FailAlloc`] only.
+pub(super) fn count_live(d: i64) {
+    let _ = LIVE.try_with(|c| c.set(c.get().wrapping_add(d)));
 }
 
 /// Fail the `n`-th allocation of the calling thread from now (1: the next one), once; the

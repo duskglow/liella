@@ -44,12 +44,13 @@ wl_local_rev() {
 # wl_local_src <root> <key>: ~/wl/src/<key> = a copy of the role tree (unless the sources or the products are already there).
 wl_local_src() {
     local root=$1 key=$2 t
-    [ -f "$HOME/wl/products/$key/libc.a" ] || [ -d "$HOME/wl/src/$key" ] && return 0
+    [ -f "$HOME/wl/products/$key/libc.a" ] || [ -f "$HOME/wl/src/$key/Cargo.toml" ] && return 0
+    [ -d "$HOME/wl/src/$key" ] && rm -rf "$HOME/wl/src/$key"   # empty or partial: copy again
     t=$HOME/wl/src/.$key.$$; rm -rf "$t"; mkdir -p "$t" || return 1
     tar -C "$root" --exclude=./target --exclude=./.git --exclude=./.synced --exclude=./.released --exclude=./.changed \
         --exclude=./.changed.hdr -cf - . | tar -x -C "$t" || { rm -rf "$t"; return 1; }
     mv -T "$t" "$HOME/wl/src/$key" 2>/dev/null || rm -rf "$t"
-    [ -d "$HOME/wl/src/$key" ]
+    [ -f "$HOME/wl/src/$key/Cargo.toml" ]
 }
 
 # wl_local_base <req> <root>: no git here. Sets base, base_why, base_mb ("-" base = no base column).
