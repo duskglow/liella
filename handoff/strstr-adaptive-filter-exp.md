@@ -29,7 +29,7 @@ baseline rc 0; p1_switchdrop (the dense switch skips the group) CAUGHT; p2_norew
 group) CAUGHT; p3_direction (jae -> jb: switch when sparse, stay one-stream when dense) CAUGHT by count: strstr_dense_4k
 1042 -> 2665 instructions (> 1.3x). The threshold direction is not observable by results (both paths are exact), so it
 is a count plant by design.
-Gate: saf-exp-gate (affected, --base origin/next), running at hand-back. clippy, static and strstr_find (19 passed) clean on the role.
+Gate: saf-exp-gate (affected, --base origin/next) rc 0: 10 suites, 10153 passed, 0 failed; conformance 116/0; peak 12G. clippy, static and strstr_find (19 passed) clean on the role.
 wl_count: not run (budget); the workload set's strstr callers still need it before any landing.
 
 Recommendation: decide after saf-exp-counts. Land (owner ruling) only if no text row or cbench_memref row is slower beyond

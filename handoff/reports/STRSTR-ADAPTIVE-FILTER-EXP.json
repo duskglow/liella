@@ -1,6 +1,6 @@
 {"task": "STRSTR-ADAPTIVE-FILTER-EXP", "model": "opus", "tokens": null,
  "result": "adaptive one-stream/pair filter in AVX2 strpair: strstr_scan_4k 1014 -> 722 instr (glibc 818, 0.88x); plants caught; text rows and cbench pending saf-exp-counts",
- "branch": "exp/strstr-adaptive-filter", "head": "see git", "gate": {"affected": "running at hand-back (saf-exp-gate)", "peak": null},
+ "branch": "exp/strstr-adaptive-filter", "head": "code 70f1194b (later commits handoff only)", "gate": {"affected": "10153 passed / 0 failed, conformance 116 / 0 (saf-exp-gate rc 0)", "peak": "12G"},
  "accepted_first_attempt": null,
  "rulings": [{"item": "land the adaptive filter", "recommendation": "only if saf-exp-counts shows no slower text/cbench row; else record the negative in the saturation register"}],
  "informational": ["strstr_dense_4k is a new percall row (1042 vs glibc 818)", "memmem and the SSE2 path are unchanged", "wl_count not run (budget)"],
