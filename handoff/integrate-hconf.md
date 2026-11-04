@@ -36,3 +36,10 @@ Merged origin/next into task/integrate-hconf-2. Only conflict: crates/core/tests
 was in that file. Jobs on keke:n1: integrate-hconf-2-clippy (clippy --all-features -D warnings + xtask static) rc 0;
 integrate-hconf-2-gate (affected --base origin/next --run) rc 0. No plants: the change is a merge resolution in a test file, no product code.
 Next step: none; CI.
+
+## INTEGRATE-HCONF-3 (2026-11-04)
+CI red was lab-names: hostconf_probe.rs used 10.0.100.x in the reorder test (pure function on address arrays). Replaced with
+the documentation range 192.0.2.0/24 (and 192.0.3.x for the other subnet); no collision with the 203.0.113/198.51.100 test
+addresses. Merged origin/next (one conflict, docs/compat-flags.md: kept both rows; COMPAT-13 here, COMPAT-14 from next).
+On shiki:sh1: xtask static rc 0, clippy --all-features -D warnings clean, job integrate-hconf-3-gate rc 0.
+No plants: test constants only. Next step: CI.
