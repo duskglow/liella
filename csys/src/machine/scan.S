@@ -6792,26 +6792,13 @@ liella_machine_strpair:
 	movq %rsi, %r9
 	negq %r9
 	testl $64, %eax
-	jz .Lliella_machine_strpair_avx_loop128
-	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
-	vpxor (%rax), %ymm1, %ymm5
-	vpxor 32(%rax), %ymm1, %ymm8
-	vpxor (%rax,%r9), %ymm0, %ymm4
-	vpxor 32(%rax,%r9), %ymm0, %ymm7
-	vpor %ymm4, %ymm5, %ymm4
-	vpor %ymm7, %ymm8, %ymm7
-	vpminub (%rax), %ymm4, %ymm4
-	vpminub 32(%rax), %ymm7, %ymm7
-	vpminub %ymm4, %ymm7, %ymm4
-	vpcmpeqb %ymm4, %ymm2, %ymm4
-	vpmovmskb %ymm4, %r10d
-	testl %r10d, %r10d
-	jnz .Lliella_machine_strpair_avx_loop
-	addq $64, %rax
+	jnz .Lliella_machine_strpair_avx_loop64
+	/* 128-byte aligned: the same test over a group of four blocks (all in one page), memory operands
+	 * so a block costs four instructions, the step before one vptest per 128 bytes (STRSTR-HIT-4K).
+	 * A hit sends the run back to the block loop from the group's start, which resolves it. From a
+	 * 64-byte boundary that is not a 128-byte one, one pair (loop64) first reaches the next. */
 	.p2align 4
 .Lliella_machine_strpair_avx_loop128:
-	/* The same test over a 128-aligned group of four blocks (all in one page): memory operands,
-	 * so a block costs four instructions, and one loop branch per 128 bytes. */
 	vpxor (%rax), %ymm1, %ymm5
 	vpxor 32(%rax), %ymm1, %ymm8
 	vpxor 64(%rax), %ymm1, %ymm9
@@ -6832,10 +6819,28 @@ liella_machine_strpair:
 	vpminub %ymm11, %ymm12, %ymm11
 	vpminub %ymm4, %ymm11, %ymm4
 	vpcmpeqb %ymm4, %ymm2, %ymm4
+	subq $-128, %rax
+	vptest %ymm4, %ymm4
+	jz .Lliella_machine_strpair_avx_loop128
+	addq $-128, %rax
+	jmp .Lliella_machine_strpair_avx_loop
+	.p2align 4
+.Lliella_machine_strpair_avx_loop64:
+	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor (%rax,%r9), %ymm0, %ymm4
+	vpxor 32(%rax,%r9), %ymm0, %ymm7
+	vpor %ymm4, %ymm5, %ymm4
+	vpor %ymm7, %ymm8, %ymm7
+	vpminub (%rax), %ymm4, %ymm4
+	vpminub 32(%rax), %ymm7, %ymm7
+	vpminub %ymm4, %ymm7, %ymm4
+	vpcmpeqb %ymm4, %ymm2, %ymm4
 	vpmovmskb %ymm4, %r10d
 	testl %r10d, %r10d
 	jnz .Lliella_machine_strpair_avx_loop
-	subq $-128, %rax
+	addq $64, %rax
 	jmp .Lliella_machine_strpair_avx_loop128
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
