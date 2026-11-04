@@ -35,6 +35,7 @@ fn check(shape: &UtmpShape, file: &str) {
 
 #[test]
 fn shapes_match_the_layout_tables() {
+    // no spec clause: ARCH-UTMP-LAYOUT, the record layouts of spec/abi/layouts*.tsv.
     check(&UtmpShape::X86_64, "layouts.tsv");
     check(&UtmpShape::AARCH64, "layouts-aarch64.tsv");
 }
@@ -50,6 +51,7 @@ fn sample() -> Utmp {
 
 #[test]
 fn aarch64_record_encodes_at_the_probed_offsets_and_round_trips() {
+    // no spec clause: ARCH-UTMP-LAYOUT, the record layouts of spec/abi/layouts*.tsv.
     let (size, off) = table("layouts-aarch64.tsv");
     let mut u = sample();
     // Values the 32-bit record cannot hold: 64-bit seconds past 2106, a wide session and microseconds.
@@ -73,6 +75,7 @@ fn aarch64_record_encodes_at_the_probed_offsets_and_round_trips() {
 
 #[test]
 fn x86_64_record_is_unchanged_and_never_wraps() {
+    // no spec clause: ARCH-UTMP-LAYOUT, the record layouts of spec/abi/layouts*.tsv.
     let u = sample();
     let mut b = vec![0u8; 384];
     u.encode(&UtmpShape::X86_64, &mut b);
@@ -93,6 +96,7 @@ fn x86_64_record_is_unchanged_and_never_wraps() {
 
 #[test]
 fn native_codec_is_the_native_shape() {
+    // no spec clause: ARCH-UTMP-LAYOUT, the record layouts of spec/abi/layouts*.tsv.
     let u = sample();
     let mut b = vec![0u8; UtmpShape::NATIVE.size];
     u.encode(&UtmpShape::NATIVE, &mut b);
