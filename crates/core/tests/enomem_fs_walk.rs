@@ -255,7 +255,8 @@ fn case_fts(dir: &std::path::Path) -> String {
         if t.is_null() {
             return failed_or(false, enomem());
         }
-        let (mut seen, mut ok, mut failed, mut bad) = (0usize, true, false, false);
+        let (mut seen, mut ok) = (0usize, true);
+        let (failed, bad);
         loop {
             errno::set_raw(0);
             let e = x::fts_read(t).cast::<FTSENT>();
