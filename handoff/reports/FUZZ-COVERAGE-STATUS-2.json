@@ -1,0 +1,26 @@
+{
+ "task": "FUZZ-COVERAGE-STATUS-2",
+ "model": "sonnet",
+ "tokens": null,
+ "result": "rerun of all 26 fuzz targets done, cov/ft table in docs/fuzzing.md; 2 findings (group duplicate GID assertion, xdr_mem memory growth OOM) for fix stories",
+ "branch": "task/fuzz-coverage-status-2",
+ "head": null,
+ "gate": {
+  "affected": "docs/handoff only on this branch; clippy and static green; fuzz run rc 0",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "group: users::group_list returned a GID twice (harness assertion); xdr_mem: OOM at 2048 MB over 150M executions, empty input clean alone",
+  "first launch fuzz-coverage-status-2-run killed by me at 2 min (ssh-attached); superseded by run2"
+ ],
+ "refused": [],
+ "improvement": "the brief's gate command should include --base origin/next; without it affected escalates to FULL",
+ "next_step": "two fix stories: group_list duplicate GID (or harness expectation), xdr_mem memory growth",
+ "jobs": [
+  "fuzz-coverage-status-2-run2",
+  "fuzz-coverage-status-2-static"
+ ],
+ "report_file": "handoff/fuzz-coverage-status.md"
+}

@@ -62,7 +62,7 @@ tree of the PRE14-FUZZ-CAMPAIGN branch on 2026-10-23; the head sha was not recor
 for every target. Per-target coverage is still open: `cargo xtask fuzz` now keeps the last libFuzzer status line of each
 target's run (across chunks) and ends with one row per target, `<target> cov=<n> ft=<n> corpus=<n> execs=<n>`; `--summary <file>`
 writes the same rows as TSV (`target cov ft corpus execs`). A run that printed no status line (a crash before the first one) says
-`none` in every column that depends on it, never 0. The rerun that fills the column has not been done yet.
+`none` in every column that depends on it, never 0. The rerun that fills the column is the next section.
 Corpus size, executions and peak RSS are as recorded. Time is in seconds (1801-1803 s is the 30 minute budget); a target with a
 finding stopped at its first finding.
 
@@ -90,6 +90,48 @@ finding stopped at its first finding.
 | charmap | b | 1803s | 13491->14781 | 618,398 | 258 | none |
 
 Sixteen targets ran their full 30 minutes clean; four (regex, regex_dfa, glob, locale) stopped on a time-out artifact.
+
+### Coverage rerun (FUZZ-COVERAGE-STATUS-2, 2026-11-04)
+
+One libFuzzer process per target for a fixed 30 minutes, 13 at a time, on a 26-thread host in RAM (`/dev/shm`), through
+`cargo xtask fuzz <target> --time 30 --summary <file>` on the head of branch `task/fuzz-coverage-status-2`. The corpus started
+empty (only the repository seeds), so corpus sizes and execution counts are not comparable with the table above. `cov` and `ft` are
+the last libFuzzer status line of the target's run. Twenty-six targets ran (six were added since the 2026-10-23 campaign:
+rpc_call, rpc_stream, fnmatch, collate, xdr_mem, xdr_rec).
+Two stopped on a finding; their coverage is the value at the stop.
+
+| Target | cov | ft | Corpus | Executions | Finding |
+|---|---|---|---|---|---|
+| charmap | 1675 | 8562 | 4877 | 826,217 | none |
+| collate | 215 | 600 | 171 | 89,322,502 | none |
+| digits_dots | 553 | 1633 | 597 | 68,036,943 | none |
+| dns | 1100 | 4386 | 1299 | 23,758,064 | none |
+| fnmatch | 965 | 5667 | 2568 | 5,637,267 | none |
+| glob | 1580 | 10721 | 3615 | 2,346,987 | none |
+| group | 214 | 819 | 87 | 1,807 | FINDING: crash, harness assertion "each GID once" (`users::group_list` returned a GID twice); stopped after 1,807 executions |
+| hosts | 556 | 2677 | 1562 | 7,662,783 | none |
+| iconv | 807 | 5165 | 2798 | 19,571,443 | none |
+| locale | 1862 | 4473 | 2495 | 588,442 | none |
+| netdb_files | 432 | 3234 | 1340 | 15,727,392 | none |
+| nscache | 332 | 1300 | 347 | 11,028,834 | none |
+| nsswitch | 364 | 2496 | 1448 | 12,073,430 | none |
+| passwd | 179 | 1206 | 534 | 15,765,357 | none |
+| printf | 1478 | 9763 | 4052 | 2,779,085 | none |
+| regex | 2447 | 12713 | 2597 | 257,210 | none |
+| regex_dfa | 2422 | 10698 | 1211 | 25,065 | none |
+| resolv_conf | 667 | 4244 | 2763 | 22,993,573 | none |
+| rpc_call | 80 | 107 | 41 | 698,423,641 | none |
+| rpc_stream | 96 | 453 | 203 | 34,872,782 | none |
+| scanf | 1184 | 5601 | 2352 | 48,168,082 | none |
+| scanners | 115 | 337 | 87 | 155,322,241 | none |
+| shadow | 242 | 1846 | 720 | 12,179,563 | none |
+| wordexp | 1746 | 8765 | 2602 | 295,601 | none |
+| xdr_mem | 515 | 1768 | 377 | 150,895,486 | FINDING: out-of-memory (2048 MB limit) after 150,895,486 executions; the stored input (empty) runs clean alone, so memory grew across executions |
+| xdr_rec | 148 | 637 | 167 | 24,238,032 | none |
+
+A finding is a defect with its own fix story (group: `group_list` duplicate GID; xdr_mem: memory growth); neither is fixed here.
+The four 2026-10-23 time-outs (regex, regex_dfa, glob, locale) did not stop their targets in this run's 30 minutes (the run starts from an empty corpus, so this is not a replay of those inputs). Low execution counts for regex (257,210) and
+regex_dfa (25,065) show those targets are slow per input, not stopped.
 
 ### Findings
 
