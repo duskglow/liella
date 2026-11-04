@@ -5,7 +5,7 @@
 //!
 //! PROBE RECORD: `tests/data/strto_internal_group.txt` is the unedited output of
 //! `crates/core/tests/oracle/strto_group_table.c` built against the reference (glibc 2.39,
-//! Ubuntu 2.39-0ubuntu8.9, kanon, 2026-10-24) with `LOCPATH` naming the locales below. Each line:
+//! Ubuntu 2.39-0ubuntu8.9, 2026-10-24) with `LOCPATH` naming the locales below. Each line:
 //! locale, flag, input, then value/end(/errno) per form. Settled there, besides run 1's table:
 //! - C locale: the flag is a no-op (the `g=1` lines equal the `g=0` lines).
 //! - `grpsame` (thousands_sep == decimal_point == `.`): integers still group (`1.234.567` ->

@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# Workload gate, step 1 (runs on keke): products, link kits and inputs.   validation/wl_gate.sh
+# Workload gate, step 1 (runs on Zen 1 host): products, link kits and inputs.   validation/wl_gate.sh
 #
 #   wl_prep.sh SHA...
 #

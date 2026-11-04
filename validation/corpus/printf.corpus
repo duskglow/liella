@@ -3195,7 +3195,7 @@ F	C	0	%10.10s	s:-rw-rw-r--	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%5ju	i:1001	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%8s	s:claude	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%s:\x20%s\x0a	s:Kernel\x20name	s:Linux	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	%s:\x20%s\x0a	s:Node\x20name	s:keke	@glibc-coreutils,glibc-sysregex-coreutils
+F	C	0	%s:\x20%s\x0a	s:Node\x20name	s:host	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%s:\x20%s\x0a	s:Kernel\x20release	s:6.8.0-146-generic	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%s:\x20%s\x0a	s:Kernel\x20version	s:#146-Ubuntu\x20SMP\x20PREEMPT_DYNAMIC\x20Thu\x20Sep\x20\x203\x2016:12:30\x20UTC\x202026	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%s:\x20%s\x0a	s:Machine	s:x86_64	@glibc-coreutils,glibc-sysregex-coreutils
@@ -7562,25 +7562,25 @@ F	C	0	%*s\x20	i:7	s:5636110	@glibc-coreutils
 F	C	0	%*s\x20	i:7	s:5636127	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%*s%s\x20	i:0	s:\e	s:0	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%*s%s\x20	i:0	s:\e	s:12	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	22	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir	@glibc-coreutils
+F	C	22	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir	@glibc-coreutils
 F	C	0	%%%02x	i:35	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/an%23chor	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/an%23chor	@glibc-coreutils
 F	C	0	%%%02x	i:92	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/back%5cslash	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/back%5cslash	@glibc-coreutils
 F	C	0	%%%02x	i:58	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/col%3aon	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/col%3aon	@glibc-coreutils
 F	C	0	%%%02x	i:37	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/encoded%253Fquestion	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/encoded%253Fquestion	@glibc-coreutils
 F	C	0	%%%02x	i:233	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/invalidutf8%e9	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/invalidutf8%e9	@glibc-coreutils
 F	C	0	%%%02x	i:63	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/ques%3ftion	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/ques%3ftion	@glibc-coreutils
 F	C	0	%%%02x	i:32	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/sp%20ace	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/sp%20ace	@glibc-coreutils
 F	C	0	%%%02x	i:195	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%%%02x	i:161	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/utf8%c3%a1	@glibc-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/probably_missing	@glibc-coreutils,glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.JENa/testdir/utf8%c3%a1	@glibc-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/probably_missing	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%s\x20%*s\x20	s:dr-xr-xr-x	i:1	s:1	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	cannot\x20access\x20%s	s:'sedir/broken'	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	0	%*s\x20	i:1	s:?	@glibc-coreutils,glibc-sysregex-coreutils
@@ -8008,9 +8008,9 @@ F	C	0	sh\x20-c\x20'sleep\x201;\x20kill\x20-INT\x20%ld'\x20&	i:2894208	@glibc-cor
 F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-03\x2004:14:15	s:reboot	s:~	i:0	i:0	i:0	i:88	i:32	s:6.8.0-146-generic	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-03\x2004:14:21	s:runlevel	s:~	i:53	i:0	i:0	i:32	i:32	s:6.8.0-146-generic	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2016:31:31	s:rmiller	s:tty1	i:664708	i:0	i:0	i:32	i:88	s:\e	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2020:37:19	s:rmiller	s:pts/2	i:2675403	i:0	i:0	i:32	i:88	s:10.0.0.77	@glibc-coreutils,glibc-sysregex-coreutils
+F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2020:37:19	s:rmiller	s:pts/2	i:2675403	i:0	i:0	i:32	i:88	s:11.0.0.77	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2020:45:10	s:\e	s:pts/0	i:664724	i:0	i:0	i:32	i:32	s:\e	@glibc-coreutils,glibc-sysregex-coreutils
-F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2020:45:11	s:\e	s:pts/1	i:664837	i:0	i:0	i:32	i:32	s:10.0.0.77	@glibc-coreutils,glibc-sysregex-coreutils
+F	C	2	%-19s\x20%-18s\x20%-11s\x20%10ld\x20%4d\x20\x20\x20%3d\x20\x20\x20%c\x20%c\x20\x20%s\x0a	s:2026-10-04\x2020:45:11	s:\e	s:pts/1	i:664837	i:0	i:0	i:32	i:32	s:11.0.0.77	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%02d	i:0	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%02d	i:1	@glibc-coreutils,glibc-sysregex-coreutils
 F	C	2	%02d	i:2	@glibc-coreutils,glibc-sysregex-coreutils
@@ -9600,15 +9600,15 @@ F	C	2	%s\x20->\x20%s	s:'/dev/shm/tmp3116217/k'	s:'k2'	@glibc-sysregex-coreutils
 F	C	18	failed\x20to\x20clone\x20%s\x20from\x20%s	s:'b'	s:'/dev/shm/tmp3118843/a'	@glibc-sysregex-coreutils
 F	C	0	%jd\x20byte\x20copied,\x20%s,\x20%s	i:1	s:0.000302595\x20s	s:3.3\x20kB/s	@glibc-sysregex-coreutils
 F	C	29	%.0f\x20s	d:3ff0025935e2763e	@glibc-sysregex-coreutils
-F	C	22	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/an%23chor	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/back%5cslash	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/col%3aon	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/encoded%253Fquestion	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/invalidutf8%e9	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/ques%3ftion	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/sp%20ace	@glibc-sysregex-coreutils
-F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:keke	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/utf8%c3%a1	@glibc-sysregex-coreutils
+F	C	22	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/an%23chor	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/back%5cslash	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/col%3aon	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/encoded%253Fquestion	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/invalidutf8%e9	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/ques%3ftion	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/sp%20ace	@glibc-sysregex-coreutils
+F	C	0	\x1b]8;;file://%s%s%s\x1b\x5c	s:host	s:\e	s:/home/claude/validation/build/glibc-sysregex-harvest/coreutils/coreutils-9.12/gt-hyperlink.sh.4gGn/testdir/utf8%c3%a1	@glibc-sysregex-coreutils
 F	C	20	backing\x20up\x20%s\x20might\x20destroy\x20source;\x20\x20%s\x20not\x20moved	s:'/dev/shm/tmp3137227/a'	s:'/dev/shm/tmp3137227/a~'	@glibc-sysregex-coreutils
 F	C	20	%s\x20and\x20%s\x20are\x20the\x20same\x20file	s:'symlink'	s:'/dev/shm/tmp3138518/file'	@glibc-sysregex-coreutils
 F	C	2	copied\x20%s\x20->\x20%s	s:'mv-null'	s:'/dev/shm/tmp3138972/mv-null'	@glibc-sysregex-coreutils

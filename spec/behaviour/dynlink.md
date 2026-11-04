@@ -10,7 +10,7 @@ corpus is its oracle), DL-12 (static-TLS surplus), DL-16 (dlerror texts), DL-17 
 **Probe:** `tools/probe/dl/run.sh SCRATCH` builds a corpus from `tools/probe/dl/dllib.c` (one
 source, many shared objects chosen by `-D` options) and `tools/probe/dl/dlprobe.c` (the probe
 program; built with `-DORDER_MAIN` it is the order program `dlorder`), runs every probe and prints
-the record. **Record:** `dynlink.glibc.txt` (SCRATCH shown as `<dir>`). Recorded on shiki (Ubuntu
+the record. **Record:** `dynlink.glibc.txt` (SCRATCH shown as `<dir>`). Recorded on Haswell-EP host (Ubuntu
 24.04, glibc 2.39-0ubuntu8.9, gcc 13.3, x86_64) with `LC_ALL=C` and no `LD_*`/`GLIBC_TUNABLES` in
 the environment. Each failure case runs in its own forked child. Every object prints with
 `write(2)`, so the record shows execution order regardless of buffering. Black box only: the
@@ -62,7 +62,7 @@ initial-exec TLS block of 1664 bytes succeeds and 1728 fails (64-byte steps); th
 `<path>: cannot allocate memory in static TLS block`.
 
 **`$LIB`, `$PLATFORM`, `$ORIGIN`** (record `== subst`): in a DT_RUNPATH, `$LIB` and `${LIB}`
-expand to `lib/x86_64-linux-gnu`, `$PLATFORM` to `haswell` on shiki (a CPU-dependent value),
+expand to `lib/x86_64-linux-gnu`, `$PLATFORM` to `haswell` on Haswell-EP host (a CPU-dependent value),
 `$ORIGIN` to the object's directory. In a `dlopen` argument the tokens are not expanded (the
 dlerror text shows them literally); `dlopen("$ORIGIN/libC.so")` from the program does expand
 `$ORIGIN` (to the program's directory) and succeeds.
@@ -94,7 +94,7 @@ library with no entry point run through `ld.so`: SIGSEGV (139). `--verify`: 0 dy
 static program or non-ELF, 2 shared library. `--list` of a program with a missing dependency:
 127. `--version`, `--help`: 0.
 
-**BIND_NOW share** (record `== bindnow`): of 681 regular ELF64 files in shiki's `/usr/bin`, 1 is
+**BIND_NOW share** (record `== bindnow`): of 681 regular ELF64 files in Haswell-EP host's `/usr/bin`, 1 is
 static, 666 dynamic with BIND_NOW (DT_FLAGS `BIND_NOW` or DT_FLAGS_1 `NOW`), 14 lazy; 667 are
 `ET_DYN`. Lazy binding is the rare case for system programs (input to R14-13 / DL-10).
 

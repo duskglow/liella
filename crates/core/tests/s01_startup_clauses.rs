@@ -1536,7 +1536,7 @@ fn s1_8_c_0_syntax() {
 }
 
 /// §1.8 (D-1.8): glibc's `GLIBC_TUNABLES` diagnostics, byte for byte as glibc 2.39 prints them
-/// (probes keke:~/work/tunables-warning/probe.sh, TUNABLES-WARNING 2026-10-23).
+/// (probes the tunables-warning probe script (task work directory on the Zen 1 host), TUNABLES-WARNING 2026-10-23).
 #[test]
 fn s1_8_c_0_warnings() {
     let p = |s: &[u8]| Tunables::malloc_perturb(s, false);
@@ -1579,7 +1579,7 @@ fn s1_8_c_0_warnings() {
         }
     }
     assert_eq!(numeric, 38, "glibc 2.39 warns for 38 names (probe)");
-    // The ranges, as `ld.so --list-tunables` of glibc 2.39 listed them (keke, LEGACY-TUNABLES-POLICY).
+    // The ranges, as `ld.so --list-tunables` of glibc 2.39 listed them (Zen 1 host, LEGACY-TUNABLES-POLICY).
     let m = u64::MAX;
     let i = 0x7fff_ffff;
     let listed: [(&str, u64, u64); 38] = [

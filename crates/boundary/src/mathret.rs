@@ -1105,7 +1105,7 @@ mod tests {
     #[test]
     fn ftz_flushes_the_tininess_edge() {
         // Clauses: s10_0_f_0.
-        // Probed black-box on shiki with ldmxcsr and mulss/mulsd: (1-2^-24)*2^-126 and
+        // Probed black-box on Haswell-EP host with ldmxcsr and mulss/mulsd: (1-2^-24)*2^-126 and
         // (1-2^-53)*2^-1022 (ties on the subnormal grid, rounding to the smallest normal) give the
         // smallest normal with underflow+inexact under the default word, and a zero of the sign with
         // underflow+inexact under FTZ, in all four rounding directions: the value is tiny after

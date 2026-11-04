@@ -46,7 +46,7 @@ duplicate builds; without it concurrent builders each compile and rename, which 
 (`unshare -r -m`, no sudo): once with a directory of the reference file system (ext4) bind-mounted over `target/tmp`
 (`CARGO_TARGET_TMPDIR`, compiled into the tests, so only a mount can move it) and over `/tmp`, once with a fresh tmpfs
 there, and compares the sorted pass/fail lists (exit 0 identical, 1 different, 2 the run broke). The bind mount is there
-because `target/` itself may be on a RAM disk (keke's is). Result of the first run (keke, 2026-10-24, 4760 tests,
+because `target/` itself may be on a RAM disk (Zen 1 host's is). Result of the first run (Zen 1 host, 2026-10-24, 4760 tests,
 `ext2/ext3` = ext4 by magic number): identical lists, so no test of the two crates turned out to depend on the file system
 under its scratch tree. Not covered: `LIELLA_TEST_TMP`-style overrides, `target/test-oracles` (stays on the file system
 of `target/`), `/dev/shm`, and the `sudo -n` tests (below).

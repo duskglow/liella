@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# keke side of validation/wl_shapes.sh (WL-STAKES): argument shapes of the mem*/str*/malloc calls each workload's
+# Zen 1 host side of validation/wl_shapes.sh (WL-STAKES): argument shapes of the mem*/str*/malloc calls each workload's
 # programs make, observed on the glibc kit with the LD_PRELOAD wrapper validation/wl_shapes_stub.c.
 #   wl_shapes_run.sh <outdir> [<workload>...]     (default: every workload of wl_workloads.sh)
 # Env: WLS_KIT (~/wl/kit/glibc/bin), WLS_WORK (~/wl/work).

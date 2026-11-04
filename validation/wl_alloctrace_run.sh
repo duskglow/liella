@@ -1,6 +1,6 @@
 #!/bin/bash
 # LAB-ONLY: this script drives the project's own test hosts and is not needed to build or test Liella.
-# wl_alloctrace.sh, keke side: run ONE workload's kit program under gdb and print the allocation summary.
+# wl_alloctrace.sh, Zen 1 host side: run ONE workload's kit program under gdb and print the allocation summary.
 #
 #   wl_alloctrace_run.sh SHA WORKLOAD PROG TOP
 #
