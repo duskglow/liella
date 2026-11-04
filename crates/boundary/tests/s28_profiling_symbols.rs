@@ -98,10 +98,12 @@ fn child_profile(cleanup: bool) -> bool {
     let low = site.min(caller) - (1 << 20);
     pr::monstartup(low, site.max(caller) + (1 << 20));
     pr::probe_run(true, 3);
+    // Read before _mcleanup: the arcs are not reported once profiling has ended.
+    let recorded = arcs_into(site, caller) == (1, 3);
     if cleanup {
         pr::_mcleanup();
     }
-    arcs_into(site, caller) == (1, 3)
+    recorded
 }
 
 #[test]
