@@ -16,3 +16,13 @@ the sink), so `enomem_stream_grow getdelim_out_of_memory_keeps_a_valid_buffer` g
 kept reading /dev/zero. Fix: the partial record applies to read errors only; a failed growth (ENOMEM/EOVERFLOW) is the error
 as before (`grow_failed` in `stdio_compat::getdelim`). Merged origin/next. Still open: the instructions:u check of the
 getc/fgets/getline bench rows (next vs head vs glibc) was never run.
+
+## STDIO-EOF-PARTIAL-REFERENCE-5
+CI red cause (`stdio_short_io pipe_getline_interrupted_then_resumes`, line 500 `errno == EINTR`, left 0): getdelim now returns the
+partial record ("par") as a success after an interrupted read, and the export only sets `errno` on an Err, so `errno` stayed 0.
+(Reproduced on keke before the fix; the "10 min, 4.4 GB" in the CI line is the harness, not this test's loop.)
+Fix: `Env::set_errno` (one implementor, boundary), called in `stdio_compat::getdelim`'s partial-record path with the read error;
+the error indicator is set as before. Not changed: the test (its expectation, errno EINTR + ferror + no feof, matches the reference).
+Merged origin/next. Plants: `noerrno` (drop the set_errno), `growpartial` (partial record on a failed growth).
+Bench check (instructions:u, cbench_hot, next vs head, glibc): job `stdio-eof-partial-reference-5-bench`; results in keke
+~/work/stdio-eof-partial-reference-5/bench-{next,head}.log. Next step: read those logs against the getc/fgets/getline rows.
