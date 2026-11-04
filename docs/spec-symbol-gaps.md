@@ -19,7 +19,7 @@ is a compatibility version, so new programs cannot link against it), else `defau
 
 ## Counts
 
-4,305 names (4,600 version rows) in the table; 698 are not defined. Counts as of 2026-11-04 (MATH-M5-CLOSE, `cargo xtask so` then `cargo xtask symcov --tsv docs/spec-symbol-gaps.tsv`, host mei). Earlier: 716 on 2026-10-24 (Zen 1 host), before the complex `_Float128` landing. Earlier counts in the notes below are kept as history: 954 on the morning of 2026-10-24, before the compatibility, RPC and libm landings of that day.
+4,305 names (4,600 version rows) in the table; 698 are not defined. Counts as of 2026-11-04 (MATH-M5-CLOSE, `cargo xtask so` then `cargo xtask symcov --tsv docs/spec-symbol-gaps.tsv`, Zen 1 host). Earlier: 716 on 2026-10-24 (Zen 1 host), before the complex `_Float128` landing. Earlier counts in the notes below are kept as history: 954 on the morning of 2026-10-24, before the compatibility, RPC and libm landings of that day.
 
 | Class | Names | What it is | Owner in the plan |
 |---|---:|---|---|
