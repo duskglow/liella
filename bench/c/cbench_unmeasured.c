@@ -61,15 +61,32 @@ static void put(const char *name, double ns)
 
 #define FILES 1000
 #define N 1024
+#define LEVELS 10
+#define LEVELLEN 200
 
 static char top[PATH_MAX];
 static int made;
+
+static void deep_files(const char *what, int create);
+static char deep[PATH_MAX], deepflat[PATH_MAX + 8];
+static int deep_levels;
 
 static void teardown(void)
 {
     char p[PATH_MAX + 32];
     if (!made)
         return;
+    if (deep_levels) {
+        if (deepflat[0]) {
+            deep_files("", 0);
+            rmdir(deepflat);
+        }
+        for (int l = deep_levels; l > 0; l--) {
+            size_t n = strlen(top) + (size_t)l * (LEVELLEN + 1);
+            deep[n] = 0;
+            rmdir(deep);
+        }
+    }
     for (int i = 0; i < FILES; i++) {
         snprintf(p, sizeof p, "%s/flat/f%04d", top, i);
         unlink(p);
@@ -108,6 +125,72 @@ static long sort_once(void)
     return work[0] + work[N - 1];
 }
 
+/* Element sizes 4, 8, 16, 24 and 64 bytes: a 4-byte key first, the rest padding that is filled
+ * deterministically and never compared. The same plain comparator work on both sides; the comparisons per
+ * sort are counted once with a separate counting comparator on the library under test. */
+typedef struct { int k; } e4_t;
+typedef struct { int k; char pad[4]; } e8_t;
+typedef struct { int k; char pad[12]; } e16_t;
+typedef struct { int k; char pad[20]; } e24_t;
+typedef struct { int k; char pad[60]; } e64_t;
+
+#define QS_SIZE(T, SZ)                                                         \
+    static T master_##SZ[N], work_##SZ[N];                                     \
+    static int cmp_##SZ(const void *a, const void *b)                          \
+    {                                                                          \
+        int x = ((const T *)a)->k, y = ((const T *)b)->k;                      \
+        return (x > y) - (x < y);                                              \
+    }                                                                          \
+    static int cmpc_##SZ(const void *a, const void *b)                         \
+    {                                                                          \
+        ncmp++;                                                                \
+        return cmp_##SZ(a, b);                                                 \
+    }                                                                          \
+    static long sort_##SZ(void)                                                \
+    {                                                                          \
+        memcpy(work_##SZ, master_##SZ, sizeof work_##SZ);                      \
+        qsort(work_##SZ, N, sizeof(T), cmp_##SZ);                              \
+        return work_##SZ[0].k + work_##SZ[N - 1].k;                            \
+    }                                                                          \
+    static long prep_##SZ(void)                                                \
+    {                                                                          \
+        unsigned q = 777u + SZ;                                                \
+        for (int i = 0; i < N; i++) {                                          \
+            q = q * 1103515245u + 12345u;                                      \
+            memset(&master_##SZ[i], i & 0xff, sizeof(T));                      \
+            master_##SZ[i].k = (int)(q >> 8);                                  \
+        }                                                                      \
+        memcpy(work_##SZ, master_##SZ, sizeof work_##SZ);                      \
+        ncmp = 0;                                                              \
+        qsort(work_##SZ, N, sizeof(T), cmpc_##SZ);                             \
+        for (int i = 1; i < N; i++)                                            \
+            if (work_##SZ[i - 1].k > work_##SZ[i].k)                           \
+                fail("qsort order " #SZ);                                      \
+        printf("comparisons_per_sort_e%d\t%ld.00\n", SZ, ncmp);                \
+        return ncmp;                                                           \
+    }
+
+QS_SIZE(e4_t, 4)
+QS_SIZE(e8_t, 8)
+QS_SIZE(e16_t, 16)
+QS_SIZE(e24_t, 24)
+QS_SIZE(e64_t, 64)
+
+static void deep_files(const char *what, int create)
+{
+    char p[PATH_MAX + 32];
+    for (int i = 0; i < FILES; i++) {
+        snprintf(p, sizeof p, "%s/f%04d", deepflat, i);
+        if (create) {
+            int fd = open(p, O_WRONLY | O_CREAT | O_EXCL, 0600);
+            if (fd < 0)
+                fail(what);
+            close(fd);
+        } else
+            unlink(p);
+    }
+}
+
 static DIR *dirp;
 
 static long rescan(void)
@@ -119,11 +202,9 @@ static long rescan(void)
     return n;
 }
 
-static long walk_fts(void)
+static long walk_fts_at(const char *flat)
 {
-    char flat[PATH_MAX + 8];
-    snprintf(flat, sizeof flat, "%s/flat", top);
-    char *argv[] = {flat, NULL};
+    char *argv[] = {(char *)flat, NULL};
     FTS *f = fts_open(argv, FTS_PHYSICAL | FTS_NOCHDIR, NULL);
     if (!f)
         return -1;
@@ -132,6 +213,18 @@ static long walk_fts(void)
     while ((e = fts_read(f)))
         n++;
     return fts_close(f) == 0 ? n : -1;
+}
+
+static long walk_fts(void)
+{
+    char flat[PATH_MAX + 8];
+    snprintf(flat, sizeof flat, "%s/flat", top);
+    return walk_fts_at(flat);
+}
+
+static long walk_fts_deep(void)
+{
+    return walk_fts_at(deepflat);
 }
 
 int main(void)
@@ -166,6 +259,12 @@ int main(void)
     }
 
     MEASURE_PER("qsort_c_cmp_1024", 100, (double)per_sort, sort_once());
+    long c4 = prep_4(), c8 = prep_8(), c16 = prep_16(), c24 = prep_24(), c64 = prep_64();
+    MEASURE_PER("qsort_c_cmp_1024_e4", 100, (double)c4, sort_4());
+    MEASURE_PER("qsort_c_cmp_1024_e8", 100, (double)c8, sort_8());
+    MEASURE_PER("qsort_c_cmp_1024_e16", 100, (double)c16, sort_16());
+    MEASURE_PER("qsort_c_cmp_1024_e24", 100, (double)c24, sort_24());
+    MEASURE_PER("qsort_c_cmp_1024_e64", 100, (double)c64, sort_64());
 
     snprintf(p, sizeof p, "%s/flat", top);
     dirp = opendir(p);
@@ -179,6 +278,28 @@ int main(void)
     if (walk_fts() != FILES + 2)
         fail("fts count");
     MEASURE_PER("fts_entry_flat", 50, FILES + 2, walk_fts());
+
+    /* A base path of about 2 KiB: LEVELS nested directories of LEVELLEN characters under the scratch
+     * directory, then `flat` with its own 1,000 files. */
+    snprintf(deep, sizeof deep, "%s", top);
+    for (int l = 1; l <= LEVELS; l++) {
+        size_t n = strlen(deep);
+        deep[n] = '/';
+        memset(deep + n + 1, 'a' + (l % 26), LEVELLEN);
+        deep[n + 1 + LEVELLEN] = 0;
+        if (mkdir(deep, 0700))
+            fail("mkdir deep");
+        deep_levels = l;
+    }
+    snprintf(deepflat, sizeof deepflat, "%s/flat", deep);
+    if (mkdir(deepflat, 0700))
+        fail("mkdir deep flat");
+    deep_files("create deep", 1);
+    if (strlen(deepflat) < 2000 || strlen(deepflat) > 2100)
+        fail("deep path length");
+    if (walk_fts_deep() != FILES + 2)
+        fail("fts deep count");
+    MEASURE_PER("fts_entry_deep2k", 50, FILES + 2, walk_fts_deep());
 
     teardown();
     return 0;

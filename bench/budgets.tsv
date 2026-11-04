@@ -626,3 +626,15 @@ cbench_unmeasured	fts_entry_flat	max_ns	20000	BENCH-ROWS-UNMEASURED: fts_open/ft
 cbench_unmeasured	qsort_c_cmp_1024	ratio_host	1.00	BENCH-ROWS-UNMEASURED: report-only (no host_limits entry); lets --counters count the glibc side
 cbench_unmeasured	readdir_entry_flat	ratio_host	1.00	BENCH-ROWS-UNMEASURED: report-only (no host_limits entry)
 cbench_unmeasured	fts_entry_flat	ratio_host	1.00	BENCH-ROWS-UNMEASURED: report-only (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024_e4	max_ns	2000	BENCH-UNMEASURED-WIDEN: qsort of 1,024 elements of this size with a C comparator, per comparison; sanity only
+cbench_unmeasured	qsort_c_cmp_1024_e8	max_ns	2000	BENCH-UNMEASURED-WIDEN: qsort of 1,024 elements of this size with a C comparator, per comparison; sanity only
+cbench_unmeasured	qsort_c_cmp_1024_e16	max_ns	2000	BENCH-UNMEASURED-WIDEN: qsort of 1,024 elements of this size with a C comparator, per comparison; sanity only
+cbench_unmeasured	qsort_c_cmp_1024_e24	max_ns	2000	BENCH-UNMEASURED-WIDEN: qsort of 1,024 elements of this size with a C comparator, per comparison; sanity only
+cbench_unmeasured	qsort_c_cmp_1024_e64	max_ns	2000	BENCH-UNMEASURED-WIDEN: qsort of 1,024 elements of this size with a C comparator, per comparison; sanity only
+cbench_unmeasured	fts_entry_deep2k	max_ns	20000	BENCH-UNMEASURED-WIDEN: fts FTS_PHYSICAL|FTS_NOCHDIR over a 1,000-file directory under a base path of about 2 KiB, per entry; sanity only
+cbench_unmeasured	qsort_c_cmp_1024_e4	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024_e8	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024_e16	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024_e24	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
+cbench_unmeasured	qsort_c_cmp_1024_e64	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
+cbench_unmeasured	fts_entry_deep2k	ratio_host	1.00	BENCH-UNMEASURED-WIDEN: report-only (no host_limits entry)
