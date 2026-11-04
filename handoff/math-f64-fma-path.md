@@ -1,39 +1,35 @@
-# MATH-F64-FMA-PATH handoff (run 3 = MATH-F64-FMA-PATH-3)
+# MATH-F64-FMA-PATH handoff (run 4 = MATH-F64-FMA-PATH-4)
 
-Branch task/math-f64-fma-path-3 (stacked on task/math-f64-fma-path-2, from origin/next 125c0ccc). Role keke:~/w/r5.
-Code head 298a64f6 (the handoff/report commit follows it). Decisions in force: **D-10.22**
-(plan/07-decisions/s10-mathematics.md), ruling #2261 (UNSAFE(hot-kernel) category text widened).
+Branch task/math-f64-fma-path-4 (= run 3's branch + merge of origin/next 432f1ef7). Role keke:~/w/r5.
+Code head 4f8d85fe (merge commit; the handoff/report commit follows it). Decisions in force: **D-10.23**
+(plan/07-decisions/s10-mathematics.md; was D-10.22 on run 3's branch, renumbered because next's
+MATH-M6-SQRT row took D-10.22), ruling #2261 (UNSAFE(hot-kernel) widened).
 
-## Run 3
-- build3 (run 2) rc 1, cause: clippy on the new test's sample arithmetic (`as_conversions`, `indexing_slicing`,
-  `arithmetic_side_effects`). Fixed with the file-level allow the other boundary tests use.
-- build1 (run 3) rc 1, cause: `xtask static`: arch-audit (dd.rs `two_prod_fma` cfg + intrinsics `use`, fast64.rs
-  `mod fused` cfg had no `// ARCH(x86_64):` tag), opaque-audit (test calls exp/log: needs `#![no_builtins]`; an
-  `opaque-ok` note covers only allocator names), trace (test named no clause: now s10_3_c_0, s10_0_g_0). All fixed.
-- Plant gap from run 2 closed: `selftest::math_fma()` returns the build in force; the test asserts that
-  `set_math_fma(true/false)` took effect. New plant `select-ignores-arg` covers it.
-- `s10_math_gen.rs` regenerated (math-gen) and committed: only exp/log (3 entries each) move to `crate::hot::*_nearest`.
-- Jobs on keke (chain `~/work/math-f64-fma-path-3/verify.sh`): `math-f64-fma-path-3-build2` (math-gen, xtask clippy =
-  `cargo clippy --workspace --all-targets --all-features -D warnings`, xtask static, math_fma_paths, liella-math lib)
-  rc 0; `math-f64-fma-path-3-gate1` (direct tier, `--base origin/next`); `math-f64-fma-path-3-plants1`
-  (`plants.sh 1`, RAM copy /dev/shm/claude/math-f64-fma-path-3/plants-1; fmadd-sign, fused-exp-ulp, fused-log-scale,
-  select-ignores-arg; exits 1 on a survivor). Results: see handoff/reports/MATH-F64-FMA-PATH-3.json.
-- Equivalent by design (not planted): `hot::{exp,log}_nearest` taking the baseline whatever the flag says returns the
-  same bits (D-10.22 construction); only instruction counts can show it.
+## Run 4
+- CI conflict resolved: MATH-M6-F64-GAP-LOG-TABLES-3 on next rewrote fast64's kernels (Fast2Sum assembly,
+  `reduce_ln2`/`reduce_exp`/`reduce_pow`, `log_series` + `log_assemble`, the `near`/`finish` rounding test,
+  `exp_kernel` returning the tail). Next's arithmetic kept unchanged; `kernels!` now wraps only the functions with
+  exact products: `exp_kernel` (rh², th·ph), `log_kernel`, `log_series` (m·c, rh²). Macro form
+  `kernels!(<attrs for all>; <inline attr for log_series>; <prod>)` because `#[inline(always)]` cannot sit on a
+  `#[target_feature]` fn. `mul`/`mul_f64` macro copies dropped (unused now); `reduce` (exp10 only) is a plain fn.
+  `fused::{exp,log}_nearest` mirror `exp_near`/`log_near` (`finish` with `C_EXP` / `log_c`).
+- Jobs on keke, chain `~/work/math-f64-fma-path-4/verify.sh` (out: verify.out): `math-f64-fma-path-4-build1`
+  (math-gen must leave s10_math_gen.rs unchanged, xtask clippy, xtask static, math_fma_paths, liella-math lib),
+  `math-f64-fma-path-4-gate1` (direct, --base origin/next), `math-f64-fma-path-4-plants1` (RAM copy
+  /dev/shm/claude/math-f64-fma-path-4/plants-1; fmadd-sign, fused-exp-scale (new: m+1 in fused exp), fused-log-scale
+  (re-anchored on `finish`), select-ignores-arg; exits 1 on a survivor). Results were not in at hand-back.
+
+## Open
+- Code comments still cite **D-10.22** for the FMA build (dd.rs:68, fast64.rs x3, config.rs:49, cpu.rs:220,
+  dispatch.rs:33, hot.rs:2502, selftest.rs:689/700, tests/math_fma_paths.rs:1): change them to D-10.23 (out of
+  budget this run; pure comments). Row order in the decisions file is D-10.21, D-10.23, D-10.22: swap.
 
 ## Next step (exact)
-1. Counts (original brief step 0, not started): `cargo xtask bench --compare --counters cbench_libm` for the exp and log
-   rows, default and with `--tunables glibc.cpu.hwcaps=-FMA` (forces both glibc and Liella onto the baseline). Report
-   instructions per call Liella FMA / Liella baseline / glibc both; update saturation register 13.5 #8. Keep only if no
-   measured row is slower.
-2. Rest of the family (exp2, exp10, log2, log10, pow): `fused::*_nearest` wrappers + selectors in hot.rs + tsv rows +
-   math-gen, the test extended to them.
-
-## Design (unchanged; see D-10.22)
-`kernels!` builds mul, mul_f64, reduce, exp_kernel, log_kernel with `two_prod` and (in `fused`) `dd::two_prod_fma`;
-exact products are unique, so results are bit-identical by construction. `dispatch::FMA` byte set in `cpu::init_with`
-from `Features::fma()` and tunable `glibc.cpu.hwcaps=-FMA`; `selftest::set_math_fma` forces a build for tests,
-`selftest::math_fma` reads it.
+1. Read the three jobs above in keke ~/logs/jobs.tsv; on a red, fix the cause and rerun only that job.
+2. D-10.22 -> D-10.23 in the comments listed above.
+3. Counts (original brief step 0, not started): `cargo xtask bench --compare --counters cbench_libm` for exp/log,
+   default and with `--tunables glibc.cpu.hwcaps=-FMA`; update saturation register 13.5 #8; keep only if no row slower.
+4. Rest of the family (exp2, exp10, log2, log10, pow) via the same macro + selectors in hot.rs + tsv + math-gen.
 
 ## Not to redo
-The macro scope fix, D-10.22, the category widening, the lint/static fixes above, the gen-file regeneration.
+The macro scope fix, the decision row, the category widening, run 3's lint/static fixes, the merge resolution.
