@@ -28,7 +28,8 @@ fn regex_backref_ring_lengths_around_the_ring() {
     }
 }
 
-/// The same with a match that starts late and two groups.
+/// The same with a match that starts late and two groups (the literal dot keeps the earlier
+/// positions from matching).
 #[test]
 fn regex_backref_ring_late_start_two_groups() {
     for n in 1usize..=24 {
@@ -38,6 +39,6 @@ fn regex_backref_ring_late_start_two_groups() {
         s.extend(std::iter::repeat_n(b'b', n));
         let a = i64::try_from(3 + n).unwrap();
         let want = (3, 3 + 2 * n + 1, vec![(3, a), (a, a + 1)]);
-        assert_eq!(groups(br"\(b*\)\(.\)\1", &s), Some(want), "n={n}");
+        assert_eq!(groups(br"\(b*\)\([.]\)\1", &s), Some(want), "n={n}");
     }
 }
