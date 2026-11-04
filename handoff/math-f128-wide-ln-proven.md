@@ -13,3 +13,9 @@ ln_atanh(10) each call; a constant table would remove it (run 1 count: log10f128
 
 Results: clippy --workspace --all-targets --all-features -D warnings rc 0; cargo xtask static rc 0 (shiki sh1).
 Gate and plants: jobs math-f128-wide-ln-proven-2-gate / -plants on shiki (see handoff/reports json).
+
+PLANTS NOT PROVEN: job math-f128-wide-ln-proven-2-plants2 rc 1: baseline green, but the four plants (log10 by ln2, log
+doubled, pow ln doubled, Stirling shifted; script ~/work/math-f128-wide-ln-proven-2/plants.sh on shiki) all SURVIVED
+with `cargo xtask so && cargo test -p liella-math --test elem_f128_products ...` in a /dev/shm copy; the tests read
+target/liella/libm.a. Cause not found (suspect a stale or unrebuilt libm.a in the copy). Superseded: -plants (rc 3,
+baseline failed: products missing in the copy). Gate math-f128-wide-ln-proven-2-gate rc 0.
