@@ -139,6 +139,10 @@ impl Env for Glue {
         crate::errno::get()
     }
 
+    fn set_errno(&self, e: Errno) {
+        crate::errno::set(e);
+    }
+
     fn list_head(&self) -> &AtomicUsize {
         &data::_IO_list_all
     }
