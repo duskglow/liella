@@ -84,7 +84,7 @@ made in this run (budget); next step: cut the `LANGUAGE`-only work (remember the
 compare the list by the address the memo already proved fresh) and then the shared hit path, proving each with the
 counters above, the gettext tests and plants.
 
-**Row 6 run 2 (PERF-GETTEXT-STEADY-2, 2026-11-04, Zen 1 host keke, code = next 5d55aecf; jobs `perf-gettext-steady-2-before`
+**Row 6 run 2 (PERF-GETTEXT-STEADY-2, 2026-11-04, Zen 1 host, code = next 5d55aecf; jobs `perf-gettext-steady-2-before`
 (`cargo xtask bench --compare --counters --runs 5 cbench_opt`), `perf-gettext-steady-2-prof` (perf record instructions:u
 -c 10007, CBENCH_ONLY=gettext_language_steady), both rc 0; NO library change in this run).** Instructions per operation,
 Liella / glibc dynamic (default level): `gettext_found` 602.8 / 452.6 (1.33), `gettext_language_steady` 712.8 / 452.6
