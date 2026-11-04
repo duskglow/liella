@@ -1,16 +1,13 @@
-# PERF-CTYPE-LANGINFO-ACCESS handoff (-2 run: verification only, no new code)
+# PERF-CTYPE-LANGINFO-ACCESS handoff (-3 run)
 
-Branch task/perf-ctype-langinfo-access-2. Code commit 94ea6a7 (crates/boundary/src/locale.rs): ctype_slot tail-calls
-ctype_fill; byte_class indexes from the stored word. Host keke, role n3. clippy and static passed earlier (pcla-lint rc 0).
+Branch task/perf-ctype-langinfo-access-3. Code commit 94ea6a7 (crates/boundary/src/locale.rs): ctype_slot tail-calls
+ctype_fill; byte_class indexes from the stored word with one range test.
 
-## This run
-- Synced role n3 to the head; started detached jobs on keke: perf-ctype-langinfo-access-2-gate (clippy, static, affected
-  --base origin/next --run) and perf-ctype-langinfo-access-2-plants (fill-skipped, range-test-dropped, wrong-slot-offset;
-  script ~/work/perf-ctype-langinfo-access-2/plants.sh, fresh RAM copy). Both sat in the keke slot queue for 20+ min.
-- Old-run jobs perf-ctype-langinfo-access-gate / -percall-a / -plants (role n4, old story name) were still queued: not named.
-- NOT VERIFIED: gate, plants results; no before/after counts (percall not started: it would share role n3 with the gate).
+## -3 run
+- The -2 plants job: range-test-dropped SURVIVED. Added test byte_class_out_of_range_is_false
+  (crates/boundary/tests/s05_ctype_symbols.rs): all 12 class functions on values past both table ends, a sweep and the extreme ints.
+- Jobs: pcla3-plants (3 plants, fresh RAM copy), pcla3-gate (direct tier). Results in the hand-back / report json.
 
 ## Next step
-1. Read the two jobs' logs in keke ~/logs. 2. Run percall (validation/percall: ctype_b_loc, wcwidth_2byte, toupper_isalpha)
-before/after after the gate. 3. Then items 2-5 of the earlier list: nl_langinfo flat per-category array (core view.rs),
-isalpha masked class, wcwidth early narrow answer, saturation-register notes (no lab host names outside handoff/).
+Not done (percall counts, nl_langinfo flat per-category array, isalpha masked class, wcwidth early narrow answer,
+saturation-register notes): run validation/percall before/after, then those items.
