@@ -452,6 +452,8 @@ pub trait Env {
     fn free(&self, addr: usize);
     /// Call the C function at `f` with three arguments.
     fn call3(&self, f: usize, a: usize, b: usize, c: usize) -> isize;
+    /// The calling thread's `errno` (what a cookie hook left after returning -1).
+    fn errno(&self) -> i32;
     /// The head of the open-streams list (`_IO_list_all`).
     fn list_head(&self) -> &AtomicUsize;
     /// The words of the stream at `addr` (a `FILE *` from the list).
@@ -507,8 +509,11 @@ fn whence_code(w: Whence) -> u32 {
     }
 }
 
-fn isize_result(r: isize) -> KResult<usize> {
-    usize::try_from(r).map_err(|_| Errno::EIO)
+
+/// A cookie hook's result: a negative count fails with the `errno` the hook left (`EIO` when it
+/// left none that the kernel defines), as the reference library keeps it.
+fn hook_result<E: Env>(env: &E, r: isize) -> KResult<usize> {
+    usize::try_from(r).map_err(|_| Errno::new(env.errno()).unwrap_or(Errno::EIO))
 }
 
 impl<E: Env> Backing for Live<'_, E> {
@@ -538,7 +543,7 @@ impl<E: Env> Backing for Live<'_, E> {
                     return Err(Errno::EBADF);
                 }
                 let r = self.env.call3(c.read, c.cookie, core::ptr::from_mut(buf).cast::<u8>().expose_provenance(), buf.len());
-                isize_result(r)
+                hook_result(self.env, r)
             }
         }
     }
@@ -559,9 +564,9 @@ impl<E: Env> Backing for Live<'_, E> {
                     return Err(Errno::EBADF);
                 }
                 let r = self.env.call3(c.write, c.cookie, core::ptr::from_ref(buf).cast::<u8>().expose_provenance(), buf.len());
-                match isize_result(r) {
-                    Ok(0) | Err(_) => Err(Errno::EIO),
-                    ok => ok,
+                match hook_result(self.env, r) {
+                    Ok(0) => Err(Errno::EIO),
+                    other => other,
                 }
             }
         }
