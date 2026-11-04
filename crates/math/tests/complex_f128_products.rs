@@ -408,6 +408,11 @@ fn accuracy_suite_retry_count() {
             }
         }
         calls += 1;
+        if c::ziv_c_pending() > zz && per.get(base).map_or(0, |v| v.2) < 12 {
+            // Step 0 diagnostic: the operands (sign, unbiased exponent, bits) of a part left undecided at 768 bits.
+            let d: Vec<String> = ln.ops.iter().map(|b| format!("{}2^{}:{b:032x}", if b >> 127 == 1 { '-' } else { '+' }, ((b >> 112) & 0x7fff) as i64 - 16383)).collect();
+            println!("ziv-c-input {base} {} {} res {:032x?} {}", ln.mode, d.join(" "), ln.res, ln.flags);
+        }
         let e = per.entry(base.to_string()).or_default();
         *e = (e.0 + 1, e.1 + (c::retries() - rr), e.2 + (c::ziv_c_pending() - zz));
     }

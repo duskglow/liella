@@ -256,6 +256,18 @@ fn trig_abs(xe: i64) -> i64 {
     (if xe <= 29 { xe.max(4) + 6 } else { 11 }) - B
 }
 
+/// `(sin X, cos X)` of a small `X` given as `v` with the absolute error exponent `a`, when
+/// `|v| < 2^e` with `e <= −B/2`: `sin v = v − θ` with `|θ| < |v|³/6 < 2^(3e − 2)` and
+/// `0 <= 1 − cos v < v²/2 < 2^(2e − 1)` (Taylor with the alternating remainder), and both
+/// functions are 1-Lipschitz, so `v` and `1` within `2^(max(a, 3e − 2) + 1)` and
+/// `2^(max(a, 2e − 1) + 1)`. For an exact `v` this is a relative `2^(2e − 1)` on the sine,
+/// where [`trig_abs`]'s absolute `2^(10 − B)` would exceed `|sin v|` itself for a subnormal
+/// operand (ZIV-C Step 0: those parts were never decided at any width). `None` above.
+fn small_trig(v: Mp, a: i64) -> Option<(Approx, Approx)> {
+    let e = v.exp;
+    (!v.is_zero() && e <= -(B / 2)).then(|| (Approx::fix(v, a.max(3 * e - 2) + 1), Approx::fix(Mp::from_i64(1), a.max(2 * e - 1) + 1)))
+}
+
 // The bounds of the general regimes of `csqrt`, `casin`, `cacos`, `casinh`, `cacosh`, `catanh`
 // and `catan` count relative errors in units of `u = 2^-B`, through the operation bounds of the
 // `mpw` header, to first order (a product of two relative errors stays below 2^(2·14 − 2B), inside
@@ -474,6 +486,17 @@ impl<F: Float> Op<F> {
         let n = float::decode(self.v);
         mp::sin_cos_wide(n.neg, n.sig, i64::from(n.exp))
     }
+
+    /// `(sin x, cos x)` of a finite nonzero operand with proven absolute bounds: [`small_trig`]
+    /// for a tiny operand, otherwise [`Op::sin_cos`] within [`trig_abs`].
+    fn trig(&self) -> (Approx, Approx) {
+        let t = self.mp();
+        small_trig(t, EXACT).unwrap_or_else(|| {
+            let (s, c) = self.sin_cos();
+            let e = trig_abs(t.exp);
+            (Approx::fix(s, e), Approx::fix(c, e))
+        })
+    }
 }
 
 impl<F: Float> Op<F> {
@@ -624,10 +647,9 @@ pub(super) fn cexp<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
             let y2 = ym.sqr();
             return pair(Part::Dev(Mp::from_i64(1), dir(xm.ldexp(1).sub(y2), false)), Part::Dev(ym, dir(xm.mul_u64(6).sub(y2), false)), mode);
         }
-        let (sy, cy) = b.sin_cos();
+        let (sy, cy) = b.trig();
         let e = Approx::rel(exp_mp(a.mp()), exp_rel(a.mp()));
-        let t = trig_abs(b.mp().exp);
-        return pair(e.mul(Approx::fix(cy, t)).part(), e.mul(Approx::fix(sy, t)).part(), mode);
+        return pair(e.mul(cy).part(), e.mul(sy).part(), mode);
     }
     match (a.k, b.k) {
         (K::Nan, K::Zero) => ((qn(), y), s),
@@ -971,9 +993,8 @@ fn circ<F: Float>(t: &Op<F>) -> (Fac, Fac) {
     if t.k == K::Zero {
         return (Fac::Z(t.neg), Fac::V(Approx::exact(Mp::from_i64(1))));
     }
-    let (s, c) = t.sin_cos();
-    let e = trig_abs(t.mp().exp);
-    (Fac::V(Approx::fix(s, e)), Fac::V(Approx::fix(c, e)))
+    let (s, c) = t.trig();
+    (Fac::V(s), Fac::V(c))
 }
 
 /// `csinh(x + iy) = sinh x cos y + i cosh x sin y`.
@@ -1183,19 +1204,18 @@ pub(super) fn ccos<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
 /// cannot be zero (`cos 2t = −e^(−2|h|)` has no solution in representable `t`, `h`), so `±1` with
 /// its side is exact enough; beyond `|h| = 2^39`, `e^(−2|h|)` is far below every format.
 fn tan_core<F: Float>(hop: &Op<F>, top: &Op<F>) -> (Part, Part) {
-    let (s, c) = top.sin_cos();
     let neg = hop.neg;
     let x = hop.abs_mp();
     let ha = x.to_f64();
     if ha >= LIM {
+        let (s, c) = top.sin_cos();
         // δ = −(cos 2t + e^(−2|h|))/(2D) has the sign of −cos 2t; D is beyond every format.
         let cos2_neg = c.sub(s).mul(c.add(s)).neg;
         return (Part::Near(1.0, cos2_neg).with_neg(neg), Part::Dev(tiny(s.neg != c.neg), true));
     }
     let (sh, ch) = mp::sinh_cosh(x);
     let (sh, ch) = (Approx::rel(sh, hyp_rel(x)), Approx::rel(ch, hyp_rel(x)));
-    let te = trig_abs(top.mp().exp);
-    let (s, c) = (Approx::fix(s, te), Approx::fix(c, te));
+    let (s, c) = top.trig();
     let d = sh.mul(sh).add(c.mul(c));
     let trig_part = s.mul(c).div(d).part();
     let hyp_part = if ha > 24.0 {
@@ -1966,6 +1986,9 @@ fn pow_int<F: Float>(a: &Op<F>, b: &Op<F>, p: &Op<F>, mode: Rounding) -> Option<
 /// integer, which the period absorbs; `frac·2π` adds `< 2^(ex φ + 6 − B) + 2^(5−B)` and
 /// `mp::sin_cos` of `|r| < 2^3` `< 2^(10−B)`: below `2^(ex φ + 8 − B)` for `ex φ > 40`.
 fn sin_cos_any(phi: Approx) -> (Approx, Approx) {
+    if let Some(sc) = small_trig(phi.v, phi.a) {
+        return sc;
+    }
     let (k, (s, c)) = if phi.v.exp > 40 {
         let turn = mp::pi().ldexp(1);
         (phi.v.exp + 8 - B, mp::sin_cos(phi.v.mul(turn.recip()).frac().mul(turn)))

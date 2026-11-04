@@ -235,6 +235,42 @@ mod ziv_tests {
         }
     }
 
+    /// A subnormal or minimum-normal operand of a sine or cosine decides at 384 bits in all four
+    /// modes (ZIV-C Step 0: `small_trig` gives the sine a relative bound; with the absolute
+    /// `2^(10 − B)` such parts were undecided at every width), for each family that takes a sine
+    /// or cosine of an operand (no spec clause; D-10.17).
+    #[test]
+    fn tiny_trig_operands_decide_at_384() {
+        let tiny = [F128::from_bits(1), F128::from_bits(1 << 112), F128::from_bits((1 << 127) | (1 << 100))];
+        let fams: [(&str, Fun, bool); 7] = [
+            ("cexp", cexp::<F128>, true),
+            ("csinh", csinh::<F128>, true),
+            ("ccosh", ccosh::<F128>, true),
+            ("ctanh", ctanh::<F128>, true),
+            ("csin", csin::<F128>, false),
+            ("ccos", ccos::<F128>, false),
+            ("ctan", ctan::<F128>, false),
+        ];
+        for (name, f, tiny_im) in fams {
+            for t in tiny {
+                for o in [q(0.5), q(-1.5), q(7.0)] {
+                    for m in MODES {
+                        let (n0, w0) = (n::misses(), w::misses());
+                        let _ = if tiny_im { f(o, t, m) } else { f(t, o, m) };
+                        assert_eq!((n::misses(), w::misses()), (n0, w0), "{name} {m:?} tiny {:x}: undecided", t.to_bits());
+                    }
+                }
+            }
+        }
+        // cpow's angle `Φ = d ln|z| + c arg z` tiny through a tiny `y` and a tiny `d`: `cis Φ`
+        // by `small_trig` with `Φ`'s own bound.
+        for m in MODES {
+            let n0 = n::misses();
+            let _ = cpow(q(3.0), F128::from_bits(1 << 112), q(1.5), F128::from_bits(1 << 112), m);
+            assert_eq!(n::misses(), n0, "cpow {m:?}: undecided");
+        }
+    }
+
     /// `carg` and `cpow` go through the same step (no spec clause; D-10.17).
     #[test]
     fn carg_and_cpow_retry() {
