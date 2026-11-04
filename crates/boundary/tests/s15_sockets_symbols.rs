@@ -36,7 +36,6 @@ use products::resolv_only;
 const ENOENT: i32 = 2;
 const ENXIO: i32 = 6;
 const EBADF: i32 = 9;
-const EACCES: i32 = 13;
 const ENODEV: i32 = 19;
 const ENOSPC: i32 = 28;
 const EMSGSIZE: i32 = 90;
