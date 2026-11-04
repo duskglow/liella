@@ -1,7 +1,23 @@
 # PERF-RC1024-SED-UTF8: sed-utf8 instructions vs fa678f74
 
-State: branch `task/perf-rc1024-sed-utf8`, code commit fa513bd3 (on origin/next 125c0ccc). PARTIAL: one
-change, gap narrowed, not closed.
+State: branch `task/perf-rc1024-sed-utf8-2` (continues `task/perf-rc1024-sed-utf8`), code commit fa513bd3
+(on origin/next 125c0ccc); the -2 run added no code. PARTIAL: one change, gap narrowed, not closed.
+
+## PERF-RC1024-SED-UTF8-2 (2026-11-04): the presence cache cannot be hit on sed-utf8
+
+Ruling #2253 allowed a per-thread cache of the prefilter's 'present' answer (never 'absent'). Before
+building it, a black-box probe logged sed's calls: an LD_PRELOAD shim over /usr/bin/sed (re_search, regexec,
+re_search_2; sed imports only re_search) on the first 20 lines of ~/wl/work/words.txt, LC_ALL=C.UTF-8,
+`s/[[:alpha:]]*a[[:alpha:]]*/<&>/g`. Result: lines with no 'a' make no regex call at all. A matching line makes
+exactly three re_search calls, at start 0, then at match 1's end, then at match 2's end (the last answers -1).
+sed alternates two line buffers (two pointers). A start never repeats, and each start lies past the required
+byte the previous call found (the match holds it). So a cache keyed on "same buffer, first <= cached
+occurrence" never hits, and the third call's memchr (absent) could only be skipped by caching 'absent', which
+the ruling forbids. Not implemented: it would add a claim, a table fetch and a compare per call and save
+nothing. RULING NEEDED: accept sed-utf8 +0.40% vs fa678f74 (recommended), or let a run try a short-window path
+in `conv::find_core` m == 1 (a scalar scan of the first few bytes before `liella_machine_memchr`; the windows
+here are about 5 to 30 bytes), measured per call with `cargo xtask bench --counters` before any count.
+The -2 run also verified plants and the gate on this head (labels in the -2 report json).
 
 ## Change
 
@@ -30,7 +46,7 @@ No row is slower. sed-utf8 is still +0.40% (+9.7M) over fa678f74.
 - Per-candidate attribution (brief step 1) not done: fa678f74, 12e93df9 and 76041c21 are not ancestors of
   the post-cutover origin/next (76041c21 is not in the clone at all), so counting each landing needs their
   source primed on keke (validation/wl_prime_base.sh from a checkout that has them) and one wl_count each.
-- The remaining sed-utf8 gap: the RC-1024 profile shows a new `liella_machine_memchr` (0 -> 52M), which is
+- (Superseded by the -2 probe above: the cache cannot hit.) The remaining sed-utf8 gap: the RC-1024 profile shows a new `liella_machine_memchr` (0 -> 52M), which is
   the regex prefilter's single-byte required-byte scan (`conv::find_core`, m == 1 -> `strz::find_in`) for
   `[[:alpha:]]*a[[:alpha:]]*`. Called once per `re_search`; sed's `s///g` makes about three per line.
   Candidate (not tried): when the bytes neither lead every match nor are the whole pattern, the prefilter
