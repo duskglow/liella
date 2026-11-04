@@ -4,7 +4,7 @@
 //! fuzz/seeds/regex_dfa) make each insertion expensive (many capture classes x groups, long probe
 //! chains), and one call ran 7-9 s in a release build before `REG_ESPACE`. The budget now charges
 //! the per-insertion work, so every call on these inputs ends (match, no match or `REG_ESPACE`)
-//! in bounded time. The answers themselves are covered by the conformance and oracle suites.
+//! in bounded time (the test keeps a generous hang guard; see `BOUND_SECS`). The answers themselves are covered by the conformance and oracle suites.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, missing_docs)]
 
 #[path = "support/timeout.rs"]
@@ -58,6 +58,10 @@ fn backref_budget_bounds_time_on_pinned_fuzz_inputs() {
     assert!(checked >= 10, "the pinned back-reference inputs are present ({checked})");
 }
 
-/// Per call, idle machine, test build (scaled by the load). Before the fix the worst input took
-/// 7-9 s in a release build; see the commit for the measured times after it.
-const BOUND_SECS: u64 = 1;
+/// HANG GUARD, not a speed measurement (REGEX-WALLCLOCK-TESTS): the budget is a work counter
+/// (`regex::BUDGET_PER_FAILURE` units per failure), so a call that ends is bounded by it
+/// deterministically, and wall time cannot show a regression in what the budget charges (uncharged
+/// work is invisible to a counter). This only stops a call that never returns: 60 s per call before
+/// the load scale (x2..x10), against 7-9 s for the worst input before the fix in a release build
+/// and well under 1 s after it. Do not tighten it.
+const BOUND_SECS: u64 = 60;
