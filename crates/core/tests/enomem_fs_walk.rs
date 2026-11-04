@@ -6,7 +6,8 @@
 //! At every injected failure the call must report its documented failure (`-1`/`NULL` with
 //! `ENOMEM`; `glob`: `GLOB_NOSPACE` with the structure empty; `fts_read` ends the walk with
 //! `ENOMEM`), never a truncated success, and the C heap's in-use bytes (`mallinfo2().uordblks`)
-//! must be what they were before the call (no partial result stays allocated). The call without
+//! must be what they were before the call (no partial result stays allocated on the Liella heap; blocks from the caller-owned `malloc`
+//! family are the host C library's in this build, so neither freed nor counted). The call without
 //! any injection must succeed with the COMPLETE result.
 //!
 //! The hook reaches only global-allocator allocations (`liella::mem` collections,
@@ -34,7 +35,6 @@ use liella_abi::layout::{struct_dirent, FTSENT};
 use liella_boundary::errno;
 use liella_boundary::posix::{s03_memory, s04_strings as st, s13_filesystem as x, s14_search as g};
 use liella_boundary::selftest::failinject::{self, FailAlloc};
-use liella_boundary::selftest::opaque;
 use liella_kernel::Errno;
 
 const FILES: usize = 300;
@@ -190,12 +190,8 @@ fn case_scandir(dir: &std::path::Path) -> String {
                 ok &= is_text(e + D_NAME, w.to_bytes());
             }
         }
-        if !list.is_null() {
-            for i in 0..n as usize {
-                opaque::free(rd(list as usize, 8 * i) as *mut c_void);
-            }
-            opaque::free(list.cast());
-        }
+        // The list is kept: in a hosted test build its blocks are the host C library's, which
+        // `opaque::free` rejects (as in failinject.rs).
         if ok { Verdict::Complete } else { Verdict::Truncated }
     })
 }
@@ -248,8 +244,7 @@ fn case_fts(dir: &std::path::Path) -> String {
         if t.is_null() {
             return failed_or(false, enomem());
         }
-        let (mut seen, mut ok, mut failed, mut bad);
-        (seen, ok, failed, bad) = (0usize, true, false, false);
+        let (mut seen, mut ok, mut failed, mut bad) = (0usize, true, false, false);
         loop {
             errno::set_raw(0);
             let e = x::fts_read(t).cast::<FTSENT>();
@@ -316,7 +311,7 @@ fn case_realpath(dir: &std::path::Path) -> String {
             return failed_or(false, enomem());
         }
         let ok = is_text(p as usize, want.to_bytes());
-        opaque::free(p.cast());
+        // `p` is kept: a host C library block (see the scandir case).
         if ok { Verdict::Complete } else { Verdict::Truncated }
     })
 }
@@ -332,7 +327,7 @@ fn case_canonicalize(dir: &std::path::Path) -> String {
             return failed_or(false, enomem());
         }
         let ok = is_text(p as usize, want.to_bytes());
-        opaque::free(p.cast());
+        // `p` is kept: a host C library block (see the scandir case).
         if ok { Verdict::Complete } else { Verdict::Truncated }
     })
 }
@@ -347,7 +342,7 @@ fn case_getcwd(dir: &std::path::Path) -> String {
             return failed_or(false, enomem());
         }
         let ok = is_text(p as usize, want.to_bytes());
-        opaque::free(p.cast());
+        // `p` is kept: a host C library block (see the scandir case).
         if ok { Verdict::Complete } else { Verdict::Truncated }
     })
 }
@@ -362,7 +357,7 @@ fn case_current_dir_name(dir: &std::path::Path) -> String {
             return failed_or(false, enomem());
         }
         let ok = is_text(p as usize, want.to_bytes());
-        opaque::free(p.cast());
+        // `p` is kept: a host C library block (see the scandir case).
         if ok { Verdict::Complete } else { Verdict::Truncated }
     })
 }
