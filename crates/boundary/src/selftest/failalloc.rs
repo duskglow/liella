@@ -10,7 +10,11 @@ extern crate std;
 use core::alloc::{GlobalAlloc, Layout};
 use std::alloc::System;
 
-use super::failinject::should_fail;
+use super::failinject::{count_live, should_fail};
+
+fn bytes(n: usize) -> i64 {
+    i64::try_from(n).unwrap_or(i64::MAX)
+}
 
 /// The host allocator with the calling thread's plan in front of it.
 #[derive(Clone, Copy, Debug, Default)]
@@ -29,7 +33,11 @@ unsafe impl GlobalAlloc for FailAlloc {
         }
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: the caller's contract (a non-zero-size layout) is passed on unchanged.
-        unsafe { System.alloc(layout) }
+        let p = unsafe { System.alloc(layout) };
+        if !p.is_null() {
+            count_live(bytes(layout.size()));
+        }
+        p
     }
 
     // UNSAFE(allocator): the trait's required method.
@@ -37,7 +45,8 @@ unsafe impl GlobalAlloc for FailAlloc {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // UNSAFE(allocator): returning the block to the host allocator.
         // SAFETY: `ptr` came from `System` (this allocator's only source) with `layout`.
-        unsafe { System.dealloc(ptr, layout) }
+        unsafe { System.dealloc(ptr, layout) };
+        count_live(bytes(layout.size()).wrapping_neg());
     }
 
     // UNSAFE(allocator): the trait's provided method, overridden to keep `System`'s zeroing.
@@ -48,7 +57,11 @@ unsafe impl GlobalAlloc for FailAlloc {
         }
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: as `alloc`.
-        unsafe { System.alloc_zeroed(layout) }
+        let p = unsafe { System.alloc_zeroed(layout) };
+        if !p.is_null() {
+            count_live(bytes(layout.size()));
+        }
+        p
     }
 
     // UNSAFE(allocator): the trait's provided method, overridden: a failed growth leaves the block.
@@ -59,6 +72,10 @@ unsafe impl GlobalAlloc for FailAlloc {
         }
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: `ptr` came from `System` with `layout`; the caller guarantees `new_size`.
-        unsafe { System.realloc(ptr, layout, new_size) }
+        let p = unsafe { System.realloc(ptr, layout, new_size) };
+        if !p.is_null() {
+            count_live(bytes(new_size).wrapping_sub(bytes(layout.size())));
+        }
+        p
     }
 }
