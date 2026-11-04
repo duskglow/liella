@@ -716,6 +716,8 @@ memcmp:
 	jne .Lcmp_big_head
 	cmpq $128, %rdx
 	jbe .Lcmp_big_blocks
+	cmpq $160, %rdx
+	jbe .Lcmp_160
 	cmpq $256, %rdx
 	jbe .Lcmp_256
 	movq %rsi, %r11
@@ -784,6 +786,37 @@ memcmp:
  * first block of the first three with a difference gives the byte (they cover [32, 128), and
  * a last-four block can differ below 128 only in bytes the first three also hold), else the
  * first of the last four; the byte is re-read and ordered at .Lcmp_big_byte. */
+/* 129-160: the blocks at 32, 64, n - 64 and n - 32 cover [32, n) (n - 64 <= 96). */
+.Lcmp_160:
+	vmovdqu 32(%rdi), %ymm1
+	vmovdqu 64(%rdi), %ymm2
+	vmovdqu -64(%rdi,%rdx), %ymm6
+	vmovdqu -32(%rdi,%rdx), %ymm7
+	vpcmpeqb 32(%rsi), %ymm1, %ymm1
+	vpcmpeqb 64(%rsi), %ymm2, %ymm2
+	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
+	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
+	vpand %ymm2, %ymm1, %ymm8
+	vpand %ymm7, %ymm6, %ymm10
+	vpand %ymm10, %ymm8, %ymm8
+	vpmovmskb %ymm8, %eax
+	incl %eax
+	jne .Lcmp_160_diff
+	vzeroupper
+	ret
+.Lcmp_160_diff:
+	vpmovmskb %ymm1, %ecx
+	incl %ecx
+	jne .Lcmp_256_a
+	vpmovmskb %ymm2, %ecx
+	incl %ecx
+	jne .Lcmp_256_b
+	vpmovmskb %ymm6, %ecx
+	incl %ecx
+	jne .Lcmp_256_f
+	vpmovmskb %ymm7, %ecx
+	incl %ecx
+	jmp .Lcmp_256_g
 .Lcmp_256:
 	vmovdqu 32(%rdi), %ymm1
 	vmovdqu 64(%rdi), %ymm2
@@ -831,6 +864,7 @@ memcmp:
 	jne .Lcmp_256_f
 	vpmovmskb %ymm7, %ecx
 	incl %ecx
+.Lcmp_256_g:
 	vzeroupper
 	bsfl %ecx, %ecx
 	leaq -32(%rdx,%rcx), %rcx
