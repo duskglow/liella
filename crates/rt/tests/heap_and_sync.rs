@@ -606,7 +606,7 @@ fn borrow_from_another_shard(donor: usize, caller: usize) {
     let pages = FakePages::new();
     // Shard 0 maps its segment; thread 1 on shard 1 gets its cache (via a large block) but no segment.
     pages.shard.set(donor);
-    let first = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
     pages.thread.set(1);
     pages.shard.set(caller);
     let big = heap.alloc(&CSys, &pages, 1 << 20, ALIGN).unwrap();
