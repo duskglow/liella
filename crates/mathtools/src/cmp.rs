@@ -26,21 +26,21 @@ pub fn format(letter: char) -> Option<Fmt> {
 
 /// The names a format is accepted under on the command line, with the probe letter of each format.
 /// A name must match whole: `f128` is binary128 and never binary32 by its first letter.
-pub const FORMAT_NAMES: &[(char, &[&str])] = &[
-    ('f', &["f", "f32", "float", "binary32"]),
-    ('d', &["d", "f64", "double", "binary64"]),
-    ('l', &["l", "f80", "ld", "long-double", "binary80"]),
-    ('q', &["q", "f128", "_Float128", "binary128"]),
+pub const FORMAT_NAMES: &[(char, Fmt, &[&str])] = &[
+    ('f', Fmt::F32, &["f", "f32", "float", "binary32"]),
+    ('d', Fmt::F64, &["d", "f64", "double", "binary64"]),
+    ('l', Fmt::F80, &["l", "f80", "ld", "long-double", "binary80"]),
+    ('q', Fmt::F128, &["q", "f128", "_Float128", "binary128"]),
 ];
 
 /// The probe letter and format of a command-line format name, or an error listing the valid names.
 pub fn parse_format(name: &str) -> Result<(char, Fmt), String> {
-    for (letter, names) in FORMAT_NAMES {
+    for (letter, fmt, names) in FORMAT_NAMES {
         if names.contains(&name) {
-            return Ok((*letter, format(*letter).expect("every listed letter is a format")));
+            return Ok((*letter, *fmt));
         }
     }
-    let valid: Vec<&str> = FORMAT_NAMES.iter().flat_map(|(_, n)| n.iter().copied()).collect();
+    let valid: Vec<&str> = FORMAT_NAMES.iter().flat_map(|(_, _, n)| n.iter().copied()).collect();
     Err(format!("unknown format {name:?}; valid names: {}", valid.join(", ")))
 }
 
@@ -389,17 +389,19 @@ pub fn shard(run: &Run<'_>, records: &[Vec<u128>]) -> Result<Tally, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod format_name_tests {
     use super::*;
 
     // no spec clause (measurement tool)
     #[test]
     fn every_alias_maps_to_its_format() {
-        for (letter, names) in FORMAT_NAMES {
+        for (letter, fmt, names) in FORMAT_NAMES {
             for n in *names {
                 let (l, f) = parse_format(n).unwrap();
                 assert_eq!(l, *letter, "{n}");
-                assert_eq!(f, format(*letter).unwrap(), "{n}");
+                assert_eq!(f, *fmt, "{n}");
+                assert_eq!(format(*letter), Some(*fmt));
             }
         }
     }
