@@ -112,7 +112,7 @@ runtime price of translating. Findings F44–F50 are new with the C-layer archit
 | F21 | `int` length results | `usize` internally. | **Yes** above `INT_MAX` | One compare | `ret::int_len`. |
 | F22 | `pthread_*_t`, `sem_t` | ABI sizes and all-zero initializers (Appendix C.6/C.8; for example `PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP` sets byte 16 to 1). | No | None | D-22.1: primitives designed to these bit patterns. |
 | F23 | Memory returned to callers | Must be freeable by a possibly interposed `free`. | No | One indirect call per caller-owned allocation | `boundary::caller_alloc`. |
-| F24 | `vfork` | RESOLVED (VFORK-CLONE-VM, owner #410): `SYS_vfork` shares the memory, as glibc. Was a copy-on-write child: 27.6 ms per call at 1 GB (glibc 0.42 ms, sumire) and one minor fault per touched page afterwards (SPAWN-LARGE-PARENT). | No | None now | D-18.1. |
+| F24 | `vfork` | RESOLVED (VFORK-CLONE-VM, owner #410): `SYS_vfork` shares the memory, as glibc. Was a copy-on-write child: 27.6 ms per call at 1 GB (glibc 0.42 ms, Skylake-SP host) and one minor fault per touched page afterwards (SPAWN-LARGE-PARENT). | No | None now | D-18.1. |
 | F25 | Cancellation points | A per-thread state check at each one. | No | One load | D-22.2. |
 | F26 | `fork` | Library locks must be handled around it. | No | Proportional to subsystems | atfork plumbing in `rt`. |
 | F27 | NSS plugin modules | A reverse ABI into third-party modules. The module interface is inspected under the format decision (Appendix D, phase 14). | Depends on inspection | A `dlopen` per source | Phase 14. |

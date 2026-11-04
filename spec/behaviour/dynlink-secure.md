@@ -10,7 +10,7 @@ search elements, `/etc/ld.so.preload`, a damaged cache, which variables stay in 
 (`LD_BIND_*` and the rest), `TZ`, and the diagnostic variables. A fact record, not a decision.
 
 **Probe:** `tools/probe/dlsecure/` (`probe.c`, `lib.c`, `audit.c`, `run.sh SRCDIR SCRATCH`).
-**Record:** `dynlink-secure.glibc.txt`, made on shiki (Ubuntu GLIBC 2.39-0ubuntu8.9, kernel
+**Record:** `dynlink-secure.glibc.txt`, made on Haswell-EP host (Ubuntu GLIBC 2.39-0ubuntu8.9, kernel
 6.8.0) as job `dl-probe-secure-record2`. Built with `cc -std=gnu17 -O1`, every case run with
 `env -i PATH=/usr/bin:/bin` plus the case's variables; the scratch directory prints as `<dir>`,
 loader `<pid>` prefixes and addresses as `<hex>`. The probe prints `AT_SECURE`, whether real and

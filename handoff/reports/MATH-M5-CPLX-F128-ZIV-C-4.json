@@ -1,0 +1,12 @@
+{"task": "MATH-M5-CPLX-F128-ZIV-C-4", "model": "opus", "tokens": null,
+ "result": "Ziv ladder counts done: random sample 0 of 32000 retried; accuracy suite 105 of 84308 retried at 384, all decided at 768, 0 at 1536/3072/residual; fast path within 0.022% of ZIV-B2-3",
+ "branch": "task/math-m5-cplx-f128-ziv-c-4", "head": null,
+ "gate": {"affected": "FULL gate math-m5-cplx-f128-ziv-c-3-gate2 rc 0 on the same code (not rerun: no code change)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "fast-path instructions:u vs ZIV-B2-3 base fed89fc58: +33 cexp, +19 csinh, +16 csin, +14 ccos, +9 clog, +5 ctan; -9 csqrt, -10 catan, -1 casin (all within 0.022%; the base also lacks Step 0's small_trig correctness fix and 48 merged next commits)", "recommendation": "accept: the size is layout level, part of it is a correctness fix, and splitting it would cost a run for a few dozen instructions"}],
+ "informational": ["the 105 accuracy-suite retries at 384 are all directed-mode calls with tiny operands (2^-140, 2^-160, smallest subnormal); hypothesis, not verified: a loose 384-bit bound on tiny normal sine/tangent parts (see handoff)", "percall job -percall (rc 1) failed only because cargo was not on PATH (no ~/.cargo/env); rerun as -percall2"],
+ "refused": [],
+ "improvement": "jobrun runs in the foreground over ssh, but the brief calls it detached; a long job started the way the brief shows ties up the ssh call (my percall2 call went to the background after 120 s). A documented `jobrun --detach` would fix that.",
+ "next_step": "optional perf: give tiny normal operands a small_trig-style relative bound so the 105 suite calls decide at 384 (check the cause first); optional cpow start step from ex(c), ex(d)",
+ "report_file": "handoff/math-m5-cplx-f128-ziv.md",
+ "jobs": ["kanon:math-m5-cplx-f128-ziv-c-4-counts", "kanon:math-m5-cplx-f128-ziv-c-4-percall2", "kanon:math-m5-cplx-f128-ziv-c-3-gate2", "kanon:math-m5-cplx-f128-ziv-c-3-plants2"]}

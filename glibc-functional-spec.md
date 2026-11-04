@@ -3110,7 +3110,7 @@ It is the only way to pass file descriptors between processes.
 * **`inet_ntop(af, src, dst, size)`** formats an address, using RFC 5952 compressed form for
   IPv6. It fails with `ENOSPC` if the buffer is too small.
 * **`inet_aton`** accepts the historical forms: 1 to 4 parts, each in octal, decimal or hex,
-  so `"10.1"` means 10.0.0.1. ⚑ HIST: this lenient syntax has caused security bugs through
+  so `"11.1"` means 11.0.0.1. ⚑ HIST: this lenient syntax has caused security bugs through
   inconsistent parsing between programs.
 * **`inet_addr`** is `inet_aton` returning `INADDR_NONE` (0xFFFFFFFF) on error. ⚑ HIST,
   ⚑ ARB: that value is also the valid address 255.255.255.255.
@@ -6720,10 +6720,10 @@ the owner's confirmation as a security default).
 ### D.3 The loader cache `ld.so.cache` (phase 14) — §27.1, D-27.3
 
 **How it was established** (plan §1.2, format inspection; story DL-CACHE-FORMAT, 2026-10-23). On
-keke (Ubuntu 24.04, glibc 2.39-0ubuntu8.9), `tools/probe/ldcache_run.sh` builds a private root
+Zen 1 host (Ubuntu 24.04, glibc 2.39-0ubuntu8.9), `tools/probe/ldcache_run.sh` builds a private root
 of tiny shared objects (`gcc -shared`, chosen sonames, soname links, `glibc-hwcaps/x86-64-v2`
 and `x86-64-v3` subdirectories) and has `ldconfig -r <root> -X -i -c new|compat|old` write
-caches for it; the files and keke's own `/etc/ld.so.cache` were read with `xxd`. The layout
+caches for it; the files and Zen 1 host's own `/etc/ld.so.cache` were read with `xxd`. The layout
 below is the hypothesis that `tools/probe/ldcache_dump.py` implements. It parses every one of
 these files strictly (all offsets bounds-checked) and writes new-format files of its own (its
 own string layout, no shared tails), which `ldconfig -p` lists correctly. It was then checked
@@ -6734,7 +6734,7 @@ against the reference loader: `tools/probe/ldcache_loader.sh` bind-mounts each c
 loader or ldconfig source was read. Integers are little-endian.
 
 **Formats.** ldconfig(8): `-c` selects `old`, `new` or `compat`, and the default has been `new`
-since glibc 2.32. keke's `/etc/ld.so.cache` is `new` (561 entries, all with flags `0x0303`, no
+since glibc 2.32. Zen 1 host's `/etc/ld.so.cache` is `new` (561 entries, all with flags `0x0303`, no
 hwcaps extension). The reference loader reads all three (D.3.4).
 
 #### D.3.1 New format (`glibc-ld.so.cache1.1`)
@@ -6773,7 +6773,7 @@ off  size
   N32,nan2008; a type of 0, 1 or 2 is "unknown or unsupported flag". **Observed:** the x86-64
   loader skips `0x0003` and `0x0803` entries and takes the next entry with the same key.
 * Padding: the extension directory starts at the end of the string table rounded up to 4
-  (keke's `/etc/ld.so.cache` has `ext_offset` `0x89ec`, which is not 8-aligned).
+  (Zen 1 host's `/etc/ld.so.cache` has `ext_offset` `0x89ec`, which is not 8-aligned).
 
 #### D.3.2 Extensions
 
@@ -6806,7 +6806,7 @@ At `ext_offset`: `u32 magic 0xeaa42174`, `u32 count`, then `count` records of fo
     `libv.so.1.9` in the cache, a request for `libv.so.1.9` loaded the `libv.so.1.09` entry's
     file.
   * hwcaps: the supported subdirectory with the highest priority wins, not the first in file
-    order (`v2, v3, plain` and `v3, v2, plain` both load `x86-64-v3` on keke, which supports v3
+    order (`v2, v3, plain` and `v3, v2, plain` both load `x86-64-v3` on Zen 1 host, which supports v3
     and not v4); `v2, plain` loads v2; `v2, v4, plain` loads v2. A plain entry placed before
     the hwcaps entries is taken. When the first hwcaps entry of the run is unsupported or
     unknown (`v4, v3, plain`; `v4, v2, plain`; `no-such-level, plain`) the plain entry is

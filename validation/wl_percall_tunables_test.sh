@@ -5,7 +5,7 @@
 #   1. print their own tunables value in the header,
 #   2. use different row files (the key is part of the cache file name),
 #   3. report different instruction counts for Liella (the dispatch level changes the code that runs).
-# It runs the real tool on the host where it is started (keke); COUNT_FRESH is not set on purpose: the second pair of
+# It runs the real tool on the host where it is started (Zen 1 host); COUNT_FRESH is not set on purpose: the second pair of
 # runs after the first must hit each run's OWN cached row and print the same numbers.
 #   ~/bin/jobrun <label> count -- sh -c 'cd ~/w/<role> && bash validation/wl_percall_tunables_test.sh .'
 set -u
