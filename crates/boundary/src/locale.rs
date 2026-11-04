@@ -266,17 +266,18 @@ fn publish_global() {
 #[inline]
 pub fn ctype_slot(slot: usize) -> usize {
     // TINY-HOT: the filled case is one `%fs` load and a test, then the thread pointer plus the
-    // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case is a
-    // tail call, so the filled path keeps no frame.
+    // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case
+    // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
+    // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
     if tb::read::<tb::CtypeB>() == 0 {
         return ctype_fill(slot);
     }
-    slot_address(slot)
+    ctype_off(slot)
 }
 
-/// The address of the calling thread's pointer `slot` (see [`ctype_slot`]).
+/// The address of the calling thread's pointer `slot`, the words known to be stored.
 #[inline(always)]
-fn slot_address(slot: usize) -> usize {
+fn ctype_off(slot: usize) -> usize {
     let off = match slot {
         0 => core::mem::offset_of!(liella_rt::tls::ThreadBlock, ctype_b),
         1 => core::mem::offset_of!(liella_rt::tls::ThreadBlock, ctype_tolower),
@@ -291,7 +292,7 @@ fn slot_address(slot: usize) -> usize {
 fn ctype_fill(slot: usize) -> usize {
     let b = tb::current();
     crate::thread::serialized(|| refresh_words(b));
-    slot_address(slot)
+    ctype_off(slot)
 }
 
 /// The table at `word` (the entry for character 0, `ZERO` entries of `UNIT` bytes before it),

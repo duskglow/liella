@@ -30,6 +30,23 @@ pub(crate) fn avx2() -> bool {
     AVX2.load(Relaxed)
 }
 
+/// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.25):
+/// the same mechanism as [`avx2`] (one byte decided at startup, `false` until then), read only
+/// by Rust (`hot::exp_nearest`, `hot::log_nearest`), so it lives here rather than in fold.S.
+static FMA: AtomicBool = AtomicBool::new(false);
+
+/// Whether the math kernels run their FMA builds.
+#[inline(always)]
+pub(crate) fn fma() -> bool {
+    FMA.load(Relaxed)
+}
+
+/// Select the math kernels' builds. `true` only when the CPU has FMA and the OS saves the AVX
+/// state (`liella_rt::cpu::Features::fma`); both builds return the same results.
+pub(crate) fn select_fma(fma: bool) {
+    FMA.store(fma, Relaxed);
+}
+
 /// Select the kernels' builds. `true` only when the CPU has AVX2 and the OS saves the YMM state
 /// (module proof obligation).
 pub(crate) fn select(avx2: bool) {
@@ -128,7 +145,11 @@ pub(crate) fn select_null_fold(fold: bool) {
         store_cmp_gates(false, false);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
-    FOLD_CHR.store(if fold { isize::MAX.unsigned_abs() } else { 0 }, Relaxed);
+    // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
+    // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,
+    // D-4.22 PORTABLE-SCAN). The gate stays 0 there, whatever the copy and fill entries do.
+    let chr = fold && !cfg!(liella_portable_scan);
+    FOLD_CHR.store(if chr { isize::MAX.unsigned_abs() } else { 0 }, Relaxed);
     update_cmp_gates();
     FOLD_RESOLVED.store(true, Relaxed);
 }

@@ -1,0 +1,11 @@
+{"task": "PERF-MEMCMPEQ-EARLY-2", "model": "opus", "tokens": null,
+ "result": "Gate red was not memcmp: s18_4_c_1 saw jobrun's inherited lock fd 8 in the spawn child; test now sets FD_CLOEXEC on runner fds 5-9,12; NULL-folding step not started (budget)",
+ "branch": "task/perf-memcmpeq-early-2", "head": "dc29baf3",
+ "gate": {"affected": "queued on keke (perf-memcmpeq-early-2-gate: clippy+static+direct tier), not yet run", "peak": null},
+ "accepted_first_attempt": null, "rulings": [],
+ "informational": ["keke ~/bin/jobrun keeps fd 8 (its label lock) open without close-on-exec for all children; any test counting a child's descriptors sees it", "clippy/static on dc29baf3 not seen by this run: keke's slot queue was 15+ min deep; they run first inside the gate job, so a lint failure makes the gate red"],
+ "refused": [],
+ "improvement": "jobrun could set close-on-exec on its lock fd (or move it above 255) so jobs inherit no stray descriptor; and a cargo call over plain ssh queues behind slots, which the brief's 'foreground clippy' step does not mention",
+ "next_step": "after gate+plants green: extend NULL folding to the 65-2048 AVX2 compare/equality classes (ruling #2517), then the probe-less 33-64 compare",
+ "report_file": "handoff/memcmpeq-early.md",
+ "jobs": ["perf-memcmpeq-early-2-gate", "perf-memcmpeq-early-2-plants"]}

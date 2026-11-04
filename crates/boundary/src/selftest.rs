@@ -686,6 +686,23 @@ pub fn set_kernel_avx2(avx2: bool) -> bool {
     true
 }
 
+/// Force the `double` exp/log fast paths' build (D-10.25): `true` for FMA, `false` for the
+/// baseline. Returns `false` (and changes nothing) if FMA is asked for on a CPU or OS without it.
+/// Test-only: the startup decision (`cpu::init_with`) is the only other writer.
+pub fn set_math_fma(fma: bool) -> bool {
+    if fma && !crate::cpu::features_cached().fma() {
+        return false;
+    }
+    crate::dispatch::select_fma(fma);
+    true
+}
+
+/// Which build of the `double` exp/log fast paths is in force (D-10.25): `true` for FMA. Lets a
+/// test confirm that [`set_math_fma`] took effect, since both builds return the same results.
+pub fn math_fma() -> bool {
+    crate::dispatch::fma()
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it
@@ -702,6 +719,12 @@ pub fn set_null_fold(fold: bool) -> bool {
 /// first small copy or fill decides it. Test-only.
 pub fn unresolve_null_fold() {
     crate::dispatch::unresolve_null_fold();
+}
+
+/// Whether the portable scanners (`crate::strz::portable`, cfg `liella_portable_scan`, A-8) stand
+/// in for the scan.S kernels in this build: never NULL-folded (D-4.22 PORTABLE-SCAN).
+pub fn portable_scan() -> bool {
+    cfg!(liella_portable_scan)
 }
 
 /// Whether the NULL-folding decision (the `vm.mmap_min_addr` read) has been taken.

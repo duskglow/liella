@@ -1,0 +1,9 @@
+{"task": "FUZZ-TIMEOUTS-RECHECK", "model": "sonnet", "tokens": null,
+ "result": "regex, regex_dfa fixed earlier; locale fixed (composite strftime field bound); glob still times out (fix story proposed)",
+ "branch": "task/fuzz-timeouts-recheck", "head": "HEAD",
+ "gate": {"affected": "rc 0", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "glob brace expansion bound (engine vs harness)", "recommendation": "story GLOB-BRACE-EXPANSION-BOUND: bound the product of alternatives in the engine with GLOB_NOSPACE"}],
+ "informational": ["fuzz artifacts for regex and locale pinned in fuzz/seeds"], "refused": [],
+ "jobs": ["fuzz-timeouts-recheck-gate", "fuzz-timeouts-recheck-plants"],
+ "improvement": "xtask fuzz --repro could print elapsed time and the verdict in one line",
+ "next_step": "glob brace-expansion bound story", "report_file": "handoff/fuzz-timeouts-recheck.md"}

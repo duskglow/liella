@@ -754,10 +754,11 @@ const CHILD: &str = "LIELLA_CORE_CONTRACT_CHILD";
 /// Run `case` in a child copy of this binary: (stderr, exit code, terminating signal).
 fn child(case: &str) -> (Vec<u8>, Option<i32>, Option<i32>) {
     let out = Command::new(std::env::current_exe().unwrap())
-        .args(["fatal_child", "--exact", "--nocapture", "--test-threads=1", "-q"])
+        .args(["fatal_child", "--exact", "--include-ignored", "--nocapture", "--test-threads=1", "-q"])
         .env(CHILD, case)
         .output()
         .unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", out.status);
     (out.stderr, out.status.code(), out.status.signal())
 }
 

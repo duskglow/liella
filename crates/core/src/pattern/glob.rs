@@ -206,6 +206,87 @@ fn brace_close(p: &[u8], open: usize, escapes: bool) -> Option<usize> {
     None
 }
 
+/// The most patterns one `GLOB_BRACE` pattern may expand to. Groups multiply (`{a,b}{c,d}` is
+/// four patterns), so a short pattern can name an exponential number of them; past this many
+/// the call fails with `GLOB_NOSPACE` before anything is expanded. 2^14 is 14 two-way groups or
+/// four 11-way groups, far beyond shell-style use.
+pub const BRACE_MAX_ALTERNATIVES: usize = 1 << 14;
+
+/// The most bytes the expanded patterns may need in all (count times the pattern's length, an
+/// upper bound on each expansion's length): 64 MiB.
+pub const BRACE_MAX_BYTES: usize = 1 << 26;
+
+/// What [`brace_count`] found.
+enum BraceCount {
+    /// An unbalanced `{`: [`braces`] reports it.
+    Unbalanced,
+    /// More than [`BRACE_MAX_ALTERNATIVES`].
+    Over,
+    /// This many patterns.
+    Count(usize),
+}
+
+/// How many patterns [`braces`] would produce for `p`, without producing them: the product over
+/// the top-level groups of the sum over their alternatives of the alternative's own count,
+/// computed with overflow checks and stopped as soon as it passes the bound.
+fn brace_count(p: &[u8], escapes: bool) -> BraceCount {
+    let mut product = 1usize;
+    let mut i = 0;
+    while let Some(&b) = p.get(i) {
+        match b {
+            b'\\' if escapes => i += 2,
+            b'{' => {
+                let Some(close) = brace_close(p, i, escapes) else { return BraceCount::Unbalanced };
+                let inner = p.get(i + 1..close).unwrap_or(&[]);
+                let mut sum = 0usize;
+                let mut start = 0;
+                let mut depth = 0usize;
+                let mut j = 0;
+                loop {
+                    let end = match inner.get(j) {
+                        None => Some(inner.len()),
+                        Some(b'\\') if escapes => {
+                            j += 2;
+                            continue;
+                        }
+                        Some(b'{') => {
+                            depth += 1;
+                            None
+                        }
+                        Some(b'}') => {
+                            depth = depth.saturating_sub(1);
+                            None
+                        }
+                        Some(b',') if depth == 0 => Some(j),
+                        Some(_) => None,
+                    };
+                    if let Some(end) = end {
+                        match brace_count(inner.get(start..end).unwrap_or(&[]), escapes) {
+                            BraceCount::Count(n) => sum = sum.saturating_add(n),
+                            other => return other,
+                        }
+                        if sum > BRACE_MAX_ALTERNATIVES {
+                            return BraceCount::Over;
+                        }
+                        if j >= inner.len() {
+                            break;
+                        }
+                        start = j + 1;
+                    }
+                    j += 1;
+                }
+                product = match product.checked_mul(sum) {
+                    Some(n) if n <= BRACE_MAX_ALTERNATIVES => n,
+                    _ => return BraceCount::Over,
+                };
+                i = close + 1;
+            }
+            _ => i += 1,
+        }
+    }
+    BraceCount::Count(product)
+}
+
 /// `GLOB_BRACE`: the alternatives of `p`, in order, appended to `out`; `false` for unbalanced
 /// braces.
 fn braces(p: &[u8], escapes: bool, out: &mut TryVec<TryVec<u8>>) -> Result<bool> {
@@ -572,8 +653,15 @@ pub fn glob<A: Access>(pattern: &[u8], flags: i32, loc: &Locale, acc: &mut A) ->
     }
     let mut alternatives = TryVec::new();
     if flags & BRACE != 0 {
-        if !braces(pattern, escapes, &mut alternatives)? {
-            alternatives.clear();
+        match brace_count(pattern, escapes) {
+            BraceCount::Over => return Err(Failure::NoSpace),
+            BraceCount::Count(n) if n.checked_mul(pattern.len()).is_none_or(|b| b > BRACE_MAX_BYTES) => return Err(Failure::NoSpace),
+            BraceCount::Unbalanced => {}
+            BraceCount::Count(_) => {
+                if !braces(pattern, escapes, &mut alternatives)? {
+                    alternatives.clear();
+                }
+            }
         }
     } else {
         alternatives.push(TryVec::from_slice(pattern)?)?;

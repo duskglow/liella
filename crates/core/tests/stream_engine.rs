@@ -428,10 +428,11 @@ fn read_line_into_stops_at_delimiter_full_output_end_and_errors() {
     assert_eq!(s.read_line_into(&mut b, &mut m, b'\n', &first, &mut out, true), Ok((4, false)));
     assert_eq!(&out[..4], b"defg");
 
-    // A read error after some bytes ends the line; before any byte it is the result.
+    // A read error is the result, after some bytes as before any (the reference's fgets is NULL
+    // then); the bytes already stored stay in `out`.
     let (mut b, mut m) = (buffer(2), Mem { data: b"abc".to_vec(), fail_read: Some(Errno::EIO), ..Mem::default() });
     let mut s = State::new(true, false, false, Policy::Full);
-    assert_eq!(s.read_line_into(&mut b, &mut m, b'\n', &first, &mut out, false), Ok((3, true)));
+    assert_eq!(s.read_line_into(&mut b, &mut m, b'\n', &first, &mut out, false), Err(Errno::EIO));
     assert_eq!(&out[..3], b"abc");
     let (mut b, mut m) = (buffer(2), Mem { fail_read: Some(Errno::EIO), ..Mem::default() });
     let mut s = State::new(true, false, false, Policy::Full);

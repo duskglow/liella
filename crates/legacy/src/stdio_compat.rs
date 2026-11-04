@@ -454,6 +454,8 @@ pub trait Env {
     fn call3(&self, f: usize, a: usize, b: usize, c: usize) -> isize;
     /// The calling thread's `errno` (what a cookie hook left after returning -1).
     fn errno(&self) -> i32;
+    /// Set the calling thread's `errno` (a partial record returned with the read error left in it).
+    fn set_errno(&self, e: Errno);
     /// The head of the open-streams list (`_IO_list_all`).
     fn list_head(&self) -> &AtomicUsize;
     /// The words of the stream at `addr` (a `FILE *` from the list).
@@ -796,9 +798,9 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
         return;
     }
     let at = |o: usize| b + o;
-    let (rp, re) = if s.role == Role::Reading { (at(s.rpos), at(s.rend)) } else { (at(RESERVE), at(RESERVE)) };
+    let (rp, re) = published_read_window(file, ext);
     let (wp, we) = match s.role {
-        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos), at(s.wend)),
+        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos.min(ext.buf_len)), at(s.wend.min(ext.buf_len))),
         Role::Writing => (at(s.wpos), at(s.wpos)),
         _ => (at(RESERVE), at(RESERVE)),
     };
@@ -811,6 +813,22 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
     set(file, word::BUF_BASE, at(RESERVE));
     set(file, word::BUF_END, b + ext.buf_len);
     store_flags(file, s);
+}
+
+/// The read window to publish (GETC-PUTC-FASTPATH, D-12.19): the engine's `rpos..rend`,
+/// bounded by the buffer, on a byte-oriented stream that is reading; on any other stream (wide
+/// or undecided orientation included) closed at `rpos` (`_IO_read_ptr == _IO_read_end`), so the
+/// trusted getc fast path (`ptr < end`, one load) never applies there. [`load`] reads only
+/// `_IO_read_ptr` back, so the wide layer's position survives. `ext.buf` is not 0.
+#[inline(always)]
+fn published_read_window(file: &[AtomicUsize], ext: &Ext) -> (usize, usize) {
+    let (s, b) = (&ext.state, ext.buf);
+    if s.role != Role::Reading {
+        return (b + RESERVE, b + RESERVE);
+    }
+    let end = s.rend.min(ext.buf_len);
+    let at = s.rpos.min(end);
+    if low_int(get(file, word::MODE)) < 0 { (b + at, b + end) } else { (b + at, b + at) }
 }
 
 /// The end-of-file and error indicators into `_flags`.
@@ -838,8 +856,7 @@ fn store_read(file: &[AtomicUsize], ext: &Ext) {
 #[inline(always)]
 fn store_read_words(file: &[AtomicUsize], ext: &Ext) {
     let s = &ext.state;
-    let b = ext.buf;
-    let (rp, re) = if s.role == Role::Reading { (b + s.rpos, b + s.rend) } else { (b + RESERVE, b + RESERVE) };
+    let (rp, re) = published_read_window(file, ext);
     set(file, word::READ_PTR, rp);
     set(file, word::READ_END, re);
     store_flags(file, s);
@@ -1324,7 +1341,11 @@ pub fn refill<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext) -> Option<KR
         return None;
     }
     let flags = get(words, word::FLAGS);
-    s.eof = flags & EOF_SEEN != 0;
+    if flags & EOF_SEEN != 0 {
+        // Sticky end of input: the general path answers without reading.
+        return None;
+    }
+    s.eof = false;
     s.err = flags & ERR_SEEN != 0;
     s.role = Role::Reading;
     s.rpos = RESERVE;
@@ -1439,7 +1460,7 @@ enum Direct {
 fn read_direct<E: Env>(env: &E, ext: &mut Ext, out: &mut [u8]) -> Direct {
     let cap = ext.buf_len.saturating_sub(RESERVE);
     let s = &mut ext.state;
-    if ext.buf == 0 || cap == 0 || out.len() < cap || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
+    if ext.buf == 0 || cap == 0 || out.len() < cap || s.eof || s.policy != Policy::Full || !s.readable || ext.kind == Kind::Closed {
         return Direct::No;
     }
     match s.role {
@@ -1773,6 +1794,18 @@ pub fn read_room(file: &[AtomicUsize]) -> Option<usize> {
     (p < e).then_some(p)
 }
 
+/// Advance the published read window to `p` (the trusted getc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_read_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::READ_PTR, p);
+}
+
+/// Advance the published write window to `p` (the trusted putc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_write_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::WRITE_PTR, p);
+}
+
 /// Whether the published `_IO_buf_base` names a buffer (STDIO-6): a hint only, so that a stream
 /// without one (a first read) skips the refill path's checks; [`refill`] re-checks the record.
 #[inline(always)]
@@ -1868,16 +1901,14 @@ pub fn gets_into<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, out: &mut
                         break;
                     }
                 }
-                Err(e) => {
-                    if n == 0 {
-                        return Err(e);
-                    }
-                    break;
-                }
+                // A read error is NULL even after some bytes (the reference; the bytes stay in
+                // `out`, not terminated).
+                Err(e) => return Err(e),
             }
         }
     }
-    if let Some(t) = out.get_mut(n) {
+    // Nothing stored (end of input first): the buffer is left as it was (the reference).
+    if let Some(t) = out.get_mut(n).filter(|_| n > 0 || room == 0) {
         *t = 0;
     }
     Ok((n > 0 || room == 0).then_some(n))
@@ -1996,20 +2027,30 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
     let mut len = 0usize;
+    // Set when the growth of the caller's buffer failed: that error is the result, not a read error.
+    let mut grow_failed = false;
     if !byte_oriented(file) {
         return Ok(None);
     }
     load(file, ext);
+    // The error indicator stops a record read before it reads (the reference).
+    if ext.state.err {
+        return Err(Errno::EIO);
+    }
     if input_flushes(ext) {
         flush_line_buffered(env, true);
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {
-            let need = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)).ok_or(Errno::EOVERFLOW)?;
+            let Some(need) = len.checked_add(piece.len()).and_then(|x| x.checked_add(1)) else {
+                grow_failed = true;
+                return Err(Errno::EOVERFLOW);
+            };
             if need > cap {
                 let ncap = need.max(cap.saturating_mul(2)).max(120);
                 let nb = env.realloc(buf, ncap);
                 if nb == 0 {
+                    grow_failed = true;
                     return Err(Errno::ENOMEM);
                 }
                 buf = nb;
@@ -2035,7 +2076,16 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         Err(e) => {
             ext.state.err = true;
             store(file, ext);
-            Err(e)
+            // The bytes read before the error are the record (the reference), the error
+            // indicator is set.
+            if len == 0 || grow_failed {
+                return Err(e);
+            }
+            env.set_errno(e);
+            if let Some(t) = env.bytes(buf, cap).get_mut(len) {
+                *t = 0;
+            }
+            Ok(Some(len))
         }
     }
 }

@@ -50,8 +50,17 @@ Only `boundary` has a build script, and it compiles `csys/` (C and the x86_64 as
 depend on `boundary` (normal dependencies, from their `Cargo.toml`) therefore build without csys: `kernel`, `mem`,
 `rt`, `abi`, `math`, `legacy`, `core`, `ld`, `native`, `thread-db`, `mathtools`, `spectest`. `libc-so` and `libm-so`
 link `boundary`. Of those, `rt` (fpu.rs), `kernel` (machine.rs, uapi.rs), `math` (x87 format, by type) and `abi`
-(x86_64 layouts) carry seams above; whether each passes `cargo check --target aarch64-unknown-linux-gnu` is A-2's
-job (not tried here: no aarch64 target installed, RL-1).
+(x86_64 layouts) carry seams above.
+
+`cargo xtask arch-check` (A-2) runs `cargo check --target aarch64-unknown-linux-gnu` (plain armv8.0-a, no
+target-feature flags until RL-1 is ruled) over all twelve: every target and feature of `kernel`, `mem`, `abi`,
+`legacy`, `ld`, `native`, `thread-db`, `mathtools` and `spectest`, and the library of `rt`, `math` and `core`, whose
+tests take `boundary` as a dev-dependency. It passes without any `cfg` change: the seams in these crates are data
+(bit layouts, constants, trait methods over MXCSR and x87 words, software float models), not instructions. Passing
+means they compile, not that they are ported: the `abi` layouts, the `Machine` trait's FPU words and the
+`arch_prctl` items are still x86_64's on aarch64 until A-3, A-5, A-9 and A-10 replace them. `boundary` (and so
+`libc-so`, `libm-so`) stops in its build script on any target other than x86_64 with the stories that port it,
+because csys is x86_64 C and assembly and the build script compiles it with the host `cc`.
 
 ## String and memory kernels without a portable Rust path
 
@@ -64,6 +73,12 @@ kernels in Rust (with AVX2 intrinsics, see above). No portable Rust function was
 `pairscan_ci`, `strpair`, `wcspair` or `env_slot` (`env_find` has a Rust search in `legacy/src/search_c.rs`).
 This is a name-level search (`fn <name>` in `mem`, `core`, `rt`, `legacy`), not a per-kernel review; A-8
 confirms each before writing the portable path.
+
+A-8 progress (D-4.22 PORTABLE-SCAN): `crates/boundary/src/strz.rs` module `portable` (cfg `liella_portable_scan`:
+every target but x86_64, or the test-only feature `portable-scan`) holds word-at-a-time Rust versions of `strlen`,
+`strnlen`, `rawmemchr`, `memchr`, `memrchr`, `strchr`, `strchrnul`, `strcmp` and `strncmp` with their entries.
+Still without one: the copy family (`strcpy` ... `stpncpy`, `_chk`), `strdiff`, `casecmp_ord_*`, `pairscan`,
+`pairscan_ci`, `strpair`, `wcspair` and `env_slot`.
 
 Other machine entry points that need an aarch64 version (A-6): `tp`, `cpuid`/`xgetbv0` (HWCAP from auxv instead,
 RL-1), `rdpkru`/`wrpkru` (POE, or none), `barrier`, `once`, `guard`, `call*`/`vcall*`, the vDSO calls, `clone_*`,

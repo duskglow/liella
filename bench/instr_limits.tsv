@@ -159,3 +159,6 @@ AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_16	125	Liella 122.1 vs
 AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_32	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
 AMD EPYC 7551 32-Core Processor	cbench_malloc	malloc_free_64	125	Liella 122.1 vs glibc 147.1; headroom 2%; LIMITS-TIGHTEN-2 new row
 AMD EPYC 7551 32-Core Processor	cbench_malloc	realloc_null_24	146	Liella 143.1 vs glibc 174.1; headroom 2%; LIMITS-TIGHTEN-2 new row
+Intel(R) Xeon(R) Platinum 8151 CPU @ 3.40GHz	cbench_unmeasured	qsort_c_cmp_1024	49	First count (BENCH-ROWS-UNMEASURED, Skylake-SP host, counters-only, all-mode instr per comparison): Liella 47.83 vs glibc 31.71 (1.51x); headroom 2%; includes the comparator and the 4 KiB copy per sort
+Intel(R) Xeon(R) Platinum 8151 CPU @ 3.40GHz	cbench_unmeasured	readdir_entry_flat	1650	First count: Liella 1611 vs glibc 1604 (all-mode, kernel getdents included; user-only 54.3 vs 46.1 = 1.18x); headroom 2.4%
+Intel(R) Xeon(R) Platinum 8151 CPU @ 3.40GHz	cbench_unmeasured	fts_entry_flat	7000	First count: Liella 6830 vs glibc 7891 (all-mode; user-only 1490 vs 792 = 1.88x ABOVE glibc in user code, kernel share lower); headroom 2.5%

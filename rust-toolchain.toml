@@ -5,4 +5,5 @@
 # deliberate change of its own.
 channel = "1.99.1"
 components = ["clippy", "rustfmt"]
-targets = ["x86_64-unknown-linux-gnu"]
+# aarch64: cross `cargo check` of the crates that build without csys (OD-10, A-2 ARCH-RUST-CHECK).
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]

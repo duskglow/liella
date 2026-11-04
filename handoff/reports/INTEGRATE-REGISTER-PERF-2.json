@@ -1,0 +1,14 @@
+{
+ "task": "INTEGRATE-REGISTER-PERF-2",
+ "status": "partial",
+ "result": "fnmatch plant survivors tested (2 caught, 1 equivalent); strstr/memset re-counted; 13.5->16.5 and rows 2/5 DONE; other counts and non-fnmatch re-plants open",
+ "jobs": [
+  "integrate-register-perf-2-plants",
+  "integrate-register-perf-2-gate",
+  "integrate-register-perf-2-lint",
+  "integrate-register-perf-2-counts"
+ ],
+ "improvement": "jobrun in a foreground ssh holds the local call until the job ends; start gates with nohup",
+ "next_step": "read counts-*.txt on mei and update ctype/wctype/fnmatch rows; plant asm/ctype/wctype/memset",
+ "report_file": "handoff/integrate-register-perf.md"
+}

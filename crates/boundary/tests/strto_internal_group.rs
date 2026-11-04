@@ -92,7 +92,8 @@ fn in_child(test: &str, check: impl FnOnce()) {
     let Some(dir) = locales() else {
         return skip_note::skipped(&format!("skipped: no localedef; {test} not run"));
     };
-    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--test-threads=1", "--nocapture"]).env(PROBE, test).env("LOCPATH", &dir).output().unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap()).args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(PROBE, test).env("LOCPATH", &dir).output().unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test"), "the child ran no test (libtest filtered it out): {:?}", o.status);
     assert!(o.status.success(), "{test} failed in its child: {:?}\n{}\n{}", o.status, String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
 }
 

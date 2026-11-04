@@ -1,0 +1,12 @@
+{"task": "MATH-F64-FMA-PATH-6", "model": "opus", "tokens": null,
+ "result": "Merged origin/next and renumbered the FMA decision row and all its citations D-10.23 -> D-10.25; static (trace) and clippy pass on keke n3",
+ "branch": "task/math-f64-fma-path-6", "head": "87a0a047",
+ "gate": {"affected": "running: keke math-f64-fma-path-6-gate-direct (--tier direct escalated to FULL by xtask affected on this diff)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["xtask affected escalates this branch's diff to FULL even with --tier direct (docs/architecture.md and core files in the 20 changed files); the gate job is that escalated run, left detached for the dispatcher", "superseded: keke math-f64-fma-path-6-gate (same escalation, killed by me via kill-mine, rc 143)", "plants not rerun: the run changes comments and the plan row only; run 5's plants1 covered the code"],
+ "refused": [],
+ "improvement": "affected --tier direct should not silently escalate to FULL (or say which file triggers it) so a developer gate stays direct as the rules require",
+ "next_step": "If the gate is green: counts (cbench_libm exp/log, default and glibc.cpu.hwcaps=-FMA), then the rest of the family; see handoff",
+ "report_file": "handoff/math-f64-fma-path.md",
+ "jobs": ["keke:math-f64-fma-path-6-gate-direct"]}

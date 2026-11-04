@@ -520,6 +520,37 @@ pub(crate) fn stream_bytes(addr: usize, len: usize) -> &'static mut [u8] {
     }
 }
 
+/// The byte at `_IO_read_ptr` of an open published read window (GETC-PUTC-FASTPATH, D-12.19).
+/// Crate-private contract: `addr` is a `_IO_read_ptr` word below its `_IO_read_end`. The library
+/// publishes such a window only over its own stream buffer (`stdio_compat::store` and `refill`
+/// bound both words by the buffer when it is filled, after the seal, bounds and orientation
+/// checks); a program that rewrites the window words of its own `FILE` names its own memory, as
+/// header-inline `getc` would read it (the owner's ruling, #1654).
+#[inline(always)]
+pub(crate) fn window_byte(addr: usize) -> u8 {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: the contract above: one readable byte at `addr`.
+    unsafe {
+        core::ptr::with_exposed_provenance::<u8>(addr).read()
+    }
+}
+
+/// Store `b` at `_IO_write_ptr` of an open published write window (GETC-PUTC-FASTPATH,
+/// D-12.19). Crate-private contract: `addr` is a `_IO_write_ptr` word below its
+/// `_IO_write_end`; the library opens that window only over its own stream buffer (`store`
+/// bounds it by the buffer at the flush that opens it), and a program that rewrites the words
+/// names its own memory, as header-inline `putc` would write it.
+#[inline(always)]
+pub(crate) fn window_set_byte(addr: usize, b: u8) {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: the contract above: one writable byte at `addr`.
+    unsafe {
+        core::ptr::with_exposed_provenance_mut::<u8>(addr).write(b);
+    }
+}
+
 /// A directory-stream or `fts` slot (§13.2, §13.3; `crate::dirtree`). Crate-private contract:
 /// `addr` is a `DIR *` or `FTS *` a C caller passed (spec §13: anything but a stream the
 /// library opened is undefined behaviour of the caller) and not NULL: the address of a slot

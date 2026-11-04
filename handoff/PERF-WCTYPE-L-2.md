@@ -1,0 +1,2 @@
+# PERF-WCTYPE-L-2 handoff
+State: branch task/perf-wctype-l-2; docs-only result (register row). Code change tried and reverted: it made 5 of 6 rows slower (see docs/saturation/15-... "PERF-WCTYPE-L-2"). Not done: wctype_t O(1) check (iswctype already takes the mask directly: `Class(desc)`, no name lookup per call), flat tables, exhaustive equality check (nothing changed in code), plants (no code kept), gate/clippy (no code kept). Next step: story (a) in the register note, with the exhaustive equality test first.

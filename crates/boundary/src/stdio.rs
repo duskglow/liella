@@ -139,6 +139,10 @@ impl Env for Glue {
         crate::errno::get()
     }
 
+    fn set_errno(&self, e: Errno) {
+        crate::errno::set(e);
+    }
+
     fn list_head(&self) -> &AtomicUsize {
         &data::_IO_list_all
     }
@@ -819,12 +823,20 @@ fn read_front_ext(fp: usize, how: Locking) -> Result<u8, (ReadFront, usize)> {
         // STDIO-6: no buffer published (a first read) goes straight to the engine.
         return Err((if sc::buf_hint(file) { ReadFront::Empty } else { ReadFront::General }, 0));
     };
+    // GETC-PUTC-FASTPATH (owner #1654, D-12.19): with no lock to take, the open window is
+    // trusted as the refill that opened it left it (seal, bounds and orientation checked there,
+    // the window bounded by the buffer and kept closed on any stream not byte-oriented): one
+    // byte, `_IO_read_ptr` advanced, as header-inline `getc` does.
+    if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
+        let b = tb::window_byte(p);
+        sc::set_read_ptr(file, p.wrapping_add(1));
+        return Ok(b);
+    }
+    // The locked forms validate at lock time (`getc_lock_c`: the sealed record, then
+    // `get_front`'s orientation and bounds under the lock).
     let ext = sc::ext_word(file);
     if !Glue.record(fp, ext) {
         return Err((ReadFront::General, 0));
-    }
-    if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
-        return sc::get_front(&Glue, file, tb::stream_ext_at(ext), p).ok_or((ReadFront::General, 0));
     }
     Err((ReadFront::Locked, ext))
 }
@@ -909,6 +921,19 @@ pub fn putc(fp: usize, how: Locking, c: i32) -> KResult<u8> {
 #[inline(always)]
 pub fn putc_c(fp: usize, how: Locking, c: i32) -> core::ffi::c_int {
     let b = low_byte(c);
+    // GETC-PUTC-FASTPATH (owner #1654, D-12.19): with no lock to take, an open write window is
+    // trusted as the flush or setup that opened it left it (`store`: open only on a sealed,
+    // byte-oriented, fully buffered stream that is writing, bounded by its buffer): one store,
+    // `_IO_write_ptr` advanced, as header-inline `putc` does. Every other case validates below.
+    if let Some(file) = tb::file_words(fp) {
+        if let Some(p) = sc::window_room(file, 1) {
+            if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
+                tb::window_set_byte(p, b);
+                sc::set_write_ptr(file, p.wrapping_add(1));
+                return core::ffi::c_int::from(b);
+            }
+        }
+    }
     match put_front_ext(fp, how, &[b]) {
         (Front::Done, _) => core::ffi::c_int::from(b),
         (Front::Locked, ext) => putc_lock_c(fp, how, b, ext),
