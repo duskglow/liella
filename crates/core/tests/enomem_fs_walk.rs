@@ -41,6 +41,8 @@ const FILES: usize = 300;
 
 enum Verdict {
     Complete,
+    /// Every entry, but not in the comparator's order (fts after a sort allocation failure).
+    Unsorted,
     Failed,
     Truncated,
     BadFailure,
@@ -103,6 +105,7 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
         }
         match verdict {
             Verdict::Failed => failures += 1,
+            Verdict::Unsorted => eprintln!("INFO {walker}: allocation {n} failed: complete but unsorted, reported as success"),
             Verdict::Complete => return format!("{walker}: allocation {n} failed but the call reported success"),
             Verdict::Truncated => return format!("{walker}: allocation {n} failed: truncated success"),
             Verdict::BadFailure => return format!("{walker}: allocation {n} failed: failure without the documented ENOMEM"),
@@ -283,10 +286,7 @@ fn case_fts(dir: &std::path::Path) -> String {
             // Complete. An allocation failure while sorting a directory's entries leaves them
             // in directory order with the walk reporting success: the spec says nothing about it
             // (see the hand-back); `ok` is the ordered case.
-            if !ok {
-                eprintln!("INFO fts: complete but unsorted after an allocation failure");
-            }
-            Verdict::Complete
+            if ok { Verdict::Complete } else { Verdict::Unsorted }
         } else {
             Verdict::Truncated
         }
