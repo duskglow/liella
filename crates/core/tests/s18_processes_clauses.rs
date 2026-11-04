@@ -363,6 +363,20 @@ fn fd_flags(fd: i32) -> i64 {
     CSys.fcntl_int(Fd::new(fd), liella_kernel::ops::FcntlInt::GetFd, 0).unwrap()
 }
 
+/// Set close-on-exec on each of `fds` this process holds open without it, so a spawned child
+/// holds only what its file actions give it. A test runner may hand descriptors down (a job
+/// wrapper keeping a lock open on 8, for one); they stay open here.
+fn keep_from_children(fds: &[i32]) {
+    use liella_kernel::ops::FcntlInt::{GetFd, SetFd};
+    for &fd in fds {
+        if let Ok(fl) = CSys.fcntl_int(Fd::new(fd), GetFd, 0)
+            && fl & 1 == 0
+        {
+            CSys.fcntl_int(Fd::new(fd), SetFd, fl | 1).unwrap();
+        }
+    }
+}
+
 // ------------------------------------------------------------------------------ §18.1, §18.2
 
 #[test]
@@ -721,6 +735,7 @@ fn s18_4_c_1() {
     write_file(&d.join("sub/insub"), "insub\n", 0o644);
     let sub = d.join("sub");
     let canon = std::fs::canonicalize(&sub).unwrap();
+    keep_from_children(&[5, 6, 7, 8, 9, 12]);
     let fds = "for f in 5 6 7 8 9 12; do [ -e /proc/$$/fd/$f ] && echo R:open $f; done; echo R:cwd $(pwd -P)";
     let (r, out, st) = run_sh(
         fds,
