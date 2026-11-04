@@ -2447,7 +2447,10 @@ mod simple_tests {
     #[test]
     fn pair_s_pieces_are_what_render_simple_writes() {
         let pair: [&[u8]; 6] = [b"%s %*s ", b"%s%*s", b"%s|%-*s|", b"[%s] %6s.", b"%s %-4s", b"%s%s"];
-        let not: [&[u8]; 7] = [b"%5s %s", b"%s %d", b"%-s %s", b"%s %c", b"%s %s %s", b"%s %*.*f", b"%s"];
+        let not: [&[u8]; 24] = [
+            b"%5s %s", b"%s %d", b"%-s %s", b"%s %c", b"%s %s %s", b"%s %*.*f", b"%s", b"%ls %s", b"%s %ls", b"%s %5ls", b"%S %s", b"%s %S", b"%s %.3s", b"%s %5.3s",
+            b"%.2s %s", b"%s %+s", b"%s % s", b"%s %#s", b"%s %05s", b"%1$s %2$s", b"%s %2$s", b"%s %5c", b"%s %*.3s", b"%s %f",
+        ];
         for fmt in pair {
             let name = std::string::String::from_utf8_lossy(fmt).into_owned();
             let plan = simple(fmt).unwrap();
