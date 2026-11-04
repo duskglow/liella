@@ -265,9 +265,9 @@ mod ziv_tests {
         }
     }
 
-    /// Loosen the bounds of the first `k` widths (384, 768, 1536, 3072) by `2^1000`, or undo it.
+    /// Loosen the bounds of the first `k` widths (384, 768, 1536, 3072) by `2^4000`, or undo it.
     fn force(k: usize, on: bool) {
-        let v = if on { 1000 } else { 0 };
+        let v = if on { 4000 } else { 0 }; // past every boundary at 3072 bits too
         let f: [fn(i64); 4] = [n::force_loose, w::force_loose, wx::force_loose, wy::force_loose];
         for g in &f[..k] {
             g(v);

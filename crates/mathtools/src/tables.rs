@@ -355,9 +355,11 @@ fn mp_constants(o: &mut Out) {
     let px = 1600;
     o.mpn_const::<24>("mpx", "MPX_PI", "`π` (mp::pi, 1536 bits)", &mp::pi(px));
     o.mpn_const::<24>("mpx", "MPX_LN2", "`ln 2` (mp::ln2, 1536 bits)", &mp::ln2(px));
+    o.mpn_const::<24>("mpx", "MPX_EULER", "Euler's constant `γ` (`euler_gamma`, 1536 bits)", &euler_gamma(px));
     let py = 3150;
     o.mpn_const::<48>("mpy", "MPY_PI", "`π` (mp::pi, 3072 bits)", &mp::pi(py));
     o.mpn_const::<48>("mpy", "MPY_LN2", "`ln 2` (mp::ln2, 3072 bits)", &mp::ln2(py));
+    o.mpn_const::<48>("mpy", "MPY_EULER", "Euler's constant `γ` (`euler_gamma`, 3072 bits)", &euler_gamma(py));
     let ck: Vec<Big> = (1..=STIRLING_TERMS as i64).map(|k| b[2 * k as usize].div(&Big::from_i64(2 * k * (2 * k - 1)), p, Round::Nearest)).collect();
     o.mp_table("MP_STIRLING", &format!("`|B_2k| / (2k(2k − 1))` for k = 1..{STIRLING_TERMS} (Bernoulli numbers from `bernoulli`); the term's sign is `(−1)^(k+1)`."), &ck);
 }

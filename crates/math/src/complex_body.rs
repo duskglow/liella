@@ -2241,11 +2241,11 @@ fn part_rounding_test_at_constructed_boundaries() {
                 let u = Mp::from_i64(side).ldexp(err - 1);
                 let (far, near) = (b.add(u.mul_u64(6)).with_sign(neg), b.add(u.mul_u64(3)).with_sign(neg));
                 let m0 = misses();
-                let got: (F128, Status) = Part::Mp(far, err).round(m);
+                let got: (F128, Status) = Part::Mp(far, err - WIDTH_SLACK).round(m);
                 let want: (F128, Status) = mp::round_exact(far, m);
                 assert!(got.0.to_bits() == want.0.to_bits() && got.1 == want.1, "{m:?} neg {neg} side {side}: far part misrounded");
                 assert_eq!(misses(), m0, "{m:?} neg {neg} side {side}: far part undecided");
-                let _: (F128, Status) = Part::Mp(near, err).round(m);
+                let _: (F128, Status) = Part::Mp(near, err - WIDTH_SLACK).round(m);
                 assert_eq!(misses(), m0 + 1, "{m:?} neg {neg} side {side}: near part decided");
             }
         }

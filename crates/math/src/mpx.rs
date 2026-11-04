@@ -35,6 +35,11 @@ pub fn ln2() -> Mp {
     c(&t::MPX_LN2)
 }
 
+/// Euler's constant `γ`.
+pub fn euler() -> Mp {
+    c(&t::MPX_EULER)
+}
+
 /// `ln x` for `x > 0`: the shared `ln_atanh` kernel (bound proved in [`crate::mpw`]).
 pub fn ln(x: Mp) -> Mp {
     ln_atanh(x)
