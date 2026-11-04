@@ -138,7 +138,7 @@ fn env_norm(out: &mut [(String, Vec<String>)]) {
     }
 }
 
-const EXTMATCH_LEADING_DIR: &str = "FNM_EXTMATCH with FNM_LEADING_DIR: the pattern matches the whole string or an initial segment followed by '/', exactly as for a plain pattern (GNU manual; LEADING_DIR only adds matches): `!(a)` matches `a/b`, `+([ab])c` does not match `ab/c`; the reference answers differently in this combination (differences row; compat flag COMPAT-11)";
+const EXTMATCH_LEADING_DIR: &str = "FNM_EXTMATCH with FNM_LEADING_DIR: the pattern matches the whole string or an initial segment followed by '/', exactly as for a plain pattern (GNU manual; LEADING_DIR only adds matches): `!(a)` matches `a/b`, `+([ab])c` does not match `ab/c`; the reference answers differently in this combination (differences row; compat flag COMPAT-13)";
 
 const KNOWN: &[(&str, &str, &str, &str)] = &[
     (r##"wordexp"##, r##"wordexp [$U] 0 -> 0 wordc=1 offs=0 [set] $"##, r##"wordexp [$U] 0 -> 0 wordc=0 offs=0 $"##, WRDE_ASSIGN_LOCAL),

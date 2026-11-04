@@ -47,17 +47,18 @@ mod abbench;
 mod abi;
 mod affected;
 mod align;
-mod arch;
 mod bench;
 mod forkalloc;
+mod fs_order;
 mod benchrows;
 mod coldbss;
 mod compat;
+mod compatprobe;
+mod compat_objects;
 mod copies;
 mod csys;
 mod fuzz;
 mod hottext;
-mod labnames;
 mod langinfo;
 mod math;
 mod native;
@@ -75,12 +76,12 @@ mod symcov;
 mod symgap;
 mod trace;
 mod unicode;
+mod compat_ids;
 mod compat_plan;
-mod plants;
-mod compatprobe;
-mod compat_objects;
 mod register;
-mod fs_order;
+mod arch;
+mod plants;
+mod labnames;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -107,6 +108,7 @@ fn main() -> ExitCode {
         "trace" => trace::run(&root),
         "static" => static_checks(&root),
         "compat-plan" => compat_plan::check(&root),
+        "compat-ids" => compat_ids::check(&root),
         "register" => register::check(&root),
         "machine-exports" if args.iter().any(|a| a == "--list") => affected::machine_exports_list(args.iter().skip(1).find(|a| !a.starts_with("--")).map_or(root.as_path(), |d| Path::new(d.as_str()))),
         "machine-exports" => affected::machine_exports_check(&root),
@@ -184,8 +186,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 21] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("reexec-audit", policy::reexec_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("lab-names", labnames::check), ("fs-order", fs_order::fs_order)];
+    let checks: [(&str, Check); 22] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
