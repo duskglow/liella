@@ -193,6 +193,8 @@ extern "C" fn by_name(a: *const *const c_void, b: *const *const c_void) -> c_int
     x::alphasort(a, b)
 }
 
+// FS-ORDER: entries are sorted by an explicit alphasort comparator, so the check is independent of readdir order
+
 fn case_scandir(dir: &std::path::Path) -> String {
     let d = cstr(dir);
     let want: Vec<CString> = (0..FILES).map(|i| CString::new(name(i)).unwrap()).collect();
@@ -248,6 +250,8 @@ extern "C" fn by_path(a: *const *const c_void, b: *const *const c_void) -> c_int
     let name = core::mem::offset_of!(FTSENT, fts_name);
     cmp_text(ea + name, eb + name)
 }
+
+// FS-ORDER: entries are sorted by an explicit path comparator and matched as a set (presence flags), not by readdir order
 
 fn case_fts(dir: &std::path::Path) -> String {
     let d = cstr(dir);
@@ -320,6 +324,8 @@ extern "C" fn count_cb(_p: *const c_char, _st: *const c_void, _flag: c_int, _f: 
     CALLS.fetch_add(1, Ordering::Relaxed);
     0
 }
+
+// FS-ORDER: only the count of visited entries and the failure mode are checked, never their order
 
 fn case_nftw(dir: &std::path::Path) -> String {
     let d = cstr(dir);
