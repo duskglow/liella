@@ -1,10 +1,10 @@
-//! §29.1 ONC RPC authentication helpers as failing stubs (D-29.3, owner ruling 2026-10-27).
+//! §29.1 ONC RPC authentication helpers as failing stubs (D-29.4, owner ruling 2026-10-27).
 //!
 //! Liella does not implement secure-RPC authentication, the key server client or the DES
 //! API: `ecb_crypt`, `cbc_crypt`, `des_setparity`, `passwd2des`, `xencrypt`, `xdecrypt`,
 //! the `key_*` calls, `getpublickey`, `getsecretkey`, `authdes_*`, `authunix_*` and the
 //! `netname` helpers. Each name stays exported at its compat version so an old program still
-//! loads; a call fails with its family's failure value (the table in D-29.3), sets `errno` to
+//! loads; a call fails with its family's failure value (the table in D-29.4), sets `errno` to
 //! `EOPNOTSUPP`, and never touches the network, a file, a key server or the memory its arguments
 //! point at. Every entry is an `internal_entry!`: `cargo xtask so` binds each compat version to
 //! the `liella_compat_<name>` symbol, so a plain `pub extern "C" fn` (no symbol) fails the build.

@@ -1,4 +1,4 @@
-// §29.1 secure-RPC authentication, key server and DES API as failing stubs (D-29.3, owner ruling 2026-10-27).
+// §29.1 secure-RPC authentication, key server and DES API as failing stubs (D-29.4, owner ruling 2026-10-27).
 //! Every stub in `s29_rpc_auth` is called from one table: each must return its family's failure
 //! value, set `errno` to `EOPNOTSUPP`, leave caller buffers as they were and open no file descriptor (no socket, no file).
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::indexing_slicing, unreachable_pub)]
@@ -27,7 +27,7 @@ fn run(f: &dyn Fn(*mut c_char) -> i64) -> (i64, i32, [u8; 64]) {
 
 #[test]
 fn every_auth_stub_fails_cleanly() {
-    // Trace: no spec clause (§29.1 secure-RPC stubs; D-29.3 failure table, owner ruling 2026-10-27).
+    // Trace: no spec clause (§29.1 secure-RPC stubs; D-29.4 failure table, owner ruling 2026-10-27).
     let s = c"x".as_ptr();
     let v: *mut c_void = null_mut();
     let u: *mut c_uint = null_mut();
@@ -72,7 +72,7 @@ fn every_auth_stub_fails_cleanly() {
 
 #[test]
 fn passwd2des_leaves_its_key_and_fails() {
-    // Trace: no spec clause (§29.1 `passwd2des` stub; D-29.3, owner ruling 2026-10-27).
+    // Trace: no spec clause (§29.1 `passwd2des` stub; D-29.4, owner ruling 2026-10-27).
     let mut key = [CANARY; 8];
     let mut pw = *b"secret\0";
     errno::set_raw(0);
