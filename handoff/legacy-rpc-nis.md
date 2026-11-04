@@ -1,6 +1,6 @@
 # Handoff: LEGACY-RPC-NIS-STUBS-3 (secure-RPC stubs verified; rcmd stubs drafted, not landed)
 
-**State:** branch `task/legacy-rpc-nis-stubs-3` (continues -2), code head ce8f9fb (+ this handoff/report commit).
+**State:** branch `task/legacy-rpc-nis-stubs-3` (continues -2), code head 01689f9 (tree ce8f9fb, the one the jobs ran on) (+ this handoff/report commit).
 Role kanon:~/w/kn1. Jobs on kanon: `legacy-rpc-nis-stubs-3-so` (rc 0), `legacy-rpc-nis-stubs-3-gate`,
 `legacy-rpc-nis-stubs-3-plants`, `legacy-rpc-nis-stubs-3-lint` (results: handoff/reports/LEGACY-RPC-NIS-STUBS-3.json).
 
@@ -12,7 +12,7 @@ differences row. Owner rulings 2026-11-04 R10/R11 (liella-ops state/PH14-OWNER-R
 `cargo xtask so` itself failed: "libc.a does not define the target of 27 compat versions ... liella_compat_authdes_create
 ...". Run 2 wrote the stubs as plain `pub extern "C" fn` (no `#[no_mangle]`), so no symbol existed; every
 product-linking test (liella_cc_lm, native_v1, s00_conventions_clauses, s01 relro) then failed on the missing products.
-The unit test calls the Rust fns directly, so it could not see this. Fix ce8f9fb: every stub is a `crate::internal_entry!`.
+The unit test calls the Rust fns directly, so it could not see this. Fix 01689f9: every stub is a `crate::internal_entry!`.
 A plant (`unexported`) now proves `xtask so` catches a missing wrapper.
 
 ## Things not to redo

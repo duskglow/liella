@@ -1,6 +1,6 @@
 {"task": "LEGACY-RPC-NIS-STUBS-3", "model": "opus", "tokens": null,
  "result": "Run 2's red gate explained and fixed (the stubs were not exported, so cargo xtask so failed); 27 secure-RPC stubs verified: gate green, 6/6 plants caught; rcmd stubs drafted as a patch, client/server stubs not started (context budget)",
- "branch": "task/legacy-rpc-nis-stubs-3", "head": "ce8f9fb",
+ "branch": "task/legacy-rpc-nis-stubs-3", "head": "01689f9 (code; jobs ran on synced tree ce8f9fb = this commit's tree; later commits are handoff-only)",
  "gate": {"affected": "6266 passed / 0 failed (4 suites ok, 1114 ignored)", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [
