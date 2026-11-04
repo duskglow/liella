@@ -7,7 +7,8 @@ the environment and secure-execution mode, are written first, before phase 14 st
 
 Status: started 2026-10-03 with the environment-variable list; the dynamic loader's section
 written 2026-10-04, before phase 14 (owner), its rules made checkable and extended to 12 on
-2026-11-04 (R14-15, DL-0d). Other boundaries (the name-service cache region,
+2026-11-04 (R14-15, DL-0d), and the environment section's loader additions approved the same
+day (#2661, DL-0d section A). Other boundaries (the name-service cache region,
 the secure allocator, credential changes, the C layer and the boundary crate, pattern and word
 expansion, parsers of system files and network data) are written in the security pass.
 
@@ -29,6 +30,14 @@ itself reads a variable that names a file, a directory or behaviour a privileged
 take from its caller, it reads it through `secure_getenv` (or checks `AT_SECURE`), which also
 covers variables a program sets itself after start.
 
+**Who clears, and when, in a dynamically linked program** (owner approval #2661, 2026-11-04,
+from DL-0d section A): the dynamic loader applies the same `rt::start::UNSECURE` list during its
+bootstrap, after it decides secure mode and before it reads any `LD_*` variable or loads any
+object. The libc pass in `__libc_start_main` stays and is then a no-op. One list, two call sites,
+the same code. **Secure mode is `AT_SECURE` only** in the products, static and dynamic; the
+hosted-build rule (real and effective IDs differ when the auxiliary vector cannot be read) stays
+in the tests only.
+
 **How the list was established** (2026-10-03; not from any library's source): the ld.so(8) man
 page on the reference system ("Secure-execution mode" lists 22 names), and a black-box probe: a
 program printing the names left in `environ`, built dynamically and statically against the
@@ -44,7 +53,7 @@ absent from the candidate list could not be observed: the list covers what docum
 |---|---|---|---|
 | `GCONV_PATH` | not read (iconv uses the installed charmaps, D-6.8) | cleared at start | ld.so(8), probe |
 | `GETCONF_DIR` | not read | cleared at start | ld.so(8), probe |
-| `GLIBC_TUNABLES` | tunables (D-1.8; `glibc.malloc.perturb` from phase 13) | cleared at start; no tunable is honoured | probe |
+| `GLIBC_TUNABLES` | tunables (D-1.8; `glibc.malloc.perturb` from phase 13); the dynamic loader (phase 14) | cleared at start, so it is not in the environment passed on; no tunable is honoured by the loader or libc (D-1.8 filter) | probe; DL-0a (`spec/behaviour/dynlink-secure.md`): the reference removes it too |
 | `HOSTALIASES` | the resolver (`res_hostalias`, host lookups) | cleared at start; ignored on read (`secure_getenv`) | ld.so(8), probe; D-16.3 |
 | `LD_AUDIT`, `LD_DEBUG`, `LD_DEBUG_OUTPUT`, `LD_DYNAMIC_WEAK`, `LD_HWCAP_MASK`, `LD_LIBRARY_PATH`, `LD_ORIGIN_PATH`, `LD_PRELOAD`, `LD_PROFILE`, `LD_SHOW_AUXV` | the dynamic loader (phase 14) | cleared at start | ld.so(8), probe |
 | `LD_BIND_NOT`, `LD_BIND_NOW`, `LD_VERBOSE`, `LD_WARN` | the dynamic loader (phase 14) | cleared at start | probe |
@@ -63,13 +72,16 @@ absent from the candidate list could not be observed: the list covers what docum
 | `PWD` | `get_current_dir_name` | **kept**; ignored on read (the physical path is returned) | D-13.14 (owner ruling) |
 | `LIELLA_NSCACHE` | the name-service cache | kept; ignored on read (the cache stays private in secure mode anyway) | D-16.10 |
 | `LIELLA_AIO_URING` | AIO engine (`0` forces worker threads) | kept; ignored on read (secure processes use threads anyway) | D-11.11 (owner ruling) |
-| `TZ` | time-zone selection | kept and honoured (a zone name or rule; `:path` names any file) | to be reviewed with the loader |
+| `TZ` | time-zone selection | kept; a zone name or a POSIX rule is honoured; a path (absolute, or `:path`) is honoured only when it lies inside the default zone directory `/usr/share/zoneinfo`; a path outside it, or any value with a `..` component, reads no file and gives offset 0 (abbreviated, as any value that is neither a zone nor a rule, by its leading valid name, empty if none: the DL-0a table); `TZDIR` is cleared, so a relative name always resolves under the default directory | owner approval #2661 (2026-11-04, DL-0d section A); DL-0a probe (`spec/behaviour/dynlink-secure.md`): the reference does the same, so no differences row |
+| `LD_ASSUME_KERNEL`, `LD_PROFILE_OUTPUT`, `LD_TRACE_LOADED_OBJECTS` | the dynamic loader (phase 14) | kept in the environment (not on the reference's list); the loader does not act on them in a secure process (loader rule 1): with `LD_TRACE_LOADED_OBJECTS` set, even empty, the program runs normally | ld.so(8); DL-0a probe: the reference keeps them and does not act on them |
 | `MALLOC_CHECK_`, `LD_USE_LOAD_BIAS`, other names | not read | kept (the reference keeps them too) | probe |
 
 Liella's own security-sensitive variables named in the ruling (`HOSTALIASES`, `RES_OPTIONS`,
 `LOCALDOMAIN`, `TMPDIR`, `TZDIR`, `LOCPATH`, `GCONV_PATH`, `NLSPATH`) are all on the reference
 library's list, so clearing them is no difference from glibc. A variable Liella starts to read in
-a later phase is added here, with its treatment in a secure process, in the same change.
+a later phase is added here, with its treatment in a secure process, in the same change. Every
+variable the dynamic loader reads that ld.so(8) lists has a row above (owner approval #2661); a
+loader variable not listed here is added in the change that makes the loader read it.
 
 ## Defaults ruled by the owner (2026-10-04)
 
@@ -217,7 +229,7 @@ text. Facts about the reference come from black-box probes: `spec/behaviour/dynl
     with `-z execstack`), the reference loads such a library and afterwards the main stack and a
     thread stack created before the `dlopen` are both mapped `rwxp`; a program linked that way
     starts with `rwxp` stacks. Recorded in `docs/differences-from-glibc.md`; registered way back:
-    COMPAT-NEW in `docs/compat-flags.md`.
+    COMPAT-19 in `docs/compat-flags.md`, ignored in a secure process (as COMPAT-12).
 11. **`dlerror` and diagnostics never print attacker-sized data unbounded:** paths and symbol
     names in messages are truncated to a fixed cap, and `LD_DEBUG` output in a secure process goes
     nowhere. Probe: in a secure process the reference ignores `LD_DEBUG`, `LD_SHOW_AUXV` (also
@@ -232,7 +244,8 @@ whether `LD_BIND_NOW`/`LD_BIND_NOT` change binding in a secure program (the refe
 both from the environment; any residual effect is not observed); `dlopen` of a set-user-ID library
 by a process that is not secure. The environment-section additions of the same draft
 (`plan/ph14/threat-model-draft.md` section A: `TZ`, `GLIBC_TUNABLES` removal, the loader's new
-variables) are not part of this approval and are not folded in here.
+variables) were approved separately (#2661, 2026-11-04) and are in "Environment variables in
+secure-execution mode" above.
 
 **How it will be tested (DL-29 `DL-SECURE-PASS` checklist).** Secure mode is made without root
 as `tests/secure_env.rs` and the DL-0a probe do: a copy of each corpus program with mode 2755 and
