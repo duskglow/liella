@@ -323,7 +323,47 @@ macro_rules! bessel_shards {
             // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
             long_double_bessel_function($which, $k, BESSEL_SHARDS);
         }
-    )*};
+    )*
+        /// The (function, shard) pairs listed below, checked at compile time by `bessel_list_is_exact`.
+        const BESSEL_LISTED: &[(usize, usize)] = &[$(($which, $k)),*];
+    };
+}
+
+/// True when `list` names each of j0 and j1 (0 and 1) with each shard 8..BESSEL_SHARDS exactly once.
+const fn bessel_list_is_exact(list: &[(usize, usize)]) -> bool {
+    if list.len() != 2 * (BESSEL_SHARDS - 8) {
+        return false;
+    }
+    let mut which = 0;
+    while which < 2 {
+        let mut k = 8;
+        while k < BESSEL_SHARDS {
+            let (mut n, mut i) = (0, 0);
+            while i < list.len() {
+                if list[i].0 == which && list[i].1 == k {
+                    n += 1;
+                }
+                i += 1;
+            }
+            if n != 1 {
+                return false;
+            }
+            k += 1;
+        }
+        which += 1;
+    }
+    true
+}
+
+/// The operand indices shard `shard` of `shards` checks in a list of `len` (index `i` goes to
+/// shard `i % shards`). The sweep and `the_bessel_shards_take_every_operand_exactly_once` both use it.
+fn bessel_shard_indices(len: usize, shard: usize, shards: usize) -> impl Iterator<Item = usize> {
+    (0..len).filter(move |i| i % shards == shard)
+}
+
+/// Shard `shard` of `shards` takes ceil((len - shard) / shards) of `len` operands.
+fn bessel_share(len: usize, shard: usize, shards: usize) -> usize {
+    (len + shards - 1 - shard) / shards
 }
 // Shards 0..8 of j0 and j1 are the functions below; these are shards 8..BESSEL_SHARDS.
 bessel_shards! {
@@ -346,7 +386,7 @@ bessel_shards! {
     long_double_bessel_functions_are_correctly_rounded_j1_s15 = 1, 15;
     long_double_bessel_functions_are_correctly_rounded_j1_s16 = 1, 16;
 }
-const _: () = assert!(BESSEL_SHARDS == 17, "shards 8..17 above are listed by hand: change them together");
+const _: () = assert!(bessel_list_is_exact(BESSEL_LISTED), "the bessel_shards! list above must name j0 and j1 shards 8..BESSEL_SHARDS once each");
 
 #[test]
 fn the_bessel_shards_take_every_operand_exactly_once() {
@@ -354,8 +394,8 @@ fn the_bessel_shards_take_every_operand_exactly_once() {
     for len in [0usize, 1, 16, 17, 18, 1_000, 1_337] {
         let mut seen = vec![0u8; len];
         for k in 0..BESSEL_SHARDS {
-            let mine: Vec<usize> = (0..len).filter(|i| i % BESSEL_SHARDS == k).collect();
-            assert_eq!(mine.len(), (len + BESSEL_SHARDS - 1 - k) / BESSEL_SHARDS, "share of shard {k} of {len}");
+            let mine: Vec<usize> = bessel_shard_indices(len, k, BESSEL_SHARDS).collect();
+            assert_eq!(mine.len(), bessel_share(len, k, BESSEL_SHARDS), "share of shard {k} of {len}");
             mine.iter().for_each(|&i| seen[i] += 1);
         }
         assert!(seen.iter().all(|&n| n == 1), "{len} operands");
@@ -379,9 +419,9 @@ fn long_double_bessel_function(which: usize, shard: usize, shards: usize) {
         if name.starts_with('j') {
             ys.extend(xs.iter().map(|b| b | LD_SIGN));
         }
-        let mine: Vec<u128> = ys.iter().enumerate().filter(|(i, _)| i % shards == shard).map(|(_, &b)| b).collect();
-        // The case count: this shard's share of the whole list (shard k of n takes ceil((len - k) / n)).
-        let share = (ys.len() + shards - 1 - shard) / shards;
+        let mine: Vec<u128> = bessel_shard_indices(ys.len(), shard, shards).map(|i| ys[i]).collect();
+        // The case count: this shard's share of the whole list.
+        let share = bessel_share(ys.len(), shard, shards);
         eprintln!("{name}l shard {shard}/{shards}: {} of {} operands, {} cases", mine.len(), ys.len(), mine.len() * MODES.len());
         assert_eq!(mine.len(), share, "{name}l shard {shard}/{shards}: checked {} operands, its share of {} is {share}", mine.len(), ys.len());
         check_ld(name, f, &mine);
