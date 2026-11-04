@@ -1,0 +1,9 @@
+## 6. Printf, regex, wordexp, iconv
+
+| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |
+|---|---|---|---|---|---|---|---|
+| `printf` `%02x` on a stream | i 529.4 vs 612.1 (0.86x; 2026-10-20 spot check) | ahead of glibc | n/a | M | PRINTF-LAYERS | PRINTF-PARSE: single-directive formats did not gain, dropped. PRINTF-FLOAT: `g6_sum` +2.1% (63 inline instr vs 22 for `u128` div), table +0.3 to 1.2%, reverted `79fb043d` | none |
+| `snprintf` `%d`, `%x08`, `%ld` large | t 1.13, 1.06, 1.00; i 0.96, 1.04, 0.91 | at or near parity | n/a | M | PRINTF rows | see above | **measured 2026-10-23** (section 10) (10-07) |
+| `snprintf` `%e` | t 3.28 (2.68 with x86-64-v3) | not at a limit | n/a | C | | a multiversioned float core flagged "worth a look", not planned | **measured 2026-10-23** (section 10) |
+| `regexec` sed tail and neighbours | +4.4% on `regexec_sed_tail`, over the 1% limit | "Do not retry" (REGEX-SED) | design | R | REGEX-SED; also RX-T4C (anchored line failing late 2.25x overall pass, aud1 +24%), REGEX-WL (saves 1 `jmp` for 1 instr), `regexec` stage 1 (no gain) | see left | none |
+| `wordexp` | t 2.9 to 4.2 (stale; Ivy Bridge host A 2026-10-23: t 0.72 to 1.76, section 10; Haswell-EP host 2026-10-23: t 0.6 to 1.7, instructions 0.3 to 2.0, `docs/wordexp-profile.md`) | OPT-STAGE1: "no measurable gain, reverted"; "no design for a larger change"; X-5 profile: a larger change is not justified | n/a | R | OPT-STAGE1, X-5 | see left | **measured 2026-10-23** (section 10; Zen 1 and Broadwell-EP not run) |

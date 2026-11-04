@@ -13,13 +13,13 @@ changes no code. Every recommendation below is RULING NEEDED.**
   (`plan/06-phases/18-phase-15-legacy-tier-and.md`), `docs/spec-symbol-gaps.md`, and the man pages' deprecation
   notes. Manifest status (`default` / `compat`) is `spec/abi/versions.tsv`; "in Liella" is
   `docs/codemap/symbols.tsv` plus a search of `crates/` and `csys/`.
-* **Users (black box only):** `legacy_users.py` (scratch, job `scope-review-legacy-usage` on mei, 2026-11-04)
+* **Users (black box only):** `legacy_users.py` (scratch, job `scope-review-legacy-usage`, 2026-11-04)
   read the undefined dynamic symbols (`readelf -W --dyn-syms`) of all 2,867 x86-64 ELFs under `/usr/bin`,
-  `/usr/sbin`, `/usr/lib*`, `/usr/libexec` and `/opt` on mei. It mapped each importing file to its package with
+  `/usr/sbin`, `/usr/lib*`, `/usr/libexec` and `/opt` on a Xeon Platinum 8151 build host. It mapped each importing file to its package with
   `dpkg -S` and left out glibc's own packages (`libc6`, `libc-bin`, ...). The **Users** column gives
   ELFs/packages that import the name, followed by examples. Earlier result to compare: the LG-0c sweep
   (`validation/results/bincompat/README.md`) found **no compat `sym@VER` bound by any non-glibc binary** on
-  kanon or shiki.
+  two other build hosts.
 * **Limits:** a server image, about 300 packages. It cannot see static links, `dlsym` lookups or the
   wider Debian archive, so a 0 means "no user seen", not "no user". I did not use Debian Code Search because its
   results include glibc's own source (clean room). The binary-compatibility corpus (LG-19, R15-8) is the evidence
@@ -35,7 +35,7 @@ difference from glibc that needs a row in `docs/differences-from-glibc.md` is it
 
 Risk: **I** insecure by design, **U** unbounded buffer, **R** racy or global state, **O** merely old. Users column: ELFs/packages.
 
-| # | Family | Manifest | Users (mei) | Risk | In Liella | Recommend |
+| # | Family | Manifest | Users (Xeon host) | Risk | In Liella | Recommend |
 |---|---|---|---|---|---|---|
 | 1 | `gets` (removed from C11; man page: never use) | default | 0/0 | I, U | yes, `s12_stdio.rs` | COMPAT-ONLY |
 | 2 | `tmpnam`, `tmpnam_r` (ISO C; man page: use `mkstemp`/`tmpfile`) | default | 0/0 | R (name-then-open) | yes, `s12_stdio.rs` | IMPLEMENT, header deprecation warning |
@@ -70,7 +70,7 @@ Risk: **I** insecure by design, **U** unbounded buffer, **R** racy or global sta
 | 31 | `inet6_option_*` (RFC 2292; RFC 3542 replaced it with `inet6_opt_*`) | default | 0/0 | O | yes, `inet_compat.rs` | COMPAT-ONLY |
 | 32 | `__xstat`/`__fxstat`/`__lxstat`/`__xmknod` (pre-2.33 stat ABI) | default | 0/0 on this host | O | yes, `fs_compat.rs` | IMPLEMENT (thin; binaries built before 2.33 bind them) |
 | 33 | Sun RPC/XDR (§29.1), NIS/NIS+ (§29.2) | compat | 0 outside glibc (LG-0c) | I | `sunrpc*.rs`, about 1,800 lines | STUB: **already ruled** (LEGACY-RPC-NIS-STUBS). Stories LG-12 to LG-18 need re-scoping to match |
-| 34 | Compat-only versions with no known user (845 compat rows; 287 compat-only names in libc.so.6, 112 in libm) | compat | 0 on kanon, shiki (LG-0c) | O | 272 exported as aliases | aliases (LG-1): IMPLEMENT (free at run time); old-behaviour versions (LG-2, LG-3 old condvars): only when the LG-19 corpus finds a user |
+| 34 | Compat-only versions with no known user (845 compat rows; 287 compat-only names in libc.so.6, 112 in libm) | compat | 0 on two other build hosts (LG-0c) | O | 272 exported as aliases | aliases (LG-1): IMPLEMENT (free at run time); old-behaviour versions (LG-2, LG-3 old condvars): only when the LG-19 corpus finds a user |
 
 Also checked, old but in use, with no change recommended (IMPLEMENT): `usleep` 65/48, `getdtablesize` 13/12,
 `sbrk` 35/11, `memalign` 13/6, `valloc` 1/1, `lckpwdf` 28/6, `putpwent` 22/4, `innetgr` 11/5, `getlogin` 18/12,
@@ -110,6 +110,33 @@ Also checked, old but in use, with no change recommended (IMPLEMENT): `usleep` 6
   XDR, RPC and NIS.
 * **R14 old-behaviour compat versions (LG-2, LG-3): build them only for a user the corpus finds.** No host binary
   binds any compat version.
+
+## Rulings (owner, 2026-11-04)
+
+The owner accepted the coordinator's view on every row (source: liella-ops `state/PH14-OWNER-RULINGS.md`). As ruled:
+
+* **R0.** COMPAT-ONLY = symbol and version kept, Liella's headers do not declare it. ONE shared differences row
+  ("declared only for binary compatibility") and one COMPAT flag that restores the declarations.
+* **R1 `gets`:** COMPAT-ONLY.
+* **R2 `tmpnam`/`tmpnam_r`:** IMPLEMENT, with a header deprecation warning that points to `mkstemp`.
+* **R3 DES `crypt`/`encrypt`/`setkey`:** DROP, recorded as decided (absent from the 2.39 manifest; `libcrypt.so.1` is separate).
+* **R4 `getpw`, `getwd`, `sigstack`:** COMPAT-ONLY (unbounded buffers).
+* **R5 `ftime`, `re_comp`/`re_exec`, `ecvt` family, `inet6_option_*`, `pthread_kill_other_threads_np`,
+  `pthread_attr_*stackaddr`:** IMPLEMENT and KEEP DECLARED. **Differs from the recommendation (COMPAT-ONLY):**
+  they are old but not unsafe, and hiding them breaks source builds that work against glibc, which does not meet
+  the ABI rule's "very good reason" bar.
+* **R6 `<regexp.h>` `step`/`advance`:** STUB (no match) plus a differences row; LG-10 deferred until the corpus finds a user.
+* **R7 `_IO_*` objects:** COMPAT-ONLY objects, no dispatch through them.
+* **R8 malloc hooks:** COMPAT-ONLY, inert.
+* **R9 `libc_malloc_debug.so.0`:** lowest priority after DL-1; `malloc_get_state` is a STUB.
+* **R10 `rexec`/`rexec_af`:** STUB (`ENOSYS`) plus a differences row and a COMPAT flag.
+* **R11 `rcmd` family:** STUB, per the 2026-10-27 RPC/NIS ruling. **Differs from the recommendation (`rcmd`
+  COMPAT-ONLY, `ruserok` IMPLEMENT).** `ruserok`/`iruserok` (`_af`) are stubs that always DENY, so `pam_rhosts`
+  still loads and address-based trust never succeeds.
+* **R12 `mallinfo`:** IMPLEMENT as specified (wrapping), not saturating.
+* **R13 LG-12 to LG-18:** re-scoped to the RPC/NIS STUB ruling (phase 15 plan updated).
+* **R14 old-behaviour compat versions (LG-2, LG-3):** built only for a user the LG-19 corpus finds.
+* The "Check scope first" paragraph for CONTRIBUTING.md was shown to the owner on 2026-11-04; approval is pending.
 
 ## Proposed standing check (text for the owner to approve)
 

@@ -134,12 +134,19 @@ static void gd(const char *scratch, const char *tmpl, const char *in) {
     printf(" wday=%s isdst=%d zone=%s\n", r->tm_wday == (c.tm_wday + days % 7 + 7) % 7 ? "ok" : "BAD", r->tm_isdst, r->tm_zone ? r->tm_zone : "(null)");
 }
 
+/* The test's instant (argv "@<epoch seconds>"), captured once by the test and given to both programs;
+   -1 when absent. The TZ offsets of the getdate cases derive from it alone, never from the program's
+   own clock, so both programs get the same rule string and a run straddling UTC midnight cannot give
+   them two dates (#2012). */
+static long long inst = -1;
+
 /* Sets TZ to `std`<offset>`rest`, the offset chosen so the local time of day is now `want` seconds
-   after midnight (on the UTC date): the getdate cases see a clock the test sets, not the time of day
-   of the run. Prints the rule without its offset and the local time reached. */
+   after midnight (on the date of the test's instant): the getdate cases see a clock the test sets, not
+   the time of day of the run. Prints the rule without its offset and the local time reached. */
 static void clockat(const char *std, const char *rest, long want) {
     time_t now = time(NULL);
-    long w = (long)(now % 86400) - want; /* the POSIX offset: west of UTC is positive */
+    /* the POSIX offset: west of UTC is positive */
+    long w = (long)((inst >= 0 ? inst : (long long)now) % 86400) - want;
     char tz[96];
     struct tm c;
     for (int i = 0; i < 3; i++) {
@@ -181,6 +188,28 @@ static void getdates(const char *scratch) {
     for (unsigned i = 0; i < sizeof at0040 / sizeof *at0040; i++) gd(scratch, at0040[i][0], at0040[i][1]);
 }
 
+/* The controlled clock reads `at` (epoch seconds, within a day of the real clock) when this starts:
+   the rule is chosen from the test's instant, so UTC midnight is crossed (or not) as the test says. */
+static void midnight(const char *scratch, long long at) {
+    static const char *const tzs[][2] = {{"UTC", ""}, {"EST", "EDT,M3.2.0,M11.1.0"}};
+    static const char *const cases[][2] = {{"%H:%M", "00:00"}, {"%H:%M", "23:59"}, {"%H", "12"}, {"%M", "30"}, {"%S", "15"},
+        {"%a", "Mon"}, {"%A", "Sunday"}, {"%a %H:%M", "Wed 10:00"}, {"%Y", "2030"}, {"%Y-%m", "2030-06"}, {"%d", "15"}, {"%b %d", "Jun 15"},
+        {"%y", "30"}, {"%Y-%m-%d", "2030-06-15"}, {"%H:%M %Z", "10:30 EST"}, {"%Y-%m-%d %H:%M %Z", "2024-07-15 10:30 UTC"}};
+    for (unsigned t = 0; t < sizeof tzs / sizeof *tzs; t++) {
+        time_t now = time(NULL);
+        long w = (long)((long long)now - at); /* the POSIX offset: west of UTC is positive */
+        long a = w < 0 ? -w : w;
+        char tz[96];
+        struct tm c;
+        snprintf(tz, sizeof tz, "%s%s%ld:%02ld:%02ld%s", tzs[t][0], w < 0 ? "-" : "", a / 3600, a / 60 % 60, a % 60, tzs[t][1]);
+        setenv("TZ", tz, 1);
+        tzset();
+        localtime_r(&now, &c);
+        printf("== clock %s%s at %04d-%02d-%02d hour %02d\n", tzs[t][0], tzs[t][1], c.tm_year + 1900, c.tm_mon + 1, c.tm_mday, c.tm_hour);
+        for (unsigned i = 0; i < sizeof cases / sizeof *cases; i++) gd(scratch, cases[i][0], cases[i][1]);
+    }
+}
+
 static void signed_y(void) {
     printf("== strptime %%y\n");
     static const char *const ins[] = {"5", "05", "-5", "+5", "-05", "+05", " 5", "-0", "+99", "-99", "99", "100", "-", "+", "--5", "-5x"};
@@ -215,6 +244,8 @@ int main(int argc, char **argv) {
     if (argc < 2) return 2;
     setvbuf(stdout, NULL, _IOLBF, 0);
     if (argc > 2 && strcmp(argv[2], "unset") == 0) { unset(); return 0; }
+    if (argc > 2 && argv[2][0] == '@') inst = atoll(argv[2] + 1);
+    if (argc > 2 && argv[2][0] == '=') { midnight(argv[1], atoll(argv[2] + 1)); return 0; }
     gaps();
     pre1970(argv[1]);
     getdates(argv[1]);
@@ -333,18 +364,51 @@ fn scratch(dir: &Path, name: &str) -> PathBuf {
     s
 }
 
-#[test]
-fn time_gaps_equal_the_reference() {
-    // Clauses: s23_5_c_2, s23_6_c_1, s23_7_c_2, s23_7_c_3 (record spec/behaviour/time-gaps.md).
-    let Some((host, ours, dir)) = programs() else { return };
+/// The real clock in epoch seconds, read once per test.
+fn instant() -> i64 {
+    i64::try_from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()).unwrap()
+}
+
+/// Runs both programs with `arg` (`@<instant>` or `=<instant>`) and returns (reference, Liella) output.
+fn run_both(host: &Path, ours: &Path, dir: &Path, arg: &str) -> (String, String) {
     let run = |exe: &Path| -> String {
-        let s = scratch(&dir, exe.file_name().unwrap().to_str().unwrap());
-        let o = Command::new("timeout").arg(timeout::secs(120)).arg(exe).arg(&s).env_clear().output().unwrap();
+        let s = scratch(dir, exe.file_name().unwrap().to_str().unwrap());
+        let o = Command::new("timeout").arg(timeout::secs(120)).arg(exe).arg(&s).arg(arg).env_clear().output().unwrap();
         let _ = std::fs::remove_dir_all(&s);
         assert!(o.status.success(), "{} failed: {:?}", exe.display(), o.status);
         String::from_utf8_lossy(&o.stdout).into_owned()
     };
-    let (want, got) = (run(&host), run(&ours));
+    (run(host), run(ours))
+}
+
+#[test]
+fn time_gaps_equal_the_reference() {
+    // Clauses: s23_5_c_2, s23_6_c_1, s23_7_c_2, s23_7_c_3 (record spec/behaviour/time-gaps.md).
+    // One instant, read once, gives both programs the same rule strings (#2012).
+    let Some((host, ours, dir)) = programs() else { return };
+    let (want, got) = run_both(&host, &ours, &dir, &format!("@{}", instant()));
+    check(&want, &got, true);
+}
+
+#[test]
+fn time_gaps_agree_across_utc_midnight() {
+    // Clauses: s23_7_c_3 (record spec/behaviour/time-gaps.md): the getdate dates follow a clock the test
+    // sets (#2012): both programs run with it reading 23:59:50 UTC, and 00:00:10 UTC, the nearest such
+    // instants to the real clock (within a day of it, so a rule string can carry the offset). The 10 s
+    // margin is the time the run may take; a program reading the real clock gives other dates and fails.
+    let Some((host, ours, dir)) = programs() else { return };
+    let now = instant();
+    let before = (now + 12 * 3600) / 86400 * 86400 - 10; // 23:59:50 of some day, within 12 h of now
+    let after = before + 20; // 00:00:10 of the next day
+    let (want_b, got_b) = run_both(&host, &ours, &dir, &format!("={before}"));
+    let (want_a, got_a) = run_both(&host, &ours, &dir, &format!("={after}"));
+    assert_ne!(want_b, want_a, "the reference ignores the test's clock: the two sides of midnight give one answer");
+    check(&want_b, &got_b, false);
+    check(&want_a, &got_a, false);
+}
+
+/// `full`: the run covers every section, so each recorded difference must still show.
+fn check(want: &str, got: &str, full: bool) {
     assert_eq!(want.lines().count(), got.lines().count(), "the outputs differ in length:\n{got}");
     let (mut bad, mut seen) = (Vec::new(), vec![false; KNOWN.len()]);
     for (w, g) in want.lines().zip(got.lines()) {
@@ -362,7 +426,7 @@ fn time_gaps_equal_the_reference() {
         }
     }
     for (i, k) in KNOWN.iter().enumerate() {
-        if k.2 && !seen[i] {
+        if full && k.2 && !seen[i] {
             bad.push(format!("recorded difference no longer seen: {}", k.3));
         }
     }

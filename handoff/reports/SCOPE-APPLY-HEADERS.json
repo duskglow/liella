@@ -1,0 +1,17 @@
+{"task": "SCOPE-APPLY-HEADERS", "model": "opus", "tokens": null,
+ "result": "Stopped for a ruling: Liella ships no C library headers (programs build against system headers), so COMPAT-ONLY header hiding and the tmpnam header warning have no target; no code changed",
+ "branch": "task/scope-apply-headers", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Where COMPAT-ONLY declarations and the tmpnam warning live while Liella has no C headers", "recommendation": "(a) defer the header part of R0/R1/R2/R4/R7/R8 to a future Liella C headers story; exports unchanged, no differences row or COMPAT id needed yet. Alternatives: (b) opt-in lint header with #pragma GCC poison + deprecated redeclarations; (c) .gnu.warning.<sym> link-time warnings after a black-box probe"},
+  {"item": "Flag name and kind if option (b) is chosen", "recommendation": "compile-time macro _LIELLA_COMPAT_LEGACY_DECLS, id COMPAT-13"}
+ ],
+ "informational": [
+  "docs/compat-flags.md uses COMPAT-11 twice; CLAUDE.md says a static check rejects duplicate ids but none exists in xtask/src",
+  "plan/scope-review-legacy.md cited by the brief is absent from origin/next f3b3584 and from liella-ops"
+ ],
+ "refused": [],
+ "improvement": "Brief writers should check that a change's target exists (here: Liella's own C headers) before cutting a story; a one-line find would have turned this into a ruling question without a run",
+ "next_step": "Owner rules on item 1; under (a) close as deferred, under (b)/(c) re-brief with the chosen mechanism",
+ "report_file": "handoff/scope-apply-headers.md",
+ "jobs": ["scope-apply-headers-gate"]}

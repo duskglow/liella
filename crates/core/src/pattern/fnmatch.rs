@@ -456,6 +456,7 @@ struct Matcher<'a> {
     flags: i32,
     mode: Mode,
     loc: &'a Locale,
+    work: &'a core::cell::Cell<u64>,
 }
 
 impl Matcher<'_> {
@@ -541,6 +542,7 @@ impl Matcher<'_> {
                 break;
             }
             let mut out = Bits::new(n)?;
+            self.work.set(self.work.get().saturating_add(u64::try_from(n + 1).unwrap_or(u64::MAX)));
             match it {
                 Item::Lit(x) => {
                     for p in 0..n {
@@ -611,6 +613,7 @@ impl Matcher<'_> {
 
     fn item(&self, it: &Item, from: &Bits) -> Result<Bits> {
         let n = self.n();
+        self.work.set(self.work.get().saturating_add(u64::try_from(n / 64 + 1).unwrap_or(u64::MAX)));
         let mut out = Bits::new(n)?;
         match it {
             Item::Lit(x) => {
@@ -697,13 +700,14 @@ pub struct Pattern {
     mode: Mode,
     raw: TryVec<u8>,
     compiled: core::cell::OnceCell<Compiled>,
+    work: core::cell::Cell<u64>,
 }
 
 impl Pattern {
     /// Compile `pattern` under `flags` in `loc`. An error only without memory, or for extended
     /// groups nested deeper than 64.
     pub fn new(pattern: &[u8], flags: i32, loc: &Locale) -> Result<Pattern> {
-        let p = Pattern { flags, mode: Mode::of(loc), raw: TryVec::from_slice(pattern)?, compiled: core::cell::OnceCell::new() };
+        let p = Pattern { flags, mode: Mode::of(loc), raw: TryVec::from_slice(pattern)?, compiled: core::cell::OnceCell::new(), work: core::cell::Cell::new(0) };
         // Extended groups nested too deeply are an error here, as they were when every
         // pattern was compiled at once; a plain pattern is compiled only when a match needs it.
         if flags & EXTMATCH != 0 {
@@ -730,6 +734,15 @@ impl Pattern {
         Ok(self.compiled.get_or_init(|| Compiled { multi, bytes }))
     }
 
+    /// The general matcher's work in this pattern's calls so far (WALLCLOCK-ASSERT-SWEEP): one unit per
+    /// 64 string positions per pattern item advanced forward (one bit-set pass), one per position per item
+    /// advanced backward (a byte loop). A count for tests
+    /// to bound complexity deterministically instead of by a clock; the direct fast paths do not count.
+    #[must_use]
+    pub fn work(&self) -> u64 {
+        self.work.get()
+    }
+
     /// Whether `string` matches (in `loc`, the locale the pattern was compiled in).
     pub fn matches(&self, string: &[u8], loc: &Locale) -> Result<bool> {
         if let Some(m) = direct(&self.raw, string, self.flags, loc) {
@@ -745,7 +758,7 @@ impl Pattern {
             },
             _ => (&c.bytes, as_bytes()?, Mode::Bytes),
         };
-        let mt = Matcher { s: &s.chars, flags: self.flags, mode: m, loc };
+        let mt = Matcher { s: &s.chars, flags: self.flags, mode: m, loc, work: &self.work };
         let n = s.chars.len();
         let mut start = Bits::new(n)?;
         start.set(0);
@@ -796,7 +809,7 @@ impl Pattern {
         let first_bytes = if text_items.is_some() { valid_to + 1 } else { 0 };
         if first_bytes <= len {
             let s = decode(Mode::Bytes, string, false)?.unwrap_or(Units { chars: TryVec::new(), offs: TryVec::new() });
-            let mt = Matcher { s: &s.chars, flags: self.flags, mode: Mode::Bytes, loc };
+            let mt = Matcher { s: &s.chars, flags: self.flags, mode: Mode::Bytes, loc, work: &self.work };
             let mut start = Bits::new(len)?;
             start.set(0);
             let end = mt.run(&c.bytes, start)?;
@@ -807,7 +820,7 @@ impl Pattern {
         if let Some(items) = text_items {
             let head = string.get(..valid_to).unwrap_or(&[]);
             if let Some(u) = decode(mode, head, true)? {
-                let mt = Matcher { s: &u.chars, flags: self.flags, mode, loc };
+                let mt = Matcher { s: &u.chars, flags: self.flags, mode, loc, work: &self.work };
                 let mut start = Bits::new(u.chars.len())?;
                 start.set(0);
                 let end = mt.run(items, start)?;
@@ -864,7 +877,7 @@ impl Pattern {
         }
         if text_from > 0 {
             let s = decode(Mode::Bytes, string, false)?.unwrap_or(Units { chars: TryVec::new(), offs: TryVec::new() });
-            let mt = Matcher { s: &s.chars, flags: self.flags, mode: Mode::Bytes, loc };
+            let mt = Matcher { s: &s.chars, flags: self.flags, mode: Mode::Bytes, loc, work: &self.work };
             let mut end = Bits::new(len)?;
             end.set(len);
             let Some(start) = mt.run_back(&c.bytes, end)? else { return Ok(None) };
@@ -875,7 +888,7 @@ impl Pattern {
         if let (Some(items), true) = (text_items, text_from <= len) {
             let tail = string.get(text_from..).unwrap_or(&[]);
             if let Some(u) = decode(mode, tail, true)? {
-                let mt = Matcher { s: &u.chars, flags: self.flags, mode, loc };
+                let mt = Matcher { s: &u.chars, flags: self.flags, mode, loc, work: &self.work };
                 let mut end = Bits::new(u.chars.len())?;
                 end.set(u.chars.len());
                 let Some(start) = mt.run_back(items, end)? else { return Ok(None) };
@@ -911,7 +924,8 @@ fn direct(p: &[u8], s: &[u8], flags: i32, loc: &Locale) -> Option<bool> {
     if flags & EXTMATCH != 0 || (mode.multibyte() && (!p.is_ascii() || !s.is_ascii())) {
         return None;
     }
-    let mt = Matcher { s: &[], flags, mode, loc };
+    let work = core::cell::Cell::new(0);
+    let mt = Matcher { s: &[], flags, mode, loc, work: &work };
     let n = s.len();
     let at = |i: usize| s.get(i).map(|&b| u32::from(b));
     let leading = |q: usize| q == 0 || (flags & PATHNAME != 0 && s.get(q - 1) == Some(&b'/'));

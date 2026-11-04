@@ -467,6 +467,7 @@ table above).
 | `parse_printf_format` for `%Li`/`%qi` | Reports `PA_INT` (the length modifier is not reflected). | D-12.8 | `s12_11_c_2` |
 | `fts_open` options with neither or both of `FTS_LOGICAL` and `FTS_PHYSICAL` | Accepted (neither: physical; both: logical), where fts(3) says one is required. | phase 12 | `s13_3_c_4` |
 | `tzset` after `TZDIR` changes with `TZ` unchanged | The explicit `tzset` re-reads `TZDIR`; the implicit one does not. | Neither reads it again (probe `tzdir_probe2.c`, liella-historic:handoff/tz-fresh.md on `fix/tz-fresh`). | owner-accepted 2026-10-09 (note: documents main's `tzset` only once `fix/tz-fresh` has landed) | `s23_6_g_0` |
+| `step`, `advance` (`<regexp.h>`, compat-only) | Return 0 (no match) for every argument and leave `loc1`, `loc2` and `locs` untouched; the exported objects are unchanged. No compatibility option: the interface is obsolete and a program that needs a matcher uses `regcomp`/`regexec` (D-29.3). | owner ruling R6, 2026-11-04 | `s29_4_c_0` |
 
 Also recorded as candidates in the decision rows: `getopt`'s letter fallback searching the raw
 option string (D-1.6), and `printf_size` never scaling negative values and dropping the sign of a
