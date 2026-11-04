@@ -14,3 +14,6 @@ superset: it also has the LOG-TABLES work this branch never had). Net diff again
 Not redone: no counts re-measured (no code changed vs next); comments still say "register 13.5 #n" (16.5 now), left for a
 docs follow-up.
 Open: register rows 2 and 5 still have no DONE note (counts pending in the originals).
+
+Jobs (keke, head 199688d9; later commit is handoff text only): integrate-register-math-2-lint (clippy -D warnings + static) rc 0; integrate-register-math-2-gate (affected --base origin/next) rc 0; integrate-register-math-2-plants2 rc 0: base ok, skip-near / no-record / rare-near plants all CAUGHT by the ignored sweep (run with --ignored, 3 chunks; the gate does not run it).
+Superseded: integrate-register-math-2-plants (forgot --ignored: the test did not run, all plants "survived").
