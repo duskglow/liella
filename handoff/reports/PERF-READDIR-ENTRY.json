@@ -1,0 +1,11 @@
+{"task": "PERF-READDIR-ENTRY", "model": "opus", "tokens": null,
+ "result": "readdir fast path asks lock_alone (one load) instead of alone; record-walk bounds tests added; counts, gate, plants started on keke, NOT VERIFIED",
+ "branch": "task/perf-readdir-entry", "head": "cdf9880a",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["branch stacks on task/perf-fswalk-phys, which is not in origin/next yet", "if perf-readdir-entry-percall is red the patch was not applied on r5 and the static/gate/plants jobs tested the old tree"],
+ "refused": [],
+ "improvement": "keke job slots were full (11 min queue before a 1-minute count could start); a story with a 45-call budget cannot wait out several queued jobs, so a pre-built baseline count per role, or a separate small-job slot for counts, would save the before-count round trip",
+ "next_step": "compare after/ vs before/ cbench logs on keke ~/work/perf-readdir-entry; use before/readdir64.dis to find the remaining per-entry instructions",
+ "report_file": "handoff/PERF-READDIR-ENTRY.md",
+ "jobs": ["perf-readdir-entry-percall", "PERF-READDIR-ENTRY-static", "perf-readdir-entry-gate", "perf-readdir-entry-plants"]}
