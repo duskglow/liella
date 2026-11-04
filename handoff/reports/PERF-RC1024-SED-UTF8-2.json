@@ -1,0 +1,12 @@
+{"task": "PERF-RC1024-SED-UTF8-2", "model": "opus", "tokens": null,
+ "result": "PARTIAL: ruled presence cache not built (a sed probe shows it can never hit: starts never repeat, each lies past the cached occurrence); code head fa513bd3 unchanged; gate and plants rerun on this head",
+ "branch": "task/perf-rc1024-sed-utf8-2", "head": null,
+ "gate": {"affected": "see job perf-rc1024-sed-utf8-2-gate", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "remaining sed-utf8 +0.40% vs fa678f74: the ruled 'present' cache cannot hit (sed makes 3 re_search calls per matching line, starts 0 / end of match 1 / end of match 2, two alternating buffers)", "recommendation": "accept +0.40%, or allow one run to try a short-window scalar pre-scan in conv::find_core m == 1, checked per call with bench --counters first"}],
+ "informational": ["plants2 of the previous run was queued and never started (no jobs.tsv row); it did not fail", "lines without the required byte make no regex call at all in sed (sed decides them itself)", "gawk-regex +1.10% and gawk-utf8 +0.72% vs fa678f74 still open, unchanged"],
+ "refused": [],
+ "jobs": ["perf-rc1024-sed-utf8-2-gate", "perf-rc1024-sed-utf8-2-plants"],
+ "improvement": "probe the caller's call pattern (an LD_PRELOAD logging shim, two calls) before ruling on a cache design: the -1 run's cache idea and its ruling cost a round trip for something that cannot hit",
+ "next_step": "owner/coordinator rules on the remaining +0.40%; if a scalar short-window path is allowed, measure it per call before counting sed-utf8/sed-s/grep rows",
+ "report_file": "handoff/perf-rc1024-sed-utf8.md"}
