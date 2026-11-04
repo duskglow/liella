@@ -23,3 +23,8 @@ See SECURITY-PRIVATE in the hand-back; docs/fuzzing.md only says "open".
 ## Checks
 gate (affected --run) rc 0, clippy -D warnings rc 0, cargo xtask static rc 0, plants 2/2 caught. Jobs on shiki:
 fuzz-timeouts-recheck-gate, fuzz-timeouts-recheck-plants (the -repro job fuzz-timeouts-recheck-repro ran on the head before the code change; superseded).
+
+## Run 2 (FUZZ-TIMEOUTS-RECHECK-2)
+Merged origin/next; the only conflict was docs/fuzzing.md (kept next's campaign summary, reworded its stale "not established"
+sentence to point at the re-check table, kept the table). `cargo xtask static`, direct-tier `affected --run` (job
+fuzz-timeouts-recheck-2-gate on shiki, rc 0) and clippy -D warnings are green. glob time-out is still open: needs its own fix story.
