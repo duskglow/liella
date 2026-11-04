@@ -1,71 +1,52 @@
-# HOTTEXT-ASM-ORDER (branch task/hottext-asm-order, role mei:~/w/s1)
+# HOTTEXT-ASM-ORDER (branch task/hottext-asm-order-2, role mei:~/w/s3)
 
-State: run 1 checkpointed at its budget (50 calls / 100k). Code commit 4cc83213 (WIP: per-function
-`.S` sections) on top of next db50ef41. The hot-text list is NOT regenerated or committed yet; no
-bound was touched.
+State: run 2 (HOTTEXT-ASM-ORDER-2) done; code head cb4fc2d6 on next db50ef41. Commits: 4cc83213 (per-function
+`.S` sections), bff0ac96 (mempcpy `.p2align 6`, D-4.33), cb4fc2d6 (regenerated hot-text list + grouping test).
+No bound touched.
 
-## What was done
+## What the story does
 
-- Cause (from PERF-READDIR-ENTRY run 3): xtask/src/hottext.rs renames function sections only. The
-  `.S` kernels in each object's plain `.text` could not be renamed, so they landed after the whole
-  hot group. On mei's built libc.a, 12 listed keys sat in plain `.text`: memcmp, strcpy (+ stpcpy,
-  _chk, strncpy, stpncpy families), memchr, index, strncmp. Also memcpy/memmove/memset (fold.S),
-  read/write/close (points.S) and tp/once/guard/barrier/rdtsc were never in a function section,
-  so regen dropped their traced names (it keeps only names that are function sections).
-- Fix: each function in a plain `.text` region of scan, fold, points, tp, guard, barrier, rdtsc,
-  once, trap, restorer, pkru, call, fpu and thread_start `.S` now opens `.text.<first label>`
-  (34 new sections). The split was made by a scratch script
-  (chisato ~/w/.scratch/HOTTEXT-ASM-ORDER/split.py), which splits only where the previous
-  instruction is an unconditional jmp/ret/ud2, no `.cfi` region is open, and no earlier symbol's
-  `.size` reaches past the split point. Kept together on purpose: rawmemchr/memchr/memrchr entry
-  gates (they fall through into the kernel), stpcpy+stpcpy_chk and memmove+move_mid (`.size`
-  spans), syscall_cancel+syscall_cancel4 (one CFI region). context, setjmp, mcount, entry and vdso
-  were left alone (cold, or already sectioned).
-- Checked: every new section of the assembled objects ends in a terminator (mei
-  ~/work/hottext-asm-order/verify.sh, objdump of our own objects): none reported.
-- tools/hottext/merge.py lets the new trace's order win, so after a regen the kernels take their
-  first-touch positions (keys `liella_machine_<fn>`; the tracer records every alias at an address).
+- xtask/src/hottext.rs renames function sections only, so `.S` kernels in plain `.text` landed after
+  the whole hot group and regen dropped their traced names. Run 1 gave each function in a plain `.text`
+  region of scan, fold, points, tp, guard, barrier, rdtsc, once, trap, restorer, pkru, call, fpu and
+  thread_start `.S` its own `.text.<first label>` (34 sections; split rules in run 1's notes: only after
+  jmp/ret/ud2, no open CFI region, no `.size` spanning the cut).
+- D-4.33 (run 1's regen build failed it): mempcpy/__mempcpy sat 64-aligned only by position inside
+  memmove's section; bff0ac96 gives its own section `.p2align 6`. Run 2 checked every exported
+  (globl, not hidden) label of every `.S` for an explicit `.p2align >= 6` before it (scratch script,
+  chisato ~/w/.scratch/HOTTEXT-ASM-ORDER-2/expalign.py): every exported entry has one; the only
+  others are hidden `liella_machine_*` internals and compat data symbols, not in dynsym. Both regen
+  builds (fast, full) and every count build print "all 2626 exported function entries ... 64-byte aligned".
+- cb4fc2d6: list regenerated on the split tree (startup/stdio/setlocale probes + the coreutils-shaped
+  `page_faults tool`), fast profile then LIELLA_FULL_PROFILE=1 (union): 503 -> 543 lines; kernels
+  now listed: strncmp, memchr_entry, strcpy family, compare, equal, memmove, memset, strchr, strcmp, ...
+  (liella_machine_read is not traced by any probe, so it is not listed). `init_cold_startup_functions_are_grouped`
+  now also names strncmp, memchr_entry, strcpy, compare, memmove, memset.
 
-## Jobs (mei)
+## Results (hot_text_products, 5 runs each, every run identical)
 
-- hottext-asm-order-static: rc 0 on 4cc83213 (workspace clippy --all-features -D warnings, xtask static).
-- hottext-asm-order-gate: started detached on 4cc83213 (direct tier --base origin/next, then the
-  boundary kernel tests by name: machine_scanners, small_copy, s04_strings_symbols, find_seq_scan).
-  Logs ~/work/hottext-asm-order/gate-*.log.
-- hottext-asm-order-faults-mei: started detached (~/work/hottext-asm-order/count.sh). Three trees in
-  /mnt/zram/claude/HOTTEXT-ASM-ORDER/count-1/{befr,aftr,regn}: befr = next's `.S` files, aftr =
-  split, regn = split + list regenerated (fast profile) with `page_faults tool`. hot_text_products
-  5 times each; per-run lines in its log (`before n:`, `split n:`, `regen n:`), regen list in
-  ~/work/hottext-asm-order/hot-text.list.regen, diff in list.diff. rc 0 only if the regen tree's
-  suite is green 5/5. Re-attach: `grep -P "^hottext-asm-order-faults-mei\t" ~/logs/jobs.tsv`, output
-  in ~/logs/hottext-asm-order-faults-mei.log (jobrun's log) and ~/work/hottext-asm-order/run-*.log.
+| host | tree | tool (bound 71) | locale (68) | startup (23) | strings |
+|---|---|---|---|---|---|
+| mei (Skylake-SP) | next (run 1) | 68 | 66 | 19 | 0 |
+| mei | split only (run 1) | 68 | 66 | 19 | 0 |
+| mei | head cb4fc2d6 list | 60 | 59 | 17 | 0 |
+| keke | head cb4fc2d6 | 60 | 59 | 17 | 0 |
 
-## Results so far (mei, Skylake-SP, 5 runs each, every run identical)
+keke "before" was not measured cleanly: hottext-asm-order-2-faults-keke built next's `.S` with the NEW list and
+test (61/59/17; the grouping and string-call tests fail there by design: the list needs the split), rc 1, SUPERSEDED.
 
-- before (next's .S): tool 68 / locale 66 / startup 19, strings 0 faults, suite 6/6 green.
-- split (4cc83213, old list): tool 68 / locale 66 / startup 19, strings 0, 6/6 green: the split
-  alone changes no count.
-- regen (fast profile, `pf_tool tool`): 407 keys traced, list 503 -> 530 keys
-  (~/work/hottext-asm-order/hot-text.list.regen). Its `cargo xtask so` FAILED the D-4.33 export
-  alignment check: mempcpy/__mempcpy (fold.S, `.p2align 4` in their new own section; inside
-  memmove's section they sat 64-aligned by position). Fixed in bff0ac96 (`.p2align 6`). Not yet
-  re-counted. Next run: also grep every new section that holds an exported entry for `.p2align`
-  < 6 (only these two were reported, but others can be aligned by luck in this layout).
-- faults-mei rc 1 (the regn build failure above): SUPERSEDED. hottext-asm-order-gate on 4cc83213:
-  stopped at hand-back (head moved; its sync blocked the bff0ac96 sync, sync_role rc 4): SUPERSEDED.
+## Jobs (final head cb4fc2d6)
 
-## Exact next step
+- mei hottext-asm-order-2-faults-mei: rc 0 (regen + 5 runs; the tree had the same list, the old test).
+- mei hottext-asm-order-2-plants: rc 0; baseline ok; strncmp / memchr_entry / memmove back in plain
+  `.text`: all CAUGHT with "<name>: not in the hot group".
+- mei hottext-asm-order-2-gate: the affected tool escalated itself to FULL (hot-text.list is a linker
+  input; .S files define exported symbols); clippy + xtask static passed in it before the tests; left
+  running detached for the dispatcher. Log ~/logs/hottext-asm-order-2-gate.log.
+- keke hottext-asm-order-2-faults-keke-2: head only, 5 runs, started at hand-back.
 
-0. Sync bff0ac96 to mei s1, rerun count.sh as hottext-asm-order-faults-mei-2 (new zram dir count-2).
+## Next step
 
-1. Read the faults-mei result. If regen 5/5 is green with margin on every bound: copy
-   hot-text.list.regen to crates/libc-so/hot-text.list, also run regen once with
-   LIELLA_FULL_PROFILE=1 (the list is the union of both profiles; regen.sh header), commit.
-2. Add the split kernels (liella_machine_strncmp, _memchr_entry, _strcpy, _compare, _read) to
-   `init_cold_startup_functions_are_grouped` (or a new test) so a kernel back in plain `.text` is
-   caught; plant: put `.text` back in front of strncmp in scan.S (anchored to its label), expect that test.
-3. Run count.sh on keke (`hottext-asm-order-faults-keke`, in /dev/shm/claude/HOTTEXT-ASM-ORDER/), the
-   gate and the plants on the final head; record before/after per test and host in the test's doc
-   comment and here. No bound may be raised.
-
-Open question: none yet; if a bound still fails after regen on either host, it is a RULING NEEDED.
+None for the code. If the FULL gate shows a failure, look at it in that log first (no reruns to pass).
+Bounds could be lowered (tool 71 -> ~62, locale 68 -> ~61, startup 23 -> ~19) in a separate story once CI
+reads the same counts; not done here (the brief asked only that none be raised).
