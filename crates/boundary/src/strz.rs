@@ -556,7 +556,7 @@ pub fn text_equals_words(addr: usize, len: usize, stored: &dyn Fn(usize) -> u64)
     // Checked indices are 0..=len (the text and its terminator); word `j` holds indices `8j - skew ..`.
     let mut j = 0usize;
     loop {
-        let first = (j * 8).wrapping_sub(skew);
+        let first = j.wrapping_mul(8).wrapping_sub(skew);
         // Word 0 starts before the text (`first` wraps): its low `skew` bytes are not the text's.
         let (lo, start) = if j == 0 { (skew, 0usize) } else { (0, first) };
         if start > len {
@@ -564,24 +564,24 @@ pub fn text_equals_words(addr: usize, len: usize, stored: &dyn Fn(usize) -> u64)
         }
         // The stored text's bytes `first..first + 8`, zero beyond its end (a word 0 is shifted up).
         let expect = if j == 0 {
-            word(0) << (skew * 8)
+            word(0).wrapping_shl(skew.wrapping_mul(8) as u32)
         } else {
-            let (k, sh) = (first / 8, (first % 8) * 8);
-            if sh == 0 { word(k) } else { (word(k) >> sh) | (word(k + 1) << (64 - sh)) }
+            let (k, sh) = (first / 8, (first % 8).wrapping_mul(8) as u32);
+            if sh == 0 { word(k) } else { word(k).wrapping_shr(sh) | word(k.wrapping_add(1)).wrapping_shl(64u32.wrapping_sub(sh)) }
         };
         // Bytes `lo..hi` of this word are checked: not before the text, not after the terminator.
-        let hi = (len - start + 1 + lo).min(8);
-        let mask = if hi >= 8 { u64::MAX } else { (1u64 << (hi * 8)) - 1 } & (u64::MAX << (lo * 8));
+        let hi = len.wrapping_sub(start).wrapping_add(1).wrapping_add(lo).min(8);
+        let mask = if hi >= 8 { u64::MAX } else { 1u64.wrapping_shl(hi.wrapping_mul(8) as u32).wrapping_sub(1) } & u64::MAX.wrapping_shl(lo.wrapping_mul(8) as u32);
         // UNSAFE(slice): one aligned word read; it holds a byte of the string (index at most
         // `len`, reached only if every earlier checked byte matched text without a NUL), and an
         // aligned word never crosses a page, so the read cannot fault.
         #[allow(unsafe_code)]
         // SAFETY: see above; the word is aligned and holds a byte of the live string.
-        let have = unsafe { core::ptr::with_exposed_provenance::<u64>(base.wrapping_add(j * 8)).read_volatile() };
+        let have = unsafe { core::ptr::with_exposed_provenance::<u64>(base.wrapping_add(j.wrapping_mul(8))).read_volatile() };
         if (have ^ expect) & mask != 0 {
             return None;
         }
-        j += 1;
+        j = j.wrapping_add(1);
     }
     // UNSAFE(slice): the `len` bytes just compared equal to the stored text, and the byte after
     // them was the terminator, so they are a live string's text.
