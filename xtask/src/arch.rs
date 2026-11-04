@@ -101,6 +101,32 @@ fn scan(root: &Path, t: &Tools) -> Result<Vec<Seam>, String> {
     Ok(seams)
 }
 
+/// The second architecture's target for `cargo xtask arch-check` (ARCH-RUST-CHECK, story A-2; plain armv8.0-a,
+/// no target-feature flags, until RL-1 is ruled). Listed in rust-toolchain.toml.
+pub const CROSS_TARGET: &str = "aarch64-unknown-linux-gnu";
+
+/// The check set, every target and feature: the crates that build without csys (no `liella-boundary` among their
+/// normal or dev dependencies; docs/arch-seams.md). A crate that gains that dependency fails the check at the
+/// boundary build script, which refuses a non-x86_64 target.
+pub const CHECK_ALL_TARGETS: &[&str] =
+    &["liella-kernel", "liella-mem", "liella-abi", "liella-legacy", "liella-ld", "liella-native", "liella-thread-db", "liella-mathtools", "spectest"];
+
+/// The check set, library only: these crates build without csys, but their tests take `liella-boundary` as a
+/// dev-dependency (csys), so only the library target is checked.
+pub const CHECK_LIB_ONLY: &[&str] = &["liella-rt", "liella-math", "liella"];
+
+/// `cargo xtask arch-check`: the cargo argument lists of the cross check, one `cargo check` each.
+pub fn cross_check_args() -> Vec<Vec<String>> {
+    let one = |scope: &[&str], crates: &[&str]| {
+        let mut a: Vec<String> = ["check", "--target", CROSS_TARGET].iter().chain(scope).map(|s| (*s).to_string()).collect();
+        for c in crates {
+            a.extend(["-p".to_string(), (*c).to_string()]);
+        }
+        a
+    };
+    vec![one(&["--all-targets", "--all-features"], CHECK_ALL_TARGETS), one(&["--lib", "--all-features"], CHECK_LIB_ONLY)]
+}
+
 /// `cargo xtask arch-audit`: fails on any untagged seam outside the allowed modules; `--list` prints all of them.
 pub fn audit(root: &Path, list: bool, t: &Tools) -> Result<(), String> {
     let seams = scan(root, t)?;

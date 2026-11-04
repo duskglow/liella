@@ -135,6 +135,10 @@ crashes before `main`, where nothing inside it can be debugged.
    an aarch64 `compile_error!` stub marks each item that is not ported. Proof: job
    `arch-rust-check-cross` (the cross `cargo check`, rc 0), plus `-gate` (x86_64 direct tier
    unchanged). Risk: medium (wide `cfg` churn). Before RL-1 is ruled, use plain armv8.0-a.
+   *Done (ARCH-RUST-CHECK, 2026-11-04):* `cargo xtask arch-check` over all twelve crates that build without csys
+   (the check set is in `xtask/src/arch.rs`; `rt`, `math`, `core` library only). No `cfg` churn was needed: their
+   seams are data, which compile but are not ported (docs/arch-seams.md). The not-ported stub is one guard in
+   `boundary/build.rs` (a build script runs before any item, so a `compile_error!` there would never be reached).
 4. **A-3 `ARCH-SYSCALLS`** (M, after A-0). Give `csys/syscalls.tsv` an arch column (or a second
    number column) taken from the kernel's `asm-generic/unistd.h` (kernel UAPI, which is allowed).
    `csys-gen` emits per-arch `liella_sysnr.h` and `ffi_sys.rs`. The calls missing on aarch64

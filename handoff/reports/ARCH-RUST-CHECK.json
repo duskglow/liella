@@ -1,0 +1,16 @@
+{"task": "ARCH-RUST-CHECK", "model": "opus", "tokens": null,
+ "result": "cargo xtask arch-check: aarch64 cargo check passes on all 12 crates that build without csys (no cfg churn needed); boundary build script refuses non-x86_64 targets; target added to rust-toolchain.toml",
+ "branch": "task/arch-rust-check", "head": "48564418",
+ "gate": {"affected": "running (escalated to FULL by the xtask change; label arch-rust-check-gate on keke)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "The check set compiles for aarch64 unchanged: its seams are data (abi layouts, MXCSR/x87 words in the Machine trait, arch_prctl items), compiled but not ported until A-3/A-5/A-9/A-10 (docs/arch-seams.md).",
+   "The not-ported stub is a guard in crates/boundary/build.rs rather than compile_error!: the build script runs before any item, and it previously compiled csys with the host cc for any target.",
+   "Any xtask change escalates the direct-tier gate to FULL (affected: 'xtask: its commands are part of the gate')."
+ ],
+ "refused": [],
+ "jobs": ["arch-rust-check-cross", "arch-rust-check-plants", "arch-rust-check-gate"],
+ "improvement": "The affected tool escalates every xtask edit to FULL; a new xtask subcommand that no other command calls could gate on xtask's own tests plus the touched crates.",
+ "next_step": "A-3 / A-5; extend CHECK_* in xtask/src/arch.rs as more crates become portable.",
+ "report_file": "handoff/arch-rust-check.md"}
