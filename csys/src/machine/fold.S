@@ -716,12 +716,14 @@ memcmp:
 	jne .Lcmp_big_head
 	cmpq $128, %rdx
 	jbe .Lcmp_big_blocks
+	cmpq $160, %rdx
+	jbe .Lcmp_160
+	cmpq $256, %rdx
+	jbe .Lcmp_256
 	movq %rsi, %r11
 	subq %rdi, %r11
 	leaq 32(%rdi), %r9
 	leaq -128(%rdi,%rdx), %r8
-	cmpq %r8, %r9
-	jae .Lcmp_long_last
 .Lcmp_long_loop:
 	vmovdqu (%r9,%r11), %ymm1
 	vmovdqu 32(%r9,%r11), %ymm2
@@ -778,6 +780,124 @@ memcmp:
 .Lcmp_long_at:
 	bsfq %rax, %rcx
 	addq %r9, %rcx
+	jmp .Lcmp_big_byte
+/* 129-256 (PERF-MEMCMP-256-AVX2; the 32-byte head is equal): the blocks at 32, 64 and 96 and the
+ * last four (n - 128 .. n - 32) cover [32, n) with no loop, ANDed into one test. A difference: the
+ * first block of the first three with a difference gives the byte (they cover [32, 128), and
+ * a last-four block can differ below 128 only in bytes the first three also hold), else the
+ * first of the last four; the byte is re-read and ordered at .Lcmp_big_byte. */
+/* 129-160: the blocks at 32, 64, n - 64 and n - 32 cover [32, n) (n - 64 <= 96). */
+.Lcmp_160:
+	vmovdqu 32(%rdi), %ymm1
+	vmovdqu 64(%rdi), %ymm2
+	vmovdqu -64(%rdi,%rdx), %ymm6
+	vmovdqu -32(%rdi,%rdx), %ymm7
+	vpcmpeqb 32(%rsi), %ymm1, %ymm1
+	vpcmpeqb 64(%rsi), %ymm2, %ymm2
+	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
+	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
+	vpand %ymm2, %ymm1, %ymm8
+	vpand %ymm7, %ymm6, %ymm10
+	vpand %ymm10, %ymm8, %ymm8
+	vpmovmskb %ymm8, %eax
+	incl %eax
+	jne .Lcmp_160_diff
+	vzeroupper
+	ret
+.Lcmp_160_diff:
+	vpmovmskb %ymm1, %ecx
+	incl %ecx
+	jne .Lcmp_256_a
+	vpmovmskb %ymm2, %ecx
+	incl %ecx
+	jne .Lcmp_256_b
+	vpmovmskb %ymm6, %ecx
+	incl %ecx
+	jne .Lcmp_256_f
+	vpmovmskb %ymm7, %ecx
+	incl %ecx
+	jmp .Lcmp_256_g
+.Lcmp_256:
+	vmovdqu 32(%rdi), %ymm1
+	vmovdqu 64(%rdi), %ymm2
+	vmovdqu 96(%rdi), %ymm3
+	vmovdqu -128(%rdi,%rdx), %ymm4
+	vmovdqu -96(%rdi,%rdx), %ymm5
+	vmovdqu -64(%rdi,%rdx), %ymm6
+	vmovdqu -32(%rdi,%rdx), %ymm7
+	vpcmpeqb 32(%rsi), %ymm1, %ymm1
+	vpcmpeqb 64(%rsi), %ymm2, %ymm2
+	vpcmpeqb 96(%rsi), %ymm3, %ymm3
+	vpcmpeqb -128(%rsi,%rdx), %ymm4, %ymm4
+	vpcmpeqb -96(%rsi,%rdx), %ymm5, %ymm5
+	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
+	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
+	vpand %ymm2, %ymm1, %ymm8
+	vpand %ymm4, %ymm3, %ymm9
+	vpand %ymm6, %ymm5, %ymm10
+	vpand %ymm9, %ymm8, %ymm8
+	vpand %ymm7, %ymm10, %ymm10
+	vpand %ymm10, %ymm8, %ymm8
+	vpmovmskb %ymm8, %eax
+	incl %eax
+	jne .Lcmp_256_diff
+	vzeroupper
+	ret
+.Lcmp_256_diff:
+	vpmovmskb %ymm1, %ecx
+	incl %ecx
+	jne .Lcmp_256_a
+	vpmovmskb %ymm2, %ecx
+	incl %ecx
+	jne .Lcmp_256_b
+	vpmovmskb %ymm3, %ecx
+	incl %ecx
+	jne .Lcmp_256_c
+	vpmovmskb %ymm4, %ecx
+	incl %ecx
+	jne .Lcmp_256_d
+	vpmovmskb %ymm5, %ecx
+	incl %ecx
+	jne .Lcmp_256_e
+	vpmovmskb %ymm6, %ecx
+	incl %ecx
+	jne .Lcmp_256_f
+	vpmovmskb %ymm7, %ecx
+	incl %ecx
+.Lcmp_256_g:
+	vzeroupper
+	bsfl %ecx, %ecx
+	leaq -32(%rdx,%rcx), %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_a:
+	vzeroupper
+	bsfl %ecx, %ecx
+	addq $32, %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_b:
+	vzeroupper
+	bsfl %ecx, %ecx
+	addq $64, %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_c:
+	vzeroupper
+	bsfl %ecx, %ecx
+	addq $96, %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_d:
+	vzeroupper
+	bsfl %ecx, %ecx
+	leaq -128(%rdx,%rcx), %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_e:
+	vzeroupper
+	bsfl %ecx, %ecx
+	leaq -96(%rdx,%rcx), %rcx
+	jmp .Lcmp_big_byte
+.Lcmp_256_f:
+	vzeroupper
+	bsfl %ecx, %ecx
+	leaq -64(%rdx,%rcx), %rcx
 	jmp .Lcmp_big_byte
 /* 65-128 without AVX2 (PERF-MEMCMP-NONAVX2; cmp_mid is 0 only then, so on an AVX2 build only sizes
  * above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit NULL tests, the two blocks at 0 and 16 as the early
