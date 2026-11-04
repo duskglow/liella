@@ -91,3 +91,22 @@ Row 8 status (PERF-FNMATCH-CLASS-3, 10-24, Haswell-EP host, 5 rounds, default le
 **Result (PERF-EXECVP-MISSING, Broadwell-EP host, 2026-10-23, job `perf-execvp-missing-ctr`, `cargo xtask bench --compare --counters --runs 5 cbench_opt`):** `execvp_missing` is 17427.6 instr/op against glibc 17268.9, ratio 1.009 (the 1.02/1.03 in the table above predates SMALL-OPEN-ROWS, which made the `Exec` closure generic). The gap is 159 instructions per call, about 53 per PATH directory (3 directories), under 1% of the call; the call is dominated by 3 failing execve syscalls in the kernel. The GUESS (per-entry path build) is not the cause: EXECVP-PATH-2 already builds each candidate in place with one element copy, and its ablation put the remainder at the execve wrapper plus errno decode. Nothing left to remove without making another row slower, so no code changed. Kept as is; parity within 1% is the bound reached by the user-space path, the rest is kernel work.
 
 Below the cut: `ngettext_found` (i 1.08 default and 1.00 SSE2: fold into N2-6), `strcmp_names` (i 1.10 default with cycles 1.27, but 0.96 with SSE2: re-measure under N2-4), `regexec_backref` and `regexec_class_nomatch_1k` (1.29 and 1.12 by cycles on 10-23; neither is among the cbench_opt rows above 1.05 here, and whatever bench carries them is re-measured by the follow-up), and the `fts`/`nftw` physical walks (10-23 t 1.08, du 82% kernel; not re-measured).
+
+### 14.1a Row 9 (N3-9 PERF-MEMSET-4K-SSE2-2) result, 10-24
+
+Paired `cargo xtask bench --compare --counters --runs 5 cbench_memref` on keke (AMD EPYC 7551, Zen 1, AVX2, no ERMS), in RAM copies of origin/next (before) and of head (after), job `keke:perf-memset-4k-sse2-2-counts` (rc 0, logs `keke:~/work/perf-memset-4k-sse2-2/{before,after}-{default,sse2}.log`). keke ran at load 40, so **instructions per op decide**; cycle ratios are noisy. The gap on the shiki run (#1899, Haswell, 64.7 vs 25.6, both levels) is the `rep stosb` path: shiki has ERMS and takes it at 4 KiB. keke has no ERMS, so on keke the default level runs the AVX2 fill and `-AVX2` runs the new SSE2 fill (before: the Rust byte loop).
+
+| Row (instr/op, Liella / glibc, ratio) | before | after |
+|---|---|---|
+| `memset_4k` default (AVX2 fill) | 276.2 / 246.0, 1.12 | 278.1 / 246.3, 1.13 (path not touched) |
+| `memset_4k` `-AVX2` (SSE2 fill) | 542.4 / 471.0, 1.15 | 407.3 / 471.0, **0.86** |
+| `memset_64k` `-AVX2` | 7272.8 / 7202.6, 1.01 | 5699.1 / 7203.5, **0.79** |
+| `memset_64k` default | 3649.7 / 3616.3, 1.01 | 3649.9 / 3617.7, 1.01 |
+| `memset_128`, `memset_256` both levels | 27.4/25.4, 30.4/32.4; 27.4/33.4, 39.4/39.4 vs 50.5 | unchanged |
+| `memset_4k_off` `-AVX2` | 13.3 / 13.3 | 13.6 / 13.3 (+0.3 instr, 2%) |
+
+Cycles `-AVX2` `memset_4k`: Liella 87.85 vs glibc 100.0 before (1.14), 87.85 vs 87.36 after (0.99); the default level's 85.7 to 102.5 spread is load noise (ratio 0.85 before, 1.03 after, same code).
+
+**Verdict.** The `-AVX2` row now beats glibc on instructions (0.86 at 4 KiB, 0.79 at 64 KiB) and matches it on cycles. The cause GUESS was close: the old SSE2 level had no vector fill at all (a Rust byte loop), so "not unrolled as far" was an understatement. **Not closed:** the default-level gap (i 1.12 to 1.13, cyc 0.85 to 1.03 noisy) belongs to the AVX2 fill, which this story did not change; the AVX2 fill spends 278 instr per 4 KiB where glibc spends 246 (about 32 more, likely loop overhead from a 128-byte step against a larger one). That is a follow-up (a wider unroll of `liella_machine_fill_avx2`), not done here for budget. Trade-off: `memset_4k_off` `-AVX2` +0.3 instr (2%, cycles within noise); no other measured row is slower. Shiki (ERMS) path is unchanged: `rep stosb` at both levels.
+
+Plants (job `mei:perf-memset-4k-sse2-2-plants`, RAM copy, 7 of 7 CAUGHT, no WARN): tail start (-128 to -112), alignment mask (-16 to -8), loop bound (end instead of last-step limit), dropped head store, `n <= SMALL_MAX` to `<`, ERMS threshold `>=` to `>`, SSE2 kernel not chosen. Direct-tier gate `mei:perf-memset-4k-sse2-2-gate` rc 0.
