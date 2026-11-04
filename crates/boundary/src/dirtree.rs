@@ -239,27 +239,44 @@ pub fn closedir(d: usize) -> KResult<()> {
     r
 }
 
-/// `readdir(d)`: the next record's address, `None` at the end.
-/// Forced inline into `readdir` and `readdir64`, with only the common case here: the only
-/// thread reading a buffered record needs no lock, no system call and no saved registers; the
-/// rest (locking, refills, errors) is [`readdir_slow`] (DU-3).
+/// `readdir(d)` as the exports return it: the next record's address, 0 at the end, or 0 with
+/// `errno` set on an error. Forced inline into `readdir` and `readdir64`, with only the common
+/// case here: the only thread reading a buffered record needs no lock, no system call, no
+/// stack frame and no saved registers; everything else (a bad handle, locking, refills, errors
+/// and `errno`) is one tail call to [`readdir_cold`] (DU-3).
 #[inline(always)]
-pub fn readdir(d: usize) -> KResult<Option<usize>> {
-    let slot = dir_slot(d)?;
+pub fn readdir_addr(d: usize) -> usize {
     // `lock_alone` (one relaxed load of a private byte, as the mutex fast paths ask it) implies
     // `alone`: it is set from `__libc_single_threaded` only once Liella owns the process and is
     // cleared for good by the first thread or shared task. When it is false the slow path asks
     // `alone` itself, so no case takes a lock it did not take before (PERF-READDIR-ENTRY).
-    if crate::thread::lock_alone() {
-        let st = tb::dir_state_at::<DirState>(slot.state.load(Relaxed));
-        if let Some(Ok(Some(a))) = st.stream.as_mut().map(DirStream::buffered_addr) {
-            return Ok(Some(a));
+    if let Ok(slot) = dir_slot(d) {
+        if crate::thread::lock_alone() {
+            let st = tb::dir_state_at::<DirState>(slot.state.load(Relaxed));
+            if let Some(Ok(Some(a))) = st.stream.as_mut().map(DirStream::buffered_addr) {
+                return a;
+            }
         }
     }
-    readdir_slow(slot)
+    readdir_cold(d)
 }
 
-/// [`readdir`] in full: under the lock (unless alone), refilling the buffer when needed.
+/// [`readdir_addr`] when the fast path does not apply: the handle checked again, then
+/// [`readdir_slow`], with the result turned into the export's form here so the caller keeps no
+/// frame (an error sets `errno`; the end of the directory leaves it alone).
+#[inline(never)]
+fn readdir_cold(d: usize) -> usize {
+    match dir_slot(d).and_then(readdir_slow) {
+        Ok(Some(a)) => a,
+        Ok(None) => 0,
+        Err(e) => {
+            crate::errno::set(e);
+            0
+        }
+    }
+}
+
+/// [`readdir_addr`] in full: under the lock (unless alone), refilling the buffer when needed.
 #[inline(never)]
 fn readdir_slow(slot: &DirSlot) -> KResult<Option<usize>> {
     let _g = lock_unless_alone(&slot.lock);
