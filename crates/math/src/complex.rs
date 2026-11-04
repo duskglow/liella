@@ -67,14 +67,14 @@ mod w {
 }
 
 /// The same evaluation in 1536 bits (the third step).
-#[allow(dead_code)]
+#[allow(dead_code, clippy::large_enum_variant)] // the parts hold values of this width inline (no allocation)
 mod wx {
     use crate::mpx as mp;
     include!("complex_body.rs");
 }
 
 /// The same evaluation in 3072 bits (the last step).
-#[allow(dead_code)]
+#[allow(dead_code, clippy::large_enum_variant)] // the parts hold values of this width inline (no allocation)
 mod wy {
     use crate::mpy as mp;
     include!("complex_body.rs");
