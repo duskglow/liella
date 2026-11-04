@@ -82,7 +82,12 @@ pub fn tm_bytes(t: &struct_tm) -> [u8; 56] {
 
 // ------------------------------------------------------------------------------ records (§17, D-17.3)
 
-use crate::layout::{struct_exit_status, struct_group, struct_passwd, struct_sgrp, struct_spwd, struct_utmp, struct_utmp__ut_tv};
+use crate::ctypes::c_char;
+use crate::layout::{struct_exit_status, struct_group, struct_passwd, struct_sgrp, struct_spwd, struct_utmp};
+#[cfg(target_arch = "aarch64")]
+use crate::layout::struct_timeval;
+#[cfg(not(target_arch = "aarch64"))]
+use crate::layout::struct_utmp__ut_tv;
 use liella::users::{Group, Gshadow, List, Passwd, Shadow, Utmp};
 
 /// Fills a caller's buffer with a record's strings and pointer arrays (the `_r` protocol): every
@@ -229,17 +234,69 @@ pub fn sgrp(g: &Gshadow<'_>, k: &mut Packer<'_>) -> Option<struct_sgrp> {
     Some(struct_sgrp { sg_namp: k.text(g.name)?, sg_passwd: k.text(g.passwd)?, sg_adm, sg_mem })
 }
 
-fn chars<const N: usize>(b: &[u8; N]) -> [i8; N] {
-    b.map(|c| i8::from_ne_bytes([c]))
+fn chars<const N: usize>(b: &[u8; N]) -> [c_char; N] {
+    b.map(|c| c_char::from_ne_bytes([c]))
 }
 
-fn bytes<const N: usize>(c: &[i8; N]) -> [u8; N] {
+fn bytes<const N: usize>(c: &[c_char; N]) -> [u8; N] {
     c.map(|v| v.to_ne_bytes()[0])
 }
 
-/// `struct utmp` (and `struct utmpx`, the same layout) for a record: the seconds are stored as
-/// unsigned 32-bit in the signed C member, so a C caller reads them as `uint32_t` after 2038
-/// (D-17.5).
+/// x86_64 `ut_tv`: two `int32_t`, the seconds stored as unsigned 32-bit (D-17.5).
+#[cfg(not(target_arch = "aarch64"))]
+fn tv_out(time: (i64, i32)) -> struct_utmp__ut_tv {
+    let (sec, usec) = liella::users::ut_tv(time);
+    struct_utmp__ut_tv { tv_sec: i32::from_ne_bytes(sec.to_ne_bytes()), tv_usec: usec }
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+fn tv_in(tv: &struct_utmp__ut_tv) -> (i64, i32) {
+    (liella::users::ut_sec(tv.tv_sec), tv.tv_usec)
+}
+
+/// x86_64 `ut_session`: `int32_t`, as the record holds it.
+#[cfg(not(target_arch = "aarch64"))]
+fn session_out(s: i32) -> i32 {
+    s
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+fn session_in(s: i32) -> i32 {
+    s
+}
+
+/// aarch64 `ut_tv`: a `struct timeval` (64-bit seconds and microseconds; layouts-aarch64.tsv).
+#[cfg(target_arch = "aarch64")]
+fn tv_out(time: (i64, i32)) -> struct_timeval {
+    struct_timeval { tv_sec: time.0, tv_usec: i64::from(time.1) }
+}
+
+/// Not ported (OD-10): `liella::users::Utmp` keeps the x86_64 record (32-bit `ut_session` and
+/// microseconds), so wider aarch64 values are clamped here (docs/arch-seams.md).
+#[cfg(target_arch = "aarch64")]
+fn tv_in(tv: &struct_timeval) -> (i64, i32) {
+    (tv.tv_sec, clamp32(tv.tv_usec))
+}
+
+/// aarch64 `ut_session`: `long`.
+#[cfg(target_arch = "aarch64")]
+fn session_out(s: i32) -> i64 {
+    i64::from(s)
+}
+
+#[cfg(target_arch = "aarch64")]
+fn session_in(s: i64) -> i32 {
+    clamp32(s)
+}
+
+#[cfg(target_arch = "aarch64")]
+fn clamp32(v: i64) -> i32 {
+    i32::try_from(v).unwrap_or(if v < 0 { i32::MIN } else { i32::MAX })
+}
+
+/// `struct utmp` (and `struct utmpx`, the same layout) for a record. On x86_64 the seconds are
+/// stored as unsigned 32-bit in the signed C member, so a C caller reads them as `uint32_t` after
+/// 2038 (D-17.5); aarch64's `ut_tv` is a 64-bit `struct timeval`.
 pub fn utmp(u: &Utmp) -> struct_utmp {
     struct_utmp {
         ut_type: u.kind,
@@ -249,11 +306,8 @@ pub fn utmp(u: &Utmp) -> struct_utmp {
         ut_user: chars(&u.user),
         ut_host: chars(&u.host),
         ut_exit: struct_exit_status { e_termination: u.exit[0], e_exit: u.exit[1] },
-        ut_session: u.session,
-        ut_tv: {
-            let (sec, usec) = liella::users::ut_tv(u.time);
-            struct_utmp__ut_tv { tv_sec: i32::from_ne_bytes(sec.to_ne_bytes()), tv_usec: usec }
-        },
+        ut_session: session_out(u.session),
+        ut_tv: tv_out(u.time),
         ut_addr_v6: u.addr,
         __glibc_reserved: [0; 20],
     }
@@ -270,8 +324,8 @@ pub fn utmp_in(c: &struct_utmp) -> Utmp {
         user: bytes(&c.ut_user),
         host: bytes(&c.ut_host),
         exit: [c.ut_exit.e_termination, c.ut_exit.e_exit],
-        session: c.ut_session,
-        time: (liella::users::ut_sec(c.ut_tv.tv_sec), c.ut_tv.tv_usec),
+        session: session_in(c.ut_session),
+        time: tv_in(&c.ut_tv),
         addr: c.ut_addr_v6,
     }
 }

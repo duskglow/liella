@@ -1,9 +1,14 @@
-//! C scalar types for x86_64 LP64 (System V ABI; spec Appendix C.1).
+//! C scalar types for x86_64 LP64 (System V ABI; spec Appendix C.1). `char` and `wchar_t` follow the target:
+//! on aarch64 both are unsigned (AAPCS64; probed against the arm64 reference, spec/abi/layouts-aarch64.tsv).
 
 #![allow(non_camel_case_types)]
 
 /// `char` (signed on x86_64).
+#[cfg(not(target_arch = "aarch64"))]
 pub type c_char = i8;
+/// `char` (unsigned on aarch64).
+#[cfg(target_arch = "aarch64")]
+pub type c_char = u8;
 /// `signed char`.
 pub type c_schar = i8;
 /// `unsigned char`.
@@ -32,8 +37,12 @@ pub type ssize_t = isize;
 pub type ptrdiff_t = isize;
 /// `off_t` (64-bit on x86_64, C0.4).
 pub type off_t = i64;
-/// `wchar_t` (UTF-32 code point, signed 32-bit).
+/// `wchar_t` (UTF-32 code point, signed 32-bit on x86_64).
+#[cfg(not(target_arch = "aarch64"))]
 pub type wchar_t = i32;
+/// `wchar_t` (UTF-32 code point, unsigned 32-bit on aarch64).
+#[cfg(target_arch = "aarch64")]
+pub type wchar_t = u32;
 /// `wint_t`.
 pub type wint_t = u32;
 /// `pid_t`.
