@@ -875,7 +875,7 @@ fn zone() -> Vec<dns_server::Record> {
         aaaa("both.test", "2001:db8::21".parse().unwrap()),
         cname("cname.test", "a.test"),
         a("multi.test", [192, 0, 2, 12]),
-        a("multi.test", [10, 1, 1, 1]),
+        a("multi.test", [11, 1, 1, 1]),
         a("multi.test", [130, 155, 161, 1]),
         a("x.s2.test", [192, 0, 2, 60]),
         a("ad.test", [192, 0, 2, 33]),
@@ -1014,7 +1014,7 @@ fn s16_4_c_1_4() {
     // matching pair's position, the unmatched last in their order.
     let c = RConf::parse(Some(b"sortlist 130.155.160.0/255.255.240.0 11.0.0.0 192.168.0.0/8\n"), None, None, b"h", |_| None).unwrap();
     assert_eq!(c.sort[0], ([130, 155, 160, 0], [255, 255, 240, 0]));
-    assert_eq!(c.sort[1], ([10, 0, 0, 0], [255, 0, 0, 0]), "the class mask by default");
+    assert_eq!(c.sort[1], ([11, 0, 0, 0], [255, 0, 0, 0]), "the class mask by default");
     assert_eq!(c.sort[2].1, [0, 0, 0, 8], "the mask as inet_aton reads it (observed)");
     let srv = dns_server::start(zone());
     let mut conf = rconf(srv.port);
@@ -1022,7 +1022,7 @@ fn s16_4_c_1_4() {
     let fx = Fx::new("sortlist");
     let r = Resolver { conf, aliases: None };
     let ctx = Ctx { dns: Some(&r), ..fx.ctx("hosts: dns\n") };
-    assert_eq!(host(netdb::host_lookup(&ctx, b"multi.test", Family::V4)), Ok("multi.test [] 130.155.161.1,10.1.1.1,192.0.2.12".into()));
+    assert_eq!(host(netdb::host_lookup(&ctx, b"multi.test", Family::V4)), Ok("multi.test [] 130.155.161.1,11.1.1.1,192.0.2.12".into()));
 }
 
 #[test]
