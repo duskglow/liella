@@ -12,6 +12,8 @@
 extern crate alloc;
 
 pub mod ctypes;
+// The generated definitions of the target's tables (`cargo xtask abi-gen`; A-5).
+#[cfg_attr(target_arch = "aarch64", path = "layout_aarch64.rs")]
 pub mod layout;
 pub mod layout_init;
 pub mod ret;

@@ -3,8 +3,14 @@
 
 #![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
+#[cfg(not(target_arch = "aarch64"))]
 const LAYOUTS: &str = include_str!("../../../../spec/abi/layouts.tsv");
+#[cfg(not(target_arch = "aarch64"))]
 const INITIALIZERS: &str = include_str!("../../../../spec/abi/initializers.tsv");
+#[cfg(target_arch = "aarch64")]
+const LAYOUTS: &str = include_str!("../../../../spec/abi/layouts-aarch64.tsv");
+#[cfg(target_arch = "aarch64")]
+const INITIALIZERS: &str = include_str!("../../../../spec/abi/initializers-aarch64.tsv");
 
 fn rows() -> impl Iterator<Item = Vec<&'static str>> {
     LAYOUTS.lines().skip(1).map(|l| l.split('\t').collect())

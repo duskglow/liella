@@ -1,0 +1,12 @@
+{"task": "ARCH-REF-PROBE-2", "model": "opus", "tokens": null,
+ "result": "PARTIAL: layouts-aarch64.tsv generated and abi-gen made per-arch; the aarch64 cross check fails in the hand-written crates/abi/src/pack.rs (utmp packing is x86_64-shaped)",
+ "branch": "task/arch-ref-probe-2", "head": null,
+ "gate": {"affected": "not run (checkpoint at budget)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["x86_64 layout.rs regenerates byte-identical; appendix_c_layouts.rs gains only #![cfg(target_arch = \"x86_64\")] and an arch word in its count line"],
+ "refused": [],
+ "jobs": [],
+ "improvement": "Role trees are not git repos: a doc line saying so, plus a sync_role --diff option, would have saved a wasted call",
+ "next_step": "Make pack.rs arch-neutral (c_char, utmp ut_tv/ut_session per arch), rerun gen.sh (arch-check, then the qemu layout tests), then the jobs",
+ "report_file": "handoff/arch-ref-probe.md"}

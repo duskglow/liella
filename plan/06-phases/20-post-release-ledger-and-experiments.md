@@ -165,6 +165,11 @@ crashes before `main`, where nothing inside it can be debugged.
    `cargo check --target aarch64...` accepts; jobs `arch-ref-probe-static`, `-cross`. Before
    RL-2 is ruled: the LLVM release tarball in `~claude` cross-compiles the probes (freestanding,
    no root).
+   *Partly done (ARCH-REF-PROBE, 2026-11-04):* (b) is done. `abi_extract.py --arch aarch64 --symbols-only` wrote
+   `versions-aarch64.tsv` (oldest node `GLIBC_2.17`) and `exports-diff-aarch64.tsv` (57 exports only on x86_64, 3 only on
+   aarch64; this is the list RL-8 needs). (a) is blocked: the arm64 reference has no kernel UAPI headers
+   (`bits/sigcontext.h` needs `asm/sigcontext.h`, from linux-libc-dev). The cross probe code is written and stops
+   until the headers are there. RL-3 needs extending to the arm64 linux-libc-dev; then run the probe and do abi-gen (handoff/arch-ref-probe.md).
 7. **A-6 `ARCH-CSYS-CROSS`** (M, after A-3 and A-5; HIGH). Write `csys/src/machine/aarch64/*.S`
    for the non-SIMD primitives: entry, signal restorer, setjmp/longjmp, context, thread start,
    `TPIDR_EL0` read/write, vDSO call (`__kernel_*` names per the kernel docs), vfork, call at an

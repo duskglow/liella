@@ -1,0 +1,37 @@
+{
+ "task": "ARCH-REF-PROBE-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "aarch64 cross check green: pack.rs/ctypes/printf_registry per target_arch, x86_64 unchanged; qemu layout tests blocked (no aarch64 libc crt on keke)",
+ "branch": "task/arch-ref-probe-3",
+ "head": "7f235823",
+ "gate": {
+  "affected": "arch-ref-probe-3-gate running at hand-back",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "aarch64 libc sysroot for qemu-user layout tests (Scrt1.o/crti.o missing on keke; root install of libc6-dev-arm64-cross or an unpacked arm64 libc6-dev into ~/ref/aarch64)",
+   "recommendation": "unpack the arm64 libc6-dev .deb into ~/ref/aarch64 as user (no root), as was done for linux-libc-dev"
+  },
+  {
+   "item": "aarch64 utmp record (400 bytes, 64-bit ut_session/ut_tv) not ported in liella::users; pack.rs clamps on the way in",
+   "recommendation": "new A-ledger story to widen Utmp and its file codec per arch"
+  }
+ ],
+ "informational": [
+  "cargo xtask stubs keeps an existing appendix_c_layouts.rs with #[test] unless --force (xtask/src/spec.rs:414)",
+  "superseded: arch-ref-probe-3-cross (rc 1, legacy wchar_t; fixed), arch-ref-probe-3-plants (rc 2, RAM copy lacked xtask so products; baseline invalid, not a code failure)"
+ ],
+ "refused": [],
+ "jobs": [
+  "arch-ref-probe-3-cross2",
+  "arch-ref-probe-3-static",
+  "arch-ref-probe-3-gate",
+  "arch-ref-probe-3-plants2"
+ ],
+ "improvement": "plants recipe should say tests needing products require `cargo xtask so` in the RAM copy first; cost one plants run here",
+ "next_step": "ruling on the aarch64 libc sysroot, then run appendix_c_layouts_aarch64 under qemu-aarch64",
+ "report_file": "handoff/arch-ref-probe.md"
+}
