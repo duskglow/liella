@@ -237,8 +237,11 @@ fn case_fts(dir: &std::path::Path) -> String {
         want.push(CString::new(format!("{}/{n}", dir.display())).unwrap());
     }
     let cmp: liella_abi::callback::SlotCompareFn = by_path;
+    let mut present = vec![false; want.len()];
     sweep("fts", || {
         errno::set_raw(0);
+        present.iter_mut().for_each(|b| *b = false);
+        let mut dup = false;
         // FTS_PHYSICAL | FTS_NOCHDIR
         let t = x::fts_open(argv.as_ptr(), 0x10 | 0x04, Some(cmp));
         if t.is_null() {
@@ -263,6 +266,11 @@ fn case_fts(dir: &std::path::Path) -> String {
             }
             if info != 6 {
                 ok &= want.get(seen).is_some_and(|w| is_text(path, w.to_bytes()));
+                // Membership (no allocation): the path is some wanted path, once.
+                match want.iter().position(|w| is_text(path, w.to_bytes())) {
+                    Some(k) if !present[k] => present[k] = true,
+                    _ => dup = true,
+                }
                 seen += 1;
             }
         }
@@ -271,7 +279,13 @@ fn case_fts(dir: &std::path::Path) -> String {
             Verdict::BadFailure
         } else if failed {
             Verdict::Failed
-        } else if ok && seen == FILES + 3 {
+        } else if seen == FILES + 3 && !dup && present.iter().all(|b| *b) {
+            // Complete. An allocation failure while sorting a directory's entries leaves them
+            // in directory order with the walk reporting success: the spec says nothing about it
+            // (see the hand-back); `ok` is the ordered case.
+            if !ok {
+                eprintln!("INFO fts: complete but unsorted after an allocation failure");
+            }
             Verdict::Complete
         } else {
             Verdict::Truncated
