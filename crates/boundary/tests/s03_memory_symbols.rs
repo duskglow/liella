@@ -879,3 +879,23 @@ fn kernel_pages_align_and_prefer_a_node() {
     pages.unmap(a, SEG);
     pages.unmap(b, 3 * PAGE);
 }
+
+/// no spec clause (Liella's in-place rule, REALLOC-FUSE): `realloc` returns the same pointer
+/// while the request fits the block's class and is more than half the class below it, and moves
+/// the block otherwise. The export tests this before its general path (PERF-REALLOC-USABLE-2).
+#[test]
+fn realloc_in_place_fit_rule() {
+    let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+    let p = s::malloc(17);
+    assert!(!p.is_null());
+    let q = s::realloc(p, 24);
+    assert_eq!(q, p, "17 -> 24 stays in the same class");
+    let r = s::realloc(q, 1000);
+    assert!(!r.is_null());
+    assert_ne!(r, q, "a request beyond the class moves the block");
+    let t = s::realloc(r, 2);
+    assert!(!t.is_null());
+    assert_ne!(t, r, "a request at most half the class below moves the block back down");
+    let u = s::realloc(t, 0);
+    assert!(u.is_null(), "size 0 frees and returns NULL");
+}
