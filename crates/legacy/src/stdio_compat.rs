@@ -1541,7 +1541,66 @@ fn write_raw<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) 
     if let Some(t) = write_direct(env, file, ext, data) {
         return t;
     }
+    if let Some(t) = write_straddle(env, file, ext, data) {
+        return t;
+    }
     run(env, file, ext, |s, b, back| s.write(b, back, data)).unwrap_or_else(|e| Transfer { done: 0, error: Some(e) })
+}
+
+/// The output straddle path (FWRITE-STRADDLE): a fully buffered, byte-oriented descriptor stream
+/// that is writing, given a block smaller than its buffer that does not fit the room left, fills the
+/// buffer with the head, writes the whole buffer, and keeps the tail at the front: the same
+/// `write` calls, results, state and `FILE` words as [`State::write`]'s head copy, drain and tail
+/// copy, without [`run`]'s set-up ([`load`], [`store`]) and the engine's loop. Only the write
+/// pointer and end change on success (the read words, base words and indicators are what the last
+/// [`store`] of a writing stream published). An error (or a zero write) is the engine's: the
+/// head is counted, the rest dropped, the stream idle with its error indicator set. `None`: it does
+/// not apply, nothing changed.
+#[inline(never)]
+fn write_straddle<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) -> Option<Transfer> {
+    let Kind::Fd(fd) = ext.kind else { return None };
+    let (len, s) = (ext.buf_len, &ext.state);
+    if ext.buf == 0 || s.role != Role::Writing || s.policy != Policy::Full || s.wend != len || data.len() >= len.saturating_sub(RESERVE) || low_int(get(file, word::MODE)) >= 0 {
+        return None;
+    }
+    let at = get(file, word::WRITE_PTR).wrapping_sub(ext.buf);
+    if at < RESERVE || at > len {
+        return None;
+    }
+    let head = len - at;
+    if head >= data.len() {
+        return None;
+    }
+    let buf = env.bytes(ext.buf, len);
+    let (Some(hd), Some(src)) = (buf.get_mut(at..len), data.get(..head)) else { return None };
+    liella::mem::copy(hd, src);
+    ext.pos_known = false;
+    let mut from = RESERVE;
+    while from < len {
+        let e = match buf.get(from..len).map(|r| env.sys().write(fd_of(fd), r)) {
+            Some(Ok(n)) if n > 0 => {
+                from += n;
+                continue;
+            }
+            Some(Ok(_)) => Errno::EIO,
+            Some(Err(e)) => e,
+            None => Errno::EINVAL,
+        };
+        load(file, ext);
+        let s = &mut ext.state;
+        (s.role, s.rpos, s.rend, s.wpos, s.wend, s.win_known, s.err) = (Role::Idle, RESERVE, RESERVE, RESERVE, RESERVE, false, true);
+        store(file, ext);
+        return Some(Transfer { done: head, error: Some(e) });
+    }
+    let tail = data.len() - head;
+    if let (Some(dst), Some(src)) = (buf.get_mut(RESERVE..RESERVE + tail), data.get(head..)) {
+        liella::mem::copy(dst, src);
+    }
+    let s = &mut ext.state;
+    (s.rpos, s.rend, s.wpos, s.wend, s.win_known) = (RESERVE, RESERVE, RESERVE + tail, len, false);
+    set(file, word::WRITE_PTR, ext.buf + RESERVE + tail);
+    set(file, word::WRITE_END, ext.buf + len);
+    Some(Transfer { done: data.len(), error: None })
 }
 
 /// The output direct path (FPUTS-NBF): an unbuffered stream, or a line-buffered one given a text
