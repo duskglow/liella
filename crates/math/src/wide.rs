@@ -300,13 +300,13 @@ pub fn log10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         Ok(n) => n,
         Err(r) => return r,
     };
+    // x = 10^k = 5^k·2^k exactly iff its odd part is 5^e and its power of two is e (5^55 is
+    // the largest power of 5 below 2^128; no wider odd part exists): one comparison, no scan.
     let (odd, e) = odd_part(&n);
-    let mut five = 1u128;
-    for k in 0..=55i64 {
-        if odd == five && e == k {
-            return exact(Mp::from_i64(k), mode);
+    if let Some(five) = u32::try_from(e).ok().filter(|&k| k <= 55).and_then(|k| 5u128.checked_pow(k)) {
+        if odd == five {
+            return exact(Mp::from_i64(e), mode);
         }
-        five = five.saturating_mul(5);
     }
     if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log10, &n, mode) {
         return r;
