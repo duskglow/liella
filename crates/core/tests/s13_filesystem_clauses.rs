@@ -319,6 +319,15 @@ mod p12 {
         u64::from_ne_bytes(b[at..at + 8].try_into().unwrap())
     }
 
+    static CWD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Held by a test that changes the working directory of this process (fts in chdir mode
+    /// changes it between `fts_open` and `fts_close`) and by a test that reads it: the working
+    /// directory is shared by every thread.
+    pub(crate) fn cwd_lock() -> std::sync::MutexGuard<'static, ()> {
+        CWD.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// The working directory as the kernel names it.
     pub(crate) fn kernel_cwd() -> Vec<u8> {
         let mut b = vec![0u8; 65536];
@@ -1705,6 +1714,7 @@ fn s13_3_c_4() {
     assert_eq!(instr_of(r.addr()), 3, "fts_read used the instruction up: FTS_NOINSTR in the entry again");
     x::fts_close(f);
     // FTS_LOGICAL: t/a/s_up repeats t.
+    let _cwd = cwd_lock();
     let args = [d.c("t")];
     let av = argv(&args);
     let f = x::fts_open(av.as_ptr(), 2, Some(by_name));
@@ -1831,6 +1841,7 @@ fn s13_3_c_4_deep_paths() {
     let args = [CString::new(format!("{}/top/", d.path.display())).unwrap()];
     let av = argv(&args);
     for opts in [16 | 4, 16] {
+        let _cwd = cwd_lock();
         let nochdir = opts & 4 != 0;
         let f = x::fts_open(av.as_ptr(), opts, Some(by_name));
         assert!(!f.is_null());
@@ -1992,6 +2003,7 @@ fn s13_3_i_0() {
         assert_eq!(kernel_cwd(), dir.as_os_str().as_encoded_bytes());
     });
     for opts in [16, 16 | 4, 2, 2 | 4] {
+        let _cwd = cwd_lock();
         let args = [deep.clone()];
         let av = argv(&args);
         let f = x::fts_open(av.as_ptr(), opts, None);
@@ -2332,7 +2344,10 @@ fn s13_8_c_0() {
     for root in ["/", "//", "///", "/..", "/../..", "//."] {
         assert_eq!(rp(&CString::new(root).unwrap()), Ok(b"/".to_vec()), "{root}");
     }
-    assert_eq!(rp(&CString::new(".").unwrap()), Ok(kernel_cwd()), "relative to the working directory");
+    {
+        let _cwd = cwd_lock();
+        assert_eq!(rp(&CString::new(".").unwrap()), Ok(kernel_cwd()), "relative to the working directory");
+    }
     let r = rp(&d.c("rp/l_dots")).unwrap();
     let mut prefix = std::path::PathBuf::from("/");
     for c in std::path::Path::new(&String::from_utf8(r.clone()).unwrap()).components().skip(1) {
