@@ -93,6 +93,52 @@ fn builds() -> Vec<bool> {
 
 const N: usize = 100_000;
 
+/// Operands whose result lies next to a midpoint between two `double`s: for tiny `x`,
+/// `atan x = x − x^3/3 + ...` and `asin x = x + x^3/6 + ...`, so where `x^3/div` is `k + 1/2`
+/// ulps of `x` the result sits within the next term (about `2^-52` ulp) of a midpoint. Around
+/// each such crossing (exponents -27..=-24) the 129 nearest `double`s: the crossing moves by
+/// `2^-52`..`2^-48` ulp per `double`, so the nearest ones lie within the kernel's own rounding
+/// error of the midpoint, where only the rounding test's margin decides.
+fn near_midpoints(div: f64) -> Vec<f64> {
+    let mut v = Vec::new();
+    for e in -27..=-24i32 {
+        let ulp = 2f64.powi(e - 52);
+        for k in 0..64u32 {
+            let x0 = (div * (f64::from(k) + 0.5) * ulp).cbrt();
+            if ((x0.to_bits() >> 52) as i64) - 1023 == i64::from(e) {
+                v.extend((0..129u64).map(|d| f64::from_bits(x0.to_bits() - 64 + d)));
+            }
+        }
+    }
+    v
+}
+
+fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// Primitive Pythagorean triples `(a, b, c)` with `c` odd just below `2^53` and both legs above
+/// `2^52`: `a^2 + b^2` takes 106 bits, so the kernel's double-double sum can be off by one unit
+/// and the root's low word is then a tiny nonzero value instead of 0. Only the exact-root check's
+/// floor keeps such a root (exact, so it must not raise inexact) from being answered.
+fn big_triples() -> Vec<(f64, f64, f64)> {
+    let mut v = Vec::new();
+    for r in [2.0f64, 2.2, 2.414, 2.7] {
+        let n0 = (2f64.powf(52.95) / (r * r + 1.0)).sqrt() as u64;
+        for n in n0 - 300..n0 {
+            let mut m = (n as f64 * r) as u64;
+            if (m - n).is_multiple_of(2) {
+                m += 1;
+            }
+            let c = m * m + n * n;
+            if gcd(m, n) == 1 && c < 1 << 53 {
+                v.push(((m * m - n * n) as f64, (2 * m * n) as f64, c as f64));
+            }
+        }
+    }
+    v
+}
+
 #[test]
 fn double_invtrig_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
     // Clauses: s10_3_c_0 (D-10.13).
@@ -116,6 +162,11 @@ fn double_invtrig_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
             hard.extend((0..=64).map(|j| f64::from(j) / 64.0));
             for d in 0..2000u64 {
                 hard.extend([0x3e50_0000_0000_0000 + d, 0x3e4f_ffff_ffff_ffff - d, 0x3fef_ffff_ffff_ffff - d, 0x43af_ffff_ffff_ffff - d].map(f64::from_bits));
+            }
+            match f {
+                "atan" => hard.extend(near_midpoints(3.0)),
+                "asin" => hard.extend(near_midpoints(6.0)),
+                _ => {}
             }
             for &x in &hard {
                 check1(f, k, x);
@@ -167,6 +218,12 @@ fn double_atan2_hypot_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
         }
         for (a, b) in [(3.0, 4.0), (5.0, 12.0), (3.0 * 2f64.powi(-300), 4.0 * 2f64.powi(-300))] {
             assert_eq!(invtrig::hypot_nearest(a, b, f64::sqrt), None, "hypot({a:e}, {b:e}): an exact root must go to the accurate path (exact-root check FAILED)");
+        }
+        let triples = big_triples();
+        assert!(triples.len() > 400, "only {} triples", triples.len());
+        for (a, b, c) in triples {
+            assert_eq!(invtrig::hypot_nearest(a, b, f64::sqrt), None, "hypot({a:e}, {b:e}) = {c:e} exactly: an exact root must go to the accurate path (exact-root check FAILED)");
+            assert_eq!(m::hypot(a, b).to_bits(), c.to_bits(), "hypot({a:e}, {b:e}) by the entry (fma {fma}), exact root {c:e}: entry FAILED");
         }
         assert!(invtrig::hypot_nearest(1.0, f64::from_bits(0x3e10_0000_0000_0000), f64::sqrt).is_some(), "hypot(1, 2^-30) refused");
     }
