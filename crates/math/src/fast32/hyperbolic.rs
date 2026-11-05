@@ -172,3 +172,19 @@ pub(super) fn atanh_core(x: f32) -> Option<f64> {
     let y = 0.5 * log1p64((a + a) / (1.0 - a));
     Some(if x < 0.0 { -y } else { y })
 }
+
+/// [`asinh_nearest`] with the square root `sqrt` (LIBM-F32-HYPERBOLIC-4): the boundary passes
+/// `sqrtsd` (this crate forbids `unsafe` and so cannot issue it; the tests pass `f64::sqrt`).
+/// `sqrt` must be correctly rounded to nearest (or at least meet [`sqrt64`]'s 2u bound) and
+/// raise at most inexact on a normal positive operand; the result and flags are then those of
+/// [`asinh_nearest`] wherever both answer (both are the correctly rounded result, inexact).
+#[inline(always)]
+pub fn asinh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(asinh_core_with(x, sqrt)?, ASINH_DELTA, Rounding::Nearest)
+}
+
+/// [`asinh_nearest_sqrt`] for acosh.
+#[inline(always)]
+pub fn acosh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(acosh_core_with(x, sqrt)?, ACOSH_DELTA, Rounding::Nearest)
+}

@@ -36,6 +36,7 @@ use hyperbolic::*;
 use inv_trig::*;
 use trig::*;
 pub use exp_log::{eval_pow, pow};
+pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
 pub use inv_trig::{atan2, eval_atan2};
 pub use trig::sincos;
 
@@ -446,22 +447,6 @@ nearest_fn!(tanh_nearest, Fast::Tanh);
 nearest_fn!(asinh_nearest, Fast::Asinh);
 nearest_fn!(acosh_nearest, Fast::Acosh);
 nearest_fn!(atanh_nearest, Fast::Atanh);
-
-/// [`asinh_nearest`] with the square root `sqrt` (LIBM-F32-HYPERBOLIC-4): the boundary passes
-/// `sqrtsd` (this crate forbids `unsafe` and so cannot issue it; the tests pass `f64::sqrt`).
-/// `sqrt` must be correctly rounded to nearest (or at least meet [`sqrt64`]'s 2u bound) and
-/// raise at most inexact on a normal positive operand; the result and flags are then those of
-/// [`asinh_nearest`] wherever both answer (both are the correctly rounded result, inexact).
-#[inline(always)]
-pub fn asinh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
-    round(asinh_core_with(x, sqrt)?, ASINH_DELTA, Rounding::Nearest)
-}
-
-/// [`asinh_nearest_sqrt`] for acosh.
-#[inline(always)]
-pub fn acosh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
-    round(acosh_core_with(x, sqrt)?, ACOSH_DELTA, Rounding::Nearest)
-}
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
