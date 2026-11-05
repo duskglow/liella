@@ -23,8 +23,9 @@ FMA). Report: handoff/reports/LIBM-SPECIAL-FAST-TIER-6.json. Accuracy contract u
 * Plants `libm-special-fast-tier-6-plants` (cargo xtask plants, handoff/libm-special-fast-tier-6-plants.txt,
   /dev/shm/claude/libm-special-fast-tier-6/plants-1): 9 CAUGHT, 0 SURVIVED, 0 WARN. Runs 3-5's 7 kernel plants, plus
   `hot-erfc-fused` and `hot-erf-baseline` on hot/erf.rs (both builds of the wrappers at their new site).
-* Gate `libm-special-fast-tier-6-gate`: `cargo xtask affected --run`, Direct tier (15 changed files): see the report
-  json for the result line.
+* Gate `libm-special-fast-tier-6-gate`: `cargo xtask affected --run`, Direct tier (15 changed files): rc 0, 39 min,
+  10 suites ok, 3474 passed / 0 failed / 1072 ignored, conformance 17/0, 2 SKIPPED lines (absent tools), peak 12G
+  (page cache included), oom_kill 0.
 
 ## Counts (instr/call, validation/percall/libm_erf.c; label libm-special-fast-tier-6-counts)
 Base = origin/next c7c320a2 (primed with validation/wl_prime_base.sh). Sorted as printed.
