@@ -12,7 +12,24 @@
 pub(crate) mod example_exp;
 pub(crate) mod example_sin;
 pub(crate) mod fast32_atan;
-pub(crate) mod tables;
+
+// The constant tables (D-10.3): one `@generated` file per family, written by `cargo xtask
+// tables` from `crates/mathtools/src/tables.rs` (never edited by hand; `cargo xtask static`
+// fails on a stale one). Callers use them all through `coeffs::tables`.
+mod erf;
+mod exp_log;
+mod mp_const;
+mod series;
+mod trig;
+
+/// Every generated table, under the one path the kernels use (`use crate::coeffs::tables as t`).
+pub(crate) mod tables {
+    pub(crate) use super::erf::*;
+    pub(crate) use super::exp_log::*;
+    pub(crate) use super::mp_const::*;
+    pub(crate) use super::series::*;
+    pub(crate) use super::trig::*;
+}
 
 #[cfg(test)]
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::float_cmp)]
