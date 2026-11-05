@@ -1,0 +1,11 @@
+{"task": "PERF-LIBM-HYPERBOLIC", "model": "sonnet", "tokens": null,
+ "result": "WIP: fast nearest entries for the six hyperbolics (f64, f32) cut instructions ~1500 -> 260-400 per call; 1.05x target not met; gate, plants and accuracy sweep not run",
+ "branch": "task/perf-libm-hyperbolic", "head": "08b22a46",
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "resume (+50%): FMA-dispatched fast_hyper copy, cheaper recip/div/sqrt, gate, plants, saturation row", "recommendation": "resume; the structure is sound and bit-identical to the accurate path on the samples"}],
+ "informational": ["counts on keke: sinh 273.7 vs 144.8 glibc, cosh 261.6 vs 84.5, tanh 257.5 vs 131.7, asinh 378.3 vs 99.4, acosh 371.3 vs 83.6 (f32 rows similar)", "no-row-slower for the rest of cbench_libm not verified"],
+ "refused": [],
+ "improvement": "the brief and rules file were each ~15k tokens and I read the rules twice by accident: a one-page rules digest would save a run's first 30k tokens",
+ "next_step": "profile the 260-400 instructions, add the FMA copy, then gate, plants, accuracy sweep, saturation row",
+ "report_file": "handoff/perf-libm-hyperbolic.md",
+ "jobs": ["perf-libm-hyperbolic-counts"]}
