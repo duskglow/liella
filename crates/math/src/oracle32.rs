@@ -14,6 +14,11 @@
 //! use `U`, a per-operation relative bound for the double-double operations (`dd`'s add, mul,
 //! div and sqrt are near 2^-104; `U` keeps a factor 16 of slack), and `UE` for `exp_dd`.
 
+// Test-only: float bit steps of normal values (never at 0 or the top), series indices below 2^17
+// and counters below 2^40; `as f64` of those indices is exact. The negated comparisons are the
+// NaN-rejecting form (`!(a > 0.0)` is true for NaN).
+#![allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing, clippy::neg_cmp_op_on_partial_ord)]
+
 use crate::dd::{self, Dd};
 use crate::status::{Flags, Rounding, Status};
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -197,7 +202,7 @@ fn erfc_fraction(a: f64) -> (Dd, f64) {
     let (k0, gap) = loop {
         let (k0, k1) = (conv(n), conv(n + 1));
         let gap = k0.sub(k1).hi.abs();
-        if gap <= k0.hi * 1.262_177_448_353_618_9e-29 || n > 1 << 16 {
+        if gap <= k0.hi * f64::from_bits(0x39f0_0000_0000_0000) || n > 1 << 16 {
             break (k0, gap); // 2^-96
         }
         n *= 2;
