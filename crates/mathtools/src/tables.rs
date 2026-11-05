@@ -343,6 +343,8 @@ fn mp_constants(o: &mut Out) {
     o.mp_const("MP_PI", "`π` (mp::pi)", &pi);
     o.mp_const("MP_LN2", "`ln 2` (mp::ln2)", &mp::ln2(p));
     o.mp_const("MP_EULER", "Euler's constant `γ` (Brent–McMillan, `euler_gamma`)", &gamma);
+    o.mp_const("MP_LN10", "`ln 10` (mp::ln10)", &approx(mp::log(&Big::from_i64(10), p)));
+    o.mp_const("MP_LN_PI", "`ln π` (the reflection of `lgamma`)", &approx(mp::log(&pi, p)));
     let ln_2pi = approx(mp::log(&pi.mul_pow2(1), p));
     o.mp_const("MP_HALF_LN_2PI", "`ln(2π)/2`", &ln_2pi.mul_pow2(-1));
     let sqrt_pi = pi.sqrt(p, Round::Nearest);
