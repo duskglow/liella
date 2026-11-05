@@ -382,3 +382,34 @@ fn strstr_large_haystacks_find_every_position_in_the_wide_groups() {
     selftest::set_scan_avx2(false);
     liella_boundary::cpu::init();
 }
+
+#[test]
+fn strstr_filter_switch_keeps_every_candidate() {
+    // Clauses: s4_6_c_0 (D-4.28). STRSTR-ADAPTIVE-FILTER-EXP: a haystack whose start holds no
+    // last needle byte runs the one-stream filter; a lone last byte ("decoy") is a one-stream stop
+    // that is no candidate. One decoy at `d`, then the match at every offset after it, so the match
+    // lies in the group of a sparse stop (d far from the start), of a dense switch (d near the start,
+    // or the match within 1024 bytes of the decoy), and past either.
+    let _g = level();
+    set_ctype(b"C\0");
+    let nd = b"needle";
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for d in [40usize, 300, 1100, 1500] {
+            for gap in (1..1300usize).step_by(5).chain([1023, 1024, 1025, 1150]) {
+                for align in [0usize, 1, 33] {
+                    let n = align + d + gap + nd.len() + 200;
+                    let mut h = vec![b'a'; n + 1];
+                    h[n] = 0;
+                    h[align + d] = b'e';
+                    let at = align + d + gap;
+                    h[at..at + nd.len()].copy_from_slice(nd);
+                    let r = s::strstr(h[align..].as_ptr().cast(), c"needle".as_ptr());
+                    assert_eq!(r as usize, h.as_ptr() as usize + at, "avx2={avx2} d={d} gap={gap} align={align}");
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
