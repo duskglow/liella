@@ -354,23 +354,23 @@ struct Frame {
     skip: bool,
 }
 
-/// Status of `name` in `dir`: the entry's kind and status as the walk reports it, or `None`
-/// (skip silently) or an error that ends the walk.
-fn examine<S: Sys>(sys: &S, dir: Fd, name: KStr<'_>, physical: bool) -> Result<(Kind, Option<Stat>)> {
+/// Status of `name` in `dir`, stored in `st`: the entry's kind as the walk reports it and whether
+/// `st` now holds its status, or an error that ends the walk (`NoStat` entries are skipped silently).
+fn examine<S: Sys>(sys: &S, dir: Fd, name: KStr<'_>, physical: bool, st: &mut Stat) -> Result<(Kind, bool)> {
     let flags = if physical { AT_SYMLINK_NOFOLLOW } else { 0 };
-    match sys.fstatat(dir, name, flags) {
-        Ok(st) => {
+    match sys.fstatat_into(dir, name, flags, st) {
+        Ok(()) => {
             let kind = match st.mode & S_IFMT {
                 S_IFDIR => Kind::Dir,
                 S_IFLNK => Kind::Symlink,
                 _ => Kind::File,
             };
-            Ok((kind, Some(st)))
+            Ok((kind, true))
         }
-        Err(Errno::EACCES) => Ok((Kind::NoStat, None)),
-        Err(Errno::ENOENT) => match sys.fstatat(dir, name, AT_SYMLINK_NOFOLLOW) {
-            Ok(l) if !physical && l.mode & S_IFMT == S_IFLNK => Ok((Kind::Dangling, Some(l))),
-            _ => Ok((Kind::NoStat, None)),
+        Err(Errno::EACCES) => Ok((Kind::NoStat, false)),
+        Err(Errno::ENOENT) => match sys.fstatat_into(dir, name, AT_SYMLINK_NOFOLLOW, st) {
+            Ok(()) if !physical && st.mode & S_IFMT == S_IFLNK => Ok((Kind::Dangling, true)),
+            _ => Ok((Kind::NoStat, false)),
         },
         Err(e) => Err(e),
     }
@@ -452,6 +452,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     let listing = list(sys, fd, false)?;
     let mut frames: TryVec<Frame> = TryVec::with_capacity(16)?;
     let mut namebuf: TryVec<u8> = TryVec::with_capacity(256)?;
+    let mut cbuf = Stat::default();
     frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false })?;
     while let Some(top) = frames.len().checked_sub(1) {
         let Some(frame) = frames.get_mut(top) else { break };
@@ -468,8 +469,9 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
             let (dir_level, path_len) = (frame.level, frame.path_len);
             let base = set_path(&mut path, path_len, name)?;
             let dir = levels.fd(sys, dir_level)?;
-            let (kind, cst) = examine(sys, dir, KStr::from_nul_terminated(namez)?, opt.physical)?;
-            if opt.mount && cst.as_ref().is_some_and(|s| s.dev != root_dev) {
+            let (kind, has) = examine(sys, dir, KStr::from_nul_terminated(namez)?, opt.physical, &mut cbuf)?;
+            let cst = if has { Some(&cbuf) } else { None };
+            if opt.mount && cst.is_some_and(|s| s.dev != root_dev) {
                 continue;
             }
             let action = if kind == Kind::Dir {
@@ -481,7 +483,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 let cfd = match levels.push(sys, namez, !opt.physical) {
                     Ok((fd, _)) => fd,
                     Err(Errno::EACCES) => {
-                        let a = visit(&path, base, level, Kind::DirUnreadable, Some(&cst), f)?;
+                        let a = visit(&path, base, level, Kind::DirUnreadable, Some(cst), f)?;
                         apply(&mut frames, a)?;
                         if let Action::Stop(v) = a {
                             return Ok(v);
@@ -492,7 +494,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 };
                 let mut entered = Action::Continue;
                 if !opt.depth {
-                    entered = visit(&path, base, level, Kind::Dir, Some(&cst), f)?;
+                    entered = visit(&path, base, level, Kind::Dir, Some(cst), f)?;
                 }
                 match entered {
                     Action::Stop(v) => return Ok(v),
@@ -506,12 +508,12 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                         }
                         let listing = list(sys, cfd, false)?;
                         let path_len = path.len().saturating_sub(1);
-                        frames.push(Frame { listing, next: 0, path_len, base, level, stat: cst, skip: false })?;
+                        frames.push(Frame { listing, next: 0, path_len, base, level, stat: *cst, skip: false })?;
                         Action::Continue
                     }
                 }
             } else {
-                visit(&path, base, level, kind, cst.as_ref(), f)?
+                visit(&path, base, level, kind, cst, f)?
             };
             if let Action::Stop(v) = action {
                 return Ok(v);
