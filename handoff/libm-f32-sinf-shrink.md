@@ -26,6 +26,7 @@ target (see "Next").
   /mnt/zram/claude/LIBM-F32-SINF-SHRINK-4/plants-1), counts `libm-f32-sinf-shrink-4-counts` (head only, after the gate,
   compared with -3's base/head tsvs by -2's cmp.py; the tables change was proven .text-identical by its own story, so
   -3's base stands as the base).
+* Plants result: rc 0, 8 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN. Gate and counts were still running at hand-back.
 
 ## -3 (merge only, no design work)
 * CI could not merge -2: `crates/math/src/fast32.rs` conflicted with next's hyperbolic and inverse-trig families.
