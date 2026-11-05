@@ -968,7 +968,9 @@ impl Resolution {
     /// record's image and, for a catalog that names a charset, the codec selector must still be
     /// the plan's; then only the index probe and the form remain (no record fields, no header,
     /// no codec words). `None`: the plan does not apply (search as usual); `Some(found)`: what
-    /// `lookup` returns.
+    /// `lookup` returns. Inlined into its one caller: out of line, the found call paid six
+    /// register saves and eight spilled arguments.
+    #[inline(always)]
     fn hit<H: Host>(&self, h: &H, rec: &[AtomicUsize], msgid: &[u8], n: Option<u64>, codeset: Option<&[u8]>, loc: &Locale) -> Option<Option<usize>> {
         let w = |j: usize| self.plan.get(j).map_or(0, |a| a.load(Relaxed));
         let image = w(P_IMAGE);
