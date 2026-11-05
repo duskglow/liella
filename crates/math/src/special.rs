@@ -165,8 +165,9 @@ pub fn erf_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
 pub fn erfc<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if F::PREC == 53 {
         let xf = as_f64(x);
-        // 2^-100 <= |x| (below, erfc x is 1 to the last place) and x below the fast range's end.
-        if dd::abs(xf) >= f64::from_bits(0x39b0_0000_0000_0000) && xf < fast_special::ERFC_MAX {
+        // Finite, 2^-100 <= |x| (below, erfc x is 1 to the last place) and x below the fast
+        // range's end (erfc(−∞) = 2 is exact: the accurate path's).
+        if xf.is_finite() && dd::abs(xf) >= f64::from_bits(0x39b0_0000_0000_0000) && xf < fast_special::ERFC_MAX {
             if let Some(r) = from_fast("erfc", fast_special::erfc(xf, mode)) {
                 return r;
             }

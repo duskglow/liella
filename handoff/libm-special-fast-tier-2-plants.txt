@@ -5,4 +5,4 @@ erf-eps | crates/math/src/fast_special.rs | lit:dd::abs(y.hi) * f64::from_bits(t
 erf-mirror | crates/math/src/fast_special.rs | lit:fast64::settle(y, eps, m, mirrored(mode)).map ==> fast64::settle(y, eps, m, mode).map | cargo test -p liella-math --test fast_special | msg:fast tier in (Up|Down)
 erfc-zlo | crates/math/src/fast_special.rs | lit:fast64::exp_dd(s.neg())? ==> fast64::exp_dd(Dd { hi: -s.hi, lo: 0.0 })? | cargo test -p liella-math --test fast_special | msg:erfc_kernel.*times its bound|erfc\(.*(fast tier|entry) in
 tiny-tie | crates/math/src/fast64.rs | lit:if d0 > 0.5 { ==> if d0 > 0.75 { | cargo test -p liella-math --test fast_special | msg:erfc near 2\^-1022: [0-9]+ of 2000 refused
-tiny-cap | crates/math/src/fast64.rs | lit:if zh >= TWO52 { ==> if zh >= TWO52 * 0.5 { | cargo test -p liella-math --test fast_special | msg:erfc near 2\^-1022: [0-9]+ of 2000 refused
+tiny-cap | crates/math/src/fast64.rs | lit:if zh >= TWO52 { ==> if zh >= TWO52 * 0.5 { | cargo test -p liella-math --test fast_special | msg:erfc near 2\^-1022: [0-9]+ of 2000 refused|erfc?: fallback rate FallbackError
