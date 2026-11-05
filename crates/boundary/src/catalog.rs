@@ -135,10 +135,6 @@ impl intl::Host for Catalogs {
         if process::secure() { None } else { LANGUAGE.getenv(b"LANGUAGE") }.map(strz::env_value)
     }
 
-    // No `language_probe` / `text_equals` here (PERF-GETTEXT-LANGUAGE-STEADY): the fused aligned
-    // compare of the value with the slot's list cost more per call than `strlen` plus the word
-    // compare in `Resolution::matches` (docs/saturation/14, row 6 runs 3 and 4).
-
     fn locale(&self) -> &'static Locale {
         locale::current()
     }

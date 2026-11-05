@@ -1,0 +1,8 @@
+# PERF-NFTW-ENTRY-9: plants on the reused status probe, the fixed-length header writes and the merged padding+status part.
+probe-slnone-lost | crates/legacy/src/fts.rs | lit:out.0 = info::SLNONE; ==> out.0 = info::NS; | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+probe-errno-dropped | crates/legacy/src/fts.rs | lit:*out = (info::NS, None, e.get()); ==> *out = (info::NS, None, 0); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+probe-info-always-file | crates/legacy/src/fts.rs | lit:out.0 = classify(dst, dot); ==> out.0 = info::F; | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+header-ino-wrong-f | crates/legacy/src/fts.rs | lit:putf(b, off::INO, &st.ino.to_ne_bytes()); ==> putf(b, off::INO, &st.nlink.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+header-statp-wrong-f | crates/legacy/src/fts.rs | lit:putf(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes()); ==> putf(b, off::STATP, &x.block.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+status-pad-misaligned | crates/legacy/src/fts.rs | lit:sb.get(LEAD.saturating_sub(pad)..) ==> sb.get(LEAD..) | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+status-size-wrong | crates/legacy/src/fts.rs | lit:putf(&mut b, LEAD + 48, &st.size.to_ne_bytes()); ==> putf(&mut b, LEAD + 48, &st.blocks.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked

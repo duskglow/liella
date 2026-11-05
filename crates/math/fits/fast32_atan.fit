@@ -1,0 +1,12 @@
+# LIBM-F32-DOUBLE-KERNELS (D-10.3): atan on [-1/64, 1/64], the reduced range of the `float`
+# inverse trigonometric kernel after atan s = atan c + atan((s - c)/(1 + s c)) with c = i/32 the
+# nearest table point. Odd powers up to 7; the x coefficient is fixed at 1 so that the leading term
+# u is exact.
+name = fast32_atan
+target = atan
+interval = -1/64, 1/64
+powers = odd 1..7
+fixed = 1:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_atan.rs

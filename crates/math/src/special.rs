@@ -229,7 +229,7 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     }
     // Γ(x) = π / (sin(πx) Γ(1 − x)).
     let s = sin_pi(x);
-    let lg = mp::ln_atanh(mp::pi()).sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
+    let lg = mp::ln_pi().sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
     (lg, if s.neg { -1 } else { 1 })
 }
 

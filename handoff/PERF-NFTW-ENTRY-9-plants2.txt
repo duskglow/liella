@@ -1,0 +1,1 @@
+status-size-wrong | crates/legacy/src/fts.rs | lit:putf(&mut b, LEAD + 48, &st.size.to_ne_bytes()); ==> putf(&mut b, LEAD + 48, &st.blocks.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked

@@ -448,16 +448,15 @@ impl LocaleView {
 
     #[inline(never)]
     fn isw_wide(&self, c: u32, mask: Class) -> bool {
-        match &self.wide {
-            Some((w, _)) => match u8::try_from(c) {
-                Ok(b) => match self.latin() {
-                    Some(l) => l.class(b, w) & u32::from(mask.0) != 0,
-                    None => ctype::is_w_file(c, mask, w),
-                },
-                Err(_) => ctype::is_w_file(c, mask, w),
-            },
-            None => ctype::wclasses(c, &self.locale).intersects(mask),
+        let Some((w, _)) = &self.wide else { return ctype::wclasses(c, &self.locale).intersects(mask) };
+        if let Ok(b) = u8::try_from(c)
+            && let Some(l) = self.latin()
+        {
+            return l.class(b, w) & u32::from(mask.0) != 0;
         }
+        // One table walk, inlined here: as a call it cost a second frame on every character
+        // above Latin-1 (PERF-REGRESS-1023-1105-2).
+        ctype::is_w_file(c, mask, w)
     }
 
     /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`].

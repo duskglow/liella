@@ -4595,7 +4595,13 @@ liella_machine_move_sse2:
 	.section .text.liella_machine_fill_avx2,"ax",@progbits
 	.globl liella_machine_fill_avx2
 	.type liella_machine_fill_avx2, @function
+	/* The hidden second label: the `memset` entry (machine/fold.S, MEMSET-4K-3) tail-jumps here
+	 * directly (no PLT hop through the exported name), after its NULL test and AVX2 flag test. */
+	.globl liella_machine_fill_avx2_entry
+	.hidden liella_machine_fill_avx2_entry
+	.type liella_machine_fill_avx2_entry, @function
 	.p2align 6
+liella_machine_fill_avx2_entry:
 liella_machine_fill_avx2:
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
@@ -6740,7 +6746,10 @@ strncmp:
  * units of the string before its terminator (readable, none 0), and p lies in the string (at or
  * before its terminator); wcspair's p is 4-byte aligned. Loads: when p's page has 32 bytes from
  * p on (page offset <= 4064), one unaligned head block at p and one at p - off, both inside
- * [p - off, p + 32) (the known units, then p's page). Otherwise units one by one up to the next
+ * [p - off, p + 32) (the known units, then p's page); strpair on AVX2, when the page has 64 bytes
+ * from p on (page offset <= 4032), also the blocks at p + 32 and p + 32 - off, inside
+ * [p - off, p + 64), and then the aligned run from the 64-byte boundary in (p, p + 64]. Otherwise
+ * units one by one up to the next
  * 32-byte boundary (stopping at a 0 unit or a candidate). Then aligned blocks A (32 bytes on
  * AVX2, 16 on SSE2), each with the block at A - off, which lies inside [p - off, A + block):
  * units already seen not to be 0, then A's own block; an aligned block never leaves its page.
@@ -6795,12 +6804,44 @@ liella_machine_strpair:
 	vpand %ymm4, %ymm6, %ymm3
 	vpmovmskb %ymm3, %r10d
 	vpmovmskb %ymm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
+	/* ecx (c1) is in ymm1 now: the mask temp, so r9 keeps p - off for the second head block. */
+	leal -1(%r11), %ecx
+	xorl %r11d, %ecx
+	andl %ecx, %r10d
 	jnz .Lliella_machine_strpair_avx_cand
 	testl %r11d, %r11d
 	jnz .Lliella_machine_strpair_avx_nul
+	/* Second head block (STRSTR-SHORT-DENSE-PARITY-3): when p's page has 64 bytes from p on (page
+	 * offset <= 4032), the unaligned block at p + 32 (and at p + 32 - off), so a string of up to 64
+	 * bytes from p is settled without the walk to a 64-byte boundary, whatever p's alignment. */
+	movl %eax, %r10d
+	andl $4095, %r10d
+	cmpl $4032, %r10d
+	ja .Lliella_machine_strpair_avx_head1
+	addq $32, %rax
+	vmovdqu (%rax), %ymm3
+	vpcmpeqb 32(%r9), %ymm0, %ymm4
+	vpcmpeqb %ymm3, %ymm2, %ymm5
+	vpcmpeqb %ymm3, %ymm1, %ymm7
+	vpand %ymm4, %ymm7, %ymm3
+	vpmovmskb %ymm3, %r10d
+	vpmovmskb %ymm5, %r11d
+	leal -1(%r11), %ecx
+	xorl %r11d, %ecx
+	andl %ecx, %r10d
+	jnz .Lliella_machine_strpair_avx_cand
+	testl %r11d, %r11d
+	jnz .Lliella_machine_strpair_avx_nul
+	/* Filter mode as below, over both head blocks; the aligned run resumes at the 64-byte
+	 * boundary in (p, p + 64]: the units it sees again were seen here to be neither 0 nor a
+	 * candidate, and its blocks at A - off start at or after p - off. */
+	vpor %ymm7, %ymm6, %ymm6
+	vpmovmskb %ymm6, %r8d
+	leaq -32(%rax), %rdx
+	addq $32, %rax
+	andq $-64, %rax
+	jmp .Lliella_machine_strpair_avx_al64
+.Lliella_machine_strpair_avx_head1:
 	/* Filter mode (STRSTR-ADAPTIVE-FILTER-EXP): r8 = 0 (one stream, c1 or 0 only) when the head
 	 * block holds no c1, else nonzero (pair). rdx = where the last one-stream stop was (p). */
 	vpmovmskb %ymm6, %r8d
@@ -6828,6 +6869,7 @@ liella_machine_strpair:
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_avx_loop
 	/* rax is 64-aligned. One 64-byte group first when it is not 128-aligned (PERF-STRSTR-LONG). */
+.Lliella_machine_strpair_avx_al64:
 	movq %rsi, %r9
 	negq %r9
 	testl $64, %eax

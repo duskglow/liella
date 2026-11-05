@@ -993,6 +993,12 @@ pub(crate) const MP_LN2: crate::mp::MpConst = (0, [0x559552fb4afa1b10, 0xe7b8762
 /// Euler's constant `γ` (Brent–McMillan, `euler_gamma`) (about 5.772156649015329e-1)
 pub(crate) const MP_EULER: crate::mp::MpConst = (0, [0xd0649ccb621057d1, 0x8e4b59fa03a9f0ee, 0x0c03df34709affbd, 0xa1cecc3af65cc019, 0xd1be3f810152cb56, 0x93c467e37db0c7a4]);
 
+/// `ln 10` (mp::ln10) (about 2.302585092994046e0)
+pub(crate) const MP_LN10: crate::mp::MpConst = (2, [0xcc70cbc02c5f0d68, 0x962f02d7b1a8105c, 0x83c61e8201f02d72, 0xe28fecf9da5df90e, 0xea56d62b82d30a28, 0x935d8dddaaa8ac16]);
+
+/// `ln π` (the reflection of `lgamma`) (about 1.1447298858494002e0)
+pub(crate) const MP_LN_PI: crate::mp::MpConst = (1, [0x69201612b6d85c33, 0x2d53626fa918b073, 0x19c0176577d49847, 0x2f36edf9d9f93037, 0xafcab635421fa4cc, 0x928682473d0de85e]);
+
 /// `ln(2π)/2` (about 9.189385332046728e-1)
 pub(crate) const MP_HALF_LN_2PI: crate::mp::MpConst = (0, [0x93eabf905c5569bb, 0x212f9d7fe00e86bf, 0xdec6a3133daa155d, 0xcfb08f8d13458b4d, 0x94bc900144192023, 0xeb3f8e4325f5a534]);
 

@@ -9,7 +9,15 @@
 #include "percall.h"
 
 #define HAY 4096
-static char hay_text[HAY], hay_scan[HAY], hay_verify[HAY], hay_short[64];
+/* Every haystack starts HAY_OFF bytes past a 4096-aligned slot (STRSTR-SHORT-DENSE-PARITY-3): the search
+ * kernels' alignment prologue follows the start address mod 128, and plain static arrays move with the
+ * binary's code size, so the 4 KiB rows compared layouts, not builds (ruling #2813). 16 is the alignment
+ * malloc guarantees and no more (not 32- or 64-aligned). */
+#define HAY_OFF 16
+static _Alignas(4096) char hay_pool[5][2 * HAY];
+static char *const hay_text = hay_pool[0] + HAY_OFF, *const hay_scan = hay_pool[1] + HAY_OFF,
+            *const hay_verify = hay_pool[2] + HAY_OFF, *const hay_short = hay_pool[3] + HAY_OFF,
+            *const hay_dense = hay_pool[4] + HAY_OFF;
 static const char needle_buf[] = "needle";
 static const char *volatile needle_v = needle_buf;
 static const char *volatile hay_v;
@@ -42,7 +50,6 @@ CASE(strstr_scan_4k, 0, 1) {
 /* strstr_dense_4k: 'a' * 200, then "xe" repeated (the last needle byte every 2 bytes, never a
  * candidate), then the needle: a clean start, then a dense run (STRSTR-ADAPTIVE-FILTER-EXP). */
 CASE(strstr_dense_4k, 0, 1) {
-    static char hay_dense[HAY];
     memset(hay_dense, 'a', HAY);
     for (size_t i = 200; i + 2 <= HAY - 7; i += 2) { hay_dense[i] = 'x'; hay_dense[i + 1] = 'e'; }
     memcpy(hay_dense + HAY - 7, "needle", 7);

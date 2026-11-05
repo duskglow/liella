@@ -27,3 +27,4 @@ and every row id (first cell of a `Row` table) to be unique across files.
 
 - [18. SSE2-level re-measure after BENCH-TUNABLES (PERF-SSE2-REMEASURE, 2026-10-23, Zen 1 host)](saturation/18-sse2-level-re-measure-after-bench-tunables.md): section 18
 - [19. qsort at five element sizes and fts under a 2 KiB path (BENCH-UNMEASURED-WIDEN, 2026-11-04, Zen 1 host)](saturation/19-qsort-element-sizes-and-fts-at-2-kib.md): section 19
+- [20. The 384-bit mp core and the double-double rounder (LIBM-MP-CORE-SPEED, 2026-11-05, Zen 1 host)](saturation/20-the-384-bit-mp-core-and-the-double-double-rounder.md): section 20
