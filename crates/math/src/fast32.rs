@@ -1224,7 +1224,8 @@ mod tests {
         use crate::dd::{two_sum, Dd};
         let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
         let check = |y: Option<f64>, f: Dd, b: f64, what: &str, x: f32| {
-            let y = y.unwrap_or_else(|| panic!("{what}({x:e}) refused"));
+            assert!(y.is_some(), "{what}({x:e}) refused");
+            let y = y.unwrap_or(f64::NAN);
             let err = Dd::from(y).sub(f).to_f64();
             assert!(err.abs() <= b * ulp(y), "{what}({x:e}): {} ulp", err / ulp(y));
         };
