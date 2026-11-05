@@ -33,11 +33,16 @@ story adds no table, so `cargo xtask tables` rewrote nothing (run in job libm-f6
 
 * libm-f64-trig-tier-2-check2 (rc 0): math-gen, tables, workspace clippy -D warnings, xtask static, liella-math trig
   (10 passed), s10_math_symbols math_double (4 passed), math_fma_paths (3 passed, FMA present, no SKIP).
-* libm-f64-trig-tier-2-gate: FULL (escalated by the tsv change); see the report json for its state.
-* libm-f64-trig-tier-2-plants: handoff/LIBM-F64-TRIG-TIER-plants.txt, dir /mnt/zram/claude/libm-f64-trig-tier-2/plants-1
-  (P3 reduction constant, a coefficient C6, the bound E_ABS -> 0, the large-argument switch LIMIT_BITS -> 2^30, the
-  small edge SMALL_BITS -> 2^-400, the sincos wiring).
-* libm-f64-trig-tier-2-counts: `cargo xtask bench --compare --counters cbench_libm`, default then
+* libm-f64-trig-tier-2-check4 (rc 0, head 5edffba4): workspace clippy -D warnings, xtask static, liella-math trig
+  (11 passed, with the new `trig_assembly_error_is_within_the_stated_bound`).
+* libm-f64-trig-tier-2-gate2: FULL (escalated by the tsv change), running at hand-back.
+* libm-f64-trig-tier-2-plants2 (rc 0): handoff/LIBM-F64-TRIG-TIER-plants.txt, dir
+  /mnt/zram/claude/libm-f64-trig-tier-2/plants-2: 5 CAUGHT, 0 SURVIVED, 1 WARN-NO-MSG (trig-bound failed rc 101 under
+  the new bound test; its msg still named the old test, corrected in the plants file afterwards). Plants: P3
+  reduction constant, coefficient C6, the bound E_ABS -> 0, the large-argument switch LIMIT_BITS -> 2^30, the small
+  edge SMALL_BITS -> 2^-400, the sincos wiring. Run 1 (libm-f64-trig-tier-2-plants, rc 1): trig-bound SURVIVED the
+  sampled tests, which led to the bound test.
+* libm-f64-trig-tier-2-counts2: `cargo xtask bench --compare --counters cbench_libm`, default then
   `--tunables glibc.cpu.hwcaps=-FMA`; starts after the gate. Before (kanon, FAST-KERNELS-3, both builds alike):
   sin 338.6, cos 336.0, tan 494.9; glibc 100.2 / 104.7 / 107.7 (FMA), 122.5 / 126.2 / 124.2 (-FMA). Projection
   (handoff run 1, not measured): sin/cos ~180 (-FMA) / ~125 (FMA), tan ~260 / ~190.

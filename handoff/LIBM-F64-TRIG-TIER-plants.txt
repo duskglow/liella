@@ -4,7 +4,7 @@ trig-p3 | crates/math/src/trig.rs | perl:s/0x3c0a_6263_3145_c06e/0x3c0a_6273_314
 # A polynomial coefficient: cos's r^6 term 1/720 -> 1/721.
 trig-coeff-c6 | crates/math/src/trig.rs | perl:s/const C6: f64 = -1\.0 \/ 720\.0;/const C6: f64 = -1.0 \/ 721.0;/ | cargo test -p liella-math --lib trig | msg:trig_fast_path_matches_the_accurate_path.*(FAILED|panicked)|panicked.*trig_fast_path
 # The bound: the exact rounding test told the assembly (S != 0) has no error.
-trig-bound | crates/math/src/trig.rs | perl:s/\} else \{ E_ABS \}/} else { 0.0 }/ | cargo test -p liella-math --lib trig | msg:trig_fast_path_matches_the_accurate_path.*(FAILED|panicked)|panicked.*trig_fast_path
+trig-bound | crates/math/src/trig.rs | perl:s/\} else \{ E_ABS \}/} else { 0.0 }/ | cargo test -p liella-math --lib trig | msg:trig_assembly_error_is_within_the_stated_bound.*(FAILED|panicked)|above the bound
 # The large-argument switch: the in-place entries take |x| up to 2^30 (k·P1 no longer exact).
 trig-limit | crates/math/src/trig.rs | perl:s/const LIMIT_BITS: u64 = 0x4130_0000_0000_0000;/const LIMIT_BITS: u64 = 0x41d0_0000_0000_0000;/ | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|mismatches
 # The small-argument edge: the in-place cubic down to 2^-400 (x³ underflows in hardware).
