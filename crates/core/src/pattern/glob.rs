@@ -673,7 +673,7 @@ fn sort_found(found: &mut TryVec<TryVec<u8>>, loc: &Locale) -> Result<()> {
     if n < 2 {
         return Ok(());
     }
-    if !loc.collates_by_bytes() || u32::try_from(n).is_err() {
+    if !loc.collates_by_bytes() {
         found.sort_unstable_by(|a, b| loc.compare_bytes(a, b).then_with(|| a.as_slice().cmp(b.as_slice())));
         return Ok(());
     }
@@ -686,23 +686,23 @@ fn sort_found(found: &mut TryVec<TryVec<u8>>, loc: &Locale) -> Result<()> {
             }
         }
     }
-    let mut keys: TryVec<(u64, u32)> = TryVec::with_capacity(n)?;
+    let mut keys: TryVec<(u64, usize)> = TryVec::with_capacity(n)?;
     for (i, p) in found.iter().enumerate() {
-        keys.push((sort_key(p, lcp), i as u32))?;
+        keys.push((sort_key(p, lcp), i))?;
     }
     {
         let paths = found.as_slice();
         keys.sort_unstable_by(|x, y| {
             x.0.cmp(&y.0).then_with(|| {
-                let a = paths.get(x.1 as usize).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
-                let b = paths.get(y.1 as usize).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
+                let a = paths.get(x.1).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
+                let b = paths.get(y.1).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
                 a.cmp(b)
             })
         });
     }
     let mut sorted: TryVec<TryVec<u8>> = TryVec::with_capacity(n)?;
     for &(_, i) in keys.iter() {
-        sorted.push(core::mem::take(found.as_mut_slice().get_mut(i as usize).ok_or(Errno::EINVAL)?))?;
+        sorted.push(core::mem::take(found.as_mut_slice().get_mut(i).ok_or(Errno::EINVAL)?))?;
     }
     *found = sorted;
     Ok(())
