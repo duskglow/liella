@@ -25,7 +25,8 @@ Role mei:~/w/s1 (Skylake-SP). Report: handoff/reports/LIBM-SPECIAL-FAST-TIER-5.j
   two on the merge's sites: `hot-erfc-fused` (hot.rs erfc FMA entry calls erf: math_fma_paths) and
   `asinh-sqrt-moved` (moved hyperbolic code: hyperbolic_hardware_sqrt_agrees_sampled).
 * Gate `libm-special-fast-tier-5-gate`: `cargo xtask affected --run`, escalated to FULL by the tool (s10_math.tsv is
-  a generator input). Result: see the report JSON.
+  a generator input): rc 0, 76 min on a loaded host (load 21-30): 32 suites ok, 10857 passed / 0 failed / 1189
+  ignored, conformance 117/0, 3 SKIPPED lines (absent tools), peak 16G (page cache included), oom_kill 0.
 
 ## Counts (instr/call, validation/percall/libm_erf.c; label libm-special-fast-tier-5-counts-2)
 Base = origin/next f2157504 (has -2's erf, not -3/-4's in-place entries). Liella now runs its FMA build from libm
