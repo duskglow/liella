@@ -18,7 +18,7 @@
 //!   `liella_legacy::fs_tree`.
 
 use crate::error::{Errno, Result};
-use crate::fs::dir::DirStream;
+use crate::fs::dir::{DirStream, D_NAME, D_RECLEN, D_TYPE};
 use crate::mem::TryVec;
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -28,40 +28,52 @@ use liella_kernel::uapi::{Stat, AT_SYMLINK_NOFOLLOW, O_CLOEXEC, O_DIRECTORY, O_N
 /// The buffer a walk reads directories with.
 const LIST_BUFFER: usize = 16 * 1024;
 
-/// One entry of a [`Listing`].
-#[derive(Clone, Copy, Debug)]
-struct Item {
-    start: usize,
-    len: usize,
-    kind: u8,
-}
-
-/// A directory's entries, in the order the file system produced them.
+/// A directory's entries, in the order the file system produced them: the kernel's records
+/// copied whole (one copy per `getdents64` buffer), parsed as the walk reaches them.
 pub struct Listing {
     bytes: TryVec<u8>,
-    items: TryVec<Item>,
+    pos: usize,
+    dots: bool,
 }
 
 impl Listing {
     /// An empty listing.
     pub fn empty() -> Listing {
-        Listing { bytes: TryVec::from(alloc::vec::Vec::new()), items: TryVec::from(alloc::vec::Vec::new()) }
+        Listing { bytes: TryVec::from(alloc::vec::Vec::new()), pos: 0, dots: false }
     }
 
-    /// The number of entries.
-    pub fn len(&self) -> usize {
-        self.items.len()
+    /// True when no record is left (a record that is only `.` or `..` still counts).
+    pub fn is_exhausted(&self) -> bool {
+        self.pos >= self.bytes.len()
     }
 
-    /// True without entries.
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
-    /// Entry `i`: its name with a terminator, and its `d_type`.
-    pub fn get(&self, i: usize) -> Option<(&[u8], u8)> {
-        let it = self.items.get(i)?;
-        Some((self.bytes.get(it.start..it.start.checked_add(it.len)?.checked_add(1)?)?, it.kind))
+    /// The next entry: its `d_type` and its name with a terminator. `EIO` for a malformed
+    /// record (the kernel never makes one).
+    pub fn next_entry(&mut self) -> Result<Option<(u8, &[u8])>> {
+        loop {
+            let Some(rec) = self.bytes.get(self.pos..).filter(|r| !r.is_empty()) else { return Ok(None) };
+            let reclen = match (rec.get(D_RECLEN), rec.get(D_RECLEN.saturating_add(1))) {
+                (Some(&a), Some(&b)) => u16::from_ne_bytes([a, b]),
+                _ => return Err(Errno::EIO),
+            };
+            let n = usize::from(reclen);
+            if n <= D_NAME || n > rec.len() {
+                return Err(Errno::EIO);
+            }
+            let tail = rec.get(D_NAME..n).ok_or(Errno::EIO)?;
+            let end = tail.iter().position(|&b| b == 0).ok_or(Errno::EIO)?;
+            let namez = tail.get(..end.saturating_add(1)).ok_or(Errno::EIO)?;
+            let kind = rec.get(D_TYPE).copied().ok_or(Errno::EIO)?;
+            let skip = !self.dots && (namez == b".\0" || namez == b"..\0");
+            let at = self.pos;
+            self.pos = at.saturating_add(n);
+            if skip {
+                continue;
+            }
+            let from = at.saturating_add(D_NAME);
+            let name = self.bytes.get(from..from.saturating_add(end).saturating_add(1)).ok_or(Errno::EIO)?;
+            return Ok(Some((kind, name)));
+        }
     }
 }
 
@@ -75,16 +87,13 @@ pub fn list<S: Sys>(sys: &S, fd: Fd, dots: bool) -> Result<Listing> {
 /// a walk lists many directories and then allocates and clears one buffer, not one per directory.
 pub fn list_reusing<S: Sys>(sys: &S, fd: Fd, dots: bool, spare: &mut Option<TryVec<u8>>) -> Result<Listing> {
     let mut d = DirStream::with_fd_reusing(fd, LIST_BUFFER, 0, spare.take())?;
-    let mut out = Listing { bytes: TryVec::with_capacity(256)?, items: TryVec::with_capacity(16)? };
+    let mut out = Listing { bytes: TryVec::from(alloc::vec::Vec::new()), pos: 0, dots };
     let r = (|| -> Result<()> {
-        while let Some((kind, namez)) = d.next_named(sys)? {
-            let len = namez.len().saturating_sub(1);
-            if !dots && (namez == b".\0" || namez == b"..\0") {
-                continue;
+        while let Some(chunk) = d.next_chunk(sys)? {
+            if out.bytes.is_empty() {
+                out.bytes = TryVec::with_capacity(chunk.len())?;
             }
-            let start = out.bytes.len();
-            out.bytes.extend_from_slice(namez)?;
-            out.items.push(Item { start, len, kind })?;
+            out.bytes.extend_from_slice(chunk)?;
         }
         Ok(())
     })();
@@ -352,7 +361,6 @@ pub struct Options {
 
 struct Frame {
     listing: Listing,
-    next: usize,
     /// The directory's path length (without terminator).
     path_len: usize,
     base: usize,
@@ -476,12 +484,11 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     let mut frames: TryVec<Frame> = TryVec::with_capacity(16)?;
     let mut cbuf = Stat::default();
     let mut dir_fd: Option<(usize, Fd)> = None;
-    frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false, prefix: 0 })?;
+    frames.push(Frame { listing, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false, prefix: 0 })?;
     while let Some(top) = frames.len().checked_sub(1) {
         let Some(frame) = frames.get_mut(top) else { break };
-        if !frame.skip && frame.next < frame.listing.len() {
-            let Some((namez, _)) = frame.listing.get(frame.next) else { break };
-            frame.next = frame.next.saturating_add(1);
+        let more = if frame.skip { None } else { frame.listing.next_entry()? };
+        if let Some((_, namez)) = more {
             let name = namez.get(..namez.len().saturating_sub(1)).unwrap_or(&[]);
             let level = frame.level.saturating_add(1);
             let (dir_level, path_len) = (frame.level, frame.path_len);
@@ -543,7 +550,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                         }
                         let listing = list_reusing(sys, cfd, false, &mut spare)?;
                         let path_len = path.len().saturating_sub(1);
-                        frames.push(Frame { listing, next: 0, path_len, base, level, stat: *cst, skip: false, prefix: 0 })?;
+                        frames.push(Frame { listing, path_len, base, level, stat: *cst, skip: false, prefix: 0 })?;
                         Action::Continue
                     }
                 }
