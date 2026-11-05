@@ -300,8 +300,9 @@ fn null_call(k: &CSys) -> i32 {
 fn null_faults_in_the_folded_compare_sizes_and_aborts_in_every_other() {
     // Clause: s4_3_c_1 with S6 (NULL with n > 0 is the EFAULT abort) and the compare fold
     // (MEMCMP-FOLD, owner ruling 2026-10-10): with folding on, NULL with 8 <= n <= 64 dies by SIGSEGV
-    // on page zero (the head probe's load in fold.S); 1-7, 65 and up (the 65-128 class of MEM-K5
-    // included) and every size with folding off take the S6 abort, in each build.
+    // on page zero (the head probe's load in fold.S), and so does 65-2048 in the AVX2 build (its
+    // first 32-byte load, owner ruling #2517, PERF-MEMCMP-TAILS); 1-7, 65 and up in the SSE2 build,
+    // 2049 and up, and every size with folding off take the S6 abort.
     use std::sync::atomic::Ordering::SeqCst;
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut runs = vec![(false, false), (true, false)];
@@ -312,11 +313,14 @@ fn null_faults_in_the_folded_compare_sizes_and_aborts_in_every_other() {
     for (fold, avx2) in runs {
         NULL_FOLD.store(fold, SeqCst);
         NULL_AVX2.store(avx2, SeqCst);
-        for n in [1, 3, 7, 8, 15, 16, 32, 33, 63, 64, 65, 96, 127, 128, 129, 4096] {
+        for n in [1, 3, 7, 8, 15, 16, 32, 33, 63, 64, 65, 96, 127, 128, 129, 2048, 2049, 4096] {
             for call in 0..NULL_CALLS {
                 NULL_CASE.store(n * NULL_CALLS + call, SeqCst);
                 let end = selftest::in_child_quiet(null_call).unwrap();
-                let want = if fold && (8..=64).contains(&n) { 11 } else { 6 };
+                // The AVX2 65-2048 classes fold too (owner ruling #2517, PERF-MEMCMP-TAILS): their
+                // first 32-byte load faults on page zero.
+                let folded = (8..=64).contains(&n) || (avx2 && (65..=2048).contains(&n));
+                let want = if fold && folded { 11 } else { 6 };
                 assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n}");
             }
         }
