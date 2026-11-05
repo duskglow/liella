@@ -137,15 +137,18 @@ const HARD: [(&str, u64); 18] = [
 fn tier_declines_or_rounds_right_on_hard_cases() {
     for (name, bits) in HARD {
         let x = f64::from_bits(bits);
-        let (fast, exact): (fn(f64) -> Option<f64>, fn(f64) -> f64) = match name {
-            "expm1" => (super::expm1_nearest, rn!(expm1)),
-            "log1p" => (super::log1p_nearest, rn!(log1p)),
-            "sinh" => (super::sinh_nearest, rn!(sinh)),
-            "cosh" => (super::cosh_nearest, rn!(cosh)),
-            "tanh" => (super::tanh_nearest, rn!(tanh)),
-            _ => panic!("hard case for an unknown function {name}"),
-        };
-        let odd = matches!(name, "sinh" | "tanh");
+        // Here the last field is the parity: −1 for an odd function (both signs are checked).
+        let funcs: [Row; 5] = [
+            ("expm1", super::expm1_nearest, rn!(expm1), 1.0),
+            ("log1p", super::log1p_nearest, rn!(log1p), 1.0),
+            ("sinh", super::sinh_nearest, rn!(sinh), -1.0),
+            ("cosh", super::cosh_nearest, rn!(cosh), 1.0),
+            ("tanh", super::tanh_nearest, rn!(tanh), -1.0),
+        ];
+        let row = funcs.iter().find(|r| r.0 == name);
+        assert!(row.is_some(), "hard case for an unknown function {name}");
+        let Some(&(_, fast, exact, parity)) = row else { continue };
+        let odd = parity < 0.0;
         let signs: &[f64] = if odd { &[1.0, -1.0] } else { &[1.0] };
         for v in signs.iter().map(|s| s * x) {
             if let Some(got) = fast(v) {
