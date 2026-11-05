@@ -24,3 +24,15 @@ Next step (only if the owner wants parity; each ~25-60/entry): keep the listing 
 push); hand the C callback the walk's Stat without the intermediate copy (fs_tree::run closure 37 + nftw closure 24); reuse one
 Listing allocation across directories; then a leaner examine. Parity at 1.05x (about 240/entry) needs all of them.
 Plan rows: none new.
+
+Run -5 (sh2 on shiki, instructions:u per entry, nftw_phys_38, glibc 212.0 on this host; the -4 head counts 502.7 here):
+* Listing kept as the kernel's raw getdents64 records (one copy per buffer, parsed when the walk reaches the record; no Item push, no
+  second name copy): 502.7 -> 413.4 (-89/entry).
+* Walk callback generic instead of `&mut dyn` (fs_tree::run closure inlines into the walk loop), name copied with its terminator
+  in one extend: 413.4 -> 386.0 (-27). Total 502.7 -> 386.0 = 1.82x of glibc in this shape (was 2.37x). Parity not reached.
+* Not done (no profile tool on the host usable in budget; gdb stepping not repeated): reuse of one Listing allocation across
+  directories (the bench shape has one directory per call, so it would not show here), a leaner examine, avoiding the
+  struct_FTW/argument conversion in the nftw closure. Remaining 174/entry over glibc: the status syscall wrapper and C callback
+  conversion are the known large parts.
+* Plants: handoff/PERF-NFTW-ENTRY-5-plants.txt (job perf-nftw-entry-5-plants).
+* Bench rows (cbench_fstree) were not re-run: ask for it if the 1.05x row target must be checked.

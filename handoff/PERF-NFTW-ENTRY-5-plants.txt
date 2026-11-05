@@ -1,0 +1,4 @@
+# PERF-NFTW-ENTRY-5: plants on the raw-record listing and the name copy.
+set-name-no-truncate | crates/core/src/fs/walk.rs | lit:path.truncate(base); ==> path.truncate(path.len()); | cargo test -p liella --test s13_filesystem_clauses --test enomem_fs_walk | msg:FAILED|panicked
+dots-kept | crates/core/src/fs/walk.rs | lit:let skip = !self.dots && ( ==> let skip = self.dots && ( | cargo test -p liella --test s13_filesystem_clauses --test enomem_fs_walk | msg:FAILED|panicked
+record-advance-short | crates/core/src/fs/walk.rs | lit:self.pos = at.saturating_add(n); ==> self.pos = at.saturating_add(n).saturating_sub(1); | cargo test -p liella --test s13_filesystem_clauses --test enomem_fs_walk | msg:FAILED|panicked
