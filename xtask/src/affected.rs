@@ -1428,19 +1428,23 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
             Some(Class::MathTables) => {
                 // The generator is a liella-mathtools source like any other (its own mapping), and it writes every
                 // coefficient family: the whole math set and both checks.
-                classify_path(repo, f, &mut sel);
-                sel.own_suite(repo, f);
+                ordinary_mapping(repo, f, &mut sel);
                 sel.math_coeffs(repo, f);
                 sel.xtask_cmds.insert("kernel-index --check".to_string());
                 sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
             }
-            None => {
-                classify_path(repo, f, &mut sel);
-                sel.own_suite(repo, f);
-            }
+            None => ordinary_mapping(repo, f, &mut sel),
         }
     }
     sel
+}
+
+/// The mapping of a source file that no rule above claims: its path class and the unit tests of the crate that owns
+/// it (AFF-OWNER). One helper for the unclaimed files and the tables generator (XTASK-AFFECTED-MATH-3), so the
+/// generator's selection cannot drift from what any other liella-mathtools source selects.
+fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
+    classify_path(repo, f, sel);
+    sel.own_suite(repo, f);
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -2825,7 +2829,11 @@ mod tests {
             let s = select_tier(repo(), &[MATH_TABLES_GEN.to_string()], tier);
             assert!(s.libs.contains_key("liella-mathtools"), "{MATH_TABLES_GEN} ({tier:?}): unit tests {:?}", s.libs.keys());
             let mut own = Selection { direct: tier == Tier::Direct, ..Selection::default() };
-            classify_path(repo(), MATH_TABLES_GEN, &mut own);
+            ordinary_mapping(repo(), MATH_TABLES_GEN, &mut own);
+            assert!(own.libs.contains_key("liella-mathtools"), "the ordinary mapping of {MATH_TABLES_GEN} ({tier:?}): {:?}", own.libs.keys());
+            for k in own.libs.keys() {
+                assert!(s.libs.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the unit tests of {k} of its own mapping");
+            }
             for k in own.tests.keys() {
                 assert!(s.tests.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses {k:?} of its own mapping");
             }
