@@ -1,44 +1,39 @@
-# PERF-WCTYPE-ENUS handoff (INCOMPLETE: code committed, verification jobs queued, nothing verified)
+# PERF-WCTYPE-ENUS handoff (PERF-WCTYPE-ENUS-2: COMPLETE, target not reached)
 
-State: branch task/perf-wctype-enus, code commit 2815d0a2 (on origin/next 7e918cfe). Role keke:~/w/r2 (synced at 2815d0a2).
+State: branch task/perf-wctype-enus-2 (stacks on task/perf-wctype-enus, base origin/next 7e918cfe3). Role shiki:~/w/sh1.
+Commits: 2815d0a2 (PERF-WCTYPE-ENUS: inline isw/wtrans hit paths, exhaustive test 0..=0x110000), e562595b
+(-2: `#[inline(always)]` on `LocaleView::isw`/`wtrans`), then the saturation row and this handoff.
 
-## Profile (before the change; validation/wl_trace.sh --list, keke, call 11, Liella only; job perf-wctype-enus-trace1)
-iswalpha_l on U+4E00.. in en_US.UTF-8: 101 instructions per call (glibc percall total 50 incl. loop overhead, from the brief).
-* 43: the Table3 walk (three bounds-checked loads, I48-90). It is already tight for safe code: three `lea/cmp/ja`
-  checks and two zero tests. L-2's micro-changes to it measured worse; I did not touch it.
-* about 25: the call to out-of-line `LocaleView::isw_wide`: 5 push + 5 pop, a second `wide` discriminant test,
-  the `is_power_of_two` mask test (5), argument moves, call/ret, and the export's own push/pop around the call.
-* about 30: the export (`locale_t` null/alignment test, object word load, view, `wide` test, `ret::truth`).
-iswctype (CJK) 85, towupper_l and iswalpha (ASCII) call 11 hit a first-use Latin-1 fill (160 / 706), so they did not show
-the steady state; the steady Latin-1 hit path has the same out-of-line call shape.
-Trace note: in the iswalpha_l_cjk trace the export took the LC_GLOBAL_LOCALE/null branch (rsi in {0, -1}); worth a look
-(percall's newlocale in the trace harness may have returned 0), INFORMATIONAL, not investigated.
+## What -2 found and fixed
+-1's four jobs (keke) were all rc 0, but its counts showed two rows slower: `iswalpha_utf8` 68.0 -> 76.1 and
+`towupper_utf8` 53.0 -> 68.0. The cause, from disassembling libc.so.6: with the inline hit paths, LLVM no longer
+inlined `LocaleView::isw`/`wtrans` (plain `#[inline]`) into the exports. Every `iswalpha`/`towupper` (built-in locales
+too) called them out of line. Fix: `#[inline(always)]` on both. The disassembled `iswalpha` saves no callee-saved
+registers, and its C.UTF-8 arm is back to one call to `ctype::wclasses`.
 
-## The change (2815d0a2)
-`LocaleView::isw` answers a filled Latin-1 cache entry and a one-bit-mask walk above U+00FF inline (no call);
-`LocaleView::wtrans` answers a filled Latin-1 entry and the case-table walk above U+00FF inline. Fills, a view without
-a Latin slot (0 / usize::MAX) and mixed masks still go through `isw_wide` / `wtrans_wide`. Same tables, same cache
-entries: every answer is the out-of-line path's. Expected: removes the ~25-instruction call phase (101 -> about 75 for
-iswalpha_l_cjk). That does NOT reach the brief's 1.05x target: the walk (43) plus the export's locale_t resolution
-remain. NOT MEASURED yet.
-Test: `view_equals_the_per_call_reads` (crates/core/src/locale/mod.rs) now covers every code point 0..=0x110000 plus
-0x7fffffff, 0xffffffff (was below 0x30000), five locales, all one-bit and mixed masks, wtrans twice (fill, then hit).
+## Results (shiki, Haswell, final code e562595b; register row: docs/saturation/15-*.md "PERF-WCTYPE-ENUS / -2")
+* gate perf-wctype-enus-2-gate (xtask clippy, static, affected --base origin/next): rc 0, affected ok, peak 3.9G.
+* plants perf-wctype-enus-2-plants (4 plants on the inline paths, reused from -1): 4 CAUGHT, 0 WARN.
+* percall perf-wctype-enus-2-percall2 (wctype.c, en_US), base -> new (glibc): iswalpha_l_cjk 112 -> 82 (50),
+  iswctype_cjk 96 -> 77 (46), towlower_cjk 102 -> 58 (41), iswalpha_ascii 61 -> 36.1 (22), towupper_l_latin1 80.2 -> 50.2
+  (42). The other rows are at or below glibc.
+* counts perf-wctype-enus-2-counts2 (cbench_locale before/after): iswalpha_en_us 91.1 -> 61.0 (49.1), iswalpha_l_en_us
+  100.1 -> 70.0 (47.0), iswctype_en_us 95.1 -> 76.0 (43.0), towupper_l_en_us 68.0 -> 39.0 (39.0), iswalpha_utf8 68 -> 66,
+  towupper_utf8 53 -> 53. newlocale_free +0.5 and fnmatch_casefold_en_32 +0.3 are within the run-to-run spread:
+  in the same job, unchanged glibc moved -3.7 and -0.6 on those rows.
+* After the docs commit: foreground `cargo clippy --workspace --all-targets --all-features -D warnings` rc 0, `cargo xtask static` rc 0.
 
-## Jobs (keke, all QUEUED, none had started after 31 min; queue was full)
-* perf-wctype-enus-gate: ~/work/perf-wctype-enus/gate.sh under ~/bin/gate 16G (xtask clippy, xtask static, affected --base origin/next --run).
-* perf-wctype-enus-plants: `cargo xtask plants ~/work/perf-wctype-enus/plants.txt --dir /dev/shm/claude/perf-wctype-enus/plants-1 --timeout 600`
-  (4 plants: isw inline walk negated, Latin class hit xor ALPHA, Latin map hit off by one, wtrans walk upper/lower swapped;
-  each `msg:` names view_equals_the_per_call_reads).
-* perf-wctype-enus-percall: wl_percall.sh --base 7e918cfe3 --spec validation/percall/wctype.c . (before/after/glibc instructions:u per call).
-* perf-wctype-enus-counts: cbench_locale --compare --counters --runs 3, before (origin/next source copy) and after, each in a RAM copy.
+## Not to redo
+Micro-changes to the Table3 accessors (PERF-WCTYPE-L-2, NEGATIVE). Out-of-line `isw_wide` for the hit path (-1 profile).
 
-## Next step
-Read the four logs (~/logs/perf-wctype-enus-*.log on keke). Keep the change only if no cbench_locale row is slower
-(compare iswalpha_utf8/towupper_utf8/wcwidth_utf8 too: the built-in arm of isw/wtrans now sits after an `if let`).
-If a row is slower, revert 2815d0a2 and record a NEGATIVE row in docs/saturation/15-*.md. If kept, add a saturation-register
-row with the counts. Further gap: the export's locale_t resolution and the walk (ideas a/c of PERF-WCTYPE-L-2).
+## Next step (target 1.05x not reached for the CJK class rows: 61/49, 70/47, 76/43)
+Profile `iswctype_en_us` first. It is 76 vs iswalpha_en_us 61, so the `wctype_t` mask decode probably sends it out of
+line: check whether `iswctype` reaches `isw` with a non-constant mask (is_power_of_two test plus trailing_zeros), or
+goes through `isw_wide`. Then the walk itself (about 35 instructions, three dependent bounds-checked loads):
+PERF-WCTYPE-L-2's untried (a) lazy per-view BMP bit cache and (c) Table3 offsets resolved once at Wide construction.
+(a) costs memory per locale object: ask for a maintainer ruling if a cache would be big.
+Plan rows: none new (local detail). Read docs/saturation/15-*.md PERF-WCTYPE-L-2 and PERF-WCTYPE-ENUS / -2.
 
 ## Process notes
-* I used one Bash heredoc (python edit of view.rs/mod.rs) against the standing no-heredoc rule; files only after that.
-* `ssh host '... && nohup jobrun ... &'` keeps ssh open (the background list holds ssh's stdout): end every
-  remote command list with redirects on the whole list, or start jobrun as the only backgrounded command.
+* wl_percall needs the base primed on the host (`bash validation/wl_prime_base.sh <host> <sha>` from a local checkout).
+  The first percall/counts run (labels perf-wctype-enus-2-percall/-counts, rc 2) stopped on that.
