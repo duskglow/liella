@@ -351,6 +351,10 @@ fn erms_copy_and_fill_match_the_loops_at_every_size_and_alignment() {
 /// Sizes around every boundary of the copy paths: the AVX2 copy's 32-byte head and tail and
 /// 128-byte steps, the dispatch thresholds, and 4 KiB.
 const COPY_SIZES: [usize; 24] = [64, 65, 95, 96, 97, 127, 128, 129, 159, 160, 161, 255, 256, 257, 383, 511, 512, 513, 1279, 1280, 1281, 4095, 4096, 4097];
+/// The AVX2 kernel's sizes (its contract is `n >= 128`): every 32-byte step of what the 128-byte
+/// steps leave inside the held 128-byte block (128 to 289), then the larger ones.
+const AVX2_KERNEL_SIZES: [usize; 27] =
+    [128, 129, 159, 160, 161, 191, 192, 193, 223, 224, 225, 255, 256, 257, 287, 288, 289, 383, 511, 512, 513, 1279, 1280, 1281, 4095, 4096, 4097];
 
 #[test]
 fn avx2_copy_matches_the_source_at_every_alignment_pair_and_size() {
@@ -365,7 +369,7 @@ fn avx2_copy_matches_the_source_at_every_alignment_pair_and_size() {
     let mut buf = pattern.clone();
     let mut dirs = [0usize; 2];
     for gap in [64usize, 3000] {
-        for n in COPY_SIZES {
+        for n in AVX2_KERNEL_SIZES {
             for sa in 0..64 {
                 for da in 0..64 {
                     let at = DST + gap + da;
@@ -1611,7 +1615,7 @@ fn avx2_move_matches_a_byte_loop_at_every_overlap_alignment_and_size() {
     let _g = level();
     liella_boundary::cpu::init();
     let mut dirs = [0usize; 2];
-    for n in COPY_SIZES {
+    for n in AVX2_KERNEL_SIZES {
         let mut shifts: Vec<isize> = (1..=40).chain([63, 64, 65, 96, 127, 128, 129, 200, 2047, 2048, 2049]).collect();
         shifts.extend([n - 33, n - 32, n - 31, n - 1].into_iter().filter(|&k| k > 0).map(|k| k as isize));
         let room = n.max(2049) + 64;

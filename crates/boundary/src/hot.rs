@@ -390,7 +390,7 @@ unsafe fn move_large(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void 
             }
             // Proof obligations of the declarations (`ffi`): both non-NULL (tested above), the
             // caller's contract; disjoint regions for `rep movsb` (`avx2_erms`); AVX2 with the YMM
-            // state saved (the kernel flag, `dispatch`) and 64 <= 129 <= n for the AVX2 move.
+            // state saved (the kernel flag, `dispatch`) and 128 <= 129 <= n for the AVX2 move.
             if avx2_erms(d.addr(), s.addr(), n) {
                 return crate::ffi::liella_machine_copy_erms_a64(d.cast(), s.cast(), n).cast();
             }
@@ -785,7 +785,7 @@ pub(crate) unsafe fn internal_move(d: *mut c_void, s: *const c_void, n: usize) -
 #[inline(never)]
 unsafe fn internal_large(d: *mut c_void, s: *const c_void, n: usize) {
     // Proof obligations of the declarations (`ffi`): AVX2 with the YMM state saved (the kernel
-    // flag, `dispatch`) for the AVX2 move; 64 <= 257 <= n, both non-NULL and valid (the function's
+    // flag, `dispatch`) for the AVX2 move; 128 <= 257 <= n, both non-NULL and valid (the function's
     // contract); disjoint regions for `rep movsb` (`fallback_move`).
     if crate::dispatch::avx2() && avx2_erms(d.addr(), s.addr(), n) {
         let _ = crate::ffi::liella_machine_copy_erms_a64(d.cast(), s.cast(), n);
