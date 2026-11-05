@@ -309,7 +309,8 @@ mod tests {
     fn bessel_oracle_is_within_its_bounds() {
         use crate::oracle32::{bessel_est, Est};
         let mut worst = [0.0f64; 4];
-        for x in bessel_operands(1 << 15) {
+        // The estimator covers the fast path's range only (the runs at its ends reach outside).
+        for x in bessel_operands(1 << 15).into_iter().filter(|x| (BES_MIN..BES_MAX).contains(&f64::from(*x))) {
             let want = crate::special::bessel01_dd(x);
             for f in 0..4 {
                 let Est::Near { v, err } = bessel_est(f, x) else { panic!("{} at {x:e}: no estimate", BES_NAMES[f]) };
