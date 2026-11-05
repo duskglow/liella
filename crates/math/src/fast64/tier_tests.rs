@@ -97,6 +97,65 @@ fn hyperbolic_tier_matches_the_accurate_path() {
     }
 }
 
+/// Hard cases for the kernel paths' rounding bounds: inputs whose exact result lies so close to a
+/// rounding boundary (a midpoint between two `double`s) that the double-double before rounding
+/// is on the wrong side of it. Found by a search of 10^8 to 1.6·10^9 uniform operands per range
+/// (LIBM-F64-EXPM1-HYPER-CBRT-TIER-3) for those where the tier with its bound set to zero
+/// disagreed with the accurate path; about one operand in 10^8 is such a case, so random sweeps
+/// never test the bound. The tier must decline each (or answer the accurate result). `cbrt` has
+/// none: 10^8 operands in [1, 8) gave no case (its second refinement leaves the double-double
+/// much closer than the exp and log kernels do).
+const HARD: [(&str, u64); 18] = [
+    // expm1, the exp kernel with the −1 folded in: 264.65, 0.2545, 0.0915, 0.8283.
+    ("expm1", 0x4070_8a59_f695_df1b),
+    ("expm1", 0x3fd0_48ee_c037_0a2b),
+    ("expm1", 0x3fb7_6a6a_31bc_1228),
+    ("expm1", 0x3fea_818c_c3cf_8565),
+    // log1p, the log kernel and `w.lo/w.hi`: 0.01256, 0.4485, −0.02829, −0.2955.
+    ("log1p", 0x3f89_b8ac_178e_dd3c),
+    ("log1p", 0x3fdc_b3c9_70f7_ee05),
+    ("log1p", 0xbf9c_f904_74ec_20c0),
+    ("log1p", 0xbfd2_e8fb_2f61_31b2),
+    // sinh, e^a − e^-a by `Dd::sub`: 32.93.
+    ("sinh", 0x4040_7710_584a_0713),
+    // cosh, e^a + e^-a by `Dd::add`: 30.04, 2.767, 13.02.
+    ("cosh", 0x403e_09b1_7a13_3df8),
+    ("cosh", 0x4006_22ce_d2e2_19c3),
+    ("cosh", 0x402a_0c34_a000_4664),
+    // e^a/2 for a > 40 (sinh and cosh alike): 263.76, 154.02.
+    ("cosh", 0x4070_7c26_6017_2b6f),
+    ("cosh", 0x4063_40c1_aa18_661b),
+    ("sinh", 0x4070_7c26_6017_2b6f),
+    // tanh, the double-double quotient: 0.0513, 1.1404, 0.2321.
+    ("tanh", 0x3faa_44ae_7c0c_9bd1),
+    ("tanh", 0x3ff2_3eea_5dd3_fb12),
+    ("tanh", 0x3fcd_b566_3998_0f39),
+];
+
+/// The hard cases above (no spec clause; D-10.13: an answer is the accurate path's result).
+#[test]
+fn tier_declines_or_rounds_right_on_hard_cases() {
+    for (name, bits) in HARD {
+        let x = f64::from_bits(bits);
+        let (fast, exact): (fn(f64) -> Option<f64>, fn(f64) -> f64) = match name {
+            "expm1" => (super::expm1_nearest, rn!(expm1)),
+            "log1p" => (super::log1p_nearest, rn!(log1p)),
+            "sinh" => (super::sinh_nearest, rn!(sinh)),
+            "cosh" => (super::cosh_nearest, rn!(cosh)),
+            "tanh" => (super::tanh_nearest, rn!(tanh)),
+            _ => panic!("hard case for an unknown function {name}"),
+        };
+        let odd = matches!(name, "sinh" | "tanh");
+        let signs: &[f64] = if odd { &[1.0, -1.0] } else { &[1.0] };
+        for v in signs.iter().map(|s| s * x) {
+            if let Some(got) = fast(v) {
+                let e = exact(v);
+                assert_eq!(got.to_bits(), e.to_bits(), "hard case {name}({v:e} = {:#x}): fast {got:e}, accurate {e:e}", v.to_bits());
+            }
+        }
+    }
+}
+
 #[test]
 fn cbrt_tier_matches_the_accurate_path_and_declines_exact_cubes() {
     let e = rn!(cbrt);

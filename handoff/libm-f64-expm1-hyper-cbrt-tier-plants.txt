@@ -1,7 +1,14 @@
 # LIBM-F64-EXPM1-HYPER-CBRT-TIER plants (cargo xtask plants; docs/plants.md). Each plant is in the
 # `entries!` macro, so it mutates the plain and the FMA build alike; the direct tests are the
 # fast64 tier unit tests (plain build, bit-equality with the accurate path and a 99.9% answer rate).
-bound | crates/math/src/fast64/exp_log.rs | lit:round(z, exp_err(y, tail) * s + R96 * dd::abs(z.hi), 0) ==> round(z, 0.0, 0) | cargo test -p liella-math --lib fast64::tier_tests | msg:expm1\(.*fast .*accurate|expm1_tier.*FAILED
+# The *-bound plants set one kernel path's rounding bound to zero: only the hard-case test
+# (tier_declines_or_rounds_right_on_hard_cases) can catch them, so their regex names it.
+bound | crates/math/src/fast64/exp_log.rs | lit:round(z, exp_err(y, tail) * s + R96 * dd::abs(z.hi), 0) ==> round(z, 0.0, 0) | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case expm1\(.*fast .*accurate
+log1p-bound | crates/math/src/fast64/exp_log.rs | lit:round(z, crate::fast64::log_eps(y, tail) + R96 * dd::abs(z.hi), 0) ==> round(z, 0.0, 0) | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case log1p\(.*fast .*accurate
+sinh-bound | crates/math/src/fast64/hyperbolic.rs | lit:round(d, ep + eq + R96 * dd::abs(p.hi), m - 1)? ==> round(d, 0.0, m - 1)? | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case sinh\(.*fast .*accurate
+cosh-bound | crates/math/src/fast64/hyperbolic.rs | lit:round(c, ep + eq + R96 * dd::abs(c.hi), m - 1) ==> round(c, 0.0, m - 1) | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case cosh\(.*fast .*accurate
+exp-half-bound | crates/math/src/fast64/hyperbolic.rs | lit:round(p, exp_err(p, tp) + E114 * dd::abs(p.hi), m - 1) ==> round(p, 0.0, m - 1) | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case (sinh|cosh)\(.*fast .*accurate
+tanh-bound | crates/math/src/fast64/hyperbolic.rs | lit:round(q, e + R96 * dd::abs(q.hi), 0)? ==> round(q, 0.0, 0)? | cargo test -p liella-math --lib fast64::tier_tests | msg:hard case tanh\(.*fast .*accurate
 folded-minus-one | crates/math/src/fast64/exp_log.rs | lit:let z = fast_two_sum(w.hi, w.lo + vl); ==> let z = fast_two_sum(w.hi, vl); | cargo test -p liella-math --lib fast64::tier_tests | msg:expm1\(.*fast .*accurate|expm1_tier.*FAILED
 one-plus-x-split | crates/math/src/fast64/exp_log.rs | lit:let z = fast_two_sum(y.hi, y.lo + w.lo / w.hi); ==> let z = fast_two_sum(y.hi, y.lo); | cargo test -p liella-math --lib fast64::tier_tests | msg:log1p\(.*fast .*accurate|log1p_tier.*FAILED
 cbrt-seed | crates/math/src/fast64/exp_log.rs | lit:const CBRT_SEED: u64 = 0x5540_0000_0000_0000; ==> const CBRT_SEED: u64 = 0x5500_0000_0000_0000; | cargo test -p liella-math --lib fast64::tier_tests | msg:cbrt.*answered [0-9]+ of [0-9]+ .below 99
