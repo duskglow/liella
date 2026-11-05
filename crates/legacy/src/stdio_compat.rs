@@ -1664,9 +1664,6 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
 /// it empty), so the policy's flushes are unchanged. Whether it applied.
 #[inline(always)]
 fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> bool {
-    if ext.buf == 0 {
-        return false;
-    }
     if ext.state.role != Role::Writing {
         return false;
     }
@@ -1679,7 +1676,8 @@ fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> 
     let p = wp.load(Relaxed);
     let at = p.wrapping_sub(ext.buf);
     let Some(stop) = at.checked_add(data.len()) else { return false };
-    if stop > ext.state.wend.min(ext.buf_len) {
+    // (No buffer yet is tested last: the block that does not fit says no first.)
+    if stop > ext.state.wend.min(ext.buf_len) || ext.buf == 0 {
         return false;
     }
     match env.bytes(ext.buf, ext.buf_len).get_mut(at..stop) {
