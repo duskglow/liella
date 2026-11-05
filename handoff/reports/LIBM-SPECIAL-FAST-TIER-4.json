@@ -1,0 +1,16 @@
+{"task": "LIBM-SPECIAL-FAST-TIER-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: run 3's in-place erf/erfc entries verified; every erf/erfc double row 138-140 instr/call cheaper (erf 376->238, erfc above 1 565->425; baseline build); target <=1.05x not reached (erf 1.37x of the -FMA reference)",
+ "branch": "task/libm-special-fast-tier-4", "head": null,
+ "gate": {"affected": "escalated to FULL by the tool (s10_math.tsv is a generator input): 10838 passed / 0 failed, conformance 117/0", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "libm's FMA builds never run on this branch: libm.a/libm.so carry their own copy of liella_boundary::dispatch::FMA that startup never sets (two copies of the byte in a static probe); LIBM-F64-FAST-KERNELS-3 fixes it; FMA counts of erf/erfc must be taken after it lands",
+  "the direct-tier gate escalates to FULL for any branch touching s10_math.tsv; it ran 47 min",
+  "plants run 1: erfc-normal-only WARN-NO-MSG (caught by the correct-rounding assertion before the flag check); msg widened, run 2 on the same code",
+  "percall erfc row MISMATCH is the reference's last bit (see handoff)"],
+ "refused": [],
+ "improvement": "sync_role refuses while a job runs in the role, so a handoff-only edit after starting the gate cannot be synced; letting plants take a plants file outside the tree worked; a 'handoff-only' sync mode would help",
+ "next_step": "after LIBM-F64-FAST-KERNELS-3 lands, recount erf/erfc on both builds (FMA expected ~-50 on erf); then cut the innermost dd step's exact product with per-slot bounds from the generator",
+ "report_file": "handoff/libm-special-fast-tier.md",
+ "jobs": ["libm-special-fast-tier-4-gate", "libm-special-fast-tier-4-plants-2", "libm-special-fast-tier-4-counts-after"]}
