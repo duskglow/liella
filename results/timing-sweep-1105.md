@@ -1,14 +1,14 @@
 # TIMING-SWEEP-1105: Liella vs glibc timing on Ivy Bridge and N100 (non-libm groups)
 
-Hosts: nico = Ivy Bridge E3-1220L v2 (no AVX2); nozomi = Intel N100 (Alder Lake-N E-cores, AVX2). The N100 verdicts are for that core type only.
+Hosts: the Ivy Bridge timing host = Ivy Bridge E3-1220L v2 (no AVX2); the N100 timing host = Intel N100 (Alder Lake-N E-cores, AVX2). The N100 verdicts are for that core type only.
 Source: out/counters.tsv and out/rounds.tsv of one run per host (same code, same CPUs; instruction ratios from the same run).
 Tool: handoff/timing-sweep-1105-analyze.py. Time ratio = median of per-round Liella/glibc ratios; spread = (max-min)/median of rounds.
 Verdicts: faster < 0.95, parity 0.95..1.05, slower > 1.05. REOPEN = instr <= 1.05 and time > 1.05. CLOSE = instr > 1.05 and time <= 1.05.
 Benches were not rerun. Full per-row table: results/timing-sweep-1105-table.md (414 rows).
 
 ## Run status
-- nozomi (N100): bench.log ends rc=0 (all 431 budgets met).
-- nico (Ivy Bridge): bench.log ends rc=1. Cause: the bench's own budget check, not a crash or lost data:
+- the N100 timing host (N100): bench.log ends rc=0 (all 431 budgets met).
+- the Ivy Bridge timing host (Ivy Bridge): bench.log ends rc=1. Cause: the bench's own budget check, not a crash or lost data:
   cbench_nscache/first_getpwnam_r_cached (290206 ns) and first_getpwnam_r_create (285679 ns) exceed 1.25 x first_getpwnam_r_uncached (272500 ns) on that host.
   The counters/rounds files were written and are complete (414 rows both hosts). That budget failure is a separate finding about the nscache rows on Ivy Bridge (ratio between first-call rows, spread not examined here); it is not investigated in this task.
 
