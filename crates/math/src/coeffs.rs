@@ -12,6 +12,14 @@
 pub(crate) mod example_exp;
 pub(crate) mod example_sin;
 pub(crate) mod fast32_atan;
+pub(crate) mod fast32_j0;
+pub(crate) mod fast32_j0_small;
+pub(crate) mod fast32_j1;
+pub(crate) mod fast32_j1_small;
+pub(crate) mod fast32_y0;
+pub(crate) mod fast32_y0_reg;
+pub(crate) mod fast32_y1;
+pub(crate) mod fast32_y1_reg;
 pub(crate) mod tables;
 
 #[cfg(test)]

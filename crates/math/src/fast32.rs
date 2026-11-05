@@ -54,6 +54,14 @@ pub enum Fast {
     Acos,
     /// `atanf` (LIBM-F32-DOUBLE-KERNELS).
     Atan,
+    /// `j0f` (LIBM-F32-BESSEL).
+    J0,
+    /// `j1f` (LIBM-F32-BESSEL).
+    J1,
+    /// `y0f` (LIBM-F32-BESSEL).
+    Y0,
+    /// `y1f` (LIBM-F32-BESSEL).
+    Y1,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -300,6 +308,10 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Asin => (asin_core(x)?, ASIN_DELTA, "asinf"),
         Fast::Acos => (acos_core(x)?, ASIN_DELTA, "acosf"),
         Fast::Atan => (atan_core(x)?, ATAN_DELTA, "atanf"),
+        Fast::J0 => return bessel_finish(x, bessel_core(0, x)?, mode, "j0f"),
+        Fast::J1 => return bessel_finish(x, bessel_core(1, x)?, mode, "j1f"),
+        Fast::Y0 => return bessel_finish(x, bessel_core(2, x)?, mode, "y0f"),
+        Fast::Y1 => return bessel_finish(x, bessel_core(3, x)?, mode, "y1f"),
     };
     finish(x, y, delta, mode, name)
 }
@@ -886,7 +898,7 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => return None,
+        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::J0 | Fast::J1 | Fast::Y0 | Fast::Y1 => return None,
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -937,13 +949,176 @@ fast_fn!(atan, Fast::Atan, trig);
 fast_fn!(expm1, Fast::Expm1);
 fast_fn!(cbrt, Fast::Cbrt, pow);
 
+
+// The Bessel functions J0, J1, Y0, Y1 (LIBM-F32-BESSEL). Pieces: [0, 2) a fit around 0 (J) or
+// the series form Y_n = (2/π) ln(x) J_n + regular part (- 2/(πx) for Y1); [2, 24) eleven pieces
+// [c - 1, c + 1), c = 3, 5, ..., 23, each one polynomial in t = x - c; [24, 2^19) Hankel's
+// asymptotic form. Every core returns y with an ABSOLUTE bound e (|y - f| ≤ e): near a zero of
+// the function a relative bound cannot hold for a polynomial in x, so [`bessel_finish`] turns
+// e into the margin e/ulp(y) of this call. Near a zero that margin grows and the rounding test
+// refuses: those operands go to the accurate path (no table of zeros is needed for that).
+
+/// The switch from the pieces to Hankel's form (DLMF 10.17.3; the plant target "switch").
+const BES_HANKEL: f64 = 24.0;
+/// The end of the fast path: [`trig_core`]'s range.
+const BES_MAX: f64 = 524_288.0;
+/// The start of the fast path (the fits of the regular parts start there).
+const BES_MIN: f64 = 9.536_743_164_062_5e-7; // 2^-20
+const U53: f64 = 1.110_223_024_625_156_5e-16; // 2^-53
+const TWO53: f64 = 9_007_199_254_740_992.0;
+const TWO_OVER_PI: f64 = f64::from_bits(0x3fe4_5f30_6dc9_c883); // RN(2/π)
+const INV_PI_D: f64 = f64::from_bits(0x3fd4_5f30_6dc9_c883); // RN(1/π)
+/// The bounds, in units of 2^-53 (absolute unless stated), each ≥ the bound proved in
+/// `bessel_bounds_hold` from the coefficients (Horner: γ_2n·Σ|a_i||t|^i plus the fit's error).
+const BES_SMALL_E: f64 = 64.0; // J0 on [0, 2) (|J0| ≤ 1), and J1/x·|x| scaled by |x|
+const BES_REG_E: f64 = 64.0; // the regular parts of Y0, Y1 on [2^-20, 2)
+const BES_PIECE_E: f64 = 128.0; // the pieces of [2, 24)
+const BES_LOG_E: f64 = 400.0; // (2/π) ln x: log_core 2^-44.79 relative plus two roundings, of |L|
+const BES_HANKEL_E: f64 = 20.0; // Hankel's form, of the amplitude (see `hankel_core`)
+
+const J0S: [u64; 12] = crate::coeffs::fast32_j0_small::FAST32_J0_SMALL;
+const J1S: [u64; 12] = crate::coeffs::fast32_j1_small::FAST32_J1_SMALL;
+const Y0R: [u64; 12] = crate::coeffs::fast32_y0_reg::FAST32_Y0_REG;
+const Y1R: [u64; 12] = crate::coeffs::fast32_y1_reg::FAST32_Y1_REG;
+const BES_PIECES: [&[[u64; 17]; 11]; 4] = [
+    &crate::coeffs::fast32_j0::FAST32_J0,
+    &crate::coeffs::fast32_j1::FAST32_J1,
+    &crate::coeffs::fast32_y0::FAST32_Y0,
+    &crate::coeffs::fast32_y1::FAST32_Y1,
+];
+
+/// Hankel's coefficients for order ν: P takes (-1)^m a_2m, Q (-1)^m a_(2m+1), with a_0 = 1 and
+/// a_(k+1) = a_k·(4ν² - (2k+1)²)/(8(k+1)) (DLMF 10.17.1), k < 22. Each a_k is within 2k·u of
+/// its exact rational (checked in `hankel_coefficients_are_the_series`).
+const fn hankel_coeffs(nu: u32) -> [[f64; 11]; 2] {
+    let mu = (4 * nu * nu) as f64;
+    let mut pq = [[0.0; 11]; 2];
+    let mut a = 1.0;
+    let mut k = 0;
+    while k < 22 {
+        pq[k % 2][k / 2] = if (k / 2) % 2 == 0 { a } else { -a };
+        let j = (2 * k + 1) as f64;
+        a = a * (mu - j * j) / (8.0 * (k + 1) as f64);
+        k += 1;
+    }
+    pq
+}
+const HANKEL: [[[f64; 11]; 2]; 2] = [hankel_coeffs(0), hankel_coeffs(1)];
+
+#[inline(always)]
+fn horner(c: &[u64], t: f64) -> f64 {
+    let n = c.len();
+    let mut y = f64::from_bits(c[n - 1]);
+    let mut i = n - 1;
+    while i > 0 {
+        i -= 1;
+        y = y * t + f64::from_bits(c[i]);
+    }
+    y
+}
+
+#[inline(always)]
+fn horner_f(c: &[f64; 11], t: f64) -> f64 {
+    let mut y = c[10];
+    let mut i = 10;
+    while i > 0 {
+        i -= 1;
+        y = y * t + c[i];
+    }
+    y
+}
+
+/// Hankel's form for x in [24, 2^19): f = √(2/(πx))·(P cos ω ∓ ...), ω = x - νπ/2 - π/4, written
+/// with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P(s - c) + Q(c + s)), J1 =
+/// A·(P(s - c) + Q(s + c)), Y1 = A·(Q(s - c) - P(s + c)), A = √(1/(πx)).
+/// P and Q are truncated after a_20 and a_21: for real x and k ≥ ν - 1/2 the remainder is
+/// bounded by the first neglected term (DLMF 10.17(iii)), |a_22|/24^22 < 2^-59 and less beyond.
+/// Errors in units u = 2^-53: s, c 9.05 each (trig_core), c ± s ≤ 9.05·√2 + √2 < 14.2 (|c ± s| ≤
+/// √2); |P - 1| < 2^-12 with ΔP < 1.1 (the last sum), |Q| < 0.016 with ΔQ < 0.1; the products and
+/// the bracket's sum add < 1.42 + 1.42 + 0.03: the bracket ≤ 19.1, the truncation < 0.1. A: 1/x
+/// (1), ·1/π (1 + the constant's 1), sqrt64 1.6: ≤ 4.6 relative, and the product 1, so
+/// e ≤ (20·A + 6·|y|)·u.
+#[inline(always)]
+fn hankel_core(f: usize, x: f64) -> Option<(f64, f64)> {
+    let (s, c) = trig_core(x as f32)?;
+    let r = 1.0 / x;
+    let z = r * r;
+    let nu = f & 1;
+    let p = horner_f(&HANKEL[nu][0], z);
+    let q = r * horner_f(&HANKEL[nu][1], z);
+    let (sum, dif) = (c + s, s - c);
+    let b = match f {
+        0 => p * sum - q * dif,
+        1 | 2 => p * dif + q * sum,
+        _ => q * dif - p * sum,
+    };
+    let a = sqrt64(INV_PI_D * r);
+    let y = a * b;
+    Some((y, (BES_HANKEL_E * a + 6.0 * y.abs()) * U53))
+}
+
+/// J0 (f = 0), J1 (1), Y0 (2), Y1 (3) of a `float` x as (y, e) with |y - f| ≤ e, or `None`
+/// (x outside [2^-20, 2^19) in magnitude, x ≤ 0 for Y, NaN). The bounds are at the constants.
+#[inline(always)]
+fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
+    let xd = f64::from(x);
+    let ax = xd.abs();
+    if !(BES_MIN..BES_MAX).contains(&ax) || (f >= 2 && xd < 0.0) {
+        return None;
+    }
+    // J1 is odd, J0 even.
+    let sign = if f == 1 && xd < 0.0 { -1.0 } else { 1.0 };
+    let (y, e) = if ax < 2.0 {
+        let z = ax * ax;
+        match f {
+            0 => {
+                let y = horner(&J0S, z);
+                (y, BES_SMALL_E * U53)
+            }
+            1 => (ax * horner(&J1S, z), BES_SMALL_E * U53 * ax),
+            _ => {
+                let l = TWO_OVER_PI * log_core(x)?;
+                if f == 2 {
+                    let j = horner(&J0S, z);
+                    let y = l * j + horner(&Y0R, z);
+                    (y, (BES_LOG_E * l.abs() + BES_REG_E + 2.0 * y.abs()) * U53)
+                } else {
+                    let j = ax * horner(&J1S, z);
+                    let w = TWO_OVER_PI / ax;
+                    let y = (l * j + ax * horner(&Y1R, z)) - w;
+                    (y, (2.0 * w + BES_LOG_E * (l * ax).abs() + BES_REG_E * ax + 2.0 * y.abs()) * U53)
+                }
+            }
+        }
+    } else if ax < BES_HANKEL {
+        let i = ((ax - 2.0) * 0.5) as usize;
+        let t = ax - (3 + 2 * i) as f64; // exact: both on the 2^-48 grid, |t| ≤ 1
+        (horner(&BES_PIECES[f][i], t), BES_PIECE_E * U53)
+    } else {
+        hankel_core(f, ax)?
+    };
+    Some((sign * y, e))
+}
+
+/// The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53),
+/// refused at or beyond 2^26 (the test's mask is 2^28; y near a zero lands here).
+#[inline(always)]
+fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
+    let d = e * TWO53 / y.abs();
+    if !(d < 67_108_864.0) {
+        stats::record(name, false);
+        return None;
+    }
+    finish(x, y, d as u64 + 1, mode, name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::exp_log as acc;
 
-    const ALL: [Fast; 15] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan];
-    const NAMES: [&str; 15] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf"];
+    const ALL: [Fast; 19] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::J0, Fast::J1, Fast::Y0, Fast::Y1];
+    const NAMES: [&str; 19] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "j0f", "j1f", "y0f", "y1f"];
     const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
@@ -964,6 +1139,10 @@ mod tests {
             Fast::Asin => crate::trig::asin(x, m),
             Fast::Acos => crate::trig::acos(x, m),
             Fast::Atan => crate::trig::atan(x, m),
+            Fast::J0 => crate::special::j0_accurate(x, m),
+            Fast::J1 => crate::special::j1_accurate(x, m),
+            Fast::Y0 => crate::special::y0_accurate(x, m),
+            Fast::Y1 => crate::special::y1_accurate(x, m),
         }
     }
 
