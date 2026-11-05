@@ -147,6 +147,19 @@ static void fresh_process(char *const env[], int fresh, double out[2])
         out[1] = b;
 }
 
+/* `rounds` rounds of the three kinds of fresh process, in turn: `t[0]` the region valid, `t[1]`
+ * the region created, `t[2]` the cache off (`off`); each the best first and second lookups. */
+static void fresh_rounds(char *const on[], char *const off[], int rounds, double t[3][2])
+{
+    for (int k = 0; k < 3; k++)
+        t[k][0] = t[k][1] = 1e300;
+    for (int i = 0; i < rounds; i++) {
+        fresh_process(on, 0, t[0]);
+        fresh_process(on, 1, t[1]);
+        fresh_process(off, 0, t[2]);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "first")) {
@@ -184,13 +197,7 @@ int main(int argc, char **argv)
     char *const on[] = {(char *)"PATH=/usr/bin:/bin", (char *)"LIELLA_NSCACHE=1", NULL};
     char *const off[] = {(char *)"PATH=/usr/bin:/bin", (char *)"LIELLA_NSCACHE=0", NULL};
     double t[3][2];
-    for (int k = 0; k < 3; k++)
-        t[k][0] = t[k][1] = 1e300;
-    for (int i = 0; i < 40; i++) {
-        fresh_process(on, 0, t[0]);
-        fresh_process(on, 1, t[1]);
-        fresh_process(off, 0, t[2]);
-    }
+    fresh_rounds(on, off, 40, t);
     put("first_getpwnam_r_cached", t[0][0]);
     put("second_getpwnam_r_cached", t[0][1]);
     put("first_getpwnam_r_create", t[1][0]);
