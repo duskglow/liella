@@ -135,19 +135,9 @@ impl intl::Host for Catalogs {
         if process::secure() { None } else { LANGUAGE.getenv(b"LANGUAGE") }.map(strz::env_value)
     }
 
-    fn language_probe(&self) -> Option<Option<usize>> {
-        // Remembered across lookups, as in `language` (one memo: this is the only reader).
-        static LANGUAGE: process::EnvMemo = process::EnvMemo::new();
-        Some(if process::secure() { None } else { LANGUAGE.getenv(b"LANGUAGE") })
-    }
-
-    fn text_at(&self, addr: usize) -> &'static [u8] {
-        strz::env_value(addr)
-    }
-
-    fn text_equals(&self, addr: usize, len: usize, stored: &dyn Fn(usize) -> u64) -> Option<&'static [u8]> {
-        strz::text_equals_words(addr, len, stored)
-    }
+    // No `language_probe` / `text_equals` here (PERF-GETTEXT-LANGUAGE-STEADY): the fused aligned
+    // compare of the value with the slot's list cost more per call than `strlen` plus the word
+    // compare in `Resolution::matches` (docs/saturation/14, row 6 runs 3 and 4).
 
     fn locale(&self) -> &'static Locale {
         locale::current()
