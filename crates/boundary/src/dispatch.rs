@@ -58,20 +58,19 @@ pub(crate) fn select(avx2: bool) {
         store_cmp_gates(FOLD.load(Relaxed) != 0, false);
     }
     AVX2.store(avx2, Relaxed);
-    update_cmp_gates();
     if avx2 {
         CMP_MID.store(128, Relaxed);
-        CMP_LONG_WORD.store(crate::hot::CMP_LONG, Relaxed);
     }
+    update_cmp_gates();
 }
 
-// The compare entries' 65-128 class word (machine/fold.S, MEMCMP-MID-3): one `cmp`/`ja` against it
-// sends sizes above it to the checked entries, replacing a range test and a flag test. It depends
-// on the AVX2 flag alone (not on folding: option B keeps the explicit NULL tests above 64).
+// The AVX2 flag word of the ordered compare's SSE2 long class (machine/fold.S, MEMCMP-MID-3): 128
+// with the AVX2 builds, else 0; `.Lcmp_sse_long` sends an AVX2 build to the Rust large class.
 use crate::ffi::liella_machine_cmp_mid as CMP_MID;
-// The compare entries' 129-2048 class word (machine/fold.S, MEMCMP-MID-4): the same rule as the
-// 65-128 word. The order of the two stores does not matter for the class (it re-tests n <= 128);
-// only the flag rule does (both are zero whenever the flag is false).
+// The compare entries' 65-2048 class word (machine/fold.S, MEMCMP-MID-4, PERF-MEMCMP-TAILS): one
+// `cmp`/`ja` against it sends larger sizes to the checked or SSE2 classes. Nonzero only with both
+// folding and AVX2 on, because those classes fold the NULL test into their first 32-byte load
+// (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048 bytes). Stored by [`store_cmp_gates`].
 use crate::ffi::liella_machine_cmp_long as CMP_LONG_WORD;
 
 // The compare entries' class words (machine/fold.S, MEMCMP-EQ64 + SEQ-REGRESS): the entries add
@@ -97,6 +96,11 @@ fn update_cmp_gates() {
 fn store_cmp_gates(fold: bool, avx2: bool) {
     let wide = if fold && avx2 { 32 } else { 0 };
     let low = if !fold { 0 } else if avx2 { 25 } else { 57 };
+    // The 65-2048 word (sizes above 64 only, independent of WIDE and LOW): dropped first, raised last.
+    let long = if fold && avx2 { crate::hot::CMP_LONG } else { 0 };
+    if long == 0 {
+        CMP_LONG_WORD.store(0, Relaxed);
+    }
     if wide < CMP_WIDE.load(Relaxed) {
         CMP_WIDE.store(wide, Relaxed);
         CMP_LOW.store(low, Relaxed);
@@ -104,19 +108,22 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
         CMP_LOW.store(low, Relaxed);
         CMP_WIDE.store(wide, Relaxed);
     }
+    CMP_LONG_WORD.store(long, Relaxed);
 }
 
 /// NULL folding (owner rulings 2026-10-08, D-4.22): the copy and fill entries take sizes
 /// `1..=FOLD` straight to their assembly classes (`csys/src/machine/fold.S`) with no NULL test,
 /// where a NULL faults on page zero (SIGSEGV, what glibc observably does: it has no NULL check of
 /// its own). Every other size, 65-128 included, keeps the explicit S6 checks in Rust (option B:
-/// no Rust code performs a deliberate NULL access). `0` (the start value, and the value whenever
+/// no Rust code performs a deliberate NULL access); the compare and equality entries also fold
+/// 65-2048 in their AVX2 classes (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS; `CMP_LONG_WORD`). `0` (the start value, and the value whenever
 /// page zero could be mapped) keeps the explicit checks for every size.
 ///
 /// Proof obligation (every fold relies on it): `FOLD` is nonzero only while no access in
 /// `[0, 64 KiB)` can succeed, which [`page_zero_unmappable`] establishes at startup
 /// (`runtime`; `selftest` forces it in tests). A folded kernel touches at most
-/// `[d, d + FOLD_MAX)` with `FOLD_MAX` = 64 <= 64 KiB, so a NULL `d` or `s` faults.
+/// `[d, d + FOLD_MAX)` with `FOLD_MAX` = 64 <= 64 KiB, so a NULL `d` or `s` faults; the 65-2048
+/// compare classes first touch `[a, a + 32)` and `[b, b + 32)` (their head block).
 // The word itself lives in machine/fold.S (`liella_machine_fold_limit`), which reads it on every
 // call (D-4.22 COPY-FILL).
 use crate::ffi::liella_machine_fold_limit as FOLD;
