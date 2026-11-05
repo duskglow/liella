@@ -13,6 +13,13 @@ pub(crate) mod example_exp;
 pub(crate) mod example_sin;
 pub(crate) mod fast32_atan;
 pub(crate) mod fast32_cos;
+pub(crate) mod fast32_erf;
+pub(crate) mod fast32_erfcx0;
+pub(crate) mod fast32_erfcx1;
+pub(crate) mod fast32_erfcx2;
+pub(crate) mod fast32_erfcx3;
+pub(crate) mod fast32_erfcx4;
+pub(crate) mod fast32_erfcx5;
 pub(crate) mod fast32_sin;
 
 // The constant tables (D-10.3): one `@generated` file per family, written by `cargo xtask

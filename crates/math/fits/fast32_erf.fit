@@ -1,0 +1,9 @@
+# LIBM-F32-ERF (D-10.3): erf on [-1, 1], the inner piece of the `float` erf/erfc kernel:
+# erf x = x·P(x²). Odd powers to 21 (degree chosen from trial fits: about 2^-56 after rounding).
+name = fast32_erf
+target = erf
+interval = -1, 1
+powers = odd 1..21
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_erf.rs
