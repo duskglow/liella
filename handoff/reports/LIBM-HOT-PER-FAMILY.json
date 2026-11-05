@@ -1,0 +1,12 @@
+{"task": "LIBM-HOT-PER-FAMILY", "model": "opus", "tokens": null,
+ "result": "hot.rs split into hot/{mod,mem,delim,exp_log,invtrig,hyperbolic,<empty families>}.rs as a pure move; clippy, static, plants 4/4 green; per-row counts not identical (196/348 rows differ by tiny amounts both ways), noise control running; FULL gate running",
+ "branch": "task/libm-hot-per-family", "head": null,
+ "gate": {"affected": "FULL tier running (libm-hot-per-family-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "plan S2 hot-kernel location now the hot module directory src/hot/ instead of the file src/hot.rs", "recommendation": "accept: same module, same contract, same audit"}],
+ "informational": ["counts before/after differ by +-0.02% on 196 of 348 rows in both directions and libc.so.6 section hashes differ; hypothesis counter noise + LTO layout, control job libm-hot-per-family-counts-noise"],
+ "refused": [],
+ "improvement": "a counts-identity proof needs a same-tree noise baseline (or a section/per-function comparison) built into the counts tooling; per-call instruction counts are not bit-stable between runs",
+ "next_step": "read libm-hot-per-family-counts-noise: similar spread -> COMPLETE; otherwise compare nm -S per-function sizes of base and split builds",
+ "report_file": "handoff/LIBM-HOT-PER-FAMILY.md",
+ "jobs": ["shiki:libm-hot-per-family-gate", "shiki:libm-hot-per-family-plants", "shiki:libm-hot-per-family-counts"]}
