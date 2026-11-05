@@ -86,6 +86,7 @@ const SIZES: &[usize] = &[10, 50, 20, 63, 5, 40, 40, 1, 1, 62, 2, 64, 100, 3, 7,
 
 #[test]
 fn straddle_delivers_what_the_engine_delivers() {
+    // s12_5a_c_2 (fwrite counts), s12_4_c_1 (full buffering with setvbuf): no spec clause names the path.
     let (path, fp) = file("same");
     let (id, cp) = cookie(None);
     let mut all = Vec::new();
@@ -107,6 +108,7 @@ fn straddle_delivers_what_the_engine_delivers() {
 
 #[test]
 fn straddle_leaves_a_stream_that_flushes_seeks_and_reads_back() {
+    // s12_5a_c_2: fwrite after a straddle; no spec clause names the path.
     let (path, fp) = file("mix");
     let mut all = Vec::new();
     for round in 0..6u8 {
@@ -127,6 +129,7 @@ fn straddle_leaves_a_stream_that_flushes_seeks_and_reads_back() {
 
 #[test]
 fn straddle_write_error_counts_the_head_and_sets_the_indicator() {
+    // s12_5a_c_2 (short count), s12_8_c_5 (the error indicator): no spec clause names the path.
     // The descriptor refuses every write; the engine stream is scripted to fail its first write call.
     let fp = x::fopen(c"/dev/full".as_ptr(), c"w".as_ptr());
     if fp.is_null() {
