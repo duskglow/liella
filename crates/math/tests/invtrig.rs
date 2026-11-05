@@ -249,6 +249,14 @@ fn double_atan_fast_tier_table_agrees_with_the_multiprecision_atan() {
                 }
                 let e = m::atan(x);
                 assert_eq!(e.to_bits(), want.to_bits(), "atan({x:e}) = {e:e} by the entry (fma {fma}) near node {j}/64, multiprecision {want:e}: table entry FAILED");
+                // `|x| > 1` with `1/x` near the node: the folded `π/2 − atan(j/64)` entry.
+                let xr = 1.0 / x;
+                let want: f64 = mp::round::<f64>(mp::atan(Mp::from_f64(xr)), Rounding::Nearest).0;
+                if let Some(v) = invtrig::atan_nearest(xr) {
+                    assert_eq!(v.to_bits(), want.to_bits(), "atan({xr:e}) = {v:e} near 64/{j}, multiprecision {want:e}: folded table entry FAILED");
+                }
+                let e = m::atan(xr);
+                assert_eq!(e.to_bits(), want.to_bits(), "atan({xr:e}) = {e:e} by the entry (fma {fma}) near 64/{j}, multiprecision {want:e}: folded table entry FAILED");
             }
         }
     }

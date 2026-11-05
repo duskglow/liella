@@ -21,9 +21,10 @@
 //!   `|v| <= |y|` (j = 0: `y ≈ v`; j >= 1: `|v| <= 1/128 <= atan c − |v|`) the error is below
 //!   `2^-65.6 |y|`. The table `ATAN_J64` is a double-double within `2^-106` of `atan(j/64)`.
 //! * `atan x`, `|x| > 1`: `π/2 − atan(1/x)`, `th = RN(1/x)`, `tl = (1 − th·x)·th` (the residual is
-//!   exact, `tl` within `2^-105 t`). The subtracted value is at most `π/4`, so its error stays
-//!   below `2^-65.6` relative to the result (at least `π/4`); `π/2` as a double-double adds
-//!   `2^-106`.
+//!   exact, `tl` within `2^-105 t`), computed as `(π/2 − atan c) − atan v` with the constant
+//!   folded into the table (`HALF_MINUS`, within `2^-104`): the subtracted `atan v` is at most
+//!   `2^-7`, below the entry (at least `π/4`), so the two final double-double sums are as above
+//!   and the evaluation error of `atan v` stays below `2^-65.6` relative to the result.
 //! * `asin x = atan(a/s)` or `π/2 − atan(s/a)` (whichever ratio is at most 1), `s = sqrt((1−a)(1+a))`
 //!   with `(1 − a)(1 + a)` from two exact 2Sums and one exact product (within `2^-105`), its root
 //!   by `sqrtsd` and one correction step (within `2^-104`), the ratio by [`div_dd`] (within
@@ -33,7 +34,8 @@
 //!   (within `2^-103`): no cancellation (`2 atan w <= π/2`).
 //! * `atan2(y, x)`: the ratio `min/max` as `th = RN(n/d)` and its exact residual divided by `d`
 //!   (within `2^-105`), then `r`, `π/2 − r`, `π − r` or `π/2 + r` by sign and order of the
-//!   operands (each at least the subtracted `r`'s size).
+//!   operands (each at least the subtracted `r`'s size), the constant folded into the table as
+//!   for `atan` (`HALF_MINUS`, `PI_MINUS`, `HALF_PLUS`).
 //!
 //!   Every `atan`-family result is within `2^-65.5 |y|`; the rounding test uses
 //!   `EPS = 2^-62 |y|`, a factor 11 above it.
@@ -74,15 +76,47 @@ const fn pow2_bits(e: i32) -> u64 {
     ((1023 + e) as u64) << 52
 }
 const TWO_M60: f64 = f64::from_bits(pow2_bits(-60));
+/// `1.5·2^52`: adding it rounds a value in `[0, 2^51)` to an integer (round-to-nearest).
+const ROUNDER: f64 = 6_755_399_441_055_744.0;
 /// `2^-62`: the relative bound of the `atan`-family rounding test (the proof: module comment).
 pub const EPS: f64 = f64::from_bits(pow2_bits(-62));
 /// `2^-98`: the relative bound of the `hypot` rounding test.
 pub const EPS_HYPOT: f64 = f64::from_bits(pow2_bits(-98));
 
-/// `atan(j/64)` for `jf = j` (`0 <= j <= 64`) as a double-double.
+/// A table of 65 double-doubles indexed by `j`, `0 <= j <= 64`.
+type Table = [[u64; 2]; 65];
+
+/// `ch + cl + s·atan(j/64)` for `s = ±1` (each entry at least `π/4`; within `2^-104` of the
+/// value relative, from `ATAN_J64`'s `2^-106` and the constant's `2^-107`: `hi + err` is
+/// `ch + s·ah` exactly, one rounding in `lo`, the last step exact).
+const fn shifted(a: &Table, ch: f64, cl: f64, s: f64) -> Table {
+    let mut o = [[0u64; 2]; 65];
+    let mut j = 0;
+    while j < 65 {
+        let (ah, al) = (s * f64::from_bits(a[j][0]), s * f64::from_bits(a[j][1]));
+        let hi = ch + ah;
+        let bb = hi - ch;
+        let err = (ch - (hi - bb)) + (ah - bb);
+        let lo = err + (cl + al);
+        let h = hi + lo;
+        o[j] = [h.to_bits(), (lo - (h - hi)).to_bits()];
+        j += 1;
+    }
+    o
+}
+
+/// `π/2 − atan(j/64)`, `π − atan(j/64)` and `π/2 + atan(j/64)`: the constant of `atan` for
+/// `|x| > 1` and of the `atan2` quadrants folded into the table add (no separate subtraction).
+static HALF_MINUS: Table = shifted(&t::ATAN_J64, HALF_HI, HALF_LO, -1.0);
+static PI_MINUS: Table = shifted(&t::ATAN_J64, PI_HI, PI_LO, -1.0);
+static HALF_PLUS: Table = shifted(&t::ATAN_J64, HALF_HI, HALF_LO, 1.0);
+
+/// `j = round(64 th)` as a `double` and as the index (`0 <= th <= 1 + 2^-52`, so `0 <= j <= 64`):
+/// `m = 64 th + 1.5·2^52` holds `j` in its low bits, read directly instead of converting `j`.
 #[inline(always)]
-fn table(jf: f64) -> [u64; 2] {
-    t::ATAN_J64[usize::try_from(dd::to_i32(jf)).unwrap_or(0).min(64)]
+fn index(th: f64) -> (f64, usize) {
+    let m = th * 64.0 + ROUNDER;
+    (m - ROUNDER, usize::try_from(m.to_bits() & 0x7f).unwrap_or(0).min(64))
 }
 
 /// `c·th` exactly for `c = j/64` (at most 7 significant bits): Dekker's product with the split
@@ -136,11 +170,12 @@ fn done(y: Dd, sign: u64) -> Option<f64> {
 // cannot be combined with `#[target_feature]`).
 macro_rules! kernels {
     ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path, $small:path) => {
-        /// `atan(th + tl)` for `2^-60 <= th <= 1 + 2^-52`, `|tl| <= ulp(th)`: within `2^-65.6`
-        /// relative (module comment).
+        /// `tab[j] + sg·atan v` (`sg = ±1`, `tab` = `ATAN_J64` or a [`shifted`] table), that is
+        /// `atan(th + tl)`, or a constant plus or minus it, for `2^-60 <= th <= 1 + 2^-52`,
+        /// `|tl| <= ulp(th)`: within `2^-65.6` relative (module comment).
         $(#[$a])* $(#[$i])*
-        fn atan_unit(th: f64, tl: f64) -> Dd {
-            let jf = dd::nearest_int(th * 64.0);
+        fn atan_unit(th: f64, tl: f64, tab: &Table, sg: f64) -> Dd {
+            let (jf, j) = index(th);
             let c = jf * (1.0 / 64.0);
             let n = two_sum(th - c, tl); // th − c exact
             let p = $small(c, th);
@@ -152,9 +187,9 @@ macro_rules! kernels {
             let q2 = rem / d.hi;
             let z = q1 * q1;
             let p = z * (C3 + z * (C5 + z * (C7 + z * C9)));
-            let a = table(jf);
-            let s = fast_two_sum(f64::from_bits(a[0]), q1);
-            fast_two_sum(s.hi, s.lo + (f64::from_bits(a[1]) + (q2 + q1 * p)))
+            let a = tab[j];
+            let s = fast_two_sum(f64::from_bits(a[0]), sg * q1);
+            fast_two_sum(s.hi, s.lo + (f64::from_bits(a[1]) + sg * (q2 + q1 * p)))
         }
 
         /// The quotient `n/d` of two positive double-doubles (within `2^-103` relative).
@@ -188,12 +223,12 @@ macro_rules! kernels {
             }
             let a = f64::from_bits(ab);
             let y = if a <= 1.0 {
-                atan_unit(a, 0.0)
+                atan_unit(a, 0.0, &t::ATAN_J64, 1.0)
             } else {
                 let th = 1.0 / a;
                 let p = $prod(th, a);
                 let tl = ((1.0 - p.hi) - p.lo) * th;
-                comb(HALF_HI, HALF_LO, -1.0, atan_unit(th, tl))
+                atan_unit(th, tl, &HALF_MINUS, -1.0)
             };
             done(y, bits)
         }
@@ -216,10 +251,11 @@ macro_rules! kernels {
             let s = sqrt_dd(fast_two_sum(p.hi, p.lo + (m1.hi * m2.lo + m1.lo * m2.hi)), sqrt);
             let av = Dd { hi: a, lo: 0.0 };
             let y = if a > s.hi {
-                comb(HALF_HI, HALF_LO, -1.0, { let t = div_dd(s, av); atan_unit(t.hi, t.lo) })
+                let t = div_dd(s, av);
+                atan_unit(t.hi, t.lo, &HALF_MINUS, -1.0)
             } else {
                 let t = div_dd(av, s);
-                atan_unit(t.hi, t.lo)
+                atan_unit(t.hi, t.lo, &t::ATAN_J64, 1.0)
             };
             done(y, bits)
         }
@@ -238,7 +274,7 @@ macro_rules! kernels {
             }
             let a = f64::from_bits(ab);
             let w = sqrt_dd(div_dd(two_sum(1.0, -a), two_sum(1.0, a)), sqrt);
-            let at = atan_unit(w.hi, w.lo);
+            let at = atan_unit(w.hi, w.lo, &t::ATAN_J64, 1.0);
             let y2 = Dd { hi: 2.0 * at.hi, lo: 2.0 * at.lo };
             done(if bits & SIGN != 0 { comb(PI_HI, PI_LO, -1.0, y2) } else { y2 }, 0)
         }
@@ -265,13 +301,13 @@ macro_rules! kernels {
             }
             let p = $prod(th, d);
             let tl = ((n - p.hi) - p.lo) / d;
-            let r = atan_unit(th, tl);
-            let r = match (swap, xb & SIGN != 0) {
-                (false, false) => r,
-                (true, false) => comb(HALF_HI, HALF_LO, -1.0, r),
-                (false, true) => comb(PI_HI, PI_LO, -1.0, r),
-                (true, true) => comb(HALF_HI, HALF_LO, 1.0, r),
+            let (tab, sg): (&Table, f64) = match (swap, xb & SIGN != 0) {
+                (false, false) => (&t::ATAN_J64, 1.0),
+                (true, false) => (&HALF_MINUS, -1.0),
+                (false, true) => (&PI_MINUS, -1.0),
+                (true, true) => (&HALF_PLUS, 1.0),
             };
+            let r = atan_unit(th, tl, tab, sg);
             done(r, yb)
         }
 
@@ -307,8 +343,8 @@ kernels!(; #[inline(always)]; dd::two_prod, prod_small);
 // ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{comb, done, settle, table, two_sum, fast_two_sum, Dd, dd, pow2_bits};
-    use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_HI, HALF_LO, PI_HI, PI_LO, SIGN, TWO_M60};
+    use super::{comb, done, settle, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
+    use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, SIGN, TWO_M60};
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma);
 }
