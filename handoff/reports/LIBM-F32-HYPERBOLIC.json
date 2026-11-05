@@ -1,11 +1,34 @@
-{"task": "LIBM-F32-HYPERBOLIC", "model": "opus", "tokens": null,
- "result": "fast32 kernels for sinhf, coshf, tanhf, asinhf, acoshf, atanhf (proved bounds, rounding test, accurate fallback); jobs running at hand-back",
- "branch": "task/libm-f32-hyperbolic", "head": "872c0c88",
- "gate": {"affected": "running at hand-back (libm-f32-hyperbolic-gate)", "peak": null}, "accepted_first_attempt": null,
+{
+ "task": "LIBM-F32-HYPERBOLIC",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: six fast32 hyperbolic kernels committed; plants2 coefficient plant (drop D8 in log1p64) SURVIVED, gate/counts/sweeps running at hand-back",
+ "branch": "task/libm-f32-hyperbolic",
+ "head": "872c0c88",
+ "gate": {
+  "affected": "running at hand-back (libm-f32-hyperbolic-gate)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["before counts (Liella/glibc): sinhf 1520.1/145.4, coshf 1505.0/78.8, tanhf 1520.3/131.2, asinhf 1482.4/88.9, acoshf 1444.4/72.9, atanhf 1494.3/115.7; after counts in libm-f32-hyperbolic-after", "no new polynomial or table, so no Remez fit to record", "plants run 1 (libm-f32-hyperbolic-plants) was refused by the tool: one pattern matched 2 sites; anchored and rerun as -plants2"],
+ "informational": [
+  "before counts (Liella/glibc): sinhf 1520.1/145.4, coshf 1505.0/78.8, tanhf 1520.3/131.2, asinhf 1482.4/88.9, acoshf 1444.4/72.9, atanhf 1494.3/115.7; after counts in libm-f32-hyperbolic-after",
+  "no new polynomial or table, so no Remez fit to record",
+  "plants run 1 (libm-f32-hyperbolic-plants) was refused by the tool: one pattern matched 2 sites; anchored and rerun as -plants2"
+ ],
  "refused": [],
  "improvement": "context, not calls, bound this run: a story with six kernels plus sweeps wants a 200k context or a split by kernel group (exp-based vs log-based)",
- "next_step": "dispatcher reads the jobs; if after-counts show sqrt64 dominating asinhf/acoshf, apply ruling #2783's _mm_sqrt_sd",
+ "next_step": "replace the coefficient plant with a stronger one (D4) or add a case-A sub-bound (3.2u) to the log1p64 check, rerun plants; read gate, after, sweeps",
  "report_file": "handoff/libm-f32-hyperbolic.md",
- "jobs": ["libm-f32-hyperbolic-gate", "libm-f32-hyperbolic-plants2", "libm-f32-hyperbolic-after", "libm-f32-hyperbolic-sweep-sinhf", "libm-f32-hyperbolic-sweep-coshf", "libm-f32-hyperbolic-sweep-tanhf", "libm-f32-hyperbolic-sweep-asinhf", "libm-f32-hyperbolic-sweep-acoshf", "libm-f32-hyperbolic-sweep-atanhf"]}
+ "jobs": [
+  "libm-f32-hyperbolic-gate",
+  "libm-f32-hyperbolic-plants2",
+  "libm-f32-hyperbolic-after",
+  "libm-f32-hyperbolic-sweep-sinhf",
+  "libm-f32-hyperbolic-sweep-coshf",
+  "libm-f32-hyperbolic-sweep-tanhf",
+  "libm-f32-hyperbolic-sweep-asinhf",
+  "libm-f32-hyperbolic-sweep-acoshf",
+  "libm-f32-hyperbolic-sweep-atanhf"
+ ]
+}
