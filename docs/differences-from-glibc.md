@@ -384,20 +384,18 @@ the oracle):
 Measured agreement of the reference with Liella's correctly rounded results (round to nearest, black-box probe
 `libm-slow-path-cause-agree`, handoff/libm-slow-path-cause/report.md section 2; `double` unless a name ends in `f`):
 
-| Functions | Inputs where the two differ | Largest difference |
-|---|---|---|
-| `exp`, `log`, `exp10` | 0.01-0.1% | 1 ulp |
-| `sin`, `tan`, `atan`, `asin`, `atan2` | 0.03-0.25% | 1 ulp |
-| `hypot` | 0.1-0.6% | 1 ulp |
-| `expm1`, `log1p` | 1.5-6.8% | 1 ulp |
-| `sinf`, `asinf`, `atanf` | 0.8-7.3% | 1 ulp |
-| `erf`, `erff` | 2-10% | 1 ulp |
-| `tanh` | 5-22% | 2 ulp |
-| `sinh` | 21-26% | 2 ulp |
-| `lgamma`, `lgammaf` | 29-32% | 4 ulp |
-| `tgamma` | 33-47% | 4 ulp |
-| `cbrt` | 46-54% | 3 ulp |
-| `j0` | 28-54% | 791 ulp (near a zero) |
+* `exp`, `log`, `exp10`: differ on 0.01-0.1% of inputs, largest difference 1 ulp.
+* `sin`, `tan`, `atan`, `asin`, `atan2`: differ on 0.03-0.25% of inputs, largest difference 1 ulp.
+* `hypot`: differ on 0.1-0.6% of inputs, largest difference 1 ulp.
+* `expm1`, `log1p`: differ on 1.5-6.8% of inputs, largest difference 1 ulp.
+* `sinf`, `asinf`, `atanf`: differ on 0.8-7.3% of inputs, largest difference 1 ulp.
+* `erf`, `erff`: differ on 2-10% of inputs, largest difference 1 ulp.
+* `tanh`: differ on 5-22% of inputs, largest difference 2 ulp.
+* `sinh`: differ on 21-26% of inputs, largest difference 2 ulp.
+* `lgamma`, `lgammaf`: differ on 29-32% of inputs, largest difference 4 ulp.
+* `tgamma`: differ on 33-47% of inputs, largest difference 4 ulp.
+* `cbrt`: differ on 46-54% of inputs, largest difference 3 ulp.
+* `j0`: differ on 28-54% of inputs, largest difference 791 ulp (near a zero).
 
 The functions of `_Float128` (elementary and special; measurements in the accuracy notes below):
 
