@@ -374,8 +374,225 @@ pub(crate) fn elem_round_below<F: Float>(q: float::Exact, mode: Rounding) -> (F,
     float::round::<F>(e, mode)
 }
 
-/// The `double` fast path of `sin`, `cos`, `tan` (M6-6, Ziv's strategy). It returns `None` when
-/// it cannot prove its result equals the double-double path's, which then runs unchanged.
+// The fast path's constants ([`fast`]): `π/64 = P1 + P2 + P3 + τ`.
+const P1: f64 = f64::from_bits(0x3fa9_21fb_5400_0000);
+const P2: f64 = f64::from_bits(0x3dc1_0b46_1000_0000);
+const P3: f64 = f64::from_bits(0x3c0a_6263_3145_c06e);
+// 1/k! with alternating signs; `T3` is `tan`'s `1/3`.
+const S3: f64 = -1.0 / 6.0;
+const S5: f64 = 1.0 / 120.0;
+const S7: f64 = -1.0 / 5040.0;
+const S9: f64 = 1.0 / 362_880.0;
+const C4: f64 = 1.0 / 24.0;
+const C6: f64 = -1.0 / 720.0;
+const C8: f64 = 1.0 / 40_320.0;
+const T3: f64 = 1.0 / 3.0;
+/// `2^-68`: the absolute error bound of an assembly whose table sine `S` is not zero ([`fast`]).
+const E_ABS: f64 = f64::from_bits(0x3bb0_0000_0000_0000);
+/// `2^-89` and `2^-63`: the bound `A + B·|y|` of an assembly with `S = 0` ([`fast`]).
+const A_RED: f64 = f64::from_bits(0x3a60_0000_0000_0000);
+const B_REL: f64 = f64::from_bits(0x3c00_0000_0000_0000);
+/// `2^-100`: the relative error of `tan`'s double-double division.
+const DIV_REL: f64 = f64::from_bits(0x39b0_0000_0000_0000);
+/// `2^-25`: with `S = 0`, the constant rounding test needs `|rh|` at least this ([`fast`]).
+const R25: f64 = f64::from_bits(0x3e60_0000_0000_0000);
+/// The constant tests' multipliers ([`fast`]): `1 + 2^-8 + 2^-14` for `rho = 2^-62` (sine,
+/// cosine), `1 + 2^-6 + 2^-11` for `rho = 2^-60` (tangent).
+const C_SIN: f64 = f64::from_bits(0x3ff0_1040_0000_0000);
+const C_TAN: f64 = f64::from_bits(0x3ff0_4200_0000_0000);
+/// Bit bounds of `|x|` in the in-place entries: `2^-339`, `2^-30` (`TINY`), `2^20`.
+const SMALL_BITS: u64 = 0x2ac0_0000_0000_0000;
+const TINY_BITS: u64 = 0x3e10_0000_0000_0000;
+const LIMIT_BITS: u64 = 0x4130_0000_0000_0000;
+
+/// The error bound of an assembly `y` from the table sine `sh` ([`fast`]).
+#[inline(always)]
+fn eps(sh: f64, y: Dd) -> f64 {
+    if sh == 0.0 { A_RED + B_REL * dd::abs(y.hi) } else { E_ABS }
+}
+
+/// `tan`'s error bound from the two assemblies `(s, S)`, `(c, C)` and the quotient `qh` ([`fast`]).
+#[inline(always)]
+fn tan_eps((s, ss): (Dd, f64), (c, cs): (Dd, f64), qh: f64) -> f64 {
+    1.01 * (eps(ss, s) / dd::abs(s.hi) + eps(cs, c) / dd::abs(c.hi) + DIV_REL) * dd::abs(qh)
+}
+
+/// `y` (from the table sine `sh` and the reduced `rh`) rounded to nearest: the constant test
+/// with `c` when its bound holds, else the exact test with [`eps`] ([`fast`]).
+#[inline(always)]
+fn nearest(y: Dd, sh: f64, rh: f64, c: f64) -> Option<f64> {
+    if sh != 0.0 || dd::abs(rh) >= R25 {
+        let w = y.lo * c;
+        if y.hi + w == y.hi && w != 0.0 {
+            return Some(y.hi);
+        }
+    }
+    fast::settle(y, eps(sh, y), Rounding::Nearest).map(|(v, _)| v)
+}
+
+/// The in-place `sin`, `tan` (`c` = `S3`, `T3`) of `x` with `|x|` bits `ix` below `2^-30`:
+/// `x + x²·(x·c)`, which rounds to `x` raising inexact only; `None` below `2^-339` (a product would
+/// be subnormal), for a subnormal and for every `|x| >= 2^-30` it is called with.
+#[inline(always)]
+fn small(x: f64, ix: u64, c: f64) -> Option<f64> {
+    if (SMALL_BITS..TINY_BITS).contains(&ix) { Some(x + x * x * (x * c)) } else { None }
+}
+
+/// The in-place `cos` for `|x|` bits `ix` below `2^-30`: `1 − |x|·2^-30` (exact product), which
+/// rounds to 1 raising inexact only; `None` as for [`small`].
+#[inline(always)]
+fn small_cos(x: f64, ix: u64) -> Option<f64> {
+    if (SMALL_BITS..TINY_BITS).contains(&ix) { Some(1.0 - dd::abs(x) * TINY) } else { None }
+}
+
+// The kernels and the in-place entries in two builds (D-10.25, as in `fast64`): `$prod` is
+// Dekker's `two_prod` or one FMA. Every product is exact in both (operands far from the
+// subnormal range: `|rh| > 2^-64`, its error term above `2^-240`), so both builds compute the
+// same values and take the same branches: the bounds in [`fast`] hold for either.
+// `#[inline(always)]` cannot be combined with `#[target_feature]`, hence `$i`.
+macro_rules! trig_kernels {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path) => {
+/// `x = k·π/64 + r`: `(k mod 128, r)` for `|x| < 2^20` ([`super::fast`]).
+$(#[$a])*
+$(#[$i])*
+pub(super) fn reduce(x: f64) -> (i32, Dd) {
+    let kf = dd::nearest_int(x * SCALE_PI);
+    let t1 = x - kf * P1;
+    let s = dd::two_sum(t1, -(kf * P2));
+    let rl = s.lo - kf * P3;
+    (dd::to_i32(kf) & 127, dd::two_sum(s.hi, rl))
+}
+
+/// `[rh, crh, crl, sr]` of the reduced `r`: `cos r − 1 = crh + crl`, `sin r − rh = sr`
+/// ([`super::fast`]), shared by the sine and the cosine assemblies.
+$(#[$a])*
+$(#[$i])*
+pub(super) fn poly(r: Dd) -> [f64; 4] {
+    let (rh, rl) = (r.hi, r.lo);
+    let zz = $prod(rh, rh);
+    let z = zz.hi;
+    let crh = -0.5 * z; // exact
+    let crl = -0.5 * zz.lo - rh * rl + z * z * (C4 + z * (C6 + z * C8));
+    let sr = rl - 0.5 * z * rl + rh * z * (S3 + z * (S5 + z * (S7 + z * S9)));
+    [rh, crh, crl, sr]
+}
+
+/// `sin(nπ/64 + r)` from [`poly`]'s terms, with the table sine `S` (for [`super::eps`]).
+$(#[$a])*
+$(#[$i])*
+pub(super) fn assemble(n: i32, [rh, crh, crl, sr]: [f64; 4]) -> (Dd, f64) {
+    let at = |i: i32| {
+        let e = t::SIN_K_PI64[usize::try_from(i & 127).unwrap_or(0)];
+        (f64::from_bits(e[0]), f64::from_bits(e[1]))
+    };
+    let ((sh, sl), (ch, cl)) = (at(n), at(n + 32));
+    let p = $prod(ch, rh);
+    let q = $prod(sh, crh);
+    let a = dd::two_sum(sh, p.hi);
+    let b = dd::two_sum(a.hi, q.hi);
+    let lo = a.lo + b.lo + p.lo + q.lo + sl + cl * rh + sh * crl + sl * crh + ch * sr + cl * sr;
+    (dd::fast_two_sum(b.hi, lo), sh)
+}
+
+/// `s/c` as a double-double (relative error `<= 2^-100`).
+$(#[$a])*
+$(#[$i])*
+pub(super) fn quotient(s: Dd, c: Dd) -> Dd {
+    let qh = s.hi / c.hi;
+    let p = $prod(qh, c.hi);
+    let ql = ((s.hi - p.hi - p.lo) + s.lo - qh * c.lo) / c.hi;
+    dd::fast_two_sum(qh, ql)
+}
+
+/// `sin x` correctly rounded to nearest, or `None` (the caller runs the accurate path). Hardware
+/// arithmetic only, raising inexact and nothing else when it answers; the caller guarantees the
+/// default SSE environment. In the FMA build the CPU must support FMA and the OS must save the
+/// AVX state (the `#[target_feature]` contract).
+$(#[$a])*
+$(#[$i])*
+pub fn sin_nearest(x: f64) -> Option<f64> {
+    let ix = x.to_bits() & !(1u64 << 63);
+    if !(TINY_BITS..LIMIT_BITS).contains(&ix) {
+        return small(x, ix, S3);
+    }
+    let (n, r) = reduce(x);
+    let (y, sh) = assemble(n, poly(r));
+    nearest(y, sh, r.hi, C_SIN)
+}
+
+/// `cos x` as [`sin_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn cos_nearest(x: f64) -> Option<f64> {
+    let ix = x.to_bits() & !(1u64 << 63);
+    if !(TINY_BITS..LIMIT_BITS).contains(&ix) {
+        return small_cos(x, ix);
+    }
+    let (n, r) = reduce(x);
+    let (y, sh) = assemble(n + 32, poly(r));
+    nearest(y, sh, r.hi, C_SIN)
+}
+
+/// `tan x` as [`sin_nearest`]: one reduction, one polynomial, both assemblies.
+$(#[$a])*
+$(#[$i])*
+pub fn tan_nearest(x: f64) -> Option<f64> {
+    let ix = x.to_bits() & !(1u64 << 63);
+    if !(TINY_BITS..LIMIT_BITS).contains(&ix) {
+        return small(x, ix, T3);
+    }
+    let (n, r) = reduce(x);
+    let p = poly(r);
+    let (s, c) = (assemble(n, p), assemble(n + 32, p));
+    let y = quotient(s.0, c.0);
+    if s.1 * c.1 != 0.0 || dd::abs(r.hi) >= R25 {
+        let w = y.lo * C_TAN;
+        if y.hi + w == y.hi && w != 0.0 {
+            return Some(y.hi);
+        }
+    }
+    fast::settle(y, tan_eps(s, c, y.hi), Rounding::Nearest).map(|(v, _)| v)
+}
+
+/// `(sin x, cos x)` as [`sin_nearest`] (both or `None`): one reduction, one polynomial.
+$(#[$a])*
+$(#[$i])*
+pub fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
+    let ix = x.to_bits() & !(1u64 << 63);
+    if !(TINY_BITS..LIMIT_BITS).contains(&ix) {
+        return Some((small(x, ix, S3)?, small_cos(x, ix)?));
+    }
+    let (n, r) = reduce(x);
+    let p = poly(r);
+    let ((s, ss), (c, cs)) = (assemble(n, p), assemble(n + 32, p));
+    Some((nearest(s, ss, r.hi, C_SIN)?, nearest(c, cs, r.hi, C_SIN)?))
+}
+    };
+}
+
+/// The fast kernels and the in-place round-to-nearest entries, baseline build (Dekker products).
+pub mod kernel {
+    use super::{dd, fast, nearest, small, small_cos, t, tan_eps, Dd, Rounding, C4, C6, C8, C_SIN, C_TAN, LIMIT_BITS, P1, P2, P3, R25, S3, S5, S7, S9, SCALE_PI, T3, TINY_BITS};
+
+    trig_kernels!(; #[inline(always)]; dd::two_prod);
+}
+
+/// [`kernel`], FMA build: the same results bit for bit. Callable only on a CPU with FMA and the
+/// OS-enabled AVX state; the boundary selects it once at startup (`dispatch::fma`).
+// ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
+#[cfg(target_arch = "x86_64")]
+pub mod fused {
+    use super::{dd, fast, nearest, small, small_cos, t, tan_eps, Dd, Rounding, C4, C6, C8, C_SIN, C_TAN, LIMIT_BITS, P1, P2, P3, R25, S3, S5, S7, S9, SCALE_PI, T3, TINY_BITS};
+
+    trig_kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma);
+}
+
+/// The `double` fast paths of `sin`, `cos`, `tan` and `sincos` (M6-6, Ziv's strategy;
+/// LIBM-F64-TRIG-TIER). They return `None` when they cannot prove their result is the correctly
+/// rounded one, and the double-double path then runs unchanged. One reduction
+/// ([`kernel::reduce`]) and one polynomial ([`kernel::poly`]) serve all; `tan` and `sincos`
+/// assemble the sine and the cosine from them. The in-place entries (`kernel::sin_nearest`, ...,
+/// and their FMA build `fused`) round to nearest; this module's functions serve every mode.
 ///
 /// * Reduction for `|x| < 2^20`: `k = nearest(x·64/π)`, `|k| < 2^24.35`; `π/64 = P1 + P2 + P3 + τ`
 ///   with `P1` of 27 bits, `P2` of 25 bits (so `k·P1`, `k·P2` are exact), `|τ| < 2^-119.1`.
@@ -387,30 +604,43 @@ pub(crate) fn elem_round_below<F: Float>(q: float::Exact, mode: Rounding) -> (F,
 /// * `sin(nπ/64 + r) = S + C·rh + S·(cos r − 1) + C·(sin r − rh)` with `S`, `C` from
 ///   `SIN_K_PI64` (double-double, `<= 2^-106`). Taylor tails: `sin` to `r^9` (next term
 ///   `< 2^-84`), `cos` to `r^8` (`< 2^-75.2`, times `|S| <= 2|y|`). `C·rh`, `S·(−rh²/2)` and the
-///   two leading sums are exact (Dekker `two_prod`, `two_sum`); the rest (`|·| < 2^-17.5`) is
-///   summed in `double`: at most ten roundings of `2^-72` plus the tails' own relative `2^-51`
-///   of `2^-18.5`, `< 2^-66.5` absolute. With `|y| >= sin(π/128) > 2^-5.35` when `S != 0`, and
-///   every term relative to `|y| ≈ |r|` when `S = 0`, the relative error is `< 2^-62.3`. Bound
-///   used: `B = 2^-61` (factor 2.4 for the `double` evaluation of `ε` itself and the
-///   double-double path's own `2^-100`).
-/// * Rounding test: `y = yh + yl` normalized; the nearest rounding boundary is `½ulp(yh) − |yl|`
-///   away (`¼ulp` below a power of two) to nearest, `|yl|` directed. The result is `yh` (nearest)
-///   or `elem::finish` of `y` (directed) only when that distance exceeds `ε = A + B·|yh|`.
+///   two leading sums are exact (Dekker `two_prod` or one FMA, `two_sum`); the rest is summed in
+///   `double` ([`kernel::assemble`]).
+/// * Error bound (LIBM-F64-TRIG-TIER, term by term; `u = 2^-53`, `|rh| <= 2^-5.34`,
+///   `z = RN(rh²) <= 2^-10.68`). Reduction `2^-89.9`, table `2^-105`, tails `2^-75.2`. Dropped:
+///   `z` for `rh²` in `rh·z·S3` (`2^-5.34·u·2^-10.68/6 < 2^-71.6`), `rl²/2` and `rh·rl²/2`
+///   (`< 2^-110`). `sr` (`|sr| < 2^-18.6`): the tail's products, sums and coefficients, `5u·2^-18.6
+///   < 2^-69.3`, its two additions `2u·2^-18.6 = 2^-70.6`. `crl` (`< 2^-25.9`): `< 2^-77.9`. The
+///   sum `lo`: the product `C·sr` and the last two additions act on values below `2^-18.5`
+///   (`3u·2^-18.5 < 2^-69.9`), the seven others below `2^-25.8` (`< 2^-76`); the final Fast2Sum is
+///   exact (`|lo| < 2^-18 < |b.hi|`). In all `< 2^-68` absolute: `E = 2^-68` when `S != 0`. When
+///   `S = 0` (`n ≡ 0 mod 64`: `C = ±1`, `cl = 0`, `p`, `q` exact and `a.lo = b.lo = 0`) every term
+///   but the reduction's scales with `|r|` (`sr`'s roundings `< 7u·r²/6`, relative `< 2^-64` to
+///   `|y| >= |r|·(1 − 2^-12)`): `eps = 2^-89 + 2^-63·|y|` ([`eps`]).
+/// * Rounding test, to nearest ([`nearest`]): first the constant test of `fast64::near` (de
+///   Dinechin, Lauter and Muller 2007; `eps <= rho·|y.hi|` and `c·(1 − 2^54·rho) > 1 + u`) with
+///   `rho = 2^-62`: `S != 0` gives `|y| >= sin(π/128)·(1 − 2^-40) > 2^-5.35`, `E/|y| < 2^-62.65`;
+///   `S = 0` with `|rh| >= 2^-25` gives `|y| > 2^-26`, `2^-89/|y| + 2^-63 < 2^-62`. `C_SIN = 1 +
+///   2^-8 + 2^-14`: `C·(1 − 2^-8) = 1 + 2^-14 − 2^-16 − 2^-22`. `tan = s/c` ([`kernel::quotient`]):
+///   relative error `<= e_s + e_c + 2·e_c·(e_s + e_c) + 2^-100`, so `rho = 2^-60` when both
+///   assemblies meet `2^-62`; `C_TAN = 1 + 2^-6 + 2^-11`: `C·(1 − 2^-6) = 1 + 2^-12 − 2^-17`. The
+///   values are transcendental (never a `double` nor a midpoint) and normal (`|y| > 2^-64`). When
+///   the constant test misses (about `2^54·rho` of the arguments) or is not allowed, and in the
+///   directed modes, the exact test decides: `y = yh + yl` normalized, the nearest rounding
+///   boundary is `½ulp(yh) − |yl|` away (`¼ulp` below a power of two) to nearest, `|yl|`
+///   directed; the result is `yh` (nearest) or `elem::finish` of `y` (directed) only when that
+///   distance exceeds `eps` ([`eps`], `tan`: [`tan_eps`]).
 /// * `|x| < 2^-30` (nearest only): `sin`, `tan` round to `x`, `cos` to 1, as `elem::near` gives.
 ///   The value is computed in hardware, so a caller's flush-to-zero would act on it (the
-///   envelope switches it off).
+///   envelope switches it off). The in-place entries answer only for `2^-339 <= |x| < 2^-30`
+///   ([`small`], [`small_cos`]), where every product is normal and only inexact is raised.
 mod fast {
-    use super::{elem, t, Dd, Residual, Rounding, Status, SCALE_PI, TINY};
+    use super::{elem, eps, kernel, tan_eps, Dd, Residual, Rounding, Status, TINY};
     use crate::dd;
     use crate::stats;
     use crate::status::Flags;
 
-    const P1: f64 = f64::from_bits(0x3fa9_21fb_5400_0000);
-    const P2: f64 = f64::from_bits(0x3dc1_0b46_1000_0000);
-    const P3: f64 = f64::from_bits(0x3c0a_6263_3145_c06e);
     const LIMIT: f64 = 1_048_576.0; // 2^20
-    const A: f64 = f64::from_bits(0x3a60_0000_0000_0000); // 2^-89
-    const B: f64 = f64::from_bits(0x3c20_0000_0000_0000); // 2^-61
     const MIN_NORMAL: f64 = f64::MIN_POSITIVE;
     const ONE_LESS: f64 = f64::from_bits(0x3fef_ffff_ffff_ffff); // 1 − 2^-53
 
@@ -422,51 +652,9 @@ mod fast {
     fn tiny_x(x: f64) -> f64 {
         if dd::abs(x) < MIN_NORMAL { x * ONE_LESS } else { x }
     }
-    // 1/k! with alternating signs.
-    const S3: f64 = -1.0 / 6.0;
-    const S5: f64 = 1.0 / 120.0;
-    const S7: f64 = -1.0 / 5040.0;
-    const S9: f64 = 1.0 / 362_880.0;
-    const C4: f64 = 1.0 / 24.0;
-    const C6: f64 = -1.0 / 720.0;
-    const C8: f64 = 1.0 / 40_320.0;
-
-    /// `x = k·π/64 + r`: `(k mod 128, r)` for `|x| < 2^20`.
-    #[inline(always)]
-    fn reduce(x: f64) -> (i32, Dd) {
-        let kf = dd::nearest_int(x * SCALE_PI);
-        let t1 = x - kf * P1;
-        let s = dd::two_sum(t1, -(kf * P2));
-        let rl = s.lo - kf * P3;
-        (dd::to_i32(kf) & 127, dd::two_sum(s.hi, rl))
-    }
-
-    /// `sin(nπ/64 + r)` and its error bound.
-    #[inline(always)]
-    fn eval(n: i32, r: Dd) -> (Dd, f64) {
-        let at = |i: i32| {
-            let e = t::SIN_K_PI64[usize::try_from(i & 127).unwrap_or(0)];
-            (f64::from_bits(e[0]), f64::from_bits(e[1]))
-        };
-        let ((sh, sl), (ch, cl)) = (at(n), at(n + 32));
-        let (rh, rl) = (r.hi, r.lo);
-        let zz = dd::two_prod(rh, rh);
-        let z = zz.hi;
-        let crh = -0.5 * z; // exact
-        let crl = -0.5 * zz.lo - rh * rl + z * z * (C4 + z * (C6 + z * C8));
-        let sr = rl - 0.5 * z * rl + rh * z * (S3 + z * (S5 + z * (S7 + z * S9)));
-        let p = dd::two_prod(ch, rh);
-        let q = dd::two_prod(sh, crh);
-        let a = dd::two_sum(sh, p.hi);
-        let b = dd::two_sum(a.hi, q.hi);
-        let lo = a.lo + b.lo + p.lo + q.lo + sl + cl * rh + sh * crl + sl * crh + ch * sr + cl * sr;
-        let y = dd::fast_two_sum(b.hi, lo);
-        (y, A + B * dd::abs(y.hi))
-    }
-
     /// The rounding test: `y` rounded in `mode` when every value within `eps` of it rounds alike.
     #[inline(always)]
-    fn settle(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)> {
+    pub(super) fn settle(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)> {
         let bits = y.hi.to_bits();
         let ex = (bits >> 52) & 0x7ff;
         if !(55..0x7fe).contains(&ex) {
@@ -512,9 +700,9 @@ mod fast {
         if ax >= LIMIT {
             return None;
         }
-        let (n, r) = reduce(x);
-        let (y, eps) = eval(n, r);
-        counted("sin", settle(y, eps, mode))
+        let (n, r) = kernel::reduce(x);
+        let (y, sh) = kernel::assemble(n, kernel::poly(r));
+        counted("sin", settle(y, eps(sh, y), mode))
     }
 
     pub(super) fn cos(x: f64, mode: Rounding) -> Option<(f64, Status)> {
@@ -525,9 +713,9 @@ mod fast {
         if ax >= LIMIT {
             return None;
         }
-        let (n, r) = reduce(x);
-        let (y, eps) = eval(n + 32, r);
-        counted("cos", settle(y, eps, mode))
+        let (n, r) = kernel::reduce(x);
+        let (y, sh) = kernel::assemble(n + 32, kernel::poly(r));
+        counted("cos", settle(y, eps(sh, y), mode))
     }
 
     /// `tan = sin/cos` in double-double: relative error `<= εs/|s| + εc/|c| + 2^-100`.
@@ -539,19 +727,16 @@ mod fast {
         if ax >= LIMIT {
             return None;
         }
-        let (n, r) = reduce(x);
-        let ((s, es), (c, ec)) = (eval(n, r), eval(n + 32, r));
-        let qh = s.hi / c.hi;
-        let p = dd::two_prod(qh, c.hi);
-        let ql = ((s.hi - p.hi - p.lo) + s.lo - qh * c.lo) / c.hi;
-        let y = dd::fast_two_sum(qh, ql);
-        let rel = es / dd::abs(s.hi) + ec / dd::abs(c.hi) + B * B;
-        counted("tan", settle(y, 1.01 * rel * dd::abs(qh), mode))
+        let (n, r) = kernel::reduce(x);
+        let p = kernel::poly(r);
+        let (s, c) = (kernel::assemble(n, p), kernel::assemble(n + 32, p));
+        let y = kernel::quotient(s.0, c.0);
+        counted("tan", settle(y, tan_eps(s, c, y.hi), mode))
     }
 
     #[cfg(test)]
     mod tests {
-        use super::super::{cos_accurate, sin_accurate, tan_accurate};
+        use super::super::{cos_accurate, sin_accurate, t, tan_accurate};
         use super::*;
 
         type Fun = (fn(f64, Rounding) -> Option<(f64, Status)>, fn(f64, Rounding) -> (f64, Status), &'static str);
