@@ -1,0 +1,11 @@
+{"task": "LIBM-F32-GAMMA", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: lgammaf/tgammaf double kernels (Remez fits, proved bounds, fallback near lgamma's negative zeros) committed; gate and plants running; sweeps and counts not run",
+ "branch": "task/libm-f32-gamma", "head": "3e302add",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The gate escalates to FULL because the coefficient files are generated sources (same as LIBM-F32-DOUBLE-KERNELS-2).", "Exhaustive lgammaf/tgammaf sweeps against the 384-bit path probably exceed the 150-minute slot; size with LIELLA_SWEEP_STRIDE=64 first."],
+ "refused": [],
+ "improvement": "jobrun ran in the foreground over ssh and tied a FULL gate to a 10-minute session; the brief's job lines should say to start them with setsid -f (or jobrun should detach itself).",
+ "next_step": "Collect libm-f32-gamma-gate2 and -plants, then the two sweeps (sized first) and cbench_libm counts before/after for tgammaf and lgammaf.",
+ "report_file": "handoff/libm-f32-gamma.md",
+ "jobs": ["shiki:libm-f32-gamma-gate2", "shiki:libm-f32-gamma-plants"]}
