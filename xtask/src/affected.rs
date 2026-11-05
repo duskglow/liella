@@ -19,7 +19,7 @@
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
 //!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
-//!    `include/`, the math fits; but the math wiring and coefficients, rule 8), the product crates, linker and export lists,
+//!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
 //! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
 //!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
@@ -60,8 +60,12 @@
 //!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
 //!    or `libm` or carries section 10, the conformance programs of section 10 or calling a math export) plus `cargo
 //!    xtask math-gen --check`; a coefficient file `crates/math/src/coeffs/<family>.rs` selects the `coeffs` module as if
-//!    changed, the same math export tests and `cargo xtask tables --check`. In every tier but `--tier full`; the math
-//!    fits, other generated files and anything else of rule 1 still escalate.
+//!    changed, the same math export tests and `cargo xtask tables --check`. XTASK-AFFECTED-MATH-2 (ruling #3204): a
+//!    fit file `crates/math/fits/<name>.fit` selects what a coefficient file selects plus `cargo xtask remez --check
+//!    <fit>` (a removed fit: FULL); the tables generator `crates/mathtools/src/tables.rs` selects its own mapping as a
+//!    `liella-mathtools` source, what a coefficient file selects, and `cargo xtask tables --check` / `kernel-index
+//!    --check`. In every tier but `--tier full`; the other files under `fits/` (the `.py` table scripts, subdirectories),
+//!    other generated files and anything else of rule 1 still escalate.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
@@ -189,6 +193,9 @@ pub struct Repo {
     /// TOOLS-7 (3): `git diff -U0` of `csys/include/` against the base, which the sync writes to `.changed.hdr` (a VM
     /// tree has no history). `None`: not available, so a changed header is not mapped (FULL).
     hdr_diff: Option<String>,
+    /// XTASK-AFFECTED-MATH-2: the fit files in the tree (`crates/math/fits/<name>.fit`). A changed fit that is not
+    /// here was removed, and `cargo xtask remez --check` cannot check it: FULL.
+    fits: BTreeSet<String>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -800,7 +807,7 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok() }
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root) }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -951,6 +958,19 @@ impl Selection {
                 add(&mut self.conf, c.name.clone(), &via(&format!("the program calls the math export `{sym}`")));
             }
         }
+    }
+
+    /// XTASK-AFFECTED-MATH: what a generated coefficient file selects (also for its fit and the tables generator,
+    /// XTASK-AFFECTED-MATH-2). The family's users: the `coeffs` module as if it had changed (its one-hop users in the
+    /// tier), the math export tests and `cargo xtask tables --check`.
+    fn math_coeffs(&mut self, repo: &Repo, f: &str) {
+        if self.direct {
+            self.narrow_direct(repo, MATH_CRATE, "coeffs", f);
+        } else {
+            self.narrow(repo, MATH_CRATE, "coeffs", f);
+        }
+        self.math_exports(repo, &format!("{f}: generated coefficients"));
+        self.xtask_cmds.insert("tables --check".to_string());
     }
 
     /// A change in module `name` of crate `krate`.
@@ -1214,17 +1234,31 @@ enum Class {
     MathWiring,
     /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
     MathCoeffs,
+    /// XTASK-AFFECTED-MATH-2: a fit file `crates/math/fits/<name>.fit` (the input of `cargo xtask remez`).
+    MathFit,
+    /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
+    MathTables,
 }
 
 const MATH_EXPORTS_CRATE: &str = "liella-boundary";
 const MATH_CRATE: &str = "liella-math";
 const MATH_TSV: &str = "crates/boundary/src/posix/s10_math.tsv";
 const MATH_GEN: &str = "crates/boundary/src/posix/s10_math_gen.rs";
+const MATH_FITS: &str = "crates/math/fits/";
+const MATH_TABLES_GEN: &str = "crates/mathtools/src/tables.rs";
+
+/// XTASK-AFFECTED-MATH-2: the fit files of the tree, `crates/math/fits/<name>.fit` (no subdirectory).
+fn fit_files(root: &Path) -> BTreeSet<String> {
+    let Ok(dir) = fs::read_dir(root.join(MATH_FITS)) else { return BTreeSet::new() };
+    dir.filter_map(Result::ok).filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.ends_with(".fit")).map(|n| format!("{MATH_FITS}{n}")).collect()
+}
 
 /// XTASK-AFFECTED-MATH (ruling #3188): the generated math files that map to the math suites instead of FULL. Only these
 /// exact files: the math fits (`crates/math/fits/`), any other `*_gen.rs` and a file in a subdirectory of `coeffs/` or
 /// `adapter/` keep escalating. `cargo xtask math-gen --check` / `tables --check` prove the generated files match their
-/// inputs; the selected suites prove what the exports do.
+/// inputs; the selected suites prove what the exports do. XTASK-AFFECTED-MATH-2 (ruling #3204): a fit file
+/// `crates/math/fits/<name>.fit` (not a subdirectory, not the `.py` table scripts) and exactly the tables generator
+/// `crates/mathtools/src/tables.rs` map too (`remez --check` / `tables --check` / `kernel-index --check`).
 fn math_class(path: &str) -> Option<Class> {
     if path == MATH_TSV || path == MATH_GEN {
         return Some(Class::MathWiring);
@@ -1234,6 +1268,12 @@ fn math_class(path: &str) -> Option<Class> {
     }
     if path.strip_prefix("crates/math/src/coeffs/").is_some_and(|f| f.ends_with(".rs") && !f.contains('/')) {
         return Some(Class::MathCoeffs);
+    }
+    if path.strip_prefix(MATH_FITS).is_some_and(|f| f.ends_with(".fit") && !f.contains('/')) {
+        return Some(Class::MathFit);
+    }
+    if path == MATH_TABLES_GEN {
+        return Some(Class::MathTables);
     }
     None
 }
@@ -1375,15 +1415,24 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.notes.push(format!("{f}: math export wiring (the math export suites and `cargo xtask math-gen --check`, not FULL)"));
             }
             Some(Class::MathCoeffs) => {
-                // The family's users: the `coeffs` module as if it had changed (its one-hop users in the tier).
-                if sel.direct {
-                    sel.narrow_direct(repo, MATH_CRATE, "coeffs", f);
-                } else {
-                    sel.narrow(repo, MATH_CRATE, "coeffs", f);
-                }
-                sel.math_exports(repo, &format!("{f}: generated coefficients"));
-                sel.xtask_cmds.insert("tables --check".to_string());
+                sel.math_coeffs(repo, f);
                 sel.notes.push(format!("{f}: generated coefficients (liella-math's suites, the math export suites and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathFit) if !repo.fits.contains(f) => sel.full.push(format!("{f}: a removed fit file (`cargo xtask remez --check` cannot check it)")),
+            Some(Class::MathFit) => {
+                // The fit's family: what its generated coefficient file selects, plus the fit's own check.
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert(format!("remez --check {f}"));
+                sel.notes.push(format!("{f}: a fit file (the family's math suites, `cargo xtask remez --check {f}` and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathTables) => {
+                // The generator is a liella-mathtools source like any other (its own mapping), and it writes every
+                // coefficient family: the whole math set and both checks.
+                classify_path(repo, f, &mut sel);
+                sel.own_suite(repo, f);
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert("kernel-index --check".to_string());
+                sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
             }
             None => {
                 classify_path(repo, f, &mut sel);
@@ -2679,8 +2728,11 @@ mod tests {
             "spec/abi/layouts.tsv",
             "include/liella/native.h",
             "crates/core/src/unicode/tables.rs",
-            // XTASK-AFFECTED-MATH: the math generated files outside the mapped set still escalate.
-            "crates/math/fits/fast32_sin.fit",
+            // XTASK-AFFECTED-MATH(-2): the math generated files outside the mapped set still escalate.
+            "crates/math/fits/fast32_tables_gen.py",
+            "crates/math/fits/sub/x.fit",
+            "crates/math/fits/removed_in_this_change.fit",
+            "crates/mathtools/src/sub/tables.rs",
             "crates/math/src/coeffs/sub/x.rs",
             "csys/src/adapter/math_libm.h",
             "csys/src/adapter/other.c",
@@ -2738,6 +2790,48 @@ mod tests {
         let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
         for k in m.tests.keys() {
             assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH-2 (ruling #3204), no spec clause: a fit file selects its family's math set (everything its
+    // generated coefficient file selects) plus `remez --check <fit>`; the tables generator selects its own mapping as a
+    // liella-mathtools source, the whole math set, `tables --check` and `kernel-index --check`. Not FULL, in the direct
+    // and wide tiers.
+    #[test]
+    fn math_fits_and_tables_generator_select_the_math_set_not_full() {
+        let fit = "crates/math/fits/fast32_sin.fit";
+        assert!(repo().fits.contains(fit), "the fit files of the tree: {:?}", repo().fits);
+        for tier in [Tier::Direct, Tier::Wide] {
+            let coeffs = select_tier(repo(), &["crates/math/src/coeffs/fast32_sin.rs".to_string()], tier);
+            for (f, cmds) in [
+                (fit, &["remez --check crates/math/fits/fast32_sin.fit", "tables --check"][..]),
+                (MATH_TABLES_GEN, &["tables --check", "kernel-index --check"][..]),
+            ] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                for cmd in cmds {
+                    assert!(s.xtask_cmds.contains(*cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                }
+                // Everything the family's coefficient file selects (the math export suites, every liella-math suite).
+                for k in coeffs.tests.keys() {
+                    assert!(s.tests.contains_key(k), "{f} ({tier:?}) misses {k:?}, which coeffs/fast32_sin.rs selects");
+                }
+                for k in coeffs.libs.keys().chain(coeffs.clippy.keys()) {
+                    assert!(s.libs.contains_key(k) || s.clippy.contains_key(k), "{f} ({tier:?}) misses the crate {k}");
+                }
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+            // The generator is also a liella-mathtools source: its own crate's unit tests and its ordinary mapping.
+            let s = select_tier(repo(), &[MATH_TABLES_GEN.to_string()], tier);
+            assert!(s.libs.contains_key("liella-mathtools"), "{MATH_TABLES_GEN} ({tier:?}): unit tests {:?}", s.libs.keys());
+            let mut own = Selection { direct: tier == Tier::Direct, ..Selection::default() };
+            classify_path(repo(), MATH_TABLES_GEN, &mut own);
+            for k in own.tests.keys() {
+                assert!(s.tests.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses {k:?} of its own mapping");
+            }
+            for k in own.conf.keys() {
+                assert!(s.conf.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the program {k} of its own mapping");
+            }
         }
     }
 
