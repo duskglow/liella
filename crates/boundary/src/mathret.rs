@@ -912,39 +912,53 @@ pub fn elem_fast<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
     f: impl FnOnce(A, Rounding) -> (R, Status),
 ) -> R {
     let (saved, in_place) = fpu::peek(&CSys);
-    let x = if in_place {
-        // The barrier keeps the fast path's arithmetic after the read and behind the branch: a
-        // caller with an unmasked trap must never see it run before the switch.
-        let x = core::hint::black_box(x);
-        if let Some(v) = fast(x) {
-            return v;
-        }
-        x
-    } else {
-        x
-    };
-    elem_fast_cold::<HW, A, R>(x, saved, in_place, f)
+    if !in_place {
+        return elem_switched(x, saved, f);
+    }
+    // The barrier keeps the fast path's arithmetic after the read and behind the branch: a
+    // caller with an unmasked trap must never see it run before the switch.
+    let x = core::hint::black_box(x);
+    if let Some(v) = fast(x) {
+        return v;
+    }
+    elem_fast_cold::<HW, A, R>(x, saved, f)
 }
 
-/// [`elem_fast`]'s fallback, out of line and cold (register 16.5 #4) so the fast path keeps
-/// nothing in callee-saved registers for it: the accurate path in place against the MXCSR value
-/// read on entry (`in_place`), or the full envelope [`elem`].
+/// [`elem_fast`]'s fallback in the default mode, out of line and cold (register 16.5 #4) so the
+/// fast path keeps nothing in callee-saved registers for it: the accurate path in place against
+/// the MXCSR value read on entry.
 #[cold]
 #[inline(never)]
 fn elem_fast_cold<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
     x: A,
     saved: u32,
-    in_place: bool,
     f: impl FnOnce(A, Rounding) -> (R, Status),
 ) -> R {
-    if in_place {
-        let (v, st) = core::hint::black_box(f(x, Rounding::Nearest));
-        debug_assert!(st.hw.0 & !HW == 0, "the compile-time hw set misses a bit the computation reports");
-        fpu::settle(&CSys, saved, st.flags, fpu::Flags(HW | FAST_ATTEMPT_HW.0));
-        store_error(st.error);
-        return v;
-    }
-    elem(x, Unit::Sse, f)
+    let (v, st) = core::hint::black_box(f(x, Rounding::Nearest));
+    debug_assert!(st.hw.0 & !HW == 0, "the compile-time hw set misses a bit the computation reports");
+    fpu::settle(&CSys, saved, st.flags, fpu::Flags(HW | FAST_ATTEMPT_HW.0));
+    store_error(st.error);
+    v
+}
+
+/// [`elem_fast`] in any other mode: [`elem`] on the MXCSR value `saved` read on entry, which is
+/// known not to hold the default control word, so the switch is made without a second read or
+/// test (#2906: the directed modes cost no more than [`elem`]). Out of line for the same reason
+/// as [`elem_fast_cold`].
+#[cold]
+#[inline(never)]
+fn elem_switched<A: Denorm, R: CVal<C = R> + Denorm>(
+    x: A,
+    saved: u32,
+    f: impl FnOnce(A, Rounding) -> (R, Status),
+) -> R {
+    fpu::switch_default(&CSys);
+    let e = Entry { saved, in_place: false };
+    let x = core::hint::black_box(e.operand(x));
+    let (v, mut st) = core::hint::black_box(f(x, fpu::rounding_of(saved)));
+    let v = e.result(v, &mut st);
+    exit(e, st);
+    v
 }
 
 /// What a refused fast attempt may have raised in hardware ([`elem32_fast`]).

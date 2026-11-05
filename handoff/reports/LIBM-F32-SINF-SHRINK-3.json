@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-SINF-SHRINK-3", "model": "opus", "tokens": null,
+ "result": "origin/next merged into -2's work (fast32.rs conflict resolved keeping both sides); gate, 6/6 plants and counts green on the merged head: 169 libm rows, 0 slower vs next; sinf/cosf 167.4 -> 90.1/90.2, tanf 173.4 -> 98.3, sinf_upward 246.7 -> 221.7",
+ "branch": "task/libm-f32-sinf-shrink-3", "head": "d3b75a57",
+ "gate": {"affected": "32 suites ok; 10842 passed / 0 failed (1190 ignored); conformance 117 passed / 0 failed (escalated to FULL by the branch's generated files, as for -2)", "peak": "16G (reclaimed under the limit, oom_kill=0)"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["affected escalates this branch to FULL (generated coeffs/fit and s10_math_gen files): a 67 min gate on mei at load up to 50; a generated file whose generator input is also in the diff could stay on the direct tier"],
+ "refused": [],
+ "improvement": "affected could keep the direct tier when a generated file changes together with its generator input and the regeneration check passes, saving about an hour per libm coefficient story",
+ "next_step": "land; then the -2 handoff's Next list (inline MXCSR read, f32-bits domain test, drop the small-r refusal, cheaper rounding test) toward 1.05x on the nearest rows",
+ "report_file": "handoff/libm-f32-sinf-shrink.md",
+ "jobs": ["mei:libm-f32-sinf-shrink-3-gate", "mei:libm-f32-sinf-shrink-3-plants", "mei:libm-f32-sinf-shrink-3-cbase", "mei:libm-f32-sinf-shrink-3-chead"]}
