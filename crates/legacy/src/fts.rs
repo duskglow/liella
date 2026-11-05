@@ -176,10 +176,20 @@ impl Key {
     }
 }
 
+impl Node {
+    /// The block's length: the status ends it, then the terminator.
+    fn size(&self) -> usize {
+        self.stat_off.saturating_add(STAT_SIZE).saturating_add(1)
+    }
+
+    /// The name's length with its terminator.
+    fn name_cap(&self) -> usize {
+        self.name_len.saturating_add(1)
+    }
+}
+
 struct Node {
     block: usize,
-    size: usize,
-    name_cap: usize,
     stat_off: usize,
     /// `fts_namelen`. The name itself is only in the block (`fts_name`): a copy kept here cost
     /// ~199 instructions per entry (FTS-FLAT-FIXES).
@@ -373,7 +383,6 @@ impl Fts {
         let stat_off = align8(off::NAME.saturating_add(name_cap));
         // The stat ends past the 120-byte structure, so the block is never shorter than an
         // `FTSENT`; no path is kept in it.
-        let size = stat_off.saturating_add(STAT_SIZE).saturating_add(1);
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
         let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
@@ -384,11 +393,9 @@ impl Fts {
         let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
         let node = Node {
             block,
-            size,
-            name_cap,
             stat_off,
             name_len: name.len(),
-            arg: TryVec::from_slice(if root { name } else { &[] }).inspect_err(|_| mem.free(block))?,
+            arg: if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() },
             path_len,
             parent,
             level,
@@ -493,7 +500,7 @@ impl Fts {
     fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size), x.stat_off, &stat_bytes(st));
+        put(mem.bytes(x.block, x.size()), x.stat_off, &stat_bytes(st));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new
@@ -518,7 +525,7 @@ impl Fts {
         let to = nb.to_ne_bytes();
         for n in 0..self.nodes.len() {
             let Some(Some(x)) = self.nodes.get(n) else { continue };
-            let b = mem.bytes(x.block, x.size);
+            let b = mem.bytes(x.block, x.size());
             put(b, off::PATH, &to);
             if !self.acc_is_name(n, x) {
                 put(b, off::ACCPATH, &to);
@@ -635,7 +642,7 @@ impl Fts {
             if let Ok(x) = self.node_mut(n) {
                 x.link = next;
                 // Only `fts_link` changed: the rest of the block is current.
-                put(mem.bytes(x.block, x.size), off::LINK, &next.to_ne_bytes());
+                put(mem.bytes(x.block, x.size()), off::LINK, &next.to_ne_bytes());
             }
         }
     }
@@ -888,7 +895,7 @@ impl Fts {
             let x = self.node(n)?;
             let cut = x.arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
             let last = x.arg.get(cut..).unwrap_or(&[]);
-            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap)).get_mut(off::NAME..) {
+            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap())).get_mut(off::NAME..) {
                 d.fill(0);
                 put(d, 0, last);
             }
