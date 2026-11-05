@@ -1675,6 +1675,17 @@ pub(crate) fn process_text(addr: usize) -> &'static [u8] {
     unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
 }
 
+/// The C text at `addr` (empty for NULL) that the C library's `secure_getenv` has just returned
+/// (`caller_alloc::secure_getenv_addr`): the libm product's FMA decision (D-NEW) reads it at once.
+#[cfg(feature = "libm")]
+pub(crate) fn env_value_text(addr: usize) -> &'static [u8] {
+    // UNSAFE(slice): see the function's documentation.
+    #[allow(unsafe_code)]
+    // SAFETY: `secure_getenv` returns NULL or the variable's NUL-terminated value in the
+    // environment; the caller parses it before it makes any other call.
+    unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
+}
+
 /// The C text at `addr` (empty for NULL) that a caller handed to the running entry point by
 /// address inside one of its arguments: `getopt`'s argument-vector entries and long-option
 /// names, `getsubopt`'s tokens, the texts of an `argp` tree and a help filter's result (spec

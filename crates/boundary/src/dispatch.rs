@@ -64,21 +64,7 @@ pub(crate) fn fma() -> bool {
 #[cold]
 #[inline(never)]
 fn decide_fma() -> bool {
-    // UNSAFE(extern): Rust cannot call C library functions without declaring them. Sound for
-    // every NUL-terminated name; the result is NULL or the variable's NUL-terminated value.
-    #[allow(unsafe_code)]
-    unsafe extern "C" {
-        safe fn secure_getenv(name: *const i8) -> *const i8;
-    }
-    let p = secure_getenv(c"GLIBC_TUNABLES".as_ptr());
-    let text: &[u8] = if p.is_null() {
-        &[]
-    } else {
-        // UNSAFE(slice) SAFETY: `secure_getenv` returned a non-NULL pointer to the variable's
-        // NUL-terminated value; it is read once, here, before any other call.
-        #[allow(unsafe_code)]
-        unsafe { crate::strz::strz(p) }.unwrap_or(&[])
-    };
+    let text = crate::conv::env_value_text(crate::caller_alloc::secure_getenv_addr(c"GLIBC_TUNABLES"));
     let on = fma_wanted(&crate::cpu::features_cached(), &liella::config::Tunables::parse(text, false));
     FMA.store(if on { FMA_ON } else { FMA_OFF }, Relaxed);
     on

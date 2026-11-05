@@ -37,6 +37,23 @@ unsafe extern "C" {
     pub(crate) safe fn __errno_location() -> *mut i32;
 }
 
+#[cfg(feature = "libm")]
+// UNSAFE(extern): Rust cannot call C library functions without declaring them. Sound for every
+// NUL-terminated name; the result is NULL or the variable's NUL-terminated value.
+#[allow(unsafe_code)]
+unsafe extern "C" {
+    #[link_name = "secure_getenv"]
+    safe fn c_secure_getenv(name: *const core::ffi::c_char) -> *const core::ffi::c_char;
+}
+
+/// The address of `name`'s value through the C library's `secure_getenv` (0 when unset, and in a
+/// secure program): the libm product's FMA decision (D-NEW), whose own copy of this crate never
+/// saw the process's startup.
+#[cfg(feature = "libm")]
+pub(crate) fn secure_getenv_addr(name: &core::ffi::CStr) -> usize {
+    c_secure_getenv(name.as_ptr()).expose_provenance()
+}
+
 /// Count `d` caller-owned blocks more (or fewer) live on the calling thread when `yes`: the
 /// test builds' leak measure (`selftest::caller_blocks`, FREE-POISON-TESTS-6 ruling #296), valid
 /// whichever allocator serves the symbols. Products compile it away.
