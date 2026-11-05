@@ -116,8 +116,7 @@ mod off {
     pub(super) const CYCLE: usize = 0;
     pub(super) const PARENT: usize = 8;
     pub(super) const LINK: usize = 16;
-    /// `fts_number`, then `fts_pointer`: the caller's, never written.
-    pub(super) const NUMBER: usize = 24;
+    // 24..40: `fts_number`, then `fts_pointer`: the caller's, never written.
     pub(super) const ACCPATH: usize = 40;
     pub(super) const PATH: usize = 48;
     pub(super) const ERRNO: usize = 56;
