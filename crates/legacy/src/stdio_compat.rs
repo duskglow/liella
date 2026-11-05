@@ -1664,19 +1664,23 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
 /// it empty), so the policy's flushes are unchanged. Whether it applied.
 #[inline(always)]
 fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> bool {
-    if ext.buf == 0 || ext.state.role != Role::Writing {
+    if ext.buf == 0 {
         return false;
     }
-    // The offset of the write pointer in the buffer and the window's end: the pointer before the
-    // buffer wraps to a huge offset, so one test covers "outside" on both sides. (Zero bytes
-    // outside the window are left to the engine, which accepts them.) The mode word is read only
-    // once the copy is known to happen, so the write-through case does not pay for it.
+    if ext.state.role != Role::Writing {
+        return false;
+    }
+    // The offset of the write pointer in the buffer and where the block would end: a pointer
+    // before the buffer wraps to a huge offset, so the end test covers "outside" on both sides
+    // (zero bytes outside the window are left to the engine, which accepts them). The mode word
+    // is read only once the copy is known to happen, so the write-through case does not pay for it.
     let p = get(file, word::WRITE_PTR);
-    let (at, end) = (p.wrapping_sub(ext.buf), ext.state.wend.min(ext.buf_len));
-    if at > end || end - at < data.len() {
+    let at = p.wrapping_sub(ext.buf);
+    let Some(stop) = at.checked_add(data.len()) else { return false };
+    if stop > ext.state.wend.min(ext.buf_len) {
         return false;
     }
-    match env.bytes(ext.buf, ext.buf_len).get_mut(at..at + data.len()) {
+    match env.bytes(ext.buf, ext.buf_len).get_mut(at..stop) {
         Some(dst) => {
             let shut = low_int(get(file, word::MODE)) >= 0;
             liella::mem::copy(dst, data);
