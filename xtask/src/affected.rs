@@ -613,6 +613,17 @@ impl Repo {
         self.test_only.contains(&(krate.to_string(), module.to_string()))
     }
 
+    /// XTASK-PLANTS-PRODUCTS-REBUILD: does test target `name` (of package `krate`, or of any package) use the products,
+    /// by the rule `run` uses to build them? `None` when no target or more than one has that name.
+    pub fn test_uses_products(&self, krate: Option<&str>, name: &str) -> Option<bool> {
+        let mut found = self.targets.iter().filter(|t| t.name == name && krate.is_none_or(|k| t.krate == k));
+        let first = found.next()?;
+        if found.next().is_some() {
+            return None;
+        }
+        Some(first.products)
+    }
+
     pub fn load(root: &Path) -> Repo {
         let top = read(&root.join("Cargo.toml"));
         let mut members = Vec::new();
