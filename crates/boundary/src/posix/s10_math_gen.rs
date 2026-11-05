@@ -1687,7 +1687,7 @@ pub extern "C" fn erfc(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn erfcf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::special::erfc)
+    mret::elem(x, mret::Unit::Sse, math::fast32::erfc)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1697,7 +1697,7 @@ pub extern "C" fn liella_erfcf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erfcf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::special::erfc)
+    mret::elem(x, mret::Unit::Sse, math::fast32::erfc)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1722,7 +1722,7 @@ pub extern "C" fn liella_erfcl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn erff(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::special::erf)
+    mret::elem(x, mret::Unit::Sse, math::fast32::erf)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1732,7 +1732,7 @@ pub extern "C" fn liella_erff128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erff32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::special::erf)
+    mret::elem(x, mret::Unit::Sse, math::fast32::erf)
 }}
 
 export! { libm "GLIBC_2.27";
