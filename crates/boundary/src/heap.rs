@@ -581,6 +581,14 @@ pub(crate) fn c_realloc(p: usize, n: usize) -> Result<KResult<usize>, Misuse> {
     malloc_compat::realloc(&CTX, p, n, copy_blocks)
 }
 
+/// Whether `realloc(p, n)` returns `p` itself: a live small block of the thread's current slab
+/// whose class still fits `n` (the first test of the resize path, REALLOC-FUSE). Inlined into
+/// the export, so that this case returns before the frame the rest needs.
+#[inline(always)]
+pub(crate) fn c_realloc_fits(p: usize, n: usize) -> bool {
+    p != 0 && !DEBUG.active() && Heap::fits_in_place(&KernelPages, p, n)
+}
+
 /// `reallocarray`.
 #[inline(always)]
 #[cfg_attr(feature = "export", allow(dead_code))] // only `caller_alloc` without `export` calls it

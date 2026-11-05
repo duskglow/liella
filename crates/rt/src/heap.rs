@@ -302,6 +302,23 @@ const MAGIC: [u64; 44] = {
 /// reduced by a mask instead of a division and needs no bounds check. A padding entry is all
 /// zero: no offset passes `q * size == off && q < blocks` with it, so a corrupt index can only
 /// send the free to the slow path.
+/// Half the size of the class below class `c`: a request at or under it belongs to a smaller
+/// class, so `fits_in_place` keeps the block only above it. Class 0 (and any index past the
+/// classes, which never reaches it) has no lower bound.
+const HALF_BELOW: [u64; 64] = {
+    let mut t = [0u64; 64];
+    let mut i = 1;
+    while i < 44 {
+        // A const context: CLASSES fits in 64 bits.
+        #[allow(clippy::as_conversions)]
+        {
+            t[i] = (CLASSES[i - 1] / 2) as u64;
+        }
+        i += 1;
+    }
+    t
+};
+
 const FREE_VIEW: [[u64; 3]; 64] = {
     let mut t = [[0u64; 3]; 64];
     let mut i = 0;
@@ -1933,6 +1950,37 @@ impl Heap {
             }
         }
         self.resize_slow(sys, pages, addr, size, copy)
+    }
+
+    /// Whether a live small block of the calling thread's current slab, resized to `size`
+    /// (`0 < size <= FORECAST_CAP`), stays where it is: the first test of [`Heap::resize`]
+    /// alone, so that a caller can return the same pointer without the frame the moving and
+    /// general paths need. `false` decides nothing: the caller takes the full path.
+    #[inline(always)]
+    pub fn fits_in_place<P: Pages>(pages: &P, addr: usize, size: usize) -> bool {
+        if size == 0 || size > FORECAST_CAP {
+            return false;
+        }
+        let Some(k) = Self::own_cache(pages) else { return false };
+        let last = k.get(slab_hint(addr));
+        let off = w64(addr).wrapping_sub(last & !(SLAB64 - 1));
+        if last == 0 || off >= SLAB64 {
+            return false;
+        }
+        let c = uz(last & 63);
+        let [csize, magic, n] = FREE_VIEW[c];
+        let q = (off * magic) >> 40;
+        if q * csize != off || q >= n {
+            return false;
+        }
+        let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return false };
+        let (j, b) = bit(uz(q));
+        let j = j & (BITMAP_WORDS - 1);
+        // Not live (or remotely freed): the full path decides and reports a double free.
+        if r.local[j].load(Relaxed) & b == 0 || (k.remote_any() && r.remote_has(j, b)) {
+            return false;
+        }
+        size <= uz(csize) && size > uz(HALF_BELOW[c])
     }
 
     /// The size a small block that `resize` moves upward is allocated for (REALLOC-FUSE growth

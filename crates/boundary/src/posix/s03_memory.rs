@@ -57,12 +57,24 @@ pub extern "C" fn __libc_calloc(k: size_t, n: size_t) -> *mut c_void {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn realloc(p: *mut c_void, n: size_t) -> *mut c_void {
-    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+    if heap::c_realloc_fits(conv::addr(p), n) {
+        return p;
+    }
+    realloc_general(p, n)
 }}
+
+/// `realloc` past the in-place test: moves, `NULL`, size 0, debugging and misuse.
+#[inline(never)]
+fn realloc_general(p: *mut c_void, n: size_t) -> *mut c_void {
+    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __libc_realloc(p: *mut c_void, n: size_t) -> *mut c_void {
-    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+    if heap::c_realloc_fits(conv::addr(p), n) {
+        return p;
+    }
+    realloc_general(p, n)
 }}
 
 export! { "GLIBC_2.26";
