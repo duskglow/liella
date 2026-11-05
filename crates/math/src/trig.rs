@@ -811,6 +811,35 @@ mod fast {
         }
 
         #[test]
+        #[allow(clippy::arithmetic_side_effects, clippy::as_conversions)] // bounded sample arithmetic
+        fn trig_assembly_error_is_within_the_stated_bound() {
+            // Clauses: s10_0_f_0. The rounding tests are only as good as the bound they are given:
+            // the sine assembly's measured error against the double-double path stays within `eps`
+            // (E_ABS when S != 0, A_RED + B_REL·|y| when S = 0), and is not zero (so the bound is
+            // what decides). |x| < 2^10 keeps the reference's own reduction error below 2^-95.
+            let mut s = 0x1234_5678_9abc_def1u64;
+            let mut worst = 0.0f64;
+            for i in 0..200_000u32 {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                let x = (s >> 11) as f64 * 2f64.powi(-53) * 1024.0 * if i & 1 == 0 { 1.0 } else { -1.0 };
+                if x.abs() < 2f64.powi(-30) {
+                    continue;
+                }
+                let (n, r) = kernel::reduce(x);
+                let (y, sh) = kernel::assemble(n, kernel::poly(r));
+                let want = crate::trig::sin_cos(x).0;
+                let err = dd::abs((y.hi - want.hi) + (y.lo - want.lo));
+                assert!(err <= eps(sh, y), "x = {x:e}: assembly error {err:e} above the bound {:e}", eps(sh, y));
+                if sh != 0.0 {
+                    worst = worst.max(err);
+                }
+            }
+            assert!(worst > 0.0, "no assembly error measured");
+        }
+
+        #[test]
         fn trig_fast_path_matches_the_accurate_path() {
             // Clauses: s10_3_f_0.
             let mut xs: Vec<f64> = random(40_000, 10.0).chain(random(10_000, LIMIT)).collect();
