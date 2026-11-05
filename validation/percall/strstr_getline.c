@@ -14,10 +14,18 @@
 
 #define HIDE(x) __asm__ volatile("" : "+r"(x))
 
+/* Every ss_ haystack starts SS_OFF bytes past a 4096-aligned allocation (STRSTR-SHORT-DENSE-PARITY-3):
+ * the search kernels' alignment prologue follows the start address mod 128, so with malloc's address
+ * (which moves with the allocator) the rows compared layouts, not builds. 16 is the alignment malloc
+ * guarantees and no more (not 32- or 64-aligned). The buffer is left allocated (the case ends the run). */
+#define SS_OFF 16
+
 static char *ss_text(size_t n) {
     static const char unit[] = "the quick brown fox jumps over the lazy dog and runs away ";
     size_t ul = sizeof unit - 1;
-    char *h = malloc(n + 16);
+    char *raw = aligned_alloc(4096, (n + SS_OFF + 16 + 4095) & ~(size_t)4095);
+    if (!raw) abort();
+    char *h = raw + SS_OFF;
     for (size_t i = 0; i < n; i++) h[i] = unit[i % ul];
     memcpy(h + n - 5, "ZEBRA", 5);
     h[n] = 0;
