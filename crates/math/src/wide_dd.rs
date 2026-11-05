@@ -22,7 +22,7 @@
 //!   `2^-107`, its double-double steps `2^-104` relative each on terms below `|r|`; the table
 //!   entry `2^-106`, the final product and sum `2^-104`: below `2^-103` relative, `b = 100`.
 //!   `expm1` adds the subtraction of 1: relative growth at most `e^x/|e^x − 1| < 2^7.6` for
-//!   `|x| >= ln2/128` (`b = 94`); below `2^-8` the polynomial runs on `x` itself (`b = 100`).
+//!   `|x| >= ln2/128` (estimate `2^-95.9`, measured `2^-95`: `b = 92`); below `2^-8` the polynomial runs on `x` itself (`b = 100`).
 //! * `log`, `log2`, `log10`, `log1p`: `x = 2^e·m`, `m` in `[0.75, 1.5)` with 113 bits, a
 //!   13-bit reciprocal `c` of `m`'s 1/128-interval, `u = m·c − 1` exact in integers
 //!   (`|u| <= 2^-7`), `ln(1 + u) = 2·atanh(u/(2 + u))` to `s^13`, `ln x = e·ln 2 − ln c +
@@ -47,7 +47,7 @@ use crate::status::{Rounding, Status};
 /// The relative bound exponent of the exponentials and logarithms.
 const B_MAIN: u32 = 100;
 /// The relative bound exponent of `expm1` where it subtracts 1 (`|x| >= ln2/128`).
-const B_EXPM1: u32 = 94;
+const B_EXPM1: u32 = 92;
 /// Below `2^RAW` in magnitude `exp`, `expm1` and `log1p` take `x` itself as the reduced
 /// argument (`|x| < ln2/128` keeps the polynomial's bound; the series needs `|x| <= 2^-7`).
 const RAW: i32 = -8;
