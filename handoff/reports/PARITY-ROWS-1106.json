@@ -1,0 +1,25 @@
+{
+ "task": "PARITY-ROWS-1106",
+ "model": "sonnet",
+ "tokens": null,
+ "result": "4 briefs (wctype en_US, memset 4k/64k, sprintf %s path, memcmp tails) and summary; 295 of 345 non-libm rows at or below 1.05x",
+ "branch": "task/parity-rows-1106",
+ "head": null,
+ "gate": {
+  "affected": "n/a (planning)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "counter host was Broadwell-EP, not keke/shiki; gettext and nl_langinfo rows not briefed (no percall spec / budget)"
+ ],
+ "refused": [],
+ "improvement": "bench output could carry a machine-readable table so the row filter needs no parser",
+ "next_step": "coordinator submits the four briefs; next round: gettext percall spec and nl_langinfo",
+ "report_file": "handoff/parity-rows-1106/summary.md",
+ "jobs": [
+  "parity-rows-1106-counts",
+  "parity-rows-1106-percall2"
+ ]
+}
