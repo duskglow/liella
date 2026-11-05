@@ -1,0 +1,13 @@
+{"task": "PARITY-LIBM-1105", "model": "sonnet", "tokens": null,
+ "result": "Six libm code briefs written from a cbench_libm counter run and per-group percall profiles; libm rows are 3x to 9000x above parity in instructions",
+ "branch": "task/parity-libm-1105", "head": "HEAD",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Counter run was on mei (Skylake-SP), not Zen 1 / Haswell-EP: the role was admitted there",
+   "_Float128 real rows (4-34x) and sqrt wrappers are not briefed (6-group cap)",
+   "validation/wl_percall_run.sh now prefers the cached tree's liella-cc: the stale ~/liella-test wrapper dropped -lm"],
+ "refused": [],
+ "improvement": "wl_percall.sh needs a hint when the host has a stale liella-cc; the link error looked like a probe bug",
+ "next_step": "Coordinator submits the six briefs in handoff/parity-libm-1105/",
+ "report_file": "handoff/parity-libm-1105/summary.md",
+ "jobs": ["parity-libm-1105-counts", "parity-libm-1105-percall4"]}
