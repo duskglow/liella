@@ -968,7 +968,9 @@ impl Resolution {
     /// record's image and, for a catalog that names a charset, the codec selector must still be
     /// the plan's; then only the index probe and the form remain (no record fields, no header,
     /// no codec words). `None`: the plan does not apply (search as usual); `Some(found)`: what
-    /// `lookup` returns.
+    /// `lookup` returns. Inlined into its one caller: out of line, the found call paid six
+    /// register saves and eight spilled arguments.
+    #[inline(always)]
     fn hit<H: Host>(&self, h: &H, rec: &[AtomicUsize], msgid: &[u8], n: Option<u64>, codeset: Option<&[u8]>, loc: &Locale) -> Option<Option<usize>> {
         let w = |j: usize| self.plan.get(j).map_or(0, |a| a.load(Relaxed));
         let image = w(P_IMAGE);
@@ -1058,6 +1060,10 @@ impl Resolution {
         self.memo_generation.store(generation, Relaxed);
     }
 
+    /// Whether the slot holds `key`'s resolution. Inlined: the found call's key has the slot's
+    /// domain and locale texts at the addresses it recorded, which takes word loads and compares
+    /// only; a text compare is out of line (no register saves or offsets on the found call).
+    #[inline(always)]
     fn matches(&self, generation: usize, category: usize, key: &Key<'_>) -> bool {
         if self.generation.load(Relaxed) != generation || self.category.load(Relaxed) != category {
             return false;
@@ -1067,6 +1073,25 @@ impl Resolution {
         if kd.load(Relaxed) != d || kl.load(Relaxed) != l || ks.load(Relaxed) != s {
             return false;
         }
+        let [ad, al] = key.fixed_at();
+        let [sd, sl] = &self.key_at;
+        // A fixed text at the address the slot recorded is the slot's text (lengths matched).
+        if ad != 0 && sd.load(Relaxed) == ad && al != 0 && sl.load(Relaxed) == al {
+            return key.list.is_none_or(|list| self.same_list(d, l, list));
+        }
+        self.same_texts(key)
+    }
+
+    /// Whether the slot's list words are `list` (domain and locale of lengths `d` and `l`).
+    #[inline(never)]
+    fn same_list(&self, d: usize, l: usize, list: &[u8]) -> bool {
+        same_part(self.key.get(d.div_ceil(8).saturating_add(l.div_ceil(8))..).unwrap_or(&[]), list)
+    }
+
+    /// The rest of [`Resolution::matches`] once generation, category and lengths matched.
+    #[inline(never)]
+    fn same_texts(&self, key: &Key<'_>) -> bool {
+        let [d, l, _] = key.lens();
         let locale_at = d.div_ceil(8);
         let list_at = locale_at.saturating_add(l.div_ceil(8));
         let [ad, al] = key.fixed_at();
