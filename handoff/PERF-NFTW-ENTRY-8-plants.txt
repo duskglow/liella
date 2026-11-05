@@ -1,0 +1,5 @@
+# PERF-NFTW-ENTRY-8: plants on the FTSENT header written straight into the block and the slimmed Node.
+header-ino-wrong | crates/legacy/src/fts.rs | lit:put(b, off::INO, &st.ino.to_ne_bytes()); ==> put(b, off::INO, &st.nlink.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+header-parent-zero | crates/legacy/src/fts.rs | lit:put(b, off::PARENT, &parent.to_ne_bytes()); ==> put(b, off::PARENT, &0usize.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+header-level-zero | crates/legacy/src/fts.rs | lit:put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes()); ==> put(b, off::LEVEL, &0i16.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+header-statp-wrong | crates/legacy/src/fts.rs | lit:put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes()); ==> put(b, off::STATP, &x.block.to_ne_bytes()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked

@@ -1,0 +1,12 @@
+{"task": "PERF-NFTW-ENTRY-8", "model": "sonnet", "tokens": null,
+ "result": "fts: 1011-entry percall case added and profiled; ~22 user instr/entry cut (1407.5 -> 1385.2 vs glibc 750.6); parity (1.05) NOT reached, bench row not recounted",
+ "branch": "task/perf-nftw-entry-8", "head": "see git log (last commit on branch)",
+ "gate": {"affected": "direct tier, perf-nftw-entry-8-gate rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "fts_physical_1000 still ~1.07 by instructions; the remaining ~150 instr/entry are spread over node construction, status conversion and moves (no single phase)", "recommendation": "one more story: build nodes in place with a small hot Node and cold side data, write the status straight into the block"}],
+ "informational": ["bench fts_physical_1000 is 10 dirs x 99 files, not one 1000-entry directory", "percall on a role without a primed base needs --base none"],
+ "refused": [],
+ "improvement": "wl_trace --list output should demangle Rust symbols so per-entry splits need no ad hoc parser",
+ "next_step": "see handoff/PERF-NFTW-ENTRY-8.md",
+ "report_file": "handoff/PERF-NFTW-ENTRY-8.md",
+ "jobs": ["perf-nftw-entry-8-gate", "perf-nftw-entry-8-plants"]}

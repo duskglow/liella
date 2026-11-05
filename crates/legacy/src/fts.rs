@@ -116,8 +116,7 @@ mod off {
     pub(super) const CYCLE: usize = 0;
     pub(super) const PARENT: usize = 8;
     pub(super) const LINK: usize = 16;
-    /// `fts_number`, then `fts_pointer`: the caller's, never written.
-    pub(super) const NUMBER: usize = 24;
+    // 24..40: `fts_number`, then `fts_pointer`: the caller's, never written.
     pub(super) const ACCPATH: usize = 40;
     pub(super) const PATH: usize = 48;
     pub(super) const ERRNO: usize = 56;
@@ -176,10 +175,20 @@ impl Key {
     }
 }
 
+impl Node {
+    /// The block's length: the status ends it, then the terminator.
+    fn size(&self) -> usize {
+        self.stat_off.saturating_add(STAT_SIZE).saturating_add(1)
+    }
+
+    /// The name's length with its terminator.
+    fn name_cap(&self) -> usize {
+        self.name_len.saturating_add(1)
+    }
+}
+
 struct Node {
     block: usize,
-    size: usize,
-    name_cap: usize,
     stat_off: usize,
     /// `fts_namelen`. The name itself is only in the block (`fts_name`): a copy kept here cost
     /// ~199 instructions per entry (FTS-FLAT-FIXES).
@@ -256,6 +265,7 @@ fn name_of<'m, M: FtsMem>(mem: &'m mut M, x: &Node) -> &'m [u8] {
     b.get(off::NAME..).unwrap_or(&[])
 }
 
+#[inline(always)]
 fn put(b: &mut [u8], at: usize, v: &[u8]) {
     if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
         d.copy_from_slice(v);
@@ -372,7 +382,6 @@ impl Fts {
         let stat_off = align8(off::NAME.saturating_add(name_cap));
         // The stat ends past the 120-byte structure, so the block is never shorter than an
         // `FTSENT`; no path is kept in it.
-        let size = stat_off.saturating_add(STAT_SIZE).saturating_add(1);
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
         let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
@@ -383,11 +392,9 @@ impl Fts {
         let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
         let node = Node {
             block,
-            size,
-            name_cap,
             stat_off,
             name_len: name.len(),
-            arg: TryVec::from_slice(if root { name } else { &[] }).inspect_err(|_| mem.free(block))?,
+            arg: if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() },
             path_len,
             parent,
             level,
@@ -418,8 +425,11 @@ impl Fts {
                 i
             }
         };
-        self.write_header(mem, idx);
-        put(mem.bytes(block, off::NAME), off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
+            let b = mem.bytes(block, off::NAME);
+            self.put_header(idx, x, b);
+            put(b, off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        }
         Ok(idx)
     }
 
@@ -451,29 +461,30 @@ impl Fts {
     }
 
     /// Entry `n`'s structure: every field before `fts_name`.
-    fn header(&self, n: usize, x: &Node) -> [u8; off::NAME] {
+    /// Write entry `n`'s structure fields straight into the first `off::NAME` bytes `b` of its
+    /// block: each field once, at its offset (PERF-NFTW-ENTRY-8: no temporary structure and no
+    /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
+    /// the caller's or `fts_set`'s, and the zeros the block was made with.
+    fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
         let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
-        let mut b = [0u8; off::NAME];
-        put(&mut b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(&mut b, off::PARENT, &parent.to_ne_bytes());
-        put(&mut b, off::LINK, &x.link.to_ne_bytes());
-        put(&mut b, off::ACCPATH, &acc.to_ne_bytes());
-        put(&mut b, off::PATH, &self.buf.to_ne_bytes());
-        put(&mut b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(&mut b, off::SYMFD, &0i32.to_ne_bytes());
-        put(&mut b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::INO, &st.ino.to_ne_bytes());
-        put(&mut b, off::DEV, &st.dev.to_ne_bytes());
-        put(&mut b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(&mut b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(&mut b, off::INFO, &x.info.to_ne_bytes());
-        put(&mut b, off::FLAGS, &0u16.to_ne_bytes());
-        // `fts_instr` is not part of it: the block holds the instruction ([`Fts::instr_of`]).
-        put(&mut b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
-        b
+        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
+        put(b, off::PARENT, &parent.to_ne_bytes());
+        put(b, off::LINK, &x.link.to_ne_bytes());
+        put(b, off::ACCPATH, &acc.to_ne_bytes());
+        put(b, off::PATH, &self.buf.to_ne_bytes());
+        put(b, off::ERRNO, &x.errno.to_ne_bytes());
+        put(b, off::SYMFD, &0i32.to_ne_bytes());
+        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(b, off::INO, &st.ino.to_ne_bytes());
+        put(b, off::DEV, &st.dev.to_ne_bytes());
+        put(b, off::NLINK, &st.nlink.to_ne_bytes());
+        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        put(b, off::INFO, &x.info.to_ne_bytes());
+        put(b, off::FLAGS, &0u16.to_ne_bytes());
+        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
@@ -481,18 +492,14 @@ impl Fts {
     /// [`Fts::visit`]), the status then and by [`Fts::write`].
     fn write_header<M: FtsMem>(&self, mem: &mut M, n: usize) {
         let Ok(x) = self.node(n) else { return };
-        let h = self.header(n, x);
-        let b = mem.bytes(x.block, off::NAME);
-        put(b, 0, h.get(..off::NUMBER).unwrap_or(&[]));
-        put(b, off::ACCPATH, h.get(off::ACCPATH..off::INSTR).unwrap_or(&[]));
-        put(b, off::STATP, h.get(off::STATP..).unwrap_or(&[]));
+        self.put_header(n, x, mem.bytes(x.block, off::NAME));
     }
 
     /// Write entry `n`'s structure and status into its block (its status changed).
     fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size), x.stat_off, &stat_bytes(st));
+        put(mem.bytes(x.block, x.size()), x.stat_off, &stat_bytes(st));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new
@@ -517,7 +524,7 @@ impl Fts {
         let to = nb.to_ne_bytes();
         for n in 0..self.nodes.len() {
             let Some(Some(x)) = self.nodes.get(n) else { continue };
-            let b = mem.bytes(x.block, x.size);
+            let b = mem.bytes(x.block, x.size());
             put(b, off::PATH, &to);
             if !self.acc_is_name(n, x) {
                 put(b, off::ACCPATH, &to);
@@ -634,7 +641,7 @@ impl Fts {
             if let Ok(x) = self.node_mut(n) {
                 x.link = next;
                 // Only `fts_link` changed: the rest of the block is current.
-                put(mem.bytes(x.block, x.size), off::LINK, &next.to_ne_bytes());
+                put(mem.bytes(x.block, x.size()), off::LINK, &next.to_ne_bytes());
             }
         }
     }
@@ -887,7 +894,7 @@ impl Fts {
             let x = self.node(n)?;
             let cut = x.arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
             let last = x.arg.get(cut..).unwrap_or(&[]);
-            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap)).get_mut(off::NAME..) {
+            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap())).get_mut(off::NAME..) {
                 d.fill(0);
                 put(d, 0, last);
             }
