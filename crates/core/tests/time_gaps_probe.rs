@@ -507,9 +507,15 @@ fn time_gaps_hold_across_forced_clock_edges() {
     };
     let want: Vec<String> = (1..=3).map(|e| run(&host, e)).collect();
     let got: Vec<String> = (1..=3).map(|e| run(&ours, e)).collect();
-    for (a, b) in [(0, 1), (0, 2), (1, 0), (2, 0), (1, 2), (2, 1)] {
+    // Edges 1 and 2 call in the boundary's second, edge 3 in the second before. Two calls on either
+    // side of a day boundary ask about two dates ("Mon" is days away from a Thursday and from a
+    // Friday), so those pairings compare the second, minute and hour boundaries; the pairings with
+    // both calls on one side compare all four, a bracket spanning midnight on both sides included.
+    let after = |e: usize| e != 2;
+    for (a, b) in [(0, 1), (1, 0), (1, 1), (2, 2), (0, 2), (2, 0), (1, 2), (2, 1)] {
         eprintln!("forced edges: reference edge {} against Liella edge {}", a + 1, b + 1);
-        check(&want[a], &got[b], false);
+        let keep = |o: &str| if after(a) == after(b) { o.to_owned() } else { o.split("== edge midnight").next().unwrap().to_owned() };
+        check(&keep(&want[a]), &keep(&got[b]), false);
     }
 }
 
