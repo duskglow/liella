@@ -21,6 +21,7 @@ use core::f64::consts::LN_2;
 use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
+use crate::fast_bessel;
 use crate::fast_special;
 use crate::float::{self, Exact, Float, Kind, Num};
 use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
@@ -794,23 +795,75 @@ fn ln_mp(v: Mp) -> f64 {
     ln_est(Mp { neg: false, exp: 0, m: v.m }.to_f64()) + v.exp as f64 * LN_2
 }
 
-/// `j0(x)`.
+/// `j0(x)`: for `double` the fast tier ([`crate::fast_bessel`]) first, then [`j0_accurate`].
 pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("j0", fast_bessel::j0(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    j0_accurate(x, mode)
+}
+
+/// `j0(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn j0_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     jn(0, x, mode)
 }
 
-/// `j1(x)`.
+/// `j1(x)`: for `double` the fast tier ([`crate::fast_bessel`]) first, then [`j1_accurate`].
 pub fn j1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("j1", fast_bessel::j1(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    j1_accurate(x, mode)
+}
+
+/// `j1(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn j1_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     jn(1, x, mode)
 }
 
-/// `y0(x)`.
+/// `y0(x)`: for `double` the fast tier ([`crate::fast_bessel`]) first, then [`y0_accurate`].
 pub fn y0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf > 0.0 && xf.is_finite() {
+            if let Some(r) = from_fast("y0", fast_bessel::y0(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    y0_accurate(x, mode)
+}
+
+/// `y0(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn y0_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     yn(0, x, mode)
 }
 
-/// `y1(x)`.
+/// `y1(x)`: for `double` the fast tier ([`crate::fast_bessel`]) first, then [`y1_accurate`].
 pub fn y1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf > 0.0 && xf.is_finite() {
+            if let Some(r) = from_fast("y1", fast_bessel::y1(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    y1_accurate(x, mode)
+}
+
+/// `y1(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn y1_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     yn(1, x, mode)
 }
 

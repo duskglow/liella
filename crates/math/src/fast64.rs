@@ -205,6 +205,15 @@ pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
     exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
 }
 
+/// `ln x` for a positive normal `x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`] and
+/// its bound [`log_eps`]; the Bessel fast tier's `y0`, `y1`, `crate::fast_bessel`), or `None`
+/// when the kernel declines.
+#[inline(always)]
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
+}
+
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
 ///
 /// `r = Fast2Sum(h, l)` of [`reduce_ln2`]: exact, since `h` is a multiple of `2^-80` and `|l| <

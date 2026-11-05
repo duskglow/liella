@@ -36,4 +36,6 @@ pub mod cplx;
 pub mod mp;
 pub mod remez;
 pub mod special_tables;
+/// The Bessel fast-tier tables.
+pub mod bessel_tables;
 pub mod tables;

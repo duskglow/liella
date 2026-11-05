@@ -39,17 +39,17 @@ use crate::mp::{self, Big, Round};
 use crate::tables::{dd, f64_of};
 
 const P: u32 = 640;
-const U: f64 = 1.0 / 9_007_199_254_740_992.0;
+pub(crate) const U: f64 = 1.0 / 9_007_199_254_740_992.0;
 /// The bound every table is sized for (relative): `2^-71`.
 const TARGET: f64 = 4.235_164_736_271_502e-22;
-const MAX_DEG: usize = 30;
+pub(crate) const MAX_DEG: usize = 30;
 
-struct Slot {
-    h: f64,
-    coef: Vec<Big>,
-    mag: Vec<f64>,
-    rem: Vec<f64>,
-    fmin: f64,
+pub(crate) struct Slot {
+    pub(crate) h: f64,
+    pub(crate) coef: Vec<Big>,
+    pub(crate) mag: Vec<f64>,
+    pub(crate) rem: Vec<f64>,
+    pub(crate) fmin: f64,
 }
 
 fn round(x: &Big) -> Big {
@@ -137,7 +137,7 @@ fn erfcx_slot(e0: i32, i: usize, k2: &Big) -> Slot {
 
 /// The relative bound of the evaluation with `m` double-double and `d + 1 − m` `f64`
 /// coefficients (module doc, items 1-3).
-fn bound(s: &Slot, m: usize, d: usize) -> f64 {
+pub(crate) fn bound(s: &Slot, m: usize, d: usize) -> f64 {
     let h = s.h;
     let mut rb = vec![0.0; d + 2];
     for k in (0..=d).rev() {
@@ -154,14 +154,19 @@ fn bound(s: &Slot, m: usize, d: usize) -> f64 {
     tot * 1.01 / s.fmin
 }
 
-/// The cheapest `(m, d, eps)` meeting [`TARGET`] on every slot (cost: about 12 operations a
-/// double-double step, 2 an `f64` step).
+/// The cheapest `(m, d, eps)` meeting [`TARGET`] on every slot.
 fn choose(slots: &[Slot]) -> (usize, usize, f64) {
+    choose_for(slots, TARGET)
+}
+
+/// The cheapest `(m, d, eps)` meeting `target` on every slot (cost: about 12 operations a
+/// double-double step, 2 an `f64` step).
+pub(crate) fn choose_for(slots: &[Slot], target: f64) -> (usize, usize, f64) {
     let mut best: Option<(usize, usize, usize, f64)> = None;
     for m in 1..=8 {
         for d in m..=MAX_DEG {
             let eps = slots.iter().map(|s| bound(s, m, d)).fold(0.0, f64::max);
-            if eps <= TARGET {
+            if eps <= target {
                 let cost = 12 * m + 2 * (d - m);
                 if best.is_none_or(|b| cost < b.0) {
                     best = Some((cost, m, d, eps));
@@ -171,7 +176,7 @@ fn choose(slots: &[Slot]) -> (usize, usize, f64) {
         }
     }
     let (_, m, d, eps) = best.unwrap_or((0, 1, MAX_DEG, f64::INFINITY));
-    assert!(eps <= TARGET, "no layout meets the target");
+    assert!(eps <= target, "no layout meets the target");
     (m, d, eps)
 }
 

@@ -202,6 +202,7 @@ pub fn generate() -> String {
     o.dd_table("INV_EVEN_FACT", "`1/(2k)!` for k = 0..15 (cosine series).", &even_fact);
     mp_constants(&mut o);
     crate::special_tables::emit(&mut o.src);
+    crate::bessel_tables::emit(&mut o.src);
     o.src
 }
 
