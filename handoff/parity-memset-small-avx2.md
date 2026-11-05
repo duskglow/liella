@@ -28,8 +28,17 @@ avx2_families.c, memset_16..4096, base f2157504). Results: see "Results" (filled
 psm-word (word 192), psm-off (word 128 with folding off), psm-unresolve (unresolve keeps the word), psm-129-bound
 (`cmp $128`), psm-129-base (`lea -130`), psm-jump (`ja` -> `jb`).
 
-## Results
-(pending: gate, plants, percall; see the hand-back / report json)
+## Results (keke, code fbd23bc4)
+- percall (wl_percall avx2_families.c, base f2157504; glibc / base / new): memset_65 30/34/33, memset_128 30/34/33;
+  memset_16 24/27/27, 31 24/27/27, 32 25/27/27, 33 25/27/27, 64 25/27/27, 129 37/37/37, 256 37/37/37,
+  1024 82/94/94, 4096 250/238/238. No row rose.
+- plants (plants-1): 5 CAUGHT, psm-unresolve WARN-NO-MSG: it failed at the expected assert (line 380), but the 1-byte
+  memset going through the 65-128 leaf wrote 0x07 bytes over the loop variable, so the message read
+  "call 117901063" (0x07070707) instead of "call 2". The cause is understood and the failure is deterministic.
+- gate (direct): RED. liella (exports interposed) 1573 passed, 2 failed: enomem_fs_walk enomem_realpath_null
+  ("realpath: allocation 2: a partial result stays allocated (5808 -> 6832)") and enomem_scandir_filter_alphasort
+  (same assert, enomem_fs_walk.rs:412). No other log on keke shows this message, so it is NOT shown to be unrelated.
+  Cause not found (budget). Hypothesis to test first: run the test at base f2157504 and at the head.
 
 ## Not to redo
 The paper analysis (previous run) and the host-split options; the Rust fold-off 65-128 recursion check (done above).
