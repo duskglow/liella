@@ -437,7 +437,11 @@ impl LocaleView {
     }
 
     /// Whether wide character `c` has a class of `mask` (`iswalpha`, ...): [`ctype::is_w`].
-    #[inline]
+    ///
+    /// Always inlined (PERF-WCTYPE-ENUS-2): with the inline hit paths below, a plain `#[inline]`
+    /// body was left out of line, and every export (the built-in locales' too) paid a call:
+    /// `iswalpha` in C.UTF-8 went from 68 to 76 instructions.
+    #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
         if let Some((w, _)) = &self.wide {
             // The two common answers are inline and call-free (PERF-WCTYPE-ENUS): a filled
@@ -489,8 +493,9 @@ impl LocaleView {
         ctype::is_w_file(c, mask, w)
     }
 
-    /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`].
-    #[inline]
+    /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`]. Always inlined, as
+    /// [`LocaleView::isw`] (`towupper` in C.UTF-8 went from 53 to 68 instructions as a call).
+    #[inline(always)]
     pub fn wtrans(&self, c: u32, upper: bool) -> u32 {
         // The file-backed arm's common answers are inline and call-free, as in `isw`
         // (PERF-WCTYPE-ENUS): a filled Latin-1 entry, and the case table's walk above U+00FF.
