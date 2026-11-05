@@ -1126,6 +1126,58 @@ pub fn sincos<A: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) ->
     exit(e, st);
 }
 
+/// `sincos` with [`elem_fast`]'s in-place attempt (the `double` entry, LIBM-F64-TRIG-TIER): the
+/// out-parameters are checked first, as in [`sincos`]; then, in the default SSE environment,
+/// `fast` answers both results in place, or the cold fallback runs `f` (in place, or in the full
+/// envelope of [`sincos`]). `HW` as in [`elem32_fast`].
+#[inline(always)]
+pub fn sincos_fast<const HW: u8, A: CVal<C = A> + Denorm>(
+    x: A,
+    fast: impl FnOnce(A) -> Option<(A, A)>,
+    f: impl FnOnce(A, Rounding) -> ((A, A), Status),
+    s: Option<&mut A>,
+    c: Option<&mut A>,
+) {
+    let (s, c) = (ret::must(conv::req(s)), ret::must(conv::req(c)));
+    let (saved, in_place) = fpu::peek(&CSys);
+    let x = if in_place {
+        // The barrier as in `elem_fast`.
+        let x = core::hint::black_box(x);
+        if let Some((sv, cv)) = fast(x) {
+            *s = sv;
+            *c = cv;
+            return;
+        }
+        x
+    } else {
+        x
+    };
+    sincos_fast_cold::<HW, A>(x, saved, in_place, f, s, c);
+}
+
+/// [`sincos_fast`]'s fallback, out of line and cold as [`elem_fast_cold`].
+#[cold]
+#[inline(never)]
+fn sincos_fast_cold<const HW: u8, A: CVal<C = A> + Denorm>(
+    x: A,
+    saved: u32,
+    in_place: bool,
+    f: impl FnOnce(A, Rounding) -> ((A, A), Status),
+    s: &mut A,
+    c: &mut A,
+) {
+    if in_place {
+        let ((sv, cv), st) = core::hint::black_box(f(x, Rounding::Nearest));
+        debug_assert!(st.hw.0 & !HW == 0, "the compile-time hw set misses a bit the computation reports");
+        *s = sv;
+        *c = cv;
+        fpu::settle(&CSys, saved, st.flags, fpu::Flags(HW | FAST_ATTEMPT_HW.0));
+        store_error(st.error);
+        return;
+    }
+    sincos(x, Unit::Sse, f, Some(s), Some(c));
+}
+
 #[cfg(test)]
 mod tests {
     use super::Denorm;

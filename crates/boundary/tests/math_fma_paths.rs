@@ -148,3 +148,62 @@ fn exp2_logb_pow_fma_build_matches_baseline_bit_for_bit() {
     }
     assert!(selftest::set_math_fma(true));
 }
+
+/// `sincos` through its export, as one value pair of bits.
+fn sincos_bits(x: f64) -> (u64, u64) {
+    let (mut s, mut c) = (0.0, 0.0);
+    m::sincos(x, Some(&mut s), Some(&mut c));
+    (s.to_bits(), c.to_bits())
+}
+
+/// The trig sample (LIBM-F64-TRIG-TIER): every binade of the fast domain [2^-30, 2^20) and beyond
+/// it on both sides, next to the cell edges k·π/64 ± π/128 and the multiples of π/2 (a few ulps
+/// apart: reduced arguments near zero and cancellations), and both signs.
+fn trig_sample(s: &mut u64) -> Vec<f64> {
+    let sign = |b: u64, v: f64| if b & 1 == 0 { v } else { -v };
+    let mut xs: Vec<f64> = (0..120_000).map(|_| {
+        let b = next(s);
+        let e = (b % 60) as i32 - 36; // 2^-36 .. 2^23
+        sign(b >> 63, 2f64.powi(e) * (1.0 + (next(s) >> 12) as f64 * 2f64.powi(-52)))
+    }).collect();
+    let q = core::f64::consts::PI / 128.0;
+    xs.extend((0..60_000).map(|_| {
+        let b = next(s);
+        let k = ((b % 4_000_000) + 1) as f64; // cell edges (odd k) and cell centres (k = 2j) up to ~10^5
+        let c = k * q;
+        sign(b >> 63, f64::from_bits(c.to_bits().wrapping_add((b >> 40) % 9).wrapping_sub(4)))
+    }));
+    xs.extend((0..20_000).map(|_| {
+        let b = next(s);
+        let c = ((b % 600_000) + 1) as f64 * core::f64::consts::FRAC_PI_2;
+        sign(b >> 63, f64::from_bits(c.to_bits().wrapping_add((b >> 40) % 5).wrapping_sub(2)))
+    }));
+    xs
+}
+
+// s10_3_c_0, s10_0_g_0: sin, cos, tan and sincos (LIBM-F64-TRIG-TIER: each export with an FMA
+// build) compute the same, correctly rounded result in both builds.
+#[test]
+fn trig_fma_build_matches_baseline_bit_for_bit() {
+    if !selftest::set_math_fma(true) {
+        eprintln!("SKIP: this CPU (or its OS) has no FMA; only the baseline build exists here");
+        return;
+    }
+    let mut s = 0xbb67_ae85_84ca_a73bu64;
+    let xs = trig_sample(&mut s);
+    let a = both(m::sin, |x| Real::sin(x, Rounding::Nearest).0, &xs);
+    let b = both(m::cos, |x| Real::cos(x, Rounding::Nearest).0, &xs);
+    let c = both(m::tan, |x| Real::tan(x, Rounding::Nearest).0, &xs);
+    assert!(a > 3000 && b > 3000 && c > 3000, "sample too small: {a} {b} {c}");
+    let fused: Vec<(u64, u64)> = xs.iter().map(|&x| sincos_bits(x)).collect();
+    assert!(selftest::set_math_fma(false));
+    for (i, &x) in xs.iter().enumerate() {
+        let plain = sincos_bits(x);
+        assert_eq!(fused[i], plain, "sincos({x:e}): FMA build {:x?}, baseline {plain:x?}", fused[i]);
+        if i % 64 == 0 {
+            let ((sv, cv), _) = Real::sincos(x, Rounding::Nearest);
+            assert_eq!(plain, (sv.to_bits(), cv.to_bits()), "sincos({x:e}): not the correctly rounded pair");
+        }
+    }
+    assert!(selftest::set_math_fma(true));
+}
