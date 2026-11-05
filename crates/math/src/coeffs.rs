@@ -12,6 +12,8 @@
 pub(crate) mod example_exp;
 pub(crate) mod example_sin;
 pub(crate) mod fast32_atan;
+pub(crate) mod fast32_cos;
+pub(crate) mod fast32_sin;
 
 // The constant tables (D-10.3): one `@generated` file per family, written by `cargo xtask
 // tables` from `crates/mathtools/src/tables.rs` (never edited by hand; `cargo xtask static`
