@@ -242,56 +242,50 @@ fn bytes<const N: usize>(c: &[c_char; N]) -> [u8; N] {
     c.map(|v| v.to_ne_bytes()[0])
 }
 
-/// x86_64 `ut_tv`: two `int32_t`, the seconds stored as unsigned 32-bit (D-17.5).
+/// x86_64 `ut_tv`: two `int32_t`, the seconds stored as unsigned 32-bit (D-17.5); a time the
+/// members cannot hold is no time, `(0, 0)`.
 #[cfg(not(target_arch = "aarch64"))]
-fn tv_out(time: (i64, i32)) -> struct_utmp__ut_tv {
+fn tv_out(time: (i64, i64)) -> struct_utmp__ut_tv {
     let (sec, usec) = liella::users::ut_tv(time);
     struct_utmp__ut_tv { tv_sec: i32::from_ne_bytes(sec.to_ne_bytes()), tv_usec: usec }
 }
 
 #[cfg(not(target_arch = "aarch64"))]
-fn tv_in(tv: &struct_utmp__ut_tv) -> (i64, i32) {
-    (liella::users::ut_sec(tv.tv_sec), tv.tv_usec)
+fn tv_in(tv: &struct_utmp__ut_tv) -> (i64, i64) {
+    (liella::users::ut_sec(tv.tv_sec), i64::from(tv.tv_usec))
 }
 
-/// x86_64 `ut_session`: `int32_t`, as the record holds it.
+/// x86_64 `ut_session`: `int32_t`; a value outside it is stored as 0, never wrapped.
 #[cfg(not(target_arch = "aarch64"))]
-fn session_out(s: i32) -> i32 {
-    s
+fn session_out(s: i64) -> i32 {
+    i32::try_from(s).unwrap_or(0)
 }
 
 #[cfg(not(target_arch = "aarch64"))]
-fn session_in(s: i32) -> i32 {
-    s
+fn session_in(s: i32) -> i64 {
+    i64::from(s)
 }
 
 /// aarch64 `ut_tv`: a `struct timeval` (64-bit seconds and microseconds; layouts-aarch64.tsv).
 #[cfg(target_arch = "aarch64")]
-fn tv_out(time: (i64, i32)) -> struct_timeval {
-    struct_timeval { tv_sec: time.0, tv_usec: i64::from(time.1) }
+fn tv_out(time: (i64, i64)) -> struct_timeval {
+    struct_timeval { tv_sec: time.0, tv_usec: time.1 }
 }
 
-/// Not ported (OD-10): `liella::users::Utmp` keeps the x86_64 record (32-bit `ut_session` and
-/// microseconds), so wider aarch64 values are clamped here (docs/arch-seams.md).
 #[cfg(target_arch = "aarch64")]
-fn tv_in(tv: &struct_timeval) -> (i64, i32) {
-    (tv.tv_sec, clamp32(tv.tv_usec))
+fn tv_in(tv: &struct_timeval) -> (i64, i64) {
+    (tv.tv_sec, tv.tv_usec)
 }
 
 /// aarch64 `ut_session`: `long`.
 #[cfg(target_arch = "aarch64")]
-fn session_out(s: i32) -> i64 {
-    i64::from(s)
+fn session_out(s: i64) -> i64 {
+    s
 }
 
 #[cfg(target_arch = "aarch64")]
-fn session_in(s: i64) -> i32 {
-    clamp32(s)
-}
-
-#[cfg(target_arch = "aarch64")]
-fn clamp32(v: i64) -> i32 {
-    i32::try_from(v).unwrap_or(if v < 0 { i32::MIN } else { i32::MAX })
+fn session_in(s: i64) -> i64 {
+    s
 }
 
 /// `struct utmp` (and `struct utmpx`, the same layout) for a record. On x86_64 the seconds are

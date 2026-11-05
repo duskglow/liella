@@ -372,8 +372,60 @@ pub fn tty_slot(text: &[u8], name: &[u8]) -> Option<usize> {
 
 // ------------------------------------------------------------------------------ login records
 
-/// The size of a login record in the files (`struct utmp`, 384 bytes).
-pub const UTMP_SIZE: usize = 384;
+/// The byte layout of a login record in the files and in C's `struct utmp`: where each member that
+/// differs between architectures sits and how wide it is. The two shapes are the offsets of
+/// `spec/abi/layouts.tsv` (x86_64) and `spec/abi/layouts-aarch64.tsv` (compile-only probes); a test
+/// reads both tables and checks every number here against them. The members that do not move
+/// (`ut_type` to `ut_exit`, offsets 0 to 336) are the same in both.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct UtmpShape {
+    /// `sizeof(struct utmp)`: the record size in the files.
+    pub size: usize,
+    /// Offset of `ut_session`.
+    pub session_at: usize,
+    /// Width of `ut_session` in bytes (4 or 8).
+    pub session_len: usize,
+    /// Offset of `ut_tv.tv_sec`.
+    pub sec_at: usize,
+    /// Width of `ut_tv.tv_sec` in bytes (4: unsigned seconds, D-17.5; 8: a `time_t`).
+    pub sec_len: usize,
+    /// Offset of `ut_tv.tv_usec`.
+    pub usec_at: usize,
+    /// Width of `ut_tv.tv_usec` in bytes.
+    pub usec_len: usize,
+    /// Offset of `ut_addr_v6`.
+    pub addr_at: usize,
+}
+
+impl UtmpShape {
+    /// x86_64: 384 bytes, 32-bit `ut_session` and `ut_tv` members.
+    pub const X86_64: UtmpShape = UtmpShape { size: 384, session_at: 336, session_len: 4, sec_at: 340, sec_len: 4, usec_at: 344, usec_len: 4, addr_at: 348 };
+    /// aarch64: 400 bytes, `long ut_session` and a 64-bit `struct timeval ut_tv`.
+    pub const AARCH64: UtmpShape = UtmpShape { size: 400, session_at: 336, session_len: 8, sec_at: 344, sec_len: 8, usec_at: 352, usec_len: 8, addr_at: 360 };
+    /// The shape of the architecture this is built for.
+    // ARCH(x86_64): the 384-byte record; the aarch64 arm is the 400-byte one (ARCH-UTMP-LAYOUT)
+    #[cfg(not(target_arch = "aarch64"))]
+    pub const NATIVE: UtmpShape = UtmpShape::X86_64;
+    /// The shape of the architecture this is built for.
+    // ARCH(x86_64): the 384-byte record; the aarch64 arm is the 400-byte one (ARCH-UTMP-LAYOUT)
+    #[cfg(target_arch = "aarch64")]
+    pub const NATIVE: UtmpShape = UtmpShape::AARCH64;
+
+    /// Whether `time` fits this shape's `ut_tv`: 32-bit seconds hold `[0, 2^32)`, a 32-bit
+    /// `tv_usec` holds an `int32_t`; a time outside is no time at all (D-17.5), never wrapped.
+    pub fn holds_time(&self, time: (i64, i64)) -> bool {
+        (self.sec_len > 4 || (0..=UT_SEC_MAX_32).contains(&time.0)) && (self.usec_len > 4 || i32::try_from(time.1).is_ok())
+    }
+
+    /// The last second `tv_sec` holds.
+    pub const fn sec_max(&self) -> i64 {
+        if self.sec_len > 4 { i64::MAX } else { UT_SEC_MAX_32 }
+    }
+}
+
+/// The size of a login record in the files on this architecture (`struct utmp`): 384 bytes on
+/// x86_64, 400 on aarch64.
+pub const UTMP_SIZE: usize = UtmpShape::NATIVE.size;
 /// `ut_type`: empty.
 pub const EMPTY: i16 = 0;
 /// `ut_type`: change of run level.
@@ -393,18 +445,22 @@ pub const USER_PROCESS: i16 = 7;
 /// `ut_type`: a session that ended.
 pub const DEAD_PROCESS: i16 = 8;
 
-/// The last second the 32-bit `ut_tv.tv_sec` holds, read as unsigned (D-17.5, F38):
+/// The last second a 32-bit `ut_tv.tv_sec` holds, read as unsigned (D-17.5, F38):
 /// 2106-02-07 06:28:15 UTC.
-pub const UT_SEC_MAX: i64 = 0xFFFF_FFFF;
+pub const UT_SEC_MAX_32: i64 = 0xFFFF_FFFF;
 
-/// `ut_tv` as the shared 32-bit format holds it (D-17.5, F38): seconds in `[0, 2^32)` as their
+/// The last second this architecture's `ut_tv.tv_sec` holds: [`UT_SEC_MAX_32`] on x86_64, every
+/// `time_t` on aarch64 (64-bit seconds).
+pub const UT_SEC_MAX: i64 = UtmpShape::NATIVE.sec_max();
+
+/// `ut_tv` as the 32-bit format holds it (D-17.5, F38): seconds in `[0, 2^32)` as their
 /// unsigned 32-bit value, so a time to 2106-02-07 06:28:15 UTC is kept and every value before
 /// 2038-01-19 03:14:07 UTC has the same bytes as the signed field glibc writes. A time outside
 /// that range is no time at all, `(0, 0)`: never wrapped.
-pub fn ut_tv(time: (i64, i32)) -> (u32, i32) {
-    match u32::try_from(time.0) {
-        Ok(sec) => (sec, time.1),
-        Err(_) => (0, 0),
+pub fn ut_tv(time: (i64, i64)) -> (u32, i32) {
+    match (u32::try_from(time.0), i32::try_from(time.1)) {
+        (Ok(sec), Ok(usec)) => (sec, usec),
+        _ => (0, 0),
     }
 }
 
@@ -432,10 +488,11 @@ pub struct Utmp {
     pub host: [u8; 256],
     /// `ut_exit`: termination and exit status.
     pub exit: [i16; 2],
-    /// `ut_session`.
-    pub session: i32,
-    /// `ut_tv`: seconds and microseconds.
-    pub time: (i64, i32),
+    /// `ut_session`: held in 64 bits; a 32-bit record (x86_64) stores a value outside `int32_t` as 0.
+    pub session: i64,
+    /// `ut_tv`: seconds and microseconds, 64 bits each; a 32-bit record stores a time it cannot
+    /// hold as `(0, 0)` ([`UtmpShape::holds_time`]).
+    pub time: (i64, i64),
     /// `ut_addr_v6`.
     pub addr: [i32; 4],
 }
@@ -489,14 +546,32 @@ impl Utmp {
         matches!(self.kind, LOGIN_PROCESS | USER_PROCESS) && field_text(&self.line) == field_text(&key.line)
     }
 
-    /// The record in the file format (native byte order, the 32-bit time).
+    /// The record in the file format of this architecture (native byte order).
     pub fn to_bytes(&self) -> [u8; UTMP_SIZE] {
         let mut b = [0u8; UTMP_SIZE];
+        self.encode(&UtmpShape::NATIVE, &mut b);
+        b
+    }
+
+    /// The record in a file's bytes (this architecture's format).
+    pub fn from_bytes(b: &[u8; UTMP_SIZE]) -> Utmp {
+        Utmp::decode(&UtmpShape::NATIVE, b)
+    }
+
+    /// Write the record in `shape` into `out` (`shape.size` bytes; a shorter `out` is filled as
+    /// far as it goes). The members before `ut_session` are the same in every shape.
+    pub fn encode(&self, shape: &UtmpShape, out: &mut [u8]) {
         let mut put = |at: usize, v: &[u8]| {
-            if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
+            if let Some(d) = out.get_mut(at..at.saturating_add(v.len())) {
                 d.copy_from_slice(v);
             }
         };
+        // `len` low bytes of `v` in native order (the narrow members of a 32-bit shape).
+        let int = |v: i64, len: usize| -> [u8; 8] {
+            if len > 4 { v.to_ne_bytes() } else { [u32::try_from(v & 0xFFFF_FFFF).unwrap_or(0).to_ne_bytes(), [0; 4]].concat().try_into().unwrap_or([0; 8]) }
+        };
+        let session = if shape.session_len > 4 || i32::try_from(self.session).is_ok() { self.session } else { 0 };
+        let (sec, usec) = if shape.holds_time(self.time) { self.time } else { (0, 0) };
         put(0, &self.kind.to_ne_bytes());
         put(4, &self.pid.to_ne_bytes());
         put(8, &self.line);
@@ -505,28 +580,36 @@ impl Utmp {
         put(76, &self.host);
         put(332, &self.exit[0].to_ne_bytes());
         put(334, &self.exit[1].to_ne_bytes());
-        put(336, &self.session.to_ne_bytes());
-        let (sec, usec) = ut_tv(self.time);
-        put(340, &sec.to_ne_bytes());
-        put(344, &usec.to_ne_bytes());
+        put(shape.session_at, int(session, shape.session_len).get(..shape.session_len).unwrap_or(&[]));
+        put(shape.sec_at, int(sec, shape.sec_len).get(..shape.sec_len).unwrap_or(&[]));
+        put(shape.usec_at, int(usec, shape.usec_len).get(..shape.usec_len).unwrap_or(&[]));
         for (k, a) in self.addr.iter().enumerate() {
-            put(348usize.saturating_add(k.saturating_mul(4)), &a.to_ne_bytes());
+            put(shape.addr_at.saturating_add(k.saturating_mul(4)), &a.to_ne_bytes());
         }
-        b
     }
 
-    /// The record in a file's bytes.
-    pub fn from_bytes(b: &[u8; UTMP_SIZE]) -> Utmp {
+    /// The record `b` holds in `shape` (zeros past its end).
+    pub fn decode(shape: &UtmpShape, b: &[u8]) -> Utmp {
+        // A member of `len` bytes at `at`: 4 bytes read signed or (`unsigned`) unsigned, 8 as `i64`.
+        let int = |at: usize, len: usize, unsigned: bool| -> i64 {
+            if len > 4 {
+                i64::from_ne_bytes(bytes_of(b, at))
+            } else if unsigned {
+                i64::from(u32::from_ne_bytes(bytes_of(b, at)))
+            } else {
+                i64::from(i32::from_ne_bytes(bytes_of(b, at)))
+            }
+        };
         let mut u = Utmp { kind: i16::from_ne_bytes(bytes_of(b, 0)), pid: i32::from_ne_bytes(bytes_of(b, 4)), ..Utmp::default() };
         u.line = bytes_of(b, 8);
         u.id = bytes_of(b, 40);
         u.user = bytes_of(b, 44);
         u.host = bytes_of(b, 76);
         u.exit = [i16::from_ne_bytes(bytes_of(b, 332)), i16::from_ne_bytes(bytes_of(b, 334))];
-        u.session = i32::from_ne_bytes(bytes_of(b, 336));
-        u.time = (i64::from(u32::from_ne_bytes(bytes_of(b, 340))), i32::from_ne_bytes(bytes_of(b, 344)));
+        u.session = int(shape.session_at, shape.session_len, false);
+        u.time = (int(shape.sec_at, shape.sec_len, true), int(shape.usec_at, shape.usec_len, false));
         for (k, a) in u.addr.iter_mut().enumerate() {
-            *a = i32::from_ne_bytes(bytes_of(b, 348usize.saturating_add(k.saturating_mul(4))));
+            *a = i32::from_ne_bytes(bytes_of(b, shape.addr_at.saturating_add(k.saturating_mul(4))));
         }
         u
     }
