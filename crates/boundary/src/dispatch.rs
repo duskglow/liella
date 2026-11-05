@@ -58,6 +58,8 @@ crate::export! { libm "LIELLA_PRIVATE";
 /// Secure-execution mode, which honours no tunable (`Tunables::parse`), is asked only when the
 /// variable is present (`process::secure`, failing safe). The name is local to both libraries.
 #[cfg(feature = "libm")]
+// A C entry, reached by its symbol from libm_init.c rather than by a Rust path.
+#[allow(unreachable_pub)]
 pub extern "C" fn liella_libm_start(argc: liella_abi::ctypes::c_int, argv: usize, envp: usize) {
     let _ = (argc, argv);
     let tunables = crate::conv::env_find_from(envp, 0, b"GLIBC_TUNABLES").map_or_else(liella::config::Tunables::default, |entry| {
