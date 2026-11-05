@@ -4595,7 +4595,13 @@ liella_machine_move_sse2:
 	.section .text.liella_machine_fill_avx2,"ax",@progbits
 	.globl liella_machine_fill_avx2
 	.type liella_machine_fill_avx2, @function
+	/* The hidden second label: the `memset` entry (machine/fold.S, MEMSET-4K-3) tail-jumps here
+	 * directly (no PLT hop through the exported name), after its NULL test and AVX2 flag test. */
+	.globl liella_machine_fill_avx2_entry
+	.hidden liella_machine_fill_avx2_entry
+	.type liella_machine_fill_avx2_entry, @function
 	.p2align 6
+liella_machine_fill_avx2_entry:
 liella_machine_fill_avx2:
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0

@@ -393,10 +393,52 @@ memset:
 	movups %xmm0, -32(%rdi,%rdx)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
-.Lset_out:					/* MEMSET-4K-LOOP: above 256 the large-fill choice at once; else the rest path */
+/* MEMSET-4K-3: above 256 the kernel choice here, as `hot::bulk_fill` makes it: from the `rep stosb`
+ * word (`liella_machine_fill_erms_from`, at least 257; usize::MAX without ERMS or before the
+ * startup decision) `rep stosb` from d when d is 64-byte aligned, else the first 64 bytes
+ * unaligned and `rep stosb` from the first 64-byte boundary above d; else with the AVX2 flag the AVX2 fill; a NULL d and every
+ * other case `hot::fill_large`. Sizes below 65 (folding off) fail both size tests. */
+.Lset_out:
+	cmpq liella_machine_fill_erms_from(%rip), %rdx
+	jae .Lset_erms
 	cmpq $256, %rdx
 	jbe .Lset_rest
-	jmp liella_hot_fill_large
+	testq %rdi, %rdi
+	jz liella_hot_fill_large
+	cmpb $0, liella_machine_avx2(%rip)
+	je liella_hot_fill_large
+	jmp liella_machine_fill_avx2_entry
+/* MEMSET-4K-4: a 64-byte-aligned d (NULL included) takes `rep stosb` over all n from d: the head
+ * stores and the alignment below would only end at the boundary `rep stosb` starts from anyway.
+ * An unaligned d is not NULL, so the alignment test stands in for the NULL test on that path. */
+.Lset_erms:
+	testb $63, %dil
+	jnz .Lset_erms_head
+	testq %rdi, %rdi
+	jz liella_hot_fill_large
+	movq %rdx, %rcx
+	movl %esi, %eax				/* al = (unsigned char)c */
+	rep stosb
+	movq %rdi, %rax
+	subq %rdx, %rax				/* d: rdi ends at d + n */
+	ret
+.Lset_erms_head:
+	movzbl %sil, %eax
+	imull $0x01010101, %eax, %eax		/* al = (unsigned char)c for rep stosb, the 16-byte block below */
+	movd %eax, %xmm0
+	pshufd $0, %xmm0, %xmm0
+	movups %xmm0, (%rdi)
+	movups %xmm0, 16(%rdi)
+	movups %xmm0, 32(%rdi)
+	movups %xmm0, 48(%rdi)
+	leaq (%rdi,%rdx), %rcx			/* the end */
+	movq %rdi, %rdx				/* d, the return value */
+	addq $64, %rdi
+	andq $-64, %rdi				/* the first 64-byte boundary above d: d < rdi < d + 64 < end */
+	subq %rdi, %rcx
+	rep stosb
+	movq %rdx, %rax
+	ret
 .Lset_rest:
 	jmp liella_hot_fill_rest
 #ifdef LIELLA_EXPORT
@@ -1333,5 +1375,19 @@ liella_machine_cmp_mid:
 liella_machine_cmp_long:
 	.zero 16
 	.size liella_machine_cmp_long, 8
+
+/* The `memset` entry's `rep stosb` word (MEMSET-4K-3; `ffi::liella_machine_fill_erms_from`):
+ * sizes above 256 with `n >= word` take the entry's `rep stosb`. usize::MAX (no size) until the
+ * startup decision writes the threshold (at least 257) on ERMS CPUs (`crate::cpu`). Its own
+ * 64-byte line: it needs a nonzero initial value, so it cannot share the .bss line above. */
+	.data
+	.globl liella_machine_fill_erms_from
+	.hidden liella_machine_fill_erms_from
+	.type liella_machine_fill_erms_from, @object
+	.p2align 6
+liella_machine_fill_erms_from:
+	.quad -1
+	.zero 56
+	.size liella_machine_fill_erms_from, 8
 
 	.section .note.GNU-stack,"",@progbits
