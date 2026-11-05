@@ -1937,6 +1937,28 @@ fn s13_3_i_0() {
         assert_eq!(n, DEPTH + 2, "every entry");
         assert!(longest > 4096);
     }
+    // A directory with two deep chains below it, descriptor limit hit inside the first chain
+    // walked (whichever the file system lists first): the directory's own descriptor was closed
+    // meanwhile, and its next entry is still examined through a reopened one.
+    {
+        use liella::fs::walk::{self, Action, Event, Options};
+        let chain: String = "n/".repeat(12);
+        for c in ["c1", "c2"] {
+            std::fs::create_dir_all(d.at(&format!("two/x/{c}/{chain}"))).unwrap();
+        }
+        let k = Faulty::new(CSys);
+        assert!(k.fail("openat", Errno::EMFILE, 6, 3));
+        let mut n = 0usize;
+        let r = walk::walk(&k, d.at("two").as_os_str().as_encoded_bytes(), Options { physical: true, ..Options::default() }, &mut |ev| {
+            if let Event::Visit(_) = ev {
+                n += 1;
+            }
+            Ok(Action::Continue)
+        });
+        assert_eq!(r, Ok(0));
+        assert_eq!(k.injected(), 3, "the descriptor limit was hit");
+        assert_eq!(n, 1 + 1 + 2 * 13, "two, x, and each chain's 13 directories");
+    }
     in_child("s13_3_i_0", &d, |dir| {
         assert_eq!(x::chdir(cpath(dir).as_ptr()), 0);
         take();
