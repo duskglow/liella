@@ -68,8 +68,8 @@ the matching `fast32/<family>.rs` (new private items there need `pub(super)`), y
 - `libm-tables-per-family-codecmp` (SUPERSEDED): compared a RAM `xtask so` build of base with the role's bench-built
   head library; the two were built differently (5543 vs 4655 text symbols, differences in regex/printf/glob), so it
   proves nothing. `libm-tables-per-family-codecmp2` builds base (branch diff reversed with patch -R) and head the same
-  way in RAM and compares .text and every cbench_libm entry's instructions (addresses and names masked); its result is
-  in the report json / hand-back.
+  way in RAM: rc 0, libc.so.6 .text IDENTICAL (3087173 bytes, sha256 a900c65f1fde6048 both): every libm row runs the
+  same instructions. (Its per-entry loop matched no symbol names, a lookup defect; moot given the identical .text.)
 - Gate `libm-tables-per-family-gate`: FULL tier (`cargo xtask affected --tier full --run` under ~/bin/gate), left
   running at hand-back for the dispatcher.
 
