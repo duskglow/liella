@@ -801,6 +801,142 @@ fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64 {
     exp_eps(v, tail) + 1.02 * dd::abs(v.hi) * dz
 }
 
+/// `1 + 2^-9`: [`near`]'s multiplier for the entries below whose `eps/|y.hi|` is at most
+/// `2^-64` (`C·(1 − 2^54·2^-64) > 1 + 2^-53`; a miss, about one in 500, goes to the exact test).
+const C_M1: f64 = f64::from_bits(0x3ff0_0800_0000_0000);
+/// `1 + 2^-15`: [`near`]'s multiplier for [`cbrt_nearest`] (`eps/|y.hi| <= 2^-70`).
+const C_CBRT: f64 = f64::from_bits(0x3ff0_0010_0000_0000);
+
+/// `e^x − 1` for the in-place entry: `2^-60 <= |x| < 700`, `x > -38` (the result normal, and not
+/// within `2^-38` of −1, so the −1 never swamps the exponential).
+///
+/// * `|x| <= 0.34` (`|k| <= 32`): `k = round(64x/ln 2)`, `r = x − k·ln2/64` as in [`exp`]
+///   (`|rh| <= 0.0055`), and with `e = 2^(k/64) − 1 = eh + el` (`EXP2M1_J64`) the sum
+///   `e + p + e·p`, `p = e^r − 1 = ph + pl` from the series of [`exp_kernel`] (same proof: its tail
+///   `T` costs `2^-49·|T|`, here times `1 + e <= 1.41`, so `eps = 2·2^-49·|T| + 2^-70·|y.hi|`).
+///   `e·p = q.hi + q.lo` by `two_prod`, `ph + q.hi` and `eh + that` by 2Sum (exact), the rest
+///   (`el + pl`, `q.lo`, `el·ph`, `eh·pl`, all below `2^-50`; `el·pl < 2^-106` dropped) summed with
+///   roundings below `2^-102`, and Fast2Sum joins them (`|lo| < 2^-40·|a.hi|`). For `k != 0`,
+///   `|y| >= 0.0054` (`e` and `p` differ in sign at worst by a factor 2), so `eps/|y| <= 2^-48·2^-25.2/2^-7.6
+///   + 2^-70 < 2^-65`; for `k = 0` (`y = p`, `r = x` exact) `eps/|y| <= 2^-48·x²/6 + 2^-70 < 2^-65`.
+/// * `|x| > 0.34`: `v = e^x = y·2^m` from [`exp_kernel`] and `v − 1` by 2Sum, `|v|/|v − 1| <= 3.5`,
+///   so `eps/|y| <= 3.5·1.0757·2^-70 < 2^-67`. Exact scaling for `|m| <= 1010`.
+///
+/// Every operation is on normal `double`s (`|r| >= 2^-60`, so `r²` and the tail stay above 2^-180),
+/// so only inexact is raised in hardware.
+#[inline(always)]
+pub fn expm1_nearest(x: f64) -> Option<f64> {
+    let ax = dd::abs(x);
+    if !(crate::exp_log::TINY..700.0).contains(&ax) || x <= -38.0 {
+        return special(x, Some(-1.0));
+    }
+    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
+    let k = dd::to_i32(kf);
+    if ax > 0.34 {
+        let (y, m, tail) = exp_kernel(reduce_exp(x, kf), k)?;
+        let s2 = dd::pow2(m);
+        let s = two_sum(y.hi * s2, -1.0);
+        let w = fast_two_sum(s.hi, s.lo + y.lo * s2);
+        return finish(w, Some(C_M1), 0, || exp_eps(y, tail) * s2 + MARGIN * dd::abs(w.hi), &mut 0);
+    }
+    let r = reduce_exp(x, kf);
+    let (rh, rl) = (r.hi, r.lo);
+    if dd::abs(rh) > 0.006 {
+        return None;
+    }
+    const C: [f64; 6] = [1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0, 1.0 / 40320.0];
+    let q = C[0] + rh * (C[1] + rh * (C[2] + rh * (C[3] + rh * (C[4] + rh * C[5]))));
+    let s = two_prod(rh, rh);
+    let tail = rh * s.hi * q;
+    let a = two_sum(rh, 0.5 * s.hi);
+    let (ph, pl) = (a.hi, a.lo + ((0.5 * s.lo + rl * (1.0 + rh)) + tail));
+    let e = t::EXP2M1_J64[usize::try_from(k + 32).unwrap_or(32)];
+    let (eh, el) = (f64::from_bits(e[0]), f64::from_bits(e[1]));
+    let q = two_prod(eh, ph);
+    let b = two_sum(ph, q.hi);
+    let c = two_sum(eh, b.hi);
+    let lo = c.lo + (b.lo + (((q.lo + el * ph) + (el + pl)) + eh * pl));
+    let y = fast_two_sum(c.hi, lo);
+    finish(y, Some(C_M1), 0, || 2.0 * TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi), &mut 0)
+}
+
+/// `ln(1 + x)` for the in-place entry: `x > -1` finite, `|x| >= 2^-60`.
+///
+/// * `|x| <= 2^-7`: the series of [`log_series`] with `r = x` exact (`e = 0`, `c = 1`, `rl = 0`);
+///   `eps = 2^-49·|T| + 2^-70·|y|`, `eps/|y| <= 2^-49·x²/3 + 2^-70 < 2^-64`.
+/// * else `w = 1 + x = wh + wl` by 2Sum (exact), `ln(wh + wl) = ln wh + wl/wh` (`|wl/wh| <= 2^-53`
+///   with rounding below `2^-106`, joined to `ll`, whose bound it leaves unchanged): [`log_series`]
+///   and [`log_assemble`] of `wh`, whose cases (`|ln wh| >= 2^-8.01` here since `|wh − 1| >= 2^-8`)
+///   give `eps/|y| <= 2^-49·2^-22.57/2^-8.01 + 2^-70 < 2^-64`.
+///
+/// Normal operands throughout, so only inexact is raised in hardware.
+#[inline(always)]
+pub fn log1p_nearest(x: f64) -> Option<f64> {
+    if !(x > -1.0 && x <= f64::MAX) || dd::abs(x) < crate::exp_log::TINY {
+        return special(x, None);
+    }
+    let (y, tail) = if dd::abs(x) <= 0.007_812_5 {
+        const C: [f64; 8] = [1.0 / 3.0, -1.0 / 4.0, 1.0 / 5.0, -1.0 / 6.0, 1.0 / 7.0, -1.0 / 8.0, 1.0 / 9.0, -1.0 / 10.0];
+        let q = C[0] + x * (C[1] + x * (C[2] + x * (C[3] + x * (C[4] + x * (C[5] + x * (C[6] + x * C[7]))))));
+        let s = two_prod(x, x);
+        let tail = x * s.hi * q;
+        let a = two_sum(x, -0.5 * s.hi);
+        (fast_two_sum(a.hi, a.lo + (-0.5 * s.lo + tail)), tail)
+    } else {
+        let w = two_sum(1.0, x);
+        let (e, idx, lh, ll, tail) = log_series(w.hi)?;
+        (log_assemble(e, idx, lh, ll + w.lo / w.hi), tail)
+    };
+    finish(y, Some(C_M1), 0, || log_eps(y, tail), &mut 0)
+}
+
+/// `10^x` for the in-place entry: `2^-60 <= |x| < 307`, not one of the exact cases `1..=22`
+/// (the accurate entry's early returns); the call of [`exp10`] with the in-place rounding.
+#[inline(always)]
+pub fn exp10_nearest(x: f64) -> Option<f64> {
+    let ax = dd::abs(x);
+    if !(crate::exp_log::TINY..307.0).contains(&ax) || ((1.0..=22.0).contains(&x) && dd::nearest_int(x) == x) {
+        return special(x, Some(0.0));
+    }
+    let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[1]));
+    let r = reduce(Dd::from(x), kf, &t::LOG10_2_64_CW);
+    let (y, m, tail) = exp_kernel(r.mul(Dd::of(t::LN10)), dd::to_i32(kf))?;
+    finish(y, Some(C_EXP), m, || exp_eps(y, tail), &mut 0)
+}
+
+/// `∛x` for the in-place entry: `2^-800 <= |x| < 2^800`, the result not a double of at most 18
+/// significant bits (the only exact cube roots; those go to the accurate path).
+///
+/// `y0` from the exponent bits divided by three (relative error below 0.032), three Halley steps
+/// `y ← y·(y³ + 2m)/(2y³ + m)` in `double` (cubic convergence: below `2^-52` rounding-limited
+/// after the third), then one Newton correction in double-double from the exactly computed residual
+/// `m − y³` (`y²` and `y²·y` by `two_prod`, `m − p.hi` exact by Sterbenz, so `r` is within
+/// `2^-100·m`); `corr = r/(3y²)`, error `δ² + 2^-53·|corr| < 2^-100·y` for `δ < 2^-49`. So
+/// `eps/|y| <= 2^-70` (checked by the `bounds` tests). All operands normal (`y³ >= 2^-800`, the
+/// products' low parts `>= 2^-910`): only inexact is raised.
+#[inline(always)]
+pub fn cbrt_nearest(x: f64) -> Option<f64> {
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff_ffff_ffff;
+    if ab.wrapping_sub(0x0df0_0000_0000_0000) >= 0x6400_0000_0000_0000 {
+        return special(x, Some(f64::NEG_INFINITY)).filter(|_| ab >= 0x7ff0_0000_0000_0000);
+    }
+    let m = f64::from_bits(ab);
+    let mut y = f64::from_bits(ab / 3 + 0x2a9f_7640_0000_0000);
+    for _ in 0..3 {
+        let y3 = y * y * y;
+        y = y * (y3 + 2.0 * m) / (2.0 * y3 + m);
+    }
+    let y2 = two_prod(y, y);
+    let p = two_prod(y2.hi, y);
+    let res = ((m - p.hi) - p.lo) - y2.lo * y;
+    let w = fast_two_sum(y, res / (3.0 * y2.hi));
+    if w.hi.to_bits() & 0x0000_0007_ffff_ffff == 0 {
+        return None;
+    }
+    near(w, C_CBRT, 0).map(|v| f64::from_bits(v.to_bits() | (b & 0x8000_0000_0000_0000)))
+}
+
 /// The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
 fn step(h: f64, up: bool) -> f64 {
     let b = h.to_bits();
@@ -1078,5 +1214,123 @@ mod bounds {
         }
         assert_eq!(LN2A + LN2B, f64::from_bits(t::LN2[0]));
         assert_eq!(dd::split(f64::from_bits(t::LN2[0])), (LN2A, LN2B));
+    }
+}
+
+// The in-place entries of expm1, log1p, exp10 and cbrt answer exactly what the accurate path
+// (double-double, correctly rounded) gives, on dense operands over their whole ranges, the
+// ends of their ranges and the neighbourhoods of the exact cases. Spec clause: §10.3 (correctly
+// rounded results); the hardware-flag side is covered by the boundary tests.
+#[cfg(test)]
+mod inplace {
+    use super::*;
+    use crate::{exp_log, pow};
+
+    fn xs(n: usize, lo: f64, hi: f64, log: bool) -> Vec<f64> {
+        let mut st = 0x9e37_79b9_7f4a_7c15u64;
+        (0..n)
+            .map(|_| {
+                st ^= st << 13;
+                st ^= st >> 7;
+                st ^= st << 17;
+                let u = f64::from_bits(0x3ff0_0000_0000_0000 | (st >> 12)) - 1.0;
+                if log { (lo.ln() + (hi.ln() - lo.ln()) * u).exp() } else { lo + (hi - lo) * u }
+            })
+            .collect()
+    }
+
+    fn check(name: &str, f: fn(f64) -> Option<f64>, acc: impl Fn(f64) -> f64, ops: &[f64]) -> (usize, usize) {
+        let (mut hit, mut total) = (0, 0);
+        for &x in ops {
+            for v in [x, -x] {
+                total += 1;
+                if let Some(r) = f(v) {
+                    hit += 1;
+                    assert_eq!(r.to_bits(), acc(v).to_bits(), "{name}({v:e}): fast {r:e}, accurate {:e}", acc(v));
+                }
+            }
+        }
+        (hit, total)
+    }
+
+    fn edges() -> Vec<f64> {
+        let mut v = vec![0.34, 0.3399999, 0.3400001, 1.0, 2.0, 22.0, 23.0, 21.9999999, 22.0000001, 0.0078125, 0.0078126, 0.0078124, 1e-18, 5e-19, 1e-300, 37.99, 37.0, 699.9, 306.9, 8.0, 27.0, 1e300, 1e-200];
+        for k in -40..40 {
+            v.push(f64::from(k) * core::f64::consts::LN_2 / 64.0);
+            v.push(f64::from(k) / 64.0);
+        }
+        v
+    }
+
+    #[test]
+    fn expm1_matches_the_accurate_path() {
+        let acc = |x: f64| exp_log::expm1(x, Rounding::Nearest).0;
+        let mut ops = xs(300_000, 1e-18, 0.34, true);
+        ops.extend(xs(300_000, 0.34, 40.0, false));
+        ops.extend(xs(20_000, 40.0, 700.0, false));
+        ops.extend(edges());
+        let (hit, total) = check("expm1", expm1_nearest, acc, &ops);
+        assert!(hit * 100 > total * 95, "expm1 answers {hit} of {total}");
+    }
+
+    #[test]
+    fn log1p_matches_the_accurate_path() {
+        let acc = |x: f64| exp_log::log1p(x, Rounding::Nearest).0;
+        let mut ops = xs(300_000, 1e-18, 0.0078125, true);
+        ops.extend(xs(300_000, 0.0078125, 1.0, false));
+        ops.extend(xs(100_000, 1.0, 1e300, true));
+        let mut near1: Vec<f64> = xs(100_000, 0.0, 1.0, false).iter().map(|u| 1.0 - u * u * u * u * u * u).collect();
+        near1.retain(|x| *x < 1.0);
+        ops.extend(edges());
+        let (hit, total) = check("log1p", log1p_nearest, acc, &ops);
+        // (the negatives of the operands above 1 are outside the domain: about 7% of the calls)
+        assert!(hit * 100 > total * 90, "log1p answers {hit} of {total}");
+        let (hit, total) = check("log1p", log1p_nearest, acc, &near1.iter().map(|x| -x).collect::<Vec<_>>());
+        assert!(hit * 100 > total * 90, "log1p near -1 answers {hit} of {total}");
+    }
+
+    #[test]
+    fn exp10_matches_the_accurate_path() {
+        let acc = |x: f64| exp_log::exp10(x, Rounding::Nearest).0;
+        let mut ops = xs(300_000, 1e-18, 1.0, true);
+        ops.extend(xs(300_000, 1.0, 306.0, false));
+        ops.extend(edges());
+        let (hit, total) = check("exp10", exp10_nearest, acc, &ops);
+        assert!(hit * 100 > total * 95, "exp10 answers {hit} of {total}");
+    }
+
+    #[test]
+    fn cbrt_matches_the_accurate_path() {
+        let acc = |x: f64| pow::cbrt(x, Rounding::Nearest).0;
+        let mut ops = xs(300_000, 1.0, 8.0, false);
+        ops.extend(xs(300_000, 1e-200, 1e200, true));
+        ops.extend(edges());
+        for n in 1..2000u32 {
+            let c = f64::from(n);
+            ops.extend([c * c * c, c * c * c * (1.0 + f64::EPSILON), c * c * c * (1.0 - f64::EPSILON / 2.0)]);
+        }
+        let (hit, total) = check("cbrt", cbrt_nearest, acc, &ops);
+        assert!(hit * 100 > total * 95, "cbrt answers {hit} of {total}");
+    }
+
+    #[test]
+    fn cbrt_correction_stays_within_its_bound() {
+        for x in xs(200_000, 1e-200, 1e200, true) {
+            // Refuse mirrors: compute the double-double the entry rounds and cube it.
+            let m = x;
+            let mut y = f64::from_bits(m.to_bits() / 3 + 0x2a9f_7640_0000_0000);
+            for _ in 0..3 {
+                let y3 = y * y * y;
+                y = y * (y3 + 2.0 * m) / (2.0 * y3 + m);
+            }
+            let y2 = two_prod(y, y);
+            let p = two_prod(y2.hi, y);
+            let res = ((m - p.hi) - p.lo) - y2.lo * y;
+            let w = fast_two_sum(y, res / (3.0 * y2.hi));
+            let c = Dd::from(w.hi).add_f64(w.lo);
+            let c3 = c.sqr().mul(c);
+            let rel = Dd::from(m).sub(c3).to_f64() / m / 3.0;
+            assert!(rel.abs() < f64::from_bits(0x3b90_0000_0000_0000), "cbrt({x:e}): relative error {rel:e}");
+        }
     }
 }
