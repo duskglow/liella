@@ -2535,6 +2535,17 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::exp_nearest(x)
 }
 
+/// The `double` `exp10` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn exp10_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp10_nearest(x) };
+    }
+    liella_math::fast64::exp10_nearest(x)
+}
+
 /// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
 #[inline(always)]
 pub(crate) fn log_nearest(x: f64) -> Option<f64> {

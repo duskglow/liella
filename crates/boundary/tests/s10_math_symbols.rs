@@ -101,10 +101,10 @@ fn around(mxcsr: u32, f: impl FnOnce() -> u64) -> (u64, u32) {
     (v, after)
 }
 
-/// The `double` exp, exp2, log, log2, log10 and pow exports as `(name, export, reference)`:
+/// The `double` exp, exp2, log, log2, log10, pow and exp10 exports as `(name, export, reference)`:
 /// the export through the C ABI entry, the reference `liella-math`'s accurate entry.
 #[allow(clippy::type_complexity)]
-fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 6] {
+fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 7] {
     use liella_math::real::Real;
     [
         ("exp", |x, _| m::exp(x), |x, _, r| Real::exp(x, r).0),
@@ -113,6 +113,7 @@ fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, li
         ("log2", |x, _| m::log2(x), |x, _, r| Real::log2(x, r).0),
         ("log10", |x, _| m::log10(x), |x, _, r| Real::log10(x, r).0),
         ("pow", |x, y| m::pow(x, y), |x, y, r| Real::pow(x, y, r).0),
+        ("exp10", |x, _| m::exp10(x), |x, _, r| Real::exp10(x, r).0),
     ]
 }
 
@@ -128,7 +129,7 @@ fn double_fast_arguments_seeded(n: u64, seed: u64) -> Vec<(f64, f64)> {
         0.0, -0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 10.0, 100.0, 1e22, 1e23, 1e-5, 8.673_617_379_884_035e-19, 1e-19, 707.9, 708.0,
         709.7, 710.0, -707.9, -708.0, -740.0, -745.5, 1020.9, 1021.0, -1021.5, 1023.5, -1074.5, 1e-310, 2.2250738585072014e-308,
         f64::MAX, f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 0.75, 1.5, -2.5, 1e300, 4.0, 9.0, 27.0, 1.0 + f64::EPSILON,
-        1.0 - f64::EPSILON / 2.0,
+        1.0 - f64::EPSILON / 2.0, 22.0, 23.0, 24.0, -22.0, 306.9, 307.0, -306.9, -307.0, -307.5,
     ];
     let ys = [0.5, 1.5, -1.0, 2.0, 3.0, 1.0 / 2048.0, 1.0 / 4096.0, 0.1, -0.3, 7.25, 1e-61, 1e-59, 1e12, 3e12, 1e20, 300.5, -0.0];
     let mut v: Vec<(f64, f64)> = Vec::new();
@@ -197,6 +198,7 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
                     "log" => Real::log(x, mode),
                     "log2" => Real::log2(x, mode),
                     "log10" => Real::log10(x, mode),
+                    "exp10" => Real::exp10(x, mode),
                     _ => Real::pow(x, y, mode),
                 };
                 for extra in [0, 0x8000, 0x40, 0x8040] {
@@ -257,15 +259,15 @@ fn double_fast_entry_mismatches(args: &[(f64, f64)]) -> (usize, Vec<String>) {
 #[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
 fn math_double_fast_entry_sweep() {
     // Clauses: s10_0_f_0. The fast-domain agreement sweep (MATH-M6-F64-FAST-ENTRY-2): LIELLA_FE_SWEEP_CHUNKS
-    // chunks (default 200) of 2·10^6 random pairs each, every one through all six fast entries as above.
+    // chunks (default 200) of 2·10^6 random pairs each, every one through all seven fast entries as above.
     let chunks: u64 = std::env::var("LIELLA_FE_SWEEP_CHUNKS").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
     // MATH-M6-F64-GAP-ROUND-TEST: also count which rounding step answers each in-place call
     // (liella_math::fast64::nearest_stage: 0 the constant test, 1 its miss settled by the exact
     // test, 2 the exact test alone, 3 the accurate path, 4 refused). The cap (coordinator #2071): a
     // miss rate (1 over 0 + 1) of at most 2^-12 per function; a miss costs one exact test (~30
     // instructions), so 2^-12 bounds its cost below 0.01 instructions per call.
-    let names = ["exp", "exp2", "log", "log2", "log10", "pow"];
-    let mut stages = [[0u64; 5]; 6];
+    let names = ["exp", "exp2", "log", "log2", "log10", "pow", "exp10"];
+    let mut stages = [[0u64; 5]; 7];
     let (mut checked, mut bad) = (0usize, Vec::new());
     for c in 0..chunks {
         let args = double_fast_arguments_seeded(1_000_000, 0x5eed_0000_0000_0001 ^ c.wrapping_mul(0x9e37_79b9_7f4a_7c15));
