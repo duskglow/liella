@@ -219,7 +219,7 @@ pub extern "C" fn acosh(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn acoshf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::acosh_nearest, math::real::Real::acosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::acoshf_nearest, math::real::Real::acosh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -229,7 +229,7 @@ pub extern "C" fn liella_acoshf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn acoshf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::acosh_nearest, math::real::Real::acosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::acoshf_nearest, math::real::Real::acosh)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -299,7 +299,7 @@ pub extern "C" fn asinh(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn asinhf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::asinh_nearest, math::real::Real::asinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::asinhf_nearest, math::real::Real::asinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -309,7 +309,7 @@ pub extern "C" fn liella_asinhf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn asinhf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::asinh_nearest, math::real::Real::asinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, crate::hot::asinhf_nearest, math::real::Real::asinh)
 }}
 
 export! { libm "GLIBC_2.27";
