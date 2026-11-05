@@ -1316,6 +1316,11 @@ mod tests {
     /// chunks instead of idling while another finishes a fixed slice of expensive operands.
     /// `LIELLA_SWEEP_STRIDE=k` checks every k-th encoding only (sizing a sweep before its job).
     fn exhaustive(fs: &'static [Fast]) -> u64 {
+        exhaustive_by(|xs| agree_in(fs, xs.iter().copied()))
+    }
+
+    /// [`exhaustive`] with the check `check` on each chunk's operands.
+    fn exhaustive_by(check: impl Fn(&[f32]) -> u64 + Sync) -> u64 {
         use std::sync::atomic::{AtomicU64, Ordering};
         const CHUNK: u64 = 1 << 16;
         let n = std::thread::available_parallelism().map_or(8, |n| n.get());
@@ -1329,9 +1334,9 @@ mod tests {
                     if lo >= 1 << 32 {
                         return (taken, seen);
                     }
-                    let xs = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32));
-                    seen += xs.clone().count() as u64;
-                    taken += agree_in(fs, xs);
+                    let xs: std::vec::Vec<f32> = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32)).collect();
+                    seen += xs.len() as u64;
+                    taken += check(&xs);
                 }
             })).collect();
             hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
@@ -1485,21 +1490,79 @@ mod tests {
         std::println!("acosf fast path taken {taken} of {} calls", 4u64 << 32);
     }
 
-    /// erff on every `float` operand in every mode, against the accurate path. (No spec clause:
-    /// LIBM-F32-ERF.)
+    /// `f` (erff or erfcf) against the tiered oracle on `xs`: one oracle call per operand the
+    /// fast path takes in any mode, the accurate path only for the modes the oracle's
+    /// double-double tier leaves undecided (ruling #2889); the number taken.
+    fn agree_oracle(f: Fast, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+        use crate::oracle32 as o;
+        let mut taken = 0;
+        for x in xs {
+            let got = o::MODES.map(|m| eval(f, x, m));
+            if got.iter().all(Option::is_none) {
+                continue;
+            }
+            let est = if f == Fast::Erf { o::erf_est(x) } else { o::erfc_est(x) };
+            let want = o::oracle(est, tally, |m| accurate(f, x, m));
+            for (i, g) in got.into_iter().enumerate() {
+                if let Some(r) = g {
+                    taken += 1;
+                    let m = o::MODES[i];
+                    assert_eq!((f, m, x.to_bits(), r.0.to_bits(), r.1), (f, m, x.to_bits(), want[i].0.to_bits(), want[i].1));
+                }
+            }
+        }
+        taken
+    }
+
+    /// `f` on every `float` operand in every mode against the tiered oracle; prints the calls
+    /// taken and how often the oracle needed the mp path.
+    fn exhaustive_oracle(f: Fast, name: &str) {
+        let tally = crate::oracle32::Tally::default();
+        let taken = exhaustive_by(|xs| agree_oracle(f, xs.iter().copied(), &tally));
+        std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
+    }
+
+    /// erff on every `float` operand in every mode, against the tiered oracle (whose mp tier is
+    /// the accurate path). (No spec clause: LIBM-F32-ERF.)
     #[test]
     #[ignore]
     fn erff_fast_path_agrees_exhaustively() {
-        let taken = exhaustive(&[Fast::Erf]);
-        std::println!("erff fast path taken {taken} of {} calls", 4u64 << 32);
+        exhaustive_oracle(Fast::Erf, "erff");
     }
 
     /// erfcf on every `float` operand in every mode (as for erff). (No spec clause.)
     #[test]
     #[ignore]
     fn erfcf_fast_path_agrees_exhaustively() {
-        let taken = exhaustive(&[Fast::Erfc]);
-        std::println!("erfcf fast path taken {taken} of {} calls", 4u64 << 32);
+        exhaustive_oracle(Fast::Erfc, "erfcf");
+    }
+
+    /// The tiered oracle's decided answers equal the accurate path's in every mode: a stride over
+    /// every encoding, a grid over [-10, 10] and the oracle's own seams (3, 4) ±8 floats. (No
+    /// spec clause: ruling #2889's oracle.)
+    #[test]
+    fn erf_oracle_agrees_with_the_accurate_path() {
+        use crate::oracle32 as o;
+        let mut xs: std::vec::Vec<f32> = (0..=u32::MAX).step_by(1_048_583).map(f32::from_bits).collect();
+        xs.extend((0..1u32 << 10).map(|i| -10.0 + 20.0 * (i as f32) / 1024.0));
+        for e in [3.0f32, 4.0] {
+            for d in 0..8u32 {
+                xs.extend([e.to_bits() + d, e.to_bits() - 1 - d].map(|b| [f32::from_bits(b), -f32::from_bits(b)]).concat());
+            }
+        }
+        let mut decided = 0;
+        for &x in &xs {
+            for (f, est) in [(Fast::Erf, o::erf_est(x)), (Fast::Erfc, o::erfc_est(x))] {
+                for m in MODES {
+                    if let Some(r) = o::decide(&est, m) {
+                        decided += 1;
+                        let want = accurate(f, x, m);
+                        assert_eq!((f, m, x.to_bits(), r.to_bits(), Status::flags(Flags::INEXACT)), (f, m, x.to_bits(), want.0.to_bits(), want.1));
+                    }
+                }
+            }
+        }
+        assert!(decided > 20_000, "{decided}");
     }
 
     /// erff and erfcf against the accurate path in every mode: a stride over every encoding, a
