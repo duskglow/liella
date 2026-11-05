@@ -101,6 +101,7 @@ fn host_build_cached(root: &Path, name: &str) -> Result<std::path::PathBuf, Stri
     let src = root.join(format!("bench/c/{name}.c"));
     match (mtime(&exe), mtime(&src)) {
         (Some(e), Some(s)) if e >= s => Ok(exe),
+        (Some(_), _) if STAGED.load(std::sync::atomic::Ordering::Relaxed) => Ok(exe),
         _ if NO_BUILD.load(std::sync::atomic::Ordering::Relaxed) => Err(format!("bench --no-build: {} is missing or older than bench/c/{name}.c; run `cargo xtask bench --build-only` first", exe.display())),
         _ => c_build(root, name, Build::HostDynamic),
     }
@@ -118,6 +119,9 @@ enum Mode {
 }
 
 static NO_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// XTASK-BENCH-STAGE: this `--no-build` run measures a staged tree whose products matched `bench-stage.manifest`
+/// by hash, so the mtime checks (`require_fresh`, `host_build_cached`) only require the programs to exist.
+static STAGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn mtime(p: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(p).and_then(|m| m.modified()).ok()
@@ -150,6 +154,8 @@ fn newest_below(dir: &Path, exts: &[&str]) -> Option<std::time::SystemTime> {
 fn require_fresh(exe: &Path, newest: Option<std::time::SystemTime>, what: &str) -> Result<(), String> {
     match (mtime(exe), newest) {
         (Some(e), Some(n)) if e >= n => Ok(()),
+        // a staged tree: the products were checked against the manifest by hash (`benchstage::load_verified`)
+        (Some(_), _) if STAGED.load(std::sync::atomic::Ordering::Relaxed) => Ok(()),
         (None, _) => Err(format!("bench --no-build: {} is missing ({what}); run `cargo xtask bench --build-only` first", exe.display())),
         _ => Err(format!("bench --no-build: {} is older than its inputs ({what}); run `cargo xtask bench --build-only` again", exe.display())),
     }
@@ -1212,6 +1218,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut affected: Option<String> = None;
     let mut ab_from: Option<std::path::PathBuf> = None;
     let mut mode = Mode::Normal;
+    let mut stage_out: Option<std::path::PathBuf> = None;
+    let mut staged_flag = false;
     let (mut counters, mut counters_only) = (false, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -1228,6 +1236,14 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             "--ab-from" => ab_from = Some(std::path::PathBuf::from(it.next().ok_or("--ab-from needs the other tree (A; this tree is B)")?)),
             "--build-only" => mode = Mode::BuildOnly,
             "--no-build" => mode = Mode::NoBuild,
+            "--stage" => {
+                stage_out = Some(crate::benchstage::out_path(it.next().ok_or("--stage needs the tarball to write (for example stage.tar)")?));
+                mode = Mode::BuildOnly;
+            }
+            "--staged" => {
+                staged_flag = true;
+                mode = Mode::NoBuild;
+            }
             "--only" => only = Some(it.next().ok_or("--only needs a comma list of bench names")?.split(',').filter(|n| !n.is_empty()).map(str::to_string).collect()),
             "--rows" => {
                 let list = it.next().ok_or("--rows needs a comma list of <bench>/<row>")?;
@@ -1267,6 +1283,15 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             other => return Err(format!("bench: unknown argument `{other}`")),
         }
     }
+    if stage_out.is_some() && mode != Mode::BuildOnly {
+        return Err("bench: --stage builds and stages; it does not combine with --no-build/--staged".into());
+    }
+    // XTASK-BENCH-STAGE: a `--no-build` run in a staged tree checks the products by hash before anything else.
+    let staged = if mode == Mode::NoBuild { crate::benchstage::load_verified(root)? } else { None };
+    if staged_flag && staged.is_none() {
+        return Err(format!("bench --staged: no {} in {} (unpack the tarball of `cargo xtask bench --stage <out.tar>` and run from it)", crate::benchstage::MANIFEST, root.display()));
+    }
+    STAGED.store(staged.is_some(), std::sync::atomic::Ordering::Relaxed);
     let table = fs::read_to_string(root.join("bench/budgets.tsv")).map_err(|e| format!("bench/budgets.tsv: {e}"))?;
     let mut rows: Vec<Vec<&str>> = table.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).map(|l| l.split('\t').collect()).collect();
     // XTASK-BENCH-ROWS-COUNTERS: which C benches have a host build is a property of the whole table, not of
@@ -1312,6 +1337,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     }
     let instr_limits = parse_instr_limits(&fs::read_to_string(root.join(INSTR_LIMITS)).map_err(|e| format!("{INSTR_LIMITS}: {e}"))?)?;
     println!("machine: {}, {cpu}, kernel {}, {} (host C library)", first_line("hostname", &[]), first_line("uname", &["-r"]), first_line("ldd", &["--version"]));
+    if let Some(m) = &staged {
+        println!("{}", crate::benchstage::header(m));
+    }
     println!("tunables: GLIBC_TUNABLES={} (both sides)", TUNABLES.get().map_or("(unset)", String::as_str));
     if gated {
         println!("bench: ratio_host rows are gated by the limits for this CPU in bench/host_limits.tsv");
@@ -1365,6 +1393,13 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             }
         }
         println!("bench: build-only: {} benchmarks built; measure with `cargo xtask bench --no-build` (timing lock)", benches.len());
+        if let Some(out) = &stage_out {
+            let rust: Vec<&str> = benches.iter().copied().filter(|b| !b.starts_with("cbench_")).collect();
+            let exe = std::env::current_exe().map_err(|e| format!("--stage: the xtask binary: {e}"))?;
+            let m = crate::benchstage::write_stage(root, out, &rust, &exe)?;
+            println!("bench: {}", crate::benchstage::header(&m));
+            println!("bench: wrote {}; on the timing host: mkdir <dir> && tar -xf {} -C <dir> && cd <dir> && ./xtask-bin bench --no-build --staged [--only ...|--rows ...]", out.display(), out.file_name().and_then(|n| n.to_str()).unwrap_or("<out.tar>"));
+        }
         return Ok(());
     }
     if mode == Mode::NoBuild {
