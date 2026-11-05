@@ -1,0 +1,16 @@
+# TIMING-IVB-STRSCAN-DISPATCH plants: the strchr / strchrnul / strncmp entries (csys/src/machine/scan.S).
+# machine_scanners runs each kernel on both scan levels (SSE2, and AVX2 on the build host).
+# strchr: wrong class target (the AVX2 level's page-end calls skip the NULL test).
+strchr-entry-class | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?)jae\s+\.Lschr_pre\n/$1jae .Lschr_pre1\n/s | cargo test -p liella-boundary --test machine_scanners | msg:abort_on_null.*FAILED|SIGSEGV
+# strchr: the SSE2 head's page test dropped (every offset takes the 64-byte head).
+strchr-page | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?)cmpl\s+\$4032, %ecx/$1cmpl \$4096, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:strchr.*FAILED|SIGSEGV
+# strchr: c / NUL decision of the SSE2 head's first block inverted.
+strchr-order | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?)jnc\s+\.Lschr_snull/$1jc .Lschr_snull/s | cargo test -p liella-boundary --test machine_scanners | msg:strchr.*FAILED
+# strchrnul: the SSE2 head's page test dropped.
+strchrnul-page | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?)cmpl\s+\$4032, %ecx/$1cmpl \$4096, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:strchr.*FAILED|SIGSEGV
+# strchrnul: the NULL test on the path the entry's branch now reaches dropped.
+strchrnul-null | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_snull:\s*testq %rdi, %rdi\n)\tjz liella_hot_strchr_null\n/$1/s | cargo test -p liella-boundary --test machine_scanners | msg:abort_on_null.*FAILED|SIGSEGV
+# strncmp: the exact page test's sense inverted (an AVX2-level a past its page limit reaches the head).
+strncmp-pt-sense | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?)jb\s+\.Lsnc_ptb/$1jae .Lsnc_ptb/s | cargo test -p liella-boundary --test machine_scanners | msg:strncmp.*FAILED|SIGSEGV
+# strncmp: the out-of-line page test of b dropped.
+strncmp-ptb-b | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_ptb:.*?)jb\s+\.Lsnc_head/$1jmp .Lsnc_head/s | cargo test -p liella-boundary --test machine_scanners | msg:strncmp.*FAILED|SIGSEGV
