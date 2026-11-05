@@ -1,49 +1,52 @@
-# LIBM-F64-FAST-KERNELS handoff (run 2: the libm FMA selection, #2920)
+# LIBM-F64-FAST-KERNELS handoff (run 3: the libm FMA decision moves to load time)
 
-Branch `task/libm-f64-fast-kernels-2` (run 1's branch `task/libm-f64-fast-kernels` plus this run's commits;
-cut from origin/next 2c1e25b9). Role mei:~/w/s1 (Skylake-SP, FMA). Decisions in force: D-10.13, D-10.25,
-**D-NEW** (placeholder id, the libm product's own FMA decision: plan/07-decisions/s10-mathematics.md, last row),
-rulings #2760 A, #932.
+Branch `task/libm-f64-fast-kernels-3` (run 2's branch plus this run's commits; cut from origin/next 2c1e25b9).
+Role kanon:~/w/kn1 (Broadwell-EP E5-2699 v4, FMA). Code head e976b48c. Decisions in force: D-10.13, D-10.25,
+**D-10.50** (reserved by ruling #2965; replaces run 2's D-NEW everywhere), rulings #2760 A, #932, #2964.
 
-## Run 1 (kept): the exp10 slice
-`fast64::reduce_exp10` (double Cody-Waite log10(2)/64 into the shared exp kernel), in-place entry
-`exp10_nearest` + FMA build. Its gate `libm-f64-fast-kernels-gate` (FULL, s3) ended rc 0; plants rc 0.
+## Runs 1-2 (kept)
+Run 1: the exp10 slice (`fast64::reduce_exp10` into the shared exp kernel, `exp10_nearest` + FMA build).
+Run 2 (#2920): libm.a / libm.so.6 carry their own copy of `dispatch::FMA`, which libc's startup never wrote,
+so no program had ever run an FMA build. Run 2 decided it on the first math call. Its final jobs on mei
+(gate2 FULL, plants2, counts3) all ended rc 0.
 
-## Run 2: #2920 settled
-* **Cause:** `libm.a` / `libm.so.6` link their own copy of `liella-boundary` (crates/libm-so), with every
-  non-export symbol made local (`xtask so` run_libm). The `dispatch::FMA` byte that libc's startup sets
-  (`cpu::init_with`) is libc's copy; libm's copy was never written, so every program ran the baseline
-  builds of exp, exp10 and log (cbench_libm counted the same with and without `-FMA`).
-* **Fix:** in the libm build the byte starts undecided; the first math call decides it with the startup's rule
-  (`dispatch::fma_wanted`: CPUID FMA with the OS-saved AVX state, and `glibc.cpu.hwcaps` from `GLIBC_TUNABLES`
-  read through libc's `secure_getenv`: `caller_alloc::secure_getenv_addr` (extern category) and
-  `conv::env_value_text` (slice category)). No new symbol. `fma()` tests OFF first: the baseline costs one load and
-  one test as before (an FMA-first order measured +3-4 instructions on the `-FMA` rows; fixed in ddaed22f).
-* **Test:** `crates/boundary/tests/libm_fma_select.rs`: a static `-lm` program counts its own user-mode
-  instructions (perf_event_open) over 4000 exp + 4000 log calls with and without `-FMA`; on mei 1,220,031 vs
-  1,672,031. Skips with a printed reason without FMA or without the counter.
+## Run 3
+* **Load-time decision (coordinator note (1), owner failure-path principle):** `csys/src/adapter/libm_init.c`
+  (linked only with feature `libm`, build.rs) puts one `.init_array` entry, `liella_libm_start(argc, argv, envp)`
+  (dispatch.rs, `export! { libm "LIELLA_PRIVATE" }`, local in both libraries). It applies `fma_wanted` to CPUID
+  and the `GLIBC_TUNABLES` entry of **envp**. It does not use libc's `secure_getenv`, because a dynamic program's loader runs
+  libm.so.6's constructors before `__libc_start_main` publishes `environ` (runtime.rs step 3). It asks
+  `process::secure()` only when the entry exists (fails safe). `fma()` is now `FMA.load() != FMA_OFF`, the same
+  one load and one test as libc. The static FMA byte starts OFF, which is the baseline and gives bit-identical results. There is no
+  per-call check left anywhere. The `secure_getenv` extern (caller_alloc.rs) is gone. Checked: libm.a's single object
+  and libm.so.6 both carry the entry (`.rela.init_array` -> `liella_libm_start`; DT_INIT_ARRAY, 8 bytes).
+* **exp10 `-FMA` +1.1 (#2964), settled:** the cause was run 2's second test in `fma()` (the undecided byte and its cold call). With
+  that test gone, exp10 `-FMA` counts 218.9 again, run 1's exact number. The FMA builds also gained 3-6 instr/call (the
+  cold call cost spills on the inlined path, not just one cmp/jcc). Settled by count; no separate profile was run.
+* **Test:** `libm_fma_select` (static `-lm`, user-mode instruction count): kanon FMA 1,204,032 vs `-FMA` 1,648,032.
+  **NOT VERIFIED:** the dynamic path (loader-passed envp in libm.so.6). libm.so.6 cannot be loaded before phase 14.
 
-## Counts (cbench_libm, instr/call Liella / glibc; mei; job libm-f64-fast-kernels-2-counts3, final head)
-| row | before run 2 (FMA = -FMA) | FMA default | -FMA | glibc FMA / -FMA |
+## New libm baseline (cbench_libm instr/call, Liella / glibc, kanon, job libm-f64-fast-kernels-3-counts, head e976b48c)
+| row | FMA default (run 2 -> run 3) | glibc FMA | `-FMA` (run 2 -> run 3) | glibc `-FMA` |
 |---|---|---|---|---|
-| exp | 181.3 | **129.3** (1.93x) | 181.4 | 67.1 / 77.3 |
-| exp10 | 218.9 | **147.4** (2.63x) | 220.0 | 56.1 / 56.1 |
-| log | 217.5 | **167.5** (2.65x) | 217.6 | 63.1 / 78.3 |
-| exp2, exp_upward, log2, log10, pow, sin | 186.3, 407.1, -, -, 481.4, 340 | 186.4, 407.2, 228.7, 242.9, 482.1, 338.6 | same | unchanged rows |
-exp10 `-FMA` is +1.1 over run 1 (218.9 -> 220.0), not explained (not profiled: budget). The other `-FMA` rows
-are within 0.1. Superseded counts: counts2 (FMA-first order: exp 126.3 / 184.4, exp10 144.4 / 223.0, log 164.5 / 220.6).
+| exp | 129.3 -> **126.2** (1.88x) | 67.1 | 181.4 -> 181.3 | 77.1 |
+| exp10 | 147.4 -> **141.4** (2.52x) | 56.1 | 220.0 -> **218.9** | 56.1 |
+| log | 167.5 -> **161.4** (2.56x) | 63.1 | 217.6 -> 217.5 | 78.1 |
+| exp2 / exp_upward | 186.3 / 407.4 | 51.1 / 67.1 | 186.3 / 407.2 | 51.2 / 77.1 |
+| log2 / log10 | 228.6 / 242.7 | 63.1 / 102.9 | 228.6 / 242.7 | 83.2 / 118.3 |
+| pow / sin / cos / tan / atan | 481.5 / 338.6 / 336.0 / 494.9 / 949.7 | 141.2 / 100.2 / 104.7 / 107.7 / 78.8 | same | 191.3 / 122.5 / 126.2 / 124.2 / 109.8 |
+| sqrt / expf / logf | 33.1 / 70.2 / 77.1 | 17.1 / 39.1 / 43.1 | same | 17.1 / 43.1 / 50.1 |
+The other rows are in `~/logs/libm-f64-fast-kernels-3-counts.log` on kanon (two tables: default, then `-FMA`).
+**Timing (NOT booked):** this is the unbooked wall time from the same job on a loaded host, so it is only a guide. exp10 31.4 ns (FMA) / 42.5 ns (`-FMA`)
+against glibc 6.8 ns, and exp 23.4 / 29.4 against 8.0. The time ratio (4.6x) is worse than the instruction ratio (2.5x).
 
 ## Not done / next step (in order)
-1. Read the final gate `mei:~/bin/jobwait libm-f64-fast-kernels-2-gate2` (FULL: the branch carries s10_math.tsv
-   and gen.rs from run 1) and plants2 if not read in the hand-back.
-2. Profile exp10 `-FMA` +1.1 (wl_percall, base primed) before anything else on that row; then the per-phase split
-   of exp10 / exp (FMA build now: 147.4 / 129.3 vs glibc 56.1 / 67.1) to push exp10 toward 1.05x.
-3. The `decision-not-stored` plant (drop the `FMA.store` in `decide_fma`) was left out: it only re-decides per
-   call (slower, same selection), which libm_fma_select cannot see; an instruction ceiling per call would catch it.
+1. Read the FULL gate `kanon:~/bin/jobwait libm-f64-fast-kernels-3-gate` (escalated FULL, as in runs 1-2).
+2. TIME exp10 on a booked timing host (`ops timing-book`, coordinator note (4)). This run did not do it: the booking
+   wait (30-60 min) did not fit the budget. The unbooked time gap (4.6x against 2.5x in instructions) makes this urgent.
+3. Per-phase split of exp10 / exp in the FMA build (141.4 / 126.2 vs 56.1 / 67.1) before any redesign.
 4. Trig and exp/log/pow redesigns are separate stories (LIBM-F64-TRIG-TIER, LIBM-F64-EXPLOGPOW-TIER).
 
-## Jobs (mei)
-Final head: libm-f64-fast-kernels-2-gate2, -plants2 (file handoff/LIBM-F64-FAST-KERNELS-2-plants.txt: 3 new
-plants on the libm decision + run 1's 6), -counts3. Superseded: check1 (unsafe audit: categories not permitted
-in dispatch.rs, fixed), check2 (green, older head), counts (role tree is not a git checkout), counts2, gate and
-plants (older head, stopped).
+## Jobs (kanon)
+Final head e976b48c: libm-f64-fast-kernels-3-gate (FULL, left running), -plants (5/5 CAUGHT, file
+handoff/LIBM-F64-FAST-KERNELS-3-plants.txt), -counts. Diagnostic only: -so (build check), -t1 (test, head f62bc304).
