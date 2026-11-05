@@ -1,55 +1,54 @@
-# LIBM-SPECIAL-FAST-TIER handoff (run 5: LIBM-SPECIAL-FAST-TIER-5, merge with next, re-verify, recount)
+# LIBM-SPECIAL-FAST-TIER handoff (run 6: LIBM-SPECIAL-FAST-TIER-6, merge only)
 
-State: branch `task/libm-special-fast-tier-5` = LIBM-TABLES-PER-FAMILY's head (stacks-on) + `task/libm-special-fast-tier-4`
-merged in (clean) + `origin/next` f2157504 merged in (merge 2bf99a9d). Code head 4473888e (after it: handoff only).
-Role mei:~/w/s1 (Skylake-SP). Report: handoff/reports/LIBM-SPECIAL-FAST-TIER-5.json. Accuracy contract unchanged
-(correct rounding, ruling #2760 option A); bound 2^-71 (ruling #2916). No new design work this run (brief).
+State: branch `task/libm-special-fast-tier-6` = -5's head 77aab541 + `origin/next` c7c320a2 merged in (merge 70db150c),
+KERNELS.md regenerated (daa183b4), plants file (04678bec); after it: handoff only. Role shiki:~/w/sh2 (Haswell-EP,
+FMA). Report: handoff/reports/LIBM-SPECIAL-FAST-TIER-6.json. Accuracy contract unchanged (correct rounding, ruling
+#2760 option A); bound 2^-71 (ruling #2916). No code change beyond paths (coordinator note, 11-05).
 
-## Merge resolution (2bf99a9d)
-* `crates/boundary/src/hot.rs`: both sides kept: the erf/erfc FMA dispatch entries and next's asinhf/acoshf
-  entries with their inline `sqrtsd`.
-* `crates/math/src/fast64.rs`: this branch's `exp_dd` and next's `reduce_exp10`, both in `kernels!`; the `fused`
-  module imports the union (`reduce_pow` plus next's exp10 names).
-* `crates/math/src/fast32.rs` (LIBM-TABLES-PER-FAMILY split vs next's LIBM-F32-HYPERBOLIC-4): the split core kept;
-  next's change moved by hand, otherwise unchanged: `asinh_core_with` / `acosh_core_with` into fast32/hyperbolic.rs,
-  `asinh_nearest_sqrt` / `acosh_nearest_sqrt` after the nearest entries in fast32.rs, the two `check(..._with...)`
-  lines, `agree_sqrt` and the two `hyperbolic_hardware_sqrt_agrees_*` tests into fast32/tests.rs.
-* Generated files: none conflicted; `math-gen --check` and `tables --check` (5 files) current on the merged tree.
-* The erf/erfc kernels stay in their own module, crates/math/src/fast_special.rs.
+## Merge resolution (70db150c)
+* `crates/boundary/src/hot.rs` was split by family on next (LIBM-HOT-PER-FAMILY). The erf/erfc FMA dispatch
+  wrappers (`erf_nearest`, `erfc_nearest`) moved unchanged into `crates/boundary/src/hot/erf.rs` (the family file,
+  flow rule); `hot/mod.rs` untouched (it already re-exports `erf::*`); `hot/mem.rs` is next's version.
+* `s10_math.tsv`: `f` rows on next's `math::fast32::erf`/`erfc` (LIBM-F32-ERF), `d` rows on this branch's in-place
+  paths (`crate::hot::erf_nearest`/`erfc_nearest`), `lq` rows on `math::special`.
+* `crates/math/src/fast64.rs`: next's `fused` import list (a superset: it already has `reduce_pow`); this branch's
+  `exp_dd` and its `pub(crate)` items (RHO_EXP, C_EXP, finish) merged without conflict.
+* `crates/boundary/tests/math_fma_paths.rs`: next's `both2` + exp2/log2/log10/pow test and this branch's erf/erfc test.
+* Generated: `math-gen` output (s10_math_gen.rs, csys adapters) was already current after git's merge; KERNELS.md
+  regenerated with `cargo xtask kernel-index`. math-gen --check, tables --check (5 files), kernel-index --check: current.
 
-## Verified on head 4473888e (mei, Skylake-SP)
-* lint `libm-special-fast-tier-5-lint1`: math-gen --check, tables --check, `cargo clippy --workspace --all-targets
-  --all-features -D warnings`, `cargo xtask static`: rc 0.
-* Plants `libm-special-fast-tier-5-plants` (cargo xtask plants, handoff/libm-special-fast-tier-5-plants.txt,
-  /mnt/zram/claude/libm-special-fast-tier-5/plants-1): 9 CAUGHT, 0 SURVIVED, 0 WARN. Run 3/4's 7 erf/erfc plants plus
-  two on the merge's sites: `hot-erfc-fused` (hot.rs erfc FMA entry calls erf: math_fma_paths) and
-  `asinh-sqrt-moved` (moved hyperbolic code: hyperbolic_hardware_sqrt_agrees_sampled).
-* Gate `libm-special-fast-tier-5-gate`: `cargo xtask affected --run`, escalated to FULL by the tool (s10_math.tsv is
-  a generator input): rc 0, 76 min on a loaded host (load 21-30): 32 suites ok, 10857 passed / 0 failed / 1189
-  ignored, conformance 117/0, 3 SKIPPED lines (absent tools), peak 16G (page cache included), oom_kill 0.
+## Verified on head 04678bec (shiki, Haswell-EP)
+* lint `libm-special-fast-tier-6-lint`: math-gen --check, tables --check, `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings`, `cargo xtask static`: rc 0.
+* Plants `libm-special-fast-tier-6-plants` (cargo xtask plants, handoff/libm-special-fast-tier-6-plants.txt,
+  /dev/shm/claude/libm-special-fast-tier-6/plants-1): 9 CAUGHT, 0 SURVIVED, 0 WARN. Runs 3-5's 7 kernel plants, plus
+  `hot-erfc-fused` and `hot-erf-baseline` on hot/erf.rs (both builds of the wrappers at their new site).
+* Gate `libm-special-fast-tier-6-gate`: `cargo xtask affected --run`, Direct tier (15 changed files): see the report
+  json for the result line.
 
-## Counts (instr/call, validation/percall/libm_erf.c; label libm-special-fast-tier-5-counts-2)
-Base = origin/next f2157504 (has -2's erf, not -3/-4's in-place entries). Liella now runs its FMA build from libm
-(LIBM-F64-FAST-KERNELS landed in next: libm sets its own dispatch byte), which -4 could not measure.
-| row | glibc (FMA host) | base (next) | new | new/glibc | -4 (keke, baseline build) |
+## Counts (instr/call, validation/percall/libm_erf.c; label libm-special-fast-tier-6-counts)
+Base = origin/next c7c320a2 (primed with validation/wl_prime_base.sh). Sorted as printed.
+| row | glibc | base (next) | new | new/glibc | -5 (Skylake-SP) |
 |---|---|---|---|---|---|
-| erf [-5,5] | 157.9 | 376.0 | 165.0 | 1.05 | 238.0 |
-| erf table | 159.3 | 368.0 | 165.0 | 1.04 | 238.0 |
-| erf series | 63.0 | 294.0 | 112.0 | 1.78 | 156.0 |
-| erfc [-5,5] | 162.4 | 452.9 | 200.4 | 1.23 | 310.0 |
-| erfc below 1 | 162.4 | 396.8 | 176.4 | 1.09 | 252.1 |
-| erfc above 1 | 194.3 | 565.0 | 247.0 | 1.27 | 425.0 |
-Every row faster than base (-189 to -318). Target <= 1.05x reached for erf and erf table, not for erf series or the
-erfc rows. The erfc row's `check` MISMATCH is the reference's last bit (known: see below). The baseline (non-FMA)
-build was not recounted on this head (-4's numbers are from the same kernels before the merge; NOT VERIFIED here).
+| erfc above 1 | 194.3 | 565.0 | 248.0 | 1.28 | 247.0 |
+| erf series | 63.0 | 294.0 | 113.0 | 1.79 | 112.0 |
+| erfc [-5,5] | 162.4 | 452.9 | 201.4 | 1.24 | 200.4 |
+| erfc below 1 | 162.4 | 396.8 | 177.4 | 1.09 | 176.4 |
+| erf [-5,5] | 157.9 | 376.0 | 166.0 | 1.05 | 165.0 |
+| erf table | 159.3 | 368.0 | 166.0 | 1.04 | 165.0 |
+Every row faster than base (-187 to -317). +1.0 on every row against -5's counts (other host, other base): common to
+all six rows, so in the shared entry path rather than a kernel; not diagnosed (merge-only run). The erfc row's check
+MISMATCH is the reference's last bit (known: below).
 
 ## Next steps (optional follow-ups; this branch should land)
-1. erf series (112 vs 63): the |x| < 2^-5 path's envelope and dd steps; profile it first (wl_trace) before a design.
-2. erfc above 1 (247 vs 194): the e^(-x^2) dd product and the exp kernel; profile first.
-3. Baseline build kernel (from -4): per-slot bounds could drop the exact product in the innermost dd step.
-4. erff/erfcf (float, still mp) and gamma/Bessel are their own stories.
+1. erf series (113 vs 63): the |x| < 2^-5 path's envelope and dd steps; profile it first (wl_trace) before a design.
+2. erfc above 1 (248 vs 194): the e^(-x^2) dd product and the exp kernel; profile first.
+3. The +1 per row against -5: compare one call's trace on next's boundary entry (mret::elem_fast, dispatch) if it matters.
+4. Baseline build kernel (from -4): per-slot bounds could drop the exact product in the innermost dd step.
+5. gamma/Bessel are their own stories.
 
 ## Things not to redo
 * Degree/slot layout (run 1); the 2^-71 bound; the erfc percall MISMATCH: erfc(0x1.b12e88p+0) is
   0x1.11c9655380463p-6 (true value 0.305 ulp below it, Decimal oracle at 200 digits); the reference returns ...462.
 * The identical FMA/-FMA counts of -4 were the libm dispatch byte, fixed in next; do not re-diagnose.
+* Run 6's merge resolution above.
