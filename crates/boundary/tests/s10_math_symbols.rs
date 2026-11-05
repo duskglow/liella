@@ -1795,6 +1795,48 @@ fn math_hypotf_fast_path_is_the_accurate_hypotf() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+#[test]
+#[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_precision_loss, clippy::float_arithmetic)] // test operand arithmetic
+fn math_double_invtrig_hypot_fast_tier_is_the_accurate_path() {
+    // Clauses: s10_0_f_0, s10_0_c_0. LIBM-F64-INVTRIG-HYPOT-TIER: the `double` atan, asin, acos,
+    // atan2 and hypot entries (fast tier in the default MXCSR, accurate path otherwise) give the
+    // accurate path's bits, flags and errno in every direction; an exact root raises nothing, and
+    // atan(1/2), whose fast-tier arithmetic is exact up to the last addition, raises inexact.
+    use liella_boundary::mathret as mr;
+    use liella_math::{pow, trig};
+    let d_in = |rc: u32, f: &dyn Fn() -> f64| {
+        liella_boundary::errno::set_raw(0);
+        let (v, after) = around(0x1f80 | rc << 13, || f().to_bits());
+        (v, after & 0x3d, liella_boundary::errno::get())
+    };
+    let mut xs = vec![0.5, 1.0, 0.3, -0.7, 2.5, -1e10, 1e-10, 0.999_999_9, 1e-20, 1e300, 0.0, -0.0, 1.5, 5e-324, f64::INFINITY, f64::NAN];
+    let mut pairs: Vec<(f64, f64)> = vec![(3.0, 4.0), (1.0, 2f64.powi(-30)), (0.5, 0.25), (-2.0, 3.0), (1e300, 1e300), (1e-300, 1e-300), (5e-324, 1.0), (f64::INFINITY, f64::NAN), (0.0, -0.0)];
+    let mut s: u64 = 0x9e37_79b9_7f4a_7c15;
+    for i in 0..3000u32 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        let x = f64::from_bits(s) % 4.0;
+        xs.push(if i % 2 == 0 { x * 0.25 } else { x * 1e5 });
+        pairs.push((x, f64::from_bits(s.rotate_left(17)) % 9.0));
+    }
+    for rc in 0..4u32 {
+        for &x in &xs {
+            assert_eq!(d_in(rc, &|| m::atan(x)), d_in(rc, &|| mr::ret(trig::atan::<f64>(x, mr::mode()))), "atan({x:e}) in direction {rc}");
+            assert_eq!(d_in(rc, &|| m::asin(x)), d_in(rc, &|| mr::ret(trig::asin::<f64>(x, mr::mode()))), "asin({x:e}) in direction {rc}");
+            assert_eq!(d_in(rc, &|| m::acos(x)), d_in(rc, &|| mr::ret(trig::acos::<f64>(x, mr::mode()))), "acos({x:e}) in direction {rc}");
+        }
+        for &(y, x) in &pairs {
+            assert_eq!(d_in(rc, &|| m::atan2(y, x)), d_in(rc, &|| mr::ret(trig::atan2::<f64>(y, x, mr::mode()))), "atan2({y:e}, {x:e}) in direction {rc}");
+            assert_eq!(d_in(rc, &|| m::hypot(y, x)), d_in(rc, &|| mr::ret(pow::hypot::<f64>(y, x, mr::mode()))), "hypot({y:e}, {x:e}) in direction {rc}");
+        }
+    }
+    assert_eq!(d_in(0, &|| m::hypot(3.0, 4.0)), (5f64.to_bits(), 0, 0), "hypot(3, 4) exact-root flags");
+    assert_eq!(d_in(0, &|| m::hypot(1.0, 2f64.powi(-30))), (1f64.to_bits(), 0x20, 0), "hypot(1, 2^-30) must raise inexact");
+    assert_eq!(d_in(0, &|| m::atan(0.5)).1, 0x20, "atan(1/2) must raise inexact");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// Whether `f` is √(x²+y²) rounded in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward
 /// zero): the root inside the rounding interval, or exactly `f` (an exact root), decided in
 /// integers: the squares of the interval ends against x²+y², in units of a quarter `f` ulp.
