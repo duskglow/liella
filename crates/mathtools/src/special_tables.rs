@@ -148,8 +148,8 @@ fn bound(s: &Slot, m: usize, d: usize) -> f64 {
         e = h * e + U * (2.0 * rb[k] + s.mag[k]);
     }
     let mut tot = e * h.powi(m as i32) + s.rem[d];
-    for k in 0..m {
-        tot += (18.0 * rb[k] + s.mag[k]) * U * U * h.powi(k as i32);
+    for (k, (r, g)) in rb.iter().zip(&s.mag).take(m).enumerate() {
+        tot += (18.0 * r + g) * U * U * h.powi(k as i32);
     }
     tot * 1.01 / s.fmin
 }
@@ -170,7 +170,8 @@ fn choose(slots: &[Slot]) -> (usize, usize, f64) {
             }
         }
     }
-    let (_, m, d, eps) = best.expect("no layout meets the target");
+    let (_, m, d, eps) = best.unwrap_or((0, 1, MAX_DEG, f64::INFINITY));
+    assert!(eps <= TARGET, "no layout meets the target");
     (m, d, eps)
 }
 
@@ -215,7 +216,7 @@ fn small(src: &mut String, k2: &Big) {
     }
     let mag: Vec<f64> = q.iter().map(|v| v.to_f64().abs()).collect();
     let q0 = mag[0];
-    let ns = (3..19).find(|&n| mag[n + 1] * z.powi(n as i32 + 1) <= 2f64.powi(-80) * q0).expect("series length");
+    let ns = (3..19).find(|&n| mag[n + 1] * z.powi(n as i32 + 1) <= 2f64.powi(-80) * q0).unwrap_or(18);
     let mut rb = vec![0.0; ns + 2];
     for n in (2..=ns).rev() {
         rb[n] = mag[n] + z * rb[n + 1];
