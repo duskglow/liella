@@ -1073,11 +1073,27 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // The hyperbolic family (LIBM-F32-HYPERBOLIC-3): the cores of [`eval`], unchanged. Where
+        // they answer, |x| ≥ 2^-26 (acosh: x > 1), so x is a normal `float` and its conversion
+        // raises nothing; a subnormal x raises denormal-operand in that conversion and is then
+        // refused (the entry's cold path drops the bit, FAST_ATTEMPT_HW). Every intermediate is a
+        // normal `double` (each core's proof: the operands of expm1_core, exp_core, sqrt64 and
+        // log1p64 lie inside their stated ranges) and each divisor is a normal `double` ≥ 2^-24
+        // (E + 1, E, E + 2, 1 + √, 1 - a): no division by zero, no overflow, no underflow. So
+        // the arithmetic raises inexact and nothing else, and the rounding test makes the
+        // result inexact.
+        Fast::Sinh => (sinh_core(x)?, SINH_DELTA),
+        Fast::Cosh => (cosh_core(x)?, COSH_DELTA),
+        Fast::Tanh => (tanh_core(x)?, TANH_DELTA),
+        Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
+        Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
+        Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
         Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan
-        | Fast::Sinh | Fast::Cosh | Fast::Tanh | Fast::Asinh | Fast::Acosh | Fast::Atanh
-        | Fast::Erf | Fast::Erfc => return None,
+        | Fast::Erf | Fast::Erfc => {
+            return None;
+        }
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -1097,6 +1113,12 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sinh_nearest, Fast::Sinh);
+nearest_fn!(cosh_nearest, Fast::Cosh);
+nearest_fn!(tanh_nearest, Fast::Tanh);
+nearest_fn!(asinh_nearest, Fast::Asinh);
+nearest_fn!(acosh_nearest, Fast::Acosh);
+nearest_fn!(atanh_nearest, Fast::Atanh);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
