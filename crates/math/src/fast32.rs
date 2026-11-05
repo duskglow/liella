@@ -944,7 +944,6 @@ mod tests {
 
     const ALL: [Fast; 15] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan];
     const NAMES: [&str; 15] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf"];
-    const INV_TRIG: [Fast; 3] = [Fast::Asin, Fast::Acos, Fast::Atan];
     const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
@@ -1175,18 +1174,34 @@ mod tests {
         assert!(seen > 750_000, "{seen}");
     }
 
-    /// `fs` on every `float` operand in every mode; the number taken.
+    /// `fs` on every `float` operand in every mode; the number taken. The threads take 2^16-operand
+    /// chunks from one counter, so one that meets a cheap range (NaN, a refused domain) takes more
+    /// chunks instead of idling while another finishes a fixed slice of expensive operands.
+    /// `LIELLA_SWEEP_STRIDE=k` checks every k-th encoding only (sizing a sweep before its job).
     fn exhaustive(fs: &'static [Fast]) -> u64 {
-        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
-        let per = (1u64 << 32) / n + 1;
-        std::thread::scope(|sc| {
-            let hs: std::vec::Vec<_> = (0..n).map(|t| sc.spawn(move || {
-                let lo = t * per;
-                let hi = ((t + 1) * per).min(1 << 32);
-                agree_in(fs, (lo..hi).map(|b| f32::from_bits(b as u32)))
+        use std::sync::atomic::{AtomicU64, Ordering};
+        const CHUNK: u64 = 1 << 16;
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get());
+        let stride = std::env::var("LIELLA_SWEEP_STRIDE").ok().and_then(|s| s.parse::<usize>().ok()).filter(|&k| k > 0).unwrap_or(1);
+        let next = AtomicU64::new(0);
+        let (taken, seen) = std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n).map(|_| sc.spawn(|| {
+                let (mut taken, mut seen) = (0, 0);
+                loop {
+                    let lo = next.fetch_add(CHUNK, Ordering::Relaxed);
+                    if lo >= 1 << 32 {
+                        return (taken, seen);
+                    }
+                    let xs = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32));
+                    seen += xs.clone().count() as u64;
+                    taken += agree_in(fs, xs);
+                }
             })).collect();
-            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
-        })
+            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+        });
+        // Every chunk exactly once: a lost or repeated chunk would pass unseen otherwise.
+        assert_eq!(seen, ((1u64 << 32) / CHUNK) * CHUNK.div_ceil(stride as u64), "sweep coverage (stride {stride})");
+        taken
     }
 
     /// ATAN32, PIO2 and PI are the rounded values (against the double-double `atan_dd`, error far
@@ -1316,13 +1331,29 @@ mod tests {
         }
     }
 
-    /// asinf, acosf, atanf on every `float` operand in every mode (LIBM-F32-DOUBLE-KERNELS's
-    /// accuracy check against the accurate path; its own job, 3·2^34 calls).
+    /// asinf on every `float` operand in every mode against the accurate path (one job per
+    /// function, 2^34 calls; LIBM-F32-DOUBLE-KERNELS's accuracy check). (No spec clause.)
     #[test]
     #[ignore]
-    fn inverse_trig_fast_path_agrees_exhaustively() {
-        let taken = exhaustive(&INV_TRIG);
-        std::println!("inverse trig fast path taken {taken} of {} calls", 12u64 << 32);
+    fn asinf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Asin]);
+        std::println!("asinf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// acosf on every `float` operand in every mode (as for asinf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn acosf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Acos]);
+        std::println!("acosf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// atanf on every `float` operand in every mode (as for asinf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn atanf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Atan]);
+        std::println!("atanf fast path taken {taken} of {} calls", 4u64 << 32);
     }
 
     /// atan2f on 2^24 y (every 256th encoding) against 64 x spread over the range and both signs,
