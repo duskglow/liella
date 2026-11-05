@@ -113,6 +113,13 @@ pub extern "C" fn hot_move_rest(d: *mut c_void, s: *const c_void, n: size_t) -> 
     unsafe { hot::move_rest(d, s, n) }
 }}
 
+export! { local "liella_hot_fill_large";
+/// The fill entry's sizes above 256, straight to the large-fill choice (from the direct entry `memset`).
+pub extern "C" fn hot_fill_large(d: *mut c_void, c: c_int, n: size_t) -> *mut c_void {
+    // UNSAFE(slice) SAFETY: the memset contract with n > 256, passed on unchanged by the direct entry.
+    unsafe { hot::fill_big(d, c, n) }
+}}
+
 export! { local "liella_hot_fill_rest";
 /// The fill entry's other sizes, as `hot_move_rest` (from the direct entry `memset`).
 pub extern "C" fn hot_fill_rest(d: *mut c_void, c: c_int, n: size_t) -> *mut c_void {
