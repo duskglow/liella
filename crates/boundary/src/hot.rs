@@ -2535,6 +2535,17 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::exp_nearest(x)
 }
 
+/// The `double` `exp10` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn exp10_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp10_nearest(x) };
+    }
+    liella_math::fast64::exp10_nearest(x)
+}
+
 /// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
 #[inline(always)]
 pub(crate) fn log_nearest(x: f64) -> Option<f64> {
@@ -2563,6 +2574,22 @@ macro_rules! invtrig_nearest {
     )+};
 }
 
+/// The `float` asinh and acosh fast paths (LIBM-F32-HYPERBOLIC-4) with their square root
+/// issued inline by [`sqrtsd`] below (liella-math forbids `unsafe` and so cannot issue it; its
+/// own root, [`liella_math::fast32::asinh_nearest_sqrt`]'s fallback, is about 20 dependent
+/// operations). A correctly rounded root is within the cores' proved bound, so the result is
+/// the same `float`.
+#[inline(always)]
+pub(crate) fn asinhf_nearest(x: f32) -> Option<f32> {
+    liella_math::fast32::asinh_nearest_sqrt(x, sqrtsd)
+}
+
+/// [`asinhf_nearest`] for acosh.
+#[inline(always)]
+pub(crate) fn acoshf_nearest(x: f32) -> Option<f32> {
+    liella_math::fast32::acosh_nearest_sqrt(x, sqrtsd)
+}
+
 /// `sqrtsd` for the kernels above (correctly rounded; they run in the default MXCSR), issued
 /// inline. The `core::arch` intrinsics are safe only inside a `#[target_feature]` function on
 /// the pinned compiler (a plain function, even with SSE2 in the target baseline, needs
@@ -2573,7 +2600,7 @@ macro_rules! invtrig_nearest {
 #[target_feature(enable = "sse2")]
 #[inline]
 fn sqrtsd_sse2(x: f64) -> f64 {
-    // ARCH(x86_64): SSE2 sqrt intrinsics (hot-kernel); aarch64 needs `fsqrt` or a portable path (A-8)
+    // ARCH(x86_64): SSE2 square root (hot-kernel); aarch64 needs `fsqrt` or a portable root (A-8)
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_pd};
     _mm_cvtsd_f64(_mm_sqrt_pd(_mm_set_sd(x)))
 }

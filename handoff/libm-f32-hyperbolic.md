@@ -1,52 +1,48 @@
 # LIBM-F32-HYPERBOLIC: handoff (float hyperbolic family on the fast32 pattern)
 
-State: branch `task/libm-f32-hyperbolic-3` (on -2's `0383207a`), code head `1f68110c`; handoff commit on top.
-Role keke:~/w/n1. Report: handoff/reports/LIBM-F32-HYPERBOLIC-3.json. Earlier runs: -1 `872c0c88` (six kernels),
--2 `0b446d69` (log1p64 one degree shorter, plants 5/5, six exhaustive sweeps green on the kernels).
+State: branch `task/libm-f32-hyperbolic-4` (on -3's `f77fb221`), code head `aa2375f4`; handoff commit on top.
+Role mei:~/w/s2. Report: handoff/reports/LIBM-F32-HYPERBOLIC-4.json. Earlier runs: -1 `872c0c88` (six kernels),
+-2 `0b446d69` (log1p64 shorter, six exhaustive sweeps), -3 `1f68110c` (in-place nearest entry for all six).
 
-## Profile (-3, validation/wl_trace.sh, call 11, head 0383207a)
-| row | Liella total | entry+envelope (`elem`, mxcsr_get, alias) | kernel (`fast32::<f>`: core + rounding test) | glibc total |
+## Done (-4)
+* `faa059c0`: ruling #2989. The safe inline square root from task/libm-f64-invtrig-hypot-tier-2 (`sqrtsd_sse2`, a
+  `#[target_feature(enable = "sse2")]` fn, and its `sqrtsd` caller in hot.rs) was **cherry-picked from `9fc38c3f`**
+  (`-n`, conflict resolved: that commit's invtrig macro, kernels and table test are not ours and were dropped; the two
+  functions are the same text). `fast32::asinh_core_with` / `acosh_core_with` take the root as a parameter (as the f64
+  branch's invtrig kernels do); `asinh_nearest_sqrt` / `acosh_nearest_sqrt` are the entries; `hot::asinhf_nearest` /
+  `acoshf_nearest` pass `sqrtsd`; s10_math.tsv `f` rows point at them (s10_math_gen.rs regenerated with
+  `cargo xtask math-gen`). The directed-mode path (`eval`) keeps `sqrt64`. Proof: a correctly rounded root (≤ 0.5u)
+  is inside sqrt64's 2u bound and raises only inexact on the cores' normal operands, so the bounds, deltas and
+  rounding test hold unchanged.
+* `aa2375f4`: `// ARCH(x86_64)` tag on the `core::arch` use (xtask static arch-audit refused it untagged).
+* Tests: the core-bound test checks both root variants; `hyperbolic_hardware_sqrt_agrees_sampled` (every 16411th
+  encoding, gate); `hyperbolic_hardware_sqrt_agrees_exhaustively` (ignored, 2^33 calls, nearest).
+
+## Jobs (mei)
+* `libm-f32-hyperbolic-4-sweep-sqrt` rc 0 on faa059c0 (liella-math identical at aa2375f4): 3 603 461 982 of 2^33 calls
+  taken, no mismatch against the accurate path, 272 s.
+* `libm-f32-hyperbolic-4-plants` rc 0 on faa059c0: 4 CAUGHT (asinh-core-root, acosh-core-root, hot-sqrtsd,
+  hot-acosh-route), 0 WARN. `-plants-2` rc 0 on aa2375f4: 4 CAUGHT, 0 WARN. `-percall-2` rc 0 on aa2375f4: the table below.
+* `libm-f32-hyperbolic-4-gate-2` on aa2375f4: affected escalated itself to FULL (s10_math_gen.rs is a generated source);
+  stubs and clippy ok; left running at hand-back for the dispatcher.
+* `libm-f32-hyperbolic-4-gate` rc 1 on faa059c0: xtask static arch-audit (untagged seam), fixed by aa2375f4.
+
+| row (instr/call, wl_percall, base 1f68110c) | glibc | -3 | -4 | ratio |
 |---|---|---|---|---|
-| asinhf | 183 | 50 | 133 | 93 |
-| coshf | 123 | 50 | 73 | 82 |
-The surplus sat in the entry: the float hyperbolic exports used the generic `mret::elem` envelope (MXCSR switch,
-status merge, exit write), while expf/logf already used the in-place `elem32_fast` entry.
-
-## Done (-3, 1f68110c): in-place nearest entry for sinhf..atanhf
-* `fast32::eval_nearest` answers for the six hyperbolic cores (same cores and rounding test as `eval`; the doc
-  comment says why only inexact is raised where they answer: |x| ≥ 2^-26 / x > 1, normal intermediates, divisors
-  normal and ≥ 2^-24). `nearest_fn!` `sinh_nearest`..`atanh_nearest`; s10_math.tsv rows split `f` (elem32_fast)
-  / `dlq` (elem); s10_math_gen.rs regenerated with `cargo xtask math-gen`. No kernel changed, so -2's exhaustive
-  sweeps still cover the values (not rerun).
-* Test `math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode` (s10_math_symbols.rs, s10_0_f_0):
-  every 2^16th float of each sign plus the domain edges, in-place vs the DAZ-forced envelope (bits, flags,
-  errno), directed modes against liella-math.
-* NEGATIVE (not landed): ruling #2783's `_mm_sqrt_sd` does not compile safely on 1.99.1. rustc E0133: "the sse2
-  target feature being enabled in the build configuration does not remove the requirement to list it in
-  `#[target_feature]`". liella-math forbids `unsafe`, so the change was reverted before it was committed.
-
-## Jobs (keke) on 1f68110c
-* `libm-f32-hyperbolic-3-plants` rc 0: entry-cosh-value, entry-atanh-sign: 2 CAUGHT, 0 WARN.
-* `libm-f32-hyperbolic-3-percall` rc 0 (wl_percall, spec ~/work/LIBM-F32-HYPERBOLIC-3/hyp.c, a copy is in the
-  report). `libm-f32-hyperbolic-3-gate` (clippy -D warnings, xtask static, affected --base origin/next): see report.
-
-| row (instr/call) | glibc | -2 (0383207a) | -3 (1f68110c) | ratio |
-|---|---|---|---|---|
-| sinhf | 146.9 | 154.5 | 99.5 | 0.68 |
-| tanhf | 130.5 | 162.0 | 106.0 | 0.81 |
-| atanhf | 117.7 | 159.2 | 103.2 | 0.88 |
-| coshf | 82.0 | 133.0 | 79.0 | 0.96 |
-| asinhf | 93.1 | 193.7 | 150.7 | 1.62 |
-| acoshf | 78.0 | 184.0 | 139.0 | 1.78 |
-(Controls: expf 73.0 vs 42.0, sinf 152.0 vs 42.0. sin/asin/atan/log1p/expm1/cbrt float still use `elem`: the
-same entry change should cut ~50 from each, once their subnormal-operand flags are proven.)
+| asinhf | 93.1 | 150.7 | 108.7 | 1.17 |
+| acoshf | 78.0 | 139.0 | 97.0 | 1.24 |
+| sinhf / tanhf / atanhf / coshf | | unchanged | 99.5 / 106.0 / 103.2 / 79.0 | 0.68 / 0.81 / 0.88 / 0.96 |
+The root cost 42 instructions per call (inferred from the -3 to -4 delta, not traced). The change swaps ~20 dependent
+multiplies and adds for one `sqrtsd` (latency 15-20 cycles): the instruction mix changed, so the timing sweep must
+confirm the row (brief exception "square root").
 
 ## Open / next
-* asinhf, acoshf are still above 1.05x. Their kernels are about 130 instructions: sqrt64 (3 Newton steps + Heron, ~20
-  dependent ops), log1p64 (~35), the rounding test. Next: a hardware square root without `unsafe` in liella-math.
-  RULING NEEDED: try `f64::sqrt` from core first (safe, if it is stable on 1.99.1), else a sqrt hook from
-  liella-boundary (UNSAFE(hot-kernel)), as `hot::exp_nearest` does. Rerun asinhf/acoshf/asinf/acosf sweeps after.
-* Optional: give sinf/asinf/atanf/log1pf/expm1f/cbrtf the same in-place entry (prove their flags on subnormal x).
-* Not to redo: D8 (settled in -2), the #2889 oracle for this family (no mp tier), the exhaustive sweeps (kernels
-  unchanged since 0b446d69).
-* Plan rows: ruling #2760 (A), #2783, #2784, #2889; handoff/libm-f32-double-kernels.md PATTERN.
+* MERGE NOTE: both this branch and the f64 invtrig branch add after `log_nearest` at the end of hot.rs, so whichever
+  lands second has one textual conflict: keep one copy of `sqrtsd_sse2` / `sqrtsd` (same text). The f64 branch also needs
+  the `// ARCH(x86_64)` tag (aa2375f4) or its xtask static fails arch-audit.
+* asinhf (+15.6) and acoshf (+19.0) remain above 1.05x. Next: wl_trace.sh one call of each (base primed on mei) to split
+  log1p64 (~35) / rounding test / entry, then shorten log1p64 for w ≥ some bound (a log table step on 1 + w instead of the
+  series), proving the bound and rerunning both sweeps (`eval` and the hardware-root sweep).
+* Optional: the same in-place entry for sinf/asinf/atanf/log1pf/expm1f/cbrtf (prove their subnormal-operand flags).
+* Not to redo: D8 (-2), the #2889 oracle for this family, the six `eval` sweeps (kernels unchanged since 0b446d69).
+* Plan rows: rulings #2760 (A), #2783, #2784, #2889, #2989; handoff/libm-f32-double-kernels.md PATTERN.
