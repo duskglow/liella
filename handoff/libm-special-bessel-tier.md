@@ -30,7 +30,9 @@ cause 1) and the new switches 2^-1021, 2^996, 2^997.
   40 doubles around each zero, huge operands), and the fast tier matches the 384-bit path bit for bit (value and
   status) wherever it settles.
 * On be0ce2c0: workspace clippy (all targets, all features) and `cargo xtask static` pass (foreground, keke n4).
-  Jobs on be0ce2c0 (keke): `libm-special-bessel-tier-2-gate2` (direct tier, `--base origin/next`), then
+  Jobs on be0ce2c0 (keke): `libm-special-bessel-tier-2-gate2` (asked for the direct tier with `--base origin/next`;
+  `affected` ESCALATED it to FULL by design because the branch changes generated sources, crates/math/src/coeffs/tables.rs
+  and crates/mathtools/src/tables.rs from run 1, so it is long and was left running at hand-back), then
   `libm-special-bessel-tier-2-counts-after`; `libm-special-bessel-tier-2-plants2` (10 plants,
   handoff/libm-special-bessel-tier-2-plants.txt, dir /dev/shm/claude/LIBM-SPECIAL-BESSEL-TIER-2/plants-2).
   Superseded: plants (run on 44cc3631, killed after its baseline and 3 of 10 CAUGHT:
