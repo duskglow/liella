@@ -1,0 +1,21 @@
+{"task": "LOADTIME-ENTRY-DESIGN", "model": "opus", "tokens": null,
+ "result": "Design doc docs/design/loadtime-entry.md: recommends per-class bodies installed once at start-up into a slot page by an mremapped private copy (M4): zero per-call cost on both classes, live text never writable, falls back to SSE2 on failure. Includes story plan, D-4.53 text and rulings.",
+ "branch": "task/loadtime-entry-design", "head": "122d6da4",
+ "gate": {"affected": "not run (design only, no product code)", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": [],
+ "rulings": [
+  {"item": "Replace a libc text page at start-up with a patched private file-backed copy (W^X kept, live page never writable)", "recommendation": "approve: no per-call test, no code pointer, every failure keeps the SSE2 baseline"},
+  {"item": "Start-up cost on the AVX2 class: about 6 syscalls + one private page per process", "recommendation": "accept unless CLASSED-SLOT-INFRA's start-up row measures worse; then use IFUNC + RELRO for libc.so.6 only"},
+  {"item": "Optional: move the remaining start-up words (avx2, scan_level, cmp_*) into RELRO in static programs", "recommendation": "small follow-up after the compare slots land"}
+ ],
+ "informational": [
+  "Brief names handoff/parity-memset-small-avx2.md, which exists only on origin/task/parity-memset-small-avx2 (reading it would need git show of another agent's branch): used the brief summary and handoff/parity-rows-avx2/PARITY-MEMSET-SMALL-AVX2.md instead",
+  "Predicted counts are from code paths, not measured; D-4.25 timed an AVX2 fill slower at 33-128 B, so the memset story must time as well as count",
+  "cargo xtask static not run: no cargo on this machine; doc checked by hand (no host names, LF)",
+  "readelf absent here: the reference's symbol type for memset (relevant only to the IFUNC option) is NOT VERIFIED"
+ ],
+ "refused": [],
+ "improvement": "Briefs that name a handoff file should name one on the agent's base (or attach it under the brief dir); the memset handoff lives only on an unmerged story branch, which the git rules forbid reading",
+ "next_step": "Owner rules on the three items; then cut CLASSED-SLOT-INFRA (doc section 4, story 1), with the memset/copy/strcmp/compare slot stories stacked on it",
+ "report_file": "handoff/loadtime-entry-design.md"}

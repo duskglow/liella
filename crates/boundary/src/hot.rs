@@ -2557,6 +2557,52 @@ pub(crate) fn log_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::log_nearest(x)
 }
 
+/// The `double` `exp2` fast path in its build chosen at startup (as [`exp_nearest`];
+/// LIBM-F64-EXPLOGPOW-TIER).
+#[inline(always)]
+pub(crate) fn exp2_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp2_nearest(x) };
+    }
+    liella_math::fast64::exp2_nearest(x)
+}
+
+/// The `double` `log2` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log2_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log2_nearest(x) };
+    }
+    liella_math::fast64::log2_nearest(x)
+}
+
+/// The `double` `log10` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log10_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log10_nearest(x) };
+    }
+    liella_math::fast64::log10_nearest(x)
+}
+
+/// The `double` `pow` fast path in its build chosen at startup (as [`exp_nearest`]); takes the
+/// pair the generated entry passes.
+#[inline(always)]
+pub(crate) fn pow_nearest((x, y): (f64, f64)) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::pow_nearest(x, y) };
+    }
+    liella_math::fast64::pow_nearest(x, y)
+}
+
 /// The `double` inverse-trigonometric and `hypot` fast paths (LIBM-F64-INVTRIG-HYPOT-TIER) in
 /// their build chosen at startup (as [`exp_nearest`]; the two builds agree bit for bit).
 macro_rules! invtrig_nearest {

@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-EXPLOGPOW-TIER", "model": "opus", "tokens": null,
+ "result": "exp2, log2, log10 and pow get run-time FMA builds of their fast paths (register 16.5 #8 extended), bit-identical to the baseline; plants 6/6 CAUGHT; FULL gate and counts still running at hand-back",
+ "branch": "task/libm-f64-explogpow-tier", "head": "d94de40e",
+ "gate": {"affected": "running (FULL, escalated by the s10_math.tsv change): shiki libm-f64-explogpow-tier-gate", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Before this change the FMA and -FMA counts of exp2/log2/log10/pow were identical: their kernels were outside kernels!, so ruling #2760's FMA tier had not reached them", "Target 1.05x not expected from this step alone; the remaining gap is double-double carrying (log assembly, pow's log) and the degree-8 exp tail"],
+ "refused": [],
+ "jobs": ["shiki:libm-f64-explogpow-tier-gate", "shiki:libm-f64-explogpow-tier-plants1", "shiki:libm-f64-explogpow-tier-counts"],
+ "improvement": "A static check that every pub fn in fast64::fused has a hot.rs dispatcher named in s10_math.tsv would have caught the four rows that never reached their FMA build",
+ "next_step": "Read the counts log (revert any slower row); then profile one call per phase and design a larger log table so log/pow tails shrink",
+ "report_file": "handoff/libm-f64-explogpow-tier.md"}

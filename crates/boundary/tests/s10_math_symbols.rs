@@ -201,7 +201,9 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
                     "exp10" => Real::exp10(x, mode),
                     _ => Real::pow(x, y, mode),
                 };
-                for extra in [0, 0x8000, 0x40, 0x8040] {
+                // 0x3f: every flag already sticky in the caller's word, so leaving the word means
+                // writing it back even when the result raises nothing new.
+                for extra in [0, 0x8000, 0x40, 0x8040, 0x3f, 0x803f] {
                     if extra & 0x40 != 0 && x < f64::MIN_POSITIVE {
                         continue; // DAZ reads a subnormal argument as zero: another function value
                     }
