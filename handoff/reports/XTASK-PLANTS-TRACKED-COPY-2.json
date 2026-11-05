@@ -1,0 +1,12 @@
+{"task": "XTASK-PLANTS-TRACKED-COPY-2", "model": "opus", "tokens": null,
+ "result": "Fixed the branch's own aio_products red (nscache_mode.sh bound back a not-yet-existing /dev/shm scratch path); plants.rs is an xtask leaf (#2993) with a selector test; direct gate green, 7/7 plants caught",
+ "branch": "task/xtask-plants-tracked-copy-2", "head": "6cf21394",
+ "gate": {"affected": "20 products tests + 194 xtask tests passed / 0 failed (direct tier, 13 products targets)", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["posixipc_products cannot run from a /dev/shm plant copy (its nodev phase mounts over /dev); plant it from a RAM dir outside /dev/shm"],
+ "refused": [],
+ "improvement": "Run -1's plants baseline ran only catalogs_products for a wrapper that 13 suites share. cargo xtask plants could warn when a plant's cmd covers fewer targets than the direct tier selects for the planted path.",
+ "next_step": "none; dispatcher reads the -2 gate and plants jobs",
+ "report_file": "handoff/XTASK-PLANTS-TRACKED-COPY.md",
+ "jobs": ["keke:xtask-plants-tracked-copy-2-gate", "keke:xtask-plants-tracked-copy-2-plants"]}

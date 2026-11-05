@@ -29,3 +29,4 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [19. qsort at five element sizes and fts under a 2 KiB path (BENCH-UNMEASURED-WIDEN, 2026-11-04, Zen 1 host)](saturation/19-qsort-element-sizes-and-fts-at-2-kib.md): section 19
 - [20. The 384-bit mp core and the double-double rounder (LIBM-MP-CORE-SPEED, 2026-11-05, Zen 1 host)](saturation/20-the-384-bit-mp-core-and-the-double-double-rounder.md): section 20
 - [21. x87 long double exp/log: the double-double first tier (LIBM-WIDE-DD-TIER, 2026-11-05, Broadwell-EP counts, Ivy Bridge cycles)](saturation/21-x87-exp-log-double-double-tier.md): section 21
+- [22. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, Broadwell host)](saturation/22-f64-invtrig-hypot-fast-tier.md): section 22
