@@ -244,6 +244,12 @@ fn init_cold_startup_functions_are_grouped() {
         "liella_machine_compare",
         "liella_machine_memmove",
         "liella_machine_memset",
+        // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside
+        // the group the second lookup of a process took 4 more text faults.
+        "7NsCache11region_path",
+        "6Memory10map_shared",
+        "5Table11stamp_files",
+        "5Table3get",
     ] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),

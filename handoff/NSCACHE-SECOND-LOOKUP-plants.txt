@@ -1,0 +1,2 @@
+sec-mode | crates/legacy/src/nscache.rs | lit: || st.mode & 0o7777 != 0o600 ==> | cargo test -p liella-boundary --features selftest --test nscache squatted_regions_are_refused | msg:squatted_regions_are_refused.*(FAILED|panicked)|mode:
+hot-region-path | crates/libc-so/hot-text.list | lit:_RNvMs2_NtC13liella_legacy7nscacheNtNtC13liella_legacy7nscache7NsCache11region_path ==> | cargo xtask so && cargo test -p liella-core --test hot_text_products init_cold_startup_functions_are_grouped | msg:region_path: not in the hot group
