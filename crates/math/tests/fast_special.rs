@@ -143,6 +143,12 @@ fn double_erf_erfc_fast_tier_rounds_correctly_and_rarely_falls_back() {
         assert!(c.fast + c.fallback >= 99_000, "{name}: the fast tier was not consulted ({c:?})");
         c.check_fallback(name, 10_000).unwrap_or_else(|e| panic!("{name}: fallback rate {e:?}"));
     }
+    // erfc x for x in [26.545, 26.575] lies in [2^-1023, 2^-1022), where the subnormal grid's
+    // scaled significand reaches 2^51: the rounding test settles these like any other (at most
+    // 1 in 500 refused; a test that refused z.hi >= 2^51 or ties of z.hi refused about 1 in 4).
+    let mut rng = Rng(0x510e_527f_ade6_82d1);
+    let refused = (0..2000).filter(|_| fast_special::erfc(rng.uniform(26.545, 26.575), Rounding::Nearest).is_none()).count();
+    assert!(refused <= 4, "erfc near 2^-1022: {refused} of 2000 refused");
     // Random operands, then the hard ones, against the oracle in all four modes.
     for (name, fast, entry, _) in FUNCS {
         let mut rng = Rng(0xbb67_ae85_84ca_a73b ^ name.len() as u64);

@@ -1,0 +1,8 @@
+slot-base | crates/math/src/fast_special.rs | lit:slot(x, 0x3fa0) ==> slot(x, 0x3f9f) | cargo test -p liella-math --test fast_special | msg:erf_kernel.*times its bound|kernels_stay_within_their_bounds.*FAILED
+erf-coef | crates/math/src/coeffs/tables.rs | lit:0x3f98906733eba891 ==> 0x3f98a06733eba891 | cargo test -p liella-math --test fast_special | msg:erf_kernel.*times its bound|kernels_stay_within_their_bounds.*FAILED
+linear-switch | crates/math/src/fast_special.rs | lit:const LINEAR: f64 = f64::from_bits(0x3c80_0000_0000_0000); ==> const LINEAR: f64 = f64::from_bits(0x3e80_0000_0000_0000); | cargo test -p liella-math --test fast_special | msg:erf_kernel.*times its bound
+erf-eps | crates/math/src/fast_special.rs | lit:dd::abs(y.hi) * f64::from_bits(t::ERF_T_EPS) ==> 0.0 * f64::from_bits(t::ERF_T_EPS) | cargo test -p liella-math --test fast_special | msg:erf_kernel.*times its bound
+erf-mirror | crates/math/src/fast_special.rs | lit:fast64::settle(y, eps, m, mirrored(mode)).map ==> fast64::settle(y, eps, m, mode).map | cargo test -p liella-math --test fast_special | msg:fast tier in (Up|Down)
+erfc-zlo | crates/math/src/fast_special.rs | lit:fast64::exp_dd(s.neg())? ==> fast64::exp_dd(Dd { hi: -s.hi, lo: 0.0 })? | cargo test -p liella-math --test fast_special | msg:erfc_kernel.*times its bound|erfc\(.*(fast tier|entry) in
+tiny-tie | crates/math/src/fast64.rs | lit:if d0 > 0.5 { ==> if d0 > 0.75 { | cargo test -p liella-math --test fast_special | msg:erfc near 2\^-1022: [0-9]+ of 2000 refused
+tiny-cap | crates/math/src/fast64.rs | lit:if zh >= TWO52 { ==> if zh >= TWO52 * 0.5 { | cargo test -p liella-math --test fast_special | msg:erfc near 2\^-1022: [0-9]+ of 2000 refused
