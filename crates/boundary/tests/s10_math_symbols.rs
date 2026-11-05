@@ -1819,9 +1819,7 @@ fn math_double_invtrig_hypot_fast_tier_is_the_accurate_path() {
     let check = |what: &str, rc: u32, args: &[f64], entry: &dyn Fn() -> f64, envelope: &dyn Fn() -> f64| {
         let got = d_in(rc, entry);
         assert_eq!(got, d_in(rc, envelope), "{what} in direction {rc}: (bits, flags, errno) against the accurate path");
-        if let Err(e) = annex_f(args, f64::from_bits(got.0), got.1, got.2) {
-            panic!("{what} in direction {rc}: {e} (bits {:#x}, flags {:#x}, errno {})", got.0, got.1, got.2);
-        }
+        assert_eq!(annex_f(args, f64::from_bits(got.0), got.1, got.2), Ok(()), "{what} in direction {rc}: §10.0 flags (bits {:#x}, flags {:#x}, errno {})", got.0, got.1, got.2);
     };
     let tiny = [5e-324, -5e-324, 1e-323, f64::MIN_POSITIVE, -f64::MIN_POSITIVE, 2.225_073_858_507_201e-308, 1e-300, -1e-160, 1e-155];
     let mut xs = vec![0.5, 1.0, -1.0, 0.3, -0.7, 2.5, -1e10, 1e-10, 0.999_999_9, 1e-20, 1e300, 0.0, -0.0, 1.5, f64::INFINITY, f64::NAN];
