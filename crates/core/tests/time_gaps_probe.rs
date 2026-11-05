@@ -386,10 +386,12 @@ fn time_gaps_equal_the_reference() {
     // Clauses: s23_5_c_2, s23_6_c_1, s23_7_c_2, s23_7_c_3 (record spec/behaviour/time-gaps.md).
     // One instant, read once, gives both programs the same rule strings (#2012).
     let Some((host, ours, dir)) = programs() else { return };
-    // The clock is held at the middle of a minute: at second 0 a field Liella sets to 0 would print
-    // as the current one, and the recorded difference would not match (it failed once in 60 runs).
-    let at = instant() / 60 * 60 + 30;
-    let (want, got) = run_both(&host, &ours, &dir, &format!("={at}"));
+    // Not started near a minute's edge: at second 0 a field Liella sets to 0 prints as the current
+    // one, and the recorded difference would not match (it failed once in 60 runs).
+    while !(2..=50).contains(&(instant() % 60)) {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    let (want, got) = run_both(&host, &ours, &dir, &format!("@{}", instant()));
     check(&want, &got, true);
 }
 

@@ -39,6 +39,6 @@ Run -5 (sh2 on shiki, instructions:u per entry, nftw_phys_38, glibc 212.0 on thi
 * Gate (affected --run) of the first head failed once: time_gaps_probe::time_gaps_equal_the_reference (a test on getdate, no
   walk code). Cause found by repeating that test 60 times over a minute (job perf-nftw-entry-5-diag): 1 of 60 failed, at an
   instant whose second is 0, where a field Liella sets to 0 prints as "cur" and the recorded-difference pattern no longer
-  matches. Fixed in the test by holding the probe's clock at second 30 of a minute.
+  matches. Fixed in the test by not starting the run within 2 s of a minute edge (holding the clock with "=" was tried and fails: that mode runs only the getdate part).
 * Plants run 2: the "." / ".." plant ran into the 600 s timeout (the walk goes up forever): not a message-checked catch. Replaced
   by a "." plant marked equivalent (the walk's repeat check skips the directory itself).
