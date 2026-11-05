@@ -1,35 +1,39 @@
-# LIBM-SPECIAL-GAMMA-TIER handoff (run 1: CHECKPOINT, WIP, nothing compiled)
+# LIBM-SPECIAL-GAMMA-TIER handoff (run 2: LIBM-SPECIAL-GAMMA-TIER-2)
 
-State: branch `task/libm-special-gamma-tier` (cut from origin/next de5102e3), WIP code commit 18ad79de.
-Role keke:~/w/n3 (not synced yet, no job run). Stopped at the context checkpoint (~150k of 180k; 33 of 90
-calls). Pattern: handoff/libm-special-fast-tier.md (erf/erfc). Accuracy contract unchanged (correct
-rounding, mp fallback, ruling #2760 option A): no differences row.
+State: branch `task/libm-special-gamma-tier-2` (run 1's WIP commits 18ad79de/68657bc9, then run 2), merged with
+origin/next 4c33d4c8; HEAD in handoff/reports/LIBM-SPECIAL-GAMMA-TIER-2.json. Role keke:~/w/n3. Pattern:
+handoff/libm-special-fast-tier.md (erf/erfc). Accuracy contract unchanged (correct rounding, 384-bit fallback, ruling
+#2760 option A): no differences row. Full report: handoff/libm-special-gamma-tier-report.md.
 
-## Design in the WIP commit (read the module docs, they carry the proof)
-* Generator `crates/mathtools/src/gamma_tables.rs` (called by `cargo xtask tables` after the erf tables):
-  ln Gamma Taylor coefficients from Hurwitz zeta (96 direct terms + Euler-Maclaurin, B2..B20), tables
-  `LG_T` (ln Gamma on [2^-5, 16), 144 slots, 4 slots by the zeros unused/excluded) and `LG_Z1`, `LG_Z2`
-  (ln Gamma(z+t)/t at z = 1, 2). Target 2^-75 relative (so tgamma = e^L stays below 2^-70).
-  `special_tables.rs`: `Slot`, `geometry`, `emit_table`, `MAX_DEG` now pub(crate); `choose`/`emit_table`
-  take the target (erf tables unchanged: same TARGET passed).
-* Runtime `crates/math/src/fast_gamma.rs`: `split(x)` gives ln|Gamma| = L - ln|D|, Gamma = e^L/D for
-  2^-60 <= |x| < 16 (shift by n = -floor(x) for x <= -1/2, exact products; the RN(1+x) trick on
-  (-1/2, -2^-5]); `lgamma`, `tgamma`, `*_kernel`. `fast64::log_dd` added (log_kernel + log_eps).
-  Wired in `special::lgamma/tgamma` for F::PREC == 53; old bodies are `lgamma_accurate`/`tgamma_accurate`.
-* Near lgamma's negative zeros: REFUSAL to the mp path (settle refuses on cancellation); no dd step.
-* Tests `crates/math/tests/fast_gamma.rs` (3 tests: oracle in 4 modes, identity with accurate path,
-  kernel bound + fallback ceiling 1/500 on [-10, 10]). Ceiling is a guess: measure, then set it.
+## Design (module docs of crates/math/src/fast_gamma.rs and crates/mathtools/src/gamma_tables.rs carry the proof)
+* Generator `gamma_tables.rs` (`cargo xtask tables`): ln Gamma Taylor rows from Hurwitz zeta; `LG_T` (ln Gamma on
+  [2^-5, 16), 144 slots, bound 2^-75.22 relative), `LG_Z1`/`LG_Z2` (ln Gamma(z+t)/t at the zeros z = 1, 2).
+* Runtime `fast_gamma.rs`: ln|Gamma| = L - ln|D|, Gamma = e^L/D for 2^-60 <= |x| < 16 (shift by -floor(x) for
+  x <= -1/2, exact products). Wired in `special::lgamma/tgamma` for doubles; old bodies `*_accurate` (fallback).
+* Near lgamma's negative zeros: REFUSAL to the 384-bit path (the bound stays absolute, from |L| and |ln D|, so
+  `settle` refuses the cancelled cases); no double-double step. Measured rates in the report.
 
-## Exact next step
-1. Sync (`sync_role.sh --story LIBM-SPECIAL-GAMMA-TIER --base origin/next <wt> keke n3`), run
-   `cargo xtask tables` on the role (regenerates crates/math/src/coeffs/tables.rs; commit it), then
-   `cargo test -p liella-math --release --test fast_gamma` and fix what fails (first compile: not done).
-2. Check that settle rounds negative y correctly (lgamma on (1,2) and negative tgamma; erf mirrored the
-   mode instead, tests in 4 modes decide) and that generator assertions (fmin > 0) hold on every slot.
-3. Measure the fallback rate on [-10, 10] (stats line in test 3) and record it; counts before/after
-   (`cbench_libm` rows lgamma, tgamma; before = current next), clippy, static, gate (direct tier),
-   plants (bound, a table entry, a region edge, the near-zero refusal) via `cargo xtask plants`.
-4. Out of scope this run: x >= 16 (Stirling) and x <= -16 (mp still), float rows.
+## Done in run 2
+Tables regenerated and committed; first compile clean (clippy, static); unit tests green unchanged; new test at the
+28 negative zeros in (-16, -2) (bisection on the oracle) in all four modes; kernel test covers them; fallback rate
+measured per distance band; plants file handoff/plants/libm-special-gamma-tier-2.plants; gate, plants, counts.
+
+## Open / next step
+0. FIRST: merge origin/next (c6e5db9d or later). It moved after this run's merge: LIBM-TABLES-PER-FAMILY splits
+   the generated tables into one file per family (`crates/math/src/coeffs/<family>.rs`, `Out::close(file, doc)`,
+   `generate() -> Vec<(file, src)>`, `coeffs.rs` declares and re-exports them). Trial merge (aborted): conflicts in
+   `crates/math/src/coeffs/tables.rs` (deleted upstream: take the deletion) and `crates/mathtools/src/tables.rs`
+   (take next's version, then add `crate::gamma_tables::emit(&mut o.src); o.close("gamma.rs", "Taylor tables of the
+   lgamma/tgamma fast tier");` after the erf close); `special_tables.rs` auto-merged (check the pub(crate) items and
+   the target argument still compile). Declare `gamma` in `coeffs.rs` like `erf`, run `cargo xtask tables` on the
+   role, commit the generated `coeffs/gamma.rs`, change the plants file's table-entry path to it, then rerun the
+   fast_gamma tests, clippy, static, gate (escalates to FULL by rule: generated sources), plants (new dir plants-2).
+1. Counts after vs the 1.05x target: see the report. If short: profile one call per phase (entry `mret::elem`, split,
+   Taylor row, log_dd/exp_dd, settle) against glibc's total before any redesign (brief rule "profile before you design").
+2. Out of scope so far: x >= 16 (Stirling), x <= -16 (still the 384-bit path), |x| < 2^-60, float rows.
+3. A double-double step at the negative zeros would cut the near-zero refusals (up to ~44% within 2^-48 relative of
+   a zero) but the uniform-range rate is 5 in 10^5; not worth it unless a workload sits on the zeros.
 
 ## Things not to redo
-* Process slip this run: one python heredoc edit (special_tables.rs visibility); use files instead.
+* Run 1's design and the generator assertions hold (tables built, all slot bounds <= 2^-75.22).
+* The emitted doc line on the LG_* tables says "(module `fast_special`)" (shared `emit_table` text); cosmetic.
