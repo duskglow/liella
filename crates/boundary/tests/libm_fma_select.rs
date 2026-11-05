@@ -1,6 +1,6 @@
 //! The libm product runs the FMA builds of the `double` exp/log fast paths on a CPU with FMA, and
-//! `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA` keeps the baseline (D-10.25, D-NEW, #2920): `libm.a`
-//! carries its own copy of the dispatch byte, which its first math call decides. Both builds
+//! `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA` keeps the baseline (D-10.25, D-10.50, #2920): `libm.a`
+//! carries its own copy of the dispatch byte, which its load-time constructor decides. Both builds
 //! return the same bits, so the only observable is the work done: a static program linked with
 //! `-lm` counts its own user-mode instructions over a fixed loop of `exp` and `log` calls
 //! (`perf_event_open`, self-monitoring), once with the tunable and once without. Instruction
@@ -68,7 +68,7 @@ fn count(exe: &PathBuf, tunables: Option<&str>) -> Option<u64> {
 
 #[test]
 fn libm_product_selects_the_fma_builds() {
-    // Trace: no spec clause (D-10.25 run-time FMA builds; D-NEW the libm product's own decision).
+    // Trace: no spec clause (D-10.25 run-time FMA builds; D-10.50 the libm product's own decision).
     if !std::arch::is_x86_feature_detected!("fma") {
         println!("SKIP: this CPU has no FMA (or the OS does not save the AVX state): one build only");
         return;

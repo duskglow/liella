@@ -1675,14 +1675,15 @@ pub(crate) fn process_text(addr: usize) -> &'static [u8] {
     unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
 }
 
-/// The C text at `addr` (empty for NULL) that the C library's `secure_getenv` has just returned
-/// (`caller_alloc::secure_getenv_addr`): the libm product's FMA decision (D-NEW) reads it at once.
+/// The C text at `addr` (empty for NULL): the value of an entry that [`env_find_from`] has just
+/// found in the environment vector the loader handed the libm product's constructor
+/// (`dispatch::liella_libm_start`, D-10.50), which parses it at once.
 #[cfg(feature = "libm")]
 pub(crate) fn env_value_text(addr: usize) -> &'static [u8] {
     // UNSAFE(slice): see the function's documentation.
     #[allow(unsafe_code)]
-    // SAFETY: `secure_getenv` returns NULL or the variable's NUL-terminated value in the
-    // environment; the caller parses it before it makes any other call.
+    // SAFETY: `addr` is just past the `NAME=` of a NUL-terminated entry of a NULL-terminated
+    // environment vector (the loader's, D-10.50); the caller parses it before any other code runs.
     unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
 }
 

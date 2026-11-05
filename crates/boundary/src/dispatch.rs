@@ -33,45 +33,39 @@ pub(crate) fn avx2() -> bool {
 /// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.25):
 /// the same mechanism as [`avx2`] (one byte, read only by Rust: `hot::exp_nearest`,
 /// `hot::log_nearest`, so it lives here rather than in fold.S). [`FMA_OFF`] (the baseline) or
-/// [`FMA_ON`]; in the libm product it starts [`FMA_UNDECIDED`] (D-NEW, #2920): `libm.a` and
-/// `libm.so.6` link their own copy of this crate, whose byte the C library's startup
-/// (`cpu::init_with`) never writes, so the first math call there decides it ([`decide_fma`]).
-static FMA: AtomicU8 = AtomicU8::new(if cfg!(feature = "libm") { FMA_UNDECIDED } else { FMA_OFF });
+/// [`FMA_ON`]. In the C library the startup writes it (`cpu::init_with`); `libm.a` and
+/// `libm.so.6` link their own copy of this crate, whose byte that startup never sees, so the
+/// libm product's load-time constructor writes its copy (`liella_libm_start`, D-10.50, #2920).
+/// A math call never asks whether the byte is decided: before the constructor (a static
+/// program's own constructors linked ahead of libm's) it runs the baseline, which returns the
+/// same bits (D-10.25).
+static FMA: AtomicU8 = AtomicU8::new(FMA_OFF);
 const FMA_OFF: u8 = 0;
 const FMA_ON: u8 = 1;
-#[cfg_attr(not(feature = "libm"), allow(dead_code))]
-const FMA_UNDECIDED: u8 = 2;
 
-/// Whether the math kernels run their FMA builds. The baseline answer costs one load and one
-/// test, as before the libm decision existed (the `-FMA` and non-FMA rows measured 3-4
-/// instructions more per call with the FMA test first); the libm product's FMA answer takes a
-/// second test, which the FMA builds repay many times over.
+/// Whether the math kernels run their FMA builds: one load and one test.
 #[inline(always)]
 pub(crate) fn fma() -> bool {
-    let v = FMA.load(Relaxed);
-    if v == FMA_OFF {
-        return false;
-    }
-    #[cfg(feature = "libm")]
-    if v == FMA_UNDECIDED {
-        return decide_fma();
-    }
-    true
+    FMA.load(Relaxed) != FMA_OFF
 }
 
-/// The libm product's decision (D-NEW), made by its first math call: the C library's startup
-/// rule ([`fma_wanted`]) on the CPU's features and the `GLIBC_TUNABLES` text the C library hands
-/// out through `secure_getenv` (NULL in a secure program, where `Tunables::parse` honours nothing
-/// either). Racing first callers store the same byte.
+crate::export! { libm "LIELLA_PRIVATE";
+/// The libm product's load-time decision (D-10.50), called once from its `.init_array` entry
+/// (`csys/src/adapter/libm_init.c`) with the loader's `(argc, argv, envp)`: the C library's
+/// startup rule ([`fma_wanted`]) on the CPU's features and the `GLIBC_TUNABLES` entry of `envp`.
+/// It reads `envp` rather than asking the C library because a dynamic program's loader runs
+/// libm.so.6's constructors before the C library's startup has published the environment.
+/// Secure-execution mode, which honours no tunable (`Tunables::parse`), is asked only when the
+/// variable is present (`process::secure`, failing safe). The name is local to both libraries.
 #[cfg(feature = "libm")]
-#[cold]
-#[inline(never)]
-fn decide_fma() -> bool {
-    let text = crate::conv::env_value_text(crate::caller_alloc::secure_getenv_addr(c"GLIBC_TUNABLES"));
-    let on = fma_wanted(&crate::cpu::features_cached(), &liella::config::Tunables::parse(text, false));
-    FMA.store(if on { FMA_ON } else { FMA_OFF }, Relaxed);
-    on
-}
+pub extern "C" fn liella_libm_start(argc: liella_abi::ctypes::c_int, argv: usize, envp: usize) {
+    let _ = (argc, argv);
+    let tunables = crate::conv::env_find_from(envp, 0, b"GLIBC_TUNABLES").map_or_else(liella::config::Tunables::default, |entry| {
+        let text = crate::conv::env_value_text(entry.saturating_add(b"GLIBC_TUNABLES=".len()));
+        liella::config::Tunables::parse(text, crate::process::secure())
+    });
+    select_fma(fma_wanted(&crate::cpu::features_cached(), &tunables));
+}}
 
 /// The FMA builds' rule (D-10.25): the CPU has FMA with the AVX state the OS saves
 /// (`liella_rt::cpu::Features::fma`), and `glibc.cpu.hwcaps=-FMA` does not keep the baseline.
