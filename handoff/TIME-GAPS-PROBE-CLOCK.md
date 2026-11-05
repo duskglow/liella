@@ -62,35 +62,36 @@ was rare only because few calls start in that 1 ms.
 
 ## State
 
-* Branch , cut from . All code is in
-  ; no product code changed.
+* Branch `task/time-gaps-probe-clock`, cut from `origin/next`. All code is in
+  `crates/core/tests/time_gaps_probe.rs`; no product code changed.
 * Jobs on keke, role r1:
-  * : rc 0. , all 4 time_gaps_probe tests passed
-    (the forced-edge test included), clippy  and  clean.
-  *  (direct tier): rc 0.
-  * :  with 5 plants: bracket-late, bracket-short,
+  * `time-gaps-probe-clock-check3`: rc 0. `cargo xtask so`, all 4 time_gaps_probe tests passed (the
+    forced-edge test included), `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+    and `cargo xtask static` clean.
+  * `time-gaps-probe-clock-gate` (direct tier): rc 0.
+  * `time-gaps-probe-clock-plants2`: `cargo xtask plants` with 5 plants: bracket-late, bracket-short,
     other-side (the reference's bracket used for Liella), wait-sec0 and wait-minute-edge. Still
     running at hand-back.
-  * : 600 runs of the probe (all tests but the forced one), at least
+  * `time-gaps-probe-clock-repeat`: 600 runs of the probe (all tests but the forced one), at least
     1 s apart, in RAM through a private user+mount namespace. 200 runs with 0 failures at load 25-30
     when handed back.
 * Superseded runs:
-  * : wrong package name.
-  * : refused, because the role had not been synced.
-  * : one forced pairing failed; fixed in 52ae124d. The pairing compared calls on two
-    sides of midnight, which ask about two dates.
+  * `-check`: wrong package name.
+  * `-plants`: refused, because the role had not been synced.
+  * `-check2`: one forced pairing failed; fixed in 52ae124d. The pairing compared calls on two sides
+    of midnight, which ask about two dates.
 
 ## Probe-settled
 
-* Liella's getdate reads . The reference's getdate follows the tick clock, the same
-  second as .
+* Liella's getdate reads `CLOCK_REALTIME`. The reference's getdate follows the tick clock, the same
+  second as `time()`.
 * Both are correct: POSIX does not name a clock. No difference row is needed. The probe now
   tolerates either clock.
 
 ## Next step and not to redo
 
-* Do not reintroduce a single clock read or any wait in . The plants cover both.
+* Do not reintroduce a single clock read or any wait in `gd()`. The plants cover both.
 * The minute-edge wait that PERF-NFTW-ENTRY-5 added on its own branch must be dropped when that
   branch meets this one. It is a merge for the coordinator.
-* Plants file:  on keke. Repeat script:
-  .
+* Plants file: `~/work/time-gaps-probe-clock/plants.txt` on keke. Repeat script:
+  `~/work/time-gaps-probe-clock/repeat.sh`.
