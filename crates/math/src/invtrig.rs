@@ -43,6 +43,11 @@
 //!   `double` (an exact root such as `hypot(3, 4)`, which must not raise inexact, or too close to
 //!   tell): the accurate path decides those.
 //!
+//! **Square root.** `asin`, `acos` and `hypot` take `sqrt`, which must be the correctly rounded
+//! `double` square root in round-to-nearest (the boundary passes `sqrtsd`; this crate forbids
+//! `unsafe` and so cannot issue it; the tests pass `f64::sqrt`). Any correctly rounded root gives
+//! the same results.
+//!
 //! **Two builds** (MATH-F64-FMA-PATH, D-10.25): the kernels below take the exact product as a
 //! parameter, Dekker's [`dd::two_prod`] or one FMA ([`dd::two_prod_fma`]). Every product here
 //! has normal operands within `2^±901` and an error term above `2^-1006`, so both return the same
@@ -72,21 +77,6 @@ const TWO_M60: f64 = f64::from_bits(pow2_bits(-60));
 pub const EPS: f64 = f64::from_bits(pow2_bits(-62));
 /// `2^-98`: the relative bound of the `hypot` rounding test.
 pub const EPS_HYPOT: f64 = f64::from_bits(pow2_bits(-98));
-
-/// `sqrt` by the hardware instruction (correctly rounded, one `double` rounding).
-#[inline(always)]
-fn sqrt_hw(x: f64) -> f64 {
-    // ARCH(x86_64): sqrtsd; other targets would use the double-double square root's leading word
-    #[cfg(target_arch = "x86_64")]
-    {
-        use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_sd};
-        _mm_cvtsd_f64(_mm_sqrt_sd(_mm_set_sd(x), _mm_set_sd(x)))
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        dd::sqrt(Dd::from(x)).hi
-    }
-}
 
 /// `atan(j/64)` for `jf = j` (`0 <= j <= 64`) as a double-double.
 #[inline(always)]
@@ -177,8 +167,8 @@ macro_rules! kernels {
 
         /// The square root of a positive normalized double-double (within `2^-104` relative).
         $(#[$a])* $(#[$i])*
-        fn sqrt_dd(x: Dd) -> Dd {
-            let s = sqrt_hw(x.hi);
+        fn sqrt_dd(x: Dd, sqrt: impl Fn(f64) -> f64) -> Dd {
+            let s = sqrt(x.hi);
             let ps = $prod(s, s);
             fast_two_sum(s, (((x.hi - ps.hi) - ps.lo) + x.lo) / (2.0 * s))
         }
@@ -205,7 +195,7 @@ macro_rules! kernels {
 
         /// `asin(x)` to nearest, for `2^-60 <= |x| < 1`.
         $(#[$a])* #[inline]
-        pub fn asin_nearest(x: f64) -> Option<f64> {
+        pub fn asin_nearest(x: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let bits = x.to_bits();
             let ab = bits & !SIGN;
             if !(pow2_bits(-60)..pow2_bits(0)).contains(&ab) {
@@ -214,7 +204,7 @@ macro_rules! kernels {
             let a = f64::from_bits(ab);
             let (m1, m2) = (two_sum(1.0, -a), two_sum(1.0, a));
             let p = $prod(m1.hi, m2.hi);
-            let s = sqrt_dd(fast_two_sum(p.hi, p.lo + (m1.hi * m2.lo + m1.lo * m2.hi)));
+            let s = sqrt_dd(fast_two_sum(p.hi, p.lo + (m1.hi * m2.lo + m1.lo * m2.hi)), sqrt);
             let av = Dd { hi: a, lo: 0.0 };
             let y = if a > s.hi {
                 comb(HALF_HI, HALF_LO, -1.0, { let t = div_dd(s, av); atan_unit(t.hi, t.lo) })
@@ -227,14 +217,14 @@ macro_rules! kernels {
 
         /// `acos(x)` to nearest, for `2^-60 <= |x| < 1`.
         $(#[$a])* #[inline]
-        pub fn acos_nearest(x: f64) -> Option<f64> {
+        pub fn acos_nearest(x: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let bits = x.to_bits();
             let ab = bits & !SIGN;
             if !(pow2_bits(-60)..pow2_bits(0)).contains(&ab) {
                 return None;
             }
             let a = f64::from_bits(ab);
-            let w = sqrt_dd(div_dd(two_sum(1.0, -a), two_sum(1.0, a)));
+            let w = sqrt_dd(div_dd(two_sum(1.0, -a), two_sum(1.0, a)), sqrt);
             let at = atan_unit(w.hi, w.lo);
             let y2 = Dd { hi: 2.0 * at.hi, lo: 2.0 * at.lo };
             done(if bits & SIGN != 0 { comb(PI_HI, PI_LO, -1.0, y2) } else { y2 }, 0)
@@ -271,7 +261,7 @@ macro_rules! kernels {
         /// `hypot(x, y)` to nearest, for `2^-450 <= |x|, |y| < 2^450` within a factor `2^61` of
         /// each other, when the root is certainly not a `double`.
         $(#[$a])* #[inline]
-        pub fn hypot_nearest(x: f64, y: f64) -> Option<f64> {
+        pub fn hypot_nearest(x: f64, y: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
             let win = pow2_bits(-450)..pow2_bits(450);
             if !(win.contains(&ab) && win.contains(&bb)) || (ab >> 52).abs_diff(bb >> 52) > 60 {
@@ -280,7 +270,7 @@ macro_rules! kernels {
             let (a, b) = (f64::from_bits(ab), f64::from_bits(bb));
             let (pa, pb) = ($prod(a, a), $prod(b, b));
             let s = two_sum(pa.hi, pb.hi);
-            let r = sqrt_dd(fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo)));
+            let r = sqrt_dd(fast_two_sum(s.hi, s.lo + (pa.lo + pb.lo)), sqrt);
             let eps = EPS_HYPOT * r.hi;
             settle(r, eps, eps)
         }
@@ -296,7 +286,7 @@ kernels!(; #[inline(always)]; dd::two_prod, prod_small);
 // ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{comb, done, settle, sqrt_hw, table, two_sum, fast_two_sum, Dd, dd, pow2_bits};
+    use super::{comb, done, settle, table, two_sum, fast_two_sum, Dd, dd, pow2_bits};
     use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_HI, HALF_LO, PI_HI, PI_LO, SIGN, TWO_M60};
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma);

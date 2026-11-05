@@ -2549,24 +2549,34 @@ pub(crate) fn log_nearest(x: f64) -> Option<f64> {
 /// The `double` inverse-trigonometric and `hypot` fast paths (LIBM-F64-INVTRIG-HYPOT-TIER) in
 /// their build chosen at startup (as [`exp_nearest`]; the two builds agree bit for bit).
 macro_rules! invtrig_nearest {
-    ($($name:ident($($a:ident),+);)+) => {$(
+    ($($name:ident($($a:ident),+) [$($s:expr)?];)+) => {$(
         #[doc = concat!("`liella_math::invtrig::", stringify!($name), "` in the build chosen at startup.")]
         #[inline(always)]
         pub(crate) fn $name($($a: f64),+) -> Option<f64> {
             if crate::dispatch::fma() {
                 // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
                 #[allow(unsafe_code)]
-                return unsafe { liella_math::invtrig::fused::$name($($a),+) };
+                return unsafe { liella_math::invtrig::fused::$name($($a),+ $(, $s)?) };
             }
-            liella_math::invtrig::$name($($a),+)
+            liella_math::invtrig::$name($($a),+ $(, $s)?)
         }
     )+};
 }
 
+/// `sqrtsd` inline, for the kernels above (correctly rounded; they run in the default MXCSR).
+#[inline(always)]
+fn sqrtsd(x: f64) -> f64 {
+    use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_sd};
+    // UNSAFE(hot-kernel) SAFETY: SSE2 is part of the x86-64 baseline; the intrinsics act on
+    // registers only (no memory access).
+    #[allow(unsafe_code)]
+    unsafe { _mm_cvtsd_f64(_mm_sqrt_sd(_mm_set_sd(x), _mm_set_sd(x))) }
+}
+
 invtrig_nearest! {
-    atan_nearest(x);
-    asin_nearest(x);
-    acos_nearest(x);
-    atan2_nearest(y, x);
-    hypot_nearest(x, y);
+    atan_nearest(x) [];
+    asin_nearest(x) [sqrtsd];
+    acos_nearest(x) [sqrtsd];
+    atan2_nearest(y, x) [];
+    hypot_nearest(x, y) [sqrtsd];
 }

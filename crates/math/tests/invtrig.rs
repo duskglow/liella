@@ -96,7 +96,7 @@ const N: usize = 100_000;
 fn double_invtrig_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
     // Clauses: s10_3_c_0 (D-10.13).
     let one: [(&str, K1, (i64, i64)); 3] =
-        [("atan", invtrig::atan_nearest, (-62, 62)), ("asin", invtrig::asin_nearest, (-62, 0)), ("acos", invtrig::acos_nearest, (-62, 0))];
+        [("atan", invtrig::atan_nearest, (-62, 62)), ("asin", |x| invtrig::asin_nearest(x, f64::sqrt), (-62, 0)), ("acos", |x| invtrig::acos_nearest(x, f64::sqrt), (-62, 0))];
     for fma in builds() {
         selftest::set_math_fma(fma);
         for (f, k, (lo, hi)) in one {
@@ -131,7 +131,7 @@ fn double_invtrig_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
 #[test]
 fn double_atan2_hypot_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
     // Clauses: s10_3_c_0 (D-10.13).
-    let two: [(&str, K2); 2] = [("atan2", invtrig::atan2_nearest), ("hypot", invtrig::hypot_nearest)];
+    let two: [(&str, K2); 2] = [("atan2", invtrig::atan2_nearest), ("hypot", |a, b| invtrig::hypot_nearest(a, b, f64::sqrt))];
     for fma in builds() {
         selftest::set_math_fma(fma);
         for (f, k) in two {
@@ -165,9 +165,9 @@ fn double_atan2_hypot_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
             }
         }
         for (a, b) in [(3.0, 4.0), (5.0, 12.0), (3.0 * 2f64.powi(-300), 4.0 * 2f64.powi(-300))] {
-            assert_eq!(invtrig::hypot_nearest(a, b), None, "hypot({a:e}, {b:e}): an exact root must go to the accurate path (exact-root check FAILED)");
+            assert_eq!(invtrig::hypot_nearest(a, b, f64::sqrt), None, "hypot({a:e}, {b:e}): an exact root must go to the accurate path (exact-root check FAILED)");
         }
-        assert!(invtrig::hypot_nearest(1.0, f64::from_bits(0x3e10_0000_0000_0000)).is_some(), "hypot(1, 2^-30) refused");
+        assert!(invtrig::hypot_nearest(1.0, f64::from_bits(0x3e10_0000_0000_0000), f64::sqrt).is_some(), "hypot(1, 2^-30) refused");
     }
     selftest::set_math_fma(false);
 }
