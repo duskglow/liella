@@ -33,3 +33,26 @@ the cbench_libm ranges (atan [-10,10], asin/acos [-1,1], atan2 [-10,10]^2, hypot
   degree-2 polynomial in `double` suffices), the quotient as one `double` division with the error carried in the
   rounding test's bound instead of a correction step, and asin/acos on their own tables near 1 instead of through
   `atan` of a quotient. That is the next story's design question; this run measured and recorded only.
+
+### Folded constants and a bit-read index (LIBM-F64-INVTRIG-HYPOT-TIER-5, 2026-11-05, POSITIVE, kept)
+
+Per-phase split of the FMA build's `atan` kernel for `|x| > 1`, counted from Liella's own listing (static binary,
+`objdump`): about 131 instructions = range check 7, reciprocal and its residual 5, table index `nearest_int` plus
+the float-to-int conversion and clamp 16, `1 + c·t` as a double-double 11, the double-double quotient 10, polynomial 8,
+table add 8, the separate `π/2 − r` double-double subtraction 15, `settle` and the sign 37 (plus spills). The two
+pieces cut here: the constant `π/2`, `π` (and `π/2` added) folded into three const tables built from `ATAN_J64` at
+compile time, so `atan` for `|x| > 1`, `asin` near 1 and three `atan2` quadrants end in one table add with a sign;
+and the index read from the low bits of `64 th + 1.5·2^52` (the same `j`). Same host and command as above, before =
+the merge with next, instructions per call:
+
+| Row | before | after | glibc | ratio after |
+|---|---:|---:|---:|---:|
+| atan | 236.8 | 217.3 | 78.8 | 2.76 |
+| asin | 325.1 | 314.7 | 75.1 | 4.19 |
+| acos | 292.9 | 286.1 | 80.2 | 3.57 |
+| atan2 | 265.8 | 248.8 | 161.8 | 1.54 |
+| hypot | 153.4 | 153.4 | 63.9 | 2.40 |
+
+No row slower; `|x| <= 1` results bit-identical, the rest under the same bound. Still open, the remaining structure:
+`settle` (37) is now the largest single phase of `atan`; then the double-double quotient and `1 + c·t` (21), which
+the single-`double`-quotient design above replaces only together with a finer table.
