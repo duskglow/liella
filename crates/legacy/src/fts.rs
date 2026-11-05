@@ -245,7 +245,7 @@ const PATH_START: usize = 256;
 const ROOT_PARENT: usize = 0;
 
 /// Zero bytes: a name's terminator and the padding to its 8-aligned status.
-const PAD_LEN: usize = 8;
+const PAD: [u8; 8] = [0; 8];
 
 /// The buffer a directory is read with.
 const LIST_BUFFER: usize = 16 * 1024;
@@ -264,35 +264,22 @@ fn put(b: &mut [u8], at: usize, v: &[u8]) {
 
 fn stat_bytes(st: &Stat) -> [u8; STAT_SIZE] {
     let mut b = [0u8; STAT_SIZE];
-    stat_into(&mut b, st);
-    b
-}
-
-/// The status after [`PAD_LEN`] zero bytes: one slice then holds a name's padding and its status.
-fn padded_stat(st: &Stat) -> [u8; PAD_LEN + STAT_SIZE] {
-    let mut b = [0u8; PAD_LEN + STAT_SIZE];
-    if let Some(d) = b.get_mut(PAD_LEN..) {
-        stat_into(d, st);
-    }
-    b
-}
-
-fn stat_into(b: &mut [u8], st: &Stat) {
-    put(b, 0, &st.dev.to_ne_bytes());
-    put(b, 8, &st.ino.to_ne_bytes());
-    put(b, 16, &st.nlink.to_ne_bytes());
-    put(b, 24, &st.mode.to_ne_bytes());
-    put(b, 28, &st.uid.to_ne_bytes());
-    put(b, 32, &st.gid.to_ne_bytes());
-    put(b, 40, &st.rdev.to_ne_bytes());
-    put(b, 48, &st.size.to_ne_bytes());
-    put(b, 56, &st.blksize.to_ne_bytes());
-    put(b, 64, &st.blocks.to_ne_bytes());
+    put(&mut b, 0, &st.dev.to_ne_bytes());
+    put(&mut b, 8, &st.ino.to_ne_bytes());
+    put(&mut b, 16, &st.nlink.to_ne_bytes());
+    put(&mut b, 24, &st.mode.to_ne_bytes());
+    put(&mut b, 28, &st.uid.to_ne_bytes());
+    put(&mut b, 32, &st.gid.to_ne_bytes());
+    put(&mut b, 40, &st.rdev.to_ne_bytes());
+    put(&mut b, 48, &st.size.to_ne_bytes());
+    put(&mut b, 56, &st.blksize.to_ne_bytes());
+    put(&mut b, 64, &st.blocks.to_ne_bytes());
     for (i, t) in [st.atime, st.mtime, st.ctime].iter().enumerate() {
         let at = 72usize.saturating_add(i.saturating_mul(16));
-        put(b, at, &t.sec.to_ne_bytes());
-        put(b, at.saturating_add(8), &t.nsec.to_ne_bytes());
+        put(&mut b, at, &t.sec.to_ne_bytes());
+        put(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
     }
+    b
 }
 
 fn z(text: &[u8]) -> Result<TryVec<u8>> {
@@ -388,13 +375,12 @@ impl Fts {
         let size = stat_off.saturating_add(STAT_SIZE).saturating_add(1);
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
-        let pad_len = stat_off.saturating_sub(off::NAME).saturating_sub(name.len());
+        let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
         let sb = match &st.1 {
-            Some(s) => padded_stat(s),
-            None => padded_stat(&Stat::default()),
+            Some(s) => stat_bytes(s),
+            None => stat_bytes(&Stat::default()),
         };
-        let pad_and_stat = sb.get(PAD_LEN.saturating_sub(pad_len)..).unwrap_or(&[]);
-        let block = mem.alloc(off::NAME, &[name, pad_and_stat]).ok_or(Errno::ENOMEM)?;
+        let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
         let node = Node {
             block,
             size,
@@ -470,23 +456,23 @@ impl Fts {
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
         let mut b = [0u8; off::NAME];
-        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(b, off::PARENT, &parent.to_ne_bytes());
-        put(b, off::LINK, &x.link.to_ne_bytes());
-        put(b, off::ACCPATH, &acc.to_ne_bytes());
-        put(b, off::PATH, &self.buf.to_ne_bytes());
-        put(b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(b, off::SYMFD, &0i32.to_ne_bytes());
-        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::INO, &st.ino.to_ne_bytes());
-        put(b, off::DEV, &st.dev.to_ne_bytes());
-        put(b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(b, off::INFO, &x.info.to_ne_bytes());
-        put(b, off::FLAGS, &0u16.to_ne_bytes());
+        put(&mut b, off::CYCLE, &x.cycle.to_ne_bytes());
+        put(&mut b, off::PARENT, &parent.to_ne_bytes());
+        put(&mut b, off::LINK, &x.link.to_ne_bytes());
+        put(&mut b, off::ACCPATH, &acc.to_ne_bytes());
+        put(&mut b, off::PATH, &self.buf.to_ne_bytes());
+        put(&mut b, off::ERRNO, &x.errno.to_ne_bytes());
+        put(&mut b, off::SYMFD, &0i32.to_ne_bytes());
+        put(&mut b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(&mut b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(&mut b, off::INO, &st.ino.to_ne_bytes());
+        put(&mut b, off::DEV, &st.dev.to_ne_bytes());
+        put(&mut b, off::NLINK, &st.nlink.to_ne_bytes());
+        put(&mut b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        put(&mut b, off::INFO, &x.info.to_ne_bytes());
+        put(&mut b, off::FLAGS, &0u16.to_ne_bytes());
         // `fts_instr` is not part of it: the block holds the instruction ([`Fts::instr_of`]).
-        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
+        put(&mut b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
         b
     }
 
