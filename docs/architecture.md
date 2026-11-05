@@ -412,8 +412,8 @@ enforced by the Rust caller.
 | Kernel | Where | What | Decision |
 |---|---|---|---|
 | Terminator scans (`strlen`, `strnlen`, `rawmemchr`, every C-string conversion in `strz`) | `csys/src/machine/scan.S` | Aligned 32-byte (AVX2) or 16-byte (SSE2) loads that never cross a page; the path is chosen once from CPUID and XCR0 (`boundary::cpu`), SSE2 until then | D-4.14, D-4.24, D-4.21 |
-| Small copies and fills (`memcpy`, `memmove`, `memset` and fortified forms, up to 128 bytes) | `crates/boundary/src/hot.rs` | 16-byte blocks from both ends, every source byte loaded before the first store (so overlap needs no test); SSE2 only, one kernel for every CPU | D-4.22 |
-| Small compares (`memcmp`, `bcmp`, `__memcmpeq`, up to 64 bytes) | `crates/boundary/src/hot.rs` | the same treatment for compare | D-4.23 |
+| Small copies and fills (`memcpy`, `memmove`, `memset` and fortified forms, up to 128 bytes) | `crates/boundary/src/hot/mem.rs` | 16-byte blocks from both ends, every source byte loaded before the first store (so overlap needs no test); SSE2 only, one kernel for every CPU | D-4.22 |
+| Small compares (`memcmp`, `bcmp`, `__memcmpeq`, up to 64 bytes) | `crates/boundary/src/hot/mem.rs` | the same treatment for compare | D-4.23 |
 | Large copies | `csys/` machine class | ERMS (`rep movsb`) paths | D-4.14 |
 
 **Checks that remain.** For the scanners, Rust checks in constant time that the reported byte is
