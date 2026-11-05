@@ -497,10 +497,6 @@ struct Memo {
     slots: [MemoSlot; MEMO_SLOTS],
 }
 
-impl Memo {
-    const EMPTY: Memo = Memo { slots: [MemoSlot { char: 0, len: MEMO_UNUSED, bytes: [0; MEMO_BYTES] }; MEMO_SLOTS] };
-}
-
 /// The state a descriptor keeps between calls.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct State {
@@ -801,6 +797,13 @@ impl Conv {
         };
         Some(Conv { from: untag(ft, fc, charmap_at)?, to: untag(tt, tc, charmap_at)?, translit: flags & 1 != 0, ignore: flags & 2 != 0, state })
     }
+}
+
+// After `impl Conv` on purpose: an impl block's position in this module is part of its methods'
+// mangled names, and crates/libc-so/hot-text.list keys `Conv::convert` and `Conv::from_words`
+// by those names. An impl placed before `impl Conv` renames them and drops both from hot text.
+impl Memo {
+    const EMPTY: Memo = Memo { slots: [MemoSlot { char: 0, len: MEMO_UNUSED, bytes: [0; MEMO_BYTES] }; MEMO_SLOTS] };
 }
 
 fn tag(c: Codec) -> (usize, usize) {
