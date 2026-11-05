@@ -2563,11 +2563,29 @@ macro_rules! invtrig_nearest {
     )+};
 }
 
-/// `sqrtsd` for the kernels above (correctly rounded; they run in the default MXCSR). An
-/// out-of-line call to the machine layer; an inline form is a measured follow-up.
+/// `sqrtsd` for the kernels above (correctly rounded; they run in the default MXCSR), issued
+/// inline. The `core::arch` intrinsics are safe only inside a `#[target_feature]` function on
+/// the pinned compiler (a plain function, even with SSE2 in the target baseline, needs
+/// `unsafe`), so the root lives in one: the SSE2 lanes' upper half is `+0`, whose root is exact
+/// and raises nothing. LLVM inlines it into callers with at least SSE2 (every x86-64 function,
+/// and the FMA builds), so no call is left (the out-of-line `liella_machine_sqrtsd` cost a call,
+/// a return and the caller-saved XMM spills around it).
+#[target_feature(enable = "sse2")]
+#[inline]
+fn sqrtsd_sse2(x: f64) -> f64 {
+    use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_pd};
+    _mm_cvtsd_f64(_mm_sqrt_pd(_mm_set_sd(x)))
+}
+
+/// [`sqrtsd_sse2`] from a function without `#[target_feature]`.
 #[inline(always)]
 fn sqrtsd(x: f64) -> f64 {
-    crate::ffi::liella_machine_sqrtsd(x)
+    // UNSAFE(hot-kernel) SAFETY: the callee needs only SSE2, which the x86-64 baseline
+    // guarantees on every CPU this library runs on.
+    #[allow(unsafe_code)]
+    unsafe {
+        sqrtsd_sse2(x)
+    }
 }
 
 invtrig_nearest! {

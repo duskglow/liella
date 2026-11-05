@@ -171,3 +171,28 @@ fn double_atan2_hypot_fast_tier_is_the_accurate_path_and_rarely_falls_back() {
     }
     selftest::set_math_fma(false);
 }
+
+#[test]
+fn double_atan_fast_tier_table_agrees_with_the_multiprecision_atan() {
+    // Clauses: s10_3_c_0 (D-10.13). The accurate path reads the same `atan(j/64)` table as the
+    // kernel, so agreement with it cannot catch a wrong entry: here each entry's neighbourhood
+    // (operands within 1/128 of j/64) is checked against `mp::atan`, which uses no table,
+    // rounded to nearest: the Dekker kernel directly, and the exported entry in each build.
+    use liella_math::mp::{self, Mp};
+    let mut rng = Rng(0x51_7cc1_b727_220a);
+    for fma in builds() {
+        selftest::set_math_fma(fma);
+        for j in 1..=64u32 {
+            for _ in 0..16 {
+                let x = (f64::from(j) - 0.5 + (rng.next() >> 11) as f64 * 2f64.powi(-53)) / 64.0;
+                let want: f64 = mp::round::<f64>(mp::atan(Mp::from_f64(x)), Rounding::Nearest).0;
+                if let Some(v) = invtrig::atan_nearest(x) {
+                    assert_eq!(v.to_bits(), want.to_bits(), "atan({x:e}) = {v:e} near node {j}/64, multiprecision {want:e}: table entry FAILED");
+                }
+                let e = m::atan(x);
+                assert_eq!(e.to_bits(), want.to_bits(), "atan({x:e}) = {e:e} by the entry (fma {fma}) near node {j}/64, multiprecision {want:e}: table entry FAILED");
+            }
+        }
+    }
+    selftest::set_math_fma(false);
+}
