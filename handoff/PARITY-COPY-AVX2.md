@@ -1,52 +1,44 @@
-# PARITY-COPY-AVX2: handoff
+# PARITY-COPY-AVX2 (continued by PARITY-COPY-AVX2-2): handoff
 
-State: branch `task/parity-copy-avx2` from origin/next f8b77d70; code commit 1e8ffb15, docs/handoff commit on top. Role keke:~/w/r1
-(Zen 1, AVX2, no ERMS: every 257 B to 64 KiB copy runs the AVX2 kernel there, so it counts the kernel change directly).
+State: branch `task/parity-copy-avx2-2` (continues `task/parity-copy-avx2`), from origin/next f8b77d70. Code commit 1e8ffb15
+(AVX2 copy: held 128-byte end block); handoff/plants commits 9453c446, c0bff978; docs wording a86b97cb; this handoff on top.
+Role this run: kanon:~/w/kn1 (Broadwell-EP E5-2699 v4: AVX2 + ERMS, no FSRM, no AVX-512 -> `AVX2_ERMS_NARROW` window).
 
-## 1. The counter probe (done first)
-Probe: a static program running 100,000 `rep movsb` / `rep stosb` at n = 0, 1, 64, 1 KiB, 4 KiB, 16 KiB, 64 KiB under
-`perf stat -e instructions:u` (scratch, job label `parity-copy-avx2-repprobe` on mei, shiki, kotori). Result: 9.00 instructions
-per iteration at every size on Skylake-SP (mei), Haswell-EP (shiki) and Ivy Bridge (kotori): the rep op counts as ONE
-instruction on all three. The brief's Ivy Bridge hypothesis (each iteration counted) is wrong: Ivy Bridge memcpy_4k
-26.3 is the reference taking `rep movsb` at 4 KiB (count about 27) against Liella's SSE2 loop (718; `COPY_ERMS_MIN` 6144).
-Written to docs/benchmarks.md section 2a and register 03 (3 rows). Per-row rule (coordinator note): memcpy_4k (both
-classes), memcpy_64k (both), Haswell 16/64 KiB = rep rows -> cycles; memmove_4k, memcpy_64, memmove_64, 1 KiB -> instructions.
+## Done (both runs)
+1. Counter probe: `rep movsb`/`rep stosb` = ONE instruction on Skylake-SP, Haswell-EP, Ivy Bridge (docs/benchmarks.md 2a,
+   register 03). Ruling #3046 / owner 11-05: rep-string copy rows are judged by timing on a booked host (same-host ratio);
+   vector-vs-vector rows are gated on instructions, verdict from the timing sweep. a86b97cb aligns 2a and register row 9.
+2. Profile of a 1 KiB AVX2 copy (by reading, 170 vs 137 Haswell-EP): entry/dispatch 25-30; overlap/direction 15; alignment
+   setup 10; 128-byte loop 77; 32-byte tail loop 14 (the pure-overhead phase); ends 5.
+3. Change 1e8ffb15: each direction loads the 128-byte block at the end it runs towards before any store, stores it last;
+   the 32-byte loop is gone. Expected -9 per call at 32-aligned power-of-two sizes, +3 where n mod 128 is 1..32 past the
+   aligned start. Kernel contract n >= 128 (all production callers pass >= 128). SSE2 path untouched.
 
-## 2. Profile of a 1 KiB AVX2 copy (by reading the kernel; dst 32-aligned), 170 vs 137 on Haswell-EP
-Entry/dispatch (fold.S `.Lmove_big` -> `move_rest` -> `move_large`, `avx2_erms` window test): about 25-30.
-Kernel: overlap/direction tests 15, forward alignment setup 10, 128-byte loop 7 x 11 = 77, **32-byte tail loop 14** (2 vectors
-x 6 + exit 2, plus its `leaq`), ends 5. The tail loop is the one phase with a pure overhead surplus.
+## Jobs
+- keke:parity-copy-avx2-gate2: rc 0 (direct tier, clippy + static + affected --base origin/next) on tree 9453c446;
+  product identical to the final head (later commits touch handoff/ and docs/ only).
+- kanon:parity-copy-avx2-2-lint: rc 0 (cargo xtask clippy + static) on c0bff978. Static re-run in the foreground on the
+  role on a86b97cb: rc 0 (log kanon:~/work/parity-copy-avx2-2/static2.log; no jobrun possible, see below).
+- kanon:parity-copy-avx2-2-plants: rc 0, 6 plants, 6 CAUGHT, 0 SURVIVED, 0 WARN (handoff/PARITY-COPY-AVX2-plants.txt,
+  `cargo xtask plants`, dir /dev/shm/claude/parity-copy-avx2-2/plants-1).
+- Percall NOT MEASURED. kanon:parity-copy-avx2-2-percall rc 1: my command did not source ~/.cargo/env (`cargo: command
+  not found`). -percall2 and -percall3 have NO jobs.tsv row: the slot queue refused them, `slots: REFUSED ... only 14G free
+  on /home/claude's filesystem (floor 15G); free space first` (seen in percall3's jobrun stderr). kanon / is 48G, 14G free;
+  ~/wl/src holds 12G of cached trees from many runs (not mine except f8b77d70 57M and c0bff978 303M; ram-sweep does not
+  cover ~/wl). A CI job (ci-pre-65e1bc3aa, queued 19:10:33) vanished the same way. Every jobrun on kanon is blocked until
+  space is freed; I did not bypass the floor or delete others' caches.
+- Base f8b77d70 is now primed on BOTH kanon and keke (`~/wl/src/f8b77d70...`): the keke percall2 failure cause is fixed.
 
-## 3. Change (1e8ffb15)
-Each direction now loads the 128-byte block at the end it runs towards (forward: last 128; backward: first 128) before any
-store and stores it last; the 128-byte steps stop when <= 128 bytes are left, which always lie inside the held block. The 32-byte
-loop is gone. Expected: -9 per call where the loop ran 2 vectors (every 32-aligned power-of-two size), -15 with 3, -3 with 1,
-+3 with 0 (n mod 128 in 1..32 past the aligned start). Kernel contract n >= 64 -> n >= 128 (all production callers pass >= 128;
-selftest wrappers and the two AVX2 kernel tests follow; new size list AVX2_KERNEL_SIZES covers 128-289 at every 32-byte step).
-SSE2 path untouched (Ivy Bridge counts cannot move: the kernel never runs without AVX2).
-Not changed: memcpy_64/memmove_64 (one over; an AVX2 33-64 class needs the flag test on the shared entry: +2 on SSE2, register
-row 03); AVX2_COPY_END and the rep windows (D-4.14 is by cycles).
+## Next step (exact)
+1. On a host with >= 15G free (keke preferred: Zen 1, no ERMS, every 257 B-64 KiB copy runs the AVX2 kernel; or kanon
+   after its ~/wl/src cache is pruned), from the synced role:
+   `setsid nohup ~/bin/jobrun <story>-percall count -- sh -c '. ~/.cargo/env; cd ~/w/<role> && bash validation/wl_percall.sh --spec validation/percall/avx2_families.c --cases memcpy_16,...,memcpy_65536,memmove_16,...,memmove_65536 .' >/dev/null 2>&1 &`
+   (sizes 16 31 32 33 64 65 128 129 256 1024 4096 16384 65536). Judge base vs new: any ladder size that rises (129 and
+   other n mod 128 in 1..32 sizes are the risk) -> revert 1e8ffb15 and hand back DO NOT LAND with the data.
+2. Skylake-SP count of memmove_4k (436.8 vs 413.0; expect about 428) on a count job there.
+3. Timing of the kernel change on a booked AVX2 timing host (3 extra loads/stores at entry change the mix).
+4. 1 KiB still about 24 over after the change: profile the entry/dispatch chain (25-30) with wl_trace.sh.
 
-## Status at hand-back (checkpoint, 67 of 70 calls): INCOMPLETE
-- parity-copy-avx2-gate / -plants / -percall: SUPERSEDED. sync_role refused (BUSY: my own queued job held r1), so they ran
-  on the unchanged origin/next tree (gate rc 0 proves nothing; plants rc 3: file absent). Killed.
-- parity-copy-avx2-gate2 (tree bdf31629 = 9453c446; clippy + static ok, so + test -p liella ok when last read) and
-  parity-copy-avx2-percall2 (chained behind gate2) were RUNNING at hand-back on keke:~/w/r1.
-- parity-copy-avx2-plants2: REFUSED by the tool (a .S plant must name its `liella_machine_<fn>:` label). The file is fixed
-  in the next commit; NOT RE-RUN. Next: once gate2 and percall2 finish, sync r1 and run
-  `setsid nohup ~/bin/jobrun parity-copy-avx2-plants3 plants -- sh -c '. ~/.cargo/env; cd ~/w/r1 && cargo xtask plants handoff/PARITY-COPY-AVX2-plants.txt --dir /dev/shm/claude/parity-copy-avx2/plants-3 --timeout 600' >/dev/null 2>&1 &`
-- Process slip: one line of scan.S (the `n >= 64` contract comment) was edited with `sed -i`, against the rules; the
-  content is correct (reviewed in the diff).
-
-## Jobs (planned; see status above)
-parity-copy-avx2-gate (clippy + static + affected --base origin/next), parity-copy-avx2-plants (6 plants,
-handoff/PARITY-COPY-AVX2-plants.txt), parity-copy-avx2-percall (wl_percall default base = merge-base: before and after in
-one run; started behind the gate). Results: read `~/logs/<label>.log`; not seen by me at hand-back if still queued.
-NOT RUN: Skylake-SP `cargo xtask bench --compare --counters` (no role on that class; the dispatcher must give a count job)
-and the Ivy Bridge count (timing host, no building; SSE2 code unchanged by construction).
-
-## Open / next step
-1. Read the percall: 1 KiB / 4 KiB rows must drop about 9; check no ladder size rose. If a row rose, revert 1e8ffb15.
-2. Skylake-SP count of memmove_4k (436.8 vs 413.0 expected -> about 428) on a count job there.
-3. Cycle check of the kernel change on a booked AVX2 timing host (3 extra loads/stores at entry change the mix slightly).
-4. 1 KiB still about 24 over after this: the entry/dispatch chain (25-30) is the next phase to profile with wl_trace.sh.
+## Not to redo
+The rep-string probe; the plants (6/6 CAUGHT on c0bff978's code); gate2 (product unchanged since).
+Process slip (run 1): one line of scan.S was edited with `sed -i`; content reviewed, correct.

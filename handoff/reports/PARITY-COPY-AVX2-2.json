@@ -1,0 +1,12 @@
+{"task": "PARITY-COPY-AVX2-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: plants 6/6 CAUGHT, gate2 green, docs aligned with ruling #3046; percall not measured: kanon slot queue refuses every job (14G free on /home, floor 15G)",
+ "branch": "task/parity-copy-avx2-2", "head": null,
+ "gate": {"affected": "keke:parity-copy-avx2-gate2 rc 0 (product identical to head); kanon lint rc 0; plants 6 CAUGHT / 0 SURVIVED", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "kanon / has 14G free, below the slot queue's 15G floor; ~/wl/src caches 12G of other runs' trees (ram-sweep does not cover ~/wl); every jobrun there is refused, a CI ci-pre job included", "recommendation": "prune old ~/wl/src/<sha> trees on kanon (owner or an ops tool), or admit the continuation on keke (base f8b77d70 primed there; Zen 1 runs every copy size on the AVX2 kernel)"}],
+ "informational": ["jobrun writes no jobs.tsv row when slots refuses a job, and the brief's >/dev/null 2>&1 hides the refusal: jobwait reports 'still running' indefinitely (percall2, percall3, ci-pre-65e1bc3aa)", "parity-copy-avx2-2-percall rc 1 was my command missing '. ~/.cargo/env'"],
+ "refused": [],
+ "jobs": ["kanon:parity-copy-avx2-2-lint", "kanon:parity-copy-avx2-2-plants", "keke:parity-copy-avx2-gate2"],
+ "improvement": "jobrun should append a jobs.tsv row (rc 75-style) when the slot queue refuses a job, so a refusal is visible to jobwait and the dispatcher instead of a silent never-ending 'still running'",
+ "next_step": "run the memcpy/memmove ladder percall (avx2_families.c) on a host with disk above the floor (keke preferred); revert 1e8ffb15 if any size rises",
+ "report_file": "handoff/PARITY-COPY-AVX2.md"}
