@@ -1,0 +1,7 @@
+{"task": "ENOMEM-REALPATH-INTERMITTENT", "model": "opus", "tokens": null, "result": "WIP: failing check located (process-wide uordblks in the exports-interposed nextest pass; per-thread live_bytes passed); 0/300 and 0/2000 (loaded) on 1-node kanon; keke 2-node debug loop queued; cause not proven, no fix", "branch": "task/enomem-realpath-intermittent", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["erpi-loop0", "erpi-loop1", "erpi-k1 (cancelled while queued)", "erpi-kdbg (queued on keke, detached)"],
+ "rulings": [], "informational": ["kanon 1 NUMA node: no repro under 2x CPU oversubscription; keke/mei (2 nodes) needed", "~/bin/kill-label is a dry run without --kill"], "refused": [],
+ "improvement": "Story-loop jobs queue behind gates on keke: a short probe slot (or running repro loops on the dispatched role host when it has the topology) would have given the cause within this budget",
+ "next_step": "Read erpi-kdbg on keke (re-attach command in the handoff), then fix the proven cause per the handoff",
+ "report_file": "handoff/ENOMEM-REALPATH-INTERMITTENT.md"}
