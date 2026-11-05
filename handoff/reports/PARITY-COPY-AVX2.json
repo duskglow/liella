@@ -1,11 +1,33 @@
-{"task": "PARITY-COPY-AVX2", "model": "opus", "tokens": null,
- "result": "rep movsb/stosb counts as one instruction on Skylake-SP, Haswell-EP and Ivy Bridge (probe; docs 2a, register 03); AVX2 copy's 32-byte tail loop replaced by a held 128-byte end block (-9 instr expected at aligned power-of-two sizes); jobs queued at hand-back",
- "branch": "task/parity-copy-avx2", "head": null,
- "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
- "rulings": [{"item": "copy rows with rep movsb on either side are judged in cycles", "recommendation": "adopt the coordinator's provisional rule: the probe shows the counter counts one rep op as one instruction on all three classes"}],
- "informational": ["Ivy Bridge memcpy_4k 26.3 is a dispatch difference (reference rep movsb at 4 KiB vs Liella SSE2 below COPY_ERMS_MIN 6144), not a counter artefact", "Skylake-SP and Ivy Bridge count jobs not run (no role on Skylake-SP; Ivy Bridge hosts are timing hosts)"],
+{
+ "task": "PARITY-COPY-AVX2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: rep movsb/stosb counts as one instruction on Skylake-SP, Haswell-EP and Ivy Bridge (probe; docs 2a, register 03); AVX2 copy's 32-byte tail loop replaced by a held 128-byte end block (-9 instr expected at aligned power-of-two sizes); gate2/percall2 running, plants not re-run (tool refused the first file; fixed)",
+ "branch": "task/parity-copy-avx2",
+ "head": null,
+ "gate": {
+  "affected": null,
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "copy rows with rep movsb on either side are judged in cycles",
+   "recommendation": "adopt the coordinator's provisional rule: the probe shows the counter counts one rep op as one instruction on all three classes"
+  }
+ ],
+ "informational": [
+  "Ivy Bridge memcpy_4k 26.3 is a dispatch difference (reference rep movsb at 4 KiB vs Liella SSE2 below COPY_ERMS_MIN 6144), not a counter artefact",
+  "Skylake-SP and Ivy Bridge count jobs not run (no role on Skylake-SP; Ivy Bridge hosts are timing hosts)",
+  "first gate/plants/percall ran on the unsynced origin/next tree (sync_role BUSY on my own queued job): superseded",
+  "one scan.S comment line was edited with sed -i against the rules"
+ ],
  "refused": [],
  "improvement": "a role on each counter class (Skylake-SP, Ivy Bridge build copy) would let one story run its own before/after counts",
- "next_step": "read parity-copy-avx2-percall: revert 1e8ffb15 if any ladder size rose; Skylake-SP count of memmove_4k",
+ "next_step": "after gate2/percall2: sync r1, run plants3 (command in handoff), read percall2; revert 1e8ffb15 if a ladder size rose",
  "report_file": "handoff/PARITY-COPY-AVX2.md",
- "jobs": ["parity-copy-avx2-gate", "parity-copy-avx2-plants", "parity-copy-avx2-percall"]}
+ "jobs": [
+  "parity-copy-avx2-gate2",
+  "parity-copy-avx2-percall2"
+ ]
+}

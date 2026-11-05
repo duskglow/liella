@@ -27,7 +27,18 @@ SSE2 path untouched (Ivy Bridge counts cannot move: the kernel never runs withou
 Not changed: memcpy_64/memmove_64 (one over; an AVX2 33-64 class needs the flag test on the shared entry: +2 on SSE2, register
 row 03); AVX2_COPY_END and the rep windows (D-4.14 is by cycles).
 
-## Jobs (keke unless noted)
+## Status at hand-back (checkpoint, 67 of 70 calls): INCOMPLETE
+- parity-copy-avx2-gate / -plants / -percall: SUPERSEDED. sync_role refused (BUSY: my own queued job held r1), so they ran
+  on the unchanged origin/next tree (gate rc 0 proves nothing; plants rc 3: file absent). Killed.
+- parity-copy-avx2-gate2 (tree bdf31629 = 9453c446; clippy + static ok, so + test -p liella ok when last read) and
+  parity-copy-avx2-percall2 (chained behind gate2) were RUNNING at hand-back on keke:~/w/r1.
+- parity-copy-avx2-plants2: REFUSED by the tool (a .S plant must name its `liella_machine_<fn>:` label). The file is fixed
+  in the next commit; NOT RE-RUN. Next: once gate2 and percall2 finish, sync r1 and run
+  `setsid nohup ~/bin/jobrun parity-copy-avx2-plants3 plants -- sh -c '. ~/.cargo/env; cd ~/w/r1 && cargo xtask plants handoff/PARITY-COPY-AVX2-plants.txt --dir /dev/shm/claude/parity-copy-avx2/plants-3 --timeout 600' >/dev/null 2>&1 &`
+- Process slip: one line of scan.S (the `n >= 64` contract comment) was edited with `sed -i`, against the rules; the
+  content is correct (reviewed in the diff).
+
+## Jobs (planned; see status above)
 parity-copy-avx2-gate (clippy + static + affected --base origin/next), parity-copy-avx2-plants (6 plants,
 handoff/PARITY-COPY-AVX2-plants.txt), parity-copy-avx2-percall (wl_percall default base = merge-base: before and after in
 one run; started behind the gate). Results: read `~/logs/<label>.log`; not seen by me at hand-back if still queued.
