@@ -39,7 +39,7 @@ use crate::status::{Flags, Rounding, Status};
 /// The 384-bit evaluation: the form of every result of a wider format and the retry step of the
 /// narrow one.
 mod slow {
-    #![allow(dead_code)] // `sincos` is the dispatching one below
+    #![allow(dead_code, unreachable_pub)] // `sincos` is the dispatching one below; the public items of the included code
     use crate::elem;
     use crate::float::{self, Exact, Float, Kind, Num};
     use crate::fused;

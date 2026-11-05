@@ -65,14 +65,16 @@ fn pack(neg: bool, exp: i64, w: &[u64]) -> Mp {
     let Some(top) = (0..n).rev().find(|&i| w[i] != 0) else {
         return Mp::ZERO;
     };
-    let lz = (n - 1 - top) as i64 * 64 + i64::from(w[top].leading_zeros());
-    // The bit at position (64n - 1 - lz) becomes the top bit; take 384 bits below it.
-    let hi_bit = 64 * n as i64 - 1 - lz;
+    let sh = w[top].leading_zeros();
+    let lz = (n - 1 - top) as i64 * 64 + i64::from(sh);
+    // The bit at position (64n - 1 - lz) becomes the top bit; take BITS bits from it down.
+    // Result limb i is the funnel shift of source words `q` and `q − 1` left by `sh`, where
+    // `q = top + 1 − LIMBS + i` (a word below the first is zero).
+    let word = |q: isize| usize::try_from(q).ok().and_then(|q| w.get(q)).copied().unwrap_or(0);
     let mut m = [0u64; LIMBS];
     for (i, limb) in m.iter_mut().enumerate() {
-        // Result bit range [64i, 64i + 64) maps to source bits [lo, lo + 64).
-        let lo = hi_bit - BITS + 1 + 64 * i as i64;
-        *limb = bits_at(w, lo);
+        let q = top as isize + 1 - LIMBS as isize + i as isize;
+        *limb = if sh == 0 { word(q) } else { (word(q) << sh) | (word(q - 1) >> (64 - sh)) };
     }
     Mp { neg, exp: exp - lz, m }
 }
@@ -241,6 +243,20 @@ impl Mp {
         }
         // (m · 2^64) / k, one extra limb of quotient below.
         let mut w = [0u64; LIMBS + 1];
+        if let Ok(k32) = u32::try_from(k) {
+            // A divisor below 2^32 (the series terms): each 32-bit half of a limb is one
+            // division of a 64-bit value, the same quotient and remainder as the 128-bit one.
+            let (k, mut rem) = (u64::from(k32), 0u64);
+            for i in (0..=LIMBS).rev() {
+                let limb = if i == 0 { 0 } else { self.m[i - 1] };
+                let cur = (rem << 32) | (limb >> 32);
+                let (qh, r1) = (cur / k, cur % k);
+                let cur = (r1 << 32) | (limb & 0xffff_ffff);
+                w[i] = (qh << 32) | (cur / k);
+                rem = cur % k;
+            }
+            return pack(self.neg, self.exp, &w);
+        }
         let mut rem = 0u128;
         for i in (0..=LIMBS).rev() {
             let limb = if i == 0 { 0 } else { self.m[i - 1] };
