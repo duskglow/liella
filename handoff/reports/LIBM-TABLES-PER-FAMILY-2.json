@@ -1,0 +1,12 @@
+{"task": "LIBM-TABLES-PER-FAMILY-2", "model": "opus", "tokens": null,
+ "result": "origin/next merged; next's hyperbolic sqrt kernels and entries moved into fast32/hyperbolic.rs by rerunning the split script (pure move, proven); tables regenerate byte-identical; libc.so.6 .text identical base vs head; 2 freshness plants CAUGHT",
+ "branch": "task/libm-tables-per-family-2", "head": "see git log (code head 1726199a)",
+ "gate": {"affected": "FULL gate libm-tables-per-family-2-gate running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cbench_libm counters over identical .text vary -0.11%..+0.06% between two builds (44 of 169 rows equal): the Liella instruction column is not bit-reproducible run to run, so 'counts identical' is proven by the .text comparison, not the bench numbers"],
+ "refused": [],
+ "improvement": "the split script now finds its anchors by content, not line numbers, so a later next merge can rerun it unchanged; a bench counter that is not reproducible over identical code makes 'counts identical' unprovable from counts alone",
+ "next_step": "none required; optional: split fast32/tests.rs per family",
+ "report_file": "handoff/libm-tables-per-family.md",
+ "jobs": ["libm-tables-per-family-2-check", "libm-tables-per-family-2-plants", "libm-tables-per-family-2-codecmp", "libm-tables-per-family-2-gate"]}
