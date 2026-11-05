@@ -108,7 +108,7 @@ fn hard_operands(f: usize) -> Vec<f64> {
 #[test]
 fn double_bessel_fast_tier_rounds_correctly_and_rarely_falls_back() {
     // Clauses: s10_3_c_0 (D-10.13).
-    for (name, fast, entry, _) in FUNCS {
+    for (name, _, entry, _) in FUNCS {
         let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ name.as_bytes()[1] as u64);
         let before = stats::counts(name);
         for n in 0..100_000u32 {
@@ -185,5 +185,5 @@ fn double_bessel_kernels_stay_within_their_bounds() {
             worst[f] = worst[f].max(r);
         }
     }
-    eprintln!("worst error over bound: {worst:.3e?}");
+    eprintln!("worst error over bound: {worst:?}");
 }
