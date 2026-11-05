@@ -22,3 +22,7 @@ sqrtf_floor 10.0/10.0 (1.00).
 Not redo: the port, the paragraph. Next step: none for this story. The reduction rows (12 to 20x glibc) and the
 sin/cos/powf typical rows are the largest float-math gaps in instructions; a follow-up story could target them.
 Jobs: math-m6-f32-bench-2-r-lint2 (static + clippy, rc 0), math-m6-f32-bench-2-r-percall2 (rc 0).
+
+## Continuation MATH-M6-F32-BENCH-2-R-2
+Merged origin/next. The only conflict was validation/wl_percall_run.sh: next had made the same change (prefer the cached tree liella-cc), so the merge keeps that code and one comment with both reasons. Reran on kanon at e6c51e6d5 with --base none (no library change; the old base was not cached on that host): the 17 float percall rows are the same as above, all check ok. Gate (affected) rc 0, clippy -D warnings and cargo xtask static clean.
+Jobs: math-m6-f32-bench-2-r-2-gate, math-m6-f32-bench-2-r-2-percall3 (earlier: -percall rc 2 base not cached; -percall2 rc 1 cargo not on PATH in job; both superseded).
