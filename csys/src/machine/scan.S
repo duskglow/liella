@@ -4607,15 +4607,21 @@ liella_machine_fill_avx2:
 	leaq -128(%r9), %r10			/* the last 128 bytes start here (n >= 128: not below dst) */
 	cmpq %r10, %rcx
 	ja .Lfill_ends
+	/* MEMSET-4K-LOOP: k = (r10 - rcx) / 128 + 1 whole steps; r11 = the end of the last one, rcx the
+	 * negative offset -128 * k from it, so the loop counts rcx up to zero (one add, one branch). */
+	movq %r10, %r11
+	subq %rcx, %r11
+	andq $-128, %r11
+	leaq 128(%rcx,%r11), %r11
+	subq %r11, %rcx
 	.p2align 4
-.Lfill_128:					/* while a whole step ends at or before the end */
-	vmovdqa %ymm0, (%rcx)
-	vmovdqa %ymm0, 32(%rcx)
-	vmovdqa %ymm0, 64(%rcx)
-	vmovdqa %ymm0, 96(%rcx)
-	subq $-128, %rcx
-	cmpq %r10, %rcx
-	jbe .Lfill_128
+.Lfill_128:					/* the whole steps, 128 bytes at r11 + rcx each */
+	vmovdqa %ymm0, (%r11,%rcx)
+	vmovdqa %ymm0, 32(%r11,%rcx)
+	vmovdqa %ymm0, 64(%r11,%rcx)
+	vmovdqa %ymm0, 96(%r11,%rcx)
+	addq $128, %rcx
+	jnz .Lfill_128
 .Lfill_ends:					/* fewer than 128 bytes left from rcx: the last 128 */
 	vmovdqu %ymm0, (%r10)
 	vmovdqu %ymm0, 32(%r10)

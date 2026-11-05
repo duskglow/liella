@@ -712,6 +712,20 @@ pub(crate) unsafe fn fill_rest(d: *mut c_void, c: c_int, n: usize) -> *mut c_voi
     unsafe { fill_large(d, c, n) }
 }
 
+/// The fill entry's sizes above 256 (MEMSET-4K-LOOP): [`fill_rest`] without the fold decision and
+/// the small classes, which only sizes of 64 bytes and fewer need.
+///
+/// # Safety
+/// `d` is valid for writing `n` bytes (the `memset` contract), `256 < n`.
+// UNSAFE(hot-kernel): the validated entry to the large fills.
+#[allow(unsafe_code)]
+#[inline(always)]
+pub(crate) unsafe fn fill_big(d: *mut c_void, c: c_int, n: usize) -> *mut c_void {
+    // UNSAFE(hot-kernel) SAFETY: the function's contract (SMALL_MAX < n).
+    #[allow(unsafe_code)]
+    unsafe { fill_large(d, conv::byte(c), n) }
+}
+
 /// `memset`: `n` bytes at `d` set to `c`; returns `d`. NULL with `n > 0` is the `EFAULT` abort,
 /// or with NULL folding for `1 <= n <= 64` the page-zero fault, as for [`move_bytes`].
 ///

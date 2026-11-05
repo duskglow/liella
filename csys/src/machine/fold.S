@@ -28,6 +28,7 @@
 	.section .text.liella_machine_memmove,"ax",@progbits
 	.hidden liella_hot_move_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.hidden liella_hot_fill_rest
+	.hidden liella_hot_fill_large
 
 /* void *liella_machine_memmove(void *d, const void *s, size_t n): 129-256 (not folded, see
  * .Lmove_big) four 32-byte blocks from each end (AVX2) or eight 16-byte ones (SSE2), 65-128 two
@@ -353,7 +354,7 @@ memset:
 	ret
 .Lset_129:
 	cmpq $191, %rcx
-	ja liella_hot_fill_rest
+	ja .Lset_out				/* n < 65 (the wrapped compare) with folding off, or n > 256 */
 	testq %rdi, %rdi
 	jz liella_hot_fill_rest
 	cmpb $0, liella_machine_avx2(%rip)
@@ -392,6 +393,12 @@ memset:
 	movups %xmm0, -32(%rdi,%rdx)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
+.Lset_out:					/* MEMSET-4K-LOOP: above 256 the large-fill choice at once; else the rest path */
+	cmpq $256, %rdx
+	jbe .Lset_rest
+	jmp liella_hot_fill_large
+.Lset_rest:
+	jmp liella_hot_fill_rest
 #ifdef LIELLA_EXPORT
 	.size memset, .-memset
 #endif

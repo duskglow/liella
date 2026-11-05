@@ -66,6 +66,7 @@ build() { # variant -> binary path on stdout (built under a temporary name, then
             [ -f "$W/products/$v/libc.a" ] || { echo "wl_percall: no products for $v" >&2; exit 1; }
             # The cached tree's own wrapper matches the products being linked; ~/liella-test (an old copy on some
             # hosts) predates -lm handling and leaves math specs with undefined references.
+            # The cached tree's own wrapper first: a stale ~/liella-test wrapper drops -lm, so math specs fail to link.
             lcc=$W/src/$v/scripts/liella-cc
             [ -x "$lcc" ] || lcc=$HOME/liella-test/scripts/liella-cc
             # -lm as for glibc: liella-cc links Liella's libm.a (math specs) only when -lm is given.
