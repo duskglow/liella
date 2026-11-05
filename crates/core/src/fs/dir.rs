@@ -301,6 +301,36 @@ impl DirStream {
         rec.get(..rec.iter().position(|&b| b == 0).map_or(0, |n| n.saturating_add(1))).unwrap_or(&[])
     }
 
+    /// The next entry's `d_type` and its name with terminator, for a caller that only copies
+    /// names out (a tree walk's listing): one pass over the record, no [`Entry`] built, the name
+    /// scanned once. `EIO` for a record without a terminated name (the kernel never makes one).
+    pub fn next_named<S: Sys>(&mut self, sys: &S) -> Result<Option<(u8, &[u8])>> {
+        loop {
+            if self.pos < self.len {
+                break;
+            }
+            if !self.refill(sys)? {
+                return Ok(None);
+            }
+        }
+        let (pos, len, base, cap) = (self.pos, self.len, self.base, self.cap);
+        let area = self.buf.get(base..base.saturating_add(cap)).unwrap_or(&[]);
+        let rec = area.get(pos..len).ok_or(Errno::EIO)?;
+        let reclen = field::<2>(rec, D_RECLEN).map(u16::from_ne_bytes).ok_or(Errno::EIO)?;
+        let n = usize::from(reclen);
+        if n <= D_NAME || n > rec.len() {
+            return Err(Errno::EIO);
+        }
+        let kind = rec.get(D_TYPE).copied().ok_or(Errno::EIO)?;
+        let off = field::<8>(rec, D_OFF).map(i64::from_ne_bytes).ok_or(Errno::EIO)?;
+        let tail = rec.get(D_NAME..n).ok_or(Errno::EIO)?;
+        let end = tail.iter().position(|&b| b == 0).ok_or(Errno::EIO)?;
+        let namez = tail.get(..end.saturating_add(1)).ok_or(Errno::EIO)?;
+        self.pos = pos.saturating_add(n);
+        self.offset = off;
+        Ok(Some((kind, namez)))
+    }
+
     /// The address of `e`'s record, which stays valid until the stream reads again (a C
     /// caller's `struct dirent *`).
     pub fn record_addr(&self, e: &Entry) -> usize {
@@ -343,6 +373,11 @@ impl DirStream {
     /// Give up the stream, keeping its descriptor open.
     pub fn into_fd(self) -> Fd {
         self.fd
+    }
+
+    /// [`into_fd`](Self::into_fd), handing back the buffer for a later stream.
+    pub fn into_fd_keep(self) -> (Fd, TryVec<u8>) {
+        (self.fd, self.buf)
     }
 }
 

@@ -68,21 +68,28 @@ impl Listing {
 /// Read the directory open at `fd` from its current position to the end (`.` and `..` only if
 /// `dots`). The descriptor stays open.
 pub fn list<S: Sys>(sys: &S, fd: Fd, dots: bool) -> Result<Listing> {
-    let mut d = DirStream::with_fd(fd, LIST_BUFFER, 0)?;
+    list_reusing(sys, fd, dots, &mut None)
+}
+
+/// [`list`] on the directory buffer in `spare` when it holds one (left there again afterwards):
+/// a walk lists many directories and then allocates and clears one buffer, not one per directory.
+pub fn list_reusing<S: Sys>(sys: &S, fd: Fd, dots: bool, spare: &mut Option<TryVec<u8>>) -> Result<Listing> {
+    let mut d = DirStream::with_fd_reusing(fd, LIST_BUFFER, 0, spare.take())?;
     let mut out = Listing { bytes: TryVec::with_capacity(256)?, items: TryVec::with_capacity(16)? };
     let r = (|| -> Result<()> {
-        while let Some(e) = d.next(sys)? {
-            let name = d.name(&e);
-            if !dots && (name == b"." || name == b"..") {
+        while let Some((kind, namez)) = d.next_named(sys)? {
+            let len = namez.len().saturating_sub(1);
+            if !dots && (namez == b".\0" || namez == b"..\0") {
                 continue;
             }
             let start = out.bytes.len();
-            out.bytes.extend_from_slice(d.name_z(&e))?;
-            out.items.push(Item { start, len: name.len(), kind: e.kind })?;
+            out.bytes.extend_from_slice(namez)?;
+            out.items.push(Item { start, len, kind })?;
         }
         Ok(())
     })();
-    let _ = d.into_fd();
+    let (_, buf) = d.into_fd_keep();
+    *spare = Some(buf);
     r.map(|()| out)
 }
 
@@ -449,9 +456,9 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     if let Action::Stop(v) = f(Event::Enter(fd))? {
         return Ok(v);
     }
-    let listing = list(sys, fd, false)?;
+    let mut spare: Option<TryVec<u8>> = None;
+    let listing = list_reusing(sys, fd, false, &mut spare)?;
     let mut frames: TryVec<Frame> = TryVec::with_capacity(16)?;
-    let mut namebuf: TryVec<u8> = TryVec::with_capacity(256)?;
     let mut cbuf = Stat::default();
     frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false })?;
     while let Some(top) = frames.len().checked_sub(1) {
@@ -459,17 +466,12 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
         if !frame.skip && frame.next < frame.listing.len() {
             let Some((namez, _)) = frame.listing.get(frame.next) else { break };
             frame.next = frame.next.saturating_add(1);
-            // One buffer for every entry's name: the listing is borrowed from `frames`, which the
-            // body below changes, so the name is copied, but not into a fresh allocation each time.
-            namebuf.truncate(0);
-            namebuf.extend_from_slice(namez)?;
-            let namez = &namebuf;
             let name = namez.get(..namez.len().saturating_sub(1)).unwrap_or(&[]);
             let level = frame.level.saturating_add(1);
             let (dir_level, path_len) = (frame.level, frame.path_len);
             let base = set_path(&mut path, path_len, name)?;
             let dir = levels.fd(sys, dir_level)?;
-            let (kind, has) = examine(sys, dir, KStr::from_nul_terminated(namez)?, opt.physical, &mut cbuf)?;
+            let (kind, has) = examine(sys, dir, KStr::from_nul_free_terminated(namez)?, opt.physical, &mut cbuf)?;
             let cst = if has { Some(&cbuf) } else { None };
             if opt.mount && cst.is_some_and(|s| s.dev != root_dev) {
                 continue;
@@ -506,7 +508,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                         if let Action::Stop(v) = f(Event::Enter(cfd))? {
                             return Ok(v);
                         }
-                        let listing = list(sys, cfd, false)?;
+                        let listing = list_reusing(sys, cfd, false, &mut spare)?;
                         let path_len = path.len().saturating_sub(1);
                         frames.push(Frame { listing, next: 0, path_len, base, level, stat: *cst, skip: false })?;
                         Action::Continue
