@@ -736,7 +736,11 @@ fn s18_4_c_1() {
     let sub = d.join("sub");
     let canon = std::fs::canonicalize(&sub).unwrap();
     keep_from_children(&[5, 6, 7, 8, 9, 12]);
-    let fds = "for f in 5 6 7 8 9 12; do [ -e /proc/$$/fd/$f ] && echo R:open $f; done; echo R:cwd $(pwd -P)";
+    // The child reports only descriptors that name the two things this test hands it (the
+    // `insub` file, the `sub` directory). A `popen` stream another test holds open in this
+    // process is inherited by every spawn (no `e` mode, no close-on-exec, by design) and can sit
+    // on any of these numbers for a moment; such a descriptor is not this test's to judge.
+    let fds = "for f in 5 6 7 8 9 12; do case $(readlink /proc/$$/fd/$f) in */actions/sub|*/actions/sub/insub) echo R:open $f;; esac; done; echo R:cwd $(pwd -P)";
     let (r, out, st) = run_sh(
         fds,
         |fa| {
