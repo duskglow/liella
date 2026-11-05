@@ -17,7 +17,7 @@ State: branch task/perf-libm-trig, code head 50b70a90 (in-place round-to-nearest
 - No docs/saturation row yet for rows above 1.05x (needs the counts and the per-phase floor).
 
 ## Jobs (keke, role n3; scripts in ~/work/perf-libm-trig/)
-perf-libm-trig-counts0 (before = RAM copy of origin/next, after = role), perf-libm-trig-plants, perf-libm-trig-gate (starts after the counts finish).
+perf-libm-trig-counts0 (before = RAM copy of origin/next, after = role), perf-libm-trig-plants, NOT started: the gate (script ~/work/perf-libm-trig/gate.sh: clippy, static, affected; run it with jobrun label perf-libm-trig-gate after counts-after.log shows rc=, since the counts build in the role). The new unit tests passed on keke before the last two commits (4 passed); the boundary test math_trig_in_place_entry_matches_the_envelope has NOT been run yet.
 
 ## Next step
 Read counts-after.log; if sin/cos f64 still > 1.05x, do the f64 kernel work (reduction for |x| < pi/4 without double-double, Estrin polynomial, FMA dispatch with bit-identical
