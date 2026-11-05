@@ -13,7 +13,7 @@
 //! `true` only while the CPU has AVX2 and the OS saves the YMM state, which [`select`]'s callers
 //! establish (`cpu::init_with` from `liella_rt::cpu::Features`; `selftest` refuses otherwise).
 
-use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
 
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -31,20 +31,69 @@ pub(crate) fn avx2() -> bool {
 }
 
 /// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.25):
-/// the same mechanism as [`avx2`] (one byte decided at startup, `false` until then), read only
-/// by Rust (`hot::exp_nearest`, `hot::log_nearest`), so it lives here rather than in fold.S.
-static FMA: AtomicBool = AtomicBool::new(false);
+/// the same mechanism as [`avx2`] (one byte, read only by Rust: `hot::exp_nearest`,
+/// `hot::log_nearest`, so it lives here rather than in fold.S). [`FMA_OFF`] (the baseline) or
+/// [`FMA_ON`]; in the libm product it starts [`FMA_UNDECIDED`] (D-NEW, #2920): `libm.a` and
+/// `libm.so.6` link their own copy of this crate, whose byte the C library's startup
+/// (`cpu::init_with`) never writes, so the first math call there decides it ([`decide_fma`]).
+static FMA: AtomicU8 = AtomicU8::new(if cfg!(feature = "libm") { FMA_UNDECIDED } else { FMA_OFF });
+const FMA_OFF: u8 = 0;
+const FMA_ON: u8 = 1;
+#[cfg_attr(not(feature = "libm"), allow(dead_code))]
+const FMA_UNDECIDED: u8 = 2;
 
-/// Whether the math kernels run their FMA builds.
+/// Whether the math kernels run their FMA builds: one load and one test once decided.
 #[inline(always)]
 pub(crate) fn fma() -> bool {
-    FMA.load(Relaxed)
+    let v = FMA.load(Relaxed);
+    if v == FMA_ON {
+        return true;
+    }
+    #[cfg(feature = "libm")]
+    if v == FMA_UNDECIDED {
+        return decide_fma();
+    }
+    false
+}
+
+/// The libm product's decision (D-NEW), made by its first math call: the C library's startup
+/// rule ([`fma_wanted`]) on the CPU's features and the `GLIBC_TUNABLES` text the C library hands
+/// out through `secure_getenv` (NULL in a secure program, where `Tunables::parse` honours nothing
+/// either). Racing first callers store the same byte.
+#[cfg(feature = "libm")]
+#[cold]
+#[inline(never)]
+fn decide_fma() -> bool {
+    // UNSAFE(extern): Rust cannot call C library functions without declaring them. Sound for
+    // every NUL-terminated name; the result is NULL or the variable's NUL-terminated value.
+    #[allow(unsafe_code)]
+    unsafe extern "C" {
+        safe fn secure_getenv(name: *const i8) -> *const i8;
+    }
+    let p = secure_getenv(c"GLIBC_TUNABLES".as_ptr());
+    let text: &[u8] = if p.is_null() {
+        &[]
+    } else {
+        // UNSAFE(slice) SAFETY: `secure_getenv` returned a non-NULL pointer to the variable's
+        // NUL-terminated value; it is read once, here, before any other call.
+        #[allow(unsafe_code)]
+        unsafe { crate::strz::strz(p) }.unwrap_or(&[])
+    };
+    let on = fma_wanted(&crate::cpu::features_cached(), &liella::config::Tunables::parse(text, false));
+    FMA.store(if on { FMA_ON } else { FMA_OFF }, Relaxed);
+    on
+}
+
+/// The FMA builds' rule (D-10.25): the CPU has FMA with the AVX state the OS saves
+/// (`liella_rt::cpu::Features::fma`), and `glibc.cpu.hwcaps=-FMA` does not keep the baseline.
+pub(crate) fn fma_wanted(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) -> bool {
+    f.fma() && t.fma.unwrap_or(true)
 }
 
 /// Select the math kernels' builds. `true` only when the CPU has FMA and the OS saves the AVX
 /// state (`liella_rt::cpu::Features::fma`); both builds return the same results.
 pub(crate) fn select_fma(fma: bool) {
-    FMA.store(fma, Relaxed);
+    FMA.store(if fma { FMA_ON } else { FMA_OFF }, Relaxed);
 }
 
 /// Select the kernels' builds. `true` only when the CPU has AVX2 and the OS saves the YMM state
