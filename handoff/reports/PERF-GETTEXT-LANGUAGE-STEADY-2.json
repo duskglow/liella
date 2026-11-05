@@ -1,0 +1,13 @@
+{"task": "PERF-GETTEXT-LANGUAGE-STEADY-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: merged origin/next (back-out landed; branch = next + gettext percall spec + docs, no Rust), per-phase traces on Zen 1: found 621, steady 727 (+106 LANGUAGE), ngettext 724; no library change; percall base-vs-head for #2896 still queued",
+ "branch": "task/perf-gettext-language-steady-2", "head": null,
+ "gate": {"affected": "0 passed / 0 failed (0 of 233 targets selected: no code differs from next); clippy -D warnings and xtask static rc 0", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#2896 ngettext_found +3 per call", "recommendation": "the +3 is now next's code (the landed back-out), not this branch; read keke:perf-gettext-language-steady-2-percall2 (base 3d7e667a vs head) and fold any real delta into the shared-path story"}],
+ "informational": ["wl_trace.sh refuses a primed ~/wl/src/<sha> as <dir> (no .synced, no .git), so a base trace from a role host has no route; wl_trace --list I-lines did not appear in the jobrun log",
+                   "my first percall job died before starting: jobrun runs in the foreground and I had started it in an ssh call I later stopped"],
+ "refused": [],
+ "jobs": ["keke:perf-gettext-language-steady-2-gate", "keke:perf-gettext-language-steady-2-trace-head", "keke:perf-gettext-language-steady-2-trace-steady", "keke:perf-gettext-language-steady-2-trace-found", "keke:perf-gettext-language-steady-2-percall2"],
+ "improvement": "wl_trace.sh should accept --rev <sha> with the primed ~/wl/src/<sha> (as wl_percall --base does), so base-vs-head traces need no git tree on the host",
+ "next_step": "shared found path: Resolution::matches 70 i on an address-matched key, then the 86 i between matches and hit in translate, then hit 147",
+ "report_file": "handoff/perf-gettext-language-steady.md"}

@@ -1,44 +1,50 @@
-# PERF-GETTEXT-LANGUAGE-STEADY (branch task/perf-gettext-language-steady, role mei:~/w/s1)
+# PERF-GETTEXT-LANGUAGE-STEADY(-2) (branch task/perf-gettext-language-steady-2, role keke:~/w/r1)
 
-State: DO NOT LAND pending a ruling. Code head 123dfe88 (proven by the jobs below); a docs commit on top (this note, register
-row 14 "Row 6 run 4", report json).
-Commits: 9d0076cd validation/percall/gettext.c (new per-call spec: found, ngettext found, LANGUAGE steady and alternating,
-the cbench_opt fixture). 123dfe88 the boundary host (crates/boundary/src/catalog.rs) drops `language_probe`, `text_at` and
-`text_equals`, so `intl::translate` reads LANGUAGE through `Host::language` again (the fused aligned compare of
-GETTEXT-LANGUAGE-ALIGNED-COMPARE-2, measured +131 by its author, was still on next: the back-out branch
-task/perf-regress-1023-1105 is not in next).
+State: INCOMPLETE. Head = origin/next 2c1e25b9 merged (ruling #2897) + this story's own work only: the per-call spec
+validation/percall/gettext.c (9d0076cd) and docs. No library change on top of next: the run-1 code change (drop of the
+fused LANGUAGE compare, 123dfe88) is identical in effect to PERF-REGRESS-1023-1105-2's back-out, which landed; the merge
+conflict in crates/boundary/src/catalog.rs was resolved to next's text. `git diff origin/next` = 4 files, no Rust.
 
-## Profile (wl_trace, one call, Liella; reference = glibc per-call total)
-- found (614 i; glibc 446): translate 254, Resolution::hit 147, matches 74, find_in_hinted 65, same_bytes 21, gettext 28,
-  strlen 11. Phases: entry and msgid strlen ~50, locale/lock/LANGUAGE/clock ~60, slot match 74 + key setup ~80, catalog
-  hit (hash hint, find, compare) ~230, return ~20. The gap to glibc (~170) is the shared found path, not LANGUAGE.
-- alternating (937 i on next): translate 341, hit 147, matches 118 + closure 38, text_equals_words 93, find_in_hinted 65,
-  env_find 41, strlen 22.
-- steady: the trace of call 11 stepped into the vDSO clock read (the one-second recheck fell on the traced call under gdb;
-  200000-step limit). Re-run with a larger --skip. Per-call count says it all: 909 on next, 742 after.
+## Per-phase split of one call (wl_trace, Zen 1 host keke, code = next + spec; skip 20)
+glibc per-call totals (Skylake-SP, run 1): found 446, steady 457, ngettext 586; Zen 1 percall column: see Counts.
+- gettext_found 621 i: translate 236 (entry 38, locale/untranslated 26, lock+clock 8+rdtsc 4, key setup 60, between
+  `matches` and `hit` 86: binding/codeset/memo_gated/planned, return 18), Resolution::hit 147 (91 + 56 around the
+  index probe), matches 70, find_in_hinted 65, same_bytes 21, gettext 30, strlen 11, language 27 (unset).
+- gettext_language_steady 727 i = found + 106: Host::language 49 (+22), env_find 41 (the memo's one-entry name
+  re-check), strlen of the value 11, matches 79 (+9) + same_part 23 (the list words). No clock read on the traced call.
+- ngettext_found 724 i: translate 236, hit 210 (147 + plural form 63), matches 70, find_in_hinted 65, ngettext 39,
+  plural::evaluate 31, language 27, same_bytes 21, strlen 11.
+Surplus over glibc, steady: ~175 in the shared found path (translate key setup + the 86 between matches and hit,
+matches' 70 for a key whose domain and locale match by address, hit 147) and ~95 in LANGUAGE.
+LANGUAGE bound (register 14 row 6 runs 2-4, not redone): the value must be read each call (in-place rewrite); length
+memo and address compare are unsound; the fused aligned compare is slower (+131) and any unaligned-word variant needs
+new unsafe in liella-boundary (RULING). So the next gains are in the shared path, which also moves found/ngettext.
 
-## Counts (mei = Skylake-SP; jobs perf-gettext-language-steady-before / -after, rc 0)
-percall glibc / next / change: steady 457 / 909 / 742; alternating 2041.6 / 1511.4 / 1361.5; found 446 / 652.8 / 626;
-ngettext 586 / 728 / 731.
-cbench_opt before / after / glibc: steady 1002.6 / 803.5 / 443.6 (2.26 -> 1.81); alternating 1273.7 / 1120.1 / 873.0
-(1.46 -> 1.28); found 616.1 / 609.7 / 443.9 (1.39 -> 1.37); ngettext 750.6 / 787.7 / 670.8 (1.12 -> 1.17, SLOWER).
-Note: the "before" bench ran while the role was at 9d0076cd (next code); a sync attempted mid-run did not apply.
+## Ruling #2896 (ngettext_found +3 per call)
+See Counts: percall base (3d7e667a, fused compare in) vs head (next, back-out in), same host, same spec.
 
-## Gate and plants
-- gate2 (clippy --workspace --all-targets --all-features -D warnings, xtask static, xtask affected --run): rc 0, 10 test
-  targets + 3 conformance programs, 236 passed. plants2 (cargo xtask plants, 2 plants): 2 CAUGHT (LANGUAGE ignored by
-  the host; list compare in matches dropped), no WARN.
-- Superseded: -gate (role still at 9d0076cd: selected 0 suites), -plants (wrong package name liella-core; baseline rc 101).
+## Counts (keke, Zen 1)
+PENDING at hand-back: job keke:perf-gettext-language-steady-2-percall2 (wl_percall, glibc / base 3d7e667a / head) was
+still queued on a full host (28 of 28 cores, libm sweeps) after 35 min. Read it with
+`ssh keke 'tail -20 ~/logs/perf-gettext-language-steady-2-percall2.log'`; its ngettext_found base vs head row answers
+ruling #2896 (head = next's code, so a +3 there is next's back-out, not this branch). Run-1 numbers (Skylake-SP):
+percall glibc / old next / back-out: steady 457 / 909 / 742, alternating 2041.6 / 1511.4 / 1361.5, found 446 / 652.8 /
+626, ngettext 586 / 728 / 731. NOT EXPLAINED in this run: there is only a head trace (ngettext 724 above); no base trace was
+obtained (see Superseded), so where the +3 sits is not known.
 
-## RULING NEEDED
-- ngettext_found +37 in cbench (+3 per call) against steady -199 / alternating -154. The LANGUAGE-unset path does the
-  same work before and after; probably codegen of the translate instantiation changing. Recommend: profile ngettext_found
-  (wl_trace ngettext_found ngettext, base vs head, --list) before landing; land if the delta is codegen noise.
-- Overlap with task/perf-regress-1023-1105 (also backs out the fused compare): land only one. This branch leaves the
-  unused legacy defaults (`Host::language_probe` etc., `Resolution::list_text`, `Key::list_checked`) and
-  `strz::text_equals_words` + its test in place; the full removal belongs to whichever back-out lands.
+## Jobs (keke)
+- perf-gettext-language-steady-2-gate: clippy -D warnings + xtask static + xtask affected --run, rc 0; selected 0 of
+  233 targets (no code differs from next).
+- -trace-head (ngettext_found), -trace-steady, -trace-found: rc 0 (wl_trace, logs on keke ~/logs).
+- -percall2: wl_percall gettext spec, base 3d7e667a.
+- Superseded: -percall (killed before it started: its jobrun was in a foreground ssh I stopped; no jobs.tsv row),
+  -trace-base (wl_trace refuses a bare ~/wl/src/<sha> dir: "neither a git tree nor a role directory").
+- No plants: no product code changed on this branch.
 
 ## Next step
-Profile ngettext_found (base vs head). Then the shared found path: `matches` 74 instructions for a key whose domain and
-locale should match by address (check why the address fast path is not taken), and `Resolution::hit` 147.
-Target 1.05x is not reached: steady 1.81 / 1.62 per call, found 1.37 / 1.40.
+Shared found path, in order: (1) `Resolution::matches` 70 i on an address-matched key: read its --list trace
+(`wl_trace.sh --list --spec validation/percall/gettext.c . gettext_found gettext`; the I-lines did not reach the job
+log in this run, check where --list writes) and find why the address fast path still costs that much (key.lens(),
+three length loads, the div_ceil offsets computed before the address test); (2) the 86 instructions between matches and
+hit in translate (binding words, codeset, memo_gated, planned); (3) hit's 147. Each with percall + cbench_opt counts,
+gate and plants. Target 1.05x is not reached on any row.

@@ -158,3 +158,12 @@ rows; Liella before / after / glibc): steady 1002.6 / 803.5 / 443.6, alternating
 `LANGUAGE` unset (the same work in both versions); not explained in this run (no profile of it). Trace of one found call
 (614 instructions): `translate` 254, `Resolution::hit` 147, `Resolution::matches` 74, `find_in_hinted` 65,
 `same_bytes` 21: the shared found path, not `LANGUAGE`, holds the rest of the gap.
+
+**Row 6 run 5 (PERF-GETTEXT-LANGUAGE-STEADY-2, 2026-11-05, Zen 1 host; code = next after the back-out, no library
+change).** Per-phase traces (`validation/wl_trace.sh --spec validation/percall/gettext.c --skip 20`, one call):
+`gettext_found` 621 (`translate` 236, `hit` 147, `matches` 70, `find_in_hinted` 65, `same_bytes` 21, `gettext` 30);
+`gettext_language_steady` 727 = found + 106 (`Host::language` 49, the memo's one-entry `env_find` 41, `strlen` of the
+value 11, `matches` 79 + `same_part` 23); `ngettext_found` 724 (`hit` 210 with the plural form, `plural::evaluate`
+31). With `--skip 20` the steady trace made no clock read (the run-4 trace at `--skip 10` did). The `LANGUAGE` share
+(about 95 over the reference) has no safe cut left (runs 2 to 4); the shared found path (about 175: `translate`'s key
+setup and the work between `matches` and `hit`, `matches` on an address-matched key, `hit`) is the next target.
