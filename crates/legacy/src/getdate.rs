@@ -230,6 +230,7 @@ mod tests {
             let fmt = if input.len() > 5 { "%H:%M:%S" } else { "%H:%M" };
             assert_eq!(done(fmt, input).map(|c| c.2), Ok(day), "{input}: {why}");
         }
+        assert_eq!(done("%a %H:%M", "Wed 10:00"), Ok((2026, 10, 7, 10, 0, 0)), "unset seconds are 0, not the current 39");
         assert_eq!(done("%Y %H:%M", "2030 10:00"), Ok((2030, 10, 3, 10, 0, 0)), "a year alone: an earlier hour is the next day");
         assert_eq!(done("%M", "50"), Ok((2026, 10, 3, 0, 50, 0)), "minutes alone: hour 0, before the current hour");
         assert_eq!(done("%b %H:%S", "Feb 10:30"), Ok((2027, 2, 1, 10, 0, 30)));
