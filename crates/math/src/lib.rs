@@ -35,6 +35,7 @@ pub mod trig;
 pub mod hyper;
 pub mod mp;
 pub mod mpw;
+pub mod mpn;
 pub mod mpx;
 pub mod mpy;
 pub mod special;
