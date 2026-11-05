@@ -30,6 +30,7 @@ pub mod elem;
 pub mod exp_log;
 pub mod fast32;
 pub mod fast64;
+pub mod fast_special;
 pub mod pow;
 pub mod trig;
 pub mod hyper;
