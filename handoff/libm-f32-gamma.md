@@ -1,42 +1,38 @@
-# LIBM-F32-GAMMA: handoff (lgammaf, tgammaf double kernels)
+# LIBM-F32-GAMMA(-2): handoff (lgammaf, tgammaf double kernels)
 
-State: branch `task/libm-f32-gamma` (stacks on LIBM-F32-DOUBLE-KERNELS-2), code head `3e302add`; this note and
-the report are committed on top (handoff/ only). Role shiki:~/w/sh2. Verdict: INCOMPLETE (sweeps and counts not run).
+State: branch `task/libm-f32-gamma-2` (continues `task/libm-f32-gamma`), merged with origin/next on 11-05;
+code head `da21e569` (handoff commits on top). Role mei:~/w/s1. Verdict: INCOMPLETE (counts not run).
 
-## Done (3e302add)
-* Remez tool (`crates/mathtools/src/remez.rs`): targets `tgamma_2p5` = Γ(5/2 + x) and `lgamma1p_over_x` =
-  lnΓ(1 + x)/x (limit -γ at 0 by a symmetric difference at 3p bits).
-* Fits (D-10.3): `fits/fast32_tgamma.fit` degree 14 on [-1/2, 1/2], 2^-50.17 after rounding (7.1u);
-  `fits/fast32_lgamma.fit` degree 11 on [-1/8, 1/8], 2^-49.77 (9.4u). Degrees 15/12 gave 2^-52.3/2^-53.6 (unneeded).
-* `fast32.rs`: `gamma_core` (Γ(t), t = x - n in [2, 3], times/divided by the exact factors; domain 2^-20 ≤ |x|,
-  -42 < x < 36; ≤ 55.1u; DELTA 96), `ln64` (ln of a `double`, ≤ (1.45 + 2|y|)u absolute), `lgamma_core` piecewise
-  (near 1: z·q(z) ≤ 12u; near 2: log1p_core + z·q(z) ≤ 41.6u; x ≥ 36 Stirling ≤ 29.1u; else ln|G|: ≤ 30.5 ulp for
-  |y| ≥ 1, ≤ 7260 ulp (DELTA 11264) for 2^-8 ≤ |y| < 1, refused below: the negative-zero neighbourhoods).
-  Proofs in the doc comments. `Fast::Tgamma`, `Fast::Lgamma`, `eval_tgamma`, `eval_lgamma` (signgam: x < 0 with an
-  even integer part gives -1).
-* `special.rs`: `lgamma`/`tgamma` try the `float` fast path first (`F::PREC == 24`); old bodies are
-  `lgamma_acc`/`tgamma_acc` (the tests' reference).
-* Tests (`fast32::tests`): `gamma_margins`, `gamma_cores_are_within_their_bounds` (vs the CR `double` path),
-  `gamma_fast_paths_agree_on_a_sample` (value, flags, signgam; 4 modes), ignored
-  `tgammaf_fast_path_agrees_exhaustively`, `lgammaf_fast_path_agrees_exhaustively`. Local run on the role: 3 passed.
-* Workspace clippy (`--all-targets --all-features -D warnings`) and `cargo xtask static`: clean on 3e302add.
+## Done
+* LIBM-F32-GAMMA (3e302add): Remez targets `tgamma_2p5`, `lgamma1p_over_x`; fits `fits/fast32_tgamma.fit`
+  (deg 14, 2^-50.17), `fits/fast32_lgamma.fit` (deg 11, 2^-49.77); `gamma_core` (≤ 55.1u), `ln64`,
+  piecewise `lgamma_core` (refuses |y| < 2^-8 next to the negative zeros); `special::lgamma/tgamma` try the
+  `float` fast path first (old bodies `lgamma_acc`/`tgamma_acc`). Proofs in the doc comments.
+* -2 (6382a5f9): merged origin/next; kernels moved unchanged into `crates/math/src/fast32/gamma.rs` (one
+  module per family); fast32.rs keeps only the `Fast` variants and eval arms. Sweeps use the shared tiered
+  oracle (#2889): `oracle32::lgamma_est`/`tgamma_est` (double-double Stirling at w = x + n ≥ 16, 10 terms,
+  remainder ≤ first omitted term; reflection for x < 0; integers → accurate path). New test
+  `gamma_oracle_agrees_with_the_accurate_path` (decided answers = accurate path, 4 modes, on the sample).
+  da21e569: `cargo xtask kernel-index` (KERNELS.md; static's tables-fresh check).
+* The estimators assume `exp_log::log_dd` is within UE·(|ln v| + 1) (stated in `log_err`; only checked
+  indirectly by the agreement test). Worth a direct bound test against mp if the oracle is reused.
 
-## Jobs (shiki)
-* `libm-f32-gamma-gate2`: direct-tier gate, escalated to FULL by the tool (generated coefficient files), started
-  detached. `libm-f32-gamma-gate` superseded (it was attached to an ssh session and stopped with kill-mine).
-* `libm-f32-gamma-plants`: `cargo xtask plants ~/work/LIBM-F32-GAMMA/plants.txt --dir
-  /dev/shm/claude/libm-f32-gamma/plants-1`: margin, a tgamma coefficient, the near-1 piece boundary, the
-  near-zero edge (2^-8 -> 2^-16), a Stirling coefficient.
+## Jobs (mei)
+* `libm-f32-gamma-2-check`: workspace clippy -D warnings + gamma tests: rc 0.
+* `libm-f32-gamma-2-plants`: 6 plants (margin, tgamma coefficient, near-1 piece edge, near-zero edge,
+  Stirling coefficient, oracle Stirling coefficient): 6 CAUGHT, 0 WARN.
+* `libm-f32-gamma-2-gate`: superseded (static: KERNELS.md stale). `libm-f32-gamma-2-gate2`: static + direct tier
+  on da21e569 (result in the report).
+* `libm-f32-gamma-2-sweep-tgammaf` (head 6382a5f9; da21e569 differs only in KERNELS.md): PASS, 482 s test
+  wall (584 s job incl. release build), 2626 s CPU. Fast path taken 1 683 198 064 of 4·2^32 mode-calls; oracle mp
+  for 37 388 of them (2.2e-5).
+* `libm-f32-gamma-2-sweep-lgammaf`: see the report (wall, CPU, mp rate, near-zero refusal count).
 
-## Not done (next step, in order)
-1. Collect `gate2` and `plants` (`~/bin/jobwait libm-f32-gamma-gate2 libm-f32-gamma-plants` on shiki); fix what they find.
-2. Sweeps, one job each, in RAM (not concurrently with a build in sh2): size with `LIELLA_SWEEP_STRIDE=64` first.
-   Estimate: each answers on about 1.5·10^9 encodings x 4 modes against the 384-bit path (tens of thousands of
-   instructions per call), likely more than the 150-minute slot. Splitting the harness by range may be needed.
-3. Counts before/after: `cargo xtask bench --compare --counters cbench_libm` rows tgammaf, lgammaf (base = origin/next).
-   Expected: the fallback rate is small on [-10, 10] (refused: |y| < 2^-8 next to the negative zeros, about 1% of the row
-   there, each costing a full mp call); if that holds the row above 1.05x, the next lever is a double-double piece
-   near the zeros -2.457 and -2.747.
+## Next step (in order)
+1. Counts before/after: `cargo xtask bench --compare --counters cbench_libm`, rows tgammaf and lgammaf
+   (base origin/next), as a jobrun job on the role, not concurrently with a gate. Target ≤ 1.05x.
+2. If lgammaf stays above target: the near-zero refusals (|y| < 2^-8 around -2.457, -2.747, ...) cost a
+   full mp call each; the lever is a double-double piece there.
 
 ## Decisions in force
-Rulings #2760 (option A), #2784 (one story per family), #2783 (software sqrt; not used here).
+Rulings #2760 (option A), #2784 (one story per family), #2783 (software sqrt; not used), #2889 (tiered oracle).
