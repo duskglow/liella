@@ -506,8 +506,12 @@ pub(super) fn quotient(s: Dd, c: Dd) -> Dd {
 
 /// `sin x` correctly rounded to nearest, or `None` (the caller runs the accurate path). Hardware
 /// arithmetic only, raising inexact and nothing else when it answers; the caller guarantees the
-/// default SSE environment. In the FMA build the CPU must support FMA and the OS must save the
-/// AVX state (the `#[target_feature]` contract).
+/// default SSE environment.
+///
+/// # Safety
+///
+/// In the FMA build the CPU must support FMA and the OS must save the AVX state (the
+/// `#[target_feature]` contract); the baseline build is safe.
 $(#[$a])*
 $(#[$i])*
 pub fn sin_nearest(x: f64) -> Option<f64> {
@@ -521,6 +525,10 @@ pub fn sin_nearest(x: f64) -> Option<f64> {
 }
 
 /// `cos x` as [`sin_nearest`].
+///
+/// # Safety
+///
+/// As [`sin_nearest`].
 $(#[$a])*
 $(#[$i])*
 pub fn cos_nearest(x: f64) -> Option<f64> {
@@ -534,6 +542,10 @@ pub fn cos_nearest(x: f64) -> Option<f64> {
 }
 
 /// `tan x` as [`sin_nearest`]: one reduction, one polynomial, both assemblies.
+///
+/// # Safety
+///
+/// As [`sin_nearest`].
 $(#[$a])*
 $(#[$i])*
 pub fn tan_nearest(x: f64) -> Option<f64> {
@@ -555,6 +567,10 @@ pub fn tan_nearest(x: f64) -> Option<f64> {
 }
 
 /// `(sin x, cos x)` as [`sin_nearest`] (both or `None`): one reduction, one polynomial.
+///
+/// # Safety
+///
+/// As [`sin_nearest`].
 $(#[$a])*
 $(#[$i])*
 pub fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
