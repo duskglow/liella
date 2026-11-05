@@ -82,6 +82,74 @@ fn hard_operands() -> Vec<f64> {
     v
 }
 
+/// The sign of `lgamma x` by the oracle (240 bits; never zero at a `double` below -2).
+fn lgamma_negative(x: f64) -> bool {
+    cmp::oracle("lgamma", &[Big::from_f64(x)], 240).unwrap().value.is_neg()
+}
+
+/// The zeros of `lgamma` in `(-16, -2)`, two in each `(-k-1, -k)` for `k = 2..15` (`|Γ|` is below
+/// 1 at `-k-1/2` and unbounded at both poles), each as the two adjacent `double`s that bracket
+/// it, found by bisection on the oracle's sign.
+fn negative_zeros() -> &'static [(f64, f64)] {
+    static Z: std::sync::OnceLock<Vec<(f64, f64)>> = std::sync::OnceLock::new();
+    Z.get_or_init(|| {
+        let mut z = Vec::new();
+        for k in 2..16 {
+            let k = f64::from(k);
+            let mid = -k - 0.5;
+            assert!(lgamma_negative(mid), "lgamma({mid}) is not negative");
+            // The `double`s next to the poles (within 2^-49): `|Γ| >= 1/(16!·2^-49) > 400` there.
+            let (near_left, near_right) = (f64::from_bits((-k - 1.0).to_bits() - 1), f64::from_bits((-k).to_bits() + 1));
+            for (mut a, mut b) in [(near_left, mid), (mid, near_right)] {
+                // lgamma(a) and lgamma(b) have opposite signs; halve until they are neighbours.
+                let neg_a = lgamma_negative(a);
+                assert_ne!(neg_a, lgamma_negative(b), "no sign change in [{a}, {b}]");
+                loop {
+                    let m = 0.5 * (a + b);
+                    if m == a || m == b {
+                        break;
+                    }
+                    if lgamma_negative(m) == neg_a { a = m } else { b = m }
+                }
+                z.push((a, b));
+            }
+        }
+        z
+    })
+}
+
+/// Operands at lgamma's negative zeros: the bracketing pair and one more `double` each side, and
+/// `z·(1 ± 2^-s)` for `s = 12, 24, 36, 48`.
+fn zero_operands() -> Vec<f64> {
+    let mut v = Vec::new();
+    for &(a, b) in negative_zeros() {
+        v.extend([a, b, f64::from_bits(a.to_bits() - 1), f64::from_bits(b.to_bits() + 1)]);
+        for s in [12, 24, 36, 48] {
+            let d = 2f64.powi(-s);
+            v.extend([a * (1.0 + d), a * (1.0 - d)]);
+        }
+    }
+    v
+}
+
+/// Each operand in each mode: the fast tier's result (when it settles) and the entry's are the
+/// oracle's. Returns the number of settled calls.
+fn check_against_oracle(name: &str, fast: Fast, entry: Entry, ops: &[f64]) -> usize {
+    let mut settled = 0;
+    for &x in ops {
+        for (mode, round) in MODES {
+            let want = oracle(name, x, round);
+            if let Some((v, _)) = fast(x, mode) {
+                assert_eq!(v.to_bits(), want, "{name}({x:e}) fast tier in {mode:?}: {v:e}, oracle {:e}", f64::from_bits(want));
+                settled += 1;
+            }
+            let v = entry(x, mode).0;
+            assert_eq!(v.to_bits(), want, "{name}({x:e}) entry in {mode:?}: {v:e}, oracle {:e}", f64::from_bits(want));
+        }
+    }
+    settled
+}
+
 #[test]
 fn double_gamma_fast_tier_rounds_correctly() {
     // Clauses: s10_3_c_0 (D-10.13).
@@ -89,19 +157,20 @@ fn double_gamma_fast_tier_rounds_correctly() {
     let mut ops: Vec<f64> = (0..300).map(|_| rng.operand()).collect();
     ops.extend(hard_operands());
     for (name, fast, entry, _) in FUNCS {
-        let mut settled = 0u32;
-        for &x in &ops {
-            for (mode, round) in MODES {
-                let want = oracle(name, x, round);
-                if let Some((v, _)) = fast(x, mode) {
-                    assert_eq!(v.to_bits(), want, "{name}({x:e}) fast tier in {mode:?}: {v:e}, oracle {:e}", f64::from_bits(want));
-                    settled += 1;
-                }
-                let v = entry(x, mode).0;
-                assert_eq!(v.to_bits(), want, "{name}({x:e}) entry in {mode:?}: {v:e}, oracle {:e}", f64::from_bits(want));
-            }
-        }
-        assert!(settled as usize * 100 >= ops.len() * 4 * 97, "{name}: the fast tier settled only {settled}");
+        let settled = check_against_oracle(name, fast, entry, &ops);
+        assert!(settled * 100 >= ops.len() * 4 * 97, "{name}: the fast tier settled only {settled}");
+    }
+}
+
+#[test]
+fn double_gamma_fast_tier_rounds_correctly_at_the_negative_zeros() {
+    // Clauses: s10_3_c_0 (D-10.13). Cancellation in `L − ln|D|`: the fast tier must refuse what
+    // its absolute bound cannot settle, never round wrongly; no settle-rate floor here.
+    let ops = zero_operands();
+    assert_eq!(negative_zeros().len(), 28);
+    for (name, fast, entry, _) in FUNCS {
+        let settled = check_against_oracle(name, fast, entry, &ops);
+        eprintln!("{name}: settled {settled} of {} at the negative zeros", ops.len() * 4);
     }
 }
 
@@ -130,6 +199,7 @@ fn double_gamma_kernels_stay_within_their_bounds_and_rarely_fall_back() {
     let mut worst = [0f64; 2];
     let mut ops: Vec<f64> = (0..3000).map(|_| rng.operand()).collect();
     ops.extend(hard_operands());
+    ops.extend(zero_operands());
     for &x in &ops {
         let exact = cmp::oracle("lgamma", &[Big::from_f64(x)], 240).unwrap().value;
         if let Some((y, eps, _)) = fast_gamma::lgamma_kernel(x) {
@@ -157,5 +227,19 @@ fn double_gamma_kernels_stay_within_their_bounds_and_rarely_fall_back() {
         let c = stats::counts(name).since(before);
         eprintln!("{name}: fast {} fallback {} of 100000 on [-10, 10]", c.fast, c.fallback);
         c.check_fallback(name, 500).unwrap_or_else(|e| panic!("{name}: fallback rate {e:?}"));
+    }
+    // The fallback rate near lgamma's negative zeros (measured, recorded in the handoff): 2000
+    // operands `z·(1 + r·2^-s)`, `r` uniform in [-1, 1], per band `s`, over the 28 zeros.
+    let mut rng = Rng(0x510e_527f_ade6_82d1);
+    for s in [2, 4, 8, 12, 16, 24, 32, 40, 48] {
+        let mut refused = 0u32;
+        for i in 0..2000usize {
+            let (z, _) = negative_zeros()[i % 28];
+            let x = z * (1.0 + rng.uniform(-1.0, 1.0) * 2f64.powi(-s));
+            if fast_gamma::domain(x, false) && fast_gamma::lgamma(x, Rounding::Nearest).is_none() {
+                refused += 1;
+            }
+        }
+        eprintln!("lgamma near the negative zeros, |x/z - 1| < 2^-{s}: refused {refused} of 2000");
     }
 }
