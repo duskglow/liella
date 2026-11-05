@@ -1,47 +1,48 @@
-# LIBM-F32-SINF-SHRINK: handoff (sinf, cosf, tanf fast path)
+# LIBM-F32-SINF-SHRINK(-2): handoff (sinf, cosf, tanf fast path)
 
-State: branch `task/libm-f32-sinf-shrink` (stacks on LIBM-F32-DOUBLE-KERNELS-2), code head `6347789c`; this note
-and `handoff/reports/LIBM-F32-SINF-SHRINK.json` on top. Role keke:~/w/n2 (Zen 1). Verdict INCOMPLETE: one
-measured row got slower (below); do not land before that is fixed or ruled on.
+State: branch `task/libm-f32-sinf-shrink-2` (stacks on `task/libm-f32-sinf-shrink`), code head `709feafb`; this
+note and `handoff/reports/LIBM-F32-SINF-SHRINK-2.json` on top. Role mei:~/w/s2 (Skylake-SP, 48 threads).
+Ruling #2906 applied: no row slower any more; nearest rows still above the 1.05x target (see "Next").
 
-## Done (3665b7ff, 6347789c)
-* Kernel (`crates/math/src/fast32.rs`, `trig_core`): same single π/64 Cody–Waite reduction and table; the
-  polynomials are now Remez minimax (D-10.3): sin odd 1..5, r fixed at 1 (`fits/fast32_sin.fit`, 2^-49.07 =
-  15.24 double ulp), cos even 0..6, 1 fixed (`fits/fast32_cos.fit`, 2^-64.59). They replace degree-7/8 Taylor.
-  Proof updated: sin/cos ≤ 24.3 ulp (TRIG_BOUND 24.4, TRIG_DELTA 40), tan ≤ 49.7 (TAN_BOUND 50, TAN_DELTA 80).
-  Large arguments (|x| ≥ 2^19) still take the accurate path.
-* In-place nearest entries `sin_nearest`/`cos_nearest`/`tan_nearest` (eval_nearest arms; inexact-only flags
-  argument in the comment). `s10_math.tsv` f rows now use `mret::elem32_fast` like expf; `cargo xtask math-gen`
-  regenerated `s10_math_gen.rs`.
-* Tests: bound test on the new bounds plus margin check; `trig_nearest_entries_match_the_accurate_path`
-  (new); the exhaustive sweep is split into `sinf_/cosf_/tanf_fast_path_agrees_exhaustively` (one job each).
-  `cargo test --release -p liella-math --lib fast32`: 14 passed; workspace clippy -D warnings clean; static clean.
+## Done
+* -1 (3665b7ff, 6347789c): minimax sin deg 5 / cos deg 6 kernel (D-10.3 fits), in-place nearest entries
+  `sin_nearest`/`cos_nearest`/`tan_nearest` through `mret::elem32_fast`; bounds and tests as in those commits.
+* -2 de05d60e: `elem_fast` sends a non-default MXCSR straight to the new cold `elem_switched(x, saved, f)`, which
+  switches with `fpu::switch_default` (new, rt) on the value already read: no second MXCSR read, no second
+  default-word test, no `in_place` argument. `elem_fast_cold` is now the default-mode refusal only. Shared by every
+  `elem_fast` user (expf.., the double exp/log/pow entries).
+* -2 709feafb: `math_double_fast_entry_stays_out_of_place_in_a_non_default_mode` also runs every word with all six
+  flags already sticky (0x3f, 0x803f). Found by plant `in-place-exit` (settle instead of leave on the directed
+  route), which survived before: with no sticky flags settle always wrote `saved | flags` back.
 
-## Profile / counts (keke, cbench_libm, instructions per call, Liella / glibc)
-| row | before (`-before`, base kernel) | after (`-after`, 6347789c) |
+## Counts (mei, cbench_libm, instructions per call; base = 617417a6 from `git archive` in RAM, head = de05d60e)
+| row | base | -1 (keke) | head (mei) | glibc |
+|---|---|---|---|---|
+| sinf / cosf | 167.3 | 90.2 | 90.2 | 42.0 |
+| tanf | 173.3 | 98.2 | 98.3 | 106.3 |
+| sinf_upward | 246.7 | 258.6 | **221.8** | 42.0 |
+| expf_upward | 242.5 | | 205.6 | 39.0 |
+| exp_upward / log_upward / pow_upward | 406.9 / 388.5 / 913.8 | | 368.1 / 349.7 / 873.5 | |
+169 rows: 0 slower, 9 faster (1% + 0.5 tolerance). Jobs `libm-f32-sinf-shrink-2-cbase`, `-chead`; compare
+script `~/work/LIBM-F32-SINF-SHRINK-2/cmp.py` on mei. 709feafb changes only a test (libm unchanged).
+
+## Per-phase split of one sinf call (objdump of Liella's own libm.so.6, head; 78 straight-line + helper + loop ≈ 90)
+| phase | instr | note |
 |---|---|---|
-| sinf | 167.2 / 42.0 | 90.2 / 42.0 |
-| cosf | 167.3 / 42.1 | 90.2 / 42.1 |
-| tanf | 173.3 / 106.3 | 98.2 / 106.3 |
-| sinf_upward | 246.6 / 42.0 | **258.6** / 42.0 (slower) |
-168 other rows: none slower (1% + 0.5 tolerance). Split: the envelope (`mret::elem` vs the in-place entry) held
-about 73 of the 125 surplus; the polynomial shrink only 4. No per-phase wl_percall trace was run (budget).
-The 1.05x target is NOT met for sinf/cosf (2.15x); tanf is under glibc.
-Why sinf_upward got slower: a non-default MXCSR now goes through `elem_fast` → `elem_fast_cold` instead of
-`elem` directly (expf has the same shape). Not profiled further.
+| entry/exit | ~18 | push/pop, GOT call to the out-of-line MXCSR read helper (~4 inside), mask/cmp/jne, `black_box` spills x twice through the stack (5, one dead `lea`) |
+| domain test | 7 | cvtss2sd, andps, two `ucomisd` against TRIG_MIN/TRIG_MAX |
+| reduction | ~12 | 3-part Cody–Waite, shift trick |
+| small-r refusal | 5 | `abs(r) < TRIG_R_MIN` |
+| polynomials | ~16 | sr deg 5 and cm deg 6 (both needed for sin: S + S·cm + C·sr) |
+| table + combine | ~12 | two index computations, two loads, 4 flops |
+| rounding test | 13 | three `movabs` constants, two compares |
+The surplus over glibc's 42 sits in the envelope (~18) and the tests (domain 7 + small-r 5 + rounding 13 = 25).
 
-## Open
-* RULING NEEDED: accept sinf_upward +12 (+4.9%) for −77 on sinf/cosf/tanf nearest, or (recommended) a
-  continuation that makes the directed-mode route of `elem_fast` cost no more than `elem` (check expf_upward
-  too: the same route), then recount.
-* Still to reach 1.05x: the in-place kernel is ~90 vs 42. Next levers: the 3-part reduction (6 flops) and the
-  two table loads + combine; a per-phase trace (validation/wl_percall.sh) first.
-* The baseline report §3.5 the brief names lives only on `origin/task/libm-slow-path-cause`; not read (the
-  rules forbid `git show` of others' branches).
-
-## Jobs (keke, on 6347789c)
-`libm-f32-sinf-shrink-before`, `-after` (rc 0). Detached at hand-back: `-gate2` (direct tier, --base
-origin/next), `-plants2` (`~/work/LIBM-F32-SINF-SHRINK/plants.txt`: bound, coef-s5, red-pi64-3, tan-nearest;
-dir /dev/shm/claude/LIBM-F32-SINF-SHRINK/plants-2), `-sweep-sinf`, `-sweep-cosf`, `-sweep-tanf` (from the RAM copy
-/dev/shm/claude/LIBM-F32-SINF-SHRINK/sweep). Superseded: `-gate`, `-plants` (stopped by me: `jobrun` runs in the
-foreground and my chained start would have been cut by the 10-min task limit; start jobs with setsid).
+## Next (the nearest rows toward 1.05x; in this order, each counted alone)
+1. Inline the MXCSR read (`stmxcsr` in place of the GOT call; boundary asm, UNSAFE category) and one `black_box` instead
+   of two: ~8 on every fast entry (expf too).
+2. Domain test on the f32 bits (one integer subtract + unsigned compare): 7 -> 3.
+3. Drop the small-r refusal by proof (exhaustive: min |r| over n != 0, |x| < 2^19 floats) or fold it into the
+   rounding test: -5.
+4. Cheaper rounding test (fewer 64-bit constants). Then recount; a first-principles bound if 1.05x stays out of reach.
+No D-row added (local detail; the code comment cites ruling #2906). No saturation-register row written (budget).
