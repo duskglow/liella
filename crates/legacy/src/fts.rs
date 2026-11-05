@@ -284,7 +284,7 @@ const LEAD: usize = 8;
 
 fn stat_bytes(st: &Stat) -> [u8; LEAD + STAT_SIZE] {
     let mut b = [0u8; LEAD + STAT_SIZE];
-    putf(&mut b, LEAD + 0, &st.dev.to_ne_bytes());
+    putf(&mut b, LEAD,&st.dev.to_ne_bytes());
     putf(&mut b, LEAD + 8, &st.ino.to_ne_bytes());
     putf(&mut b, LEAD + 16, &st.nlink.to_ne_bytes());
     putf(&mut b, LEAD + 24, &st.mode.to_ne_bytes());
