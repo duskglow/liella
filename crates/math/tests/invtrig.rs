@@ -5,6 +5,7 @@
 //! nodes, the window edges) are refused or settled right; random operands rarely fall back. The
 //! exported entries (fast tier plus fallback) give the accurate path's bits in both builds of
 //! the kernels (Dekker and FMA, D-10.25, switched by `selftest::set_math_fma`).
+#![no_builtins] // calls to libc names (atan, hypot, ...) reach Liella's export, not LLVM's folding (OPAQUE-AUDIT)
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::arithmetic_side_effects, clippy::float_arithmetic, missing_docs)]
 
 use liella_boundary::posix::s10_math_gen as m;

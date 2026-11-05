@@ -2573,6 +2573,7 @@ macro_rules! invtrig_nearest {
 #[target_feature(enable = "sse2")]
 #[inline]
 fn sqrtsd_sse2(x: f64) -> f64 {
+    // ARCH(x86_64): SSE2 sqrt intrinsics (hot-kernel); aarch64 needs `fsqrt` or a portable path (A-8)
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_pd};
     _mm_cvtsd_f64(_mm_sqrt_pd(_mm_set_sd(x)))
 }
