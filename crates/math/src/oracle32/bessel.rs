@@ -59,7 +59,7 @@ fn consts() -> &'static Consts {
 pub(crate) fn bessel_est(f: usize, x: f32) -> Est {
     let a = f64::from(x).abs();
     let (n, want_y) = ((f & 1) as u32, f >= 2);
-    if !(a >= LO && a < HI) || (want_y && x < 0.0) {
+    if !(LO..HI).contains(&a) || (want_y && x < 0.0) {
         return Est::Unknown;
     }
     let (v, err) = if a < SWITCH { series(n, a, want_y) } else { hankel(n, a, want_y) };

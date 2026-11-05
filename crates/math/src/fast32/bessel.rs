@@ -313,7 +313,11 @@ mod tests {
         for x in bessel_operands(1 << 15).into_iter().filter(|x| (BES_MIN..BES_MAX).contains(&f64::from(*x))) {
             let want = crate::special::bessel01_dd(x);
             for f in 0..4 {
-                let Est::Near { v, err } = bessel_est(f, x) else { panic!("{} at {x:e}: no estimate", BES_NAMES[f]) };
+                // No estimate: a NaN that fails the assertion below.
+                let (v, err) = match bessel_est(f, x) {
+                    Est::Near { v, err } => (v, err),
+                    _ => (crate::dd::Dd::from(f64::NAN), 0.0),
+                };
                 let y = want[f];
                 let d = v.sub(y).to_f64().abs();
                 assert!(d <= err + 2.47e-32 * y.hi.abs(), "{} at {x:e}: |v - y| = {d:e} > {err:e}", BES_NAMES[f]); // 2^-105
@@ -350,8 +354,8 @@ mod tests {
         use crate::oracle32 as o;
         let mut pos: std::vec::Vec<f32> = (0x3580_0000u32..0x4900_0000).step_by(1 << 17).map(f32::from_bits).collect();
         let marks = [0x3580_0000u32, 0x4000_0000, 0x4080_0000, 0x4100_0000, 0x4180_0000, 0x41c0_0000, 0x48ff_ffff];
-        let zeros = [2.404_825_557_695_773f32, 3.831_705_970_207_512, 0.893_576_966_279_167_5, 2.197_141_326_031_017];
-        for b in marks.into_iter().chain(zeros.map(f32::to_bits)) {
+        let zeros = [2.404_825_557_695_773f64, 3.831_705_970_207_512, 0.893_576_966_279_167_5, 2.197_141_326_031_017];
+        for b in marks.into_iter().chain(zeros.map(|z| (z as f32).to_bits())) {
             pos.extend((b - 8..b + 8).map(f32::from_bits));
         }
         let mut decided = 0u64;
