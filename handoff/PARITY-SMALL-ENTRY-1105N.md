@@ -31,10 +31,14 @@ nl_langinfo_l); strnlen, isalpha and ctype_b_loc are profiled below but left unc
 
 ## Results
 Counts before (cbench, instr ratio): ctype_b_loc 1.20 (time 0.84), isalpha_c 1.44 (time 1.00), nl_langinfo_en_us
-1.13, nl_langinfo_l_en_us 1.57. After: see job `parity-small-entry-1105n-counts-after` and
-`parity-small-entry-1105n-percall-after` (started detached at hand-back; NOT VERIFIED in this run). Expected:
-nl_langinfo_l about -8 to -10 per call; any row where it measures worse must be reverted (developer-flow).
-Lint (cargo xtask clippy + static) rc 0 on be808ed. Gate and plants were started detached; see the hand-back.
+1.13, nl_langinfo_l_en_us 1.57. Percall after (be808ed): nl_langinfo_mon 42 -> 36 (glibc 38, 0.95); nl_langinfo_l_mon 49 -> 43 (35, 1.23);
+nl_langinfo_l_codeset 42 -> 36 (28, 1.29); other cases unchanged (expected). The remaining nl_langinfo_l surplus
+is view_of's null/alignment test and object-word load (next: fold the test, e.g. one rotate-and-compare).
+Counts after: job `parity-small-entry-1105n-counts-after` (about 29 min, still running at hand-back, NOT VERIFIED
+here): check that no cbench_locale row (setlocale/newlocale especially, a new view builds its answer table) is
+slower; revert if one is (developer-flow).
+Lint (cargo xtask clippy + static) rc 0; direct-tier gate rc 0 (peak 4.7G); plants 4 CAUGHT / 0 SURVIVED / 0 WARN.
+Target 1.05 not reached for nl_langinfo_l, strnlen, isalpha, ctype_b_loc.
 
 ## Next step (things not to redo: the profile above)
 1. Read the after jobs on mei: `ssh mei '~/bin/jobwait parity-small-entry-1105n-gate parity-small-entry-1105n-plants
