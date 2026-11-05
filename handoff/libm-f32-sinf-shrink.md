@@ -1,8 +1,31 @@
-# LIBM-F32-SINF-SHRINK(-3): handoff (sinf, cosf, tanf fast path)
+# LIBM-F32-SINF-SHRINK(-4): handoff (sinf, cosf, tanf fast path)
 
-State: branch `task/libm-f32-sinf-shrink-3` = -2's branch (`deb410d0`) + merge of origin/next `de5102e3` as
-`dbbe3d1b`; this note and `handoff/reports/LIBM-F32-SINF-SHRINK-3.json` on top. Role mei:~/w/s1 (Skylake-SP).
-Ruling #2906 applied: no row slower any more; nearest rows still above the 1.05x target (see "Next").
+State: branch `task/libm-f32-sinf-shrink-4` = `task/libm-tables-per-family` (f207fed6, Stacks-on) + merge of
+`task/libm-f32-sinf-shrink-3` (d15fe0c1) as `3ad240da`; this note and `handoff/reports/LIBM-F32-SINF-SHRINK-4.json`
+on top. Role mei:~/w/s2 (Skylake-SP). Ruling #2906 applied: no row slower; nearest rows still above the 1.05x
+target (see "Next").
+
+## -4 (move onto the per-family layout, no design work)
+* LIBM-TABLES-PER-FAMILY had NOT landed in origin/next at the start of this run (f207fed6 not in next), so origin/next
+  was not merged (the coordinator note allows that merge only after it lands). The branch is stacked on the tables
+  branch instead, and -3 merged into it; when the tables branch lands, the remaining merge of next is the release
+  manager's (or a -5's) job. -3's base next de5102e3 is an ancestor of the tables base f8b77d70: no extra next commits.
+* Conflicts: `coeffs.rs` (per-family `mod`s + -3's `fast32_sin`/`fast32_cos`) and `fast32.rs` (took the tables side,
+  then re-applied -3's own diff `de5102e3..d15fe0c1`): the kernel, its proof text and the margins/bounds
+  (TRIG_DELTA 40, TAN_DELTA 80, TRIG_BOUND, TAN_BOUND, moved from the core into `fast32/trig.rs`, as inv_trig keeps
+  its own) in `fast32/trig.rs`; the Sin/Cos/Tan in-place arms and `sin/cos/tan_nearest` in the core's `eval_nearest`
+  (next to the other families' arms and `nearest_fn!`s); the tests (margin check, nearest-entry agreement, per-function
+  exhaustive jobs) in `fast32/tests.rs`.
+* Generated files: no `coeffs/` table file touched by -3. Job `libm-f32-sinf-shrink-4-check` (rc 0) ran `math-gen`,
+  `tables`, `stubs` (checksums of crates/boundary/src/posix, crates/math/src/coeffs, spec identical before/after),
+  `remez --check` (all fits up to date), clippy -D warnings all targets/features, `cargo xtask static`
+  (`tables: up to date (5 files)`).
+* Jobs on mei (see the report json for results): gate `libm-f32-sinf-shrink-4-gate` (direct tier as the brief's
+  command; may escalate to FULL as -2/-3 did), plants `libm-f32-sinf-shrink-4-plants` (mei:~/work/LIBM-F32-SINF-SHRINK-4/
+  plants.txt: -3's six with paths moved + `sin-poly`, `trig-margin` on fast32/trig.rs; dir
+  /mnt/zram/claude/LIBM-F32-SINF-SHRINK-4/plants-1), counts `libm-f32-sinf-shrink-4-counts` (head only, after the gate,
+  compared with -3's base/head tsvs by -2's cmp.py; the tables change was proven .text-identical by its own story, so
+  -3's base stands as the base).
 
 ## -3 (merge only, no design work)
 * CI could not merge -2: `crates/math/src/fast32.rs` conflicted with next's hyperbolic and inverse-trig families.
