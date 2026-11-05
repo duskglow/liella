@@ -147,3 +147,14 @@ instead of removing the estimated 40: the per-word closure reads, the shift-and-
 key state cost more than the `strlen` plus word compare they replace for the short list values the row uses. Not for landing
 as it stands; a retry would need a kernel measured at the instruction level first (for example a value of at most 8 bytes
 read as one aligned word pair, no closure), against the 731.6 base.
+
+**Row 6 run 4 (PERF-GETTEXT-LANGUAGE-STEADY, 2026-11-05, Skylake-SP host; the fused compare was still on next).** Change:
+the boundary host drops its `language_probe` / `text_at` / `text_equals` overrides, so `translate` reads `LANGUAGE`
+through `Host::language` (remembered slot, `strlen`, `same_part`) again. Per call, `validation/percall/gettext.c`
+(new; glibc / next / change): steady 457.0 / 909.0 / 742.0, alternating 2041.6 / 1511.4 / 1361.5, found 446.0 / 652.8
+/ 626.0, ngettext found 586.0 / 728.0 / 731.0. `cargo xtask bench --compare --counters --runs 5 cbench_opt` (gettext
+rows; Liella before / after / glibc): steady 1002.6 / 803.5 / 443.6, alternating 1273.7 / 1120.1 / 873.0, found 616.1
+/ 609.7 / 443.9, ngettext found 750.6 / **787.7** / 670.8. The ngettext row is +37 in the bench and +3 per call, with
+`LANGUAGE` unset (the same work in both versions); not explained in this run (no profile of it). Trace of one found call
+(614 instructions): `translate` 254, `Resolution::hit` 147, `Resolution::matches` 74, `find_in_hinted` 65,
+`same_bytes` 21: the shared found path, not `LANGUAGE`, holds the rest of the gap.
