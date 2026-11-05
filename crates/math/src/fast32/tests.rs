@@ -559,6 +559,7 @@ fn hyperbolic_cores_are_within_their_bounds() {
             let a2 = da.mul(da);
             let w = da.add(a2.div(crate::dd::sqrt(a2.add_f64(1.0)).add_f64(1.0)));
             check(asinh_core(xs), sg(log1p_dd(w)), ASINH_BOUND, "asinh_core", a);
+            check(asinh_core_with(xs, f64::sqrt), sg(log1p_dd(w)), ASINH_BOUND, "asinh_core_with(sqrtsd)", a);
             if a < 1.0 {
                 let w = da.scale(2.0).div(one.sub(da));
                 check(atanh_core(xs), sg(log1p_dd(w).scale(0.5)), ATANH_BOUND, "atanh_core", a);
@@ -568,6 +569,7 @@ fn hyperbolic_cores_are_within_their_bounds() {
             let t = da.add_f64(-1.0);
             let w = t.add(crate::dd::sqrt(t.mul(t.add_f64(2.0))));
             check(acosh_core(x), log1p_dd(w), ACOSH_BOUND, "acosh_core", a);
+            check(acosh_core_with(x, f64::sqrt), log1p_dd(w), ACOSH_BOUND, "acosh_core_with(sqrtsd)", a);
         }
         seen += 1;
     }
@@ -621,6 +623,56 @@ fn acoshf_fast_path_agrees_exhaustively() {
 fn atanhf_fast_path_agrees_exhaustively() {
     let taken = exhaustive(&[Fast::Atanh]);
     std::println!("atanhf fast path taken {taken} of {} calls", 4u64 << 32);
+}
+
+/// `asinh_nearest_sqrt` and `acosh_nearest_sqrt` with a correctly rounded root (`f64::sqrt`,
+/// the `sqrtsd` the boundary passes) on the `float`s `xs`: where they answer, the accurate
+/// path's nearest result (the entry's flags are the boundary test's); the number taken.
+fn agree_sqrt(xs: impl Iterator<Item = f32> + Clone) -> u64 {
+    let mut taken = 0;
+    for (f, g) in [(Fast::Asinh, asinh_nearest_sqrt as fn(f32, fn(f64) -> f64) -> Option<f32>), (Fast::Acosh, acosh_nearest_sqrt)] {
+        for x in xs.clone() {
+            if let Some(r) = g(x, f64::sqrt) {
+                taken += 1;
+                let want = accurate(f, x, Rounding::Nearest).0;
+                assert_eq!((f, x.to_bits(), r.to_bits()), (f, x.to_bits(), want.to_bits()), "nearest with sqrtsd");
+            }
+        }
+    }
+    taken
+}
+
+/// asinhf and acoshf with the hardware root on every 16411th `float` encoding (the gate's
+/// share of the exhaustive sweep below). (No spec clause: LIBM-F32-HYPERBOLIC-4.)
+#[test]
+fn hyperbolic_hardware_sqrt_agrees_sampled() {
+    let taken = agree_sqrt((0..u32::MAX).step_by(16411).map(f32::from_bits));
+    assert!(taken > 150_000, "{taken}");
+}
+
+/// asinhf and acoshf with the hardware root on every `float` (2^33 calls, its own job:
+/// LIBM-F32-HYPERBOLIC-4's accuracy check). (No spec clause.)
+#[test]
+#[ignore]
+fn hyperbolic_hardware_sqrt_agrees_exhaustively() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    const CHUNK: u64 = 1 << 16;
+    let n = std::thread::available_parallelism().map_or(8, |n| n.get());
+    let next = AtomicU64::new(0);
+    let taken: u64 = std::thread::scope(|sc| {
+        let hs: std::vec::Vec<_> = (0..n).map(|_| sc.spawn(|| {
+            let mut taken = 0;
+            loop {
+                let lo = next.fetch_add(CHUNK, Ordering::Relaxed);
+                if lo >= 1 << 32 {
+                    return taken;
+                }
+                taken += agree_sqrt((lo..lo + CHUNK).map(|b| f32::from_bits(b as u32)));
+            }
+        })).collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
+    });
+    std::println!("asinhf/acoshf hardware-root fast path taken {taken} of {} calls", 2u64 << 32);
 }
 
 /// sinf (and sincosf) on every `float` operand in every mode against the accurate path, one

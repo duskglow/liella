@@ -42,6 +42,7 @@ fn both(f: extern "C" fn(f64) -> f64, exact: fn(f64) -> f64, xs: &[f64]) -> usiz
 // s10_3_c_0, s10_0_g_0: every build of exp/log computes the same, correctly rounded result.
 #[test]
 fn exp_and_log_fma_build_matches_baseline_bit_for_bit() {
+    // exp, log and exp10 (each export with an FMA build).
     if !selftest::set_math_fma(true) {
         eprintln!("SKIP: this CPU (or its OS) has no FMA; only the baseline build exists here");
         return;
@@ -59,7 +60,18 @@ fn exp_and_log_fma_build_matches_baseline_bit_for_bit() {
     let mut ls: Vec<f64> = (0..200_000).map(|_| f64::from_bits(next(&mut s) >> 1)).filter(|x| x.is_finite()).collect();
     ls.extend((0..50_000).map(|_| 1.0 + ((next(&mut s) >> 11) as f64 * 2f64.powi(-53) - 0.5) * 2f64.powi(-((next(&mut s) % 60) as i32))));
     let k = both(m::log, |x| Real::log(x, Rounding::Nearest).0, &ls);
-    assert!(n > 3000 && k > 3000, "sample too small: {n} {k}");
+    // exp10 (LIBM-F64-FAST-KERNELS): uniform over the fast domain, next to the multiples of
+    // log10(2)/64 (tiny reduced arguments) and small magnitudes.
+    let l = core::f64::consts::LOG10_2 / 64.0;
+    let mut ts: Vec<f64> = (0..200_000).map(|_| (next(&mut s) >> 11) as f64 * 2f64.powi(-53) * 616.0 - 308.0).collect();
+    ts.extend((0..50_000).map(|_| {
+        let b = next(&mut s);
+        let c = ((b % 130_000) as f64 - 65_000.0) * l;
+        f64::from_bits(c.to_bits().wrapping_add((b >> 40) % 64).wrapping_sub(32))
+    }).filter(|x| x.is_finite()));
+    ts.extend((0..20_000).map(|_| 2f64.powi(-((next(&mut s) % 62) as i32)) * if next(&mut s) & 1 == 0 { 1.0 } else { -1.0 }));
+    let j = both(m::exp10, |x| Real::exp10(x, Rounding::Nearest).0, &ts);
+    assert!(n > 3000 && k > 3000 && j > 3000, "sample too small: {n} {k} {j}");
     // Leave the startup decision in force for any later test in this binary.
     assert!(selftest::set_math_fma(true));
 }

@@ -101,10 +101,10 @@ fn around(mxcsr: u32, f: impl FnOnce() -> u64) -> (u64, u32) {
     (v, after)
 }
 
-/// The `double` exp, exp2, log, log2, log10 and pow exports as `(name, export, reference)`:
+/// The `double` exp, exp2, log, log2, log10, pow and exp10 exports as `(name, export, reference)`:
 /// the export through the C ABI entry, the reference `liella-math`'s accurate entry.
 #[allow(clippy::type_complexity)]
-fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 6] {
+fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 7] {
     use liella_math::real::Real;
     [
         ("exp", |x, _| m::exp(x), |x, _, r| Real::exp(x, r).0),
@@ -113,6 +113,7 @@ fn double_fast_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, li
         ("log2", |x, _| m::log2(x), |x, _, r| Real::log2(x, r).0),
         ("log10", |x, _| m::log10(x), |x, _, r| Real::log10(x, r).0),
         ("pow", |x, y| m::pow(x, y), |x, y, r| Real::pow(x, y, r).0),
+        ("exp10", |x, _| m::exp10(x), |x, _, r| Real::exp10(x, r).0),
     ]
 }
 
@@ -128,7 +129,7 @@ fn double_fast_arguments_seeded(n: u64, seed: u64) -> Vec<(f64, f64)> {
         0.0, -0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 10.0, 100.0, 1e22, 1e23, 1e-5, 8.673_617_379_884_035e-19, 1e-19, 707.9, 708.0,
         709.7, 710.0, -707.9, -708.0, -740.0, -745.5, 1020.9, 1021.0, -1021.5, 1023.5, -1074.5, 1e-310, 2.2250738585072014e-308,
         f64::MAX, f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 0.75, 1.5, -2.5, 1e300, 4.0, 9.0, 27.0, 1.0 + f64::EPSILON,
-        1.0 - f64::EPSILON / 2.0,
+        1.0 - f64::EPSILON / 2.0, 22.0, 23.0, 24.0, -22.0, 306.9, 307.0, -306.9, -307.0, -307.5,
     ];
     let ys = [0.5, 1.5, -1.0, 2.0, 3.0, 1.0 / 2048.0, 1.0 / 4096.0, 0.1, -0.3, 7.25, 1e-61, 1e-59, 1e12, 3e12, 1e20, 300.5, -0.0];
     let mut v: Vec<(f64, f64)> = Vec::new();
@@ -197,6 +198,7 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
                     "log" => Real::log(x, mode),
                     "log2" => Real::log2(x, mode),
                     "log10" => Real::log10(x, mode),
+                    "exp10" => Real::exp10(x, mode),
                     _ => Real::pow(x, y, mode),
                 };
                 // 0x3f: every flag already sticky in the caller's word, so leaving the word means
@@ -321,15 +323,15 @@ fn math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode() {
 #[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
 fn math_double_fast_entry_sweep() {
     // Clauses: s10_0_f_0. The fast-domain agreement sweep (MATH-M6-F64-FAST-ENTRY-2): LIELLA_FE_SWEEP_CHUNKS
-    // chunks (default 200) of 2·10^6 random pairs each, every one through all six fast entries as above.
+    // chunks (default 200) of 2·10^6 random pairs each, every one through all seven fast entries as above.
     let chunks: u64 = std::env::var("LIELLA_FE_SWEEP_CHUNKS").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
     // MATH-M6-F64-GAP-ROUND-TEST: also count which rounding step answers each in-place call
     // (liella_math::fast64::nearest_stage: 0 the constant test, 1 its miss settled by the exact
     // test, 2 the exact test alone, 3 the accurate path, 4 refused). The cap (coordinator #2071): a
     // miss rate (1 over 0 + 1) of at most 2^-12 per function; a miss costs one exact test (~30
     // instructions), so 2^-12 bounds its cost below 0.01 instructions per call.
-    let names = ["exp", "exp2", "log", "log2", "log10", "pow"];
-    let mut stages = [[0u64; 5]; 6];
+    let names = ["exp", "exp2", "log", "log2", "log10", "pow", "exp10"];
+    let mut stages = [[0u64; 5]; 7];
     let (mut checked, mut bad) = (0usize, Vec::new());
     for c in 0..chunks {
         let args = double_fast_arguments_seeded(1_000_000, 0x5eed_0000_0000_0001 ^ c.wrapping_mul(0x9e37_79b9_7f4a_7c15));
@@ -1857,6 +1859,114 @@ fn math_hypotf_fast_path_is_the_accurate_hypotf() {
     // Finite random operands of comparable magnitude overwhelmingly take the fast path.
     assert!(eligible > 40_000 && fast * 10 > eligible * 9, "fast path taken {fast} of {eligible} comparable");
     fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+#[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_precision_loss, clippy::float_arithmetic)] // test operand arithmetic
+fn math_double_invtrig_hypot_fast_tier_is_the_accurate_path() {
+    // Clauses: s10_0_f_0, s10_0_c_0. LIBM-F64-INVTRIG-HYPOT-TIER: the `double` atan, asin, acos,
+    // atan2 and hypot entries (fast tier in the default MXCSR, accurate path otherwise) give the
+    // accurate path's bits, flags and errno in every direction as an entry delivers them: the
+    // envelope `mr::elem` (the pre-story entry), which runs the double-double arithmetic in the
+    // default MXCSR (under the caller's directed hardware rounding it is not exact) and drops
+    // what that arithmetic raised in hardware but the result does not (acos(5e-324)'s steps
+    // underflow, its result π/2 is not tiny). Every flag set also obeys §10.0 and C F.10 on its
+    // own (`annex_f`): underflow exactly for a tiny inexact result, overflow and ERANGE only as
+    // §10.0 says, invalid and EDOM only for a domain error. An exact root raises nothing, and
+    // atan(1/2), whose fast-tier arithmetic is exact up to the last addition, raises inexact.
+    use liella_boundary::mathret as mr;
+    use liella_math::{pow, trig};
+    let d_in = |rc: u32, f: &dyn Fn() -> f64| {
+        liella_boundary::errno::set_raw(0);
+        let (v, after) = around(0x1f80 | rc << 13, || f().to_bits());
+        (v, after & 0x3d, liella_boundary::errno::get())
+    };
+    // The entry against the accurate path's envelope, then the spec rule on the entry's own.
+    let check = |what: &str, rc: u32, args: &[f64], entry: &dyn Fn() -> f64, envelope: &dyn Fn() -> f64| {
+        let got = d_in(rc, entry);
+        assert_eq!(got, d_in(rc, envelope), "{what} in direction {rc}: (bits, flags, errno) against the accurate path");
+        assert_eq!(annex_f(args, f64::from_bits(got.0), got.1, got.2), Ok(()), "{what} in direction {rc}: §10.0 flags (bits {:#x}, flags {:#x}, errno {})", got.0, got.1, got.2);
+    };
+    let tiny = [5e-324, -5e-324, 1e-323, f64::MIN_POSITIVE, -f64::MIN_POSITIVE, 2.225_073_858_507_201e-308, 1e-300, -1e-160, 1e-155];
+    let mut xs = vec![0.5, 1.0, -1.0, 0.3, -0.7, 2.5, -1e10, 1e-10, 0.999_999_9, 1e-20, 1e300, 0.0, -0.0, 1.5, f64::INFINITY, f64::NAN];
+    xs.extend_from_slice(&tiny);
+    let mut pairs: Vec<(f64, f64)> = vec![(3.0, 4.0), (1.0, 2f64.powi(-30)), (0.5, 0.25), (-2.0, 3.0), (1e300, 1e300), (f64::MAX, f64::MAX), (1e-300, 1e-300), (5e-324, 1.0), (1.0, 5e-324), (5e-324, 0.0), (5e-324, 5e-324), (1e-300, 1e10), (-1e-300, 1e20), (f64::INFINITY, f64::NAN), (0.0, -0.0)];
+    let mut s: u64 = 0x9e37_79b9_7f4a_7c15;
+    for i in 0..3000u32 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        let x = f64::from_bits(s) % 4.0;
+        xs.push(if i % 2 == 0 { x * 0.25 } else { x * 1e5 });
+        pairs.push((x, f64::from_bits(s.rotate_left(17)) % 9.0));
+    }
+    for rc in 0..4u32 {
+        for &x in &xs {
+            check(&format!("atan({x:e})"), rc, &[x], &|| m::atan(x), &|| mr::elem(x, mr::Unit::Sse, trig::atan::<f64>));
+            check(&format!("asin({x:e})"), rc, &[x], &|| m::asin(x), &|| mr::elem(x, mr::Unit::Sse, trig::asin::<f64>));
+            check(&format!("acos({x:e})"), rc, &[x], &|| m::acos(x), &|| mr::elem(x, mr::Unit::Sse, trig::acos::<f64>));
+        }
+        for &(y, x) in &pairs {
+            for (y, x) in [(y, x), (x, y)] {
+                check(&format!("atan2({y:e}, {x:e})"), rc, &[y, x], &|| m::atan2(y, x), &|| mr::elem((y, x), mr::Unit::Sse, |(y, x), md| trig::atan2::<f64>(y, x, md)));
+                check(&format!("hypot({y:e}, {x:e})"), rc, &[y, x], &|| m::hypot(y, x), &|| mr::elem((y, x), mr::Unit::Sse, |(y, x), md| pow::hypot::<f64>(y, x, md)));
+            }
+        }
+    }
+    // The case run -3's FULL gate found (the raw computation raises underflow in hardware), in
+    // every direction and for both signs: π/2 rounded, inexact only.
+    for rc in 0..4u32 {
+        for x in [5e-324, -5e-324] {
+            let (v, flags, errno) = d_in(rc, &|| m::acos(x));
+            assert!((f64::from_bits(v) - core::f64::consts::FRAC_PI_2).abs() < 1e-15 && flags == 0x20 && errno == 0, "acos({x:e}) in direction {rc}: ({v:#x}, {flags:#x}, {errno})");
+        }
+    }
+    assert_eq!(d_in(0, &|| m::hypot(3.0, 4.0)), (5f64.to_bits(), 0, 0), "hypot(3, 4) exact-root flags");
+    assert_eq!(d_in(0, &|| m::hypot(1.0, 2f64.powi(-30))), (1f64.to_bits(), 0x20, 0), "hypot(1, 2^-30) must raise inexact");
+    assert_eq!(d_in(0, &|| m::atan(0.5)).1, 0x20, "atan(1/2) must raise inexact");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// §10.0 (s10_0_f_0) and C F.10 for a `double` result `r` of the operands `args` (quiet NaNs,
+/// infinities or finite values), its MXCSR flags (`0x3d` bits: invalid, divide-by-zero, overflow,
+/// underflow, inexact) and `errno`, decided from the result alone: invalid and `EDOM` exactly for
+/// a NaN from non-NaN operands; never divide-by-zero; underflow only for an inexact result at or
+/// below the smallest normal and always for an inexact one below it (tininess is detected after
+/// rounding, so a result rounded up to `DBL_MIN` may carry it); overflow only for an inexact
+/// result of finite operands that is infinite or `DBL_MAX`, and always for an infinite one;
+/// `ERANGE` exactly for an overflow to ±∞ or an underflow to ±0.
+#[allow(clippy::float_cmp)] // exact comparisons against the format's limits
+fn annex_f(args: &[f64], r: f64, flags: u32, errno: i32) -> Result<(), String> {
+    const EDOM: i32 = 33;
+    const ERANGE: i32 = 34;
+    let finite = args.iter().all(|a| a.is_finite());
+    let domain = r.is_nan() && !args.iter().any(|a| a.is_nan());
+    let inexact = flags & 0x20 != 0;
+    let (uf, of) = (flags & 0x10 != 0, flags & 0x08 != 0);
+    if (flags & 0x01 != 0) != domain {
+        return Err(format!("invalid must be raised exactly for a domain error (domain: {domain})"));
+    }
+    if flags & 0x04 != 0 {
+        return Err("divide-by-zero raised".into());
+    }
+    if uf && !(inexact && r.abs() <= f64::MIN_POSITIVE) {
+        return Err("underflow raised for a result that is exact or not tiny".into());
+    }
+    if !uf && inexact && r.abs() < f64::MIN_POSITIVE {
+        return Err("underflow missing for a tiny inexact result".into());
+    }
+    if of && !(inexact && finite && (r.is_infinite() || r.abs() == f64::MAX)) {
+        return Err("overflow raised for a result that did not overflow".into());
+    }
+    if !of && finite && r.is_infinite() {
+        return Err("overflow missing for an infinite result of finite operands".into());
+    }
+    let range = finite && (r.is_infinite() || (r == 0.0 && inexact));
+    let want = if domain { EDOM } else if range { ERANGE } else { 0 };
+    if errno != want {
+        return Err(format!("errno {errno}, §10.0 gives {want}"));
+    }
+    Ok(())
 }
 
 /// Whether `f` is √(x²+y²) rounded in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward

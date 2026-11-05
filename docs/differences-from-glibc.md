@@ -342,6 +342,7 @@ The elementary functions of `float` and `double` (milestone 2), recorded in
 | Inexact for tiny arguments (`sin`, `tan`, `asin`, `atan`, `sincos` below about 2^-26; `cos`, `acos`, `cosh` of tiny ones; `atan2` limits) | Raised (the result is inexact). | Not raised. | D-10.14 (C F.10: unspecified) (s10_0_f_0) |
 | Inexact for exact results (`cbrt(27)`, `log2(2^k)`, `log10(10^k)`, `exp10(k)`, `pow(3, 4)`, `pow(0.25, 0.5)`) | Not raised; no underflow for an exact subnormal result (`exp2(−1074)`, `pow(2, −1074)`). | Raised (with underflow for the subnormal ones). | D-10.14 (s10_0_f_0) |
 | `errno` for a subnormal result, or a result rounded to the largest finite value, of `exp`, `exp2`, `exp10`, `pow` (and their `float` forms) | Not set (flags only), as for every function. | `ERANGE` for some such operands, not for others. | D-10.14 (s10_0_f_0; three-way: spec kept) |
+| `errno` for a result that underflows to ±0 in a directed mode (`sin`, `atan`, `atan2(x, 1)`, `tanh`, `asinh`, `log1p`, `expm1` and their `float` forms, of the smallest subnormals) | `ERANGE` (§10.0: an underflow to zero), with underflow raised. | Not set; for most of these operands the result is the smallest subnormal rather than ±0 (the first row); `tanh` and `tanhf` toward zero return −0 with underflow and no `ERANGE`. `atan2(x, 2)` of the smallest subnormal to nearest: `ERANGE` on both. | D-10.14 (s10_0_f_0; probed 2026-11-05) |
 
 The elementary functions of `long double` (milestone 5a), recorded in
 `crates/math/tests/elem_ld_products.rs` (special, boundary and random operands in every

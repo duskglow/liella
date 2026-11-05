@@ -8,7 +8,14 @@
 //! - a copy without the products (`cargo xtask so` is run in the copy before the baseline);
 //! - an unanchored pattern that mutated the wrong site (every plant must change exactly one site,
 //!   and a plant on a `.S` file must name its `liella_machine_<fn>:` label);
-//! - a script that always exits 0 (any SURVIVED exits 1; a failed baseline exits 2).
+//! - a script that always exits 0 (any SURVIVED exits 1; a failed baseline exits 2);
+//! - a copy missing a source file a test needs: after the copy every source path (`git ls-files`, tracked
+//!   and untracked-not-ignored, in a git work tree; every file and symlink outside `/target` and
+//!   `/fuzz/target` in a synced role, which has no `.git`) must exist in it, else the run is refused.
+//!
+//! A `--dir` under `/dev/shm` prints WARN-DEV-SHM: a test that mounts its own `/dev` or `/dev/shm`
+//! hides such a copy (XTASK-PLANTS-TRACKED-COPY: `nscache_mode.sh` binds the copy back; the
+//! `nodev` phase of `posixipc_run.sh` cannot).
 //!
 //! The plants file has one plant per line (blank lines and `#` comments are skipped):
 //! `id | path | pattern | cmd | msg:<regex>` or `id | path | pattern | cmd | equivalent:<reason>`,
@@ -355,6 +362,49 @@ fn refused(msg: String) -> Outcome {
     Outcome { code: EXIT_REFUSED, verdicts: Vec::new() }
 }
 
+/// The source paths the copy must hold, sorted, and how they were found. In a git work tree (`.git` a directory or a
+/// worktree's file): `git ls-files` of the tracked and the untracked-not-ignored files that exist (a tracked file
+/// deleted in the work tree is not expected); a tracked file under `/target` is expected too (the copy then lacks it
+/// and the run is refused). Otherwise (a synced role: no `.git`) every file and symlink below `src` outside `/target`
+/// and `/fuzz/target`, symlinks not followed.
+fn source_paths(src: &Path) -> Result<(Vec<String>, &'static str), String> {
+    if src.join(".git").exists() {
+        let out = Command::new("git").arg("-C").arg(src).args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).output().map_err(|e| format!("git ls-files: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("git ls-files: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        let mut paths: Vec<String> = String::from_utf8_lossy(&out.stdout).split('\0').filter(|p| !p.is_empty() && fs::symlink_metadata(src.join(p)).is_ok()).map(str::to_string).collect();
+        paths.sort();
+        paths.dedup();
+        return Ok((paths, "git ls-files"));
+    }
+    fn walk(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<(), String> {
+        for e in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+            let e = e.map_err(|e| e.to_string())?;
+            let name = e.file_name().to_string_lossy().into_owned();
+            let path = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+            if path == "target" || path == "fuzz/target" {
+                continue;
+            }
+            if e.file_type().map_err(|e| e.to_string())?.is_dir() {
+                walk(&e.path(), &path, out)?;
+            } else {
+                out.push(path);
+            }
+        }
+        Ok(())
+    }
+    let mut paths = Vec::new();
+    walk(src, "", &mut paths)?;
+    paths.sort();
+    Ok((paths, "every file of a tree without .git"))
+}
+
+/// The paths of `paths` that `copy` lacks (as a file, symlink or anything else; a dangling symlink counts as present).
+fn missing_in(copy: &Path, paths: &[String]) -> Vec<String> {
+    paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err()).cloned().collect()
+}
+
 /// The whole run: refuse what cannot be trusted, copy, build, baseline, then each plant.
 pub fn run(cfg: &Config) -> Outcome {
     if cfg.dir.exists() {
@@ -368,6 +418,9 @@ pub fn run(cfg: &Config) -> Outcome {
     }
     if on_ram(&cfg.dir) == Some(false) {
         println!("plants: WARN-NOT-RAM: {} is not on tmpfs or zram (plant copies belong in RAM: /dev/shm/claude/<story>/ or /mnt/zram/claude/<story>/)", cfg.dir.display());
+    }
+    if cfg.dir.starts_with("/dev/shm") {
+        println!("plants: WARN-DEV-SHM: {} is under /dev/shm: a test that mounts its own /dev or /dev/shm cannot see the copy (posixipc_products; nscache_mode.sh binds it back)", cfg.dir.display());
     }
     if let Some(parent) = cfg.dir.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
@@ -390,6 +443,17 @@ pub fn run(cfg: &Config) -> Outcome {
         return Outcome { code: EXIT_SURVIVED, verdicts: Vec::new() };
     }
     println!("plants: copy {} -> {}", cfg.src.display(), copy.display());
+    match source_paths(&cfg.src) {
+        Ok((paths, how)) => {
+            let missing = missing_in(&copy, &paths);
+            if !missing.is_empty() {
+                let shown: Vec<&str> = missing.iter().take(20).map(String::as_str).collect();
+                return refused(format!("the copy lacks {} of {} source paths ({how}), so a test could miss a file it needs: {}{}", missing.len(), paths.len(), shown.join(", "), if missing.len() > 20 { ", ..." } else { "" }));
+            }
+            println!("plants: copy check: all {} source paths ({how}) are in the copy", paths.len());
+        }
+        Err(e) => return refused(format!("cannot list the source paths of {}: {e}", cfg.src.display())),
+    }
     // The products, then each distinct command on the unmutated copy.
     let mut baseline: Vec<(String, Vec<String>)> = vec![("so".into(), cfg.prepare.clone())];
     for p in &cfg.plants {
@@ -600,6 +664,67 @@ mod tests {
         assert_eq!(DEFAULT_TIMEOUT, 600);
         let cfg = parse_args(&src, &[f, "--dir".into(), d, "--timeout".into(), "7".into()]).unwrap();
         assert_eq!(cfg.timeout, 7);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        Command::new("git").arg("-C").arg(dir).args(args).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY, no spec clause: every source path of a git work tree reaches the copy, including
+    // unusual kinds (a symlink, a dangling symlink, an executable script, a dot directory, a name with a space and a
+    // newline, a `target` directory below the top), and the copy check lists them all; without git, every file but /target.
+    #[test]
+    fn every_tracked_path_of_an_unusual_kind_is_copied() {
+        let (src, dir) = toy("tracked");
+        if !git(&src, &["init", "-q"]) {
+            println!("skipped: no git (the tracked-path case needs `git init`)");
+            return;
+        }
+        fs::create_dir_all(src.join(".config")).unwrap();
+        fs::write(src.join(".config/x.toml"), "x = 1\n").unwrap();
+        fs::create_dir_all(src.join("crates/x/target")).unwrap();
+        fs::write(src.join("crates/x/target/keep.txt"), "source, not a build\n").unwrap();
+        fs::write(src.join("src/a b\nc.txt"), "odd name\n").unwrap();
+        fs::write(src.join("src/run.sh"), "#!/bin/sh\nexit 0\n").unwrap();
+        let mut mode = fs::metadata(src.join("src/run.sh")).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut mode, 0o755);
+        fs::set_permissions(src.join("src/run.sh"), mode).unwrap();
+        std::os::unix::fs::symlink("value.txt", src.join("src/link")).unwrap();
+        std::os::unix::fs::symlink("nowhere", src.join("src/dangling")).unwrap();
+        fs::write(src.join(".gitignore"), "/target\n").unwrap();
+        assert!(git(&src, &["add", "-A"]), "git add");
+        fs::write(src.join("src/untracked.txt"), "new, not added yet\n").unwrap();
+        let (paths, how) = source_paths(&src).unwrap();
+        assert_eq!(how, "git ls-files");
+        for p in [".config/x.toml", "crates/x/target/keep.txt", "src/a b\nc.txt", "src/run.sh", "src/link", "src/dangling", "src/untracked.txt"] {
+            assert!(paths.iter().any(|x| x == p), "{p} listed: {paths:?}");
+        }
+        assert!(!paths.iter().any(|x| x.starts_with("target/")), "ignored target/ is not a source path");
+        let out = run(&config(&src, &dir, &format!("c1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} && test -x src/run.sh && test -L src/dangling | msg:WRONG-ANSWER\n")));
+        assert_eq!(out.code, EXIT_OK, "{:?}", out.verdicts);
+        assert!(missing_in(&dir.join("src"), &paths).is_empty());
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY, no spec clause: a tracked file the copy lacks (here one force-added under the excluded
+    // /target) refuses the run before the build or any plant, naming the path
+    #[test]
+    fn a_tracked_path_missing_from_the_copy_refuses_the_run() {
+        let (src, dir) = toy("missing");
+        if !git(&src, &["init", "-q"]) {
+            println!("skipped: no git (the tracked-path case needs `git init`)");
+            return;
+        }
+        fs::write(src.join("target/needed.sh"), "echo a test needs me\n").unwrap();
+        fs::write(src.join(".gitignore"), "/target\n").unwrap();
+        assert!(git(&src, &["add", "src/value.txt", ".gitignore"]) && git(&src, &["add", "-f", "target/needed.sh"]), "git add");
+        let mut cfg = config(&src, &dir, &format!("m1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} | msg:WRONG-ANSWER\n"));
+        cfg.prepare = sh("echo BUILT > built.txt");
+        let out = run(&cfg);
+        assert_eq!(out.code, EXIT_REFUSED);
+        assert!(out.verdicts.is_empty() && !dir.join("src/built.txt").exists(), "refused before the build");
+        assert_eq!(missing_in(&dir.join("src"), &source_paths(&src).unwrap().0), vec!["target/needed.sh".to_string()]);
         let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 
