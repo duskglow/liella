@@ -37,6 +37,7 @@ unsafe extern "C" {
     pub(crate) safe fn __errno_location() -> *mut i32;
 }
 
+
 /// Count `d` caller-owned blocks more (or fewer) live on the calling thread when `yes`: the
 /// test builds' leak measure (`selftest::caller_blocks`, FREE-POISON-TESTS-6 ruling #296), valid
 /// whichever allocator serves the symbols. Products compile it away.

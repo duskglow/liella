@@ -36,6 +36,7 @@ use hyperbolic::*;
 use inv_trig::*;
 use trig::*;
 pub use exp_log::{eval_pow, pow};
+pub use hyperbolic::{acosh_nearest_sqrt, asinh_nearest_sqrt};
 pub use inv_trig::{atan2, eval_atan2};
 pub use trig::sincos;
 

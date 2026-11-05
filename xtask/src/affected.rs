@@ -53,12 +53,13 @@
 //!    `#include` or `.set` (which can define symbols unseen), a symbol not prefixed `liella_`
 //!    (may be exported C ABI), a symbol named by another csys source, a link list, a script or
 //!    xtask, or no user at all.
-//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule): the
+//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
-//! naming either (not through hubs or test-support modules), and the spec sections of those modules only; no reverse
+//! naming either (not through hubs or test-support modules), the spec sections of those modules and of the C entries
+//! whose bodies name one of them (the products tests reach code only through C entries); no reverse
 //! closure, no section 0, no "carries no section". Rules 1-3 and 5-7 (and every escalation to FULL) are unchanged.
 //! `--tier wide` is the rule 4 above; `--tier full` runs everything, as the landing gate (`cargo xtask test`) does.
 //! `--replay <records>` checks that the failures of past gates fall inside a tier (`replay`).
@@ -1006,7 +1007,9 @@ impl Selection {
     /// * the test targets that name the module or one of those users (a user that is a hub or a test-only module,
     ///   e.g. `selftest`, does not select its own namers: that would reach most of the workspace again),
     /// * the targets and conformance programs carrying a spec section of the module or of a one-hop `posix/sNN`
-    ///   user (never section 0 by default, never "carries no section").
+    ///   user (never section 0 by default, never "carries no section"),
+    /// * the targets carrying the spec section of a C entry (a `posix/sNN` definition) whose body names the module or
+    ///   a one-hop user that is not a hub, an entry hub or test support: the products tests reach a helper module this way.
     ///
     /// A module re-exported at its crate root cannot be followed by name: wide, as before. Escalations to FULL are
     /// decided before this (`classify`). Data (GATE-TIME, 100 gates): every real failure was in a target the change
@@ -1058,6 +1061,27 @@ impl Selection {
         sections.extend(ns.section);
         sections.extend(users.iter().filter_map(|&i| repo.nodes[i].section));
         let secs: Vec<String> = sections.iter().map(u32::to_string).collect();
+        // XTASK-PLANTS-TRACKED-COPY: the sections of the C entries the change reaches. A test that diffs the products
+        // (`catalogs_products`) reaches a module only through the entries its C program calls, so it names no module and
+        // carries only sections; a module behind a helper (legacy::intl, used by boundary::catalog, which the
+        // `posix/s07_locale` entries name) has no section of its own nor a `posix/sNN` one-hop user, and selected none of
+        // them. An entry counts when its body names the module or a one-hop user that is neither a hub, an entry hub nor
+        // test support (as for conformance programs, which have their own call-based rule below and do not use these).
+        let entry_names = |e: &Entry, i: usize| e.refs.iter().any(|(m_c, m)| repo.nodes[i].name == *m && repo.nodes[i].krate == *m_c.as_deref().unwrap_or(repo.nodes[e.node].krate.as_str()));
+        let mut entry_secs: BTreeMap<u32, String> = BTreeMap::new();
+        for (sym, es) in &repo.entries {
+            for e in es {
+                let Some(s) = repo.nodes[e.node].section.filter(|s| !sections.contains(s) && !entry_secs.contains_key(s)) else {
+                    continue;
+                };
+                if let Some(i) = named.iter().copied().find(|&i| !repo.entry_hubs.contains(&i) && entry_names(e, i)) {
+                    entry_secs.insert(s, format!("`{sym}` in {} names {}", label(e.node), label(i)));
+                }
+            }
+        }
+        if !entry_secs.is_empty() {
+            self.notes.push(format!("{file}: DIRECT tier: sections of the C entries reached: {}", entry_secs.iter().map(|(s, w)| format!("{s} ({w})")).collect::<Vec<_>>().join(", ")));
+        }
         let via = |t: &str| format!("{file}: {t}");
         add(&mut self.clippy, krate.to_string(), &format!("{file} changed"));
         let mut crates_in: BTreeSet<&str> = users.iter().map(|&i| repo.nodes[i].krate.as_str()).collect();
@@ -1071,6 +1095,8 @@ impl Selection {
                 via(&format!("names `{r}` (the module, a name it re-exports or a one-hop user)"))
             } else if let Some(s) = t.sections.intersection(&sections).next() {
                 via(&format!("spec section {s} (sections of the module and its one-hop users: {})", secs.join(",")))
+            } else if let Some((s, w)) = entry_secs.iter().find(|(s, _)| t.sections.contains(s)) {
+                via(&format!("spec section {s} of a C entry the change reaches ({w})"))
             } else {
                 continue;
             };
@@ -1142,6 +1168,8 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/policy.rs", &[]),
     ("xtask/src/forkalloc.rs", &[]),
     ("xtask/src/fs_order.rs", &[]),
+    // `cargo xtask plants` only (ruling #2993): no other command or gate step runs it.
+    ("xtask/src/plants.rs", &[]),
     ("xtask/src/symgap.rs", &["symgap"]),
     ("xtask/src/status.rs", &["status"]),
     ("xtask/src/schedule.rs", &["status"]),
@@ -2865,6 +2893,15 @@ mod tests {
     }
 
     #[test]
+    fn a_plants_change_selects_exactly_the_xtask_tests_and_clippy() {
+        // no spec clause: ruling #2993, plants.rs is a leaf like the audit modules, not FULL.
+        let (_, s) = sel(&["xtask/src/plants.rs"]);
+        assert!(s.full.is_empty(), "plants.rs must not escalate to FULL: {s:?}");
+        assert!(s.xtask_tests && s.xtask_cmds.is_empty() && s.tests.is_empty() && s.conf.is_empty(), "{s:?}");
+        assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "only the xtask clippy: {s:?}");
+    }
+
+    #[test]
     fn audit_modules_are_leaves() {
         let audit: Vec<&str> = XTASK_AUDITS.iter().map(|(m, _)| *m).collect();
         let mut files = Vec::new();
@@ -2904,6 +2941,23 @@ mod tests {
 
     fn tier(files: &[&str], t: Tier) -> Selection {
         select_tier(repo(), &files.iter().map(|s| s.to_string()).collect::<Vec<_>>(), t)
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY red-before-green: legacy::intl has no section and no `posix/sNN` one-hop user (its users
+    // are boundary::catalog and boundary::data); the gettext entries of posix/s07_locale name boundary::catalog. The
+    // products test diffing the catalogs names no module, only §7.7/§7.8. Before: not selected for an intl.rs change.
+    #[test]
+    fn direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches() {
+        let repo = repo();
+        let t = repo.targets.iter().find(|t| t.name == "catalogs_products").unwrap_or_else(|| panic!("catalogs_products"));
+        assert!(t.products && t.sections.contains(&7), "catalogs_products diffs the products and carries §7");
+        let d = tier(&["crates/legacy/src/intl.rs"], Tier::Direct);
+        assert!(d.full.is_empty() && d.direct, "{:?}", d.full);
+        let k = (t.krate.clone(), t.name.clone());
+        assert!(d.tests.contains_key(&k), "intl.rs must select catalogs_products: {:?}", d.tests.keys().collect::<Vec<_>>());
+        assert!(d.tests[&k].contains("C entry the change reaches"), "{}", d.tests[&k]);
+        let w = tier(&["crates/legacy/src/intl.rs"], Tier::Wide);
+        assert!(d.tests.keys().all(|k| w.tests.contains_key(k)), "direct stays inside wide");
     }
 
     // GATE-TIER-2 red-before-green: a conformance program is C, so no module name reaches it; it is reached through the

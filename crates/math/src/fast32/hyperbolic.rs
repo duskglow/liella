@@ -129,9 +129,17 @@ pub(super) fn tanh_core(x: f32) -> Option<f64> {
 /// carries ≤ 4.5u/2 + u = 3.25u; [`log1p64`] passes that on (≤ 3.25u) and adds 8.2u.
 #[inline(always)]
 pub(super) fn asinh_core(x: f32) -> Option<f64> {
+    asinh_core_with(x, sqrt64)
+}
+
+/// [`asinh_core`] with the square root `sqrt`, which must meet [`sqrt64`]'s bound (≤ 2u) and
+/// raise at most inexact on its operands (normal, in [1, 2^257]): a correctly rounded root
+/// (`sqrtsd` in the default MXCSR, ≤ 0.5u) does both, so the proof above holds unchanged.
+#[inline(always)]
+pub(super) fn asinh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
     let a = hyp_arg(x, f64::INFINITY)?;
     let a2 = a * a;
-    let y = log1p64(a + a2 / (1.0 + sqrt64(1.0 + a2)));
+    let y = log1p64(a + a2 / (1.0 + sqrt(1.0 + a2)));
     Some(if x < 0.0 { -y } else { y })
 }
 
@@ -141,12 +149,19 @@ pub(super) fn asinh_core(x: f32) -> Option<f64> {
 /// error passed on is ≤ 5u/ln 2^53 < 0.14u); [`log1p64`] adds 8.2u: 12.2u, 12.3u with slack.
 #[inline(always)]
 pub(super) fn acosh_core(x: f32) -> Option<f64> {
+    acosh_core_with(x, sqrt64)
+}
+
+/// [`acosh_core`] with the square root `sqrt` (as for [`asinh_core_with`]; operands in
+/// [2^-22, 2^257]).
+#[inline(always)]
+pub(super) fn acosh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
     let x = f64::from(x);
     if !(x > 1.0 && x < f64::INFINITY) {
         return None;
     }
     let t = x - 1.0;
-    Some(log1p64(t + sqrt64(t * (t + 2.0))))
+    Some(log1p64(t + sqrt(t * (t + 2.0))))
 }
 
 /// atanh x, ε ≤ 9.3u, for 2^-26 ≤ |x| < 1: y = ln(1 + w)/2, w = 2a/(1 - a); 1 - a is exact (a on
@@ -156,4 +171,20 @@ pub(super) fn atanh_core(x: f32) -> Option<f64> {
     let a = hyp_arg(x, 1.0)?;
     let y = 0.5 * log1p64((a + a) / (1.0 - a));
     Some(if x < 0.0 { -y } else { y })
+}
+
+/// [`asinh_nearest`] with the square root `sqrt` (LIBM-F32-HYPERBOLIC-4): the boundary passes
+/// `sqrtsd` (this crate forbids `unsafe` and so cannot issue it; the tests pass `f64::sqrt`).
+/// `sqrt` must be correctly rounded to nearest (or at least meet [`sqrt64`]'s 2u bound) and
+/// raise at most inexact on a normal positive operand; the result and flags are then those of
+/// [`asinh_nearest`] wherever both answer (both are the correctly rounded result, inexact).
+#[inline(always)]
+pub fn asinh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(asinh_core_with(x, sqrt)?, ASINH_DELTA, Rounding::Nearest)
+}
+
+/// [`asinh_nearest_sqrt`] for acosh.
+#[inline(always)]
+pub fn acosh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(acosh_core_with(x, sqrt)?, ACOSH_DELTA, Rounding::Nearest)
 }
