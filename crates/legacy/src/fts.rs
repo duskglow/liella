@@ -148,6 +148,10 @@ pub trait FtsMem {
     /// Copy `len` bytes from `from` to `to`, each a (live block, offset into it) pair, the two
     /// blocks different ones.
     fn copy(&mut self, from: (usize, usize), to: (usize, usize), len: usize);
+    /// The status as the `STAT_SIZE` bytes of the block's status field: `Stat` has the layout the
+    /// block holds (x86-64 `struct stat`, field for field), so its bytes are the status and no
+    /// field-by-field conversion is made per entry (PERF-NFTW-ENTRY-11).
+    fn stat_raw(st: &Stat) -> &[u8];
 }
 
 #[derive(Default)]
@@ -278,29 +282,11 @@ fn putf<const N: usize>(b: &mut [u8; N], at: usize, v: &[u8]) {
     }
 }
 
-/// Zero bytes ahead of the status in [`stat_bytes`]'s result: the slice the block is made from
-/// starts inside them, so the padding after the name and the status are one part of the block.
-const LEAD: usize = 8;
+/// The block's status field for an entry without a status: all zero.
+const NO_STAT: [u8; STAT_SIZE] = [0; STAT_SIZE];
 
-fn stat_bytes(st: &Stat) -> [u8; LEAD + STAT_SIZE] {
-    let mut b = [0u8; LEAD + STAT_SIZE];
-    putf(&mut b, LEAD,&st.dev.to_ne_bytes());
-    putf(&mut b, LEAD + 8, &st.ino.to_ne_bytes());
-    putf(&mut b, LEAD + 16, &st.nlink.to_ne_bytes());
-    putf(&mut b, LEAD + 24, &st.mode.to_ne_bytes());
-    putf(&mut b, LEAD + 28, &st.uid.to_ne_bytes());
-    putf(&mut b, LEAD + 32, &st.gid.to_ne_bytes());
-    putf(&mut b, LEAD + 40, &st.rdev.to_ne_bytes());
-    putf(&mut b, LEAD + 48, &st.size.to_ne_bytes());
-    putf(&mut b, LEAD + 56, &st.blksize.to_ne_bytes());
-    putf(&mut b, LEAD + 64, &st.blocks.to_ne_bytes());
-    for (i, t) in [st.atime, st.mtime, st.ctime].iter().enumerate() {
-        let at = (LEAD + 72usize).saturating_add(i.saturating_mul(16));
-        putf(&mut b, at, &t.sec.to_ne_bytes());
-        putf(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
-    }
-    b
-}
+/// Zero bytes for the padding between a name and its status (at most 8).
+const PAD_ZEROS: [u8; 8] = [0; 8];
 
 fn z(text: &[u8]) -> Result<TryVec<u8>> {
     let mut v = TryVec::with_capacity(text.len().saturating_add(1))?;
@@ -405,12 +391,11 @@ impl Fts {
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
         let pad = stat_off.saturating_sub(off::NAME).saturating_sub(name.len());
-        let sb = match &st.1 {
-            Some(s) => stat_bytes(s),
-            None => stat_bytes(&Stat::default()),
+        let sb: &[u8] = match &st.1 {
+            Some(s) => M::stat_raw(s),
+            None => &NO_STAT,
         };
-        // The padding is the first `pad` (1..=8) zeros of `sb`: one part for both.
-        let block = mem.alloc(off::NAME, &[name, sb.get(LEAD.saturating_sub(pad)..).unwrap_or(&[])]).ok_or(Errno::ENOMEM)?;
+        let block = mem.alloc(off::NAME, &[name, PAD_ZEROS.get(..pad).unwrap_or(&[]), sb]).ok_or(Errno::ENOMEM)?;
         let arg = if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() };
         let idx = match self.free_slots.pop() {
             Some(i) => i,
@@ -521,7 +506,7 @@ impl Fts {
     fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size()), x.stat_off, stat_bytes(st).get(LEAD..).unwrap_or(&[]));
+        put(mem.bytes(x.block, x.size()), x.stat_off, M::stat_raw(st));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new

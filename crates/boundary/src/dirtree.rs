@@ -23,7 +23,8 @@ use liella::fs::temp::{self, Create, Made};
 use liella::mem::{TryBox, TryVec};
 use liella_abi::callback::{DirFilterFn, SlotCompareFn};
 use liella_abi::layout::{struct_dirent, struct_dirent64};
-use liella_kernel::fd::Fd;
+use liella_kernel::uapi::Stat;
+use liella_kernel::::fd::Fd;
 use liella_kernel::path::{KStr, PATH_MAX};
 use liella_legacy::fs_tree;
 use liella_legacy::fts::{Fts, FtsMem};
@@ -545,6 +546,8 @@ pub fn mktemp(template: KResult<&mut [u8]>) -> Option<Errno> {
 /// The caller's allocator for `FTSENT` blocks.
 struct Blocks;
 
+const _: () = assert!(core::mem::size_of::<Stat>() == 144);
+
 impl FtsMem for Blocks {
     fn alloc(&mut self, head: usize, tail: &[&[u8]]) -> Option<usize> {
         let len = tail.iter().try_fold(head, |a, t| a.checked_add(t.len()))?.checked_add(1)?;
@@ -572,6 +575,12 @@ impl FtsMem for Blocks {
         if let (Some(s), Some(d)) = (src.get(from.1..), dst.get_mut(to.1..)) {
             d.copy_from_slice(s);
         }
+    }
+
+    fn stat_raw(st: &Stat) -> &[u8] {
+        // UNSAFE(slice) SAFETY: `Stat` is `repr(C)`, 144 bytes, every byte a field or an explicit
+        // padding field (no implicit padding), so all of them are initialised; the slice borrows `st`.
+        unsafe { core::slice::from_raw_parts(core::ptr::from_ref(st).cast::<u8>(), core::mem::size_of::<Stat>()) }
     }
 }
 
