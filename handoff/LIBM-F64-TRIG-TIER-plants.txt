@@ -12,4 +12,4 @@ trig-small | crates/math/src/trig.rs | perl:s/const SMALL_BITS: u64 = 0x2ac0_000
 # The sincos wiring: the in-place answer stores the sine through both out-parameters.
 trig-sincos-wire | crates/boundary/src/mathret.rs | perl:s/\*c = cv;(\n\s+return;)/*c = sv;$1/ | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|sincos\.cos
 # The boundary dispatch (hot/trig.rs, TIER-3 move): the FMA build of sin/cos/tan answers with the cosine kernel.
-trig-hot-dispatch | crates/boundary/src/hot/trig.rs | lit:kernel_fma::$name(x) ==> kernel_fma::cos_nearest(x) | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|mismatches
+trig-hot-dispatch | crates/boundary/src/hot/trig.rs | lit:kernel_fma::$name(x) ==> kernel_fma::cos_nearest(x) | cargo test -p liella-boundary --test libm_fma_select libm_product_trig | msg:libm_product_trig_fma_builds_return_the_baseline_bits.*(FAILED|panicked)|differs from the baseline
