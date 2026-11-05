@@ -1,5 +1,0 @@
-# PERF-NFTW-ENTRY-10: plants on the cold side data (root argument, children, read position).
-cold-next-child-stuck | crates/legacy/src/fts.rs | lit:p.next_child = p.next_child.saturating_add(1); ==> p.next_child = p.next_child; | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked|timed out
-cold-arg-empty | crates/legacy/src/fts.rs | lit:Ok(c) => c.arg = a, ==> Ok(_) => {} | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
-cold-children-kept-after-free | crates/legacy/src/fts.rs | lit:*c = Cold::default(); ==> {} | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
-cold-slash-root | crates/legacy/src/fts.rs | lit:arg_of(&self.colds, x).last() == Some(&b'/') ==> arg_of(&self.colds, x).last() == Some(&b'x') | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
