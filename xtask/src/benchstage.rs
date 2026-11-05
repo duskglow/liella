@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn manifest_round_trips_and_rejects_bad_lines() {
         let h = "a".repeat(64);
-        let m = Manifest { commit: "c0ffee".into(), tree: h.clone(), profile: "release".into(), built_on: "shiki".into(), products: vec![(h.clone(), "target/liella/libc.a".into())] };
+        let m = Manifest { commit: "c0ffee".into(), tree: h.clone(), profile: "release".into(), built_on: "buildhost".into(), products: vec![(h.clone(), "target/liella/libc.a".into())] };
         let back = Manifest::parse(&m.text()).unwrap();
         assert_eq!((back.commit.as_str(), back.profile.as_str(), back.products.len()), ("c0ffee", "release", 1));
         assert!(Manifest::parse(&format!("commit\tc\nproduct\t{h}\t../x\n")).is_err());
