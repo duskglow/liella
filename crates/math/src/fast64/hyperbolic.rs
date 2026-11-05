@@ -125,7 +125,7 @@ pub fn tanh_nearest(x: f64) -> Option<f64> {
         let (y, eps) = odd_series(a, &[-1.0 / 3.0, 2.0 / 15.0, -17.0 / 315.0, 62.0 / 2835.0, -1382.0 / 155_925.0]);
         round(y, eps, 0)?
     } else {
-        let (p, m, ep, qs, eq) = exp_pm(a)?;
+        let (p, _, ep, qs, eq) = exp_pm(a)?;
         let (n, d) = (p.sub(qs), p.add(qs));
         let q1 = n.hi / d.hi;
         let pr = $prod(q1, d.hi);
