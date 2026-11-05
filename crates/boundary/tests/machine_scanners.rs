@@ -1387,6 +1387,14 @@ fn memrchr_kernel_finds_the_last_match_inside_the_region_at_every_alignment_leng
                     buf[align + pos] = b'#';
                     assert_eq!(memrchr_at(&mut buf, align, n), Some(pos), "avx2={avx2}, align {align}, n {n}, pos {pos}");
                 }
+                // One match alone at each position: a block's any-match test must see a match in
+                // any of its vectors when no other vector of the block holds one.
+                buf[align..align + n].fill(b'.');
+                for pos in 0..n {
+                    buf[align + pos] = b'#';
+                    assert_eq!(memrchr_at(&mut buf, align, n), Some(pos), "single, avx2={avx2}, align {align}, n {n}, pos {pos}");
+                    buf[align + pos] = b'.';
+                }
             }
         }
     }

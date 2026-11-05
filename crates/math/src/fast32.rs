@@ -982,9 +982,17 @@ fn tanh_core(x: f32) -> Option<f64> {
 /// carries ≤ 4.5u/2 + u = 3.25u; [`log1p64`] passes that on (≤ 3.25u) and adds 8.2u.
 #[inline(always)]
 fn asinh_core(x: f32) -> Option<f64> {
+    asinh_core_with(x, sqrt64)
+}
+
+/// [`asinh_core`] with the square root `sqrt`, which must meet [`sqrt64`]'s bound (≤ 2u) and
+/// raise at most inexact on its operands (normal, in [1, 2^257]): a correctly rounded root
+/// (`sqrtsd` in the default MXCSR, ≤ 0.5u) does both, so the proof above holds unchanged.
+#[inline(always)]
+fn asinh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
     let a = hyp_arg(x, f64::INFINITY)?;
     let a2 = a * a;
-    let y = log1p64(a + a2 / (1.0 + sqrt64(1.0 + a2)));
+    let y = log1p64(a + a2 / (1.0 + sqrt(1.0 + a2)));
     Some(if x < 0.0 { -y } else { y })
 }
 
@@ -994,12 +1002,19 @@ fn asinh_core(x: f32) -> Option<f64> {
 /// error passed on is ≤ 5u/ln 2^53 < 0.14u); [`log1p64`] adds 8.2u: 12.2u, 12.3u with slack.
 #[inline(always)]
 fn acosh_core(x: f32) -> Option<f64> {
+    acosh_core_with(x, sqrt64)
+}
+
+/// [`acosh_core`] with the square root `sqrt` (as for [`asinh_core_with`]; operands in
+/// [2^-22, 2^257]).
+#[inline(always)]
+fn acosh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
     let x = f64::from(x);
     if !(x > 1.0 && x < f64::INFINITY) {
         return None;
     }
     let t = x - 1.0;
-    Some(log1p64(t + sqrt64(t * (t + 2.0))))
+    Some(log1p64(t + sqrt(t * (t + 2.0))))
 }
 
 /// atanh x, ε ≤ 9.3u, for 2^-26 ≤ |x| < 1: y = ln(1 + w)/2, w = 2a/(1 - a); 1 - a is exact (a on
@@ -1058,10 +1073,26 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // The hyperbolic family (LIBM-F32-HYPERBOLIC-3): the cores of [`eval`], unchanged. Where
+        // they answer, |x| ≥ 2^-26 (acosh: x > 1), so x is a normal `float` and its conversion
+        // raises nothing; a subnormal x raises denormal-operand in that conversion and is then
+        // refused (the entry's cold path drops the bit, FAST_ATTEMPT_HW). Every intermediate is a
+        // normal `double` (each core's proof: the operands of expm1_core, exp_core, sqrt64 and
+        // log1p64 lie inside their stated ranges) and each divisor is a normal `double` ≥ 2^-24
+        // (E + 1, E, E + 2, 1 + √, 1 - a): no division by zero, no overflow, no underflow. So
+        // the arithmetic raises inexact and nothing else, and the rounding test makes the
+        // result inexact.
+        Fast::Sinh => (sinh_core(x)?, SINH_DELTA),
+        Fast::Cosh => (cosh_core(x)?, COSH_DELTA),
+        Fast::Tanh => (tanh_core(x)?, TANH_DELTA),
+        Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
+        Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
+        Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan
-        | Fast::Sinh | Fast::Cosh | Fast::Tanh | Fast::Asinh | Fast::Acosh | Fast::Atanh => return None,
+        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => {
+            return None;
+        }
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -1081,6 +1112,28 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sinh_nearest, Fast::Sinh);
+nearest_fn!(cosh_nearest, Fast::Cosh);
+nearest_fn!(tanh_nearest, Fast::Tanh);
+nearest_fn!(asinh_nearest, Fast::Asinh);
+nearest_fn!(acosh_nearest, Fast::Acosh);
+nearest_fn!(atanh_nearest, Fast::Atanh);
+
+/// [`asinh_nearest`] with the square root `sqrt` (LIBM-F32-HYPERBOLIC-4): the boundary passes
+/// `sqrtsd` (this crate forbids `unsafe` and so cannot issue it; the tests pass `f64::sqrt`).
+/// `sqrt` must be correctly rounded to nearest (or at least meet [`sqrt64`]'s 2u bound) and
+/// raise at most inexact on a normal positive operand; the result and flags are then those of
+/// [`asinh_nearest`] wherever both answer (both are the correctly rounded result, inexact).
+#[inline(always)]
+pub fn asinh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(asinh_core_with(x, sqrt)?, ASINH_DELTA, Rounding::Nearest)
+}
+
+/// [`asinh_nearest_sqrt`] for acosh.
+#[inline(always)]
+pub fn acosh_nearest_sqrt(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    round(acosh_core_with(x, sqrt)?, ACOSH_DELTA, Rounding::Nearest)
+}
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
@@ -1651,6 +1704,7 @@ mod tests {
                 let a2 = da.mul(da);
                 let w = da.add(a2.div(crate::dd::sqrt(a2.add_f64(1.0)).add_f64(1.0)));
                 check(asinh_core(xs), sg(log1p_dd(w)), ASINH_BOUND, "asinh_core", a);
+                check(asinh_core_with(xs, f64::sqrt), sg(log1p_dd(w)), ASINH_BOUND, "asinh_core_with(sqrtsd)", a);
                 if a < 1.0 {
                     let w = da.scale(2.0).div(one.sub(da));
                     check(atanh_core(xs), sg(log1p_dd(w).scale(0.5)), ATANH_BOUND, "atanh_core", a);
@@ -1660,6 +1714,7 @@ mod tests {
                 let t = da.add_f64(-1.0);
                 let w = t.add(crate::dd::sqrt(t.mul(t.add_f64(2.0))));
                 check(acosh_core(x), log1p_dd(w), ACOSH_BOUND, "acosh_core", a);
+                check(acosh_core_with(x, f64::sqrt), log1p_dd(w), ACOSH_BOUND, "acosh_core_with(sqrtsd)", a);
             }
             seen += 1;
         }
@@ -1713,6 +1768,56 @@ mod tests {
     fn atanhf_fast_path_agrees_exhaustively() {
         let taken = exhaustive(&[Fast::Atanh]);
         std::println!("atanhf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// `asinh_nearest_sqrt` and `acosh_nearest_sqrt` with a correctly rounded root (`f64::sqrt`,
+    /// the `sqrtsd` the boundary passes) on the `float`s `xs`: where they answer, the accurate
+    /// path's nearest result (the entry's flags are the boundary test's); the number taken.
+    fn agree_sqrt(xs: impl Iterator<Item = f32> + Clone) -> u64 {
+        let mut taken = 0;
+        for (f, g) in [(Fast::Asinh, asinh_nearest_sqrt as fn(f32, fn(f64) -> f64) -> Option<f32>), (Fast::Acosh, acosh_nearest_sqrt)] {
+            for x in xs.clone() {
+                if let Some(r) = g(x, f64::sqrt) {
+                    taken += 1;
+                    let want = accurate(f, x, Rounding::Nearest).0;
+                    assert_eq!((f, x.to_bits(), r.to_bits()), (f, x.to_bits(), want.to_bits()), "nearest with sqrtsd");
+                }
+            }
+        }
+        taken
+    }
+
+    /// asinhf and acoshf with the hardware root on every 16411th `float` encoding (the gate's
+    /// share of the exhaustive sweep below). (No spec clause: LIBM-F32-HYPERBOLIC-4.)
+    #[test]
+    fn hyperbolic_hardware_sqrt_agrees_sampled() {
+        let taken = agree_sqrt((0..u32::MAX).step_by(16411).map(f32::from_bits));
+        assert!(taken > 150_000, "{taken}");
+    }
+
+    /// asinhf and acoshf with the hardware root on every `float` (2^33 calls, its own job:
+    /// LIBM-F32-HYPERBOLIC-4's accuracy check). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn hyperbolic_hardware_sqrt_agrees_exhaustively() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        const CHUNK: u64 = 1 << 16;
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get());
+        let next = AtomicU64::new(0);
+        let taken: u64 = std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n).map(|_| sc.spawn(|| {
+                let mut taken = 0;
+                loop {
+                    let lo = next.fetch_add(CHUNK, Ordering::Relaxed);
+                    if lo >= 1 << 32 {
+                        return taken;
+                    }
+                    taken += agree_sqrt((lo..lo + CHUNK).map(|b| f32::from_bits(b as u32)));
+                }
+            })).collect();
+            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
+        });
+        std::println!("asinhf/acoshf hardware-root fast path taken {taken} of {} calls", 2u64 << 32);
     }
 
     /// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's

@@ -2535,6 +2535,17 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::exp_nearest(x)
 }
 
+/// The `double` `exp10` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn exp10_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::exp10_nearest(x) };
+    }
+    liella_math::fast64::exp10_nearest(x)
+}
+
 /// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
 #[inline(always)]
 pub(crate) fn log_nearest(x: f64) -> Option<f64> {
@@ -2544,4 +2555,46 @@ pub(crate) fn log_nearest(x: f64) -> Option<f64> {
         return unsafe { liella_math::fast64::fused::log_nearest(x) };
     }
     liella_math::fast64::log_nearest(x)
+}
+
+/// The `float` asinh and acosh fast paths (LIBM-F32-HYPERBOLIC-4) with their square root
+/// issued inline by [`sqrtsd`] below (liella-math forbids `unsafe` and so cannot issue it; its
+/// own root, [`liella_math::fast32::asinh_nearest_sqrt`]'s fallback, is about 20 dependent
+/// operations). A correctly rounded root is within the cores' proved bound, so the result is
+/// the same `float`.
+#[inline(always)]
+pub(crate) fn asinhf_nearest(x: f32) -> Option<f32> {
+    liella_math::fast32::asinh_nearest_sqrt(x, sqrtsd)
+}
+
+/// [`asinhf_nearest`] for acosh.
+#[inline(always)]
+pub(crate) fn acoshf_nearest(x: f32) -> Option<f32> {
+    liella_math::fast32::acosh_nearest_sqrt(x, sqrtsd)
+}
+
+/// `sqrtsd` for the kernels above (correctly rounded; they run in the default MXCSR), issued
+/// inline. The `core::arch` intrinsics are safe only inside a `#[target_feature]` function on
+/// the pinned compiler (a plain function, even with SSE2 in the target baseline, needs
+/// `unsafe`), so the root lives in one: the SSE2 lanes' upper half is `+0`, whose root is exact
+/// and raises nothing. LLVM inlines it into callers with at least SSE2 (every x86-64 function,
+/// and the FMA builds), so no call is left (the out-of-line `liella_machine_sqrtsd` cost a call,
+/// a return and the caller-saved XMM spills around it).
+#[target_feature(enable = "sse2")]
+#[inline]
+fn sqrtsd_sse2(x: f64) -> f64 {
+    // ARCH(x86_64): SSE2 square root (hot-kernel); aarch64 needs `fsqrt` or a portable root (A-8)
+    use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_pd};
+    _mm_cvtsd_f64(_mm_sqrt_pd(_mm_set_sd(x)))
+}
+
+/// [`sqrtsd_sse2`] from a function without `#[target_feature]`.
+#[inline(always)]
+fn sqrtsd(x: f64) -> f64 {
+    // UNSAFE(hot-kernel) SAFETY: the callee needs only SSE2, which the x86-64 baseline
+    // guarantees on every CPU this library runs on.
+    #[allow(unsafe_code)]
+    unsafe {
+        sqrtsd_sse2(x)
+    }
 }

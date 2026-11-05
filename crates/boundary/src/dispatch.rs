@@ -13,7 +13,7 @@
 //! `true` only while the CPU has AVX2 and the OS saves the YMM state, which [`select`]'s callers
 //! establish (`cpu::init_with` from `liella_rt::cpu::Features`; `selftest` refuses otherwise).
 
-use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
 
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -31,20 +31,54 @@ pub(crate) fn avx2() -> bool {
 }
 
 /// Whether the `double` exp/log fast paths run their FMA builds (MATH-F64-FMA-PATH, D-10.25):
-/// the same mechanism as [`avx2`] (one byte decided at startup, `false` until then), read only
-/// by Rust (`hot::exp_nearest`, `hot::log_nearest`), so it lives here rather than in fold.S.
-static FMA: AtomicBool = AtomicBool::new(false);
+/// the same mechanism as [`avx2`] (one byte, read only by Rust: `hot::exp_nearest`,
+/// `hot::log_nearest`, so it lives here rather than in fold.S). [`FMA_OFF`] (the baseline) or
+/// [`FMA_ON`]. In the C library the startup writes it (`cpu::init_with`); `libm.a` and
+/// `libm.so.6` link their own copy of this crate, whose byte that startup never sees, so the
+/// libm product's load-time constructor writes its copy (`liella_libm_start`, D-10.50, #2920).
+/// A math call never asks whether the byte is decided: before the constructor (a static
+/// program's own constructors linked ahead of libm's) it runs the baseline, which returns the
+/// same bits (D-10.25).
+static FMA: AtomicU8 = AtomicU8::new(FMA_OFF);
+const FMA_OFF: u8 = 0;
+const FMA_ON: u8 = 1;
 
-/// Whether the math kernels run their FMA builds.
+/// Whether the math kernels run their FMA builds: one load and one test.
 #[inline(always)]
 pub(crate) fn fma() -> bool {
-    FMA.load(Relaxed)
+    FMA.load(Relaxed) != FMA_OFF
+}
+
+crate::export! { libm "LIELLA_PRIVATE";
+/// The libm product's load-time decision (D-10.50), called once from its `.init_array` entry
+/// (`csys/src/adapter/libm_init.c`) with the loader's `(argc, argv, envp)`: the C library's
+/// startup rule ([`fma_wanted`]) on the CPU's features and the `GLIBC_TUNABLES` entry of `envp`.
+/// It reads `envp` rather than asking the C library because a dynamic program's loader runs
+/// libm.so.6's constructors before the C library's startup has published the environment.
+/// Secure-execution mode, which honours no tunable (`Tunables::parse`), is asked only when the
+/// variable is present (`process::secure`, failing safe). The name is local to both libraries.
+#[cfg(feature = "libm")]
+// A C entry, reached by its symbol from libm_init.c rather than by a Rust path.
+#[allow(unreachable_pub)]
+pub extern "C" fn liella_libm_start(argc: liella_abi::ctypes::c_int, argv: usize, envp: usize) {
+    let _ = (argc, argv);
+    let tunables = crate::conv::env_find_from(envp, 0, b"GLIBC_TUNABLES").map_or_else(liella::config::Tunables::default, |entry| {
+        let text = crate::conv::env_value_text(entry.saturating_add(b"GLIBC_TUNABLES=".len()));
+        liella::config::Tunables::parse(text, crate::process::secure())
+    });
+    select_fma(fma_wanted(&crate::cpu::features_cached(), &tunables));
+}}
+
+/// The FMA builds' rule (D-10.25): the CPU has FMA with the AVX state the OS saves
+/// (`liella_rt::cpu::Features::fma`), and `glibc.cpu.hwcaps=-FMA` does not keep the baseline.
+pub(crate) fn fma_wanted(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) -> bool {
+    f.fma() && t.fma.unwrap_or(true)
 }
 
 /// Select the math kernels' builds. `true` only when the CPU has FMA and the OS saves the AVX
 /// state (`liella_rt::cpu::Features::fma`); both builds return the same results.
 pub(crate) fn select_fma(fma: bool) {
-    FMA.store(fma, Relaxed);
+    FMA.store(if fma { FMA_ON } else { FMA_OFF }, Relaxed);
 }
 
 /// Select the kernels' builds. `true` only when the CPU has AVX2 and the OS saves the YMM state
@@ -65,7 +99,8 @@ pub(crate) fn select(avx2: bool) {
 }
 
 // The AVX2 flag word of the ordered compare's SSE2 long class (machine/fold.S, MEMCMP-MID-3): 128
-// with the AVX2 builds, else 0; `.Lcmp_sse_long` sends an AVX2 build to the Rust large class.
+// with the AVX2 builds, else 0; `.Lcmp_sse_long` and `.Leq_huge` send an AVX2 build, after the
+// explicit NULL tests, to the assembly AVX2 long class (PARITY-MEMCMP-AVX2).
 use crate::ffi::liella_machine_cmp_mid as CMP_MID;
 // The compare entries' 65-2048 class word (machine/fold.S, MEMCMP-MID-4, PERF-MEMCMP-TAILS): one
 // `cmp`/`ja` against it sends larger sizes to the checked or SSE2 classes. Nonzero only with both
