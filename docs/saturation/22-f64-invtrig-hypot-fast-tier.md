@@ -45,7 +45,7 @@ compile time, so `atan` for `|x| > 1`, `asin` near 1 and three `atan2` quadrants
 and the index read from the low bits of `64 th + 1.5·2^52` (the same `j`). Same host and command as above, before =
 the merge with next, instructions per call:
 
-| Row | before | after | glibc | ratio after |
+| Function | before | after | glibc | ratio after |
 |---|---:|---:|---:|---:|
 | atan | 236.8 | 217.3 | 78.8 | 2.76 |
 | asin | 325.1 | 314.7 | 75.1 | 4.19 |
