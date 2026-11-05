@@ -1,6 +1,6 @@
 {"task": "PARITY-LIBM-1105", "model": "sonnet", "tokens": null,
  "result": "Six libm code briefs written from a cbench_libm counter run and per-group percall profiles; libm rows are 3x to 9000x above parity in instructions",
- "branch": "task/parity-libm-1105", "head": "HEAD",
+ "branch": "task/parity-libm-1105", "head": "fd36660a",
  "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["Counter run was on mei (Skylake-SP), not Zen 1 / Haswell-EP: the role was admitted there",
