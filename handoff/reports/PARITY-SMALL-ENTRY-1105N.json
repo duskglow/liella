@@ -1,0 +1,12 @@
+{"task": "PARITY-SMALL-ENTRY-1105N", "model": "opus", "tokens": null,
+ "result": "nl_langinfo/nl_langinfo_l answer from a per-view precomputed table; small_entry.c percall probe added; strnlen/isalpha/ctype_b_loc profiled, not changed (budget)",
+ "branch": "task/parity-small-entry-1105n", "head": "be808ed",
+ "gate": {"affected": "running at hand-back (parity-small-entry-1105n-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["small-probe.c named by the brief was not found; validation/percall/small_entry.c written from the brief's case list", "isalpha (real function) is 26 vs 19 per call in en_US: range test plus a null test of the entry address"],
+ "refused": [],
+ "jobs": ["parity-small-entry-1105n-lint", "parity-small-entry-1105n-gate", "parity-small-entry-1105n-plants", "parity-small-entry-1105n-percall-before", "parity-small-entry-1105n-percall-after", "parity-small-entry-1105n-counts-before", "parity-small-entry-1105n-counts-after"],
+ "improvement": "the brief's probe file was missing from the brief directory: briefs that name a file should check it exists at dispatch",
+ "next_step": "read the after jobs; then strnlen direct asm entry (-3/call) and isalpha null-test removal (-2/call)",
+ "report_file": "handoff/PARITY-SMALL-ENTRY-1105N.md"}
