@@ -1,0 +1,16 @@
+{"task": "LIBM-SLOW-PATH-CAUSE", "model": "opus", "tokens": null,
+ "result": "Root cause: no Ziv fast tier in most families (dd path on every call, 384-bit mp on every special/long double call, software division and per-call constants in mp); CR is a decision, not a spec requirement; report + 7 redesign briefs",
+ "branch": "task/libm-slow-path-cause", "head": null,
+ "gate": {"affected": "not run (planning story, no code)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "R1 accuracy contract per family (CR everywhere vs ulp bound for lgamma/tgamma/Bessel/x87)", "recommendation": "A: keep CR, build Ziv fast tiers; record residuals for lgamma/tgamma/Bessel/x87; switch a family to a ulp bound only if it stays above ~2x in time after its fast tier"},
+  {"item": "R2 parity yardstick for x87 long double rows", "recommendation": "measure in cycles/ns on a booked timing host; instruction counts compare against single microcoded x87 instructions"}],
+ "informational": [
+  "the reference is not correctly rounded on any measured function (differs on 0.01-54% of inputs, up to 4 ulp; j0 791 ulp)",
+  "elem.rs states the f64 double-double path is CR except within ~2^-100 of a boundary: D-10.13's 'every result correctly rounded' is not proved for double",
+  "mp::ln10() recomputes ln 10 by series per call (log10l ~2x avoidable)"],
+ "refused": [],
+ "jobs": ["mei:libm-slow-path-cause-percall-2", "mei:libm-slow-path-cause-agree"],
+ "improvement": "a fastpath-stats + perf harness for libm per-path costs belongs in validation/ so tuning stories stop re-deriving it",
+ "next_step": "rule R1/R2; dispatch LIBM-MP-CORE-SPEED first, then the F64/F32 kernel briefs",
+ "report_file": "handoff/libm-slow-path-cause/report.md"}
