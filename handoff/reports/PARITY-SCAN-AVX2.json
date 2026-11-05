@@ -1,0 +1,17 @@
+{"task": "PARITY-SCAN-AVX2", "model": "opus", "tokens": null,
+ "result": "AVX2 scan loops test their fold with vptest (-1 instr per 128 B): strlen/strnlen/rawmemchr/memchr 4k+64k rows at 0.96-1.01 and memrchr_4k 1.04 on Skylake-SP (were 1.08-1.11); strnlen_16, strnlen_16_mix, memrchr_64_hit still 1.08-1.12",
+ "branch": "task/parity-scan-avx2", "head": "see git log (report commit on c407f33f)",
+ "gate": {"affected": "parity-scan-avx2-gate2 running at hand-back (9 suites ok, none failed when last read)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "strnlen_16 (1.12), strnlen_16_mix (1.09), memrchr_64_hit (1.08) not closed: the small-max head (max = 0 test + clamp) needs its own design",
+  "Haswell 128-129 B entry rows (item a) not done; validation/percall/avx2_families.c has no strlen/strnlen/rawmemchr cases",
+  "Ivy Bridge count not run: the SSE2 path's instructions are unchanged by construction",
+  "Skylake-SP count ran in a RAM-backed copy mei:~/w/psa2-cnt synced from 654cc537 (product source identical to the final head)",
+  "plants run 1 (parity-scan-avx2-plants, rc 1) found a test gap: memrchr matches were planted from the start up; fixed by c407f33f, run 2 7/7 CAUGHT"],
+ "refused": [],
+ "jobs": ["shiki:parity-scan-avx2-gate2", "shiki:parity-scan-avx2-plants2", "mei:parity-scan-avx2-count-avx2", "shiki:parity-scan-avx2-percall"],
+ "improvement": "the percall spec named in the brief (avx2_families.c) lacks strlen/strnlen/rawmemchr cases, so the brief's ladder cannot be repeated from it; add them",
+ "next_step": "design the strnlen small-max head (max <= 64) and memrchr's 64-byte hit path; then the 128-129 B AVX2 entry with wl_trace.sh",
+ "report_file": "handoff/PARITY-SCAN-AVX2.md"}
