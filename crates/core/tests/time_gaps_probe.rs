@@ -121,6 +121,15 @@ static void gd(const char *scratch, const char *tmpl, const char *in) {
     do { /* again if the second changed during the call: the current fields must be the call's */
         now = time(NULL);
         localtime_r(&now, &c);
+        /* A current second of 0 would print as "sec=cur" for a result that zeroed it, hiding a program
+           that kept the current seconds from one that zeroed them; wait out that second (the clock
+           reads 12:30:00 plus the run's delay, so it passes by itself). */
+        for (int w = 0; c.tm_sec == 0 && w < 20; w++) {
+            struct timespec ts = {0, 100000000};
+            nanosleep(&ts, NULL);
+            now = time(NULL);
+            localtime_r(&now, &c);
+        }
         r = getdate(in);
     } while (time(NULL) != now && ++tries < 5);
     printf("getdate(\"%s\", \"%s\") ->", in, tmpl);
