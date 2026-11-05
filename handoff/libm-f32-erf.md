@@ -1,52 +1,42 @@
 # LIBM-F32-ERF: handoff (erff, erfcf on the fast32 PATTERN)
 
-State: branch `task/libm-f32-erf-3` (stacks on `task/libm-f32-erf-2`), role mei:~/w/s3. Code head: the commit
-"Add a tiered test oracle and run the erf sweeps against it" (de666b73); the handoff commit follows it.
-Verdict of -3: COMPLETE once its gate is green (see the report json for the job labels).
+State: branch `task/libm-f32-erf-4` (stacks on `-3`, `-2`, `-1`; merged with origin/next 4c33d4c8), role keke:~/w/n2.
+Code head: fafbde3c "Merge origin/next again (LIBM-F32-HYPERBOLIC-3)"; the handoff commit follows it.
+Verdict of -4: COMPLETE once the jobs below are rc 0 (they were still running at hand-back).
 
-## What -3 did
-* Read -2's jobs on keke: `libm-f32-erf-2-gate` rc 0 (10826 passed, 0 failed), `libm-f32-erf-2-plants` rc 0 (4
-  CAUGHT, 1 WARN-NO-MSG: erfcx1-coeff is caught by the erf_core bound line, the regex named erfc_core; fixed in
-  -3's plants file).
-* Ruling #2889: `crates/math/src/oracle32.rs` (test-only, shared by every float family). `Est` = a double-double
-  `v` with a proven absolute bound `err`, or "just below the float F" (erf beside ±1, erfc beside 2), or Unknown.
-  `decide(est, mode)` rounds when no boundary of that mode lies within err (floats for directed, midpoints for
-  nearest; only normal inexact results; exact cases never decided); `oracle(est, tally, accurate)` answers all
-  four modes from one estimate and calls the mp path only for an undecided mode (counted in `Tally`).
-  erf estimators: series (positive terms, tail bound) for |x| < 4; beside ±1 from 4 (erfc < e^-x²/(x√π));
-  erfc = 1 + erf for x < 0 (beside 2 from -4), 1 - erf below 3, Laplace's continued fraction from 3 to 10
-  (consecutive convergents bracket the value: their gap bounds the truncation). Bounds use U = 2^-100 per dd
-  operation and 2^-98 for exp_dd: these per-operation figures are slack over dd's stated accuracy, NOT proven
-  here; the end-to-end bound is checked against the 384-bit mp erf at 20k points
-  (`erf_estimates_are_within_their_bounds`, which also rejects a bound looser than 2^-70).
-* Sweeps now use the oracle (`agree_oracle`, `exhaustive_oracle`); `exhaustive_by` takes the chunk check.
-* Tests added: `oracle_decides_only_clear_cells`, `erf_estimates_are_within_their_bounds`,
-  `erf_oracle_agrees_with_the_accurate_path`. Unit run `libm-f32-erf-3-unit` (mei): 6 passed.
+## What -4 did (coordinator note 11-05: merge next, one module per family, one sweep oracle)
+* Merged origin/next twice (hyperbolic family, then LIBM-F32-HYPERBOLIC-3 landed mid-run). Both sides kept: the
+  `Fast` enum, `eval`, the `eval_nearest` refusal list (erff/erfcf still refused there: no in-place entry is
+  proven for them), the `fast_fn!` wrappers, the test tables (ALL/NAMES = 23; erff/erfcf last, CHEAP = 21 so they
+  stay out of `agree`'s wide strides), `accurate`, and the bench-range match (21 = erff, 22 = erfcf).
+* Layout: the erf kernels (bounds, deltas, erfcx pieces, erf_small, erfc_big, erf_core, erfc_core) and all erf
+  tests (oracle sweeps, oracle agreement, stride and bound tests) moved to `crates/math/src/fast32/erf.rs`.
+  fast32.rs keeps the shared core and dispatch with `mod erf; use erf::{erf_core, erfc_core, ERFC_DELTA,
+  ERF_DELTA};`. Shared test helpers `accurate`, `agree_in`, `exhaustive_by`, `MODES` are `pub(super)` in
+  fast32's test module so family modules reuse them. Next family: put its kernels in `fast32/<family>.rs` the same way.
+* One sweep oracle: next carries no second float sweep helper. Hyperbolic sweeps use the shared
+  `exhaustive`/`exhaustive_by` against their (cheap) accurate path; erf sweeps use `exhaustive_by` with the
+  tiered oracle (`crates/math/src/oracle32.rs`, ruling #2889). `wide_dd.rs`'s `sweep` is a random tier check
+  of the wide (long double) route, not a float sweep: left alone.
+* No kernel code changed in either family. Workspace clippy -D warnings and `cargo xtask static` clean on keke.
 
-## Measured (mei, Skylake-SP class, load 35-47 during the runs)
-* Sizing, LIELLA_SWEEP_STRIDE=64, both functions: 26 s wall, 157 s CPU; mp needed for 0 modes.
-* Full sweep erfcf (`libm-f32-erf-3-sweep-erfcf`, 12 CPUs, test binary run from a RAM copy): rc 0, 643 s
-  wall, 6432 s CPU, taken 7,405,707,468 of 2^34 calls, mp needed for 0 of 7,405,707,468 modes.
-* Full sweep erff (`libm-f32-erf-3-sweep-erff`, 12 CPUs): rc 0, 824 s wall, 4746 s CPU, taken
-  17,053,282,856 of 2^34 calls, mp needed for 4 of 17,053,282,856 modes (2.3e-10).
-* Counts (`libm-f32-erf-3-counts`, `cargo xtask bench --compare --counters cbench_libm`), instructions per
-  call: erff 180.2 (before 228,016, the mp path; glibc 135.3), erfcf 191.6 (before not measured: the same mp
-  path; glibc 138.7).
-
-## Plants (`~/work/libm-f32-erf-3/plants2.txt` on mei; cmd `cargo test -p liella-math --release --lib -- erf oracle`)
-Product: erfc-delta, erfcx1-coeff, piece-lo, piece-mid, erf-sat. Oracle: oracle-mid-side, oracle-sign-mode,
-oracle-series-stop, oracle-beside-two, oracle-fraction-term. Run 1 (`libm-f32-erf-3-plants`, SUPERSEDED) had
-oracle-fraction-depth (the fraction's doubling threshold), which SURVIVED: the starting depth 16 + 4000/a²
-already brings the gap below 2^-96 on every tested point, so the threshold is a guard that only trades cost; it
-was replaced by a plant on the fraction's term (run 2, `libm-f32-erf-3-plants-2`).
+## Jobs on the final head (keke)
+`libm-f32-erf-4-gate-2` (affected --base origin/next; escalates to FULL: generated coeff sources in the diff),
+`libm-f32-erf-4-plants-2` (`~/work/libm-f32-erf-4/plants.txt`, 11 plants: -3's ten with the kernel plants'
+path now fast32/erf.rs, plus dispatch-erfc on fast32.rs's eval; dir /dev/shm/claude/libm-f32-erf-4/plants-2),
+`libm-f32-erf-4-sweeps-2` (both exhaustive oracle sweeps, 16 CPUs, RAM copy; expect mp needed for 4 erff modes,
+0 erfcf, as in -3), `libm-f32-erf-4-counts` (`cargo xtask bench --compare --counters cbench_libm`, RAM copy;
+compare erff 180.2 / erfcf 191.6 from -3 and the hyperbolic rows in handoff/libm-f32-hyperbolic.md).
+Superseded (older merge head, killed by me when next moved): `libm-f32-erf-4-gate` (143), `-plants` (143),
+`-sweeps` (124). Results were not read before hand-back: the coordinator collects them.
 
 ## Next step
-None for the story. Optional: lower the fraction's starting depth if a later family needs the sweep faster
-(erfcf's 643 s is mostly the fraction from 3 to 9.19); add estimators for the next families in oracle32.rs.
+Read the four jobs; if counts match -3 and the hyperbolic table, nothing changed. Otherwise none for the story.
+Optional: lower the fraction's starting depth in oracle32.rs if a sweep must run faster.
 
 ## Decisions in force
 Rulings #2760, #2784, #2783, #2889. D-10.3: coefficients from the Remez tool.
 
 ## Not to redo
 The trial degree search (degree 15 holds). The fallback design (subnormal erfc results on the accurate path).
-The oracle and its bound test.
+The oracle and its bound test. The module split (done here).
