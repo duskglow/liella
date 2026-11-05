@@ -91,7 +91,7 @@ fn nul_index(b: &[u8]) -> Option<usize> {
         // Set in the lowest zero byte (higher bytes may be false positives, lower never are).
         let z = w.wrapping_sub(LOW) & !w & HIGH;
         if z != 0 {
-            return Some(at.saturating_add(usize::try_from(z.trailing_zeros() / 8).unwrap_or(0)));
+            return Some(at.saturating_add((z.trailing_zeros() / 8) as usize));
         }
         at = at.saturating_add(8);
     }
