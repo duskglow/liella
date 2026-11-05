@@ -32,8 +32,12 @@ const EXIT_BASELINE: u8 = 2;
 /// Exit status: the input was refused (usage, plants file, an ambiguous plant, an existing `--dir`).
 const EXIT_REFUSED: u8 = 3;
 
-/// The default limit for one command, in seconds (a mutant may loop forever).
-const DEFAULT_TIMEOUT: u64 = 1800;
+/// The default limit for one command, in seconds (a mutant may loop forever). The project's per-plant limit
+/// (owner, 2026-11-05): `--timeout 600`.
+const DEFAULT_TIMEOUT: u64 = 600;
+
+/// The exit status of `timeout(1)` when it ended the command: a mutant that hangs is caught by the limit.
+const TIMED_OUT: i32 = 124;
 
 /// How a plant is expected to be judged.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -450,6 +454,7 @@ pub fn run(cfg: &Config) -> Outcome {
         let (verdict, detail) = match (&p.expect, rc) {
             (Expect::Equivalent(why), 0) => (Verdict::Equivalent, why.clone()),
             (_, 0) => (Verdict::Survived, format!("`{}` passed on the mutant", p.cmd)),
+            (_, TIMED_OUT) => (Verdict::Caught, format!("caught by timeout ({}s)", cfg.timeout)),
             (Expect::Msg(re), rc) if log_matches(&log, re) => (Verdict::Caught, format!("rc {rc}, /{re}/ in the log")),
             (Expect::Msg(re), rc) => (Verdict::WarnNoMsg, format!("rc {rc}, but /{re}/ is not in {}", log.display())),
             (Expect::Equivalent(_), rc) => (Verdict::Caught, format!("rc {rc} (declared equivalent, but caught)")),
@@ -581,5 +586,32 @@ mod tests {
         assert!(parse_plants("x | a | a ==> b | true | msg:X").is_err());
         assert_eq!(parse_plants("d | a | lit:drop me ==> | true").unwrap()[0].pattern, Pattern::Literal { old: "drop me".into(), new: String::new() });
         assert!(names_machine_anchor("(liella_machine_toyfn:.*?)x") && !names_machine_anchor("liella_machine_:") && !names_machine_anchor("liella_machine_x"));
+    }
+
+    // no spec clause: the default per-plant limit is 600 s (the project rule), and --timeout overrides it
+    #[test]
+    fn default_timeout_is_600_seconds() {
+        let (src, dir) = toy("defaulttimeout");
+        let file = src.join("plants.txt");
+        fs::write(&file, format!("d1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} | msg:WRONG-ANSWER\n")).unwrap();
+        let (f, d) = (file.display().to_string(), dir.display().to_string());
+        let cfg = parse_args(&src, &[f.clone(), "--dir".into(), d.clone()]).unwrap();
+        assert_eq!(cfg.timeout, 600);
+        assert_eq!(DEFAULT_TIMEOUT, 600);
+        let cfg = parse_args(&src, &[f, "--dir".into(), d, "--timeout".into(), "7".into()]).unwrap();
+        assert_eq!(cfg.timeout, 7);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a plant whose command hangs is CAUGHT by the timeout, even with a msg: its log cannot match
+    #[test]
+    fn a_plant_that_times_out_is_caught() {
+        let (src, dir) = toy("timeout");
+        let mut cfg = config(&src, &dir, "h1 | src/value.txt | lit:answer=42 ==> answer=43 | if grep -q answer=43 src/value.txt; then sleep 30; fi | msg:WRONG-ANSWER\n");
+        cfg.timeout = 1;
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("h1".to_string(), Verdict::Caught)]);
+        assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 }

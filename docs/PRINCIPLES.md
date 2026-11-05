@@ -143,7 +143,7 @@ relies on.
   noise. Re-running measures; it never decides. Explain it, then fix it.
 * **A test must prove something.** Tests are derived from the specification and name the
   clause they cover. A test that cannot fail proves nothing: plants (deliberately broken
-  copies of the code) show each test catches what it is meant to. A test may skip only when
+  copies of the code, run with `cargo xtask plants`, see docs/plants.md) show each test catches what it is meant to. A test may skip only when
   a capability is genuinely absent on the host, and must say so; a tool that exists but fails
   makes the test fail.
 * **No file-system dependence.** Nothing depends on directory order, inode numbers, timestamp
