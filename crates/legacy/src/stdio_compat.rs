@@ -1674,7 +1674,9 @@ fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> 
     // before the buffer wraps to a huge offset, so the end test covers "outside" on both sides
     // (zero bytes outside the window are left to the engine, which accepts them). The mode word
     // is read only once the copy is known to happen, so the write-through case does not pay for it.
-    let p = get(file, word::WRITE_PTR);
+    // (A `FILE` image too short to hold the pointer has none: the engine's.)
+    let Some(wp) = file.get(word::WRITE_PTR) else { return false };
+    let p = wp.load(Relaxed);
     let at = p.wrapping_sub(ext.buf);
     let Some(stop) = at.checked_add(data.len()) else { return false };
     if stop > ext.state.wend.min(ext.buf_len) {
@@ -1684,7 +1686,7 @@ fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> 
         Some(dst) => {
             let shut = low_int(get(file, word::MODE)) >= 0;
             liella::mem::copy(dst, data);
-            set(file, word::WRITE_PTR, p + data.len());
+            wp.store(p + data.len(), Relaxed);
             if shut {
                 set(file, word::WRITE_END, p + data.len());
             }
