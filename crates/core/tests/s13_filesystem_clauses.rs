@@ -520,6 +520,9 @@ mod p12 {
         pub(crate) kind: u32,
         pub(crate) namelen: u16,
         pub(crate) pathlen: u16,
+        /// `fts_ino` and `fts_nlink` of the structure, then the same two read from `fts_statp`.
+        pub(crate) head_ino_nlink: (u64, u64),
+        pub(crate) stat_ino_nlink: (u64, u64),
     }
 
     pub(crate) fn ent(p: *mut c_void) -> Option<Ent> {
@@ -530,7 +533,10 @@ mod p12 {
         let at = |a: u64| ctext(core::ptr::with_exposed_provenance(usize::try_from(a).unwrap()));
         let statp = word(&b, 104);
         let kind = if statp == 0 { 0 } else { u32::from_ne_bytes(cbytes(core::ptr::with_exposed_provenance(usize::try_from(statp).unwrap()), 144)[24..28].try_into().unwrap()) & S_IFMT };
+        let sb = if statp == 0 { vec![0u8; 144] } else { cbytes(core::ptr::with_exposed_provenance(usize::try_from(statp).unwrap()), 144) };
         Some(Ent {
+            head_ino_nlink: (word(&b, 72), word(&b, 88)),
+            stat_ino_nlink: (word(&sb, 8), word(&sb, 16)),
             addr: p.expose_provenance(),
             info: u16::from_ne_bytes(b[98..100].try_into().unwrap()),
             level: i16::from_ne_bytes(b[96..98].try_into().unwrap()),
@@ -1673,6 +1679,11 @@ fn s13_3_c_4() {
         }
         let mut got = Vec::new();
         while let Some(e) = ent(x::fts_read(f)) {
+            assert_eq!(e.head_ino_nlink, e.stat_ino_nlink, "fts_ino and fts_nlink are the status's ({})", e.path);
+            if e.name == "s_dir" && e.info == 1 {
+                assert_eq!(e.kind, 0o040_000, "the followed link's status is the directory's (direct {direct})");
+                assert_ne!(e.stat_ino_nlink.0, 0);
+            }
             got.push((e.path.clone(), e.info, instr_of(e.addr)));
         }
         assert!(got.iter().any(|(p, i, n)| p.ends_with("/t/s_dir") && *i == 1 && *n == 3), "listed FTS_FOLLOW (direct {direct}): the directory the link names");
