@@ -763,7 +763,7 @@ fn atan_red(s: f64, inv: bool) -> f64 {
 #[inline(always)]
 fn atan_core(x: f32) -> Option<f64> {
     let a = crate::dd::abs(f64::from(x));
-    if !(a >= 0.0 && a < f64::INFINITY) {
+    if !(0.0..f64::INFINITY).contains(&a) {
         return None;
     }
     let y = if a <= 1.0 { atan_red(a, false) } else { atan_red(1.0 / a, true) };
@@ -778,7 +778,7 @@ fn atan_core(x: f32) -> Option<f64> {
 #[inline(always)]
 fn asin_core(x: f32) -> Option<f64> {
     let a = crate::dd::abs(f64::from(x));
-    if !(a >= 0.0 && a < 1.0) {
+    if !(0.0..1.0).contains(&a) {
         return None;
     }
     let d = sqrt64(1.0 - a * a);
