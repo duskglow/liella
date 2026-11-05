@@ -677,7 +677,7 @@ mod tests {
         let n = mo.len();
         if n >= 2 {
             for (word, value) in [(1usize, u32::try_from(n + 1).unwrap()), (0, 2)] {
-                let mut bad = ix.clone();
+                let mut bad = ix.to_vec();
                 bad[word * 4..word * 4 + 4].copy_from_slice(&value.to_ne_bytes());
                 let (from, to) = (4 * (IX_HEAD + 2 * (n - 1)), 4 * IX_HEAD);
                 let d: [u8; 8] = bad[from..from + 8].try_into().unwrap();
