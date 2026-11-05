@@ -14,7 +14,7 @@ impl Lcg {
         self.0 >> 11
     }
     fn unit(&mut self) -> f64 {
-        self.next() as f64 / (1u64 << 53) as f64
+        f64::from(u32::try_from(self.next() >> 21).unwrap_or(0)) / 4_294_967_296.0
     }
 }
 
@@ -24,7 +24,9 @@ type F32Fast = fn(f32) -> Option<f32>;
 type F32Slow = fn(f32, Rounding) -> (f32, liella_math::Status);
 
 /// (name, fast, accurate, ranges sampled).
-fn f64_rows() -> Vec<(&'static str, F64Fast, F64Slow, Vec<(f64, f64)>)> {
+type Row = (&'static str, F64Fast, F64Slow, Vec<(f64, f64)>);
+
+fn f64_rows() -> Vec<Row> {
     vec![
         ("sinh", fh::sinh_nearest, hyper::sinh::<f64>, vec![(-10.0, 10.0), (-0.5, 0.5), (-700.0, 700.0), (-60.0, 60.0)]),
         ("cosh", fh::cosh_nearest, hyper::cosh::<f64>, vec![(-10.0, 10.0), (-0.01, 0.01), (-700.0, 700.0), (-60.0, 60.0)]),
