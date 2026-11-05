@@ -34,6 +34,7 @@
 
 use crate::ctype::{self, WClass};
 use crate::error::{Errno, Result};
+use crate::locale::collate::Collation;
 use crate::locale::Locale;
 use crate::mem::TryVec;
 
@@ -1046,9 +1047,16 @@ fn bracket_has(p: &[u8], i: usize, escapes: bool, mt: &Matcher<'_>, ch: Option<u
         j += 1;
     }
     let mut hit = false;
+    // Without case folding and with code-point order, a character and a range are plain
+    // comparisons (the order of a character is the character): no collation lookup per member.
+    let plain = mt.flags & CASEFOLD == 0 && matches!(mt.loc.collation(), Collation::CodePoint);
     let mut add = |m: Member| {
         if !hit {
-            hit = ch.is_some_and(|c| mt.member_has(&m, c));
+            hit = ch.is_some_and(|c| match m {
+                Member::Char(x) if plain => x == c,
+                Member::Range(lo, hi) if plain => lo <= c && c <= hi,
+                _ => mt.member_has(&m, c),
+            });
         }
     };
     let mut first = true;
