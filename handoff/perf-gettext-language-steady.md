@@ -1,44 +1,40 @@
-# PERF-GETTEXT-LANGUAGE-STEADY(-4) (branch task/perf-gettext-language-steady-4, role keke:~/w/r2)
+# PERF-GETTEXT-LANGUAGE-STEADY(-5) (branch task/perf-gettext-language-steady-5, role shiki:~/w/sh1)
 
-State: -3's work, ready to land once its jobs are green; target (found ~454) not reached. The branch is origin/next
-f2157504 (which has XTASK-PLANTS-TRACKED-COPY) with -3's branch merged in (e579908c), then 48310c65 (the next change, below)
-and its revert 14f130fd. **The tree at 14f130fd is the same as at e579908c** (`git diff e579908c 14f130fd` is empty), and
-that is the tree the -4 jobs test (the role's .synced head is e579908c).
-Library changes on the branch (all from -3, crates/legacy/src/intl.rs): `Resolution::matches` and `Resolution::hit`
-#[inline(always)]. No new unsafe, no ABI or behaviour change. Decisions in force: D-7.5, D-7.12; saturation 14 row 6 runs 1-6.
+State: ready to land; target (glibc 466 steady / 455 found) not reached. Code head e1ae2628 (the jobs below ran on it);
+the commit after it only holds this handoff and the report. Base: -4's branch (origin/next f2157504 + -3's work); origin/next
+has moved on since (dc65f761), not merged (the brief allows no merge).
+Commits of -5: 8577660f re-applies -4's 48310c65 (find_in_hinted split: #[inline] hint test `hinted` + #[inline(never)]
+`find_in_unhinted`); e1ae2628 fixes its test (TryVec has no Clone: `ix.to_vec()`); 90f4ce34 adds the list cases to the
+`key_address_accept` unit test (crates/legacy/src/intl.rs). No new unsafe, no ABI or behaviour change.
+Decisions in force: D-7.5, D-7.12; saturation 14 row 6 (runs 1-6 recorded; this run's numbers are below, not yet in the register).
 
-## -4 jobs (keke; all queued at 16:46Z, none had started by hand-back: the queue was busy for over an hour)
-- perf-gettext-language-steady-4-gate: clippy --workspace --all-targets --all-features -D warnings, xtask static,
-  `cargo xtask affected --base origin/next --run` on e579908c (the direct tier should now select catalogs_products).
-- perf-gettext-language-steady-4-plants: `cargo xtask plants ~/work/PERF-GETTEXT-LANGUAGE-STEADY-4/plants.txt --dir
-  /dev/shm/claude/PERF-GETTEXT-LANGUAGE-STEADY-4/plants-1 --timeout 600`, -3's 4 plants (matches fast path, catalogs_products).
-- perf-gettext-language-steady-4-list-found: wl_trace --list of gettext_found on e579908c (per-phase split for the next step).
-If the gate or plants come back red, -5 fixes that first.
+## Why -4's plants survived (the brief's first question), settled
+1. `cargo xtask plants` builds the products once, before any plant; `catalogs_products` links `target/liella/libc.a`, so
+   every mutant was tested against the unmutated library. With `cargo xtask so &&` in the cmd (plants-1) the mutants were
+   in the library and still all 4 SURVIVED:
+2. catalogs_diff.c never reaches the distinguishing cases. The direct test of `Resolution::matches` is the unit test
+   `key_address_accept`; it covered both address conditions, and it had no list case. 90f4ce34 adds them (a list rewritten in
+   place at the same address, another list of the same length, no list: no match; the same list, an equal copy: match).
+   plants-2 runs the 4 on `cargo test -p liella-legacy --lib intl`: all CAUGHT.
 
-## Next change, written but not built (48310c65, reverted by 14f130fd: re-apply with `git revert 14f130fd`)
-crates/core/src/catalog/mo.rs: `find_in_hinted` becomes an #[inline] hint test (`hinted`: whole 12-byte index head
-present, the index count equals `self.n`, mode <= IX_HASH, entry < n, the indexed original same_bytes the key) plus an
-#[inline(never)] `find_in_unhinted` (the old body without the hint block; `find_in` calls it). The point: hit's
-`Mo::from_fields` value stays in registers on a hinted hit instead of being built in memory and passed by pointer to the
-out-of-line call (-3's profile put that at ~25 instructions of `hit`'s 147). Answers are unchanged by construction (the hint
-is taken under the same conditions as before; everything else runs the same search). It adds an assertion in
-`same_answers`: a hint given with an index whose count (head word 1) or mode (head word 0) does not describe the image must
-give the search's answer. NOT COMPILED (no local cargo; the role could not be synced while the jobs waited).
-Plants for it (keke ~/work/PERF-GETTEXT-LANGUAGE-STEADY-4/plants-mo.txt, which also holds -3's 4): hint-count-ignored,
-hint-mode-ignored (drop either condition of the head test), hint-unchecked (`same_bytes(...).then_some(e)` -> `Some(e)`),
-no-search-after-hint (`None => self.find_in_unhinted(..)` -> `None => None`); cmd `cargo test -p liella --lib catalog::mo`.
-To measure: wl_percall with `--spec validation/percall/gettext.c --base 97ae80d06b495c8ff28b265089f123ff487f6b0d`
-(products cached on keke; -3's head library), WL_BASE_EXACT=1.
+## Jobs (shiki; all rc 0 on e1ae2628)
+- perf-gettext-language-steady-5-gate: `cargo xtask affected --base origin/next --run` under ~/bin/gate: 30 of 235 targets
+  + 3 unit-test libs, 2750 passed, 0 failed, peak 11G. Clippy (`cargo xtask clippy`) and `cargo xtask static` ran clean first.
+- perf-gettext-language-steady-5-plants-2: ~/work/PERF-GETTEXT-LANGUAGE-STEADY-5/plants2.txt, dir
+  /mnt/zram/claude/PERF-GETTEXT-LANGUAGE-STEADY-5/plants-2: 8 CAUGHT (4 matches + 4 hint plants), 0 WARN.
+- perf-gettext-language-steady-5-percall: wl_percall --spec validation/percall/gettext.c --base c27f580e (WL_BASE_EXACT=1).
+- Superseded: perf-gettext-language-steady-5-plants-1 (rc 1, diagnosis: catalogs_products cmd with products rebuilt).
 
-## Counts in force (from -3, wl_percall, Zen 1, instructions per call; glibc / -3 head)
-gettext_found 455 / 558; ngettext_found 597 / 662; gettext_language_steady 466 / 684; alternating 2227 / 1283.
+## Counts (wl_percall, Haswell-EP 26 vCPU, instructions per call; glibc / base -4 head / new e1ae2628)
+gettext_language_steady 466 / 684 / 652; gettext_found 455 / 558 / 526; ngettext_found 597 / 662 / 630;
+gettext_language_alternating 2211 / 1287 / 1255. -32 on every row; no row slower. Parity by instructions: not yet.
 
 ## Open / next step (in order)
-1. Read the -4 gate, plants and trace logs (above); fix any red first.
-2. Re-apply 48310c65, clippy + static on the role, gate, plants-mo.txt, percall against 97ae80d0. Keep it only if no row
-   is slower.
-3. Then the selector compare in `hit` (~20: `ctype_identity` match + charmap load) and translate's ~60 of key setup
-   before the slot test, from the -4 trace. LANGUAGE's ~95: runs 2-4 found no safe cut without new unsafe in
-   liella-boundary (RULING NEEDED + DO NOT LAND if tried).
-Tool note: sync_role refuses to sync a role while jobs are queued on it (it lists their processes), even before they start.
+1. Add run 7 (this split, -32 per row) to saturation 14 row 6 (docs/saturation/), left out so the gated head stays the final one.
+2. Profile first: -4's trace job (keke perf-gettext-language-steady-4-list-found) never ran. Run validation/wl_trace.sh
+   --list for gettext_found / gettext_language_steady on e1ae2628 and write the per-phase split here.
+3. Then the selector compare in `hit` (~20: `ctype_identity` match + charmap load) and translate's ~60 of key setup before
+   the slot test. LANGUAGE's ~95: runs 2-4 found no safe cut without new unsafe in liella-boundary (RULING NEEDED + DO NOT LAND).
+Things not to redo: the 48310c65 split is in; plants of products-linked code must rebuild the products in the cmd, or use the
+unit test of the planted function.
 Plan rows: saturation 14 row 6, D-7.5, D-7.12.
