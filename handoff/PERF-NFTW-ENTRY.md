@@ -48,3 +48,17 @@ Run -5 (sh2 on shiki, instructions:u per entry, nftw_phys_38, glibc 212.0 on thi
   test-only commits; product code is identical.
 * Bench row (cbench_fstree) not re-run; target 1.05x not reached: user space is 386 vs glibc 212 instr/entry (1.82x) in the
   percall shape. Next: reuse the Listing allocation across directories, leaner examine, nftw closure argument conversion.
+
+Run -6 (shiki, role sh1, branch task/perf-nftw-entry-6; instructions:u per entry, nftw_phys_38, glibc 212.0):
+* -5's red was procedural (diag loop rc 1 by design, gate3 wrote no row). Gate and plants re-run on this head through jobrun, no redirect.
+* Per-phase split of one call (wl_trace, 41 entries, gdb counts each rep-stos iteration, so the 4106 "fill_erms" is ~1 real instruction;
+  real total 15.8k = 385/entry): walk_in 100, Listing::next_entry 71, fs_tree::run closure (C callback conversion) 41,
+  set_name 38, examine 31, conv::internal_move 22 (name/Stat moves), dealloc+alloc 26 total per entry average, nftw_cb 9, newfstatat 5.
+* Tried: eight-bytes-at-a-time NUL scan in next_entry: 386 -> 415 (worse: names are 3-5 bytes, the word loop costs more than
+  the byte loop; trace showed next_entry 2914 -> 4122). Reverted. The scan was not where next_entry's 71 went.
+* Kept: next_entry returns the name slice it already found (no second bounds-checked slice of the buffer) and tests the first byte
+  before the two dot comparisons: 386.0 -> 378.5 (-7.5), 1.79x of glibc. Parity and the 1.05x row target are NOT reached.
+* Remaining 166/entry over glibc is spread: walk_in 100 (frame/prefix/seen/dir_fd bookkeeping), the C callback conversion 41,
+  set_name 38, examine 31. No single phase holds it; each remaining cut is ~10-30. Not done: leaner set_name (avoid the
+  memmove call for short names), merging examine+kind classification into walk_in, passing the Stat to the C callback without a copy.
+* Bench row (cbench_fstree) not re-run.
