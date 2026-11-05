@@ -1,6 +1,6 @@
 # Phase 14 saturation review packet (PRE14-SATURATION-PACKET)
 
-Compiled 2026-11-05 from `docs/saturation/` (sections 00 to 19) and the V-4 appendix in `docs/benchmarks.md` on this
+Compiled 2026-11-05 from `docs/saturation/` (the intro 00-intro.md and sections 1 to 19) and the V-4 appendix in `docs/benchmarks.md` on this
 branch (next `a6fc34c2`, 2026-11-05). No code changed, nothing decided, no recommendations (the coordinator adds them).
 
 ## How to read this
@@ -15,7 +15,7 @@ branch (next `a6fc34c2`, 2026-11-05). No code changed, nothing decided, no recom
   bound. STALE = cited numbers no longer match V-4, or the code changed since (the register itself flags many rows
   "recheck"). OPEN = still above 1.05 by instructions with no bound. The grade is mine from reading the entries; where a
   register file's own text was only skimmed (13 to 16: see "Not covered") that is said.
-* Date = the register entry's date (the rule: register section 00 gives 2026-10-23 for sections 01 to 12; later
+* Date = the register entry's date (the rule: the register's intro, docs/saturation/00-intro.md, gives 2026-10-23 for sections 01 to 12; later
   sections carry their own).
 
 ## String and memory kernels
