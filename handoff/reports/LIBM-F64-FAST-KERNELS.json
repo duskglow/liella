@@ -1,0 +1,17 @@
+{"task": "LIBM-F64-FAST-KERNELS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: exp10 slice done (double Cody-Waite log10(2)/64 reduction into the shared exp kernel, in-place entry plus FMA build): exp10 419.3 -> 218.9 instructions (7.48x -> 3.90x), other rows unchanged, still correctly rounded; trig and exp/log/pow kernel redesigns not started",
+ "branch": "task/libm-f64-fast-kernels", "head": "see git (handoff commit after code commit 673040a3)",
+ "gate": {"affected": "running (tool escalated --tier direct to FULL: s10_math.tsv and generated gen.rs); build3 targeted suites green", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Liella cbench_libm counts are identical with and without --tunables glibc.cpu.hwcaps=-FMA (exp 181.3 both): the bench may never select the FMA build; check dispatch::fma() in a cbench process before any FMA claim",
+   "the gate tool escalates any change to s10_math.tsv / s10_math_gen.rs to FULL even with --tier direct, so every libm entry change is a FULL gate",
+   "halving exp_eps is not detectable by tests (real errors far below the bound); the bound-halved plant was put on the kernel domain bound instead",
+   "task/perf-libm-trig has not landed (4 commits ahead of next): trig redesign deferred until it lands"],
+ "refused": [],
+ "jobs": ["mei:libm-f64-fast-kernels-gate", "mei:libm-f64-fast-kernels-plants", "mei:libm-f64-fast-kernels-counts2"],
+ "superseded": ["libm-f64-fast-kernels-build1 (test bug: kernel check past overflow)", "libm-f64-fast-kernels-build2 (test bug: NaN operand)", "libm-f64-fast-kernels-counts (--rows is not a --compare option)"],
+ "improvement": "xtask bench --compare should take --rows (or --only rows): a 6-row before/after count had to run the whole cbench_libm twice",
+ "next_step": "profile exp and sin per phase (wl_percall) and check that the bench reaches the FMA build, then redesign the exp/log kernels; do trig on task/perf-libm-trig once it lands",
+ "report_file": "handoff/LIBM-F64-FAST-KERNELS.md"}

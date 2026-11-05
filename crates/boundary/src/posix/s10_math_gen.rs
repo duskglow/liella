@@ -1762,7 +1762,7 @@ pub extern "C" fn exp(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.39";
 pub extern "C" fn exp10(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::exp10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp10_nearest, math::real::Real::exp10)
 }}
 
 export! { libm "GLIBC_2.32";
@@ -1782,12 +1782,12 @@ pub extern "C" fn exp10f32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp10f32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::exp10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp10_nearest, math::real::Real::exp10)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp10f64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::exp10)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::exp10_nearest, math::real::Real::exp10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
