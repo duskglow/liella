@@ -1,0 +1,19 @@
+{"task": "STRSTR-SHORT-DENSE-PARITY-3", "model": "opus", "tokens": null,
+ "result": "strstr haystacks pinned (16 past 4096-aligned; 4k rows now move 0 across code-size changes); second unaligned head block: ss_hit_64 176->138, ss_miss_64 181->143, no row slower; ss_hit_1k 333 (0.94x Zen 1), strstr_dense_4k 947 (1.16x) still open",
+ "branch": "task/strstr-short-dense-parity-3", "head": "b3e3b059",
+ "gate": {"affected": "direct tier rc 0 (strstr-short-dense-parity-3-gate, code f1851a6f; scan.S reaches every section)", "peak": "1.1G (final clippy+static job)"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Ruling #2813 read strstr_hit_4k's +4 as layout; with the haystack pinned it stays (+4 while every other hit row is -47), so it is a code cost of -2's out-of-line find_next pass", "recommendation": "record it as a code cost of find_next (+4 on rows whose first candidate fails); accept or trace in the dense story"},
+  {"item": "The Zen 1 glibc reference (163.2/355.2/818) was measured at unpinned addresses; this run's host is Haswell-EP, where glibc takes another path (ss_hit_64 102, strstr_hit_short 87, ss_hit_1k 661, dense 2253)", "recommendation": "re-measure the Zen 1 reference with the pinned specs in the next story (Zen 1 role) and state which host's glibc is the parity reference"}
+ ],
+ "informational": [
+  "Pinning moved ss_hit_64 from 141 (malloc address, -2) to 176 at offset 16 before this change: the old prologue's cost followed p mod 128",
+  "Per-phase split at the pinned offset in handoff/strstr-short-dense-parity.md: dense = pair loop 738 (32 x 23) + kernel fixed ~117 + Rust 81",
+  "plants: first run had resume-below WARN-NO-MSG (caught by SIGSEGV, regex lacked it); plants2 with the regex fixed: 5 CAUGHT"
+ ],
+ "refused": [],
+ "jobs": ["shiki:strstr-short-dense-parity-3-gate", "shiki:strstr-short-dense-parity-3-plants2", "shiki:strstr-short-dense-parity-3-counts", "shiki:strstr-short-dense-parity-3-final", "shiki:strstr-short-dense-parity-3-check"],
+ "improvement": "jobrun blocks in the foreground: the brief's 'start detached' needs setsid nohup around it; a jobrun --detach flag would save a lost local wait and the risk of the harness killing the ssh",
+ "next_step": "re-measure the Zen 1 glibc reference with the pinned specs; then strstr_dense_4k: 8-block pair groups plus a direct exit from the group min vectors (handoff step 2)",
+ "report_file": "handoff/strstr-short-dense-parity.md"}
