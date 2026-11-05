@@ -2523,6 +2523,9 @@ pub(crate) unsafe fn opt_obj32<'a, T>(p: *const T) -> KResult<Option<&'a [core::
 /// The text a `%s` argument points at (§12.6): up to its NUL, at most `max` bytes. Crate-
 /// private contract: `addr` is the non-NULL pointer the format's argument gave, which the C
 /// caller's contract makes a string, or `max` readable bytes when a precision is given.
+/// Inline: a call per `%s` argument cost about 15 instructions of its own on ls's
+/// `"%s %*s "` (PARITY-SPRINTF-CHK-LS-2).
+#[inline]
 pub(crate) fn printf_text(addr: usize, max: Option<usize>) -> &'static [u8] {
     let p = core::ptr::with_exposed_provenance::<i8>(addr);
     let r = match max {
