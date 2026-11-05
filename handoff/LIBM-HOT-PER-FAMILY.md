@@ -38,7 +38,12 @@ already in base c6e5db9d and so already in the split.
 - plants `libm-hot-per-family-2-plants` (cargo xtask plants, handoff/LIBM-HOT-PER-FAMILY-2-plants.txt, dir
   /dev/shm/claude/libm-hot-per-family-2/plants-1): 6 CAUGHT, 0 SURVIVED, 0 WARN (the 4 of run 1 + exp2 and pow
   dispatchers in exp_log.rs).
-- gate `libm-hot-per-family-2-gate`: FULL tier (`--tier full --base origin/next`). Result: see the report json.
+- gate `libm-hot-per-family-2-gate`: FULL tier (`--tier full --base origin/next`), rc 0: suites 32 ok / 0 failed,
+  tests 10867 passed / 0 failed / 1191 ignored, conformance 117 passed / 0 failed, 3 SKIPPED lines; peak 13G, oom_kill 0.
+- counts `libm-hot-per-family-2-counts`, rc 0, COUNTS OK: 348 rows; same tree run twice differs on 201 rows (max 2.88%,
+  memset_4k_off 13.5 vs 13.9); base vs split differs on 218 (max 2.27%, the same row 13.2 vs 13.5/13.9); no row over
+  the tolerance; mean signed base-vs-split shift +0.0019%. libm rows: largest mxcsr_wrapper_seq 10.2 -> 10.3.
+  Parity by instructions (a pure move; no timing needed).
 - counts `libm-hot-per-family-2-counts` (keke:~/work/libm-hot-per-family-2/counts.sh + noise_cmp.py): origin/next tree
   once, the split tree twice (RAM copies), cbench_libm/hot/memref/stdio; fails if any row's base-vs-split difference in
   `liella_instr` exceeds max(0.1%, 2 x the largest same-tree difference). Per-call counts are not bit-stable run to run
