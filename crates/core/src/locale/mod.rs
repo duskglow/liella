@@ -399,6 +399,11 @@ impl Locale {
         }
     }
 
+    /// Whether `strcoll` here is a plain byte comparison (the C and C.UTF-8 locales).
+    pub fn collates_by_bytes(&self) -> bool {
+        matches!(self.collation, Collation::CodePoint)
+    }
+
     /// Compare byte strings as `strcoll` does in this locale (D-4.18).
     pub fn compare_bytes(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
         match &self.collation {

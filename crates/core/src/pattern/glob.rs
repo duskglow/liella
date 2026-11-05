@@ -636,6 +636,78 @@ impl<A: Access> Walk<'_, A> {
     }
 }
 
+/// Length of the common prefix of `a` and `b`, looking at no more than `limit` bytes.
+fn common_prefix(a: &[u8], b: &[u8], limit: usize) -> usize {
+    let n = limit.min(a.len()).min(b.len());
+    let mut i = 0;
+    while i + 8 <= n {
+        let (Some(x), Some(y)) = (a.get(i..i + 8), b.get(i..i + 8)) else { break };
+        if x != y {
+            break;
+        }
+        i += 8;
+    }
+    while i < n && a.get(i) == b.get(i) {
+        i += 1;
+    }
+    i
+}
+
+/// The eight bytes of `s` from `at`, big-endian and zero-padded: comparing keys compares the
+/// bytes (a name holds no NUL, so padding sorts a shorter name first).
+fn sort_key(s: &[u8], at: usize) -> u64 {
+    let tail = s.get(at..).unwrap_or(&[]);
+    let mut k = [0u8; 8];
+    let n = tail.len().min(8);
+    if let (Some(d), Some(t)) = (k.get_mut(..n), tail.get(..n)) {
+        d.copy_from_slice(t);
+    }
+    u64::from_be_bytes(k)
+}
+
+/// Sort the found paths as `strcoll` does, bytes breaking ties. Where collation is a byte
+/// comparison the sort runs on a table of (eight bytes past the shared prefix, index), so most
+/// comparisons never touch the strings.
+fn sort_found(found: &mut TryVec<TryVec<u8>>, loc: &Locale) -> Result<()> {
+    let n = found.len();
+    if n < 2 {
+        return Ok(());
+    }
+    if !loc.collates_by_bytes() {
+        found.sort_unstable_by(|a, b| loc.compare_bytes(a, b).then_with(|| a.as_slice().cmp(b.as_slice())));
+        return Ok(());
+    }
+    let mut lcp = usize::MAX;
+    if let Some((first, rest)) = found.split_first() {
+        for p in rest {
+            lcp = common_prefix(first, p, lcp);
+            if lcp == 0 {
+                break;
+            }
+        }
+    }
+    let mut keys: TryVec<(u64, usize)> = TryVec::with_capacity(n)?;
+    for (i, p) in found.iter().enumerate() {
+        keys.push((sort_key(p, lcp), i))?;
+    }
+    {
+        let paths = found.as_slice();
+        keys.sort_unstable_by(|x, y| {
+            x.0.cmp(&y.0).then_with(|| {
+                let a = paths.get(x.1).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
+                let b = paths.get(y.1).map_or(&[][..], |p| p.get(lcp..).unwrap_or(&[]));
+                a.cmp(b)
+            })
+        });
+    }
+    let mut sorted: TryVec<TryVec<u8>> = TryVec::with_capacity(n)?;
+    for &(_, i) in keys.iter() {
+        sorted.push(core::mem::take(found.as_mut_slice().get_mut(i).ok_or(Errno::EINVAL)?))?;
+    }
+    *found = sorted;
+    Ok(())
+}
+
 /// `glob(pattern, flags)` over `acc` in `loc` (flags already validated against
 /// [`KNOWN_FLAGS`]; `GLOB_APPEND`, `GLOB_DOOFFS` and `GLOB_ALTDIRFUNC` are the caller's).
 pub fn glob<A: Access>(pattern: &[u8], flags: i32, loc: &Locale, acc: &mut A) -> Outcome<Found> {
@@ -675,7 +747,7 @@ pub fn glob<A: Access>(pattern: &[u8], flags: i32, loc: &Locale, acc: &mut A) ->
         let mut found = TryVec::new();
         Walk { acc, flags, loc }.expand(&p, &mut found)?;
         if flags & NOSORT == 0 {
-            found.sort_unstable_by(|a, b| loc.compare_bytes(a, b).then_with(|| a.as_slice().cmp(b.as_slice())));
+            sort_found(&mut found, loc)?;
         }
         for f in found.into_inner() {
             paths.push(f)?;
