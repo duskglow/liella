@@ -581,7 +581,7 @@ pub mod kernel {
 /// OS-enabled AVX state; the boundary selects it once at startup (`dispatch::fma`).
 // ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
-pub mod fused {
+pub mod kernel_fma {
     use super::{dd, fast, nearest, small, small_cos, t, tan_eps, Dd, Rounding, C4, C6, C8, C_SIN, C_TAN, LIMIT_BITS, P1, P2, P3, R25, S3, S5, S7, S9, SCALE_PI, T3, TINY_BITS};
 
     trig_kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma);
@@ -592,7 +592,7 @@ pub mod fused {
 /// rounded one, and the double-double path then runs unchanged. One reduction
 /// ([`kernel::reduce`]) and one polynomial ([`kernel::poly`]) serve all; `tan` and `sincos`
 /// assemble the sine and the cosine from them. The in-place entries (`kernel::sin_nearest`, ...,
-/// and their FMA build `fused`) round to nearest; this module's functions serve every mode.
+/// and their FMA build [`kernel_fma`]) round to nearest; this module's functions serve every mode.
 ///
 /// * Reduction for `|x| < 2^20`: `k = nearest(x·64/π)`, `|k| < 2^24.35`; `π/64 = P1 + P2 + P3 + τ`
 ///   with `P1` of 27 bits, `P2` of 25 bits (so `k·P1`, `k·P2` are exact), `|τ| < 2^-119.1`.
