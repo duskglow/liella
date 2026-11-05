@@ -577,8 +577,10 @@ impl FtsMem for Blocks {
         }
     }
 
+    // UNSAFE(slice): a status's own bytes are viewed as a byte slice for the entry block.
+    #[allow(unsafe_code)]
     fn stat_raw(st: &Stat) -> &[u8] {
-        // UNSAFE(slice) SAFETY: `Stat` is `repr(C)`, 144 bytes, every byte a field or an explicit
+        // SAFETY: `Stat` is `repr(C)`, 144 bytes, every byte a field or an explicit
         // padding field (no implicit padding), so all of them are initialised; the slice borrows `st`.
         unsafe { core::slice::from_raw_parts(core::ptr::from_ref(st).cast::<u8>(), core::mem::size_of::<Stat>()) }
     }
