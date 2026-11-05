@@ -69,6 +69,7 @@ const PI_HI: f64 = f64::from_bits(t::PI[0]);
 const PI_LO: f64 = f64::from_bits(t::PI[1]);
 const SIGN: u64 = 1 << 63;
 const MANT: u64 = (1 << 52) - 1;
+#[allow(clippy::as_conversions, clippy::cast_sign_loss)] // e in -60..=450: the biased exponent is positive
 const fn pow2_bits(e: i32) -> u64 {
     ((1023 + e) as u64) << 52
 }
@@ -174,6 +175,10 @@ macro_rules! kernels {
         }
 
         /// `atan(x)` to nearest, for `2^-60 <= |x| < 2^60`.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn atan_nearest(x: f64) -> Option<f64> {
             let bits = x.to_bits();
@@ -194,6 +199,10 @@ macro_rules! kernels {
         }
 
         /// `asin(x)` to nearest, for `2^-60 <= |x| < 1`.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn asin_nearest(x: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let bits = x.to_bits();
@@ -216,6 +225,10 @@ macro_rules! kernels {
         }
 
         /// `acos(x)` to nearest, for `2^-60 <= |x| < 1`.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn acos_nearest(x: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let bits = x.to_bits();
@@ -231,6 +244,10 @@ macro_rules! kernels {
         }
 
         /// `atan2(y, x)` to nearest, for `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn atan2_nearest(y: f64, x: f64) -> Option<f64> {
             let (yb, xb) = (y.to_bits(), x.to_bits());
@@ -243,7 +260,7 @@ macro_rules! kernels {
             let swap = ay > ax;
             let (n, d) = if swap { (ax, ay) } else { (ay, ax) };
             let th = n / d;
-            if !(th >= TWO_M60) {
+            if th < TWO_M60 {
                 return None;
             }
             let p = $prod(th, d);
@@ -260,6 +277,10 @@ macro_rules! kernels {
 
         /// `hypot(x, y)` to nearest, for `2^-450 <= |x|, |y| < 2^450` within a factor `2^61` of
         /// each other, when the root is certainly not a `double`.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn hypot_nearest(x: f64, y: f64, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
             let (ab, bb) = (x.to_bits() & !SIGN, y.to_bits() & !SIGN);
