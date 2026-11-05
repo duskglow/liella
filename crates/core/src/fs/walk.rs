@@ -410,11 +410,10 @@ fn set_path(path: &mut TryVec<u8>, len: usize, name: &[u8]) -> Result<usize> {
 }
 
 /// [`set_path`] for a later entry of a directory whose prefix (`base` bytes: the directory's
-/// path and a separator) is already in `path`: only the name is replaced.
-fn set_name(path: &mut TryVec<u8>, base: usize, name: &[u8]) -> Result<()> {
+/// path and a separator) is already in `path`: only the name (with its terminator) is replaced.
+fn set_name(path: &mut TryVec<u8>, base: usize, namez: &[u8]) -> Result<()> {
     path.truncate(base);
-    path.extend_from_slice(name)?;
-    path.push(0)?;
+    path.extend_from_slice(namez)?;
     if i32::try_from(path.len()).is_err() {
         return Err(Errno::ENAMETOOLONG);
     }
@@ -424,19 +423,19 @@ fn set_name(path: &mut TryVec<u8>, base: usize, name: &[u8]) -> Result<()> {
 /// `nftw`'s walk of `root` (see the module documentation): `f` sees every entry and the
 /// directory changes; the result is 0 at the end, the value of [`Action::Stop`], or the error
 /// that ended the walk. Paths are relative to the working directory at the call.
-pub fn walk<S: Sys>(sys: &S, root: &[u8], opt: Options, f: &mut dyn FnMut(Event<'_>) -> Result<Action>) -> Result<i32> {
+pub fn walk<S: Sys, F: FnMut(Event<'_>) -> Result<Action> + ?Sized>(sys: &S, root: &[u8], opt: Options, f: &mut F) -> Result<i32> {
     walk_levels(sys, &mut Levels::new(Fd::CWD), root, opt, f)
 }
 
 /// [`walk`] with its open directories in `levels` (closed at the end), for a caller that must
 /// close them itself if `f` never returns (a C++ exception, OD-6 revised).
-pub fn walk_levels<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &mut dyn FnMut(Event<'_>) -> Result<Action>) -> Result<i32> {
+pub fn walk_levels<S: Sys, F: FnMut(Event<'_>) -> Result<Action> + ?Sized>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &mut F) -> Result<i32> {
     let r = walk_in(sys, levels, root, opt, f);
     levels.close_all(sys);
     r
 }
 
-fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &mut dyn FnMut(Event<'_>) -> Result<Action>) -> Result<i32> {
+fn walk_in<S: Sys, F: FnMut(Event<'_>) -> Result<Action> + ?Sized>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &mut F) -> Result<i32> {
     // The root as given, without trailing slashes (one is kept for "/").
     let keep = root.iter().rposition(|&b| b != b'/').map_or(root.len().min(1), |i| i.saturating_add(1));
     let root = root.get(..keep).unwrap_or(&[]);
@@ -497,7 +496,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 frame.prefix = b;
                 b
             } else {
-                set_name(&mut path, frame.prefix, name)?;
+                set_name(&mut path, frame.prefix, namez)?;
                 frame.prefix
             };
             // The directory's descriptor is kept while nothing opens or closes a level.
@@ -591,7 +590,8 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     Ok(0)
 }
 
-fn visit(path: &[u8], base: usize, level: usize, kind: Kind, stat: Option<&Stat>, f: &mut dyn FnMut(Event<'_>) -> Result<Action>) -> Result<Action> {
+#[inline(always)]
+fn visit<F: FnMut(Event<'_>) -> Result<Action> + ?Sized>(path: &[u8], base: usize, level: usize, kind: Kind, stat: Option<&Stat>, f: &mut F) -> Result<Action> {
     f(Event::Visit(Visit { path, base, level, kind, stat }))
 }
 
