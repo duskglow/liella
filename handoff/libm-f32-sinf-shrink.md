@@ -16,7 +16,9 @@ Ruling #2906 applied: no row slower any more; nearest rows still above the 1.05x
   Jobs `libm-f32-sinf-shrink-3-cbase`, `-chead`; tsvs in mei:~/work/LIBM-F32-SINF-SHRINK-3/{base,head}.tsv.
 * Plants `libm-f32-sinf-shrink-3-plants` (file mei:~/work/LIBM-F32-SINF-SHRINK-3/plants.txt): -2's four on the
   elem_fast directed route + `sin-as-cos`, `tan-inverted` on the resolved fast32 trig arms. Gate
-  `libm-f32-sinf-shrink-3-gate` (direct tier). Results: see the report json.
+  `libm-f32-sinf-shrink-3-gate`. Results: plants 6 CAUGHT, 0 SURVIVED, 0 WARN; gate rc 0 (affected escalated to
+  FULL on the branch's generated files, as -2's did): 32 suites ok, 10842 passed / 0 failed, conformance 117 / 0,
+  peak 16G, 67 min. clippy (-D warnings, all targets/features) and `cargo xtask static` clean on the merged head.
 
 ## Done
 * -1 (3665b7ff, 6347789c): minimax sin deg 5 / cos deg 6 kernel (D-10.3 fits), in-place nearest entries
