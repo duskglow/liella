@@ -470,23 +470,23 @@ impl Fts {
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
         let mut b = [0u8; off::NAME];
-        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(b, off::PARENT, &parent.to_ne_bytes());
-        put(b, off::LINK, &x.link.to_ne_bytes());
-        put(b, off::ACCPATH, &acc.to_ne_bytes());
-        put(b, off::PATH, &self.buf.to_ne_bytes());
-        put(b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(b, off::SYMFD, &0i32.to_ne_bytes());
-        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::INO, &st.ino.to_ne_bytes());
-        put(b, off::DEV, &st.dev.to_ne_bytes());
-        put(b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(b, off::INFO, &x.info.to_ne_bytes());
-        put(b, off::FLAGS, &0u16.to_ne_bytes());
+        put(&mut b, off::CYCLE, &x.cycle.to_ne_bytes());
+        put(&mut b, off::PARENT, &parent.to_ne_bytes());
+        put(&mut b, off::LINK, &x.link.to_ne_bytes());
+        put(&mut b, off::ACCPATH, &acc.to_ne_bytes());
+        put(&mut b, off::PATH, &self.buf.to_ne_bytes());
+        put(&mut b, off::ERRNO, &x.errno.to_ne_bytes());
+        put(&mut b, off::SYMFD, &0i32.to_ne_bytes());
+        put(&mut b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(&mut b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(&mut b, off::INO, &st.ino.to_ne_bytes());
+        put(&mut b, off::DEV, &st.dev.to_ne_bytes());
+        put(&mut b, off::NLINK, &st.nlink.to_ne_bytes());
+        put(&mut b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        put(&mut b, off::INFO, &x.info.to_ne_bytes());
+        put(&mut b, off::FLAGS, &0u16.to_ne_bytes());
         // `fts_instr` is not part of it: the block holds the instruction ([`Fts::instr_of`]).
-        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
+        put(&mut b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
         b
     }
 
