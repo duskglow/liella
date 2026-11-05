@@ -130,7 +130,9 @@ pub fn is_w(c: u32, mask: Class, loc: &Locale) -> bool {
 }
 
 /// [`is_w`] in a compiled locale through its checked wide tables `w` (a locale view, D-7.13).
-#[inline]
+/// Always inlined: its one caller is the view's out-of-line file-backed arm, which would
+/// otherwise pay a second call per character (PERF-REGRESS-1023-1105-2).
+#[inline(always)]
 pub fn is_w_file(c: u32, mask: Class, w: &Wide) -> bool {
     // One class (every `wctype`/`iswalpha` descriptor): one table, found by its bit, instead of
     // testing all twelve masks in a loop (WCTYPE-LOCALE-3). A bit of no standard class has

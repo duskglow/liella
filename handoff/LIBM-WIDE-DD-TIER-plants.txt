@@ -1,0 +1,8 @@
+# LIBM-WIDE-DD-TIER: plants on the double-double tier (crates/math/src/wide_dd.rs).
+bound-too-tight | crates/math/src/wide_dd.rs | lit:const B_MAIN: u32 = 100; ==> const B_MAIN: u32 = 112; | cargo test --release -p liella-math --lib wide_dd | msg:test wide_dd::tests::\S+ \.\.\. FAILED
+table-entry | crates/math/src/wide_dd.rs | lit:[0x3ff02c9a3e778061, 0xbc719083535b085d], ==> [0x3ff02c9a3e778062, 0xbc719083535b085d], | cargo test --release -p liella-math --lib wide_dd | msg:test wide_dd::tests::\S+ \.\.\. FAILED
+reduction-threshold | crates/math/src/wide_dd.rs | lit:const RAW: i32 = -8; ==> const RAW: i32 = -3; | cargo test --release -p liella-math --lib wide_dd | msg:test wide_dd::tests::\S+ \.\.\. FAILED
+directed-grid-check | crates/math/src/wide_dd.rs | lit:if f < half { f >= err && f + err <= half } ==> if f < half { f + err <= half } | cargo test --release -p liella-math --lib wide_dd | msg:test wide_dd::tests::\S+ \.\.\. FAILED
+nearest-midpoint-check | crates/math/src/wide_dd.rs | lit:else { f >= half + err && f + err <= mask } ==> else { f >= half && f + err <= mask } | cargo test --release -p liella-math --lib wide_dd | msg:test wide_dd::tests::\S+ \.\.\. FAILED
+log10-exact-limit | crates/math/src/wide.rs | lit:k <= 55) ==> k <= 47) | cargo test --release -p liella-math --test s10_math_clauses s10_3_c_r3 | msg:test s10_3_c_r3 \.\.\. FAILED
+log10-exact-compare | crates/math/src/wide.rs | lit:if odd == five { ==> if odd == five && e < 27 { | cargo test --release -p liella-math --test s10_math_clauses s10_3_c_r3 | msg:test s10_3_c_r3 \.\.\. FAILED

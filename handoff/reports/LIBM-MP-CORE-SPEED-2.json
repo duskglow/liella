@@ -1,0 +1,16 @@
+{"task": "LIBM-MP-CORE-SPEED-2", "model": "opus", "tokens": null,
+ "result": "ln10 digest change explained: MP_LN10 and MP_LN_PI equal the 384-bit truncation (also nearest) of an independent 250-digit reference; pin test added; -1 accuracy rc 124 traced to the f32 exhaustive sweeps; counts recorded in saturation section 20; final jobs queued on keke",
+ "branch": "task/libm-mp-core-speed-2", "head": "see git log (handoff commit after afe34f72)",
+ "gate": {"affected": "queued (libm-mp-core-speed-2-gate); -1 gate FULL: 10823 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "libm-mp-core-speed-accuracy rc 124: --include-ignored ran the three fast32 exhaustive f32 sweeps past the 150 min limit; -2 accuracy runs the release suites and the two mp-path count jobs, not the f32 sweeps",
+  "Preliminary counts (before b6353c7b vs the -1 code): 111 mp/double-double rows 15-75% fewer instructions (median 19%), no row slower; the brief's 2-3x was not reached, the remaining cost is the 384-bit arithmetic itself",
+  "Jobs ran on the 4bbb53b9 tree (sync refused BUSY once they were queued); afe34f72 and the handoff commit are docs/handoff only"
+ ],
+ "refused": [],
+ "jobs": ["libm-mp-core-speed-2-lint", "libm-mp-core-speed-2-gate", "libm-mp-core-speed-2-accuracy", "libm-mp-core-speed-2-counts-after", "libm-mp-core-speed-2-plants"],
+ "improvement": "A shared 'accuracy' job recipe that names its suites (and excludes the multi-hour exhaustive sweeps) would have saved the -1 run's 150 min timeout",
+ "next_step": "Read the five -2 jobs on keke; if green and counts-after matches section 20 within 0.5%, land",
+ "report_file": "handoff/libm-mp-core-speed.md"}

@@ -396,6 +396,32 @@ fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out
     let (width, left) = p.field(star_arg);
     let fill = width.saturating_sub(s1.len());
     let (head, mid, tail) = (fmt.get(..p.at0)?, fmt.get(p.after0..p.at1)?, fmt.get(p.after1..)?);
+    let n = head.len().saturating_add(s0.len()).saturating_add(mid.len()).saturating_add(s1.len().max(width)).saturating_add(tail.len());
+    // The result is an `int` (D-12.5).
+    let fits_int = n <= usize::try_from(i32::MAX).unwrap_or(usize::MAX);
+    // The whole result fits the sink (sprintf into a large enough buffer): the pieces written in
+    // place, the same bytes in the same order as the `put`s below, without a call per piece.
+    if fits_int {
+        if let Some(dst) = out.room(n) {
+            let mut at = 0usize;
+            place(dst, &mut at, head);
+            place(dst, &mut at, s0);
+            place(dst, &mut at, mid);
+            if left {
+                place(dst, &mut at, s1);
+            }
+            let end = at.saturating_add(fill);
+            if let Some(pad) = dst.get_mut(at..end) {
+                liella::mem::fill(pad, b' ');
+            }
+            at = end;
+            if !left {
+                place(dst, &mut at, s1);
+            }
+            place(dst, &mut at, tail);
+            return Some(Ok(n));
+        }
+    }
     let mut put = |piece: &[u8]| {
         if !piece.is_empty() {
             out.put(piece);
@@ -418,12 +444,21 @@ fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out
         put(s1);
     }
     put(tail);
-    let n = head.len().saturating_add(s0.len()).saturating_add(mid.len()).saturating_add(s1.len().max(width)).saturating_add(tail.len());
-    // The result is an `int` (D-12.5).
-    if n > usize::try_from(i32::MAX).unwrap_or(usize::MAX) {
+    if !fits_int {
         return Some(Err(Errno::EOVERFLOW));
     }
     Some(Ok(n))
+}
+
+/// Copy `piece` into `dst` at `*at` and move `*at` past it (render_pair_s's in-place write;
+/// `dst` was sized to hold every piece).
+#[inline(always)]
+fn place(dst: &mut [u8], at: &mut usize, piece: &[u8]) {
+    let end = at.saturating_add(piece.len());
+    if let Some(d) = dst.get_mut(*at..end) {
+        liella::mem::copy(d, piece);
+    }
+    *at = end;
 }
 
 /// Render the simple format `fmt`, `plan` being what `pf::simple_into` made of it, its
@@ -796,6 +831,20 @@ impl Out<u8> for ToBuffer {
             return;
         }
         self.put_rest(s);
+    }
+
+    /// The same test as [`Out::put`]'s common case, for all `n` bytes at once: `None` when they
+    /// would reach the terminator's byte or pass the fortified size (the caller's `put`s then
+    /// take the piece-by-piece path and its checks).
+    #[inline]
+    fn room(&mut self, n: usize) -> Option<&mut [u8]> {
+        let end = self.pos.saturating_add(n);
+        if end < self.max && end <= self.slen {
+            let dst = conv::out_bytes(self.addr.wrapping_add(self.pos), n);
+            self.pos = end;
+            return Some(dst);
+        }
+        None
     }
 }
 

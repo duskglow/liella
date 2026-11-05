@@ -2,11 +2,14 @@
 
 A plant is a deliberate mutation of the code (or test) a story adds. The story's tests must catch it. `cargo xtask
 plants` runs a list of plants in the way the project rules ask for, so a story does not need a hand-written plants
-script (XTASK-PLANTS, plan/next-batch-1024-2.md). For now the tool is advisory: hand-written scripts are still
-accepted until the owner makes this the required path.
+script (XTASK-PLANTS, plan/next-batch-1024-2.md).
+
+**The tool is the required way to run plants (owner, 2026-11-05).** Do not write your own plants script: hand-written
+scripts printed CAUGHT next to passing tests, hung for 150 minutes and silently skipped plants. The project's
+per-plant limit is `--timeout 600` (the default); a plant whose command runs into it is CAUGHT ("caught by timeout").
 
 ```
-cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]
+cargo xtask plants <plants-file> --dir <new-directory> [--timeout <secs>]   # default and project limit: 600
 ```
 
 Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/gate`, which gives the job a private
@@ -22,10 +25,23 @@ Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/ga
 3. In the copy it runs `cargo xtask so` (the products), then each distinct plant command once on the unmutated copy.
    If one of them fails, it prints the last lines of its log and exits 2 before any plant is applied.
 4. For each plant: it writes the mutated file (a fresh mtime, so cargo rebuilds), runs the command with `sh -c` in the
-   copy (under `timeout`, default 1800 s), then restores the file by writing it again (again a fresh mtime).
+   copy (under `timeout`, default 600 s, the project's per-plant limit), then restores the file by writing it again (again a fresh mtime).
 5. It prints one verdict per plant and a summary line. It exits 1 if any plant SURVIVED (or a step failed), else 0.
 
-Logs go to `<dir>/logs/` (`so.log`, `baseline-<n>.log`, `<id>.log`). The tool writes nothing outside `--dir`.
+**Which commands rebuild the products** (XTASK-PLANTS-PRODUCTS-REBUILD). A test that links `libc.a` or
+`liella-crt1.o` (a `*_products` test, a conformance program) sees a plant only if the products are rebuilt with
+it, so for each plant whose command may use the products the tool runs `cargo xtask so` in the copy after
+applying the plant and before the command (log `<id>.so.log`; if the mutant does not build, the plant is judged
+on that log and the command is not run). A command is known not to use them only when it is one plain
+`cargo test` whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
+uses the products by the rule `cargo xtask affected` builds them for (its source or support files name
+`target/liella`, `libc.a`, `liella-crt1` or `conformance`). Such a plant reuses the baseline build; anything
+else (shell syntax, `cargo xtask affected`, all targets of a package, an unknown target or option) rebuilds.
+After a plant that rebuilt the products, the next plant that does not use them first rebuilds them unmutated
+(`<id>.so-restore.log`), so no command sees an earlier plant's mutant. The verdict line names the build
+used (`build: the baseline products, not rebuilt`, or `rebuilt with the mutant in <n>s`).
+
+Logs go to `<dir>/logs/` (`so.log`, `baseline-<n>.log`, `<id>.log`, `<id>.so.log`, `<id>.so-restore.log`). The tool writes nothing outside `--dir`.
 `CARGO_TARGET_DIR` is removed from the commands' environment, so the copy builds into its own `target/`.
 
 ## The plants file
@@ -62,7 +78,7 @@ id | path | pattern | cmd
 
 | Verdict | Meaning | Exit |
 |---|---|---|
-| `CAUGHT` | the command failed and its log matches `msg:` (or a plant declared equivalent was caught anyway) | 0 |
+| `CAUGHT` | the command failed and its log matches `msg:` (or a plant declared equivalent was caught anyway), or it ran into the timeout | 0 |
 | `WARN-NO-MSG` | the command failed, but its log does not match `msg:` | 0 |
 | `WARN-RC-ONLY` | the command failed, and the plant has no `msg:` | 0 |
 | `EQUIVALENT` | the command passed, and the plant is declared `equivalent:` | 0 |

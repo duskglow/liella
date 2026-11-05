@@ -85,6 +85,9 @@ pub const TARGETS: &[Target] = &[
     Target { name: "erf", parity: Parity::Odd, eval: |x, p| mp::erf(x, p).value },
     Target { name: "tgamma_2p5", parity: Parity::Neither, eval: |x, p| mp::tgamma(&x.add(&Big::from_f64(2.5)), p).value },
     Target { name: "lgamma1p_over_x", parity: Parity::Neither, eval: lgamma1p_over_x },
+    // erfc(x)·e^(x²), the scaled complementary error function (LIBM-F32-ERF): both factors to
+    // p + 8 bits, their product exact.
+    Target { name: "erfcx", parity: Parity::Neither, eval: |x, p| mp::erfc(x, p + 8).value.mul(&mp::exp(&x.mul(x), p + 8).value) },
 ];
 
 /// lnΓ(1 + x)/x, and its limit -γ at 0 as the symmetric difference (lnΓ(1 + h) - lnΓ(1 - h))/(2h)
@@ -582,6 +585,9 @@ pub struct FitSpec {
     pub format: (String, Fmt),
     /// Output path relative to the workspace root.
     pub output: String,
+    /// The optional `shift` c as written and its value: the fit is p(t) ≈ f(c + t) for t in the
+    /// interval (a polynomial centred on c; the parity fold is then off).
+    pub shift: Option<(String, Big)>,
     /// Working precision (default 256).
     pub prec: u32,
     /// Equioscillation tolerance (default 1e-6).
@@ -666,7 +672,8 @@ pub fn parse_powers(s: &str) -> Option<Vec<u32>> {
 ///
 /// Keys: `name`, `target`, `interval` (two endpoints, optionally in brackets), `powers`,
 /// `error` (`relative` | `absolute`), `format` (`f32` | `f64` | `f80` | `f128`), `fixed`
-/// (optional, `k:value, ...`), `output` (path relative to the workspace root), and the optional
+/// (optional, `k:value, ...`), `output` (path relative to the workspace root), `shift` (optional
+/// c: fit p(t) ≈ f(c + t) on the interval in t), and the optional
 /// `precision` (working bits, default 256), `tolerance` (default 1e-6) and `points`
 /// (measurement grid, default 8192).
 pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
@@ -686,7 +693,7 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
     let get = |k: &str| kv.iter().find(|(j, _)| j == k).map(|(_, v)| v.clone());
     let need = |k: &str| get(k).ok_or(format!("missing key {k}"));
     for (k, _) in &kv {
-        if !["name", "target", "interval", "powers", "error", "format", "fixed", "output", "precision", "tolerance", "points"]
+        if !["name", "target", "interval", "powers", "error", "format", "fixed", "output", "shift", "precision", "tolerance", "points"]
             .contains(&k.as_str())
         {
             return Err(format!("unknown key {k}"));
@@ -738,6 +745,10 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
     }
     powers.sort_unstable();
     powers.dedup();
+    let shift = match get("shift") {
+        Some(c) => Some((c.clone(), parse_expr(&c, prec).ok_or(format!("bad shift {c}"))?)),
+        None => None,
+    };
     Ok(FitSpec {
         name,
         target: target_name,
@@ -749,6 +760,7 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
         relative,
         format: (fname, fmt),
         output: need("output")?,
+        shift,
         prec,
         tol,
         points,
@@ -769,9 +781,12 @@ pub struct Generated {
 /// Fits a spec and renders the Rust source. `fit_path` is how the header names the fit file.
 pub fn generate(spec: &FitSpec, fit_path: &str) -> Result<Generated, String> {
     let t = target(&spec.target).ok_or("unknown target")?;
-    let f = |x: &Big, p: u32| (t.eval)(x, p);
+    let zero = Big::from_i64(0);
+    let c = spec.shift.as_ref().map_or(&zero, |s| &s.1);
+    let f = |x: &Big, p: u32| (t.eval)(&x.add(c), p);
+    let parity = if spec.shift.is_some() { Parity::Neither } else { t.parity };
     let free: Vec<u32> = spec.powers.iter().copied().filter(|k| !spec.fixed.iter().any(|(j, _)| j == k)).collect();
-    let mut pb = Problem::new(&f, t.parity, spec.interval.0.clone(), spec.interval.1.clone(), free, spec.relative);
+    let mut pb = Problem::new(&f, parity, spec.interval.0.clone(), spec.interval.1.clone(), free, spec.relative);
     pb.fixed = spec.fixed.clone();
     pb.prec = spec.prec;
     pb.tol = spec.tol;
@@ -806,6 +821,9 @@ pub fn generate(spec: &FitSpec, fit_path: &str) -> Result<Generated, String> {
         "//! {}: minimax {kind} approximation of {} on [{}, {}], powers {}, coefficients rounded to {fname}.",
         spec.name, spec.target, spec.interval_text.0, spec.interval_text.1, spec.powers_text
     );
+    if let Some((c, _)) = &spec.shift {
+        let _ = writeln!(s, "//! Centred: the polynomial is in t = x - {c}, fitted to {}({c} + t) for t in that interval.", spec.target);
+    }
     let _ = writeln!(
         s,
         "//! Derivation (D-10.3): Remez exchange, {} iterations at {}-bit precision; levelled error 2^{lev:.2};",

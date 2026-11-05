@@ -6,9 +6,18 @@
 //! - a reused copy directory (rsync restores old mtimes, so cargo skipped the rebuild and tested a
 //!   stale mutant): `--dir` must not exist, and nothing is ever deleted;
 //! - a copy without the products (`cargo xtask so` is run in the copy before the baseline);
+//! - a products test run against the baseline products, blind to the mutant (XTASK-PLANTS-PRODUCTS-REBUILD: the
+//!   products are rebuilt with each plant whose command may use them, see [`cmd_uses_products`]);
 //! - an unanchored pattern that mutated the wrong site (every plant must change exactly one site,
 //!   and a plant on a `.S` file must name its `liella_machine_<fn>:` label);
-//! - a script that always exits 0 (any SURVIVED exits 1; a failed baseline exits 2).
+//! - a script that always exits 0 (any SURVIVED exits 1; a failed baseline exits 2);
+//! - a copy missing a source file a test needs: after the copy every source path (`git ls-files`, tracked
+//!   and untracked-not-ignored, in a git work tree; every file and symlink outside `/target` and
+//!   `/fuzz/target` in a synced role, which has no `.git`) must exist in it, else the run is refused.
+//!
+//! A `--dir` under `/dev/shm` prints WARN-DEV-SHM: a test that mounts its own `/dev` or `/dev/shm`
+//! hides such a copy (XTASK-PLANTS-TRACKED-COPY: `nscache_mode.sh` binds the copy back; the
+//! `nodev` phase of `posixipc_run.sh` cannot).
 //!
 //! The plants file has one plant per line (blank lines and `#` comments are skipped):
 //! `id | path | pattern | cmd | msg:<regex>` or `id | path | pattern | cmd | equivalent:<reason>`,
@@ -22,6 +31,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::time::Instant;
 
 /// Exit status: every plant CAUGHT (or EQUIVALENT).
 const EXIT_OK: u8 = 0;
@@ -32,8 +42,12 @@ const EXIT_BASELINE: u8 = 2;
 /// Exit status: the input was refused (usage, plants file, an ambiguous plant, an existing `--dir`).
 const EXIT_REFUSED: u8 = 3;
 
-/// The default limit for one command, in seconds (a mutant may loop forever).
-const DEFAULT_TIMEOUT: u64 = 1800;
+/// The default limit for one command, in seconds (a mutant may loop forever). The project's per-plant limit
+/// (owner, 2026-11-05): `--timeout 600`.
+const DEFAULT_TIMEOUT: u64 = 600;
+
+/// The exit status of `timeout(1)` when it ended the command: a mutant that hangs is caught by the limit.
+const TIMED_OUT: i32 = 124;
 
 /// How a plant is expected to be judged.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,14 +100,76 @@ impl Verdict {
     }
 }
 
-/// One run: the tree to copy, the plants, the new directory and the command that builds the
-/// products in the copy (`cargo xtask so`; the unit tests use a toy tree without one).
+/// One run: the tree to copy, the plants, the new directory, the command that builds the
+/// products in the copy (`cargo xtask so`; the unit tests use a toy tree without one), and which
+/// plants' commands use the products (given the copy; [`plants_use_products`]).
 pub struct Config {
     pub src: PathBuf,
     pub plants: Vec<Plant>,
     pub dir: PathBuf,
     pub prepare: Vec<String>,
     pub timeout: u64,
+    pub uses_products: fn(&Path, &[Plant]) -> Vec<bool>,
+}
+
+/// XTASK-PLANTS-PRODUCTS-REBUILD: per plant, whether its command may use the products, so that
+/// they are rebuilt with the mutant first. The test targets are judged by the rule
+/// `cargo xtask affected` uses to build the products (`Repo::test_uses_products`).
+pub fn plants_use_products(copy: &Path, plants: &[Plant]) -> Vec<bool> {
+    let repo = crate::affected::Repo::load(copy);
+    plants.iter().map(|p| cmd_uses_products(&p.cmd, |krate, name| repo.test_uses_products(krate, name))).collect()
+}
+
+/// Whether `cmd` may use the products. It is known not to only when it is one plain `cargo test`
+/// whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
+/// uses them (`lookup(package, target) == Some(false)`). Anything else (shell syntax, another
+/// program such as `cargo xtask affected`, an unknown option, all targets of a package, an unknown
+/// target) may: when unsure, rebuild.
+pub fn cmd_uses_products(cmd: &str, lookup: impl Fn(Option<&str>, &str) -> Option<bool>) -> bool {
+    if cmd.contains(|c: char| ";&|$`()<>'\"\\*?\n".contains(c)) {
+        return true;
+    }
+    // `--opt=value` is `--opt value`.
+    let words: Vec<&str> = cmd.split_whitespace().flat_map(|w| match w.split_once('=') {
+        Some((k, v)) if k.starts_with("--") => vec![k, v],
+        _ => vec![w],
+    }).collect();
+    let mut it = words.into_iter();
+    if it.next() != Some("cargo") || it.next() != Some("test") {
+        return true;
+    }
+    let (mut package, mut unit, mut tests) = (None, false, Vec::new());
+    while let Some(w) = it.next() {
+        match w {
+            // The test binaries' own arguments.
+            "--" => break,
+            "-p" | "--package" if package.is_none() => match it.next() {
+                Some(p) => package = Some(p),
+                None => return true,
+            },
+            "--lib" => unit = true,
+            "--bin" => match it.next() {
+                Some(_) => unit = true,
+                None => return true,
+            },
+            "--test" => match it.next() {
+                Some(t) => tests.push(t),
+                None => return true,
+            },
+            "-q" | "--quiet" | "--release" | "--no-fail-fast" | "--locked" | "--offline" | "--frozen" => {}
+            "--features" | "-F" | "-j" | "--jobs" => {
+                it.next();
+            }
+            // `--tests`, `--all-targets`, `--workspace`, `--doc`, a second package, ...
+            w if w.starts_with('-') => return true,
+            // A test name filter.
+            _ => {}
+        }
+    }
+    if !unit && tests.is_empty() {
+        return true;
+    }
+    tests.into_iter().any(|t| lookup(package, t) != Some(false))
 }
 
 /// The outcome of a run: the exit status and the verdict per plant (in file order).
@@ -141,7 +217,7 @@ fn parse_args(root: &Path, args: &[String]) -> Result<Config, String> {
     let text = fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
     let dir = if dir.is_absolute() { dir } else { std::env::current_dir().map_err(|e| e.to_string())?.join(dir) };
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout })
+    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout, uses_products: plants_use_products })
 }
 
 /// Parse a plants file (see the module comment). Every line is checked; the errors are joined.
@@ -351,6 +427,49 @@ fn refused(msg: String) -> Outcome {
     Outcome { code: EXIT_REFUSED, verdicts: Vec::new() }
 }
 
+/// The source paths the copy must hold, sorted, and how they were found. In a git work tree (`.git` a directory or a
+/// worktree's file): `git ls-files` of the tracked and the untracked-not-ignored files that exist (a tracked file
+/// deleted in the work tree is not expected); a tracked file under `/target` is expected too (the copy then lacks it
+/// and the run is refused). Otherwise (a synced role: no `.git`) every file and symlink below `src` outside `/target`
+/// and `/fuzz/target`, symlinks not followed.
+fn source_paths(src: &Path) -> Result<(Vec<String>, &'static str), String> {
+    if src.join(".git").exists() {
+        let out = Command::new("git").arg("-C").arg(src).args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).output().map_err(|e| format!("git ls-files: {e}"))?;
+        if !out.status.success() {
+            return Err(format!("git ls-files: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        let mut paths: Vec<String> = String::from_utf8_lossy(&out.stdout).split('\0').filter(|p| !p.is_empty() && fs::symlink_metadata(src.join(p)).is_ok()).map(str::to_string).collect();
+        paths.sort();
+        paths.dedup();
+        return Ok((paths, "git ls-files"));
+    }
+    fn walk(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<(), String> {
+        for e in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+            let e = e.map_err(|e| e.to_string())?;
+            let name = e.file_name().to_string_lossy().into_owned();
+            let path = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+            if path == "target" || path == "fuzz/target" {
+                continue;
+            }
+            if e.file_type().map_err(|e| e.to_string())?.is_dir() {
+                walk(&e.path(), &path, out)?;
+            } else {
+                out.push(path);
+            }
+        }
+        Ok(())
+    }
+    let mut paths = Vec::new();
+    walk(src, "", &mut paths)?;
+    paths.sort();
+    Ok((paths, "every file of a tree without .git"))
+}
+
+/// The paths of `paths` that `copy` lacks (as a file, symlink or anything else; a dangling symlink counts as present).
+fn missing_in(copy: &Path, paths: &[String]) -> Vec<String> {
+    paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err()).cloned().collect()
+}
+
 /// The whole run: refuse what cannot be trusted, copy, build, baseline, then each plant.
 pub fn run(cfg: &Config) -> Outcome {
     if cfg.dir.exists() {
@@ -364,6 +483,9 @@ pub fn run(cfg: &Config) -> Outcome {
     }
     if on_ram(&cfg.dir) == Some(false) {
         println!("plants: WARN-NOT-RAM: {} is not on tmpfs or zram (plant copies belong in RAM: /dev/shm/claude/<story>/ or /mnt/zram/claude/<story>/)", cfg.dir.display());
+    }
+    if cfg.dir.starts_with("/dev/shm") {
+        println!("plants: WARN-DEV-SHM: {} is under /dev/shm: a test that mounts its own /dev or /dev/shm cannot see the copy (posixipc_products; nscache_mode.sh binds it back)", cfg.dir.display());
     }
     if let Some(parent) = cfg.dir.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
@@ -386,6 +508,17 @@ pub fn run(cfg: &Config) -> Outcome {
         return Outcome { code: EXIT_SURVIVED, verdicts: Vec::new() };
     }
     println!("plants: copy {} -> {}", cfg.src.display(), copy.display());
+    match source_paths(&cfg.src) {
+        Ok((paths, how)) => {
+            let missing = missing_in(&copy, &paths);
+            if !missing.is_empty() {
+                let shown: Vec<&str> = missing.iter().take(20).map(String::as_str).collect();
+                return refused(format!("the copy lacks {} of {} source paths ({how}), so a test could miss a file it needs: {}{}", missing.len(), paths.len(), shown.join(", "), if missing.len() > 20 { ", ..." } else { "" }));
+            }
+            println!("plants: copy check: all {} source paths ({how}) are in the copy", paths.len());
+        }
+        Err(e) => return refused(format!("cannot list the source paths of {}: {e}", cfg.src.display())),
+    }
     // The products, then each distinct command on the unmutated copy.
     let mut baseline: Vec<(String, Vec<String>)> = vec![("so".into(), cfg.prepare.clone())];
     for p in &cfg.plants {
@@ -407,9 +540,28 @@ pub fn run(cfg: &Config) -> Outcome {
             }
         }
     }
+    // XTASK-PLANTS-PRODUCTS-REBUILD: a command that uses the products gets them rebuilt with the
+    // mutant; the others reuse the baseline build, rebuilt unmutated first if a plant left a mutant in it.
+    let uses = (cfg.uses_products)(&copy, &cfg.plants);
+    let mut products_hold_mutant = false;
     let mut verdicts = Vec::new();
     let mut failed = false;
-    for p in &cfg.plants {
+    for (p, &products) in cfg.plants.iter().zip(&uses) {
+        let mut build = "the baseline products, not rebuilt".to_string();
+        if !products && products_hold_mutant {
+            let log = logs.join(format!("{}.so-restore.log", p.id));
+            let start = Instant::now();
+            match run_logged(&copy, &cfg.prepare, &log, cfg.timeout) {
+                Ok(0) => {
+                    products_hold_mutant = false;
+                    build = format!("the products, rebuilt unmutated after the last plant in {:.0}s (log {})", start.elapsed().as_secs_f64(), log.display());
+                }
+                rc => {
+                    println!("plants: {}: ERROR: rebuilding the unmutated products: {rc:?}; stopping (log {})", p.id, log.display());
+                    return Outcome { code: EXIT_SURVIVED, verdicts };
+                }
+            }
+        }
         let file = copy.join(&p.path);
         let original = match fs::read_to_string(&file) {
             Ok(s) => s,
@@ -432,8 +584,21 @@ pub fn run(cfg: &Config) -> Outcome {
             failed = true;
             continue;
         }
-        let log = logs.join(format!("{}.log", p.id));
-        let rc = run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout);
+        let mut log = logs.join(format!("{}.log", p.id));
+        let mut built = Ok(0);
+        if products {
+            products_hold_mutant = true;
+            let so_log = logs.join(format!("{}.so.log", p.id));
+            let start = Instant::now();
+            built = run_logged(&copy, &cfg.prepare, &so_log, cfg.timeout);
+            build = format!("the products, rebuilt with the mutant in {:.0}s (log {})", start.elapsed().as_secs_f64(), so_log.display());
+            if !matches!(built, Ok(0)) {
+                // The mutant does not build: judged on the build's log, the command is not run.
+                build = format!("the products build failed on the mutant: {build}");
+                log = so_log;
+            }
+        }
+        let rc = if matches!(built, Ok(0)) { run_logged(&copy, &sh(&p.cmd), &log, cfg.timeout) } else { built };
         // Restore by writing (a fresh mtime) before anything else can go wrong.
         if let Err(e) = write_fresh(&file, &original) {
             println!("plants: {}: ERROR: restore: {e}; stopping (the copy holds the mutant)", p.id);
@@ -450,12 +615,13 @@ pub fn run(cfg: &Config) -> Outcome {
         let (verdict, detail) = match (&p.expect, rc) {
             (Expect::Equivalent(why), 0) => (Verdict::Equivalent, why.clone()),
             (_, 0) => (Verdict::Survived, format!("`{}` passed on the mutant", p.cmd)),
+            (_, TIMED_OUT) => (Verdict::Caught, format!("caught by timeout ({}s)", cfg.timeout)),
             (Expect::Msg(re), rc) if log_matches(&log, re) => (Verdict::Caught, format!("rc {rc}, /{re}/ in the log")),
             (Expect::Msg(re), rc) => (Verdict::WarnNoMsg, format!("rc {rc}, but /{re}/ is not in {}", log.display())),
             (Expect::Equivalent(_), rc) => (Verdict::Caught, format!("rc {rc} (declared equivalent, but caught)")),
             (Expect::RcOnly, rc) => (Verdict::WarnRcOnly, format!("rc {rc}, no msg: given")),
         };
-        println!("plants: {}: {} ({}; log {})", p.id, verdict.label(), detail, log.display());
+        println!("plants: {}: {} ({}; log {}; build: {build})", p.id, verdict.label(), detail, log.display());
         verdicts.push((p.id.clone(), verdict));
     }
     let count = |v: Verdict| verdicts.iter().filter(|(_, x)| *x == v).count();
@@ -494,7 +660,77 @@ mod tests {
     const CHECK: &str = "grep -q answer=42 src/value.txt || { echo WRONG-ANSWER; exit 1; }";
 
     fn config(src: &Path, dir: &Path, plants: &str) -> Config {
-        Config { src: src.to_path_buf(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60 }
+        Config { src: src.to_path_buf(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60, uses_products: |_, ps| vec![false; ps.len()] }
+    }
+
+    /// The toy's products: `product.txt`, a copy of `src/value.txt`; every build appends a line to `builds.txt`.
+    const BUILD: &str = "cp src/value.txt product.txt && echo built >> builds.txt";
+    const PRODUCT_CHECK: &str = "grep -q answer=42 product.txt || { echo WRONG-PRODUCT; exit 1; }";
+
+    // no spec clause (XTASK-PLANTS-PRODUCTS-REBUILD): a plant seen only through the products is CAUGHT (the baseline
+    // products alone would let it survive); a command that does not use them reuses the build, which is first rebuilt
+    // unmutated when the plant before left its mutant in it
+    #[test]
+    fn a_products_command_gets_the_products_rebuilt_with_the_mutant() {
+        let (src, dir) = toy("products");
+        let plants = format!(
+            "u1 | src/value.txt | perl:s/(answer=42\\n)other=7/$1other=8/ | {CHECK} | equivalent:other= is not read\n\
+             pr | src/value.txt | lit:answer=42 ==> answer=43 | {PRODUCT_CHECK} | msg:WRONG-PRODUCT\n\
+             u2 | src/value.txt | perl:s/answer=42/answer=44/ | {CHECK} | msg:WRONG-ANSWER\n"
+        );
+        let mut cfg = config(&src, &dir, &plants);
+        cfg.prepare = sh(BUILD);
+        cfg.uses_products = |_, ps| ps.iter().map(|p| p.cmd.contains("product.txt")).collect();
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("u1".into(), Verdict::Equivalent), ("pr".into(), Verdict::Caught), ("u2".into(), Verdict::Caught)]);
+        assert_eq!(out.code, EXIT_OK);
+        // The baseline, `pr` with its mutant, the unmutated rebuild before `u2`; none for `u1`.
+        assert_eq!(fs::read_to_string(dir.join("src/builds.txt")).unwrap().lines().count(), 3);
+        assert!(dir.join("logs/pr.so.log").is_file() && dir.join("logs/u2.so-restore.log").is_file());
+        assert!(!dir.join("logs/u1.so.log").exists() && !dir.join("logs/u1.so-restore.log").exists());
+        assert_eq!(fs::read_to_string(dir.join("src/product.txt")).unwrap(), "answer=42\nother=7\nother=7\n");
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (XTASK-PLANTS-PRODUCTS-REBUILD): a mutant whose products do not build is judged on the build's log
+    #[test]
+    fn a_mutant_that_breaks_the_products_build_is_judged_on_its_log() {
+        let (src, dir) = toy("nobuild");
+        let plants = format!("nb | src/value.txt | lit:answer=42 ==> answer=99 | {PRODUCT_CHECK} | msg:BUILD-BROKE\n");
+        let mut cfg = config(&src, &dir, &plants);
+        cfg.prepare = sh("grep -q answer=99 src/value.txt && { echo BUILD-BROKE; exit 1; }; cp src/value.txt product.txt");
+        cfg.uses_products = |_, ps| vec![true; ps.len()];
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("nb".into(), Verdict::Caught)]);
+        assert!(!dir.join("logs/nb.log").exists(), "the command must not run on a mutant that does not build");
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (XTASK-PLANTS-PRODUCTS-REBUILD): only a plain `cargo test` of named targets none of which uses the
+    // products skips the rebuild
+    #[test]
+    fn which_commands_use_the_products() {
+        let lookup = |k: Option<&str>, t: &str| match (k, t) {
+            (Some("liella") | None, "catalogs_products") => Some(true),
+            (Some("liella") | None, "stdio_short_io") => Some(false),
+            _ => None,
+        };
+        for (cmd, want) in [
+            ("cargo test -p liella --test stdio_short_io", false),
+            ("cargo test -p liella --test=stdio_short_io short_write -- --test-threads 1", false),
+            ("cargo test -p xtask --bin xtask plants::", false),
+            ("cargo test -p liella --lib diag", false),
+            ("cargo test -p liella --test catalogs_products", true),
+            ("cargo test -p liella --test stdio_short_io --test catalogs_products", true),
+            ("cargo test -p liella --test unknown_target", true),
+            ("cargo test -p liella", true),
+            ("cargo test -p liella --tests", true),
+            ("cargo test -p liella --test stdio_short_io && true", true),
+            ("cargo xtask affected --only conformance:printf --with-exports --run", true),
+            ("sh tests/oracle/run.sh", true),
+        ] {
+            assert_eq!(cmd_uses_products(cmd, lookup), want, "{cmd}");
+        }
     }
 
     // no spec clause: a plant its command catches is CAUGHT, a declared one with no msg is WARN-RC-ONLY, the copy has no target/
@@ -581,5 +817,93 @@ mod tests {
         assert!(parse_plants("x | a | a ==> b | true | msg:X").is_err());
         assert_eq!(parse_plants("d | a | lit:drop me ==> | true").unwrap()[0].pattern, Pattern::Literal { old: "drop me".into(), new: String::new() });
         assert!(names_machine_anchor("(liella_machine_toyfn:.*?)x") && !names_machine_anchor("liella_machine_:") && !names_machine_anchor("liella_machine_x"));
+    }
+
+    // no spec clause: the default per-plant limit is 600 s (the project rule), and --timeout overrides it
+    #[test]
+    fn default_timeout_is_600_seconds() {
+        let (src, dir) = toy("defaulttimeout");
+        let file = src.join("plants.txt");
+        fs::write(&file, format!("d1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} | msg:WRONG-ANSWER\n")).unwrap();
+        let (f, d) = (file.display().to_string(), dir.display().to_string());
+        let cfg = parse_args(&src, &[f.clone(), "--dir".into(), d.clone()]).unwrap();
+        assert_eq!(cfg.timeout, 600);
+        assert_eq!(DEFAULT_TIMEOUT, 600);
+        let cfg = parse_args(&src, &[f, "--dir".into(), d, "--timeout".into(), "7".into()]).unwrap();
+        assert_eq!(cfg.timeout, 7);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        Command::new("git").arg("-C").arg(dir).args(args).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY, no spec clause: every source path of a git work tree reaches the copy, including
+    // unusual kinds (a symlink, a dangling symlink, an executable script, a dot directory, a name with a space and a
+    // newline, a `target` directory below the top), and the copy check lists them all; without git, every file but /target.
+    #[test]
+    fn every_tracked_path_of_an_unusual_kind_is_copied() {
+        let (src, dir) = toy("tracked");
+        if !git(&src, &["init", "-q"]) {
+            println!("skipped: no git (the tracked-path case needs `git init`)");
+            return;
+        }
+        fs::create_dir_all(src.join(".config")).unwrap();
+        fs::write(src.join(".config/x.toml"), "x = 1\n").unwrap();
+        fs::create_dir_all(src.join("crates/x/target")).unwrap();
+        fs::write(src.join("crates/x/target/keep.txt"), "source, not a build\n").unwrap();
+        fs::write(src.join("src/a b\nc.txt"), "odd name\n").unwrap();
+        fs::write(src.join("src/run.sh"), "#!/bin/sh\nexit 0\n").unwrap();
+        let mut mode = fs::metadata(src.join("src/run.sh")).unwrap().permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut mode, 0o755);
+        fs::set_permissions(src.join("src/run.sh"), mode).unwrap();
+        std::os::unix::fs::symlink("value.txt", src.join("src/link")).unwrap();
+        std::os::unix::fs::symlink("nowhere", src.join("src/dangling")).unwrap();
+        fs::write(src.join(".gitignore"), "/target\n").unwrap();
+        assert!(git(&src, &["add", "-A"]), "git add");
+        fs::write(src.join("src/untracked.txt"), "new, not added yet\n").unwrap();
+        let (paths, how) = source_paths(&src).unwrap();
+        assert_eq!(how, "git ls-files");
+        for p in [".config/x.toml", "crates/x/target/keep.txt", "src/a b\nc.txt", "src/run.sh", "src/link", "src/dangling", "src/untracked.txt"] {
+            assert!(paths.iter().any(|x| x == p), "{p} listed: {paths:?}");
+        }
+        assert!(!paths.iter().any(|x| x.starts_with("target/")), "ignored target/ is not a source path");
+        let out = run(&config(&src, &dir, &format!("c1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} && test -x src/run.sh && test -L src/dangling | msg:WRONG-ANSWER\n")));
+        assert_eq!(out.code, EXIT_OK, "{:?}", out.verdicts);
+        assert!(missing_in(&dir.join("src"), &paths).is_empty());
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY, no spec clause: a tracked file the copy lacks (here one force-added under the excluded
+    // /target) refuses the run before the build or any plant, naming the path
+    #[test]
+    fn a_tracked_path_missing_from_the_copy_refuses_the_run() {
+        let (src, dir) = toy("missing");
+        if !git(&src, &["init", "-q"]) {
+            println!("skipped: no git (the tracked-path case needs `git init`)");
+            return;
+        }
+        fs::write(src.join("target/needed.sh"), "echo a test needs me\n").unwrap();
+        fs::write(src.join(".gitignore"), "/target\n").unwrap();
+        assert!(git(&src, &["add", "src/value.txt", ".gitignore"]) && git(&src, &["add", "-f", "target/needed.sh"]), "git add");
+        let mut cfg = config(&src, &dir, &format!("m1 | src/value.txt | lit:answer=42 ==> answer=43 | {CHECK} | msg:WRONG-ANSWER\n"));
+        cfg.prepare = sh("echo BUILT > built.txt");
+        let out = run(&cfg);
+        assert_eq!(out.code, EXIT_REFUSED);
+        assert!(out.verdicts.is_empty() && !dir.join("src/built.txt").exists(), "refused before the build");
+        assert_eq!(missing_in(&dir.join("src"), &source_paths(&src).unwrap().0), vec!["target/needed.sh".to_string()]);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause: a plant whose command hangs is CAUGHT by the timeout, even with a msg: its log cannot match
+    #[test]
+    fn a_plant_that_times_out_is_caught() {
+        let (src, dir) = toy("timeout");
+        let mut cfg = config(&src, &dir, "h1 | src/value.txt | lit:answer=42 ==> answer=43 | if grep -q answer=43 src/value.txt; then sleep 30; fi | msg:WRONG-ANSWER\n");
+        cfg.timeout = 1;
+        let out = run(&cfg);
+        assert_eq!(out.verdicts, vec![("h1".to_string(), Verdict::Caught)]);
+        assert_eq!(out.code, EXIT_OK);
+        let _ = fs::remove_dir_all(src.parent().unwrap());
     }
 }

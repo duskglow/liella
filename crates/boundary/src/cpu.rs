@@ -218,7 +218,7 @@ pub fn init_with(t: &Tunables) -> u8 {
     // The hot kernels' builds (D-4.25): the same decision as the scanners'.
     crate::dispatch::select(avx2);
     // The math kernels' FMA builds (D-10.25): `glibc.cpu.hwcaps=-FMA` keeps the baseline.
-    crate::dispatch::select_fma(f.fma() && t.fma.unwrap_or(true));
+    crate::dispatch::select_fma(crate::dispatch::fma_wanted(&f, t));
     if let Some(n) = t.rep_movsb_threshold {
         COPY_MIN.store(n, Relaxed);
     }
@@ -229,7 +229,19 @@ pub fn init_with(t: &Tunables) -> u8 {
     ERMS_LARGE_FROM.store(erms_large_window(f.fsrm(), avx2, t.rep_movsb_threshold), Relaxed);
     let s = READY | if erms { ERMS } else { 0 } | if avx2 { AVX2 } else { 0 };
     STATE.store(s, Release);
+    publish_fill_erms_from();
     s
+}
+
+/// Write the `memset` entry's `rep stosb` word (machine/fold.S, MEMSET-4K-3) from the decided
+/// ERMS flag and the current threshold: the threshold, at least 257 (the entry reads it only
+/// above 256, where `hot::bulk_fill` makes the same choice), while ERMS is decided; else
+/// `usize::MAX` (no size takes the entry's `rep stosb`). Either value is a correct fill, so a call
+/// that reads it mid-update stays correct.
+fn publish_fill_erms_from() {
+    // 257: the first size past the entry's straight-line 129-256 class.
+    let from = if erms_decided() { fill_erms_min().max(257) } else { usize::MAX };
+    ffi::liella_machine_fill_erms_from.store(from, Relaxed);
 }
 
 /// Make sure the paths are decided (the scanners are correct either way; this is for speed).
@@ -330,6 +342,7 @@ pub(crate) fn force_erms(on: bool) {
     } else {
         STATE.fetch_and(!ERMS, Release);
     }
+    publish_fill_erms_from();
 }
 
 /// Whether the scanners may use AVX2.

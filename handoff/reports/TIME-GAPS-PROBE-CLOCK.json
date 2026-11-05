@@ -1,0 +1,29 @@
+{
+ "task": "TIME-GAPS-PROBE-CLOCK",
+ "model": "opus",
+ "tokens": null,
+ "result": "time_gaps_probe judges getdate current fields against each program's own clock bracket; waits removed; forced-edge test added",
+ "branch": "task/time-gaps-probe-clock",
+ "head": null,
+ "gate": {
+  "affected": "gate rc 0 (time-gaps-probe-clock-gate); time_gaps_probe 4 passed / 0 failed (check3)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cause: Liella getdate reads CLOCK_REALTIME, the probe read time() (tick clock); reproduced 60/60 at forced second edges on a HZ=1000 host",
+  "the minute-edge wait (PERF-NFTW-ENTRY-5) is not on origin/next, so nothing to remove here; the branch that has it must drop it when this lands",
+  "the first -so build job died with a local ssh session killed by the harness time limit (no jobs.tsv row)"
+ ],
+ "refused": [],
+ "improvement": "jobrun from a foreground ssh dies with the session; start every job with nohup ... </dev/null & and wait with jobwait",
+ "next_step": "dispatcher reads gate, plants2 and repeat on keke; on a red plant, read ~/logs/time-gaps-probe-clock-plants2.log",
+ "report_file": "handoff/TIME-GAPS-PROBE-CLOCK.md",
+ "jobs": [
+  "keke:time-gaps-probe-clock-gate",
+  "keke:time-gaps-probe-clock-plants2",
+  "keke:time-gaps-probe-clock-repeat",
+  "keke:time-gaps-probe-clock-check3"
+ ]
+}

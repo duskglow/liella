@@ -42,12 +42,28 @@ pub trait SortCompare {
     /// Whether the element at byte offset `a` of `base` goes after the element at offset `b`
     /// (it compares greater).
     fn gt(&mut self, base: &[u8], a: usize, b: usize) -> bool;
+
+    /// [`gt`](Self::gt) on elements named by address (PERF-QSORT-OFFSET-EXP): `a` and `b` are
+    /// `base.as_ptr().expose_provenance()` plus an offset that [`gt`](Self::gt)'s contract
+    /// allows. The index sort keeps addresses so its merge loop needs no base; an
+    /// implementation that forms pointers overrides this, the default turns them back into
+    /// offsets.
+    #[inline(always)]
+    fn gt_at(&mut self, base: &[u8], a: usize, b: usize) -> bool {
+        let o = base.as_ptr().addr();
+        self.gt(base, a - o, b - o)
+    }
 }
 
 impl<C: SortCompare + ?Sized> SortCompare for &mut C {
     #[inline]
     fn gt(&mut self, base: &[u8], a: usize, b: usize) -> bool {
         (**self).gt(base, a, b)
+    }
+
+    #[inline]
+    fn gt_at(&mut self, base: &[u8], a: usize, b: usize) -> bool {
+        (**self).gt_at(base, a, b)
     }
 }
 
@@ -145,17 +161,23 @@ fn elem(base: &[u8], size: usize, i: usize) -> &[u8] {
 fn sort_by_index<C: SortCompare>(base: &mut [u8], size: usize, mut cmp: C, buf: &mut [usize]) {
     let n = base.len() / size;
     let (pos, aux) = buf.split_at_mut(n);
-    let mut off = 0;
+    // Positions are element addresses while merging (PERF-QSORT-OFFSET-EXP): a comparison
+    // then adds no base, and the merge loop keeps one value fewer live across the call.
+    let start = base.as_ptr().expose_provenance();
+    let mut at = start;
     for slot in pos.iter_mut() {
-        *slot = off;
-        off += size;
+        *slot = at;
+        at += size;
     }
     {
-        // Every position is a multiple of `size` below `n * size == elems.len()` (the
-        // `SortCompare` contract): `merge_sort_index` only permutes them.
+        // Every position is `start` plus a multiple of `size` below `n * size == elems.len()`
+        // (the `SortCompare` contract, `gt_at`): `merge_sort_index` only permutes them.
         let elems: &[u8] = base;
-        let mut gt = move |a: usize, b: usize| cmp.gt(elems, a, b);
+        let mut gt = move |a: usize, b: usize| cmp.gt_at(elems, a, b);
         merge_sort_index(pos, aux, &mut gt);
+    }
+    for p in pos.iter_mut() {
+        *p -= start;
     }
     permute(base, size, pos);
 }
@@ -193,17 +215,18 @@ fn merge_sort_index<G: FnMut(usize, usize) -> bool>(idx: &mut [usize], aux: &mut
     // instead measured 7% more instructions, QSORT-MERGE-INDEX.)
     let left = &mut aux[..mid];
     left.copy_from_slice(&idx[..mid]);
-    let (mut i, mut j, mut k) = (0, mid, 0);
+    // The output position is i + j - mid, not a counter of its own (one value fewer live
+    // across the comparator call, PERF-QSORT-OFFSET-EXP).
+    let (mut i, mut j) = (0, mid);
     while i < mid && j < n {
         let (a, b) = (left[i], idx[j]);
         let right_first = gt(a, b);
-        idx[k] = if right_first { b } else { a };
+        idx[i + j - mid] = if right_first { b } else { a };
         j += usize::from(right_first);
         i += usize::from(!right_first);
-        k += 1;
     }
     // A left remainder fills the gap before the rest of the right run, which is in place.
-    idx[k..k + (mid - i)].copy_from_slice(&left[i..]);
+    idx[i + j - mid..j].copy_from_slice(&left[i..]);
     false
 }
 
