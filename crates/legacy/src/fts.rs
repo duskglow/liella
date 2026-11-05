@@ -253,8 +253,6 @@ const PATH_START: usize = 256;
 
 const ROOT_PARENT: usize = 0;
 
-/// Zero bytes: a name's terminator and the padding to its 8-aligned status.
-const PAD: [u8; 8] = [0; 8];
 
 /// The buffer a directory is read with.
 const LIST_BUFFER: usize = 16 * 1024;
@@ -272,22 +270,34 @@ fn put(b: &mut [u8], at: usize, v: &[u8]) {
     }
 }
 
-fn stat_bytes(st: &Stat) -> [u8; STAT_SIZE] {
-    let mut b = [0u8; STAT_SIZE];
-    put(&mut b, 0, &st.dev.to_ne_bytes());
-    put(&mut b, 8, &st.ino.to_ne_bytes());
-    put(&mut b, 16, &st.nlink.to_ne_bytes());
-    put(&mut b, 24, &st.mode.to_ne_bytes());
-    put(&mut b, 28, &st.uid.to_ne_bytes());
-    put(&mut b, 32, &st.gid.to_ne_bytes());
-    put(&mut b, 40, &st.rdev.to_ne_bytes());
-    put(&mut b, 48, &st.size.to_ne_bytes());
-    put(&mut b, 56, &st.blksize.to_ne_bytes());
-    put(&mut b, 64, &st.blocks.to_ne_bytes());
+/// [`put`] into a block of known length: with a constant `at` the bounds check is folded away.
+#[inline(always)]
+fn putf<const N: usize>(b: &mut [u8; N], at: usize, v: &[u8]) {
+    if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
+        d.copy_from_slice(v);
+    }
+}
+
+/// Zero bytes ahead of the status in [`stat_bytes`]'s result: the slice the block is made from
+/// starts inside them, so the padding after the name and the status are one part of the block.
+const LEAD: usize = 8;
+
+fn stat_bytes(st: &Stat) -> [u8; LEAD + STAT_SIZE] {
+    let mut b = [0u8; LEAD + STAT_SIZE];
+    putf(&mut b, LEAD,&st.dev.to_ne_bytes());
+    putf(&mut b, LEAD + 8, &st.ino.to_ne_bytes());
+    putf(&mut b, LEAD + 16, &st.nlink.to_ne_bytes());
+    putf(&mut b, LEAD + 24, &st.mode.to_ne_bytes());
+    putf(&mut b, LEAD + 28, &st.uid.to_ne_bytes());
+    putf(&mut b, LEAD + 32, &st.gid.to_ne_bytes());
+    putf(&mut b, LEAD + 40, &st.rdev.to_ne_bytes());
+    putf(&mut b, LEAD + 48, &st.size.to_ne_bytes());
+    putf(&mut b, LEAD + 56, &st.blksize.to_ne_bytes());
+    putf(&mut b, LEAD + 64, &st.blocks.to_ne_bytes());
     for (i, t) in [st.atime, st.mtime, st.ctime].iter().enumerate() {
-        let at = 72usize.saturating_add(i.saturating_mul(16));
-        put(&mut b, at, &t.sec.to_ne_bytes());
-        put(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
+        let at = (LEAD + 72usize).saturating_add(i.saturating_mul(16));
+        putf(&mut b, at, &t.sec.to_ne_bytes());
+        putf(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
     }
     b
 }
@@ -319,23 +329,33 @@ fn classify(st: &Stat, dot: bool) -> u16 {
 /// The status of `namez` (a name with its terminator) in `dir`: following links (then a link
 /// naming nothing is `FTS_SLNONE`, whatever made `stat` fail) or not. The listing's names
 /// already end in NUL, so a child's status needs no copy of its name (FTS-FLAT-PROFILE).
-fn stat_entry<S: Sys>(sys: &S, dir: Fd, namez: &[u8], follow: bool, dot: bool) -> Result<(u16, Option<Stat>, i32)> {
+///
+/// The result is written into `out` (info, status, errno), the kernel writing the status straight
+/// into it: no status is built and moved per entry (PERF-NFTW-ENTRY-9).
+fn stat_entry<S: Sys>(sys: &S, dir: Fd, namez: &[u8], follow: bool, dot: bool, out: &mut Probe) -> Result<()> {
     let k = KStr::from_nul_terminated(namez)?;
-    if follow {
-        match sys.fstatat(dir, k, 0) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-                Ok(l) if l.mode & S_IFMT == S_IFLNK => Ok((info::SLNONE, Some(l), 0)),
-                _ => Ok((info::NS, None, e.get())),
-            },
+    let dst = out.1.get_or_insert_with(Stat::default);
+    let flags = if follow { 0 } else { AT_SYMLINK_NOFOLLOW };
+    match sys.fstatat_into(dir, k, flags, dst) {
+        Ok(()) => {
+            out.0 = classify(dst, dot);
+            out.2 = 0;
         }
-    } else {
-        match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => Ok((info::NS, None, e.get())),
+        Err(e) => {
+            let link = follow && sys.fstatat_into(dir, k, AT_SYMLINK_NOFOLLOW, dst).is_ok() && dst.mode & S_IFMT == S_IFLNK;
+            if link {
+                out.0 = info::SLNONE;
+                out.2 = 0;
+            } else {
+                *out = (info::NS, None, e.get());
+            }
         }
     }
+    Ok(())
 }
+
+/// An entry's `fts_info`, status (when it has one) and `fts_errno`.
+type Probe = (u16, Option<Stat>, i32);
 
 impl Fts {
     fn chdir_mode(&self) -> bool {
@@ -384,47 +404,47 @@ impl Fts {
         // `FTSENT`; no path is kept in it.
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
-        let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
+        let pad = stat_off.saturating_sub(off::NAME).saturating_sub(name.len());
         let sb = match &st.1 {
             Some(s) => stat_bytes(s),
             None => stat_bytes(&Stat::default()),
         };
-        let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
-        let node = Node {
-            block,
-            stat_off,
-            name_len: name.len(),
-            arg: if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() },
-            path_len,
-            parent,
-            level,
-            info: st.0,
-            errno: st.2,
-            stat: st.1.as_ref().map(Key::of),
-            cycle,
-            link: 0,
-            children: Children::NotBuilt,
-            next_child: 0,
-            follow,
-            root_dev,
-            root,
-        };
+        // The padding is the first `pad` (1..=8) zeros of `sb`: one part for both.
+        let block = mem.alloc(off::NAME, &[name, sb.get(LEAD.saturating_sub(pad)..).unwrap_or(&[])]).ok_or(Errno::ENOMEM)?;
+        let arg = if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() };
         let idx = match self.free_slots.pop() {
-            Some(i) => {
-                if let Some(s) = self.nodes.get_mut(i) {
-                    *s = Some(node);
-                }
-                i
-            }
+            Some(i) => i,
             None => {
                 let i = self.nodes.len();
-                if let Err(e) = self.nodes.push(Some(node)) {
+                if let Err(e) = self.nodes.push(None) {
                     mem.free(block);
                     return Err(e);
                 }
                 i
             }
         };
+        // Built in the slot it lives in (no 200-byte value made first and moved).
+        if let Some(s) = self.nodes.get_mut(idx) {
+            *s = Some(Node {
+                block,
+                stat_off,
+                name_len: name.len(),
+                arg,
+                path_len,
+                parent,
+                level,
+                info: st.0,
+                errno: st.2,
+                stat: st.1.as_ref().map(Key::of),
+                cycle,
+                link: 0,
+                children: Children::NotBuilt,
+                next_child: 0,
+                follow,
+                root_dev,
+                root,
+            });
+        }
         if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
             let b = mem.bytes(block, off::NAME);
             self.put_header(idx, x, b);
@@ -466,25 +486,27 @@ impl Fts {
     /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
     /// the caller's or `fts_set`'s, and the zeros the block was made with.
     fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
+        // The fixed length lets every field write below drop its bounds check.
+        let Ok(b) = <&mut [u8; off::NAME]>::try_from(b) else { return };
         let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
-        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(b, off::PARENT, &parent.to_ne_bytes());
-        put(b, off::LINK, &x.link.to_ne_bytes());
-        put(b, off::ACCPATH, &acc.to_ne_bytes());
-        put(b, off::PATH, &self.buf.to_ne_bytes());
-        put(b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(b, off::SYMFD, &0i32.to_ne_bytes());
-        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::INO, &st.ino.to_ne_bytes());
-        put(b, off::DEV, &st.dev.to_ne_bytes());
-        put(b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(b, off::INFO, &x.info.to_ne_bytes());
-        put(b, off::FLAGS, &0u16.to_ne_bytes());
-        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
+        putf(b, off::CYCLE, &x.cycle.to_ne_bytes());
+        putf(b, off::PARENT, &parent.to_ne_bytes());
+        putf(b, off::LINK, &x.link.to_ne_bytes());
+        putf(b, off::ACCPATH, &acc.to_ne_bytes());
+        putf(b, off::PATH, &self.buf.to_ne_bytes());
+        putf(b, off::ERRNO, &x.errno.to_ne_bytes());
+        putf(b, off::SYMFD, &0i32.to_ne_bytes());
+        putf(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::INO, &st.ino.to_ne_bytes());
+        putf(b, off::DEV, &st.dev.to_ne_bytes());
+        putf(b, off::NLINK, &st.nlink.to_ne_bytes());
+        putf(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        putf(b, off::INFO, &x.info.to_ne_bytes());
+        putf(b, off::FLAGS, &0u16.to_ne_bytes());
+        putf(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
@@ -499,7 +521,7 @@ impl Fts {
     fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size()), x.stat_off, &stat_bytes(st));
+        put(mem.bytes(x.block, x.size()), x.stat_off, stat_bytes(st).get(LEAD..).unwrap_or(&[]));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new
@@ -609,7 +631,10 @@ impl Fts {
         let base = self.orig.unwrap_or(Fd::CWD);
         let mut roots = TryVec::with_capacity(argv.len())?;
         for a in argv {
-            let st = if u16::try_from(a.len()).is_err() { (info::NS, None, Errno::ENAMETOOLONG.get()) } else { stat_entry(sys, base, &z(a)?, follow, false)? };
+            let mut st: Probe = (info::NS, None, Errno::ENAMETOOLONG.get());
+            if u16::try_from(a.len()).is_ok() {
+                stat_entry(sys, base, &z(a)?, follow, false, &mut st)?;
+            }
             let dev = st.1.map_or(0, |s| s.dev);
             let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, &st, 0, follow, dev, true)?;
             roots.push(n)?;
@@ -670,7 +695,9 @@ impl Fts {
                 (z(name)?, name == b"." || name == b"..")
             }
         };
-        let (inf, st, e) = stat_entry(sys, dir, &namez, follow, dot)?;
+        let mut probe: Probe = (0, None, 0);
+        stat_entry(sys, dir, &namez, follow, dot, &mut probe)?;
+        let (inf, st, e) = probe;
         let x = self.node_mut(n)?;
         x.info = inf;
         x.stat = st.as_ref().map(Key::of);
@@ -796,6 +823,7 @@ impl Fts {
         // Only a root's path can end in a slash (names have none).
         let sep_len = usize::from(!slash);
         // Ok(Err(e)): reading the directory failed; Err(e): making an entry failed.
+        let mut st: Probe = (0, None, 0);
         let r = (|| -> Result<core::result::Result<(), Errno>> {
             loop {
                 let e = match d.next(sys) {
@@ -809,13 +837,13 @@ impl Fts {
                     continue;
                 }
                 let cpath_len = path_len.saturating_add(sep_len).saturating_add(cname.len());
-                let mut st = if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
-                    (info::NS, None, Errno::ENAMETOOLONG.get())
+                if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
+                    st = (info::NS, None, Errno::ENAMETOOLONG.get());
                 } else if how == Build::NameOnly || (nostat && !dot && dtype != DT_DIR && dtype != DT_UNKNOWN) {
-                    (info::NSOK, None, 0)
+                    st = (info::NSOK, None, 0);
                 } else {
-                    stat_entry(sys, fd, namez, logical, dot)?
-                };
+                    stat_entry(sys, fd, namez, logical, dot, &mut st)?;
+                }
                 // A directory repeating an ancestor is `FTS_DC`, known before its block is made.
                 let cycle = match &st.1 {
                     Some(s) if st.0 == info::D => self.cycle_of(n, s.dev, s.ino)?,

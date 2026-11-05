@@ -199,6 +199,23 @@ Median instructions-per-call ratio without libm: 0.93 (Ivy Bridge 0.86). The lib
 section 5; I did not identify the other four), so the totals are not a like-for-like difference; the per-row comparison
 below is: all 529 rows of this run are in the appendix of the Ivy Bridge run.
 
+**What the counter counts for a rep string instruction (PARITY-COPY-AVX2 probe, 2026-11-05).** `perf stat -e
+instructions:u` of a loop of 100,000 `rep movsb` (and, separately, `rep stosb`) at 0, 1, 64, 1024, 4096, 16384 and 65536
+bytes counted 9.00 instructions per iteration at every size on a Skylake-SP host (Xeon Platinum 8151), a Haswell-EP host
+(E5-2697 v3) and an Ivy Bridge host (E3-1265L V2): the loop's 8 plus **one** for the `rep` instruction, whatever its
+length. On all three classes a `rep movsb`/`rep stosb` is one instruction, so a row where either side runs one counts
+that side's setup only, not the copy. Such rows are judged by timing on a booked timing host (Liella and the reference
+on the same host, interleaved, same-host ratio; cycles there are that measurement), not by instructions (owner ruling,
+2026-11-05: timing is the final arbiter). Rows where neither side runs a rep string instruction keep instruction counts
+as the development gate, and the periodic timing sweep gives their verdict. Copy rows this concerns (the side
+that runs `rep movsb` follows from its per-size count; Liella's dispatch is in `crates/boundary/src/cpu.rs`):
+`memcpy_4k` (Skylake-SP: Liella's `rep movsb` window starts at 4 KiB on an ERMS CPU with AVX-512, 73 instructions;
+Ivy Bridge: the reference's count of about 27 against Liella's 718-instruction SSE2 loop, which runs below
+`COPY_ERMS_MIN` = 6144), `memcpy_64k` (both sides `rep movsb` on Skylake-SP: 85.5 against 57.5 is setup against setup;
+Ivy Bridge 100 against 54, the same), and on Haswell-EP 16 and 64 KiB (the reference's 44 is setup; Liella's 80 at 16 KiB
+is its `rep movsb` window, 5718 at 64 KiB its vector loop). `memmove_4k`, `memcpy_64`, `memmove_64` and the 1 KiB copies
+run vector code on both sides: developed and gated on instructions, verdict from the timing sweep.
+
 **Where the two classes give a different verdict.** 89 of the 529 rows change band between the Ivy Bridge and the
 AVX2 class (bands on instructions per call vs glibc): faster to parity 31, faster to slower 21, slower to parity 13,
 parity to faster 10, parity to slower 9, slower to faster 5. The pattern in the lists below: on Ivy Bridge Liella's string and memory rows mostly use fewer

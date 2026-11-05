@@ -1,0 +1,16 @@
+{"task": "LIBM-F64-FAST-KERNELS-3", "model": "opus", "tokens": null,
+ "result": "libm decides its FMA builds once at load (.init_array, envp-based; no per-call check): exp 129.3->126.2, exp10 147.4->141.4, log 167.5->161.4 instr/call; exp10 -FMA back to 218.9 (the +1.1 was run 2's undecided test); D-NEW -> D-10.50; exp10 not timed on a booked host",
+ "branch": "task/libm-f64-fast-kernels-3", "head": "e976b48c",
+ "gate": {"affected": "FULL gate libm-f64-fast-kernels-3-gate running at hand-back (escalated FULL); plants 5/5 CAUGHT", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "libm.so.6's dynamic path (envp passed by the loader to its .init_array entry) is NOT VERIFIED: libm.so.6 cannot be loaded before phase 14; only the static path is tested",
+   "unbooked kanon timing from the counts job: exp10 31.4 ns (FMA) / 42.5 ns (-FMA) vs glibc 6.8 ns; the time ratio 4.6x is worse than the instruction ratio 2.52x",
+   "not checked: whether libm's own copy of the AVX2 dispatch byte (liella_machine_avx2) is used by any libm path; if so it is never set in libm either"
+ ],
+ "refused": [],
+ "improvement": "the coordinator note asked for a booked timing run, which waits 30-60 min, inside a 90-call story; a separate timing story (or a dispatcher-run timing sweep for the row) would fit better than a booking inside a code run",
+ "next_step": "read the FULL gate; time exp10 on a booked host; then do a per-phase split of exp10/exp in the FMA build",
+ "report_file": "handoff/LIBM-F64-FAST-KERNELS.md",
+ "jobs": ["kanon:libm-f64-fast-kernels-3-gate", "kanon:libm-f64-fast-kernels-3-plants", "kanon:libm-f64-fast-kernels-3-counts"]}

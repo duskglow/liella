@@ -523,6 +523,8 @@ mod p12 {
         /// `fts_ino` and `fts_nlink` of the structure, then the same two read from `fts_statp`.
         pub(crate) head_ino_nlink: (u64, u64),
         pub(crate) stat_ino_nlink: (u64, u64),
+        /// `st_size` and `st_blocks` of `fts_statp`.
+        pub(crate) size_blocks: (i64, i64),
     }
 
     pub(crate) fn ent(p: *mut c_void) -> Option<Ent> {
@@ -537,6 +539,7 @@ mod p12 {
         Some(Ent {
             head_ino_nlink: (word(&b, 72), word(&b, 88)),
             stat_ino_nlink: (word(&sb, 8), word(&sb, 16)),
+            size_blocks: (i64::from_ne_bytes(sb[48..56].try_into().unwrap()), i64::from_ne_bytes(sb[64..72].try_into().unwrap())),
             addr: p.expose_provenance(),
             info: u16::from_ne_bytes(b[98..100].try_into().unwrap()),
             level: i16::from_ne_bytes(b[96..98].try_into().unwrap()),
@@ -1603,6 +1606,28 @@ fn s13_3_c_4() {
     let f = x::fts_open(av.as_ptr(), 16 | 4, Some(by_name));
     let again = read_all(f, &[("/t/a/f1", 8, 1)]);
     assert_eq!(again.iter().filter(|(p, _)| p.ends_with("/f1")).count(), 2, "FTS_AGAIN returns the entry again");
+    x::fts_close(f);
+    // fts_statp holds the whole status, every field where struct stat has it (spec 13.3 fts
+    // entries; PERF-NFTW-ENTRY-9 writes it from a reused probe): a 5-byte file's size and
+    // blocks are those stat reports, whatever the name's length (the status follows the name's padding).
+    for name in ["five", "sixsix", "seven77", "eightee8"] {
+        d.dir("sz");
+        std::fs::write(d.at(&format!("sz/{name}")), b"12345").unwrap();
+    }
+    let sargs = [d.c("sz")];
+    let sav = argv(&sargs);
+    let f = x::fts_open(sav.as_ptr(), 16 | 4, Some(by_name));
+    let mut files = 0;
+    while let Some(e) = ent(x::fts_read(f)) {
+        if e.info == 8 {
+            let m = std::fs::symlink_metadata(&e.path).unwrap();
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(e.size_blocks, (5, i64::try_from(m.blocks()).unwrap()), "fts_statp's st_size and st_blocks ({})", e.path);
+            assert_eq!(e.head_ino_nlink, (m.ino(), m.nlink()), "fts_ino and fts_nlink ({})", e.path);
+            files += 1;
+        }
+    }
+    assert_eq!(files, 4);
     x::fts_close(f);
     let targs = [d.c("t")];
     let tav = argv(&targs);

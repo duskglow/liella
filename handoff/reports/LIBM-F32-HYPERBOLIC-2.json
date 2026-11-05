@@ -1,0 +1,39 @@
+{
+ "task": "LIBM-F32-HYPERBOLIC-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: hyperbolic float kernels proven (plants 5/5, six exhaustive sweeps green, gate green); 1500 -> 151-212 instr/call but 1.05x target unmet (1.20-2.74x)",
+ "branch": "task/libm-f32-hyperbolic-2",
+ "head": "0b446d69",
+ "gate": {
+  "affected": "368 passed / 0 failed (direct tier, libm-f32-hyperbolic-2-gate, keke)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "-1's plants2 survivor (drop D8 in log1p64): the term does not matter at the bound; log1p64 is now one degree shorter, case bounds A 5.3u / B 4.4u / C 8.2u, overall 8.2u unchanged, each case tested on its own bound",
+  "plants (cargo xtask plants, libm-f32-hyperbolic-2-plants): 5 CAUGHT, 0 SURVIVED, 0 WARN",
+  "-1's gate libm-f32-hyperbolic-gate on 872c0c88 (shiki) ended rc 0; its chain (counts, sweeps on the old head) was stopped before it started them",
+  "ruling #2889 oracle: crate::hyper is double-double only (no mp tier), so the accurate path is already the ~1.5e3-instruction oracle; mp-fallback rate 0 by construction; no separate helper built",
+  "sweeps (keke, 7-CPU slots, one job each, wall/CPU s): sinhf 581/4067, coshf 605/4229, tanhf 2698/18879, asinhf 3008/21046, acoshf 1208/8451, atanhf 475/3324; no mismatch",
+  "after counts instr Liella/glibc: sinhf 174.9/145.4 (1.20), coshf 151.3/78.9 (1.92), tanhf 179.8/131.3 (1.37), asinhf 212.3/88.9 (2.39), acoshf 199.5/72.9 (2.74), atanhf 182.5/115.7 (1.58); time ratios 1.01, 2.11, 1.07, 3.29, 4.25, 1.42"
+ ],
+ "refused": [],
+ "improvement": "a foreground ssh running jobrun dies when the harness moves it to the background (lost the first check job): always start remote jobs with setsid nohup, and submit counts before long sweeps so they do not queue behind them",
+ "next_step": "profile asinhf/acoshf (sqrt64 share) and apply ruling #2783's _mm_sqrt_sd if sqrt dominates; then coshf's division; re-count",
+ "report_file": "handoff/libm-f32-hyperbolic.md",
+ "jobs": [
+  "libm-f32-hyperbolic-2-lint",
+  "libm-f32-hyperbolic-2-gate",
+  "libm-f32-hyperbolic-2-plants",
+  "libm-f32-hyperbolic-2-after",
+  "libm-f32-hyperbolic-2-sweep-size",
+  "libm-f32-hyperbolic-2-sweep-sinhf",
+  "libm-f32-hyperbolic-2-sweep-coshf",
+  "libm-f32-hyperbolic-2-sweep-tanhf",
+  "libm-f32-hyperbolic-2-sweep-asinhf",
+  "libm-f32-hyperbolic-2-sweep-acoshf",
+  "libm-f32-hyperbolic-2-sweep-atanhf"
+ ]
+}

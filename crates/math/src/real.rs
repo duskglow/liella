@@ -138,7 +138,7 @@ macro_rules! real {
 }
 
 impl Real for f32 {
-    real!(fast32, fast32, fast32, hyper); // fast32 has pow, cbrt and sin/cos/tan; it re-exports the inverse trig
+    real!(fast32, fast32, fast32, fast32); // fast32 has pow, cbrt, the trig and inverse trig and the hyperbolic functions
 }
 
 impl Real for f64 {

@@ -1,0 +1,7 @@
+# PARITY-MEMCMP-AVX2 plants (cargo xtask plants; format docs/plants.md)
+cmp-loop-test | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_long_loop:.*?)jnc \.Lcmp_long_diff/$1jz .Lcmp_long_diff/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-last-test | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_long_last:.*?)jnc \.Lcmp_long_diff/$1jz .Lcmp_long_diff/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-tail-test | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_long:.*?)jnc \.Leq_big_one/$1jz .Leq_big_one/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-loop-test | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_long_loop:.*?)jnc \.Leq_big_one/$1jz .Leq_big_one/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-huge-null-a | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_avx_long:\s*)testq %rdi, %rdi/$1testq %rsi, %rsi/s | cargo test -p liella-boundary --test small_compare null_faults | msg:null_faults.*(FAILED|panicked)|avx2 true
+eq-huge-null-a | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_huge:.*?)testq %rdi, %rdi/$1testq %rsi, %rsi/s | cargo test -p liella-boundary --test small_compare null_faults | msg:null_faults.*(FAILED|panicked)|avx2 true

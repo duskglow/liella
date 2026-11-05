@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-ERF", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: erff/erfcf double kernels (erf x·P(x²) below 1, e^(-x²)·erfcx on six centred Remez pieces), Remez tool shift key + erfcx target; unit tests green, lint green, gate started; plants, sweeps, counts not run",
+ "branch": "task/libm-f32-erf", "head": "0649d1af",
+ "gate": {"affected": "running (libm-f32-erf-gate, keke, direct tier)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Exhaustive erff/erfcf sweeps check every taken call against the 384-bit mp accurate path (~2.3e5 instructions), about 2^34 calls per function", "recommendation": "add a test-only oracle that evaluates mp once per operand and rounds it in all four modes (4x fewer mp calls), size with LIELLA_SWEEP_STRIDE=64 first; else rule on a stride"}],
+ "informational": ["A sync of uncommitted edits left the role's old s10_math.tsv while fast32.rs arrived; after committing, the sync delivered it (cause not investigated)", "One command in this run held a stray empty heredoc (patch attempt); nothing was written by it"],
+ "refused": [],
+ "improvement": "The Remez tool now fits centred pieces (shift key); a multi-piece fit file would remove six near-identical .fit and coeff files per family",
+ "next_step": "Read libm-f32-erf-gate; run plants (ERF_DELTA, ERFC_DELTA, a coefficient, ERFCX_LO edge, ERF_SAT) via cargo xtask plants, counts before/after for erff/erfcf, then the sized sweeps",
+ "report_file": "handoff/libm-f32-erf.md",
+ "jobs": ["keke:libm-f32-erf-verify", "keke:libm-f32-erf-lint", "keke:libm-f32-erf-gate"]}

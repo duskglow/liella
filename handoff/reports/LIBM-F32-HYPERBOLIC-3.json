@@ -1,0 +1,32 @@
+{
+ "task": "LIBM-F32-HYPERBOLIC-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: float hyperbolic exports take the in-place nearest entry; sinhf 0.68x, tanhf 0.81x, atanhf 0.88x, coshf 0.96x glibc; asinhf 1.62x, acoshf 1.78x remain (sqrt64 + log1p64)",
+ "branch": "task/libm-f32-hyperbolic-3",
+ "head": "1f68110c",
+ "gate": {
+  "affected": "see libm-f32-hyperbolic-3-gate (clippy and static passed; affected tier running at hand-back)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "hardware sqrt for sqrt64: ruling #2783 _mm_sqrt_sd needs unsafe on 1.99.1 (E0133), liella-math forbids unsafe",
+   "recommendation": "try core f64::sqrt if stable on 1.99.1, else a liella-boundary UNSAFE(hot-kernel) sqrt hook like hot::exp_nearest"
+  }
+ ],
+ "informational": [
+  "sinf/asinf/atanf/log1pf/expm1f/cbrtf still use the elem envelope (~50 instr); the same in-place entry applies once their subnormal-operand flags are proven",
+  "profile split (wl_trace call 11 on 0383207a): asinhf 183 = 50 entry/envelope + 133 kernel; coshf 123 = 50 + 73"
+ ],
+ "refused": [],
+ "improvement": "the ruling text claimed _mm_sqrt_sd is safe on 1.99.1; a one-line compile probe in the ruling would have saved a build cycle",
+ "next_step": "hardware sqrt for asinhf/acoshf per the ruling, then rerun asinhf/acoshf/asinf/acosf sweeps",
+ "report_file": "handoff/libm-f32-hyperbolic.md",
+ "jobs": [
+  "keke:libm-f32-hyperbolic-3-gate",
+  "keke:libm-f32-hyperbolic-3-plants",
+  "keke:libm-f32-hyperbolic-3-percall"
+ ]
+}

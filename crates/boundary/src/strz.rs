@@ -534,64 +534,6 @@ pub(crate) fn env_value(addr: usize) -> &'static [u8] {
     }
 }
 
-/// The text at `addr` as a view of `len` bytes if it is exactly the `len` bytes `stored(0..)` give
-/// (little-endian eight-byte words, the last zero-padded, none beyond `ceil(len / 8)`), followed by
-/// its terminator; else `None`. This is `strlen(addr) == len && bytes equal` in one pass of
-/// aligned word reads (GETTEXT-LANGUAGE-ALIGNED-COMPARE).
-///
-/// The text is read a whole aligned word at a time, so a read never crosses a page. Words are
-/// compared in order, and a word is read only after every byte of the earlier ones (up to index
-/// `len`) matched the stored text, which has no NUL: the first word read after a terminator
-/// earlier than `len` is never reached, because that terminator mismatches first. The last word
-/// read is the one holding the terminator at index `len`. Crate contract: `addr` is a
-/// NUL-terminated string that stays put while it is used (as for [`env_value`]).
-pub fn text_equals_words(addr: usize, len: usize, stored: &dyn Fn(usize) -> u64) -> Option<&'static [u8]> {
-    if addr == 0 || len == 0 {
-        return None;
-    }
-    let skew = addr & 7;
-    let base = addr.wrapping_sub(skew);
-    let words = len.div_ceil(8);
-    // Eight times a byte count below eight, as a shift amount.
-    let bits = |n: usize| u32::try_from(n.wrapping_mul(8)).unwrap_or(0);
-    let word = |k: usize| if k < words { stored(k) } else { 0 };
-    // Checked indices are 0..=len (the text and its terminator); word `j` holds indices `8j - skew ..`.
-    let mut j = 0usize;
-    loop {
-        let first = j.wrapping_mul(8).wrapping_sub(skew);
-        // Word 0 starts before the text (`first` wraps): its low `skew` bytes are not the text's.
-        let (lo, start) = if j == 0 { (skew, 0usize) } else { (0, first) };
-        if start > len {
-            break;
-        }
-        // The stored text's bytes `first..first + 8`, zero beyond its end (a word 0 is shifted up).
-        let expect = if j == 0 {
-            word(0).wrapping_shl(bits(skew))
-        } else {
-            let (k, sh) = (first / 8, bits(first % 8));
-            if sh == 0 { word(k) } else { word(k).wrapping_shr(sh) | word(k.wrapping_add(1)).wrapping_shl(64u32.wrapping_sub(sh)) }
-        };
-        // Bytes `lo..hi` of this word are checked: not before the text, not after the terminator.
-        let hi = len.wrapping_sub(start).wrapping_add(1).wrapping_add(lo).min(8);
-        let mask = if hi >= 8 { u64::MAX } else { 1u64.wrapping_shl(bits(hi)).wrapping_sub(1) } & u64::MAX.wrapping_shl(bits(lo));
-        // UNSAFE(slice): one aligned word read; it holds a byte of the string (index at most
-        // `len`, reached only if every earlier checked byte matched text without a NUL), and an
-        // aligned word never crosses a page, so the read cannot fault.
-        #[allow(unsafe_code)]
-        // SAFETY: see above; the word is aligned and holds a byte of the live string.
-        let have = unsafe { core::ptr::with_exposed_provenance::<u64>(base.wrapping_add(j.wrapping_mul(8))).read_volatile() };
-        if (have ^ expect) & mask != 0 {
-            return None;
-        }
-        j = j.wrapping_add(1);
-    }
-    // UNSAFE(slice): the `len` bytes just compared equal to the stored text, and the byte after
-    // them was the terminator, so they are a live string's text.
-    #[allow(unsafe_code)]
-    // SAFETY: as above.
-    Some(unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(addr), len) })
-}
-
 /// The abbreviation a `struct tm`'s `tm_zone` points to (spec §23.5), `None` for NULL, for the
 /// duration of the call that received the structure. Crate-private contract: `addr` is the
 /// `tm_zone` of a `struct tm` the C caller passed, which is NULL or points to a string (the

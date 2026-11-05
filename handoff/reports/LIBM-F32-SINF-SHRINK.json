@@ -1,0 +1,11 @@
+{"task": "LIBM-F32-SINF-SHRINK", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: sinf/cosf 167->90, tanf 173->98 instr/call (minimax deg 5/6 kernel + in-place nearest entry); sinf_upward 246.6->258.6 slower; 1.05x not met",
+ "branch": "task/libm-f32-sinf-shrink", "head": "6347789c",
+ "gate": {"affected": "detached: libm-f32-sinf-shrink-gate2 (keke)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "sinf_upward +12 instructions (directed mode now routes through elem_fast_cold) against -77 on sinf/cosf/tanf nearest", "recommendation": "continuation: make the directed-mode route of elem_fast cost no more than elem, recount, then land"}],
+ "informational": ["baseline report section 3.5 exists only on origin/task/libm-slow-path-cause; not read (git show of others' work is forbidden)", "jobrun runs in the foreground: chaining several starts in one ssh call runs them in sequence; use setsid"],
+ "refused": [],
+ "improvement": "the brief's jobrun example should say jobrun blocks; a one-line detached-start helper would avoid the restart this run needed",
+ "next_step": "fix the elem_fast directed-mode cost (sinf_upward), recount, then profile the in-place kernel (~90 vs 42) with wl_percall",
+ "report_file": "handoff/libm-f32-sinf-shrink.md",
+ "jobs": ["keke:libm-f32-sinf-shrink-gate2", "keke:libm-f32-sinf-shrink-plants2", "keke:libm-f32-sinf-shrink-sweep-sinf", "keke:libm-f32-sinf-shrink-sweep-cosf", "keke:libm-f32-sinf-shrink-sweep-tanf", "keke:libm-f32-sinf-shrink-before", "keke:libm-f32-sinf-shrink-after"]}
