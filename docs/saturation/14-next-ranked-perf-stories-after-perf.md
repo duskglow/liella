@@ -167,3 +167,17 @@ value 11, `matches` 79 + `same_part` 23); `ngettext_found` 724 (`hit` 210 with t
 31). With `--skip 20` the steady trace made no clock read (the run-4 trace at `--skip 10` did). The `LANGUAGE` share
 (about 95 over the reference) has no safe cut left (runs 2 to 4); the shared found path (about 175: `translate`'s key
 setup and the work between `matches` and `hit`, `matches` on an address-matched key, `hit`) is the next target.
+
+**Row 6 run 6 (PERF-GETTEXT-LANGUAGE-STEADY-3, 2026-11-05, Zen 1 host).** Instruction listing of one `gettext_found`
+call (`wl_trace.sh --list`; run with `WLP_TAIL=0`, because the job log otherwise keeps only the last 60 lines of the
+inner log): of `matches`' 70 instructions, 16 were register saves and restores and the return, and about 12 computed
+the locale and list word offsets before the address test ran. `hit` (called once) paid 6 saves and 8 spilled
+arguments. The 86 in `translate` between `matches` and `hit` are memo-gate loads, the plan's bounds and the argument
+setup for the `hit` call. No cut was found there. Changes: (1) `Resolution::matches` is inlined down to the address
+test, with the list compare and the text compares out of line; (2) `Resolution::hit` is inlined into its one caller.
+Per call (`wl_percall.sh --spec validation/percall/gettext.c`, base = run 5's head), glibc / before / after:
+`gettext_found` 455 / 630 / 558 (1.38 to 1.23), `ngettext_found` 597 / 735 / 662 (1.23 to 1.11),
+`gettext_language_steady` 466 / 736 / 684 (1.58 to 1.47), `_alternating` 2227 / 1358 / 1283. Step (1) gave -50, -50,
+-30 and -53. Step (2) gave about -22 more on every row. On ruling #2896, the run-5 percall job (fused compare base vs
+next) measured found and ngettext at +7 each for next's back-out; this run's change removes that and more. Still open:
+`hit`'s `Mo` construction and selector compare (about 45), `translate`'s 60 of key setup, and `LANGUAGE` (about 95).
