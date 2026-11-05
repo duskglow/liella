@@ -27,7 +27,9 @@ It stacks on LIBM-F32-ERF-5 (not on origin/next yet at 11-05 20:00; origin/next 
 ## Jobs (kanon) on the code head
 `libm-f32-bessel-4-gate` (clippy, static, direct tier), `libm-f32-bessel-4-plants`,
 `libm-f32-bessel-4-counts-before`, `libm-f32-bessel-4-counts-after`, and `libm-f32-bessel-4-static` (static on the
-final head with the register section). Results in the -4 report.
+final head with the register section). All rc 0: the gate's `affected` escalated itself to FULL (generated
+coeffs/tables from the ERF-5 stack in the diff) and `cargo xtask test` passed in 3138 s; counts 340 s each.
+The code head is fbdc5de0; later commits are docs and handoff only (static green on them).
 
 ## Open
 * Section number 23 in the saturation register may collide with another branch landing a section 23 (the check

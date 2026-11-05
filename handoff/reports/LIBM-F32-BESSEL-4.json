@@ -1,7 +1,7 @@
 {"task": "LIBM-F32-BESSEL-4", "model": "opus", "tokens": null,
  "result": "COMPLETE: -3 gate red was one clippy approx_constant (2/pi literal), fixed with FRAC_2_PI; plants 5/5 CAUGHT; j0f/j1f/y0f/y1f 121750-472877 -> 197-217 instr/call (glibc 278-297)",
  "branch": "task/libm-f32-bessel-4", "head": "a721e085",
- "gate": {"affected": "clippy + static ok; affected escalated itself to FULL (generated coeffs/tables in the ERF-5 stack), result read by the dispatcher from libm-f32-bessel-4-gate", "peak": null},
+ "gate": {"affected": "rc 0: clippy + static ok, affected escalated itself to FULL (generated coeffs/tables in the ERF-5 stack), cargo xtask test ok in 3138 s; static on the final head (docs) ok", "peak": "10.1 GB RSS (jobs.tsv)"},
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["mxcsr_wrapper_seq 10.2 -> 10.3 instr/call (+0.1) between origin/next and head; this story does not touch that path",
