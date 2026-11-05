@@ -1,0 +1,5 @@
+# LIBM-TABLES-PER-FAMILY plants (cargo xtask plants; docs/plants.md).
+# 1. A hand edit of one value in a generated table file: the static tables-fresh check must name the file.
+tables-fresh-value | crates/math/src/coeffs/trig.rs | lit:0x3d0739f78a5292ea, 0x6bfb5fb11f8d5d08 ==> 0x3d0739f78a5292eb, 0x6bfb5fb11f8d5d08 | cargo xtask static | msg:coeffs/trig\.rs is out of date.*run `cargo xtask tables`
+# 2. A generator change not rerun: the header every family file carries changes, so every file is stale.
+tables-fresh-generator | crates/mathtools/src/tables.rs | lit:(crates/mathtools/src/tables.rs). Do not edit.\n ==> (crates/mathtools/src/tables.rs). Do not edit!\n | cargo xtask static | msg:coeffs/erf\.rs is out of date.*run `cargo xtask tables`

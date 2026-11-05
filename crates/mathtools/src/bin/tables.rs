@@ -20,7 +20,7 @@ fn main() -> ExitCode {
     let check = std::env::args().any(|a| a == "--check");
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../math/src/coeffs");
     let files = liella_mathtools::tables::generate();
-    let mut bad = 0usize;
+    let mut bad = false;
     for (name, src) in &files {
         let path = dir.join(name);
         let old = std::fs::read_to_string(&path).ok();
@@ -30,7 +30,7 @@ fn main() -> ExitCode {
         if check {
             let why = if old.is_some() { "is out of date (stale or edited by hand)" } else { "is missing" };
             eprintln!("tables: crates/math/src/coeffs/{name} {why}: run `cargo xtask tables`");
-            bad += 1;
+            bad = true;
         } else if let Err(e) = std::fs::write(&path, src) {
             eprintln!("tables: {}: {e}", path.display());
             return ExitCode::FAILURE;
@@ -48,10 +48,10 @@ fn main() -> ExitCode {
         let generated = std::fs::read_to_string(dir.join(&name)).is_ok_and(|s| s.starts_with(HEADER));
         if generated && !files.iter().any(|(f, _)| *f == name) {
             eprintln!("tables: crates/math/src/coeffs/{name} is a leftover generated file that `cargo xtask tables` no longer writes: remove it");
-            bad += 1;
+            bad = true;
         }
     }
-    if bad > 0 {
+    if bad {
         return ExitCode::FAILURE;
     }
     if check {
