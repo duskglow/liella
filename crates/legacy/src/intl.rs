@@ -968,7 +968,9 @@ impl Resolution {
     /// record's image and, for a catalog that names a charset, the codec selector must still be
     /// the plan's; then only the index probe and the form remain (no record fields, no header,
     /// no codec words). `None`: the plan does not apply (search as usual); `Some(found)`: what
-    /// `lookup` returns.
+    /// `lookup` returns. Inlined into its one caller: out of line, the found call paid six
+    /// register saves and eight spilled arguments.
+    #[inline(always)]
     fn hit<H: Host>(&self, h: &H, rec: &[AtomicUsize], msgid: &[u8], n: Option<u64>, codeset: Option<&[u8]>, loc: &Locale) -> Option<Option<usize>> {
         let w = |j: usize| self.plan.get(j).map_or(0, |a| a.load(Relaxed));
         let image = w(P_IMAGE);
@@ -1058,6 +1060,10 @@ impl Resolution {
         self.memo_generation.store(generation, Relaxed);
     }
 
+    /// Whether the slot holds `key`'s resolution. Inlined: the found call's key has the slot's
+    /// domain and locale texts at the addresses it recorded, which takes word loads and compares
+    /// only; a text compare is out of line (no register saves or offsets on the found call).
+    #[inline(always)]
     fn matches(&self, generation: usize, category: usize, key: &Key<'_>) -> bool {
         if self.generation.load(Relaxed) != generation || self.category.load(Relaxed) != category {
             return false;
@@ -1067,6 +1073,25 @@ impl Resolution {
         if kd.load(Relaxed) != d || kl.load(Relaxed) != l || ks.load(Relaxed) != s {
             return false;
         }
+        let [ad, al] = key.fixed_at();
+        let [sd, sl] = &self.key_at;
+        // A fixed text at the address the slot recorded is the slot's text (lengths matched).
+        if ad != 0 && sd.load(Relaxed) == ad && al != 0 && sl.load(Relaxed) == al {
+            return key.list.is_none_or(|list| self.same_list(d, l, list));
+        }
+        self.same_texts(key)
+    }
+
+    /// Whether the slot's list words are `list` (domain and locale of lengths `d` and `l`).
+    #[inline(never)]
+    fn same_list(&self, d: usize, l: usize, list: &[u8]) -> bool {
+        same_part(self.key.get(d.div_ceil(8).saturating_add(l.div_ceil(8))..).unwrap_or(&[]), list)
+    }
+
+    /// The rest of [`Resolution::matches`] once generation, category and lengths matched.
+    #[inline(never)]
+    fn same_texts(&self, key: &Key<'_>) -> bool {
+        let [d, l, _] = key.lens();
         let locale_at = d.div_ceil(8);
         let list_at = locale_at.saturating_add(l.div_ceil(8));
         let [ad, al] = key.fixed_at();
@@ -1484,6 +1509,18 @@ mod tests {
         assert!(!r.matches(1, 5, &Key { domain: fixed, locale: fr, list: None, domain_fixed: true }));
         let (d2, l2) = (b"domain_c".to_vec(), de.to_vec());
         assert!(r.matches(1, 5, &Key { domain: &d2, locale: &l2, list: None, domain_fixed: false }));
+        // The list (`LANGUAGE`) is compared by content even when domain and locale are accepted by
+        // address: a list rewritten in place at the same address is another key, and an equal
+        // list in another buffer is the same key (its words follow the domain's and the locale's).
+        let mut list = *b"de:fr_FR:it";
+        r.store(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }, 0, &[]);
+        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }), "the stored list");
+        let copy = list.to_vec();
+        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&copy), domain_fixed: true }), "an equal list elsewhere");
+        list[10] = b'x';
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }), "a list rewritten in place");
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(b"fr:de_DE:it"), domain_fixed: true }), "another list of the length");
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: None, domain_fixed: true }), "no list");
     }
 
     /// The tail word as the zero-padded little-endian word of the last `len % 8` bytes, whatever

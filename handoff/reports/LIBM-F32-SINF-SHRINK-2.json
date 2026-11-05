@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-SINF-SHRINK-2", "model": "opus", "tokens": null,
+ "result": "directed modes of the fast entries no longer re-read MXCSR: sinf_upward 246.7 -> 221.8 (base), 0 of 169 rows slower; sinf/cosf 167 -> 90, tanf 173 -> 98; nearest rows still 2.15x glibc (1.05x not met)",
+ "branch": "task/libm-f32-sinf-shrink-2", "head": "709feafb",
+ "gate": {"affected": "libm-f32-sinf-shrink-2-gate2 (see jobs.tsv on mei)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plant in-place-exit survived the first plants run: the directed-mode test had no sticky-flag caller word; test extended (709feafb), plants2 reruns all four"],
+ "refused": [],
+ "jobs": ["mei:libm-f32-sinf-shrink-2-cbase", "mei:libm-f32-sinf-shrink-2-chead", "mei:libm-f32-sinf-shrink-2-plants2", "mei:libm-f32-sinf-shrink-2-gate2"],
+ "improvement": "a base-vs-head count needs a base build on the same CPU; git archive of the base into RAM plus one compare script did it in 3 calls: worth a standard tool",
+ "next_step": "nearest rows toward 1.05x: inline the MXCSR read and one black_box (~8), bit-pattern domain test (7->3), drop the small-r refusal by proof (5), cheaper rounding test",
+ "report_file": "handoff/libm-f32-sinf-shrink.md"}
