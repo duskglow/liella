@@ -122,7 +122,8 @@ fn series(n: u32, x: f64, want_y: bool) -> (Dd, f64) {
     let m = la * sa + inv_x.hi + 0.5 * wa;
     let err_b = la * err_j + err_l * sa + 0.5 * (8.0 * (kk + 2.0) * U * wa + tail_w) + 8.0 * U * m;
     let v = c.two_over_pi.mul(b);
-    (v, SLACK * 0.636_62 * (err_b + 8.0 * U * m))
+    // |2/π| as the nearest f64: its rounding (below 2^-53 relative) is within SLACK.
+    (v, SLACK * core::f64::consts::FRAC_2_PI * (err_b + 8.0 * U * m))
 }
 
 /// Hankel's form from [`SWITCH`].
