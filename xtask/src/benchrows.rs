@@ -1160,7 +1160,7 @@ int main(void) { /* MEASURE(\"gone\", 1, memset(0,0,0)) */\n    MEASURE(\"a\", 1
     fn every_cbench_row_is_mapped() {
         let root = root();
         let budget = budget_rows(&root).expect("budgets");
-        let (_, p) = plan(&["crates/boundary/src/hot.rs"]);
+        let (_, p) = plan(&["crates/boundary/src/hot/mem.rs"]);
         assert!(budget.iter().any(|r| r[0].starts_with("cbench_")));
         assert!(p.unmapped.is_empty(), "rows no MEASURE site names or that call no exported symbol: {:?}", p.unmapped);
     }
@@ -1199,8 +1199,8 @@ int main(void) { /* MEASURE(\"gone\", 1, memset(0,0,0)) */\n    MEASURE(\"a\", 1
 
     #[test]
     fn the_copy_kernel_narrows_and_selects_the_copy_rows() {
-        let (rows, _) = plan(&["crates/boundary/src/hot.rs"]);
-        let rows = rows.expect("hot.rs must narrow, not go FULL");
+        let (rows, _) = plan(&["crates/boundary/src/hot/mem.rs"]);
+        let rows = rows.expect("hot/mem.rs must narrow, not go FULL");
         assert!(rows.get(&("cbench_memref".into(), "memcpy_64k".into())).is_some_and(|w| w != "sentinel"), "{rows:?}");
         // No negative row any more: since WL-HOT-MAKE calloc zeroes through hot.rs, and the module-level
         // reach (heap -> s11/s18 exports) then takes in nearly every row, the name service included.
@@ -1210,7 +1210,7 @@ int main(void) { /* MEASURE(\"gone\", 1, memset(0,0,0)) */\n    MEASURE(\"a\", 1
     fn a_test_only_module_is_not_followed() {
         let repo = Repo::load(&root());
         assert!(repo.test_only_has("liella-boundary", "selftest"), "selftest is declared under cfg(feature = \"selftest\")");
-        let files = ["crates/boundary/src/hot.rs".to_string()];
+        let files = ["crates/boundary/src/hot/mem.rs".to_string()];
         let all = affected::select_opts(&repo, &files, false).modules;
         let prod = affected::select_opts(&repo, &files, true).modules;
         assert!(prod.is_subset(&all) && !prod.iter().any(|(_, m)| m == "selftest"), "{prod:?}");

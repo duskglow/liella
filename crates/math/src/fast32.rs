@@ -19,18 +19,21 @@
 //! Layout: this file is the shared core ([`Fast`] and its dispatch, the shared constants and
 //! tables, the rounding test [`round`]); each family's kernels are in `fast32/`: `exp_log.rs`
 //! (exp, log, log1p, expm1, cbrt, pow), `trig.rs` (sin, cos, tan, sincos), `inv_trig.rs` (asin,
-//! acos, atan, atan2) and `hyperbolic.rs`; the tests are in `fast32/tests.rs`.
+//! acos, atan, atan2), `hyperbolic.rs` and `erf.rs` (erf, erfc, with their own tests); the
+//! shared tests are in `fast32/tests.rs`.
 #![allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing)] // bit fields and exponents of bounded width; table indices masked to 0..128; `cvtsd2ss` is the `as f32`
 
 use crate::coeffs::tables as t;
 use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
+mod erf;
 mod exp_log;
 mod hyperbolic;
 mod inv_trig;
 mod trig;
 
+use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 use hyperbolic::*;
 use inv_trig::*;
@@ -85,6 +88,10 @@ pub enum Fast {
     Acosh,
     /// `atanhf` (LIBM-F32-HYPERBOLIC).
     Atanh,
+    /// `erff` (LIBM-F32-ERF).
+    Erf,
+    /// `erfcf` (LIBM-F32-ERF).
+    Erfc,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -100,10 +107,6 @@ const EXP_DELTA: u64 = 512;
 const LOG_DELTA: u64 = 640;
 /// log1p: ε ≤ 6.8·2^-53 (proof at [`log1p_core`]), so < 6.9 ulp.
 const LOG1P_DELTA: u64 = 8;
-/// sin, cos: ε ≤ 9.05·2^-53 (proof at [`trig_core`]), so < 9.1 ulp.
-const TRIG_DELTA: u64 = 10;
-/// tan = s/c: both quotients' bounds and the division, ε ≤ 19.2·2^-53, so < 19.3 ulp.
-const TAN_DELTA: u64 = 20;
 /// expm1: ε ≤ 9.1·2^-53 (proof at [`expm1_core`]), so < 9.2 ulp; 12 keeps a margin.
 const EXPM1_DELTA: u64 = 12;
 /// cbrt: ε ≤ 5.4·2^-53 (proof at [`cbrt_core`]), so < 5.5 ulp.
@@ -337,6 +340,8 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Asinh => (asinh_core(x)?, ASINH_DELTA, "asinhf"),
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA, "acoshf"),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA, "atanhf"),
+        Fast::Erf => (erf_core(x)?, ERF_DELTA, "erff"),
+        Fast::Erfc => (erfc_core(x)?, ERFC_DELTA, "erfcf"),
     };
     finish(x, y, delta, mode, name)
 }
@@ -417,9 +422,18 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
         Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
+        // trig_core takes only normal x (2^-26 ≤ |x| < 2^19, so no denormal-operand), keeps every
+        // intermediate a normal `double` or zero (its proof) and |c| ≥ 2^-37, so s/c raises no
+        // divide-by-zero, overflow or underflow: inexact only (LIBM-F32-SINF-SHRINK).
+        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA),
+        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA),
+        Fast::Tan => {
+            let (s, c) = trig_core(x)?;
+            (s / c, TAN_DELTA)
+        }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => {
+        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::Erf | Fast::Erfc => {
             return None;
         }
     };
@@ -441,6 +455,9 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sin_nearest, Fast::Sin);
+nearest_fn!(cos_nearest, Fast::Cos);
+nearest_fn!(tan_nearest, Fast::Tan);
 nearest_fn!(sinh_nearest, Fast::Sinh);
 nearest_fn!(cosh_nearest, Fast::Cosh);
 nearest_fn!(tanh_nearest, Fast::Tanh);
@@ -483,6 +500,8 @@ fast_fn!(tanh, Fast::Tanh, hyper);
 fast_fn!(asinh, Fast::Asinh, hyper);
 fast_fn!(acosh, Fast::Acosh, hyper);
 fast_fn!(atanh, Fast::Atanh, hyper);
+fast_fn!(erf, Fast::Erf, special);
+fast_fn!(erfc, Fast::Erfc, special);
 
 #[cfg(test)]
 mod tests;

@@ -105,10 +105,23 @@ fn at(base: &[u8], o: usize) -> *const c_void {
     unsafe { base.as_ptr().add(o) }.cast()
 }
 
+/// The element at address `a` of `base` (`SortCompare::gt_at`): the address carries the
+/// provenance `base` exposed, and names a whole element of it (the same contract as `at`).
+#[inline(always)]
+fn at_addr(base: &[u8], a: usize) -> *const c_void {
+    debug_assert!(a.wrapping_sub(base.as_ptr().addr()) < base.len(), "SortCompare contract: address {a:#x} outside the array");
+    core::ptr::with_exposed_provenance(a)
+}
+
 impl SortCompare for ByOffset {
     #[inline(always)]
     fn gt(&mut self, base: &[u8], a: usize, b: usize) -> bool {
         (self.0)(at(base, a), at(base, b)) > 0
+    }
+
+    #[inline(always)]
+    fn gt_at(&mut self, base: &[u8], a: usize, b: usize) -> bool {
+        (self.0)(at_addr(base, a), at_addr(base, b)) > 0
     }
 }
 
@@ -116,6 +129,11 @@ impl SortCompare for ByOffsetCtx {
     #[inline(always)]
     fn gt(&mut self, base: &[u8], a: usize, b: usize) -> bool {
         (self.0)(at(base, a), at(base, b), self.1) > 0
+    }
+
+    #[inline(always)]
+    fn gt_at(&mut self, base: &[u8], a: usize, b: usize) -> bool {
+        (self.0)(at_addr(base, a), at_addr(base, b), self.1) > 0
     }
 }
 

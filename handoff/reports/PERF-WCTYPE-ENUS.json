@@ -1,0 +1,12 @@
+{"task": "PERF-WCTYPE-ENUS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: isw/wtrans hit paths of compiled locales made inline (profile: ~25 of 101 instr were the out-of-line call); exhaustive test widened to 0..=0x110000; gate, plants, percall, counts queued on keke, none started, nothing verified",
+ "branch": "task/perf-wctype-enus", "head": "2815d0a2",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["iswalpha_l_cjk trace (wl_trace, call 11) took the null/LC_GLOBAL_LOCALE branch of iswalpha_l: the percall newlocale may have returned 0 in the trace harness; not investigated",
+                   "the change removes the call phase only (~25 instr expected); the 1.05x target needs the export's locale_t resolution and the 43-instr checked walk cut too"],
+ "refused": [],
+ "jobs": ["keke:perf-wctype-enus-gate", "keke:perf-wctype-enus-plants", "keke:perf-wctype-enus-percall", "keke:perf-wctype-enus-counts"],
+ "improvement": "the host queue held all four jobs over 30 min: a story with a 70-call budget cannot wait that out; let the dispatcher start the jobs at hand-off or give agents a short lane for small test-only jobs",
+ "next_step": "read the four job logs; keep 2815d0a2 only if no cbench_locale row is slower, else revert and record a NEGATIVE saturation row",
+ "report_file": "handoff/PERF-WCTYPE-ENUS.md"}

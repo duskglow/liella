@@ -3,12 +3,15 @@
 use super::*;
 use crate::exp_log as acc;
 
-const ALL: [Fast; 21] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::Sinh, Fast::Cosh, Fast::Tanh, Fast::Asinh, Fast::Acosh, Fast::Atanh];
-const NAMES: [&str; 21] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "sinhf", "coshf", "tanhf", "asinhf", "acoshf", "atanhf"];
+const ALL: [Fast; 23] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::Sinh, Fast::Cosh, Fast::Tanh, Fast::Asinh, Fast::Acosh, Fast::Atanh, Fast::Erf, Fast::Erfc];
+const NAMES: [&str; 23] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "sinhf", "coshf", "tanhf", "asinhf", "acoshf", "atanhf", "erff", "erfcf"];
+/// The functions whose accurate path is cheap enough for [`agree`]'s wide strides: not erff and
+/// erfcf (384-bit mp, some 2·10^5 instructions a call), which have their own test.
+const CHEAP: usize = 21;
 const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
-const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
+pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
-fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
+pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
     match f {
         Fast::Exp => acc::exp(x, m),
         Fast::Exp2 => acc::exp2(x, m),
@@ -31,16 +34,18 @@ fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
         Fast::Asinh => crate::hyper::asinh(x, m),
         Fast::Acosh => crate::hyper::acosh(x, m),
         Fast::Atanh => crate::hyper::atanh(x, m),
+        Fast::Erf => crate::special::erf(x, m),
+        Fast::Erfc => crate::special::erfc(x, m),
     }
 }
 
 /// Compare the fast path with the accurate path on `xs` in every mode; the number taken.
 fn agree(xs: impl Iterator<Item = f32> + Clone) -> u64 {
-    agree_in(&ALL, xs)
+    agree_in(&ALL[..CHEAP], xs)
 }
 
 /// [`agree`] for the functions `fs`; with trig among them also `sincosf` against `sinf`, `cosf`.
-fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
+pub(super) fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
     let mut taken = 0;
     if fs.contains(&Fast::Sin) {
         for m in MODES {
@@ -175,6 +180,9 @@ fn fast_path_agrees_with_the_accurate_path() {
             // acoshf over [1, 100], atanhf over [-0.99, 0.99] (the bench rows' ranges).
             19 => (0..1u32 << 17).map(|i| 1.0 + 99.0 * (i as f32) / 131_072.0).collect(),
             20 => (0..1u32 << 17).map(|i| -0.99 + 1.98 * (i as f32) / 131_072.0).collect(),
+            // erff over [-5, 5], erfcf over [-3, 10] (the kernels' working ranges).
+            21 => trigs.clone().map(|x| x / 20.0).collect(),
+            22 => trigs.clone().map(|x| 3.5 + x * 0.065).collect(),
             _ => logs.clone().collect(),
         };
         for x in xs {
@@ -223,8 +231,9 @@ fn log1p_core_is_within_its_bound() {
     assert!(seen > 1_000_000, "{seen}");
 }
 
-/// trig_core's sin, cos (< 9.1 ulp) and tan = s/c (< 19.3 ulp) against the double-double
-/// `sin_cos` of the accurate path (its error far below 2^-100).
+/// trig_core's sin, cos (< TRIG_BOUND ulp) and tan = s/c (< TAN_BOUND ulp) against the
+/// double-double `sin_cos` of the accurate path (its error far below 2^-100); the margins
+/// TRIG_DELTA, TAN_DELTA are at least 1.5·bound + 1. (No spec clause: LIBM-F32-SINF-SHRINK.)
 #[test]
 fn trig_core_is_within_its_bound() {
     let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
@@ -235,13 +244,16 @@ fn trig_core_is_within_its_bound() {
         if let Some((s, c)) = trig_core(x) {
             seen += 1;
             let (fs, fc) = crate::trig::sin_cos(f64::from(x));
-            for (y, f, b, n) in [(s, fs, 9.1, "sin"), (c, fc, 9.1, "cos"), (s / c, fs.div(fc), 19.3, "tan")] {
+            for (y, f, b, n) in [(s, fs, TRIG_BOUND, "sin"), (c, fc, TRIG_BOUND, "cos"), (s / c, fs.div(fc), TAN_BOUND, "tan")] {
                 let err = crate::dd::Dd::from(y).sub(f).to_f64();
                 assert!(err.abs() <= b * ulp(y), "trig_core {n}({x:e}): {} ulp", err / ulp(y));
             }
         }
     }
     assert!(seen > 750_000, "{seen}");
+    for (d, b) in [(TRIG_DELTA, TRIG_BOUND), (TAN_DELTA, TAN_BOUND)] {
+        assert!(d as f64 >= 1.5 * b + 1.0, "margin {d} ulp for the bound {b} ulp");
+    }
 }
 
 /// `fs` on every `float` operand in every mode; the number taken. The threads take 2^16-operand
@@ -249,6 +261,11 @@ fn trig_core_is_within_its_bound() {
 /// chunks instead of idling while another finishes a fixed slice of expensive operands.
 /// `LIELLA_SWEEP_STRIDE=k` checks every k-th encoding only (sizing a sweep before its job).
 fn exhaustive(fs: &'static [Fast]) -> u64 {
+    exhaustive_by(|xs| agree_in(fs, xs.iter().copied()))
+}
+
+/// [`exhaustive`] with the check `check` on each chunk's operands.
+pub(super) fn exhaustive_by(check: impl Fn(&[f32]) -> u64 + Sync) -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     const CHUNK: u64 = 1 << 16;
     let n = std::thread::available_parallelism().map_or(8, |n| n.get());
@@ -262,9 +279,9 @@ fn exhaustive(fs: &'static [Fast]) -> u64 {
                 if lo >= 1 << 32 {
                     return (taken, seen);
                 }
-                let xs = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32));
-                seen += xs.clone().count() as u64;
-                taken += agree_in(fs, xs);
+                let xs: std::vec::Vec<f32> = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32)).collect();
+                seen += xs.len() as u64;
+                taken += check(&xs);
             }
         })).collect();
         hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
@@ -458,6 +475,30 @@ fn atan2_fast_path_agrees_on_a_wide_sample() {
     std::println!("atan2f fast path taken {taken} of {} calls", (1u64 << 24) * 64 * 4);
 }
 
+/// The in-place nearest entries of sinf, cosf, tanf, where they answer, give the accurate
+/// path's round-to-nearest result. (No spec clause: LIBM-F32-SINF-SHRINK.) Not through
+/// [`eval`]: its statistics are shared with the fallback-rate check of the agreement test.
+#[test]
+fn trig_nearest_entries_match_the_accurate_path() {
+    let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
+    let wide = (0u32..0x7f80_0001).step_by(4099).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+    let m = Rounding::Nearest;
+    let mut taken = 0u32;
+    for x in grid.chain(wide) {
+        for (f, near) in [(Fast::Sin, sin_nearest(x)), (Fast::Cos, cos_nearest(x)), (Fast::Tan, tan_nearest(x))] {
+            let Some(v) = near else { continue };
+            taken += 1;
+            let a = match f {
+                Fast::Sin => crate::trig::sin(x, m),
+                Fast::Cos => crate::trig::cos(x, m),
+                _ => crate::trig::tan(x, m),
+            };
+            assert_eq!(v.to_bits(), a.0.to_bits(), "{f:?}_nearest({x:e})");
+        }
+    }
+    assert!(taken > 500_000, "{taken}");
+}
+
 /// Each hyperbolic margin exceeds its proved bound by half and one ulp. (No spec clause:
 /// LIBM-F32-HYPERBOLIC.)
 #[test]
@@ -647,13 +688,29 @@ fn hyperbolic_hardware_sqrt_agrees_exhaustively() {
     std::println!("asinhf/acoshf hardware-root fast path taken {taken} of {} calls", 2u64 << 32);
 }
 
-/// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's
-/// proof; its own job, 3·2^34 calls).
+/// sinf (and sincosf) on every `float` operand in every mode against the accurate path, one
+/// job per function (LIBM-F32-SINF-SHRINK's accuracy check, 2^34 calls). (No spec clause.)
 #[test]
 #[ignore]
-fn trig_fast_path_agrees_exhaustively() {
-    let taken = exhaustive(&TRIG);
-    std::println!("trig fast path taken {taken} of {} calls", 12u64 << 32);
+fn sinf_fast_path_agrees_exhaustively() {
+    let taken = exhaustive(&[Fast::Sin]);
+    std::println!("sinf fast path taken {taken} of {} calls", 4u64 << 32);
+}
+
+/// cosf on every `float` operand in every mode (as for sinf). (No spec clause.)
+#[test]
+#[ignore]
+fn cosf_fast_path_agrees_exhaustively() {
+    let taken = exhaustive(&[Fast::Cos]);
+    std::println!("cosf fast path taken {taken} of {} calls", 4u64 << 32);
+}
+
+/// tanf on every `float` operand in every mode (as for sinf). (No spec clause.)
+#[test]
+#[ignore]
+fn tanf_fast_path_agrees_exhaustively() {
+    let taken = exhaustive(&[Fast::Tan]);
+    std::println!("tanf fast path taken {taken} of {} calls", 4u64 << 32);
 }
 
 /// expm1_core's y is within its proved bound (|y/f - 1| ≤ 9.1·2^-53) of f = e^x - 1, f from the

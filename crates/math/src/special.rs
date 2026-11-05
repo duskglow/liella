@@ -89,6 +89,13 @@ fn erf_mp(x: Mp) -> Mp {
     c(&t::MP_TWO_OVER_SQRT_PI).mul(x).mul(e).mul(sum)
 }
 
+/// `erf a` and `1 − erf a` for `0 < a < 10` at 384 bits (the `float` oracle's bound test).
+#[cfg(test)]
+pub(crate) fn erf_erfc_mp(a: f64) -> (Mp, Mp) {
+    let e = erf_mp(Mp::from_f64(a));
+    (e, Mp::from_i64(1).sub(e))
+}
+
 /// `erfc a` for `a >= 10` by the continued fraction, evaluated from depth `n` up: the depth
 /// needed falls with `a` (the tail's influence decays like `e^(−2a√(2n))`).
 fn erfc_cf(x: Mp) -> Mp {

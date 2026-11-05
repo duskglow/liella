@@ -1,0 +1,12 @@
+{"task": "PERF-QSORT-COMPARISONS", "model": "opus", "tokens": null,
+ "result": "COMPLETE, NEGATIVE: surplus = runs' predecessor test (~236 at 1,024) + per-merge in-order test (127), the price of n-1 on ordered input; 10 candidates modelled, each rises on some pattern; strategy kept; table in docs/saturation/19",
+ "branch": "task/perf-qsort-comparisons", "head": null,
+ "gate": {"affected": "pqc-gate started detached at hand-back (docs-only commit)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [{"item": "best trade: predecessor test only after an end insertion: random -1.9% at 1,024, up to +14 comparisons in 20/150 cells", "recommendation": "do not take; gap is per comparison, not the count"}],
+ "refused": [],
+ "jobs": ["pqc-percall-before", "pqc-counts", "pqc-gate"],
+ "improvement": "a counting-comparator pattern probe (qcount.c) belongs in validation/percall so count stories need no new probe; slot queue waits cost most of the wall time here",
+ "next_step": "none for the count; per-comparison work (ping-pong merge) is the next qsort story",
+ "report_file": "handoff/perf-qsort-comparisons.md"}
