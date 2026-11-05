@@ -121,53 +121,21 @@ pub(super) fn erfc_core(x: f32) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::tests::{accurate, agree_in, exhaustive_by, MODES};
-
-    /// `f` (erff or erfcf) against the tiered oracle on `xs`: one oracle call per operand the
-    /// fast path takes in any mode, the accurate path only for the modes the oracle's
-    /// double-double tier leaves undecided (ruling #2889); the number taken.
-    fn agree_oracle(f: Fast, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
-        use crate::oracle32 as o;
-        let mut taken = 0;
-        for x in xs {
-            let got = o::MODES.map(|m| eval(f, x, m));
-            if got.iter().all(Option::is_none) {
-                continue;
-            }
-            let est = if f == Fast::Erf { o::erf_est(x) } else { o::erfc_est(x) };
-            let want = o::oracle(est, tally, |m| accurate(f, x, m));
-            for (i, g) in got.into_iter().enumerate() {
-                if let Some(r) = g {
-                    taken += 1;
-                    let m = o::MODES[i];
-                    assert_eq!((f, m, x.to_bits(), r.0.to_bits(), r.1), (f, m, x.to_bits(), want[i].0.to_bits(), want[i].1));
-                }
-            }
-        }
-        taken
-    }
-
-    /// `f` on every `float` operand in every mode against the tiered oracle; prints the calls
-    /// taken and how often the oracle needed the mp path.
-    fn exhaustive_oracle(f: Fast, name: &str) {
-        let tally = crate::oracle32::Tally::default();
-        let taken = exhaustive_by(|xs| agree_oracle(f, xs.iter().copied(), &tally));
-        std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
-    }
+    use super::super::tests::{accurate, agree_in, exhaustive_oracle, MODES};
 
     /// erff on every `float` operand in every mode, against the tiered oracle (whose mp tier is
     /// the accurate path). (No spec clause: LIBM-F32-ERF.)
     #[test]
     #[ignore]
     fn erff_fast_path_agrees_exhaustively() {
-        exhaustive_oracle(Fast::Erf, "erff");
+        exhaustive_oracle(Fast::Erf, "erff", crate::oracle32::erf_est);
     }
 
     /// erfcf on every `float` operand in every mode (as for erff). (No spec clause.)
     #[test]
     #[ignore]
     fn erfcf_fast_path_agrees_exhaustively() {
-        exhaustive_oracle(Fast::Erfc, "erfcf");
+        exhaustive_oracle(Fast::Erfc, "erfcf", crate::oracle32::erfc_est);
     }
 
     /// The tiered oracle's decided answers equal the accurate path's in every mode: a stride over

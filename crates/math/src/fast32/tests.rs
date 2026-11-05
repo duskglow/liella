@@ -36,6 +36,10 @@ pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
         Fast::Atanh => crate::hyper::atanh(x, m),
         Fast::Erf => crate::special::erf(x, m),
         Fast::Erfc => crate::special::erfc(x, m),
+        Fast::J0 => crate::special::j0_accurate(x, m),
+        Fast::J1 => crate::special::j1_accurate(x, m),
+        Fast::Y0 => crate::special::y0_accurate(x, m),
+        Fast::Y1 => crate::special::y1_accurate(x, m),
     }
 }
 
@@ -850,4 +854,36 @@ fn fast_path_agrees_exhaustively() {
         hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
     });
     std::println!("fast path taken {taken} of {} calls", (fs.len() as u64 * 4) << 32);
+}
+
+/// `f` against the tiered oracle (ruling #2889) on `xs`, `est` its family's estimator: one
+/// oracle call per operand the fast path takes in any mode, the accurate path only for the
+/// modes the double-double tier leaves undecided; the number of calls taken.
+pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+    use crate::oracle32 as o;
+    let mut taken = 0;
+    for x in xs {
+        let got = o::MODES.map(|m| eval(f, x, m));
+        if got.iter().all(Option::is_none) {
+            continue;
+        }
+        let want = o::oracle(est(x), tally, |m| accurate(f, x, m));
+        for (i, g) in got.into_iter().enumerate() {
+            if let Some(r) = g {
+                taken += 1;
+                let m = o::MODES[i];
+                assert_eq!((f, m, x.to_bits(), r.0.to_bits(), r.1), (f, m, x.to_bits(), want[i].0.to_bits(), want[i].1));
+            }
+        }
+    }
+    taken
+}
+
+/// `f` on every `float` operand in every mode against the tiered oracle (`est` its family's
+/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
+/// oracle needed the mp path.
+pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
+    let tally = crate::oracle32::Tally::default();
+    let taken = exhaustive_by(|xs| agree_oracle(f, &est, xs.iter().copied(), &tally));
+    std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
 }
