@@ -59,3 +59,38 @@ was rare only because few calls start in that 1 ms.
   the call and `hi()` (3). The test runs both programs at each placement and compares every pairing
   of two different placements. A placement that is not achieved within 20 tries prints
   `edge not arranged`, which fails the test.
+
+## State
+
+* Branch , cut from . All code is in
+  ; no product code changed.
+* Jobs on keke, role r1:
+  * : rc 0. , all 4 time_gaps_probe tests passed
+    (the forced-edge test included), clippy  and  clean.
+  *  (direct tier): rc 0.
+  * :  with 5 plants: bracket-late, bracket-short,
+    other-side (the reference's bracket used for Liella), wait-sec0 and wait-minute-edge. Still
+    running at hand-back.
+  * : 600 runs of the probe (all tests but the forced one), at least
+    1 s apart, in RAM through a private user+mount namespace. 200 runs with 0 failures at load 25-30
+    when handed back.
+* Superseded runs:
+  * : wrong package name.
+  * : refused, because the role had not been synced.
+  * : one forced pairing failed; fixed in 52ae124d. The pairing compared calls on two
+    sides of midnight, which ask about two dates.
+
+## Probe-settled
+
+* Liella's getdate reads . The reference's getdate follows the tick clock, the same
+  second as .
+* Both are correct: POSIX does not name a clock. No difference row is needed. The probe now
+  tolerates either clock.
+
+## Next step and not to redo
+
+* Do not reintroduce a single clock read or any wait in . The plants cover both.
+* The minute-edge wait that PERF-NFTW-ENTRY-5 added on its own branch must be dropped when that
+  branch meets this one. It is a merge for the coordinator.
+* Plants file:  on keke. Repeat script:
+  .
