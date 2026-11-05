@@ -1509,6 +1509,18 @@ mod tests {
         assert!(!r.matches(1, 5, &Key { domain: fixed, locale: fr, list: None, domain_fixed: true }));
         let (d2, l2) = (b"domain_c".to_vec(), de.to_vec());
         assert!(r.matches(1, 5, &Key { domain: &d2, locale: &l2, list: None, domain_fixed: false }));
+        // The list (`LANGUAGE`) is compared by content even when domain and locale are accepted by
+        // address: a list rewritten in place at the same address is another key, and an equal
+        // list in another buffer is the same key (its words follow the domain's and the locale's).
+        let mut list = *b"de:fr_FR:it";
+        r.store(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }, 0, &[]);
+        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }), "the stored list");
+        let copy = list.to_vec();
+        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&copy), domain_fixed: true }), "an equal list elsewhere");
+        list[10] = b'x';
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(&list), domain_fixed: true }), "a list rewritten in place");
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: Some(b"fr:de_DE:it"), domain_fixed: true }), "another list of the length");
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: de, list: None, domain_fixed: true }), "no list");
     }
 
     /// The tail word as the zero-padded little-endian word of the last `len % 8` bytes, whatever
