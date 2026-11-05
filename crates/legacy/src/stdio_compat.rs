@@ -1664,15 +1664,15 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
 /// it empty), so the policy's flushes are unchanged. Whether it applied.
 #[inline(always)]
 fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> bool {
-    if ext.state.role != Role::Writing {
-        return false;
-    }
     // The offset of the write pointer in the buffer and where the block would end: a pointer
     // before the buffer wraps to a huge offset, so the end test covers "outside" on both sides
     // (zero bytes outside the window are left to the engine, which accepts them). The mode word
     // is read only once the copy is known to happen, so the write-through case does not pay for it.
     // (A `FILE` image too short to hold the pointer has none: the engine's.)
     let Some(wp) = file.get(word::WRITE_PTR) else { return false };
+    if ext.state.role != Role::Writing {
+        return false;
+    }
     let p = wp.load(Relaxed);
     let at = p.wrapping_sub(ext.buf);
     let Some(stop) = at.checked_add(data.len()) else { return false };
