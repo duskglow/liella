@@ -1,0 +1,12 @@
+{"task": "PRE14-BENCH-RERUN", "model": "sonnet", "tokens": null,
+ "result": "docs/benchmarks.md rewritten from a full counted bench of next a6fc34c2 on two Ivy Bridge timing hosts; counters vs 10-23: 43 better / 163 same / 8 worse; vs glibc 235 faster / 63 parity / 244 slower (165 libm)",
+ "branch": "task/pre14-bench-rerun", "head": "HEADSHA",
+ "gate": {"affected": "n/a (docs only); static rc 0, clippy rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "5cc49dc has no instruction counts; a true before/after by counters needs that commit built and counted on an Ivy Bridge host (not done: old checkout)", "recommendation": "story to build and count 5cc49dc if the owner wants it"}],
+ "informational": ["no AVX2 host measured", "libm is 165 of 169 rows slower by instructions", "timing runs have no jobs.tsv row (ran under ~/bin/timing)", "13 rows over cycle limits on the E3-1265L v2 host"],
+ "refused": [],
+ "improvement": "a timing-host runner for prebuilt bench products (stage + run) should be a tool; staging by hand took 6 calls",
+ "next_step": "owner: decide on AVX2 run and 5cc49dc counted build; owners of iswalpha/gettext_language rows",
+ "report_file": "handoff/benchmarks-v4.md",
+ "jobs": ["pre14-bench-rerun-build", "pre14-bench-rerun-static", "pre14-bench-rerun-clippy"]}
