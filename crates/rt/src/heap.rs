@@ -302,6 +302,23 @@ const MAGIC: [u64; 44] = {
 /// reduced by a mask instead of a division and needs no bounds check. A padding entry is all
 /// zero: no offset passes `q * size == off && q < blocks` with it, so a corrupt index can only
 /// send the free to the slow path.
+/// Half the size of the class below class `c`: a request at or under it belongs to a smaller
+/// class, so `fits_in_place` keeps the block only above it. Class 0 (and any index past the
+/// classes, which never reaches it) has no lower bound.
+const HALF_BELOW: [u64; 64] = {
+    let mut t = [0u64; 64];
+    let mut i = 1;
+    while i < 44 {
+        // A const context: CLASSES fits in 64 bits.
+        #[allow(clippy::as_conversions)]
+        {
+            t[i] = (CLASSES[i - 1] / 2) as u64;
+        }
+        i += 1;
+    }
+    t
+};
+
 const FREE_VIEW: [[u64; 3]; 64] = {
     let mut t = [[0u64; 3]; 64];
     let mut i = 0;
@@ -1963,8 +1980,7 @@ impl Heap {
         if r.local[j].load(Relaxed) & b == 0 || (k.remote_any() && r.remote_has(j, b)) {
             return false;
         }
-        let below = CLASSES[c.min(CLASSES.len() - 1).saturating_sub(1)];
-        size <= uz(csize) && (c == 0 || size > below / 2)
+        size <= uz(csize) && size > uz(HALF_BELOW[c])
     }
 
     /// The size a small block that `resize` moves upward is allocated for (REALLOC-FUSE growth
