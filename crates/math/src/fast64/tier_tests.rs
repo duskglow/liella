@@ -18,7 +18,8 @@ fn uniform(n: usize, seed: u64, lo: f64, hi: f64) -> impl Iterator<Item = f64> {
     })
 }
 
-/// Signed magnitudes `±m·2^-e`, `e` uniform in `[0, emax)`, `m` in `[1, 2)`.
+/// Signed magnitudes `±m·2^-e`, `e` uniform in `[0, emax)`, `m` in `[1, 2)` (callers keep the scaled
+/// magnitudes above the tier's floor `2^-60`, so the answer rate counts operands in the window).
 fn logscale(n: usize, seed: u64, emax: u64) -> impl Iterator<Item = f64> {
     let mut st = seed;
     (0..n).map(move |_| {
@@ -64,7 +65,7 @@ macro_rules! rn {
 #[test]
 fn expm1_tier_matches_the_accurate_path() {
     let e = rn!(expm1);
-    rate("expm1 series", check("expm1", super::expm1_nearest, e, logscale(40_000, 0x1234_5678_9abc_def1, 60).map(|x| x * 0.0078)));
+    rate("expm1 series", check("expm1", super::expm1_nearest, e, logscale(40_000, 0x1234_5678_9abc_def1, 50).map(|x| x * 0.0078)));
     rate("expm1 kernel", check("expm1", super::expm1_nearest, e, uniform(60_000, 0x9e37_79b9_7f4a_7c15, -36.9, 708.0)));
     rate("expm1 near 2^-6", check("expm1", super::expm1_nearest, e, uniform(40_000, 0x2545_f491_4f6c_dd1d, -0.2, 0.2)));
 }
@@ -72,24 +73,27 @@ fn expm1_tier_matches_the_accurate_path() {
 #[test]
 fn log1p_tier_matches_the_accurate_path() {
     let e = rn!(log1p);
-    rate("log1p series", check("log1p", super::log1p_nearest, e, logscale(40_000, 0x1234_5678_9abc_def1, 60).map(|x| x * 0.0039)));
+    rate("log1p series", check("log1p", super::log1p_nearest, e, logscale(40_000, 0x1234_5678_9abc_def1, 50).map(|x| x * 0.0039)));
     rate("log1p kernel", check("log1p", super::log1p_nearest, e, uniform(40_000, 0x9e37_79b9_7f4a_7c15, -0.999_999, 4.0)));
     rate("log1p near -1", check("log1p", super::log1p_nearest, e, logscale(20_000, 0x2545_f491_4f6c_dd1d, 50).map(|x| -1.0 + x.abs())));
     let big = logscale(40_000, 0x5151_aaaa_1234_9876, 900).map(|x| 1.0 / x.abs());
     rate("log1p large", check("log1p", super::log1p_nearest, e, big.filter(|x| *x < 1e288)));
 }
 
+/// A hyperbolic sweep: name, fast entry, accurate path, the end of the tier's range.
+type Row = (&'static str, fn(f64) -> Option<f64>, fn(f64) -> f64, f64);
+
 #[test]
 fn hyperbolic_tier_matches_the_accurate_path() {
-    let rows: [(&str, fn(f64) -> Option<f64>, fn(f64) -> f64, f64); 3] = [
+    let rows: [Row; 3] = [
         ("sinh", super::sinh_nearest, rn!(sinh), 708.0),
         ("cosh", super::cosh_nearest, rn!(cosh), 708.0),
         ("tanh", super::tanh_nearest, rn!(tanh), 22.0),
     ];
     for (name, f, ex, top) in rows {
-        rate(name, check(name, f, ex, logscale(40_000, 0x1234_5678_9abc_def1, 60).map(|x| x * 0.0078)));
+        rate(name, check(name, f, ex, logscale(40_000, 0x1234_5678_9abc_def1, 50).map(|x| x * 0.0078)));
         rate(name, check(name, f, ex, uniform(60_000, 0x9e37_79b9_7f4a_7c15, -top, top)));
-        rate(name, check(name, f, ex, uniform(40_000, 0x2545_f491_4f6c_dd1d, -45.0, 45.0)));
+        rate(name, check(name, f, ex, uniform(40_000, 0x2545_f491_4f6c_dd1d, -top.min(45.0), top.min(45.0))));
     }
 }
 
@@ -103,7 +107,7 @@ fn cbrt_tier_matches_the_accurate_path_and_declines_exact_cubes() {
             st ^= st << 13;
             st ^= st >> 7;
             st ^= st << 17;
-            f64::from_bits(st & 0xffef_ffff_ffff_ffff | 0x0010_0000_0000_0000)
+            f64::from_bits((st >> 12) | ((1 + st % 2046) << 52) | ((st & 1) << 63))
         })
         .collect();
     rate("cbrt", check("cbrt", super::cbrt_nearest, e, xs.into_iter()));
