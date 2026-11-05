@@ -72,7 +72,7 @@ macro_rules! kernels {
 // fused into each entry (register 16.5 #3); no numeric change
 $(#[$a])*
 $(#[$i])*
-fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
+pub(crate) fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
         return None;
@@ -107,7 +107,7 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
 // fused into each entry (register 16.5 #3); no numeric change
 $(#[$a])*
 $(#[$i])*
-fn log_kernel(x: f64) -> Option<(Dd, f64)> {
+pub(crate) fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let (e, idx, lh, ll, tail) = log_series(x)?;
     Some((log_assemble(e, idx, lh, ll), tail))
 }
@@ -223,7 +223,7 @@ fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64) {
 
 /// [`exp`]'s reduced argument (proof there).
 #[inline(always)]
-fn reduce_exp(x: f64, kf: f64) -> Dd {
+pub(crate) fn reduce_exp(x: f64, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(x, kf);
     fast_two_sum(h, l)
 }
@@ -357,7 +357,7 @@ pub mod fused {
 
 /// [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
 #[inline(always)]
-fn log_eps(y: Dd, tail: f64) -> f64 {
+pub(crate) fn log_eps(y: Dd, tail: f64) -> f64 {
     TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)
 }
 
