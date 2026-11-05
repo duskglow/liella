@@ -1541,8 +1541,12 @@ fn write_raw<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) 
     if let Some(t) = write_direct(env, file, ext, data) {
         return t;
     }
-    if let Some(t) = write_straddle(env, file, ext, data) {
-        return t;
+    // The size test is here, not in the callee: a block the buffer cannot hold (written through)
+    // pays no call for a path that cannot apply to it.
+    if ext.state.policy == Policy::Full && data.len() < ext.buf_len.saturating_sub(RESERVE) {
+        if let Some(t) = write_straddle(env, file, ext, data) {
+            return t;
+        }
     }
     run(env, file, ext, |s, b, back| s.write(b, back, data)).unwrap_or_else(|e| Transfer { done: 0, error: Some(e) })
 }
