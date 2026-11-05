@@ -172,7 +172,7 @@ fn double_bessel_kernels_stay_within_their_bounds() {
     let mut rng = Rng(0xa54f_f53a_5f1d_36f1);
     let mut ops: Vec<f64> = Vec::new();
     for i in 0..160 {
-        let s = 2f64.powi(-5 + (i / 16) as i32);
+        let s = 2f64.powi(-5 + i / 16);
         let j = (i % 16) as f64;
         let (a, b) = (s * (1.0 + j / 16.0), s * (1.0 + (j + 1.0) / 16.0));
         ops.extend([a, f64::from_bits(b.to_bits() - 1)]);

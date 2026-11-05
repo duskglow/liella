@@ -196,7 +196,8 @@ fn emit_hankel(src: &mut String) {
     };
     let c: [Vec<Big>; 2] = [coef(0, 80), coef(1, 80)];
     let size = |k: usize| c.iter().map(|v| v[k].to_f64().abs() / x.powi(k as i32)).fold(0.0, f64::max);
-    let n = (1..39).find(|&n| size(2 * n) < 2f64.powi(-77) && size(2 * n + 1) < 2f64.powi(-77)).expect("Hankel terms");
+    let n = (1..39).find(|&n| size(2 * n) < 2f64.powi(-77) && size(2 * n + 1) < 2f64.powi(-77)).unwrap_or(39);
+    assert!(n < 39, "no Hankel term count meets 2^-77");
     let _ = writeln!(src, "\n/// Terms kept of Hankel's `P` and `Q` (module `fast_bessel`); first omitted at 32: {:.1} (log2).\npub(crate) const HANKEL_N: usize = {n};", size(2 * n).max(size(2 * n + 1)).log2());
     for (name, off) in [("HANKEL_P", 0), ("HANKEL_Q", 1)] {
         let _ = writeln!(src, "/// `(−1)^k·a_(2k+{off})(ν)` for `ν = 0, 1` (module `fast_bessel`).\npub(crate) static {name}: [[[u64; 2]; {n}]; 2] = [");

@@ -53,6 +53,8 @@
 
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // slot indices bounded by the ranges checked before each lookup
 
+use core::cmp::Ordering;
+
 use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
 use crate::fast64;
@@ -80,8 +82,8 @@ const E95: f64 = f64::from_bits(0x3a00_0000_0000_0000);
 const E104: f64 = f64::from_bits(0x3970_0000_0000_0000);
 /// 2^64: `small_kernel`'s `Y1` scales `x` up by it and the quotient `(2/π)/x` back.
 const S64: f64 = f64::from_bits(0x43f0_0000_0000_0000);
-/// `2/π` rounded up, for the logarithm's share of the bound.
-const K_UP: f64 = 0.636_62;
+/// `2/π` rounded up (by more than its last place), for the logarithm's share of the bound.
+const K_UP: f64 = core::f64::consts::FRAC_2_PI * 1.0001;
 
 const M: usize = t::BESSEL_T_DD;
 const D: usize = t::BESSEL_T_DEG;
@@ -174,7 +176,7 @@ fn mirrored(mode: Rounding) -> Rounding {
 
 /// `y` (within `eps`) correctly rounded in `mode`, or `None`.
 fn round(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)> {
-    if !(eps < dd::abs(y.hi)) {
+    if eps.partial_cmp(&dd::abs(y.hi)) != Some(Ordering::Less) {
         return None;
     }
     if y.hi < 0.0 {
