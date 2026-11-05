@@ -83,7 +83,23 @@ pub const TARGETS: &[Target] = &[
     Target { name: "tanh", parity: Parity::Odd, eval: |x, p| mp::tanh(x, p).value },
     Target { name: "log", parity: Parity::Neither, eval: |x, p| mp::log(x, p).value },
     Target { name: "erf", parity: Parity::Odd, eval: |x, p| mp::erf(x, p).value },
+    Target { name: "tgamma_2p5", parity: Parity::Neither, eval: |x, p| mp::tgamma(&x.add(&Big::from_f64(2.5)), p).value },
+    Target { name: "lgamma1p_over_x", parity: Parity::Neither, eval: lgamma1p_over_x },
 ];
+
+/// lnΓ(1 + x)/x, and its limit -γ at 0 as the symmetric difference (lnΓ(1 + h) - lnΓ(1 - h))/(2h)
+/// with h = 2^-(p+8): the series lnΓ(1 + h) = -γh + Σ_{k≥2} (-1)^k ζ(k) h^k/k leaves -γ - ζ(3)h²/3 - ...,
+/// an error below 2^-(2p+16), evaluated with 3p bits so the difference keeps p + 8 good bits.
+fn lgamma1p_over_x(x: &Big, p: u32) -> Big {
+    let lg1p = |v: &Big, q: u32| mp::lgamma(&Big::one().add(v), q).value;
+    if !x.is_zero() {
+        return lg1p(x, p + 4).div(x, p + 4, Round::Nearest);
+    }
+    let k = i64::from(p) + 8;
+    let h = Big::pow2(-k);
+    let q = 3 * p + 32;
+    lg1p(&h, q).sub(&lg1p(&h.neg(), q)).mul_pow2(k - 1).round(p + 4, Round::Nearest)
+}
 
 /// Looks a target up by name.
 pub fn target(name: &str) -> Option<&'static Target> {

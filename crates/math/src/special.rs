@@ -233,8 +233,19 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     (lg, if s.neg { -1 } else { 1 })
 }
 
-/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1).
+/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1): for `float` the fast path
+/// ([`crate::fast32::eval_lgamma`]) first.
 pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
+    if let (24, Ok(b)) = (F::PREC, u32::try_from(x.to_bits())) {
+        if let Some(((r, st), sign)) = crate::fast32::eval_lgamma(f32::from_bits(b), mode) {
+            return ((F::from_bits(u128::from(r.to_bits())), st), sign);
+        }
+    }
+    lgamma_acc(x, mode)
+}
+
+/// `lgamma(x)` and the sign of `Γ(x)` by the accurate path.
+pub(crate) fn lgamma_acc<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return (r, 1);
@@ -255,8 +266,18 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     (mp::round(lg, mode), sign)
 }
 
-/// `tgamma(x)`.
+/// `tgamma(x)`: for `float` the fast path ([`crate::fast32::eval_tgamma`]) first.
 pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if let (24, Ok(b)) = (F::PREC, u32::try_from(x.to_bits())) {
+        if let Some((r, st)) = crate::fast32::eval_tgamma(f32::from_bits(b), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), st);
+        }
+    }
+    tgamma_acc(x, mode)
+}
+
+/// `tgamma(x)` by the accurate path.
+pub(crate) fn tgamma_acc<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
