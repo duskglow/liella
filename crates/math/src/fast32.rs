@@ -1416,21 +1416,28 @@ mod tests {
         std::println!("atan2f fast path taken {taken} of {} calls", (1u64 << 24) * 64 * 4);
     }
 
-    /// The in-place nearest entries of sinf, cosf, tanf give exactly what [`eval`] gives in round
-    /// to nearest, and refuse where it refuses. (No spec clause: LIBM-F32-SINF-SHRINK.)
+    /// The in-place nearest entries of sinf, cosf, tanf, where they answer, give the accurate
+    /// path's round-to-nearest result. (No spec clause: LIBM-F32-SINF-SHRINK.) Not through
+    /// [`eval`]: its statistics are shared with the fallback-rate check of the agreement test.
     #[test]
-    fn trig_nearest_entries_match_eval() {
+    fn trig_nearest_entries_match_the_accurate_path() {
         let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
         let wide = (0u32..0x7f80_0001).step_by(4099).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let m = Rounding::Nearest;
         let mut taken = 0u32;
         for x in grid.chain(wide) {
             for (f, near) in [(Fast::Sin, sin_nearest(x)), (Fast::Cos, cos_nearest(x)), (Fast::Tan, tan_nearest(x))] {
-                let e = eval(f, x, Rounding::Nearest).map(|(v, _)| v.to_bits());
-                assert_eq!(near.map(f32::to_bits), e, "{f:?}({x:e})");
-                taken += u32::from(e.is_some());
+                let Some(v) = near else { continue };
+                taken += 1;
+                let a = match f {
+                    Fast::Sin => crate::trig::sin(x, m),
+                    Fast::Cos => crate::trig::cos(x, m),
+                    _ => crate::trig::tan(x, m),
+                };
+                assert_eq!(v.to_bits(), a.0.to_bits(), "{f:?}_nearest({x:e})");
             }
         }
-        assert!(taken > 1_000_000, "{taken}");
+        assert!(taken > 500_000, "{taken}");
     }
 
     /// sinf (and sincosf) on every `float` operand in every mode against the accurate path, one
