@@ -1,12 +1,34 @@
-{"task": "PERF-MALLOC-LATEST-FREE-EXP", "model": "opus", "tokens": null,
+{
+ "task": "PERF-MALLOC-LATEST-FREE-EXP",
+ "model": "opus",
+ "tokens": null,
  "result": "DO NOT LAND: latest-malloc fast path in free cuts the malloc/free pair from 51.5 to 45.3 cycles on Ivy Bridge (glibc 44.8-47.0) and 45.6 to 41.4 on Skylake-SP, 123.2 to 110.2 instr; workload counts pending",
- "branch": "task/perf-malloc-latest-free-exp", "head": "dd873a8e",
- "gate": {"affected": "direct tier rc 0 (shiki:perf-malloc-latest-free-exp-gate)", "peak": "11G"},
+ "branch": "task/perf-malloc-latest-free-exp",
+ "head": "f4583242",
+ "gate": {
+  "affected": "direct tier rc 0 on final head (shiki:perf-malloc-latest-free-exp-gate2: clippy --all-features, static, affected)",
+  "peak": "9.9G"
+ },
  "accepted_first_attempt": null,
- "rulings": [{"item": "D-12: adopt the latest-allocation fast path in free (-6.2 cyc IVB, -4.1 cyc SKX, -13 instr per pair; +2 stores per fast malloc, +load/cmp/branch per other free, cache +64 B)", "recommendation": "adopt if keke:perf-malloc-latest-free-exp-wlc-zen shows no heap workload slower than noise, else record as negative"}],
- "informational": ["shiki has no ~/wl/recipes: wl_count stops at 'wl_prep: no link command for sort'; count run on keke from a copy of the synced tree in ~/work", "shiki is Haswell (E5-2697 v3)"],
+ "rulings": [
+  {
+   "item": "D-12: adopt the latest-allocation fast path in free (-6.2 cyc IVB, -4.1 cyc SKX, -13 instr per pair; +2 stores per fast malloc, +load/cmp/branch per other free, cache +64 B)",
+   "recommendation": "adopt if keke:perf-malloc-latest-free-exp-wlc-zen shows no heap workload slower than noise, else record as negative"
+  }
+ ],
+ "informational": [
+  "shiki has no ~/wl/recipes: wl_count stops at 'wl_prep: no link command for sort'; count run on keke from a copy of the synced tree in ~/work",
+  "shiki is Haswell (E5-2697 v3)"
+ ],
  "refused": [],
- "jobs": ["shiki:perf-malloc-latest-free-exp-gate", "shiki:perf-malloc-latest-free-exp-plants", "nico:perf-malloc-latest-free-exp-ivb", "mei:perf-malloc-latest-free-exp-skx2", "keke:perf-malloc-latest-free-exp-wlc-zen"],
+ "jobs": [
+  "shiki:perf-malloc-latest-free-exp-gate2",
+  "shiki:perf-malloc-latest-free-exp-plants",
+  "nico:perf-malloc-latest-free-exp-ivb",
+  "mei:perf-malloc-latest-free-exp-skx2",
+  "keke:perf-malloc-latest-free-exp-wlc-zen"
+ ],
  "improvement": "wl_count could check recipes before building or queueing, and name the hosts that have them; three runs were spent finding that shiki has none",
  "next_step": "read keke wl_count log, bring the D-12 ruling to the owner with those numbers",
- "report_file": "handoff/PERF-MALLOC-LATEST-FREE-EXP.md"}
+ "report_file": "handoff/PERF-MALLOC-LATEST-FREE-EXP.md"
+}
