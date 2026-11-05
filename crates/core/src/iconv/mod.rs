@@ -474,6 +474,33 @@ pub fn derived_translit(c: u32, full: bool, out: &mut [u32; 32]) -> Option<usize
     (out.get(..len) != Some(&[c][..])).then_some(len)
 }
 
+/// The slots of a [`Memo`] (a power of two), and the longest transliteration one keeps.
+const MEMO_SLOTS: usize = 8;
+const MEMO_BYTES: usize = 11;
+/// [`MemoSlot::len`] of a slot that holds nothing.
+const MEMO_UNUSED: u8 = u8::MAX;
+
+/// One character's transliteration in the target.
+#[derive(Clone, Copy)]
+struct MemoSlot {
+    char: u32,
+    len: u8,
+    bytes: [u8; MEMO_BYTES],
+}
+
+/// The transliterations one [`Conv::convert`] call has worked out (D-NEW), direct-mapped on the
+/// character's low bits. Text that needs transliterating repeats a few characters (accented
+/// letters, quotes), and working one out is a chain of dependent table searches. It lives for
+/// one call only: the descriptor and the locale are fixed within it, so a kept result is the
+/// one a new derivation would give.
+struct Memo {
+    slots: [MemoSlot; MEMO_SLOTS],
+}
+
+impl Memo {
+    const EMPTY: Memo = Memo { slots: [MemoSlot { char: 0, len: MEMO_UNUSED, bytes: [0; MEMO_BYTES] }; MEMO_SLOTS] };
+}
+
 /// The state a descriptor keeps between calls.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct State {
@@ -542,6 +569,8 @@ impl Conv {
         // (ICONV-3, D-6.13); what the tables do not own goes to the loop below.
         let single_in = if fused && self.to == Codec::Utf8 { fast::single_byte(self.from) } else { None };
         let single_out = if fused && self.from == Codec::Utf8 { fast::single_byte(self.to) } else { None };
+        // Transliterations this call worked out, made on the first one (D-NEW).
+        let mut memo: Option<Memo> = None;
         while read < input.len() {
             let rest = input.get(read..).unwrap_or(&[]);
             let fused_single = single_in
@@ -652,10 +681,10 @@ impl Conv {
                 }
                 None => {
                     let mut buf = [0u8; 64];
-                    match self.encode_char(c, &mut buf, loc) {
+                    match self.encode_memo(c, &mut memo, &mut buf, loc) {
                         Some((n, lossy)) => {
                             let Some(dst) = out.get_mut(written..written + n) else { return end(read, written, Err(Errno::E2BIG)) };
-                            dst.copy_from_slice(buf.get(..n).unwrap_or(&[]));
+                            crate::mem::copy_inline(dst, buf.get(..n).unwrap_or(&[]));
                             irreversible += usize::from(lossy);
                             n
                         }
@@ -672,6 +701,29 @@ impl Conv {
             read += used;
         }
         end(read, written, if ignored { Err(Errno::EILSEQ) } else { Ok(irreversible) })
+    }
+
+    /// [`Conv::encode_char`] for a `c` the target cannot encode, from `memo` when this call
+    /// already transliterated `c` (D-NEW). Out of line: the loop above stays small.
+    #[inline(never)]
+    fn encode_memo(&self, c: u32, memo: &mut Option<Memo>, buf: &mut [u8; 64], loc: &Locale) -> Option<(usize, bool)> {
+        let memo = memo.get_or_insert(Memo::EMPTY);
+        let slot = memo.slots.get_mut(usize::try_from(c).ok()? % MEMO_SLOTS)?;
+        if slot.char == c && slot.len != MEMO_UNUSED {
+            let n = usize::from(slot.len);
+            crate::mem::copy_inline(buf.get_mut(..n)?, slot.bytes.get(..n)?);
+            return Some((n, true));
+        }
+        let (n, lossy) = self.encode_char(c, buf, loc)?;
+        // Only transliterations (lossy) that fit; a character the target encodes never gets here.
+        if let (true, Ok(len), Some(src)) = (lossy, u8::try_from(n), buf.get(..n)) {
+            if let Some(dst) = slot.bytes.get_mut(..n) {
+                dst.copy_from_slice(src);
+                slot.char = c;
+                slot.len = len;
+            }
+        }
+        Some((n, lossy))
     }
 
     /// `c` in the target, transliterated if need be: the bytes and whether it was lossy.

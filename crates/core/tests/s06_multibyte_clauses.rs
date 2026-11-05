@@ -256,6 +256,32 @@ fn s6_4_c_1_1() {
     assert_eq!(out, b"?e?", "C: compatibility decompositions only, a mark is '?'");
 }
 
+/// A transliteration met again in one call (D-NEW: kept per call): the same bytes as the first
+/// time, characters that share a table slot (U+00E9 and U+00F1, U+20AC and U+00C4) each keep
+/// their own result, a kept result that does not fit is E2BIG, and every one counts as
+/// irreversible.
+#[test]
+fn iconv_translit_memo_repeats_and_collisions() {
+    // Trace: s6_4_c_1_1 (`//TRANSLIT` approximates them); D-NEW.
+    let one = "é€ñÄ½x\u{2153}";
+    let want: &[u8] = b"eEURnA 1/2 x 1/3 ";
+    let text = one.repeat(3);
+    let (o, out) = iconv_once("ASCII//TRANSLIT", "UTF-8", text.as_bytes(), 256, &C_UTF8);
+    assert_eq!(out, want.repeat(3), "each repeat as the first");
+    assert_eq!((o.result, o.read), (Ok(18), text.len()), "6 irreversible per repeat, all read");
+    // Each character alone: the same bytes as in the mixed text.
+    for (ch, w) in [("é", "e"), ("€", "EUR"), ("ñ", "n"), ("Ä", "A"), ("½", " 1/2 ")] {
+        let (_, out) = iconv_once("ASCII//TRANSLIT", "UTF-8", ch.repeat(2).as_bytes(), 64, &C_UTF8);
+        assert_eq!(out, w.repeat(2).as_bytes(), "{ch} twice");
+    }
+    // A kept result into too little room: E2BIG with what fit, the same as a new derivation.
+    let (o, out) = iconv_once("ASCII//TRANSLIT", "UTF-8", "€€".as_bytes(), 5, &C_UTF8);
+    assert_eq!((o.result, o.read, out.as_slice()), (Err(Errno::E2BIG), 3, &b"EUR"[..]), "the second does not fit");
+    // A character with no transliteration (C: a mark gives '?') repeated, and IGNORE drops nothing.
+    let (o, out) = iconv_once("ASCII//TRANSLIT//IGNORE", "UTF-8", "ä一ä一".as_bytes(), 64, &Locale::C);
+    assert_eq!((o.result, out.as_slice()), (Ok(4), &b"????"[..]), "C: '?' each time");
+}
+
 #[test]
 fn s6_4_c_1_2() {
     let (o, out) = iconv_once("ASCII//IGNORE", "UTF-8", "xé一y".as_bytes(), 64, &Locale::C);
