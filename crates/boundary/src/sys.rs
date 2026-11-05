@@ -1024,6 +1024,9 @@ impl<const CP: bool> Sys for CSysImpl<CP> {
         let mut st = Stat::default();
         unit(liella_sys_newfstatat(f(dir), s(path), m(&mut st), u(flags))).map(|()| st)
     }
+    fn fstatat_into(&self, dir: Fd, path: KStr<'_>, flags: u32, dst: &mut Stat) -> KResult<()> {
+        unit(liella_sys_newfstatat(f(dir), s(path), m(dst), u(flags)))
+    }
     fn fstat(&self, fd: Fd) -> KResult<Stat> {
         let mut st = Stat::default();
         unit(liella_sys_fstat(f(fd), m(&mut st))).map(|()| st)

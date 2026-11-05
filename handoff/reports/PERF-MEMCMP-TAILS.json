@@ -1,0 +1,12 @@
+{"task": "PERF-MEMCMP-TAILS", "model": "opus", "tokens": null,
+ "result": "65-2048 AVX2 memcmp/bcmp/__memcmpeq classes: NULL folded into the head load (ruling #2517) and one class gate; static count -4 on diff8_96/127 and head_128, -6 on head_1k/129-2048; brief's 1.05x targets not reached (entry dispatch and -1/1 ordering left)",
+ "branch": "task/perf-memcmp-tails", "head": "see git: the commit adding this file",
+ "gate": {"affected": "running at hand-back (keke perf-memcmp-tails-gate, direct tier reaches all sections via fold.S)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "NULL folding for 65-2048 in the AVX2 compare/equality classes relies on ruling #2517 (coordinator, 2026-11-04) as recorded in handoff/memcmpeq-early.md; not found in plan/", "recommendation": "confirm #2517 covers this and assign the D-4.52 row id"}],
+ "informational": ["plants: 5 CAUGHT, 0 SURVIVED, no WARN (keke perf-memcmp-tails-plants2)", "first plants run perf-memcmp-tails-plants refused by the tool (.S plants without function label); superseded", "percall (wl_percall.sh) not run: budget; per-phase split in the handoff is a static count", "tail_32 rows and memcmp_4k/64k not addressed (reasons in handoff)", "after-count perf-memcmp-tails-count-after waits for the gate, then counts"],
+ "refused": [],
+ "improvement": "a fold.S change makes the direct-tier gate the full suite; a fold.S-specific direct tier (small_compare, small_copy, machine_scanners) would make kernel stories cheap to gate",
+ "next_step": "collect gate and after-count; compare after vs before rows in handoff/perf-memcmp-tails.md; revert if any cbench_memref row got slower",
+ "report_file": "handoff/perf-memcmp-tails.md",
+ "jobs": ["keke:perf-memcmp-tails-gate", "keke:perf-memcmp-tails-plants2", "keke:perf-memcmp-tails-count-before", "keke:perf-memcmp-tails-count-after"]}

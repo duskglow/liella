@@ -33,7 +33,7 @@ Read these first; this file is the short version:
    for genuine hang guards).
 4. **Tests must prove something.** Name the spec clause a test covers (or `no spec clause`). Prove
    new tests with plants (deliberately broken scratch copies of the code that the tests must
-   catch). Skip only when a capability is truly absent, and print why.
+   catch), run through `cargo xtask plants` (required; `docs/plants.md`), never a hand-written script. Skip only when a capability is truly absent, and print why.
 5. **`unsafe`** only in `liella-boundary` and the C layer, within the documented categories, each
    use commented `// UNSAFE(<category>) SAFETY:` with the invariant it relies on.
 6. **Security.** A problem in Liella goes to the private channel in [SECURITY.md](SECURITY.md),

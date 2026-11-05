@@ -313,6 +313,13 @@ reference behaviour (a compat flag in `compat-flags.md`).
 
 ## Mathematics (`libm`, spec §10)
 
+Accuracy principle (owner rulings #2760, #2761, 2026-11-05): a change in accuracy is a difference from glibc, so every
+family that returns correctly rounded results is a row below. When Liella is reasonably close to glibc's speed,
+accuracy wins; a family whose correctly rounded fast tier stays above about 2x the reference in time may move to a
+documented ulp bound (x87 `long double` is judged in cycles), and that move updates the family's row in the same
+change. No row has a compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results
+for a marginal speed gain is not offered. This is the recorded reason not to take a `COMPAT-N` id for these rows.
+
 Differences of behaviour, recorded in `crates/math/tests/exact_products.rs` (the differential test
 of every exact and correctly rounded function, all formats, `spec/behaviour/libm-exact.md`):
 
@@ -331,7 +338,7 @@ The elementary functions of `float` and `double` (milestone 2), recorded in
 
 | Case | Liella | glibc 2.39 | Decision (clause) |
 |---|---|---|---|
-| Results that glibc does not round correctly (most in the directed modes) | Correctly rounded in the current mode. | Up to 3 ulp off; in directed modes often the round-to-nearest result (`sin`, `cos`, `tan`, `atan`, `atan2` at about half of all arguments; `exp10f(2)` upward = 100 + 1 ulp; `tanh(−huge)` upward = −1). Measured below. | D-10.3, D-10.13 (s10_3_c_0) |
+| Results that glibc does not round correctly (most in the directed modes) | Correctly rounded in the current mode. | Up to 3 ulp off; in directed modes often the round-to-nearest result (`sin`, `cos`, `tan`, `atan`, `atan2` at about half of all arguments; `exp10f(2)` upward = 100 + 1 ulp; `tanh(−huge)` upward = −1). Measured below. | D-10.3, D-10.13 (s10_3_c_0) No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 | Inexact for tiny arguments (`sin`, `tan`, `asin`, `atan`, `sincos` below about 2^-26; `cos`, `acos`, `cosh` of tiny ones; `atan2` limits) | Raised (the result is inexact). | Not raised. | D-10.14 (C F.10: unspecified) (s10_0_f_0) |
 | Inexact for exact results (`cbrt(27)`, `log2(2^k)`, `log10(10^k)`, `exp10(k)`, `pow(3, 4)`, `pow(0.25, 0.5)`) | Not raised; no underflow for an exact subnormal result (`exp2(−1074)`, `pow(2, −1074)`). | Raised (with underflow for the subnormal ones). | D-10.14 (s10_0_f_0) |
 | `errno` for a subnormal result, or a result rounded to the largest finite value, of `exp`, `exp2`, `exp10`, `pow` (and their `float` forms) | Not set (flags only), as for every function. | `ERANGE` for some such operands, not for others. | D-10.14 (s10_0_f_0; three-way: spec kept) |
@@ -343,7 +350,7 @@ oracle):
 
 | Case | Liella | glibc 2.39 | Decision (clause) |
 |---|---|---|---|
-| Results glibc does not round correctly (every function; the directed modes above all) | Correctly rounded in every mode, including the tiny and huge arguments whose value lies just beside a representable one (`sinl(2^-16445)` downward = +0, `cosl(tiny)` downward = 1 − 2^-64). | Up to 4.5 ulp off on the random sample (`asinhl`, `sinhl`, `tanhl`, `atanhl` in the directed modes), 2.5 ulp in round-to-nearest (`asinhl`); tiny arguments return the operand or 1 in every mode. Measured below. | D-10.3, D-10.19 (s10_3_c_0) |
+| Results glibc does not round correctly (every function; the directed modes above all) | Correctly rounded in every mode, including the tiny and huge arguments whose value lies just beside a representable one (`sinl(2^-16445)` downward = +0, `cosl(tiny)` downward = 1 − 2^-64). | Up to 4.5 ulp off on the random sample (`asinhl`, `sinhl`, `tanhl`, `atanhl` in the directed modes), 2.5 ulp in round-to-nearest (`asinhl`); tiny arguments return the operand or 1 in every mode. Measured below. | D-10.3, D-10.19 (s10_3_c_0) No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 | Inexact for tiny arguments (`coshl`, `expm1l` and the like) | Raised (the result is inexact). | Not raised. | D-10.14 (C F.10: unspecified) (s10_0_f_0) |
 | Inexact for exact results (`powl` of exact powers, `cbrtl` of cubes, `log2l(2^k)`, `log10l(10^k)`, `exp10l(k)`, `exp2l(k)`) | Not raised (and no underflow for an exact subnormal result). | Raised, with underflow for the subnormal ones. | D-10.14 (s10_0_f_0) |
 | Inexact with invalid or division by zero (`powl` of a negative base to a non-integer power, `powl(±0, y<0)`, `log1pl(x<−1)`) | Not raised: the result is a NaN or an infinity, not a rounded value. | Raised as well. | D-10.14 (s10_0_f_0) |
@@ -355,7 +362,7 @@ checked against the oracle):
 
 | Case | Liella | glibc 2.39 | Decision (clause) |
 |---|---|---|---|
-| Results glibc does not round correctly (`erf`, `erfc`, `tgamma`, `lgamma`, and the Bessel functions above all, worst at large arguments) | Correctly rounded in every mode. | Up to several ulp off in round-to-nearest (`y0` 47 ulp on a random sample), more in the directed modes. | D-10.3, D-10.15 (s10_3_c_r6, s10_3_c_r7) |
+| Results glibc does not round correctly (`erf`, `erfc`, `tgamma`, `lgamma`, and the Bessel functions above all, worst at large arguments) | Correctly rounded in every mode. | Up to several ulp off in round-to-nearest (`y0` 47 ulp on a random sample), more in the directed modes. | D-10.3, D-10.15 (s10_3_c_r6, s10_3_c_r7) No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 | Inexact for exact `tgamma` results (`tgamma(2)` = 1, `tgamma(5)` = 24) | Not raised. | Raised. | D-10.14 (s10_0_f_0) |
 | Inexact where a tiny argument takes glibc's shortcut (`y1` and `yn` near 0, `jn(2, 2^-60)`) | Raised. | Not raised. | D-10.14 (s10_0_f_0) |
 | `errno` for some subnormal results of `erfc`, `jn`, `yn` (and their `float` forms) | Not set (flags only). | `ERANGE`. | D-10.14 (s10_0_f_0) |
@@ -367,12 +374,34 @@ the oracle):
 
 | Case | Liella | glibc 2.39 | Decision (clause) |
 |---|---|---|---|
-| Results glibc does not round correctly (4,673 of the 10,068 probed lines; every function, the directed modes above all) | Correctly rounded in every mode, including tiny arguments whose value lies just inside a short dyadic leading term (`jnl(2, 2^-190)` downward = 2^-383 − 1 ulp, `j1l`, `jnl(3, 3·2^-201)`). | Up to several ulp off; tiny arguments return the leading term in every mode. Measured below. | D-10.3, D-10.20 (s10_3_c_r6, s10_3_c_r7) |
+| Results glibc does not round correctly (4,673 of the 10,068 probed lines; every function, the directed modes above all) | Correctly rounded in every mode, including tiny arguments whose value lies just inside a short dyadic leading term (`jnl(2, 2^-190)` downward = 2^-383 − 1 ulp, `j1l`, `jnl(3, 3·2^-201)`). | Up to several ulp off; tiny arguments return the leading term in every mode. Measured below. | D-10.3, D-10.20 (s10_3_c_r6, s10_3_c_r7) No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 | `lgammal(2)` (also `gammal`, `lgammal_r`) rounding downward | +0, as in every mode (C F.10.5.3: `lgamma(2)` returns +0). | −0 (`lgamma(2)` and `lgammaf(2)` give +0). | D-10.20 (s10_3_c_r6; three-way: the spec takes Annex F's special cases and C agrees, glibc differs) |
 | Overflow and inexact at the poles of `lgammal` at very large negative integers (−LDBL_MAX) | Division by zero only (a pole, exact +∞). | Division by zero, overflow and inexact. | D-10.14 (s10_0_f_0) |
 | Inexact for exact `tgammal` results (`tgammal(5)` = 24) | Not raised. | Raised. | D-10.14 (s10_0_f_0) |
 | Inexact where a tiny argument takes glibc's shortcut (`y1l`, `ynl` near 0, `jnl(2, 2^-190)`) | Raised. | Not raised. | D-10.14 (s10_0_f_0) |
 | `errno` for subnormal results of `erfcl`, `jnl` and results of `ynl` rounded to the largest finite value | Not set (flags only). | `ERANGE`. | D-10.14 (s10_0_f_0) |
+
+Measured agreement of the reference with Liella's correctly rounded results (round to nearest, black-box probe
+`libm-slow-path-cause-agree`, handoff/libm-slow-path-cause/report.md section 2; `double` unless a name ends in `f`):
+
+* `exp`, `log`, `exp10`: differ on 0.01-0.1% of inputs, largest difference 1 ulp.
+* `sin`, `tan`, `atan`, `asin`, `atan2`: differ on 0.03-0.25% of inputs, largest difference 1 ulp.
+* `hypot`: differ on 0.1-0.6% of inputs, largest difference 1 ulp.
+* `expm1`, `log1p`: differ on 1.5-6.8% of inputs, largest difference 1 ulp.
+* `sinf`, `asinf`, `atanf`: differ on 0.8-7.3% of inputs, largest difference 1 ulp.
+* `erf`, `erff`: differ on 2-10% of inputs, largest difference 1 ulp.
+* `tanh`: differ on 5-22% of inputs, largest difference 2 ulp.
+* `sinh`: differ on 21-26% of inputs, largest difference 2 ulp.
+* `lgamma`, `lgammaf`: differ on 29-32% of inputs, largest difference 4 ulp.
+* `tgamma`: differ on 33-47% of inputs, largest difference 4 ulp.
+* `cbrt`: differ on 46-54% of inputs, largest difference 3 ulp.
+* `j0`: differ on 28-54% of inputs, largest difference 791 ulp (near a zero).
+
+The functions of `_Float128` (elementary and special; measurements in the accuracy notes below):
+
+| Case | Liella | glibc 2.39 | Decision (clause) |
+|---|---|---|---|
+| Results that differ from the correctly rounded value (`_Float128` elementary and special functions; `lgamma` 66.1% to `erfc` 99.1% identical in round to nearest on the special-function sample; up to 4.9 ulp in round to nearest (`y0`) and 34.4 ulp toward zero (`y1`)) | Correctly rounded in every mode (largest error 0.500 ulp in round to nearest, 1.000 in the directed modes). | Not always correctly rounded; measured as stated. | D-10.3, D-10.15, D-10.19 (s10_3_c_r6, s10_3_c_r7). No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 
 The complex functions of `float` and `double` (milestone 4a), recorded in
 `crates/math/tests/complex_products.rs` (special and boundary parts in every rounding
@@ -381,7 +410,7 @@ against the oracle):
 
 | Case | Liella | glibc 2.39 | Decision (clause) |
 |---|---|---|---|
-| Results glibc does not round correctly (every function; `cpow` above all, up to 2.7·10^5 ulp; the directed modes) | Each part correctly rounded in every mode; exact parts exact (`csqrt(3 + 4i)` = 2 + i, `clog10(6 + 8i)` = 1, `cpow(1 + i, 2)` = 2i, `cpow(−8, 1/3)`'s angle, `(1 + i)^(10^10)` real). | Up to 4.9 ulp off in round-to-nearest on the random sample (`cpow` far more), constants of the special values not rounded in the current direction (`cargf(−∞ + i∞)` upward two units above the correctly rounded 3π/4). | D-10.3, D-10.17 (s10_5_c_0) |
+| Results glibc does not round correctly (every function; `cpow` above all, up to 2.7·10^5 ulp; the directed modes) | Each part correctly rounded in every mode; exact parts exact (`csqrt(3 + 4i)` = 2 + i, `clog10(6 + 8i)` = 1, `cpow(1 + i, 2)` = 2i, `cpow(−8, 1/3)`'s angle, `(1 + i)^(10^10)` real). | Up to 4.9 ulp off in round-to-nearest on the random sample (`cpow` far more), constants of the special values not rounded in the current direction (`cargf(−∞ + i∞)` upward two units above the correctly rounded 3π/4). | D-10.3, D-10.17 (s10_5_c_0) No compatibility option (owner 2026-11-05): a switch back to the reference's less accurate results for a marginal speed gain is not offered. |
 | Inexact for exact parts (`cexp(0)`, `ccosh(0)`, `csin(0)`, infinite parts of `cexp(+∞ + iy)` and `csinh(±∞ + iy)`) | Not raised. | Raised. | D-10.14 (s10_0_f_0) |
 | Inexact for an inexact constant of a special value (`clog(−∞ + iy)` = ∞ + iπ, `cacos(0 + i∞)`, `catan(±∞ + iy)`) | Raised. | Not raised. | D-10.14 (s10_0_f_0) |
 | `errno` of a part that overflows to ±∞ or underflows to ±0, of a pole (`clog(0)`), of invalid raised by non-NaN operands (`cexp(0 + i∞)`) | `ERANGE`, `ERANGE`, `EDOM` (§10.0's rule, as for the real functions). | Not set, except incidentally (`ERANGE` for some underflows of `cexp` and `cpow`, the poles of `catan` and `catanh`). | D-10.18 (three-way: C 7.3.2 lets an implementation set `errno`; the spec's rule kept) (s10_0_f_0) |

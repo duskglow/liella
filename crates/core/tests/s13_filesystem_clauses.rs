@@ -319,6 +319,15 @@ mod p12 {
         u64::from_ne_bytes(b[at..at + 8].try_into().unwrap())
     }
 
+    static CWD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Held by a test that changes the working directory of this process (fts in chdir mode
+    /// changes it between `fts_open` and `fts_close`) and by a test that reads it: the working
+    /// directory is shared by every thread.
+    pub(crate) fn cwd_lock() -> std::sync::MutexGuard<'static, ()> {
+        CWD.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// The working directory as the kernel names it.
     pub(crate) fn kernel_cwd() -> Vec<u8> {
         let mut b = vec![0u8; 65536];
@@ -511,6 +520,11 @@ mod p12 {
         pub(crate) kind: u32,
         pub(crate) namelen: u16,
         pub(crate) pathlen: u16,
+        /// `fts_ino` and `fts_nlink` of the structure, then the same two read from `fts_statp`.
+        pub(crate) head_ino_nlink: (u64, u64),
+        pub(crate) stat_ino_nlink: (u64, u64),
+        /// `st_size` and `st_blocks` of `fts_statp`.
+        pub(crate) size_blocks: (i64, i64),
     }
 
     pub(crate) fn ent(p: *mut c_void) -> Option<Ent> {
@@ -521,7 +535,11 @@ mod p12 {
         let at = |a: u64| ctext(core::ptr::with_exposed_provenance(usize::try_from(a).unwrap()));
         let statp = word(&b, 104);
         let kind = if statp == 0 { 0 } else { u32::from_ne_bytes(cbytes(core::ptr::with_exposed_provenance(usize::try_from(statp).unwrap()), 144)[24..28].try_into().unwrap()) & S_IFMT };
+        let sb = if statp == 0 { vec![0u8; 144] } else { cbytes(core::ptr::with_exposed_provenance(usize::try_from(statp).unwrap()), 144) };
         Some(Ent {
+            head_ino_nlink: (word(&b, 72), word(&b, 88)),
+            stat_ino_nlink: (word(&sb, 8), word(&sb, 16)),
+            size_blocks: (i64::from_ne_bytes(sb[48..56].try_into().unwrap()), i64::from_ne_bytes(sb[64..72].try_into().unwrap())),
             addr: p.expose_provenance(),
             info: u16::from_ne_bytes(b[98..100].try_into().unwrap()),
             level: i16::from_ne_bytes(b[96..98].try_into().unwrap()),
@@ -1589,6 +1607,28 @@ fn s13_3_c_4() {
     let again = read_all(f, &[("/t/a/f1", 8, 1)]);
     assert_eq!(again.iter().filter(|(p, _)| p.ends_with("/f1")).count(), 2, "FTS_AGAIN returns the entry again");
     x::fts_close(f);
+    // fts_statp holds the whole status, every field where struct stat has it (spec 13.3 fts
+    // entries; PERF-NFTW-ENTRY-9 writes it from a reused probe): a 5-byte file's size and
+    // blocks are those stat reports, whatever the name's length (the status follows the name's padding).
+    for name in ["five", "sixsix", "seven77", "eightee8"] {
+        d.dir("sz");
+        std::fs::write(d.at(&format!("sz/{name}")), b"12345").unwrap();
+    }
+    let sargs = [d.c("sz")];
+    let sav = argv(&sargs);
+    let f = x::fts_open(sav.as_ptr(), 16 | 4, Some(by_name));
+    let mut files = 0;
+    while let Some(e) = ent(x::fts_read(f)) {
+        if e.info == 8 {
+            let m = std::fs::symlink_metadata(&e.path).unwrap();
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(e.size_blocks, (5, i64::try_from(m.blocks()).unwrap()), "fts_statp's st_size and st_blocks ({})", e.path);
+            assert_eq!(e.head_ino_nlink, (m.ino(), m.nlink()), "fts_ino and fts_nlink ({})", e.path);
+            files += 1;
+        }
+    }
+    assert_eq!(files, 4);
+    x::fts_close(f);
     let targs = [d.c("t")];
     let tav = argv(&targs);
     let f = x::fts_open(tav.as_ptr(), 16 | 4, Some(by_name));
@@ -1664,6 +1704,11 @@ fn s13_3_c_4() {
         }
         let mut got = Vec::new();
         while let Some(e) = ent(x::fts_read(f)) {
+            assert_eq!(e.head_ino_nlink, e.stat_ino_nlink, "fts_ino and fts_nlink are the status's ({})", e.path);
+            if e.name == "s_dir" && e.info == 1 {
+                assert_eq!(e.kind, 0o040_000, "the followed link's status is the directory's (direct {direct})");
+                assert_ne!(e.stat_ino_nlink.0, 0);
+            }
             got.push((e.path.clone(), e.info, instr_of(e.addr)));
         }
         assert!(got.iter().any(|(p, i, n)| p.ends_with("/t/s_dir") && *i == 1 && *n == 3), "listed FTS_FOLLOW (direct {direct}): the directory the link names");
@@ -1705,6 +1750,7 @@ fn s13_3_c_4() {
     assert_eq!(instr_of(r.addr()), 3, "fts_read used the instruction up: FTS_NOINSTR in the entry again");
     x::fts_close(f);
     // FTS_LOGICAL: t/a/s_up repeats t.
+    let _cwd = cwd_lock();
     let args = [d.c("t")];
     let av = argv(&args);
     let f = x::fts_open(av.as_ptr(), 2, Some(by_name));
@@ -1831,6 +1877,7 @@ fn s13_3_c_4_deep_paths() {
     let args = [CString::new(format!("{}/top/", d.path.display())).unwrap()];
     let av = argv(&args);
     for opts in [16 | 4, 16] {
+        let _cwd = cwd_lock();
         let nochdir = opts & 4 != 0;
         let f = x::fts_open(av.as_ptr(), opts, Some(by_name));
         assert!(!f.is_null());
@@ -1937,6 +1984,28 @@ fn s13_3_i_0() {
         assert_eq!(n, DEPTH + 2, "every entry");
         assert!(longest > 4096);
     }
+    // A directory with two deep chains below it, descriptor limit hit inside the first chain
+    // walked (whichever the file system lists first): the directory's own descriptor was closed
+    // meanwhile, and its next entry is still examined through a reopened one.
+    {
+        use liella::fs::walk::{self, Action, Event, Options};
+        let chain: String = "n/".repeat(12);
+        for c in ["c1", "c2"] {
+            std::fs::create_dir_all(d.at(&format!("two/x/{c}/{chain}"))).unwrap();
+        }
+        let k = Faulty::new(CSys);
+        assert!(k.fail("openat", Errno::EMFILE, 6, 3));
+        let mut n = 0usize;
+        let r = walk::walk(&k, d.at("two").as_os_str().as_encoded_bytes(), Options { physical: true, ..Options::default() }, &mut |ev| {
+            if let Event::Visit(_) = ev {
+                n += 1;
+            }
+            Ok(Action::Continue)
+        });
+        assert_eq!(r, Ok(0));
+        assert_eq!(k.injected(), 3, "the descriptor limit was hit");
+        assert_eq!(n, 1 + 1 + 2 * 13, "two, x, and each chain's 13 directories");
+    }
     in_child("s13_3_i_0", &d, |dir| {
         assert_eq!(x::chdir(cpath(dir).as_ptr()), 0);
         take();
@@ -1945,6 +2014,7 @@ fn s13_3_i_0() {
         assert_eq!(kernel_cwd(), dir.as_os_str().as_encoded_bytes());
     });
     for opts in [16, 16 | 4, 2, 2 | 4] {
+        let _cwd = cwd_lock();
         let args = [deep.clone()];
         let av = argv(&args);
         let f = x::fts_open(av.as_ptr(), opts, None);
@@ -2285,7 +2355,10 @@ fn s13_8_c_0() {
     for root in ["/", "//", "///", "/..", "/../..", "//."] {
         assert_eq!(rp(&CString::new(root).unwrap()), Ok(b"/".to_vec()), "{root}");
     }
-    assert_eq!(rp(&CString::new(".").unwrap()), Ok(kernel_cwd()), "relative to the working directory");
+    {
+        let _cwd = cwd_lock();
+        assert_eq!(rp(&CString::new(".").unwrap()), Ok(kernel_cwd()), "relative to the working directory");
+    }
     let r = rp(&d.c("rp/l_dots")).unwrap();
     let mut prefix = std::path::PathBuf::from("/");
     for c in std::path::Path::new(&String::from_utf8(r.clone()).unwrap()).components().skip(1) {

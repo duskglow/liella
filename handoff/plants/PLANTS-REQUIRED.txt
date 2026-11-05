@@ -1,0 +1,2 @@
+default-1800 | xtask/src/plants.rs | lit:const DEFAULT_TIMEOUT: u64 = 600; ==> const DEFAULT_TIMEOUT: u64 = 1800; | cargo test -p xtask plants:: | msg:default_timeout_is_600_seconds.*FAILED|panicked
+timeout-survived | xtask/src/plants.rs | lit:(_, TIMED_OUT) => (Verdict::Caught, ==> (_, TIMED_OUT) => (Verdict::Survived, | cargo test -p xtask plants:: | msg:a_plant_that_times_out_is_caught.*FAILED|panicked

@@ -654,6 +654,15 @@ impl Unit for u32 {
 pub trait Out<U: Unit> {
     /// Append units.
     fn put(&mut self, s: &[U]);
+
+    /// The next `n` units of the output, to be written in place of `n` units' worth of
+    /// [`Out::put`] calls, when the sink can lend them and all `n` fit; `None` (nothing taken)
+    /// otherwise, the caller then [`Out::put`]s its pieces. A renderer that knows its whole
+    /// length writes its pieces into the slice without a call per piece (SPRINTF-CHK-LS).
+    fn room(&mut self, n: usize) -> Option<&mut [U]> {
+        let _ = n;
+        None
+    }
 }
 
 /// A byte sink over a number's text for the formatters.

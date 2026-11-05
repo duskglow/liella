@@ -27,6 +27,7 @@
 #define obstack_chunk_free free
 
 extern int __fprintf_chk(FILE *, int, const char *, ...);
+extern int __sprintf_chk(char *, int, size_t, const char *, ...);
 
 static int failures;
 static const char *current;
@@ -44,6 +45,56 @@ static int eq(const char *got, const char *want)
     fprintf(stderr, "  got  [%s]\n  want [%s]\n", got, want);
     return 0;
 }
+
+/* What a format of two strings (ls -l's "%s %*s ") gives, built by hand: `head`, `s0`, `mid`,
+ * at most `prec` bytes of `s1` (all of it when `prec` < 0) in a field of `width` bytes
+ * (left-justified when `minus` or `width` < 0, its size then -`width`), `tail`. Widths and
+ * precisions count bytes, so a multibyte character counts as its bytes. */
+static void pair_want(char *w, const char *head, const char *s0, const char *mid, const char *s1, int width, int minus, int prec, const char *tail)
+{
+    size_t n1 = strlen(s1);
+    int left = minus || width < 0;
+    size_t fw = width < 0 ? (size_t)(-(long)width) : (size_t)width;
+    if (prec >= 0 && (size_t)prec < n1)
+        n1 = (size_t)prec;
+    size_t pad = fw > n1 ? fw - n1 : 0;
+    w[0] = 0;
+    strcat(w, head);
+    strcat(w, s0);
+    strcat(w, mid);
+    char *p = w + strlen(w);
+    if (left) {
+        memcpy(p, s1, n1);
+        p += n1;
+    }
+    memset(p, ' ', pad);
+    p += pad;
+    if (!left) {
+        memcpy(p, s1, n1);
+        p += n1;
+    }
+    strcpy(p, tail);
+}
+
+/* sprintf, __sprintf_chk (object of exactly the result and its terminator) and snprintf with
+ * room for the result give `want` and nothing past its terminator; snprintf with every smaller
+ * bound gives the cut prefix, terminated, and nothing past the bound. All return the length. */
+#define PAIR(want, ...) do { \
+    char b_[192]; \
+    int n_ = (int)strlen(want); \
+    memset(b_, 0x55, sizeof b_); \
+    CHECK(sprintf(b_, __VA_ARGS__) == n_ && eq(b_, want) && (unsigned char)b_[n_ + 1] == 0x55); \
+    memset(b_, 0x55, sizeof b_); \
+    CHECK(__sprintf_chk(b_, 1, (size_t)n_ + 1, __VA_ARGS__) == n_ && eq(b_, want) && (unsigned char)b_[n_ + 1] == 0x55); \
+    memset(b_, 0x55, sizeof b_); \
+    CHECK(snprintf(b_, sizeof b_ - 1, __VA_ARGS__) == n_ && eq(b_, want) && (unsigned char)b_[n_ + 1] == 0x55); \
+    for (int k_ = 0; k_ <= n_; k_++) { \
+        memset(b_, 0x55, sizeof b_); \
+        CHECK(snprintf(b_, (size_t)k_, __VA_ARGS__) == n_ \
+              && (k_ == 0 || (memcmp(b_, want, (size_t)k_ - 1) == 0 && b_[k_ - 1] == 0)) \
+              && (unsigned char)b_[k_] == 0x55); \
+    } \
+} while (0)
 
 /* snprintf gives `want`, and returns its length. */
 #define FMT(want, ...) do { char b_[2048]; int r_ = snprintf(b_, sizeof b_, __VA_ARGS__); CHECK(r_ == (int)strlen(want) && eq(b_, want)); } while (0)
@@ -146,6 +197,61 @@ int main(void)
     CHECK(sprintf(b, "<%d>", 12345) == 7 && memcmp(b, "<12345>\0", 8) == 0);
     memset(b, 0x55, 32);
     CHECK(snprintf(b, 4, "<%d>", 12345) == 7 && memcmp(b, "<12\0\x55", 5) == 0);
+    /* Two strings, the second in a field (ls -l's "%s %*s "), against the bytes built by hand:
+     * every width 0-40 either way (a negative `*` width left-justifies), text around and between
+     * or none, multibyte bytes, a string longer than its field, precision cuts. */
+    {
+        static const char *const s0s[] = { "-rw-r--r--", "", "d\xc3\xa9j\xc3\xa0" };
+        static const char *const s1s[] = { "", "1", "12", "\xc3\xa9", "\xe2\x82\xac" "12", "0123456789abcdef0123456789abcdefX" };
+        char want[192];
+        for (size_t i = 0; i < sizeof s0s / sizeof s0s[0]; i++) {
+            for (size_t j = 0; j < sizeof s1s / sizeof s1s[0]; j++) {
+                const char *s0 = s0s[i], *s1 = s1s[j];
+                for (int w = -40; w <= 40; w++) {
+                    pair_want(want, "", s0, " ", s1, w, 0, -1, " ");
+                    PAIR(want, "%s %*s ", s0, w, s1);
+                    pair_want(want, "", s0, " ", s1, w, 1, -1, " ");
+                    PAIR(want, "%s %-*s ", s0, w, s1);
+                    pair_want(want, "[", s0, "|", s1, w, 0, -1, "]");
+                    PAIR(want, "[%s|%*s]", s0, w, s1);
+                    pair_want(want, "", s0, "", s1, w, 0, -1, "");
+                    PAIR(want, "%s%*s", s0, w, s1);
+                    pair_want(want, "", s0, " ", s1, w, 0, 2, " ");
+                    PAIR(want, "%s %*.2s ", s0, w, s1);
+                    pair_want(want, "", s0, " ", s1, w, 1, 3, ".");
+                    PAIR(want, "%s %-*.3s.", s0, w, s1);
+                }
+                pair_want(want, "", s0, " ", s1, 5, 0, -1, " ");
+                PAIR(want, "%s %5s ", s0, s1);
+                pair_want(want, "", s0, " ", s1, 5, 1, -1, "|");
+                PAIR(want, "%s %-5s|", s0, s1);
+                pair_want(want, "<", s0, "", s1, 40, 0, -1, "");
+                PAIR(want, "<%s%40s", s0, s1);
+            }
+        }
+        /* __sprintf_chk with an object too small for the 14 bytes and the terminator: it aborts (in
+         * a child, into shared memory) and writes nothing past the object (C0.5). */
+        unsigned char *sh = mmap(NULL, 64, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        CHECK(sh != MAP_FAILED);
+        for (size_t slen = 1; sh != MAP_FAILED && slen <= 14; slen++) {
+            memset(sh, 0x55, 64);
+            fflush(NULL);
+            pid_t pid = fork();
+            if (pid == 0) {
+                expect_crash();
+                __sprintf_chk((char *)sh, 1, slen, "%s %*s ", "-rw-r--r--", 2, "1");
+                _exit(0);
+            }
+            int st = -1;
+            CHECK(pid > 0 && reap(pid, &st) && WIFSIGNALED(st) && WTERMSIG(st) == SIGABRT);
+            int clean = 1;
+            for (size_t k = slen; k < 64; k++)
+                clean &= sh[k] == 0x55;
+            CHECK(clean);
+        }
+        if (sh != MAP_FAILED)
+            munmap(sh, 64);
+    }
     end();
 
     begin("s12_6_c_r5");

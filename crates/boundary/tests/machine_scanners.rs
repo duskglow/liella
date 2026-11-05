@@ -1597,8 +1597,9 @@ fn memmove_matches_a_byte_loop_around_the_64_kib_edge_and_above() {
 
 #[test]
 fn memset_matches_a_byte_loop_around_the_rep_stosb_threshold_at_every_alignment() {
-    // Clause: s4_2_c_1 (memset). MEM-BULK: from the threshold the entry sets the first 64 bytes
-    // and runs `rep stosb` from the next 64-byte boundary; every start offset modulo 64, sizes
+    // Clause: s4_2_c_1 (memset). MEM-BULK: from the threshold the entry runs `rep stosb` from d
+    // when d is 64-byte aligned (MEMSET-4K-4), else sets the first 64 bytes and runs `rep stosb`
+    // from the next 64-byte boundary; every start offset modulo 64, sizes
     // around the threshold and 4 KiB, nothing outside the region written.
     // Both paths on every machine: ERMS forced off (the loops) and on (`rep stosb`, correct
     // without ERMS too; Zen 1 host's Zen 1 has none).
