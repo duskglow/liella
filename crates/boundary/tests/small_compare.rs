@@ -387,9 +387,11 @@ fn mid_and_long_classes_find_the_first_difference_at_every_size_to_2049_in_each_
         CSys.mprotect(&mut lo, PROT_NONE).unwrap();
         CSys.mprotect(&mut hi, PROT_NONE).unwrap();
         let (first, end) = (mid.addr(), mid.addr() + 2 * PAGE);
-        let mut a = vec![0u8; 2049 + WIN];
-        let mut b = vec![0u8; 2049 + WIN];
-        for n in 129..=2049 {
+        // Past 2048 (PARITY-MEMCMP-AVX2): the AVX2 build's long class behind the explicit NULL
+        // tests, sampled at chunk-boundary sizes up to the 8 KiB window.
+        let mut a = vec![0u8; 2 * PAGE + WIN];
+        let mut b = vec![0u8; 2 * PAGE + WIN];
+        for n in (129..=2049).chain([2050, 2175, 2176, 2177, 2208, 3000, 4095, 4096, 4097, 8159, 8191, 8192]) {
             let (ao, bo) = [(0, 0), (3, 9), (15, 1), (1, 0)][n % 4];
             build(&mut a, &mut b, ao, bo, n, None, false);
             check(&a, &b, ao, bo, n, "equal");

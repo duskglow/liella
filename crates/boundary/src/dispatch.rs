@@ -65,7 +65,8 @@ pub(crate) fn select(avx2: bool) {
 }
 
 // The AVX2 flag word of the ordered compare's SSE2 long class (machine/fold.S, MEMCMP-MID-3): 128
-// with the AVX2 builds, else 0; `.Lcmp_sse_long` sends an AVX2 build to the Rust large class.
+// with the AVX2 builds, else 0; `.Lcmp_sse_long` and `.Leq_huge` send an AVX2 build, after the
+// explicit NULL tests, to the assembly AVX2 long class (PARITY-MEMCMP-AVX2).
 use crate::ffi::liella_machine_cmp_mid as CMP_MID;
 // The compare entries' 65-2048 class word (machine/fold.S, MEMCMP-MID-4, PERF-MEMCMP-TAILS): one
 // `cmp`/`ja` against it sends larger sizes to the checked or SSE2 classes. Nonzero only with both
