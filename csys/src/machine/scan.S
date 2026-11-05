@@ -4329,11 +4329,12 @@ liella_machine_fill_erms:
 
 /* AVX2 copy and move (owner ruling 2026-10-05, D-4.14, PJ-7; overlap MEM-BULK). Rust calls it only
  * when the CPU has AVX2 and the OS saves the YMM state (`boundary::cpu`), for validated regions of
- * at least 64 bytes; they may overlap (memmove).
+ * at least 128 bytes (AVX2_COPY_MIN); they may overlap (memmove).
  *
- * The first and last 32 bytes are loaded before anything is stored and written as unaligned
- * vectors after everything else; between them, whole 32-byte vectors go to 32-byte-aligned
- * destination addresses (four per step, then one at a time; the last one may overlap the tail),
+ * The first and last 32 bytes, and the 128-byte block at the end the copy runs towards, are loaded
+ * before anything is stored and written as unaligned vectors after everything else; between
+ * them, whole 32-byte vectors go to 32-byte-aligned destination addresses (four per step, while
+ * more than 128 bytes are left; the rest lies inside the held block),
  * each step loading all its vectors before storing any. Overlapping regions fix the direction:
  * from the end when the destination starts inside the source (dst - src < n), from the start when
  * the source starts inside the destination (src - dst < n); every load then reads bytes no
@@ -4346,7 +4347,7 @@ liella_machine_fill_erms:
  * least 2 KiB keeps each such load further back than the store buffer reaches. No non-temporal
  * stores; `vzeroupper` before returning.
  *
- * void liella_machine_copy_avx2(void *dst, const void *src, size_t n), n >= 64; the same code as
+ * void liella_machine_copy_avx2(void *dst, const void *src, size_t n), n >= 128; the same code as
  * void *liella_machine_move_avx2(void *dst, const void *src, size_t n), which returns dst */
 	.section .text.liella_machine_copy_avx2,"ax",@progbits
 	.globl liella_machine_copy_avx2
@@ -4374,8 +4375,13 @@ liella_machine_move_avx2:
 	jb .Lcpy_back
 
 	/* Forward. One induction pointer: rdi walks the destination, the loads are at rdi + (src -
-	 * dst), so every store has a base-only address (Haswell's store-address port takes no index). */
+	 * dst), so every store has a base-only address (Haswell's store-address port takes no index).
+	 * The last 128 bytes are held too (n >= 128; nothing is stored yet): the 128-byte steps run
+	 * while more than 128 bytes are left, and what they leave lies inside the held block. */
 .Lcpy_fwd:
+	vmovdqu -128(%rsi,%rdx), %ymm6
+	vmovdqu -96(%rsi,%rdx), %ymm7
+	vmovdqu -64(%rsi,%rdx), %ymm8
 	movl %edi, %ecx
 	andl $31, %ecx
 	subq $32, %rcx
@@ -4386,7 +4392,7 @@ liella_machine_move_avx2:
 	leaq (%rdi,%rdx), %r9			/* the end */
 	leaq -128(%r9), %r10
 	cmpq %r10, %rdi
-	jae .Lcpy_f32
+	jae .Lcpy_f_ends
 	.p2align 4
 .Lcpy_f128:					/* while more than 128 bytes are left */
 	vmovdqu (%rsi,%rdi), %ymm0
@@ -4400,19 +4406,24 @@ liella_machine_move_avx2:
 	subq $-128, %rdi
 	cmpq %r10, %rdi
 	jb .Lcpy_f128
-.Lcpy_f32:
-	leaq -32(%r9), %r10
-.Lcpy_f32_next:					/* while more than 32 bytes are left */
-	cmpq %r10, %rdi
-	jae .Lcpy_ends
-	vmovdqu (%rsi,%rdi), %ymm0
-	vmovdqa %ymm0, (%rdi)
-	addq $32, %rdi
-	jmp .Lcpy_f32_next
+.Lcpy_f_ends:					/* the held first 32 and last 128 bytes, stored last */
+	vmovdqu %ymm6, -96(%r8)
+	vmovdqu %ymm7, -64(%r8)
+	vmovdqu %ymm8, -32(%r8)
+	vmovdqu %ymm5, (%r8)
+	vmovdqu %ymm4, (%r11)
+	movq %r11, %rax				/* dst */
+	vzeroupper
+	ret
 
 	/* Backward: r10 walks the destination down from its last 32-byte boundary, the loads at
-	 * r10 + (src - dst). */
+	 * r10 + (src - dst). The first 128 bytes are held too (n >= 128; nothing is stored yet): the
+	 * 128-byte steps run while more than 128 bytes are left below r10, and what they leave lies
+	 * inside the held block. */
 .Lcpy_back:
+	vmovdqu 32(%rsi), %ymm6
+	vmovdqu 64(%rsi), %ymm7
+	vmovdqu 96(%rsi), %ymm8
 	leaq (%rdi,%rdx), %r10
 	leal -1(%r10), %ecx
 	andl $31, %ecx
@@ -4421,7 +4432,7 @@ liella_machine_move_avx2:
 	subq %rdi, %rsi				/* src - dst */
 	leaq 128(%rdi), %r9
 	cmpq %r9, %r10
-	jbe .Lcpy_b32
+	jbe .Lcpy_b_ends
 	.p2align 4
 .Lcpy_b128:					/* while more than 128 bytes are left below r10 */
 	addq $-128, %r10
@@ -4435,18 +4446,10 @@ liella_machine_move_avx2:
 	vmovdqa %ymm3, (%r10)
 	cmpq %r9, %r10
 	ja .Lcpy_b128
-.Lcpy_b32:
-	leaq 32(%rdi), %r9
-.Lcpy_b32_next:					/* while more than 32 bytes are left; the head covers the first 32 */
-	cmpq %r9, %r10
-	jbe .Lcpy_ends
-	subq $32, %r10
-	vmovdqu (%rsi,%r10), %ymm0
-	vmovdqa %ymm0, (%r10)
-	jmp .Lcpy_b32_next
-
-	/* Both directions: the held first and last 32 bytes, stored last. */
-.Lcpy_ends:
+.Lcpy_b_ends:					/* the held first 128 and last 32 bytes, stored last */
+	vmovdqu %ymm6, 32(%r11)
+	vmovdqu %ymm7, 64(%r11)
+	vmovdqu %ymm8, 96(%r11)
 	vmovdqu %ymm5, (%r8)
 	vmovdqu %ymm4, (%r11)
 	movq %r11, %rax				/* dst */
