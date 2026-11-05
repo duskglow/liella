@@ -61,7 +61,7 @@ impl Listing {
                 return Err(Errno::EIO);
             }
             let tail = rec.get(D_NAME..n).ok_or(Errno::EIO)?;
-            let end = nul_index(tail).ok_or(Errno::EIO)?;
+            let end = tail.iter().position(|&b| b == 0).ok_or(Errno::EIO)?;
             let namez = tail.get(..end.saturating_add(1)).ok_or(Errno::EIO)?;
             let kind = rec.get(D_TYPE).copied().ok_or(Errno::EIO)?;
             let skip = !self.dots && (namez == b".\0" || namez == b"..\0");
@@ -75,27 +75,6 @@ impl Listing {
             return Ok(Some((kind, name)));
         }
     }
-}
-
-/// The index of the first zero byte of `b`, eight bytes at a time (names are short and the
-/// record is padded to eight bytes, so one or two words usually hold the terminator).
-#[inline]
-fn nul_index(b: &[u8]) -> Option<usize> {
-    const LOW: u64 = 0x0101_0101_0101_0101;
-    const HIGH: u64 = 0x8080_8080_8080_8080;
-    let mut chunks = b.chunks_exact(8);
-    let mut at = 0usize;
-    for c in chunks.by_ref() {
-        let Ok(a) = <[u8; 8]>::try_from(c) else { break };
-        let w = u64::from_le_bytes(a);
-        // Set in the lowest zero byte (higher bytes may be false positives, lower never are).
-        let z = w.wrapping_sub(LOW) & !w & HIGH;
-        if z != 0 {
-            return Some(at.saturating_add((z.trailing_zeros() / 8) as usize));
-        }
-        at = at.saturating_add(8);
-    }
-    chunks.remainder().iter().position(|&x| x == 0).map(|i| at.saturating_add(i))
 }
 
 /// Read the directory open at `fd` from its current position to the end (`.` and `..` only if
