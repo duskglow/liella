@@ -1544,6 +1544,63 @@ fn write_raw<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) 
     run(env, file, ext, |s, b, back| s.write(b, back, data)).unwrap_or_else(|e| Transfer { done: 0, error: Some(e) })
 }
 
+/// The output straddle path (FWRITE-STRADDLE): a fully buffered, byte-oriented descriptor stream
+/// that is writing, given a block smaller than its buffer that does not fit the room left, fills the
+/// buffer with the head, writes the whole buffer, and keeps the tail at the front: the same
+/// `write` calls, results, state and `FILE` words as [`State::write`]'s head copy, drain and tail
+/// copy, without [`run`]'s set-up ([`load`], [`store`]) and the engine's loop. Only the write
+/// pointer and end change on success (the read words, base words and indicators are what the last
+/// [`store`] of a writing stream published). An error (or a zero write) is the engine's: the
+/// head is counted, the rest dropped, the stream idle with its error indicator set. `None`: it does
+/// not apply, nothing changed.
+#[cold]
+#[inline(never)]
+fn write_straddle<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) -> Option<Transfer> {
+    let Kind::Fd(fd) = ext.kind else { return None };
+    let (len, s) = (ext.buf_len, &ext.state);
+    if ext.buf == 0 || s.role != Role::Writing || s.policy != Policy::Full || s.wend != len || data.len() >= len.saturating_sub(RESERVE) || low_int(get(file, word::MODE)) >= 0 {
+        return None;
+    }
+    let at = get(file, word::WRITE_PTR).wrapping_sub(ext.buf);
+    if at < RESERVE || at > len {
+        return None;
+    }
+    let head = len - at;
+    if head >= data.len() {
+        return None;
+    }
+    let buf = env.bytes(ext.buf, len);
+    let (Some(hd), Some(src)) = (buf.get_mut(at..len), data.get(..head)) else { return None };
+    liella::mem::copy(hd, src);
+    ext.pos_known = false;
+    let mut from = RESERVE;
+    while from < len {
+        let e = match buf.get(from..len).map(|r| env.sys().write(fd_of(fd), r)) {
+            Some(Ok(n)) if n > 0 => {
+                from += n;
+                continue;
+            }
+            Some(Ok(_)) => Errno::EIO,
+            Some(Err(e)) => e,
+            None => Errno::EINVAL,
+        };
+        load(file, ext);
+        let s = &mut ext.state;
+        (s.role, s.rpos, s.rend, s.wpos, s.wend, s.win_known, s.err) = (Role::Idle, RESERVE, RESERVE, RESERVE, RESERVE, false, true);
+        store(file, ext);
+        return Some(Transfer { done: head, error: Some(e) });
+    }
+    let tail = data.len() - head;
+    if let (Some(dst), Some(src)) = (buf.get_mut(RESERVE..RESERVE + tail), data.get(head..)) {
+        liella::mem::copy(dst, src);
+    }
+    let s = &mut ext.state;
+    (s.rpos, s.rend, s.wpos, s.wend, s.win_known) = (RESERVE, RESERVE, RESERVE + tail, len, false);
+    set(file, word::WRITE_PTR, ext.buf + RESERVE + tail);
+    set(file, word::WRITE_END, ext.buf + len);
+    Some(Transfer { done: data.len(), error: None })
+}
+
 /// The output direct path (FPUTS-NBF): an unbuffered stream, or a line-buffered one given a text
 /// shorter than its buffer that ends in a newline, already writing with nothing pending, on a
 /// descriptor, writes `data` with `write(2)` straight from the caller's bytes, without the
@@ -1565,6 +1622,10 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
     let line = match s.policy {
         Policy::Unbuffered => false,
         Policy::Line if data.last() == Some(&b'\n') => true,
+        // The size test is here, not in the callee: a block the buffer cannot hold (written through)
+        // pays no call for a path that cannot apply to it. A tail call: nothing is live after it.
+        // (a block of the buffer's size or more is written through; the callee makes the exact test)
+        Policy::Full if data.len() < ext.buf_len => return write_straddle(env, file, ext, data),
         _ => return None,
     };
     // Writing with nothing pending, and the published write pointer at the reserve (what
@@ -1603,19 +1664,27 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
 /// it empty), so the policy's flushes are unchanged. Whether it applied.
 #[inline(always)]
 fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> bool {
-    if ext.buf == 0 || ext.state.role != Role::Writing {
+    // The offset of the write pointer in the buffer and where the block would end: a pointer
+    // before the buffer wraps to a huge offset, so the end test covers "outside" on both sides
+    // (zero bytes outside the window are left to the engine, which accepts them). The mode word
+    // is read only once the copy is known to happen, so the write-through case does not pay for it.
+    // (A `FILE` image too short to hold the pointer has none: the engine's.)
+    let Some(wp) = file.get(word::WRITE_PTR) else { return false };
+    if ext.state.role != Role::Writing {
         return false;
     }
-    let (p, shut) = (get(file, word::WRITE_PTR), low_int(get(file, word::MODE)) >= 0);
-    let e = ext.buf.saturating_add(ext.state.wend.min(ext.buf_len));
-    if p < ext.buf || e.saturating_sub(p) < data.len() {
+    let p = wp.load(Relaxed);
+    let at = p.wrapping_sub(ext.buf);
+    let Some(stop) = at.checked_add(data.len()) else { return false };
+    // (No buffer yet is tested last: the block that does not fit says no first.)
+    if stop > ext.state.wend.min(ext.buf_len) || ext.buf == 0 {
         return false;
     }
-    let at = p - ext.buf;
-    match env.bytes(ext.buf, ext.buf_len).get_mut(at..at + data.len()) {
+    match env.bytes(ext.buf, ext.buf_len).get_mut(at..stop) {
         Some(dst) => {
+            let shut = low_int(get(file, word::MODE)) >= 0;
             liella::mem::copy(dst, data);
-            set(file, word::WRITE_PTR, p + data.len());
+            wp.store(p + data.len(), Relaxed);
             if shut {
                 set(file, word::WRITE_END, p + data.len());
             }
