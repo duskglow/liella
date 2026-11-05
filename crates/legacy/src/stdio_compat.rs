@@ -1624,7 +1624,8 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
         Policy::Line if data.last() == Some(&b'\n') => true,
         // The size test is here, not in the callee: a block the buffer cannot hold (written through)
         // pays no call for a path that cannot apply to it. A tail call: nothing is live after it.
-        Policy::Full if data.len() < ext.buf_len.saturating_sub(RESERVE) => return write_straddle(env, file, ext, data),
+        // (a block of the buffer's size or more is written through; the callee makes the exact test)
+        Policy::Full if data.len() < ext.buf_len => return write_straddle(env, file, ext, data),
         _ => return None,
     };
     // Writing with nothing pending, and the published write pointer at the reserve (what
@@ -1666,14 +1667,18 @@ fn window_put<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, data: &[u8]) -> 
     if ext.buf == 0 || ext.state.role != Role::Writing {
         return false;
     }
-    let (p, shut) = (get(file, word::WRITE_PTR), low_int(get(file, word::MODE)) >= 0);
-    let e = ext.buf.saturating_add(ext.state.wend.min(ext.buf_len));
-    if p < ext.buf || e.saturating_sub(p) < data.len() {
+    // The offset of the write pointer in the buffer and the window's end: the pointer before the
+    // buffer wraps to a huge offset, so one test covers "outside" on both sides. (Zero bytes
+    // outside the window are left to the engine, which accepts them.) The mode word is read only
+    // once the copy is known to happen, so the write-through case does not pay for it.
+    let p = get(file, word::WRITE_PTR);
+    let (at, end) = (p.wrapping_sub(ext.buf), ext.state.wend.min(ext.buf_len));
+    if at > end || end - at < data.len() {
         return false;
     }
-    let at = p - ext.buf;
     match env.bytes(ext.buf, ext.buf_len).get_mut(at..at + data.len()) {
         Some(dst) => {
+            let shut = low_int(get(file, word::MODE)) >= 0;
             liella::mem::copy(dst, data);
             set(file, word::WRITE_PTR, p + data.len());
             if shut {
