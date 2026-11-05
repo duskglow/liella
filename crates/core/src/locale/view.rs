@@ -596,3 +596,28 @@ impl LocaleView {
         }
     }
 }
+
+#[cfg(test)]
+mod answer_tests {
+    use super::{answer, Locale, LocaleView};
+
+    /// no spec clause (the `nl_langinfo` answers of §7, PARITY-SMALL-ENTRY): the answer table of a
+    /// built view equals the `cats` decode for every category number and index, past the end of
+    /// each table included; the const `"C"` view has no table.
+    #[test]
+    fn answer_table_matches_entries() {
+        let built = LocaleView::new(Locale::C, 0, &|_, _| None);
+        assert!(built.is_ok(), "the view of \"C\" is built");
+        let Ok(v) = built else { return };
+        let mut seen = 0usize;
+        for number in 0..15u32 {
+            for index in 0..1100usize {
+                let want = v.entry(number, index).map(answer);
+                assert_eq!(v.answer(number, index), want, "category {number} item {index}");
+                seen += usize::from(want.is_some());
+            }
+        }
+        assert!(seen > 100, "the C view answers its items ({seen})");
+        assert_eq!(LocaleView::c().answer(2, 0), None, "the const view has no table");
+    }
+}
