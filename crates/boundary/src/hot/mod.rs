@@ -30,22 +30,16 @@ mod invtrig;
 mod mem;
 mod trig;
 
-pub use bessel::*;
-pub use delim::*;
-pub use erf::*;
-pub use exp_log::*;
-pub use f32_bessel::*;
-pub use f32_erf::*;
-pub use f32_exp_log::*;
-pub use f32_gamma::*;
-pub use f32_hyperbolic::*;
-pub use f32_invtrig::*;
-pub use f32_trig::*;
-pub use gamma::*;
-pub use hyperbolic::*;
-pub use invtrig::*;
+pub(crate) use delim::*;
+pub(crate) use exp_log::*;
+pub(crate) use hyperbolic::*;
+pub(crate) use invtrig::*;
 pub use mem::*;
-pub use trig::*;
+
+// The families with no wrapper yet: declared here once so that a story adding the first one
+// edits only its family's file (the `allow` does nothing once a family has items).
+#[allow(unused_imports)]
+pub(crate) use {bessel::*, erf::*, f32_bessel::*, f32_erf::*, f32_exp_log::*, f32_gamma::*, f32_hyperbolic::*, f32_invtrig::*, f32_trig::*, gamma::*, trig::*};
 
 /// `sqrtsd` for the family kernels (`invtrig`, `hyperbolic`) (correctly rounded; they run in the default MXCSR), issued
 /// inline. The `core::arch` intrinsics are safe only inside a `#[target_feature]` function on
