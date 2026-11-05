@@ -98,7 +98,9 @@ fn erf_and_erfc_fma_build_matches_baseline_and_raises_inexact_alone() {
                 feclearexcept(FE_ALL);
                 let v = f(x);
                 let raised = fetestexcept(FE_ALL);
-                let want = FE_INEXACT | if v != 0.0 && v.abs() < f64::MIN_POSITIVE { FE_UNDERFLOW } else { 0 };
+                // Every sampled x is finite and nonzero, so every result is inexact; below 2^-1022
+                // (zero included: erfc x for x above about 27.2) it is tiny, so underflow too.
+                let want = FE_INEXACT | if v.abs() < f64::MIN_POSITIVE { FE_UNDERFLOW } else { 0 };
                 assert_eq!(raised, want, "{name}({x:e}) = {v:e} (FMA build {build}): flags {raised:#x}, expected {want:#x}");
             }
         }
