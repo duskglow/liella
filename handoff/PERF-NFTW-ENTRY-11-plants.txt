@@ -1,0 +1,5 @@
+# PERF-NFTW-ENTRY-11: plants on the status copied straight into the entry block.
+stat-raw-short | crates/boundary/src/dirtree.rs | lit:core::mem::size_of::<Stat>()) } ==> core::mem::size_of::<Stat>() - 8) } | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+stat-pad-dropped | crates/legacy/src/fts.rs | lit:PAD_ZEROS.get(..pad).unwrap_or(&[]), sb] ==> &[], sb] | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+stat-restat-skipped | crates/legacy/src/fts.rs | lit:x.stat_off, M::stat_raw(st)); ==> x.stat_off, &[]); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+stat-none-nonzero | crates/legacy/src/fts.rs | lit:[u8; STAT_SIZE] = [0; STAT_SIZE]; ==> [u8; STAT_SIZE] = [1; STAT_SIZE]; | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
