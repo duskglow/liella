@@ -871,9 +871,10 @@ const ERFCX: [[u64; 16]; 6] = [
     crate::coeffs::fast32_erfcx4::FAST32_ERFCX4,
     crate::coeffs::fast32_erfcx5::FAST32_ERFCX5,
 ];
-/// The pieces' lower ends (after the first, 1) and centres, as in the fit files.
+/// The pieces' lower ends (after the first, 1) and centres, as in the fit files (each fit's
+/// interval is the piece's half-width around its centre; a test checks the centres).
 const ERFCX_LO: [f64; 5] = [1.5, 2.25, 3.375, 5.0625, 7.593_75];
-const ERFCX_MID: [f64; 6] = [1.25, 1.875, 2.8125, 4.218_75, 6.328_125, 8.601_562_5];
+const ERFCX_MID: [f64; 6] = [1.25, 1.875, 2.8125, 4.218_75, 6.328_125, 8.421_875];
 /// erfc x < 2^-25 for x ≥ ERF_SAT (erfc 4 = 2^-25.95): erf x then lies in (1 - 2^-25, 1), between
 /// the midpoint below 1 and 1, an interval with no `float` rounding boundary inside. ERF_ONE =
 /// 1 - 2^-30 lies there too, so it rounds as erf x in every direction and is inexact like it
@@ -902,7 +903,7 @@ fn erf_small(v: f64) -> f64 {
 /// bits), so z = RN(-a²·INV_L) has |z| < 85.6·184.7 < 2^13.95: INV_L's rounding and z's give
 /// 2^-39.05 + 2^-40 in z, 2^-45.99 in e^(-a²) after ln 2/128; with [`exp_core`]'s polynomial
 /// (2^-49.5), evaluation (2^-52) and table and scaling (2·2^-53): 2^-45.83. t = a - c_i is
-/// exact (a multiple of 2^-23 below 1). Q_i: the fit ≤ 0.9u, Horner (|t| ≤ 0.63, the terms
+/// exact (a multiple of 2^-23 below 2). Q_i: the fit ≤ 0.9u, Horner (|t| ≤ 1.27, the terms
 /// falling by over 2 per step) ≤ 2u, the product u. e^(-a²) ≥ 2^-123.5 and Q > 0.06: all normal.
 #[inline(always)]
 fn erfc_big(a: f64) -> f64 {
@@ -1530,6 +1531,11 @@ mod tests {
     #[test]
     fn erf_cores_are_within_their_bounds() {
         assert!(ERF_DELTA as f64 >= 1.5 * ERF_BOUND + 1.0 && ERFC_DELTA as f64 >= 1.5 * ERFC_BOUND + 1.0);
+        // Each erfcx piece [lo, hi) is centred on its ERFCX_MID (the fits' shift).
+        let ends = [1.0, ERFCX_LO[0], ERFCX_LO[1], ERFCX_LO[2], ERFCX_LO[3], ERFCX_LO[4], ERFC_MAX];
+        for i in 0..6 {
+            assert_eq!(ERFCX_MID[i], (ends[i] + ends[i + 1]) / 2.0, "erfcx piece {i} centre");
+        }
         let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
         // Every 40009th `float` in [2^-30, 9.25), both signs (ERF_SAT's saturation is the agreement tests').
         for b in (0x3080_0000u32..0x4114_0000).step_by(40_009).flat_map(|b| [b, b | 1 << 31]) {

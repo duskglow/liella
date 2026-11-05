@@ -3,7 +3,7 @@
 # midpoint; degree 15 from trial fits (degree 12 lost 2^3.5 per piece, 2^-45 by the fourth).
 name = fast32_erfcx3
 target = erfcx
-interval = -27/64, 27/64
+interval = -27/32, 27/32
 shift = 135/32
 powers = 0..15
 error = relative
