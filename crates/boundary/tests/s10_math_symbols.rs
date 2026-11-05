@@ -251,9 +251,71 @@ fn double_fast_entry_mismatches(args: &[(f64, f64)]) -> (usize, Vec<String>) {
     (checked, bad)
 }
 
+/// The `float` hyperbolic exports as `(name, export, reference)` (LIBM-F32-HYPERBOLIC-3): the
+/// export through its in-place fast entry, the reference `liella-math`'s accurate entry.
+#[allow(clippy::type_complexity)]
+fn float_hyperbolic_entries() -> [(&'static str, fn(f32) -> f32, fn(f32, liella_math::Rounding) -> f32); 6] {
+    use liella_math::real::Real;
+    [
+        ("sinhf", |x| m::sinhf(x), |x, r| Real::sinh(x, r).0),
+        ("coshf", |x| m::coshf(x), |x, r| Real::cosh(x, r).0),
+        ("tanhf", |x| m::tanhf(x), |x, r| Real::tanh(x, r).0),
+        ("asinhf", |x| m::asinhf(x), |x, r| Real::asinh(x, r).0),
+        ("acoshf", |x| m::acoshf(x), |x, r| Real::acosh(x, r).0),
+        ("atanhf", |x| m::atanhf(x), |x, r| Real::atanh(x, r).0),
+    ]
+}
+
+// ARCH(x86_64): the in-place fast entry of the float hyperbolic exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
+fn math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // Round to nearest with the default control word takes the in-place fast entry; DAZ set
+    // (normal arguments: no effect on the value) forces the full envelope. Bits, flags and errno
+    // must agree. The directed modes must match the accurate path of liella-math. Arguments: every
+    // 2^16th `float` bit pattern of each sign (the fast domains and every refused range: zeros,
+    // tiny, the 2^-26 cut, the overflow edges, |x| ≥ 1 for atanh, x ≤ 1 for acosh, infinities,
+    // NaNs) and the edges of each fast domain.
+    let edges: [f32; 16] = [
+        1.490_116_1e-8, 1.490_116_2e-8, 0.75, 1.0, 1.000_000_1, 0.999_999_94, 9.499_999, 9.5, 88.999_99, 89.0, 89.499_99,
+        89.5, 89.415_985, 1e30, f32::MAX, 2.5,
+    ];
+    let mut args: Vec<f32> = edges.iter().flat_map(|&x| [x, -x]).collect();
+    args.extend((0u32..1 << 16).map(|i| f32::from_bits(i << 16 | (i & 0xffff))));
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for (name, f, reference) in float_hyperbolic_entries() {
+        for &x in &args {
+            if x != 0.0 && x.abs() < f32::MIN_POSITIVE {
+                continue; // DAZ reads a subnormal argument as zero: another function value
+            }
+            let mut fast = (0, 0);
+            let e_fast = observe(|| fast = around(0x1f80, || u64::from(f(x).to_bits()))).0;
+            let mut full = (0, 0);
+            let e_full = observe(|| full = around(0x1f80 | 0x40, || u64::from(f(x).to_bits()))).0;
+            if (fast.0, fast.1 | 0x40, e_fast) != (full.0, full.1, e_full) {
+                bad.push(format!("{name}({x:e}) nearest: {fast:x?} {e_fast} vs {full:x?} {e_full}"));
+            }
+            for (rc, mode) in [(1u32, liella_math::Rounding::Down), (2, liella_math::Rounding::Up), (3, liella_math::Rounding::Zero)] {
+                let (bits, _) = around(0x1f80 | (rc << 13), || u64::from(f(x).to_bits()));
+                let want = u64::from(reference(x, mode).to_bits());
+                if bits != want && !(f32::from_bits(u32::try_from(bits).unwrap_or(0)).is_nan() && reference(x, mode).is_nan()) {
+                    bad.push(format!("{name}({x:e}) rc {rc}: {bits:x} vs {want:x}"));
+                }
+            }
+            checked += 1;
+        }
+    }
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 380_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 // ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
 #[test]
-#[ignore = "long sweep: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_double_fast_entry_sweep"]
+#[ignore = "long sweep:cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_double_fast_entry_sweep"]
 #[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
 fn math_double_fast_entry_sweep() {
     // Clauses: s10_0_f_0. The fast-domain agreement sweep (MATH-M6-F64-FAST-ENTRY-2): LIELLA_FE_SWEEP_CHUNKS

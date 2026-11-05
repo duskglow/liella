@@ -54,6 +54,18 @@ pub enum Fast {
     Acos,
     /// `atanf` (LIBM-F32-DOUBLE-KERNELS).
     Atan,
+    /// `sinhf` (LIBM-F32-HYPERBOLIC).
+    Sinh,
+    /// `coshf` (LIBM-F32-HYPERBOLIC).
+    Cosh,
+    /// `tanhf` (LIBM-F32-HYPERBOLIC).
+    Tanh,
+    /// `asinhf` (LIBM-F32-HYPERBOLIC).
+    Asinh,
+    /// `acoshf` (LIBM-F32-HYPERBOLIC).
+    Acosh,
+    /// `atanhf` (LIBM-F32-HYPERBOLIC).
+    Atanh,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -300,6 +312,12 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Asin => (asin_core(x)?, ASIN_DELTA, "asinf"),
         Fast::Acos => (acos_core(x)?, ASIN_DELTA, "acosf"),
         Fast::Atan => (atan_core(x)?, ATAN_DELTA, "atanf"),
+        Fast::Sinh => (sinh_core(x)?, SINH_DELTA, "sinhf"),
+        Fast::Cosh => (cosh_core(x)?, COSH_DELTA, "coshf"),
+        Fast::Tanh => (tanh_core(x)?, TANH_DELTA, "tanhf"),
+        Fast::Asinh => (asinh_core(x)?, ASINH_DELTA, "asinhf"),
+        Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA, "acoshf"),
+        Fast::Atanh => (atanh_core(x)?, ATANH_DELTA, "atanhf"),
     };
     finish(x, y, delta, mode, name)
 }
@@ -706,7 +724,8 @@ const ATAN32: [f64; 33] = [
 const PIO2: f64 = f64::from_bits(0x3ff921fb54442d18);
 const PI: f64 = f64::from_bits(0x400921fb54442d18);
 
-/// √x for a normal `double` x in (2^-60, 1], relative error ≤ 2u, in safe code (the crate
+/// √x for a normal `double` x in [2^-60, 2^260] (the estimate's error depends only on the
+/// exponent's parity and every intermediate stays normal), relative error ≤ 2u, in safe code (the crate
 /// forbids `unsafe`, and the `sqrtsd` intrinsic needs it here). An estimate y of 1/√x from the
 /// halved exponent (relative error ≤ 3.4%), three Newton steps y·(1.5 - (x/2)·y²) (error
 /// e → 1.5e² + e³/2: 3.4% → 1.8·10^-3 → 4.9·10^-6 → 3.6·10^-11, each step's roundings a few u
@@ -837,6 +856,161 @@ pub fn atan2(y: f32, x: f32, mode: Rounding) -> (f32, Status) {
     }
 }
 
+// The hyperbolic family (LIBM-F32-HYPERBOLIC). No new polynomial or table: the kernels reuse
+// expm1_core, exp_core, sqrt64 and the log tables, so there is no Remez fit to record. u = 2^-53.
+#[cfg(test)]
+const SINH_BOUND: f64 = 12.2;
+#[cfg(test)]
+const COSH_BOUND: f64 = 233.0;
+#[cfg(test)]
+const TANH_BOUND: f64 = 11.2;
+#[cfg(test)]
+const ASINH_BOUND: f64 = 11.5;
+#[cfg(test)]
+const ACOSH_BOUND: f64 = 12.3;
+#[cfg(test)]
+const ATANH_BOUND: f64 = 9.3;
+#[cfg(test)]
+const LOG1P64_BOUND: f64 = 8.2;
+/// Margins (≥ 1.5·bound + 1 ulp, checked by a test).
+const SINH_DELTA: u64 = 20;
+const COSH_DELTA: u64 = 512;
+const TANH_DELTA: u64 = 18;
+const ASINH_DELTA: u64 = 20;
+const ACOSH_DELTA: u64 = 20;
+const ATANH_DELTA: u64 = 16;
+/// The small-|x| cut of the family: below 2^-26 the result is x or 1 plus far less than a
+/// `float` ulp, which the rounding test refuses in the directed modes; the accurate path takes them.
+const HYP_MIN: f64 = 1.490_116_119_384_765_6e-8;
+/// tanh a for a ≥ TANH_SAT lies in (1 - 2^-25, 1): see [`tanh_core`].
+const TANH_SAT: f64 = 9.5;
+
+/// ln(1 + w) for a `double` w in [2^-26, 2^130], relative error ≤ 8.2u.
+///
+/// z = RN(1 + w) ≥ 1, z = 2^e·m, i, L = LOG_INV[i] and LOG_C as in [`log_core`]; ln(1 + w) =
+/// e·ln 2 + LOG_C[i] + ln(1 + r) with r = L·(1 + w)/2^e - 1, and the series, e·LN2_HI (exact:
+/// e ≤ 130, 44 + 8 bits), e·LN2_LO and the sums as in [`log1p_core`] (3.2u in all) but the
+/// series one degree shorter than log1p_core's: ln(1 + r) = r + r²(-1/2 + r·D3 + ... + r^5·D7).
+/// Its remainder, r^8/8 - r^9/9 + ..., is below |r|^8/8 for |r| < 2^-7 (|m·L - 1| < 2^-7). r:
+/// * e = 0 (z in [1, 1.5), w < 0.5): r = L·w + (L - 1) without rounding z's error in: w = wh + wl
+///   with wh its top 28 bits, so wh·L (52 bits) and L - 1 (24 bits, L in [2/3, 1]) are exact. For
+///   i = 0, L = 1 and r = wh + wl = w exactly, r in [2^-26, 2^-7), y ≥ r(1 - r/2): the remainder
+///   is ≤ 1.004·2^-49/8 = 2.01u relative (case A: 3.2u + 2.01u ≤ 5.3u). For i ≥ 1, w ≥ 2^-8,
+///   so wh·L is on the 2^-59 grid, L - 1 on 2^-24, their sum below 2^-7: exact; wl·L rounds by
+///   ≤ u·2^-28 and the last sum by u·|r|, |r| < 0.0040 ≤ 1.03|y| (|y| ≥ ln(1 + 2^-8)): 4.3u, and
+///   the remainder 0.004^8/8 < 0.02u·|y| (case B: 4.4u).
+/// * e ≥ 1 (|y| ≥ ln 1.5 > 0.405): z's rounding moves ln z by ≤ u absolute, ≤ 2.47u relative;
+///   RN(m·L) by ≤ u (then the subtraction of 1 is exact, Sterbenz), ln(1 + r) by ≤ 1.004u, 2.48u
+///   relative; the remainder ≤ 2^-56/8 absolute, 0.04u relative: 3.2u + 2.47u + 2.48u + 0.04u
+///   ≤ 8.2u (case C).
+///
+/// The overall bound is case C's, so the r^8 term (D8) of log1p_core's series buys nothing here.
+///
+/// A caller's w with relative error η moves the result by η·w/((1 + w)·ln(1 + w)) ≤ η.
+/// Every operand is a normal `double` (w ≥ 2^-26): only inexact is raised.
+#[inline(always)]
+fn log1p64(w: f64) -> f64 {
+    let z = 1.0 + w;
+    let zb = z.to_bits();
+    let e = (zb.wrapping_sub(0x3fe8_0000_0000_0000) as i64 >> 52) as i32;
+    let m = f64::from_bits(zb.wrapping_sub((e as i64 as u64) << 52));
+    let i = ((m.to_bits() >> 45) & 127) as usize;
+    let l = LOG_INV[i];
+    let r = if e == 0 {
+        let wh = f64::from_bits(w.to_bits() & !0x1ff_ffff);
+        (wh * l + (l - 1.0)) + (w - wh) * l
+    } else {
+        m * l - 1.0
+    };
+    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * (D6 + r * D7)))));
+    let ef = f64::from(e);
+    (ef * LN2_HI + LOG_C[i]) + (r + (s + ef * LN2_LO))
+}
+
+/// |x| as a `double` when HYP_MIN ≤ |x| < `hi` (NaN fails both tests).
+#[inline(always)]
+fn hyp_arg(x: f32, hi: f64) -> Option<f64> {
+    let a = crate::dd::abs(f64::from(x));
+    if a >= HYP_MIN && a < hi { Some(a) } else { None }
+}
+
+/// sinh x, ε ≤ 12.2u, for 2^-26 ≤ |x| < 89: y = (E + E/(E + 1))/2, E = e^a - 1 by
+/// [`expm1_core`] (9.1u). E/(E + 1) moves by 9.1u/(1 + E) ≤ 9.1u for E's error, plus the sum
+/// E + 1 and the quotient (u each): 11.1u; the sum of the two positive terms adds u (12.1u, with
+/// the second-order terms 12.2u); halving is exact (y ≥ 2^-27). The overflow range and the cut's
+/// small operands are the accurate path's.
+#[inline(always)]
+fn sinh_core(x: f32) -> Option<f64> {
+    let a = hyp_arg(x, 89.0)?;
+    let e = expm1_core(a as f32)?; // a is a `float` (exact)
+    let y = (e + e / (e + 1.0)) * 0.5;
+    Some(if x < 0.0 { -y } else { y })
+}
+
+/// cosh x, ε ≤ 2^-45.14 (< 233 ulp), for 2^-26 ≤ |x| < 89.5: y = (E + 1/E)/2, E = e^a by
+/// [`exp_core`] (2^-45.16; its proof holds up to 104), 1/E adds u, the positive sum u, halving
+/// exact. Results above FLT_MAX are refused by [`round`]: the accurate path's overflow.
+#[inline(always)]
+fn cosh_core(x: f32) -> Option<f64> {
+    let a = hyp_arg(x, 89.5)? as f32;
+    let e = exp_core(a, -1.0, 89.5, INV_L)?;
+    Some((e + 1.0 / e) * 0.5)
+}
+
+/// tanh x, ε ≤ 11.2u, for 2^-26 ≤ |x| < 9.5: y = E/(E + 2), E = e^(2a) - 1 by [`expm1_core`]
+/// (2a exact, < 19; 9.1u). The quotient moves by 9.1u·2/(E + 2) ≤ 9.1u for E's error, plus the
+/// sum and the division (u each): 11.1u, 11.2u with second-order terms.
+/// For finite |x| ≥ 9.5: 1 - tanh a = 2/(e^(2a) + 1) < 2^-26.4, so tanh a and y = 1 - 2^-30 lie
+/// strictly inside (1 - 2^-25, 1), between two adjacent rounding boundaries (1 - 2^-25 the
+/// midpoint, 1 a `float`): they round alike in every direction, inexact (the rounding test
+/// accepts y, whose low 28 bits are far from 0 and 2^28). ∞ and NaN go to the accurate path.
+#[inline(always)]
+fn tanh_core(x: f32) -> Option<f64> {
+    let a = hyp_arg(x, f64::INFINITY)?;
+    let y = if a >= TANH_SAT {
+        1.0 - 9.313_225_746_154_785e-10
+    } else {
+        let e = expm1_core((a + a) as f32)?;
+        e / (e + 2.0)
+    };
+    Some(if x < 0.0 { -y } else { y })
+}
+
+/// asinh x, ε ≤ 11.5u, for finite |x| ≥ 2^-26: y = ln(1 + w), w = a + a²/(1 + √(1 + a²)).
+/// a² is exact (24-bit a, ≥ 2^-52), 1 + a² rounds (u), [`sqrt64`] adds 2u and halves the rest
+/// (2.5u), 1 + √ (3.5u: the sum's u and √'s share ≤ 1), the quotient q (4.5u); q < a so a + q
+/// carries ≤ 4.5u/2 + u = 3.25u; [`log1p64`] passes that on (≤ 3.25u) and adds 8.2u.
+#[inline(always)]
+fn asinh_core(x: f32) -> Option<f64> {
+    let a = hyp_arg(x, f64::INFINITY)?;
+    let a2 = a * a;
+    let y = log1p64(a + a2 / (1.0 + sqrt64(1.0 + a2)));
+    Some(if x < 0.0 { -y } else { y })
+}
+
+/// acosh x, ε ≤ 12.3u, for finite x > 1: y = ln(1 + w), w = t + √(t·(t + 2)), t = x - 1.
+/// t is exact for x < 2^53 and within u above; t + 2 and the product round (u each), [`sqrt64`]
+/// halves that and adds 2u (3u), the positive sum adds u: w carries ≤ 4u for x < 2^53 (above, the
+/// error passed on is ≤ 5u/ln 2^53 < 0.14u); [`log1p64`] adds 8.2u: 12.2u, 12.3u with slack.
+#[inline(always)]
+fn acosh_core(x: f32) -> Option<f64> {
+    let x = f64::from(x);
+    if !(x > 1.0 && x < f64::INFINITY) {
+        return None;
+    }
+    let t = x - 1.0;
+    Some(log1p64(t + sqrt64(t * (t + 2.0))))
+}
+
+/// atanh x, ε ≤ 9.3u, for 2^-26 ≤ |x| < 1: y = ln(1 + w)/2, w = 2a/(1 - a); 1 - a is exact (a on
+/// the 2^-49 grid) and the quotient rounds (u); [`log1p64`] adds 8.2u; halving is exact.
+#[inline(always)]
+fn atanh_core(x: f32) -> Option<f64> {
+    let a = hyp_arg(x, 1.0)?;
+    let y = 0.5 * log1p64((a + a) / (1.0 - a));
+    Some(if x < 0.0 { -y } else { y })
+}
+
 /// The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
 ///
 /// The `float` results of f and y in a direction can differ only if a rounding boundary (a
@@ -884,9 +1058,26 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // The hyperbolic family (LIBM-F32-HYPERBOLIC-3): the cores of [`eval`], unchanged. Where
+        // they answer, |x| ≥ 2^-26 (acosh: x > 1), so x is a normal `float` and its conversion
+        // raises nothing; a subnormal x raises denormal-operand in that conversion and is then
+        // refused (the entry's cold path drops the bit, FAST_ATTEMPT_HW). Every intermediate is a
+        // normal `double` (each core's proof: the operands of expm1_core, exp_core, sqrt64 and
+        // log1p64 lie inside their stated ranges) and each divisor is a normal `double` ≥ 2^-24
+        // (E + 1, E, E + 2, 1 + √, 1 - a): no division by zero, no overflow, no underflow. So
+        // the arithmetic raises inexact and nothing else, and the rounding test makes the
+        // result inexact.
+        Fast::Sinh => (sinh_core(x)?, SINH_DELTA),
+        Fast::Cosh => (cosh_core(x)?, COSH_DELTA),
+        Fast::Tanh => (tanh_core(x)?, TANH_DELTA),
+        Fast::Asinh => (asinh_core(x)?, ASINH_DELTA),
+        Fast::Acosh => (acosh_core(x)?, ACOSH_DELTA),
+        Fast::Atanh => (atanh_core(x)?, ATANH_DELTA),
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => return None,
+        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => {
+            return None;
+        }
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -906,6 +1097,12 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sinh_nearest, Fast::Sinh);
+nearest_fn!(cosh_nearest, Fast::Cosh);
+nearest_fn!(tanh_nearest, Fast::Tanh);
+nearest_fn!(asinh_nearest, Fast::Asinh);
+nearest_fn!(acosh_nearest, Fast::Acosh);
+nearest_fn!(atanh_nearest, Fast::Atanh);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
@@ -936,14 +1133,20 @@ fast_fn!(acos, Fast::Acos, trig);
 fast_fn!(atan, Fast::Atan, trig);
 fast_fn!(expm1, Fast::Expm1);
 fast_fn!(cbrt, Fast::Cbrt, pow);
+fast_fn!(sinh, Fast::Sinh, hyper);
+fast_fn!(cosh, Fast::Cosh, hyper);
+fast_fn!(tanh, Fast::Tanh, hyper);
+fast_fn!(asinh, Fast::Asinh, hyper);
+fast_fn!(acosh, Fast::Acosh, hyper);
+fast_fn!(atanh, Fast::Atanh, hyper);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::exp_log as acc;
 
-    const ALL: [Fast; 15] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan];
-    const NAMES: [&str; 15] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf"];
+    const ALL: [Fast; 21] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::Sinh, Fast::Cosh, Fast::Tanh, Fast::Asinh, Fast::Acosh, Fast::Atanh];
+    const NAMES: [&str; 21] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "sinhf", "coshf", "tanhf", "asinhf", "acoshf", "atanhf"];
     const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
@@ -964,6 +1167,12 @@ mod tests {
             Fast::Asin => crate::trig::asin(x, m),
             Fast::Acos => crate::trig::acos(x, m),
             Fast::Atan => crate::trig::atan(x, m),
+            Fast::Sinh => crate::hyper::sinh(x, m),
+            Fast::Cosh => crate::hyper::cosh(x, m),
+            Fast::Tanh => crate::hyper::tanh(x, m),
+            Fast::Asinh => crate::hyper::asinh(x, m),
+            Fast::Acosh => crate::hyper::acosh(x, m),
+            Fast::Atanh => crate::hyper::atanh(x, m),
         }
     }
 
@@ -1104,7 +1313,10 @@ mod tests {
                 11 => logs.clone().flat_map(|x| [x, -x]).collect(),
                 // asinf, acosf over [-1, 1] and atanf over [-10, 10] (the bench rows' ranges).
                 12 | 13 => (0..1u32 << 17).map(|i| -1.0 + 2.0 * (i as f32) / 131_072.0).collect(),
-                14 => trigs.clone().map(|x| x / 10.0).collect(),
+                14..=18 => trigs.clone().map(|x| x / 10.0).collect(),
+                // acoshf over [1, 100], atanhf over [-0.99, 0.99] (the bench rows' ranges).
+                19 => (0..1u32 << 17).map(|i| 1.0 + 99.0 * (i as f32) / 131_072.0).collect(),
+                20 => (0..1u32 << 17).map(|i| -0.99 + 1.98 * (i as f32) / 131_072.0).collect(),
                 _ => logs.clone().collect(),
             };
             for x in xs {
@@ -1386,6 +1598,143 @@ mod tests {
             hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
         });
         std::println!("atan2f fast path taken {taken} of {} calls", (1u64 << 24) * 64 * 4);
+    }
+
+    /// Each hyperbolic margin exceeds its proved bound by half and one ulp. (No spec clause:
+    /// LIBM-F32-HYPERBOLIC.)
+    #[test]
+    fn hyperbolic_margins() {
+        for (b, d, n) in [(SINH_BOUND, SINH_DELTA, "sinh"), (COSH_BOUND, COSH_DELTA, "cosh"), (TANH_BOUND, TANH_DELTA, "tanh"), (ASINH_BOUND, ASINH_DELTA, "asinh"), (ACOSH_BOUND, ACOSH_DELTA, "acosh"), (ATANH_BOUND, ATANH_DELTA, "atanh")] {
+            assert!(d as f64 >= 1.5 * b + 1.0, "{n}: margin {d} ulp for a bound of {b} ulp");
+        }
+        // The log1p64-based bounds: the argument's error (passed on at most 1:1) plus log1p64's.
+        for (w, b, n) in [(3.25, ASINH_BOUND, "asinh"), (4.0, ACOSH_BOUND, "acosh"), (1.0, ATANH_BOUND, "atanh")] {
+            assert!(LOG1P64_BOUND + w <= b, "{n}: {w} + log1p64's bound over {b}");
+        }
+    }
+
+    /// The hyperbolic cores and log1p64 are within their proved bounds, against double-double
+    /// references built from the accurate path's `exp_dd`, `expm1_small`, `log1p_dd` and `dd::sqrt`
+    /// (errors far below 2^-90 relative): every 1021st `float` from 2^-26 up, both signs, plus a
+    /// grid over the bench rows' ranges. tanh's saturated range is checked by the agreement tests.
+    /// The agreement tests cannot see a loss of a few ulp of the `double`. (No spec clause.)
+    #[test]
+    fn hyperbolic_cores_are_within_their_bounds() {
+        use crate::dd::Dd;
+        use crate::exp_log::{exp_dd, expm1_small, log1p_dd};
+        let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
+        let check = |y: Option<f64>, f: Dd, b: f64, what: &str, x: f64| {
+            assert!(y.is_some(), "{what}({x:e}) refused");
+            let y = y.unwrap_or(f64::NAN);
+            let err = Dd::from(y).sub(f).to_f64();
+            assert!(err.abs() <= b * ulp(y), "{what}({x:e}): {} ulp", err / ulp(y));
+        };
+        let expm1 = |a: f64| if a <= 0.34 { expm1_small(Dd::from(a)) } else { let (v, m) = exp_dd(Dd::from(a)); v.scale(crate::dd::pow2(m)).add_f64(-1.0) };
+        let one = Dd::from(1.0);
+        // log1p64 on doubles (not only on the w the callers form): every scale from 2^-26 to 2^130,
+        // and densely over [2^-8, 2^-7), where case A's series remainder peaks. Each case against
+        // its own bound (A: z < 1 + 2^-7, 5.3u; B: z < 1.5, 4.4u; C: LOG1P64_BOUND).
+        let scales = (0x3e50_0000_0000_0000u64..0x4810_0000_0000_0000).step_by(0x0000_0f00_0f00_0f01);
+        let case_a_top = (0x3f70_0000_0000_0000u64..0x3f80_0000_0000_0000).step_by(0x0000_0040_0000_0001);
+        for k in scales.chain(case_a_top) {
+            let w = f64::from_bits(k);
+            let z = 1.0 + w;
+            let b = if z < 1.0 + 1.0 / 128.0 { 5.3 } else if z < 1.5 { 4.4 } else { LOG1P64_BOUND };
+            check(Some(log1p64(w)), log1p_dd(Dd::from(w)), b, "log1p64", w);
+        }
+        // sqrt64 over the range the family adds (1 + a², t(t + 2): up to 2^257).
+        for k in (0x3ff0_0000_0000_0000u64..=0x5030_0000_0000_0000).step_by(0x0000_0f00_0f00_0f01) {
+            let x = f64::from_bits(k);
+            let (s, f) = (sqrt64(x), crate::dd::sqrt(Dd::from(x)));
+            assert!(Dd::from(s).sub(f).to_f64().abs() <= 2.0 * s / 9_007_199_254_740_992.0, "sqrt64({x:e})");
+        }
+        let grid = (0..1u32 << 15).map(|i| f32::from_bits(0x3280_0000) + 100.0 * (i as f32) / 32_768.0);
+        let wide = (0x3280_0000u32..0x7f80_0000).step_by(1021).map(f32::from_bits);
+        let mut seen = 0u32;
+        for x in grid.chain(wide) {
+            let a = f64::from(x);
+            let da = Dd::from(a);
+            for s in [1.0f32, -1.0] {
+                let xs = x * s;
+                let sg = |v: Dd| if s < 0.0 { v.neg() } else { v };
+                if a < 89.0 {
+                    let e = expm1(a);
+                    check(sinh_core(xs), sg(e.add(e.div(e.add_f64(1.0))).scale(0.5)), SINH_BOUND, "sinh_core", a);
+                }
+                if a < 89.5 {
+                    let (v, m) = exp_dd(da);
+                    let e = v.scale(crate::dd::pow2(m));
+                    check(cosh_core(xs), e.add(one.div(e)).scale(0.5), COSH_BOUND, "cosh_core", a);
+                }
+                if a < TANH_SAT {
+                    let e = expm1(2.0 * a);
+                    check(tanh_core(xs), sg(e.div(e.add_f64(2.0))), TANH_BOUND, "tanh_core", a);
+                }
+                let a2 = da.mul(da);
+                let w = da.add(a2.div(crate::dd::sqrt(a2.add_f64(1.0)).add_f64(1.0)));
+                check(asinh_core(xs), sg(log1p_dd(w)), ASINH_BOUND, "asinh_core", a);
+                if a < 1.0 {
+                    let w = da.scale(2.0).div(one.sub(da));
+                    check(atanh_core(xs), sg(log1p_dd(w).scale(0.5)), ATANH_BOUND, "atanh_core", a);
+                }
+            }
+            if a > 1.0 {
+                let t = da.add_f64(-1.0);
+                let w = t.add(crate::dd::sqrt(t.mul(t.add_f64(2.0))));
+                check(acosh_core(x), log1p_dd(w), ACOSH_BOUND, "acosh_core", a);
+            }
+            seen += 1;
+        }
+        assert!(seen > 1_200_000, "{seen}");
+    }
+
+    /// sinhf on every `float` operand in every mode against the accurate path (one job per
+    /// function, 2^34 calls; LIBM-F32-HYPERBOLIC's accuracy check). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn sinhf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Sinh]);
+        std::println!("sinhf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// coshf on every `float` operand in every mode (as for sinhf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn coshf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Cosh]);
+        std::println!("coshf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// tanhf on every `float` operand in every mode (as for sinhf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn tanhf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Tanh]);
+        std::println!("tanhf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// asinhf on every `float` operand in every mode (as for sinhf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn asinhf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Asinh]);
+        std::println!("asinhf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// acoshf on every `float` operand in every mode (as for sinhf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn acoshf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Acosh]);
+        std::println!("acoshf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// atanhf on every `float` operand in every mode (as for sinhf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn atanhf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Atanh]);
+        std::println!("atanhf fast path taken {taken} of {} calls", 4u64 << 32);
     }
 
     /// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's

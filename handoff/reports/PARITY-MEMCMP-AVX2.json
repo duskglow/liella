@@ -1,0 +1,12 @@
+{"task": "PARITY-MEMCMP-AVX2", "model": "opus", "tokens": null,
+ "result": "memcmp/bcmp/__memcmpeq above 2048 take the AVX2 asm long class (NULL tests kept) and the long loop uses one vptest per 128 B: memcmp_4k 669.1 -> 554.1 (glibc 576.1), memcmp_64k 9319.6 -> 8245.1 (8748.1), eq_1k 165.6 -> 157.6 on the Zen 1 AVX2 host; the 17-32 and first-vector mismatch rows not changed (every design trades rows)",
+ "branch": "task/parity-memcmp-avx2", "head": null,
+ "gate": {"affected": "parity-memcmp-avx2-gate rc 0 (direct tier)", "peak": "149909504 bytes rss"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "17-32 and 65-2048 head-difference rows only move with a band trade (+2 on 33-64, or +2 on 8-64)", "recommendation": "keep current entry; a trade needs an owner ruling on workload shape (sort -C is 95% 33-64)"}],
+ "informational": ["Skylake-SP and Ivy Bridge count jobs not run: no role on those hosts for this story; Ivy Bridge has no AVX2, so its rows cannot change", "memchr_64k/rawmemchr_64k/memmem_miss_4k/strstr_miss_4k +0.4-1.5 instr in untouched code (<=0.03%), read as counter noise, not verified", "after-count ran from a RAM copy of the role because the gate held the role", "one empty heredoc (python3 - <<X with no body) slipped into a local command; no effect"],
+ "refused": [],
+ "improvement": "sync_role.sh refuses while a gate runs in the role, so a plants-file fix needs a copy outside the tree; letting xtask plants take the file from handoff/ of the synced commit, or syncing handoff/ only, would save the detour",
+ "next_step": "dispatcher count jobs on Skylake-SP and Ivy Bridge, then a timing run of memcmp_4k/64k and eq_1k rows",
+ "report_file": "handoff/parity-memcmp-avx2.md",
+ "jobs": ["parity-memcmp-avx2-gate", "parity-memcmp-avx2-plants-3", "parity-memcmp-avx2-count-before", "parity-memcmp-avx2-count-after"]}

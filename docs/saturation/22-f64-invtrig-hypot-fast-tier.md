@@ -1,4 +1,4 @@
-## 21. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, counted)
+## 22. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, counted)
 
 Code: the round-to-nearest fast tier in `crates/math/src/invtrig.rs` (Ziv's first step, double-double, correctly
 rounded or refused; D-10.13), wired in `crates/boundary/src/hot.rs`. Broadwell host (Xeon E5-2699 v4, 35 vCPU, FMA
