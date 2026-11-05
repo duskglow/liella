@@ -13,7 +13,10 @@ Branch task/libm-wide-dd-tier (cut from origin/next 2c1e25b9). Role kanon:~/w/kn
   rounding test at midpoints/representable values in all 4 modes, sweep of 8 kernels x 300 operands x 4 modes
   against the 384-bit route (0 mismatches). Measured worst error: exp/exp2/exp10 2^-105, logs 2^-104,
   expm1 (subtract branch) 2^-95 (hence b = 92).
-* Started at hand-back, NOT waited on: libm-wide-dd-tier-gate (lint: xtask clippy + static, then
+* Gate libm-wide-dd-tier-gate (head a7d6a6fb): RED on clippy (test-module order, panic!, >= y+1), fixed in 0e9e83b2,
+  gate NOT re-run (role busy with the plants job, sync refused). Plants libm-wide-dd-tier-plants ran on a7d6a6fb
+  (wide_dd.rs differs from the final head only in test layout/lint).
+* Started: libm-wide-dd-tier-gate (lint: xtask clippy + static, then
   `cargo xtask affected --base origin/next --run`), libm-wide-dd-tier-plants (handoff/LIBM-WIDE-DD-TIER-plants.txt,
   5 plants: bound, table entry, reduction threshold, directed grid check, nearest midpoint check).
 * NOT DONE: counts before/after (cbench_libm *l rows), booked timing run, the long accuracy sweep
