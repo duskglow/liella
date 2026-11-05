@@ -488,7 +488,7 @@ struct MemoSlot {
     bytes: [u8; MEMO_BYTES],
 }
 
-/// The transliterations one [`Conv::convert`] call has worked out (D-NEW), direct-mapped on the
+/// The transliterations one [`Conv::convert`] call has worked out (D-6.14), direct-mapped on the
 /// character's low bits. Text that needs transliterating repeats a few characters (accented
 /// letters, quotes), and working one out is a chain of dependent table searches. It lives for
 /// one call only: the descriptor and the locale are fixed within it, so a kept result is the
@@ -569,7 +569,7 @@ impl Conv {
         // (ICONV-3, D-6.13); what the tables do not own goes to the loop below.
         let single_in = if fused && self.to == Codec::Utf8 { fast::single_byte(self.from) } else { None };
         let single_out = if fused && self.from == Codec::Utf8 { fast::single_byte(self.to) } else { None };
-        // Transliterations this call worked out, made on the first one (D-NEW).
+        // Transliterations this call worked out, made on the first one (D-6.14).
         let mut memo: Option<Memo> = None;
         while read < input.len() {
             let rest = input.get(read..).unwrap_or(&[]);
@@ -704,7 +704,7 @@ impl Conv {
     }
 
     /// [`Conv::encode_char`] for a `c` the target cannot encode, from `memo` when this call
-    /// already transliterated `c` (D-NEW). Out of line: the loop above stays small.
+    /// already transliterated `c` (D-6.14). Out of line: the loop above stays small.
     #[inline(never)]
     fn encode_memo(&self, c: u32, memo: &mut Option<Memo>, buf: &mut [u8; 64], loc: &Locale) -> Option<(usize, bool)> {
         let memo = memo.get_or_insert(Memo::EMPTY);

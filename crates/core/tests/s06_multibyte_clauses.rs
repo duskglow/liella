@@ -256,13 +256,13 @@ fn s6_4_c_1_1() {
     assert_eq!(out, b"?e?", "C: compatibility decompositions only, a mark is '?'");
 }
 
-/// A transliteration met again in one call (D-NEW: kept per call): the same bytes as the first
+/// A transliteration met again in one call (D-6.14: kept per call): the same bytes as the first
 /// time, characters that share a table slot (U+00E9 and U+00F1, U+20AC and U+00C4) each keep
 /// their own result, a kept result that does not fit is E2BIG, and every one counts as
 /// irreversible.
 #[test]
 fn iconv_translit_memo_repeats_and_collisions() {
-    // Trace: s6_4_c_1_1 (`//TRANSLIT` approximates them); D-NEW.
+    // Trace: s6_4_c_1_1 (`//TRANSLIT` approximates them); D-6.14.
     let one = "é€ñÄ½x\u{2153}";
     let want: &[u8] = b"eEURnA 1/2 x 1/3 ";
     let text = one.repeat(3);
