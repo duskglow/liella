@@ -154,3 +154,26 @@ fn straddle_write_error_counts_the_head_and_sets_the_indicator() {
     assert_eq!(fw(fp, &third), fw(cp, &third));
     assert_ne!(x::ferror(fp), 0);
 }
+
+#[test]
+fn block_that_fits_a_large_buffer_lands_after_the_bytes_before_it() {
+    // s12_5a_c_2 (fwrite counts), s12_4_c_1 (full buffering with setvbuf): blocks of 65 bytes or more that
+    // fit the room left are copied in by the operation itself, not the header's fast path.
+    let path = std::env::temp_dir().join(format!("liella-straddle-{}-window", std::process::id()));
+    let c = CString::new(path.to_str().unwrap()).unwrap();
+    let fp = x::fopen(c.as_ptr(), c"w".as_ptr());
+    assert!(!fp.is_null());
+    let buf = Box::leak(vec![0u8; 1000].into_boxed_slice());
+    assert_eq!(x::setvbuf(fp, buf.as_mut_ptr().cast(), IOFBF, 1000), 0);
+    let mut all = Vec::new();
+    for (i, n) in [100usize, 300, 70, 65, 200, 100].into_iter().enumerate() {
+        let d: Vec<u8> = (0..n).map(|k| (all.len() + k) as u8 ^ 0x33).collect();
+        assert_eq!(fw(fp, &d), n, "call {i}");
+        all.extend_from_slice(&d);
+        assert_eq!(x::ftell(fp), all.len() as i64, "ftell after call {i}");
+    }
+    assert_eq!(x::fflush(fp), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), all, "the bytes arrive in order, none added or lost");
+    assert_eq!(x::fclose(fp), 0);
+    std::fs::remove_file(path).unwrap();
+}
