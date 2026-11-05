@@ -1959,6 +1959,31 @@ fn s13_3_i_0() {
         assert_eq!(k.injected(), 3, "the descriptor limit was hit");
         assert_eq!(n, 1 + 1 + 2 * 13, "two, x, and each chain's 13 directories");
     }
+    // Two sibling directories with files, three levels down: the descriptor limit hit when the
+    // second sibling is opened closes the shallowest level's descriptor, so the second sibling
+    // gets a different descriptor number than the first had; its entries are still examined
+    // through its own descriptor, not the first sibling's closed one.
+    {
+        use liella::fs::walk::{self, Action, Event, Options};
+        for s in ["s1", "s2"] {
+            std::fs::create_dir_all(d.at(&format!("sib/a/b/{s}"))).unwrap();
+            std::fs::write(d.at(&format!("sib/a/b/{s}/f")), b"x").unwrap();
+        }
+        let k = Faulty::new(CSys);
+        assert!(k.fail("openat", Errno::EMFILE, 5, 1));
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        let r = walk::walk(&k, d.at("sib").as_os_str().as_encoded_bytes(), Options { physical: true, ..Options::default() }, &mut |ev| {
+            if let Event::Visit(v) = ev {
+                assert_ne!(v.kind, walk::Kind::NoStat, "{:?}", v.path);
+                seen.push(v.path[v.base..v.path.len().saturating_sub(1)].to_vec());
+            }
+            Ok(Action::Continue)
+        });
+        assert_eq!(r, Ok(0));
+        assert_eq!(k.injected(), 1, "the descriptor limit was hit");
+        seen.sort();
+        assert_eq!(seen, [&b"a"[..], b"b", b"f", b"f", b"s1", b"s2", b"sib"], "every entry, the files of both siblings");
+    }
     in_child("s13_3_i_0", &d, |dir| {
         assert_eq!(x::chdir(cpath(dir).as_ptr()), 0);
         take();
