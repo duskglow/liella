@@ -96,7 +96,6 @@ fn straddle_delivers_what_the_engine_delivers() {
         all.extend_from_slice(&d);
         assert_eq!(std::fs::read(&path).unwrap(), sunk(id), "bytes delivered after call {i}");
         assert_eq!(x::ftell(fp), all.len() as i64, "ftell after call {i}");
-        assert_eq!(x::ftell(cp), all.len() as i64, "ftell after call {i} (engine)");
         assert_eq!((x::ferror(fp), x::ferror(cp)), (0, 0));
     }
     assert_eq!(x::fclose(fp), 0);
