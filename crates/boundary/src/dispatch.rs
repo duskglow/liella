@@ -42,18 +42,21 @@ const FMA_ON: u8 = 1;
 #[cfg_attr(not(feature = "libm"), allow(dead_code))]
 const FMA_UNDECIDED: u8 = 2;
 
-/// Whether the math kernels run their FMA builds: one load and one test once decided.
+/// Whether the math kernels run their FMA builds. The baseline answer costs one load and one
+/// test, as before the libm decision existed (the `-FMA` and non-FMA rows measured 3-4
+/// instructions more per call with the FMA test first); the libm product's FMA answer takes a
+/// second test, which the FMA builds repay many times over.
 #[inline(always)]
 pub(crate) fn fma() -> bool {
     let v = FMA.load(Relaxed);
-    if v == FMA_ON {
-        return true;
+    if v == FMA_OFF {
+        return false;
     }
     #[cfg(feature = "libm")]
     if v == FMA_UNDECIDED {
         return decide_fma();
     }
-    false
+    true
 }
 
 /// The libm product's decision (D-NEW), made by its first math call: the C library's startup
