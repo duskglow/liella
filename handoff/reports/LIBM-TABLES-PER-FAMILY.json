@@ -1,0 +1,17 @@
+{"task": "LIBM-TABLES-PER-FAMILY", "model": "opus", "tokens": null,
+ "result": "libm tables generated as 5 per-family files (byte-identical, tables --check proves it), tables-fresh in xtask static (2 plants CAUGHT), fast32.rs split into core + exp_log/trig/inv_trig/hyperbolic/tests by pure move; fast64 is one family, unsplit",
+ "branch": "task/libm-tables-per-family", "head": "26b0fa10 (code); handoff commit on top",
+ "gate": {"affected": "FULL tier running at hand-back (libm-tables-per-family-gate); clippy and static clean on the role", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "cbench_libm counters before/after: 25 of 169 rows identical, 144 differ by <= 0.15% upward, including rows the change cannot reach (acosl, acosf128); bench spread 1-2%. Deterministic proof is libm-tables-per-family-codecmp2 (base and head built alike, .text and every libm entry's instructions compared), queued at hand-back.",
+   "libm-tables-per-family-codecmp compared a RAM xtask-so base with the role's bench-built head (5543 vs 4655 text symbols, differences in regex/printf/glob): not comparable builds, superseded by codecmp2.",
+   "shiki is Haswell-EP: plants ran in /dev/shm (tmpfs), the brief names only Zen 1 and Skylake-SP RAM dirs."
+ ],
+ "refused": [],
+ "jobs": ["libm-tables-per-family-gate", "libm-tables-per-family-plants", "libm-tables-per-family-counts-before", "libm-tables-per-family-counts-after", "libm-tables-per-family-codecmp2"],
+ "superseded": ["libm-tables-per-family-codecmp (rc 141; base and head built differently, not comparable)"],
+ "improvement": "A per-row instructions counter of cbench_libm is not deterministic to the 0.1% level (fixed overhead amortised over varying iteration counts?); a 'pure move' story is better proven by a like-for-like .text / per-entry disassembly compare, worth a validation/ tool.",
+ "next_step": "None required; optional: split fast32/tests.rs per family. In-flight libm branches: merge next, take next's coeffs/, rerun cargo xtask tables (handoff merge note).",
+ "report_file": "handoff/libm-tables-per-family.md"}
