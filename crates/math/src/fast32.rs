@@ -703,9 +703,19 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // sinf, cosf, tanf (PERF-LIBM-TRIG): `trig_core` answers only for 2^-26 <= |x| < 2^19, so a
+        // subnormal operand, a zero, an infinity and a NaN are refused before any arithmetic; every
+        // operation is on normal doubles (see its proof) and `round` limits the result to the normal
+        // floats, so the hardware raises inexact only, as for the logarithms.
+        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA),
+        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA),
+        Fast::Tan => {
+            let (s, c) = trig_core(x)?;
+            (s / c, TAN_DELTA)
+        }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt => return None,
+        Fast::Log1p | Fast::Expm1 | Fast::Cbrt => return None,
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -725,6 +735,9 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sin_nearest, Fast::Sin);
+nearest_fn!(cos_nearest, Fast::Cos);
+nearest_fn!(tan_nearest, Fast::Tan);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
@@ -1006,6 +1019,36 @@ mod tests {
     fn trig_fast_path_agrees_exhaustively() {
         let taken = exhaustive(&TRIG);
         std::println!("trig fast path taken {taken} of {} calls", 12u64 << 32);
+    }
+
+    /// The in-place entries `sin_nearest`, `cos_nearest`, `tan_nearest` (PERF-LIBM-TRIG): where one
+    /// answers, its bits are the accurate entry's in round to nearest, and it refuses the specials,
+    /// the subnormals and the operands outside 2^-26 <= |x| < 2^19. (No spec clause: an
+    /// implementation entry, proved against the accurate entry.)
+    #[test]
+    fn trig_nearest_entries_agree_with_the_accurate_entry() {
+        type Pair = (fn(f32) -> Option<f32>, fn(f32, Rounding) -> (f32, Status));
+        let pairs: [Pair; 3] = [(sin_nearest, sin), (cos_nearest, cos), (tan_nearest, tan)];
+        let specials = [0.0f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, f32::from_bits(1), f32::MIN_POSITIVE, 2f32.powi(-26), 2f32.powi(19), -2f32.powi(19), 524_287.97, 1e-30, 3e38, f32::MAX];
+        let mut taken = [0u64; 3];
+        for (i, &(near, full)) in pairs.iter().enumerate() {
+            for x in specials.into_iter().chain((0u32..=u32::MAX).step_by(2_003).map(f32::from_bits)) {
+                let a = x.abs();
+                match near(x) {
+                    Some(v) => {
+                        taken[i] += 1;
+                        assert!((2f32.powi(-26)..2f32.powi(19)).contains(&a), "{x:e} answered outside its domain");
+                        let (w, st) = full(x, Rounding::Nearest);
+                        assert_eq!((i, x.to_bits(), v.to_bits(), st), (i, x.to_bits(), w.to_bits(), Status::flags(Flags::INEXACT)));
+                    }
+                    None => {}
+                }
+                if !(2f32.powi(-26)..2f32.powi(19)).contains(&a) {
+                    assert!(near(x).is_none(), "{x:e}");
+                }
+            }
+        }
+        assert!(taken.iter().all(|&n| n > 100_000), "{taken:?}");
     }
 
     /// expm1_core's y is within its proved bound (|y/f - 1| ≤ 9.1·2^-53) of f = e^x - 1, f from the

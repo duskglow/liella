@@ -150,6 +150,28 @@ fn from_fast<F: Small>((v, st): (f64, Status)) -> (F, Status) {
     (F::from_bits(u128::from(v.to_bits())), st)
 }
 
+/// `sin x` rounded to nearest by the `double` fast path, or `None`, for a caller whose MXCSR
+/// control word is the default one (the boundary's `elem_fast` checks it): `Some` only where the
+/// hardware arithmetic raises the inexact flag and nothing else, and then the value is the one
+/// [`sin`] gives in round-to-nearest. `None` for every operand outside `2^-30 <= |x| < 2^20`
+/// (zero, tiny, huge, infinite and NaN operands) and wherever the rounding test fails.
+#[inline(always)]
+pub fn sin_nearest(x: f64) -> Option<f64> {
+    fast::sin_nearest(x)
+}
+
+/// `cos x` for the in-place entry (as [`sin_nearest`]).
+#[inline(always)]
+pub fn cos_nearest(x: f64) -> Option<f64> {
+    fast::cos_nearest(x)
+}
+
+/// `tan x` for the in-place entry (as [`sin_nearest`]).
+#[inline(always)]
+pub fn tan_nearest(x: f64) -> Option<f64> {
+    fast::tan_nearest(x)
+}
+
 /// `sin(x)`.
 pub fn sin<F: Small>(x: F, mode: Rounding) -> (F, Status) {
     if let Some(r) = trig_special(x, None) {
@@ -487,6 +509,59 @@ mod fast {
         }
     }
 
+    /// The in-place entries' rounding test (round to nearest only): `y.hi` when [`settle`] answers
+    /// in nearest, else `None`. `y` is normalized (`y.hi = RN(y.hi + y.lo)`), so a nonzero `y.lo`
+    /// below half an ulp makes `y.hi + y.lo` an inexact addition that returns `y.hi`: it is returned
+    /// in that form, so the hardware raises inexact (a zero `y.lo` is refused). Nothing else is
+    /// raised: the arguments are normal, `2^-30 <= |x| < 2^20`, so `r` is zero or at least about
+    /// 2^-62 and every intermediate (the smallest, `r²·r·2^-53`) is above 2^-240; the result is
+    /// normal (`settle` limits the exponent) and no division by zero or overflow occurs.
+    #[inline(always)]
+    fn settle_nearest(y: Dd, eps: f64) -> Option<f64> {
+        if y.lo == 0.0 {
+            return None;
+        }
+        match settle(y, eps, Rounding::Nearest) {
+            Some(_) => Some(y.hi + y.lo),
+            None => None,
+        }
+    }
+
+    /// `sin x` for the in-place entry: `2^-30 <= |x| < 2^20`, else `None` (the accurate entry
+    /// handles specials, tiny and huge operands before the fast path).
+    #[inline(always)]
+    pub(super) fn sin_nearest(x: f64) -> Option<f64> {
+        if !(TINY..LIMIT).contains(&dd::abs(x)) {
+            return None;
+        }
+        let (n, r) = reduce(x);
+        let (y, eps) = eval(n, r);
+        settle_nearest(y, eps)
+    }
+
+    /// `cos x` for the in-place entry (as [`sin_nearest`]).
+    #[inline(always)]
+    pub(super) fn cos_nearest(x: f64) -> Option<f64> {
+        if !(TINY..LIMIT).contains(&dd::abs(x)) {
+            return None;
+        }
+        let (n, r) = reduce(x);
+        let (y, eps) = eval(n + 32, r);
+        settle_nearest(y, eps)
+    }
+
+    /// `tan x` for the in-place entry (as [`sin_nearest`]).
+    #[inline(always)]
+    pub(super) fn tan_nearest(x: f64) -> Option<f64> {
+        if !(TINY..LIMIT).contains(&dd::abs(x)) {
+            return None;
+        }
+        let (n, r) = reduce(x);
+        let ((s, es), (c, ec)) = (eval(n, r), eval(n + 32, r));
+        let (y, eps) = tan_quot(s, es, c, ec);
+        settle_nearest(y, eps)
+    }
+
     /// `|x| < 2^-30` to nearest: `v` (computed in hardware from `x`), inexact, underflow when `v` is subnormal.
     #[inline(always)]
     fn tiny(x: f64, v: f64, mode: Rounding) -> Option<(f64, Status)> {
@@ -541,12 +616,19 @@ mod fast {
         }
         let (n, r) = reduce(x);
         let ((s, es), (c, ec)) = (eval(n, r), eval(n + 32, r));
+        let (y, eps) = tan_quot(s, es, c, ec);
+        counted("tan", settle(y, eps, mode))
+    }
+
+    /// `s/c` in double-double and its error bound.
+    #[inline(always)]
+    fn tan_quot(s: Dd, es: f64, c: Dd, ec: f64) -> (Dd, f64) {
         let qh = s.hi / c.hi;
         let p = dd::two_prod(qh, c.hi);
         let ql = ((s.hi - p.hi - p.lo) + s.lo - qh * c.lo) / c.hi;
         let y = dd::fast_two_sum(qh, ql);
         let rel = es / dd::abs(s.hi) + ec / dd::abs(c.hi) + B * B;
-        counted("tan", settle(y, 1.01 * rel * dd::abs(qh), mode))
+        (y, 1.01 * rel * dd::abs(qh))
     }
 
     #[cfg(test)]
@@ -607,6 +689,44 @@ mod fast {
                 let err = (u.hi - 1.0) + u.lo + ps.lo + pc.lo + 2.0 * (sh * sl + ch * cl);
                 assert!(dd::abs(err) < f64::from_bits(0x39b0_0000_0000_0000), "entry {k}: S²+C²-1 = {err:e}");
             }
+        }
+
+        /// The in-place entries answer with the accurate path's bits in round to nearest, and
+        /// refuse the specials, the operands outside `2^-30 <= |x| < 2^20` and what the rounding
+        /// test refuses (PERF-LIBM-TRIG; no spec clause: an implementation entry).
+        #[test]
+        fn trig_nearest_entries_match_the_accurate_path() {
+            let mut xs: Vec<f64> = random(60_000, 10.0).chain(random(20_000, LIMIT)).chain(random(2_000, 1e-3)).collect();
+            for k in [1.0, 2.0, 3.0, 7.0, 64.0, 355.0, 1e4, 6.0e5] {
+                let m = k * core::f64::consts::FRAC_PI_2;
+                for d in -2i64..=2 {
+                    xs.push(f64::from_bits(m.to_bits().wrapping_add_signed(d)));
+                }
+            }
+            let specials = [0.0, -0.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 1e-310, -5e-324, 2.2e-308, TINY, -TINY, TINY * (1.0 - 1e-16), LIMIT, -LIMIT, LIMIT * (1.0 - 1e-16), 1e300, f64::MAX];
+            type Pair = (fn(f64) -> Option<f64>, fn(f64, Rounding) -> (f64, Status));
+            let pairs: [Pair; 3] = [(sin_nearest, sin_accurate::<f64>), (cos_nearest, cos_accurate::<f64>), (tan_nearest, tan_accurate::<f64>)];
+            for (i, &(near, acc)) in pairs.iter().enumerate() {
+                let mut taken = 0u64;
+                for &x in specials.iter().chain(&xs) {
+                    let inside = (TINY..LIMIT).contains(&x.abs());
+                    match near(x) {
+                        Some(v) => {
+                            taken += 1;
+                            assert!(inside, "{x:e} answered outside its domain");
+                            let (w, st) = acc(x, Rounding::Nearest);
+                            assert_eq!((i, x.to_bits(), v.to_bits(), st), (i, x.to_bits(), w.to_bits(), Status::flags(Flags::INEXACT)));
+                        }
+                        None => assert!(!inside || x.abs() < 1e-12 || fast_refuses(i, x), "{x:e} refused"),
+                    }
+                }
+                assert!(taken * 10 > u64::try_from(xs.len()).unwrap_or(0) * 9, "function {i}: {taken} answers");
+            }
+        }
+
+        /// Whether the fast path's own rounding test refuses `x` in round to nearest (function `i`).
+        fn fast_refuses(i: usize, x: f64) -> bool {
+            [sin, cos, tan][i](x, Rounding::Nearest).is_none()
         }
 
         #[test]
