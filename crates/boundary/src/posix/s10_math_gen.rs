@@ -1224,7 +1224,7 @@ pub extern "C" fn liella_copysignl_bits(x: LdBits, y: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cos(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cos)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::cos_nearest, math::real::Real::cos)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -1244,12 +1244,12 @@ pub extern "C" fn cosf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cosf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cos)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::cos_nearest, math::real::Real::cos)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cosf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cos)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::cos_nearest, math::real::Real::cos)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4857,12 +4857,12 @@ pub extern "C" fn liella_significandl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sin(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sin)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::sin_nearest, math::real::Real::sin)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sincos(x: f64, y: Option<&mut f64>, z: Option<&mut f64>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincos_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -4882,12 +4882,12 @@ pub extern "C" fn sincosf32(x: f32, y: Option<&mut f32>, z: Option<&mut f32>) {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sincosf32x(x: f64, y: Option<&mut f64>, z: Option<&mut f64>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincos_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sincosf64(x: f64, y: Option<&mut f64>, z: Option<&mut f64>) {
-    mret::sincos(x, mret::Unit::Sse, math::real::Real::sincos, y, z)
+    mret::sincos_fast::<{ math::Status::HW_ANY.0 }, _>(x, crate::hot::sincos_nearest, math::real::Real::sincos, y, z)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4917,12 +4917,12 @@ pub extern "C" fn sinf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sin)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::sin_nearest, math::real::Real::sin)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sin)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::sin_nearest, math::real::Real::sin)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -5017,7 +5017,7 @@ pub extern "C" fn liella_sqrtl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn tan(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tan)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::tan_nearest, math::real::Real::tan)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -5037,12 +5037,12 @@ pub extern "C" fn tanf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tan)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::tan_nearest, math::real::Real::tan)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tan)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::tan_nearest, math::real::Real::tan)
 }}
 
 export! { libm "LIELLA_PRIVATE";

@@ -264,7 +264,8 @@ fn sincos_pair(x: f64) -> (f64, f64) {
 fn double_trig_arguments() -> Vec<(f64, f64)> {
     let ulps = |c: f64, w: u64| (0..=2 * w).map(move |d| f64::from_bits(c.to_bits().wrapping_add(d).wrapping_sub(w)));
     let mut v: Vec<f64> = vec![0.0, f64::MIN_POSITIVE, 1e-310, f64::MAX, 1e300, f64::INFINITY, f64::NAN, 1.0, 0.5, 3.0, 1e5, 7e5];
-    for c in [2f64.powi(-339), 2f64.powi(-30), 2f64.powi(20), 2f64.powi(-36), 2f64.powi(-200)] {
+    // 2^-360 and 2^-1000: below the in-place cubic's range (x³ would underflow and raise it).
+    for c in [2f64.powi(-339), 2f64.powi(-30), 2f64.powi(20), 2f64.powi(-36), 2f64.powi(-200), 2f64.powi(-360), 2f64.powi(-1000)] {
         v.extend(ulps(c, 3));
     }
     let q = core::f64::consts::PI / 128.0;
