@@ -1970,7 +1970,7 @@ fn s13_3_i_0() {
             std::fs::write(d.at(&format!("sib/a/b/{s}/f")), b"x").unwrap();
         }
         let k = Faulty::new(CSys);
-        assert!(k.fail("openat", Errno::EMFILE, 5, 1));
+        assert!(k.fail("openat", Errno::EMFILE, 4, 1));
         let mut seen: Vec<Vec<u8>> = Vec::new();
         let r = walk::walk(&k, d.at("sib").as_os_str().as_encoded_bytes(), Options { physical: true, ..Options::default() }, &mut |ev| {
             if let Event::Visit(v) = ev {
