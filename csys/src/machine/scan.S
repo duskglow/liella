@@ -3729,14 +3729,104 @@ liella_machine_strcmp:
 	bsfq %rdx, %rdx
 	addq %rdx, %rax
 	jmp .Lstrcmp_v_settle
+.Lstrcmp_v_blocks4:
+	/* PARITY-STRCMP-AVX2: from .Lstrcmp_v_top with both offsets at most 3968, four tested blocks
+	 * (a stop in them costs what it did in the two blocks and the 64-byte group, or less), then
+	 * (3968 - offset) / 128 groups of 128 bytes, all inside both pages: 22 instructions per 128
+	 * bytes against 28 in the 64-byte groups. The 0-127 bytes left before a page end go through
+	 * .Lstrcmp_v_top again. The first page of a call that came through .Lstrcmp_v_start keeps
+	 * the 64-byte groups (a stop at 64-383 there costs up to 11 fewer). */
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	negl %ecx
+	shrl $7, %ecx
+	jz .Lstrcmp_v_top
+.Lstrcmp_v_group128:
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vmovdqu 32(%rdi,%rax), %ymm3
+	vpcmpeqb 32(%rsi,%rax), %ymm3, %ymm4
+	vpminub %ymm3, %ymm4, %ymm4
+	vmovdqu 64(%rdi,%rax), %ymm5
+	vpcmpeqb 64(%rsi,%rax), %ymm5, %ymm6
+	vpminub %ymm5, %ymm6, %ymm6
+	vmovdqu 96(%rdi,%rax), %ymm7
+	vpcmpeqb 96(%rsi,%rax), %ymm7, %ymm8
+	vpminub %ymm7, %ymm8, %ymm8
+	vpminub %ymm4, %ymm2, %ymm9
+	vpminub %ymm8, %ymm6, %ymm10
+	vpminub %ymm10, %ymm9, %ymm9
+	vpcmpeqb %ymm0, %ymm9, %ymm9
+	vpmovmskb %ymm9, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_locate128
+	subq $-128, %rax
+	decl %ecx
+	jnz .Lstrcmp_v_group128
+	jmp .Lstrcmp_v_top
+.Lstrcmp_v_locate128:
+	/* The four blocks' min vectors are still in ymm2, ymm4, ymm6 and ymm8: each half's two
+	 * masks form one 64-bit mask (no second read). The first half with a stop wins; the fold
+	 * proved one has one. */
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm4, %ymm4
+	vpmovmskb %ymm2, %edx
+	vpmovmskb %ymm4, %ecx
+	shlq $32, %rcx
+	orq %rcx, %rdx
+	jnz .Lstrcmp_v_locate128_at
+	vpcmpeqb %ymm0, %ymm6, %ymm6
+	vpcmpeqb %ymm0, %ymm8, %ymm8
+	vpmovmskb %ymm6, %edx
+	vpmovmskb %ymm8, %ecx
+	shlq $32, %rcx
+	orq %rcx, %rdx
+	addq $64, %rax
+.Lstrcmp_v_locate128_at:
+	bsfq %rdx, %rdx
+	addq %rdx, %rax
+	jmp .Lstrcmp_v_settle
 .Lstrcmp_v_top:
-	/* As .Lstrcmp_top. */
+	/* As .Lstrcmp_top, with the 128-byte groups behind four tested blocks (PARITY-STRCMP-AVX2):
+	 * the OR of the two offsets at most 3968 proves 128 bytes fit in both pages. Above it the
+	 * exact test goes on to the two blocks and 64-byte groups when 64 bytes fit. */
 	leal (%rdi,%rax), %ecx
 	leal (%rsi,%rax), %edx
 	orl %edx, %ecx
 	andl $4095, %ecx
-	subl $4032, %ecx
-	jbe .Lstrcmp_v_blocks
+	subl $3968, %ecx
+	jbe .Lstrcmp_v_blocks4
 .Lstrcmp_v_exact:
 	leal (%rdi,%rax), %ecx
 	leal (%rsi,%rax), %edx
