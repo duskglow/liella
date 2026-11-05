@@ -1541,27 +1541,7 @@ fn write_raw<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) 
     if let Some(t) = write_direct(env, file, ext, data) {
         return t;
     }
-    // Both continuations are tail calls, so this frame keeps no value live across a call (a block the
-    // buffer cannot hold, written through, pays only the size test).
-    if ext.state.policy == Policy::Full && data.len() < ext.buf_len.saturating_sub(RESERVE) {
-        return write_small(env, file, ext, data);
-    }
-    write_engine(env, file, ext, data)
-}
-
-/// The engine's write of `data` ([`State::write`] under [`run`]).
-fn write_engine<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) -> Transfer {
     run(env, file, ext, |s, b, back| s.write(b, back, data)).unwrap_or_else(|e| Transfer { done: 0, error: Some(e) })
-}
-
-/// A block smaller than the buffer of a fully buffered stream: the straddle path when it applies,
-/// else the engine.
-#[inline(never)]
-fn write_small<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) -> Transfer {
-    if let Some(t) = write_straddle(env, file, ext, data) {
-        return t;
-    }
-    write_engine(env, file, ext, data)
 }
 
 /// The output straddle path (FWRITE-STRADDLE): a fully buffered, byte-oriented descriptor stream
@@ -1641,6 +1621,9 @@ fn write_direct<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8
     let line = match s.policy {
         Policy::Unbuffered => false,
         Policy::Line if data.last() == Some(&b'\n') => true,
+        // The size test is here, not in the callee: a block the buffer cannot hold (written through)
+        // pays no call for a path that cannot apply to it. A tail call: nothing is live after it.
+        Policy::Full if data.len() < ext.buf_len.saturating_sub(RESERVE) => return write_straddle(env, file, ext, data),
         _ => return None,
     };
     // Writing with nothing pending, and the published write pointer at the reserve (what
