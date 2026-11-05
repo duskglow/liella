@@ -340,199 +340,6 @@ fn log1p_kernel(n: &Num) -> Option<Dd> {
     Some(ln_kernel(y, q))
 }
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::float_cmp)]
-mod tests {
-    use super::*;
-    use crate::float::F80;
-    use crate::mp::{self, Mp};
-
-    const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
-
-    fn mp_of(v: Dd) -> Mp {
-        Mp::from_f64(v.hi).add(Mp::from_f64(v.lo))
-    }
-
-    /// `|got − want| <= ulp(last)/2·(1 + 2^-20)`: `got` is the rounded value (`last` its last
-    /// part: the double-double's `lo` or the `f64` itself).
-    fn rounded(got: Mp, last: f64, want: Mp, what: &str) {
-        let e = ((last.to_bits() >> 52) & 0x7ff) as i32 - 1075;
-        let half_ulp = Mp::from_f64(dd::pow2(e - 1)).add(Mp::from_f64(dd::pow2(e - 21)));
-        let d = got.sub(want);
-        assert!(d.cmp_abs(half_ulp) != core::cmp::Ordering::Greater, "{what}: not the rounded value");
-    }
-
-    fn dd_rounded(c: [u64; 2], want: Mp, what: &str) {
-        let v = Dd::of(c);
-        rounded(mp_of(v), if v.lo == 0.0 { v.hi * f64::EPSILON } else { v.lo }, want, what);
-    }
-
-    /// Spec §10.3 (correct rounding of the wide functions rests on these constants).
-    #[test]
-    fn constants_are_the_rounded_values() {
-        let ln2 = mp::ln2();
-        for j in 0..64u64 {
-            dd_rounded(EXP2_64[j as usize], mp::exp(ln2.mul_u64(j).div_u64(64)), "EXP2_64");
-        }
-        for (i, &c) in RCP.iter().enumerate() {
-            let want = mp::ln(Mp::from_i64(i64::from(c)).ldexp(-12)).neg();
-            if c == 4096 {
-                assert_eq!(LOGC[i], [0, 0], "LOGC[{i}]");
-            } else {
-                dd_rounded(LOGC[i], want, "LOGC");
-            }
-        }
-        dd_rounded(LN2_64, ln2.div_u64(64), "LN2_64");
-        dd_rounded(LN2, ln2, "LN2");
-        dd_rounded(LOG2E, ln2.recip(), "LOG2E");
-        dd_rounded(LOG10E, mp::ln10().recip(), "LOG10E");
-        let mut fact = 1u64;
-        let dds = [(2, E2), (3, E3), (4, E4), (5, E5)];
-        let f64s = [(6, E6), (7, E7), (8, E8), (9, E9), (10, E10), (11, E11)];
-        for n in 2..=11u64 {
-            fact *= n;
-            let want = Mp::from_i64(1).div_u64(fact);
-            if let Some(&(_, c)) = dds.iter().find(|p| p.0 == n) {
-                dd_rounded(c, want, "1/n!");
-            }
-            if let Some(&(_, c)) = f64s.iter().find(|p| p.0 == n) {
-                rounded(Mp::from_f64(f64::from_bits(c)), f64::from_bits(c), want, "1/n!");
-            }
-        }
-        for (n, c) in [(3, A3), (5, A5), (7, A7)] {
-            dd_rounded(c, Mp::from_i64(1).div_u64(n), "1/n");
-        }
-        for (n, c) in [(9, A9), (11, A11), (13, A13)] {
-            rounded(Mp::from_f64(f64::from_bits(c)), f64::from_bits(c), Mp::from_i64(1).div_u64(n), "1/n");
-        }
-        // The fixed-point factors within half a unit.
-        let half = Mp::from_i64(1).ldexp(-1);
-        let ce = Mp::from_u128(false, C_E, 0).sub(ln2.recip().ldexp(127));
-        assert!(ce.cmp_abs(half) != core::cmp::Ordering::Greater, "C_E");
-        let c10 = Mp::from_u128(false, C_10, 0).sub(mp::ln10().div(ln2).ldexp(126));
-        assert!(c10.cmp_abs(half) != core::cmp::Ordering::Greater, "C_10");
-    }
-
-    /// Spec §10.3, correct rounding in every mode: the rounding test refuses an approximation
-    /// whose bound reaches a rounding boundary (a midpoint for to-nearest, a representable value
-    /// for the directed modes) and decides one clear of it.
-    #[test]
-    fn rounding_test_refuses_near_a_boundary() {
-        let ulp = dd::pow2(-63);
-        let near = dd::pow2(-(B_MAIN as i32)) * 0.75;
-        let clear = dd::pow2(-(B_MAIN as i32)) * 16.0;
-        for base in [ulp / 2.0, ulp] {
-            for d in [near, -near] {
-                for m in MODES {
-                    assert_eq!(decide::<F80>(Dd { hi: 1.0, lo: base + d }, 0, B_MAIN, m), None, "{base:e} {d:e} {m:?}");
-                }
-            }
-            for d in [clear, -clear] {
-                for m in MODES {
-                    let want = mp::round::<F80>(Mp::from_f64(1.0).add(Mp::from_f64(base + d)), m);
-                    assert_eq!(decide::<F80>(Dd { hi: 1.0, lo: base + d }, 0, B_MAIN, m), Some(want), "{base:e} {d:e} {m:?}");
-                }
-            }
-        }
-        // A bound too wide for the format never decides (binary128 waits for its own tier).
-        assert_eq!(decide::<crate::float::F128>(Dd { hi: 1.0, lo: ulp * 0.3 }, 0, B_MAIN, Rounding::Nearest), None);
-    }
-
-    struct Rng(u64);
-    impl Rng {
-        fn next(&mut self) -> u64 {
-            self.0 ^= self.0 << 13;
-            self.0 ^= self.0 >> 7;
-            self.0 ^= self.0 << 17;
-            self.0
-        }
-    }
-
-    /// A random x87 operand with its leading bit at `2^top`, `top` in `lo..=hi`.
-    fn operand(g: &mut Rng, lo: i32, hi: i32, neg: bool) -> Num {
-        let span = (hi - lo + 1) as u64;
-        let top = lo + (g.next() % span) as i32;
-        let sig = u128::from(g.next() | (1 << 63));
-        Num { neg, kind: crate::float::Kind::Finite, sig, exp: top - 63 }
-    }
-
-    /// The 384-bit value of each function (the route [`crate::wide`] falls back to).
-    fn reference(k: Kernel, n: &Num) -> Mp {
-        let x = Mp::from_u128(n.neg, n.sig, i64::from(n.exp));
-        match k {
-            Kernel::Exp => mp::exp(x),
-            Kernel::Exp2 => mp::exp(x.mul(mp::ln2())),
-            Kernel::Exp10 => mp::exp(x.mul(mp::ln10())),
-            Kernel::Expm1 => mp::exp(x).sub(Mp::from_i64(1)),
-            Kernel::Log => mp::ln_atanh(x),
-            Kernel::Log2 => mp::ln_atanh(x).div(mp::ln2()),
-            Kernel::Log10 => mp::ln_atanh(x).div(mp::ln10()),
-            Kernel::Log1p => mp::ln1p(x),
-        }
-    }
-
-    /// The operand ranges each kernel is exercised on (inside the callers' limits).
-    fn draw(k: Kernel, g: &mut Rng) -> Num {
-        let neg = g.next() & 1 == 1;
-        match k {
-            Kernel::Exp | Kernel::Exp2 => operand(g, -66, 12, neg),
-            Kernel::Exp10 => operand(g, -66, 11, neg),
-            Kernel::Expm1 if neg => operand(g, -66, 4, true),
-            Kernel::Expm1 => operand(g, -66, 12, false),
-            Kernel::Log | Kernel::Log2 | Kernel::Log10 => operand(g, -16382, 16383, false),
-            Kernel::Log1p if neg => operand(g, -66, -1, true),
-            Kernel::Log1p => operand(g, -66, 16383, false),
-        }
-    }
-
-    const ALL: [Kernel; 8] =
-        [Kernel::Exp, Kernel::Exp2, Kernel::Exp10, Kernel::Expm1, Kernel::Log, Kernel::Log2, Kernel::Log10, Kernel::Log1p];
-
-    /// Each kernel within its bound (one bit of margin), and every result the tier decides equal
-    /// to the 384-bit route's in all four modes. Returns the refusals.
-    fn sweep(per_kernel: usize, seed: u64) -> usize {
-        let mut g = Rng(seed);
-        let mut refused = 0;
-        for k in ALL {
-            let mut worst = i64::MIN;
-            for _ in 0..per_kernel {
-                let n = draw(k, &mut g);
-                let want = reference(k, &n);
-                let (v, scale, bits) = kernel(k, &n).unwrap_or_else(|| panic!("{k:?} {n:?}: no kernel"));
-                let d = mp_of(v).ldexp(i64::from(scale)).sub(want);
-                // |d|/|want| < 2^(ex(d) − ex(want) + 1).
-                let rel = mp::ex(d) - mp::ex(want) + 1;
-                worst = worst.max(rel + i64::from(bits));
-                assert!(rel <= -i64::from(bits) - 1, "{k:?} {n:?}: error 2^{rel} against the bound 2^-{bits}");
-                for m in MODES {
-                    match eval::<F80>(k, &n, m) {
-                        Some(r) => assert_eq!(r, mp::round::<F80>(want, m), "{k:?} {n:?} {m:?}"),
-                        None => refused += 1,
-                    }
-                }
-            }
-            println!("{k:?}: worst error 2^{worst} of its bound");
-        }
-        refused
-    }
-
-    /// Spec §10.3 (correctly rounded wide functions): the tier against the 384-bit route.
-    #[test]
-    fn tier_agrees_with_the_wide_route() {
-        let refused = sweep(300, 0x9e37_79b9_7f4a_7c15);
-        // Out-of-range results (subnormal, overflow) and a rare undecided case only.
-        assert!(refused < 300, "refused {refused}");
-    }
-
-    /// The accuracy job's sweep (release build): more operands, every mode.
-    #[test]
-    #[ignore = "long: the accuracy job runs it in release"]
-    fn tier_agrees_with_the_wide_route_long() {
-        let refused = sweep(40_000, 0x2545_f491_4f6c_dd1d);
-        println!("refused {refused}");
-    }
-}
-
 // ------------------------------------------------------------------------------------------
 // Constants (Python `decimal`, 80 digits; checked by `constants_are_the_rounded_values`).
 // ------------------------------------------------------------------------------------------
@@ -771,3 +578,196 @@ const LOGC: [[u64; 2]; 128] = [
 ];
 // max |u| = 0.0078125 = 2^-7.000
 // max c = 5447
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::float_cmp)]
+mod tests {
+    use super::*;
+    use crate::float::F80;
+    use crate::mp::{self, Mp};
+
+    const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+
+    fn mp_of(v: Dd) -> Mp {
+        Mp::from_f64(v.hi).add(Mp::from_f64(v.lo))
+    }
+
+    /// `|got − want| <= ulp(last)/2·(1 + 2^-20)`: `got` is the rounded value (`last` its last
+    /// part: the double-double's `lo` or the `f64` itself).
+    fn rounded(got: Mp, last: f64, want: Mp, what: &str) {
+        let e = ((last.to_bits() >> 52) & 0x7ff) as i32 - 1075;
+        let half_ulp = Mp::from_f64(dd::pow2(e - 1)).add(Mp::from_f64(dd::pow2(e - 21)));
+        let d = got.sub(want);
+        assert!(d.cmp_abs(half_ulp) != core::cmp::Ordering::Greater, "{what}: not the rounded value");
+    }
+
+    fn dd_rounded(c: [u64; 2], want: Mp, what: &str) {
+        let v = Dd::of(c);
+        rounded(mp_of(v), if v.lo == 0.0 { v.hi * f64::EPSILON } else { v.lo }, want, what);
+    }
+
+    /// Spec §10.3 (correct rounding of the wide functions rests on these constants).
+    #[test]
+    fn constants_are_the_rounded_values() {
+        let ln2 = mp::ln2();
+        for j in 0..64u64 {
+            dd_rounded(EXP2_64[j as usize], mp::exp(ln2.mul_u64(j).div_u64(64)), "EXP2_64");
+        }
+        for (i, &c) in RCP.iter().enumerate() {
+            let want = mp::ln(Mp::from_i64(i64::from(c)).ldexp(-12)).neg();
+            if c == 4096 {
+                assert_eq!(LOGC[i], [0, 0], "LOGC[{i}]");
+            } else {
+                dd_rounded(LOGC[i], want, "LOGC");
+            }
+        }
+        dd_rounded(LN2_64, ln2.div_u64(64), "LN2_64");
+        dd_rounded(LN2, ln2, "LN2");
+        dd_rounded(LOG2E, ln2.recip(), "LOG2E");
+        dd_rounded(LOG10E, mp::ln10().recip(), "LOG10E");
+        let mut fact = 1u64;
+        let dds = [(2, E2), (3, E3), (4, E4), (5, E5)];
+        let f64s = [(6, E6), (7, E7), (8, E8), (9, E9), (10, E10), (11, E11)];
+        for n in 2..=11u64 {
+            fact *= n;
+            let want = Mp::from_i64(1).div_u64(fact);
+            if let Some(&(_, c)) = dds.iter().find(|p| p.0 == n) {
+                dd_rounded(c, want, "1/n!");
+            }
+            if let Some(&(_, c)) = f64s.iter().find(|p| p.0 == n) {
+                rounded(Mp::from_f64(f64::from_bits(c)), f64::from_bits(c), want, "1/n!");
+            }
+        }
+        for (n, c) in [(3, A3), (5, A5), (7, A7)] {
+            dd_rounded(c, Mp::from_i64(1).div_u64(n), "1/n");
+        }
+        for (n, c) in [(9, A9), (11, A11), (13, A13)] {
+            rounded(Mp::from_f64(f64::from_bits(c)), f64::from_bits(c), Mp::from_i64(1).div_u64(n), "1/n");
+        }
+        // The fixed-point factors within half a unit.
+        let half = Mp::from_i64(1).ldexp(-1);
+        let ce = Mp::from_u128(false, C_E, 0).sub(ln2.recip().ldexp(127));
+        assert!(ce.cmp_abs(half) != core::cmp::Ordering::Greater, "C_E");
+        let c10 = Mp::from_u128(false, C_10, 0).sub(mp::ln10().div(ln2).ldexp(126));
+        assert!(c10.cmp_abs(half) != core::cmp::Ordering::Greater, "C_10");
+    }
+
+    /// Spec §10.3, correct rounding in every mode: the rounding test refuses an approximation
+    /// whose bound reaches a rounding boundary (a midpoint for to-nearest, a representable value
+    /// for the directed modes) and decides one clear of it.
+    #[test]
+    fn rounding_test_refuses_near_a_boundary() {
+        let ulp = dd::pow2(-63);
+        let near = dd::pow2(-(B_MAIN as i32)) * 0.75;
+        let clear = dd::pow2(-(B_MAIN as i32)) * 16.0;
+        for base in [ulp / 2.0, ulp] {
+            for d in [near, -near] {
+                for m in MODES {
+                    assert_eq!(decide::<F80>(Dd { hi: 1.0, lo: base + d }, 0, B_MAIN, m), None, "{base:e} {d:e} {m:?}");
+                }
+            }
+            for d in [clear, -clear] {
+                for m in MODES {
+                    let want = mp::round::<F80>(Mp::from_f64(1.0).add(Mp::from_f64(base + d)), m);
+                    assert_eq!(decide::<F80>(Dd { hi: 1.0, lo: base + d }, 0, B_MAIN, m), Some(want), "{base:e} {d:e} {m:?}");
+                }
+            }
+        }
+        // A bound too wide for the format never decides (binary128 waits for its own tier).
+        assert_eq!(decide::<crate::float::F128>(Dd { hi: 1.0, lo: ulp * 0.3 }, 0, B_MAIN, Rounding::Nearest), None);
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+    }
+
+    /// A random x87 operand with its leading bit at `2^top`, `top` in `lo..=hi`.
+    fn operand(g: &mut Rng, lo: i32, hi: i32, neg: bool) -> Num {
+        let span = (hi - lo + 1) as u64;
+        let top = lo + (g.next() % span) as i32;
+        let sig = u128::from(g.next() | (1 << 63));
+        Num { neg, kind: crate::float::Kind::Finite, sig, exp: top - 63 }
+    }
+
+    /// The 384-bit value of each function (the route [`crate::wide`] falls back to).
+    fn reference(k: Kernel, n: &Num) -> Mp {
+        let x = Mp::from_u128(n.neg, n.sig, i64::from(n.exp));
+        match k {
+            Kernel::Exp => mp::exp(x),
+            Kernel::Exp2 => mp::exp(x.mul(mp::ln2())),
+            Kernel::Exp10 => mp::exp(x.mul(mp::ln10())),
+            Kernel::Expm1 => mp::exp(x).sub(Mp::from_i64(1)),
+            Kernel::Log => mp::ln_atanh(x),
+            Kernel::Log2 => mp::ln_atanh(x).div(mp::ln2()),
+            Kernel::Log10 => mp::ln_atanh(x).div(mp::ln10()),
+            Kernel::Log1p => mp::ln1p(x),
+        }
+    }
+
+    /// The operand ranges each kernel is exercised on (inside the callers' limits).
+    fn draw(k: Kernel, g: &mut Rng) -> Num {
+        let neg = g.next() & 1 == 1;
+        match k {
+            Kernel::Exp | Kernel::Exp2 => operand(g, -66, 12, neg),
+            Kernel::Exp10 => operand(g, -66, 11, neg),
+            Kernel::Expm1 if neg => operand(g, -66, 4, true),
+            Kernel::Expm1 => operand(g, -66, 12, false),
+            Kernel::Log | Kernel::Log2 | Kernel::Log10 => operand(g, -16382, 16383, false),
+            Kernel::Log1p if neg => operand(g, -66, -1, true),
+            Kernel::Log1p => operand(g, -66, 16383, false),
+        }
+    }
+
+    const ALL: [Kernel; 8] =
+        [Kernel::Exp, Kernel::Exp2, Kernel::Exp10, Kernel::Expm1, Kernel::Log, Kernel::Log2, Kernel::Log10, Kernel::Log1p];
+
+    /// Each kernel within its bound (one bit of margin), and every result the tier decides equal
+    /// to the 384-bit route's in all four modes. Returns the refusals.
+    fn sweep(per_kernel: usize, seed: u64) -> usize {
+        let mut g = Rng(seed);
+        let mut refused = 0;
+        for k in ALL {
+            let mut worst = i64::MIN;
+            for _ in 0..per_kernel {
+                let n = draw(k, &mut g);
+                let want = reference(k, &n);
+                let (v, scale, bits) = kernel(k, &n).unwrap();
+                let d = mp_of(v).ldexp(i64::from(scale)).sub(want);
+                // |d|/|want| < 2^(ex(d) − ex(want) + 1).
+                let rel = mp::ex(d) - mp::ex(want) + 1;
+                worst = worst.max(rel + i64::from(bits));
+                assert!(rel < -i64::from(bits), "{k:?} {n:?}: error 2^{rel} against the bound 2^-{bits}");
+                for m in MODES {
+                    match eval::<F80>(k, &n, m) {
+                        Some(r) => assert_eq!(r, mp::round::<F80>(want, m), "{k:?} {n:?} {m:?}"),
+                        None => refused += 1,
+                    }
+                }
+            }
+            println!("{k:?}: worst error 2^{worst} of its bound");
+        }
+        refused
+    }
+
+    /// Spec §10.3 (correctly rounded wide functions): the tier against the 384-bit route.
+    #[test]
+    fn tier_agrees_with_the_wide_route() {
+        let refused = sweep(300, 0x9e37_79b9_7f4a_7c15);
+        // Out-of-range results (subnormal, overflow) and a rare undecided case only.
+        assert!(refused < 300, "refused {refused}");
+    }
+
+    /// The accuracy job's sweep (release build): more operands, every mode.
+    #[test]
+    #[ignore = "long: the accuracy job runs it in release"]
+    fn tier_agrees_with_the_wide_route_long() {
+        let refused = sweep(40_000, 0x2545_f491_4f6c_dd1d);
+        println!("refused {refused}");
+    }
+}
