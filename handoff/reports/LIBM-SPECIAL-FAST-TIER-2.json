@@ -1,0 +1,13 @@
+{"task": "LIBM-SPECIAL-FAST-TIER-2", "model": "opus", "tokens": null,
+ "result": "double erf/erfc fast tier (Ziv first step, 2^-71 bound, mp fallback) with tests and 8/8 plants; fallback erf 1, erfc 0 in 10^5",
+ "branch": "task/libm-special-fast-tier-2", "head": "3e474c09",
+ "gate": {"affected": "gate (015d7d1e) red: erfc(-inf) inexact, fixed in 3e474c09; gate2 (3e474c09, escalated to FULL by the generated tables) green rc 0", "peak": null},
+ "counts": "erf 174247 -> 377.9 (ref 153.8, 2.46x); erfc 174738 -> 440.6 (ref 157.8, 2.79x); erff/erfcf unchanged",
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["settle's subnormal branch now settles results in [2^-1023, 2^-1022) (exp/exp2/exp10 too)", "erff/erfcf still take the mp path (next step)", "10^7 sweep per function not run (budget); 2000 per function and mode in the test", "process slips: one heredoc python edit of special.rs, sed -i on own scratch job script"],
+ "refused": [],
+ "jobs": ["shiki:libm-special-fast-tier-2-gate2", "shiki:libm-special-fast-tier-2-plants2", "shiki:libm-special-fast-tier-2-counts-before", "shiki:libm-special-fast-tier-2-counts-after"],
+ "improvement": "a story that regenerates tables.rs always escalates the gate to FULL; a generated-table diff could map to the tables' readers instead",
+ "next_step": "erff/erfcf through the same kernel with a float rounding test; then LIBM-SPECIAL-GAMMA-TIER",
+ "report_file": "handoff/libm-special-fast-tier-2-report.md"}
