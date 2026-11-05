@@ -9,7 +9,9 @@
 # the fresh tmpfs, and the run script with it ("cannot open .../catalogs_run.sh"). So each
 # top-level directory of /dev/shm holding the working directory or a path argument (`/dev/shm/x/..`
 # or `NAME=/dev/shm/x/..`) is bound back into the new /dev/shm, from a descriptor opened on the old
-# one before the mount. The shared region is a top-level file: it still starts fresh.
+# one before the mount. Only a directory that already exists there is bound back: a path the
+# command is to create (aio_products' scratch, /dev/shm/liella-aio-...) belongs to the private
+# /dev/shm and goes with it. The shared region is a top-level file: it still starts fresh.
 #
 # Usage: nscache_mode.sh on|off COMMAND ARGS...
 set -eu
@@ -31,4 +33,4 @@ for p in "$PWD" "$@"; do
 		;;
 	esac
 done
-exec sudo -n unshare -m env -i PATH="$PATH" sh -c 'u=$1; g=$2; k=$3; shift 3; exec 3</dev/shm; mount -t tmpfs -o mode=1777 tmpfs /dev/shm || exit 1; for n in $k; do mkdir "/dev/shm/$n" && mount --no-canonicalize --bind "/proc/$$/fd/3/$n" "/dev/shm/$n" || exit 1; done; exec 3<&-; exec setpriv --reuid="$u" --regid="$g" --init-groups "$@"' sh "$(id -u)" "$(id -g)" "$keep" "$@"
+exec sudo -n unshare -m env -i PATH="$PATH" sh -c 'u=$1; g=$2; k=$3; shift 3; exec 3</dev/shm; mount -t tmpfs -o mode=1777 tmpfs /dev/shm || exit 1; for n in $k; do [ -d "/proc/$$/fd/3/$n" ] || continue; mkdir "/dev/shm/$n" && mount --no-canonicalize --bind "/proc/$$/fd/3/$n" "/dev/shm/$n" || exit 1; done; exec 3<&-; exec setpriv --reuid="$u" --regid="$g" --init-groups "$@"' sh "$(id -u)" "$(id -g)" "$keep" "$@"

@@ -53,7 +53,7 @@
 //!    `#include` or `.set` (which can define symbols unseen), a symbol not prefixed `liella_`
 //!    (may be exported C ABI), a symbol named by another csys source, a link list, a script or
 //!    xtask, or no user at all.
-//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule): the
+//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
@@ -1168,6 +1168,8 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/policy.rs", &[]),
     ("xtask/src/forkalloc.rs", &[]),
     ("xtask/src/fs_order.rs", &[]),
+    // `cargo xtask plants` only (ruling #2993): no other command or gate step runs it.
+    ("xtask/src/plants.rs", &[]),
     ("xtask/src/symgap.rs", &["symgap"]),
     ("xtask/src/status.rs", &["status"]),
     ("xtask/src/schedule.rs", &["status"]),
@@ -2888,6 +2890,15 @@ mod tests {
         for f in ["xtask/src/so.rs", "xtask/src/spec.rs", "xtask/src/csys.rs", "xtask/src/main.rs"] {
             assert!(!sel(&[f]).1.full.is_empty(), "{f} must escalate to full");
         }
+    }
+
+    #[test]
+    fn a_plants_change_selects_exactly_the_xtask_tests_and_clippy() {
+        // no spec clause: ruling #2993, plants.rs is a leaf like the audit modules, not FULL.
+        let (_, s) = sel(&["xtask/src/plants.rs"]);
+        assert!(s.full.is_empty(), "plants.rs must not escalate to FULL: {s:?}");
+        assert!(s.xtask_tests && s.xtask_cmds.is_empty() && s.tests.is_empty() && s.conf.is_empty(), "{s:?}");
+        assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "only the xtask clippy: {s:?}");
     }
 
     #[test]
