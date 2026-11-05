@@ -331,6 +331,19 @@ impl DirStream {
         Ok(Some((kind, namez)))
     }
 
+    /// The records not yet handed out, as the kernel wrote them (whole records, `getdents64`
+    /// layout), refilling when none are left; `None` at the end. For a caller that copies a
+    /// directory out whole (a tree walk's listing).
+    pub fn next_chunk<S: Sys>(&mut self, sys: &S) -> Result<Option<&[u8]>> {
+        if self.pos >= self.len && !self.refill(sys)? {
+            return Ok(None);
+        }
+        let (pos, len, base, cap) = (self.pos, self.len, self.base, self.cap);
+        self.pos = len;
+        let area = self.buf.get(base..base.saturating_add(cap)).unwrap_or(&[]);
+        Ok(Some(area.get(pos..len).ok_or(Errno::EIO)?))
+    }
+
     /// The address of `e`'s record, which stays valid until the stream reads again (a C
     /// caller's `struct dirent *`).
     pub fn record_addr(&self, e: &Entry) -> usize {
