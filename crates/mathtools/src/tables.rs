@@ -16,13 +16,13 @@ use crate::mp::{self, Big, Fmt, Round};
 /// Working precision of every constant (bits).
 const WORK: u32 = 400;
 
-fn f64_of(x: &Big) -> f64 {
+pub(crate) fn f64_of(x: &Big) -> f64 {
     let (b, _) = x.round_to(Fmt::F64, Round::Nearest);
     f64::from_bits(b as u64)
 }
 
 /// The double-double nearest `x`: (hi, lo) bit patterns.
-fn dd(x: &Big) -> (u64, u64) {
+pub(crate) fn dd(x: &Big) -> (u64, u64) {
     let hi = f64_of(x);
     let lo = f64_of(&x.sub(&Big::from_f64(hi)));
     (hi.to_bits(), lo.to_bits())
@@ -201,6 +201,7 @@ pub fn generate() -> String {
     let even_fact: Vec<Big> = (0..16i64).map(|k| Big::one().div(&fact(2 * k), p, Round::Nearest)).collect();
     o.dd_table("INV_EVEN_FACT", "`1/(2k)!` for k = 0..15 (cosine series).", &even_fact);
     mp_constants(&mut o);
+    crate::special_tables::emit(&mut o.src);
     o.src
 }
 
