@@ -109,8 +109,9 @@ pub fn cosh_nearest(x: f64) -> Option<f64> {
 /// Proof. `|x| < 2^-6`: [`odd_series`] with the Taylor coefficients `−1/3, 2/15, −17/315,
 /// 62/2835, −1382/155925` (alternating and falling: the omitted terms are below
 /// `0.004·|x|^13 < 2^-80·|x|`). Else `N = p − qs`, `D = p + qs` (units of `2^m`, each within
-/// `E = ep + eq + 2^-100·|p.hi|`), the real `D·2^m >= 2`. For errors `dN`, `dD` below `E·2^m`:
-/// `|N'/D' − N/D| <= E·2^m·(D + N)/(D·D') <= 1.01·E·2^m`. The quotient: `q1 = RN(N.hi/D.hi)`,
+/// `E = ep + eq + 2^-100·|p.hi|`). For errors `dN`, `dD` below `E·2^m`, with `N < D`:
+/// `|N'/D' − N/D| <= E·2^m·(D + N)/(D·D'·2^m) <= 2E/D'` (the `2^m` cancels), at most `2.02·E/d.hi`
+/// (`d.hi` within `2^-100` of `D'`); about `2^-69` relative, as `E` is about `2^-70·D`. The quotient: `q1 = RN(N.hi/D.hi)`,
 /// the residual `N − q1·D` with `q1·D.hi` exact (`$prod`) and `N.hi − P.hi` exact (Sterbenz),
 /// `q2 = RN(res/D.hi)`: the remaining error below `2^-100·|q|` ([`R96`]).
 $(#[$a])*
@@ -130,7 +131,7 @@ pub fn tanh_nearest(x: f64) -> Option<f64> {
         let pr = $prod(q1, d.hi);
         let res = (((n.hi - pr.hi) - pr.lo) + n.lo) - q1 * d.lo;
         let q = fast_two_sum(q1, res / d.hi);
-        let e = 1.01 * (ep + eq + R96 * dd::abs(p.hi)) * dd::pow2(m);
+        let e = 2.02 * (ep + eq + R96 * dd::abs(p.hi)) / d.hi;
         round(q, e + R96 * dd::abs(q.hi), 0)?
     };
     Some(if x < 0.0 { -v } else { v })
