@@ -39,6 +39,7 @@ pub mod mpx;
 pub mod mpy;
 pub mod special;
 pub mod wide;
+mod wide_dd;
 pub mod real;
 pub mod complex;
 pub mod ulp;
