@@ -2563,14 +2563,11 @@ macro_rules! invtrig_nearest {
     )+};
 }
 
-/// `sqrtsd` inline, for the kernels above (correctly rounded; they run in the default MXCSR).
+/// `sqrtsd` for the kernels above (correctly rounded; they run in the default MXCSR). An
+/// out-of-line call to the machine layer; an inline form is a measured follow-up.
 #[inline(always)]
 fn sqrtsd(x: f64) -> f64 {
-    use core::arch::x86_64::{_mm_cvtsd_f64, _mm_set_sd, _mm_sqrt_sd};
-    // UNSAFE(hot-kernel) SAFETY: SSE2 is part of the x86-64 baseline; the intrinsics act on
-    // registers only (no memory access).
-    #[allow(unsafe_code)]
-    unsafe { _mm_cvtsd_f64(_mm_sqrt_sd(_mm_set_sd(x), _mm_set_sd(x))) }
+    crate::ffi::liella_machine_sqrtsd(x)
 }
 
 invtrig_nearest! {
