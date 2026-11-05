@@ -860,7 +860,8 @@ pub fn expm1_nearest(x: f64) -> Option<f64> {
     finish(y, Some(C_M1), 0, || 2.0 * TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi), &mut 0)
 }
 
-/// `ln(1 + x)` for the in-place entry: `x > -1` finite, `|x| >= 2^-60`.
+/// `ln(1 + x)` for the in-place entry: `-1 < x <= 1e300`, `|x| >= 2^-60` (above that `wl/wh` could be
+/// subnormal and raise underflow in hardware: the gate's `log1p(DBL_MAX)` row).
 ///
 /// * `|x| <= 2^-7`: the series of [`log_series`] with `r = x` exact (`e = 0`, `c = 1`, `rl = 0`);
 ///   `eps = 2^-49·|T| + 2^-70·|y|`, `eps/|y| <= 2^-49·x²/3 + 2^-70 < 2^-64`.
@@ -872,7 +873,7 @@ pub fn expm1_nearest(x: f64) -> Option<f64> {
 /// Normal operands throughout, so only inexact is raised in hardware.
 #[inline(always)]
 pub fn log1p_nearest(x: f64) -> Option<f64> {
-    if !(x > -1.0 && x <= f64::MAX) || dd::abs(x) < crate::exp_log::TINY {
+    if !(x > -1.0 && x <= 1.0e300) || dd::abs(x) < crate::exp_log::TINY {
         return special(x, None);
     }
     let (y, tail) = if dd::abs(x) <= 0.007_812_5 {
