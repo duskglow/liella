@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 use liella::locale::file::Cat;
 use liella::ctype::Class;
-use liella::locale::view::LocaleView;
+use liella::locale::view::{LocaleView, EMPTY};
 use liella::locale::{Ctype, Item, Locale};
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -584,9 +584,6 @@ pub fn invalidate() -> Result<(), liella::error::Errno> {
     r
 }
 
-/// An empty string for absent items.
-static EMPTY: [u8; 1] = [0];
-
 /// `nl_langinfo(item)` in `l`: the item's address, or for a word item its value (D-7.10). The
 /// category's item table answers (LV-3); a category without one, the name item and an unknown
 /// category take [`langinfo_slow`].
@@ -596,6 +593,12 @@ pub fn langinfo(item: i32, v: &LocaleView) -> usize {
     // negative item, a number past the table, `LC_ALL` and the name item (index 0xffff: no table
     // has that many entries) find no entry and take the slow path.
     let bits = u32::from_ne_bytes(item.to_ne_bytes());
+    let index = usize::try_from(bits & 0xffff).unwrap_or(usize::MAX);
+    // PARITY-SMALL-ENTRY: the view's answer table (the same words the match below works out),
+    // one bounds check and one load; the const "C" view has none and goes on below.
+    if let Some(a) = v.answer(bits >> 16, index) {
+        return a;
+    }
     if let Some(entry) = v.entry(bits >> 16, usize::try_from(bits & 0xffff).unwrap_or(usize::MAX)) {
         return match entry {
             Item::Word(v) => usize::try_from(v).unwrap_or(0),

@@ -175,6 +175,42 @@ pub struct LocaleView {
     /// The words of this locale's `struct lconv`, worked out by the first `localeconv` that
     /// asks (the same values every time, so a racing second fill stores the same words).
     lconv: LconvWords,
+    /// `nl_langinfo`'s answer for every entry of `cats`, by the same category number and index
+    /// (PARITY-SMALL-ENTRY): a word item's value, else the address of the item's bytes ([`EMPTY`]
+    /// for an empty one). Worked out once when the view is built, so the call is one bounds check
+    /// and one load instead of decoding a `Tab` and an `Item`. The const `"C"` view has none
+    /// (every slice empty): its callers take the `cats` path.
+    answers: [&'static [usize]; 13],
+}
+
+/// The empty string every empty `nl_langinfo` item answers with.
+pub static EMPTY: [u8; 1] = [0];
+
+/// [`LocaleView::answers`]' word for one item.
+fn answer(item: Item) -> usize {
+    match item {
+        Item::Word(v) => usize::try_from(v).unwrap_or(0),
+        Item::Bytes([]) => EMPTY.as_ptr().expose_provenance(),
+        Item::Bytes(b) => b.as_ptr().expose_provenance(),
+    }
+}
+
+/// The answer tables of `cats` in one allocation, leaked with the view (views are never freed).
+fn answers_of(cats: &[Tab; 13]) -> Result<[&'static [usize]; 13], Errno> {
+    let total = cats.iter().fold(0usize, |t, c| t.saturating_add(c.len()));
+    let mut v = TryVec::with_capacity(total)?;
+    for tab in cats {
+        for i in 0..tab.len() {
+            v.push(tab.get(i).map_or(0, answer))?;
+        }
+    }
+    let mut rest: &'static [usize] = v.leak();
+    let mut out: [&'static [usize]; 13] = [&[]; 13];
+    for (slot, tab) in out.iter_mut().zip(cats) {
+        let (head, tail) = rest.split_at(tab.len().min(rest.len()));
+        (*slot, rest) = (head, tail);
+    }
+    Ok(out)
 }
 
 /// The twelve words of a `struct lconv` (ten string pointers, two words of packed chars).
@@ -301,7 +337,7 @@ impl LocaleView {
     /// The view of `"C"` (handle 0).
     #[allow(clippy::indexing_slicing)] // a const fn (no `get`): `Cat::Time.index()` is 2, below the 12 tables
     pub const fn c() -> LocaleView {
-        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new() }
+        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: [&[]; 13] }
     }
 
     /// The words of this locale's `struct lconv`: `fill` works them out on the first call, later
@@ -373,7 +409,15 @@ impl LocaleView {
             Ctype::File(f) => Some((f.wide(), f.ascii_case())),
             Ctype::C | Ctype::CUtf8 => None,
         };
-        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new() })
+        let answers = answers_of(&cats)?;
+        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers })
+    }
+
+    /// `nl_langinfo`'s answer for entry `index` of category number `number` ([`Self::entry`]
+    /// worked out ahead; `None` where `entry` is `None`, and always for the const `"C"` view).
+    #[inline]
+    pub fn answer(&self, number: u32, index: usize) -> Option<usize> {
+        self.answers.get(usize::try_from(number).ok()?)?.get(index).copied()
     }
 
     /// The entry `index` of the table of category number `number` (`nl_langinfo`'s fast path):
