@@ -592,6 +592,14 @@ fn bessel01(a: &Arg, want_y: bool) -> [Mp; 4] {
     [j0.v, j1.v, y0.v, y1.v]
 }
 
+/// `[J_0(x), J_1(x), Y_0(x), Y_1(x)]` of a positive `float` as double-doubles (the reference of
+/// the `float` fast path's bound test, LIBM-F32-BESSEL).
+#[cfg(test)]
+pub(crate) fn bessel01_dd(x: f32) -> [dd::Dd; 4] {
+    let d = float::decode(x);
+    bessel01(&Arg::of(&d), true).map(mp_to_dd)
+}
+
 /// The double-double value of an `Mp` within the `f64` range.
 fn mp_to_dd(m: Mp) -> dd::Dd {
     let hi = m.to_f64();

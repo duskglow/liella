@@ -972,20 +972,24 @@ const INV_PI_D: f64 = f64::from_bits(0x3fd4_5f30_6dc9_c883); // RN(1/π)
 /// `bessel_bounds_hold` from the coefficients (Horner: γ_2n·Σ|a_i||t|^i plus the fit's error).
 const BES_SMALL_E: f64 = 64.0; // J0 on [0, 2) (|J0| ≤ 1), and J1/x·|x| scaled by |x|
 const BES_REG_E: f64 = 64.0; // the regular parts of Y0, Y1 on [2^-20, 2)
-const BES_PIECE_E: f64 = 128.0; // the pieces of [2, 24)
+/// The pieces of [2, 24) per function (J0, J1, Y0, Y1); the first piece of Y0 and Y1 ([2, 4),
+/// next to the logarithmic singularity at 0) takes [`BES_PIECE0_E`] instead: its fit levels at
+/// 66 and 399 units (`fast32_y0.rs`, `fast32_y1.rs`), the others at ≤ 2.8.
+const BES_PIECE_E: f64 = 128.0;
+const BES_PIECE0_E: [f64; 4] = [128.0, 128.0, 192.0, 512.0];
 const BES_LOG_E: f64 = 400.0; // (2/π) ln x: log_core 2^-44.79 relative plus two roundings, of |L|
 const BES_HANKEL_E: f64 = 20.0; // Hankel's form, of the amplitude (see `hankel_core`)
 
-const J0S: [u64; 12] = crate::coeffs::fast32_j0_small::FAST32_J0_SMALL;
-const J1S: [u64; 12] = crate::coeffs::fast32_j1_small::FAST32_J1_SMALL;
-const Y0R: [u64; 12] = crate::coeffs::fast32_y0_reg::FAST32_Y0_REG;
-const Y1R: [u64; 12] = crate::coeffs::fast32_y1_reg::FAST32_Y1_REG;
-const BES_PIECES: [&[[u64; 17]; 11]; 4] = [
-    &crate::coeffs::fast32_j0::FAST32_J0,
-    &crate::coeffs::fast32_j1::FAST32_J1,
-    &crate::coeffs::fast32_y0::FAST32_Y0,
-    &crate::coeffs::fast32_y1::FAST32_Y1,
-];
+const J0S: [u64; 9] = crate::coeffs::fast32_j0_small::FAST32_J0_SMALL;
+const J1S: [u64; 9] = crate::coeffs::fast32_j1_small::FAST32_J1_SMALL;
+const Y0R: [u64; 9] = crate::coeffs::fast32_y0_reg::FAST32_Y0_REG;
+const Y1R: [u64; 9] = crate::coeffs::fast32_y1_reg::FAST32_Y1_REG;
+/// The pieces of [2, 24): J0, J1 degree 13, Y0, Y1 degree 16 (their first piece converges
+/// slowly next to the singularity at 0), one row per center 3, 5, ..., 23.
+const J0P: [[u64; 14]; 11] = crate::coeffs::fast32_j0::FAST32_J0;
+const J1P: [[u64; 14]; 11] = crate::coeffs::fast32_j1::FAST32_J1;
+const Y0P: [[u64; 17]; 11] = crate::coeffs::fast32_y0::FAST32_Y0;
+const Y1P: [[u64; 17]; 11] = crate::coeffs::fast32_y1::FAST32_Y1;
 
 /// Hankel's coefficients for order ν: P takes (-1)^m a_2m, Q (-1)^m a_(2m+1), with a_0 = 1 and
 /// a_(k+1) = a_k·(4ν² - (2k+1)²)/(8(k+1)) (DLMF 10.17.1), k < 22. Each a_k is within 2k·u of
@@ -1032,7 +1036,8 @@ fn horner_f(c: &[f64; 11], t: f64) -> f64 {
 /// with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P(s - c) + Q(c + s)), J1 =
 /// A·(P(s - c) + Q(s + c)), Y1 = A·(Q(s - c) - P(s + c)), A = √(1/(πx)).
 /// P and Q are truncated after a_20 and a_21: for real x and k ≥ ν - 1/2 the remainder is
-/// bounded by the first neglected term (DLMF 10.17(iii)), |a_22|/24^22 < 2^-59 and less beyond.
+/// bounded by the first neglected term (DLMF 10.17(iii)), |a_22|/24^22 < 2^-58 and less beyond
+/// (`bessel_bounds_hold`).
 /// Errors in units u = 2^-53: s, c 9.05 each (trig_core), c ± s ≤ 9.05·√2 + √2 < 14.2 (|c ± s| ≤
 /// √2); |P - 1| < 2^-12 with ΔP < 1.1 (the last sum), |Q| < 0.016 with ΔQ < 0.1; the products and
 /// the bracket's sum add < 1.42 + 1.42 + 0.03: the bracket ≤ 19.1, the truncation < 0.1. A: 1/x
@@ -1081,19 +1086,29 @@ fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
                 if f == 2 {
                     let j = horner(&J0S, z);
                     let y = l * j + horner(&Y0R, z);
-                    (y, (BES_LOG_E * l.abs() + BES_REG_E + 2.0 * y.abs()) * U53)
+                    // L's error times |J0| ≤ 1, J0's times |L|, the product's rounding, R0, the sum.
+                    (y, ((BES_LOG_E + BES_SMALL_E + 1.0) * l.abs() + BES_REG_E + 2.0 * y.abs()) * U53)
                 } else {
                     let j = ax * horner(&J1S, z);
                     let w = TWO_OVER_PI / ax;
                     let y = (l * j + ax * horner(&Y1R, z)) - w;
-                    (y, (2.0 * w + BES_LOG_E * (l * ax).abs() + BES_REG_E * ax + 2.0 * y.abs()) * U53)
+                    // w's two roundings and the final difference's share of it (|J1| ≤ x/2 ≤ x),
+                    // L·J1 as for Y0 with J1's bound scaled by x, R1 (absolute fit error ≤ 1),
+                    // the sums.
+                    (y, (3.0 * w + (BES_LOG_E + BES_SMALL_E + 1.0) * (l * ax).abs() + BES_REG_E * ax + 1.0 + 2.0 * y.abs()) * U53)
                 }
             }
         }
     } else if ax < BES_HANKEL {
         let i = ((ax - 2.0) * 0.5) as usize;
-        let t = ax - (3 + 2 * i) as f64; // exact: both on the 2^-48 grid, |t| ≤ 1
-        (horner(&BES_PIECES[f][i], t), BES_PIECE_E * U53)
+        let t = ax - (3 + 2 * i) as f64; // exact: ax is a `float` ≥ 2 (on the 2^-22 grid), |t| ≤ 1
+        let c: &[u64] = match f {
+            0 => &J0P[i],
+            1 => &J1P[i],
+            2 => &Y0P[i],
+            _ => &Y1P[i],
+        };
+        (horner(c, t), if i == 0 { BES_PIECE0_E[f] } else { BES_PIECE_E } * U53)
     } else {
         hankel_core(f, ax)?
     };
@@ -1105,7 +1120,7 @@ fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)> {
 #[inline(always)]
 fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)> {
     let d = e * TWO53 / y.abs();
-    if !(d < 67_108_864.0) {
+    if d.is_nan() || d >= 67_108_864.0 {
         stats::record(name, false);
         return None;
     }
@@ -1117,8 +1132,12 @@ mod tests {
     use super::*;
     use crate::exp_log as acc;
 
-    const ALL: [Fast; 19] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::J0, Fast::J1, Fast::Y0, Fast::Y1];
-    const NAMES: [&str; 19] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "j0f", "j1f", "y0f", "y1f"];
+    const ALL: [Fast; 15] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan];
+    const NAMES: [&str; 15] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf"];
+    /// The Bessel functions (not in ALL: their accurate path costs ~2.3e5 instructions a call,
+    /// so their agreement tests sample instead of striding over every encoding).
+    const BES: [Fast; 4] = [Fast::J0, Fast::J1, Fast::Y0, Fast::Y1];
+    const BES_NAMES: [&str; 4] = ["j0f", "j1f", "y0f", "y1f"];
     const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
@@ -1757,5 +1776,112 @@ mod tests {
             hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
         });
         std::println!("fast path taken {taken} of {} calls", (fs.len() as u64 * 4) << 32);
+    }
+
+    /// Positive operands for the Bessel tests: a stride over [2^-20, 2^19) and dense runs at the
+    /// cuts (2^-20, the piece borders 2, 4, ..., 24 with Hankel's switch, 2^19) and at the first
+    /// zeros of J0, J1, Y0, Y1 (where the rounding test must refuse).
+    fn bessel_operands(step: usize) -> std::vec::Vec<f32> {
+        let mut xs: std::vec::Vec<f32> = (0x3580_0000u32..0x4900_0000).step_by(step).map(f32::from_bits).collect();
+        let cuts = [0x3580_0000u32, 0x4900_0000, 0x4000_0000, 0x4080_0000, 0x40c0_0000, 0x4100_0000, 0x4120_0000, 0x4140_0000, 0x4160_0000, 0x4180_0000, 0x4190_0000, 0x41a0_0000, 0x41b0_0000, 0x41c0_0000];
+        // The first two zeros of J0, J1, Y0, Y1 (DLMF Table 10.21.1).
+        let zeros = [2.404_825_557_695_773f64, 5.520_078_110_286_311, 3.831_705_970_207_512, 7.015_586_669_815_619, 0.893_576_966_279_167_5, 3.957_678_419_314_858, 2.197_141_326_031_017, 5.429_681_040_794_135];
+        for b in cuts.into_iter().chain(zeros.map(|z| (z as f32).to_bits())) {
+            xs.extend((b - 0x100..b + 0x100).map(f32::from_bits));
+        }
+        xs
+    }
+
+    /// Each Bessel core's y is within its absolute bound e of the function, against the 384-bit
+    /// series or Hankel sums of the accurate path rounded to double-double (their error far below
+    /// 2^-100). (No spec clause: LIBM-F32-BESSEL, D-10.49.)
+    #[test]
+    fn bessel_cores_are_within_their_bounds() {
+        let (mut seen, mut worst) = (0u32, [0f64; 4]);
+        for x in bessel_operands(9973) {
+            let want = crate::special::bessel01_dd(x);
+            for f in 0..4 {
+                if let Some((y, e)) = bessel_core(f, x) {
+                    seen += 1;
+                    let err = crate::dd::Dd::from(y).sub(want[f]).to_f64().abs();
+                    assert!(err <= e, "{}({x:e}) = {y:e}: error {err:e} > bound {e:e}", BES_NAMES[f]);
+                    worst[f] = worst[f].max(err / e);
+                }
+            }
+        }
+        std::println!("worst error / bound: {worst:?}");
+        assert!(seen > 100_000, "{seen}");
+    }
+
+    /// The bound constants hold for the coefficients: Horner with a separate multiply and add
+    /// rounds 2(n - 1) times, |error| ≤ γ_2(n-1)·Σ|a_i|·r^i (r the largest |t| or z), plus the fit's
+    /// error as the Remez tool measured it (the generated files' headers, units of 2^-53).
+    /// Hankel's series: the first neglected terms a_22/x^22, a_23/x^23 are below 2^-59 at x = 24
+    /// (DLMF 10.17(iii): the remainder is bounded by the first neglected term). (No spec clause:
+    /// LIBM-F32-BESSEL, D-10.49.)
+    #[test]
+    fn bessel_bounds_hold() {
+        fn horner_bound(c: &[u64], r: f64) -> f64 {
+            let s: f64 = c.iter().rev().fold(0.0, |acc, &a| acc * r + f64::from_bits(a).abs());
+            let k = 2.0 * (c.len() - 1) as f64;
+            k / (1.0 - k * U53) * s
+        }
+        // The small pieces on z = x² in [0, 4]: J0 relative (|J0| ≤ 1), J1/x relative to J1/x ≤ 1/2.
+        assert!(horner_bound(&J0S, 4.0) + 2.56 + 1.2 <= BES_SMALL_E, "J0S {}", horner_bound(&J0S, 4.0));
+        assert!(horner_bound(&J1S, 4.0) + 0.14 + 1.0 <= BES_SMALL_E, "J1S {}", horner_bound(&J1S, 4.0));
+        assert!(horner_bound(&Y0R, 4.0) + 1.22 <= BES_REG_E, "Y0R {}", horner_bound(&Y0R, 4.0));
+        assert!(horner_bound(&Y1R, 4.0) + 1.0 <= BES_REG_E, "Y1R {}", horner_bound(&Y1R, 4.0));
+        // The pieces of [2, 24) on t in [-1, 1]: fit errors ≤ 2.8 (J0, J1), 66.27 and 398.55 on
+        // Y0's and Y1's first piece, ≤ 1 on their others.
+        for i in 0..11 {
+            let fit = |f: usize| match (f, i) {
+                (0 | 1, _) => 2.8,
+                (2, 0) => 66.27,
+                (3, 0) => 398.55,
+                _ => 1.0,
+            };
+            for (f, c) in [(0, &J0P[i][..]), (1, &J1P[i][..]), (2, &Y0P[i][..]), (3, &Y1P[i][..])] {
+                let b = if i == 0 { BES_PIECE0_E[f] } else { BES_PIECE_E };
+                let h = horner_bound(c, 1.0) + fit(f) + 1.0;
+                assert!(h <= b, "{} piece {i}: {h} > {b}", BES_NAMES[f]);
+            }
+        }
+        for (nu, pq) in HANKEL.iter().enumerate() {
+            // a_k by the recurrence once more, past the kept terms.
+            let mu = (4 * nu * nu) as f64;
+            let mut a = [1.0f64; 24];
+            for k in 0..23 {
+                let j = (2 * k + 1) as f64;
+                a[k + 1] = a[k] * (mu - j * j) / (8.0 * (k + 1) as f64);
+            }
+            for k in 0..22 {
+                let want = if (k / 2) % 2 == 0 { a[k] } else { -a[k] };
+                assert_eq!(pq[k % 2][k / 2].to_bits(), want.to_bits(), "HANKEL[{nu}] a_{k}");
+            }
+            for k in [22, 23] {
+                assert!(a[k].abs() / 24f64.powi(k as i32) < 2f64.powi(-58), "a_{k}(nu = {nu}) / 24^{k}");
+            }
+        }
+    }
+
+    /// The Bessel fast path against the accurate path in every mode on sampled operands (both
+    /// signs; the Y functions refuse x ≤ 0), and its fallback rate on a grid over (0, 64]: the
+    /// rounding test refuses only next to a zero or a rounding boundary. (No spec clause:
+    /// LIBM-F32-BESSEL, D-10.49.)
+    #[test]
+    fn bessel_fast_path_agrees_with_the_accurate_path() {
+        let xs = bessel_operands(0x1_0001);
+        let both = xs.iter().flat_map(|&x| [x, -x]);
+        let special = [0.0f32, -0.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, 1e-30, -1e-30, 1e6, -1e6];
+        assert!(agree_in(&BES, both.chain(special)) > 50_000);
+        for (f, n) in BES.into_iter().zip(BES_NAMES) {
+            let before = stats::counts(n);
+            for i in 1..=1u32 << 16 {
+                let _ = eval(f, 64.0 * i as f32 / 65_536.0, Rounding::Nearest);
+            }
+            let c = stats::counts(n).since(before);
+            std::println!("{n}: fallback {c:?}");
+            assert!(c.check_fallback(n, 1_000).is_ok(), "{n}: fallback rate {c:?}");
+        }
     }
 }
