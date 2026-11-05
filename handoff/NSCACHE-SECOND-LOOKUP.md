@@ -1,84 +1,55 @@
-# NSCACHE-SECOND-LOOKUP (handoff, run 1)
+# NSCACHE-SECOND-LOOKUP (handoff, after run 2 = NSCACHE-SECOND-LOOKUP-2)
 
-**State.** Branch `task/nscache-second-lookup` from `origin/next` ff125cce; code commit 4507467b (hot-text probe
-`tools/hottext/probes/p_nss.c`, regenerated `crates/libc-so/hot-text.list` (fast profile, +58 keys, 28 existing keys moved),
-four cache functions added to `init_cold_startup_functions_are_grouped`). Role shiki:~/w/sh1 (Haswell-EP, 2.6 GHz).
-**Decisions in force.** D-16.10 unchanged (first lookup uncached, attach + first validation on the second, every
-amendment check kept). No new D-row: layout of the products only, no behaviour or trust change.
+**State.** Branch `task/nscache-second-lookup-2` (run 1's `task/nscache-second-lookup` + 3 commits), from `origin/next`
+ff125cce. Code head 2a40c53a (the handoff/report commit is on top). Role keke:~/w/n3 (Zen 1).
+Commits: 4507467b (run 1: p_nss probe, fast-profile hot-text regen, grouping test), e460117f (probes under
+`validation/probes/nscache/`: percall.c, steps.c, measure.sh, timing.sh), 877bd3c9 (release-profile regen merged into
+the list: +7 keys, ~20 keys moved into the release trace's first-touch order; grouping test made profile-independent),
+2a40c53a (plants file for both profiles).
+**Decisions in force.** D-16.10 unchanged (first lookup uncached; attach + first validation on the 2nd; every amendment
+check kept). Ruling #3234: no attach at break-even. Ruling #3233 (skip boot_id on tmpfs) is with the OWNER: not implemented.
+No new D-row (layout of the products only).
 
-## Profile (step 1; static Liella probe, per call: perf_event_open self-counters, getrusage, markers)
-Scratch probes: `~/w/.scratch/NSCACHE-SECOND-LOOKUP/{percall.c,steps.c,measure.sh,reattach.sh,hotjob.sh}`, the
-same files on shiki `~/work/nscache-second-lookup/`. `percall N user [x]` (x: `setuid(getuid())` before call 3
-forces a re-attach with warm code); `steps <region>` measures each attach system call alone.
+## Result (release products, static `percall` probe; base = ff125cce's list, after = this branch)
+Counts (Zen 1 host, deterministic): first getpwnam_r 41 -> 30 faults, ~420k -> ~305k kernel instr; cached 2nd
+11 -> 8 faults, ~168k -> 129.5k kernel instr; uncached and hit calls unchanged (19.5k+37.6k; 4.1k+6.0k incl. markers).
+The fast-only list already gave the release 2nd call its 8 faults; the release regen adds 2 faults off the 1st call.
 
-Steady state (region exists, entry present), base next ff125cce:
+Timing (booked, interleaved A/B, 400 rounds, medians, `validation/probes/nscache/timing.sh`):
 
-| call | kernel instr | user instr | minflt | ns (unbooked, noisy) |
-|---|---|---|---|---|
-| cached 2nd | 171.5k | 18.5k | 11 | 79-86k |
-| cached 3rd+ (hit) | 4.0k (= the marker/counter floor) | 7.1k | 0 | 1.8-2.7k |
-| uncached 2nd | 19.1k | 39.8k | 0 | 15.0k |
-| re-attach, warm code (3rd call after setuid) | 100.1k (incl. ~15k unmap/close of the old mapping) | 16.4k | 3 | |
+| host class | 1st cached | 1st uncached | 2nd cached | 2nd uncached | later uncached | hit | attach extra | break-even |
+|---|---|---|---|---|---|---|---|---|
+| Ivy Bridge E3-1220L v2, base | 376.5 us | 375.6 | 230.7 | 44.4 | 35.68 | 6.15 | 187.2 us | n > 8.34 |
+| Ivy Bridge, after | **307.5** | **306.7** | **200.4** | 42.6 | 34.62 | 5.89 | **158.6 us** | **n > 7.52** |
+| N100 (AVX2), base | 151.3 | 143.7 | 91.9 | 15.7 | 11.92 | 2.20 | 83.9 us | n > 10.63 |
+| N100 (AVX2), after | **117.2** | **114.5** | **78.3** | 14.9 | 11.47 | 2.09 | **66.1 us** | **n > 9.06** |
 
-Where the cached 2nd call's 171.5k kernel instructions go (steps.c, fresh process; strace of the call):
-- the first validation: 5 stats (passwd, nsswitch.conf, host.conf, resolv.conf, gai.conf): 24.4k
-- `/proc/self/ns/user` stat (T13): 26.3k in a fresh process (13.7k warm: the first walk of /proc/self costs the rest)
-- boot ID (open+read+close of /proc/sys/kernel/random/boot_id): 13.4k
-- open region 6.3k, fstat 1.2k, mmap 8 MiB shared 7.3k, 4 id calls 1.5k
-- region page faults (header, slot, entry: 3 different 64 KiB windows): 11-15k
-- **first touch of the attach / validate / hit code and a heap page: 8 faults, about 71k** (171.5k − 100.1k
-  re-attach). This was the largest share that does not touch a security check, so run 1 went after it.
-Not on the path: no MAP_POPULATE, no full-file validation (the reader touches 3 pages), no account lookup (the
-cheap stamp path holds), no F_DUPFD (the descriptor is already above 2).
+attach extra = c1 + c2 - u1 - u2; break-even: a process gains from the cache from lookup ceil(2 + extra/(later - hit)):
+the 8th (was 9th) on Ivy Bridge, the 10th (was 11th) on N100. The first-lookup gain (-18% / -20%) holds for every process
+with any lookup, cache on or off. By instructions run 1 said break-even 4.7 -> 3.7; time puts it at 7.5-9: the
+attach's kernel work (stats, /proc, mmap, faults) costs more time per instruction than the user-mode lookup it saves.
+**Target (2nd cached <= uncached) not reached: the floor is the attach's security system calls** (~95k kernel instr:
+5 config stats, /proc/self/ns/user, boot_id, open/fstat/mmap of the region, 4 id calls; see steps.c). Layout cannot
+remove them; only a change to the checks could (ruling #3233, with the owner).
 
-## Change (step 2) and result
-The attach, validation and hit functions go into the hot-text group (`p_nss`: getpwuid+getgrgid ×3, as in ls -l or id),
-so they share the fault-around windows of code that is already mapped. Same per-call probe, same host:
+## Jobs (keke unless named)
+- `nscache-second-lookup-2-regen` rc 101: the grouping test failed on release products (region_path, stamp_files,
+  Table::get are inlined into attach's closure in fat LTO). Fixed in 877bd3c9 (test now: every section of an attach-path
+  function is grouped, >= 2 present). Superseded.
+- `nscache-second-lookup-2-bounds` rc 0: hot_text_products 6/6 on release (startup 17, setlocale+printf 58, tool 61) and
+  fast products (19, 58, 60); bounds 23 / 68 / 71. Counts above.
+- `nscache-second-lookup-2-plants` rc 0: 3 CAUGHT (hot-region-path fast, hot-map-shared-rel and hot-attach-rel release),
+  0 WARN-RC-ONLY/NO-MSG; one WARN-DEV-SHM line (copy under /dev/shm; harmless for this test).
+- `nscache-second-lookup-2-gate` rc 0 (escalated to FULL: hot-text.list is linker input): 32 suites ok, 10873 passed,
+  0 failed; conformance 117 passed; peak 12G. clippy (`--all-targets --all-features -D warnings`) and static rc 0 on 2a40c53a.
+- `nico:nscache-second-lookup-2-nico`, `nozomi:nscache-second-lookup-2-nozomi` rc 0 (timing; bookings 44, 45 cancelled).
+- Run 1's `shiki:nscache-second-lookup-gate` (4507467b) passed: 10873 passed, 0 failed.
 
-| call | before (kernel / user / faults) | after |
-|---|---|---|
-| cached 2nd | 171.5k / 18.5k / 11 | **121.6k / 18.5k / 7** |
-| cached 1st | ~397k / 64.7k / 37 | ~300k / 64.7k / 28 (NSS files path grouped too) |
-| uncached 1st | ~398k / 64.7k / 37 | ~298k / 64.7k / 29 |
-| uncached 2nd, hit | unchanged (19.1k / 39.8k / 0; 4.0k / 7.1k / 0) | unchanged |
-
-**Break-even by instructions** (n lookups in one process; cached cheaper when n > 2 + (c2 − u)/(u − h); c2 = cached 2nd,
-u = uncached later call 58.9k, h = hit 11.1k): before 2 + 131.0/47.8 = 4.7 → **from the 5th lookup**; after
-2 + 81.2/47.8 = 3.7 → **from the 4th lookup**. The first lookup's ~97k gain applies to every process with one or more
-lookups, cache on or off. By time: not measured on a booked host (see Not run). Unbooked shiki times of the 2nd call
-did not separate (80-138 µs after, 79-241 µs before).
-**Target (2nd cached ≤ uncached) not reached and not reachable by layout:** the remaining 121.6k kernel instructions are
-the stats, /proc and region syscalls listed above (~95k) plus 4 faults. With every amendment check kept, the
-attach floor is about 2× the uncached call (58.9k). Security properties: none touched. The region checks (O_NOFOLLOW,
-fstat type/owner/mode/size, AT_SECURE and ID checks, initial user namespace, descriptor above 2, header stamp with boot ID,
-seqlock and entry checksums) run as before. Only the section names of their functions changed.
-
-## Gate / plants / counts (this run, shiki)
-- `cargo xtask clippy` rc 0, `cargo xtask static` rc 0 on 4507467b.
-- Gate `nscache-second-lookup-gate` (`cargo xtask affected --base origin/next --run`): xtask itself escalated to
-  FULL ("crates/libc-so/hot-text.list: a product crate or its linker input"); still running at hand-back (clippy ok,
-  then `cargo xtask test`, which includes hot_text_products and its fault bounds). Re-attach: `ssh <shiki> ~/bin/jobwait
-  nscache-second-lookup-gate`. The role's tree is 4507467b (the later commits touch handoff/ only; the sync was skipped while the gate ran).
-- Plants `nscache-second-lookup-plants3` (rc 0): `sec-mode` (connect accepts a region with the wrong mode) CAUGHT by
-  squatted_regions_are_refused; `hot-region-path` (one cache key dropped from the list) CAUGHT by
-  init_cold_startup_functions_are_grouped. 2 CAUGHT, 0 WARN. Superseded: `-plants` (baseline: package named
-  `liella-core`, it is `liella`), `-plants2` (role sync skipped while the gate ran, old file).
-- Counts: `nscache-second-lookup-prof-base` (before) and `nscache-second-lookup-hot1` (regen + after), rc 0.
-
-## Not run (and why)
-- Booked timing on both timing CPU classes (Ivy Bridge, AVX2): budget. Needs ~45-75 min of booking wait plus staging.
-- Full-profile regen (`LIELLA_FULL_PROFILE=1 cargo xtask so` + `regen.sh`, union): only the fast profile was traced, so
-  release-build names that differ are simply not grouped (no harm, less gain).
-
-## RULING NEEDED (not implemented)
-1. Boot ID on a tmpfs region: a file in tmpfs cannot outlive a boot, so reading `/proc/sys/kernel/random/boot_id` (13.4k
-   per attach) proves nothing there. Option: `fstatfs` the region (about 1k) and on TMPFS_MAGIC skip the read and the
-   header comparison of the boot words, but keep writing them. This changes a check of the owner's amendment, so it needs
-   the owner. Recommendation: allow it.
-2. Attach at break-even instead of at the 2nd lookup (D-16.10 as-implemented item 6): moves the cost rather than cutting it.
-   Recommendation: no.
+## INFORMATIONAL
+- The cached 1st call is 1-8 us slower than the uncached 1st on N100 (151.3 vs 143.7 base, 117.2 vs 114.5 after) though
+  both do the same system calls (TIMING-NSCACHE-FIRSTCALL); Ivy Bridge shows 1 us. Not investigated.
+- No saturation-register file covers the name-service cache yet.
 
 ## Next step
-Book Ivy Bridge and an AVX2 timing host, stage per handoff/timing-sweep-1105.md, time the static `percall` (before =
-ff125cce products, after = this branch) interleaved, and print the break-even in µs. Then regen the full profile and
-union it. Rows: `grep -rn "^| D-16.10 " plan/`.
+None required for this story. If the owner allows #3233, the boot_id read (13.4k kernel instr) goes; re-time with
+timing.sh. Rows: `grep -rn "^| D-16.10 " plan/`.
