@@ -1,0 +1,13 @@
+{"task": "PERF-MEMSET-4K-3", "model": "opus", "tokens": null,
+ "result": "memset entry picks the >256 B kernel itself (in-entry rep stosb on ERMS, direct AVX2 fill jump): memset_4k per call 65 -> 41 (glibc 30, 1.37) on Haswell-EP; 257-1279 B -14; no size slower; 1.05 target not reached",
+ "branch": "task/perf-memset-4k-3", "head": "see git log; code commit 9cfdddee",
+ "gate": {"affected": "running at hand-back (shiki:perf-memset-4k-3-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["remaining 11 instr/call at 4-64 KiB: 64-byte head stores (9) and entry class chain; skipping the head for aligned d needs a timing booking",
+                   "time ratios and the Zen 1 host not measured in this run",
+                   "bench counts (cbench_memref) are after-only; before/after is the percall pair"],
+ "refused": [],
+ "improvement": "a jobrun of a ~/bin/gate job blocks its ssh until the gate ends; starting gate and plants in one ssh call left plants unstarted for 20 min - start each job in its own ssh -n call",
+ "next_step": "count and time memset_4k/64k on the Broadwell-EP and Zen 1 hosts; try skipping the head store for 64-byte-aligned d under a timing booking",
+ "report_file": "handoff/PERF-MEMSET-4K-3.md",
+ "jobs": ["shiki:perf-memset-4k-3-gate", "shiki:perf-memset-4k-3-plants", "shiki:perf-memset-4k-3-counts", "shiki:perf-memset-4k-3-percall-before", "shiki:perf-memset-4k-3-percall2"]}
