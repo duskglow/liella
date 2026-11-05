@@ -37,6 +37,7 @@ fn f64_rows() -> Vec<Row> {
     ]
 }
 
+/// no spec clause: the fast entries add no behaviour; they must equal the accurate path (§10.3 results).
 #[test]
 fn double_entries_match_the_accurate_path() {
     let n: usize = std::env::var("LIELLA_HYPER_N").ok().and_then(|s| s.parse().ok()).unwrap_or(40_000);
@@ -59,6 +60,7 @@ fn double_entries_match_the_accurate_path() {
     }
 }
 
+/// no spec clause: the fast entries add no behaviour; they must equal the accurate path (§10.3 results).
 #[test]
 fn float_entries_match_the_accurate_path() {
     let stride: u32 = std::env::var("LIELLA_HYPER_STRIDE").ok().and_then(|s| s.parse().ok()).unwrap_or(8191);
