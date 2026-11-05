@@ -1,0 +1,27 @@
+{
+ "task": "LIBM-KERNEL-INDEX",
+ "model": "opus",
+ "tokens": null,
+ "result": "cargo xtask kernel-index writes crates/math/KERNELS.md (102 lines over 8 fast files); tables --check / static tables-fresh fail on a stale copy",
+ "branch": "task/libm-kernel-index",
+ "head": "72a87d2e",
+ "gate": {
+  "affected": "direct tier escalates to FULL for xtask/src (not run); direct tests: cargo test -p xtask 194 passed / 0 failed + static clean",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --tier direct escalates every xtask/src change to FULL; recommend a direct rule for xtask/src (xtask unit tests + static)",
+  "98 of 102 index lines say bound: undocumented (no kernel has a /// bound: tag yet); a doc story could add them from each doc's proven prose bound"
+ ],
+ "refused": [],
+ "jobs": [
+  "libm-kernel-index-check2 (clippy+static)",
+  "libm-kernel-index-gate",
+  "libm-kernel-index-plants"
+ ],
+ "improvement": "cargo is not on PATH for non-login ssh on kanon (jobrun rc 127); the sync/run wrapper should export ~/.cargo/bin",
+ "next_step": "coordinator adds the KERNELS.md-first flow rule; optional story: /// bound: tags on fast kernels",
+ "report_file": "handoff/libm-kernel-index.md"
+}

@@ -28,7 +28,20 @@ Run it from the role tree on the build host, under plain `jobrun` (not `~/bin/ga
    copy (under `timeout`, default 600 s, the project's per-plant limit), then restores the file by writing it again (again a fresh mtime).
 5. It prints one verdict per plant and a summary line. It exits 1 if any plant SURVIVED (or a step failed), else 0.
 
-Logs go to `<dir>/logs/` (`so.log`, `baseline-<n>.log`, `<id>.log`). The tool writes nothing outside `--dir`.
+**Which commands rebuild the products** (XTASK-PLANTS-PRODUCTS-REBUILD). A test that links `libc.a` or
+`liella-crt1.o` (a `*_products` test, a conformance program) sees a plant only if the products are rebuilt with
+it, so for each plant whose command may use the products the tool runs `cargo xtask so` in the copy after
+applying the plant and before the command (log `<id>.so.log`; if the mutant does not build, the plant is judged
+on that log and the command is not run). A command is known not to use them only when it is one plain
+`cargo test` whose targets are all named (`--lib`, `--bin <name>`, `--test <name>`) and no named test target
+uses the products by the rule `cargo xtask affected` builds them for (its source or support files name
+`target/liella`, `libc.a`, `liella-crt1` or `conformance`). Such a plant reuses the baseline build; anything
+else (shell syntax, `cargo xtask affected`, all targets of a package, an unknown target or option) rebuilds.
+After a plant that rebuilt the products, the next plant that does not use them first rebuilds them unmutated
+(`<id>.so-restore.log`), so no command sees an earlier plant's mutant. The verdict line names the build
+used (`build: the baseline products, not rebuilt`, or `rebuilt with the mutant in <n>s`).
+
+Logs go to `<dir>/logs/` (`so.log`, `baseline-<n>.log`, `<id>.log`, `<id>.so.log`, `<id>.so-restore.log`). The tool writes nothing outside `--dir`.
 `CARGO_TARGET_DIR` is removed from the commands' environment, so the copy builds into its own `target/`.
 
 ## The plants file

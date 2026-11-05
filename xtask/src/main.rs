@@ -20,7 +20,8 @@
 //! | `math-gen`     | Generate the math exports (`crates/boundary/src/posix/s10_math_gen.rs`) and their C forwarders (`csys/src/adapter/math_*.c`) from `crates/boundary/src/posix/s10_math.tsv` and spec Appendix C (D-10.7); `--check` fails if stale. |
 //! | `mathcmp`      | Compare glibc and Liella on one math function and format, bit for bit, and classify each result against the test oracle (D-10.3; `crates/mathtools`). |
 //! | `remez`        | The minimax (Remez) fitting tool: generate or `--check` the coefficient files of `crates/math/fits/*.fit` (D-10.3). |
-//! | `tables`       | Generate or `--check` the elementary functions' constant tables, one `@generated` file per family in `crates/math/src/coeffs/` (D-10.3). |
+//! | `tables`       | Generate or `--check` the elementary functions' constant tables, one `@generated` file per family in `crates/math/src/coeffs/` (D-10.3); also regenerates or checks `crates/math/KERNELS.md` (`kernel-index`). |
+//! | `kernel-index` | Generate or `--check` `crates/math/KERNELS.md`, the one-page index of the libm fast-tier kernels (file:line, signature, doc tags). |
 
 //! | `bench`        | Run the release-mode benchmarks and check `bench/budgets.tsv` (rule P6); `ratio_host` rows are gated on the median Liella/glibc ratio against the limit for this CPU model in `bench/host_limits.tsv` (`--runs N`, default 5 rounds; `--build-only` builds everything and stops, `--no-build` measures only and fails on a missing or stale program (the timing-lock split of `vm_bench.sh`), `BENCH_SETTLE_SECS` (default 12) idles before the first round; `--only a,b` runs just those benchmarks and says PARTIAL BENCH, not a merge bench); a CPU without entries is reported, not gated. With `--compare [--runs N] [<cbench>...]` (rule P10 (9); names are checked against `bench/c/*.c` before anything is built; `--compare` has no row filter: `--rows`/`--affected` are plain-`bench` only): build each C benchmark (default `cbench_opt`) against the products and against the host C library (dynamic and static), run them alternately N times after a discarded warm-up run (default 5), and print medians with min and max and the same-run ratio; no budgets are checked. Measurement columns (MEASURE-1): `--v3` (archive built with `-Ctarget-cpu=x86-64-v3`), `--sorted` (Liella linked with `--sort-section=name`: layout effect), `--counters` (per-row aggregate perf counters, `CBENCH_COUNTERS=1`; the summary table shows instr/op for Liella and glibc and the ratio); all columns in `target/liella/bench/measure.tsv`. `--stress env,path,fds,names,locale,deep,threads` (or `all`, STRESS-ENV-AUDIT, -2): advisory runs of the C benchmarks in a large environment (2,000 extra variables, a 200-directory `PATH`, 10,000 open descriptors; `names`: 50,000 users and groups, `locale`: 500 more names in the locale archive, both through an unprivileged user and mount namespace; `deep`: the fstree rows 64 directories down; `threads`: 64 idle threads), normally with `--counters-only`, compared with the same command without `--stress` to find costs that grow with the environment; limits are not set for it. |
 //! | `csys-audit`   | Enforce the C syscall layer's rules: single-statement wrappers, freestanding, assembly only in machine/ (plan §2.5). |
@@ -82,6 +83,7 @@ mod register;
 mod arch;
 mod plants;
 mod labnames;
+mod kernel_index;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -134,6 +136,7 @@ fn main() -> ExitCode {
         "mathcmp" => math::run_mathcmp(&root, &args[1..]),
         "remez" => math::run_remez(&root, &args[1..]),
         "tables" => math::run_tables(&root, &args[1..]),
+        "kernel-index" => kernel_index::run(&root, args[1..].iter().any(|a| a == "--check")),
         "bench" if args.iter().any(|a| a == "--compare") => bench::compare(&root, &args[1..]),
         "bench" => bench::run(&root, &args[1..]),
         "fuzz" => fuzz::run(&root, &args[1..]),
@@ -149,7 +152,7 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };

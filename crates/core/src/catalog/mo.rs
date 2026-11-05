@@ -174,14 +174,47 @@ impl<'a> Mo<'a> {
     /// and one comparison (or a binary search over the stored lengths). An index that does not
     /// describe this image (another count) is ignored.
     pub fn find_in(&self, index: &[u8], key: &[u8]) -> Option<usize> {
-        self.find_in_hinted(index, key, 0)
+        self.find_in_unhinted(index, key)
     }
 
     /// [`Mo::find_in`] with `hint`: an entry number plus one (0: none), which an earlier answer of
     /// this image's index gave. The answer is a function of the key's bytes and the image alone,
     /// so when the hinted entry's original equals `key` it is the answer, found without the hash
     /// and the probe (GETTEXT-FOUND); a hint that does not match is ignored.
+    ///
+    /// The hint test is inlined into the caller and the rest is out of line: a caller that
+    /// builds `self` from cached fields keeps them in registers on a hinted hit instead of
+    /// building the value in memory for the call.
+    #[inline]
     pub fn find_in_hinted(&self, index: &[u8], key: &[u8], hint: usize) -> Option<usize> {
+        match self.hinted(index, key, hint) {
+            Some(e) => Some(e),
+            None => self.find_in_unhinted(index, key),
+        }
+    }
+
+    /// The hinted entry (an entry number plus one in `hint`) when this image's index is usable
+    /// and that entry's original is `key`; `None` otherwise (the search then decides).
+    #[inline]
+    fn hinted(&self, index: &[u8], key: &[u8], hint: usize) -> Option<usize> {
+        let e = hint.checked_sub(1)?;
+        // The whole head must be there, as for the search (a shorter index is ignored).
+        let &[a0, a1, a2, a3, b0, b1, b2, b3, ..] = index.first_chunk::<12>()?;
+        let (mode, n) = (u32::from_ne_bytes([a0, a1, a2, a3]), u32::from_ne_bytes([b0, b1, b2, b3]));
+        let n = usize::try_from(n).ok()?;
+        if n != self.n || usize::try_from(mode).ok()? > IX_HASH || e >= n {
+            return None;
+        }
+        let word = |j: usize| -> Option<usize> { usize::try_from(u32::from_ne_bytes(index.get(j.checked_mul(4)?..j.checked_mul(4)?.checked_add(4)?)?.try_into().ok()?)).ok() };
+        let at = e.checked_mul(2)?.checked_add(IX_HEAD)?;
+        let off = word(at)?;
+        let original = self.image.get(off..off.checked_add(word(at.checked_add(1)?)?)?)?;
+        same_bytes(original, key).then_some(e)
+    }
+
+    /// [`Mo::find_in_hinted`] without a hint.
+    #[inline(never)]
+    fn find_in_unhinted(&self, index: &[u8], key: &[u8]) -> Option<usize> {
         let word = |j: usize| -> Option<usize> { usize::try_from(u32::from_ne_bytes(index.get(j.checked_mul(4)?..j.checked_mul(4)?.checked_add(4)?)?.try_into().ok()?)).ok() };
         // The three head words from one bounds check (GETTEXT-5).
         let Some(&[a0, a1, a2, a3, b0, b1, b2, b3, c0, c1, c2, c3]) = index.first_chunk::<12>() else { return self.find(key) };
@@ -196,11 +229,6 @@ impl<'a> Mo<'a> {
             let off = word(at)?;
             self.image.get(off..off.checked_add(word(at.checked_add(1)?)?)?)
         };
-        if let Some(e) = hint.checked_sub(1) {
-            if e < n && original(e).is_some_and(|o| same_bytes(o, key)) {
-                return Some(e);
-            }
-        }
         if mode == IX_SEARCH {
             let (mut lo, mut hi) = (0usize, n);
             while lo < hi {
@@ -643,6 +671,24 @@ mod tests {
             }
         }
         assert_eq!(mo.find_in(&ix[..8], b"hello"), mo.find(b"hello"), "a damaged index is ignored");
+        // GETTEXT-FOUND: a hint is taken only from an index of this image's count, in a known
+        // mode: entry 0's descriptor is made to name entry n-1's original, and a hint of entry 0
+        // for that original must still give the search's answer.
+        let n = mo.len();
+        if n >= 2 {
+            for (word, value) in [(1usize, u32::try_from(n + 1).unwrap()), (0, 2)] {
+                let mut bad = ix.to_vec();
+                bad[word * 4..word * 4 + 4].copy_from_slice(&value.to_ne_bytes());
+                let (from, to) = (4 * (IX_HEAD + 2 * (n - 1)), 4 * IX_HEAD);
+                let d: [u8; 8] = bad[from..from + 8].try_into().unwrap();
+                bad[to..to + 8].copy_from_slice(&d);
+                let off = usize::try_from(u32::from_ne_bytes(d[..4].try_into().unwrap())).unwrap();
+                let len = usize::try_from(u32::from_ne_bytes(d[4..].try_into().unwrap())).unwrap();
+                let k = &img[off..off + len];
+                assert_ne!(mo.find(k), Some(0), "the probe is not entry 0's key");
+                assert_eq!(mo.find_in_hinted(&bad, k, 1), mo.find(k), "foreign index, head word {word}");
+            }
+        }
     }
 
     fn probes_of(keys: &[&[u8]]) -> Vec<Vec<u8>> {
