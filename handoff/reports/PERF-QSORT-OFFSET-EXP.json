@@ -1,0 +1,11 @@
+{"task": "PERF-QSORT-OFFSET-EXP", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND: offset comparison already on next; disassembly puts the gap in register spills across the C call (7 of 31 merge-loop instr); address-based positions experiment built, counts/gate/plants queued, timing not done",
+ "branch": "task/perf-qsort-offset-exp", "head": "6a451fc4",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "adopt address-based positions (SortCompare::gt_at) in core's index sort", "recommendation": "only if pc1 gains on every qsort row and Ivy Bridge timing is no worse; no new unsafe"}],
+ "informational": ["brief premise stale: QSORT-COMPARE-TRAIT already compares by offset; the per-comparison gap is register pressure (11 live values, 6 callee-saved regs), not bounds checks", "baseline pc0 and trace0 cancelled: queued behind about 6 jobs, they blocked sync_role"],
+ "refused": [],
+ "improvement": "keke queue waits over 1 h per job: a story that has to profile before designing cannot get a first count inside a 70-call budget; a git clone (or a pre-primed base build) on the host would let a base count run while the role is resynced",
+ "next_step": "read pc1/wlc; if gain, book timing (Ivy Bridge + AVX2); else revert and record NEGATIVE",
+ "jobs": ["perf-qsort-offset-exp-lint", "perf-qsort-offset-exp-gate", "perf-qsort-offset-exp-plants", "perf-qsort-offset-exp-pc1", "perf-qsort-offset-exp-wlc"],
+ "report_file": "handoff/perf-qsort-offset-exp.md"}

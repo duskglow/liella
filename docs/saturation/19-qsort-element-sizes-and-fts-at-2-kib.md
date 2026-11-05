@@ -33,3 +33,34 @@ Proposed PERF story lines (rows whose ratio is above 1.10; `qsort` is user mode 
 * The 16- and 24-byte rows (0.88, 0.87) are the cases to keep when the above are fixed.
 
 Bench-only change: no library code was touched, so no plants apply.
+
+### Update: address-based positions in the index sort (PERF-QSORT-OFFSET-EXP, 2026-11-05, Zen 1 host)
+
+Where the surplus was (disassembly of the merge loop, `merge_sort_index` with the C comparator): 31 instructions per
+merge comparison besides the comparator. 11 values stay live across the indirect call and there are 6 callee-saved
+registers, so 7 of the 31 are spill stores or reloads; two `lea`s add the base to each offset; bounds checks are 2 to
+4 instructions. The surplus is register pressure across the call, not safety checks (the "8 check instructions and
+the slice building" in section 2's row predate QSORT-COMPARE-TRAIT, which already compares by offset).
+
+Change (adopted, owner ruling #3097): while merging, the position table holds element addresses (the base's exposed
+provenance plus the offset, safe Rust; `SortCompare::gt_at`, which the boundary's C-comparator adapters override with
+`with_exposed_provenance`, no new `unsafe`), turned back into offsets before the permute pass; the merge's output
+index is `i + j - mid` instead of a third counter. Two values fewer stay live across the call.
+
+Counted with `validation/wl_percall.sh` on `validation/percall/qsort.c` (`instructions:u` per sort, deterministic,
+sd 0); the comparison counts are the same before and after (Liella 1,830 at 256 elements and 9,316 at 1,024; glibc
+1,720 and 8,958), so the per-comparison columns divide by each side's own count:
+
+| Elements | before | after | change | glibc | before / cmp | after / cmp | glibc / cmp | after / glibc per cmp |
+|---|---|---|---|---|---|---|---|---|
+| 4-byte, 256 | 90823 | 83044 | -8.6% | 59665 | 49.6 | 45.4 | 34.7 | 1.31 |
+| 64-byte, 256 | 95535 | 87756 | -8.1% | 73273 | 52.2 | 48.0 | 42.6 | 1.13 |
+| 4-byte, 1,024 | 442291 | 398712 | -9.9% | 284113 | 47.5 | 42.8 | 31.7 | 1.35 |
+| 8-byte, 1,024 | 440583 | 397004 | -9.9% | 290558 | 47.3 | 42.6 | 32.4 | 1.31 |
+| 64-byte, 1,024 | 460975 | 417396 | -9.5% | 337983 | 49.5 | 44.8 | 37.7 | 1.19 |
+
+The comparator-only control row is unchanged (186910 on all three columns), and `wl_count sort-utf8` gives the same
+output with an unchanged count. About 4.5 instructions per comparison saved; the rows stay behind glibc in
+instructions. Not measured here: wall time (the next timing sweep judges the rows; revert if slower on Ivy Bridge);
+the comparison-count gap (about 4% more comparisons than glibc) is a story of its own. Not tried: a ping-pong merge
+over two disjoint buffers (removes the output bounds check, adds a copy on in-order merges).
