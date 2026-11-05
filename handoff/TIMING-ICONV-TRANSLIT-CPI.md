@@ -1,58 +1,49 @@
-# TIMING-ICONV-TRANSLIT-CPI: iconv UTF-8 -> ASCII//TRANSLIT, more cycles than instructions
+# TIMING-ICONV-TRANSLIT-CPI (-2): iconv UTF-8 -> ASCII//TRANSLIT, more cycles than instructions
 
-State: branch `task/timing-iconv-translit-cpi`, code head `f221e5a2` (memo + test + D-NEW row), then the plants file and
-this note. Role shiki:~/w/sh2 (Haswell-EP build host).
+State: branch `task/timing-iconv-translit-cpi-2`, code head `2679c686` (memo f221e5a2 + D-6.14 naming 37f05369 +
+hot-text name fix 2679c686), then docs/handoff commits. Role shiki:~/w/sh2 (Haswell-EP build host). Verdict: DO NOT
+LAND until the utf16 time loss below is explained or accepted by a ruling.
 
-## Where the time went (profile from the brief, Ivy Bridge, booked)
+## Decisions in force
+- D-6.14 (plan/07-decisions/s06-...md): transliterations kept for one `Conv::convert` call (`iconv::Memo`, 8 slots).
+  The placeholder D-NEW is gone from the plan row, mod.rs and the test doc (ruling #3223).
 
-Liella cycles: `Conv::convert` 53% (with `encode_char`, `derived_translit`, `combining_class`, `props` inlined),
-`unicode::decomposition` 30%, `internal_move` 10%, `Codec::encode` 6%. The bench text is `"abcdefg é h €."` x 256, so
-one call transliterates 512 characters, only two distinct ones. Each derivation is a binary search over DECOMP (about
-13 dependent loads over a table larger than L1, branchless, hence the low branch-miss count), a partition_point over
-CCC and a property lookup per part, then a linear search of ASCII_EQUIVALENTS: latency-bound chains, which is where
-the low IPC comes from. The front-end/flags-merge/store-forward events in the brief are symptoms inside that inlined
-derivation; removing the repeated derivation removes them with it, so they were not chased separately
-(perf annotate on the timing host was not needed).
+## What -2 did
+1. D-NEW -> D-6.14 (37f05369). Static + clippy: `timing-iconv-translit-cpi-2-static` rc 0 (superseded by the gate job).
+2. Ivy Bridge timing (nico, E3-1220L v2, load 0.00-0.3, queue empty, booking 41): stages A = head with the memo diff
+   reversed (only mod.rs differs), B = head; `xtask-bin bench --no-build --ab-from A --only cbench_locale --rows <3 rows>
+   --runs 5` (A1 B A2 B per round). Job `timing-iconv-translit-cpi-2-ivb` (rc 1: its second step used `--compare
+   --rows`, which `--compare` refuses by design; the A/B part ran): translit 0.364, 8859-15 0.996, utf16 **1.044
+   SLOWER** (spread 0.2%), instructions 0.481 / 0.999 / 0.999.
+3. Cause hunted: `impl Memo` placed before `impl Conv` changed Conv's impl disambiguator (Ms_ -> Ms0_), so
+   `Conv::convert` and `Conv::from_words` no longer matched their crates/libc-so/hot-text.list keys (convert moved from
+   0x75f00 next to `iconv` to 0xd9dc0). Fix 2679c686: `impl Memo` moved after `impl Conv` (comment says why); B2
+   puts convert back at 0x75f00. **It did not fix utf16:** job `timing-iconv-translit-cpi-2-ivb2` (A vs B2, then plain
+   bench with --rows, which interleaves Liella/glibc per round, B2 A B2 A): A/B translit 0.354, 8859-15 0.997, utf16
+   **1.052** (spread 0.5%), instructions 0.481 / 0.999 / 0.999. Cycles Liella/glibc, head (base): translit 0.469
+   (about 1.33), utf16 0.671-0.672 (0.636), 8859-15 0.275-0.277 (0.276-0.277). Logs: nico ~/logs/<label>.log.
+4. Gate `timing-iconv-translit-cpi-2-gate` (static + clippy -D warnings + affected --base origin/next) on 2679c686:
+   5 suites ok, 1584 passed, 0 failed, peak 3.5G. Plants `timing-iconv-translit-cpi-2-plants`
+   (handoff/TIMING-ICONV-TRANSLIT-CPI-plants.txt): 5 CAUGHT, 1 EQUIVALENT, 0 SURVIVED, 0 WARN.
+5. Saturation row added (docs/saturation/06-...md).
 
-## Change (D-NEW, number to be reserved)
+## Open
+- RULING NEEDED: utf16 1.052x of base in time on Ivy Bridge at equal instructions vs translit 0.354x. Recommendation:
+  do not accept; a -3 run profiles it first (below), then fixes the layout of the fused path.
+- INFORMATIONAL: hot-text.list keys depend on impl-block order (`Ms_`/`Ms0_`); tools/hottext/keys.py could strip
+  impl disambiguators, or static could flag a list entry that matches no symbol in the build.
 
-`Conv::convert` keeps each transliteration it works out in a per-call table (`iconv::Memo`: 8 slots, direct-mapped on
-`c % 8`, results up to 11 bytes, only lossy results), made lazily on the first character the target cannot encode
-(`Option<Memo>`: pure-ASCII and non-translit calls only store the discriminant). A repeat takes its bytes from the
-slot. The lookup is out of line (`Conv::encode_memo`, `#[inline(never)]`), so the conversion loop stays small; the two
-small copies on that path use `mem::copy_inline` instead of `copy_from_slice` (memcpy calls). Nothing is kept between
-calls or in `iconv_t` (no ABI or layout change); within one call the descriptor and locale are fixed, so a kept result
-equals a new derivation; E2BIG, //IGNORE and the irreversible count behave as before.
+## Exact next step (-3)
+Profile, do not guess: on the Ivy Bridge host (book it), `perf stat` the utf16 row of stages A and B2 (cycles,
+instructions, idq.dsb_uops, idq.mite_uops, lsd.uops, dsb2mite_switches, branch-misses) with the bench binary under
+CBENCH_ROWS=iconv_utf8_utf16_4k; nm-compare the fused utf8_to_wide loop inside `Conv::convert` (code size 0x43ce in A,
+0x30d8 in B2: the loop moved within the function). If it is front-end (DSB/LSD), try the fused UTF-8 -> wide path out
+of line in its own function so its layout does not depend on the rest of convert; re-time A vs head the same way
+(time2.sh recipe: stage via a script on shiki that reverses memo.patch for A; scratch in
+/home/claude/w/.scratch/TIMING-ICONV-TRANSLIT-CPI-2/).
 
-## Results (final code head)
-
-- Instructions per call (shiki, `--counters --runs 3`, Liella; glibc in brackets):
-  translit 395,931 -> 190,502 (glibc 458,239; ratio 0.86 -> 0.42);
-  utf16 74,623 -> 74,580 (124,633); 8859-15 51,599 -> 51,551 (160,775). No row rose.
-- Time on shiki (Haswell-EP, NOT booked, advisory): translit Liella/glibc 1.21 -> 0.40. utf16 time 0.63 -> 0.70 there
-  with fewer instructions and a byte-identical fused path: unbooked-host noise, judge it on the timing hosts.
-- Timing on the timing hosts (bookings 38, 39 were still draining; hosts idle, load ~0.0-1.0; binaries of f221e5a2):
-  N100 (nozomi, `~/logs/timing-iconv-translit-cpi-time4-nozomi.log`, `--runs 5`): translit Liella/glibc median
-  0.522 (sweep: 1.453), utf16 0.765, 8859-15 0.275. Ivy Bridge (nico): NOT VERIFIED; the run went past my 500 s
-  timeout before the iconv rows (it ran the whole cbench_locale group), log `...-time4-nico.log`.
-  Bookings cancelled. Staging lesson: the stage needs the root Cargo.toml, crates/ and csys/ besides target/liella,
-  bench/, xtask/Cargo.toml and xtask-bin (else "not a benchmark" / "bench/budgets.tsv: No such file"); use
-  `--only <group>` not positional with --compare; ~/bin/timing writes no log, so redirect it to ~/logs yourself.
-  Next timing step: rerun on Ivy Bridge with a longer timeout (one cbench_locale group with counters: over 8 min).
-- Gate `timing-iconv-translit-cpi-gate` (static + affected --base origin/next): 5 suites ok, 1584 passed, 0 failed,
-  peak 2.6G. Plants `timing-iconv-translit-cpi-plants2`: 5 CAUGHT, 1 EQUIVALENT (unused-slot check: only key 0 could
-  match, U+0000 is never transliterated), 0 WARN.
-- Superseded: `timing-iconv-translit-cpi-plants` (rc 3: plants file not yet synced), `-check` (wrong package name).
-
-## Test
-
-`iconv_translit_memo_repeats_and_collisions` (s06_multibyte_clauses; trace s6_4_c_1_1): repeats, slot collisions
-(U+00E9/U+00F1, U+20AC/U+00C4), E2BIG on a kept result, irreversible count, C-locale '?' with //IGNORE.
-
-## Open / next
-
-- RULING: none. D-NEW needs its number (`ops reserve`).
-- Next: a saturation-register row for this row (positive: memo; not tried: a direct-mapped two-stage decomposition
-  table in the generator, which would also help the first occurrence and other decomposition users).
-- Do not redo: flags-merge / store-forward hunting in the old inlined body; the body it pointed at no longer runs per
-  repeated character.
+## Not to redo
+The memo and its tests/plants; the hot-text name fix; flags-merge/store-forward hunting in the old inlined body.
+Staging: the tar needs target/liella, bench/, xtask/Cargo.toml, Cargo.toml, crates/, csys/ and the debug xtask as
+xtask-bin; `--compare` takes no `--rows` (use the plain bench with --rows, it interleaves glibc per round).
+Plan rows: D-6.11, D-6.14; docs/saturation/06.
