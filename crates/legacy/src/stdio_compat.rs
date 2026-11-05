@@ -1553,6 +1553,7 @@ fn write_raw<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) 
 /// [`store`] of a writing stream published). An error (or a zero write) is the engine's: the
 /// head is counted, the rest dropped, the stream idle with its error indicator set. `None`: it does
 /// not apply, nothing changed.
+#[cold]
 #[inline(never)]
 fn write_straddle<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, data: &[u8]) -> Option<Transfer> {
     let Kind::Fd(fd) = ext.kind else { return None };
