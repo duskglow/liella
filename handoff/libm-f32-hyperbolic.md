@@ -1,54 +1,52 @@
 # LIBM-F32-HYPERBOLIC: handoff (float hyperbolic family on the fast32 pattern)
 
-State: branch `task/libm-f32-hyperbolic-2` (on `task/libm-f32-hyperbolic`, which stacks on
-`task/libm-f32-double-kernels-2`), code head `0b446d69`; handoff commits on top. Role keke:~/w/n3
-(-1 ran on shiki:~/w/sh1). Report: handoff/reports/LIBM-F32-HYPERBOLIC-2.json.
+State: branch `task/libm-f32-hyperbolic-3` (on -2's `0383207a`), code head `1f68110c`; handoff commit on top.
+Role keke:~/w/n1. Report: handoff/reports/LIBM-F32-HYPERBOLIC-3.json. Earlier runs: -1 `872c0c88` (six kernels),
+-2 `0b446d69` (log1p64 one degree shorter, plants 5/5, six exhaustive sweeps green on the kernels).
 
-## Done (-1, 872c0c88)
-* `crates/math/src/fast32.rs`: `sinh_core`, `cosh_core`, `tanh_core`, `asinh_core`, `acosh_core`, `atanh_core`,
-  `Fast::{Sinh..Atanh}`, `fast_fn!` entries falling back to `crate::hyper`; `real.rs` routes `f32` to fast32.
-  sinh = (E + E/(E+1))/2, tanh = E/(E+2) (E from `expm1_core`), cosh = (E + 1/E)/2 (`exp_core`); asinh, acosh,
-  atanh from the shared `log1p64(w)` plus `sqrt64`. Proofs in the doc comments. Small-|x| cut 2^-26 (HYP_MIN).
-* No new polynomial or table, so no Remez fit (D-10.3 vacuous): log1p64 reuses log1p's D3..D7, LOG_INV/LOG_C.
+## Profile (-3, validation/wl_trace.sh, call 11, head 0383207a)
+| row | Liella total | entry+envelope (`elem`, mxcsr_get, alias) | kernel (`fast32::<f>`: core + rounding test) | glibc total |
+|---|---|---|---|---|
+| asinhf | 183 | 50 | 133 | 93 |
+| coshf | 123 | 50 | 73 | 82 |
+The surplus sat in the entry: the float hyperbolic exports used the generic `mret::elem` envelope (MXCSR switch,
+status merge, exit write), while expf/logf already used the in-place `elem32_fast` entry.
 
-## Done (-2, 0b446d69): the surviving coefficient plant
-* -1's plant "drop D8 in log1p64" survived because the term does not matter at the bound. log1p64 now uses the
-  series one degree shorter (D3..D7). Recomputed (doc comment): the remainder r^8/8 adds ≤ 2.01u relative in
-  case A (z < 1 + 2^-7, r = w < 2^-7), 0.02u in case B, 0.04u in case C. Case bounds A 5.3u, B 4.4u, C 8.2u:
-  the overall LOG1P64_BOUND (8.2u) and every caller's bound and margin are unchanged.
-* `hyperbolic_cores_are_within_their_bounds` checks log1p64 per case (A 5.3u, B 4.4u, C 8.2u) and samples
-  [2^-8, 2^-7) densely (16k points) where case A's remainder peaks. The coefficient plant is now "drop D7"
-  (about 290u in case A).
-* Sweep oracle (ruling #2889): `crate::hyper` is double-double only with a final `elem::finish` (no mp tier), so
-  the accurate path already costs ~1.5e3 instructions per call, the ruling's target; mp-fallback rate 0 by
-  construction. No separate oracle was built for this family; the ERF-2 helper had not landed.
+## Done (-3, 1f68110c): in-place nearest entry for sinhf..atanhf
+* `fast32::eval_nearest` answers for the six hyperbolic cores (same cores and rounding test as `eval`; the doc
+  comment says why only inexact is raised where they answer: |x| ≥ 2^-26 / x > 1, normal intermediates, divisors
+  normal and ≥ 2^-24). `nearest_fn!` `sinh_nearest`..`atanh_nearest`; s10_math.tsv rows split `f` (elem32_fast)
+  / `dlq` (elem); s10_math_gen.rs regenerated with `cargo xtask math-gen`. No kernel changed, so -2's exhaustive
+  sweeps still cover the values (not rerun).
+* Test `math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode` (s10_math_symbols.rs, s10_0_f_0):
+  every 2^16th float of each sign plus the domain edges, in-place vs the DAZ-forced envelope (bits, flags,
+  errno), directed modes against liella-math.
+* NEGATIVE (not landed): ruling #2783's `_mm_sqrt_sd` does not compile safely on 1.99.1. rustc E0133: "the sse2
+  target feature being enabled in the build configuration does not remove the requirement to list it in
+  `#[target_feature]`". liella-math forbids `unsafe`, so the change was reverted before it was committed.
 
-## Jobs (keke) on 0b446d69, all rc 0
-* `libm-f32-hyperbolic-2-lint` (clippy --workspace --all-targets --all-features -D warnings, xtask static).
-* `-gate` (direct tier, --base origin/next): 5 of 234 targets, 368 passed, 0 failed.
-* `-plants` (`cargo xtask plants`, ~/work/LIBM-F32-HYPERBOLIC-2/plants.txt, /dev/shm/.../plants-1): bound,
-  coefficient (drop D7), small-x switch, tanh saturation edge, sinh term: 5 CAUGHT, 0 WARN.
-* `-sweep-size` (LIELLA_SWEEP_STRIDE=64, all six) then `-sweep-<f>` one job per function, every `float` in all
-  four modes against `crate::hyper` (7-CPU slots, RAM copy of the role): wall / CPU s: sinhf 581/4067,
-  coshf 605/4229, tanhf 2698/18879, asinhf 3008/21046, acoshf 1208/8451, atanhf 475/3324. No mismatch.
-* `-after` (`cargo xtask bench --compare --counters cbench_libm`). Before: -1's `libm-f32-hyperbolic-before`
-  (shiki, base 617417a6).
+## Jobs (keke) on 1f68110c
+* `libm-f32-hyperbolic-3-plants` rc 0: entry-cosh-value, entry-atanh-sign: 2 CAUGHT, 0 WARN.
+* `libm-f32-hyperbolic-3-percall` rc 0 (wl_percall, spec ~/work/LIBM-F32-HYPERBOLIC-3/hyp.c, a copy is in the
+  report). `libm-f32-hyperbolic-3-gate` (clippy -D warnings, xtask static, affected --base origin/next): see report.
 
-| row | before instr Liella / glibc | after instr Liella / glibc (ratio) | after time ratio (dynamic) |
-|---|---|---|---|
-| sinhf | 1520.1 / 145.4 | 174.9 / 145.4 (1.20) | 1.01 |
-| coshf | 1505.0 / 78.8 | 151.3 / 78.9 (1.92) | 2.11 |
-| tanhf | 1520.3 / 131.2 | 179.8 / 131.3 (1.37) | 1.07 |
-| asinhf | 1482.4 / 88.9 | 212.3 / 88.9 (2.39) | 3.29 |
-| acoshf | 1444.4 / 72.9 | 199.5 / 72.9 (2.74) | 4.25 |
-| atanhf | 1494.3 / 115.7 | 182.5 / 115.7 (1.58) | 1.42 |
+| row (instr/call) | glibc | -2 (0383207a) | -3 (1f68110c) | ratio |
+|---|---|---|---|---|
+| sinhf | 146.9 | 154.5 | 99.5 | 0.68 |
+| tanhf | 130.5 | 162.0 | 106.0 | 0.81 |
+| atanhf | 117.7 | 159.2 | 103.2 | 0.88 |
+| coshf | 82.0 | 133.0 | 79.0 | 0.96 |
+| asinhf | 93.1 | 193.7 | 150.7 | 1.62 |
+| acoshf | 78.0 | 184.0 | 139.0 | 1.78 |
+(Controls: expf 73.0 vs 42.0, sinf 152.0 vs 42.0. sin/asin/atan/log1p/expm1/cbrt float still use `elem`: the
+same entry change should cut ~50 from each, once their subnormal-operand flags are proven.)
 
 ## Open / next
-* The 1.05x target is not met on any row (instructions). coshf, asinhf and acoshf stay above 2x glibc in time
-  (#2760's threshold). Next step, in order: (1) profile one asinhf/acoshf call (sqrt64 share) and, if sqrt
-  dominates, ruling #2783's `_mm_sqrt_sd` (safe core::arch, no unsafe), with the sqrt64 bound test kept;
-  (2) coshf: the 1/E division and exp_core's share; (3) re-count; only then any #2760 ulp-bound question, with
-  that data.
-* Not to redo: the D8 question (settled above), the exhaustive sweeps (green on 0b446d69; rerun only if a kernel
-  changes), the #2889 oracle for this family (not needed: no mp tier).
+* asinhf, acoshf are still above 1.05x. Their kernels are about 130 instructions: sqrt64 (3 Newton steps + Heron, ~20
+  dependent ops), log1p64 (~35), the rounding test. Next: a hardware square root without `unsafe` in liella-math.
+  RULING NEEDED: try `f64::sqrt` from core first (safe, if it is stable on 1.99.1), else a sqrt hook from
+  liella-boundary (UNSAFE(hot-kernel)), as `hot::exp_nearest` does. Rerun asinhf/acoshf/asinf/acosf sweeps after.
+* Optional: give sinf/asinf/atanf/log1pf/expm1f/cbrtf the same in-place entry (prove their flags on subnormal x).
+* Not to redo: D8 (settled in -2), the #2889 oracle for this family (no mp tier), the exhaustive sweeps (kernels
+  unchanged since 0b446d69).
 * Plan rows: ruling #2760 (A), #2783, #2784, #2889; handoff/libm-f32-double-kernels.md PATTERN.
