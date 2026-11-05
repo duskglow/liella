@@ -65,14 +65,24 @@ fn pack(neg: bool, exp: i64, w: &[u64]) -> Mp {
     let Some(top) = (0..n).rev().find(|&i| w[i] != 0) else {
         return Mp::ZERO;
     };
-    let lz = (n - 1 - top) as i64 * 64 + i64::from(w[top].leading_zeros());
-    // The bit at position (64n - 1 - lz) becomes the top bit; take 384 bits below it.
-    let hi_bit = 64 * n as i64 - 1 - lz;
+    let r = w[top].leading_zeros();
+    let lz = (n - 1 - top) as i64 * 64 + i64::from(r);
+    // The top set bit (bit 63 - r of limb `top`) becomes the top bit; take BITS bits below it.
+    // Result limb i covers source bits [64j - r, 64j - r + 64) with j = top + 1 + i - LIMBS:
+    // limb j shifted up by r, filled from limb j - 1 (limbs below index 0 are zeros).
+    let word = |j: isize| if j >= 0 { w[j as usize] } else { 0 };
+    let base = top as isize + 1 - LIMBS as isize;
     let mut m = [0u64; LIMBS];
-    for (i, limb) in m.iter_mut().enumerate() {
-        // Result bit range [64i, 64i + 64) maps to source bits [lo, lo + 64).
-        let lo = hi_bit - BITS + 1 + 64 * i as i64;
-        *limb = bits_at(w, lo);
+    if r == 0 {
+        // Already normalised (the top limb's top bit is set): a plain copy of the top limbs.
+        for (i, limb) in m.iter_mut().enumerate() {
+            *limb = word(base + i as isize);
+        }
+    } else {
+        for (i, limb) in m.iter_mut().enumerate() {
+            let j = base + i as isize;
+            *limb = (word(j) << r) | (word(j - 1) >> (64 - r));
+        }
     }
     Mp { neg, exp: exp - lz, m }
 }
@@ -85,14 +95,45 @@ fn bits_at(w: &[u64], lo: i64) -> u64 {
     if r == 0 { word(q) } else { (word(q) >> r) | (word(q + 1) << (64 - r)) }
 }
 
-/// `m >> k` (truncating), for a significand.
+/// The reciprocal `⌊(2^128 − 1)/d⌋ − 2^64` of a normalised `d` (top bit set) for [`div_2by1`]:
+/// the one 128-bit division of a `div_u64` by a divisor of 2^32 or more.
+fn div_2by1_reciprocal(d: u64) -> u64 {
+    // ⌊(2^128 − 1)/d⌋ lies in [2^64, 2^65) for d in [2^63, 2^64): dropping bit 64 subtracts 2^64.
+    (u128::MAX / u128::from(d)) as u64
+}
+
+/// `(⌊(u1·2^64 + u0)/d⌋, remainder)` for a normalised `d` and `u1 < d`, with `v` from
+/// [`div_2by1_reciprocal`] (Möller–Granlund, Algorithm 4): the candidate quotient from `v·u1` is
+/// the true one or one above, and the two corrections bring the remainder into `[0, d)`.
+fn div_2by1(u1: u64, u0: u64, d: u64, v: u64) -> (u64, u64) {
+    // Modulo 2^128, as in the paper: only the low 128 bits of (v + 2^64)·u1 + u0 are used.
+    let q = (u128::from(v) * u128::from(u1)).wrapping_add((u128::from(u1) << 64) | u128::from(u0));
+    let mut q1 = ((q >> 64) as u64).wrapping_add(1);
+    let q0 = q as u64;
+    let mut r = u0.wrapping_sub(q1.wrapping_mul(d));
+    if r > q0 {
+        q1 = q1.wrapping_sub(1);
+        r = r.wrapping_add(d);
+    }
+    if r >= d {
+        q1 += 1;
+        r -= d;
+    }
+    (q1, r)
+}
+
+/// `m >> k` (truncating, `k >= 0`), for a significand.
 fn shr(m: &[u64; LIMBS], k: i64) -> [u64; LIMBS] {
     let mut out = [0u64; LIMBS];
     if k >= BITS {
         return out;
     }
+    // Limb i takes source bits [64i + k, 64i + k + 64): limb i + q shifted down by r, filled from
+    // limb i + q + 1 (limbs at LIMBS and above are zeros).
+    let (q, r) = ((k / 64) as usize, (k % 64) as u32);
+    let word = |j: usize| if j < LIMBS { m[j] } else { 0 };
     for (i, limb) in out.iter_mut().enumerate() {
-        *limb = bits_at(m, 64 * i as i64 + k);
+        *limb = if r == 0 { word(i + q) } else { (word(i + q) >> r) | (word(i + q + 1) << (64 - r)) };
     }
     out
 }
@@ -239,14 +280,40 @@ impl Mp {
         if self.is_zero() || k == 0 {
             return Mp::ZERO;
         }
-        // (m · 2^64) / k, one extra limb of quotient below.
+        // ⌊(m · 2^64) / k⌋, one extra limb of quotient below, by schoolbook long division: every
+        // step divides (rem, next digit) with rem < k, so each quotient digit is exact and the
+        // whole quotient is the exact floor whichever way a step divides (the truncation the
+        // callers' error bounds assume). No step needs a 128-by-64 software division.
         let mut w = [0u64; LIMBS + 1];
-        let mut rem = 0u128;
-        for i in (0..=LIMBS).rev() {
-            let limb = if i == 0 { 0 } else { self.m[i - 1] };
-            let cur = (rem << 64) | u128::from(limb);
-            w[i] = (cur / u128::from(k)) as u64;
-            rem = cur % u128::from(k);
+        let limb = |i: usize| if i == 0 { 0 } else { self.m[i - 1] };
+        if k >> 32 == 0 {
+            // k < 2^32: digits of 32 bits; (rem < k) · 2^32 + digit < 2^64 fits a native division.
+            let mut rem = 0u64;
+            for i in (0..=LIMBS).rev() {
+                let x = limb(i);
+                let hi = (rem << 32) | (x >> 32);
+                let (qh, r) = (hi / k, hi % k);
+                let lo = (r << 32) | (x & 0xffff_ffff);
+                let (ql, r) = (lo / k, lo % k);
+                rem = r;
+                w[i] = (qh << 32) | ql;
+            }
+        } else {
+            // k >= 2^32: divide (m · 2^64) · 2^s by d = k · 2^s (normalised, top bit set; the
+            // quotient is the same) with the reciprocal of d (Möller and Granlund, "Improved
+            // division by invariant integers", IEEE Trans. Computers 60(2), 2011, Algorithm 4).
+            let s = k.leading_zeros(); // s <= 31
+            let d = k << s;
+            let v = div_2by1_reciprocal(d);
+            // Digits of the shifted dividend, top first; the bits shifted out of the top limb
+            // start the remainder (below 2^31 <= d).
+            let sh = |i: usize| if s == 0 { limb(i) } else { (limb(i) << s) | (if i == 0 { 0 } else { limb(i - 1) >> (64 - s) }) };
+            let mut rem = if s == 0 { 0 } else { limb(LIMBS) >> (64 - s) };
+            for i in (0..=LIMBS).rev() {
+                let (q, r) = div_2by1(rem, sh(i), d, v);
+                w[i] = q;
+                rem = r;
+            }
         }
         pack(self.neg, self.exp, &w)
     }
@@ -568,6 +635,17 @@ pub fn ln2() -> Mp {
     c(&t::MP_LN2)
 }
 
+/// `ln 10` for [`ln10`]: the generated constant (`MP_LN10`, from 520 bits), within one unit
+/// of its 384th bit (the series it replaces, still used by the wider steps, was within a few).
+fn ln10_value() -> Mp {
+    c(&t::MP_LN10)
+}
+
+/// `ln π`: the generated constant (`MP_LN_PI`), within one unit of its 384th bit.
+pub fn ln_pi() -> Mp {
+    c(&t::MP_LN_PI)
+}
+
 /// `ln x` for `x > 0`: `x = 2^e·m` with `m` in `[√½, √2)`, `ln m` by Halley's iteration on
 /// `e^y = m` from an `f64` start (cubic: 53, 159, 477 bits), plus `e·ln 2`.
 pub fn ln(x: Mp) -> Mp {
@@ -870,9 +948,9 @@ pub fn add_x(a: Mp, b: Mp) -> (Mp, bool) {
     (a.add(b), hi - lo <= BITS)
 }
 
-/// `ln 10`.
+/// `ln 10` (`ln10_value` of the expansion site).
 pub fn ln10() -> Mp {
-    ln_atanh(Mp::from_i64(10))
+    ln10_value()
 }
 
 /// `x` reduced by multiples of π/2: `(k mod 4, r)` with `x = k·π/2 + r`, `|r| <= π/4` (about),
@@ -1028,6 +1106,56 @@ mp_kernels!();
 mod tests {
     use super::*;
 
+    /// `div_u64` by plain 128-by-64 long division (the definition: the exact floor of
+    /// `m · 2^64 / k`, then `pack`).
+    fn div_u64_reference(x: Mp, k: u64) -> Mp {
+        let mut w = [0u64; LIMBS + 1];
+        let mut rem = 0u128;
+        for i in (0..=LIMBS).rev() {
+            let limb = if i == 0 { 0 } else { x.m[i - 1] };
+            let cur = (rem << 64) | u128::from(limb);
+            w[i] = (cur / u128::from(k)) as u64;
+            rem = cur % u128::from(k);
+        }
+        pack(x.neg, x.exp, &w)
+    }
+
+    #[test]
+    fn div_u64_is_the_exact_floor_quotient() {
+        // no spec clause: `div_u64` (half-limb and reciprocal paths) gives bit-for-bit the exact
+        // truncated quotient, for divisors on both sides of 2^32 and at the reciprocal's edges.
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let mut ks = vec![1, 2, 3, 7, 10, 0xffff_ffff, 1 << 32, (1 << 32) + 1, 1 << 63, (1 << 63) + 1, u64::MAX, u64::MAX - 1];
+        for _ in 0..400 {
+            let r = next();
+            ks.push(r >> (r % 64));
+        }
+        for &k in &ks {
+            if k == 0 {
+                continue;
+            }
+            for t in 0..24 {
+                let mut m = [0u64; LIMBS];
+                for limb in &mut m {
+                    *limb = match t {
+                        0 => u64::MAX,
+                        1 => 0,
+                        _ => next(),
+                    };
+                }
+                m[LIMBS - 1] |= 1 << 63;
+                let x = Mp { neg: t % 2 == 1, exp: 5, m };
+                assert_eq!(x.div_u64(k), div_u64_reference(x, k), "k = {k:#x}, m = {m:x?}");
+            }
+        }
+    }
+
     fn close(a: Mp, b: f64) -> bool {
         let d = a.to_f64() - b;
         (if d < 0.0 { -d } else { d }) <= 1e-15 * (if b < 0.0 { -b } else { b }).max(1e-300)
@@ -1120,7 +1248,9 @@ mod tests {
         // no spec clause: the 384-bit results are bit-for-bit those before the 768-bit kernels
         // were added (MATH-M5-CPLX-F128-ZIV-A; the digest was taken on c30e8f83, the code before it),
         // except `ln1p` above 2^-6 and `ln10`, which now use the proven `ln_atanh` in place of the
-        // Halley `ln` (MATH-M5-CPLX-F128-ZIV-B1-2, #1912; digest retaken then, every other kernel as before).
-        assert_eq!(narrow_digest(), 0x8061_5ab8_8856_0a28);
+        // Halley `ln` (MATH-M5-CPLX-F128-ZIV-B1-2, #1912; digest retaken then, every other kernel as before),
+        // and `ln10`, now the generated `MP_LN10` (LIBM-MP-CORE-SPEED; with the series `ln10` the
+        // digest was still the previous one after the `div_u64`, `pack` and `shr` rewrites).
+        assert_eq!(narrow_digest(), 0x6e1d_732c_6aea_f08c);
     }
 }
