@@ -19,7 +19,7 @@
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
 //!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
-//!    `include/`, the math fits and coefficients), the product crates, linker and export lists,
+//!    `include/`, the math fits; but the math wiring and coefficients, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
 //! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
 //!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
@@ -55,6 +55,13 @@
 //!    xtask, or no user at all.
 //! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
+//! 8. XTASK-AFFECTED-MATH (ruling #3188): the math export wiring (`crates/boundary/src/posix/s10_math.tsv`,
+//!    `s10_math_gen.rs`, `csys/src/adapter/math_*.c`) selects the math export tests (`Selection::math_exports`: the
+//!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
+//!    or `libm` or carries section 10, the conformance programs of section 10 or calling a math export) plus `cargo
+//!    xtask math-gen --check`; a coefficient file `crates/math/src/coeffs/<family>.rs` selects the `coeffs` module as if
+//!    changed, the same math export tests and `cargo xtask tables --check`. In every tier but `--tier full`; the math
+//!    fits, other generated files and anything else of rule 1 still escalate.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
@@ -900,6 +907,41 @@ impl Selection {
         }
     }
 
+    /// XTASK-AFFECTED-MATH (ruling #3188): the tests that can observe the math exports, for a change of their wiring
+    /// (`s10_math.tsv`, `s10_math_gen.rs`, the `math_*.c` forwarders) or of a generated coefficient file. The export
+    /// module itself as if it had changed (rule 4 of the tier: its users, the targets naming it, the conformance
+    /// programs calling its entries), every test target of `liella-math` (the libm product, clause and kernel suites),
+    /// every target of any crate whose own source names `s10_math` or `libm` or carries section 10, the unit tests of
+    /// both crates, and every conformance program that carries section 10 or calls an entry of the export modules.
+    fn math_exports(&mut self, repo: &Repo, why: &str) {
+        let via = |what: &str| format!("{why}: {what}");
+        if self.direct {
+            self.narrow_direct(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        } else {
+            self.narrow(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        }
+        for c in [MATH_EXPORTS_CRATE, MATH_CRATE] {
+            add(&mut self.libs, c.to_string(), &via("the unit tests of the export and kernel crates"));
+            add(&mut self.clippy, c.to_string(), &via("the export and kernel crates"));
+        }
+        for t in &repo.targets {
+            let own = &t.text[..t.own.min(t.text.len())];
+            if t.krate == MATH_CRATE {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("a liella-math suite (they call the math exports)"));
+            } else if own.contains("s10_math") || own.contains("libm") || t.sections.contains(&10) {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("the test names s10_math or libm, or carries section 10"));
+            }
+        }
+        let export_nodes: BTreeSet<usize> = repo.nodes.iter().enumerate().filter(|(_, n)| n.krate == MATH_EXPORTS_CRATE && (n.name == "s10_math_gen" || n.name == "s10_math")).map(|(i, _)| i).collect();
+        for c in &repo.conf {
+            if c.sections.contains(&10) {
+                add(&mut self.conf, c.name.clone(), &via("the program carries section 10"));
+            } else if let Some(sym) = c.calls.iter().find(|s| repo.entries[*s].iter().any(|e| export_nodes.contains(&e.node))) {
+                add(&mut self.conf, c.name.clone(), &via(&format!("the program calls the math export `{sym}`")));
+            }
+        }
+    }
+
     /// A change in module `name` of crate `krate`.
     fn narrow(&mut self, repo: &Repo, krate: &str, name: &str, file: &str) {
         let Some(start) = repo.nodes.iter().position(|n| n.krate == krate && n.name == name) else {
@@ -1157,6 +1199,32 @@ enum Class {
     /// bench/ and benchmarks/: data the xtask unit tests read (limits, rows, sentinels), so `-p xtask` runs.
     XtaskData,
     XtaskAudit(&'static [&'static str]),
+    /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
+    MathWiring,
+    /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
+    MathCoeffs,
+}
+
+const MATH_EXPORTS_CRATE: &str = "liella-boundary";
+const MATH_CRATE: &str = "liella-math";
+const MATH_TSV: &str = "crates/boundary/src/posix/s10_math.tsv";
+const MATH_GEN: &str = "crates/boundary/src/posix/s10_math_gen.rs";
+
+/// XTASK-AFFECTED-MATH (ruling #3188): the generated math files that map to the math suites instead of FULL. Only these
+/// exact files: the math fits (`crates/math/fits/`), any other `*_gen.rs` and a file in a subdirectory of `coeffs/` or
+/// `adapter/` keep escalating. `cargo xtask math-gen --check` / `tables --check` prove the generated files match their
+/// inputs; the selected suites prove what the exports do.
+fn math_class(path: &str) -> Option<Class> {
+    if path == MATH_TSV || path == MATH_GEN {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("csys/src/adapter/math_").is_some_and(|f| f.ends_with(".c") && !f.contains('/')) {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("crates/math/src/coeffs/").is_some_and(|f| f.ends_with(".rs") && !f.contains('/')) {
+        return Some(Class::MathCoeffs);
+    }
+    None
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1183,6 +1251,9 @@ fn classify(path: &str) -> Option<Class> {
     }
     if let Some((_, cmds)) = XTASK_AUDITS.iter().find(|(m, _)| *m == path) {
         return Some(Class::XtaskAudit(cmds));
+    }
+    if let Some(c) = math_class(path) {
+        return Some(c);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1286,6 +1357,22 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
                 sel.xtask_cmds.extend(cmds.iter().map(|c| c.to_string()));
                 sel.notes.push(format!("{f}: an audit/report module of xtask (xtask unit tests, clippy, the policy checks{})", cmds.iter().map(|c| format!(", `cargo xtask {c}`")).collect::<String>()));
+            }
+            Some(Class::MathWiring) => {
+                sel.math_exports(repo, &format!("{f}: math export wiring"));
+                sel.xtask_cmds.insert("math-gen --check".to_string());
+                sel.notes.push(format!("{f}: math export wiring (the math export suites and `cargo xtask math-gen --check`, not FULL)"));
+            }
+            Some(Class::MathCoeffs) => {
+                // The family's users: the `coeffs` module as if it had changed (its one-hop users in the tier).
+                if sel.direct {
+                    sel.narrow_direct(repo, MATH_CRATE, "coeffs", f);
+                } else {
+                    sel.narrow(repo, MATH_CRATE, "coeffs", f);
+                }
+                sel.math_exports(repo, &format!("{f}: generated coefficients"));
+                sel.xtask_cmds.insert("tables --check".to_string());
+                sel.notes.push(format!("{f}: generated coefficients (liella-math's suites, the math export suites and `cargo xtask tables --check`, not FULL)"));
             }
             None => {
                 classify_path(repo, f, &mut sel);
@@ -2298,7 +2385,8 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             ok &= step(root, &log, &format!("conformance ({} programs)", sel.conf.len()), &mut cmd);
         }
         for c in &sel.xtask_cmds {
-            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).args(["xtask", c]));
+            // A command may carry its flags (`math-gen --check`).
+            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
         }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
@@ -2579,15 +2667,59 @@ mod tests {
             "spec/clauses.tsv",
             "spec/abi/layouts.tsv",
             "include/liella/native.h",
-            "crates/boundary/src/posix/s10_math_gen.rs",
             "crates/core/src/unicode/tables.rs",
-            "crates/boundary/src/posix/s10_math.tsv",
+            // XTASK-AFFECTED-MATH: the math generated files outside the mapped set still escalate.
+            "crates/math/fits/fast32_sin.fit",
+            "crates/math/src/coeffs/sub/x.rs",
+            "csys/src/adapter/math_libm.h",
+            "csys/src/adapter/other.c",
+            "crates/core/src/foo_gen.rs",
             "crates/libc-so/src/lib.rs",
             "scripts/anything.sh",
             "somewhere/unknown.bin",
         ] {
             let (_, s) = sel(&[f]);
             assert!(!s.full.is_empty(), "{f} must escalate to full");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH (ruling #3188), no spec clause: a change of the math export wiring or of a generated
+    // coefficient file selects the math export tests and the generator's check, not FULL, in the direct and wide tiers.
+    #[test]
+    fn math_wiring_and_coefficients_select_the_math_suites_not_full() {
+        let math_set: &[(&str, &str)] = &[
+            ("liella-boundary", "s10_math_symbols"),
+            ("liella-boundary", "math_fma_paths"),
+            ("liella-boundary", "libm_fma_select"),
+            ("liella-math", "s10_math_clauses"),
+            ("liella-math", "special_products"),
+            ("liella-math", "elem_products"),
+            ("liella-math", "fast64"),
+        ];
+        for (f, cmd) in [
+            (MATH_TSV, "math-gen --check"),
+            (MATH_GEN, "math-gen --check"),
+            ("csys/src/adapter/math_libm.c", "math-gen --check"),
+            ("crates/math/src/coeffs/trig.rs", "tables --check"),
+            ("crates/math/src/coeffs/fast32_sin.rs", "tables --check"),
+        ] {
+            for tier in [Tier::Direct, Tier::Wide] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.xtask_cmds.contains(cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                for (c, t) in math_set {
+                    assert!(s.tests.contains_key(&(c.to_string(), t.to_string())), "{f} ({tier:?}): {c}::{t} not selected");
+                }
+                assert!(s.libs.contains_key("liella-boundary") && s.libs.contains_key("liella-math"), "{f} ({tier:?}): unit tests {:?}", s.libs.keys());
+                // Targeted, not everything: a test of another section stays out.
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+        }
+        // The coefficient family's users come from the `coeffs` module: its one-hop users' targets are a subset.
+        let c = select_tier(repo(), &["crates/math/src/coeffs/trig.rs".to_string()], Tier::Direct);
+        let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
+        for k in m.tests.keys() {
+            assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
         }
     }
 
