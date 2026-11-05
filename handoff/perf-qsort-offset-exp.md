@@ -1,73 +1,53 @@
-# PERF-QSORT-OFFSET-EXP (experiment, DO NOT LAND as it stands)
+# PERF-QSORT-OFFSET-EXP(-2): address-based positions in qsort's index sort (ADOPTED, ready to land)
 
-State: branch `task/perf-qsort-offset-exp` (from origin/next f2157504), role keke:~/w/r3. Commits:
-`validation/percall/qsort.c` (new wl_percall cases), the docs-only NEGATIVE malloc row (04-allocator.md), and the
-experiment commit (core `search.rs` + boundary `s14_search.rs`).
+State: branch `task/perf-qsort-offset-exp-2` (stacks on `task/perf-qsort-offset-exp`, cut from origin/next f2157504;
+origin/next has since moved only in docs/saturation/22, no overlap, so no merge was made). Role keke:~/w/n3 (the first
+run used keke:~/w/r3). Code commit: 6a451fc4 (core `search.rs`, boundary `s14_search.rs`); later commits are docs and
+handoff only.
 
-## Finding 1: the brief's premise is out of date
+## Decisions in force
 
-Comparing by offset is already on next (QSORT-COMPARE-TRAIT): `liella::search::SortCompare::gt(base, a, b)` takes byte
-offsets, and the boundary's `ByOffset`/`ByOffsetCtx` form the C pointers with `base.as_ptr().add(o)` (UNSAFE(slice),
-no slicing, no bounds check). The "8 check instructions plus slice building" in register section 19 do not describe
-the current code. Whether section 19's counts (2026-11-04) were taken before or after that change is not known here
-(I did not read others' history); the pc1 job's `base` column gives the current figure.
+* Ruling #3097 (owner, 2026-11-05): ADOPT address-based positions (`SortCompare::gt_at`). The Ivy Bridge verdict comes
+  from the next TIMING-SWEEP: revert this change if it times slower there. The comparison-count gap with glibc (about
+  4% more comparisons) is its own story.
+* No D-row was added (no id reserved; the ruling is the record). No compat option: no behaviour change.
 
-## Finding 2: where the gap is (disassembly of next's build, not a wl_trace)
+## What the change is
 
-The wl_trace and baseline per-call jobs were queued behind about 6 jobs and kept the role busy (sync_role refused),
-so I cancelled them. The split below comes from `objdump -d` of Liella's own `libc.a` (a cached products build of
-another branch that does not touch qsort, `~/wl/products/38c60827...`; `merge_sort_index::<..ByOffset..>`).
-Saved as keke:~/work/perf-qsort-offset-exp/msi.s.
+While merging, the index sort's position table holds element addresses (`base.as_ptr().expose_provenance()` plus the
+offset, safe Rust), turned back into offsets before `permute`. `SortCompare::gt_at` (default: subtract the base,
+call `gt`) is overridden in the boundary for `ByOffset` / `ByOffsetCtx` with `core::ptr::with_exposed_provenance`
+(a safe fn; no new unsafe; debug assert of the range in `at_addr`). The merge output index is `i + j - mid`.
+Why it wins: the merge loop's surplus was register pressure across the C call (7 of 31 instructions per comparison
+were spills, plus 2 leas adding the base), not bounds checks; two fewer live values.
 
-* Merge loop (offset 0x520-0x597): **31 instructions per comparison** + the comparator (about 7 with the ret).
-  11 values stay live across the C call (base, fn pointer, left buffer, idx, i, j, k, mid, n, a, b) and there are
-  6 callee-saved registers, so **7 of the 31 are spill stores or reloads** (0x541, 0x55e, 0x563, 0x56c, 0x576,
-  0x587, 0x592), plus the call goes through a stack slot. Two leas add the base to each offset. Bounds checks
-  are 2 to 4 instructions, not 8.
-* Binary insertion (runs of 8, 0x428-0x45a): about 13 instructions per comparison + comparator, the base reloaded
-  from the stack each time and one bounds check.
-* Per sort, outside comparisons: zeroing the 1.5n-word heap buffer, the permute pass, malloc/free: under 2
-  instructions per comparison at n = 1,024 (estimate from the code, not counted).
+## Evidence (all on keke, Zen 1 host)
 
-So the surplus over glibc's ~25 library instructions per comparison is mostly register pressure across the
-indirect call, not safety checks.
+* pc1 (`wl_percall` qsort.c, base f2157504 vs 6a451fc4): every qsort row -8.1% to -9.9% per sort, about 4.5
+  instructions per comparison; comparator-only control unchanged; comparison counts identical before/after.
+  Table in docs/saturation/19 (new "Update" subsection). Still 1.13 to 1.35x glibc per comparison.
+* wlc (sort-utf8): instructions:u new/base 1.0000, output SAME.
+* gate perf-qsort-offset-exp-gate (direct tier, 6a451fc4): 2354 passed, 0 failed; peak 2.3G, oom_kill=0.
+* lint perf-qsort-offset-exp-2-lint (clippy --workspace --all-targets --all-features -D warnings + xtask static,
+  on fc69b97a): rc 0.
+* plants perf-qsort-offset-exp-2-plants (`cargo xtask plants`, keke:~/work/perf-qsort-offset-exp-2/plants.txt,
+  /dev/shm/claude/perf-qsort-offset-exp-2/plants-1): 6 CAUGHT, 0 SURVIVED; only WARN-DEV-SHM (informational).
 
-## The experiment (commit "Sort qsort positions by element address ...")
+## The failed job and its cause
 
-* The index sort's position table holds element ADDRESSES while merging (`base.as_ptr().expose_provenance()` plus the
-  offset, safe Rust), turned back into offsets before `permute`. New trait method `SortCompare::gt_at` (default:
-  subtract the base, call `gt`; so `BySlices` callers are unchanged). The boundary overrides it for `ByOffset` /
-  `ByOffsetCtx` with `core::ptr::with_exposed_provenance` (a safe function; **no new unsafe**).
-* The merge loop's output index is `i + j - mid`, not a third counter.
-* Expected: 2 leas and 2 live values fewer per merge comparison, so about 3 to 5 instructions (**estimate, NOT
-  VERIFIED**; job pc1 measures it).
-* Safety argument: the same as QSORT-COMPARE-TRAIT's contract. Every value in the table is `start + m * size` with
-  `m < n`, the merge and insertion only permute the table, so whatever the comparator answers the C side only
-  sees whole elements of the caller's array, and the array stays untouched until the last comparison (permute
-  after). The address carries the provenance `base` exposed; the debug build asserts the range (`at_addr`).
+perf-qsort-offset-exp-plants rc 2: the plants file named package `liella-core`, which does not exist (core's
+package is `liella`). The baseline failed, so no plant ran. Cause of the mistake: docs/plants.md's own example says
+`cargo test -p liella-core --test stdio_short_io`. That doc example should be fixed (not done here: one change per
+branch).
 
-## Jobs (keke, all on head 6a451fc4, queued 18:02Z, results NOT READ at hand-back)
+## Not to redo
 
-perf-qsort-offset-exp-lint (clippy -D warnings + xtask static), -gate (direct tier), -plants (6 plants,
-keke:~/work/perf-qsort-offset-exp/plants.txt), -pc1 (wl_percall qsort.c, base f2157504 vs this head, glibc column),
--wlc (wl_count sort-utf8, base vs head). Re-attach: `ssh claude@10.0.100.53 '~/bin/jobwait perf-qsort-offset-exp-lint
-perf-qsort-offset-exp-gate perf-qsort-offset-exp-plants perf-qsort-offset-exp-pc1 perf-qsort-offset-exp-wlc'`.
-
-## Not done
-
-* TIMING (the brief's item 3, owner: the final arbiter): no booking made; budget. Next run: `ops timing-book` an Ivy
-  Bridge and an AVX2 host, time qsort_c_cmp_1024 / _e4 / _e8 / _e64 interleaved against glibc.
-* wl_trace per-phase split of the e8/e64 rows (only e4's merge loop was read from the disassembly; the loop is
-  the same code for every size, only the comparator's load differs).
-* Per-row per-comparison numbers: pc1 prints per sort; divide by the comparison count its check mode prints to stderr.
+The disassembly split (merge loop 31 instr/comparison, binary insertion about 13) and the pc1/wlc counts above.
 
 ## Next step
 
-Read pc1 and wlc. If merge comparisons drop by 3 or more instructions and no row is slower, book timing. If that is
-also no worse, bring "address-based positions in the index sort" to the owner (RULING NEEDED below). Otherwise
-revert the experiment commit and add a NEGATIVE row to docs/saturation/02 and 19.
-Further idea, not tried: a merge loop over two disjoint sources (ping-pong buffers, 2n words) removes the output
-bounds check but adds a copy per in-order merge (sorted input gets slower); judge it only with counts.
+Land. Then: the next TIMING-SWEEP times the qsort rows (Ivy Bridge, AVX2) against glibc; revert if slower. Separate
+stories: the comparison-count gap; a ping-pong merge over two buffers (removes the output bounds check, adds a copy
+on in-order merges; judge with counts, sorted input included).
 
-RULING NEEDED: adopt address-based positions (`SortCompare::gt_at`) in core's index sort. Recommendation: only
-with pc1 showing a gain on every qsort row and timing on Ivy Bridge no worse; it needs no new unsafe.
+Plan rows to read: section 19 of the saturation register; ruling #3097.
