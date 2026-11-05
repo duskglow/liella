@@ -889,15 +889,22 @@ const TANH_SAT: f64 = 9.5;
 ///
 /// z = RN(1 + w) ≥ 1, z = 2^e·m, i, L = LOG_INV[i] and LOG_C as in [`log_core`]; ln(1 + w) =
 /// e·ln 2 + LOG_C[i] + ln(1 + r) with r = L·(1 + w)/2^e - 1, and the series, e·LN2_HI (exact:
-/// e ≤ 130, 44 + 8 bits), e·LN2_LO and the sums as in [`log1p_core`] (3.2u in all). r:
+/// e ≤ 130, 44 + 8 bits), e·LN2_LO and the sums as in [`log1p_core`] (3.2u in all) but the
+/// series one degree shorter than log1p_core's: ln(1 + r) = r + r²(-1/2 + r·D3 + ... + r^5·D7).
+/// Its remainder, r^8/8 - r^9/9 + ..., is below |r|^8/8 for |r| < 2^-7 (|m·L - 1| < 2^-7). r:
 /// * e = 0 (z in [1, 1.5), w < 0.5): r = L·w + (L - 1) without rounding z's error in: w = wh + wl
 ///   with wh its top 28 bits, so wh·L (52 bits) and L - 1 (24 bits, L in [2/3, 1]) are exact. For
-///   i = 0, L = 1 and r = wh + wl = w exactly (case A: 3.2u). For i ≥ 1, w ≥ 2^-8, so wh·L is on
-///   the 2^-59 grid, L - 1 on 2^-24, their sum below 2^-7: exact; wl·L rounds by ≤ u·2^-28 and
-///   the last sum by u·|r|, |r| < 0.0040 ≤ 1.03|y| (|y| ≥ ln(1 + 2^-8)): 4.3u.
+///   i = 0, L = 1 and r = wh + wl = w exactly, r in [2^-26, 2^-7), y ≥ r(1 - r/2): the remainder
+///   is ≤ 1.004·2^-49/8 = 2.01u relative (case A: 3.2u + 2.01u ≤ 5.3u). For i ≥ 1, w ≥ 2^-8,
+///   so wh·L is on the 2^-59 grid, L - 1 on 2^-24, their sum below 2^-7: exact; wl·L rounds by
+///   ≤ u·2^-28 and the last sum by u·|r|, |r| < 0.0040 ≤ 1.03|y| (|y| ≥ ln(1 + 2^-8)): 4.3u, and
+///   the remainder 0.004^8/8 < 0.02u·|y| (case B: 4.4u).
 /// * e ≥ 1 (|y| ≥ ln 1.5 > 0.405): z's rounding moves ln z by ≤ u absolute, ≤ 2.47u relative;
 ///   RN(m·L) by ≤ u (then the subtraction of 1 is exact, Sterbenz), ln(1 + r) by ≤ 1.004u, 2.48u
-///   relative: 3.2u + 2.47u + 2.48u ≤ 8.2u.
+///   relative; the remainder ≤ 2^-56/8 absolute, 0.04u relative: 3.2u + 2.47u + 2.48u + 0.04u
+///   ≤ 8.2u (case C).
+///
+/// The overall bound is case C's, so the r^8 term (D8) of log1p_core's series buys nothing here.
 ///
 /// A caller's w with relative error η moves the result by η·w/((1 + w)·ln(1 + w)) ≤ η.
 /// Every operand is a normal `double` (w ≥ 2^-26): only inexact is raised.
@@ -915,8 +922,7 @@ fn log1p64(w: f64) -> f64 {
     } else {
         m * l - 1.0
     };
-    let q = D6 + r * (D7 + r * D8);
-    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * q))));
+    let s = r * r * (-0.5 + r * (D3 + r * (D4 + r * (D5 + r * (D6 + r * D7)))));
     let ef = f64::from(e);
     (ef * LN2_HI + LOG_C[i]) + (r + (s + ef * LN2_LO))
 }
@@ -1603,10 +1609,16 @@ mod tests {
         };
         let expm1 = |a: f64| if a <= 0.34 { expm1_small(Dd::from(a)) } else { let (v, m) = exp_dd(Dd::from(a)); v.scale(crate::dd::pow2(m)).add_f64(-1.0) };
         let one = Dd::from(1.0);
-        // log1p64 on doubles (not only on the w the callers form): every scale from 2^-26 to 2^130.
-        for k in (0x3e50_0000_0000_0000u64..0x4810_0000_0000_0000).step_by(0x0000_0f00_0f00_0f01) {
+        // log1p64 on doubles (not only on the w the callers form): every scale from 2^-26 to 2^130,
+        // and densely over [2^-8, 2^-7), where case A's series remainder peaks. Each case against
+        // its own bound (A: z < 1 + 2^-7, 5.3u; B: z < 1.5, 4.4u; C: LOG1P64_BOUND).
+        let scales = (0x3e50_0000_0000_0000u64..0x4810_0000_0000_0000).step_by(0x0000_0f00_0f00_0f01);
+        let case_a_top = (0x3f70_0000_0000_0000u64..0x3f80_0000_0000_0000).step_by(0x0000_0040_0000_0001);
+        for k in scales.chain(case_a_top) {
             let w = f64::from_bits(k);
-            check(Some(log1p64(w)), log1p_dd(Dd::from(w)), LOG1P64_BOUND, "log1p64", w);
+            let z = 1.0 + w;
+            let b = if z < 1.0 + 1.0 / 128.0 { 5.3 } else if z < 1.5 { 4.4 } else { LOG1P64_BOUND };
+            check(Some(log1p64(w)), log1p_dd(Dd::from(w)), b, "log1p64", w);
         }
         // sqrt64 over the range the family adds (1 + a², t(t + 2): up to 2^257).
         for k in (0x3ff0_0000_0000_0000u64..=0x5030_0000_0000_0000).step_by(0x0000_0f00_0f00_0f01) {
