@@ -5,13 +5,13 @@ HEAD in `handoff/reports/PERF-MEMCMP-TAILS.json`. Role keke:~/w/n3 (Zen 1 host).
 
 ## Change
 csys/src/machine/fold.S: the AVX2 65-128 and 129-2048 classes of `liella_machine_compare` (memcmp) and
-`liella_machine_equal` (bcmp, __memcmpeq) lose their four explicit NULL tests (owner ruling #2517 as recorded in
+`liella_machine_equal` (bcmp, __memcmpeq) lose their four explicit NULL tests (ruling #2517 (coordinator, 2026-11-04) as recorded in
 handoff/memcmpeq-early.md: NULL folding to 2048) and their second class word: one compare against
 `liella_machine_cmp_long` gates 65-2048, the 32-byte head block runs next, then `n > 128` picks the long class.
 crates/boundary/src/dispatch.rs: `cmp_long` is now 2048 only while folding AND AVX2 are on (`store_cmp_gates`,
 dropped first, raised last); with folding off those sizes take the SSE2 class / checked entries (S6 abort as before).
 `cmp_mid` stays the AVX2 flag word of `.Lcmp_sse_long`. Test: small_compare NULL test expects SIGSEGV for 65-2048 in
-the folded AVX2 build only (2048, 2049 added). Decision row `D-NEW` (placeholder) in plan/07-decisions/s04.
+the folded AVX2 build only (2048, 2049 added). Decision row `D-4.52` in plan/07-decisions/s04.
 
 ## Per-phase split (static count from the listing, instructions from entry to ret; bench overhead about 8.4)
 | path | dispatch to class | class gate | NULL | head block | size test | locate + order | total before -> after |

@@ -435,7 +435,7 @@ memset:
  * reach the 65-2048 AVX2 classes here when `n <= liella_machine_cmp_long` (2048 with folding and
  * AVX2 on, else 0: one compare, PERF-MEMCMP-TAILS; above it the SSE2 classes or the checked
  * entries). No NULL test: the first 32 bytes of each region are the first load, so a NULL faults
- * on page zero (owner ruling #2517: NULL folding to 2048). Those 32 bytes are the early probe,
+ * on page zero (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048). Those 32 bytes are the early probe,
  * then `n > 128` goes to the long class; 65-128 (MEMCMP-MID) take (sort -C differs within bytes 8-31), then the blocks at 32, n - 64 and n - 32
  * ANDed into one test; the first differing byte (first block first) is re-read and ordered as below
  * (re-read equal, D-4.21 -> `liella_hot_compare_rescan` with the index in rcx: the counted rescan
@@ -1325,7 +1325,7 @@ liella_machine_cmp_mid:
  * `ffi::liella_machine_cmp_long`): 2048 (`hot::CMP_LONG`) while NULL folding and the AVX2 builds
  * are both on, else 0 (written by `crate::dispatch::store_cmp_gates`: dropped before folding or the
  * AVX2 flag goes off, raised after both are on). The AVX2 65-2048 classes have no NULL test (their
- * first load faults on page zero, owner ruling #2517), so the word is their only gate: sizes above
+ * first load faults on page zero, ruling #2517 (coordinator, 2026-11-04)), so the word is their only gate: sizes above
  * 64 with `n > word` go to the SSE2 classes (compare) or the checked entry (equality). */
 	.globl liella_machine_cmp_long
 	.hidden liella_machine_cmp_long

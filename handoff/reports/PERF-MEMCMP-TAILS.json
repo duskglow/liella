@@ -3,7 +3,7 @@
  "branch": "task/perf-memcmp-tails", "head": "see git: the commit adding this file",
  "gate": {"affected": "running at hand-back (keke perf-memcmp-tails-gate, direct tier reaches all sections via fold.S)", "peak": null},
  "accepted_first_attempt": null,
- "rulings": [{"item": "NULL folding for 65-2048 in the AVX2 compare/equality classes relies on owner ruling #2517 as recorded in handoff/memcmpeq-early.md; not found in plan/", "recommendation": "confirm #2517 covers this and assign the D-NEW row id"}],
+ "rulings": [{"item": "NULL folding for 65-2048 in the AVX2 compare/equality classes relies on ruling #2517 (coordinator, 2026-11-04) as recorded in handoff/memcmpeq-early.md; not found in plan/", "recommendation": "confirm #2517 covers this and assign the D-4.52 row id"}],
  "informational": ["plants: 5 CAUGHT, 0 SURVIVED, no WARN (keke perf-memcmp-tails-plants2)", "first plants run perf-memcmp-tails-plants refused by the tool (.S plants without function label); superseded", "percall (wl_percall.sh) not run: budget; per-phase split in the handoff is a static count", "tail_32 rows and memcmp_4k/64k not addressed (reasons in handoff)", "after-count perf-memcmp-tails-count-after waits for the gate, then counts"],
  "refused": [],
  "improvement": "a fold.S change makes the direct-tier gate the full suite; a fold.S-specific direct tier (small_compare, small_copy, machine_scanners) would make kernel stories cheap to gate",

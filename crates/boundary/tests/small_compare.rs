@@ -301,7 +301,7 @@ fn null_faults_in_the_folded_compare_sizes_and_aborts_in_every_other() {
     // Clause: s4_3_c_1 with S6 (NULL with n > 0 is the EFAULT abort) and the compare fold
     // (MEMCMP-FOLD, owner ruling 2026-10-10): with folding on, NULL with 8 <= n <= 64 dies by SIGSEGV
     // on page zero (the head probe's load in fold.S), and so does 65-2048 in the AVX2 build (its
-    // first 32-byte load, owner ruling #2517, PERF-MEMCMP-TAILS); 1-7, 65 and up in the SSE2 build,
+    // first 32-byte load, ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS); 1-7, 65 and up in the SSE2 build,
     // 2049 and up, and every size with folding off take the S6 abort.
     use std::sync::atomic::Ordering::SeqCst;
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -317,7 +317,7 @@ fn null_faults_in_the_folded_compare_sizes_and_aborts_in_every_other() {
             for call in 0..NULL_CALLS {
                 NULL_CASE.store(n * NULL_CALLS + call, SeqCst);
                 let end = selftest::in_child_quiet(null_call).unwrap();
-                // The AVX2 65-2048 classes fold too (owner ruling #2517, PERF-MEMCMP-TAILS): their
+                // The AVX2 65-2048 classes fold too (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS): their
                 // first 32-byte load faults on page zero.
                 let folded = (8..=64).contains(&n) || (avx2 && (65..=2048).contains(&n));
                 let want = if fold && folded { 11 } else { 6 };
