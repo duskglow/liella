@@ -256,6 +256,7 @@ fn name_of<'m, M: FtsMem>(mem: &'m mut M, x: &Node) -> &'m [u8] {
     b.get(off::NAME..).unwrap_or(&[])
 }
 
+#[inline(always)]
 fn put(b: &mut [u8], at: usize, v: &[u8]) {
     if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
         d.copy_from_slice(v);
@@ -418,8 +419,11 @@ impl Fts {
                 i
             }
         };
-        self.write_header(mem, idx);
-        put(mem.bytes(block, off::NAME), off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
+            let b = mem.bytes(block, off::NAME);
+            self.put_header(idx, x, b);
+            put(b, off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        }
         Ok(idx)
     }
 
@@ -451,29 +455,30 @@ impl Fts {
     }
 
     /// Entry `n`'s structure: every field before `fts_name`.
-    fn header(&self, n: usize, x: &Node) -> [u8; off::NAME] {
+    /// Write entry `n`'s structure fields straight into the first `off::NAME` bytes `b` of its
+    /// block: each field once, at its offset (PERF-NFTW-ENTRY-8: no temporary structure and no
+    /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
+    /// the caller's or `fts_set`'s, and the zeros the block was made with.
+    fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
         let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
-        let mut b = [0u8; off::NAME];
-        put(&mut b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(&mut b, off::PARENT, &parent.to_ne_bytes());
-        put(&mut b, off::LINK, &x.link.to_ne_bytes());
-        put(&mut b, off::ACCPATH, &acc.to_ne_bytes());
-        put(&mut b, off::PATH, &self.buf.to_ne_bytes());
-        put(&mut b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(&mut b, off::SYMFD, &0i32.to_ne_bytes());
-        put(&mut b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::INO, &st.ino.to_ne_bytes());
-        put(&mut b, off::DEV, &st.dev.to_ne_bytes());
-        put(&mut b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(&mut b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(&mut b, off::INFO, &x.info.to_ne_bytes());
-        put(&mut b, off::FLAGS, &0u16.to_ne_bytes());
-        // `fts_instr` is not part of it: the block holds the instruction ([`Fts::instr_of`]).
-        put(&mut b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
-        b
+        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
+        put(b, off::PARENT, &parent.to_ne_bytes());
+        put(b, off::LINK, &x.link.to_ne_bytes());
+        put(b, off::ACCPATH, &acc.to_ne_bytes());
+        put(b, off::PATH, &self.buf.to_ne_bytes());
+        put(b, off::ERRNO, &x.errno.to_ne_bytes());
+        put(b, off::SYMFD, &0i32.to_ne_bytes());
+        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(b, off::INO, &st.ino.to_ne_bytes());
+        put(b, off::DEV, &st.dev.to_ne_bytes());
+        put(b, off::NLINK, &st.nlink.to_ne_bytes());
+        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        put(b, off::INFO, &x.info.to_ne_bytes());
+        put(b, off::FLAGS, &0u16.to_ne_bytes());
+        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
@@ -481,11 +486,7 @@ impl Fts {
     /// [`Fts::visit`]), the status then and by [`Fts::write`].
     fn write_header<M: FtsMem>(&self, mem: &mut M, n: usize) {
         let Ok(x) = self.node(n) else { return };
-        let h = self.header(n, x);
-        let b = mem.bytes(x.block, off::NAME);
-        put(b, 0, h.get(..off::NUMBER).unwrap_or(&[]));
-        put(b, off::ACCPATH, h.get(off::ACCPATH..off::INSTR).unwrap_or(&[]));
-        put(b, off::STATP, h.get(off::STATP..).unwrap_or(&[]));
+        self.put_header(n, x, mem.bytes(x.block, off::NAME));
     }
 
     /// Write entry `n`'s structure and status into its block (its status changed).
