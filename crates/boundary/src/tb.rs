@@ -467,6 +467,20 @@ pub(crate) fn file_words(addr: usize) -> Option<&'static [AtomicUsize]> {
     Some(w)
 }
 
+/// [`file_words`] with no null or alignment test, for the `getc`/`putc` front paths
+/// (PERF-STDIO-UNLOCKED-TRIM, owner #1654: libc is not a security boundary). Contract: `addr`
+/// is a `FILE *` the caller holds, as [`file_words`] requires; a null or misaligned pointer is
+/// the caller's undefined behaviour and faults on the first window load, as in the reference.
+#[inline(always)]
+pub(crate) fn file_words_trusted(addr: usize) -> &'static [AtomicUsize] {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: a live FILE object of FILE_WORDS words (the caller's valid stream).
+    unsafe {
+        words64_at(addr, liella_legacy::stdio_compat::FILE_WORDS)
+    }
+}
+
 /// A stream's lock. Crate-private contract: `addr` is a `_lock` word `crate::stdio` stored,
 /// the address of a lock in a slot it leaked (never freed).
 pub(crate) fn stream_lock_at(addr: usize) -> &'static liella_legacy::stdio_compat::StreamLock {

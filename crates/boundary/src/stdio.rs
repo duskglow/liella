@@ -835,7 +835,8 @@ fn read_front(fp: usize, how: Locking) -> Result<u8, ReadFront> {
 /// is taken in it without reading and checking it again, as [`put_front_ext`]).
 #[inline(always)]
 fn read_front_ext(fp: usize, how: Locking) -> Result<u8, (ReadFront, usize)> {
-    let Some(file) = tb::file_words(fp) else { return Err((ReadFront::General, 0)) };
+    // PERF-STDIO-UNLOCKED-TRIM (owner #1654): no null or alignment test of the caller's `fp`.
+    let file = tb::file_words_trusted(fp);
     let Some(p) = sc::read_room(file) else {
         // STDIO-6: no buffer published (a first read) goes straight to the engine.
         return Err((if sc::buf_hint(file) { ReadFront::Empty } else { ReadFront::General }, 0));
@@ -942,13 +943,13 @@ pub fn putc_c(fp: usize, how: Locking, c: i32) -> core::ffi::c_int {
     // trusted as the flush or setup that opened it left it (`store`: open only on a sealed,
     // byte-oriented, fully buffered stream that is writing, bounded by its buffer): one store,
     // `_IO_write_ptr` advanced, as header-inline `putc` does. Every other case validates below.
-    if let Some(file) = tb::file_words(fp) {
-        if let Some(p) = sc::window_room(file, 1) {
-            if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
-                tb::window_set_byte(p, b);
-                sc::set_write_ptr(file, p.wrapping_add(1));
-                return core::ffi::c_int::from(b);
-            }
+    // PERF-STDIO-UNLOCKED-TRIM (owner #1654): no null or alignment test of the caller's `fp`.
+    let file = tb::file_words_trusted(fp);
+    if let Some(p) = sc::window_room(file, 1) {
+        if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
+            tb::window_set_byte(p, b);
+            sc::set_write_ptr(file, p.wrapping_add(1));
+            return core::ffi::c_int::from(b);
         }
     }
     match put_front_ext(fp, how, &[b]) {
