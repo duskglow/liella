@@ -1671,8 +1671,11 @@ fn glob_sort_key_ties() {
     use pat::*;
     let names = ["file_000000010", "file_000000009", "file_00000001", "file_0000000100", "file_", "file_000000009x", "file_\u{e9}", "file_z", "zz", "a"];
     let mut t = Tree::default();
+    t.entries.push((".", "v", 4));
+    t.modes.insert("v".to_string(), DIR);
     for n in names {
         t.entries.push(("v", n, 8));
+        t.modes.insert(format!("v/{n}"), REG);
     }
     let mut want: Vec<String> = names.iter().map(|n| format!("v/{n}")).collect();
     want.sort();
