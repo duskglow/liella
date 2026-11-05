@@ -884,6 +884,7 @@ fn kernel_pages_align_and_prefer_a_node() {
 /// while the request fits the block's class and is more than half the class below it, and moves
 /// the block otherwise. The export tests this before its general path (PERF-REALLOC-USABLE-2).
 #[test]
+// opaque-ok: the test needs the export's own in-place rule (pointer identity), not a folded call
 fn realloc_in_place_fit_rule() {
     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
     let p = s::malloc(17);
