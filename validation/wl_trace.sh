@@ -12,7 +12,8 @@
 # <case>: a wl_percall case (strcoll_short, fgets_line, ...). <function>: a symbol of the Liella binary to
 #   break on (an exported name such as strcoll or fgets, or an internal symbol).
 # --skip K: trace call K+1 (default 10: past first-call initialisation). --max N: step limit (default 200000;
-#   gdb steps ~10-20k instructions per second). Runs locally, no queue of its own (jobrun is the queue).
+#   gdb steps ~10-20k instructions per second). --list: also print every executed instruction (I <n> <pc> <sym+off>:
+#   <insn>) to split one call into phases by address. Runs locally, no queue of its own (jobrun is the queue).
 # The breakpoint is the ELF symbol's linked address (nm), so an exported alias whose body is another symbol is traced;
 # a function never hit is reported with its same-address aliases ("X is an alias of Y; try Y") or a rewrite hint.
 # Example: cd ~/w/<role> && bash validation/wl_trace.sh . strcoll_short strcoll
@@ -24,6 +25,7 @@ while [ $# -gt 0 ]; do
         --spec) pass+=(--spec "$2"); shift 2 ;;
         --skip) skip=$2; shift 2 ;;
         --max) max=$2; shift 2 ;;
+        --list) export WL_TRACE_LIST=1; shift ;;
         --rev) pass+=(--rev "$2"); shift 2 ;;
         --nowait) shift ;;   # ignored: jobrun detaches
         -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;

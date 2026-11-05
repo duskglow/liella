@@ -1,0 +1,5 @@
+# PERF-NFTW-ENTRY-7: plants on the fts entry's status key (dev/ino/nlink kept in the node; the block holds the whole status).
+cycle-ino-ignored | crates/legacy/src/fts.rs | lit:a.stat.is_some_and(|s| s.dev == dev && s.ino == ino) ==> a.stat.is_some_and(|s| s.dev == dev) | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+cycle-never-dc | crates/legacy/src/fts.rs | lit:                    st.0 = info::DC; ==>                     st.0 = st.0; | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+restat-block-status-default | crates/legacy/src/fts.rs | lit:self.write(mem, n, &st.unwrap_or_default()); ==> self.write(mem, n, &Stat::default()); | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked
+key-nlink-dropped | crates/legacy/src/fts.rs | lit:Key { dev: s.dev, ino: s.ino, nlink: s.nlink } ==> Key { dev: s.dev, ino: s.ino, nlink: 0 } | cargo test -p liella --test s13_filesystem_clauses | msg:FAILED|panicked

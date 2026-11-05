@@ -882,6 +882,7 @@ const SHORT_NEEDLE: usize = 16;
 /// `h` and `n` are NULL or readable NUL-terminated strings, not written during the call.
 // UNSAFE(slice): both strings are read unit by unit, never past a terminator, then as for `find_str`.
 #[allow(unsafe_code)]
+#[inline(always)]
 pub unsafe fn find_str_n(h: *const i8, n: *const i8) -> KResult<Option<usize>> {
     if h.is_null() || n.is_null() {
         return Err(Errno::EFAULT);
@@ -992,15 +993,53 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
     kernel: extern "C" fn(*const T, usize, i32, i32) -> usize,
     rank: fn(T) -> u8,
 ) -> KResult<Option<usize>> {
+    let last = needle.len().saturating_sub(1);
+    let (Some(&c0), Some(&c1)) = (needle.first(), needle.get(last)) else { return Ok(None) };
+    let r = kernel(p.wrapping_add(last), last, c0.into(), c1.into());
+    if r & 1 == 0 {
+        let at = r >> 1;
+        // UNSAFE(slice): comparing the needle at the first candidate.
+        // SAFETY: units [at, at + last] are text: the scanner saw no terminator in [last, at + last],
+        // and the units before `last` are text (the function's contract).
+        if unsafe { matches_at(p, at, last, needle) } {
+            return Ok(Some(at));
+        }
+    }
+    // A miss ends here, without the out-of-line call (`find_next` reads the unit again).
+    // UNSAFE(slice): the one unit the scanner reported as the terminator.
+    // SAFETY: the string is readable through its terminator, reported at last + (r >> 1).
+    if r & 1 == 1 && unsafe { p.wrapping_add(last.saturating_add(r >> 1)).read() } == T::default() {
+        return Ok(None);
+    }
+    // UNSAFE(slice): the rest of the search, after the first pass.
+    // SAFETY: as for this function; `r` is the first pass's answer and a candidate in it failed.
+    unsafe { find_next(p, needle, kernel, rank, r) }
+}
+
+/// [`find_known`] after its first pass (STRSTR-SHORT-DENSE-PARITY-2): `r` is the scanner's answer
+/// for the pair (0, last) from unit `last`, and when it names a candidate the needle is not there.
+/// Out of line, so a call that the first candidate settles keeps the loop's state off its path.
+///
+/// # Safety
+/// As for [`find_known`], with `r` that answer.
+// UNSAFE(slice): reading the haystack through its terminator via the scanner's answers.
+#[allow(unsafe_code)]
+#[inline(never)]
+unsafe fn find_next<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::Unit>(
+    p: *const T,
+    needle: &[T],
+    kernel: extern "C" fn(*const T, usize, i32, i32) -> usize,
+    rank: fn(T) -> u8,
+    first: usize,
+) -> KResult<Option<usize>> {
     let m = needle.len();
     let last = m.saturating_sub(1);
     let (mut o0, mut o1) = (0usize, last);
     let mut tuned = m < 2;
     let (mut from, mut wasted) = (0usize, 0usize);
+    let mut r = first;
+    let mut q0 = last;
     loop {
-        let (Some(&c0), Some(&c1)) = (needle.get(o0), needle.get(o1)) else { return Ok(None) };
-        let q0 = from.saturating_add(o1);
-        let r = kernel(p.wrapping_add(q0), o1.saturating_sub(o0), c0.into(), c1.into());
         let k = r >> 1;
         if r & 1 == 1 {
             // UNSAFE(slice): the one unit the scanner reported as the terminator.
@@ -1013,13 +1052,9 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
             // SAFETY: unit `from` is at or before the terminator (loop invariant).
             return unsafe { find_rest(p, from, needle) };
         }
+        // The candidate at `at` was compared and is no match (by the caller for the first pass,
+        // else at the end of the previous iteration).
         let at = from.saturating_add(k);
-        // UNSAFE(slice): comparing the needle at the candidate.
-        // SAFETY: units [at, at + o1] are text: the scanner saw no terminator in [q0, at + o1],
-        // and the units before q0 are text (loop invariant).
-        if unsafe { matches_at(p, at, o1, needle) } {
-            return Ok(Some(at));
-        }
         from = at.saturating_add(1);
         wasted = wasted.saturating_add(m);
         if wasted > from.saturating_mul(4).saturating_add(256) {
@@ -1031,6 +1066,18 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
             // o1 stays at most `last`, so the invariant holds for the new pair.
             tuned = true;
             (o0, o1) = crate::conv::rare_pair_by(needle, rank);
+        }
+        let (Some(&c0), Some(&c1)) = (needle.get(o0), needle.get(o1)) else { return Ok(None) };
+        q0 = from.saturating_add(o1);
+        r = kernel(p.wrapping_add(q0), o1.saturating_sub(o0), c0.into(), c1.into());
+        if r & 1 == 0 {
+            let at = from.saturating_add(r >> 1);
+            // UNSAFE(slice): comparing the needle at the candidate.
+            // SAFETY: units [at, at + o1] are text: the scanner saw no terminator in [q0, at + o1],
+            // and the units before q0 are text (loop invariant).
+            if unsafe { matches_at(p, at, o1, needle) } {
+                return Ok(Some(at));
+            }
         }
     }
 }

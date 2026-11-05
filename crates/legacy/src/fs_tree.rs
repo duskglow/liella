@@ -65,7 +65,7 @@ fn action(r: i32, retval: bool) -> Action {
 
 /// Run a walk, following it with the working directory if `chdir`, and return to the caller's
 /// working directory at the end.
-fn run<S: Sys>(sys: &S, path: &[u8], opt: Options, chdir: bool, visit: &mut dyn FnMut(&walk::Visit<'_>) -> i32, retval: bool, st: &mut WalkState) -> Result<i32> {
+fn run<S: Sys, V: FnMut(&walk::Visit<'_>) -> i32>(sys: &S, path: &[u8], opt: Options, chdir: bool, visit: &mut V, retval: bool, st: &mut WalkState) -> Result<i32> {
     let orig = if chdir { Some(sys.openat(Fd::CWD, KStr::from_nul_terminated(b".\0")?, O_PATH | O_DIRECTORY | O_CLOEXEC, 0)?) } else { None };
     st.orig = orig;
     let r = walk::walk_levels(sys, &mut st.levels, path, opt, &mut |ev| match ev {

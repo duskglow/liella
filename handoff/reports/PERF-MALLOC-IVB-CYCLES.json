@@ -1,0 +1,12 @@
+{"task": "PERF-MALLOC-IVB-CYCLES", "model": "opus", "tokens": null,
+ "result": "cause recorded: malloc_free on Ivy Bridge is latency-bound on a loop-carried chain through the bitmap word (resource_stalls.rs 20 vs 6-8 per pair, all other stall events 0); the conditional K_HINT store measured worse and was reverted; no code change",
+ "branch": "task/perf-malloc-ivb-cycles", "head": null,
+ "gate": {"affected": "0 passed / 0 failed (docs-only change; direct tier selects no suites)", "peak": "169M"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "a 'latest malloc' fast path in free (take word and bit from the cache when p is the block the last fast malloc returned) to shorten the chain by about 12 cycles; new fast path, D-12 design question", "recommendation": "approve a follow-up story to build and measure it on Ivy Bridge and Skylake-SP with wl_count on heap workloads; keep the liveness load (double-free report)"}],
+ "informational": ["target (<= 1.05x on Ivy Bridge) not met: cause recorded instead, as the brief allows", "whole-process perf stat of cbench_malloc is unusable for one row (CBENCH_ROWS does not skip the non-MEASURE sections); a one-row probe was used", "nico has no objdump: annotation was done on shiki from perf script IPs"],
+ "refused": [],
+ "jobs": ["shiki:perf-malloc-ivb-cycles-gate", "shiki:perf-malloc-ivb-cycles-static", "shiki:perf-malloc-ivb-cycles-clippy", "nico:perf-malloc-ivb-cycles-perfab"],
+ "improvement": "cbench_counters.h could take an extra raw-event list from the environment (e.g. CBENCH_EVENTS=0x01a2,...) so one bench row can be counted for any event without a separate probe",
+ "next_step": "ruling on the 'latest malloc' free fast path; if approved, build it and measure cycles on Ivy Bridge host A and Skylake-SP",
+ "report_file": "handoff/PERF-MALLOC-IVB-CYCLES.md"}
