@@ -69,10 +69,14 @@ const EXP_DELTA: u64 = 512;
 const LOG_DELTA: u64 = 640;
 /// log1p: ε ≤ 6.8·2^-53 (proof at [`log1p_core`]), so < 6.9 ulp.
 const LOG1P_DELTA: u64 = 8;
-/// sin, cos: ε ≤ 9.05·2^-53 (proof at [`trig_core`]), so < 9.1 ulp.
-const TRIG_DELTA: u64 = 10;
-/// tan = s/c: both quotients' bounds and the division, ε ≤ 19.2·2^-53, so < 19.3 ulp.
-const TAN_DELTA: u64 = 20;
+/// sin, cos: ε ≤ 24.3·2^-53 (proof at [`trig_core`]), so < [`TRIG_BOUND`] = 24.4 ulp.
+const TRIG_DELTA: u64 = 40;
+/// tan = s/c: both quotients' bounds and the division, ε ≤ 49.7·2^-53, so < [`TAN_BOUND`] = 50 ulp.
+const TAN_DELTA: u64 = 80;
+#[cfg(test)]
+const TRIG_BOUND: f64 = 24.4;
+#[cfg(test)]
+const TAN_BOUND: f64 = 50.0;
 /// expm1: ε ≤ 9.1·2^-53 (proof at [`expm1_core`]), so < 9.2 ulp; 12 keeps a margin.
 const EXPM1_DELTA: u64 = 12;
 /// cbrt: ε ≤ 5.4·2^-53 (proof at [`cbrt_core`]), so < 5.5 ulp.
@@ -432,14 +436,17 @@ const INV_PI64: f64 = f64::from_bits(t::SCALES[2]); // RN(64/π)
 const PI64_1: f64 = f64::from_bits(0x3fa9_21fb_5400_0000); // π/64 to 27 significant bits
 const PI64_2: f64 = f64::from_bits(0x3dc1_0b46_1100_0000); // the next 29 bits
 const PI64_3: f64 = f64::from_bits(0x3bf4_c4c6_628b_80dc); // RN(π/64 - PI64_1 - PI64_2)
-const S3: f64 = -1.0 / 6.0;
-const S5: f64 = 1.0 / 120.0;
-const S7: f64 = -1.0 / 5040.0;
-const K4: f64 = 1.0 / 24.0;
-const K6: f64 = -1.0 / 720.0;
-const K8: f64 = 1.0 / 40320.0;
+/// The minimax polynomials for sin and cos on [-0.0246, 0.0246] (`crates/math/fits/fast32_sin.fit`
+/// and `fast32_cos.fit`, `cargo xtask remez`, D-10.3): sin odd 1..5 with the r coefficient fixed
+/// at 1, relative error 2^-49.07 (15.24·2^-53); cos even 0..6 with the constant fixed at 1,
+/// relative error 2^-64.59.
+const S3: f64 = f64::from_bits(crate::coeffs::fast32_sin::FAST32_SIN[1]);
+const S5: f64 = f64::from_bits(crate::coeffs::fast32_sin::FAST32_SIN[2]);
+const K2: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[1]);
+const K4: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[2]);
+const K6: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[3]);
 
-/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 9.05·2^-53, for 2^-26 ≤ |x| < 2^19.
+/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 24.3·2^-53, for 2^-26 ≤ |x| < 2^19.
 ///
 /// Reduction (Cody–Waite): x = n·π/64 + r, n = nearest(RN(x·64/π)), so |r| < 0.024544.
 /// n·PI64_1 and n·PI64_2 are exact (27 and 29 bits, |n| < 2^24); x - n·PI64_1 is exact (both on
@@ -447,15 +454,20 @@ const K8: f64 = 1.0 / 40320.0;
 /// product n·PI64_3 ≤ 2^-94 and the constants' tail ≤ 2^-95.8: |Δr| ≤ 2·2^-53|r| + 2^-93. n = 0
 /// gives r = x exactly. |r| < 2^-36 with n ≠ 0 goes to the accurate path.
 ///
-/// sin r = r + r·z(S3 + z(S5 + z·S7)), z = r², Taylor remainder ≤ 2^-61.2|r|; with Δr and the final
-/// sum, |Δsr| ≤ 3.01·2^-53|r|. cos r - 1 = cm = z(-1/2 + z(K4 + z(K6 + z·K8))): remainder < 2^-75,
-/// |cm| ≤ 3.02·10^-4, |Δcm| ≤ 8·2^-53|cm|. S = sin(nπ/64), C = cos(nπ/64) are the `double` heads
-/// of the table (relative error 2^-53; sin 0, sin π, cos ±π/2 are exactly 0 and ±1).
-/// sin x = S + (S·cm + C·sr); cos x is the same with (C, -S) for (S, C) (the angle shifted by π/2).
+/// sin r = sr = r + r·z(S3 + z·S5), z = r² (|r| ≤ 0.024545 < 0.0246, the fitted range):
+/// approximation error ≤ 15.25·2^-53|r| (the fit's 15.24 plus its coefficients' rounding, already
+/// in the fit's measured figure); with Δr and the evaluation (the r·z·(...) part is < 10^-4|r|,
+/// its roundings below 2^-63|r|; the final sum 2^-53), |Δsr| ≤ (3.01 + 15.25)·2^-53|r| =
+/// 18.26·2^-53|r|. cos r - 1 = cm = z(K2 + z(K4 + z·K6)): approximation error ≤ 2^-64.5 < 0.01·2^-53
+/// absolute, |cm| ≤ 3.02·10^-4, |Δcm| ≤ 8·2^-53|cm| + 0.01·2^-53. S = sin(nπ/64), C = cos(nπ/64)
+/// are the `double` heads of the table (relative error 2^-53; sin 0, sin π, cos ±π/2 are exactly
+/// 0 and ±1). sin x = S + (S·cm + C·sr); cos x is the same with (C, -S) for (S, C) (the angle
+/// shifted by π/2).
 /// * n ≢ 0 (mod 64): the angle is at least π/128 from a multiple of π, so |S| ≤ 2|y| and
-///   |C·r| ≤ 1.0001|y|. The errors, in units of 2^-53|y|: S 2, C 1.0001, sr 3.0103, cm 0.005,
-///   the two products 1.002, the inner sum 1.02, the outer 1: ≤ 9.05.
-/// * n ≡ 0 (mod 64): S = 0, C = ±1, y = ±sr: Δr ≤ (2 + 2^-5)·2^-53|r| (|r| ≥ 2^-36), so ≤ 3.04.
+///   |C·r| ≤ 1.0001|y|. The errors, in units of 2^-53|y|: S 2, C 1.0001, sr 18.26·1.0001, cm
+///   0.005 + 0.02, the two products 1.002, the inner sum 1.02, the outer 1: ≤ 24.3.
+/// * n ≡ 0 (mod 64): S = 0, C = ±1, y = ±sr: Δr ≤ (2 + 2^-5)·2^-53|r| (|r| ≥ 2^-36), so
+///   ≤ 3.04 + 15.25 = 18.3.
 ///
 /// No operand or intermediate is subnormal (|r| ≥ 2^-36 or r = x ≥ 2^-26, so z^4 ≥ 2^-304), and
 /// |y| ≥ 2^-37.
@@ -475,8 +487,8 @@ fn trig_core(x: f32) -> Option<(f64, f64)> {
         return None;
     }
     let z = r * r;
-    let sr = r + r * z * (S3 + z * (S5 + z * S7));
-    let cm = z * (-0.5 + z * (K4 + z * (K6 + z * K8)));
+    let sr = r + r * z * (S3 + z * S5);
+    let cm = z * (K2 + z * (K4 + z * K6));
     let s = f64::from_bits(t::SIN_K_PI64[n][0]);
     let c = f64::from_bits(t::SIN_K_PI64[(n + 32) & 127][0]);
     Some((s + (s * cm + c * sr), c + (c * cm - s * sr)))
@@ -884,9 +896,18 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         Fast::Log => (log_core_from(x, 0x0080_0000)?, LOG_DELTA),
         Fast::Log2 => (log_core_from(x, 0x0080_0000)? * INV_LN2, LOG_DELTA),
         Fast::Log10 => (log_core_from(x, 0x0080_0000)? * INV_LN10, LOG_DELTA),
+        // trig_core takes only normal x (2^-26 ≤ |x| < 2^19, so no denormal-operand), keeps every
+        // intermediate a normal `double` or zero (its proof) and |c| ≥ 2^-37, so s/c raises no
+        // divide-by-zero, overflow or underflow: inexact only (LIBM-F32-SINF-SHRINK).
+        Fast::Sin => (trig_core(x)?.0, TRIG_DELTA),
+        Fast::Cos => (trig_core(x)?.1, TRIG_DELTA),
+        Fast::Tan => {
+            let (s, c) = trig_core(x)?;
+            (s / c, TAN_DELTA)
+        }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Sin | Fast::Cos | Fast::Tan | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => return None,
+        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan => return None,
     };
     round(y, delta, Rounding::Nearest)
 }
@@ -906,6 +927,9 @@ nearest_fn!(exp10_nearest, Fast::Exp10);
 nearest_fn!(log_nearest, Fast::Log);
 nearest_fn!(log2_nearest, Fast::Log2);
 nearest_fn!(log10_nearest, Fast::Log10);
+nearest_fn!(sin_nearest, Fast::Sin);
+nearest_fn!(cos_nearest, Fast::Cos);
+nearest_fn!(tan_nearest, Fast::Tan);
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
@@ -1153,8 +1177,9 @@ mod tests {
         assert!(seen > 1_000_000, "{seen}");
     }
 
-    /// trig_core's sin, cos (< 9.1 ulp) and tan = s/c (< 19.3 ulp) against the double-double
-    /// `sin_cos` of the accurate path (its error far below 2^-100).
+    /// trig_core's sin, cos (< TRIG_BOUND ulp) and tan = s/c (< TAN_BOUND ulp) against the
+    /// double-double `sin_cos` of the accurate path (its error far below 2^-100); the margins
+    /// TRIG_DELTA, TAN_DELTA are at least 1.5·bound + 1. (No spec clause: LIBM-F32-SINF-SHRINK.)
     #[test]
     fn trig_core_is_within_its_bound() {
         let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
@@ -1165,13 +1190,16 @@ mod tests {
             if let Some((s, c)) = trig_core(x) {
                 seen += 1;
                 let (fs, fc) = crate::trig::sin_cos(f64::from(x));
-                for (y, f, b, n) in [(s, fs, 9.1, "sin"), (c, fc, 9.1, "cos"), (s / c, fs.div(fc), 19.3, "tan")] {
+                for (y, f, b, n) in [(s, fs, TRIG_BOUND, "sin"), (c, fc, TRIG_BOUND, "cos"), (s / c, fs.div(fc), TAN_BOUND, "tan")] {
                     let err = crate::dd::Dd::from(y).sub(f).to_f64();
                     assert!(err.abs() <= b * ulp(y), "trig_core {n}({x:e}): {} ulp", err / ulp(y));
                 }
             }
         }
         assert!(seen > 750_000, "{seen}");
+        for (d, b) in [(TRIG_DELTA, TRIG_BOUND), (TAN_DELTA, TAN_BOUND)] {
+            assert!(d as f64 >= 1.5 * b + 1.0, "margin {d} ulp for the bound {b} ulp");
+        }
     }
 
     /// `fs` on every `float` operand in every mode; the number taken. The threads take 2^16-operand
@@ -1388,13 +1416,46 @@ mod tests {
         std::println!("atan2f fast path taken {taken} of {} calls", (1u64 << 24) * 64 * 4);
     }
 
-    /// sinf, cosf, tanf (and sincosf) on every `float` operand in every mode (MATH-M6-F32-TRIG's
-    /// proof; its own job, 3·2^34 calls).
+    /// The in-place nearest entries of sinf, cosf, tanf give exactly what [`eval`] gives in round
+    /// to nearest, and refuse where it refuses. (No spec clause: LIBM-F32-SINF-SHRINK.)
+    #[test]
+    fn trig_nearest_entries_match_eval() {
+        let grid = (0..1u32 << 16).map(|i| -40.0 + 80.0 * (i as f32) / 65_536.0);
+        let wide = (0u32..0x7f80_0001).step_by(4099).flat_map(|b| [b, b | 1 << 31]).map(f32::from_bits);
+        let mut taken = 0u32;
+        for x in grid.chain(wide) {
+            for (f, near) in [(Fast::Sin, sin_nearest(x)), (Fast::Cos, cos_nearest(x)), (Fast::Tan, tan_nearest(x))] {
+                let e = eval(f, x, Rounding::Nearest).map(|(v, _)| v.to_bits());
+                assert_eq!(near.map(f32::to_bits), e, "{f:?}({x:e})");
+                taken += u32::from(e.is_some());
+            }
+        }
+        assert!(taken > 1_000_000, "{taken}");
+    }
+
+    /// sinf (and sincosf) on every `float` operand in every mode against the accurate path, one
+    /// job per function (LIBM-F32-SINF-SHRINK's accuracy check, 2^34 calls). (No spec clause.)
     #[test]
     #[ignore]
-    fn trig_fast_path_agrees_exhaustively() {
-        let taken = exhaustive(&TRIG);
-        std::println!("trig fast path taken {taken} of {} calls", 12u64 << 32);
+    fn sinf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Sin]);
+        std::println!("sinf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// cosf on every `float` operand in every mode (as for sinf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn cosf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Cos]);
+        std::println!("cosf fast path taken {taken} of {} calls", 4u64 << 32);
+    }
+
+    /// tanf on every `float` operand in every mode (as for sinf). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn tanf_fast_path_agrees_exhaustively() {
+        let taken = exhaustive(&[Fast::Tan]);
+        std::println!("tanf fast path taken {taken} of {} calls", 4u64 << 32);
     }
 
     /// expm1_core's y is within its proved bound (|y/f - 1| ≤ 9.1·2^-53) of f = e^x - 1, f from the
