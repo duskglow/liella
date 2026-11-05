@@ -1682,6 +1682,19 @@ fn glob_sort_key_ties() {
     assert_eq!(paths(&mut t, "v/*", 0), want);
     assert_eq!(paths(&mut t, "v/file_0*", 0), want.iter().filter(|w| w.starts_with("v/file_0")).cloned().collect::<Vec<_>>());
     assert_eq!(paths(&mut t, "v/a*", 0), v(&["v/a"]), "one match");
+    // Only the last entry read ends the shared prefix early: it must still bound the prefix
+    // (its byte past the prefix of the others sorts after theirs).
+    let names = ["prefix_long_aaaa1", "prefix_long_aaaa2", "prefix_long_aaaa0", "prefix_lonh"];
+    let mut t = Tree::default();
+    t.entries.push((".", "w", 4));
+    t.modes.insert("w".to_string(), DIR);
+    for n in names {
+        t.entries.push(("w", n, 8));
+        t.modes.insert(format!("w/{n}"), REG);
+    }
+    let mut want: Vec<String> = names.iter().map(|n| format!("w/{n}")).collect();
+    want.sort();
+    assert_eq!(paths(&mut t, "w/*", 0), want, "last entry shortens the shared prefix");
 }
 
 /// Spec §14.8 (Contract): `GLOB_ALTDIRFUNC`, with caller directory-access callbacks.
