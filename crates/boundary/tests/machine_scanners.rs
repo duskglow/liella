@@ -868,7 +868,9 @@ fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes() {
 fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level() {
     // Clauses: s4_3_c_1 (PARITY-STRCMP-AVX2). Lengths around the edges of the first groups after
     // the four tested blocks (each half of a group, each block, each lane), every position of
-    // the first difference, unsigned bytes above 0x7F, a terminator in a first.
+    // the first difference, unsigned bytes above 0x7F, a terminator in a first. With no writer,
+    // no call rescans (each stop is located at its true index).
+    let rescans = selftest::rescans();
     let mut a = vec![0u8; 64 + 1200 + 64];
     let mut b = a.clone();
     let aligns = [0usize, 1, 33, 63];
@@ -897,6 +899,7 @@ fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level() {
             }
         }
     }
+    assert_eq!(selftest::rescans(), rescans, "a call without a writer rescanned");
 }
 
 #[test]
@@ -935,6 +938,14 @@ fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators_on_level() 
         }
         // A string in the middle of a page against one ending at a page end.
         assert_eq!(cmp_at(end(base, la), base2 + 1000 - la.min(900)), (la.cmp(&(PAGE - 1 - 1000 + la.min(900)))) as c_int, "mid-page, length {la}");
+    }
+    // Long strings (PARITY-STRCMP-AVX2): the 128-byte groups' count must stop them at the page end.
+    for la in (256..PAGE - 2).step_by(29) {
+        for lb in [la - 1, la, la + 1] {
+            let want = (la.cmp(&lb)) as c_int;
+            assert_eq!(cmp_at(end(base, la), end(base2, lb)), want, "long lengths {la}/{lb}");
+            assert_eq!(cmp_at(end(base2, lb), end(base, la)), -want, "long lengths {lb}/{la}");
+        }
     }
     CSys.munmap(hi2).unwrap();
     CSys.munmap(lo2).unwrap();
