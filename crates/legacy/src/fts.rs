@@ -45,14 +45,17 @@
 //!   (D-13.13: only what cannot be represented fails).
 
 use liella::error::{Errno, Result};
-use liella::fs::dir::{DirStream, DT_DIR, DT_UNKNOWN};
+use liella::fs::dir::{DT_DIR, DT_UNKNOWN, DirStream};
 use liella::fs::walk::Levels;
 use liella::mem::TryVec;
 use liella_abi::callback::SlotCompareFn;
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
 use liella_kernel::sys::Sys;
-use liella_kernel::uapi::{Stat, AT_SYMLINK_NOFOLLOW, O_CLOEXEC, O_DIRECTORY, O_PATH, SEEK_SET, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG};
+use liella_kernel::uapi::{
+    AT_SYMLINK_NOFOLLOW, O_CLOEXEC, O_DIRECTORY, O_PATH, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG,
+    SEEK_SET, Stat,
+};
 
 use crate::fs_tree::sort_slots;
 
@@ -171,7 +174,11 @@ struct Key {
 
 impl Key {
     fn of(s: &Stat) -> Key {
-        Key { dev: s.dev, ino: s.ino, nlink: s.nlink }
+        Key {
+            dev: s.dev,
+            ino: s.ino,
+            nlink: s.nlink,
+        }
     }
 }
 
@@ -319,23 +326,42 @@ fn classify(st: &Stat, dot: bool) -> u16 {
 /// The status of `namez` (a name with its terminator) in `dir`: following links (then a link
 /// naming nothing is `FTS_SLNONE`, whatever made `stat` fail) or not. The listing's names
 /// already end in NUL, so a child's status needs no copy of its name (FTS-FLAT-PROFILE).
-fn stat_entry<S: Sys>(sys: &S, dir: Fd, namez: &[u8], follow: bool, dot: bool) -> Result<(u16, Option<Stat>, i32)> {
+///
+/// The result is written into `out` (info, status, errno), the kernel writing the status straight
+/// into it: no status is built and moved per entry (PERF-NFTW-ENTRY-9).
+fn stat_entry<S: Sys>(
+    sys: &S,
+    dir: Fd,
+    namez: &[u8],
+    follow: bool,
+    dot: bool,
+    out: &mut Probe,
+) -> Result<()> {
     let k = KStr::from_nul_terminated(namez)?;
-    if follow {
-        match sys.fstatat(dir, k, 0) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-                Ok(l) if l.mode & S_IFMT == S_IFLNK => Ok((info::SLNONE, Some(l), 0)),
-                _ => Ok((info::NS, None, e.get())),
-            },
+    let dst = out.1.get_or_insert_with(Stat::default);
+    let flags = if follow { 0 } else { AT_SYMLINK_NOFOLLOW };
+    match sys.fstatat_into(dir, k, flags, dst) {
+        Ok(()) => {
+            out.0 = classify(dst, dot);
+            out.2 = 0;
         }
-    } else {
-        match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => Ok((info::NS, None, e.get())),
+        Err(e) => {
+            let link = follow
+                && sys.fstatat_into(dir, k, AT_SYMLINK_NOFOLLOW, dst).is_ok()
+                && dst.mode & S_IFMT == S_IFLNK;
+            if link {
+                out.0 = info::SLNONE;
+                out.2 = 0;
+            } else {
+                *out = (info::NS, None, e.get());
+            }
         }
     }
+    Ok(())
 }
+
+/// An entry's `fts_info`, status (when it has one) and `fts_errno`.
+type Probe = (u16, Option<Stat>, i32);
 
 impl Fts {
     fn chdir_mode(&self) -> bool {
@@ -347,11 +373,17 @@ impl Fts {
     }
 
     fn node(&self, n: usize) -> Result<&Node> {
-        self.nodes.get(n).and_then(Option::as_ref).ok_or(Errno::EINVAL)
+        self.nodes
+            .get(n)
+            .and_then(Option::as_ref)
+            .ok_or(Errno::EINVAL)
     }
 
     fn node_mut(&mut self, n: usize) -> Result<&mut Node> {
-        self.nodes.get_mut(n).and_then(Option::as_mut).ok_or(Errno::EINVAL)
+        self.nodes
+            .get_mut(n)
+            .and_then(Option::as_mut)
+            .ok_or(Errno::EINVAL)
     }
 
     /// The block of entry `n` (0 if there is none).
@@ -377,54 +409,77 @@ impl Fts {
     #[allow(clippy::too_many_arguments)]
     /// A new entry whose path is `path_len` bytes long (its bytes are put in the shared buffer
     /// only when the entry is returned: [`Fts::place`]). A root's path is its name.
-    fn new_node<M: FtsMem>(&mut self, mem: &mut M, name: &[u8], path_len: usize, parent: usize, level: i32, st: &(u16, Option<Stat>, i32), cycle: usize, follow: bool, root_dev: u64, root: bool) -> Result<usize> {
+    fn new_node<M: FtsMem>(
+        &mut self,
+        mem: &mut M,
+        name: &[u8],
+        path_len: usize,
+        parent: usize,
+        level: i32,
+        st: &(u16, Option<Stat>, i32),
+        cycle: usize,
+        follow: bool,
+        root_dev: u64,
+        root: bool,
+    ) -> Result<usize> {
         let name_cap = name.len().saturating_add(1);
         let stat_off = align8(off::NAME.saturating_add(name_cap));
         // The stat ends past the 120-byte structure, so the block is never shorter than an
         // `FTSENT`; no path is kept in it.
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
-        let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
+        let pad = PAD
+            .get(
+                ..stat_off
+                    .saturating_sub(off::NAME)
+                    .saturating_sub(name.len()),
+            )
+            .unwrap_or(&[]);
         let sb = match &st.1 {
             Some(s) => stat_bytes(s),
             None => stat_bytes(&Stat::default()),
         };
-        let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
-        let node = Node {
-            block,
-            stat_off,
-            name_len: name.len(),
-            arg: if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() },
-            path_len,
-            parent,
-            level,
-            info: st.0,
-            errno: st.2,
-            stat: st.1.as_ref().map(Key::of),
-            cycle,
-            link: 0,
-            children: Children::NotBuilt,
-            next_child: 0,
-            follow,
-            root_dev,
-            root,
+        let block = mem
+            .alloc(off::NAME, &[name, pad, &sb])
+            .ok_or(Errno::ENOMEM)?;
+        let arg = if root {
+            TryVec::from_slice(name).inspect_err(|_| mem.free(block))?
+        } else {
+            TryVec::default()
         };
         let idx = match self.free_slots.pop() {
-            Some(i) => {
-                if let Some(s) = self.nodes.get_mut(i) {
-                    *s = Some(node);
-                }
-                i
-            }
+            Some(i) => i,
             None => {
                 let i = self.nodes.len();
-                if let Err(e) = self.nodes.push(Some(node)) {
+                if let Err(e) = self.nodes.push(None) {
                     mem.free(block);
                     return Err(e);
                 }
                 i
             }
         };
+        // Built in the slot it lives in (no 200-byte value made first and moved).
+        if let Some(s) = self.nodes.get_mut(idx) {
+            *s = Some(Node {
+                block,
+                stat_off,
+                name_len: name.len(),
+                arg,
+                path_len,
+                parent,
+                level,
+                info: st.0,
+                errno: st.2,
+                stat: st.1.as_ref().map(Key::of),
+                cycle,
+                link: 0,
+                children: Children::NotBuilt,
+                next_child: 0,
+                follow,
+                root_dev,
+                root,
+            });
+        }
         if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
             let b = mem.bytes(block, off::NAME);
             self.put_header(idx, x, b);
@@ -436,15 +491,26 @@ impl Fts {
     /// Entry `n`'s instruction: its `fts_instr`, as `fts_set` or the caller wrote it (the block
     /// is its only copy, FTS-INSTR-DIRECT).
     fn instr_of<M: FtsMem>(&self, mem: &mut M, n: usize) -> u16 {
-        let Ok(x) = self.node(n) else { return FTS_NOINSTR };
+        let Ok(x) = self.node(n) else {
+            return FTS_NOINSTR;
+        };
         let b = mem.bytes(x.block, off::NAME);
-        b.get(off::INSTR..off::STATP).map_or(FTS_NOINSTR, |v| u16::from_ne_bytes([v.first().copied().unwrap_or(0), v.get(1).copied().unwrap_or(0)]))
+        b.get(off::INSTR..off::STATP).map_or(FTS_NOINSTR, |v| {
+            u16::from_ne_bytes([
+                v.first().copied().unwrap_or(0),
+                v.get(1).copied().unwrap_or(0),
+            ])
+        })
     }
 
     /// Write `instr` into entry `n`'s `fts_instr`.
     fn set_instr<M: FtsMem>(&self, mem: &mut M, n: usize, instr: u16) {
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, off::NAME), off::INSTR, &instr.to_ne_bytes());
+        put(
+            mem.bytes(x.block, off::NAME),
+            off::INSTR,
+            &instr.to_ne_bytes(),
+        );
     }
 
     /// Whether `n` is a directory below a root that the caller marked `FTS_SKIP` after
@@ -452,7 +518,9 @@ impl Fts {
     /// returns it, as the reference (probe, FTS-FLAT-FIXES-2, FTS-INSTR-DIRECT; a file or root
     /// so marked is returned).
     fn passed_over<M: FtsMem>(&self, mem: &mut M, n: usize) -> bool {
-        self.skips_listed && self.node(n).is_ok_and(|x| x.info == info::D && !x.root) && self.instr_of(mem, n) == FTS_SKIP
+        self.skips_listed
+            && self.node(n).is_ok_and(|x| x.info == info::D && !x.root)
+            && self.instr_of(mem, n) == FTS_SKIP
     }
 
     /// Whether entry `n`'s `fts_accpath` is its own name (chdir mode) rather than `fts_path`.
@@ -466,8 +534,16 @@ impl Fts {
     /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
     /// the caller's or `fts_set`'s, and the zeros the block was made with.
     fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
-        let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
-        let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
+        let parent = if n == ROOT_PARENT {
+            0
+        } else {
+            self.block(x.parent)
+        };
+        let acc = if self.acc_is_name(n, x) {
+            x.block.saturating_add(off::NAME)
+        } else {
+            self.buf
+        };
         let st = x.stat.unwrap_or_default();
         put(b, off::CYCLE, &x.cycle.to_ne_bytes());
         put(b, off::PARENT, &parent.to_ne_bytes());
@@ -476,15 +552,31 @@ impl Fts {
         put(b, off::PATH, &self.buf.to_ne_bytes());
         put(b, off::ERRNO, &x.errno.to_ne_bytes());
         put(b, off::SYMFD, &0i32.to_ne_bytes());
-        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        put(
+            b,
+            off::PATHLEN,
+            &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes(),
+        );
+        put(
+            b,
+            off::NAMELEN,
+            &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes(),
+        );
         put(b, off::INO, &st.ino.to_ne_bytes());
         put(b, off::DEV, &st.dev.to_ne_bytes());
         put(b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        put(
+            b,
+            off::LEVEL,
+            &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes(),
+        );
         put(b, off::INFO, &x.info.to_ne_bytes());
         put(b, off::FLAGS, &0u16.to_ne_bytes());
-        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
+        put(
+            b,
+            off::STATP,
+            &x.block.saturating_add(x.stat_off).to_ne_bytes(),
+        );
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
@@ -513,7 +605,11 @@ impl Fts {
         while cap < need {
             cap = cap.checked_mul(2).ok_or(Errno::ENOMEM)?;
         }
-        let kept = if self.buf == 0 { TryVec::with_capacity(0)? } else { TryVec::from_slice(mem.bytes(self.buf, keep.min(self.buf_cap)))? };
+        let kept = if self.buf == 0 {
+            TryVec::with_capacity(0)?
+        } else {
+            TryVec::from_slice(mem.bytes(self.buf, keep.min(self.buf_cap)))?
+        };
         let nb = mem.alloc(cap.saturating_sub(1), &[]).ok_or(Errno::ENOMEM)?;
         put(mem.bytes(nb, cap), 0, &kept);
         if self.buf != 0 {
@@ -523,7 +619,9 @@ impl Fts {
         self.buf_cap = cap;
         let to = nb.to_ne_bytes();
         for n in 0..self.nodes.len() {
-            let Some(Some(x)) = self.nodes.get(n) else { continue };
+            let Some(Some(x)) = self.nodes.get(n) else {
+                continue;
+            };
             let b = mem.bytes(x.block, x.size());
             put(b, off::PATH, &to);
             if !self.acc_is_name(n, x) {
@@ -540,7 +638,14 @@ impl Fts {
     fn place<M: FtsMem>(&mut self, mem: &mut M, n: usize) -> Result<()> {
         let (start, len) = {
             let x = self.node(n)?;
-            (if x.root { 0 } else { self.node(x.parent)?.path_len }, x.path_len)
+            (
+                if x.root {
+                    0
+                } else {
+                    self.node(x.parent)?.path_len
+                },
+                x.path_len,
+            )
         };
         let end = len.checked_add(1).ok_or(Errno::ENOMEM)?;
         self.reserve(mem, start, end)?;
@@ -563,12 +668,22 @@ impl Fts {
     fn terminate<M: FtsMem>(&self, mem: &mut M, n: usize) {
         let Ok(x) = self.node(n) else { return };
         if x.path_len < self.buf_cap {
-            put(mem.bytes(self.buf, x.path_len.saturating_add(1)), x.path_len, &[0]);
+            put(
+                mem.bytes(self.buf, x.path_len.saturating_add(1)),
+                x.path_len,
+                &[0],
+            );
         }
     }
 
     /// `fts_open(argv, options, compar)`.
-    pub fn open<S: Sys, M: FtsMem>(sys: &S, mem: &mut M, argv: &[&[u8]], options: i32, compar: Option<SlotCompareFn>) -> Result<Fts> {
+    pub fn open<S: Sys, M: FtsMem>(
+        sys: &S,
+        mem: &mut M,
+        argv: &[&[u8]],
+        options: i32,
+        compar: Option<SlotCompareFn>,
+    ) -> Result<Fts> {
         if options & !FTS_OPTIONMASK != 0 || argv.is_empty() {
             return Err(Errno::EINVAL);
         }
@@ -576,7 +691,16 @@ impl Fts {
             return Err(Errno::ENOENT);
         }
         let chdir = options & (FTS_NOCHDIR | FTS_LOGICAL) == 0;
-        let orig = if chdir { Some(sys.openat(Fd::CWD, KStr::from_nul_terminated(b".\0")?, O_PATH | O_DIRECTORY | O_CLOEXEC, 0)?) } else { None };
+        let orig = if chdir {
+            Some(sys.openat(
+                Fd::CWD,
+                KStr::from_nul_terminated(b".\0")?,
+                O_PATH | O_DIRECTORY | O_CLOEXEC,
+                0,
+            )?)
+        } else {
+            None
+        };
         let mut f = Fts {
             options,
             compar,
@@ -601,15 +725,34 @@ impl Fts {
         }
     }
 
-    fn open_roots<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, argv: &[&[u8]]) -> Result<()> {
+    fn open_roots<S: Sys, M: FtsMem>(
+        &mut self,
+        sys: &S,
+        mem: &mut M,
+        argv: &[&[u8]],
+    ) -> Result<()> {
         self.reserve(mem, 0, PATH_START)?;
-        let rp = self.new_node(mem, b"", 0, ROOT_PARENT, -1, &(0, None, 0), 0, false, 0, false)?;
+        let rp = self.new_node(
+            mem,
+            b"",
+            0,
+            ROOT_PARENT,
+            -1,
+            &(0, None, 0),
+            0,
+            false,
+            0,
+            false,
+        )?;
         debug_assert_eq!(rp, ROOT_PARENT);
         let follow = self.options & (FTS_LOGICAL | FTS_COMFOLLOW) != 0;
         let base = self.orig.unwrap_or(Fd::CWD);
         let mut roots = TryVec::with_capacity(argv.len())?;
         for a in argv {
-            let st = if u16::try_from(a.len()).is_err() { (info::NS, None, Errno::ENAMETOOLONG.get()) } else { stat_entry(sys, base, &z(a)?, follow, false)? };
+            let mut st: Probe = (info::NS, None, Errno::ENAMETOOLONG.get());
+            if u16::try_from(a.len()).is_ok() {
+                stat_entry(sys, base, &z(a)?, follow, false, &mut st)?;
+            }
             let dev = st.1.map_or(0, |s| s.dev);
             let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, &st, 0, follow, dev, true)?;
             roots.push(n)?;
@@ -657,7 +800,13 @@ impl Fts {
     }
 
     /// Restat entry `n` (`FTS_AGAIN`, `FTS_FOLLOW`); its entries are dropped.
-    fn restat<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, n: usize, follow: bool) -> Result<()> {
+    fn restat<S: Sys, M: FtsMem>(
+        &mut self,
+        sys: &S,
+        mem: &mut M,
+        n: usize,
+        follow: bool,
+    ) -> Result<()> {
         self.unpush(sys, n);
         self.drop_children(mem, n);
         let dir = self.dir_of(sys, n)?;
@@ -670,7 +819,9 @@ impl Fts {
                 (z(name)?, name == b"." || name == b"..")
             }
         };
-        let (inf, st, e) = stat_entry(sys, dir, &namez, follow, dot)?;
+        let mut probe: Probe = (0, None, 0);
+        stat_entry(sys, dir, &namez, follow, dot, &mut probe)?;
+        let (inf, st, e) = probe;
         let x = self.node_mut(n)?;
         x.info = inf;
         x.stat = st.as_ref().map(Key::of);
@@ -744,13 +895,30 @@ impl Fts {
     }
 
     /// Read directory `n`'s entries (see [`Children`]).
-    fn build<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, n: usize, how: Build) -> Result<()> {
+    fn build<S: Sys, M: FtsMem>(
+        &mut self,
+        sys: &S,
+        mem: &mut M,
+        n: usize,
+        how: Build,
+    ) -> Result<()> {
         let (level, follow, path_len, root_dev, slash) = {
             let x = self.node(n)?;
-            if how == Build::Read && matches!(x.children, Children::Built(_) | Children::Unreadable(_) | Children::NoSearch(_)) {
+            if how == Build::Read
+                && matches!(
+                    x.children,
+                    Children::Built(_) | Children::Unreadable(_) | Children::NoSearch(_)
+                )
+            {
                 return Ok(());
             }
-            (x.level, x.follow, x.path_len, x.root_dev, x.root && x.arg.last() == Some(&b'/'))
+            (
+                x.level,
+                x.follow,
+                x.path_len,
+                x.root_dev,
+                x.root && x.arg.last() == Some(&b'/'),
+            )
         };
         self.drop_children(mem, n);
         let ulevel = usize::try_from(level).map_err(|_| Errno::EINVAL)?;
@@ -781,7 +949,10 @@ impl Fts {
         // A directory read before (`fts_children` called again) is read from its start. Each
         // entry is made from the kernel's record as it is read, with no listing of the names
         // copied first (it cost ~196 instructions per entry, FTS-FLAT-FIXES).
-        let mut d = match sys.lseek(fd, 0, SEEK_SET).and_then(|_| DirStream::with_fd(fd, LIST_BUFFER, 0)) {
+        let mut d = match sys
+            .lseek(fd, 0, SEEK_SET)
+            .and_then(|_| DirStream::with_fd(fd, LIST_BUFFER, 0))
+        {
             Ok(d) => d,
             Err(e) => {
                 self.leave_level(sys, n)?;
@@ -796,6 +967,7 @@ impl Fts {
         // Only a root's path can end in a slash (names have none).
         let sep_len = usize::from(!slash);
         // Ok(Err(e)): reading the directory failed; Err(e): making an entry failed.
+        let mut st: Probe = (0, None, 0);
         let r = (|| -> Result<core::result::Result<(), Errno>> {
             loop {
                 let e = match d.next(sys) {
@@ -809,13 +981,15 @@ impl Fts {
                     continue;
                 }
                 let cpath_len = path_len.saturating_add(sep_len).saturating_add(cname.len());
-                let mut st = if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
-                    (info::NS, None, Errno::ENAMETOOLONG.get())
-                } else if how == Build::NameOnly || (nostat && !dot && dtype != DT_DIR && dtype != DT_UNKNOWN) {
-                    (info::NSOK, None, 0)
+                if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
+                    st = (info::NS, None, Errno::ENAMETOOLONG.get());
+                } else if how == Build::NameOnly
+                    || (nostat && !dot && dtype != DT_DIR && dtype != DT_UNKNOWN)
+                {
+                    st = (info::NSOK, None, 0);
                 } else {
-                    stat_entry(sys, fd, namez, logical, dot)?
-                };
+                    stat_entry(sys, fd, namez, logical, dot, &mut st)?;
+                }
                 // A directory repeating an ancestor is `FTS_DC`, known before its block is made.
                 let cycle = match &st.1 {
                     Some(s) if st.0 == info::D => self.cycle_of(n, s.dev, s.ino)?,
@@ -824,7 +998,18 @@ impl Fts {
                 if cycle != 0 {
                     st.0 = info::DC;
                 }
-                let c = self.new_node(mem, cname, cpath_len, n, child_level, &st, cycle, logical, root_dev, false)?;
+                let c = self.new_node(
+                    mem,
+                    cname,
+                    cpath_len,
+                    n,
+                    child_level,
+                    &st,
+                    cycle,
+                    logical,
+                    root_dev,
+                    false,
+                )?;
                 if let Err(e) = kids.push(c) {
                     self.free_node(mem, c);
                     return Err(e);
@@ -862,7 +1047,11 @@ impl Fts {
         self.link(mem, &kids);
         let x = self.node_mut(n)?;
         x.next_child = 0;
-        x.children = if how == Build::NameOnly { Children::NameOnly(kids) } else { Children::Built(kids) };
+        x.children = if how == Build::NameOnly {
+            Children::NameOnly(kids)
+        } else {
+            Children::Built(kids)
+        };
         Ok(())
     }
 
@@ -892,9 +1081,16 @@ impl Fts {
         let instr = self.instr_of(mem, n);
         if root {
             let x = self.node(n)?;
-            let cut = x.arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
+            let cut = x
+                .arg
+                .iter()
+                .rposition(|&b| b == b'/')
+                .map_or(0, |i| i.saturating_add(1));
             let last = x.arg.get(cut..).unwrap_or(&[]);
-            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap())).get_mut(off::NAME..) {
+            if let Some(d) = mem
+                .bytes(x.block, off::NAME.saturating_add(x.name_cap()))
+                .get_mut(off::NAME..)
+            {
                 d.fill(0);
                 put(d, 0, last);
             }
@@ -983,7 +1179,10 @@ impl Fts {
                     self.terminate(mem, cur);
                     return Ok(Some(self.block(cur)));
                 }
-                Children::Built(l) => l.iter().position(|&c| !self.passed_over(mem, c)).and_then(|i| Some((i, *l.get(i)?))),
+                Children::Built(l) => l
+                    .iter()
+                    .position(|&c| !self.passed_over(mem, c))
+                    .and_then(|i| Some((i, *l.get(i)?))),
                 _ => None,
             };
             // Entries built by `fts_children` were read without staying in the directory.
@@ -1010,7 +1209,11 @@ impl Fts {
         // The next sibling, or the parent in post-order.
         let parent = self.node(cur)?.parent;
         if parent == ROOT_PARENT {
-            let pos = self.roots.iter().position(|&r| r == cur).ok_or(Errno::EINVAL)?;
+            let pos = self
+                .roots
+                .iter()
+                .position(|&r| r == cur)
+                .ok_or(Errno::EINVAL)?;
             return match self.roots.get(pos.saturating_add(1)).copied() {
                 Some(next) => self.visit(sys, mem, next).map(Some),
                 None => {
@@ -1025,7 +1228,12 @@ impl Fts {
         let next = if self.skips_listed {
             let p = self.node(parent)?;
             let found = match &p.children {
-                Children::Built(l) => l.iter().enumerate().skip(p.next_child).find(|&(_, &c)| !self.passed_over(mem, c)).map(|(i, &c)| (i, c)),
+                Children::Built(l) => l
+                    .iter()
+                    .enumerate()
+                    .skip(p.next_child)
+                    .find(|&(_, &c)| !self.passed_over(mem, c))
+                    .map(|(i, &c)| (i, c)),
                 _ => None,
             };
             if let Some((i, _)) = found {
@@ -1057,7 +1265,12 @@ impl Fts {
 
     /// `fts_children(ftsp, options)`: the first entry of the current directory's list (the roots
     /// before the first `fts_read`), `None` (no error) when there is none.
-    pub fn children<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, options: i32) -> Result<Option<usize>> {
+    pub fn children<S: Sys, M: FtsMem>(
+        &mut self,
+        sys: &S,
+        mem: &mut M,
+        options: i32,
+    ) -> Result<Option<usize>> {
         if options != 0 && options != FTS_NAMEONLY {
             return Err(Errno::EINVAL);
         }
@@ -1070,7 +1283,11 @@ impl Fts {
         if self.node(cur)?.info != info::D {
             return Ok(None);
         }
-        let how = if options == FTS_NAMEONLY { Build::NameOnly } else { Build::Children };
+        let how = if options == FTS_NAMEONLY {
+            Build::NameOnly
+        } else {
+            Build::Children
+        };
         self.build(sys, mem, cur, how)?;
         // The caller may write `FTS_SKIP` into any listed entry without `fts_set`
         // (FTS-INSTR-DIRECT): from now on the walk looks for entries to pass over. A
@@ -1103,7 +1320,11 @@ impl Fts {
             Ok(i @ (0 | FTS_AGAIN | FTS_FOLLOW | FTS_NOINSTR | FTS_SKIP)) => i,
             _ => return Err(Errno::EINVAL),
         };
-        let n = self.nodes.iter().position(|s| s.as_ref().is_some_and(|x| x.block == entry && entry != 0)).ok_or(Errno::EINVAL)?;
+        let n = self
+            .nodes
+            .iter()
+            .position(|s| s.as_ref().is_some_and(|x| x.block == entry && entry != 0))
+            .ok_or(Errno::EINVAL)?;
         if instr == FTS_SKIP && self.cur != Some(n) {
             self.skips_listed = true;
         }
