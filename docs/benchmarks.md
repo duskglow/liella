@@ -11,6 +11,7 @@ Data used (the logs are not in the repository):
 |---|---|---|---|---|
 | Ivy Bridge host A | Xeon E3-1220L v2 (Ivy Bridge, 2C/4T, no AVX2) | full bench, instructions:u counted (`--counters`), 473 `ratio_host` rows, 21 benchmark programs | `a6fc34c2` (`next`) | 2026-11-05 |
 | Ivy Bridge host B | Xeon E3-1265L v2 (Ivy Bridge, 4C/8T, no AVX2) | the same, repeated | `a6fc34c2` | 2026-11-05 |
+| Skylake-SP | Xeon Platinum 8151 (Skylake-SP, 48 threads, AVX2 and AVX-512) | full bench of the 17 comparable programs, instructions:u counted (`--counters --runs 3`), 529 counted rows; time ratios not used (host not booked) | `a6fc34c2` (`next`) | 2026-11-05 |
 | Haswell-EP | Xeon E5-2697 v3 (Haswell, AVX2) | full bench, time only, 161 rows | `5cc49dc` | 2026-10-08 |
 | Broadwell-EP | Xeon E5-2699 v4 (Broadwell, AVX2) | full bench, time only, 161 rows | `5cc49dc` | 2026-10-08 |
 | Ivy Bridge hosts A and B | as above | `bench/parity-measure.tsv` (BENCH-REFRESH-1023): 214 rows with instruction counts | 10-23 `next` | 2026-10-23 |
@@ -18,8 +19,9 @@ Data used (the logs are not in the repository):
 The 2026-11-05 runs are the V-4 bench: the products were built once (`cargo xtask bench --build-only`, release
 profile, fat LTO) on a build host and the programs run on each timing host with `--no-build --counters`, the host
 booked for the run and idle otherwise. They took 4,571 s (host A) and 4,221 s (host B). Both timing hosts are Ivy
-Bridge, which has no AVX2: every number here is for the SSE2/fallback code paths. **No AVX2 host was measured in this
-run.** The rows' decision on host A is on cycles with no limits for that CPU (nothing gated); on host B, 13 rows
+Bridge, which has no AVX2: every number in sections 2 to 4 and the appendix is for the SSE2/fallback code paths. The
+counted bench was then repeated on a Skylake-SP host (AVX2 and AVX-512) at the same commit `a6fc34c2`: its counts are in
+[section 2a](#2a-avx2-class-instruction-counts); nothing else on this page uses that run. The rows' decision on host A is on cycles with no limits for that CPU (nothing gated); on host B, 13 rows
 exceeded their cycle limits (limits calibrated on `main` 5236e77), listed in the run's log, not reproduced here.
 
 **What "before" means.** The 5cc49dc page has time ratios only, from AVX2 machines. It has no instruction counts,
@@ -88,8 +90,8 @@ The first three matter for how to read any row; the rest are completeness notes.
   dynamic-link measurement does not exist. This matters for a few rows.
 * **Single-threaded**, except the `re_mt4_*` rows (four threads). Nothing here measures
   contention in malloc or stdio under load. This matters if you care about threaded programs.
-* **Host-specific.** The 2026-11-05 run is on two Ivy Bridge machines (no AVX2: the SSE2 and
-  fallback paths). The 5cc49dc run was on two AVX2 machines (Haswell-EP, Broadwell-EP). The two
+* **Host-specific.** The 2026-11-05 timed run is on two Ivy Bridge machines (no AVX2: the SSE2 and
+  fallback paths); the AVX2 class has instruction counts only (section 2a). The 5cc49dc run was on two AVX2 machines (Haswell-EP, Broadwell-EP). The two
   are different CPU classes, so a time ratio does not compare directly across them (section 3).
 * **Cold paths** (`cold_exec_empty` and the `first_` rows) include process start and are
   noisier than the hot-path rows.
@@ -178,6 +180,69 @@ Per benchmark program, instruction-ratio bands against glibc now (Ivy Bridge hos
 | `cbench_time` | 9 | 0 | 0 |
 | `cbench_unmeasured` | 4 | 1 | 4 |
 
+## 2a. AVX2-class instruction counts
+
+The same counted bench (`cargo xtask bench --compare --counters --runs 3`, 17 of the 18 C programs;
+`a6fc34c2`, release profile) on a Skylake-SP host (Xeon Platinum 8151, AVX2 and AVX-512), run on a shared host that was not booked for timing. Instruction counts do not depend on load, so they hold; **the time ratios of this run
+are not used anywhere on this page** (host not booked). The count per row is `instr_ratio_ss`: Liella static against
+glibc static, user-mode instructions per call. Bands as in section 1. The Ivy Bridge column is the "now instr vs glibc"
+column of the appendix (host A).
+
+| Measure | rows | faster (< 0.95) | at parity | slower (> 1.05) |
+|---|---:|---:|---:|---:|
+| Instructions per call, all counted rows, AVX2 class | 529 | 187 | 90 | 252 |
+| Instructions per call, without the libm rows, AVX2 class | 360 | 186 | 87 | 87 |
+| Instructions per call, libm rows, AVX2 class | 169 | 1 | 3 | 165 |
+| (Ivy Bridge, section 2, for comparison: all / without libm) | 542 / 373 | 235 / 234 | 63 / 60 | 244 / 79 |
+
+Median instructions-per-call ratio without libm: 0.93 (Ivy Bridge 0.86). The libm rows are 165 slower on both classes. The two row sets differ by 13 rows (`cbench_nscache` cannot be compared, see
+section 5; I did not identify the other four), so the totals are not a like-for-like difference; the per-row comparison
+below is: all 529 rows of this run are in the appendix of the Ivy Bridge run.
+
+**Where the two classes give a different verdict.** 89 of the 529 rows change band between the Ivy Bridge and the
+AVX2 class (bands on instructions per call vs glibc): faster to parity 31, faster to slower 21, slower to parity 13,
+parity to faster 10, parity to slower 9, slower to faster 5. The pattern in the lists below: on Ivy Bridge Liella's string and memory rows mostly use fewer
+instructions than glibc's; on the AVX2 class many of them are at parity or above 1.05 (glibc may use AVX2 or AVX-512
+variants there; not separated), mostly on the 16-byte to 64 KiB `strlen`, `strnlen`, `memchr`, `rawmemchr`, `memset`, `memcmp` and
+`strcmp` rows. The reverse (slower on Ivy Bridge, parity or better here) happens for `memchr`, `bcmp`, `memcmp` and
+`strstr` rows. These are instruction counts, not times: a shorter vector loop can still be slower per call, and no AVX2
+time was taken at this commit.
+
+The rows at **parity on one class and above 1.05 on the other** (22):
+
+| Row | Ivy Bridge instr vs glibc | AVX2-class instr vs glibc | AVX2-class Liella instr per call |
+|---|---:|---:|---:|
+| `strchr_16_hit` (cbench_hot) | 1.06 | 1.00 | 28 |
+| `strchrnul_16_hit` (cbench_hot) | 1.07 | 1.04 | 25 |
+| `strncmp_eq16` (cbench_hot) | 1.01 | 1.09 | 35 |
+| `strncmp_names64` (cbench_hot) | 1.07 | 1.02 | 42 |
+| `strcasecmp_c_16` (cbench_locale) | 0.98 | 1.20 | 54 |
+| `realloc_grow_x2` (cbench_malloc) | 1.11 | 0.99 | 2035 |
+| `__memcmpeq_eq_16` (cbench_memref) | 1.00 | 1.14 | 23 |
+| `__memcmpeq_eq_1k` (cbench_memref) | 1.21 | 1.04 | 172 |
+| `__memcmpeq_eq_64` (cbench_memref) | 1.37 | 1.04 | 25 |
+| `__memcmpeq_eq_8` (cbench_memref) | 1.00 | 1.15 | 23 |
+| `__memcmpeq_tail_16` (cbench_memref) | 1.00 | 1.15 | 23 |
+| `__memcmpeq_tail_64` (cbench_memref) | 1.38 | 1.04 | 25 |
+| `bcmp_eq_128` (cbench_memref) | 1.08 | 1.00 | 39 |
+| `bcmp_eq_1k` (cbench_memref) | 1.21 | 1.04 | 172 |
+| `bcmp_eq_64` (cbench_memref) | 1.34 | 0.97 | 25 |
+| `memchr_16` (cbench_memref) | 1.58 | 1.04 | 25 |
+| `memchr_16_mix` (cbench_memref) | 1.33 | 1.03 | 32 |
+| `memcmp_16_mix` (cbench_memref) | 1.05 | 1.13 | 42 |
+| `memcmp_4k` (cbench_memref) | 1.01 | 1.24 | 671 |
+| `memcmp_64k` (cbench_memref) | 1.00 | 1.13 | 9325 |
+| `strcmp_64_mix` (cbench_memref) | 0.95 | 1.26 | 71 |
+| `fwrite_4k` (cbench_stdio) | 2.05 | 1.05 | 1095 |
+
+The rows that are faster than glibc (< 0.95) on Ivy Bridge and slower (> 1.05) on the AVX2 class (19): `memrchr_4k`,
+`putenv_remove_cycle_30`, `unsetenv_cycle_30`, `strncasecmp_c_64`, `bcmp_tail_32`, `memchr_64k`, `memmove_4k`, `memset_128`,
+`memset_64`, `rawmemchr_4k`, `rawmemchr_64k`, `strcmp_16_mix`, `strlen_4k`, `strlen_64k`, `strnlen_16`, `strnlen_16_mix`,
+`strnlen_4k`, `strnlen_64k`, `strcmp_names`. The reverse (slower than glibc on Ivy Bridge, faster on the AVX2 class, 5):
+`nl_langinfo_en_us`, `bcmp_tail_64`, `memcpy_4k`, `strstr_hit_4k`, `strstr_miss_64`. (`memcpy_4k` is 26.3 on Ivy Bridge and
+0.17 here; I did not look into why, and a count ratio that far from 1 on a plain copy needs a look before it is trusted.)
+The full row-by-row list of all 89 is in the run's scratch output, not in the repository.
+
 ## 3. Where Liella is faster
 
 The shape of the 5cc49dc page holds: 234 of the 373 non-libm counted rows are faster by instructions and the median
@@ -230,7 +295,12 @@ column, so the register is the authority on what was tried per row.
 
 ## 5. Not measured in this run
 
-* No AVX2 host (the AVX2 code paths of the memory and string kernels, `--v3` and `--sorted` comparisons).
+* No AVX2 **time** measurement at `a6fc34c2` (the AVX2 class was counted, not timed; the 5cc49dc Haswell-EP and
+  Broadwell-EP times are the only AVX2 timings). No `--v3` or `--sorted` comparison on any class. The AVX2-class run was
+  on a CPU that also has AVX-512, and the run did not separate the AVX2 kernels from AVX-512 ones on either side:
+  glibc may have chosen an AVX-512 (EVEX) variant there. A `--tunables glibc.cpu.hwcaps=-AVX512F` count would split them.
+* `cbench_nscache` (it includes a Liella-only header, so the host build cannot compile it and the command stops) and
+  the glibc column of `cbench_netdb` (static host build fails) have no AVX2-class comparison.
 * No AMD host. The saturation register's Zen 1 numbers are from earlier runs and are not refreshed here.
 * The `5cc49dc` instruction counts (section 1 of this page).
 
