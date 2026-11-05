@@ -64,15 +64,12 @@ impl Listing {
             let end = tail.iter().position(|&b| b == 0).ok_or(Errno::EIO)?;
             let namez = tail.get(..end.saturating_add(1)).ok_or(Errno::EIO)?;
             let kind = rec.get(D_TYPE).copied().ok_or(Errno::EIO)?;
-            let skip = !self.dots && (namez == b".\0" || namez == b"..\0");
-            let at = self.pos;
-            self.pos = at.saturating_add(n);
+            let skip = !self.dots && namez.first() == Some(&b'.') && (namez == b".\0" || namez == b"..\0");
+            self.pos = self.pos.saturating_add(n);
             if skip {
                 continue;
             }
-            let from = at.saturating_add(D_NAME);
-            let name = self.bytes.get(from..from.saturating_add(end).saturating_add(1)).ok_or(Errno::EIO)?;
-            return Ok(Some((kind, name)));
+            return Ok(Some((kind, namez)));
         }
     }
 }
