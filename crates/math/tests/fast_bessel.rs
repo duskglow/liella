@@ -48,12 +48,12 @@ impl Rng {
     fn log(&mut self, lo: f64, hi: f64) -> f64 {
         f64::from_bits(lo.to_bits() + self.next() % (hi.to_bits() - lo.to_bits()))
     }
-    /// Half the bench's range (`j` on `[-20, 20]`, `y` on `[0.01, 20]`), half log-uniform up to 2^1000.
+    /// Half the bench's range (`j` on `[-20, 20]`, `y` on `[0.01, 20]`), half log-uniform up to the largest double.
     fn operand(&mut self, name: &str) -> f64 {
         let x = match self.next() % 4 {
             0 | 1 => self.uniform(0.01, 20.0),
             2 => self.log(fb::TINY, 64.0),
-            _ => self.log(fb::TINY, 2f64.powi(1000)),
+            _ => self.log(fb::TINY, f64::MAX),
         };
         if name.starts_with('j') && self.next() % 2 == 0 { -x } else { x }
     }
@@ -92,7 +92,7 @@ fn hard_operands(f: usize) -> Vec<f64> {
             edge(2f64.powi(e) * (1.0 + f64::from(j) / 16.0));
         }
     }
-    for x in [2f64.powi(-27), 2f64.powi(-1000), 32.0, 2f64.powi(30), 1e300] {
+    for x in [2f64.powi(-27), 2f64.powi(-1000), 2f64.powi(-1021), 32.0, 2f64.powi(30), 1e300] {
         edge(x);
     }
     for z in ZEROS[f] {
@@ -108,12 +108,18 @@ fn hard_operands(f: usize) -> Vec<f64> {
 #[test]
 fn double_bessel_fast_tier_rounds_correctly_and_rarely_falls_back() {
     // Clauses: s10_3_c_0 (D-10.13).
-    for (name, _, entry, _) in FUNCS {
+    // The fallback rate first (the counters are global and no other test of this binary calls
+    // the entries): 10^5 random operands per function, in round-to-nearest and one directed mode.
+    for (name, fast, entry, _) in FUNCS {
         let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ name.as_bytes()[1] as u64);
         let before = stats::counts(name);
         for n in 0..100_000u32 {
+            let x = rng.operand(name);
             let mode = if n % 2 == 0 { Rounding::Nearest } else { Rounding::Up };
-            core::hint::black_box(entry(rng.operand(name), mode));
+            core::hint::black_box(entry(x, mode));
+            if fast(x, mode).is_none() {
+                eprintln!("{name}: fallback at {x:e} ({:#018x}) in {mode:?}", x.to_bits());
+            }
         }
         let c = stats::counts(name).since(before);
         eprintln!("{name}: fast {} fallback {} of 100000", c.fast, c.fallback);
@@ -161,7 +167,8 @@ fn double_bessel_fast_tier_matches_the_accurate_path() {
 fn double_bessel_kernels_stay_within_their_bounds() {
     // Clauses: s10_3_c_0 (D-10.13).
     // Each kernel's error against the oracle (240 bits) stays within its `eps` on 8 operands of
-    // every slot (both ends included), on the series range and on Hankel's range up to 2^1000.
+    // every slot (both ends included), on the series range and on Hankel's range up to the largest
+    // double (Dekker's split overflows above 2^996: no operand of a product may get there).
     let mut rng = Rng(0xa54f_f53a_5f1d_36f1);
     let mut ops: Vec<f64> = Vec::new();
     for i in 0..160 {
@@ -172,7 +179,8 @@ fn double_bessel_kernels_stay_within_their_bounds() {
         ops.extend((0..6).map(|_| rng.uniform(a, b)));
     }
     ops.extend((0..200).map(|_| rng.log(fb::TINY, fb::SMALL)));
-    ops.extend((0..200).map(|_| rng.log(fb::HANKEL, 2f64.powi(1000))));
+    ops.extend((0..200).map(|_| rng.log(fb::HANKEL, f64::MAX)));
+    ops.extend([2f64.powi(996), 2f64.powi(997), f64::MAX, fb::TINY, 2f64.powi(-997)]);
     ops.extend((0..100).map(|_| rng.uniform(fb::HANKEL, 40.0)));
     let names = ["j0", "j1", "y0", "y1"];
     let mut worst = [0f64; 4];

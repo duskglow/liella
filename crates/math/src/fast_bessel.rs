@@ -18,9 +18,13 @@
 //!   the dozen double-double operations (each within `2^-100` relative) stay below
 //!   `2^-90·|y|`; the logarithm adds `(2/π)·eps_ln·|A|` (`Y0`) or `(2/π)·eps_ln·|J1|` (`Y1`)
 //!   with `fast64::log_dd`'s proved `eps_ln`. Bound: `eps = 2^-90·|y| + 0.64·eps_ln·|A or J1|`
-//!   (`J0`: `2^-90` absolute). Below `2^-1000` `j1`, `y0`, `y1` decline (subnormal and overflowing
-//!   results are the 384-bit path's); `j0` below `2^-27` is 1 moved down by `x²/4 < 2^-56`, less
-//!   than a quarter of the last place below 1 (`wide::beside`).
+//!   (`J0`: `2^-90` absolute), plus an absolute `2^-1068` for `J1` (where `|y|·2^-90` and the
+//!   roundings of the last operations fall below `2^-1022`, their errors are absolute: at most
+//!   `2^-1075` each). Below `2^-1000` `y0`, `y1` decline (overflowing results are the 384-bit
+//!   path's). Below `2^-27` the entries skip the series: `j0` is 1 moved down by
+//!   `x²/4 < 2^-56`, less than a quarter of the last place below 1, and `j1` is `x/2` moved
+//!   toward 0 by less than `2^-56·|x/2|` (`wide::beside`); `j1` declines below `2^-1021`, where
+//!   `x/2` is subnormal.
 //! * `2^-5 <= x < 32`: `BESSEL_T`, 16 slots a binade, Taylor rows at the slot centre `c`
 //!   (`t = x − c` exact, `|t| <= 2^e/32`), evaluated as `fast_special`'s rows are (`f64` Horner
 //!   from `p_D` to `p_M`, then `M` double-double steps, then Fast2Sum); each row's last entry is
@@ -35,8 +39,9 @@
 //!   `|P| <= 1`, `|Q| < 2^-7.9` and double-double roundings of `2^-100`, the bracket is within
 //!   `2·2^-77 + 2^-88 < 2^-75.5` absolute. `a` is `√((2/π)/m)·2^-k` with `x = m·4^k`,
 //!   `1 <= m < 4` (no subnormal intermediate for any `x`), within `2^-98` relative. Bound:
-//!   `eps = a·2^-74 + 2^-95·|y|`. `1/x`, `w = 1/x²` underflow only where `Q`'s terms are
-//!   negligible (`|Q| < 2^-1000`).
+//!   `eps = a·2^-74 + 2^-95·|y|`. `1/x` is `(1/m)·4^-k` (`x` never enters a product: Dekker's
+//!   split overflows above 2^996); `r.lo` and `w = 1/x²` underflow only where `Q`'s terms are
+//!   negligible (`|Q| < 2^-900`, absolute errors below 2^-1074).
 //!
 //! **Rounding.** A negative `y` is rounded as `|y|` in the mirrored mode and negated (the flags
 //! the same); `eps >= |y|` (or `y = 0`) refuses at once. Every settled result is inexact and
@@ -61,13 +66,20 @@ pub const SMALL: f64 = f64::from_bits(0x3fa0_0000_0000_0000);
 pub const HANKEL: f64 = 32.0;
 /// 2^-1000: `j1`, `y0`, `y1` decline below.
 pub const TINY: f64 = f64::from_bits(0x0170_0000_0000_0000);
-/// 2^-27: `j0` is just below 1 under it.
-const J0_ONE: f64 = f64::from_bits(0x3e40_0000_0000_0000);
+/// 2^-27: `j0` is just below 1 and `j1(x)` just inside `x/2` under it.
+pub const NEAR_SERIES: f64 = f64::from_bits(0x3e40_0000_0000_0000);
+/// 2^-1021: `x/2` is normal from here (`j1`'s tiny range).
+const J1_HALF: f64 = f64::from_bits(0x0020_0000_0000_0000);
+/// 2^-1068: an absolute floor on the series' bound, above the dozen absolute roundings
+/// (`2^-1075` each) of results below `2^-1022` and the underflow of `|y|·2^-90` itself.
+const FLOOR: f64 = f64::from_bits(0x0000_0000_0000_0040);
 /// 2^-74, 2^-90, 2^-95, 2^-104.
 const E74: f64 = f64::from_bits(0x3b50_0000_0000_0000);
 const E90: f64 = f64::from_bits(0x3a50_0000_0000_0000);
 const E95: f64 = f64::from_bits(0x3a00_0000_0000_0000);
 const E104: f64 = f64::from_bits(0x3970_0000_0000_0000);
+/// 2^64: `small_kernel`'s `Y1` scales `x` up by it and the quotient `(2/π)/x` back.
+const S64: f64 = f64::from_bits(0x43f0_0000_0000_0000);
 /// `2/π` rounded up, for the logarithm's share of the bound.
 const K_UP: f64 = 0.636_62;
 
@@ -112,7 +124,7 @@ pub fn small_kernel(f: usize, x: f64) -> Option<(Dd, f64)> {
         0 => (s(0), E90),
         1 => {
             let y = s(1).mul_f64(x);
-            (y, dd::abs(y.hi) * E90)
+            (y, dd::abs(y.hi) * E90 + FLOOR)
         }
         2 => {
             let (l, el) = fast64::log_dd(x)?;
@@ -123,7 +135,9 @@ pub fn small_kernel(f: usize, x: f64) -> Option<(Dd, f64)> {
         _ => {
             let (l, el) = fast64::log_dd(x)?;
             let j1 = s(1).mul_f64(x);
-            let y = k.div(Dd::from(x)).neg().add(k.mul(l).mul(j1)).add(s(3).mul_f64(x));
+            // `(2/π)/x` as `((2/π)/(x·2^64))·2^64` (exact scalings): a quotient above 2^996
+            // would overflow Dekker's split inside the division.
+            let y = k.div(Dd::from(x * S64)).scale(S64).neg().add(k.mul(l).mul(j1)).add(s(3).mul_f64(x));
             (y, K_UP * el * dd::abs(j1.hi) * 1.01 + dd::abs(y.hi) * E90)
         }
     })
@@ -131,16 +145,18 @@ pub fn small_kernel(f: usize, x: f64) -> Option<(Dd, f64)> {
 
 /// `(J_n(x), Y_n(x), eps)` for `n` 0 or 1 and `x >= 32` by Hankel's expansion (module doc).
 pub fn hankel_kernel(n: usize, x: f64) -> (Dd, Dd, f64) {
-    let r = Dd::from(1.0).div(Dd::from(x));
+    let e = i32::try_from((x.to_bits() >> 52) & 0x7ff).unwrap_or(0) - 1023;
+    let k = e >> 1;
+    let m = dd::ldexp(x, -2 * k);
+    // `1/x` as `(1/m)·4^-k`: Dekker's split of an operand above 2^996 overflows, so `x` itself
+    // never enters a product (the scaling is exact; a subnormal `r.lo` errs by under 2^-1074).
+    let r = Dd::from(1.0).div(Dd::from(m)).scale(dd::pow2(-2 * k));
     let w = r.sqr();
     let p = dd::horner(w, &t::HANKEL_P[n], 3);
     let q = dd::horner(w, &t::HANKEL_Q[n], 3).mul(r);
     let (s, c) = crate::trig::sin_cos(x);
     let h = Dd::of(t::SQRT_HALF_DD);
     let (sc, cc) = if n == 0 { (s.sub(c).mul(h), c.add(s).mul(h)) } else { (s.add(c).mul(h).neg(), s.sub(c).mul(h)) };
-    let e = i32::try_from((x.to_bits() >> 52) & 0x7ff).unwrap_or(0) - 1023;
-    let k = e >> 1;
-    let m = dd::ldexp(x, -2 * k);
     let a = dd::sqrt(Dd::of(t::TWO_OVER_PI_DD).div(Dd::from(m))).scale(dd::pow2(-k));
     let j = a.mul(p.mul(cc).sub(q.mul(sc)));
     let y = a.mul(p.mul(sc).add(q.mul(cc)));
@@ -184,7 +200,7 @@ pub fn kernel(f: usize, x: f64) -> Option<(Dd, f64)> {
 /// `j0(x)` for a finite nonzero `x`, correctly rounded in `mode`, or `None`.
 pub fn j0(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let ax = dd::abs(x);
-    if ax < J0_ONE {
+    if ax < NEAR_SERIES {
         return Some(beside::<f64>(Mp::from_i64(1), false, mode));
     }
     let (y, eps) = kernel(0, ax)?;
@@ -194,8 +210,10 @@ pub fn j0(x: f64, mode: Rounding) -> Option<(f64, Status)> {
 /// `j1(x)` for a finite nonzero `x`, or `None`.
 pub fn j1(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     let ax = dd::abs(x);
-    if ax < TINY {
-        return None;
+    if ax < NEAR_SERIES {
+        // `J1(x) = (x/2)·(1 − x²/8 + ...)`: `x/2` (exact and normal from 2^-1021) moved toward 0
+        // by less than `2^-56` of itself, under a quarter of its last place.
+        return if ax < J1_HALF { None } else { Some(beside::<f64>(Mp::from_f64(x * 0.5), false, mode)) };
     }
     let (y, eps) = kernel(1, ax)?;
     round(if x < 0.0 { y.neg() } else { y }, eps, mode)
