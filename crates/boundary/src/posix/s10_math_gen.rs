@@ -214,12 +214,12 @@ pub extern "C" fn liella_acosf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn acosh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::acosh_nearest(x), math::real::Real::acosh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn acoshf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::acoshf_nearest, math::real::Real::acosh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -229,17 +229,17 @@ pub extern "C" fn liella_acoshf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn acoshf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::acoshf_nearest, math::real::Real::acosh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn acoshf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::acosh_nearest(x), math::real::Real::acosh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn acoshf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::acosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::acosh_nearest(x), math::real::Real::acosh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -294,12 +294,12 @@ pub extern "C" fn liella_asinf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn asinh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::asinh_nearest(x), math::real::Real::asinh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn asinhf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::asinhf_nearest, math::real::Real::asinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -309,17 +309,17 @@ pub extern "C" fn liella_asinhf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn asinhf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::asinhf_nearest, math::real::Real::asinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn asinhf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::asinh_nearest(x), math::real::Real::asinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn asinhf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::asinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::asinh_nearest(x), math::real::Real::asinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -414,12 +414,12 @@ pub extern "C" fn liella_atanf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn atanh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::atanh_nearest(x), math::real::Real::atanh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn atanhf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atanh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::atanhf_nearest, math::real::Real::atanh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -429,17 +429,17 @@ pub extern "C" fn liella_atanhf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn atanhf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atanh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::atanhf_nearest, math::real::Real::atanh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn atanhf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::atanh_nearest(x), math::real::Real::atanh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn atanhf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::atanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::atanh_nearest(x), math::real::Real::atanh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1259,12 +1259,12 @@ pub extern "C" fn liella_cosf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cosh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::cosh_nearest(x), math::real::Real::cosh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn coshf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::coshf_nearest, math::real::Real::cosh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1274,17 +1274,17 @@ pub extern "C" fn liella_coshf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn coshf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cosh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::coshf_nearest, math::real::Real::cosh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn coshf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::cosh_nearest(x), math::real::Real::cosh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn coshf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::cosh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::cosh_nearest(x), math::real::Real::cosh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4932,12 +4932,12 @@ pub extern "C" fn liella_sinf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sinh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::sinh_nearest(x), math::real::Real::sinh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn sinhf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::sinhf_nearest, math::real::Real::sinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4947,17 +4947,17 @@ pub extern "C" fn liella_sinhf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinhf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sinh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::sinhf_nearest, math::real::Real::sinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinhf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::sinh_nearest(x), math::real::Real::sinh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn sinhf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::sinh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::sinh_nearest(x), math::real::Real::sinh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -5052,12 +5052,12 @@ pub extern "C" fn liella_tanf64x_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn tanh(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::tanh_nearest(x), math::real::Real::tanh)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn tanhf(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tanh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::tanhf_nearest, math::real::Real::tanh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -5067,17 +5067,17 @@ pub extern "C" fn liella_tanhf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanhf32(x: f32) -> f32 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tanh)
+    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast_hyper::tanhf_nearest, math::real::Real::tanh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanhf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::tanh_nearest(x), math::real::Real::tanh)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn tanhf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::real::Real::tanh)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, |x| math::fast_hyper::tanh_nearest(x), math::real::Real::tanh)
 }}
 
 export! { libm "LIELLA_PRIVATE";
