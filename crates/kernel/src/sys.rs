@@ -384,12 +384,9 @@ fallible {
     /// `newfstatat`.
     fn fstatat(&self, dir: Fd, path: KStr<'_>, flags: u32) -> KResult<Stat>;
     /// `newfstatat` into the caller's object: a walk that stats many entries reuses one object
-    /// instead of building and moving a fresh one per call. Same result and errors as
-    /// [`fstatat`](Self::fstatat); `dst` is unspecified after an error.
-    fn fstatat_into(&self, dir: Fd, path: KStr<'_>, flags: u32, dst: &mut Stat) -> KResult<()> {
-        *dst = self.fstatat(dir, path, flags)?;
-        Ok(())
-    }
+    /// instead of building and moving a fresh one per call. Same result and errors as `fstatat`;
+    /// `dst` is unspecified after an error.
+    fn fstatat_into(&self, dir: Fd, path: KStr<'_>, flags: u32, dst: &mut Stat) -> KResult<()>;
     /// `fstat`.
     fn fstat(&self, fd: Fd) -> KResult<Stat>;
     /// `statx`.
