@@ -1005,6 +1005,12 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
             return Ok(Some(at));
         }
     }
+    // A miss ends here, without the out-of-line call (`find_next` reads the unit again).
+    // UNSAFE(slice): the one unit the scanner reported as the terminator.
+    // SAFETY: the string is readable through its terminator, reported at last + (r >> 1).
+    if r & 1 == 1 && unsafe { p.wrapping_add(last.saturating_add(r >> 1)).read() } == T::default() {
+        return Ok(None);
+    }
     // UNSAFE(slice): the rest of the search, after the first pass.
     // SAFETY: as for this function; `r` is the first pass's answer and a candidate in it failed.
     unsafe { find_next(p, needle, kernel, rank, r) }
