@@ -359,6 +359,9 @@ struct Frame {
     level: usize,
     stat: Stat,
     skip: bool,
+    /// Where this directory's entry names start in the path once its first entry set the
+    /// prefix (the directory's path and a separator); 0 before that.
+    prefix: usize,
 }
 
 /// Status of `name` in `dir`, stored in `st`: the entry's kind as the walk reports it and whether
@@ -396,6 +399,18 @@ fn set_path(path: &mut TryVec<u8>, len: usize, name: &[u8]) -> Result<usize> {
         return Err(Errno::ENAMETOOLONG);
     }
     Ok(base)
+}
+
+/// [`set_path`] for a later entry of a directory whose prefix (`base` bytes: the directory's
+/// path and a separator) is already in `path`: only the name is replaced.
+fn set_name(path: &mut TryVec<u8>, base: usize, name: &[u8]) -> Result<()> {
+    path.truncate(base);
+    path.extend_from_slice(name)?;
+    path.push(0)?;
+    if i32::try_from(path.len()).is_err() {
+        return Err(Errno::ENAMETOOLONG);
+    }
+    Ok(())
 }
 
 /// `nftw`'s walk of `root` (see the module documentation): `f` sees every entry and the
@@ -460,7 +475,8 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
     let listing = list_reusing(sys, fd, false, &mut spare)?;
     let mut frames: TryVec<Frame> = TryVec::with_capacity(16)?;
     let mut cbuf = Stat::default();
-    frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false })?;
+    let mut dir_fd: Option<(usize, Fd)> = None;
+    frames.push(Frame { listing, next: 0, path_len: root.len(), base: root_base, level: 0, stat: st, skip: false, prefix: 0 })?;
     while let Some(top) = frames.len().checked_sub(1) {
         let Some(frame) = frames.get_mut(top) else { break };
         if !frame.skip && frame.next < frame.listing.len() {
@@ -469,8 +485,23 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
             let name = namez.get(..namez.len().saturating_sub(1)).unwrap_or(&[]);
             let level = frame.level.saturating_add(1);
             let (dir_level, path_len) = (frame.level, frame.path_len);
-            let base = set_path(&mut path, path_len, name)?;
-            let dir = levels.fd(sys, dir_level)?;
+            let base = if frame.prefix == 0 {
+                let b = set_path(&mut path, path_len, name)?;
+                frame.prefix = b;
+                b
+            } else {
+                set_name(&mut path, frame.prefix, name)?;
+                frame.prefix
+            };
+            // The directory's descriptor is kept while nothing opens or closes a level.
+            let dir = match dir_fd {
+                Some((l, fd)) if l == dir_level => fd,
+                _ => {
+                    let fd = levels.fd(sys, dir_level)?;
+                    dir_fd = Some((dir_level, fd));
+                    fd
+                }
+            };
             let (kind, has) = examine(sys, dir, KStr::from_nul_free_terminated(namez)?, opt.physical, &mut cbuf)?;
             let cst = if has { Some(&cbuf) } else { None };
             if opt.mount && cst.is_some_and(|s| s.dev != root_dev) {
@@ -482,6 +513,8 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 if !fresh {
                     continue;
                 }
+                // Opening a level may close an ancestor's descriptor to make room.
+                dir_fd = None;
                 let cfd = match levels.push(sys, namez, !opt.physical) {
                     Ok((fd, _)) => fd,
                     Err(Errno::EACCES) => {
@@ -510,7 +543,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                         }
                         let listing = list_reusing(sys, cfd, false, &mut spare)?;
                         let path_len = path.len().saturating_sub(1);
-                        frames.push(Frame { listing, next: 0, path_len, base, level, stat: *cst, skip: false })?;
+                        frames.push(Frame { listing, next: 0, path_len, base, level, stat: *cst, skip: false, prefix: 0 })?;
                         Action::Continue
                     }
                 }
@@ -542,6 +575,7 @@ fn walk_in<S: Sys>(sys: &S, levels: &mut Levels, root: &[u8], opt: Options, f: &
                 return Ok(v);
             }
             levels.pop(sys);
+            dir_fd = None;
             if action == Action::SkipSiblings {
                 apply(&mut frames, action)?;
             }
