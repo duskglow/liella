@@ -117,20 +117,6 @@ pub trait Host {
     fn identity(&self, path: &[u8]) -> Option<Identity>;
     /// `LANGUAGE`, unless unset or the process is in secure mode (its text read at each call).
     fn language(&self) -> Option<&'static [u8]>;
-    /// The address of `LANGUAGE`'s text: `Some(None)` unset or secure mode, `Some(Some(addr))` set,
-    /// `None` if this host only offers [`Host::language`] (the default).
-    fn language_probe(&self) -> Option<Option<usize>> {
-        None
-    }
-    /// The text at `addr` (an address [`Host::language_probe`] returned).
-    fn text_at(&self, _addr: usize) -> &'static [u8] {
-        &[]
-    }
-    /// The text at `addr` if it is exactly the `len` bytes of `stored` (words as in a slot's key)
-    /// and then ends, found without measuring it first; else `None` (the default).
-    fn text_equals(&self, _addr: usize, _len: usize, _stored: &dyn Fn(usize) -> u64) -> Option<&'static [u8]> {
-        None
-    }
     /// The calling thread's current locale.
     fn locale(&self) -> &'static Locale;
     /// The codec a charset name denotes (without suffixes).
@@ -1072,19 +1058,7 @@ impl Resolution {
         self.memo_generation.store(generation, Relaxed);
     }
 
-    /// `LANGUAGE`'s text at `addr` as a view, if it equals the list this slot keys (one fused pass,
-    /// no measuring): the slot is then the one `key.list_checked` names.
-    fn list_text<H: Host + ?Sized>(&self, h: &H, addr: usize) -> Option<&'static [u8]> {
-        let [kd, kl, ks] = &self.key_len;
-        let ks = ks.load(Relaxed);
-        if ks == LIST_IS_LOCALE {
-            return None;
-        }
-        let list_at = kd.load(Relaxed).div_ceil(8).saturating_add(kl.load(Relaxed).div_ceil(8));
-        h.text_equals(addr, ks, &|k| self.key.get(list_at.saturating_add(k)).map_or(0, |w| w.load(Relaxed)))
-    }
-
-    fn matches(&self, generation: usize, category: usize, key: &Key<'_>, index: usize) -> bool {
+    fn matches(&self, generation: usize, category: usize, key: &Key<'_>) -> bool {
         if self.generation.load(Relaxed) != generation || self.category.load(Relaxed) != category {
             return false;
         }
@@ -1100,7 +1074,7 @@ impl Resolution {
         // A fixed text at the address the slot recorded is the slot's text (lengths matched).
         (ad != 0 && sd.load(Relaxed) == ad || same_part(&self.key, key.domain))
             && (al != 0 && sl.load(Relaxed) == al || same_part(self.key.get(locale_at..).unwrap_or(&[]), key.locale))
-            && key.list.is_none_or(|list| key.list_checked == Some(index) || same_part(self.key.get(list_at..).unwrap_or(&[]), list))
+            && key.list.is_none_or(|list| same_part(self.key.get(list_at..).unwrap_or(&[]), list))
     }
 
     fn store(&self, generation: usize, category: usize, key: &Key<'_>, binding: usize, recs: &[usize]) {
@@ -1166,8 +1140,6 @@ struct Key<'a> {
     domain: &'a [u8],
     locale: &'a [u8],
     list: Option<&'a [u8]>,
-    /// The slot whose stored list `list` was just compared with, word for word (by `list_text`).
-    list_checked: Option<usize>,
     /// Whether `domain` is the interned default domain (leaked, never written).
     domain_fixed: bool,
 }
@@ -1281,28 +1253,16 @@ pub fn translate<S: Sys, H: Host>(sys: &S, h: &H, domain: Option<&[u8]>, msgid: 
     }
     // A changed `LANGUAGE` selects the cached resolution for its value and is not a setting
     // change: catalogs keep their one-second clock (owner ruling 2026-10-07, P4; D-7.12).
-    // The common call finds the same list as the last one: compare it with the last slot's stored
-    // list in one pass over the text instead of measuring it and comparing again.
-    let (language, list_checked) = match h.language_probe() {
-        None => (h.language(), None),
-        Some(None) => (None, None),
-        Some(Some(addr)) => {
-            let last = R_LAST.load(Relaxed);
-            match RESOLVED.0.get(last).and_then(|s| s.list_text(h, addr)) {
-                Some(text) => (Some(text), Some(last)),
-                None => (Some(h.text_at(addr)), None),
-            }
-        }
-    };
+    let language = h.language();
     let clock = Clock::new(sys.tsc());
     // A locale name holds no `:`, so it is a list of one.
     let language = language.filter(|l| !l.is_empty());
     let list = language.unwrap_or(locale_name);
     let generation = SETTINGS.load(Acquire);
-    let key = Key { domain, locale: locale_name, list: language, list_checked, domain_fixed };
+    let key = Key { domain, locale: locale_name, list: language, domain_fixed };
     if key.fits() {
         let cat_no = usize::try_from(category).unwrap_or(usize::MAX);
-        let matches = |i: &usize| RESOLVED.0.get(*i).is_some_and(|s| s.matches(generation, cat_no, &key, *i));
+        let matches = |i: &usize| RESOLVED.0.get(*i).is_some_and(|s| s.matches(generation, cat_no, &key));
         let last = R_LAST.load(Relaxed);
         let found = Some(last).filter(matches).or_else(|| Some(R_PREV.load(Relaxed)).filter(matches)).or_else(|| (0..R_SLOTS).find(matches));
         let slot = match found {
@@ -1511,19 +1471,19 @@ mod tests {
         let r = Resolution::new();
         let mut caller = *b"domain_a";
         let (de, fr) = (b"de_DE.UTF-8".as_slice(), b"fr_FR.UTF-8".as_slice());
-        r.store(1, 5, &Key { domain: &caller, locale: de, list: None, list_checked: None, domain_fixed: false }, 0, &[]);
+        r.store(1, 5, &Key { domain: &caller, locale: de, list: None, domain_fixed: false }, 0, &[]);
         caller[7] = b'b';
         // Same address, rewritten text: the slot recorded no address for a caller's text.
-        assert!(!r.matches(1, 5, &Key { domain: &caller, locale: de, list: None, list_checked: None, domain_fixed: true }, 0));
+        assert!(!r.matches(1, 5, &Key { domain: &caller, locale: de, list: None, domain_fixed: true }));
         caller[7] = b'a';
-        assert!(r.matches(1, 5, &Key { domain: &caller, locale: de, list: None, list_checked: None, domain_fixed: true }, 0));
+        assert!(r.matches(1, 5, &Key { domain: &caller, locale: de, list: None, domain_fixed: true }));
         let fixed = b"domain_c".as_slice();
-        r.store(1, 5, &Key { domain: fixed, locale: de, list: None, list_checked: None, domain_fixed: true }, 0, &[]);
-        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: None, list_checked: None, domain_fixed: true }, 0));
-        assert!(!r.matches(1, 5, &Key { domain: b"domain_d", locale: de, list: None, list_checked: None, domain_fixed: true }, 0));
-        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: fr, list: None, list_checked: None, domain_fixed: true }, 0));
+        r.store(1, 5, &Key { domain: fixed, locale: de, list: None, domain_fixed: true }, 0, &[]);
+        assert!(r.matches(1, 5, &Key { domain: fixed, locale: de, list: None, domain_fixed: true }));
+        assert!(!r.matches(1, 5, &Key { domain: b"domain_d", locale: de, list: None, domain_fixed: true }));
+        assert!(!r.matches(1, 5, &Key { domain: fixed, locale: fr, list: None, domain_fixed: true }));
         let (d2, l2) = (b"domain_c".to_vec(), de.to_vec());
-        assert!(r.matches(1, 5, &Key { domain: &d2, locale: &l2, list: None, list_checked: None, domain_fixed: false }, 0));
+        assert!(r.matches(1, 5, &Key { domain: &d2, locale: &l2, list: None, domain_fixed: false }));
     }
 
     /// The tail word as the zero-padded little-endian word of the last `len % 8` bytes, whatever
