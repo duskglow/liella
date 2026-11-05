@@ -52,18 +52,6 @@ liella_machine_short_lim:
 liella_machine_rshort_mask:
 	.long 0
 
-/* PERF-STRCHR-NONAVX2-3: strchr / strchrnul's slow-entry mask. All ones on the AVX2 level, 0 on SSE2.
- * The slow entry's `testq %rdi, mask` is then the NULL test on the AVX2 level (the same two
- * instructions as before the SSE2 head) and sends every SSE2 call (ZF always set) to the SSE2 head,
- * which re-tests the page and leaves NULL to the NULL test. Set with the level. */
-	.p2align 3
-	.globl liella_machine_schr_mask
-	.hidden liella_machine_schr_mask
-	.type liella_machine_schr_mask, @object
-	.size liella_machine_schr_mask, 8
-liella_machine_schr_mask:
-	.quad 0
-
 	.text
 
 /* void liella_machine_set_scan_level(uint32_t level) */
@@ -82,12 +70,6 @@ liella_machine_set_scan_level:
 	/* level 1 -> 0xfc0, level 0 -> 0 (REGEX-WL, memrchr's end-page mask). */
 	andl $0xfc0, %eax
 	movl %eax, liella_machine_rshort_mask(%rip)
-	/* level 1 -> all ones, level 0 -> 0 (PERF-STRCHR-NONAVX2-3). */
-	xorl %eax, %eax
-	testl %edi, %edi
-	setz %al
-	decq %rax
-	movq %rax, liella_machine_schr_mask(%rip)
 	ret
 	.size liella_machine_set_scan_level, .-liella_machine_set_scan_level
 	.section .text.liella_machine_scan_level_get,"ax",@progbits
@@ -5871,7 +5853,7 @@ strchrnul:
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_rshort_mask(%rip), %ecx
-	jae .Lschrnul_slow
+	jae .Lschrnul_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpxor %xmm3, %xmm3, %xmm3
@@ -5901,10 +5883,17 @@ strchrnul:
 	addq $64, %rdi
 	xorl %r11d, %r11d
 	jmp .Lschr_body
+	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, on a 32-byte boundary
+	 * (the padding follows the jmp above and never runs): no second mask test, no second taken
+	 * branch before the SSE2 head (measured on an Ivy Bridge host: the decoded-uop cache delivers
+	 * one 32-byte window per cycle and a taken branch ends that cycle's delivery). */
+	.p2align 5
 .Lschrnul_pre:
 	/* PERF-STRCHR-NONAVX2: ecx = (s - 1) & 4095 >= rshort_mask here (4032 on the AVX2 level), so
 	 * ecx < 4032 means the SSE2 level AND [s, s + 64) inside s's page (page offset 1..4032; a NULL
-	 * s gives 4095): one compare is both tests. Then [s, s + 64) as four unaligned 16-byte blocks,
+	 * s gives 4095): one compare is both tests. On the AVX2 level ecx >= 4032 always holds here,
+	 * so that level's page-end and NULL calls go to .Lschrnul_snull (the NULL test, then the
+	 * aligned body). Then [s, s + 64) as four unaligned 16-byte blocks,
 	 * one exit branch each, with no group fold, no locate step and no strchr flag. SAFETY: all four
 	 * loads lie in s's page. A miss in all four enters the aligned body at .Lschr_next with
 	 * rax = ((s + 64) & -16) - 16: [s, rax + 16) is inside the checked [s, s + 64). */
@@ -5964,12 +5953,6 @@ strchrnul:
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
-.Lschrnul_slow:
-	/* AVX2 level: the NULL test (mask all ones); SSE2 level: always to the SSE2 head. */
-	testq %rdi, liella_machine_schr_mask(%rip)
-	jz .Lschrnul_pre
-	xorl %r11d, %r11d
-	jmp .Lschr_body
 .Lschrnul_snull:
 	testq %rdi, %rdi
 	jz liella_hot_strchr_null
@@ -6001,7 +5984,7 @@ index:
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_rshort_mask(%rip), %ecx
-	jae .Lschr_slow
+	jae .Lschr_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpxor %xmm3, %xmm3, %xmm3
@@ -6040,6 +6023,10 @@ index:
 	xorl %eax, %eax
 	vzeroupper
 	ret
+	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, 32-byte aligned (as
+	 * strchrnul's .Lschrnul_pre); the AVX2 level's page-end and NULL calls leave at the compare
+	 * to .Lschr_snullchk. */
+	.p2align 5
 .Lschr_pre:
 	/* PERF-STRCHR-NONAVX2: strchrnul's SSE2 head (one compare: SSE2 level and [s, s + 64) in s's
 	 * page; four unaligned blocks, SAFETY as there). Each block's c lanes and NUL lanes are two
@@ -6121,11 +6108,6 @@ index:
 .Lschr_snullchk:
 	testq %rdi, %rdi
 	jz liella_hot_strchr_null
-	jmp .Lschr_pre1
-.Lschr_slow:
-	/* AVX2 level: the NULL test (mask all ones); SSE2 level: always to the SSE2 head. */
-	testq %rdi, liella_machine_schr_mask(%rip)
-	jz .Lschr_pre
 .Lschr_pre1:
 	movl $1, %r11d
 .Lschr_body:
@@ -6688,6 +6670,8 @@ strncmp:
 	pxor %xmm3, %xmm3
 	movl $64, %ecx
 	jmp .Lsnc_step
+	/* The entry's taken branch lands on a 32-byte boundary (padding after the jmp above). */
+	.p2align 5
 .Lsnc_pt:
 	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected (or the SSE2
 	 * level: limit 0). */
@@ -6695,14 +6679,12 @@ strncmp:
 	jz liella_hot_strncmp_null
 	testq %rsi, %rsi
 	jz liella_hot_strncmp_null
+	/* TIMING-IVB-STRSCAN-DISPATCH: the SSE2 level (limit 0) falls through to the SSE2 steps with
+	 * no taken branch after the entry's; an AVX2-level a inside its page tests b out of line. */
 	movl %edi, %eax
 	andl $4095, %eax
 	cmpl liella_machine_short_lim(%rip), %eax
-	jae .Lsnc_old
-	movl %esi, %eax
-	andl $4095, %eax
-	cmpl liella_machine_short_lim(%rip), %eax
-	jb .Lsnc_head
+	jb .Lsnc_ptb
 .Lsnc_old:
 	pxor %xmm3, %xmm3
 	xorl %ecx, %ecx
@@ -6819,6 +6801,13 @@ strncmp:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
+.Lsnc_ptb:
+	/* AVX2 level, a's page offset below the limit: the head when b's is too, else the steps. */
+	movl %esi, %eax
+	andl $4095, %eax
+	cmpl liella_machine_short_lim(%rip), %eax
+	jb .Lsnc_head
+	jmp .Lsnc_old
 	.size liella_machine_strncmp, .-liella_machine_strncmp
 	.text
 
