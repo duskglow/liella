@@ -1664,6 +1664,24 @@ fn s14_8_c_2_2() {
     assert_eq!(paths(&mut t, "v/*/", 0), v(&["v/d/", "v/ld/", "v/locked/"]), "a trailing slash: directories only");
 }
 
+/// no spec clause (glob(3): results are sorted by `strcoll`; in C a byte order): names that
+/// share a prefix longer than the eight-byte sort key, names that are prefixes of each other,
+/// and bytes above 0x7f.
+#[test]
+fn s14_8_glob_sort_key_ties() {
+    use pat::*;
+    let names = ["file_000000010", "file_000000009", "file_00000001", "file_0000000100", "file_", "file_000000009x", "file_\u{e9}", "file_z", "zz", "a"];
+    let mut t = Tree::default();
+    for n in names {
+        t.entries.push(("v", n, 8));
+    }
+    let mut want: Vec<String> = names.iter().map(|n| format!("v/{n}")).collect();
+    want.sort();
+    assert_eq!(paths(&mut t, "v/*", 0), want);
+    assert_eq!(paths(&mut t, "v/file_0*", 0), want.iter().filter(|w| w.starts_with("v/file_0")).cloned().collect::<Vec<_>>());
+    assert_eq!(paths(&mut t, "v/a*", 0), v(&["v/a"]), "one match");
+}
+
 /// Spec §14.8 (Contract): `GLOB_ALTDIRFUNC`, with caller directory-access callbacks.
 #[test]
 fn s14_8_c_2_3() {
