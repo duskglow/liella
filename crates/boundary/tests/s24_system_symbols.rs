@@ -337,6 +337,7 @@ fn sym_getcpu() {
     assert_eq!(s::getcpu(None, None), 0, "either may be NULL");
 }
 
+// s24_5_c_3: getdomainname returns the kernel's NIS domain name (uname's `domainname` field), not a DNS domain.
 #[test]
 fn sym_getdomainname() {
     let len = uts_len(&uts().domainname);

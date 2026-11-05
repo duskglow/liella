@@ -24,7 +24,7 @@
  * every instruction, so `backtrace` from a signal handler in the window unwinds through here.
  * No .macro (the affected map reads this file for the symbols it defines and uses). */
 
-	.text
+	.section .text.liella_machine_read,"ax",@progbits
 	.hidden liella_machine_cancel_window	/* machine/thread_start.S */
 	.hidden liella_cancel_point_fail	/* crates/boundary/src/posix/s11_lowio.rs */
 	.hidden liella_close_point_fail
@@ -64,6 +64,7 @@ read:
 	jmp liella_cancel_point_fail
 	.cfi_endproc
 	.size liella_machine_read, .-liella_machine_read
+	.section .text.liella_machine_write,"ax",@progbits
 
 /* ssize_t liella_machine_write(int fd, const void *buf, size_t n) */
 	.globl liella_machine_write
@@ -94,6 +95,7 @@ write:
 	jmp liella_cancel_point_fail
 	.cfi_endproc
 	.size liella_machine_write, .-liella_machine_write
+	.section .text.liella_machine_pread,"ax",@progbits
 
 /* ssize_t liella_machine_pread(int fd, void *buf, size_t n, off_t off) */
 	.globl liella_machine_pread
@@ -128,6 +130,7 @@ pread64:
 	jmp liella_cancel_point_fail
 	.cfi_endproc
 	.size liella_machine_pread, .-liella_machine_pread
+	.section .text.liella_machine_pwrite,"ax",@progbits
 
 /* ssize_t liella_machine_pwrite(int fd, const void *buf, size_t n, off_t off) */
 	.globl liella_machine_pwrite
@@ -168,6 +171,7 @@ pwrite64:
  * Any asynchronous I/O ever started (liella_machine_aio_used, set by crates/boundary/src/aio.rs
  * before its first request or internal descriptor) sends every close to the Rust path, which
  * cancels the descriptor's requests first. */
+	.section .text.liella_machine_close,"ax",@progbits
 	.globl liella_machine_close
 	.hidden liella_machine_close
 	.type liella_machine_close, @function

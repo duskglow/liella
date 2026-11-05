@@ -1,0 +1,12 @@
+{"task": "PERF-CTYPE-LANGINFO-ACCESS-4", "model": "sonnet", "tokens": null,
+ "result": "ctype out-of-range test fixed (compiles; reaches the range test); plants 3/3 CAUGHT; percall counts and remaining items not done",
+ "branch": "task/perf-ctype-langinfo-access-4", "head": "see hand-back",
+ "gate": {"affected": "pcla4-gate-b", "peak": "16G cap"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["pcla4-plants (SURVIVED range-test-dropped) was before the test stored the thread's ctype words; superseded"],
+ "refused": [],
+ "jobs": ["keke:pcla4-plants-b", "keke:pcla4-gate-b"],
+ "improvement": "a plant that survives deserves a look at whether the test reaches the planted line at all",
+ "next_step": "percall before/after, nl_langinfo flat array, isalpha masked class, wcwidth early narrow answer, saturation-register notes",
+ "report_file": "handoff/perf-ctype-langinfo-access.md"}

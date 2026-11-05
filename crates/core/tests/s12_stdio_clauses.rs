@@ -347,6 +347,8 @@ struct Cookie {
     room: Option<usize>,
     seeks: usize,
     closed: bool,
+    /// At most this many bytes per read (short reads), when set.
+    chunk: Option<usize>,
 }
 
 static COOKIES: Mutex<Vec<Cookie>> = Mutex::new(Vec::new());
@@ -365,7 +367,7 @@ fn with_cookie<T>(id: usize, f: impl FnOnce(&mut Cookie) -> T) -> T {
 extern "C" fn ck_read(id: usize, buf: *mut c_char, n: usize) -> isize {
     with_cookie(id, |c| {
         let src = c.data.get(c.pos..).unwrap_or(&[]);
-        let k = n.min(src.len());
+        let k = n.min(src.len()).min(c.chunk.unwrap_or(usize::MAX));
         st::memcpy(buf.cast(), src.as_ptr().cast(), k);
         c.pos += k;
         k as isize
@@ -1419,6 +1421,99 @@ fn s12_5_c_5() {
     let fp = fopen(&wt, "w");
     assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "an error");
     x::fclose(fp);
+}
+
+/// §12.5: a record longer than the unread window (a line crossing the stream's buffer boundary,
+/// read whole or a few bytes at a time) comes back whole, byte for byte, through `getline` and
+/// `getdelim`, whether it ends in the delimiter or at end of file, with the caller's buffer
+/// already big enough or not, the stream locked internally or by the caller, and the next record
+/// starts right after it.
+#[test]
+fn s12_5_c_5_long_records_cross_the_window() {
+    // §12.5 getline/getdelim: the count, the bytes and the terminator of every record.
+    use std::os::unix::fs::MetadataExt;
+    let pattern = |n: usize, seed: usize| -> Vec<u8> { (0..n).map(|i| b'a' + ((i.wrapping_mul(7).wrapping_add(seed)) % 26) as u8).collect() };
+    // The buffer of a file stream is the file's block size; a cookie stream's is BUFSIZ.
+    let file_block = usize::try_from(std::fs::metadata(&tmp_with("c55lb", b"x").0).unwrap().blksize()).unwrap().max(1);
+    // (file or cookie, bytes per read, the stream's buffer size)
+    let sources = [(true, None, file_block), (false, None, 8192), (false, Some(7), 8192), (false, Some(4097), 8192)];
+    for (si, &(is_file, chunk, block)) in sources.iter().enumerate() {
+        for delim in *b"\n:" {
+            for by_caller in [true, false] {
+                for warm in [true, false] {
+                    for shift in [0usize, 5, 31, 33, 100] {
+                        // The record starts at `start`; `r` bytes of its read are left in the window there.
+                        let warm_len = if warm { 3 * block } else { 0 };
+                        let start = warm_len + usize::from(warm) + shift + 1;
+                        let piece = chunk.unwrap_or(block).min(block);
+                        let r = piece - start % piece;
+                        let mut lens = vec![1, r.saturating_sub(1).max(1), r, r + 1, r + 33, block - 1, block, block + 1, 2 * block + 3];
+                        lens.sort_unstable();
+                        lens.dedup();
+                        for len in lens {
+                            for with_tail in [true, false] {
+                                let mut data = Vec::new();
+                                if warm {
+                                    data.extend(pattern(warm_len, 1));
+                                    data.push(delim);
+                                }
+                                data.extend(std::iter::repeat_n(b'q', shift));
+                                data.push(delim);
+                                let rec = pattern(len, len + shift);
+                                data.extend_from_slice(&rec);
+                                if with_tail {
+                                    data.push(delim);
+                                    data.extend_from_slice(b"next");
+                                    data.push(delim);
+                                }
+                                let (fp, keep, id) = if is_file {
+                                    let t = tmp_with(&format!("c55l{si}"), &data);
+                                    (fopen(&t, "r"), Some(t), 0)
+                                } else {
+                                    let id = cookie(&data, None);
+                                    with_cookie(id, |c| c.chunk = chunk);
+                                    (fopencookie(id, "r"), None, id)
+                                };
+                                if by_caller {
+                                    x::__fsetlocking(fp, FSETLOCKING_BYCALLER);
+                                }
+                                let mut p: *mut c_char = null_mut();
+                                let mut cap = 0usize;
+                                let next = |p: &mut *mut c_char, cap: &mut usize| -> isize {
+                                    if delim == b'\n' { x::getline(Some(p), Some(cap), fp) } else { x::getdelim(Some(p), Some(cap), c_int::from(delim), fp) }
+                                };
+                                let what = format!("src {si} delim {delim} by_caller {by_caller} warm {warm} shift {shift} len {len} tail {with_tail}");
+                                if warm {
+                                    assert_eq!(next(&mut p, &mut cap), isize::try_from(warm_len + 1).unwrap(), "{what}");
+                                }
+                                assert_eq!(next(&mut p, &mut cap), isize::try_from(shift + 1).unwrap(), "{what}");
+                                let want = len + usize::from(with_tail);
+                                assert_eq!(next(&mut p, &mut cap), isize::try_from(want).unwrap(), "{what}");
+                                let mut expect = rec.clone();
+                                if with_tail {
+                                    expect.push(delim);
+                                }
+                                assert!(cap > want, "{what}: room for the NUL");
+                                assert_eq!(bytes(p.cast(), want), expect, "{what}");
+                                assert_eq!(bytes(p.cast(), want + 1)[want], 0, "{what}: terminated");
+                                if with_tail {
+                                    assert_eq!(next(&mut p, &mut cap), 5, "{what}: the record after");
+                                    assert_eq!(bytes(p.cast(), 5), [&b"next"[..], &[delim]].concat(), "{what}");
+                                }
+                                assert_eq!(next(&mut p, &mut cap), -1, "{what}: end of file");
+                                assert_ne!(x::feof(fp), 0, "{what}");
+                                x::fclose(fp);
+                                drop(keep);
+                                if id != 0 {
+                                    with_cookie(id, |c| c.data = Vec::new());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// §12.5: `fputs` writes a Text without a newline; `puts` writes it to `stdout` with one.

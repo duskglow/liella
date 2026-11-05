@@ -446,6 +446,12 @@ pub trait Env {
     fn find_copy(&self, s: &[u8], d: &mut [u8], c: u8) -> Option<usize> {
         find_copy(self, s, d, c)
     }
+    /// After [`Env::find_copy`] returned `None` for a source of `n` bytes that fit `d`: how many
+    /// leading bytes of `s` it has already stored in `d` (0 when it keeps no such promise).
+    #[inline(always)]
+    fn find_copy_done(&self, _n: usize) -> usize {
+        0
+    }
     /// `realloc` (0 when out of memory; the block is kept).
     fn realloc(&self, addr: usize, n: usize) -> usize;
     /// `free`.
@@ -798,9 +804,9 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
         return;
     }
     let at = |o: usize| b + o;
-    let (rp, re) = if s.role == Role::Reading { (at(s.rpos), at(s.rend)) } else { (at(RESERVE), at(RESERVE)) };
+    let (rp, re) = published_read_window(file, ext);
     let (wp, we) = match s.role {
-        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos), at(s.wend)),
+        Role::Writing if low_int(get(file, word::MODE)) < 0 => (at(s.wpos.min(ext.buf_len)), at(s.wend.min(ext.buf_len))),
         Role::Writing => (at(s.wpos), at(s.wpos)),
         _ => (at(RESERVE), at(RESERVE)),
     };
@@ -813,6 +819,22 @@ fn store_words(file: &[AtomicUsize], ext: &Ext) {
     set(file, word::BUF_BASE, at(RESERVE));
     set(file, word::BUF_END, b + ext.buf_len);
     store_flags(file, s);
+}
+
+/// The read window to publish (GETC-PUTC-FASTPATH, D-12.19): the engine's `rpos..rend`,
+/// bounded by the buffer, on a byte-oriented stream that is reading; on any other stream (wide
+/// or undecided orientation included) closed at `rpos` (`_IO_read_ptr == _IO_read_end`), so the
+/// trusted getc fast path (`ptr < end`, one load) never applies there. [`load`] reads only
+/// `_IO_read_ptr` back, so the wide layer's position survives. `ext.buf` is not 0.
+#[inline(always)]
+fn published_read_window(file: &[AtomicUsize], ext: &Ext) -> (usize, usize) {
+    let (s, b) = (&ext.state, ext.buf);
+    if s.role != Role::Reading {
+        return (b + RESERVE, b + RESERVE);
+    }
+    let end = s.rend.min(ext.buf_len);
+    let at = s.rpos.min(end);
+    if low_int(get(file, word::MODE)) < 0 { (b + at, b + end) } else { (b + at, b + at) }
 }
 
 /// The end-of-file and error indicators into `_flags`.
@@ -840,8 +862,7 @@ fn store_read(file: &[AtomicUsize], ext: &Ext) {
 #[inline(always)]
 fn store_read_words(file: &[AtomicUsize], ext: &Ext) {
     let s = &ext.state;
-    let b = ext.buf;
-    let (rp, re) = if s.role == Role::Reading { (b + s.rpos, b + s.rend) } else { (b + RESERVE, b + RESERVE) };
+    let (rp, re) = published_read_window(file, ext);
     set(file, word::READ_PTR, rp);
     set(file, word::READ_END, re);
     store_flags(file, s);
@@ -1779,6 +1800,18 @@ pub fn read_room(file: &[AtomicUsize]) -> Option<usize> {
     (p < e).then_some(p)
 }
 
+/// Advance the published read window to `p` (the trusted getc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_read_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::READ_PTR, p);
+}
+
+/// Advance the published write window to `p` (the trusted putc fast path, GETC-PUTC-FASTPATH).
+#[inline(always)]
+pub fn set_write_ptr(file: &[AtomicUsize], p: usize) {
+    set(file, word::WRITE_PTR, p);
+}
+
 /// Whether the published `_IO_buf_base` names a buffer (STDIO-6): a hint only, so that a stream
 /// without one (a first read) skips the refill path's checks; [`refill`] re-checks the record.
 #[inline(always)]
@@ -1920,18 +1953,39 @@ pub fn read_record<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, delim: 
 /// a wide or unset stream): the general [`getdelim`] decides. `p` is `_IO_read_ptr` as
 /// [`read_room`] read it, the lock is held or needed by none.
 #[inline(always)]
-pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, lineptr: usize, cap_var: usize, delim: u8) -> Option<usize> {
-    let window: &[u8] = read_window(env, file, ext, p)?;
+pub fn getdelim_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, (lineptr, cap_var): (usize, usize), delim: u8, partial: bool) -> Result<usize, Partial> {
+    let window: &[u8] = read_window(env, file, ext, p).ok_or(Partial(0))?;
     let buf = env.load_word(lineptr);
     if buf == 0 {
-        return None;
+        return Err(Partial(0));
     }
     // The record and its NUL must fit `*n` bytes; more than the window and a NUL is never needed.
     let room = env.load_word(cap_var).min(window.len().saturating_add(1));
-    let n = env.find_copy(window, env.bytes(buf, room), delim)?;
-    set(file, word::READ_PTR, p + n);
-    Some(n)
+    let dst = env.bytes(buf, room);
+    if let Some(n) = env.find_copy(window, dst, delim) {
+        set(file, word::READ_PTR, p + n);
+        return Ok(n);
+    }
+    // GETLINE-LONG: no delimiter in the whole window and all of it fits: the window is the
+    // record's first piece. Its bytes are put in place (the scan stored the first `done` of them)
+    // and consumed; the general path goes on from there. Not with the error indicator set (the
+    // general path fails first) and only when the caller holds the stream (`partial`).
+    let n = window.len();
+    if partial && n > 0 && room == n.saturating_add(1) && get(file, word::FLAGS) & ERR_SEEN == 0 {
+        let done = env.find_copy_done(n).min(n);
+        if let (Some(d), Some(s)) = (dst.get_mut(done..n), window.get(done..n)) {
+            liella::mem::copy(d, s);
+        }
+        set(file, word::READ_PTR, p + n);
+        return Err(Partial(n));
+    }
+    Err(Partial(0))
 }
+
+/// [`getdelim_front`] did not finish the record. `.0` bytes of it are in `*lineptr` and consumed
+/// (the unread window, which held no delimiter); the general path continues after them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Partial(pub usize);
 
 /// [`Env::find_copy`] in two passes: [`Env::find`] over the bytes that fit, then the copy.
 #[inline(always)]
@@ -1996,10 +2050,12 @@ pub fn read_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, ou
 
 /// `getdelim`: a record up to and including `delim` into the caller's `malloc` buffer
 /// (`*lineptr`, `*n`), grown as needed and terminated. The length, or `None` at end of input.
-pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8) -> KResult<Option<usize>> {
+/// With `prefix` > 0 the front path has already moved the first `prefix` bytes of the record
+/// into `*lineptr` ([`Partial`]); the record continues at the stream's position.
+pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8, prefix: usize) -> KResult<Option<usize>> {
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
-    let mut len = 0usize;
+    let mut len = prefix;
     // Set when the growth of the caller's buffer failed: that error is the result, not a read error.
     let mut grow_failed = false;
     if !byte_oriented(file) {
@@ -2039,7 +2095,7 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
         })
     })?;
     match r {
-        Ok(0) => Ok(None),
+        Ok(0) if len == 0 => Ok(None),
         Ok(_) => {
             if let Some(t) = env.bytes(buf, cap).get_mut(len) {
                 *t = 0;

@@ -1,0 +1,13 @@
+{"task": "HOTTEXT-ASM-ORDER-2", "model": "opus", "tokens": null,
+ "result": "hot-text list regenerated with the split .S kernels; D-4.33 passes; mei and keke tool 60 / locale 59 / startup 17 / strings 0 (was 68/66/19/0), 5/5",
+ "branch": "task/hottext-asm-order-2", "head": "cb4fc2d6",
+ "gate": {"affected": "escalated to FULL by the affected tool; running detached (mei hottext-asm-order-2-gate); clippy + static passed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["gate escalates to FULL for this change (hot-text.list is a linker input, .S export symbols)", "bounds now have 8-11 faults of margin; lowering them is a separate story"],
+ "refused": [],
+ "jobs": ["mei:hottext-asm-order-2-faults-mei", "mei:hottext-asm-order-2-plants", "mei:hottext-asm-order-2-gate", "keke:hottext-asm-order-2-faults-keke-2"],
+ "superseded": ["keke:hottext-asm-order-2-faults-keke (before-tree mixed next .S with the new list/test; rc 1 by design)"],
+ "improvement": "count scripts should build the 'before' tree from the base commit wholesale, not overlay files, so a list/test change cannot leak into it",
+ "next_step": "dispatcher reads the FULL gate; later story may lower the hot_text_products bounds",
+ "report_file": "handoff/HOTTEXT-ASM-ORDER.md"}

@@ -2,7 +2,7 @@
  * SIGABRT (spec §1.2, abort clause 2). `hlt` is privileged, so in user mode it faults (SIGSEGV),
  * as glibc's ABORT_INSTRUCTION does on x86-64. If even that is survived, the instruction
  * returns and the caller exits with status 127. */
-	.text
+	.section .text.liella_machine_trap,"ax",@progbits
 	.globl liella_machine_trap
 	.type liella_machine_trap, @function
 	.p2align 6

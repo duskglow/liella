@@ -1,0 +1,26 @@
+{
+ "task": "PROFIL-SIGPROF-HISTOGRAM",
+ "model": "opus",
+ "tokens": null,
+ "result": "s28_1_c_3 specified: profil/sprofil histogram placement, stop disarms ITIMER_PROF and restores the SIGPROF action; plants a+b CAUGHT",
+ "branch": "task/profil-sigprof-histogram",
+ "head": "8ececa8f",
+ "gate": {
+  "affected": "2 passed / 0 failed",
+  "peak": "1.1G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "glibc 2.39 profil with scale 0 keeps sampling (does not stop); Liella matches; not tested",
+  "probe: glibc sprofil(..,&tv,0) wrote tv=0 and armed a 1 us ITIMER_PROF interval; Liella uses 10 ms and reports tv=10 ms; untested, needs its own story"
+ ],
+ "refused": [],
+ "improvement": "jobrun started over ssh with nohup keeps the ssh session open until the job ends; a documented detach form (setsid, all fds closed) would save a stuck call",
+ "next_step": "none for s28_1_c_3; optional follow-up story on sprofil timer period and tv output",
+ "report_file": "handoff/profil-sigprof-histogram.md",
+ "jobs": [
+  "profil-sigprof-histogram-gate",
+  "profil-sigprof-histogram-plants"
+ ]
+}

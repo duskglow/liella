@@ -14,7 +14,7 @@
 	.p2align 3
 .Lguard_personality:
 	.quad liella_guard_personality
-	.text
+	.section .text.liella_machine_guard,"ax",@progbits
 	.hidden liella_guard_begin
 	.hidden liella_guard_end
 	.hidden liella_guard_personality

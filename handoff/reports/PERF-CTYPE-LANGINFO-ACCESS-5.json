@@ -1,0 +1,12 @@
+{"task": "PERF-CTYPE-LANGINFO-ACCESS-5", "model": "sonnet", "tokens": null,
+ "result": "verification only: plants 3/3 CAUGHT, gate and percall queued; remaining perf items not done",
+ "branch": "task/perf-ctype-langinfo-access-5", "head": "see hand-back",
+ "gate": {"affected": "pcla5-gate2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["pcla5-gate was a queued job killed with my ssh; pcla5-percall ran rc 2 (--base sources absent on the host); superseded by -gate2 and -percall2. Both -2 jobs were still queued at hand-back (host load ~30)", "fill-skipped caught with a different message (WARN-NO-MSG)"],
+ "refused": [],
+ "jobs": ["keke:pcla5-plants", "keke:pcla5-gate2", "keke:pcla5-percall2"],
+ "improvement": "jobrun in the foreground of an ssh dies with the ssh; submit via a script with setsid nohup",
+ "next_step": "percall before/after with a base, nl_langinfo flat array, isalpha masked class, wcwidth early narrow answer, saturation-register notes",
+ "report_file": "handoff/perf-ctype-langinfo-access.md"}

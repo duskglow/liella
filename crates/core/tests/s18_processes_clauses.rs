@@ -363,6 +363,20 @@ fn fd_flags(fd: i32) -> i64 {
     CSys.fcntl_int(Fd::new(fd), liella_kernel::ops::FcntlInt::GetFd, 0).unwrap()
 }
 
+/// Set close-on-exec on each of `fds` this process holds open without it, so a spawned child
+/// holds only what its file actions give it. A test runner may hand descriptors down (a job
+/// wrapper keeping a lock open on 8, for one); they stay open here.
+fn keep_from_children(fds: &[i32]) {
+    use liella_kernel::ops::FcntlInt::{GetFd, SetFd};
+    for &fd in fds {
+        if let Ok(fl) = CSys.fcntl_int(Fd::new(fd), GetFd, 0)
+            && fl & 1 == 0
+        {
+            CSys.fcntl_int(Fd::new(fd), SetFd, fl | 1).unwrap();
+        }
+    }
+}
+
 // ------------------------------------------------------------------------------ §18.1, §18.2
 
 #[test]
@@ -721,7 +735,12 @@ fn s18_4_c_1() {
     write_file(&d.join("sub/insub"), "insub\n", 0o644);
     let sub = d.join("sub");
     let canon = std::fs::canonicalize(&sub).unwrap();
-    let fds = "for f in 5 6 7 8 9 12; do [ -e /proc/$$/fd/$f ] && echo R:open $f; done; echo R:cwd $(pwd -P)";
+    keep_from_children(&[5, 6, 7, 8, 9, 12]);
+    // The child reports only descriptors that name the two things this test hands it (the
+    // `insub` file, the `sub` directory). A `popen` stream another test holds open in this
+    // process is inherited by every spawn (no `e` mode, no close-on-exec, by design) and can sit
+    // on any of these numbers for a moment; such a descriptor is not this test's to judge.
+    let fds = "for f in 5 6 7 8 9 12; do case $(readlink /proc/$$/fd/$f) in *-actions/sub|*-actions/sub/insub) echo R:open $f;; esac; done; echo R:cwd $(pwd -P)";
     let (r, out, st) = run_sh(
         fds,
         |fa| {

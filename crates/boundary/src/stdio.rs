@@ -91,6 +91,12 @@ impl Env for Glue {
         sc::find_copy(self, s, d, c)
     }
 
+    #[inline(always)]
+    fn find_copy_done(&self, n: usize) -> usize {
+        // The AVX2 scan stores every whole 32-byte block it compared (`hot::delim_copy`).
+        if n >= 32 && crate::dispatch::avx2() { n & !31 } else { 0 }
+    }
+
     fn sys(&self) -> &CSys {
         &CSys
     }
@@ -349,6 +355,17 @@ enum Front {
     Locked,
     /// The general path.
     General,
+}
+
+/// What [`delim_front`] did when it did not finish the record.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DelimMiss {
+    /// Try again under the stream's lock ([`delim_locked`]).
+    Locked,
+    /// The general path.
+    General,
+    /// The general path, the first `.0` bytes of the record already in `*lineptr` ([`sc::Partial`]).
+    Missed(usize),
 }
 
 /// [`put_front`], then [`put_front_locked`] when the lock is needed: whether the bytes went in.
@@ -823,12 +840,20 @@ fn read_front_ext(fp: usize, how: Locking) -> Result<u8, (ReadFront, usize)> {
         // STDIO-6: no buffer published (a first read) goes straight to the engine.
         return Err((if sc::buf_hint(file) { ReadFront::Empty } else { ReadFront::General }, 0));
     };
+    // GETC-PUTC-FASTPATH (owner #1654, D-12.19): with no lock to take, the open window is
+    // trusted as the refill that opened it left it (seal, bounds and orientation checked there,
+    // the window bounded by the buffer and kept closed on any stream not byte-oriented): one
+    // byte, `_IO_read_ptr` advanced, as header-inline `getc` does.
+    if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
+        let b = tb::window_byte(p);
+        sc::set_read_ptr(file, p.wrapping_add(1));
+        return Ok(b);
+    }
+    // The locked forms validate at lock time (`getc_lock_c`: the sealed record, then
+    // `get_front`'s orientation and bounds under the lock).
     let ext = sc::ext_word(file);
     if !Glue.record(fp, ext) {
         return Err((ReadFront::General, 0));
-    }
-    if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
-        return sc::get_front(&Glue, file, tb::stream_ext_at(ext), p).ok_or((ReadFront::General, 0));
     }
     Err((ReadFront::Locked, ext))
 }
@@ -913,6 +938,19 @@ pub fn putc(fp: usize, how: Locking, c: i32) -> KResult<u8> {
 #[inline(always)]
 pub fn putc_c(fp: usize, how: Locking, c: i32) -> core::ffi::c_int {
     let b = low_byte(c);
+    // GETC-PUTC-FASTPATH (owner #1654, D-12.19): with no lock to take, an open write window is
+    // trusted as the flush or setup that opened it left it (`store`: open only on a sealed,
+    // byte-oriented, fully buffered stream that is writing, bounded by its buffer): one store,
+    // `_IO_write_ptr` advanced, as header-inline `putc` does. Every other case validates below.
+    if let Some(file) = tb::file_words(fp) {
+        if let Some(p) = sc::window_room(file, 1) {
+            if how == Locking::Unlocked || crate::thread::alone() || sc::by_caller(file) {
+                tb::window_set_byte(p, b);
+                sc::set_write_ptr(file, p.wrapping_add(1));
+                return core::ffi::c_int::from(b);
+            }
+        }
+    }
     match put_front_ext(fp, how, &[b]) {
         (Front::Done, _) => core::ffi::c_int::from(b),
         (Front::Locked, ext) => putc_lock_c(fp, how, b, ext),
@@ -1219,31 +1257,32 @@ pub fn getdelim(line: KResult<usize>, cap: KResult<usize>, delim: i32, fp: usize
     let d = low_byte(delim);
     match delim_front(fp, line, cap, d) {
         Ok(n) => Ok(Some(n)),
-        Err(Front::Locked) => delim_locked(fp, line, cap, d),
-        Err(_) => getdelim_general(fp, line, cap, d),
+        Err(DelimMiss::Locked) => delim_locked(fp, line, cap, d),
+        Err(DelimMiss::Missed(k)) => getdelim_general(fp, line, cap, d, k),
+        Err(DelimMiss::General) => getdelim_general(fp, line, cap, d, 0),
     }
 }
 
 /// [`getdelim`] past its front path: the engine's.
 #[inline(never)]
-fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8) -> KResult<Option<usize>> {
-    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d))?
+fn getdelim_general(fp: usize, line: usize, cap: usize, d: u8, prefix: usize) -> KResult<Option<usize>> {
+    with(fp, Locking::Locked, |g, file, ext| sc::getdelim(g, file, ext, line, cap, d, prefix))?
 }
 
 /// The `getdelim` front path (GETDELIM, D-12.19), the mirror of [`read_front`]: a whole record
 /// in an open published read window on a sealed record that fits the caller's buffer.
 #[inline(always)]
-fn delim_front(fp: usize, line: usize, cap: usize, d: u8) -> Result<usize, Front> {
-    let Some(file) = tb::file_words(fp) else { return Err(Front::General) };
-    let Some(p) = sc::read_room(file) else { return Err(Front::General) };
+fn delim_front(fp: usize, line: usize, cap: usize, d: u8) -> Result<usize, DelimMiss> {
+    let Some(file) = tb::file_words(fp) else { return Err(DelimMiss::General) };
+    let Some(p) = sc::read_room(file) else { return Err(DelimMiss::General) };
     let ext = sc::ext_word(file);
     if !Glue.record(fp, ext) {
-        return Err(Front::General);
+        return Err(DelimMiss::General);
     }
     if crate::thread::alone() || sc::by_caller(file) {
-        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d).ok_or(Front::General);
+        return sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, (line, cap), d, true).map_err(|m| if m.0 > 0 { DelimMiss::Missed(m.0) } else { DelimMiss::General });
     }
-    Err(Front::Locked)
+    Err(DelimMiss::Locked)
 }
 
 /// [`delim_front`] under the stream's lock (another thread may use the stream): everything is
@@ -1255,13 +1294,14 @@ fn delim_locked(fp: usize, line: usize, cap: usize, d: u8) -> KResult<Option<usi
         let (lock, ext) = sc::parts(&Glue, file)?;
         let me = Glue.tid();
         lock.lock(&CSys, me);
-        let n = sc::read_room(file).and_then(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, line, cap, d));
+        let n = sc::read_room(file).map(|p| sc::getdelim_front(&Glue, file, tb::stream_ext_at(ext), p, (line, cap), d, false));
         lock.unlock(&CSys, me);
         n
     })();
+    // The lock was released: the window may have changed, so a miss is not carried over.
     match front {
-        Some(n) => Ok(Some(n)),
-        None => getdelim_general(fp, line, cap, d),
+        Some(Ok(n)) => Ok(Some(n)),
+        _ => getdelim_general(fp, line, cap, d, 0),
     }
 }
 

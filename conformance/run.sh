@@ -29,6 +29,14 @@
 #                                  use with LINK-LIBM and LINK-UNWIND
 #   /* LINK-NOW: yes */            link with -z now -z relro (the GOT, .got.plt included, lies
 #                                  in PT_GNU_RELRO)
+#   /* LINK-HELPERS: a b */        dynamic-link mode: the test links dynamically, against the
+#                                  reference C library only (no Liella loader yet). Each name
+#                                  is a helper source conformance/c/helpers/<name>.c, built as
+#                                  build/<test>.helpers/lib<name>.so and linked into the program
+#                                  (DT_NEEDED, even if unused by name); the program runs with
+#                                  LD_LIBRARY_PATH set to that directory. The result is the
+#                                  reference's; Liella is reported SKIPPED with the reason.
+#                                  See conformance/README.md.
 #
 # `sh conformance/run.sh [name ...]` runs only the named tests. Until `cargo xtask so` has
 # produced libc.a and the start object, the suite reports SKIPPED and succeeds.
@@ -119,8 +127,37 @@ for name in "$@"; do
     if [ -n "$(directive LINK-NOW "$src")" ]; then
         flags="$flags -Wl,-z,now -Wl,-z,relro"
     fi
+    # LINK-HELPERS: dynamic-link mode, reference C library only (Liella has no loader yet).
+    dyn=""; helpers=$(directive LINK-HELPERS "$src")
+    if [ -n "$helpers" ]; then
+        dyn=1
+        hdir="$exe.helpers"; mkdir -p "$hdir"
+        hlibs=""; hbad=""
+        for h in $helpers; do
+            hsrc="$here/c/helpers/$h.c"
+            if [ ! -f "$hsrc" ]; then hbad="missing helper source $hsrc"; break; fi
+            if ! "$cc" -std=c17 -O1 -shared -fPIC "$hsrc" -o "$hdir/lib$h.so.$$" >"$log" 2>&1 \
+                  || ! mv -f "$hdir/lib$h.so.$$" "$hdir/lib$h.so"; then
+                rm -f "$hdir/lib$h.so.$$"; hbad="helper $h does not build"; break
+            fi
+            hlibs="$hlibs -l$h"
+        done
+        # --no-as-needed: a test that reaches its helper only through dlsym still gets it as DT_NEEDED.
+        # shellcheck disable=SC2086
+        if [ -z "$hbad" ]; then
+            if ! "$cc" -std=c17 -O1 -I "$root/include" "$src" -L "$hdir" -Wl,--no-as-needed $hlibs -o "$exe.$$" >>"$log" 2>&1 \
+                  || ! mv -f "$exe.$$" "$exe"; then
+                rm -f "$exe.$$"; hbad="does not build"
+            fi
+        fi
+        if [ -n "$hbad" ]; then
+            echo "conformance: FAIL $name ($hbad; see conformance/build/$name.log)"
+            fail=$((fail + 1))
+            continue
+        fi
+    fi
     key="$phash $mhash $ihash $(sha256sum < "$src" | cut -d' ' -f1) $comp $flags $lang $cxxlibs $unwind ${cxxbegin:-} ${cxxend:-}"
-    if [ -x "$exe" ] && [ -f "$exe.key" ] && [ "$(cat "$exe.key")" = "$key" ]; then
+    if [ -n "$dyn" ] || { [ -x "$exe" ] && [ -f "$exe.key" ] && [ "$(cat "$exe.key")" = "$key" ]; }; then
         :   # unchanged: no relink, nothing written
     # shellcheck disable=SC2086
     elif ! "$comp" $flags -I "$root/include" "$crt" $cxxbegin $lang "$src" $lang_end $cxxlibs $libm "$libc" $unwind -lgcc $cxxend -o "$exe.$$" >"$log" 2>&1 \
@@ -151,6 +188,9 @@ for name in "$@"; do
         secure="${TMPDIR:-/tmp}/liella-conformance-$name-$$"   # per run: concurrent gates shared one path and removed each other's copy
         cp "$exe" "$secure" && chgrp "$group" "$secure" && chmod g+s "$secure" && exe="$secure"
     fi
+    if [ -n "$dyn" ]; then
+        if [ -n "$envs" ]; then envs="$envs LD_LIBRARY_PATH=$hdir"; else export LD_LIBRARY_PATH="$hdir"; fi
+    fi
     set +e
     if [ -n "$envs" ]; then
         # shellcheck disable=SC2086
@@ -175,7 +215,10 @@ for name in "$@"; do
     while IFS= read -r text; do
         grep -qF -- "$text" "$log.stderr" || { ok=0; echo "conformance: $name: stderr lacks: $text"; }
     done < "$log.want"
-    if [ "$ok" -eq 1 ]; then
+    if [ "$ok" -eq 1 ] && [ -n "$dyn" ]; then
+        echo "conformance: SKIPPED $name for Liella (passed on the reference; Liella has no dynamic loader yet)"
+        pass=$((pass + 1))
+    elif [ "$ok" -eq 1 ]; then
         pass=$((pass + 1))
     else
         echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)"

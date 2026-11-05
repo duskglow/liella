@@ -1,6 +1,6 @@
 /* Class machine: thread start on a new stack (D-22.9), and the cancellation window (D-22.11).
  * Status: approved (thread start); the window is the system-call form D-22.11 describes. */
-	.text
+	.section .text.liella_machine_clone3_run,"ax",@progbits
 
 /* long liella_machine_clone3_run(const void *args, long size, void (*entry)(uintptr_t), uintptr_t arg)
  * clone3(2) for a spawn child that shares the caller's memory (CLONE_VM | CLONE_VFORK, D-18.3):
@@ -35,6 +35,7 @@ liella_machine_clone3_run:
  * entry function and its argument. The parent gets the new TID or -errno. The child pops the
  * two words, calls entry(arg) with a zero frame pointer, and makes the thread-only exit system
  * call with entry's result if it ever returns (the runtime's entry never does). */
+	.section .text.liella_machine_clone_thread,"ax",@progbits
 	.globl liella_machine_clone_thread
 	.hidden liella_machine_clone_thread
 	.type liella_machine_clone_thread, @function
@@ -84,6 +85,7 @@ liella_machine_clone_thread:
  * and the `syscall` instruction. A request arriving before the load is seen by the load; one
  * arriving between the load and the `syscall` instruction (or while the kernel restarts it) is
  * redirected by the handler; both as before the split. */
+	.section .text.liella_machine_syscall_cancel,"ax",@progbits
 	.globl liella_machine_syscall_cancel
 	.hidden liella_machine_syscall_cancel
 	.type liella_machine_syscall_cancel, @function
@@ -131,6 +133,7 @@ liella_machine_cancel_exit:
 /* void liella_machine_cancel_bounds(uintptr_t out[3]): the window's start and end and the
  * cancelled exit, as addresses (the internal signal's handler compares the interrupted
  * program counter with them). */
+	.section .text.liella_machine_cancel_bounds,"ax",@progbits
 	.globl liella_machine_cancel_bounds
 	.hidden liella_machine_cancel_bounds
 	.type liella_machine_cancel_bounds, @function

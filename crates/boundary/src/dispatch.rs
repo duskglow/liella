@@ -145,7 +145,11 @@ pub(crate) fn select_null_fold(fold: bool) {
         store_cmp_gates(false, false);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
-    FOLD_CHR.store(if fold { isize::MAX.unsigned_abs() } else { 0 }, Relaxed);
+    // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
+    // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,
+    // D-4.22 PORTABLE-SCAN). The gate stays 0 there, whatever the copy and fill entries do.
+    let chr = fold && !cfg!(liella_portable_scan);
+    FOLD_CHR.store(if chr { isize::MAX.unsigned_abs() } else { 0 }, Relaxed);
     update_cmp_gates();
     FOLD_RESOLVED.store(true, Relaxed);
 }

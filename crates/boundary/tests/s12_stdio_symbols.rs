@@ -603,16 +603,31 @@ fn getc_forms(f: GetC, locked: bool) {
     assert_eq!(waits(fp, |fp| assert_eq!(f(fp), ch(b'r'))), locked, "the stream lock, a byte in the read window (STDIO-2)");
     assert_eq!(waits(fp, |fp| assert_eq!(f(fp), EOF)), locked, "the stream lock, an empty window on a buffer (STDIO-6)");
     assert_eq!(x::fclose(fp), 0);
-    read_front(f);
-    // PUTC-FRONT: a read window the program widened past the data. The front path (under the
-    // lock for the locked forms: the test harness has several threads) refuses the bytes past
-    // the engine's end of data; the general path answers EOF with the indicator.
+    read_front(f, locked);
+    // PUTC-FRONT: a read window the program widened past the data. The locked forms validate
+    // under the lock (the test harness has several threads) and refuse the bytes past the
+    // engine's end of data; the general path answers EOF with the indicator.
     let fp = open(&tmp_with("getc-widened", b"abc"), "r");
     assert_eq!(f(fp), ch(b'a'));
     let end = core::mem::offset_of!(FILE, _IO_read_end);
-    set_field(fp, end, field(fp, end) + 16);
-    assert_eq!((f(fp), f(fp)), (ch(b'b'), ch(b'c')));
-    assert_eq!(f(fp), EOF, "no byte past the data");
+    if locked {
+        set_field(fp, end, field(fp, end) + 16);
+        assert_eq!((f(fp), f(fp)), (ch(b'b'), ch(b'c')));
+        assert_eq!(f(fp), EOF, "no byte past the data");
+    } else {
+        // GETC-PUTC-FASTPATH (D-12.19): the `_unlocked` forms trust the window as the program
+        // left it (validated at the refill, not per call), as header-inline `getc` reads it: a
+        // byte the program placed in its own buffer just past the data is taken. With the
+        // window put back at its end, the refill path answers EOF.
+        let e = field(fp, end);
+        let z = b'Z';
+        st::memcpy(with_exposed_provenance_mut::<u8>(e).cast(), (&raw const z).cast(), 1);
+        set_field(fp, end, e + 1);
+        assert_eq!((f(fp), f(fp), f(fp)), (ch(b'b'), ch(b'c'), ch(b'Z')), "the trusted window");
+        set_field(fp, core::mem::offset_of!(FILE, _IO_read_ptr), e);
+        set_field(fp, end, e);
+        assert_eq!(f(fp), EOF, "no byte past the restored window");
+    }
     assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, from the general path");
     assert_eq!(x::fclose(fp), 0);
 }
@@ -620,7 +635,7 @@ fn getc_forms(f: GetC, locked: bool) {
 /// The read front path (STDIO-2, D-12.19): bytes taken from the published read window are the
 /// engine's, through pushback, repositioning, a switch to output, end of input and a wide
 /// stream; a crafted `FILE` is refused (`EBADF`) and nothing is read through it.
-fn read_front(f: GetC) {
+fn read_front(f: GetC, locked: bool) {
     let data: Vec<u8> = (0..3000u32).map(|i| b'a' + u8::try_from(i % 26).unwrap()).collect();
     let t = tmp_with("getc-front", &data);
     let fp = open(&t, "r+");
@@ -649,15 +664,33 @@ fn read_front(f: GetC) {
     let fp = open(&tmp_with("getc-wide", b"ab"), "r");
     assert!(x::fwide(fp, 1) > 0);
     assert_eq!(x::fgetwc(fp), wi('a'));
+    let (rp, re) = (field(fp, core::mem::offset_of!(FILE, _IO_read_ptr)), field(fp, core::mem::offset_of!(FILE, _IO_read_end)));
+    assert!(rp >= re, "a wide stream keeps its byte read window closed (GETC-PUTC-FASTPATH, D-12.19)");
     assert_eq!(f(fp), EOF, "byte input on a wide stream (D-12.14)");
     assert_eq!(x::fgetwc(fp), wi('b'), "nothing consumed");
     assert_eq!(x::fclose(fp), 0);
-    read_crafted(|fp| f(fp));
+    // An unbuffered stream reads one byte per refill: its window never holds a byte ahead
+    // (GETC-PUTC-FASTPATH; spec §12.5 setvbuf `_IONBF`).
+    let fp = open(&tmp_with("getc-unbuf", b"xyz"), "r");
+    assert_eq!(x::setvbuf(fp, null_mut(), IONBF, 0), 0);
+    for &b in b"xyz" {
+        assert_eq!(f(fp), ch(b));
+        let (rp, re) = (field(fp, core::mem::offset_of!(FILE, _IO_read_ptr)), field(fp, core::mem::offset_of!(FILE, _IO_read_end)));
+        assert!(rp >= re, "unbuffered: no byte left in the window");
+    }
+    assert_eq!(f(fp), EOF);
+    assert_eq!(x::fclose(fp), 0);
+    // The `_unlocked` forms take the trusted fast path here (a test process never runs alone).
+    read_crafted(|fp| f(fp), !locked);
 }
 
 /// [`front_crafted`] for input: a copy of a stream's words whose `_codecvt` names a fake record
-/// (its buffer the caller's), or a copy that keeps the original's record, is refused.
-fn read_crafted(f: impl Fn(*mut FILE) -> c_int) {
+/// (its buffer the caller's), or a copy that keeps the original's record, is refused. With
+/// `trusted` (the getc fast path with no lock to take, GETC-PUTC-FASTPATH, D-12.19; spec §12.5,
+/// no spec clause for the misuse itself), an open window in the program's own `FILE` words is
+/// the program's: its byte is returned; the refused cases are those that reach a buffer
+/// boundary (an empty window: the refill validates the record).
+fn read_crafted(f: impl Fn(*mut FILE) -> c_int, trusted: bool) {
     use liella_legacy::stdio_compat::Ext;
     const WORDS: usize = 28;
     let fp = open(&tmp_with("getc-crafted", b"abcdefgh"), "r");
@@ -676,14 +709,20 @@ fn read_crafted(f: impl Fn(*mut FILE) -> c_int) {
     fake[at(core::mem::offset_of!(FILE, _codecvt))] = fake_rec.as_ptr() as u64 + 8;
     fake[at(core::mem::offset_of!(FILE, _IO_read_ptr))] = v + 1;
     fake[at(core::mem::offset_of!(FILE, _IO_read_end))] = v + 2;
-    errno::set_raw(0);
-    assert_eq!(f(fake.as_mut_ptr().cast()), EOF, "a fake record: refused");
-    assert_eq!(errno::get(), EBADF);
     let mut copy = vec![0u64; WORDS];
     st::memcpy(copy.as_mut_ptr().cast(), fp.cast_const().cast(), WORDS * 8);
     errno::set_raw(0);
-    assert_eq!(f(copy.as_mut_ptr().cast()), EOF, "another FILE's record: refused");
-    assert_eq!(errno::get(), EBADF);
+    if trusted {
+        assert_eq!(f(fake.as_mut_ptr().cast()), ch(b'V'), "the program's own window: its byte");
+        assert_eq!(fake[at(core::mem::offset_of!(FILE, _IO_read_ptr))], v + 2, "the window advanced");
+        assert_eq!(f(copy.as_mut_ptr().cast()), ch(b'b'), "a copied window: the program's words");
+    } else {
+        assert_eq!(f(fake.as_mut_ptr().cast()), EOF, "a fake record: refused");
+        assert_eq!(errno::get(), EBADF);
+        errno::set_raw(0);
+        assert_eq!(f(copy.as_mut_ptr().cast()), EOF, "another FILE's record: refused");
+        assert_eq!(errno::get(), EBADF);
+    }
     // The same with an empty window on a named buffer (the refill path, STDIO-6): refused, and
     // nothing read into the fake record's buffer.
     fake[at(core::mem::offset_of!(FILE, _IO_read_ptr))] = v + 64;
@@ -710,7 +749,16 @@ fn read_crafted(f: impl Fn(*mut FILE) -> c_int) {
     assert!(end <= mem.as_ptr() as usize + 32, "the caller's buffer");
     set_field(fp, core::mem::offset_of!(FILE, _IO_read_ptr), end);
     set_field(fp, core::mem::offset_of!(FILE, _IO_read_end), end + 8);
-    assert_ne!(f(fp), ch(b'G'), "nothing read past the buffer");
+    if trusted {
+        // The program's window words name its own memory: followed, as header-inline `getc`
+        // follows them; the next boundary (the empty window's refill) is the library's again.
+        for _ in 0..8 {
+            assert_eq!(f(fp), ch(b'G'), "the program's own window");
+        }
+        assert_ne!(f(fp), ch(b'G'), "the boundary: nothing read past the buffer");
+    } else {
+        assert_ne!(f(fp), ch(b'G'), "nothing read past the buffer");
+    }
     assert_eq!(x::fclose(fp), 0);
     drop(mem);
 }
@@ -726,18 +774,23 @@ fn putc_forms(f: PutC, locked: bool) {
     assert_eq!(waits(fp, |fp| assert_eq!(f(ch(b'z'), fp), ch(b'z'))), locked, "the stream lock");
     assert_eq!(x::fclose(fp), 0);
     assert_eq!(t.read(), b"A\xfez");
-    front_corners(|fp, s| s.iter().all(|&b| f(ch(b), fp) == ch(b)));
-    // PUTC-FRONT: a write window the program widened past the buffer. The front path (under
-    // the lock for the locked forms) refuses the bytes past the buffer; the general path writes
-    // them, so every byte arrives.
-    let fp = open(&t, "w");
-    assert_eq!(f(ch(b'0'), fp), ch(b'0'));
-    let end = core::mem::offset_of!(FILE, _IO_write_end);
-    set_field(fp, end, field(fp, end) + 64);
-    let data: Vec<u8> = (0..70_000u32).map(|i| b'a' + u8::try_from(i % 26).unwrap()).collect();
-    assert!(data.iter().all(|&b| f(ch(b), fp) == ch(b)), "each byte answered");
-    assert_eq!(x::fclose(fp), 0);
-    assert!(t.read().get(1..) == Some(&data[..]), "every byte written, past the buffer too");
+    // The `_unlocked` forms take the trusted fast path here (a test process never runs alone).
+    front_corners(|fp, s| s.iter().all(|&b| f(ch(b), fp) == ch(b)), !locked);
+    // PUTC-FRONT: a write window the program widened past the buffer. The locked forms validate
+    // under the lock and refuse the bytes past the buffer; the general path writes them, so
+    // every byte arrives. The `_unlocked` forms trust the window as the program left it
+    // (GETC-PUTC-FASTPATH, D-12.19: validated at the flush, not per call), as header-inline
+    // `putc` does, so past the buffer they would store into memory the program named: not run.
+    if locked {
+        let fp = open(&t, "w");
+        assert_eq!(f(ch(b'0'), fp), ch(b'0'));
+        let end = core::mem::offset_of!(FILE, _IO_write_end);
+        set_field(fp, end, field(fp, end) + 64);
+        let data: Vec<u8> = (0..70_000u32).map(|i| b'a' + u8::try_from(i % 26).unwrap()).collect();
+        assert!(data.iter().all(|&b| f(ch(b), fp) == ch(b)), "each byte answered");
+        assert_eq!(x::fclose(fp), 0);
+        assert!(t.read().get(1..) == Some(&data[..]), "every byte written, past the buffer too");
+    }
     let fp = open(&t, "r");
     assert_eq!(f(ch(b'x'), fp), EOF);
     assert!(x::ferror(fp) != 0, "the error indicator");
@@ -764,7 +817,7 @@ fn fgets_forms(f: Fgets, locked: bool) {
     read_crafted(|fp| {
         let mut b = [0 as c_char; 2];
         if f(b.as_mut_ptr(), 2, fp).is_null() { EOF } else { c_int::from(b[0] as u8) }
-    });
+    }, false);
 }
 
 /// `fgets` takes a line from the buffer in pieces (STDIO-FGETS): every line split, at every
@@ -973,7 +1026,7 @@ fn fputs_forms(f: Fputs, locked: bool) {
     if locked {
         front_lock_pins(&tmp("fputs-front-lock"), |fp, s| f(s.as_ptr(), fp) >= 0);
     }
-    front_corners(|fp, s| f(CString::new(s).unwrap().as_ptr(), fp) >= 0);
+    front_corners(|fp, s| f(CString::new(s).unwrap().as_ptr(), fp) >= 0, false);
     fputs_fuse_corners(f);
     let fp = open(&t, "r");
     assert_eq!(f(c"x".as_ptr(), fp), EOF);
@@ -1112,7 +1165,7 @@ fn fread_pieces(f: Fread) {
     read_crafted(|fp| {
         let mut b = [0u8; 1];
         if f(b.as_mut_ptr().cast(), 1, 1, fp) == 1 { c_int::from(b[0]) } else { EOF }
-    });
+    }, false);
 }
 
 /// The `fread` direct path (FREAD-BIG): a request at least as large as the buffer with nothing
@@ -1313,7 +1366,7 @@ fn fwrite_forms(f: Fwrite, locked: bool, high: c_int) {
     assert_eq!(f(b"gh".as_ptr().cast(), 1, 2, fp), 2);
     assert_eq!(x::fclose(fp), 0);
     assert_eq!(t.read(), b"gh", "only the valid write");
-    front_corners(|fp, s| f(s.as_ptr().cast(), 1, s.len(), fp) == s.len());
+    front_corners(|fp, s| f(s.as_ptr().cast(), 1, s.len(), fp) == s.len(), false);
     let fp = x::fdopen(high_fd("/dev/full", O_WRONLY, high), c"w".as_ptr());
     assert_eq!(x::setvbuf(fp, null_mut(), IONBF, 0), 0);
     errno::set_raw(0);
@@ -1326,7 +1379,7 @@ fn fwrite_forms(f: Fwrite, locked: bool, high: c_int) {
 /// wide stream (its byte window kept closed, D-12.19) refuses (`EINVAL`, nothing stored), a
 /// line-buffered stream keeps no window and writes at its newline, a fully buffered one keeps
 /// the bytes until the flush. Then the window-closed invariant and crafted `FILE`s (P5b).
-fn front_corners(put: impl Fn(*mut FILE, &[u8]) -> bool) {
+fn front_corners(put: impl Fn(*mut FILE, &[u8]) -> bool, trusted: bool) {
     let t = tmp("front");
     let fp = open(&t, "w");
     assert!(x::fwide(fp, 1) > 0);
@@ -1351,7 +1404,7 @@ fn front_corners(put: impl Fn(*mut FILE, &[u8]) -> bool) {
     assert_eq!(t.read(), b"cd\n");
     assert_eq!(x::fclose(fp), 0);
     window_states(&put);
-    front_crafted(&put);
+    front_crafted(&put, trusted);
 }
 
 /// The window-closed invariant (D-12.19): the published write window is open only on a
@@ -1395,8 +1448,11 @@ fn window_states(put: &impl Fn(*mut FILE, &[u8]) -> bool) {
 /// A crafted `FILE` cannot steer the library's writes (D-12.19, P5b): a copy of a stream's
 /// words whose `_codecvt` names a fake record (a copy of the real one, the word before it
 /// included, but its buffer the caller's), or a copy that keeps the original's genuine record,
-/// is refused (`EBADF`) by the front and the general path alike, and nothing is written.
-fn front_crafted(put: &impl Fn(*mut FILE, &[u8]) -> bool) {
+/// is refused (`EBADF`) by the front and the general path alike, and nothing is written. With
+/// `trusted` (the putc fast path with no lock to take, GETC-PUTC-FASTPATH, D-12.19; no spec
+/// clause for the misuse itself), an open window in the program's own `FILE` words is the
+/// program's: the byte goes where they point, as header-inline `putc` puts it.
+fn front_crafted(put: &impl Fn(*mut FILE, &[u8]) -> bool, trusted: bool) {
     use liella_legacy::stdio_compat::Ext;
     const WORDS: usize = 28;
     let t = tmp("crafted");
@@ -1416,15 +1472,21 @@ fn front_crafted(put: &impl Fn(*mut FILE, &[u8]) -> bool) {
     fake[at(core::mem::offset_of!(FILE, _codecvt))] = fake_rec.as_ptr() as u64 + 8;
     fake[at(core::mem::offset_of!(FILE, _IO_write_ptr))] = v + 8;
     fake[at(core::mem::offset_of!(FILE, _IO_write_end))] = v + 16;
-    errno::set_raw(0);
-    assert!(!put(fake.as_mut_ptr().cast(), b"Z"), "a fake record: refused");
-    assert_eq!(errno::get(), EBADF);
-    assert!(victim.iter().all(|&b| b == 0), "nothing written through a fake record");
     let mut copy = vec![0u64; WORDS];
     st::memcpy(copy.as_mut_ptr().cast(), fp.cast_const().cast(), WORDS * 8);
     errno::set_raw(0);
-    assert!(!put(copy.as_mut_ptr().cast(), b"Y"), "another FILE's record: refused");
-    assert_eq!(errno::get(), EBADF);
+    if trusted {
+        assert!(put(fake.as_mut_ptr().cast(), b"Z") && victim[8] == b'Z', "the program's own window");
+        assert_eq!(fake[at(core::mem::offset_of!(FILE, _IO_write_ptr))], v + 9, "the window advanced");
+        assert!(put(copy.as_mut_ptr().cast(), b"Y"), "a copied window: the program's words");
+    } else {
+        assert!(!put(fake.as_mut_ptr().cast(), b"Z"), "a fake record: refused");
+        assert_eq!(errno::get(), EBADF);
+        assert!(victim.iter().all(|&b| b == 0), "nothing written through a fake record");
+        errno::set_raw(0);
+        assert!(!put(copy.as_mut_ptr().cast(), b"Y"), "another FILE's record: refused");
+        assert_eq!(errno::get(), EBADF);
+    }
     assert_eq!(x::fclose(fp), 0);
     assert_eq!(t.read(), b"a", "nothing written into the original stream");
     // The stream's own window words set past its (caller's) buffer: refused or contained, never
@@ -1439,7 +1501,12 @@ fn front_crafted(put: &impl Fn(*mut FILE, &[u8]) -> bool) {
     set_field(fp, core::mem::offset_of!(FILE, _IO_write_end), end + 8);
     let _ = put(fp, b"Z");
     let past = end - mem.as_ptr() as usize;
-    assert!(mem[past..].iter().all(|&b| b == 0), "nothing written past the buffer");
+    if trusted {
+        assert_eq!(mem[past], b'Z', "the program's own window words, followed");
+        assert!(mem[past + 1..].iter().all(|&b| b == 0), "one byte, nothing more");
+    } else {
+        assert!(mem[past..].iter().all(|&b| b == 0), "nothing written past the buffer");
+    }
     assert_eq!(x::fclose(fp), 0);
     drop(mem);
 }

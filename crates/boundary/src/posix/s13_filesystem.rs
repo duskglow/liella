@@ -700,12 +700,12 @@ pub extern "C" fn fdopendir(fd: c_int) -> *mut c_void {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn readdir(d: *mut c_void) -> *mut struct_dirent {
-    ret::entry(dirtree::readdir(conv::addr(d)))
+    core::ptr::with_exposed_provenance_mut(dirtree::readdir_addr(conv::addr(d)))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn readdir64(d: *mut c_void) -> *mut struct_dirent64 {
-    ret::entry(dirtree::readdir(conv::addr(d)))
+    core::ptr::with_exposed_provenance_mut(dirtree::readdir_addr(conv::addr(d)))
 }}
 
 export! { "GLIBC_2.2.5";

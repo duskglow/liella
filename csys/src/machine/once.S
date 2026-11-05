@@ -19,7 +19,7 @@
 .Lonce_personality:
 	.quad liella_once_personality
 
-	.text
+	.section .text.liella_machine_once,"ax",@progbits
 	.hidden liella_once_begin
 	.hidden liella_once_end
 	.hidden liella_once_personality
@@ -70,12 +70,14 @@ liella_machine_once:
 #ifdef LIELLA_EXPORT
 /* The exported entry points: tail calls, so that the routine's frame sits directly below the
  * caller's (call_once's void result is %eax, ignored). */
+	.section .text.pthread_once,"ax",@progbits
 	.globl pthread_once
 	.type pthread_once, @function
 	.p2align 6			/* exported entries are 64-byte aligned (D-4.33) */
 pthread_once:
 	jmp liella_machine_once
 	.size pthread_once, .-pthread_once
+	.section .text.__pthread_once,"ax",@progbits
 
 	.globl __pthread_once
 	.type __pthread_once, @function
@@ -83,6 +85,7 @@ pthread_once:
 __pthread_once:
 	jmp liella_machine_once
 	.size __pthread_once, .-__pthread_once
+	.section .text.call_once,"ax",@progbits
 
 	.globl call_once
 	.type call_once, @function

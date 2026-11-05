@@ -1,0 +1,6 @@
+{"task": "PERF-MEMCMPEQ-EARLY", "model": "sonnet", "tokens": null, "result": "memcmp 33-64 first-mask-first reorder: diff8_64 34.4 -> 30.4 instr; other rows unchanged, parity not reached", "branch": "task/perf-memcmpeq-early", "head": "02e393a2",
+ "gate": {"affected": "queued", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "extend NULL folding to the 65-2048 AVX2 compare/equality classes (D-4.22 scopes it to 1..=FOLD)", "recommendation": "yes: same page-zero proof, saves 4 instr per call"}],
+ "informational": ["tail_32 stays on SSE2 blocks (MEMCMP-MID-4), time 0.60-0.70 of glibc", "gate/plants/percall were queued behind other stories at hand-back"], "refused": [],
+ "improvement": "jobrun in the foreground blocks the shell: the brief should say to start it with nohup &", "next_step": "ruling on NULL folding for 65-2048, then probe-less 33-64 experiment", "report_file": "handoff/memcmpeq-early.md",
+ "jobs": ["perf-memcmpeq-early-counts-after", "perf-memcmpeq-early-gate", "perf-memcmpeq-early-plants", "perf-memcmpeq-early-percall"]}

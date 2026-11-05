@@ -1,0 +1,39 @@
+{
+ "task": "DL-THREAT-TEXT",
+ "model": "opus",
+ "tokens": null,
+ "result": "Loader threat-model rules 1-12 folded into spec/security/threat-model.md with DL-0a probe answers and a DL-29 checklist; rule 10 differences + compat rows (COMPAT-NEW: brief's COMPAT-18 is taken)",
+ "branch": "task/dl-threat-text",
+ "head": "81f978db",
+ "gate": {
+  "affected": "not run (docs only); cargo xtask static green (dl-threat-text-static-3, final head)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "COMPAT-18 is already the fnmatch row on origin/next; the rule-10 row carries COMPAT-NEW",
+   "recommendation": "assign COMPAT-19 and replace both placeholders"
+  },
+  {
+   "item": "Draft section A (environment additions, TZ row) was not in the approval and is not folded in",
+   "recommendation": "approve A as drafted; DL-0a shows the reference matches it"
+  },
+  {
+   "item": "Future execstack compat flag in a secure process",
+   "recommendation": "ignored in a secure process, as COMPAT-12"
+  }
+ ],
+ "informational": [
+  "Rule 4 gained one cross-reference sentence to rule 10 so that 'PT_GNU_STACK honoured' does not contradict the refusal",
+  "Execstack probe: reference dlopen of a -z execstack library succeeds and makes main and existing thread stacks rwxp (tools/probe/execstack)",
+  "Superseded: dl-threat-text-static (rc 1, differences row lacked a clause cell, fixed in 81f978db); dl-threat-text-static-2 (rc 0 on 81f978db, before the report commit)"
+ ],
+ "refused": [],
+ "improvement": "the dispatcher could check a brief's assigned COMPAT id against origin/next's registry before issuing it",
+ "next_step": "coordinator numbers the compat id, then lands; DL-29 takes the checklist table",
+ "report_file": "handoff/dl-threat-text.md",
+ "jobs": [
+  "dl-threat-text-static-3"
+ ]
+}
