@@ -420,7 +420,8 @@ fn strstr_dense_last_byte_then_first_byte_stream_keeps_every_candidate() {
     // byte close to the previous one tests its group for a pair and for the first needle byte; with
     // neither, the scan goes on with a one-stream filter on the first byte. 'a's, then from `d` a run
     // of "xe" (the last byte every 2 bytes, never a candidate) of length `run`, then the needle or
-    // the terminator, so both lie at every offset of the groups after the switch; an optional lone
+    // the terminator (a copy of the needle after it), so both lie at every offset of the groups after
+    // the switch; an optional lone
     // first byte `n` at `d + c` in the run: in the switch group (pair mode follows), or later (a
     // first-byte stop that is a false candidate, c even, or no candidate at all, c odd).
     let _g = level();
@@ -435,7 +436,10 @@ fn strstr_dense_last_byte_then_first_byte_stream_keeps_every_candidate() {
                         for align in [0usize, 16, 33] {
                             let start = align + d;
                             let n = start + run + if found { nd.len() } else { 0 };
-                            let mut h = vec![b'a'; n + 1];
+                            // A copy of the needle after the terminator: a scan that misses it finds that.
+                            let mut h = vec![b'a'; n + 1 + nd.len() + 1];
+                            h[n + 1..n + 1 + nd.len()].copy_from_slice(nd);
+                            h[n + 1 + nd.len()] = 0;
                             for i in 0..run {
                                 h[start + i] = if i % 2 == 0 { b'x' } else { b'e' };
                             }
