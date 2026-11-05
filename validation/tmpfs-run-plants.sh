@@ -1,4 +1,5 @@
 #!/bin/bash
+# NOTE: new plants go through `cargo xtask plants` (docs/plants.md); this script predates it.
 # Plant for validation/tmpfs-run.sh (FS-TMPFS-SCRATCH-RUN), run from a RAM copy of the role (no target/):
 #   usage: tmpfs-run-plants.sh <copy-dir>   (the copy is made by the caller with rsync -a --exclude /target)
 # Baseline: a small existing test must give identical lists. Plant: a test that depends on readdir order (it asserts the

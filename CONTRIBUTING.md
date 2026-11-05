@@ -99,7 +99,9 @@ against `next`; the maintainers run the lab steps (counts, the merge queue) for 
    rules. A developer proves their own change; whole-tree runs are the merge queue's job.
 3. **Plants** (mutation checks). For a code change, deliberately break the new code in a
    scratch copy and show that the direct tests fail with the expected message; a plant that
-   survives means a missing test, or is written up as equivalent with a reason.
+   survives means a missing test, or is written up as equivalent with a reason. Plants run only
+   through `cargo xtask plants` (required, owner 2026-11-05; format and the 600 s per-plant limit
+   in [docs/plants.md](docs/plants.md)); do not write a plants script.
 4. **Counts** for performance work: `validation/wl_count.sh` (instructions, page faults and
    system calls of whole workloads, new versus base versus glibc, with an output check) and
    `validation/wl_percall.sh` (instructions per call of single functions). Counts are
