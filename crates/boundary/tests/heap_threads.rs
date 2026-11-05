@@ -405,4 +405,108 @@ fn rust_alloc_zeroed_is_zero_after_a_dirty_free() {
     }
 }
 
+/// Run the calling thread on CPU `cpu` only (no-op when the mask call fails: one CPU).
+fn pin_to(cpu: usize) {
+    let mut mask = [0u64; 16];
+    mask[(cpu / 64) % 16] = 1 << (cpu % 64);
+    let _ = liella_boundary::posix::s24_system::sched_setaffinity(0, size_of_val(&mask), mask.as_ptr().cast());
+}
+
+#[test]
+fn statistics_never_read_below_the_blocks_live_throughout() {
+    // Clauses: s3_2_c_2 (mallinfo2 in-use bytes); D-3.4 (a block live for the whole call counts
+    // as in use), D-3.11, D-3.15.
+    // Workers spread over every CPU (both NUMA nodes where there are two) each hold a set of
+    // blocks live for the whole test, in the same slabs where they and the others keep allocating,
+    // freeing locally and freeing each other's blocks (remote frees, collection, reuse). The
+    // sampler reads the in-use bytes meanwhile: every held block is live throughout and the churn
+    // only adds, so a sample below base + held bytes proves a held block read as free.
+    let _g = serial();
+    const SIZES: [usize; 6] = [24, 32, 100, 1000, 1024, 4000];
+    const SAMPLES: usize = 100_000;
+    let cpus = usize::try_from(liella_boundary::posix::s24_system::get_nprocs()).unwrap_or(1).max(1);
+    let workers = cpus.clamp(4, 16);
+    let base = in_use();
+    let held_total = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let inboxes: Arc<Vec<Mutex<Vec<usize>>>> = Arc::new((0..workers).map(|_| Mutex::new(Vec::new())).collect());
+    let ready = Arc::new(Barrier::new(workers + 1));
+    let handles: Vec<_> = (0..workers)
+        .map(|t| {
+            let (held_total, stop, inboxes, ready) = (Arc::clone(&held_total), Arc::clone(&stop), Arc::clone(&inboxes), Arc::clone(&ready));
+            std::thread::spawn(move || {
+                pin_to(t * cpus / workers);
+                let mut g = Gen(0x5EED + t as u64 * 104_729);
+                // Every fourth block of a run is held; the others are freed, leaving holes in the
+                // held blocks' slabs for the churn to reuse.
+                let mut held = Vec::new();
+                for i in 0..256 {
+                    let p = m::malloc(SIZES[i % SIZES.len()]) as usize;
+                    assert_ne!(p, 0);
+                    if i % 4 == 0 {
+                        held.push(p);
+                    } else {
+                        m::free(p as *mut c_void);
+                    }
+                }
+                let mine: u64 = held.iter().map(|&p| m::malloc_usable_size(p as *mut c_void) as u64).sum();
+                held_total.fetch_add(mine, std::sync::atomic::Ordering::SeqCst);
+                ready.wait();
+                let mut live: Vec<usize> = Vec::new();
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    match g.below(8) {
+                        0..=3 => {
+                            let p = m::malloc(SIZES[g.below(SIZES.len() as u64) as usize]) as usize;
+                            assert_ne!(p, 0);
+                            live.push(p);
+                        }
+                        4 if !live.is_empty() => m::free(live.swap_remove(g.below(live.len() as u64) as usize) as *mut c_void),
+                        5 if !live.is_empty() => {
+                            let p = live.swap_remove(g.below(live.len() as u64) as usize);
+                            inboxes[(t + 1 + g.below(workers as u64 - 1) as usize) % workers].lock().unwrap().push(p);
+                        }
+                        6 => {
+                            for p in std::mem::take(&mut *inboxes[t].lock().unwrap()) {
+                                m::free(p as *mut c_void);
+                            }
+                        }
+                        _ => {}
+                    }
+                    if live.len() > 64 {
+                        m::free(live.swap_remove(0) as *mut c_void);
+                    }
+                }
+                ready.wait();
+                for p in live.into_iter().chain(held) {
+                    m::free(p as *mut c_void);
+                }
+                ready.wait();
+                for p in std::mem::take(&mut *inboxes[t].lock().unwrap()) {
+                    m::free(p as *mut c_void);
+                }
+                selftest::park_heap_cache();
+            })
+        })
+        .collect();
+    ready.wait();
+    let held = held_total.load(std::sync::atomic::Ordering::SeqCst);
+    // With `export` the harness allocates from this heap too and may free some of its own blocks
+    // meanwhile: the floor then allows for its residue (as the test above does).
+    let floor = if cfg!(feature = "export") { (base + held).saturating_sub(64 << 10) } else { base + held };
+    let (mut below, mut lowest) = (0usize, u64::MAX);
+    for _ in 0..SAMPLES {
+        let v = in_use();
+        lowest = lowest.min(v);
+        below += usize::from(v < floor);
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    ready.wait();
+    ready.wait();
+    for h in handles {
+        h.join().unwrap();
+    }
+    eprintln!("statistics sweep: {workers} workers on {cpus} CPUs, {SAMPLES} samples, floor {floor} (base {base} + held {held}), lowest {lowest}");
+    assert_eq!(below, 0, "{below} of {SAMPLES} samples read below the {held} held bytes over base {base} (lowest {lowest}, floor {floor})");
+}
+
 // opaque-ok: audited in GATE-SPEED-4/5: the direct calls here use their results and pass at opt-level 1 and 2 in both pass types; any case LLVM folds goes through selftest::opaque.
