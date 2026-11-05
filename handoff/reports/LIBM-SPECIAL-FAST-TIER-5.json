@@ -1,0 +1,16 @@
+{"task": "LIBM-SPECIAL-FAST-TIER-5", "model": "opus", "tokens": null,
+ "result": "COMPLETE: -4 merged with next (hot.rs/fast64.rs both sides kept, next's hyperbolic change moved into the fast32 family split); with libm's FMA build now running, erf 376->165 instr/call (1.05x reference), erf table 1.04x, erfc above 1 565->247; target <=1.05x reached for erf, not for erf series/erfc",
+ "branch": "task/libm-special-fast-tier-5", "head": null,
+ "gate": {"affected": "GATE_RESULT", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the direct-tier gate escalates to FULL by itself for any branch touching s10_math.tsv (generator input), as in -4",
+  "the first merge commit (bcc0e6c8, merge of task/libm-special-fast-tier-4, default message) has no Co-Authored-By trailer; not rewritten (pushed history)",
+  "percall erfc row check MISMATCH is the reference's last bit (documented in the handoff)",
+  "baseline (non-FMA) build not recounted on the merged head; -4's counts apply to the same kernels before the merge"],
+ "refused": [],
+ "improvement": "a stacked branch whose dependency (LIBM-TABLES-PER-FAMILY) is not in next makes its own merge with next re-resolve the dependency's conflicts (fast32.rs here); landing the dependency first, or the dispatcher stacking on next+dependency after it lands, avoids doing that resolution twice",
+ "next_step": "optional: profile erf series (112 vs 63) and erfc above 1 (247 vs 194) with wl_trace before any design",
+ "report_file": "handoff/libm-special-fast-tier.md",
+ "jobs": ["libm-special-fast-tier-5-gate", "libm-special-fast-tier-5-plants", "libm-special-fast-tier-5-counts-2"]}
