@@ -64,8 +64,8 @@ build() { # variant -> binary path on stdout (built under a temporary name, then
             gcc -O2 -Wl,-z,now -I"$src" -o "$out/pc.$$" "$src"/harness.c "$src"/spec.c -lm || exit 1
         else
             [ -f "$W/products/$v/libc.a" ] || { echo "wl_percall: no products for $v" >&2; exit 1; }
-            # The keke layout has ~/liella-test; other hosts (kanon) use the cached tree's own wrapper.
-            # The cached tree's own wrapper first: a stale ~/liella-test wrapper drops -lm, so math specs fail to link.
+            # The cached tree's own wrapper matches the products being linked; ~/liella-test (an old copy on some
+            # hosts) predates -lm handling and leaves math specs with undefined references.
             lcc=$W/src/$v/scripts/liella-cc
             [ -x "$lcc" ] || lcc=$HOME/liella-test/scripts/liella-cc
             # -lm as for glibc: liella-cc links Liella's libm.a (math specs) only when -lm is given.
