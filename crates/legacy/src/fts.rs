@@ -187,14 +187,34 @@ impl Node {
     }
 }
 
+/// The fields only directories and roots use, kept apart so the file entries that make up most
+/// of a walk do not carry (or initialise) them: a [`Node`] names its `Cold` by `cold` (0: none).
+#[derive(Default)]
+struct Cold {
+    /// A root's whole argument: its path.
+    arg: TryVec<u8>,
+    children: Children,
+    next_child: usize,
+}
+
+/// The `Cold` a node names, if it has one.
+#[inline(always)]
+fn cold_of<'a>(colds: &'a [Cold], x: &Node) -> Option<&'a Cold> {
+    x.cold.checked_sub(1).and_then(|i| colds.get(i))
+}
+
+/// A root's argument (empty for other entries).
+#[inline(always)]
+fn arg_of<'a>(colds: &'a [Cold], x: &Node) -> &'a [u8] {
+    cold_of(colds, x).map_or(&[][..], |c| &c.arg)
+}
+
 struct Node {
     block: usize,
     stat_off: usize,
     /// `fts_namelen`. The name itself is only in the block (`fts_name`): a copy kept here cost
     /// ~199 instructions per entry (FTS-FLAT-FIXES).
     name_len: usize,
-    /// A root's whole argument (empty for other entries): its path.
-    arg: TryVec<u8>,
     /// The length of `fts_path`; the bytes are in the stream's buffer only while the entry or
     /// one below it is the current one ([`Fts::place`]).
     path_len: usize,
@@ -206,8 +226,8 @@ struct Node {
     stat: Option<Key>,
     cycle: usize,
     link: usize,
-    children: Children,
-    next_child: usize,
+    /// 1 + the index in [`Fts::colds`] of this entry's cold fields; 0: it has none.
+    cold: usize,
     follow: bool,
     root_dev: u64,
     root: bool,
@@ -232,6 +252,8 @@ pub struct Fts {
     options: i32,
     compar: Option<SlotCompareFn>,
     nodes: TryVec<Option<Node>>,
+    colds: TryVec<Cold>,
+    free_colds: TryVec<usize>,
     free_slots: TryVec<usize>,
     roots: TryVec<usize>,
     cur: Option<usize>,
@@ -374,6 +396,31 @@ impl Fts {
         self.nodes.get_mut(n).and_then(Option::as_mut).ok_or(Errno::EINVAL)
     }
 
+    /// Entry `n`'s cold fields, made when it has none yet.
+    fn cold_mut(&mut self, n: usize) -> Result<&mut Cold> {
+        let have = self.node(n)?.cold;
+        let at = if have != 0 {
+            have
+        } else {
+            let i = match self.free_colds.pop() {
+                Some(i) => i,
+                None => {
+                    self.colds.push(Cold::default())?;
+                    self.colds.len().saturating_sub(1)
+                }
+            };
+            let c = i.saturating_add(1);
+            self.node_mut(n)?.cold = c;
+            c
+        };
+        self.colds.get_mut(at.saturating_sub(1)).ok_or(Errno::EINVAL)
+    }
+
+    /// Entry `n`'s children, `None` when none were built.
+    fn kids(&self, n: usize) -> Result<Option<&Children>> {
+        Ok(cold_of(&self.colds, self.node(n)?).map(|c| &c.children))
+    }
+
     /// The block of entry `n` (0 if there is none).
     fn block(&self, n: usize) -> usize {
         self.node(n).map_or(0, |x| x.block)
@@ -411,7 +458,7 @@ impl Fts {
         };
         // The padding is the first `pad` (1..=8) zeros of `sb`: one part for both.
         let block = mem.alloc(off::NAME, &[name, sb.get(LEAD.saturating_sub(pad)..).unwrap_or(&[])]).ok_or(Errno::ENOMEM)?;
-        let arg = if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() };
+        let arg = if root { Some(TryVec::from_slice(name).inspect_err(|_| mem.free(block))?) } else { None };
         let idx = match self.free_slots.pop() {
             Some(i) => i,
             None => {
@@ -429,7 +476,6 @@ impl Fts {
                 block,
                 stat_off,
                 name_len: name.len(),
-                arg,
                 path_len,
                 parent,
                 level,
@@ -438,12 +484,20 @@ impl Fts {
                 stat: st.1.as_ref().map(Key::of),
                 cycle,
                 link: 0,
-                children: Children::NotBuilt,
-                next_child: 0,
+                cold: 0,
                 follow,
                 root_dev,
                 root,
             });
+        }
+        if let Some(a) = arg {
+            match self.cold_mut(idx) {
+                Ok(c) => c.arg = a,
+                Err(e) => {
+                    self.free_node(mem, idx);
+                    return Err(e);
+                }
+            }
         }
         if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
             let b = mem.bytes(block, off::NAME);
@@ -568,7 +622,7 @@ impl Fts {
         self.reserve(mem, start, end)?;
         let x = self.node(n)?;
         if x.root {
-            put(mem.bytes(self.buf, end), 0, &x.arg);
+            put(mem.bytes(self.buf, end), 0, arg_of(&self.colds, x));
         } else if x.name_len <= len {
             let name_at = len.saturating_sub(x.name_len);
             if name_at > start {
@@ -603,6 +657,8 @@ impl Fts {
             options,
             compar,
             nodes: TryVec::with_capacity(argv.len().saturating_add(16))?,
+            colds: TryVec::with_capacity(0)?,
+            free_colds: TryVec::with_capacity(0)?,
             free_slots: TryVec::with_capacity(0)?,
             roots: TryVec::with_capacity(argv.len())?,
             cur: None,
@@ -689,7 +745,7 @@ impl Fts {
         let (namez, dot) = {
             let x = self.node(n)?;
             if x.root {
-                (z(&x.arg)?, false)
+                (z(arg_of(&self.colds, x))?, false)
             } else {
                 let name = name_of(mem, x);
                 (z(name)?, name == b"." || name == b"..")
@@ -703,7 +759,6 @@ impl Fts {
         x.stat = st.as_ref().map(Key::of);
         x.errno = e;
         x.follow = follow || x.follow;
-        x.next_child = 0;
         if x.info == info::D {
             self.check_cycle(n)?;
         }
@@ -752,18 +807,25 @@ impl Fts {
         if let Some(slot) = self.nodes.get_mut(n) {
             if let Some(x) = slot.take() {
                 mem.free(x.block);
+                if let Some(i) = x.cold.checked_sub(1) {
+                    if let Some(c) = self.colds.get_mut(i) {
+                        *c = Cold::default();
+                    }
+                    let _ = self.free_colds.push(i);
+                }
                 let _ = self.free_slots.push(n);
             }
         }
     }
 
     fn drop_children<M: FtsMem>(&mut self, mem: &mut M, n: usize) {
-        let list = match self.node_mut(n) {
-            Ok(x) => match core::mem::take(&mut x.children) {
+        let Some(ci) = self.nodes.get(n).and_then(Option::as_ref).and_then(|x| x.cold.checked_sub(1)) else { return };
+        let list = match self.colds.get_mut(ci) {
+            Some(c) => match core::mem::take(&mut c.children) {
                 Children::Built(l) | Children::NameOnly(l) => l,
                 _ => return,
             },
-            Err(_) => return,
+            None => return,
         };
         for &c in list.iter() {
             self.free_node(mem, c);
@@ -774,10 +836,10 @@ impl Fts {
     fn build<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, n: usize, how: Build) -> Result<()> {
         let (level, follow, path_len, root_dev, slash) = {
             let x = self.node(n)?;
-            if how == Build::Read && matches!(x.children, Children::Built(_) | Children::Unreadable(_) | Children::NoSearch(_)) {
+            if how == Build::Read && matches!(cold_of(&self.colds, x).map(|c| &c.children), Some(Children::Built(_) | Children::Unreadable(_) | Children::NoSearch(_))) {
                 return Ok(());
             }
-            (x.level, x.follow, x.path_len, x.root_dev, x.root && x.arg.last() == Some(&b'/'))
+            (x.level, x.follow, x.path_len, x.root_dev, x.root && arg_of(&self.colds, x).last() == Some(&b'/'))
         };
         self.drop_children(mem, n);
         let ulevel = usize::try_from(level).map_err(|_| Errno::EINVAL)?;
@@ -786,13 +848,13 @@ impl Fts {
             let opened = {
                 let x = self.node(n)?;
                 if x.root {
-                    z(&x.arg)?
+                    z(arg_of(&self.colds, x))?
                 } else {
                     z(name_of(mem, x))?
                 }
             };
             if let Err(e) = self.levels.push(sys, &opened, follow) {
-                self.node_mut(n)?.children = Children::Unreadable(e);
+                self.cold_mut(n)?.children = Children::Unreadable(e);
                 return Ok(());
             }
         }
@@ -800,7 +862,7 @@ impl Fts {
         if self.chdir_mode() && how != Build::NameOnly {
             if let Err(e) = sys.fchdir(fd) {
                 self.levels.pop(sys);
-                self.node_mut(n)?.children = Children::NoSearch(e);
+                self.cold_mut(n)?.children = Children::NoSearch(e);
                 return Ok(());
             }
         }
@@ -812,7 +874,7 @@ impl Fts {
             Ok(d) => d,
             Err(e) => {
                 self.leave_level(sys, n)?;
-                self.node_mut(n)?.children = Children::Unreadable(e);
+                self.cold_mut(n)?.children = Children::Unreadable(e);
                 return Ok(());
             }
         };
@@ -873,7 +935,7 @@ impl Fts {
                 return Err(e);
             }
             self.leave_level(sys, n)?;
-            self.node_mut(n)?.children = Children::Unreadable(e);
+            self.cold_mut(n)?.children = Children::Unreadable(e);
             return Ok(());
         }
         if let Some(c) = self.compar {
@@ -888,7 +950,7 @@ impl Fts {
             }
         }
         self.link(mem, &kids);
-        let x = self.node_mut(n)?;
+        let x = self.cold_mut(n)?;
         x.next_child = 0;
         x.children = if how == Build::NameOnly { Children::NameOnly(kids) } else { Children::Built(kids) };
         Ok(())
@@ -920,8 +982,9 @@ impl Fts {
         let instr = self.instr_of(mem, n);
         if root {
             let x = self.node(n)?;
-            let cut = x.arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
-            let last = x.arg.get(cut..).unwrap_or(&[]);
+            let arg = arg_of(&self.colds, x);
+            let cut = arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
+            let last = arg.get(cut..).unwrap_or(&[]);
             if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap())).get_mut(off::NAME..) {
                 d.fill(0);
                 put(d, 0, last);
@@ -988,12 +1051,12 @@ impl Fts {
                 self.terminate(mem, cur);
                 return Ok(Some(self.block(cur)));
             }
-            if matches!(self.node(cur)?.children, Children::NameOnly(_)) {
+            if matches!(self.kids(cur)?, Some(Children::NameOnly(_))) {
                 self.drop_children(mem, cur);
             }
             self.build(sys, mem, cur, Build::Read)?;
-            let first = match &self.node(cur)?.children {
-                Children::Unreadable(e) => {
+            let first = match self.kids(cur)? {
+                Some(Children::Unreadable(e)) => {
                     let e = e.get();
                     let x = self.node_mut(cur)?;
                     x.info = info::DNR;
@@ -1002,7 +1065,7 @@ impl Fts {
                     self.terminate(mem, cur);
                     return Ok(Some(self.block(cur)));
                 }
-                Children::NoSearch(e) => {
+                Some(Children::NoSearch(e)) => {
                     let e = e.get();
                     let x = self.node_mut(cur)?;
                     x.info = info::DP;
@@ -1011,7 +1074,7 @@ impl Fts {
                     self.terminate(mem, cur);
                     return Ok(Some(self.block(cur)));
                 }
-                Children::Built(l) => l.iter().position(|&c| !self.passed_over(mem, c)).and_then(|i| Some((i, *l.get(i)?))),
+                Some(Children::Built(l)) => l.iter().position(|&c| !self.passed_over(mem, c)).and_then(|i| Some((i, *l.get(i)?))),
                 _ => None,
             };
             // Entries built by `fts_children` were read without staying in the directory.
@@ -1022,7 +1085,7 @@ impl Fts {
             }
             match first {
                 Some((i, c)) => {
-                    self.node_mut(cur)?.next_child = i.saturating_add(1);
+                    self.cold_mut(cur)?.next_child = i.saturating_add(1);
                     return self.visit(sys, mem, c).map(Some);
                 }
                 None => {
@@ -1051,17 +1114,17 @@ impl Fts {
         // One lookup of the parent unless an entry may be passed over (FTS-FLAT-FIXES-2: the
         // second lookup and the search cost ~25 instructions per entry).
         let next = if self.skips_listed {
-            let p = self.node(parent)?;
-            let found = match &p.children {
-                Children::Built(l) => l.iter().enumerate().skip(p.next_child).find(|&(_, &c)| !self.passed_over(mem, c)).map(|(i, &c)| (i, c)),
+            let p = cold_of(&self.colds, self.node(parent)?);
+            let found = match p {
+                Some(Cold { children: Children::Built(l), next_child, .. }) => l.iter().enumerate().skip(*next_child).find(|&(_, &c)| !self.passed_over(mem, c)).map(|(i, &c)| (i, c)),
                 _ => None,
             };
             if let Some((i, _)) = found {
-                self.node_mut(parent)?.next_child = i.saturating_add(1);
+                self.cold_mut(parent)?.next_child = i.saturating_add(1);
             }
             found.map(|(_, c)| c)
         } else {
-            let p = self.node_mut(parent)?;
+            let p = self.cold_mut(parent)?;
             let next = match &p.children {
                 Children::Built(l) => l.get(p.next_child).copied(),
                 _ => None,
@@ -1106,10 +1169,10 @@ impl Fts {
         if how == Build::Children {
             self.skips_listed = true;
         }
-        let first = match &self.node(cur)?.children {
-            Children::Unreadable(e) | Children::NoSearch(e) => return Err(*e),
-            Children::Built(l) | Children::NameOnly(l) => l.first().copied(),
-            Children::NotBuilt => None,
+        let first = match self.kids(cur)? {
+            Some(Children::Unreadable(e) | Children::NoSearch(e)) => return Err(*e),
+            Some(Children::Built(l) | Children::NameOnly(l)) => l.first().copied(),
+            Some(Children::NotBuilt) | None => None,
         };
         // Building may have entered the directory; the caller's view does not move.
         if self.chdir_mode() && how != Build::NameOnly {
