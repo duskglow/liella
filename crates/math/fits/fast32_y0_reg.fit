@@ -3,7 +3,7 @@
 name = fast32_y0_reg
 target = y0_reg
 interval = 1/1048576, 2
-powers = even 0..22
+powers = even 0..16
 error = absolute
 format = f64
 output = crates/math/src/coeffs/fast32_y0_reg.rs
