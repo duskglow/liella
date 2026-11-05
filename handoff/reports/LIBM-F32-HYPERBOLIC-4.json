@@ -1,0 +1,18 @@
+{"task": "LIBM-F32-HYPERBOLIC-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: asinhf/acoshf take the cherry-picked inline sqrtsd (9fc38c3f): 150.7->108.7 (1.17x) and 139->97 (1.24x) instr/call, exhaustive hardware-root sweep green, plants 4/4; target 1.05x not reached (log1p64 next)",
+ "branch": "task/libm-f32-hyperbolic-4", "head": "aa2375f4",
+ "gate": {"affected": "gate-2 escalated to FULL (generated s10_math_gen.rs), running at hand-back; stubs and clippy ok; gate-1 on faa059c0 red on arch-audit only, fixed by aa2375f4", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Cherry-pick of 9fc38c3f was not separable: its hot.rs hunk sits inside the f64 branch's invtrig macro block; taken with -n keeping only sqrtsd_sse2/sqrtsd (same text). Both branches append after log_nearest in hot.rs, so the second to land has one textual conflict: keep one copy.",
+  "task/libm-f64-invtrig-hypot-tier-2's sqrtsd_sse2 lacks the // ARCH(x86_64) tag: its xtask static will fail arch-audit (fixed here in aa2375f4).",
+  "The root swap changes the instruction mix (sqrtsd replaces ~20 multiplies/adds): instructions say 1.17x/1.24x; the timing sweep should judge the rows.",
+  "Process slip: two empty heredocs were typed by mistake (one aborted commit, one empty python stdin); nothing ran from them."
+ ],
+ "refused": [],
+ "jobs": ["mei:libm-f32-hyperbolic-4-gate-2", "mei:libm-f32-hyperbolic-4-plants-2", "mei:libm-f32-hyperbolic-4-percall-2", "mei:libm-f32-hyperbolic-4-sweep-sqrt"],
+ "superseded": ["mei:libm-f32-hyperbolic-4-gate (rc 1, arch-audit untagged seam, fixed)", "mei:libm-f32-hyperbolic-4-plants (rc 0 on faa059c0)", "mei:libm-f32-hyperbolic-4-percall (rc 0 on faa059c0)"],
+ "improvement": "sync_role refuses while any job of the story runs in the role, so a sweep started from the role blocks a one-comment fix; run ignored sweeps from a RAM copy like plants.",
+ "next_step": "wl_trace one call of asinhf/acoshf, then shorten log1p64 (table step) and rerun both sweeps",
+ "report_file": "handoff/libm-f32-hyperbolic.md"}
