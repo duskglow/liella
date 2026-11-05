@@ -1,0 +1,12 @@
+# LIBM-F32-SINF-SHRINK (D-10.3): sin on [-0.0246, 0.0246], the reduced range of the `float`
+# sin/cos/tan kernel after x = n·π/64 + r (|r| ≤ π/128 = 0.024544 plus the reduction's rounding,
+# so the interval is taken a little wider). Odd powers up to 5; the x coefficient is fixed at 1 so
+# that the leading term r is exact.
+name = fast32_sin
+target = sin
+interval = -0.0246, 0.0246
+powers = odd 1..5
+fixed = 1:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_sin.rs

@@ -1,0 +1,12 @@
+{"task": "PERF-GETTEXT-LANGUAGE-STEADY-5", "model": "opus", "tokens": null,
+ "result": "-4's surviving plants explained (products built before mutation; catalogs_products never reaches the cases) and caught by new list cases in key_address_accept; find_in_hinted split re-applied: -32 instructions per call on all 4 gettext rows (steady 684->652, found 558->526); target not reached",
+ "branch": "task/perf-gettext-language-steady-5", "head": "e1ae2628",
+ "gate": {"affected": "2750 passed / 0 failed", "peak": "11G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cargo xtask plants builds the products once before any plant: a plant cmd running a products-linked test (catalogs_products) tests the unmutated library unless it runs cargo xtask so first; docs/plants.md does not say so", "-4's trace job perf-gettext-language-steady-4-list-found on keke never ran (no jobs.tsv row)"],
+ "refused": ["git add crates/core/src/catalog/mo.rs && git commit -q --amend --no-edit (Git Destructive; it would have amended the pushed 90f4ce34; a new commit e1ae2628 was made instead)"],
+ "improvement": "docs/plants.md: say that products-linked tests need `cargo xtask so &&` in the plant cmd and prefer the planted function's unit test; or make cargo xtask plants rebuild the products per plant when the cmd's test links target/liella",
+ "next_step": "record run 7 in saturation 14 row 6, run wl_trace --list on e1ae2628, then the selector compare in hit and translate's key setup",
+ "report_file": "handoff/perf-gettext-language-steady.md",
+ "jobs": ["shiki:perf-gettext-language-steady-5-gate", "shiki:perf-gettext-language-steady-5-plants-2", "shiki:perf-gettext-language-steady-5-percall"]}

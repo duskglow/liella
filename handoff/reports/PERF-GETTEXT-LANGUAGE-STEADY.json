@@ -1,0 +1,12 @@
+{"task": "PERF-GETTEXT-LANGUAGE-STEADY", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND (ruling): gettext percall spec added; host fused LANGUAGE compare dropped: steady 1002.6->803.5 i (2.26->1.81x), alternating 1273.7->1120.1, found 616.1->609.7, ngettext 750.6->787.7 (+37 bench, +3 percall)",
+ "branch": "task/perf-gettext-language-steady", "head": "123dfe88",
+ "gate": {"affected": "236 passed / 0 failed (10 targets, 3 conformance)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [{"item": "ngettext_found +37 instr in cbench_opt (+3 per call) vs steady -199 / alternating -154", "recommendation": "profile ngettext_found base vs head before landing; land if codegen noise"},
+             {"item": "overlap with task/perf-regress-1023-1105 (same back-out, not in next)", "recommendation": "land one; the back-out branch carries the full removal of the unused legacy/boundary pieces"}],
+ "informational": ["steady wl_trace hit the vDSO clock read under gdb (one-second recheck on the traced call): rerun with a larger --skip", "brief named cbench_locale; the gettext rows are in cbench_opt"],
+ "refused": [],
+ "jobs": ["mei:perf-gettext-language-steady-gate2", "mei:perf-gettext-language-steady-plants2", "mei:perf-gettext-language-steady-before", "mei:perf-gettext-language-steady-after"],
+ "improvement": "sync_role while a count job runs in the role silently left the old tree, and the gate then selected 0 suites and passed; the gate should fail on 0 selected targets when code changed",
+ "next_step": "profile ngettext_found base vs head; then the shared found path (matches 74 i, hit 147 i)",
+ "report_file": "handoff/perf-gettext-language-steady.md"}

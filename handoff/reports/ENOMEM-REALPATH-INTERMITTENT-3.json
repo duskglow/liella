@@ -1,0 +1,12 @@
+{"task": "ENOMEM-REALPATH-INTERMITTENT-3", "model": "opus", "tokens": null,
+ "result": "heap statistics ruled out: uordblks never read below the bytes live throughout under 16-thread churn on 2 NUMA nodes (10M samples, bound reached exactly); stress test added, no product change; original cause still not proven",
+ "branch": "task/enomem-realpath-intermittent-3", "head": "7b53d176",
+ "gate": {"affected": "direct tier rc 0 (enomem-realpath-intermittent-3-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["search_nomem hcreate_and_hsearch_fail_with_the_table_intact does not read uordblks (RLIMIT_AS in a forked child): a different mechanism; its failure text is needed", "the heap test commits carry WIP: subjects (no amend/squash allowed by the git rules); the code in them is final"],
+ "refused": [],
+ "improvement": "the plants file format takes | as a field separator with no escape: a lit: pattern containing | fails its baseline (rc 2) and costs a run; the tool could reject it at parse time with a clear message",
+ "next_step": "land with -2's guard; on the next enomem_fs_walk sighting compare before with the printed baseline: equal means after is high (a rare failure-path leak), not the counter",
+ "report_file": "handoff/ENOMEM-REALPATH-INTERMITTENT-3.md",
+ "jobs": ["enomem-realpath-intermittent-3-gate", "enomem-realpath-intermittent-3-plants2"]}

@@ -1,5 +1,5 @@
 //! The Taylor tables of the `double` `erf`/`erfc` fast tier (`liella_math::fast_special`),
-//! appended to `crates/math/src/coeffs/tables.rs` by `cargo xtask tables`.
+//! written to `crates/math/src/coeffs/erf.rs` by `cargo xtask tables`.
 //!
 //! **Slots.** An operand `x` in a table's range falls in the slot of its exponent and its four
 //! leading fraction bits: `[2^e·(1 + j/16), 2^e·(1 + (j+1)/16))`. The slot's centre

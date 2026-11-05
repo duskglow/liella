@@ -584,8 +584,11 @@ pub fn run_remez(root: &Path, args: &[String]) -> Result<(), String> {
     sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "remez", "--"]).args(args))
 }
 
-/// `cargo xtask tables [--check]`: the elementary functions' constant tables (D-10.3).
+/// `cargo xtask tables [--check]`: the elementary functions' constant tables (D-10.3), then
+/// `crates/math/KERNELS.md` ([`crate::kernel_index`]).
 pub fn run_tables(root: &Path, args: &[String]) -> Result<(), String> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(args))
+    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(args))?;
+    // The kernel index rides on the same generate/check step (LIBM-KERNEL-INDEX).
+    crate::kernel_index::run(root, args.iter().any(|a| a == "--check"))
 }

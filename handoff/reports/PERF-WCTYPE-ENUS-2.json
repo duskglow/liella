@@ -1,0 +1,12 @@
+{"task": "PERF-WCTYPE-ENUS-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: en_US wide class/case rows improved 19-30 instr (towupper_l_en_us at parity 39/39); -1's C.UTF-8 regression (isw/wtrans no longer inlined) fixed with inline(always); target 1.05x not reached for CJK class rows (61/49, 70/47, 76/43)",
+ "branch": "task/perf-wctype-enus-2", "head": null,
+ "gate": {"affected": "affected: ok (rc 0)", "peak": "3.9G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["newlocale_free +0.5 and fnmatch_casefold_en_32 +0.3 instr/op are within run-to-run spread (unchanged glibc moved -3.7/-0.6 in the same job)",
+                   "first percall/counts attempt rc 2: base 7e918cfe3 was not primed on shiki (fixed with validation/wl_prime_base.sh)"],
+ "refused": [],
+ "improvement": "a per-host check in the brief's developer flow that the percall base is primed would have saved one rc-2 round",
+ "next_step": "profile iswctype_en_us (76 vs iswalpha 61: likely mask decode or out-of-line path), then try the lazy BMP bit cache / Table3 offsets resolved once for the walk",
+ "report_file": "handoff/PERF-WCTYPE-ENUS.md",
+ "jobs": ["shiki:perf-wctype-enus-2-gate", "shiki:perf-wctype-enus-2-plants", "shiki:perf-wctype-enus-2-percall2", "shiki:perf-wctype-enus-2-counts2"]}

@@ -1,5 +1,5 @@
 //! The Taylor tables of the `double` `lgamma`/`tgamma` fast tier (`liella_math::fast_gamma`),
-//! appended to `crates/math/src/coeffs/tables.rs` by `cargo xtask tables` after the erf tables.
+//! written to `crates/math/src/coeffs/gamma.rs` by `cargo xtask tables`.
 //!
 //! **Coefficients.** At `c > 0`, `ln Γ(c + t) = Σ p_k t^k` with `p_0 = ln Γ(c)`, `p_1 = ψ(c)` and
 //! `p_k = (−1)^k ζ(k, c)/k` for `k >= 2` (`ψ^(n)(c) = (−1)^(n+1) n! ζ(n+1, c)`, Abramowitz and

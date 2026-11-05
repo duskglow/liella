@@ -1,0 +1,7 @@
+# XTASK-PLANTS-PRODUCTS-REBUILD self-test plants (cargo xtask plants on this file):
+# u1: a unit-test-only command; the baseline products must not be rebuilt (its line says "not rebuilt").
+# pr: product code seen only through a products test (diag_products links target/liella/libc.a); before this change it SURVIVED.
+# u2: a unit-test-only command after pr; the products are first rebuilt unmutated (u2.so-restore.log).
+u1 | xtask/src/plants.rs | lit:const DEFAULT_TIMEOUT: u64 = 600; ==> const DEFAULT_TIMEOUT: u64 = 601; | cargo test -p xtask --bin xtask default_timeout | msg:default_timeout_is_600_seconds.*FAILED|panicked
+pr | crates/core/src/diag.rs | lit:"Operation not permitted\0" ==> "Operation not permittee\0" | cargo test -p liella --test diag_products | msg:diagnostics_equal_the_reference.*FAILED|lines that differ
+u2 | xtask/src/plants.rs | lit:const TIMED_OUT: i32 = 124; ==> const TIMED_OUT: i32 = 125; | cargo test -p xtask --bin xtask a_plant_that_times_out | msg:a_plant_that_times_out_is_caught.*FAILED|panicked

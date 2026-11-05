@@ -1,0 +1,6 @@
+# PARITY-STRCMP-AVX2 plants (format: docs/plants.md). Every plant mutates the AVX2 strcmp kernel's 128-byte path.
+fold-drop-block3 | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)vpminub %ymm8, %ymm6, %ymm10/$1vpminub %ymm6, %ymm6, %ymm10/s | cargo test -p liella-boundary --test machine_scanners strcmp | msg:strcmp.*(FAILED|panicked)|signal: 11|SIGSEGV
+locate-half | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)addq \$64, %rax(\s+\.Lstrcmp_v_locate128_at:)/$1addq \$32, %rax$2/s | cargo test -p liella-boundary --test machine_scanners strcmp | msg:strcmp.*(FAILED|panicked)
+group-count | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)shrl \$7, %ecx/$1shrl \$6, %ecx/s | cargo test -p liella-boundary --test machine_scanners strcmp | msg:strcmp.*(FAILED|panicked)|signal: 11|SIGSEGV
+top-limit | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)subl \$3968, %ecx/$1subl \$4032, %ecx/s | cargo test -p liella-boundary --test machine_scanners strcmp | msg:strcmp.*(FAILED|panicked)|signal: 11|SIGSEGV
+group-step | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)subq \$-128, %rax/$1subq \$-160, %rax/s | cargo test -p liella-boundary --test machine_scanners strcmp | msg:strcmp.*(FAILED|panicked)|signal: 11|SIGSEGV
