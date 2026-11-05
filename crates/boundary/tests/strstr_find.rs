@@ -413,3 +413,55 @@ fn strstr_filter_switch_keeps_every_candidate() {
     selftest::set_scan_avx2(false);
     liella_boundary::cpu::init();
 }
+
+#[test]
+fn strstr_dense_last_byte_then_first_byte_stream_keeps_every_candidate() {
+    // Clauses: s4_6_c_0 (D-4.28). STRSTR-SHORT-DENSE-PARITY-4: a one-stream stop on the last needle
+    // byte close to the previous one tests its group for a pair and for the first needle byte; with
+    // neither, the scan goes on with a one-stream filter on the first byte. 'a's, then from `d` a run
+    // of "xe" (the last byte every 2 bytes, never a candidate) of length `run`, then the needle or
+    // the terminator (a copy of the needle past its group), so both lie at every offset of the groups after
+    // the switch; an optional lone
+    // first byte `n` at `d + c` in the run: in the switch group (pair mode follows), or later (a
+    // first-byte stop that is a false candidate, c even, or no candidate at all, c odd).
+    let _g = level();
+    set_ctype(b"C\0");
+    let nd = b"needle";
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for d in [100usize, 200, 900] {
+            for c in [None, Some(0usize), Some(3), Some(130), Some(700), Some(701)] {
+                for run in (0..1100usize).step_by(5).chain([255, 256, 257, 511, 512]) {
+                    for found in [false, true] {
+                        for align in [0usize, 16, 33] {
+                            let start = align + d;
+                            let n = start + run + if found { nd.len() } else { 0 };
+                            // A copy of the needle 130 bytes after the terminator, past the terminator's
+                            // 128-byte group: a scan that misses the terminator finds that copy.
+                            let bait = n + 1 + 130;
+                            let mut h = vec![b'a'; bait + nd.len() + 1];
+                            h[bait..bait + nd.len()].copy_from_slice(nd);
+                            h[bait + nd.len()] = 0;
+                            for i in 0..run {
+                                h[start + i] = if i % 2 == 0 { b'x' } else { b'e' };
+                            }
+                            if let Some(c) = c.filter(|&c| c < run) {
+                                h[start + c] = b'n';
+                            }
+                            if found {
+                                h[start + run..n].copy_from_slice(nd);
+                            }
+                            h[n] = 0;
+                            let want = naive(&h[align..n], nd, false);
+                            let r = s::strstr(h[align..].as_ptr().cast(), c"needle".as_ptr());
+                            let got = (!r.is_null()).then(|| r as usize - h[align..].as_ptr() as usize);
+                            assert_eq!(got, want, "avx2={avx2} d={d} c={c:?} run={run} found={found} align={align}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
