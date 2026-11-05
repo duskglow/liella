@@ -154,6 +154,51 @@ fn double_fast_arguments_seeded(n: u64, seed: u64) -> Vec<(f64, f64)> {
     v
 }
 
+// ARCH(x86_64): the in-place fast entry of the sin/cos/tan exports (s10_3_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_trig_in_place_entry_matches_the_envelope() {
+    // Clauses: s10_3_f_0.
+    // Under the default control word sin, cos, tan (double and float) take the in-place entry;
+    // DAZ set (no effect on a normal argument) forces the full envelope. Bits and the flags left
+    // in MXCSR must agree, and a normal result raises inexact and nothing else.
+    type D = extern "C" fn(f64) -> f64;
+    type F = extern "C" fn(f32) -> f32;
+    let ds: [(&str, D); 3] = [("sin", m::sin), ("cos", m::cos), ("tan", m::tan)];
+    let fs: [(&str, F); 3] = [("sinf", m::sinf), ("cosf", m::cosf), ("tanf", m::tanf)];
+    let mut xs = vec![0.0, -0.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 1e-30, -1e-9, 1e-9, 1.0, 0.5, -2.5, 355.0, 1e5, 1e6, 3e6, 1e300];
+    let mut s = 0x9e37_79b9_7f4a_7c15u64;
+    for i in 0..3000u32 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        let u = (s >> 11) as f64 / 9_007_199_254_740_992.0;
+        xs.push((u - 0.5) * if i % 3 == 0 { 4e6 } else { 40.0 });
+    }
+    let mut bad = Vec::new();
+    let mut checked = 0usize;
+    for &x in &xs {
+        for (name, f) in ds {
+            let (a, b) = (around(0x1f80, || f(x).to_bits()), around(0x1fc0, || f(x).to_bits()));
+            if (a.0, a.1 & !0x40) != (b.0, b.1 & !0x40) || (x.abs() > 1e-12 && x.abs() < 1e7 && a.1 & 0x3f != 0x20) {
+                bad.push(format!("{name}({x:e}): {a:x?} vs {b:x?}"));
+            }
+            checked += 1;
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        let xf = x as f32;
+        for (name, f) in fs {
+            let (a, b) = (around(0x1f80, || u64::from(f(xf).to_bits())), around(0x1fc0, || u64::from(f(xf).to_bits())));
+            if (a.0, a.1 & !0x40) != (b.0, b.1 & !0x40) || (xf.abs() > 1e-6 && xf.abs() < 1e7 && a.1 & 0x3f != 0x20) {
+                bad.push(format!("{name}({xf:e}): {a:x?} vs {b:x?}"));
+            }
+            checked += 1;
+        }
+    }
+    bad.truncate(20);
+    assert!(bad.is_empty(), "{} of {checked}: {}", bad.len(), bad.join("\n"));
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 // ARCH(x86_64): the in-place fast entry of the double exp/log/pow exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
 #[test]
 fn math_double_fast_entry_matches_the_envelope_in_every_mode() {

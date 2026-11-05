@@ -724,6 +724,34 @@ mod fast {
             }
         }
 
+        /// `settle_nearest` at the edges of its test (PERF-LIBM-TRIG; no spec clause): it answers
+        /// `y.hi` when `y.lo` is more than `eps` short of the rounding boundary (half an ulp, a
+        /// quarter below a power of two), refuses at and within `eps` of it, refuses a zero `y.lo`
+        /// (no inexact addition would be raised) and a NaN bound.
+        #[test]
+        fn trig_nearest_rounding_test_edges() {
+            let eps = f64::from_bits(0x3c00_0000_0000_0000); // 2^-63
+            let half = f64::from_bits(0x3ca0_0000_0000_0000); // 2^-53 = half ulp(1.0 .. 2.0)
+            let y = |hi: f64, lo: f64| Dd { hi, lo };
+            let bits = |v: Option<f64>| v.map(f64::to_bits);
+            for sign in [1.0, -1.0] {
+                let (h, e) = (1.5 * sign, eps);
+                // Above one: the boundary is `half` away on both sides.
+                assert_eq!(bits(settle_nearest(y(h, 0.25 * half), e)), Some(h.to_bits()));
+                assert_eq!(bits(settle_nearest(y(h, sign * (half - 4.0 * e)), e)), Some(h.to_bits()));
+                assert_eq!(bits(settle_nearest(y(h, sign * (half - 0.5 * e)), e)), None);
+                assert_eq!(bits(settle_nearest(y(h, sign * half), e)), None);
+                assert_eq!(bits(settle_nearest(y(h, -sign * (half - 4.0 * e)), e)), Some(h.to_bits()));
+                assert_eq!(bits(settle_nearest(y(h, 0.0), e)), None);
+                assert_eq!(bits(settle_nearest(y(h, sign * 0.25 * half), f64::NAN)), None);
+                // A power of two: toward zero the boundary is a quarter ulp, half the distance.
+                let p = sign;
+                assert_eq!(bits(settle_nearest(y(p, -sign * (0.5 * half - 4.0 * e)), e)), Some(p.to_bits()));
+                assert_eq!(bits(settle_nearest(y(p, -sign * (0.5 * half - 0.5 * e)), e)), None);
+                assert_eq!(bits(settle_nearest(y(p, sign * (half - 4.0 * e)), e)), Some(p.to_bits()));
+            }
+        }
+
         /// Whether the fast path's own rounding test refuses `x` in round to nearest (function `i`).
         fn fast_refuses(i: usize, x: f64) -> bool {
             [sin, cos, tan][i](x, Rounding::Nearest).is_none()

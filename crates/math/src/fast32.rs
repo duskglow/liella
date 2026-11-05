@@ -1051,6 +1051,42 @@ mod tests {
         assert!(taken.iter().all(|&n| n > 100_000), "{taken:?}");
     }
 
+    /// The in-place entries on every `float` operand (PERF-LIBM-TRIG's proof; its own job, 3·2^32
+    /// calls): each answer is the accurate entry's in round to nearest, bit for bit and flag for flag.
+    /// (No spec clause: an implementation entry.)
+    #[test]
+    #[ignore]
+    fn trig_nearest_entries_agree_exhaustively() {
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get()) as u64;
+        let per = (1u64 << 32) / n + 1;
+        let taken: u64 = std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n)
+                .map(|t| {
+                    sc.spawn(move || {
+                        let mut taken = 0u64;
+                        for b in (t * per)..((t + 1) * per).min(1 << 32) {
+                            let x = f32::from_bits(b as u32);
+                            let got = [sin_nearest(x), cos_nearest(x), tan_nearest(x)];
+                            if got.iter().all(Option::is_none) {
+                                continue;
+                            }
+                            let want = [sin(x, Rounding::Nearest), cos(x, Rounding::Nearest), tan(x, Rounding::Nearest)];
+                            for (g, w) in got.iter().zip(want) {
+                                if let Some(v) = g {
+                                    taken += 1;
+                                    assert_eq!((x.to_bits(), v.to_bits(), Status::flags(Flags::INEXACT)), (x.to_bits(), w.0.to_bits(), w.1));
+                                }
+                            }
+                        }
+                        taken
+                    })
+                })
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
+        });
+        std::println!("trig in-place entries took {taken} of {} calls", 3u64 << 32);
+    }
+
     /// expm1_core's y is within its proved bound (|y/f - 1| ≤ 9.1·2^-53) of f = e^x - 1, f from the
     /// double-double `exp_dd` minus 1. Below |x| = 2^-20 exp_dd's absolute error (about 2^-104)
     /// is no longer far below 2^-53·|f|, so the grid starts there. (Clause M6-3: no spec clause.)
