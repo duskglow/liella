@@ -25,7 +25,7 @@ docs/saturation/22-f64-invtrig-hypot-fast-tier.md (renumbered from 21: next took
   not reached (atan 2.76x, atan2 1.54x).
 
 ## Jobs (shiki, ~/logs/<label>.log; files in ~/work/libm-f64-invtrig-hypot-tier-5/)
-libm-f64-invtrig-hypot-tier-5-gate (Direct tier), -plants (6/6 CAUGHT, no WARN), -counts (before/after),
+libm-f64-invtrig-hypot-tier-5-gate (escalated to FULL: 32 suites ok, 10851 passed, 0 failed; conformance 117/0), -plants (6/6 CAUGHT, no WARN), -counts (before/after),
 -check (clippy -D warnings, static, invtrig tests: rc 0). Superseded: -prep (Liella link line lacked libm.a; the
 math-gen and so parts were ok), -probe (evidence, rc 0).
 

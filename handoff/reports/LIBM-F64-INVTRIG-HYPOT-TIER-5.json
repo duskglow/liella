@@ -1,12 +1,28 @@
-{"task": "LIBM-F64-INVTRIG-HYPOT-TIER-5", "model": "opus", "tokens": null,
+{
+ "task": "LIBM-F64-INVTRIG-HYPOT-TIER-5",
+ "model": "opus",
+ "tokens": null,
  "result": "COMPLETE: -4's FULL gate green; merged origin/next; ERANGE underflow-to-zero row added for the double and float forms (probe-settled); atan kernel profiled and trimmed (folded pi/2, pi constants into const tables, bit-read index): atan 236.8->217.3, atan2 265.8->248.8, asin 325.1->314.7, acos 292.9->286.1, hypot unchanged, by instructions; target 1.05x not reached",
- "branch": "task/libm-f64-invtrig-hypot-tier-5", "head": "see git log (code head 3c1200b4)",
- "gate": {"affected": "FULL tier (escalated by the generated s10_math_gen.rs) running at hand-back; direct invtrig suite 3 passed / 0 failed; plants 6/6 CAUGHT", "peak": null},
+ "branch": "task/libm-f64-invtrig-hypot-tier-5",
+ "head": "31695b52 + this report commit (code head 3c1200b4)",
+ "gate": {
+  "affected": "FULL tier (escalated): 32 suites ok, 10851 passed / 0 failed, conformance 117/0; plants 6/6 CAUGHT",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["affected --base origin/next escalates every run of this story to FULL because the branch changes s10_math.tsv and the generated s10_math_gen.rs; landing ends that", "saturation section 21 was taken on next by LIBM-WIDE-DD-TIER; this story's section is now 22"],
+ "informational": [
+  "affected --base origin/next escalates every run of this story to FULL because the branch changes s10_math.tsv and the generated s10_math_gen.rs; landing ends that",
+  "saturation section 21 was taken on next by LIBM-WIDE-DD-TIER; this story's section is now 22"
+ ],
  "refused": [],
  "improvement": "sync_role.sh/vm_ssh.sh accept a host name but fail with 'invalid variable name' on an address (10.0.100.66); the error could say 'use the host name'",
  "next_step": "cut settle (37 instructions, now atan's largest phase), then the single-double-quotient + j/256 table design in saturation section 22",
  "report_file": "handoff/libm-f64-invtrig-hypot-tier.md",
- "jobs": ["shiki:libm-f64-invtrig-hypot-tier-5-gate", "shiki:libm-f64-invtrig-hypot-tier-5-plants", "shiki:libm-f64-invtrig-hypot-tier-5-counts", "shiki:libm-f64-invtrig-hypot-tier-5-check"]}
+ "jobs": [
+  "shiki:libm-f64-invtrig-hypot-tier-5-gate",
+  "shiki:libm-f64-invtrig-hypot-tier-5-plants",
+  "shiki:libm-f64-invtrig-hypot-tier-5-counts",
+  "shiki:libm-f64-invtrig-hypot-tier-5-check"
+ ]
+}
