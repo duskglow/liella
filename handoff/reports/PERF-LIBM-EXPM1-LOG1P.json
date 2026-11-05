@@ -1,0 +1,9 @@
+{"task": "PERF-LIBM-EXPM1-LOG1P", "model": "sonnet", "tokens": null,
+ "result": "CHECKPOINT: in-place f64 fast entries for expm1, log1p, exp10, cbrt wired and unit-tested; plants, f32 rows, FMA build and counts reading remain",
+ "branch": "task/perf-libm-expm1-log1p", "head": "see git", "gate": {"affected": "first gate 5895 passed / 1 failed (fixed, elem_products green); gate-2 running", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["two short heredocs were used early (python/commit message) before noting the no-heredoc rule", "agent machine has no cargo: all builds on the role"],
+ "refused": [], "improvement": "brief tools list: say that jobrun blocks in the foreground over ssh so detached chains need nohup with redirected stdio",
+ "next_step": "read counts.txt, add plants job and FMA/f32 work, write the saturation row",
+ "report_file": "handoff/PERF-LIBM-EXPM1-LOG1P.md",
+ "jobs": ["perf-libm-expm1-log1p-gate-2", "perf-libm-expm1-log1p-counts"]}
