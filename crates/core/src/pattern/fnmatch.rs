@@ -1125,6 +1125,24 @@ mod tests {
     extern crate std;
     use std::vec::Vec;
 
+    /// A bracket range holds both end points and nothing outside them, a negated one the reverse,
+    /// and `FNM_CASEFOLD` folds the range (the plain comparison is not used then).
+    // no spec clause: speed-up of the direct matcher; POSIX XCU 2.13.1 bracket expressions define the behaviour.
+    #[test]
+    fn direct_bracket_ranges_hold_both_ends_and_follow_case_folding() {
+        let c = |p: &[u8], s: &[u8], f: i32| direct(p, s, f, &Locale::C);
+        for (s, want) in [(b"`", false), (b"a", true), (b"b", true), (b"c", true), (b"d", false)] {
+            assert_eq!(c(b"[a-c]", s, 0), Some(want), "{s:?}");
+            assert_eq!(c(b"[!a-c]", s, 0), Some(!want), "{s:?}");
+        }
+        assert_eq!(c(b"[xa]", b"a", 0), Some(true));
+        assert_eq!(c(b"[xa]", b"b", 0), Some(false));
+        assert_eq!(c(b"[a-c]", b"B", 0), Some(false));
+        assert_eq!(c(b"[a-c]", b"B", CASEFOLD), Some(true));
+        assert_eq!(c(b"[A-C]", b"b", CASEFOLD), Some(true));
+        assert_eq!(c(b"[a]", b"A", CASEFOLD), Some(true));
+    }
+
     /// A `[` after the first `]` still opens a bracket: the last `]` of the pattern decides, and a
     /// run of equal ordinary characters stops before `*`, `?`, `[` and `\\` (the string holds the
     /// metacharacter itself there).
