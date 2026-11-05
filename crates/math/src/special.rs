@@ -21,6 +21,7 @@ use core::f64::consts::LN_2;
 use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
+use crate::fast_gamma;
 use crate::fast_special;
 use crate::float::{self, Exact, Float, Kind, Num};
 use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
@@ -274,8 +275,24 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     (lg, if s.neg { -1 } else { 1 })
 }
 
-/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1).
+/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1): for `double` the fast tier
+/// ([`crate::fast_gamma`]) first, then [`lgamma_accurate`].
 pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if fast_gamma::domain(xf, false) && xf != 1.0 && xf != 2.0 {
+            let r = fast_gamma::lgamma(xf, mode);
+            crate::stats::record("lgamma", r.is_some());
+            if let Some(((v, st), sign)) = r {
+                return ((F::from_bits(u128::from(v.to_bits())), st), sign);
+            }
+        }
+    }
+    lgamma_accurate(x, mode)
+}
+
+/// `lgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn lgamma_accurate<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return (r, 1);
@@ -296,8 +313,21 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     (mp::round(lg, mode), sign)
 }
 
-/// `tgamma(x)`.
+/// `tgamma(x)`: for `double` the fast tier ([`crate::fast_gamma`]) first, then [`tgamma_accurate`].
 pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if fast_gamma::domain(xf, true) {
+            if let Some(r) = from_fast("tgamma", fast_gamma::tgamma(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    tgamma_accurate(x, mode)
+}
+
+/// `tgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn tgamma_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;

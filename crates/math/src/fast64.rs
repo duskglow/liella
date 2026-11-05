@@ -205,6 +205,14 @@ pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
     exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
 }
 
+/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`).
+#[inline(always)]
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
+}
+
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
 ///
 /// `r = Fast2Sum(h, l)` of [`reduce_ln2`]: exact, since `h` is a multiple of `2^-80` and `|l| <
