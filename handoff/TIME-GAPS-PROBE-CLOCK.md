@@ -26,8 +26,16 @@ two places where a boundary fell between the probe's read and the call. They did
 cause, which can happen at any second.
 
 Reproduced with a diagnostic (`edge.c`, scratch only, not committed). It spins until
-`CLOCK_REALTIME` enters a new second, then does `time()`, `getdate("2030-06-15")`, `time()`. The
-result is under "Probe-settled" below.
+`CLOCK_REALTIME` enters a new second, then does `time()`, `getdate("2030-06-15")`, `time()`.
+Results on keke (Zen 1, `CONFIG_HZ=1000`), 3 runs of 20 edges per library:
+* `time()` was still in the previous second at 60 of 60 edges, for both programs.
+* Liella's getdate returned the new second at 60/60. The old probe would have printed a value (the
+  07:03 failure) at 60/60.
+* The reference's getdate returned `time()`'s second at 60/60. The old probe would have printed
+  `cur` at 60/60.
+
+The failure is therefore deterministic whenever a call starts within the first tick of a second. It
+was rare only because few calls start in that 1 ms.
 
 ## Redesign (in force)
 
