@@ -8,10 +8,13 @@ bound 2^-71 (ruling #2916); -2 landed through #2970.
 ## Verified this run (head 34ef3835)
 * build1: math-gen (s10_math_gen.rs current), clippy of math+boundary, `fast_special` unit + integration tests,
   `math_fma_paths` (both builds bit-identical, flags): all green. lint1: `cargo xtask clippy` + `cargo xtask static` clean.
-* Plants: `cargo xtask plants handoff/libm-special-fast-tier-3-plants.txt --dir /dev/shm/claude/libm-special-fast-tier-4/plants-1`
-  (label libm-special-fast-tier-4-plants): result in the report json.
-* Gate (label libm-special-fast-tier-4-gate): `cargo xtask affected --run` escalates to FULL by itself because the
-  branch changes `s10_math.tsv` (a generator input); left running at hand-back if not finished.
+* Plants: run 1 (libm-special-fast-tier-4-plants, plants-1): 6 CAUGHT + erfc-normal-only WARN-NO-MSG (caught by
+  the correct-rounding assertion before the flag check: a subnormal scale gives a wrong value first); msg widened in
+  handoff/libm-special-fast-tier-3-plants.txt; run 2 (libm-special-fast-tier-4-plants-2, plants-2, same code):
+  7 CAUGHT, 0 SURVIVED, 0 WARN.
+* Gate (libm-special-fast-tier-4-gate, rc 0, 47 min): `cargo xtask affected --run` escalates to FULL by itself
+  because the branch changes `s10_math.tsv` (a generator input): 32 suites ok, 10838 passed / 0 failed,
+  conformance 117/0, peak 13G.
 
 ## Counts after (instr/call, validation/percall/libm_erf.c, base none; label libm-special-fast-tier-4-counts-after)
 | row | before (run 3) | after | reference FMA / -FMA | after/ref(-FMA) |
