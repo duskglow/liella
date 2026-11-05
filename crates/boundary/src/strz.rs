@@ -864,8 +864,13 @@ pub unsafe fn wcsz<'a>(p: *const i32) -> KResult<&'a [i32]> {
 pub unsafe fn find_str(h: *const i8, needle: &[u8]) -> KResult<Option<usize>> {
     // UNSAFE(slice): the shared search over the caller's string.
     // SAFETY: the caller's contract; `strpair` is the byte instance of the fused scanner.
-    unsafe { find_z(h.cast::<u8>(), needle, ffi::liella_machine_strpair, crate::conv::commonness) }
+    unsafe { find_z(h.cast::<u8>(), needle, ffi::liella_machine_strpair, crate::conv::commonness, STRPAIR_DENSE) }
 }
+
+/// `liella_machine_strpair`'s DENSE flag (bit 8 of `c0`): a dense run of the last needle byte is
+/// returned as a false candidate instead of switching the scan to the pair filter, so the search
+/// can move to the needle's rarest pair (STRSTR-SHORT-DENSE-PARITY). `wcspair` takes no flag.
+const STRPAIR_DENSE: i32 = 256;
 
 /// Needle bytes that [`find_str_n`] measures in its fused loop before it hands the rest to the
 /// length scanner.
@@ -887,8 +892,13 @@ pub unsafe fn find_str_n(h: *const i8, n: *const i8) -> KResult<Option<usize>> {
         return Err(Errno::EFAULT);
     }
     let (p, q) = (h.cast::<u8>(), n.cast::<u8>());
-    let mut i = 0usize;
-    let m = loop {
+    // A needle of up to 15 bytes away from both page ends: one vector step measures it and checks
+    // the haystack prefix (STRSTR-SHORT-DENSE-PARITY); 16 = the haystack is shorter; 17 = the loop.
+    let r = ffi::liella_machine_strprefix(p, q);
+    if r == 16 {
+        return Ok(None);
+    }
+    let m = if r < 16 { r } else { let mut i = 0usize; loop {
         if i == SHORT_NEEDLE {
             // UNSAFE(slice): measuring the needle from byte i, after i text bytes.
             // SAFETY: bytes [0, i) of the needle were not NUL, so byte i lies in the string.
@@ -914,7 +924,7 @@ pub unsafe fn find_str_n(h: *const i8, n: *const i8) -> KResult<Option<usize>> {
             return Ok(None);
         }
         i = i.wrapping_add(1);
-    };
+    } };
     if m == 0 {
         return Ok(Some(0));
     }
@@ -924,7 +934,7 @@ pub unsafe fn find_str_n(h: *const i8, n: *const i8) -> KResult<Option<usize>> {
     crate::cpu::ready();
     // UNSAFE(slice): the search after the prefix check.
     // SAFETY: haystack bytes [0, m - 1) are text (checked above); `strpair` keeps the contract.
-    unsafe { find_known(p, needle, ffi::liella_machine_strpair, crate::conv::commonness) }
+    unsafe { find_known(p, needle, ffi::liella_machine_strpair, crate::conv::commonness, STRPAIR_DENSE) }
 }
 
 /// `wcsstr`'s search (STRSTR-VEC): [`find_str`] over 4-byte units (`liella_machine_wcspair`; a
@@ -944,11 +954,12 @@ pub unsafe fn find_wcs(h: *const i32, needle: &[i32]) -> KResult<Option<usize>> 
     }
     // UNSAFE(slice): the shared search over the caller's aligned wide string.
     // SAFETY: the caller's contract; `h` is 4-byte aligned (checked above).
-    unsafe { find_z(h, needle, ffi::liella_machine_wcspair, crate::conv::unit_commonness) }
+    unsafe { find_z(h, needle, ffi::liella_machine_wcspair, crate::conv::unit_commonness, 0) }
 }
 
 /// The search of [`find_str`] and [`find_wcs`] over units `T`, with the fused scanner `kernel`
-/// and the rarity rank `rank`. Loop invariant: the units before `from + o1` are text (none is
+/// and the rarity rank `rank`; `dense` is ORed into `c0` until the pair is tuned (`STRPAIR_DENSE`
+/// for `strpair`, 0 for a kernel without the flag). Loop invariant: the units before `from + o1` are text (none is
 /// the terminator), and unit `from + o1` is at or before the terminator, which is the
 /// scanner's proof obligation for the start `p + from + o1` and the distance `o1 - o0`.
 ///
@@ -961,6 +972,7 @@ unsafe fn find_z<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::Unit
     needle: &[T],
     kernel: extern "C" fn(*const T, usize, i32, i32) -> usize,
     rank: fn(T) -> u8,
+    dense: i32,
 ) -> KResult<Option<usize>> {
     if p.is_null() {
         return Err(Errno::EFAULT);
@@ -975,7 +987,7 @@ unsafe fn find_z<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::Unit
     crate::cpu::ready();
     // UNSAFE(slice): the search after the prefix check.
     // SAFETY: units [0, last) at `p` are text (checked above); the caller's contract for `kernel`.
-    unsafe { find_known(p, needle, kernel, rank) }
+    unsafe { find_known(p, needle, kernel, rank, dense) }
 }
 
 /// [`find_z`] after its checks: `needle` is not empty, units [0, needle.len() - 1) at `p` are
@@ -991,16 +1003,20 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
     needle: &[T],
     kernel: extern "C" fn(*const T, usize, i32, i32) -> usize,
     rank: fn(T) -> u8,
+    dense: i32,
 ) -> KResult<Option<usize>> {
     let m = needle.len();
     let last = m.saturating_sub(1);
     let (mut o0, mut o1) = (0usize, last);
     let mut tuned = m < 2;
+    // The scanner's DENSE flag while the pair is untuned: a dense run of c1 comes back as a false
+    // candidate, so the rarer pair below takes over (STRSTR-SHORT-DENSE-PARITY).
+    let mut flag = if tuned { 0 } else { dense };
     let (mut from, mut wasted) = (0usize, 0usize);
     loop {
         let (Some(&c0), Some(&c1)) = (needle.get(o0), needle.get(o1)) else { return Ok(None) };
         let q0 = from.saturating_add(o1);
-        let r = kernel(p.wrapping_add(q0), o1.saturating_sub(o0), c0.into(), c1.into());
+        let r = kernel(p.wrapping_add(q0), o1.saturating_sub(o0), c0.into() | flag, c1.into());
         let k = r >> 1;
         if r & 1 == 1 {
             // UNSAFE(slice): the one unit the scanner reported as the terminator.
@@ -1030,6 +1046,7 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
         if !tuned {
             // o1 stays at most `last`, so the invariant holds for the new pair.
             tuned = true;
+            flag = 0;
             (o0, o1) = crate::conv::rare_pair_by(needle, rank);
         }
     }

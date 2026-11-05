@@ -285,11 +285,19 @@ unsafe extern "C" {
     /// in [p, q]; `2k + 1` when `p + k` is the first NUL at or after `p` and no candidate precedes
     /// it. Proof obligation: the `off` bytes before `p` are string bytes before its NUL and `p` is
     /// at or before that NUL (`crate::strz::find_str`). Loads past the NUL stay in its page.
+    /// With bit 8 of `c0` set (DENSE; the low byte is the unit) a dense run of `c1` may also
+    /// return `2k` for a text byte `p + k` that is not a candidate, with no candidate before it.
     pub(crate) safe fn liella_machine_strpair(p: *const u8, off: usize, c0: i32, c1: i32) -> usize;
     /// `liella_machine_strpair` over 4-byte units (`wcsstr`; `off` and the answer in units).
     /// Proof obligation: as `liella_machine_strpair` in units, and `p` 4-byte aligned
     /// (`crate::strz::find_wcs`).
     pub(crate) safe fn liella_machine_wcspair(p: *const i32, off: usize, c0: i32, c1: i32) -> usize;
+    /// `strstr`'s short-needle setup (STRSTR-SHORT-DENSE-PARITY): `m` (0..15) when the needle at `n`
+    /// has `m` bytes and the first NUL of `h` is at `h + m` or later; 16 when `h` is shorter than
+    /// the needle; 17 when undecided (a needle of 16 bytes or more, or a string within 15 bytes of
+    /// its page end). Proof obligation: `h` and `n` are readable NUL-terminated strings
+    /// (`crate::strz::find_str_n`). Loads: 16 bytes at each, only inside its page.
+    pub(crate) safe fn liella_machine_strprefix(h: *const u8, n: *const u8) -> usize;
     /// The address of the first entry of the NULL-terminated array `env` (0: none) that is the
     /// `len` bytes at `name` followed by `=`, or 0 (byte loop, never past an entry's NUL).
     /// Proof obligation: `env` is 0 or the address of a NULL-terminated array of pointers to

@@ -384,6 +384,61 @@ fn strstr_large_haystacks_find_every_position_in_the_wide_groups() {
 }
 
 #[test]
+fn strstr_dense_last_byte_run_hands_over_to_the_rare_pair() {
+    // Clauses: s4_6_c_0 (D-4.28). STRSTR-SHORT-DENSE-PARITY: a clean start (one-stream filter on the
+    // last needle byte), then a run of that byte every 2 bytes, optionally followed by a run of the
+    // byte the rarest pair ends on; the dense stop hands the search a false candidate just before
+    // the stopping 128-byte group and the next call scans with the rarest pair. The match at every
+    // position across both runs, the terminator at every position in them (a copy of the needle
+    // after it), four alignments to a 128-byte group, needles whose rarest pair keeps or moves the
+    // last byte ("needle" ends its pair on 'l', "lee" on its second byte, "ne" and "xel" keep it).
+    let _g = level();
+    set_ctype(b"C\0");
+    let mut buf = vec![0u8; 128 + 128 + 1100 + 700 + 64];
+    let base = buf.as_ptr().align_offset(128);
+    let mut nbuf = Vec::new();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for nd in [&b"needle"[..], b"ne", b"lee", b"xel"] {
+            for d in [40usize, 200, 1100] {
+                for lrun in [0usize, 160] {
+                    let run = 300;
+                    let full = d + run + lrun + 40;
+                    let mut h = vec![b'a'; full];
+                    for i in (d..d + run).step_by(2) {
+                        h[i] = b'x';
+                        h[i + 1] = nd[nd.len() - 1];
+                    }
+                    for i in (d + run..d + run + lrun).step_by(3) {
+                        h[i] = b'l';
+                    }
+                    let mut cases: Vec<(usize, Option<usize>)> = Vec::new();
+                    for pos in d.saturating_sub(8)..d + run + lrun + 8 {
+                        cases.push((full, Some(pos)));
+                    }
+                    for n in d..d + run + lrun + 8 {
+                        cases.push((n, None));
+                    }
+                    for (n, pos) in cases {
+                        let mut t = h[..n].to_vec();
+                        if let Some(p) = pos {
+                            t[p..p + nd.len()].copy_from_slice(nd);
+                        }
+                        let want = naive(&t, nd, false);
+                        for align in [0usize, 1, 33, 100] {
+                            let got = call(buf[base + align..].as_mut_ptr(), &t, nd, &mut nbuf, false, true);
+                            assert_eq!(got, want, "avx2={avx2} nd={nd:?} d={d} lrun={lrun} n={n} pos={pos:?} align={align}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+#[test]
 fn strstr_filter_switch_keeps_every_candidate() {
     // Clauses: s4_6_c_0 (D-4.28). STRSTR-ADAPTIVE-FILTER-EXP: a haystack whose start holds no
     // last needle byte runs the one-stream filter; a lone last byte ("decoy") is a one-stream stop

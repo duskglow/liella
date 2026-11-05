@@ -6729,6 +6729,10 @@ strncmp:
  * Returns 2*k when q = p + k is the first candidate and no unit in [p, q] is 0; returns 2*k + 1
  * when p + k is the first 0 unit at or after p and no candidate lies before it. c0/c1 are the
  * unit values (strpair: 0..255); c1 is never 0 in the callers, so the terminator is no candidate.
+ * strpair's c0 may carry DENSE (bit 8, 256; only the low byte is the unit): then a one-stream
+ * stop closer than 1024 bytes to the previous one (AVX2) returns 2*k for the unit p + k just
+ * before the stopping group, which is text and not a candidate, and no candidate lies before
+ * it: a FALSE candidate the caller verifies like any other (STRSTR-SHORT-DENSE-PARITY).
  *
  * Contract (the Rust caller `strz::find_str` / `find_wcs` keeps it): the off units before p are
  * units of the string before its terminator (readable, none 0), and p lies in the string (at or
@@ -6763,7 +6767,7 @@ liella_machine_strpair:
 	movq %rax, %r9
 	subq %rsi, %r9
 	movzbl (%r9), %r10d
-	cmpl %edx, %r10d
+	cmpb %dl, %r10b
 	je .Lliella_machine_strpair_unit_cand
 1:
 	addq $1, %rax
@@ -6778,6 +6782,8 @@ liella_machine_strpair:
 	vpbroadcastb %xmm0, %ymm0
 	vpbroadcastb %xmm1, %ymm1
 	vpxor %xmm2, %xmm2, %xmm2
+	/* ecx keeps edx (c0 and the DENSE flag, bit 8) for the one-stream stop; c1 is in ymm1. */
+	movl %edx, %ecx
 	testl %r8d, %r8d
 	jnz .Lliella_machine_strpair_avx_loop
 	vmovdqu (%rax), %ymm3
@@ -6906,8 +6912,25 @@ liella_machine_strpair:
 	movq %rax, %rdx
 	cmpq $1024, %r10
 	jae .Lliella_machine_strpair_avx_loop
+	/* Dense with DENSE set (STRSTR-SHORT-DENSE-PARITY): hand the caller the unit before this
+	 * group as a false candidate (text, and no candidate lies at or before it), so it can choose
+	 * a rarer pair and call again; a 0 in the group goes to the block loop instead (the call
+	 * ends there). Without DENSE, the pair filter from this group's start. */
+	testl $256, %ecx
+	jnz .Lliella_machine_strpair_avx_dense
 	movl $1, %r8d
 	jmp .Lliella_machine_strpair_avx_loop128
+.Lliella_machine_strpair_avx_dense:
+	vmovdqa (%rax), %ymm5
+	vpminub 32(%rax), %ymm5, %ymm5
+	vpminub 64(%rax), %ymm5, %ymm5
+	vpminub 96(%rax), %ymm5, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	vptest %ymm5, %ymm5
+	jnz .Lliella_machine_strpair_avx_loop
+	vzeroupper
+	subq $1, %rax
+	jmp .Lliella_machine_strpair_unit_cand
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
 .Lliella_machine_strpair_sse_cand:
@@ -7019,6 +7042,51 @@ liella_machine_strpair:
 	addq $64, %rax
 	jmp .Lliella_machine_strpair_sse_loop64
 	.size liella_machine_strpair, .-liella_machine_strpair
+
+/* size_t liella_machine_strprefix(const char *h, const char *n) (STRSTR-SHORT-DENSE-PARITY): the
+ * needle length m of strstr's short needles and the haystack check the pair scan needs, in one
+ * 16-byte step each (SSE2). Returns m (0..15) when n's terminator is at n + m and h's first 0 byte
+ * is at h + m or later (bytes [0, m) of h are text); 16 when h's first 0 byte is before h + m (h
+ * is shorter than the needle, no match); 17 when it decides nothing: a needle of 16 bytes or more,
+ * or h or n within 15 bytes of its page end. Contract: h and n are readable NUL-terminated strings.
+ * Loads: 16 bytes at h and at n, each only when it stays inside its page (bytes past a terminator
+ * are read inside the terminator's page only and decide nothing). */
+	.section .text.liella_machine_strprefix,"ax",@progbits
+	.globl liella_machine_strprefix
+	.type liella_machine_strprefix, @function
+	.p2align 4
+liella_machine_strprefix:
+	movl %esi, %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	ja .Lliella_machine_strprefix_none
+	movl %edi, %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	ja .Lliella_machine_strprefix_none
+	movdqu (%rsi), %xmm0
+	movdqu (%rdi), %xmm1
+	pxor %xmm2, %xmm2
+	pcmpeqb %xmm2, %xmm0
+	pcmpeqb %xmm2, %xmm1
+	pmovmskb %xmm0, %ecx
+	pmovmskb %xmm1, %edx
+	testl %ecx, %ecx
+	jz .Lliella_machine_strprefix_none
+	bsfl %ecx, %eax
+	/* edx = the first 0 byte of h (16: none in the 16 bytes); h shorter than m: no match. */
+	orl $65536, %edx
+	bsfl %edx, %edx
+	cmpl %eax, %edx
+	jb .Lliella_machine_strprefix_short
+	ret
+.Lliella_machine_strprefix_short:
+	movl $16, %eax
+	ret
+.Lliella_machine_strprefix_none:
+	movl $17, %eax
+	ret
+	.size liella_machine_strprefix, .-liella_machine_strprefix
 	.section .text.liella_machine_wcspair,"ax",@progbits
 
 	.globl liella_machine_wcspair

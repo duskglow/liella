@@ -93,6 +93,7 @@ size_t liella_machine_pairscan(const void *h, size_t count, size_t off, int b0, 
 size_t liella_machine_pairscan_ci(const void *h, size_t count, size_t off, int b0, int b1, unsigned fl);
 size_t liella_machine_strpair(const char *p, size_t off, int c0, int c1);
 size_t liella_machine_wcspair(const int *p, size_t off, int c0, int c1);
+size_t liella_machine_strprefix(const char *h, const char *n);
 size_t liella_machine_env_find(const char *const *env, const char *name, size_t len);
 /* env_find's scan answering also its stop slot (ENVIRON-SMALL-CYCLE): rax = the entry (0: none),
  * rdx = its slot's address, or the NULL slot's on a miss (0 when env is 0); boundary's ffi.rs
