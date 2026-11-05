@@ -1,0 +1,9 @@
+{"task": "PERF-LIBM-LONGDOUBLE", "model": "sonnet", "tokens": null,
+ "result": "NOT READY: 192-bit first step for long double libm (3.5-4.3x fewer instructions on exp/log/trig/pow rows, none slower); gate red on clippy (fixed, not re-run), plants not verified on final head",
+ "branch": "task/perf-libm-longdouble", "head": "see git", "gate": {"affected": "not run (clippy red, fixed after)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "1.05x unreachable against x87 hardware instructions (expl 113x instructions, 58x time after)", "recommendation": "accept a budget row; table-driven exp/log in mpn is the next step"}],
+ "informational": ["special functions (erf, gamma, Bessel, hypotl) not touched beyond pack", "Mp::div_u64 split into 64-bit divisions was slower, reverted"],
+ "refused": [], "improvement": "jobrun blocks in the foreground; briefs should say to start it with nohup",
+ "next_step": "sync, clippy, static, gate, rerun plants on the final head", "report_file": "handoff/libm-longdouble.md",
+ "jobs": ["perf-libm-longdouble-counts3", "perf-libm-longdouble-counts-before"]}

@@ -107,7 +107,7 @@ fn undecided(st: &Status) -> bool {
     st.hw.0 & 0x40 != 0
 }
 
-pub use slow::*;
+pub(crate) use slow::*;
 
 macro_rules! dispatch1 {
     ($($name:ident),*) => {$(
