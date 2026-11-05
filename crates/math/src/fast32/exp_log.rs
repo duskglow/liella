@@ -25,14 +25,20 @@ pub(super) fn exp_core(x: f32, lo: f64, hi: f64, c: f64) -> Option<f64> {
     if !(x > lo && x < hi) {
         return None;
     }
-    let z = x * c;
+    Some(exp_z(x * c))
+}
+
+/// 2^(z/128) for |z| < 2^14.24: the reduction and polynomial of [`exp_core`] (whose proof
+/// covers every z in that range, the rounding of z itself aside).
+#[inline(always)]
+pub(super) fn exp_z(z: f64) -> f64 {
     let kd = z + SHIFT;
     let k = kd.to_bits() as i32;
     let r = z - (kd - SHIFT);
     let r2 = r * r;
     let p = (1.0 + E1 * r) + r2 * ((E2 + E3 * r) + r2 * E4);
     let s = EXP2_BITS[(k & 127) as usize].wrapping_add((i64::from(k >> 7) as u64) << 52);
-    Some(f64::from_bits(s) * p)
+    f64::from_bits(s) * p
 }
 
 /// ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.

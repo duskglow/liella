@@ -32,6 +32,8 @@ pub mod fast32;
 pub mod fast64;
 pub mod invtrig;
 pub mod fast_special;
+#[cfg(test)]
+pub(crate) mod oracle32;
 pub mod pow;
 pub mod trig;
 pub mod hyper;

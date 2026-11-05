@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-ERF-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: merged origin/next twice (hyperbolic, hyperbolic-3), both sides kept; erf kernels and tests moved to crates/math/src/fast32/erf.rs; one sweep oracle (next had no second helper); clippy and static clean; jobs running at hand-back",
+ "branch": "task/libm-f32-erf-4", "head": "fafbde3c",
+ "gate": {"affected": "running (libm-f32-erf-4-gate-2, escalated to FULL by generated coeff sources)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["origin/next moved mid-run (LIBM-F32-HYPERBOLIC-3 landed): the first jobs were killed and rerun on the second merge", "gate escalates to FULL for every erf branch: the generated coeff sources from LIBM-F32-ERF are in the diff against next"],
+ "refused": [],
+ "jobs": ["keke:libm-f32-erf-4-gate-2", "keke:libm-f32-erf-4-plants-2", "keke:libm-f32-erf-4-sweeps-2", "keke:libm-f32-erf-4-counts"],
+ "improvement": "the dispatcher could tell a merge-only continuation when next has moved since its brief, or CI could merge handoff-only/disjoint-hunk conflicts itself; per-family module files (started here) remove most of them",
+ "next_step": "read the four keke jobs; counts should match -3 (erff 180.2, erfcf 191.6) and the hyperbolic table",
+ "report_file": "handoff/libm-f32-erf.md"}

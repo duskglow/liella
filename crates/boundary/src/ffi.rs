@@ -308,13 +308,13 @@ unsafe extern "C" {
     /// `src` are valid for `n` bytes and disjoint (`crate::hot::avx2_erms`, `conv::copy_large`).
     pub(crate) safe fn liella_machine_copy_erms_a64(dst: *mut u8, src: *const u8, n: usize) -> *mut u8;
     /// The AVX2 copy (machine/scan.S). Proof obligation: the CPU has AVX2 and the OS saves the
-    /// YMM state (`crate::cpu::avx2`), `n >= 64`, and `dst` and `src` are valid for `n` bytes
-    /// and disjoint (from a `&mut [u8]` and a `&[u8]`: `crate::conv::copy_units`).
+    /// YMM state (`crate::cpu::avx2`), `n >= 128` (it holds a 128-byte end block), and `dst` and
+    /// `src` are valid for `n` bytes and disjoint (from a `&mut [u8]` and a `&[u8]`: `crate::conv::copy_units`).
     pub(crate) safe fn liella_machine_copy_avx2(dst: *mut u8, src: *const u8, n: usize);
     /// The same AVX2 copy for regions that may overlap (MEM-BULK; machine/scan.S, a second name
     /// for `liella_machine_copy_avx2`): `n` bytes from `s` to `d`; returns `d`. Proof obligation:
     /// the CPU has AVX2 and the OS saves the YMM state (`crate::dispatch::avx2` or
-    /// `crate::cpu::copy_avx2`), `n >= 64`, `d` valid for writing and `s` for reading `n` bytes
+    /// `crate::cpu::copy_avx2`), `n >= 128`, `d` valid for writing and `s` for reading `n` bytes
     /// (the `memmove` contract after its NULL tests: `crate::hot::move_rest`,
     /// `crate::conv::move_regions`; the internal copy's contract: `crate::hot::internal_large`).
     pub(crate) safe fn liella_machine_move_avx2(d: *mut u8, s: *const u8, n: usize) -> *mut u8;
