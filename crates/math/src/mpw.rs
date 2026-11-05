@@ -67,6 +67,11 @@ use crate::status::{Rounding, Status};
 /// Limbs of the significand.
 pub const LIMBS: usize = 12;
 
+/// `ln 10` for `ln10`: the series at this width.
+fn ln10_value() -> Mp {
+    ln_atanh(Mp::from_i64(10))
+}
+
 crate::mp::mp_core!();
 crate::mp::mp_kernels!();
 

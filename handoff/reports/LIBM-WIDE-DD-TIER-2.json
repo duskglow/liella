@@ -1,0 +1,18 @@
+{"task": "LIBM-WIDE-DD-TIER-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: x87 exp/log double-double tier (expl exp2l exp10l expm1l logl log2l log10l log1pl), correctly rounded; 28-66x fewer instructions and 27-56x fewer cycles than next; log10 exactness scan replaced; still 4-11x glibc cycles",
+ "branch": "task/libm-wide-dd-tier-2", "head": "e9f79044",
+ "gate": {"affected": "gate2 on aa1eaeae: affected ok, conformance 112 passed / 0 failed (rc 0); gate3 on final head started detached", "peak": "13G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "log10l/expm1l percall self-check MISMATCH vs glibc: glibc's last bit; Liella base and new agree (correctly rounded)",
+   "cycles (nico, booked, load 0.00, binaries of aa1eaeae; code identical on the final head): new/glibc 3.94 expl .. 11.41 log1pl; new/base 0.018-0.038",
+   "the long accuracy sweep (wide_dd --ignored) has never run: proposed in LIBM-WIDE-DD-EXPLOG-TRIM",
+   "proposed stories: LIBM-WIDE-DD-EXPLOG-TRIM, LIBM-WIDE-DD-TRIG, LIBM-WIDE-DD-INVTRIG, LIBM-WIDE-DD-HYPER, LIBM-WIDE-DD-POW (handoff/libm-wide-dd-tier.md)"
+ ],
+ "refused": [],
+ "jobs": ["libm-wide-dd-tier-2-gate3", "libm-wide-dd-tier-2-plants4", "libm-wide-dd-tier-2-percall4"],
+ "superseded": ["libm-wide-dd-tier-2-gate (killed, ssh-foreground jobrun)", "libm-wide-dd-tier-2-plants2 (killed, old head)", "libm-wide-dd-tier-2-percall (rc 1, no cargo env)", "libm-wide-dd-tier-2-gate2 / plants3 / percall3 (green on aa1eaeae; docs-only commits since)"],
+ "improvement": "jobrun runs in the foreground: the brief's example jobrun line over ssh blocks and dies with the ssh at the 10-min tool limit; the brief should show the nohup setsid ... </dev/null & form",
+ "next_step": "queue LIBM-WIDE-DD-EXPLOG-TRIM (mixed-precision Horner, direct dd->x87 rounding, long sweep), then TRIG/INVTRIG/HYPER/POW families",
+ "report_file": "handoff/libm-wide-dd-tier.md"}

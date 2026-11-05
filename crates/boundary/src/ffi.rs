@@ -355,6 +355,11 @@ unsafe extern "C" {
     /// written only by `crate::dispatch::select` (its proof obligation: `true` only while the CPU
     /// has AVX2 and the OS saves the YMM state).
     pub(crate) safe static liella_machine_avx2: core::sync::atomic::AtomicBool;
+    /// The `memset` entry's `rep stosb` word (machine/fold.S, MEMSET-4K-3): sizes above 256 with
+    /// `n >= word` set the first 64 bytes and run `rep stosb` from the next 64-byte boundary in
+    /// the entry itself. `usize::MAX` until the startup decision; written only by
+    /// `crate::cpu` (its proof obligation: never below 257, any value a correct fill).
+    pub(crate) safe static liella_machine_fill_erms_from: core::sync::atomic::AtomicUsize;
     /// The compare entries' 33-64 class word (machine/fold.S, MEMCMP-EQ64, SEQ-REGRESS): 32 only
     /// while NULL folding is on AND the AVX2 builds run, else 0; written only by `crate::dispatch`
     /// (its proof obligation: never nonzero while the fold limit is 0 or the AVX2 flag is false).

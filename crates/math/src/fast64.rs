@@ -32,8 +32,8 @@ const MARGIN: f64 = f64::from_bits(0x3b90_0000_0000_0000);
 const TAIL: f64 = f64::from_bits(0x3ce0_0000_0000_0000);
 /// 2^-100: covers the rounding of `lo ± eps` in [`settle`].
 const SLACK: f64 = f64::from_bits(0x39b0_0000_0000_0000);
-/// 1.5·2^52: adding and subtracting it rounds a value below 2^51 to an integer.
-const ROUND_INT: f64 = 6_755_399_441_055_744.0;
+/// 2^52: adding and subtracting it rounds a value in `[0, 2^52)` to an integer.
+const TWO52: f64 = 4_503_599_627_370_496.0;
 
 /// `x − k·c` for the stored Cody–Waite parts `c` (the arithmetic of `crate::exp_log::reduce`), for
 /// [`exp10`].
@@ -192,6 +192,17 @@ fn reduce_exp(x: f64, kf: f64) -> Dd {
 fn reduce_pow(z: Dd, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(z.hi, kf);
     fast_two_sum(h, l + z.lo)
+}
+
+/// `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and
+/// `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special`). The reduction is
+/// [`pow`]'s ([`reduce_pow`]: `r` within `2^-96.9` of `z − k·ln2/64`), so by [`exp_kernel`]'s proof
+/// `|e^z − y·2^m| <= |y|·(2^-49·|tail| + 2^-73.8)·2^m` (`th·2^-74 + 2^-101` over `|y| >= 0.994·th`,
+/// with the reduction's `2^-96.9`).
+#[inline(always)]
+pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
+    let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
+    exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
 }
 
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
@@ -854,8 +865,11 @@ pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, St
 
 /// [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade,
 /// where the grid is 2^-1074 throughout; anything at or above 2^-1022 falls back). In units of 2^-1074, `z = y·2^(m+1074)` (exact scaling,
-/// `m >= -1077`); `t` is the integer nearest `z.hi` (`z.hi < 2^51`), `d = (z.hi − t) + z.lo`
-/// (`z.hi − t` exact: `|z.hi − t| <= 1/2`). Nearest: `|d| + e < 1/2` makes `t` the rounding.
+/// `m >= -1077`); `t` is the integer nearest `z.hi` (`0 < z.hi < 2^52`, so `z.hi + 2^52` lies in
+/// `[2^52, 2^53)`, where the spacing is 1: adding and subtracting `2^52` rounds `z.hi` to an
+/// integer, ties to even), `d = (z.hi − t) + z.lo` (`z.hi − t` exact by Sterbenz: `t` is within
+/// `1/2` of `z.hi`, and `t = 0` only when `z.hi <= 1/2`). Nearest:
+/// `|d| + e < 1/2` makes `t` the rounding.
 /// Directed: `d` of one sign (with `|d| < 1`) puts `f(x)` strictly between `t` and `t ± 1`. The
 /// result `n·2^-1074` is formed by two multiplications, the last one producing the subnormal (so
 /// the caller's flush-to-zero, were it ever in force here, would show). The result is tiny before
@@ -866,11 +880,20 @@ fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)> {
     }
     let s = dd::pow2(m + 1074);
     let (zh, zl, ze) = (y.hi * s, y.lo * s, e * s);
-    if zh >= 2_251_799_813_685_248.0 {
-        return None; // 2^51
+    if zh >= TWO52 {
+        return None;
     }
-    let t = (zh + ROUND_INT) - ROUND_INT;
-    let d = (zh - t) + zl;
+    let t0 = (zh + TWO52) - TWO52;
+    let d0 = (zh - t0) + zl;
+    // `z.hi` a half-integer whose tie went to the other side of `z.hi + z.lo`: `|d0| <= 3/4`, and
+    // `t0 ± 1`, `d0 ∓ 1` are exact (integers below 2^53; Sterbenz), leaving `|d| <= 1/2`.
+    let (t, d) = if d0 > 0.5 {
+        (t0 + 1.0, d0 - 1.0)
+    } else if d0 < -0.5 {
+        (t0 - 1.0, d0 + 1.0)
+    } else {
+        (t0, d0)
+    };
     let (dn, up) = (d - ze, d + ze);
     let n = if mode == Rounding::Nearest {
         if dn <= -0.5 || up >= 0.5 {

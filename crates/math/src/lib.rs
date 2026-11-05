@@ -30,6 +30,7 @@ pub mod elem;
 pub mod exp_log;
 pub mod fast32;
 pub mod fast64;
+pub mod fast_special;
 #[cfg(test)]
 pub(crate) mod oracle32;
 pub mod pow;
@@ -41,6 +42,7 @@ pub mod mpx;
 pub mod mpy;
 pub mod special;
 pub mod wide;
+mod wide_dd;
 pub mod real;
 pub mod complex;
 pub mod ulp;

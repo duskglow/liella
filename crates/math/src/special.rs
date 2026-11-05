@@ -21,6 +21,7 @@ use core::f64::consts::LN_2;
 use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
+use crate::fast_special;
 use crate::float::{self, Exact, Float, Kind, Num};
 use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
 use crate::mpw;
@@ -123,8 +124,33 @@ fn erfc_cf_min<F: Float>() -> f64 {
     if F::PREC > 64 { 6.0 } else { 10.0 }
 }
 
-/// `erf(x)`.
+/// The `double` operand `x` (`F::PREC == 53` only).
+fn as_f64<F: Float>(x: F) -> f64 {
+    f64::from_bits(x.to_bits() as u64)
+}
+
+/// The fast tier's `double` result as `F` (`F::PREC == 53` only), counted for the fallback-rate
+/// tests (`crate::stats`).
+fn from_fast<F: Float>(name: &'static str, r: Option<(f64, Status)>) -> Option<(F, Status)> {
+    crate::stats::record(name, r.is_some());
+    r.map(|(v, st)| (F::from_bits(u128::from(v.to_bits())), st))
+}
+
+/// `erf(x)`: for `double` the fast tier ([`crate::fast_special`]) first, then [`erf_accurate`].
 pub fn erf<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("erf", fast_special::erf(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    erf_accurate(x, mode)
+}
+
+/// `erf(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn erf_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
@@ -142,8 +168,23 @@ pub fn erf<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     mp::round(signed(erf_mp(a.v), n.neg), mode)
 }
 
-/// `erfc(x)`.
+/// `erfc(x)`: for `double` the fast tier ([`crate::fast_special`]) first, then [`erfc_accurate`].
 pub fn erfc<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        // Finite, 2^-100 <= |x| (below, erfc x is 1 to the last place) and x below the fast
+        // range's end (erfc(−∞) = 2 is exact: the accurate path's).
+        if xf.is_finite() && dd::abs(xf) >= f64::from_bits(0x39b0_0000_0000_0000) && xf < fast_special::ERFC_MAX {
+            if let Some(r) = from_fast("erfc", fast_special::erfc(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    erfc_accurate(x, mode)
+}
+
+/// `erfc(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn erfc_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
@@ -236,7 +277,7 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     }
     // Γ(x) = π / (sin(πx) Γ(1 − x)).
     let s = sin_pi(x);
-    let lg = mp::ln_atanh(mp::pi()).sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
+    let lg = mp::ln_pi().sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
     (lg, if s.neg { -1 } else { 1 })
 }
 

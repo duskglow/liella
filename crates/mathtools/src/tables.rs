@@ -16,13 +16,13 @@ use crate::mp::{self, Big, Fmt, Round};
 /// Working precision of every constant (bits).
 const WORK: u32 = 400;
 
-fn f64_of(x: &Big) -> f64 {
+pub(crate) fn f64_of(x: &Big) -> f64 {
     let (b, _) = x.round_to(Fmt::F64, Round::Nearest);
     f64::from_bits(b as u64)
 }
 
 /// The double-double nearest `x`: (hi, lo) bit patterns.
-fn dd(x: &Big) -> (u64, u64) {
+pub(crate) fn dd(x: &Big) -> (u64, u64) {
     let hi = f64_of(x);
     let lo = f64_of(&x.sub(&Big::from_f64(hi)));
     (hi.to_bits(), lo.to_bits())
@@ -201,6 +201,7 @@ pub fn generate() -> String {
     let even_fact: Vec<Big> = (0..16i64).map(|k| Big::one().div(&fact(2 * k), p, Round::Nearest)).collect();
     o.dd_table("INV_EVEN_FACT", "`1/(2k)!` for k = 0..15 (cosine series).", &even_fact);
     mp_constants(&mut o);
+    crate::special_tables::emit(&mut o.src);
     o.src
 }
 
@@ -343,6 +344,8 @@ fn mp_constants(o: &mut Out) {
     o.mp_const("MP_PI", "`π` (mp::pi)", &pi);
     o.mp_const("MP_LN2", "`ln 2` (mp::ln2)", &mp::ln2(p));
     o.mp_const("MP_EULER", "Euler's constant `γ` (Brent–McMillan, `euler_gamma`)", &gamma);
+    o.mp_const("MP_LN10", "`ln 10` (mp::ln10)", &approx(mp::log(&Big::from_i64(10), p)));
+    o.mp_const("MP_LN_PI", "`ln π` (the reflection of `lgamma`)", &approx(mp::log(&pi, p)));
     let ln_2pi = approx(mp::log(&pi.mul_pow2(1), p));
     o.mp_const("MP_HALF_LN_2PI", "`ln(2π)/2`", &ln_2pi.mul_pow2(-1));
     let sqrt_pi = pi.sqrt(p, Round::Nearest);

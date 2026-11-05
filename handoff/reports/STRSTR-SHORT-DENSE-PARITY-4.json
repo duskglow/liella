@@ -1,0 +1,16 @@
+{"task": "STRSTR-SHORT-DENSE-PARITY-4", "model": "opus", "tokens": null,
+ "result": "strstr_dense_4k 947 -> 706 (Zen 1 glibc 830 pinned: 1.14x -> 0.85x) with a first-byte stream after a dense last-byte switch; ss_hit_1k 333 -> 328; no row slower; every strstr row <= 1.05x on Zen 1; Haswell-EP short rows (hit_short 1.45x, ss_hit_64 1.35x) open",
+ "branch": "task/strstr-short-dense-parity-4", "head": "see git log (report commit on top of 2c02a8f5; code head c95bb92a)",
+ "gate": {"affected": "direct tier strstr-short-dense-parity-4-gate2: affected ok, rc 0 (2 SKIPPED lines, capability absent)", "peak": "11G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Zen 1 glibc pinned reference: dense 830 (was 818 unpinned), ss_hit_64 167 (163.2), ss_hit_1k 348 (355.2)",
+   "Haswell-EP: strstr_hit_short 126 vs 87 (1.45x) and ss_hit_64 138 vs 102 (1.35x) above 1.05x; glibc pinned there by -3, not re-run this run (no role on that host; Liella AVX2 counts are host-independent)",
+   "plant c0loop-ypos WARN-NO-MSG: caught by strstr_filter_switch_keeps_every_candidate, not by the new test (its needle is followed by the terminator, whose stop in the same group resolves a missed candidate)",
+   "find_next's +4 on strstr_hit_4k recorded in the saturation row (ruling #2856)"],
+ "refused": [],
+ "improvement": "jobwait under `timeout 570` races its own 570 s limit (rc 124, lost one call); call jobwait bare",
+ "next_step": "Haswell-EP short rows: trace one strstr_hit_short call on the current head, aim at the Rust fixed cost (~46 before the kernel)",
+ "report_file": "handoff/strstr-short-dense-parity.md",
+ "jobs": ["keke:strstr-short-dense-parity-4-gate2", "keke:strstr-short-dense-parity-4-plants2", "keke:strstr-short-dense-parity-4-cnt2", "keke:strstr-short-dense-parity-4-final"]}
