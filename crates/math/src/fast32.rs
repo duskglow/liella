@@ -883,8 +883,10 @@ const ERFCX_MID: [f64; 6] = [1.25, 1.875, 2.8125, 4.218_75, 6.328_125, 8.421_875
 const ERF_SAT: f64 = 4.0;
 const ERF_ONE: f64 = 1.0 - 1.0 / 1_073_741_824.0;
 const ERFC_TWO: f64 = 2.0 - 1.0 / 536_870_912.0;
-/// erfc x is below 2^-126 from 9.19 on: subnormal results are the accurate path's.
-const ERFC_MAX: f64 = 9.25;
+/// erfc x is below 2^-126 from 9.194 on (erfc 9.1875 = 2^-125.8): subnormal results are the
+/// accurate path's, refused before the kernel (above this, [`round`] would refuse them after it).
+/// The last erfcx piece is fitted up to 37/4.
+const ERFC_MAX: f64 = 9.1875;
 
 /// erf v for |v| < 1 as v·P(v²), ε ≤ 7u: the fit 3.67u; s = RN(v²) moves P by under
 /// s·|P'/P|·u < 0.4u; Horner in s ∈ [0, 1) with |c_k s^k| falling by over 3 per step from
@@ -1512,7 +1514,7 @@ mod tests {
         let grid = (0..1u32 << 12).map(|i| -10.0 + 20.0 * (i as f32) / 4096.0);
         assert!(agree_in(&fs, grid) > 30_000);
         let mut edges = std::vec::Vec::new();
-        for e in [1.0f32, 1.5, 2.25, 3.375, 5.0625, 7.593_75, 4.0, 9.25] {
+        for e in [1.0f32, 1.5, 2.25, 3.375, 5.0625, 7.593_75, 4.0, 9.1875, 9.25] {
             for d in 0..8u32 {
                 for b in [e.to_bits() + d, e.to_bits() - 1 - d] {
                     edges.extend([f32::from_bits(b), -f32::from_bits(b)]);
@@ -1532,18 +1534,22 @@ mod tests {
     fn erf_cores_are_within_their_bounds() {
         assert!(ERF_DELTA as f64 >= 1.5 * ERF_BOUND + 1.0 && ERFC_DELTA as f64 >= 1.5 * ERFC_BOUND + 1.0);
         // Each erfcx piece [lo, hi) is centred on its ERFCX_MID (the fits' shift).
-        let ends = [1.0, ERFCX_LO[0], ERFCX_LO[1], ERFCX_LO[2], ERFCX_LO[3], ERFCX_LO[4], ERFC_MAX];
+        let ends = [1.0, ERFCX_LO[0], ERFCX_LO[1], ERFCX_LO[2], ERFCX_LO[3], ERFCX_LO[4], 37.0 / 4.0];
         for i in 0..6 {
             assert_eq!(ERFCX_MID[i], (ends[i] + ends[i + 1]) / 2.0, "erfcx piece {i} centre");
         }
         let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
-        // Every 40009th `float` in [2^-30, 9.25), both signs (ERF_SAT's saturation is the agreement tests').
+        // Every 40009th `float` in [2^-30, 9.25), both signs; erf and erfc's saturation at ERF_SAT
+        // and the refusal from ERFC_MAX are the agreement tests'.
         for b in (0x3080_0000u32..0x4114_0000).step_by(40_009).flat_map(|b| [b, b | 1 << 31]) {
             let x = f32::from_bits(b);
             let v = f64::from(x);
             if v.abs() < ERF_SAT {
                 let (y, f) = (erf_core(x).unwrap_or(f64::NAN), crate::special::erf(v, Rounding::Nearest).0);
                 assert!((y - f).abs() <= (ERF_BOUND - 1.0) * ulp(y), "erf_core({x:e}): {} ulp", (y - f) / ulp(y));
+            }
+            if v <= -ERF_SAT || v >= ERFC_MAX {
+                continue;
             }
             let (y, f) = (erfc_core(x).unwrap_or(f64::NAN), crate::special::erfc(v, Rounding::Nearest).0);
             assert!((y - f).abs() <= (ERFC_BOUND - 1.0) * ulp(y), "erfc_core({x:e}): {} ulp", (y - f) / ulp(y));
