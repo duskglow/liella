@@ -1,0 +1,13 @@
+{"task": "STRSTR-SHORT-DENSE-PARITY", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT: two designs (DENSE hand-back to the rare pair, SSE2 short-needle prefix step) measured slower on every strstr row; reverted, negative row recorded; parity not reached, no bound yet",
+ "branch": "task/strstr-short-dense-parity", "head": null,
+ "gate": {"affected": "not run on final head (docs-only net change); gate on 37e2ef81 killed when the counts came back slower", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["wl_percall base a65a823f numbers (hit_64 188, dense_4k 997) differ from the brief's (171.7, 1042): re-baseline before the next attempt", "wl_percall needed wl_prime_base.sh for the base sha (first counts job rc 1)", "the first baseline jobrun died queued when the local ssh holding it was stopped (never ran)"],
+ "refused": [],
+ "jobs": ["strstr-short-dense-parity-static"],
+ "superseded": ["strstr-short-dense-parity-counts2 (37e2ef81, rows slower; code reverted)", "strstr-short-dense-parity-plants (37e2ef81, 5 CAUGHT 2 EQUIVALENT; code reverted)", "strstr-short-dense-parity-gate (37e2ef81, killed)", "strstr-short-dense-parity-counts (rc 1, base not primed)", "strstr-short-dense-parity-before (never started)"],
+ "improvement": "start every perf story with wl_trace of the target rows and a fresh base (prime it) before writing code; this run spent its budget on queue waits and an unprofiled design",
+ "next_step": "re-baseline, trace one call of ss_hit_64 and strstr_dense_4k with validation/wl_trace.sh, write the per-phase split, then design",
+ "report_file": "handoff/strstr-short-dense-parity.md"}
