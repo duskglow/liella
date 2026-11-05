@@ -1,5 +1,5 @@
 {"task": "LIBM-F32-ERF-3", "model": "opus", "tokens": null,
- "result": "COMPLETE: tiered test oracle (ruling #2889) in crates/math/src/oracle32.rs; erff/erfcf exhaustive sweeps against it, mp needed for 0 modes; erff 228016 -> 180.2 instr/call, erfcf 191.6 (glibc 135.3 / 138.7)",
+ "result": "COMPLETE: tiered test oracle (ruling #2889) in crates/math/src/oracle32.rs; erff/erfcf exhaustive sweeps against it, mp needed for 4 of 1.7e10 modes (erff) and 0 (erfcf); erff 228016 -> 180.2 instr/call, erfcf 191.6 (glibc 135.3 / 138.7)",
  "branch": "task/libm-f32-erf-3", "head": null,
  "gate": {"affected": "see libm-f32-erf-3-gate on mei", "peak": null},
  "accepted_first_attempt": null,

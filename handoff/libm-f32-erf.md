@@ -27,7 +27,8 @@ Verdict of -3: COMPLETE once its gate is green (see the report json for the job 
 * Sizing, LIELLA_SWEEP_STRIDE=64, both functions: 26 s wall, 157 s CPU; mp needed for 0 modes.
 * Full sweep erfcf (`libm-f32-erf-3-sweep-erfcf`, 12 CPUs, test binary run from a RAM copy): rc 0, 643 s
   wall, 6432 s CPU, taken 7,405,707,468 of 2^34 calls, mp needed for 0 of 7,405,707,468 modes.
-* Full sweep erff (`libm-f32-erf-3-sweep-erff`, 12 CPUs): see the report json / hand-back (was running).
+* Full sweep erff (`libm-f32-erf-3-sweep-erff`, 12 CPUs): rc 0, 824 s wall, 4746 s CPU, taken
+  17,053,282,856 of 2^34 calls, mp needed for 4 of 17,053,282,856 modes (2.3e-10).
 * Counts (`libm-f32-erf-3-counts`, `cargo xtask bench --compare --counters cbench_libm`), instructions per
   call: erff 180.2 (before 228,016, the mp path; glibc 135.3), erfcf 191.6 (before not measured: the same mp
   path; glibc 138.7).
