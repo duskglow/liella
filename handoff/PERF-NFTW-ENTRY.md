@@ -42,3 +42,9 @@ Run -5 (sh2 on shiki, instructions:u per entry, nftw_phys_38, glibc 212.0 on thi
   matches. Fixed in the test by not starting the run within 2 s of a minute edge (holding the clock with "=" was tried and fails: that mode runs only the getdate part).
 * Plants run 2: the "." / ".." plant ran into the 600 s timeout (the walk goes up forever): not a message-checked catch. Replaced
   by a "." plant marked equivalent (the walk's repeat check skips the directory itself).
+* Final head: gate3 = 62 repeats of the getdate test over a minute, then affected --run, clippy -D warnings, static (one
+  job, ~45 min, still running at hand-back; the dispatcher reads perf-nftw-entry-5-gate3). gate2 (the "=" clock attempt)
+  failed in the repeat loop at once and is superseded. Plants (plants3) and percall (percall5) ran on the head before the
+  test-only commits; product code is identical.
+* Bench row (cbench_fstree) not re-run; target 1.05x not reached: user space is 386 vs glibc 212 instr/entry (1.82x) in the
+  percall shape. Next: reuse the Listing allocation across directories, leaner examine, nftw closure argument conversion.
