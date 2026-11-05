@@ -69,7 +69,7 @@ over two disjoint buffers (removes the output bounds check, adds a copy on in-or
 ### Update: comparison counts per input pattern (PERF-QSORT-COMPARISONS, 2026-11-05, Zen 1 host): NEGATIVE
 
 Comparator calls per `qsort`, Liella / glibc 2.39, 8-byte elements (an `int` key and the element's original index,
-so the probe also checks stability; Liella was stable in every cell). Probe `keke:~/work/perf-qsort-comparisons/qcount.c`
+so the probe also checks stability; Liella was stable in every cell). Probe `the Zen 1 (AVX2-class) counter host:~/work/perf-qsort-comparisons/qcount.c`
 (static binaries; the keys come from the same LCG as `validation/percall/qsort.c`, so the random 256 and 1,024 cells
 are the percall cases' 1,830 / 1,720 and 9,316 / 8,958):
 
