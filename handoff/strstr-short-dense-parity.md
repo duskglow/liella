@@ -40,10 +40,15 @@ the kernel (-3's trace: 46 before, 31 after), the kernel ~40-50. Reaching 91 nee
 kernel entry and the head merged; not attempted (budget). Trace one call first (validation/wl_trace.sh --list).
 
 ## Jobs (keke)
-Final head code = 77b73980 (+ docs). -check1 (clippy + static + strstr_find on 01763a07, rc 0), -cnt1 (counts 01763a07
-vs 449936ea, rc 0), -plants (4 plants, plants file ~/work/strstr-short-dense-parity-4/plants.txt), -gate (direct tier),
--final (cargo clippy --workspace --all-targets --all-features + static on the final head), -cnt2 (counts on the final head).
-Diagnostic: -zen1-cyc, -zen1-gl (pinned re-measure of 449936ea, --base none).
+Final code head c95bb92a (+ docs). Named: -gate2 (direct tier), -plants2 (5 plants: 4 CAUGHT, 1 WARN-NO-MSG, 0 SURVIVED;
+file ~/work/strstr-short-dense-parity-4/plants2.txt), -cnt2 (counts vs 449936ea, as in the table), -final (cargo clippy
+--workspace --all-targets --all-features -D warnings + cargo xtask static on the final head).
+WARN: c0loop-ypos (c0 stream block 1 tests Y instead of L) is caught by strstr_filter_switch_keeps_every_candidate, not by
+the new test: its needle is followed by the terminator, whose stop in that group resolves the missed candidate. Next test
+change: put 'a's between the needle and the terminator when found.
+Superseded: -check1 (01763a07, rc 0), -cnt1 (01763a07, same counts), -plants (c0loop-nozero SURVIVED: the needle copy sat
+in the terminator's group; fixed by c95bb92a), -gate (killed rc 143 when the test changed). Diagnostic: -zen1-cyc,
+-zen1-gl (pinned re-measure of 449936ea, --base none).
 
 ## Next step
 1. Haswell-EP short rows (hit_short 1.45x, ss_hit_64 1.35x): profile one call on the current head, then aim at the
