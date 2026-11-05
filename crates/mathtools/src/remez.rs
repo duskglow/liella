@@ -83,7 +83,37 @@ pub const TARGETS: &[Target] = &[
     Target { name: "tanh", parity: Parity::Odd, eval: |x, p| mp::tanh(x, p).value },
     Target { name: "log", parity: Parity::Neither, eval: |x, p| mp::log(x, p).value },
     Target { name: "erf", parity: Parity::Odd, eval: |x, p| mp::erf(x, p).value },
+    Target { name: "j0", parity: Parity::Even, eval: |x, p| mp::bessel_j(0, x, p).value },
+    Target { name: "j1", parity: Parity::Odd, eval: |x, p| mp::bessel_j(1, x, p).value },
+    Target { name: "j1_over_x", parity: Parity::Even, eval: j1_over_x },
+    Target { name: "y0", parity: Parity::Neither, eval: |x, p| mp::bessel_y(0, x, p).value },
+    Target { name: "y1", parity: Parity::Neither, eval: |x, p| mp::bessel_y(1, x, p).value },
+    Target { name: "y0_reg", parity: Parity::Neither, eval: |x, p| y_reg(0, x, p) },
+    Target { name: "y1_reg", parity: Parity::Neither, eval: |x, p| y_reg(1, x, p) },
 ];
+
+/// `J1(x)/x`, `1/2` at 0.
+fn j1_over_x(x: &Big, p: u32) -> Big {
+    if x.is_zero() {
+        return Big::one().mul_pow2(-1);
+    }
+    mp::bessel_j(1, x, p + 4).value.div(x, p + 4, Round::Nearest).round(p, Round::Nearest)
+}
+
+/// The regular part of `Y_n` for `x > 0` (n = 0 or 1): `Y0(x) - (2/π) ln(x) J0(x)` (an even entire
+/// function) and `Y1(x) + 2/(πx) - (2/π) ln(x) J1(x)` (odd), from the series of `Y_n` at 0
+/// (DLMF 10.8.2). Evaluated with 96 guard bits: the cancellation is below 64 bits for
+/// `x ≥ 2^-20` (`|Y1| < 2^20`, the result above `2^-24`).
+fn y_reg(n: i64, x: &Big, p: u32) -> Big {
+    let w = p + 96;
+    let two_over_pi = Big::from_u64(2).div(&mp::pi(w), w, Round::Nearest);
+    let l = mp::log(x, w).value.round(w, Round::Nearest);
+    let mut r = mp::bessel_y(n, x, w).value.sub(&two_over_pi.mul(&l).round(w, Round::Nearest).mul(&mp::bessel_j(n, x, w).value));
+    if n == 1 {
+        r = r.add(&two_over_pi.div(x, w, Round::Nearest));
+    }
+    r.round(p, Round::Nearest)
+}
 
 /// Looks a target up by name.
 pub fn target(name: &str) -> Option<&'static Target> {
@@ -572,6 +602,9 @@ pub struct FitSpec {
     pub tol: f64,
     /// Measurement grid size (default 8192).
     pub points: usize,
+    /// Optional `centers` (as written and parsed): one fit of `f(c + t)` over the interval in `t`
+    /// per center c, written as one row each of a two-dimensional table.
+    pub centers: Vec<(String, Big)>,
 }
 
 /// Parses an interval endpoint or fixed coefficient: a decimal or C hex float, or `pi`, `ln2`,
@@ -670,7 +703,7 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
     let get = |k: &str| kv.iter().find(|(j, _)| j == k).map(|(_, v)| v.clone());
     let need = |k: &str| get(k).ok_or(format!("missing key {k}"));
     for (k, _) in &kv {
-        if !["name", "target", "interval", "powers", "error", "format", "fixed", "output", "precision", "tolerance", "points"]
+        if !["name", "target", "interval", "powers", "error", "format", "fixed", "output", "precision", "tolerance", "points", "centers"]
             .contains(&k.as_str())
         {
             return Err(format!("unknown key {k}"));
@@ -722,6 +755,12 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
     }
     powers.sort_unstable();
     powers.dedup();
+    let mut centers = Vec::new();
+    if let Some(cs) = get("centers") {
+        for c in cs.split(',').map(str::trim).filter(|c| !c.is_empty()) {
+            centers.push((c.to_string(), parse_expr(c, prec).ok_or(format!("centers: bad value {c}"))?));
+        }
+    }
     Ok(FitSpec {
         name,
         target: target_name,
@@ -736,6 +775,7 @@ pub fn parse_fit(text: &str) -> Result<FitSpec, String> {
         prec,
         tol,
         points,
+        centers,
     })
 }
 
@@ -752,6 +792,9 @@ pub struct Generated {
 
 /// Fits a spec and renders the Rust source. `fit_path` is how the header names the fit file.
 pub fn generate(spec: &FitSpec, fit_path: &str) -> Result<Generated, String> {
+    if !spec.centers.is_empty() {
+        return generate_centered(spec, fit_path);
+    }
     let t = target(&spec.target).ok_or("unknown target")?;
     let f = |x: &Big, p: u32| (t.eval)(x, p);
     let free: Vec<u32> = spec.powers.iter().copied().filter(|k| !spec.fixed.iter().any(|(j, _)| j == k)).collect();
@@ -818,5 +861,73 @@ pub fn generate(spec: &FitSpec, fit_path: &str) -> Result<Generated, String> {
         if fit.folded { ", folded onto the right half" } else { "" }
     );
     let _ = writeln!(report, "  rounded to {fname}: max error 2^{meas:.2} on {npts} points = {unit_text}");
+    Ok(Generated { output: spec.output.clone(), source: s, report })
+}
+
+/// [`generate`] for a spec with `centers`: one fit of `f(c + t)` per center (no parity folding),
+/// rendered as a `[[_; n]; k]` table, one row per center in the order given.
+fn generate_centered(spec: &FitSpec, fit_path: &str) -> Result<Generated, String> {
+    let t = target(&spec.target).ok_or("unknown target")?;
+    let fmt = spec.format.1;
+    let fname = &spec.format.0;
+    let kind = if spec.relative { "relative" } else { "absolute" };
+    let free: Vec<u32> = spec.powers.iter().copied().filter(|k| !spec.fixed.iter().any(|(j, _)| j == k)).collect();
+    let (ty, hexw) = match fmt.total_bits() {
+        32 => ("u32", 8),
+        64 => ("u64", 16),
+        80 => ("u128", 20),
+        _ => ("u128", 32),
+    };
+    let digits = (f64::from(fmt.prec) * std::f64::consts::LOG10_2).ceil() as usize + 1;
+    let mut s = String::new();
+    let mut report = String::new();
+    let _ = writeln!(s, "// @generated by `cargo run --release -p liella-mathtools --bin remez -- {fit_path}`. Do not edit.");
+    let _ = writeln!(
+        s,
+        "//! {}: minimax {kind} approximations of {}(c + t) for t on [{}, {}], powers {} of t, coefficients rounded to {fname}.",
+        spec.name, spec.target, spec.interval_text.0, spec.interval_text.1, spec.powers_text
+    );
+    let _ = writeln!(s, "//! Derivation (D-10.3): Remez exchange at {}-bit precision, one fit per center c:", spec.prec);
+    let _ = writeln!(report, "{} ({}(c + t), t on [{}, {}], {kind}, {fname}):", spec.name, spec.target, spec.interval_text.0, spec.interval_text.1);
+    let mut rows = Vec::new();
+    for (ctext, c) in &spec.centers {
+        let f = |x: &Big, p: u32| (t.eval)(&c.add(x), p);
+        let mut pb = Problem::new(&f, Parity::Neither, spec.interval.0.clone(), spec.interval.1.clone(), free.clone(), spec.relative);
+        pb.fixed = spec.fixed.clone();
+        pb.prec = spec.prec;
+        pb.tol = spec.tol;
+        let fit = remez(&pb)?;
+        let rounded: Vec<(u32, Big)> =
+            fit.coeffs.iter().map(|(k, c)| (*k, Big::from_bits(fmt, c.round_to(fmt, Round::Nearest).0))).collect();
+        let around: Vec<Big> = fit.extrema.iter().map(|(x, _)| x.clone()).collect();
+        let (maxerr, npts) = measure(&pb, &rounded, fmt, spec.points, &around);
+        let (lev, meas) = (log2_abs(&fit.levelled), log2_abs(&maxerr));
+        let units = maxerr.mul_pow2(i64::from(fmt.prec)).to_f64();
+        let _ = writeln!(
+            s,
+            "//! c = {ctext}: {} iterations, levelled error 2^{lev:.2}; rounded: max error 2^{meas:.2} on {npts} points ({units:.2} units of 2^-{}).",
+            fit.iterations, fmt.prec
+        );
+        let _ = writeln!(report, "  c = {ctext}: {} iterations, spread {:.2e}; levelled 2^{lev:.2}; rounded 2^{meas:.2} on {npts} points", fit.iterations, fit.spread);
+        rows.push((ctext.clone(), rounded));
+    }
+    if !spec.fixed.is_empty() {
+        let fx: Vec<String> = spec.fixed.iter().map(|(k, c)| format!("t^{k} = {}", c.to_hex())).collect();
+        let _ = writeln!(s, "//! Fixed in advance: {}.", fx.join(", "));
+    }
+    let n = rows[0].1.len();
+    let _ = writeln!(s);
+    let _ = writeln!(s, "/// Coefficients of t^{}..t^{} ({fname} bit patterns), lowest power first, one row per center.", spec.powers[0], spec.powers[n - 1]);
+    let _ = writeln!(s, "pub(crate) const {}: [[{ty}; {n}]; {}] = [", spec.name.to_ascii_uppercase(), rows.len());
+    for (ctext, rounded) in &rows {
+        let _ = writeln!(s, "    // c = {ctext}");
+        let _ = writeln!(s, "    [");
+        for (k, c) in rounded {
+            let bits = c.round_to(fmt, Round::Nearest).0;
+            let _ = writeln!(s, "        0x{bits:0hexw$x}, // t^{k}: {}", c.to_decimal(digits));
+        }
+        let _ = writeln!(s, "    ],");
+    }
+    let _ = writeln!(s, "];");
     Ok(Generated { output: spec.output.clone(), source: s, report })
 }
