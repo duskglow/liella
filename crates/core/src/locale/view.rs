@@ -437,13 +437,47 @@ impl LocaleView {
     }
 
     /// Whether wide character `c` has a class of `mask` (`iswalpha`, ...): [`ctype::is_w`].
-    #[inline]
+    ///
+    /// Always inlined (PERF-WCTYPE-ENUS-2): with the inline hit paths below, a plain `#[inline]`
+    /// body was left out of line, and every export (the built-in locales' too) paid a call:
+    /// `iswalpha` in C.UTF-8 went from 68 to 76 instructions.
+    #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
-        // The file-backed arm is out of line (PERF-WCTYPE-UTF8-REST-3, as `wtrans`).
-        if self.wide.is_some() {
+        if let Some((w, _)) = &self.wide {
+            // The two common answers are inline and call-free (PERF-WCTYPE-ENUS): a filled
+            // Latin-1 entry, and one class's table walk above U+00FF (`iswalpha` passes a
+            // constant one-bit mask, so its test folds away). As a call to `isw_wide` they paid
+            // its five saved registers, a second `wide` test and the mask test: about 25
+            // instructions of 101. A fill, a view without a slot and a mixed mask stay out of line.
+            if let Ok(b) = u8::try_from(c) {
+                if let Some(v) = self.latin_class_hit(b) {
+                    return v & u32::from(mask.0) != 0;
+                }
+            } else if mask.0.is_power_of_two() {
+                return w.in_class_bit(mask.0.trailing_zeros(), c);
+            }
             return self.isw_wide(c, mask);
         }
         ctype::wclasses(c, &self.locale).intersects(mask)
+    }
+
+    /// The filled [`LATIN`] class entry of `b` for this view; `None` when the view has no slot
+    /// yet (0), none was left (`usize::MAX`), or the entry is not filled: `isw_wide` then
+    /// takes a slot, fills the entry or walks the tables.
+    #[inline]
+    fn latin_class_hit(&self, b: u8) -> Option<u32> {
+        let l = LATIN.get(self.latin.load(Relaxed).wrapping_sub(1))?;
+        let v = l.class.get(usize::from(b))?.load(Relaxed);
+        (v != 0).then_some(v)
+    }
+
+    /// The filled [`LATIN`] `towupper` (`upper`) or `towlower` entry of `b` for this view, as
+    /// [`LocaleView::latin_class_hit`] (`None`: `wtrans_wide` takes the general path).
+    #[inline]
+    fn latin_map_hit(&self, b: u8, upper: bool) -> Option<u32> {
+        let l = LATIN.get(self.latin.load(Relaxed).wrapping_sub(1))?;
+        let v = l.map.get(usize::from(!upper))?.get(usize::from(b))?.load(Relaxed);
+        (v != 0).then(|| v.wrapping_sub(1))
     }
 
     #[inline(never)]
@@ -459,12 +493,22 @@ impl LocaleView {
         ctype::is_w_file(c, mask, w)
     }
 
-    /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`].
-    #[inline]
+    /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`]. Always inlined, as
+    /// [`LocaleView::isw`] (`towupper` in C.UTF-8 went from 53 to 68 instructions as a call).
+    #[inline(always)]
     pub fn wtrans(&self, c: u32, upper: bool) -> u32 {
-        // The file-backed arm is out of line so this body saves no registers for the built-in
-        // locales (PERF-WCTYPE-UTF8-REST-3).
-        if self.wide.is_some() {
+        // The file-backed arm's common answers are inline and call-free, as in `isw`
+        // (PERF-WCTYPE-ENUS): a filled Latin-1 entry, and the case table's walk above U+00FF.
+        // The rest stays out of line so this body saves no registers for the built-in locales
+        // (PERF-WCTYPE-UTF8-REST-3).
+        if let Some((w, ascii)) = &self.wide {
+            if let Ok(b) = u8::try_from(c) {
+                if let Some(r) = self.latin_map_hit(b, upper) {
+                    return r;
+                }
+            } else {
+                return ctype::wtrans_file(c, upper, *ascii, w);
+            }
             return self.wtrans_wide(c, upper);
         }
         ctype::wtrans(c, if upper { Trans::Upper } else { Trans::Lower }, &self.locale)
