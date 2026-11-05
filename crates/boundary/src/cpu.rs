@@ -218,7 +218,7 @@ pub fn init_with(t: &Tunables) -> u8 {
     // The hot kernels' builds (D-4.25): the same decision as the scanners'.
     crate::dispatch::select(avx2);
     // The math kernels' FMA builds (D-10.25): `glibc.cpu.hwcaps=-FMA` keeps the baseline.
-    crate::dispatch::select_fma(f.fma() && t.fma.unwrap_or(true));
+    crate::dispatch::select_fma(crate::dispatch::fma_wanted(&f, t));
     if let Some(n) = t.rep_movsb_threshold {
         COPY_MIN.store(n, Relaxed);
     }
