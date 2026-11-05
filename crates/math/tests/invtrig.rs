@@ -127,7 +127,7 @@ fn big_triples() -> Vec<(f64, f64, f64)> {
         let n0 = (2f64.powf(52.95) / (r * r + 1.0)).sqrt() as u64;
         for n in n0 - 300..n0 {
             let mut m = (n as f64 * r) as u64;
-            if (m - n).is_multiple_of(2) {
+            if (m ^ n) & 1 == 0 {
                 m += 1;
             }
             let c = m * m + n * n;
