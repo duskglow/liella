@@ -1935,6 +1935,38 @@ impl Heap {
         self.resize_slow(sys, pages, addr, size, copy)
     }
 
+    /// Whether a live small block of the calling thread's current slab, resized to `size`
+    /// (`0 < size <= FORECAST_CAP`), stays where it is: the first test of [`Heap::resize`]
+    /// alone, so that a caller can return the same pointer without the frame the moving and
+    /// general paths need. `false` decides nothing: the caller takes the full path.
+    #[inline(always)]
+    pub fn fits_in_place<P: Pages>(pages: &P, addr: usize, size: usize) -> bool {
+        if size == 0 || size > FORECAST_CAP {
+            return false;
+        }
+        let Some(k) = Self::own_cache(pages) else { return false };
+        let last = k.get(slab_hint(addr));
+        let off = w64(addr).wrapping_sub(last & !(SLAB64 - 1));
+        if last == 0 || off >= SLAB64 {
+            return false;
+        }
+        let c = uz(last & 63);
+        let [csize, magic, n] = FREE_VIEW[c];
+        let q = (off * magic) >> 40;
+        if q * csize != off || q >= n {
+            return false;
+        }
+        let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return false };
+        let (j, b) = bit(uz(q));
+        let j = j & (BITMAP_WORDS - 1);
+        // Not live (or remotely freed): the full path decides and reports a double free.
+        if r.local[j].load(Relaxed) & b == 0 || (k.remote_any() && r.remote_has(j, b)) {
+            return false;
+        }
+        let below = CLASSES[c.min(CLASSES.len() - 1).saturating_sub(1)];
+        size <= uz(csize) && (c == 0 || size > below / 2)
+    }
+
     /// The size a small block that `resize` moves upward is allocated for (REALLOC-FUSE growth
     /// forecast): about twice the request, at most [`FORECAST_CAP`], so that a caller doubling
     /// its buffer finds the next step in place. Only `resize` uses it: `malloc`'d blocks keep
