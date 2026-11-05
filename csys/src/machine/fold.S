@@ -488,8 +488,10 @@ memset:
  * overlap the one before; a differing chunk's four masks give the first differing byte, re-read and
  * ordered as above. Without AVX2, 65-128 and everything above take the SSE2 classes at
  * .Lcmp_sse_mid and .Lcmp_sse_long (PERF-MEMCMP-NONAVX2, PERF-MEMCMP-LONG-NONAVX2). Above that word
- * with AVX2, and for a NULL a or b, tail-jump to `liella_hot_compare_big` (the checked classes above
- * 64, no folding decision to take).
+ * with AVX2 (and above 128 with folding off) .Lcmp_avx_long tests a and b for NULL and takes the
+ * same AVX2 head block and long class (PARITY-MEMCMP-AVX2); a NULL a or b tail-jumps to
+ * `liella_hot_compare_big` (the checked classes above 64, the S6 abort). The long class's chunk
+ * test is one `vptest` of the ANDed chunk against the head block's all-ones vector (ymm0).
  * A set sign means n <= 64: the 0-7 byte classes (MEMCMP-SHORT; no fold: explicit NULL tests first, a
  * NULL a or b tail-jumps to the checked entry for the S6 abort): 4-7 one 4-byte word from each end
  * (after an `n < 8` test, since with folding off 8-64 arrive here too and go to
@@ -703,6 +705,7 @@ memcmp:
 .Lcmp_big:
 	cmpq liella_machine_cmp_long(%rip), %rdx
 	ja .Lcmp_sse_mid
+.Lcmp_big_load:
 	vmovdqu (%rdi), %ymm0
 	vpcmpeqb (%rsi), %ymm0, %ymm0
 	vpmovmskb %ymm0, %ecx
@@ -772,11 +775,10 @@ memcmp:
 	vpcmpeqb 64(%r9), %ymm3, %ymm3
 	vpcmpeqb 96(%r9), %ymm4, %ymm4
 	vpand %ymm2, %ymm1, %ymm5
-	vpand %ymm4, %ymm3, %ymm0
-	vpand %ymm0, %ymm5, %ymm5
-	vpmovmskb %ymm5, %eax
-	incl %eax
-	jne .Lcmp_long_diff
+	vpand %ymm4, %ymm3, %ymm6
+	vpand %ymm6, %ymm5, %ymm5
+	vptest %ymm0, %ymm5
+	jnc .Lcmp_long_diff
 	subq $-128, %r9
 	cmpq %r8, %r9
 	jb .Lcmp_long_loop
@@ -791,11 +793,10 @@ memcmp:
 	vpcmpeqb 64(%r9), %ymm3, %ymm3
 	vpcmpeqb 96(%r9), %ymm4, %ymm4
 	vpand %ymm2, %ymm1, %ymm5
-	vpand %ymm4, %ymm3, %ymm0
-	vpand %ymm0, %ymm5, %ymm5
-	vpmovmskb %ymm5, %eax
-	incl %eax
-	jne .Lcmp_long_diff
+	vpand %ymm4, %ymm3, %ymm6
+	vpand %ymm6, %ymm5, %ymm5
+	vptest %ymm0, %ymm5
+	jnc .Lcmp_long_diff
 	vzeroupper
 	xorl %eax, %eax
 	ret
@@ -819,6 +820,16 @@ memcmp:
 	bsfq %rax, %rcx
 	addq %r9, %rcx
 	jmp .Lcmp_big_byte
+/* From .Lcmp_sse_long with AVX2 on (`liella_machine_cmp_mid` set): above `liella_machine_cmp_long`
+ * (above 128 with folding off). The explicit NULL tests (a NULL a or b -> the checked entry's S6
+ * abort; no folding above 2048), then the AVX2 head block and long class as for 129-2048
+ * (PARITY-MEMCMP-AVX2: the 16-instruction 128-byte step instead of the Rust loop). */
+.Lcmp_avx_long:
+	testq %rdi, %rdi
+	je liella_hot_compare_big
+	testq %rsi, %rsi
+	je liella_hot_compare_big
+	jmp .Lcmp_big_load
 /* 129-256 (PERF-MEMCMP-256-AVX2; the 32-byte head is equal): the blocks at 32, 64 and 96 and the
  * last four (n - 128 .. n - 32) cover [32, n) with no loop, ANDed into one test. A difference: the
  * first block of the first three with a difference gives the byte (they cover [32, 128), and
@@ -1030,7 +1041,7 @@ memcmp:
  * only (MEMCMP-MID-4's torn-read bound). */
 .Lcmp_sse_long:
 	cmpq $0, liella_machine_cmp_mid(%rip)
-	jne liella_hot_compare_big
+	jne .Lcmp_avx_long
 	testq %rdi, %rdi
 	je liella_hot_compare_big
 	testq %rsi, %rsi
@@ -1232,7 +1243,8 @@ __memcmpeq:
 	ret
 .Leq_big:
 	cmpq liella_machine_cmp_long(%rip), %rdx
-	ja liella_hot_equal_big
+	ja .Leq_huge
+.Leq_big_load:
 	vmovdqu (%rdi), %ymm0
 	vpcmpeqb (%rsi), %ymm0, %ymm0
 	vpmovmskb %ymm0, %ecx
@@ -1274,9 +1286,8 @@ __memcmpeq:
 	vpand %ymm2, %ymm1, %ymm1
 	vpand %ymm4, %ymm3, %ymm3
 	vpand %ymm3, %ymm1, %ymm1
-	vpmovmskb %ymm1, %ecx
-	incl %ecx
-	jne .Leq_big_one
+	vptest %ymm0, %ymm1
+	jnc .Leq_big_one
 	leaq 32(%rdi), %r9
 	cmpq %r8, %r9
 	jae .Leq_long_zero
@@ -1292,9 +1303,8 @@ __memcmpeq:
 	vpand %ymm2, %ymm1, %ymm1
 	vpand %ymm4, %ymm3, %ymm3
 	vpand %ymm3, %ymm1, %ymm1
-	vpmovmskb %ymm1, %ecx
-	incl %ecx
-	jne .Leq_big_one
+	vptest %ymm0, %ymm1
+	jnc .Leq_big_one
 	subq $-128, %r9
 	cmpq %r8, %r9
 	jb .Leq_long_loop
@@ -1302,6 +1312,19 @@ __memcmpeq:
 	vzeroupper
 	xorl %eax, %eax
 	ret
+/* Above `liella_machine_cmp_long` (every size above 64 with folding off) and AVX2 on (the
+ * `liella_machine_cmp_mid` flag word, nonzero only then): the explicit NULL tests (a NULL a or b ->
+ * the checked entry's S6 abort; no folding above 2048), then the AVX2 classes above (PARITY-MEMCMP-AVX2:
+ * the long class's 16-instruction 128-byte step instead of the Rust loop). Without AVX2 the
+ * checked entry. */
+.Leq_huge:
+	cmpq $0, liella_machine_cmp_mid(%rip)
+	je liella_hot_equal_big
+	testq %rdi, %rdi
+	je liella_hot_equal_big
+	testq %rsi, %rsi
+	je liella_hot_equal_big
+	jmp .Leq_big_load
 #ifdef LIELLA_EXPORT
 	.size __memcmpeq, .-__memcmpeq
 	.size bcmp, .-bcmp

@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-INVTRIG-HYPOT-TIER-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: run -3's red was the test reference (raw mr::ret leaked hardware underflow; also ran dd arithmetic under directed hardware rounding); test now checks the envelope and the 10.0 flag rule, probe-settled (acos raises no underflow on glibc or Liella); plants 2/2; FULL gate running; kernel redesign designed per phase, not built",
+ "branch": "task/libm-f64-invtrig-hypot-tier-4", "head": "80667ac8",
+ "gate": {"affected": "running (FULL tier, escalated by the generated s10_math_gen.rs); focused suite 1 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["affected --base origin/next escalates every run of this story to FULL because run -1 changed the generated s10_math_gen.rs; landing the branch ends that", "probe: Liella's correctly rounded atan/atan2 set ERANGE for an underflow to zero in directed modes (10.0's rule); glibc sets none; check whether a differences row covers the double forms (row 357 names atanl)"],
+ "refused": [],
+ "improvement": "the plants tool's ` | ` separator collides with Rust bit-or in a lit: pattern; docs/plants.md says so, but a lit: hint in the refusal message (use perl: with \\|) would save a run",
+ "next_step": "read the FULL gate on shiki; then build the atan kernel redesign (single double quotient, j/256 table, degree-2 poly) per the handoff's per-phase estimates",
+ "report_file": "handoff/libm-f64-invtrig-hypot-tier.md",
+ "jobs": ["shiki:libm-f64-invtrig-hypot-tier-4-gate", "shiki:libm-f64-invtrig-hypot-tier-4-plants2"]}

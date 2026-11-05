@@ -1,0 +1,18 @@
+{"task": "LIBM-F64-FAST-KERNELS-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: #2920 settled: libm.a/libm.so.6 carried their own never-set copy of the FMA dispatch byte, so no program ever ran the FMA builds; libm now decides it on first call (CPUID + glibc.cpu.hwcaps via secure_getenv): exp 181.3 -> 129.3, exp10 218.9 -> 147.4, log 217.5 -> 167.5 instr/call (FMA default); -FMA rows unchanged except exp10 +1.1; exp10 per-phase push not started",
+ "branch": "task/libm-f64-fast-kernels-2", "head": "see git (handoff commit after code commit ddaed22f)",
+ "gate": {"affected": "gate2 running at hand-back (FULL: branch carries s10_math.tsv / gen.rs from run 1); check2 targeted suites green", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+   {"item": "exp10 with glibc.cpu.hwcaps=-FMA measures 220.0 vs 218.9 before this run (+1.1, unprofiled); FMA default row 218.9 -> 147.4", "recommendation": "accept: FMA is the default on every x86-64-v3 CPU; profile the +1.1 in the next run"},
+   {"item": "D-NEW: libm product decides its FMA builds itself (placeholder decision id)", "recommendation": "reserve a D-10.x id and replace D-NEW in plan/07-decisions/s10-mathematics.md, dispatch.rs, conv.rs, caller_alloc.rs, libm_fma_select.rs"}],
+ "informational": [
+   "every libm-side run-time CPU decision has the same problem: libm's copy of liella-boundary never sees libc's startup; only dispatch::FMA is read by libm today",
+   "libm_fma_select: 4000 exp + 4000 log user instructions 1,220,031 (FMA) vs 1,672,031 (-FMA) on mei",
+   "a plant that drops the decision's store (re-decide every call) is not caught: same selection, only slower; not in the plants file"],
+ "refused": [],
+ "jobs": ["mei:libm-f64-fast-kernels-2-gate2", "mei:libm-f64-fast-kernels-2-plants2", "mei:libm-f64-fast-kernels-2-counts3"],
+ "superseded": ["libm-f64-fast-kernels-2-check1 (unsafe audit: categories not permitted in dispatch.rs)", "libm-f64-fast-kernels-2-check2 (green, older head)", "libm-f64-fast-kernels-2-counts (role tree is not a git checkout)", "libm-f64-fast-kernels-2-counts2 (FMA-first order: -FMA rows +3-4)", "libm-f64-fast-kernels-2-gate (older head, stopped)", "libm-f64-fast-kernels-2-plants (older head, stopped)"],
+ "improvement": "a product-level counter test (perf_event_open self-count) proved the dispatch in minutes; the libm product build could assert at xtask so time that no localized liella_ data symbol is written by libc's startup",
+ "next_step": "profile exp10 -FMA +1.1, then the per-phase split of exp10/exp on the FMA build to push exp10 toward 1.05x",
+ "report_file": "handoff/LIBM-F64-FAST-KERNELS.md"}

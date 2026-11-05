@@ -74,7 +74,7 @@ fn main() {
         let linked = match src.file_name().and_then(|n| n.to_str()) {
             Some("math_libc.c") => export,
             Some("math_both.c") => export || libm,
-            Some("math_libm.c") => libm,
+            Some("math_libm.c" | "libm_init.c") => libm,
             _ => true,
         };
         let obj = out.join(format!("csys_{i}.o"));
