@@ -6749,6 +6749,8 @@ strncmp:
  * units already seen not to be 0, then A's own block; an aligned block never leaves its page.
  * AVX2 from a 64-byte boundary on: 64-byte aligned pairs of blocks (one page each), one test
  * for "any candidate or 0 unit" per pair; a pair that has one is resolved block by block.
+ * Groups of four blocks (128 bytes, one page) run a one-stream filter (c1 at q, or c0 at q - off
+ * after a dense run of c1 in a group free of c0) or the pair test, each with the 0 test of q.
  * Units past the terminator are read only inside the terminator's page and are masked off
  * (the bits from the first 0 unit on). Rust verifies the needle at every candidate. */
 	.section .text.liella_machine_strpair,"ax",@progbits
@@ -6941,15 +6943,70 @@ liella_machine_strpair:
 	jz .Lliella_machine_strpair_avx_loop128s
 	addq $-128, %rax
 	/* A stop: c1 or 0 in this group. Sparse (1024 bytes or more after the last stop): the block
-	 * loop resolves the group and the run comes back through avx_mode. Dense: the pair filter for
-	 * the rest of this call, from this group's start. */
+	 * loop resolves the group and the run comes back through avx_mode. Dense: this group gets the
+	 * pair test and, when it holds no candidate and no 0, a test for c0 at q - off
+	 * (STRSTR-SHORT-DENSE-PARITY-4): with no c0 either, the rest of the call runs the one-stream
+	 * filter on c0 (loop128c); else the pair filter. A pair or 0 here: the block loop resolves it. */
 	movq %rax, %r10
 	subq %rdx, %r10
 	movq %rax, %rdx
 	cmpq $1024, %r10
 	jae .Lliella_machine_strpair_avx_loop
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor 64(%rax), %ymm1, %ymm9
+	vpxor 96(%rax), %ymm1, %ymm10
+	vpxor (%rax,%r9), %ymm0, %ymm4
+	vpxor 32(%rax,%r9), %ymm0, %ymm7
+	vpxor 64(%rax,%r9), %ymm0, %ymm11
+	vpxor 96(%rax,%r9), %ymm0, %ymm12
+	vpor %ymm4, %ymm5, %ymm5
+	vpor %ymm7, %ymm8, %ymm8
+	vpor %ymm11, %ymm9, %ymm9
+	vpor %ymm12, %ymm10, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	vptest %ymm5, %ymm5
+	jnz .Lliella_machine_strpair_avx_loop
+	/* No candidate and no 0 in the group: c0 at q - off anywhere in it (min of the L ^ c0 blocks)? */
+	vpminub %ymm4, %ymm7, %ymm4
+	vpminub %ymm11, %ymm12, %ymm11
+	vpminub %ymm4, %ymm11, %ymm4
+	vpcmpeqb %ymm4, %ymm2, %ymm4
+	subq $-128, %rax
+	vptest %ymm4, %ymm4
+	jnz .Lliella_machine_strpair_avx_loop128
+	/* r8 = pair mode for any return through avx_mode after a c0 stop (a c0 that is no candidate). */
 	movl $1, %r8d
-	jmp .Lliella_machine_strpair_avx_loop128
+	.p2align 4
+.Lliella_machine_strpair_avx_loop128c:
+	/* One stream on c0 (STRSTR-SHORT-DENSE-PARITY-4): unit q is a candidate only when unit q - off
+	 * is c0, so q is c0 at q - off or 0 exactly when min(L ^ c0, Y) is 0; 16 instructions per 128
+	 * bytes. A stop: the block loop resolves the group (exact pair and 0 test per block); a c0 that
+	 * is no candidate continues in pair mode (r8). */
+	vpxor (%rax,%r9), %ymm0, %ymm5
+	vpxor 32(%rax,%r9), %ymm0, %ymm8
+	vpxor 64(%rax,%r9), %ymm0, %ymm9
+	vpxor 96(%rax,%r9), %ymm0, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	subq $-128, %rax
+	vptest %ymm5, %ymm5
+	jz .Lliella_machine_strpair_avx_loop128c
+	addq $-128, %rax
+	jmp .Lliella_machine_strpair_avx_loop
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
 .Lliella_machine_strpair_sse_cand:
