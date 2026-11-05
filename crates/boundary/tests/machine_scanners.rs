@@ -853,6 +853,53 @@ fn strcmp_kernel_folded_groups_find_every_difference_up_to_length_300_on_level()
 }
 
 #[test]
+fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes() {
+    // Clauses: s4_3_c_1 (PARITY-STRCMP-AVX2: the AVX2 kernel tests 128-byte groups once, with
+    // four blocks' minima folded). Both scan levels (D-4.29).
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level();
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level() {
+    // Clauses: s4_3_c_1 (PARITY-STRCMP-AVX2). Lengths around the edges of the first groups after
+    // the four tested blocks (each half of a group, each block, each lane), every position of
+    // the first difference, unsigned bytes above 0x7F, a terminator in a first.
+    let mut a = vec![0u8; 64 + 1200 + 64];
+    let mut b = a.clone();
+    let aligns = [0usize, 1, 33, 63];
+    let lens = (250..=262).chain(318..=322).chain(382..=386).chain(446..=450).chain(510..=514).chain(574..=578).chain(638..=642).chain([700, 1100]);
+    for &aa in &aligns {
+        for &ba in &aligns {
+            for len in lens.clone() {
+                for (buf, al) in [(&mut a, aa), (&mut b, ba)] {
+                    buf.fill(b'z');
+                    for i in 0..len {
+                        buf[al + i] = 1 + ((i * 61) % 255) as u8;
+                    }
+                    buf[al + len] = 0;
+                }
+                let (pa, pb) = (a.as_ptr() as usize + aa, b.as_ptr() as usize + ba);
+                assert_eq!(cmp_at(pa, pb), 0, "equal, align {aa}/{ba}, len {len}");
+                for d in 0..len {
+                    let keep = (a[aa + d], b[ba + d]);
+                    (a[aa + d], b[ba + d]) = (0x80, 0x7F);
+                    assert_eq!(cmp_at(pa, pb), 1, "0x80 > 0x7F at {d}, align {aa}/{ba}, len {len}");
+                    assert_eq!(cmp_at(pb, pa), -1, "swapped, at {d}, align {aa}/{ba}, len {len}");
+                    a[aa + d] = 0;
+                    assert_eq!(cmp_at(pa, pb), -1, "a ends at {d}, align {aa}/{ba}, len {len}");
+                    (a[aa + d], b[ba + d]) = keep;
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators() {
     // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). Both strings end on the last byte of a page whose Both scan levels (D-4.29).
     let _g = level();
