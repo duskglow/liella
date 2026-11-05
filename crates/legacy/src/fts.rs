@@ -163,6 +163,19 @@ enum Children {
     NoSearch(Errno),
 }
 
+#[derive(Clone, Copy, Default)]
+struct Key {
+    dev: u64,
+    ino: u64,
+    nlink: u64,
+}
+
+impl Key {
+    fn of(s: &Stat) -> Key {
+        Key { dev: s.dev, ino: s.ino, nlink: s.nlink }
+    }
+}
+
 struct Node {
     block: usize,
     size: usize,
@@ -180,7 +193,8 @@ struct Node {
     level: i32,
     info: u16,
     errno: i32,
-    stat: Option<Stat>,
+    /// The parts of the status the walk itself reads (the block holds the whole status).
+    stat: Option<Key>,
     cycle: usize,
     link: usize,
     children: Children,
@@ -353,7 +367,7 @@ impl Fts {
     #[allow(clippy::too_many_arguments)]
     /// A new entry whose path is `path_len` bytes long (its bytes are put in the shared buffer
     /// only when the entry is returned: [`Fts::place`]). A root's path is its name.
-    fn new_node<M: FtsMem>(&mut self, mem: &mut M, name: &[u8], path_len: usize, parent: usize, level: i32, st: (u16, Option<Stat>, i32), cycle: usize, follow: bool, root_dev: u64, root: bool) -> Result<usize> {
+    fn new_node<M: FtsMem>(&mut self, mem: &mut M, name: &[u8], path_len: usize, parent: usize, level: i32, st: &(u16, Option<Stat>, i32), cycle: usize, follow: bool, root_dev: u64, root: bool) -> Result<usize> {
         let name_cap = name.len().saturating_add(1);
         let stat_off = align8(off::NAME.saturating_add(name_cap));
         // The stat ends past the 120-byte structure, so the block is never shorter than an
@@ -362,7 +376,11 @@ impl Fts {
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
         let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
-        let block = mem.alloc(off::NAME, &[name, pad, &stat_bytes(&st.1.unwrap_or_default())]).ok_or(Errno::ENOMEM)?;
+        let sb = match &st.1 {
+            Some(s) => stat_bytes(s),
+            None => stat_bytes(&Stat::default()),
+        };
+        let block = mem.alloc(off::NAME, &[name, pad, &sb]).ok_or(Errno::ENOMEM)?;
         let node = Node {
             block,
             size,
@@ -375,7 +393,7 @@ impl Fts {
             level,
             info: st.0,
             errno: st.2,
-            stat: st.1,
+            stat: st.1.as_ref().map(Key::of),
             cycle,
             link: 0,
             children: Children::NotBuilt,
@@ -471,10 +489,10 @@ impl Fts {
     }
 
     /// Write entry `n`'s structure and status into its block (its status changed).
-    fn write<M: FtsMem>(&self, mem: &mut M, n: usize) {
+    fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size), x.stat_off, &stat_bytes(&x.stat.unwrap_or_default()));
+        put(mem.bytes(x.block, x.size), x.stat_off, &stat_bytes(st));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new
@@ -578,7 +596,7 @@ impl Fts {
 
     fn open_roots<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, argv: &[&[u8]]) -> Result<()> {
         self.reserve(mem, 0, PATH_START)?;
-        let rp = self.new_node(mem, b"", 0, ROOT_PARENT, -1, (0, None, 0), 0, false, 0, false)?;
+        let rp = self.new_node(mem, b"", 0, ROOT_PARENT, -1, &(0, None, 0), 0, false, 0, false)?;
         debug_assert_eq!(rp, ROOT_PARENT);
         let follow = self.options & (FTS_LOGICAL | FTS_COMFOLLOW) != 0;
         let base = self.orig.unwrap_or(Fd::CWD);
@@ -586,7 +604,7 @@ impl Fts {
         for a in argv {
             let st = if u16::try_from(a.len()).is_err() { (info::NS, None, Errno::ENAMETOOLONG.get()) } else { stat_entry(sys, base, &z(a)?, follow, false)? };
             let dev = st.1.map_or(0, |s| s.dev);
-            let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, st, 0, follow, dev, true)?;
+            let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, &st, 0, follow, dev, true)?;
             roots.push(n)?;
         }
         if let Some(c) = self.compar {
@@ -648,14 +666,14 @@ impl Fts {
         let (inf, st, e) = stat_entry(sys, dir, &namez, follow, dot)?;
         let x = self.node_mut(n)?;
         x.info = inf;
-        x.stat = st;
+        x.stat = st.as_ref().map(Key::of);
         x.errno = e;
         x.follow = follow || x.follow;
         x.next_child = 0;
         if x.info == info::D {
             self.check_cycle(n)?;
         }
-        self.write(mem, n);
+        self.write(mem, n, &st.unwrap_or_default());
         Ok(())
     }
 
@@ -666,7 +684,7 @@ impl Fts {
             let Some(st) = x.stat else { return Ok(()) };
             (st, x.parent)
         };
-        let blk = self.cycle_of(parent, &st)?;
+        let blk = self.cycle_of(parent, st.dev, st.ino)?;
         if blk != 0 {
             let x = self.node_mut(n)?;
             x.info = info::DC;
@@ -676,10 +694,10 @@ impl Fts {
     }
 
     /// The block of the directory among `p` and its ancestors that `st` repeats, 0 if none.
-    fn cycle_of(&self, mut p: usize, st: &Stat) -> Result<usize> {
+    fn cycle_of(&self, mut p: usize, dev: u64, ino: u64) -> Result<usize> {
         while p != ROOT_PARENT {
             let a = self.node(p)?;
-            if a.stat.is_some_and(|s| s.dev == st.dev && s.ino == st.ino) {
+            if a.stat.is_some_and(|s| s.dev == dev && s.ino == ino) {
                 return Ok(a.block);
             }
             p = a.parent;
@@ -784,7 +802,7 @@ impl Fts {
                     continue;
                 }
                 let cpath_len = path_len.saturating_add(sep_len).saturating_add(cname.len());
-                let st = if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
+                let mut st = if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
                     (info::NS, None, Errno::ENAMETOOLONG.get())
                 } else if how == Build::NameOnly || (nostat && !dot && dtype != DT_DIR && dtype != DT_UNKNOWN) {
                     (info::NSOK, None, 0)
@@ -792,12 +810,14 @@ impl Fts {
                     stat_entry(sys, fd, namez, logical, dot)?
                 };
                 // A directory repeating an ancestor is `FTS_DC`, known before its block is made.
-                let cycle = match st.1 {
-                    Some(s) if st.0 == info::D => self.cycle_of(n, &s)?,
+                let cycle = match &st.1 {
+                    Some(s) if st.0 == info::D => self.cycle_of(n, s.dev, s.ino)?,
                     _ => 0,
                 };
-                let st = if cycle != 0 { (info::DC, st.1, st.2) } else { st };
-                let c = self.new_node(mem, cname, cpath_len, n, child_level, st, cycle, logical, root_dev, false)?;
+                if cycle != 0 {
+                    st.0 = info::DC;
+                }
+                let c = self.new_node(mem, cname, cpath_len, n, child_level, &st, cycle, logical, root_dev, false)?;
                 if let Err(e) = kids.push(c) {
                     self.free_node(mem, c);
                     return Err(e);
