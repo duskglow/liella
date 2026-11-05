@@ -1,0 +1,11 @@
+{"task": "PERF-QSORT-OFFSET-EXP-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: address-based positions in qsort's index sort (ruling #3097): every qsort row -8.1% to -9.9% instructions per sort (about 4.5 per comparison), sort-utf8 unchanged and output SAME; gate, lint, plants (6/6 CAUGHT) green",
+ "branch": "task/perf-qsort-offset-exp-2", "head": null,
+ "gate": {"affected": "2354 passed / 0 failed (direct tier, code commit 6a451fc4)", "peak": "2.3G, oom_kill=0"}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["previous plants job rc 2: plants file named package liella-core (does not exist; core's package is liella); docs/plants.md's examples (lines 55 and 81) use the same wrong name", "gate, pc1 and wlc ran on 6a451fc4, the last code commit; later commits are docs/handoff only (gate not rerun, per the coordinator)", "still 1.13 to 1.35x glibc instructions per comparison; Ivy Bridge timing left to the next TIMING-SWEEP"],
+ "refused": [],
+ "improvement": "fix docs/plants.md's example package name (liella-core -> liella): it cost the previous run its plants job; xtask plants could also check -p names against cargo metadata before the baseline",
+ "next_step": "land; next TIMING-SWEEP times the qsort rows (revert if slower on Ivy Bridge); comparison-count gap is its own story",
+ "jobs": ["keke:perf-qsort-offset-exp-gate", "keke:perf-qsort-offset-exp-2-lint", "keke:perf-qsort-offset-exp-2-plants", "keke:perf-qsort-offset-exp-pc1", "keke:perf-qsort-offset-exp-wlc"],
+ "report_file": "handoff/perf-qsort-offset-exp.md"}

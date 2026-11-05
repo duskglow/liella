@@ -41,7 +41,7 @@ numbers from `csys/syscalls.tsv`, `long double` handled as raw 80-bit words, and
 | Thread pointer through `%fs` | `boundary/src/tb.rs` (`asm!`, tagged), `boundary/src/raw.rs` (`ARCH_SET_FS`, tagged), `runtime.rs` and `s00_conventions_clauses.rs` (`ARCH_GET_FS`, tagged) | `TPIDR_EL0`, TLS variant I | A-4 |
 | `arch_prctl` system call and its exports | `kernel/src/sys.rs`, `kernel/src/ops.rs`, `boundary/src/raw.rs`, `posix/s18_processes.rs`, symbol tests (tagged); `kernel/src/uapi.rs`, `boundary/src/ffi_sys.rs` (allowed, thread-pointer) | none: x86_64 only; drop from the aarch64 syscall table and export list | A-3, A-5 (RL-8) |
 | `rdtsc` and its `PR_GET_TSC` gate (D-7.14) | `boundary/src/sys.rs` (the only `target_arch` branches, tagged; a non-x86_64 arm already returns 0) | `CNTVCT_EL0` | A-6 |
-| AVX2 intrinsics | `boundary/src/hot.rs` (tagged) | NEON or a portable Rust path | A-8 |
+| AVX2 intrinsics | `boundary/src/hot/` (tagged) | NEON or a portable Rust path | A-8 |
 | `R_X86_64_IRELATIVE` | `boundary/src/runtime.rs` (tagged) | the aarch64 IRELATIVE number (AAELF64) | A-6 |
 | Syscall numbers | `csys/syscalls.tsv` (`asm/unistd_64.h`) | the generic table, arch column | A-3 |
 

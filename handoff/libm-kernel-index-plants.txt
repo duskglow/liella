@@ -1,0 +1,5 @@
+# LIBM-KERNEL-INDEX plants (cargo xtask plants; docs/plants.md).
+# 1. A new kernel added without regenerating: the static tables-fresh check must name KERNELS.md as stale.
+kernel-index-dummy-kernel | crates/math/src/fast32/trig.rs | lit:pub fn sincos(x: f32, mode: Rounding) ==> pub(super) fn plant_dummy_kernel(x: f32) -> Option<f64> { Some(x as f64) }\npub fn sincos(x: f32, mode: Rounding) | cargo xtask static | msg:crates/math/KERNELS\.md is out of date: run `cargo xtask kernel-index`
+# 2. A generator change not rerun (the page's legend changes): the same check must fail.
+kernel-index-generator | xtask/src/kernel_index.rs | lit:Read this first; open kernel code ==> Read this first! Open kernel code | cargo xtask static | msg:crates/math/KERNELS\.md is out of date: run `cargo xtask kernel-index`

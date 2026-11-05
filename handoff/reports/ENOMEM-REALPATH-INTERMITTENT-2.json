@@ -1,0 +1,12 @@
+{"task": "ENOMEM-REALPATH-INTERMITTENT-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: cause not proven; sweep no longer judges a window another thread's allocator call overlapped (test-only counter in FailAlloc) and prints its baseline; 0 failures in 7100 runs on mei (sequential and 32-way bursts), no overlapped window ever seen",
+ "branch": "task/enomem-realpath-intermittent-2", "head": "3440d515",
+ "gate": {"affected": "6362 passed / 0 failed (direct tier, mei, code head 3440d515)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "land the measurement guard now (green, plants 3/3 CAUGHT) although the cause is not proven", "recommendation": "land it: it costs nothing, and a later sighting with it in place rules out other-thread allocator traffic and shows the baseline"}],
+ "informational": ["after value is 6832 in all three sightings (6800->6832, 5808->6832): the baseline may read low rather than the window growing; points at the heap stats path (mallinfo2 across shards)", "erpi-kdbg on keke was still queued and was not read", "parity-memset-small-avx2-2-gate.log on keke has no failure line; its affected.log was not found, so the 5808->6832 sighting is not verified here"],
+ "refused": [],
+ "improvement": "the gate's affected.log path should be named in the gate log so a sighting can be read back; nextest output of passing tests is not kept, so a baseline print only helps in loops",
+ "next_step": "loop the real exports-interposed nextest pass of -p liella on a 2-node host; on a failure compare before with the printed baseline; if before is low, inspect heap stats (crates/rt/src/heap.rs) for a transient undercount",
+ "report_file": "handoff/ENOMEM-REALPATH-INTERMITTENT.md",
+ "jobs": ["mei:enomem-realpath-intermittent-2-gate", "mei:enomem-realpath-intermittent-2-plants"]}

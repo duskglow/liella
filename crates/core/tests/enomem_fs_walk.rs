@@ -86,8 +86,23 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
     // slot of a closed or failed stream on a free list for the next open). That pool is filled
     // here, so the leak checks below see only what a failed call leaves behind.
     let _ = attempt();
-    for n in 1..=20_000u64 {
+    // `uordblks` is process-wide. With the exports interposed (the suite's second pass) every
+    // thread's Rust allocations are Liella heap blocks, so an allocation by libtest's main thread
+    // (its bookkeeping right after it starts this test's thread) can land between `before` and
+    // `after` and look like a leak of the call (ENOMEM-REALPATH-INTERMITTENT: +32 and +1024 bytes
+    // at allocation 1 on a loaded 2-node host). A window that another thread's allocator call
+    // overlapped is not judged: the same `n` is measured again (`disturbed`). The
+    // per-thread checks need no such care.
+    let mut disturbed = 0u64;
+    let mut disturbed_moved = 0u64;
+    // Reported in the summary: the baseline a failing run's message can be compared with.
+    let mut first_before = None;
+    let mut n = 0u64;
+    while n < 20_000 {
+        n += 1;
+        let others_done = failinject::others_done();
         let before = s03_memory::mallinfo2().uordblks;
+        let _ = first_before.get_or_insert(before);
         let live_before = failinject::live_bytes();
         let caller_before = selftest::caller_blocks();
         let hit = failinject::injected();
@@ -96,6 +111,15 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
         failinject::off();
         let injected = failinject::injected() != hit;
         let after = s03_memory::mallinfo2().uordblks;
+        if failinject::others_begun() != others_done {
+            disturbed += 1;
+            disturbed_moved += u64::from(after != before);
+            if disturbed > 1000 {
+                return format!("{walker}: allocation {n}: other threads used the allocator in 1000 windows, none measured");
+            }
+            n -= 1;
+            continue;
+        }
         let failed = matches!(verdict, Verdict::Failed);
         if failed && failinject::live_bytes() != live_before {
             return format!("{walker}: allocation {n}: a partial result stays allocated on the global allocator ({live_before} -> {})", failinject::live_bytes());
@@ -116,7 +140,7 @@ fn sweep(walker: &str, mut attempt: impl FnMut() -> Verdict) -> String {
             if failures == 0 {
                 eprintln!("NOT TESTABLE YET: {walker} makes no global-allocator allocation (C heap only)");
             } else {
-                eprintln!("{walker}: {failures} allocation failures injected, all reported as documented ({absorbed} absorbed with the complete result)");
+                eprintln!("{walker}: {failures} allocation failures injected, all reported as documented ({absorbed} absorbed with the complete result; {disturbed} windows measured again after another thread used the allocator, {disturbed_moved} of them with the C heap moved; C heap in use before the first window: {} bytes)", first_before.unwrap_or(0));
             }
             return String::new();
         }
