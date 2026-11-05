@@ -261,6 +261,8 @@ const SIGABRT: i32 = 6;
 static NULL_CASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static NULL_FOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static NULL_AVX2: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// `rep stosb` forced on in the child (the `memset` entry's ERMS path on every machine).
+static NULL_ERMS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const NULL_CALLS: usize = 7;
 
 fn null_call(k: &CSys) -> i32 {
@@ -272,6 +274,9 @@ fn null_call(k: &CSys) -> i32 {
     let (case, fold) = (NULL_CASE.load(SeqCst), NULL_FOLD.load(SeqCst));
     if !selftest::set_null_fold(fold) || !selftest::set_kernel_avx2(NULL_AVX2.load(SeqCst)) {
         return 3;
+    }
+    if NULL_ERMS.load(SeqCst) {
+        selftest::set_erms(true);
     }
     let (call, n) = (case % NULL_CALLS, case / NULL_CALLS);
     let mut buf = [0x5Au8; 256];
@@ -299,18 +304,22 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
     use std::sync::atomic::Ordering::SeqCst;
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // (fold, AVX2 build): the AVX2 flag changes only the 65-256 copy and 129-256 fill classes.
-    let mut runs = vec![(false, false), (true, false)];
+    // Third: `rep stosb` forced on, so the `memset` entry's ERMS path (MEMSET-4K-4: NULL is
+    // 64-byte aligned and takes its aligned branch) is checked without ERMS hardware too.
+    let mut runs = vec![(false, false, false), (true, false, false), (true, false, true)];
     if liella_boundary::cpu::avx2() {
-        runs.push((true, true));
+        runs.push((true, true, false));
     }
-    for (fold, avx2) in runs {
+    for (fold, avx2, erms) in runs {
         NULL_FOLD.store(fold, SeqCst);
         NULL_AVX2.store(avx2, SeqCst);
+        NULL_ERMS.store(erms, SeqCst);
         // Folded: every folded size, then the class bounds above it. Checked: the class bounds
         // (each abort prints a line).
-        let sizes: Vec<usize> = match (fold, avx2) {
-            (true, false) => (1..=66).chain([96, 127, 128, 129, 144, 200, 256, 257, 4096]).collect(),
-            (true, true) => (60..=70).chain([96, 127, 128, 129, 144, 256, 257]).collect(),
+        let sizes: Vec<usize> = match (fold, avx2, erms) {
+            (_, _, true) => vec![1280, 4096, 65_536],
+            (true, false, _) => (1..=66).chain([96, 127, 128, 129, 144, 200, 256, 257, 4096]).collect(),
+            (true, true, _) => (60..=70).chain([96, 127, 128, 129, 144, 256, 257]).collect(),
             _ => vec![1, 2, 3, 4, 7, 8, 15, 16, 17, 32, 33, 63, 64, 65, 96, 127, 128, 129, 144, 200, 256, 257, 4096],
         };
         for n in sizes {
