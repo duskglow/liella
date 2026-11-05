@@ -54,7 +54,10 @@ fn rate(name: &str, (got, n): (usize, usize)) {
 /// The accurate path in round-to-nearest, as `fn(f64) -> f64`.
 macro_rules! rn {
     ($f:ident) => {
-        (|x: f64| Real::$f(x, Rounding::Nearest).0) as fn(f64) -> f64
+        {
+            let f: fn(f64) -> f64 = |x: f64| Real::$f(x, Rounding::Nearest).0;
+            f
+        }
     };
 }
 
@@ -78,11 +81,12 @@ fn log1p_tier_matches_the_accurate_path() {
 
 #[test]
 fn hyperbolic_tier_matches_the_accurate_path() {
-    for (name, f, ex, top) in [
-        ("sinh", super::sinh_nearest as fn(f64) -> Option<f64>, rn!(sinh), 708.0),
+    let rows: [(&str, fn(f64) -> Option<f64>, fn(f64) -> f64, f64); 3] = [
+        ("sinh", super::sinh_nearest, rn!(sinh), 708.0),
         ("cosh", super::cosh_nearest, rn!(cosh), 708.0),
         ("tanh", super::tanh_nearest, rn!(tanh), 22.0),
-    ] {
+    ];
+    for (name, f, ex, top) in rows {
         rate(name, check(name, f, ex, logscale(40_000, 0x1234_5678_9abc_def1, 60).map(|x| x * 0.0078)));
         rate(name, check(name, f, ex, uniform(60_000, 0x9e37_79b9_7f4a_7c15, -top, top)));
         rate(name, check(name, f, ex, uniform(40_000, 0x2545_f491_4f6c_dd1d, -45.0, 45.0)));
