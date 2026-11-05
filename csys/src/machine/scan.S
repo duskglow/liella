@@ -325,8 +325,9 @@ liella_machine_strlen:
 	vpminub %ymm1, %ymm2, %ymm3
 	vpcmpeqb %ymm0, %ymm3, %ymm3
 	subq $-128, %rax
-	vpmovmskb %ymm3, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest is the any-match test (ZF set iff no byte compared equal), one
+	 * instruction for vpmovmskb + test: 9 per 128 bytes. */
+	vptest %ymm3, %ymm3
 	jz .Lstrlen_avx_loop
 	addq $-128, %rax
 	/* ymm1 = the minimum of the group's first 64 bytes. */
@@ -1470,14 +1471,13 @@ liella_machine_strnlen:
 	jae .Lstrnlen_pre
 	/* SMALL-STR head (D-4.45), max > 64: on the AVX2 level with [s, s + 64) inside s's page,
 	 * two unaligned 32-byte blocks [s, s + 32) and [s + 32, s + 64), one branch each (SAFETY:
-	 * both loads lie in s's page, mapped because max >= 1). Answers are clamped to max. */
+	 * both loads lie in s's page, mapped because max >= 1). PARITY-SCAN-AVX2: an answer from
+	 * these two blocks is below 64 < max, so it needs no clamp. */
 	vpxor %xmm0, %xmm0, %xmm0
 	vpcmpeqb (%rdi), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
 	bsfl %eax, %eax
 	jz .Lstrnlen_f32
-	cmpq %rsi, %rax
-	cmovaq %rsi, %rax
 	vzeroupper
 	ret
 .Lstrnlen_f32:
@@ -1486,8 +1486,6 @@ liella_machine_strnlen:
 	bsfl %edx, %edx
 	jz .Lstrnlen_f64
 	leaq 32(%rdx), %rax
-	cmpq %rsi, %rax
-	cmovaq %rsi, %rax
 	vzeroupper
 	ret
 .Lstrnlen_f64:
@@ -1878,8 +1876,8 @@ liella_machine_strnlen:
 	vpminub %ymm1, %ymm2, %ymm3
 	vpcmpeqb %ymm0, %ymm3, %ymm3
 	subq $-128, %rax
-	vpmovmskb %ymm3, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop). */
+	vptest %ymm3, %ymm3
 	jz .Lstrnlen_avx_loop
 	addq $-128, %rax
 	/* ymm1 = the minimum of the group's first 64 bytes. */
@@ -2207,8 +2205,8 @@ liella_machine_rawmemchr:
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
 	subq $-128, %rax
-	vpmovmskb %ymm6, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 10 per 128 bytes. */
+	vptest %ymm6, %ymm6
 	jz .Lraw_avx_loop
 	addq $-128, %rax
 	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
@@ -2687,8 +2685,8 @@ liella_machine_memchr:
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
 	subq $-128, %rax
-	vpmovmskb %ymm6, %r9d
-	testl %r9d, %r9d
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
+	vptest %ymm6, %ymm6
 	jz .Lmemchr_avx_loop
 	addq $-128, %rax
 	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
@@ -6345,8 +6343,8 @@ liella_machine_memrchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
+	vptest %ymm5, %ymm5
 	jz .Lmrc_avx
 	vpmovmskb %ymm3, %edx
 	vpmovmskb %ymm4, %esi
@@ -6377,8 +6375,7 @@ liella_machine_memrchr:
 	vpcmpeqb -64(%rax), %ymm0, %ymm1
 	vpcmpeqb -32(%rax), %ymm0, %ymm2
 	vpor %ymm1, %ymm2, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	vptest %ymm5, %ymm5
 	jnz .Lmrc_avx_tail_hit
 	subq $64, %rax
 	cmpq %rdi, %rax
@@ -6386,8 +6383,7 @@ liella_machine_memrchr:
 	vpcmpeqb -64(%rax), %ymm0, %ymm1
 	vpcmpeqb -32(%rax), %ymm0, %ymm2
 	vpor %ymm1, %ymm2, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	vptest %ymm5, %ymm5
 	jnz .Lmrc_avx_tail_hit
 .Lmrc_avx_null:
 	vzeroupper
