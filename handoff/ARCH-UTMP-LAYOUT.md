@@ -41,3 +41,9 @@ Not done / NOT VERIFIED: no plants job for the scan.S change (the failing state 
 the evidence that the test catches its absence); memcmp/memchr stay in shared chunks and could cross a window the same way later
 (next step: give them own sections the same way, keys memcmp / memchr). The gate escalated to FULL (branch 129 commits behind
 next; rebase/merge is the coordinator's); its result is whatever jobs.tsv shows for arch-utmp-layout-3-gate.
+
+## ARCH-UTMP-LAYOUT-4 (continuation)
+Merged origin/next (with the SPAWN-STRAY-FD fix) into the branch; no other change. Jobs on shiki role sh1, final head:
+arch-utmp-layout-4-gate rc 0 (FULL tier, 2652 s), arch-utmp-layout-4-plants rc 0 (4/4 CAUGHT, fresh copy plants-1),
+arch-utmp-layout-4-lint rc 0 (clippy workspace all-targets all-features + cargo xtask static).
+Not done: memcmp/memchr own hot sections (optional hardening, see -3). Next: land.
