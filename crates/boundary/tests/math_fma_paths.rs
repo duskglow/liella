@@ -75,3 +75,41 @@ fn exp_and_log_fma_build_matches_baseline_bit_for_bit() {
     // Leave the startup decision in force for any later test in this binary.
     assert!(selftest::set_math_fma(true));
 }
+
+/// `count` signed values `±m·2^-e` (`e` below `emax`) scaled by `scale`, and `count` uniform in
+/// `[lo, hi)`.
+fn sample(s: &mut u64, count: usize, emax: u64, scale: f64, lo: f64, hi: f64) -> Vec<f64> {
+    let mut xs: Vec<f64> = (0..count)
+        .map(|_| {
+            let b = next(s);
+            let mag = scale * 2f64.powi(-((b % emax) as i32)) * (1.0 + (b >> 12) as f64 * 2f64.powi(-52));
+            if b & 1 == 0 { mag } else { -mag }
+        })
+        .collect();
+    xs.extend((0..count).map(|_| lo + (next(s) >> 11) as f64 * 2f64.powi(-53) * (hi - lo)));
+    xs
+}
+
+// s10_0_f_0, s10_0_g_0: every build of expm1/log1p/sinh/cosh/tanh/cbrt computes the same,
+// correctly rounded result (LIBM-F64-EXPM1-HYPER-CBRT-TIER).
+#[test]
+fn expm1_log1p_hyperbolic_cbrt_fma_build_matches_baseline_bit_for_bit() {
+    if !selftest::set_math_fma(true) {
+        eprintln!("SKIP: this CPU (or its OS) has no FMA; only the baseline build exists here");
+        return;
+    }
+    let mut s = 0x2545_f491_4f6c_dd1du64;
+    let ex = sample(&mut s, 60_000, 62, 0.03, -38.0, 710.0);
+    let a = both(m::expm1, |x| Real::expm1(x, Rounding::Nearest).0, &ex);
+    let lp: Vec<f64> = sample(&mut s, 60_000, 62, 0.01, -1.0, 8.0).into_iter().chain((0..20_000).map(|_| f64::from_bits(next(&mut s) >> 1))).filter(|x| x.is_finite()).collect();
+    let b = both(m::log1p, |x| Real::log1p(x, Rounding::Nearest).0, &lp);
+    let hy = sample(&mut s, 60_000, 62, 0.03, -712.0, 712.0);
+    let c = both(m::sinh, |x| Real::sinh(x, Rounding::Nearest).0, &hy);
+    let d = both(m::cosh, |x| Real::cosh(x, Rounding::Nearest).0, &hy);
+    let th = sample(&mut s, 60_000, 62, 0.03, -23.0, 23.0);
+    let e = both(m::tanh, |x| Real::tanh(x, Rounding::Nearest).0, &th);
+    let cb: Vec<f64> = (0..120_000).map(|_| f64::from_bits(next(&mut s))).filter(|x| x.is_finite()).chain((1..3000).map(|n| f64::from(n).powi(3))).collect();
+    let f = both(m::cbrt, |x| Real::cbrt(x, Rounding::Nearest).0, &cb);
+    assert!([a, b, c, d, e, f].iter().all(|&n| n > 1000), "sample too small: {a} {b} {c} {d} {e} {f}");
+    assert!(selftest::set_math_fma(true));
+}

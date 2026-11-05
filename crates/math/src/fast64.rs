@@ -18,6 +18,10 @@
 //! The only error near `2^-70` is the `double` evaluation of the series tail `T` (a few roundings:
 //! below `5u·|T| < 2^-50·|T|`), so `eps = 2^-49·|T|·|scale| + 2^-70·|y|` (with the factor 2 for
 //! the table value multiplying `T` in `exp`, at most 1.006). See [`exp_kernel`] and [`log`].
+//!
+//! Layout: this file holds the exp/log kernels and their entries; the fast tier of `expm1`,
+//! `log1p` and `cbrt` is in `fast64/exp_log.rs`, that of `sinh`, `cosh` and `tanh` in
+//! `fast64/hyperbolic.rs` (both reuse these kernels), their tests in `fast64/tier_tests.rs`.
 
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // table indices reduced to the tables' ranges; exponents of bounded range
 
@@ -25,6 +29,13 @@ use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
 use crate::float;
 use crate::status::{Flags, Rounding, Status};
+
+mod exp_log;
+mod hyperbolic;
+#[cfg(test)]
+mod tier_tests;
+pub use exp_log::{cbrt_nearest, expm1_nearest, log1p_nearest};
+pub use hyperbolic::{cosh_nearest, sinh_nearest, tanh_nearest};
 
 /// 2^-70: the margin for all the errors far below the series tail's.
 const MARGIN: f64 = f64::from_bits(0x3b90_0000_0000_0000);
@@ -306,6 +317,9 @@ pub mod fused {
     use crate::dd;
 
     kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma);
+
+    pub use super::exp_log::fused::{cbrt_nearest, expm1_nearest, log1p_nearest};
+    pub use super::hyperbolic::fused::{cosh_nearest, sinh_nearest, tanh_nearest};
 
     /// [`super::exp10_nearest`], FMA build (LIBM-F64-FAST-KERNELS).
     ///

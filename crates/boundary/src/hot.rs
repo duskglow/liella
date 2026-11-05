@@ -2557,6 +2557,74 @@ pub(crate) fn log_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::log_nearest(x)
 }
 
+/// The `double` `expm1` fast path (LIBM-F64-EXPM1-HYPER-CBRT-TIER) in its build chosen at
+/// startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn expm1_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::expm1_nearest(x) };
+    }
+    liella_math::fast64::expm1_nearest(x)
+}
+
+/// The `double` `log1p` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log1p_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log1p_nearest(x) };
+    }
+    liella_math::fast64::log1p_nearest(x)
+}
+
+/// The `double` `sinh` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn sinh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::sinh_nearest(x) };
+    }
+    liella_math::fast64::sinh_nearest(x)
+}
+
+/// The `double` `cosh` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn cosh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::cosh_nearest(x) };
+    }
+    liella_math::fast64::cosh_nearest(x)
+}
+
+/// The `double` `tanh` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn tanh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::tanh_nearest(x) };
+    }
+    liella_math::fast64::tanh_nearest(x)
+}
+
+/// The `double` `cbrt` fast path in its build chosen at startup (as [`exp_nearest`]); it declines
+/// exact cubes, so a refused attempt's inexact is undone by `mathret::elem_fast_cold`.
+#[inline(always)]
+pub(crate) fn cbrt_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::cbrt_nearest(x) };
+    }
+    liella_math::fast64::cbrt_nearest(x)
+}
+
 /// The `double` inverse-trigonometric and `hypot` fast paths (LIBM-F64-INVTRIG-HYPOT-TIER) in
 /// their build chosen at startup (as [`exp_nearest`]; the two builds agree bit for bit).
 macro_rules! invtrig_nearest {
