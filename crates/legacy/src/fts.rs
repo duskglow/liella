@@ -272,22 +272,30 @@ fn put(b: &mut [u8], at: usize, v: &[u8]) {
     }
 }
 
+/// [`put`] into a block of known length: with a constant `at` the bounds check is folded away.
+#[inline(always)]
+fn putf<const N: usize>(b: &mut [u8; N], at: usize, v: &[u8]) {
+    if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
+        d.copy_from_slice(v);
+    }
+}
+
 fn stat_bytes(st: &Stat) -> [u8; STAT_SIZE] {
     let mut b = [0u8; STAT_SIZE];
-    put(&mut b, 0, &st.dev.to_ne_bytes());
-    put(&mut b, 8, &st.ino.to_ne_bytes());
-    put(&mut b, 16, &st.nlink.to_ne_bytes());
-    put(&mut b, 24, &st.mode.to_ne_bytes());
-    put(&mut b, 28, &st.uid.to_ne_bytes());
-    put(&mut b, 32, &st.gid.to_ne_bytes());
-    put(&mut b, 40, &st.rdev.to_ne_bytes());
-    put(&mut b, 48, &st.size.to_ne_bytes());
-    put(&mut b, 56, &st.blksize.to_ne_bytes());
-    put(&mut b, 64, &st.blocks.to_ne_bytes());
+    putf(&mut b, 0, &st.dev.to_ne_bytes());
+    putf(&mut b, 8, &st.ino.to_ne_bytes());
+    putf(&mut b, 16, &st.nlink.to_ne_bytes());
+    putf(&mut b, 24, &st.mode.to_ne_bytes());
+    putf(&mut b, 28, &st.uid.to_ne_bytes());
+    putf(&mut b, 32, &st.gid.to_ne_bytes());
+    putf(&mut b, 40, &st.rdev.to_ne_bytes());
+    putf(&mut b, 48, &st.size.to_ne_bytes());
+    putf(&mut b, 56, &st.blksize.to_ne_bytes());
+    putf(&mut b, 64, &st.blocks.to_ne_bytes());
     for (i, t) in [st.atime, st.mtime, st.ctime].iter().enumerate() {
         let at = 72usize.saturating_add(i.saturating_mul(16));
-        put(&mut b, at, &t.sec.to_ne_bytes());
-        put(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
+        putf(&mut b, at, &t.sec.to_ne_bytes());
+        putf(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
     }
     b
 }
@@ -475,25 +483,27 @@ impl Fts {
     /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
     /// the caller's or `fts_set`'s, and the zeros the block was made with.
     fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
+        // The fixed length lets every field write below drop its bounds check.
+        let Ok(b) = <&mut [u8; off::NAME]>::try_from(b) else { return };
         let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
-        put(b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(b, off::PARENT, &parent.to_ne_bytes());
-        put(b, off::LINK, &x.link.to_ne_bytes());
-        put(b, off::ACCPATH, &acc.to_ne_bytes());
-        put(b, off::PATH, &self.buf.to_ne_bytes());
-        put(b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(b, off::SYMFD, &0i32.to_ne_bytes());
-        put(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(b, off::INO, &st.ino.to_ne_bytes());
-        put(b, off::DEV, &st.dev.to_ne_bytes());
-        put(b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(b, off::INFO, &x.info.to_ne_bytes());
-        put(b, off::FLAGS, &0u16.to_ne_bytes());
-        put(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
+        putf(b, off::CYCLE, &x.cycle.to_ne_bytes());
+        putf(b, off::PARENT, &parent.to_ne_bytes());
+        putf(b, off::LINK, &x.link.to_ne_bytes());
+        putf(b, off::ACCPATH, &acc.to_ne_bytes());
+        putf(b, off::PATH, &self.buf.to_ne_bytes());
+        putf(b, off::ERRNO, &x.errno.to_ne_bytes());
+        putf(b, off::SYMFD, &0i32.to_ne_bytes());
+        putf(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::INO, &st.ino.to_ne_bytes());
+        putf(b, off::DEV, &st.dev.to_ne_bytes());
+        putf(b, off::NLINK, &st.nlink.to_ne_bytes());
+        putf(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        putf(b, off::INFO, &x.info.to_ne_bytes());
+        putf(b, off::FLAGS, &0u16.to_ne_bytes());
+        putf(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
