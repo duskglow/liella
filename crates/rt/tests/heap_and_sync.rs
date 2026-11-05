@@ -898,6 +898,51 @@ fn the_free_fast_path_finds_each_blocks_own_slab() {
 }
 
 #[test]
+fn a_free_of_the_latest_fast_block_releases_that_block_only() {
+    // Trace: no spec clause (the free fast path's record of the latest fast allocation,
+    // PERF-MALLOC-LATEST-FREE-EXP); D-3.11 (double frees stay detected), S6.
+    const SLAB: usize = 1 << 18;
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    // 200 16-byte blocks from block 0 of one slab: words 0-2 full, word 3 partly.
+    let live: Vec<usize> = (0..200).map(|_| heap.alloc(&CSys, &pages, 8, ALIGN).unwrap().addr).collect();
+    for (i, &p) in live.iter().enumerate() {
+        assert_eq!(p, live[0] + i * 16, "block {i} of one slab");
+    }
+    let fast = || Heap::alloc_fast(&pages, 8, ALIGN).map_or(0, |b| b.addr);
+    for i in [100, 70, 3, 131, 199] {
+        // A free on the slab-hint path; the fast path gives the block back and records it.
+        heap.free(&CSys, &pages, live[i]).unwrap();
+        assert_eq!(fast(), live[i], "block {i} comes back from the fast path");
+        assert!(Heap::free_fast(&pages, live[i]), "block {i}: the latest block is freed on the fast path");
+        for (n, &p) in live.iter().enumerate() {
+            if n != i {
+                assert_eq!(heap.usable(&CSys, &pages, p), Ok(16), "block {n} stays live after block {i}'s free");
+            }
+        }
+        assert_eq!(heap.free(&CSys, &pages, live[i]), Err(Misuse::DoubleFree), "block {i}: the latest block freed twice");
+        assert_eq!(heap.usable(&CSys, &pages, live[i]), Err(Misuse::DoubleFree), "block {i} is free");
+        assert_eq!(fast(), live[i], "block {i} is the lowest free block of its word");
+    }
+    // The latest block in a slab that has stopped being current: a full 32-byte slab whose
+    // block 0 is the latest fast allocation, then a block from the next slab (block 0 too).
+    let per = SLAB / 32;
+    let old: Vec<usize> = (0..per).map(|_| heap.alloc(&CSys, &pages, 32, ALIGN).unwrap().addr).collect();
+    heap.free(&CSys, &pages, old[0]).unwrap();
+    assert_eq!(Heap::alloc_fast(&pages, 32, ALIGN).map(|b| b.addr), Some(old[0]), "block 0 is the latest");
+    let new = heap.alloc(&CSys, &pages, 32, ALIGN).unwrap().addr;
+    assert_eq!(new & (SLAB - 1), old[0] & (SLAB - 1), "block 0 of the next slab");
+    heap.free(&CSys, &pages, old[0]).unwrap();
+    assert_eq!(heap.usable(&CSys, &pages, new), Ok(32), "the new slab's block 0 is still live");
+    assert_eq!(heap.free(&CSys, &pages, old[0]), Err(Misuse::DoubleFree));
+    heap.free(&CSys, &pages, new).unwrap();
+    for &p in old[1..].iter().chain(&live) {
+        heap.free(&CSys, &pages, p).unwrap();
+    }
+    assert_eq!(heap.stats(&CSys, &pages).in_use, 0);
+}
+
+#[test]
 fn malloc_reuses_blocks_freed_into_several_words() {
     // Trace: no spec clause (the allocation hint's free groups, HEAP-HINT-2); D-3.16.
     let heap = Heap::new();
