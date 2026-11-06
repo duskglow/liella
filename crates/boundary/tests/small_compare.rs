@@ -238,6 +238,45 @@ fn the_size_shards_tile_0_to_max() {
     assert_eq!(next, MAX + 1);
 }
 
+/// Sizes of the long classes above `MAX` (TIMING-N100-MEMCMP: the 256-byte steps from byte 32,
+/// then the 128-byte chunk at the cursor when more than 128 bytes remain, then the last at
+/// n - 128): no step (257-288), one step and a short rest (289-300 in the shards; 416), one step
+/// and the 128-byte rest chunk (417, 543), the step boundary (544, 545), several steps (673-1100),
+/// the class limit and the entry above it (2048, 2049) and the 4 KiB rows (4096, 4097).
+const LONG_SIZES: [usize; 14] = [289, 416, 417, 543, 544, 545, 673, 800, 1056, 1100, 2048, 2049, 4096, 4097];
+
+/// The long classes against the byte loop: three alignment pairs, a first difference at the start,
+/// middle and end of every 32-byte block (offsets 0, 17 and 31) and at the edges, each pair order
+/// across 0x80 with every later byte differing the other way, and a lone difference.
+fn compares_match_a_byte_loop_in_the_long_classes() {
+    let top = LONG_SIZES[LONG_SIZES.len() - 1];
+    let mut a = vec![0u8; top + WIN];
+    let mut b = vec![0u8; top + WIN];
+    for n in LONG_SIZES {
+        for (ao, bo) in [(0, 0), (3, 9), (15, 1)] {
+            build(&mut a, &mut b, ao, bo, n, None, false);
+            check(&a, &b, ao, bo, n, "equal");
+            let mut positions: Vec<usize> = (0..n).filter(|p| matches!(p % 32, 0 | 17 | 31)).chain(edge_positions(n)).collect();
+            positions.sort_unstable();
+            positions.dedup();
+            for p in positions {
+                for (x, y) in [(0x7F, 0x80), (0x80, 0x7F)] {
+                    build(&mut a, &mut b, ao, bo, n, Some((p, x, y)), true);
+                    check(&a, &b, ao, bo, n, &format!("first difference at {p}: {x:#04x} vs {y:#04x}"));
+                }
+                build(&mut a, &mut b, ao, bo, n, Some((p, 0x00, 0xFF)), false);
+                check(&a, &b, ao, bo, n, &format!("only difference at {p}"));
+            }
+        }
+    }
+}
+
+#[test]
+fn compares_match_a_byte_loop_in_the_long_classes_in_each_build() {
+    // Clauses: s4_3_c_1, s4_3_c_2, s4_3_c_3 (each build of the kernels, D-4.25; the long classes).
+    each_build(compares_match_a_byte_loop_in_the_long_classes);
+}
+
 #[test]
 fn compares_stay_inside_regions_that_touch_unmapped_pages_in_each_build() {
     // Clauses: s4_3_c_1 (each build of the kernels, D-4.25).

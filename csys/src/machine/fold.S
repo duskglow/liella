@@ -498,10 +498,15 @@ memset:
  * (re-read equal, D-4.21 -> `liella_hot_compare_rescan` with the index in rcx: the counted rescan
  * from the next byte, so a reported index that is too low shows in the self-tests; MEMCMP-MID-2). 129 to `liella_machine_cmp_long` (2048 with
  * folding and AVX2, else 0; MEMCMP-MID-4) take the long AVX2 class here: the same 32-byte head
- * block, then 128-byte chunks from byte 32 (four blocks ANDed, one test; a cursor in a and the
- * distance b - a, so every compare folds a plain address) and a last chunk at n - 128 that may
- * overlap the one before; a differing chunk's four masks give the first differing byte, re-read and
- * ordered as above. Without AVX2, 65-128 and everything above take the SSE2 classes at
+ * block, then (above 288) 256-byte steps from byte 32 (eight blocks ANDed, one test; a negative
+ * index counting up to 0 from the bases a + n - 256 and b + n - 256, and ONE branch per step: the
+ * equal flag (sbb) ANDed with the advanced index loops while that is negative, so a 4 KiB compare
+ * has a 15-trip loop of one branch, which the predictor of a Gracemont-class core follows where a
+ * 31-trip loop of two branches per 128 bytes cost one mispredicted exit per call:
+ * TIMING-N100-MEMCMP), then the at most 256 bytes left as one 128-byte chunk at the cursor when
+ * more than 128 remain (a cursor in a and the distance b - a, so every compare folds a plain
+ * address) and a last chunk at n - 128 that may overlap the one before; a differing chunk's four
+ * masks give the first differing byte, re-read and ordered as above. Without AVX2, 65-128 and everything above take the SSE2 classes at
  * .Lcmp_sse_mid and .Lcmp_sse_long (PERF-MEMCMP-NONAVX2, PERF-MEMCMP-LONG-NONAVX2). Above that word
  * with AVX2 (and above 128 with folding off) .Lcmp_avx_long tests a and b for NULL and takes the
  * same AVX2 head block and long class (PARITY-MEMCMP-AVX2); a NULL a or b tail-jumps to
@@ -778,9 +783,47 @@ memcmp:
 	jbe .Lcmp_256
 	movq %rsi, %r11
 	subq %rdi, %r11
-	leaq 32(%rdi), %r9
-	leaq -128(%rdi,%rdx), %r8
+	leaq -256(%rdi,%rdx), %r8
+	leaq (%r8,%r11), %rcx
+	movl $288, %r9d
+	subq %rdx, %r9
+	jns .Lcmp_long_rest
 .Lcmp_long_loop:
+	vmovdqu (%r8,%r9), %ymm1
+	vmovdqu 32(%r8,%r9), %ymm2
+	vmovdqu 64(%r8,%r9), %ymm3
+	vmovdqu 96(%r8,%r9), %ymm4
+	vmovdqu 128(%r8,%r9), %ymm6
+	vmovdqu 160(%r8,%r9), %ymm7
+	vmovdqu 192(%r8,%r9), %ymm8
+	vmovdqu 224(%r8,%r9), %ymm9
+	vpcmpeqb (%rcx,%r9), %ymm1, %ymm1
+	vpcmpeqb 32(%rcx,%r9), %ymm2, %ymm2
+	vpcmpeqb 64(%rcx,%r9), %ymm3, %ymm3
+	vpcmpeqb 96(%rcx,%r9), %ymm4, %ymm4
+	vpcmpeqb 128(%rcx,%r9), %ymm6, %ymm6
+	vpcmpeqb 160(%rcx,%r9), %ymm7, %ymm7
+	vpcmpeqb 192(%rcx,%r9), %ymm8, %ymm8
+	vpcmpeqb 224(%rcx,%r9), %ymm9, %ymm9
+	vpand %ymm2, %ymm1, %ymm5
+	vpand %ymm4, %ymm3, %ymm12
+	vpand %ymm7, %ymm6, %ymm10
+	vpand %ymm9, %ymm8, %ymm13
+	vpand %ymm12, %ymm5, %ymm5
+	vpand %ymm13, %ymm10, %ymm10
+	vpand %ymm10, %ymm5, %ymm11
+	vptest %ymm0, %ymm11
+	sbbq %r10, %r10
+	addq $256, %r9
+	andq %r9, %r10
+	js .Lcmp_long_loop
+	vptest %ymm0, %ymm11
+	jnc .Lcmp_long_wide_diff
+.Lcmp_long_rest:
+	addq %r8, %r9
+	subq $-128, %r8
+	cmpq %r8, %r9
+	jae .Lcmp_long_last
 	vmovdqu (%r9,%r11), %ymm1
 	vmovdqu 32(%r9,%r11), %ymm2
 	vmovdqu 64(%r9,%r11), %ymm3
@@ -794,9 +837,6 @@ memcmp:
 	vpand %ymm6, %ymm5, %ymm5
 	vptest %ymm0, %ymm5
 	jnc .Lcmp_long_diff
-	subq $-128, %r9
-	cmpq %r8, %r9
-	jb .Lcmp_long_loop
 .Lcmp_long_last:
 	movq %r8, %r9
 	vmovdqu (%r9,%r11), %ymm1
@@ -815,6 +855,18 @@ memcmp:
 	vzeroupper
 	xorl %eax, %eax
 	ret
+/* A differing 256-byte step: r9 is 256 past its start (an offset from r8). Its first half
+ * (ymm1-ymm4, ANDed in ymm5) differing goes to .Lcmp_long_diff as is, else the second half's
+ * masks (ymm6-ymm9) move into ymm1-ymm4 and the cursor 128 further. */
+.Lcmp_long_wide_diff:
+	leaq -256(%r8,%r9), %r9
+	vptest %ymm0, %ymm5
+	jnc .Lcmp_long_diff
+	subq $-128, %r9
+	vmovdqa %ymm6, %ymm1
+	vmovdqa %ymm7, %ymm2
+	vmovdqa %ymm8, %ymm3
+	vmovdqa %ymm9, %ymm4
 .Lcmp_long_diff:
 	vpmovmskb %ymm1, %eax
 	vpmovmskb %ymm2, %ecx
@@ -883,22 +935,22 @@ memcmp:
 	jmp .Lcmp_256_g
 .Lcmp_256:
 	vmovdqu 32(%rdi), %ymm1
-	vmovdqu 64(%rdi), %ymm2
-	vmovdqu 96(%rdi), %ymm3
-	vmovdqu -128(%rdi,%rdx), %ymm4
-	vmovdqu -96(%rdi,%rdx), %ymm5
-	vmovdqu -64(%rdi,%rdx), %ymm6
-	vmovdqu -32(%rdi,%rdx), %ymm7
 	vpcmpeqb 32(%rsi), %ymm1, %ymm1
+	vmovdqu 64(%rdi), %ymm2
 	vpcmpeqb 64(%rsi), %ymm2, %ymm2
+	vmovdqu 96(%rdi), %ymm3
 	vpcmpeqb 96(%rsi), %ymm3, %ymm3
-	vpcmpeqb -128(%rsi,%rdx), %ymm4, %ymm4
-	vpcmpeqb -96(%rsi,%rdx), %ymm5, %ymm5
-	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
-	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
 	vpand %ymm2, %ymm1, %ymm8
+	vmovdqu -128(%rdi,%rdx), %ymm4
+	vpcmpeqb -128(%rsi,%rdx), %ymm4, %ymm4
+	vmovdqu -96(%rdi,%rdx), %ymm5
+	vpcmpeqb -96(%rsi,%rdx), %ymm5, %ymm5
 	vpand %ymm4, %ymm3, %ymm9
+	vmovdqu -64(%rdi,%rdx), %ymm6
+	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
 	vpand %ymm6, %ymm5, %ymm10
+	vmovdqu -32(%rdi,%rdx), %ymm7
+	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
 	vpand %ymm9, %ymm8, %ymm8
 	vpand %ymm7, %ymm10, %ymm10
 	vpand %ymm10, %ymm8, %ymm8
