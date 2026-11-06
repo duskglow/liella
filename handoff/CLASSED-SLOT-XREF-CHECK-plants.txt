@@ -1,0 +1,15 @@
+# CLASSED-SLOT-XREF-CHECK plants: the XREF check (D-X.34, xtask/src/classed.rs). Run: cargo xtask plants handoff/CLASSED-SLOT-XREF-CHECK-plants.txt --dir <dir>
+# The check on the classed pages themselves is planted in handoff/classed-slot-infra-plants.txt (xref-bias-set-mid, xref-bias-fold-limit).
+# The runner rebuilds the products for an xtask mutant, and `cargo xtask so` runs the check on libc.a: a mutant that breaks a correct pair fails there first.
+# An unpaired reference no longer reported (page 1 with one reference more than page 0 passes).
+xref-no-count | xtask/src/classed.rs | lit:    if page0.len() != page1.len() { ==>     if false { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|extra .*: Ok
+# The target no longer compared (a biasless page 1 passes).
+xref-no-target | xtask/src/classed.rs | lit: || a.sym != b.sym || b.target != want { ==>  || a.sym != b.sym { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|(load|jump) \.(o|so): Ok
+# A section with nothing to check passes.
+xref-empty-passes | xtask/src/classed.rs | lit:    if page0.is_empty() && page1.is_empty() { ==>     if false { | cargo test -p xtask classed | msg:the_readers_parse_relocations_and_instructions.*FAILED
+# Relocations taken in readelf's order (grouped by type), not by offset.
+xref-unsorted | xtask/src/classed.rs | lit:    out.sort_by_key(|r| r.0); ==>     let _ = &out; | cargo test -p xtask classed | msg:the_readers_parse_relocations_and_instructions.*FAILED
+# PLT32 (`jz sym`) and PC32 (`jz sym+4096`) compared as different kinds (every correct jump pair fails).
+xref-plt-kind | xtask/src/classed.rs | lit:    if what == "R_X86_64_PLT32" { ==>     if false { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|R_X86_64_PC32 -> [^ ]+ does not match page 0 [^ ]+ R_X86_64_PLT32
+# The linked reader ignores direct jumps and calls (a biasless page 1 jump passes in a linked object).
+xref-linked-no-jumps | xtask/src/classed.rs | lit:let direct = mnem.starts_with('j') ==> let direct = false && mnem.starts_with('j') | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|jump \.so: Ok
