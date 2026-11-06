@@ -1,53 +1,61 @@
 # DL-BOOT-RELOC (phase 14 DL-4): self-relocator, first used by libc.a's static-PIE start
 
-**State:** branch `task/dl-boot-reloc-4` (continues dl-boot-reloc-3; base origin/next), code head `d3ba674b`
-(handoff commit on top). Role mei:~/w/s1. Jobs: mei `dl-boot-reloc-4-lint0` (clippy + static on the inherited head
-05aa096d, rc 0) and `dl-boot-reloc-4-gate` on d3ba674b (clippy, static, `affected --run --base origin/next`; the
-tool escalates to FULL because entry.S defines `_start`): rc 0, 32 suites ok, 11128 tests passed, 0 failed,
-1200 ignored; conformance 124 passed, 0 failed (s01_static_pie and s01_static_pie_rela included); peak 16G
-(page cache), oom_kill=0. No plants this run: the merge changed none of this story's
-code (only a status line in so.rs), per the coordinator's note.
+**State:** branch `task/dl-boot-reloc-5` (continues dl-boot-reloc-4; base origin/next), code head `6ae9fced`
+(unchanged from DL-BOOT-RELOC-4; this run added handoff commits only). Role shiki:~/w/sh2.
+**Verdict: DO NOT LAND until the RPC test story fixes `s29_rpc_clnt_svc_stubs`** (the CI red is that
+test's own race, present on origin/next without this branch; evidence below). The branch itself needs no change.
 
-## Done (DL-BOOT-RELOC-4)
-* CI conflict: merged origin/next (be49b4cd). so.rs: kept DL-PLACEHOLDERS' placeholder build (placeholders.rs,
-  check_no_private) and this story's liella-rcrt1.o product and GOT check whole; the status line now names
-  liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder. s26-29.md: D-27.10 (this story) and D-27.11
-  (DL-SYMBOLS) both kept; D-27.9 (placeholders) and D-27.10 each appear once.
-* Ruling #3670 applied: docs/toolchain.md section 3.3 documents liella-rcrt1.o (build line, what it does, PC-relative
-  check), the section 2 table lists it, section 4 gives the static-PIE link line (d3ba674b).
-* Note: docs/toolchain.md 3.3 still describes the old libpthread-only placeholders; DL-PLACEHOLDERS (D-27.9) changed
-  them. Not this story's text; left for that story's docs.
+## DL-BOOT-RELOC-5: the CI red (train 502, tip 4cb906564)
+* Failure: `liella-boundary::s29_rpc_clnt_svc_stubs every_rpc_client_and_server_stub_fails_cleanly`,
+  `svcudp_create: kept memory` +1024 bytes, in CI's second test build only (`--features
+  liella-boundary/export,liella-boundary/selftest`); the default-feature build passed in the same run.
+* **Reproduced on origin/next alone** (job shiki `dl-boot-reloc-5-repro1`, rc 0; evidence only): the test binary
+  built with those features from origin/next (sha256 faf0d568...) and from origin/next + this branch
+  (bae174cd..., a no-commit merge in a scratch worktree, never pushed), each run 26 workers x 150 = 3900 times
+  with `LIELLA_TEST_MALLOC_PERTURB=165` (as CI), host load 4.6-8.3 on 26 CPUs (Haswell):
+  **next 20 / 3900 fail, next+branch 24 / 3900 fail.** Same signature both: +1024 (50496 -> 51520) or +176
+  (51344 -> 51520) bytes, at a random stub each time (callrpc, svcraw_create, svc_getreq, svcudp_create,
+  svc_unregister, _authenticate, svc_sendreply, ...). A deterministic lazy allocation in a stub would hit the
+  same stub every time and be absorbed by the warm-up round.
+* Cause (test side): with `export`, the test executable defines Liella's `malloc`, so Rust std / libtest
+  allocations land in Liella's heap, and `mallinfo2().uordblks` is process-wide. libtest runs the test on a
+  spawned thread (the panic names thread `every_rpc_client_and_server_stub_fails_cleanly`) while its main thread
+  still allocates after the spawn; under load the main thread is preempted past the warm-up, so its allocation
+  lands inside the measured window. `--test-threads=1` does not help (job shiki `dl-boot-reloc-5-repro2`, rc 0,
+  evidence only: 15 / 3900 fail, still on the spawned thread).
+* Not this branch: the code this branch adds (`runtime.rs` PIE path, `bootstrap.rs`) is `cfg(feature = "runtime")`
+  and is not compiled into that test build at all.
+* Recommendation for the RPC test story: run the heap check in a process with no other thread (a
+  `harness = false` test target, or the repo's re-exec helper with the check on the child's main thread), or a
+  per-thread allocation count; do not loosen the equality.
 
-## Done (DL-BOOT-RELOC-3)
-* Cause of the last red (dl-boot-reloc-2-t1 rc 1): clippy `arithmetic_side_effects` in liella-ld, already fixed
-  in ebb71c51; clippy + static clean on the inherited head (job dl-boot-reloc-3-lint, rc 0).
-* **Link-time selection, no runtime test on the non-PIE start** (coordinator item 1): `entry.S` assembled with
-  `-DLIELLA_STATIC_PIE` is the new `target/liella/liella-rcrt1.o`; its `_start` does `leaq main(%rip)` and
-  `call liella_start_main_static_pie` (PC-relative; `cargo xtask so` refuses a GOT-typed relocation in it, unit
-  test `static_pie_start_object_is_pc_relative`). That entry (`internal_entry!`, local in libc.so.6) runs
-  `runtime::start::<true>`; `__libc_start_main` runs `start::<false>`, which compiles neither the ET_DYN test nor
-  the relocation step nor the pass-2 IRELATIVE branch and keeps origin/next's `prog.bias != 0` refusal (message now
-  names liella-rcrt1.o). The conformance runner links LINK-STATIC-PIE programs with liella-rcrt1.o. D-27.10 updated.
-  Static non-PIE instruction delta vs origin/next: zero by construction (same code as origin/next in that
-  instantiation); NOT MEASURED with perf stat (budget).
-* `relr-span` (item 2): the RELR unit test sets a bit in a second consecutive bitmap word (63- vs 64-word span).
-* `tls-rebase` (item 2), cause: the conformance program's `static __thread` variables were never written, so gcc
-  folded them; the linked static PIE had NO PT_TLS (readelf), and the RELRO half of the delta only feeds an
-  mprotect whose failure is ignored by design. Fix: external-linkage `__thread` variables (79821fcf).
-* WARN-NO-MSG (item 3): msg patterns now `conformance FAILED: s01_static_pie(_rela|:)`. Run plants-1 (head
-  5246efe1): 24 plants, 23 CAUGHT, tls-rebase SURVIVED (cause above), 0 WARN.
-* New plants: `rcrt-check-got` (so.rs check), `pie-entry-plain` (rcrt1's entry runs start::<false>).
+## The three dead-code warnings (classed::start, nscache::start, sys::set_sysinfo_ehdr)
+* Not from this branch: the same three warnings appear in three CI gate logs on mei that do not contain this
+  branch (ci-gate-34c98f61c, -435b9fc3a, -31ecf574c: each lists sys.rs:299, classed.rs:200, nscache.rs:49, and no
+  bootstrap.rs). Their only caller is `runtime::start` (runtime.rs:280, 357, 388), which exists only with feature
+  `runtime`; a test build without it (export,selftest) compiles them uncalled.
+* This branch does not change which start-up init runs: `start::<false>` (liella-crt1.o) and `start::<true>`
+  (liella-rcrt1.o) both run all three on the same path as origin/next (classed::start still only for a static
+  program). Nothing to wire or remove; the tidy fix is `#[cfg_attr(not(feature = "runtime"), allow(dead_code))]`
+  on the three, the pattern ffi.rs already uses (not done here: the brief's case 3 stops the run).
+
+## Jobs this run (shiki)
+* `dl-boot-reloc-5-lint0`: `cargo xtask clippy && cargo xtask static` on the inherited head 6ae9fced, rc 0.
+* `dl-boot-reloc-5-lint1`: the same on the final head (code identical; handoff commits only).
+* `dl-boot-reloc-5-repro1`, `dl-boot-reloc-5-repro2`: evidence loops above (scripts in ~/work/DL-BOOT-RELOC-5/).
+
+## Done earlier (DL-BOOT-RELOC-4, -3; see their reports in handoff/reports/)
+* -4: origin/next merged (so.rs keeps the DL-PLACEHOLDERS build and liella-rcrt1.o whole; D-27.9/10/11 once each);
+  docs/toolchain.md documents liella-rcrt1.o (ruling #3670); FULL gate rc 0 (11128 passed, conformance 124/0).
+* -3: link-time selection (`liella-rcrt1.o` -> `start::<true>`; `__libc_start_main` -> `start::<false>`, no
+  runtime test on the non-PIE start); relr-span and tls-rebase plant fixes; plants 24/24 CAUGHT on 79821fcf.
+* Note: docs/toolchain.md 3.3 still describes the old libpthread-only placeholders (D-27.9's text to fix).
 
 ## Open / next
-1. If gate-2 / plants-2 are red: fix, run only the failing suite.
-2. Done in DL-BOOT-RELOC-4 (docs/toolchain.md); README not changed.
-3. Optional: a conformance check that RELRO is read-only in a static PIE (the RELRO half of the bias delta has no
-   test of its own; the tls-rebase plant is caught through the TLS half).
+1. Coordinator: open the story on `s29_rpc_clnt_svc_stubs` (above); once it lands, this branch can go to CI
+   again with no change (merge origin/next first only if CI reports a conflict).
+2. Optional tidy: the cfg_attr allow on the three runtime-only functions.
+3. Optional: a conformance check that RELRO is read-only in a static PIE.
 4. PT_PHDR load offset: already cut as STATIC-PIE-LOAD-OFFSET; not here.
-
-## Arch seam (§0a checklist)
-1 ticked (GOT check matches type names generically); 2 ticked; 3 n/a; 4 entry.S variant: x86_64 asm, the
-aarch64 start will need its own rcrt1 variant (same -D switch); 5-6 n/a; 7 ticked; 8 n/a; 9 ticked (rcrt1 refs
-PC-relative, checked).
 
 Decisions: D-27.10. Plan rows: design §0a (item 9), §1; phase-14 item 8; R14-1. Plants: handoff/DL-BOOT-RELOC-plants.txt.
