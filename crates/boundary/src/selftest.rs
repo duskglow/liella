@@ -661,6 +661,18 @@ pub fn set_scan_avx2(avx2: bool) -> bool {
     true
 }
 
+/// `liella_machine_strpair`'s answer from `s[off..]` for c0 at q - off and c1 at q
+/// (TIMING-N100-STRSTR-64), so a test checks the scanner's exact contract (the first candidate or
+/// the terminator, not merely a unit that `strstr`'s compare rejects). `None`, without a call,
+/// when `s` breaks the scanner's proof obligation: no 0 byte in `s`, or one before `off`.
+pub fn strpair(s: &[u8], off: usize, c0: u8, c1: u8) -> Option<usize> {
+    let end = s.iter().position(|&b| b == 0)?;
+    if end < off {
+        return None;
+    }
+    Some(crate::ffi::liella_machine_strpair(s.as_ptr().wrapping_add(off), off, i32::from(c0), i32::from(c1)))
+}
+
 /// Force the `strcasecmp`/`strncasecmp` kernel (CASECMP): 0 = none (the measured path), 1 = SSE2,
 /// 2 = AVX2. Returns `false` (and changes nothing) for another value or AVX2 on a CPU or OS
 /// without it. [`set_scan_avx2`] also sets it (AVX2 or SSE2).

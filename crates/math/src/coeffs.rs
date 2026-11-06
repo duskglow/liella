@@ -35,6 +35,7 @@ pub(crate) mod fast32_y1_reg;
 // fails on a stale one). Callers use them all through `coeffs::tables`.
 mod erf;
 mod exp_log;
+mod gamma;
 mod mp_const;
 mod series;
 mod trig;
@@ -43,6 +44,7 @@ mod trig;
 pub(crate) mod tables {
     pub(crate) use super::erf::*;
     pub(crate) use super::exp_log::*;
+    pub(crate) use super::gamma::*;
     pub(crate) use super::mp_const::*;
     pub(crate) use super::series::*;
     pub(crate) use super::trig::*;
