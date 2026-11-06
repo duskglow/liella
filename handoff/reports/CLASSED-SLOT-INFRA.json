@@ -1,0 +1,7 @@
+{"task": "CLASSED-SLOT-INFRA", "model": "opus", "tokens": null, "result": "INCOMPLETE: two-page memset slot section, guarded mremap at start-up, COMPAT-20 tunable, tests, plants file and docs written; not built or tested (keke queue)", "branch": "task/classed-slot-infra", "head": "bb24a548",
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "The classed section keeps the name .text.liella_machine_memset instead of the design's .text.liella_classed, so the generated hot-text list still groups it", "recommendation": "accept until the next hot-text regen; recorded in D-4.53"}],
+ "informational": ["keke dev check was queued for more than 20 minutes behind the ci-instr and libm tier-3 gates; job classed-slot-infra-dev is left queued, log at ~/w/r1-classed-dev.log"],
+ "refused": [], "jobs": ["keke:classed-slot-infra-dev (queued, not started)"],
+ "improvement": "A build-only lane (clippy plus one test target) that does not queue behind full gates would let a developer find compile errors in minutes, not in a wait that uses up the budget",
+ "next_step": "Read the dev log, fix compile errors, then run the plants, the gate, the counts and the start-up row", "report_file": "handoff/classed-slot-infra.md"}
