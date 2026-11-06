@@ -114,7 +114,7 @@ fn run_sweep(root: &Path, bench: &[OsString], args: &[String]) -> Result<(), Str
     let log = fs::File::create(&log_path).map_err(|e| format!("sweep run: {}: {e}", log_path.display()))?;
     let err = log.try_clone().map_err(|e| format!("sweep run: {}: {e}", log_path.display()))?;
     let only = groups.join(",");
-    println!("sweep: {} ratio_host rows of {} groups; bench output in {}", selected.len(), groups.len(), log_path.display());
+    println!("sweep: {} ratio_host rows of the groups {only}; bench output in {}", selected.len(), log_path.display());
     let (prog, pre) = bench.split_first().ok_or("sweep run: no bench command")?;
     let status = Command::new(prog)
         .args(pre)
@@ -566,6 +566,9 @@ mod tests {
     const LOG_CYC: &str = "xtask bench: bench: budget regressions:\n  cbench_x/b: cycles ratio 1.200 exceeds the cycle limit 1.100 (ns median 1.300, advisory) (why)\n  cbench_x/a: 120.0 instructions per call exceed the limit 100 (bench/instr_limits.tsv; INSTR-REGRESS)\n";
     const LOG_UNCOUNTED: &str = "xtask bench: bench: budget regressions:\n  cbench_x/b: median ratio 1.300 exceeds the limit 1.100 (worst 1.40; why)\n  cbench_x/a: no counted instruction value, the limit 100 could not be checked (bench/instr_limits.tsv)\n";
 
+    /// (case, bench exit code, log, tables, Ok(flagged rows) or Err(part of the message)).
+    type Case = (&'static str, Option<i32>, &'static str, Tables, Result<Vec<&'static str>, &'static str>);
+
     fn sel() -> Vec<(String, String)> {
         vec![("cbench_x".into(), "a".into()), ("cbench_x".into(), "b".into())]
     }
@@ -578,7 +581,7 @@ mod tests {
     fn assess_tells_a_finished_run_from_an_unfinished_one() {
         // (case, bench exit code, log, tables, Ok(flagged rows) or Err(part of the message))
         let full = tables(Some(RH), Some(ROUNDS), Some(CNT), None);
-        let cases: Vec<(&str, Option<i32>, &str, Tables, Result<Vec<&str>, &str>)> = vec![
+        let cases: Vec<Case> = vec![
             ("clean run, rc 0", Some(0), "bench: all 2 budgets met", tables(Some(RH_OK), Some(ROUNDS), Some(CNT), None), Ok(vec![])),
             ("flagged row, rc 1: finished", Some(1), LOG_FLAG, full.clone(), Ok(vec!["cbench_x/b"])),
             ("cycles CPU: decision.tsv FAIL and an instruction limit, rc 1: finished", Some(1), LOG_CYC, tables(Some(RH_CYC), Some(ROUNDS), Some(CNT), Some(DEC)), Ok(vec!["cbench_x/a", "cbench_x/b"])),
