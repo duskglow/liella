@@ -1,50 +1,48 @@
-# TIMING-COV-REGEX-FIRSTBYTE-IVB: regexec first-byte scan, range path
+# TIMING-COV-REGEX-FIRSTBYTE-IVB(-2): regexec first-byte scan, range path
 
-**State.** Branch `task/timing-cov-regex-firstbyte-ivb`, code commit `fbe4e079` (on origin/next 7e9c5bb0), then this
-handoff commit. Role mei:~/w/s1. Verdict: INCOMPLETE until the Ivy Bridge timing (the deciding measurement) is read.
+**State.** Branch `task/timing-cov-regex-firstbyte-ivb-2`: code commit `fbe4e079`, D-14.21 assigned (`cef85ca3`), origin/next
+merged (`e92c9d5d`, for the staged `bench --compare` fix, XTASK-BENCH-COMPARE-STAGED), then this handoff commit. Role kanon:~/w/kn1.
+Code unchanged in -2. Verdict: target met in time; two off-target rows slower in time by 1-2% -> RULING NEEDED (below).
 
-**Change.** `ProgRef::first_start` (crates/core/src/pattern/regex/program.rs). Codegen check (my own probe, rustc -O,
-baseline x86-64): the four-byte chunk loop compiled each byte to `shr r64, cl` (several micro-ops on the Ivy Bridge
-class); a 256-byte table compiles to load + `or` per byte; a range test `b - lo <= span` over 16-byte chunks compiles
-to SSE2 (`psubb`, `pminub`, `pcmpeqb`, `pmovmskb`), about 7 instructions per 16 bytes. Chosen: when the first-byte map
-is ONE contiguous range (`[0-9]`, `[a-z]`, one byte, `(cat|dog)` = c-d), regcomp stores `lo` and `hi - lo` in spare
-bits of the header flags word (bit 5, bits 8..24; no format bump, a block never outlives the process) and
-`first_start` scans by range in 16-byte chunks after the one-byte shortcut. Other maps keep the four-byte bitmap loop
-unchanged. Decision row `D-NEW` in plan/07-decisions/s14 (placeholder: no id was reserved in the brief).
+**Change (fbe4e079).** `ProgRef::first_start` (crates/core/src/pattern/regex/program.rs): when the first-byte map is ONE
+contiguous range (`[0-9]`, `[a-z]`, one byte, `(cat|dog)`), regcomp stores `lo` and `hi - lo` in spare header flag bits
+(bit 5, bits 8..24) and the scan tests `b - lo <= span` in 16-byte chunks (SSE2 compares) instead of a variable shift per
+byte. Other maps keep the bitmap loop. Decision D-14.21 (plan/07-decisions/s14). Test
+`class_tests::first_start_agrees_with_can_start_with_for_every_byte` (§14.9).
 
-**Test.** `class_tests::first_start_agrees_with_can_start_with_for_every_byte` (§14.9, s14_9_c_1_2): every byte value
-at every position of windows of 1..50 bytes, against `can_start_with`, for range, 0x3f/0x40 word-boundary, single-byte
-(0x01, 0x7f, 0xff), gapped (`[[:alpha:]]`, `(cat|eel)`, `[^0-9]`, ICASE) and can-be-empty maps, C and C.UTF-8; asserts the
-detected range in C.
+**Why the -1 timing failed.** nico job `timing-cov-regex-firstbyte-ivb-timing-ivb` ended rc 1 in 1 s ("cbench_patterns is not
+a benchmark"): the tree was hand-staged without Cargo.toml / bench-stage.manifest, so xtask used the build host's path.
+Fixed by staging with `cargo xtask bench --stage` (whole tarballs) after merging next.
 
-**Results (mei = Skylake-SP, jobs on fbe4e079).**
-- Gate `timing-cov-regex-firstbyte-ivb-gate` (direct tier, --base origin/next): rc 0, `affected: ok`, peak 2.7G.
-- Plants `timing-cov-regex-firstbyte-ivb-plants2` (`cargo xtask plants`, file handoff/TIMING-COV-REGEX-FIRSTBYTE-IVB-plants.txt):
-  7 of 7 CAUGHT, no WARN. Superseded run `-plants`: `base += 16 -> 15` SURVIVED; it is an equivalent mutant (a short
-  stride only rescans bytes already known not to start a match), replaced by `-> 17` (skips bytes), caught.
-- Counts `cargo xtask bench --compare --counters --runs 3 cbench_patterns`, Liella instr/call before -> after (glibc, ratio after):
-  | row | default | `-AVX2` |
-  |---|---|---|
-  | regexec_class_nomatch_1k | 8163.9 -> 1701.2 (8655.1, 0.20; time 0.21) | 8266.1 -> 1810.4 (8734.7, 0.21) |
-  | regexec_literal_1k | 1121.6 -> 1120.6 | 1627.5 -> 1627.7 |
-  | regexec_submatch_1k | 32229.5 -> 32224.5 | 32763.0 -> 32767.7 |
-  | regexec_backref | 22033.0 -> 21985.4 | 22334.7 -> 22304.6 |
-  | regcomp_regexec_regfree_email | 145516.8 -> 145551.8 (+35, 0.02%) | 146552.4 -> 146673.2 (+121, 0.08%) |
-  | fnmatch_star/bracket/pathname/pathname_nomatch | within 0.6 | unchanged |
-  Before = RAM copy of the role with this commit's program.rs diff reversed (jobs `-before`, `-before-noavx2`);
-  after = `-after`, `-after-noavx2`. The email row's rise is regcomp's `byte_range` (popcount of 4 words; without
-  POPCNT in the SSE2 build it is a software popcount); its ratio stays 0.28.
+**Ivy Bridge timing (-2).** Staged on kanon by job `timing-cov-regex-firstbyte-ivb-2-stage2`: head.tar (tree bbc3eb13) and
+base.tar (= head with origin/next's program.rs, tree fe5394ad; restored with `cat`, fresh mtime, cmp-checked). On nico
+(booking 81, cancelled after): `~/bin/timing timing-cov-regex-firstbyte-ivb-2-timing-ivb bash ~/work/TIMING-COV-REGEX-FIRSTBYTE-IVB-2/run.sh 3 3`
+(script: handoff/TIMING-COV-REGEX-FIRSTBYTE-IVB-2-run.sh; 3 alternations base/head, each `./xtask-bin bench --compare
+--no-build --counters --runs 3 cbench_patterns`), rc 0, 13 min. glibc's ns per row stayed within 0.2% over all 6 runs:
+all medians come from one clock state (2.3 GHz from glibc cycles/ns), so no per-speed split was needed.
+| row | Liella cycles base -> head | time ratio to glibc base -> head | instr head |
+|---|---|---|---|
+| regexec_class_nomatch_1k (target) | 2714 -> 626 | 1.158 -> 0.263 | 8266 -> 1812 |
+| regcomp_regexec_regfree_email | 63211 -> 64635 (+2.3%) | 0.337 -> 0.342 (+1.3% ns, every head run above every base run) | +134 |
+| wordexp_arith | 2021 -> 2072 | 1.494 -> 1.525 (+2%, all 3 runs) | equal (4186) |
+| literal, submatch, backref, pathological, fnmatch x4, glob x2, wordexp_tilde_var | head/base 0.99-1.01 | within spread | +-30 |
+Email: +134 instructions (regcomp's one-off `byte_range`) but +1100 uops and +1400 cycles: more than those instructions
+explain; wordexp_arith runs no regex code and has equal instructions and uops. Both read as code-layout / branch-address
+effects of the larger regex module (NOT proven: no branch-miss counter was read).
 
-**Pending.** nico (Ivy Bridge E3-1220L V2): `timing-cov-regex-firstbyte-ivb-timing-ivb` =
-`~/bin/timing <label> bash -c "cd ~/work/TIMING-COV-REGEX-FIRSTBYTE-IVB/tree && ./xtask-bin bench --compare --no-build --runs 5 cbench_patterns"`
-on the staged after-products (queued for all slots at 07:40Z). No booking was made: `~/bin/timing` takes every slot itself.
+**Gate and plants on the final code head (e92c9d5d), kanon.** Clippy (`--all-features -D warnings`) and `cargo xtask static`
+clean. Gate `timing-cov-regex-firstbyte-ivb-2-gate` (direct, --base origin/next): rc 0, 3509 passed / 0 failed, conformance
+2/2, peak 3.3G. Plants `timing-cov-regex-firstbyte-ivb-2-plants` (handoff/TIMING-COV-REGEX-FIRSTBYTE-IVB-plants.txt): 7/7
+CAUGHT, no WARN.
 
-**Exact next step.** `tail ~/logs/timing-cov-regex-firstbyte-ivb-timing-ivb.log` on nico. Read class_nomatch_1k's
-time ratio (target < 1.0; brief: 1.145 before) and check that no regex/fnmatch row got slower in time. If it is
-slower, revert fbe4e079 and record a NEGATIVE row in docs/saturation/15 row 6. Otherwise: COMPLETE; add the result to
-docs/saturation/15 row 6 (not done in this run, budget).
+**Instruction counts (from -1, Skylake-SP, unchanged code).** class_nomatch_1k 8163.9 -> 1701.2 (glibc 8655.1), -AVX2
+8266.1 -> 1810.4; email +35 / +121 (ruling #3496 accepted).
 
-**Open / rulings.** Email-row +35 / +121 instructions per call (0.02% / 0.08%): recommend accept (one-off regcomp cost,
-the target row is 5x fewer instructions). It could be cut by testing contiguity with word masks instead of `count_ones`.
-Not to redo: the codegen comparison (above); the 256-byte table (needs a new section in the serialised program for
-gapped maps; a follow-up if a gapped-class row matters).
+**RULING NEEDED.** Land despite email +1.3% and wordexp_arith +2% in time on the Ivy Bridge class? Recommend accept: the
+target row is 4.3x faster (1.158 -> 0.263 of glibc); email stays at 0.34 of glibc; wordexp_arith's shift has no
+instruction or uop change. If not accepted: next step is a branch-miss/layout check of the email row (perf
+`branch-misses` base vs head on a timing host) before any code change.
+
+**Not to redo.** The codegen comparison (shift vs table vs range); the staging recipe above works. Optional follow-ups:
+contiguity test without `count_ones` (cuts the email row's +134 instructions); 256-byte table for gapped maps.
+Saturation register: docs/saturation/15 row 6 follow-up paragraph added.
