@@ -1,10 +1,22 @@
 # DL-BOOT-RELOC (phase 14 DL-4): self-relocator, first used by libc.a's static-PIE start
 
-**State:** branch `task/dl-boot-reloc-3` (stacks on dl-boot-reloc-2; base origin/next), code head `79821fcf`
-(handoff commit on top). Role shiki:~/w/sh1. Jobs on 79821fcf: shiki `dl-boot-reloc-3-gate-2` (clippy, static,
-`affected --run --base origin/next`; clippy + static passed, affected still running at hand-back) and
-`dl-boot-reloc-3-plants-2` (rc 0: 24 plants, 24 CAUGHT, 0 WARN). Superseded: dl-boot-reloc-3-gate (killed,
-head moved), dl-boot-reloc-3-plants (tls-rebase survived, fixed in 79821fcf).
+**State:** branch `task/dl-boot-reloc-4` (continues dl-boot-reloc-3; base origin/next), code head `d3ba674b`
+(handoff commit on top). Role mei:~/w/s1. Jobs: mei `dl-boot-reloc-4-lint0` (clippy + static on the inherited head
+05aa096d, rc 0) and `dl-boot-reloc-4-gate` on d3ba674b (clippy, static, `affected --run --base origin/next`; the
+tool escalates to FULL because entry.S defines `_start`): rc 0, 32 suites ok, 11128 tests passed, 0 failed,
+1200 ignored; conformance 124 passed, 0 failed (s01_static_pie and s01_static_pie_rela included); peak 16G
+(page cache), oom_kill=0. No plants this run: the merge changed none of this story's
+code (only a status line in so.rs), per the coordinator's note.
+
+## Done (DL-BOOT-RELOC-4)
+* CI conflict: merged origin/next (be49b4cd). so.rs: kept DL-PLACEHOLDERS' placeholder build (placeholders.rs,
+  check_no_private) and this story's liella-rcrt1.o product and GOT check whole; the status line now names
+  liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder. s26-29.md: D-27.10 (this story) and D-27.11
+  (DL-SYMBOLS) both kept; D-27.9 (placeholders) and D-27.10 each appear once.
+* Ruling #3670 applied: docs/toolchain.md section 3.3 documents liella-rcrt1.o (build line, what it does, PC-relative
+  check), the section 2 table lists it, section 4 gives the static-PIE link line (d3ba674b).
+* Note: docs/toolchain.md 3.3 still describes the old libpthread-only placeholders; DL-PLACEHOLDERS (D-27.9) changed
+  them. Not this story's text; left for that story's docs.
 
 ## Done (DL-BOOT-RELOC-3)
 * Cause of the last red (dl-boot-reloc-2-t1 rc 1): clippy `arithmetic_side_effects` in liella-ld, already fixed
@@ -28,8 +40,7 @@ head moved), dl-boot-reloc-3-plants (tls-rebase survived, fixed in 79821fcf).
 
 ## Open / next
 1. If gate-2 / plants-2 are red: fix, run only the failing suite.
-2. docs/toolchain.md (and README) should tell users that a static PIE links liella-rcrt1.o (not done: it would
-   have moved the head after the jobs started). Small docs follow-up.
+2. Done in DL-BOOT-RELOC-4 (docs/toolchain.md); README not changed.
 3. Optional: a conformance check that RELRO is read-only in a static PIE (the RELRO half of the bias delta has no
    test of its own; the tls-rebase plant is caught through the TLS half).
 4. PT_PHDR load offset: already cut as STATIC-PIE-LOAD-OFFSET; not here.
