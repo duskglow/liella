@@ -251,16 +251,7 @@ const _: () = assert!(BITMAP_WORDS >> GROUP_SHIFT <= 64);
 /// straddle two lines. Word 7 is unused.
 const CLASS_WORDS: usize = 8;
 const C_LARGE: usize = C_CLASS + 44 * CLASS_WORDS;
-const CACHE_WORDS: usize = 392;
-/// The block the cache's latest fast allocation ([`Heap::alloc_hint`]) returned, and where it
-/// sits: `(class + 1) | index << 8` in the current slab of its class, 0 for none
-/// (PERF-MALLOC-LATEST-FREE-EXP, an experiment). A free of that block takes its bitmap word and
-/// bit from here instead of the slab hint and the magic multiply, so the word's address does not
-/// wait on the block's address. `refill` clears it before its class's slab stops being current,
-/// so a non-zero `C_LATEST_AT` always names the current slab's record. The free still loads the
-/// word and tests the bit (a double free is reported as on every other path).
-const C_LATEST: usize = 384;
-const C_LATEST_AT: usize = 385;
+const CACHE_WORDS: usize = 384;
 /// The free fast path's slab hints (HEAP-CUTS2 S-C): a small table, indexed by the slab's address
 /// bits above `SLAB_SHIFT`, of slabs that are the current slab of their class: base | class, 0
 /// for none. Every allocation from a current slab records it; `refill` removes a class's entry
@@ -279,7 +270,7 @@ pub const MID_FORECAST: usize = 2048;
 pub const MID_GROWTH: usize = 4;
 // The fused path reads `SMALL_CLASS` up to the cap and masks the class with 31.
 const _: () = assert!(FORECAST_CAP >> 4 == SMALL_CLASS.len() - 1 && CLASSES[31] >= FORECAST_CAP);
-const _: () = assert!(C_SLABS + SLAB_HINTS <= C_LATEST && C_LATEST_AT < CACHE_WORDS && SLAB_HINTS.is_power_of_two());
+const _: () = assert!(C_SLABS + SLAB_HINTS <= CACHE_WORDS && SLAB_HINTS.is_power_of_two());
 const CACHE_BYTES: usize = CACHE_WORDS * 8;
 const CACHE_CHUNK: usize = 64 << 10;
 
@@ -1227,7 +1218,6 @@ impl Heap {
             }
         }
         k.set_class(c, K_CUR, 0);
-        k.set(C_LATEST_AT, 0);
         self.collect(sys, pages, k);
         if let Some(s) = k.class(c, K_PARTIAL).checked_sub(1) {
             self.unlist(pages, k, c, s);
@@ -1637,35 +1627,7 @@ impl Heap {
         let i = j * 64 + uz(u64::from(b));
         let base = k.class(c, K_BASE);
         k.set(slab_hint(uz(base)), base | w64(c));
-        let addr = uz(base) + i * CLASSES[c];
-        k.set(C_LATEST, w64(addr));
-        k.set(C_LATEST_AT, w64(c + 1) | w64(i) << 8);
-        Some(Block { addr, usable: CLASSES[c], zeroed: false })
-    }
-
-    /// Release the block the cache's latest fast allocation returned (`C_LATEST`), if it is
-    /// still recorded and live: its word and bit come from `C_LATEST_AT`, not from its address.
-    /// False changes nothing (the caller's other paths decide, and report a double free).
-    #[inline(always)]
-    fn free_latest<P: Pages>(pages: &P, k: &Cache<'_>) -> bool {
-        let at = k.get(C_LATEST_AT);
-        // 0 (none) wraps to a class past the table, like a corrupt word.
-        let c = uz(at & 63).wrapping_sub(1);
-        if c >= CLASSES.len() {
-            return false;
-        }
-        let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return false };
-        let i = uz(at >> 8);
-        // A recorded index is inside the slab; the mask lets the compiler see it.
-        let j = (i >> 6) & (BITMAP_WORDS - 1);
-        let b = 1u64 << (i & 63);
-        let v = r.local[j].load(Relaxed);
-        if v & b != 0 && !(k.remote_any() && r.remote_has(j, b)) {
-            r.local[j].store(v & !b, Relaxed);
-            k.freed_into(c, j);
-            return true;
-        }
-        false
+        Some(Block { addr: uz(base) + i * CLASSES[c], usable: CLASSES[c], zeroed: false })
     }
 
     /// Allocate a *secure* block (D-X.11): `size` bytes aligned to `align` (a power of two), in
@@ -1776,10 +1738,6 @@ impl Heap {
     #[inline(always)]
     pub fn free_hint<P: Pages>(pages: &P, addr: usize) -> bool {
         if let Some(k) = Self::own_cache(pages) {
-            // The latest fast allocation's block: its word and bit are recorded.
-            if w64(addr) == k.get(C_LATEST) && Self::free_latest(pages, &k) {
-                return true;
-            }
             // A slab hint: a current slab of the cache, its class known.
             let last = k.get(slab_hint(addr));
             let off = w64(addr).wrapping_sub(last & !(SLAB64 - 1));
