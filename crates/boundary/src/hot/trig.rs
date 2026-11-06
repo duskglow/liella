@@ -1,2 +1,36 @@
-//! The `double` sin, cos, tan, sincos family's boundary wrappers (none yet). A story adds them here, not in
-//! `hot/mod.rs` (LIBM-HOT-PER-FAMILY).
+//! The `double` sin, cos, tan, sincos family's boundary wrappers.
+
+/// The `double` `sin`, `cos` and `tan` fast paths (LIBM-F64-TRIG-TIER) in their build chosen at
+/// startup (as [`exp_nearest`](super::exp_nearest); the two builds agree bit for bit).
+macro_rules! trig_nearest {
+    ($($name:ident;)+) => {$(
+        #[doc = concat!("`liella_math::trig::kernel::", stringify!($name), "` in the build chosen at startup.")]
+        #[inline(always)]
+        pub(crate) fn $name(x: f64) -> Option<f64> {
+            if crate::dispatch::fma() {
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                #[allow(unsafe_code)]
+                return unsafe { liella_math::trig::kernel_fma::$name(x) };
+            }
+            liella_math::trig::kernel::$name(x)
+        }
+    )+};
+}
+
+trig_nearest! {
+    sin_nearest;
+    cos_nearest;
+    tan_nearest;
+}
+
+/// The `double` `sincos` fast path (LIBM-F64-TRIG-TIER) in its build chosen at startup (as
+/// [`exp_nearest`](super::exp_nearest)): both results or `None`.
+#[inline(always)]
+pub(crate) fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::trig::kernel_fma::sincos_nearest(x) };
+    }
+    liella_math::trig::kernel::sincos_nearest(x)
+}

@@ -1,0 +1,4 @@
+answer-word | crates/core/src/locale/view.rs | perl:s/(fn answer\(item: Item\) -> usize \{\s*match item \{\s*Item::Word\(v\) => usize::try_from\(v\)\.unwrap_or\(0\))/${1} ^ 1/s | cargo test -p liella --test locale_products | msg:locale_products.*(FAILED|panicked)|panicked at
+answer-empty | crates/core/src/locale/view.rs | perl:s/(fn answer\(item: Item\) -> usize \{.*?Item::Bytes\(\[\]\) => )EMPTY\.as_ptr\(\)\.expose_provenance\(\)/${1}1/s | cargo test -p liella --test locale_products | msg:panicked at|FAILED
+answer-split | crates/core/src/locale/view.rs | lit:tab.len().min(rest.len()) ==> tab.len().min(rest.len()).saturating_sub(1) | cargo test -p liella --lib answer_tests | msg:answer_table_matches_entries.*FAILED|category \d+ item \d+
+answer-fast | crates/boundary/src/locale.rs | perl:s/(v\.answer\(bits >> 16, index\) \{\s*return a)/${1}.wrapping_add(1)/ | cargo test -p liella --test locale_products | msg:panicked at|FAILED

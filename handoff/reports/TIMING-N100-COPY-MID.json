@@ -1,0 +1,12 @@
+{"task": "TIMING-N100-COPY-MID", "model": "opus", "tokens": null,
+ "result": "No same-instruction-count shape of the AVX2 129-256 copy is faster on the N100 (all 13.00 cycles vs glibc 12.26); the gap is the option-B NULL tests (without them 12.00); negative register row, no code change",
+ "branch": "task/timing-n100-copy-mid", "head": "4953840a",
+ "gate": {"affected": "0 passed / 0 failed (docs-only: 0 of 236 targets selected; clippy and static clean)", "peak": "1.1G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "The explicit NULL tests on the 129-256 copy path (option B, 2026-10-08) are the whole time gap on Gracemont (12.00 without them vs glibc 12.26; 13.00 with)", "recommendation": "keep option B and close memcpy_144/256 on the N100 as design-bound; or accept +1 instruction on the 65-128 class (0.75 of glibc there) for a 129-256 NULL test with fewer uops"}],
+ "informational": ["Step 0 on next 730f416b, N100: memcpy_144 1.077, memcpy_256 1.077, memcpy_128 0.752, memmove_144 0.859, memmove_256 0.947 (time ratio)", "Placement is not the cause: glibc and Liella equal in every src/dst layout tried; a 4 KiB alias costs both 17 cycles", "Zen 1 count-before: memcpy_144/256 38.4 vs 36.4 instr"],
+ "refused": [],
+ "improvement": "A one-binary microbench (kernel variants plus glibc memcpy, perf difference per call, pinned under ~/bin/timing) settled 15 shapes in 4 short timing-queue runs with no booking; worth a repo tool for timing stories",
+ "next_step": "owner ruling on the 129-256 NULL tests; if the cycle is wanted, design a cheaper NULL test and measure the 65-128 cost",
+ "report_file": "handoff/TIMING-N100-COPY-MID.md",
+ "jobs": ["TIMING-N100-COPY-MID-gate", "TIMING-N100-COPY-MID-count-before", "TIMING-N100-COPY-MID-stage-base", "nozomi:TIMING-N100-COPY-MID-n100", "nozomi:TIMING-N100-COPY-MID-n100-diag", "nozomi:TIMING-N100-COPY-MID-n100-r2", "nozomi:TIMING-N100-COPY-MID-n100-r3"]}
