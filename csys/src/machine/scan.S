@@ -6040,9 +6040,9 @@ strchrnul:
 	pxor %xmm3, %xmm3
 	movdqu (%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s16
@@ -6051,9 +6051,9 @@ strchrnul:
 .Lschrnul_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s32
@@ -6062,9 +6062,9 @@ strchrnul:
 .Lschrnul_s32:
 	movdqu 32(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s48
@@ -6073,9 +6073,9 @@ strchrnul:
 .Lschrnul_s48:
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s64

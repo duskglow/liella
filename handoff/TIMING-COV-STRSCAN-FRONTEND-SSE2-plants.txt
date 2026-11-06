@@ -14,3 +14,5 @@ strchrnul-null-moved | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnu
 strncmp-limit-off-by-one | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_hit:.*?)jae \.Lsnc_zero/$1ja .Lsnc_zero/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
 # strncmp: an equal NUL no longer ends the comparison (the byte step's in-place return dropped).
 strncmp-nul-continues | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_byte:.*?)jnz \.Lsnc_bnext/$1jmp .Lsnc_bnext/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# strchrnul: terminator not matched for c == 0 (first SSE2 block: c lanes XOR NUL lanes).
+strchrnul-c0-terminator | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_pre:.*?)por %xmm1, %xmm2/$1pxor %xmm1, %xmm2/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchrnul.*(FAILED|panicked)
