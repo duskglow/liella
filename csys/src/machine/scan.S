@@ -6961,9 +6961,10 @@ strncmp:
  * units of the string before its terminator (readable, none 0), and p lies in the string (at or
  * before its terminator); wcspair's p is 4-byte aligned. Loads: when p's page has 32 bytes from
  * p on (page offset <= 4064), one unaligned head block at p and one at p - off, both inside
- * [p - off, p + 32) (the known units, then p's page); strpair on AVX2, when the page has 64 bytes
- * from p on (page offset <= 4032), also the blocks at p + 32 and p + 32 - off, inside
- * [p - off, p + 64), and then the aligned run from the 64-byte boundary in (p, p + 64]. Otherwise
+ * [p - off, p + 32) (the known units, then p's page); strpair, when the page has 64 bytes
+ * from p on (page offset <= 4032), also the blocks up to p + 64 and their blocks at -off (AVX2:
+ * at p + 32; SSE2: at p + 16, p + 32, p + 48), inside [p - off, p + 64), and then the aligned
+ * run from the 64-byte boundary in (p, p + 64]. Otherwise
  * units one by one up to the next
  * 32-byte boundary (stopping at a 0 unit or a candidate). Then aligned blocks A (32 bytes on
  * AVX2, 16 on SSE2), each with the block at A - off, which lies inside [p - off, A + block):
@@ -7267,7 +7268,16 @@ liella_machine_strpair:
 	pshufd $0, %xmm0, %xmm0
 	pshufd $0, %xmm1, %xmm1
 	pxor %xmm2, %xmm2
+	movq %rsi, %r9
+	negq %r9
 	jmp .Lliella_machine_strpair_sse_loop
+	/* TIMING-COV-STRSTR-NONAVX2: every SSE2 block uses the group loop's test: unit q is a
+	 * candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0, one mask and one branch per
+	 * block; the first stop unit itself says which (0: the terminator). r9 = -off throughout.
+	 * When p's page has 64 bytes from p on (page offset <= 4032): four unaligned head blocks at
+	 * p, p + 16, p + 32, p + 48 with their blocks at -off, inside [p - off, p + 64), then the
+	 * aligned groups from the 64-byte boundary in (p, p + 64]. Otherwise one head block, then
+	 * aligned blocks up to the 64-byte boundary. */
 .Lliella_machine_strpair_sse2:
 	movd %edx, %xmm0
 	movd %ecx, %xmm1
@@ -7278,49 +7288,104 @@ liella_machine_strpair:
 	pshufd $0, %xmm0, %xmm0
 	pshufd $0, %xmm1, %xmm1
 	pxor %xmm2, %xmm2
-	movdqu (%rax), %xmm3
-	movq %rax, %r9
-	subq %rsi, %r9
-	movdqu (%r9), %xmm4
-	pcmpeqb %xmm0, %xmm4
-	movdqa %xmm3, %xmm5
-	pcmpeqb %xmm2, %xmm5
-	pcmpeqb %xmm1, %xmm3
-	pand %xmm4, %xmm3
+	cmpl $4032, %r9d
+	ja .Lliella_machine_strpair_sse_head1
+	movq %rsi, %r9
+	negq %r9
+	movdqu (%rax), %xmm5
+	movdqu (%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	pmovmskb %xmm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
-	jnz .Lliella_machine_strpair_sse_cand
-	testl %r11d, %r11d
-	jnz .Lliella_machine_strpair_sse_nul
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
+	movdqu 16(%rax), %xmm5
+	movdqu 16(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop16
+	movdqu 32(%rax), %xmm5
+	movdqu 32(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop32
+	movdqu 48(%rax), %xmm5
+	movdqu 48(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop48
+	andq $-64, %rax
+	addq $64, %rax
+	jmp .Lliella_machine_strpair_sse_loop64
+.Lliella_machine_strpair_sse_stop16:
+	addq $16, %rax
+	jmp .Lliella_machine_strpair_sse_stop
+.Lliella_machine_strpair_sse_stop32:
+	addq $32, %rax
+	jmp .Lliella_machine_strpair_sse_stop
+.Lliella_machine_strpair_sse_stop48:
+	addq $48, %rax
+.Lliella_machine_strpair_sse_stop:
+	bsfl %r10d, %r10d
+	addq %r10, %rax
+	cmpb $0, (%rax)
+	je .Lliella_machine_strpair_unit_nul
+	subq %rdi, %rax
+	addq %rax, %rax
+	ret
+.Lliella_machine_strpair_sse_head1:
+	movq %rsi, %r9
+	negq %r9
+	movdqu (%rax), %xmm5
+	movdqu (%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
 	andq $-16, %rax
 	addq $16, %rax
 	.p2align 4
 .Lliella_machine_strpair_sse_loop:
 	movdqa (%rax), %xmm3
-	movq %rax, %r9
-	subq %rsi, %r9
-	movdqu (%r9), %xmm4
-	pcmpeqb %xmm0, %xmm4
-	movdqa %xmm3, %xmm5
-	pcmpeqb %xmm2, %xmm5
-	pcmpeqb %xmm1, %xmm3
-	pand %xmm4, %xmm3
+	movdqu (%rax,%r9), %xmm4
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub (%rax), %xmm3
+	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	pmovmskb %xmm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
-	jnz .Lliella_machine_strpair_sse_cand
-	testl %r11d, %r11d
-	jnz .Lliella_machine_strpair_sse_nul
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
 	addq $16, %rax
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_sse_loop
-	movq %rsi, %r9
-	negq %r9
 	.p2align 4
 .Lliella_machine_strpair_sse_loop64:
 	/* PERF-STRSTR-LONG: a 64-aligned group of four blocks (one page) tested at once: unit q is a
@@ -7354,10 +7419,12 @@ liella_machine_strpair:
 	pminub %xmm5, %xmm3
 	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	testl %r10d, %r10d
-	jnz .Lliella_machine_strpair_sse_loop
 	addq $64, %rax
-	jmp .Lliella_machine_strpair_sse_loop64
+	testl %r10d, %r10d
+	jz .Lliella_machine_strpair_sse_loop64
+	/* The group has a stop: its blocks one by one (the first stop is in it). */
+	subq $64, %rax
+	jmp .Lliella_machine_strpair_sse_loop
 	.size liella_machine_strpair, .-liella_machine_strpair
 	.section .text.liella_machine_wcspair,"ax",@progbits
 
