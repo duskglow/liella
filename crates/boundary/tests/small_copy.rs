@@ -198,6 +198,38 @@ fn moves_match_a_byte_loop_at_every_size_and_overlap_in_each_build() {
     each_build(moves_match_a_byte_loop_at_every_size_and_overlap);
 }
 
+/// The 129-256 copy class splits at 192 (D-4.61: six 16-byte blocks from each end for 129-192 on
+/// the SSE2 build, eight for 193-256): every size from 128 to 193 at every overlap shift in both
+/// directions, so a store issued before a load of the source bytes it covers shows up at some shift.
+fn moves_of_128_to_193_match_a_byte_loop_at_every_overlap_shift(build: &str) {
+    // Clause: s4_2_c_1 (memmove), D-4.2 (memcpy moves overlapping regions correctly too).
+    const LO: usize = 128;
+    const HI: usize = 193;
+    for (name, f) in movers() {
+        for n in LO..=HI {
+            let reach = n as isize + 1;
+            for shift in -reach..=reach {
+                let len = 3 * HI + 2 * PAD;
+                let mut buf = pattern(len, n);
+                let mut want = buf.clone();
+                let s_at = PAD + HI + 5;
+                let d_at = (s_at as isize + shift) as usize;
+                oracle_move(&mut want, d_at, s_at, n);
+                let p = buf.as_mut_ptr();
+                let r = f(p.wrapping_add(d_at).cast(), p.wrapping_add(s_at).cast_const().cast(), n);
+                assert_eq!(r, p.wrapping_add(d_at).cast(), "{build} {name} {n} return");
+                assert!(buf == want, "{build} {name} n {n} shift {shift}");
+            }
+        }
+    }
+}
+
+#[test]
+fn moves_of_128_to_193_match_a_byte_loop_at_every_overlap_shift_in_each_build() {
+    // Clause: s4_2_c_1 (each build of the kernels, D-4.25; the 192/193 split of D-4.61).
+    each_build(moves_of_128_to_193_match_a_byte_loop_at_every_overlap_shift);
+}
+
 #[test]
 fn fills_match_a_byte_loop_at_every_size_alignment_and_value_in_each_build() {
     // Clauses: s4_1_c_1 (each build of the kernels, D-4.25).

@@ -32,7 +32,8 @@
 	.hidden liella_hot_fill_large
 
 /* void *liella_machine_memmove(void *d, const void *s, size_t n): 129-256 (folded with NULL folding
- * on, see .Lmove_129) four 32-byte blocks from each end (AVX2) or eight 16-byte ones (SSE2), 65-128 two
+ * on, see .Lmove_129) four 32-byte blocks from each end (AVX2) or six (129-192) or eight 16-byte
+ * ones (SSE2), 65-128 two
  * 32-byte blocks from each end (AVX2) or four 16-byte ones (SSE2), 33-64 two
  * 16-byte blocks from each end, 16-32 one from each end, 8-15 two 8-byte words, 4-7 two 4-byte words, 2-3 two 2-byte
  * words, 1 one byte, 0 nothing; other sizes in Rust. */
@@ -108,7 +109,7 @@ memcpy:
  * 129-256 folded (below: no NULL test while `liella_machine_move_long` is nonzero), with AVX2 (the flag byte below,
  * or for 129-256 the class word's clear sign bit, set by crates/boundary/src/dispatch.rs only when the CPU has AVX2
  * and the OS saves the YMM state) two
- * (65-128) or four (129-256) 32-byte blocks from each end, without it four or eight 16-byte ones;
+ * (65-128) or four (129-256) 32-byte blocks from each end, without it four or six (129-192) or eight 16-byte ones;
  * a NULL, 1-64 without folding and every other size in Rust. The 65-128 class falls through
  * (no compare added to it by COPY-256). */
 .Lmove_big:
@@ -188,7 +189,39 @@ memcpy:
 	btrq $63, %rcx			/* the SSE2 mark off: 256 */
 	cmpq %rcx, %rdx
 	ja liella_hot_move_rest
+/* SSE2-COPY-MID-SPLIT (D-4.61, ruling #3587): 129-192 six 16-byte blocks from each end (the whole
+ * region for n <= 192; 12 loads and 12 stores, not 16 each), 193-256 eight from each end. The ORDER
+ * above holds on both paths: all loads, starting at s + 0, before the first store at d + 0; both
+ * touch only [x, x + n) of each region. The fill (memset 129-256) keeps eight per end. */
 .Lmove_129_sse2:
+	cmpq $192, %rdx
+	ja .Lmove_193_sse2
+	movups (%rsi), %xmm0
+	movups 16(%rsi), %xmm1
+	movups 32(%rsi), %xmm2
+	movups 48(%rsi), %xmm3
+	movups 64(%rsi), %xmm4
+	movups 80(%rsi), %xmm5
+	movups -96(%rsi,%rdx), %xmm6
+	movups -80(%rsi,%rdx), %xmm7
+	movups -64(%rsi,%rdx), %xmm8
+	movups -48(%rsi,%rdx), %xmm9
+	movups -32(%rsi,%rdx), %xmm10
+	movups -16(%rsi,%rdx), %xmm11
+	movups %xmm0, (%rdi)
+	movups %xmm1, 16(%rdi)
+	movups %xmm2, 32(%rdi)
+	movups %xmm3, 48(%rdi)
+	movups %xmm4, 64(%rdi)
+	movups %xmm5, 80(%rdi)
+	movups %xmm6, -96(%rdi,%rdx)
+	movups %xmm7, -80(%rdi,%rdx)
+	movups %xmm8, -64(%rdi,%rdx)
+	movups %xmm9, -48(%rdi,%rdx)
+	movups %xmm10, -32(%rdi,%rdx)
+	movups %xmm11, -16(%rdi,%rdx)
+	ret
+.Lmove_193_sse2:
 	movups (%rsi), %xmm0
 	movups 16(%rsi), %xmm1
 	movups 32(%rsi), %xmm2

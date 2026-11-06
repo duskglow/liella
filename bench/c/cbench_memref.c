@@ -319,6 +319,8 @@ int main(void)
     size_rows(128, "128", 0);
     /* COPY-256: the 129-256 copy class (D-4.25): the fstatat (144 B) and statx (256 B) struct sizes. */
     size_rows(144, "144", 0);
+    /* SSE2-COPY-MID-SPLIT (D-4.61): the last size of the six-blocks-per-end SSE2 copy. */
+    size_rows(192, "192", 0);
     size_rows(256, "256", 0);
     size_rows(4096, "4k", 1);
     size_rows(65536, "64k", 1);
