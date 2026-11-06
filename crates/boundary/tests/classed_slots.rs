@@ -4,7 +4,7 @@
 //! then sweeps `memset` (the first classed slot) against a byte loop; the parent process never
 //! swaps. The live page is read back from the code (`classed_id` slot), not from a flag.
 #![no_builtins] // calls to libc names reach Liella's export, not LLVM's folding (OPAQUE-AUDIT)
-#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
+#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
 
 use liella_boundary::classed::{self, Outcome};
 use liella_boundary::selftest::{self, opaque, ChildEnd};
@@ -47,6 +47,12 @@ fn file_backed(addr: usize) -> Option<bool> {
     Some(e & (1 << 63) != 0 && e & (1 << 61) != 0)
 }
 
+/// A line on stderr from a forked child, by one `write` (no allocation, no output capture).
+fn say(msg: &[u8]) {
+    use liella_kernel::sys::Sys;
+    let _ = CSys.write(liella_kernel::fd::Fd::STDERR, msg);
+}
+
 fn run(name: &str, body: fn(&CSys) -> i32) {
     match selftest::in_child(body).expect("fork") {
         ChildEnd::Exited(0) => {}
@@ -65,7 +71,7 @@ fn the_avx2_page_after_the_swap_fills_like_a_byte_loop() {
             assert_eq!(classed::live_page(), 1, "the AVX2 page is live after the swap");
             assert_eq!(file_backed(classed::page0()), Some(true), "the live slot page was written: it is no longer the file's page");
         } else {
-            eprintln!("classed_slots: no AVX2 on this CPU: the SSE2 page only");
+            say(b"classed_slots: no AVX2 on this CPU: the SSE2 page only\n");
             assert_eq!(o, Outcome::Sse2Class);
             assert_eq!(classed::live_page(), 0);
         }
@@ -105,18 +111,18 @@ fn a_page_written_before_the_swap_keeps_the_sse2_page() {
     // private anonymous copy with the same content.
     run("guard", |_| {
         if !liella_boundary::cpu::avx2() {
-            eprintln!("classed_slots: no AVX2 on this CPU: no swap to guard");
+            say(b"classed_slots: no AVX2 on this CPU: no swap to guard\n");
             return SKIP;
         }
         use std::os::unix::fs::FileExt;
         let Ok(mem) = std::fs::OpenOptions::new().read(true).write(true).open("/proc/self/mem") else {
-            eprintln!("classed_slots: /proc/self/mem cannot be opened for writing");
+            say(b"classed_slots: /proc/self/mem cannot be opened for writing\n");
             return SKIP;
         };
         let at = classed::page0() as u64 + 16;
         let mut b = [0u8; 1];
         if mem.read_at(&mut b, at).ok() != Some(1) || mem.write_at(&b, at).ok() != Some(1) {
-            eprintln!("classed_slots: /proc/self/mem refuses a write to text (proc_mem.force_override)");
+            say(b"classed_slots: /proc/self/mem refuses a write to text (proc_mem.force_override)\n");
             return SKIP;
         }
         assert_eq!(selftest::classed_install(true, false), Outcome::Modified, "a written page 0 must keep the SSE2 page");
@@ -132,11 +138,11 @@ fn the_swap_passes_under_mdwe() {
     // gains none). The policy is set in the child before the swap, as a parent would before execve.
     run("mdwe", |_| {
         if !liella_boundary::cpu::avx2() {
-            eprintln!("classed_slots: no AVX2 on this CPU: no swap under MDWE to test");
+            say(b"classed_slots: no AVX2 on this CPU: no swap under MDWE to test\n");
             return SKIP;
         }
         if selftest::set_mdwe_refuse_exec_gain().is_err() {
-            eprintln!("classed_slots: this kernel has no PR_SET_MDWE (Linux 6.3 and later)");
+            say(b"classed_slots: this kernel has no PR_SET_MDWE (Linux 6.3 and later)\n");
             return SKIP;
         }
         assert_eq!(selftest::classed_install(true, false), Outcome::Installed, "the swap under MDWE");

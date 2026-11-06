@@ -17,6 +17,7 @@
  *     debugger's breakpoint makes the page anonymous): the SSE2 page (the pagemap guard)
  *   PR_SET_MDWE(PR_MDWE_REFUSE_EXEC_GAIN) set before execve: the AVX2 page on an AVX2 host
  *     (the swap gains no exec permission); skipped, with the reason, without PR_SET_MDWE. */
+#define _GNU_SOURCE
 #include <cpuid.h>
 #include <errno.h>
 #include <fcntl.h>

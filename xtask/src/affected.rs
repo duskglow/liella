@@ -194,9 +194,35 @@ fn csys_symbols(path: &str, text: &str) -> Option<Vec<String>> {
         return None;
     }
     let mut out = Vec::new();
+    let mut in_macro = false;
     for l in text.lines() {
         let t = l.trim_start();
         let first = t.split([' ', '\t']).next().unwrap_or("");
+        // CLASSED-SLOT-INFRA (D-4.53): a `.macro` body that declares nothing global and labels only `.L` locals defines no
+        // symbol where it is written (its expansions are read where they occur); a `#define` of an upper-case name to a
+        // number literal renames nothing. Anything else in either stays unmappable.
+        if in_macro {
+            let label = l.split_once(':').is_some_and(|(x, _)| !x.is_empty() && !x.starts_with(".L") && !x.contains([' ', '\t']));
+            if first == ".endm" {
+                in_macro = false;
+            } else if label || matches!(first, ".macro" | ".globl" | ".global" | ".weak" | ".symver" | ".set" | ".equ" | ".equiv" | "#define" | "#include") {
+                return None;
+            }
+            continue;
+        }
+        if first == ".macro" {
+            in_macro = true;
+            continue;
+        }
+        if first == "#define" {
+            let mut w = t[first.len()..].split_whitespace();
+            let name_ok = w.next().is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_'));
+            let value_ok = w.next().is_some_and(|v| v.bytes().all(|b| b.is_ascii_hexdigit() || b == b'x')) && w.next().is_none();
+            if name_ok && value_ok {
+                continue;
+            }
+            return None;
+        }
         if matches!(first, ".macro" | "#define" | "#include" | ".set" | ".equ" | ".equiv" | ".include" | ".irp" | ".rept") {
             return None;
         }
@@ -2858,7 +2884,12 @@ mod tests {
     fn csys_symbol_reading() {
         assert_eq!(csys_symbols("a.S", "\t.globl liella_a, liella_b\n\t.weak w\nliella_c:\n.Llocal:\n\tret\n"), Some(vec!["liella_a".into(), "liella_b".into(), "liella_c".into(), "w".into()]));
         assert_eq!(csys_symbols("a.S", "#include \"x.h\"\n\t.globl liella_a\n"), None);
-        assert_eq!(csys_symbols("a.S", ".macro M\n.endm\n"), None);
+        assert_eq!(csys_symbols("a.S", ".macro M\n.endm\n"), Some(vec![]));
+        assert_eq!(csys_symbols("a.S", ".macro M b\n.Lx\\@:\n\tjmp liella_y+\\b\n.endm\n#define SLOT 4032\nliella_z:\n"), Some(vec!["liella_z".into()]));
+        assert_eq!(csys_symbols("a.S", ".macro M\n\t.globl liella_a\n.endm\n"), None);
+        assert_eq!(csys_symbols("a.S", ".macro M\nliella_a:\n.endm\n"), None);
+        assert_eq!(csys_symbols("a.S", "#define memset liella_a\n"), None);
+        assert_eq!(csys_symbols("a.S", "#define SLOT(x) x\n"), None);
         // TOOLS-9: a one-line .symver alias maps to the alias and the exported name; a malformed one stays unmappable.
         assert_eq!(
             csys_symbols("a.S", "\t.globl liella_x_alias\nliella_x_alias:\n\tjmp liella_x@PLT\n\t.symver liella_x_alias, stime@GLIBC_2.2.5\n"),
