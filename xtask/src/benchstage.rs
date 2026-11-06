@@ -335,6 +335,7 @@ mod tests {
         write(&src.join("bench/instr_limits.tsv"), "# none\n");
         write(&src.join("bench/c/cbench_stagetwice.c"), "/* the bench source */\n");
         write(&src.join("target/liella/libc.a"), "!<arch>\n");
+        write(&src.join("target/liella/.profile"), "release\n");
         // an earlier run's tables on the build host
         for t in ["bench_times.tsv", "counters.tsv", "counters-cbench_hot.tsv", "rounds.tsv", "ratio_host.tsv", "cbench_hot.compare.tsv"] {
             write(&src.join("target/liella/bench").join(t), "old run\n");

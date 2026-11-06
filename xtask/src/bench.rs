@@ -2185,7 +2185,10 @@ ctr	short	1
         write("bench/budgets.tsv", &budgets);
         write("bench/host_limits.tsv", "# none\n");
         write("bench/instr_limits.tsv", "# none\n");
+        write("crates/a/src/lib.rs", "// source\n");
+        write("csys/src/b.c", "/* source */\n");
         write("target/liella/libc.a", "!<arch>\n");
+        write("target/liella/.profile", "release\n");
         // an earlier run of another bench
         let out = root.join("target/liella/bench");
         write("target/liella/bench/counters.tsv", &format!("{COUNTERS_HEADER}cbench_hot\told\n"));
