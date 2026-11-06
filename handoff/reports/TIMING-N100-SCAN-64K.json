@@ -1,0 +1,11 @@
+{"task": "TIMING-N100-SCAN-64K", "model": "opus", "tokens": null,
+ "result": "AVX2 memchr/rawmemchr loops take 256-byte aligned groups: memchr_64k 6192->5172, rawmemchr_64k 5175->4675 instr (glibc 6713/5690); N100 timing and IVB check pending",
+ "branch": "task/timing-n100-scan-64k", "head": "c35d7c4f",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "software prefetch in the 256-byte loops puts rawmemchr_64k/4k above glibc's count", "recommendation": "keep it out unless N100 timing of the final head still shows L2 stalls; then time pf512 vs pf0 before a ruling"}],
+ "informational": ["brief's suggested 4x32-byte OR-reduced body already existed; the change goes to 8 loads per test", "IVB timing check not run (SSE2 code and counts unchanged)", "rec.<row>.data not annotated (budget)"],
+ "refused": [],
+ "improvement": "a sync while a staging job edits the role tree is a silent hazard (it was a no-op here); stage variants from a RAM copy instead of the role",
+ "next_step": "read nozomi:timing-n100-scan-64k-n100 (base vs pf0) and run the IVB check; cancel booking #52",
+ "report_file": "handoff/TIMING-N100-SCAN-64K.md",
+ "jobs": ["keke:timing-n100-scan-64k-lint", "keke:timing-n100-scan-64k-gate", "keke:timing-n100-scan-64k-plants", "keke:timing-n100-scan-64k-count-before", "keke:timing-n100-scan-64k-count-after", "nozomi:timing-n100-scan-64k-n100"]}

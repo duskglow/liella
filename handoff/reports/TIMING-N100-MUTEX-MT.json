@@ -1,0 +1,13 @@
+{"task": "TIMING-N100-MUTEX-MT", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: N100 normal_mt 1.215 -> 1.013 by dropping the push and count stores ahead of unlock's xchg, but recursive rows +3 instr and slower in time (0.848 -> 0.940); not landable yet",
+ "branch": "task/timing-n100-mutex-mt", "head": null,
+ "gate": {"affected": "852 passed / 0 failed (conformance 16/0)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["glibc sets __nusers 1 while a mutex is held; Liella leaves it 0 (existing difference, unchanged)",
+                   "probe b2d4f23094db: glibc __count is 0 for non-recursive mutexes held or free; Liella stored 1 (fixed on this branch)",
+                   "~/bin/timing is its own jobrun wrapper: nesting it under jobrun is refused (first label TIMING-N100-MUTEX-MT-n100 rc 2)"],
+ "refused": [],
+ "jobs": ["TIMING-N100-MUTEX-MT-gate", "TIMING-N100-MUTEX-MT-plants", "TIMING-N100-MUTEX-MT-count-before", "TIMING-N100-MUTEX-MT-count-after", "nozomi:TIMING-N100-MUTEX-MT-n100b"],
+ "improvement": "the profile method should ship disassembly with the samples (perf script ip histogram + objdump on a build host took 4 calls; annotate on the timing host is impossible without objdump)",
+ "next_step": "rework lock_fast so the recursive-only count store does not make LLVM fold the entry tests (split by type before the CAS), then counts, N100 + IVB timing, plants, D-row",
+ "report_file": "handoff/timing-n100-mutex-mt.md"}

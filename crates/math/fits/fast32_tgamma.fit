@@ -1,0 +1,10 @@
+# LIBM-F32-GAMMA (D-10.3): Γ(5/2 + s) on [-1/2, 1/2], the reduced range of the `float` gamma kernel
+# after Γ(x) = Γ(t)·(x - 1)···t or Γ(t)/(x (x + 1)···(t - 1)) with t = x - n in [2, 3) and s = t - 5/2
+# (exact). Relative error: Γ has no zero on [2, 3].
+name = fast32_tgamma
+target = tgamma_2p5
+interval = -1/2, 1/2
+powers = 0..14
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_tgamma.rs

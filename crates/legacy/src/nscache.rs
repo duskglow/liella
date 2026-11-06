@@ -542,10 +542,16 @@ impl NsCache {
     /// In a `fork` child (one thread): no other thread holds the lock or a reader count, and the
     /// region's descriptor is shared with the parent (and so is its OFD lock), so the next
     /// lookup attaches anew.
+    /// Before the first lookup (no table attached) nothing is written: the next lookup attaches
+    /// in any case, and the cache's page stays shared with the parent (D-18.8).
     pub fn after_fork_child(&self) {
         self.lock.reset();
-        self.readers.store(0, Release);
-        self.credentials_changed();
+        if self.readers.load(Relaxed) != 0 {
+            self.readers.store(0, Release);
+        }
+        if self.mode.load(Acquire) != MODE_IDLE {
+            self.credentials_changed();
+        }
     }
 
     /// While the cache is in use and validated the global files less than a second ago: the

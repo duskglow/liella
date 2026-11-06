@@ -2188,14 +2188,18 @@ fn count_skips(log: &str) -> u64 {
         .sum()
 }
 
-fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, allow_skip: bool) -> Outcome {
+/// A step's line, and for a failed test step the report of `failed_tests_report`, go to `out` (the console; a buffer in
+/// the unit tests). `test_crate` is `Some(crate)` for a test step: it may be a skip (`no_tests_only`), and when it fails
+/// its failing tests are named right under its FAIL line, before the next step starts (XTASK-AFFECTED-FAIL-EARLY).
+fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, test_crate: Option<&str>, out: &mut dyn std::io::Write) -> Outcome {
+    use std::io::Write;
+    let allow_skip = test_crate.is_some();
     let started = Instant::now();
     // This step's own output starts where the log ends now (the classification never reads earlier steps).
     let from = fs::metadata(log).map_or(0, |m| m.len());
     let file = fs::OpenOptions::new().create(true).append(true).open(log);
     let (success, failed_to_start) = match file.and_then(|f| f.try_clone().map(|g| (f, g))) {
         Ok((out, err)) => {
-            use std::io::Write;
             let _ = writeln!(&out, "== {label}");
             (cmd.current_dir(root).stdout(Stdio::from(out)).stderr(Stdio::from(err)).status().is_ok_and(|s| s.success()), false)
         }
@@ -2226,8 +2230,115 @@ fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, allow_skip:
     if outcome == Outcome::Failed {
         log_step_failed(log, label, "");
     }
-    println!("{:>6.1}s  {shown}  {label}{}", started.elapsed().as_secs_f64(), if outcome == Outcome::Skipped { "  (no test matched the selection: skipped, not failed)" } else { "" });
+    let _ = writeln!(out, "{:>6.1}s  {shown}  {label}{}", started.elapsed().as_secs_f64(), if outcome == Outcome::Skipped { "  (no test matched the selection: skipped, not failed)" } else { "" });
+    if let (Outcome::Failed, Some(c)) = (outcome, test_crate) {
+        let bytes = fs::read(log).unwrap_or_default();
+        let first_line = bytes[..(from as usize).min(bytes.len())].iter().filter(|&&b| b == b'\n').count() + 1;
+        let _ = write!(out, "{}", failed_tests_report(&own, c, log, first_line));
+    }
+    let _ = out.flush();
     outcome
+}
+
+/// How many failing tests a failed test step names under its FAIL line, and how many lines of each one's panic it
+/// shows (XTASK-AFFECTED-FAIL-EARLY); a longer line is cut to `EARLY_WIDTH` characters.
+const EARLY_TESTS: usize = 10;
+const EARLY_PANIC_LINES: usize = 5;
+const EARLY_WIDTH: usize = 300;
+
+/// The failing tests of a test step's own output, in order, each `<crate>[::<binary>] <test>` with the first lines of
+/// its panic (empty when the output holds none). Two runners write it:
+/// - nextest (through `xtask nextest`): a `<STATUS> [ 0.1s] (n/m) <binary id> <test>` line per test, a failing test's
+///   captured output under header lines naming it, and at the end one `---- <binary id> <test> stdout ----` line per
+///   failure (`nextest.rs`);
+/// - `cargo test`: `Running <file> (<deps path>)` per binary, then `---- <test> stdout ----` followed by that test's
+///   output for each failure; the name gets the binary of the `Running` line before it.
+fn failed_tests(own: &str, krate: &str) -> Vec<(String, Vec<String>)> {
+    let lines: Vec<&str> = own.lines().collect();
+    let mut binary = krate.to_string();
+    // (full name, the name as its `---- ` line has it)
+    let mut names: Vec<(String, String)> = Vec::new();
+    for l in &lines {
+        let t = l.trim();
+        if let Some(r) = t.strip_prefix("Running ") {
+            // "Running unittests src/lib.rs (target/debug/deps/liella_mem-0123)", "Running tests/x.rs (.../x-0123)"
+            let deps = r.rsplit_once('(').map_or("", |(_, p)| p.trim_end_matches(')'));
+            let stem = deps.rsplit('/').next().unwrap_or("");
+            let stem = stem.rsplit_once('-').map_or(stem, |(s, _)| s);
+            binary = if r.starts_with("unittests src/lib.rs") || stem.is_empty() { krate.to_string() } else if r.starts_with("unittests ") { format!("{krate}::bin/{stem}") } else { format!("{krate}::{stem}") };
+        } else if let Some(n) = t.strip_prefix("---- ").and_then(|x| x.strip_suffix(" stdout ----")) {
+            let full = if n.contains(' ') { n.to_string() } else { format!("{binary} {n}") };
+            if !names.iter().any(|(f, _)| *f == full) {
+                names.push((full, n.to_string()));
+            }
+        }
+    }
+    let mut panics: Vec<Vec<String>> = vec![Vec::new(); names.len()];
+    // The failure whose output the scan is in: set by a line naming it (a nextest status or output header, a
+    // `---- ` line), cleared by a line naming another test or ending a `cargo test` section.
+    let mut current: Option<usize> = None;
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim();
+        let section = t.strip_prefix("---- ").and_then(|x| x.strip_suffix(" stdout ----"));
+        let named = names.iter().position(|(full, short)| section == Some(short.as_str()) || t.ends_with(full.as_str()) || t.contains(&format!("{full} ")));
+        let status = t.split_once(" [").is_some_and(|(s, _)| !s.is_empty() && s.bytes().all(|b| b.is_ascii_uppercase() || b == b'-'));
+        if named.is_some() {
+            current = named;
+        } else if status || t.starts_with("---- ") || lines[i] == "failures:" || lines[i].starts_with("test result: ") || t.starts_with("Running ") {
+            // nextest indents a test's captured output (its own `failures:` and `test result:` lines too), under
+            // `stdout ───` / `stderr ───` headers that do not name the test: only column-0 lines end a section.
+            current = None;
+        } else if let Some(k) = current.filter(|&k| panics[k].is_empty() && t.contains("panicked at")) {
+            let indent = &lines[i][..lines[i].len() - lines[i].trim_start().len()];
+            let mut j = i;
+            while j < lines.len() && panics[k].len() < EARLY_PANIC_LINES {
+                let p = lines[j].trim_end();
+                let p = p.strip_prefix(indent).unwrap_or(p);
+                let q = p.trim_start();
+                if j > i && (q.is_empty() || q.starts_with("note: run with") || q.starts_with("stack backtrace:") || q.starts_with("---- ")) {
+                    break;
+                }
+                let cut: String = p.chars().take(EARLY_WIDTH).collect();
+                panics[k].push(if cut.len() < p.len() { format!("{cut} [line cut]") } else { cut });
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    names.into_iter().map(|(f, _)| f).zip(panics).collect()
+}
+
+/// What a failed test step prints under its FAIL line: its failing tests (at most `EARLY_TESTS`, with the count of the
+/// rest), the first `EARLY_PANIC_LINES` lines of each one's panic, and the log holding the step's whole output with
+/// the line the step starts at. The end-of-run summary still lists every failure.
+fn failed_tests_report(own: &str, krate: &str, log: &Path, first_line: usize) -> String {
+    let fails = failed_tests(own, krate);
+    let mut out = String::new();
+    if fails.is_empty() {
+        out.push_str("        no failing test named in the step's output (a build error, or a runner that did not finish)\n");
+        for e in own.lines().filter(|l| l.starts_with("error")).take(EARLY_PANIC_LINES) {
+            out.push_str(&format!("          {}\n", e.chars().take(EARLY_WIDTH).collect::<String>()));
+        }
+    } else {
+        out.push_str(&format!("        failing tests ({}):\n", fails.len()));
+        for (name, panic) in fails.iter().take(EARLY_TESTS) {
+            out.push_str(&format!("          {name}\n"));
+            if panic.is_empty() {
+                out.push_str("            (no panic message in the output; see the log)\n");
+            }
+            for p in panic {
+                out.push_str(&format!("            | {p}\n"));
+            }
+        }
+        if fails.len() > EARLY_TESTS {
+            out.push_str(&format!("          ... and {} more failing tests (all are in the summary at the end)\n", fails.len() - EARLY_TESTS));
+        }
+    }
+    out.push_str(&format!("        full output: {} (this step from line {first_line})\n", log.display()));
+    out
 }
 
 /// TOOLS-9: a line `STEP FAILED: <label>: <why>` in the affected log, which `~/bin/test-summary` lists next to the
@@ -2255,7 +2366,7 @@ fn check_logged(log: &Path, label: &str, r: Result<(), String>) -> Result<(), ()
 }
 
 fn step(root: &Path, log: &Path, label: &str, cmd: &mut Command) -> bool {
-    step_out(root, log, label, cmd, false) == Outcome::Ok
+    step_out(root, log, label, cmd, None, &mut std::io::stdout()) == Outcome::Ok
 }
 
 /// TOOLS-7 (1): like `step`, and the step's own output (everything it appended to `log`) is also written to
@@ -2272,6 +2383,116 @@ fn step_saving(root: &Path, log: &Path, label: &str, cmd: &mut Command, name: &s
         println!("        full output of the failed step: {}", dest.display());
     }
     ok
+}
+
+/// How many trailing lines of a failed conformance program's stdout, and of its stderr, `affected` prints (D-X.27).
+const CONF_TAIL_LINES: usize = 40;
+/// A longer line of that output is cut to this many characters (one runaway line does not flood the console).
+const CONF_TAIL_WIDTH: usize = 300;
+
+/// D-X.27: the selected conformance programs as one step (`conformance/run.sh <name>...`): whether it passed, and when
+/// it failed the report of `conformance_failures` (empty when it passed), which the caller prints to the console, where `cargo xtask plants` matches a plant's `msg:` (before, the console
+/// named the step only, and a plant caught for the right reason by a program's own check was WARN-NO-MSG).
+fn run_conformance(root: &Path, log: &Path, names: &[&str]) -> (bool, String) {
+    let from = fs::metadata(log).map_or(0, |m| m.len());
+    let mut cmd = Command::new("sh");
+    cmd.arg("conformance/run.sh").args(names);
+    let ok = step(root, log, &format!("conformance ({} programs)", names.len()), &mut cmd);
+    if ok {
+        return (true, String::new());
+    }
+    let bytes = fs::read(log).unwrap_or_default();
+    let own = String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).into_owned();
+    (false, conformance_failures(&root.join("conformance").join("build"), &own))
+}
+
+/// Linux x86-64 signal numbers (kernel UAPI `asm/signal.h`), for a status of 128 + n.
+fn signal_name(n: u32) -> Option<&'static str> {
+    const NAMES: [&str; 31] = [
+        "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGTRAP", "SIGABRT", "SIGBUS", "SIGFPE", "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM", "SIGTERM", "SIGSTKFLT", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF", "SIGWINCH", "SIGIO", "SIGPWR", "SIGSYS",
+    ];
+    NAMES.get((n as usize).wrapping_sub(1)).copied()
+}
+
+/// `status N, expected ...` of `run.sh`, with a status above 128 read as the shell does: death by signal N - 128.
+fn describe_status(detail: &str) -> String {
+    let Some(rest) = detail.strip_prefix("status ") else { return detail.to_string() };
+    let (n, tail) = rest.split_at(rest.find(',').unwrap_or(rest.len()));
+    match n.trim().parse::<u32>() {
+        Ok(rc) if rc > 128 && rc <= 128 + 64 => {
+            let sig = rc - 128;
+            format!("killed by signal {sig}{} (status {rc}){tail}", signal_name(sig).map(|s| format!(" {s}")).unwrap_or_default())
+        }
+        Ok(rc) => format!("exit status {rc}{tail}"),
+        Err(_) => detail.to_string(),
+    }
+}
+
+/// The last `CONF_TAIL_LINES` lines of `path` under a heading, each line prefixed `    | `, with a note when the file
+/// had more lines (or a line was cut); `(empty)` or `(absent)` otherwise.
+fn conf_tail(what: &str, path: &Path) -> String {
+    let Ok(bytes) = fs::read(path) else { return format!("  {what}: (absent: {})\n", path.display()) };
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return format!("  {what}: (empty)\n");
+    }
+    let skip = lines.len().saturating_sub(CONF_TAIL_LINES);
+    let mut out = if skip > 0 {
+        format!("  {what}: last {CONF_TAIL_LINES} of {} lines ({skip} cut; whole file {}):\n", lines.len(), path.display())
+    } else {
+        format!("  {what} ({} lines):\n", lines.len())
+    };
+    for l in &lines[skip..] {
+        let n = l.chars().count();
+        if n > CONF_TAIL_WIDTH {
+            out.push_str(&format!("    | {} ... ({} more characters cut)\n", l.chars().take(CONF_TAIL_WIDTH).collect::<String>(), n - CONF_TAIL_WIDTH));
+        } else {
+            out.push_str(&format!("    | {l}\n"));
+        }
+    }
+    out
+}
+
+/// D-X.27: for each program the step's own output (`own`, what `run.sh` printed) names as failed - a line
+/// `conformance: FAIL <name> (<why>)` - its name, how it ended (the `conformance: <name>: ...` lines: exit status or
+/// signal, missing stderr text) and the tails of its stdout and stderr in `build`. A program that did not build (or
+/// whose helper did not) shows its build log instead: its stdout and stderr files there are an earlier run's. Programs
+/// that passed print nothing; a failed step that names no program shows the end of its own output.
+fn conformance_failures(build: &Path, own: &str) -> String {
+    let mut failed: Vec<(&str, &str)> = Vec::new();
+    let mut details: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for l in own.lines() {
+        let Some(r) = l.strip_prefix("conformance: ") else { continue };
+        if let Some(f) = r.strip_prefix("FAIL ") {
+            let (name, why) = f.split_once(' ').unwrap_or((f, ""));
+            failed.push((name, why.trim().trim_start_matches('(').trim_end_matches(')')));
+        } else if let Some((name, d)) = r.split_once(": ") {
+            if !name.is_empty() && !name.contains(' ') {
+                details.entry(name).or_default().push(d);
+            }
+        }
+    }
+    let mut out = String::new();
+    if failed.is_empty() {
+        let lines: Vec<&str> = own.lines().collect();
+        out.push_str("conformance: the step failed but named no failed program; the end of its output:\n");
+        for l in &lines[lines.len().saturating_sub(CONF_TAIL_LINES)..] {
+            out.push_str(&format!("    | {l}\n"));
+        }
+        return out;
+    }
+    for (name, why) in failed {
+        let how: Vec<String> = details.get(name).into_iter().flatten().map(|d| describe_status(d)).collect();
+        out.push_str(&format!("conformance FAILED: {name}: {}\n", if how.is_empty() { why.to_string() } else { how.join("; ") }));
+        if why.starts_with("stderr:") {
+            out.push_str(&conf_tail("stdout", &build.join(format!("{name}.log.stdout"))));
+            out.push_str(&conf_tail("stderr", &build.join(format!("{name}.log.stderr"))));
+        } else if build.join(format!("{name}.log")).exists() && (why.contains("does not build") || why.contains("helper")) {
+            out.push_str(&conf_tail("build log", &build.join(format!("{name}.log"))));
+        }
+    }
+    out
 }
 
 /// A few lines from a cargo/xtask log, in the format of `~/bin/test-summary`.
@@ -2377,7 +2598,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             ok &= step_saving(root, &log, &format!("clippy --workspace (changed: {})", sel.clippy.keys().cloned().collect::<Vec<_>>().join(", ")), &mut cmd, "clippy.log");
         }
         if sel.xtask_tests {
-            ok &= step(root, &log, "xtask unit tests", Command::new(&cargo).args(["test", "-p", "xtask"]));
+            ok &= step_out(root, &log, "xtask unit tests", Command::new(&cargo).args(["test", "-p", "xtask"]), Some("xtask"), &mut std::io::stdout()) == Outcome::Ok;
         }
         let needs_products = !sel.conf.is_empty() || sel.xtask_cmds.contains("symgap") || repo.targets.iter().any(|t| t.products && sel.tests.contains_key(&(t.krate.clone(), t.name.clone())));
         if needs_products {
@@ -2435,7 +2656,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["--test", t]);
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
-                match step_out(root, &log, &label, &mut cmd, true) {
+                match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {
                     Outcome::Ok => {}
                     Outcome::Skipped => skipped.push(label),
                     Outcome::Failed => ok = false,
@@ -2443,12 +2664,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             }
         }
         if !sel.conf.is_empty() {
-            let mut cmd = Command::new("sh");
-            cmd.arg("conformance/run.sh");
-            for n in sel.conf.keys() {
-                cmd.arg(n);
-            }
-            ok &= step(root, &log, &format!("conformance ({} programs)", sel.conf.len()), &mut cmd);
+            let (passed, report) = run_conformance(root, &log, &sel.conf.keys().map(String::as_str).collect::<Vec<_>>());
+            print!("{report}");
+            ok &= passed;
         }
         for c in &sel.xtask_cmds {
             // A command may carry its flags (`math-gen --check`).
@@ -2744,6 +2962,184 @@ mod tests {
         }
         assert!(!saved.contains("STALE") && !saved.contains("earlier-output"), "{saved:?}");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// XTASK-AFFECTED-FAIL-EARLY: an env-gated fixture. It passes unless `LIELLA_AFFECTED_FAIL_FIXTURE` is set; with it
+    /// set, `LIELLA_AFFECTED_FAIL_FIXTURE=1 cargo xtask affected --only xtask --run` shows a real failed test step's
+    /// report (the end-to-end plant in handoff/XTASK-AFFECTED-FAIL-EARLY-plants.txt).
+    #[test]
+    fn affected_fail_early_fixture() {
+        // Trace: no spec clause (test-harness reporting fixture; XTASK-AFFECTED-FAIL-EARLY).
+        if std::env::var_os("LIELLA_AFFECTED_FAIL_FIXTURE").is_some() {
+            panic!("FIXTURE-PANIC-MARKER: this test fails on purpose because LIELLA_AFFECTED_FAIL_FIXTURE is set");
+        }
+    }
+
+    /// The output of `cargo test -p liella-x` with one failure in the unit tests and one in `tests/sweep.rs`.
+    const CARGO_TEST_FAILS: &str = "   Compiling liella-x v0.1.0\n    Finished `test` profile [unoptimized] target(s) in 1.00s\n     Running unittests src/lib.rs (target/debug/deps/liella_x-0123abcd)\n\nrunning 2 tests\ntest a::passes ... ok\ntest a::breaks ... FAILED\n\nfailures:\n\n---- a::breaks stdout ----\n\nthread 'a::breaks' panicked at src/a.rs:9:5:\nassertion `left == right` failed\n  left: 1\n right: 2\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    a::breaks\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running tests/sweep.rs (target/debug/deps/sweep-89abcdef)\n\nrunning 1 test\ntest edge ... FAILED\n\nfailures:\n\n---- edge stdout ----\nthread 'edge' panicked at tests/sweep.rs:3:5:\nL1\nL2\nL3\nL4\nL5\n\nfailures:\n    edge\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n";
+
+    // A failed test step names its failing tests and their panics right under its FAIL line, before the next step's
+    // line; a passing test step prints its line only; an earlier step's output is not read.
+    #[test]
+    fn a_failed_test_step_names_its_failures_under_its_fail_line() {
+        // Trace: no spec clause (test-harness reporting; XTASK-AFFECTED-FAIL-EARLY).
+        let root = std::env::temp_dir().join(format!("xtask-failearly-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("target")).unwrap();
+        let log = root.join("target").join("affected.log");
+        fs::write(root.join("fails.txt"), CARGO_TEST_FAILS).unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let sh = |script: &str| {
+            let mut c = Command::new("sh");
+            c.args(["-c", script]);
+            c
+        };
+        assert_eq!(step_out(&root, &log, "test -p liella-w", &mut sh("echo '---- old stdout ----'; echo \"thread 'old' panicked at x\"; exit 0"), Some("liella-w"), &mut out), Outcome::Ok);
+        let passing = String::from_utf8(out.clone()).unwrap();
+        assert_eq!(passing.lines().count(), 1, "a passing step printed more than its line: {passing:?}");
+        assert_eq!(step_out(&root, &log, "test -p liella-x", &mut sh("cat fails.txt; exit 101"), Some("liella-x"), &mut out), Outcome::Failed);
+        assert_eq!(step_out(&root, &log, "test -p liella-z", &mut sh("exit 0"), Some("liella-z"), &mut out), Outcome::Ok);
+        let got = String::from_utf8(out).unwrap();
+        let lines: Vec<&str> = got.lines().map(|l| l.split_once("s  ").map_or(l, |(_, r)| r)).collect();
+        let want = [
+            "ok    test -p liella-w".to_string(),
+            "FAIL  test -p liella-x".to_string(),
+            "        failing tests (2):".to_string(),
+            "          liella-x a::breaks".to_string(),
+            "            | thread 'a::breaks' panicked at src/a.rs:9:5:".to_string(),
+            "            | assertion `left == right` failed".to_string(),
+            "            |   left: 1".to_string(),
+            "            |  right: 2".to_string(),
+            "          liella-x::sweep edge".to_string(),
+            "            | thread 'edge' panicked at tests/sweep.rs:3:5:".to_string(),
+            "            | L1".to_string(),
+            "            | L2".to_string(),
+            "            | L3".to_string(),
+            "            | L4".to_string(),
+            format!("        full output: {} (this step from line 4)", log.display()),
+            "ok    test -p liella-z".to_string(),
+        ];
+        assert_eq!(lines, want, "the console was {got:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // nextest's format: status and output header lines name the binary id and test, `xtask nextest` adds a `---- `
+    // line per failure. At most 10 tests are shown (with the count of the rest), long lines are cut, a failure
+    // without a panic says so, a panic under another test's line is not attributed, and a step naming no failing
+    // test shows its first error lines.
+    #[test]
+    fn the_failed_test_report_reads_nextest_output_and_stays_bounded() {
+        // Trace: no spec clause (test-harness reporting; XTASK-AFFECTED-FAIL-EARLY).
+        let mut own = String::from("== test -p liella-y\n    Starting 14 tests across 1 binary\n        SIGSEGV [   0.010s] (  1/14) liella-y::t crash\n");
+        own.push_str("        PASS [   0.001s] (  2/14) liella-y::t fine\nthread 'fine' panicked at tests/t.rs:1:1:\nnot this one\n");
+        // nextest 0.9.1xx (as on the build hosts, 11-06): indented output under `stdout ───` / `stderr ───`; case_1
+        // has the older `──── STDERR: <binary id> <test>` header, which names the test.
+        for i in 0..12 {
+            let (out_h, err_h, ind) = if i == 1 { (format!("──── STDOUT:             liella-y::t case_{i}"), format!("──── STDERR:             liella-y::t case_{i}"), "") } else { ("  stdout ───".to_string(), "  stderr ───".to_string(), "    ") };
+            own.push_str(&format!("        FAIL [   0.010s] ({:>3}/14) liella-y::t case_{i}\n{out_h}\n\n{ind}running 1 test\n{ind}test case_{i} ... FAILED\n\n{ind}failures:\n\n{ind}failures:\n{ind}    case_{i}\n\n{ind}test result: FAILED. 0 passed; 1 failed\n\n", i + 3));
+            own.push_str(&format!("{err_h}\n\n{ind}thread 'case_{i}' (12{i}) panicked at tests/t.rs:{i}:1:\n{ind}boom {i}{}\n{ind}note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n", if i == 0 { "x".repeat(400) } else { String::new() }));
+        }
+        own.push_str("     Summary [   0.200s] 14 tests run: 1 passed, 13 failed\n---- liella-y::t crash stdout ----\n");
+        for i in 0..12 {
+            own.push_str(&format!("---- liella-y::t case_{i} stdout ----\n"));
+        }
+        let r = failed_tests_report(&own, "liella-y", Path::new("/x/affected.log"), 7);
+        for want in [
+            "        failing tests (13):\n          liella-y::t crash\n            (no panic message in the output; see the log)\n          liella-y::t case_0\n            | thread 'case_0' (120) panicked at tests/t.rs:0:1:\n            | boom 0xxx",
+            "xxx [line cut]\n          liella-y::t case_1\n            | thread 'case_1' (121) panicked at tests/t.rs:1:1:\n            | boom 1\n          liella-y::t case_2\n",
+            "          liella-y::t case_8\n            | thread 'case_8' (128) panicked at tests/t.rs:8:1:\n            | boom 8\n          ... and 3 more failing tests",
+            "        full output: /x/affected.log (this step from line 7)\n",
+        ] {
+            assert!(r.contains(want), "missing {want:?} in {r}");
+        }
+        assert!(!r.contains("case_9\n") && !r.contains("'fine'") && !r.contains("not this one"), "{r}");
+        assert!(r.lines().all(|l| l.chars().count() <= EARLY_WIDTH + 30), "a line was not cut: {r}");
+        let build = failed_tests_report("== test -p liella-y\nerror[E0425]: cannot find value `x` in this scope\n  --> tests/t.rs:1:1\n", "liella-y", Path::new("/x/affected.log"), 1);
+        assert_eq!(build, "        no failing test named in the step's output (a build error, or a runner that did not finish)\n          error[E0425]: cannot find value `x` in this scope\n        full output: /x/affected.log (this step from line 1)\n");
+    }
+
+    /// A temporary root whose `conformance/run.sh` stands in for the real runner, printing its message formats:
+    /// `good` passes; `bad` exits with status 134 (SIGABRT) and a missing stderr text, 5 stdout and 50 stderr lines
+    /// (the last one far wider than the cut); `nobuild` does not build and has an earlier run's stdout and stderr.
+    fn fake_conformance_root(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("xtask-conf-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("conformance").join("build")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        let script = r#"b=conformance/build; fail=0; pass=0
+for n in "$@"; do
+  case $n in
+  good) pass=$((pass + 1)) ;;
+  bad) i=1; while [ $i -le 5 ]; do echo "out-$i"; i=$((i + 1)); done > $b/bad.log.stdout
+       i=1; while [ $i -le 49 ]; do echo "err-$i"; i=$((i + 1)); done > $b/bad.log.stderr
+       printf 'FAIL: strlen returned 3 %0500d\n' 7 >> $b/bad.log.stderr
+       echo "conformance: bad: status 134, expected 0"; echo "conformance: bad: stderr lacks: wanted text"
+       echo "conformance: FAIL bad (stderr: conformance/build/bad.log.stderr)"; fail=$((fail + 1)) ;;
+  nobuild) echo STALE-STDOUT > $b/nobuild.log.stdout; echo STALE-STDERR > $b/nobuild.log.stderr
+       echo "x.c:1: error: boom" > $b/nobuild.log
+       echo "conformance: FAIL nobuild (does not build; see conformance/build/nobuild.log)"; fail=$((fail + 1)) ;;
+  esac
+done
+echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
+"#;
+        fs::write(root.join("conformance").join("run.sh"), script).unwrap();
+        root
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed conformance program's name, its end (signal by
+    // name, the missing stderr text) and the bounded tails of its stdout and stderr reach the report `affected` prints;
+    // a program that did not build shows its build log, not an earlier run's output; a passing program adds nothing.
+    #[test]
+    fn a_failed_conformance_program_reports_its_end_and_output_tails() {
+        let root = fake_conformance_root("fail");
+        let log = root.join("target").join("affected.log");
+        assert!(step(&root, &log, "earlier step", Command::new("sh").args(["-c", "echo 'conformance: FAIL earlier (stderr: x)'"])));
+        let (ok, report) = run_conformance(&root, &log, &["good", "bad", "nobuild"]);
+        assert!(!ok, "{report}");
+        for want in [
+            "conformance FAILED: bad: killed by signal 6 SIGABRT (status 134), expected 0; stderr lacks: wanted text\n",
+            "  stdout (5 lines):\n    | out-1\n",
+            "    | out-5\n",
+            "  stderr: last 40 of 50 lines (10 cut; whole file ",
+            "    | err-11\n",
+            "    | FAIL: strlen returned 3 000",
+            " ... (224 more characters cut)\n",
+            "conformance FAILED: nobuild: does not build; see conformance/build/nobuild.log\n  build log (1 lines):\n    | x.c:1: error: boom\n",
+        ] {
+            assert!(report.contains(want), "missing {want:?} in:\n{report}");
+        }
+        for not in ["| err-10\n", "STALE-", "good", "earlier"] {
+            assert!(!report.contains(not), "unexpected {not:?} in:\n{report}");
+        }
+        let (ok, report) = run_conformance(&root, &log, &["good"]);
+        assert!(ok && report.is_empty(), "a passing program printed: {report:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed step naming no program still shows how it ended.
+    #[test]
+    fn a_conformance_step_failing_without_a_program_shows_its_end() {
+        let report = conformance_failures(Path::new("/nonexistent"), "== conformance (1 programs)\nrun.sh: 3: cc: not found\n");
+        assert!(report.contains("named no failed program") && report.contains("    | run.sh: 3: cc: not found\n"), "{report}");
+        assert_eq!(describe_status("status 3, expected 0"), "exit status 3, expected 0");
+        assert_eq!(describe_status("status 139, expected signal 6"), "killed by signal 11 SIGSEGV (status 139), expected signal 6");
+        assert_eq!(describe_status("stderr lacks: x"), "stderr lacks: x");
+    }
+
+    // Trace: no spec clause (D-X.27): the report reads `run.sh`'s own lines and files; this fails when their format moves.
+    #[test]
+    fn the_conformance_report_matches_the_runner_formats() {
+        let run = fs::read_to_string(root().join("conformance").join("run.sh")).unwrap();
+        for want in [
+            r#"log="$here/build/$name.log""#,
+            r#"2>"$log.stderr" >"$log.stdout""#,
+            r#"echo "conformance: $name: status $rc, expected $want_exit""#,
+            r#"echo "conformance: $name: stderr lacks: $text""#,
+            r#"echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)""#,
+            r#"echo "conformance: FAIL $name (does not build; see conformance/build/$name.log)""#,
+        ] {
+            assert!(run.contains(want), "conformance/run.sh no longer has {want:?}: update conformance_failures");
+        }
     }
 
     fn root() -> PathBuf {

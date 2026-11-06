@@ -1,0 +1,12 @@
+{"task": "DL-ELF-READ-1", "model": "opus", "tokens": null,
+ "result": "liella_ld::elf part 1 (header, program headers, dynamic, notes; typed ElfError, no panic/no OOB) and liella_ld::arch (Arch, X86_64, Native); readelf -h/-l/-d/-n parity corpus + malformed corpus; 41 plants (38 caught, 3 equivalent)",
+ "branch": "task/dl-elf-read-1", "head": "c11eddb6",
+ "gate": {"affected": "direct tier rc 0 (clippy, static, affected --base origin/next; conformance 119 passed, 0 failed)", "peak": "1.1G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW placeholder in plan/07-decisions/s26-29.md (reader error rules)", "recommendation": "reserve the D-27 id and run tools/assign_placeholder.sh"}],
+ "informational": ["arch seam: ticked with two exceptions (Native undefined off x86_64 because arch-check builds liella-ld for aarch64; one test asserts machine 62 literally)", "crates/ld/src/arch.rs uses an ARCH(x86_64) tag; adding it to the arch-audit ALLOWED table touches xtask and escalates the gate to FULL (left to A-0)", "dlerror texts for ElfError wait for the DL-0b probes"],
+ "refused": [],
+ "improvement": "a change under xtask/ silently escalates the developer gate to FULL; the brief or design could say so where it suggests an xtask edit (design 0a's allowed-module list)",
+ "next_step": "DL-3 DL-ELF-READ-2 (hash tables, versions, RELA/RELR iterators, elf fuzz target) on top of Elf::bytes_at and Dynamic",
+ "report_file": "handoff/DL-ELF-READ-1.md",
+ "jobs": ["keke:dl-elf-read-1-gate2", "keke:dl-elf-read-1-plants2"]}

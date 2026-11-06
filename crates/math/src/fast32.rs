@@ -30,6 +30,7 @@ use crate::status::{Flags, Rounding, Status};
 mod bessel;
 mod erf;
 mod exp_log;
+mod gamma;
 mod hyperbolic;
 mod inv_trig;
 mod trig;
@@ -37,6 +38,8 @@ mod trig;
 use bessel::{bessel_core, bessel_finish};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
+pub use gamma::{eval_lgamma, eval_tgamma};
+use gamma::{gamma_core, lgamma_core, TGAMMA_DELTA};
 use hyperbolic::*;
 use inv_trig::*;
 use trig::*;
@@ -94,6 +97,10 @@ pub enum Fast {
     Erf,
     /// `erfcf` (LIBM-F32-ERF).
     Erfc,
+    /// `tgammaf` (LIBM-F32-GAMMA).
+    Tgamma,
+    /// `lgammaf` (LIBM-F32-GAMMA; the sign by [`eval_lgamma`]).
+    Lgamma,
     /// `j0f` (LIBM-F32-BESSEL).
     J0,
     /// `j1f` (LIBM-F32-BESSEL).
@@ -352,6 +359,11 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
         Fast::Atanh => (atanh_core(x)?, ATANH_DELTA, "atanhf"),
         Fast::Erf => (erf_core(x)?, ERF_DELTA, "erff"),
         Fast::Erfc => (erfc_core(x)?, ERFC_DELTA, "erfcf"),
+        Fast::Tgamma => (gamma_core(f64::from(x))?, TGAMMA_DELTA, "tgammaf"),
+        Fast::Lgamma => {
+            let (y, d) = lgamma_core(x)?;
+            (y, d, "lgammaf")
+        }
         Fast::J0 => return bessel_finish(x, bessel_core(0, x)?, mode, "j0f"),
         Fast::J1 => return bessel_finish(x, bessel_core(1, x)?, mode, "j1f"),
         Fast::Y0 => return bessel_finish(x, bessel_core(2, x)?, mode, "y0f"),
@@ -447,8 +459,8 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::Erf | Fast::Erfc | Fast::J0 | Fast::J1 | Fast::Y0
-        | Fast::Y1 => {
+        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::Erf | Fast::Erfc | Fast::Tgamma | Fast::Lgamma | Fast::J0
+        | Fast::J1 | Fast::Y0 | Fast::Y1 => {
             return None;
         }
     };
