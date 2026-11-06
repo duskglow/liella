@@ -203,9 +203,16 @@ impl StreamLock {
     /// In a `fork` child (only the forking thread `me` survives): a lock another thread held
     /// becomes free.
     pub fn reset_in_child(&self, me: u32) {
-        if self.owner.load(Relaxed) != me {
-            self.owner.store(0, Relaxed);
-            self.depth.store(0, Relaxed);
+        // Only the words that differ from a free lock are written: an unused stream's page
+        // stays shared copy-on-write with the parent (D-18.8).
+        let owner = self.owner.load(Relaxed);
+        if owner != me {
+            if owner != 0 {
+                self.owner.store(0, Relaxed);
+            }
+            if self.depth.load(Relaxed) != 0 {
+                self.depth.store(0, Relaxed);
+            }
             self.raw.reset();
         }
     }

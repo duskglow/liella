@@ -152,7 +152,7 @@ use liella_rt::sync::{MutexGuard, RawCondvar, RawMutex};
 use liella_rt::thread::Attr;
 
 use crate::sys::{CSys, CP};
-use crate::{conv, ffi, heap, pthread, raw, stacks, tb, thread};
+use crate::{conv, ffi, fork, heap, pthread, raw, stacks, tb, thread};
 
 /// `aio_cancel`'s results.
 pub const AIO_CANCELED: i32 = 0;
@@ -420,6 +420,8 @@ impl Drop for Held {
 }
 
 fn lock() -> Held {
+    // Before the lock: a `fork` child of a process holding it resets the state it guards.
+    fork::mark_used(fork::USED_AIO);
     let g = LOCK.lock(&CSys);
     OWNER.store(thread::own_tid(), Relaxed);
     Held { _guard: g }
@@ -2306,10 +2308,15 @@ fn park() -> ! {
 
 /// A child of `fork`: no request, ring, helper or worker is inherited. Async-signal-safe
 /// (`_Fork`): no allocation, and the lock is reset rather than taken. The free lists stay (their
-/// blocks are this process's memory); records in use by the parent are left alone.
-pub(crate) fn after_fork_child() {
+/// blocks are this process's memory); records in use by the parent are left alone. `used`: the
+/// process ever took the lock ([`fork::USED_AIO`]); before that every word below still holds
+/// its initial value, and the child writes none of them (D-18.8).
+pub(crate) fn after_fork_child(used: bool) {
     LOCK.reset();
-    OWNER.store(0, Relaxed);
+    fork::set_if_differs!(OWNER, 0);
+    if !used {
+        return;
+    }
     ENGINE.store(ENGINE_NONE, Relaxed);
     for x in [&WORKERS, &IDLE, &PENDING, &WAITERS, &LIST_WAITERS, &INFLIGHT, &WAITING, &DEAD] {
         x.store(0, Relaxed);

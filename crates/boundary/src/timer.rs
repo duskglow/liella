@@ -1164,8 +1164,12 @@ pub(crate) fn abandoned_count() -> usize {
 /// there is no helper. Async-signal-safe (`_Fork`): no allocation, and the lock is reset rather
 /// than taken.
 pub(crate) fn after_fork_child() {
+    // Only the words that change are written (D-18.8).
     LOCK.reset();
-    let mut a = HEAD.swap(0, AcqRel);
+    let mut a = HEAD.load(Acquire);
+    if a != 0 {
+        HEAD.store(0, Release);
+    }
     while a != 0 {
         let r = record(a);
         if serial_of(r) != 0 {
@@ -1176,11 +1180,12 @@ pub(crate) fn after_fork_child() {
     if let Some(ep) = epoll() {
         let _ = CSys.close(ep);
     }
-    EPOLL.store(-1, Release);
-    let wake = WAKE.swap(-1, AcqRel);
+    crate::fork::set_if_differs!(EPOLL, -1);
+    let wake = WAKE.load(Acquire);
     if wake >= 0 {
+        WAKE.store(-1, Release);
         let _ = CSys.close(Fd::new(wake));
     }
-    RETRYING.store(false, Relaxed);
-    OTHERS.store(false, Relaxed);
+    crate::fork::set_if_differs!(RETRYING, false);
+    crate::fork::set_if_differs!(OTHERS, false);
 }

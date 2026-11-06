@@ -46,8 +46,11 @@ impl RawMutex {
     /// Make the lock free again whoever held it: in a `fork` child, for a lock a thread that
     /// does not exist there held.
     pub fn reset(&self) {
-        // The registered sleepers do not exist in the child either.
-        self.state.store(0, Release);
+        // The registered sleepers do not exist in the child either. A free lock is left
+        // unwritten, so its page stays shared copy-on-write with the parent (D-18.8).
+        if self.state.load(Relaxed) != 0 {
+            self.state.store(0, Release);
+        }
     }
 
     /// Take the lock if it is free.

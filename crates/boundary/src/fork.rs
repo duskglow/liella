@@ -11,7 +11,7 @@
 //! not inherited, §23.4; D-23.3), parks the other threads' heap caches (their slabs stay
 //! usable, M4), registers its robust list again, and runs the *child* handlers.
 
-use core::sync::atomic::{AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 use liella_kernel::errno::{Errno, KResult};
 use liella_kernel::uapi::{CLONE_CHILD_CLEARTID, CLONE_CHILD_SETTID, CLONE_VFORK, CLONE_VM, SIGCHLD};
@@ -123,18 +123,55 @@ fn raw_fork() -> KResult<i32> {
     Ok(i32::try_from(r).unwrap_or(0))
 }
 
+/// The subsystems a `fork` child resets only once the process has used them (D-18.8): their
+/// reset writes whole tables, whose pages a process that never used them would otherwise copy
+/// (or fault in) in every child. Each sets its bit on its first-use path, never at start-up.
+static USED: AtomicU32 = AtomicU32::new(0);
+/// `aio_*` took its lock.
+pub(crate) const USED_AIO: u32 = 1;
+/// `getaddrinfo_a` ran.
+pub(crate) const USED_GAI: u32 = 2;
+
+/// Record that the subsystem `bit` names holds state a `fork` child must reset. Written once:
+/// the word stays shared with later children.
+#[inline]
+pub(crate) fn mark_used(bit: u32) {
+    if USED.load(Relaxed) & bit == 0 {
+        mark_used_first(bit);
+    }
+}
+
+#[cold]
+fn mark_used_first(bit: u32) {
+    USED.fetch_or(bit, Release);
+}
+
+/// Store `$v` in the atomic `$a` only when it holds another value, so the child writes (and
+/// copies) no page whose words already hold their reset values (D-18.8).
+macro_rules! set_if_differs {
+    ($a:expr, $v:expr) => {{
+        let a = &$a;
+        let v = $v;
+        if a.load(core::sync::atomic::Ordering::Relaxed) != v {
+            a.store(v, core::sync::atomic::Ordering::Release);
+        }
+    }};
+}
+pub(crate) use set_if_differs;
+
 fn child_reset() {
+    let used = USED.load(Acquire);
     thread::after_fork_child();
     crate::stacks::after_fork_child();
     crate::timer::after_fork_child();
     crate::mqueue::after_fork_child();
     crate::syslog::after_fork_child();
-    crate::gai_async::after_fork_child();
-    crate::aio::after_fork_child();
+    crate::gai_async::after_fork_child(used & USED_GAI != 0);
+    crate::aio::after_fork_child(used & USED_AIO != 0);
     crate::stdio::after_fork_in_child();
     crate::spawn::after_fork_child();
     liella_legacy::nscache::NSCACHE.after_fork_child();
-    crate::data::__libc_single_threaded.store(1, Release);
+    set_if_differs!(crate::data::__libc_single_threaded, 1);
 }
 
 /// `fork`. While the caller is the process's only thread (`thread::alone`, decided after the

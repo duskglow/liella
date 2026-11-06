@@ -433,8 +433,9 @@ pub(crate) fn queued() -> usize {
 /// Async-signal-safe (`_Fork`): no allocation, and the lock is reset rather than taken.
 pub(crate) fn after_fork_child() {
     LOCK.reset();
+    // Only the words that change are written (D-18.8).
     for x in [&OCCUPANTS, &COUNT, &QUEUE_HEAD, &QUEUE_TAIL, &SERVICE] {
-        x.store(0, Release);
+        crate::fork::set_if_differs!(*x, 0);
     }
-    WORK.store(0, Release);
+    crate::fork::set_if_differs!(WORK, 0);
 }

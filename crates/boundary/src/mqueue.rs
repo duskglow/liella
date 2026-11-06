@@ -339,12 +339,16 @@ pub(crate) fn abandoned_count() -> usize {
 /// reset rather than taken.
 pub(crate) fn after_fork_child() {
     LOCK.reset();
-    let s = SOCKET.swap(-1, Relaxed);
+    // Only the words that change are written (D-18.8).
+    let s = SOCKET.load(Relaxed);
     if s >= 0 {
+        SOCKET.store(-1, Relaxed);
         let _ = CSys.close(Fd::new(s));
     }
     for r in records() {
-        put(r, KEY, 0);
+        if get(r, KEY) != 0 {
+            put(r, KEY, 0);
+        }
     }
 }
 
