@@ -332,7 +332,6 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
     if static_program {
         crate::classed::start(cpu::avx2_in(cpu_state), &tunables);
     }
-    crate::posix::s29_rpc_clnt::compat_from_start(&tunables);
     // The program's own indirect functions, before any of its code runs (glibc's resolvers run
     // before `.preinit_array`, probe-settled) and before its RELRO is protected.
     if static_program {
