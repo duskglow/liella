@@ -114,6 +114,7 @@ fn others_settled() -> bool {
     let me = std::fs::read_link("/proc/thread-self").unwrap(); // "<pid>/task/<tid>"
     let me = me.file_name().unwrap().to_owned();
     for _ in 0..SETTLE_POLLS {
+        // FS-ORDER: every entry must pass (`all`), so the order of the listing does not matter.
         let parked = std::fs::read_dir("/proc/self/task")
             .unwrap()
             .map(Result::unwrap)
