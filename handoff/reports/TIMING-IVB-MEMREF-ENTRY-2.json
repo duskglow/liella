@@ -1,0 +1,17 @@
+{"task": "TIMING-IVB-MEMREF-ENTRY-2", "model": "opus", "tokens": null,
+ "result": "SSE2 129-192 split rebased, counted, timed on Ivy Bridge and N100: memset_256 +11.7%/+8.9%, memset_144 flat, memmove_144 -17%/-15%; split dropped per ruling #3421 (revert commit), NEGATIVE register row; memchr entry fix timed: memchr_64 -10%/-8%, memchr_4k -5%/-12%, rawmemchr_4k +1.3% IvB",
+ "branch": "task/timing-ivb-memref-entry-2", "head": "57c12bdb",
+ "gate": {"affected": "keke:timing-ivb-memref-entry-2-gate-final queued at hand-back (clippy -D warnings, xtask static, affected --base 9424819f); code equals 9424819f", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Copy-only SSE2 129-192 split (memmove six blocks per end, memset unchanged): memmove_144 -17% Ivy Bridge, -15% N100 SSE2 level, memmove_256 flat, -6 instr", "recommendation": "land it in a new story with the fill half left out"},
+  {"item": "Landed memchr entry fix: rawmemchr_4k +1.3% on Ivy Bridge, memchr_16 +9% on N100 at forced SSE2 level; memchr_64 and memchr_4k gain 5-12%", "recommendation": "keep it; follow-up profiles the rawmemchr SSE2 loop placement on Ivy Bridge"}],
+ "informational": [
+  "bench --rows accepts only rows with a bench/budgets.tsv line; memchr_16, memset_144 etc. have none, so the first timing jobs (nico:timing-ivb-memref-entry-2-ivb, nozomi:timing-ivb-memref-entry-2-n100) ended rc 1; reruns used --only cbench_memref",
+  "Open, out of scope: memcmp_144, bcmp_tail_128, __memcmpeq_tail_8 on Ivy Bridge",
+  "Evidence jobs (rc 0, staged trees): keke:timing-ivb-memref-entry-2-stage-split, -stage-after, -stage-before; keke:timing-ivb-memref-entry-2-plants (split code, 3/3 CAUGHT, moot after the revert)"],
+ "refused": [],
+ "jobs": ["keke:timing-ivb-memref-entry-2-gate-final", "nico:timing-ivb-memref-entry-2-ivb2", "nozomi:timing-ivb-memref-entry-2-n100b"],
+ "improvement": "bench --rows should accept any row of the bench (or say which rows it accepts in --help): two timing jobs were lost to it",
+ "next_step": "Rule on the copy-only split and the memchr fix's rawmemchr_4k row; then profile memcmp/bcmp/__memcmpeq on Ivy Bridge",
+ "report_file": "handoff/TIMING-IVB-MEMREF-ENTRY-2.md"}
