@@ -1,0 +1,35 @@
+{
+ "task": "NULLFOLD-MEMSET-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: 129-256 fold reverted (layout/aliasing ruled out), but the 65-128-only head also measures memset_256 slower on the N100 (1.457M -> 1.516M cycles); cause open, do not land as is",
+ "branch": "task/nullfold-memset-2",
+ "head": null,
+ "gate": {
+  "affected": "shiki nullfold-memset-2-gate running at hand-back",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "N100 memset_256 slower with any change to memset's 65-256 block layout tried except variant d",
+   "recommendation": "continuation profiles branch/front-end events pre vs final; if unexplained, land nothing for memset (keep tests) or the variant-d form only if a 128 gain survives"
+  }
+ ],
+ "informational": [
+  "nullfold-memset-counts rc 5 cause: its script ran `cargo xtask bench --stage` without the tarball path",
+  "plants: unguarded-mid WARN-NO-MSG (caught rc 101, message regex did not match)",
+  "first N100 final job nullfold-memset-2-final-n100 used a stale tarball (copied before stage-3 ended), killed"
+ ],
+ "refused": [],
+ "improvement": "a staged-variant probe (overlay files, stage, perf per row with fixed iterations) resolves ~0.5 cycle/call in 40 s on the N100; make it a tool instead of per-story scripts",
+ "next_step": "profile pre vs final memset_256 on the N100 with branch/front-end counters; test pre with the 65-128 test replaced by equal-length padding",
+ "report_file": "handoff/NULLFOLD-MEMSET.md",
+ "jobs": [
+  "shiki:nullfold-memset-2-gate",
+  "shiki:nullfold-memset-2-plants",
+  "shiki:nullfold-memset-2-stage-3",
+  "nozomi:nullfold-memset-2-final-n100-2",
+  "kotori:nullfold-memset-2-final-ivb"
+ ]
+}

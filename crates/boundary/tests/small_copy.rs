@@ -11,7 +11,7 @@ use liella_boundary::posix::s04_strings as s;
 use liella_boundary::selftest::{self, opaque, ChildEnd};
 use liella_boundary::sys::CSys;
 use liella_kernel::sys::Sys;
-use liella_kernel::uapi::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
+use liella_kernel::uapi::{MAP_ANONYMOUS, MAP_FIXED_NOREPLACE, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE};
 
 const PAGE: usize = 4096;
 const MAX: usize = 257;
@@ -300,8 +300,9 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
     // 1 <= n <= 64 dies by SIGSEGV on page zero with folding on (the fault in fold.S; glibc's
     // observable outcome, it has no NULL check of its own) and by the S6 abort with folding off.
     // The copies (memcpy, memmove, __memcpy_chk) also fold 129-256 (owner ruling #3304, D-4.55).
-    // Every other size, 65-128 included, and every memset above 64, takes the explicit checks
-    // either way (the abort): no Rust path performs a deliberate NULL access.
+    // Every other size and call, 65-128 included, and every memset above 64, takes the explicit
+    // checks either way (the abort), n > 64 KiB included: no Rust path performs a deliberate NULL
+    // access.
     use std::sync::atomic::Ordering::SeqCst;
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // (fold, AVX2 build): the AVX2 flag changes only the 65-256 copy and 129-256 fill classes.
@@ -318,8 +319,8 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
         // Folded: every folded size, then the class bounds above it. Checked: the class bounds
         // (each abort prints a line).
         let sizes: Vec<usize> = match (fold, avx2, erms) {
-            (_, _, true) => vec![1280, 4096, 65_536],
-            (true, false, _) => (1..=66).chain([96, 127, 128, 129, 144, 200, 256, 257, 4096]).collect(),
+            (_, _, true) => vec![1280, 4096, 65_536, 65_537, 1 << 20],
+            (true, false, _) => (1..=66).chain([96, 127, 128, 129, 130, 144, 200, 255, 256, 257, 4096, 65_537]).collect(),
             (true, true, _) => (60..=70).chain([96, 127, 128, 129, 144, 256, 257]).collect(),
             _ => vec![1, 2, 3, 4, 7, 8, 15, 16, 17, 32, 33, 63, 64, 65, 96, 127, 128, 129, 144, 200, 256, 257, 4096],
         };
@@ -542,4 +543,118 @@ fn the_folding_decision_is_taken_by_the_first_small_call_not_at_startup() {
     } else {
         selftest::unresolve_null_fold();
     }
+}
+
+/// The fill a store-order or 64 KiB child makes (set before each fork; the child gets its own
+/// copy): `d` (0 for NULL), `n`, `__memset_chk` instead of `memset`, and the kernel forced in the
+/// child (0 as decided, 1 `rep stosb`, 2 the AVX2 build).
+static FILL_D: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FILL_N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FILL_CHK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FILL_MODE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The fill child: folding on, the kernel `FILL_MODE` names, then one fill of 0x3C.
+fn fill_call(k: &CSys) -> i32 {
+    use std::sync::atomic::Ordering::SeqCst;
+    if k.prctl_int(liella_kernel::ops::PrctlInt::SetDumpable, 0, 0).is_err() {
+        return 4;
+    }
+    if !selftest::set_null_fold(true) {
+        return 3;
+    }
+    match FILL_MODE.load(SeqCst) {
+        1 => selftest::set_erms(true),
+        2 if !selftest::set_kernel_avx2(true) => return 5,
+        _ => {}
+    }
+    let (d, n) = (FILL_D.load(SeqCst) as *mut c_void, FILL_N.load(SeqCst));
+    if FILL_CHK.load(SeqCst) {
+        opaque::__memset_chk(d, 0x3C, n, usize::MAX);
+    } else {
+        opaque::memset(d, 0x3C, n);
+    }
+    0
+}
+
+#[test]
+fn fills_store_their_head_block_first() {
+    // Clause: s4_1_c_1 (memset, __memset_chk). The store order D-4.60 records for 17-256: the
+    // first store of each fill class is its head block at d, before any store further out (what
+    // folding a class's NULL test into the page-zero fault would rely on).
+    // Here d sits 16 bytes below a writable page, with a PROT_NONE page under it: the head store
+    // faults (SIGSEGV), and the writable page, shared with the child, must be left untouched. A
+    // class that stored a later block first would have written it before the fault.
+    use std::sync::atomic::Ordering::SeqCst;
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let r = CSys.mmap(0, 2 * PAGE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, None, 0).unwrap();
+    let (mut lo, hi) = r.split_at(PAGE).ok().unwrap();
+    CSys.mprotect(&mut lo, PROT_NONE).unwrap();
+    let (edge, clean) = (hi.addr(), vec![0xA5u8; PAGE]);
+    FILL_MODE.store(0, SeqCst);
+    for n in 17..=256 {
+        for chk in [false, true] {
+            opaque::memset(edge as *mut c_void, 0xA5, PAGE);
+            FILL_D.store(edge - 16, SeqCst);
+            FILL_N.store(n, SeqCst);
+            FILL_CHK.store(chk, SeqCst);
+            let end = selftest::in_child_quiet(fill_call).unwrap();
+            assert_eq!(end, ChildEnd::Signaled(SIGSEGV), "n {n} chk {chk}: the head store must fault");
+            let same = s::memcmp(edge as *const c_void, clean.as_ptr().cast(), PAGE) == 0;
+            assert!(same, "n {n} chk {chk}: a store past the head block came before it (head-first)");
+        }
+    }
+    CSys.munmap(lo).unwrap();
+    CSys.munmap(hi).unwrap();
+}
+
+/// The 64 KiB child: maps a shared page at 64 KiB (the lowest address the guard allows), then for
+/// each kernel and size above 64 KiB a grandchild fills from NULL; 0 when every grandchild aborts
+/// and the page stays untouched, 77 when the page cannot be mapped (said on stderr).
+fn null_fill_beside_a_page_at_64_kib(k: &CSys) -> i32 {
+    use std::sync::atomic::Ordering::SeqCst;
+    const AT: usize = 0x1_0000;
+    let flags = MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE;
+    let page = match k.mmap(AT, PAGE, PROT_READ | PROT_WRITE, flags, None, 0) {
+        Ok(r) if r.addr() == AT => r,
+        _ => {
+            let _ = k.write(liella_kernel::fd::Fd::STDERR, b"small_copy: no page can be mapped at 64 KiB here: that check skipped\n");
+            return 77;
+        }
+    };
+    let clean = [0xA5u8; PAGE];
+    let modes: &[usize] = if liella_boundary::cpu::avx2() { &[0, 1, 2] } else { &[0, 1] };
+    for &mode in modes {
+        for n in [65_537, AT + PAGE, 1 << 20] {
+            for chk in [false, true] {
+                opaque::memset(AT as *mut c_void, 0xA5, PAGE);
+                FILL_D.store(0, SeqCst);
+                FILL_N.store(n, SeqCst);
+                FILL_CHK.store(chk, SeqCst);
+                FILL_MODE.store(mode, SeqCst);
+                if !matches!(selftest::in_child_quiet(fill_call), Ok(ChildEnd::Signaled(SIGABRT))) {
+                    return 1;
+                }
+                if s::memcmp(AT as *const c_void, clean.as_ptr().cast(), PAGE) != 0 {
+                    return 2;
+                }
+            }
+        }
+    }
+    let _ = k.munmap(page);
+    0
+}
+
+#[test]
+fn null_fills_above_64_kib_abort_and_leave_a_page_at_64_kib_untouched() {
+    // Clause: s4_1_c_1 (the S6 abort) with D-4.22: the fill classes without a NULL test end at 64
+    // bytes (65-256 keeps its test, D-4.60); every larger fill (`rep stosb`, the AVX2 fill, the Rust path) keeps the explicit test,
+    // so a NULL d with n > 64 KiB aborts before any store and never reaches a page mapped at 64 KiB.
+    // In a child: the test process keeps its low addresses free.
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let end = selftest::in_child(null_fill_beside_a_page_at_64_kib).unwrap();
+    if end == ChildEnd::Exited(77) {
+        eprintln!("small_copy: 64 KiB check skipped (reason printed above)");
+        return;
+    }
+    assert_eq!(end, ChildEnd::Exited(0), "NULL fill above 64 KiB (1: a grandchild did not abort, 2: the page at 64 KiB was written)");
 }

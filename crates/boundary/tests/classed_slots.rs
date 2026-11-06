@@ -151,3 +151,75 @@ fn the_swap_passes_under_mdwe() {
         0
     });
 }
+
+const SIGABRT: i32 = 6;
+const SIGSEGV: i32 = 11;
+
+/// The fill the grandchild makes (set by the child before each fork): `d` (0 for NULL), `n`,
+/// `__memset_chk` instead of `memset`.
+static FILL_D: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FILL_N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static FILL_CHK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn fill_call(k: &CSys) -> i32 {
+    use liella_kernel::sys::Sys;
+    use std::sync::atomic::Ordering::SeqCst;
+    if k.prctl_int(liella_kernel::ops::PrctlInt::SetDumpable, 0, 0).is_err() {
+        return 4;
+    }
+    let (d, n) = (FILL_D.load(SeqCst) as *mut liella_abi::ctypes::c_void, FILL_N.load(SeqCst));
+    if FILL_CHK.load(SeqCst) {
+        opaque::__memset_chk(d, 0x3C, n, usize::MAX);
+    } else {
+        opaque::memset(d, 0x3C, n);
+    }
+    0
+}
+
+/// One grandchild fill; whether it ended by `want`.
+fn fill_ends_by(d: usize, n: usize, chk: bool, want: i32) -> bool {
+    use std::sync::atomic::Ordering::SeqCst;
+    FILL_D.store(d, SeqCst);
+    FILL_N.store(n, SeqCst);
+    FILL_CHK.store(chk, SeqCst);
+    matches!(selftest::in_child_quiet(fill_call), Ok(ChildEnd::Signaled(s)) if s == want)
+}
+
+#[test]
+fn the_avx2_page_folds_null_up_to_64_and_stores_head_first() {
+    // Clauses: s4_1_c_1 (memset, __memset_chk) on the AVX2 page after the swap (D-4.53, the swap
+    // flag on), with D-4.22: with folding on a NULL d faults on page zero (SIGSEGV) for every size
+    // up to 64 and aborts (S6) above (65-256 keep their test, D-4.60); with folding off every size aborts. Head-first: d 16 bytes
+    // below a writable shared page over a PROT_NONE page, the head store faults and the writable
+    // page stays untouched for every size of the 32-byte-block 129-256 class and the 65-128 class.
+    run("avx2 page NULL", |k| {
+        use liella_kernel::sys::Sys;
+        use liella_kernel::uapi::{MAP_ANONYMOUS, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE};
+        if !liella_boundary::cpu::avx2() {
+            say(b"classed_slots: no AVX2 on this CPU: no AVX2 page to check\n");
+            return SKIP;
+        }
+        assert_eq!(selftest::classed_install(true, false), Outcome::Installed);
+        assert_eq!(classed::live_page(), 1, "the AVX2 page is live after the swap");
+        for fold in [false, true] {
+            assert!(selftest::set_null_fold(fold), "vm.mmap_min_addr below 64 KiB or unreadable: NULL folding refused");
+            for n in [1, 64, 65, 96, 127, 128, 129, 130, 144, 200, 255, 256, 257, 4096, 65_537] {
+                for chk in [false, true] {
+                    let want = if fold && n <= 64 { SIGSEGV } else { SIGABRT };
+                    assert!(fill_ends_by(0, n, chk, want), "fold {fold} n {n} chk {chk}: NULL ended otherwise than by {want}");
+                }
+            }
+        }
+        let r = k.mmap(0, 2 * classed::PAGE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, None, 0).unwrap();
+        let (mut lo, hi) = r.split_at(classed::PAGE).ok().unwrap();
+        k.mprotect(&mut lo, PROT_NONE).unwrap();
+        let (edge, clean) = (hi.addr(), [0xA5u8; classed::PAGE]);
+        for n in 65..=256 {
+            opaque::memset(edge as *mut liella_abi::ctypes::c_void, 0xA5, classed::PAGE);
+            assert!(fill_ends_by(edge - 16, n, false, SIGSEGV), "n {n}: the head store must fault");
+            let same = liella_boundary::posix::s04_strings::memcmp(edge as *const liella_abi::ctypes::c_void, clean.as_ptr().cast(), classed::PAGE) == 0;
+            assert!(same, "n {n}: a store past the head block came before it (head-first)");
+        }
+        0
+    });
+}
