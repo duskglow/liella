@@ -1,51 +1,41 @@
-# COLDSTART-FORK-CHILD-RESET: handoff (INCOMPLETE, budget)
+# COLDSTART-FORK-CHILD-RESET: handoff (run 2, COLDSTART-FORK-CHILD-RESET-2)
 
-Branch `task/coldstart-fork-child-reset` (stacked on next 41b8737b); code commit "WIP: fork child resets skip unused
-subsystems and unchanged words", plus the commit adding this note and the stacks.rs import fix. Role keke:~/w/n2.
+Branch `task/coldstart-fork-child-reset-2` (stacked on next 41b8737b; next has moved since, no merge done). Role keke:~/w/n3.
+Commits: run 1's "WIP: fork child resets skip unused subsystems and unchanged words" + import fix; run 2's "Test the fork
+child reset and record D-18.8" (conformance/c/s18_fork_reset.c, wired into `sym_fork`; row D-18.8 in
+plan/07-decisions/s18-processes.md) and this handoff.
 
-## Step 0 (done)
-N100 re-time read from nozomi:CSP1106-n100 (`~/work/COLDSTART-PLAN-1106/`, DONE, staged commit 730f416b):
-`cbench_process/fork_exit_wait` time 1.286x (132807.9 vs 126598.5 ns), so the code change is needed.
-Probe deltas per extra fork (counts-n100.txt, (10 forks - 1)/9, N100): Liella +6.8k user / +255k kernel instr / +27 faults;
-glibc +0.3k / +218k / +12.
+## Change in force (D-18.8)
+`fork.rs`: one `USED` word (`USED_AIO`, `USED_GAI`) read once by `child_reset`; `mark_used` on the first-use path (aio
+`lock()`, `getaddrinfo_a` entry). The aio and gai hooks reset their locks always and their tables only when the bit is set.
+Every other reset stores only differing values (`set_if_differs!`, compare-first `RawMutex::reset`, stream-lock reset);
+nscache bumps `cred` only with a table attached.
 
-## Cause found (code reading, NOT yet confirmed by a profile)
-`gai_async::after_fork_child` cleared all 4096 `QUEUED` slots (32 KiB) and the `used` word of all 256 `GROUP`s on every fork,
-and `aio` cleared its 256 `BUCKET`s: about 11 never-touched .bss pages faulted in per child, plus about 4.6k stores (that
-roughly matches the +6.8k user instructions). Every `RawMutex::reset`, stream-lock reset (`reset_in_child` wrote every stream's
-lock words, even unlocked ones), `swap`/`store` and the nscache `cred` bump also wrote shared copy-on-write pages.
+## Results (run 2, head = the commit holding this file; code unchanged since 9dec619f)
+- keke:cfcr2-check rc 0: `cargo xtask clippy`, `cargo xtask static`, s18_fork_reset passes.
+- keke:cfcr2-gate rc 0 (direct tier, `--base origin/next`): 9790 passed, 0 failed, 1220 ignored; conformance 50/50; peak 12G.
+- keke:cfcr2-plants rc 1 (SUPERSEDED): 11 CAUGHT, 1 SURVIVED (`stream-owner-kept`). Cause: the stream owner is only
+  compared with the caller's thread id; a stale owner names a live parent thread, so dropping that store is visible only
+  after thread-id reuse, which no deterministic test can force. Marked `equivalent:` (store kept as the defensive reset).
+- keke:cfcr2-plants-2 rc 0: 11 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, no WARN; same 12 plants, the last marked equivalent (plants file keke:~/work/COLDSTART-FORK-CHILD-RESET-2/plants.txt).
+- keke:cfcr2-counts rc 0, per extra fork+_exit+waitpid ((10 forks - 1 fork)/9, perf stat -r 30, Skylake-SP host, minimal
+  static probe forkn.c):
+  | | user instr | kernel instr | page faults |
+  |---|---|---|---|
+  | before (41b8737b) | 6728 | 354122 | 29.1 |
+  | after | 421 | 299183 | 15.1 |
+  | glibc 2.39 dynamic | 275 | 283239 | 12.3 |
+- Timing (staged cbench_process, before/after interleaved x3, Liella vs glibc in each run): nozomi:cfcr2-n100 (N100),
+  nico:cfcr2-ivb (Ivy Bridge, E3-1220L v2). Logs `~/logs/cfcr2-n100.log`, `~/logs/cfcr2-ivb.log` on those hosts. Verdict:
+  see the hand-back (if absent: not collected yet; read the fork_exit_wait / vfork_exit_wait rows per round).
 
-## Change (D-18.8, reserved via `ops reserve`; the ROW IS NOT WRITTEN yet, see next step)
-- `fork.rs`: one `USED` word (bits `USED_AIO`, `USED_GAI`) read once in `child_reset`; `mark_used` (load, `#[cold]` fetch_or)
-  is set on the first-use path: aio `lock()` (before taking `LOCK`), `getaddrinfo_a` entry. The aio and gai hooks still reset
-  their lock (and aio its `OWNER`) unconditionally (cheap compare), and skip the tables while the bit is clear.
-- `set_if_differs!` macro (fork.rs); used in the thread, stacks, timer, aio, `__libc_single_threaded` resets; mqueue, spawn,
-  timer `swap`s became load-then-store; `RawMutex::reset` writes only a non-zero state; stdio `reset_in_child` writes only the
-  non-zero words; nscache bumps `cred` only when a table was attached (`mode != MODE_IDLE`; an idle cache attaches anew anyway).
-- Parent side: not changed or checked (the brief asked for it; `heap::HEAP.park_others` and the atfork handlers were not looked at).
-
-## Results
-- keke n2: `cargo xtask clippy` rc=0, `cargo xtask static` rc=0 (before the handoff commit; the D-row was not added).
-- Gate keke:gate-cfcr (`cargo xtask affected --base origin/next`, direct tier) started detached, pid 940995, log
-  `keke:~/w/n2.gate-cfcr.log`. Result NOT collected.
-- NOT DONE: new test, plants, counts, N100 timing, profile.
-
-## Exact next step
-1. Collect keke:gate-cfcr (`~/bin/test-summary ~/w/n2.gate-cfcr.log`).
-2. Add the row `| D-18.8 | §18.2 | <status as the s18 file uses> | fork child reset: aio and getaddrinfo_a tables only after
-   their first use (one USED word, bits set on the first-use path); every other reset stores only values that differ; nscache
-   bumps cred only with a table attached |` to plan/07-decisions/s18-processes.md, then rerun static.
-3. Add the test (spec §18.2): in a process that used a timer (SIGEV_THREAD), aio (one aio_write + aio_suspend) and stdio (a
-   stream locked by another thread through `flockfile` at fork), the child: creates a timer, runs an aio request, and `ftrylockfile`
-   succeeds on the stream; plus one getaddrinfo_a request in the child after one in the parent.
-4. Plants (`cargo xtask plants`): drop each hook call in `child_reset` (timer, aio, gai, stdio); `mark_used` a no-op; `USED_AIO`
-   mark removed from aio `lock()`; `set_if_differs!` store removed (always skip).
-5. Counts: the per-fork probe (P vs PPPPPPPPPP) before/after/glibc on a build host; then N100 staged timing
-   (`cargo xtask bench --stage` / `--staged`) of fork_exit_wait and vfork_exit_wait.
+## Open
+- Parent side (writes after fork to still-shared pages: `heap::HEAP.park_others`, atfork handlers) not examined.
+- Remaining gap to glibc: ~146 user instr, ~16k kernel instr, ~3 faults per fork.
+- `RawMutex::reset` compare-first has no plant of its own (a lock held by another thread at fork for aio/gai is not tested).
 
 ## Not to redo
-Step 0 (above). The hook audit (above): thread/stacks/timer/mqueue/syslog/spawn/nscache/stdio hooks are cheap once compare-first;
-only gai and aio have tables.
+Step 0 (run 1), hook audit (run 1), the test, plants, counts above.
 
 ## Plan rows to read
-D-18.6 (fork), D-23.3 (timers after fork).
+D-18.6, D-18.8, D-23.3.
