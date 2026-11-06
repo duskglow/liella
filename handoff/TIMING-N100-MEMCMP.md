@@ -1,51 +1,38 @@
-# TIMING-N100-MEMCMP handoff (INCOMPLETE: the branch must not land as it stands)
+# TIMING-N100-MEMCMP handoff (after -2: COMPLETE, the branch should land)
 
-State: branch `task/timing-n100-memcmp` from origin/next e119b8bc; code commit e53ba22d (fold.S + small_compare.rs +
-plants file), handoff commit on top. Role keke:~/w/n4 (Zen 1). Timing: N100 host nozomi (booking 82, cancelled),
-Ivy Bridge host kotori (booking 83, ran out at 12:40 while the second IVB script was still running; host load 1.26 at its end).
+State: branch `task/timing-n100-memcmp-2` (from task/timing-n100-memcmp, merged origin/next 19d032c5 at 8d417a77;
+TIMING-COV-MEMCMP-NONAVX2 had not landed, fold.S on next was unchanged). Commits: ddc378df (129-256 interleave
+reverted), 720ab326 (code: 256-byte step only to 8 KiB, old 128-byte two-branch step above; SSE2 phase pin; test
+sizes 8192/8193/8449), 431761fa (saturation row, plants msgs), then this handoff. Role kanon:~/w/kn1. Plants file:
+handoff/TIMING-N100-MEMCMP-2-plants.txt. Decisions: no new D-row (local to fold.S; reasons in its comments).
 
-## Change (e53ba22d)
-* `.Lcmp_long` (AVX2, n > 256, also 2049+ through `.Lcmp_avx_long`): 256-byte steps (eight blocks ANDed, one vptest)
-  from byte 32, a negative index counting up to 0 from the bases a + n - 256 / b + n - 256, ONE branch per step
-  (`sbb` of the equal flag ANDed with the advanced index, `js`). After it, at most 256 bytes are left: a 128-byte chunk
-  at the cursor if more than 128 remain, then the last chunk at n - 128 as before. A differing step's first half goes
-  to `.Lcmp_long_diff`; the second half's masks are moved into ymm1-4 (`.Lcmp_long_wide_diff`).
-* `.Lcmp_256`: loads and compares interleaved (same instructions). Measured NEUTRAL (below): revert it in the continuation.
-* small_compare.rs: `compares_match_a_byte_loop_in_the_long_classes_in_each_build` (sizes 289-4097, three alignment
-  pairs, first difference at offsets 0/17/31 of every 32-byte block plus the edge positions, every build).
+## Why memcmp_64k slowed with the 256-byte step (N100, perf stat -r 5, Liella only, per call)
+| per call | next (128 x 2 branches) | B (256 x 1) | C (128 x 1) | E = final |
+|---|---|---|---|---|
+| cycles 64k | 4773 | 5058 | 4894 | 4784 |
+| L2-hit demand loads 64k | 214 | 308 | 232 | 211 |
+| ld_head l1_miss_at_ret 64k | 21.0 | 40.7 | 12.0 | 23.0 |
+| branch-misses 4k | 1.00 | 0.00 | 1.00 | 0.00 |
+| instructions 4k / 64k | 553 / 8233 | 499 / 7219 | 557 / 8237 | 501 / 8236 |
+Same loads (8201), no split loads: the 256-byte stride per load site leaves more of the L2-resident stream to demand
+misses (prefetch coverage). C (128-byte one-branch step) keeps the 4k mispredict and is slower (NEGATIVE).
+D (256 to 8 KiB, C above) left 64k +0.7%: hence E uses the old loop above 8 KiB.
 
-## Results
-* Mispredict hypothesis CONFIRMED (N100, perf stat -r 5, Liella only, per call = (row - setup-only run) / 84000):
-  memcmp_4k branch-misses 1.00 -> 0.002 per call; cycles 279.7 -> 261.2 per call (glibc 258 in the brief's profile).
-  memcmp_256 18.18 -> 18.18 cycles (the interleave does nothing).
-* N100 time (`--compare --runs 5`, two rounds before/after, both rounds identical), Liella ns / glibc ns:
-  memcmp_4k 116.52 -> 108.97 (ratio 1.09 -> 1.02); memcmp_256 7.53 -> 7.53 (1.06); memcmp_64k 1977.6 -> 2096.0
-  (0.83 -> 0.88): **64k SLOWER by 6%**, fewer instructions. Not explained yet (64k is an L2-resident stream; 16 loads
-  per step instead of 8 is the obvious suspect).
-* Ivy Bridge time (SSE2 class; same staged trees): memcmp_4k 141.41 -> 144.75 (0.98 -> 1.00), both rounds: **SLOWER by 2.3%**
-  although no SSE2 instruction changed. Suspect: the SSE2 classes after `.Lcmp_long` moved (code alignment of the
-  `.Lcmp_sse_long` loop). NOT VERIFIED. 144/256/64k unchanged.
-* Instructions (keke, `bench --compare --counters cbench_memref`): memcmp_4k 554.0 -> 500.1, memcmp_64k 8245.4 -> 7233.0;
-  every other row within +-0.3 (memcmp_256 52.4 -> 52.5 with identical static code; untouched memchr/memcpy rows
-  moved the same amount: harness noise, not a gain).
+## Ivy Bridge 4k +2.3%
+The AVX2 growth moved the SSE2 classes 257 bytes (.Lcmp_sse_mid phase 20 -> 21 mod 64). Pinned with `.p2align 6, 0xcc;
+.fill 20, 1, 0xcc` before .Lcmp_sse_mid (never run, after a jmp): memcmp_4k 141.41 = next 141.41.
 
-## Jobs
-keke: timing-n100-memcmp-count-before (rc 0, tree e119b8bc, also staged before.tar), timing-n100-memcmp-count-after
-(rc 0, e53ba22d, after.tar), timing-n100-memcmp-plants (rc 0: 5 plants, 4 CAUGHT, 1 WARN-NO-MSG: step-loop-sign died by
-SIGSEGV, the mutant loop reading past the region, which the msg regex did not name), timing-n100-memcmp-gate (clippy,
-static, direct-tier affected; still running at hand-back, partial lines all ok).
-nozomi: timing-n100-memcmp-n100-2 (rc 0). kotori: timing-n100-memcmp-ivb-2 (rc 0).
-Superseded: nozomi:timing-n100-memcmp-n100 and kotori:timing-n100-memcmp-ivb (the script passed `--rows`, which
-`--compare` refuses; every compare failed; the perf stat lines of the first are kept, the same as the second's).
-Staged trees and scripts stay in ~/work/TIMING-N100-MEMCMP/ on nozomi and kotori (before/, after/, run2.sh).
+## Timing (staged trees from kanon, interleaved, 7 rounds, Liella static vs glibc host-dynamic, median ns)
+N100 (nozomi:timing-n100-memcmp-2-n100-final): memcmp_4k 116.37 -> 109.00 (L/G 1.084 -> 1.015); 64k 1978.6 -> 1977.5;
+256 7.53 = 7.53. Ivy Bridge (kotori:timing-n100-memcmp-2-ivb-final): 144 10.84 =; 256 15.65 =; 4k 141.41 =; 64k
+4000.7 -> 3990.5. All four trees (next/B/Cp/Dp) are in nozomi:timing-n100-memcmp-2-n100 / kotori:...-ivb. Bookings 88/89.
 
-## Next step (continuation)
-1. Revert the `.Lcmp_256` interleave (neutral). The 256 row still needs its own idea (N100 1.06, IVB 1.26 is
-   TIMING-IVB-MEMREF-ENTRY's).
-2. Keep the 256-byte one-branch step only up to a bound (try n <= 8 KiB; 4k keeps its win) and the old 128-byte
-   loop above it, OR find why 64k slows (try a 128-byte one-branch step: same branch count per byte as now, 8 loads per step).
-3. Restore the SSE2 path's IVB time: `.p2align` the `.Lcmp_sse_long` loop or place the new AVX2 code after the SSE2
-   classes; check with the same staged before/after pair on Ivy Bridge.
-4. Re-time on both classes (stage with `cargo xtask bench --stage <tar> --only cbench_memref`; `--compare` takes the
-   bench name positionally, not `--rows`), then counts, gate, plants.
-Plan rows: none new (no D-row written; the change is local to fold.S).
+## Jobs (final code 720ab326)
+kanon: timing-n100-memcmp-2-gate (clippy -D warnings, static, direct-tier affected), timing-n100-memcmp-2-plants2
+(9 plants). Superseded: timing-n100-memcmp-2-plants (rc 0; 2 WARN-NO-MSG, SIGSEGV deaths not in the msg regex: fixed).
+Not run: the `bench --compare --counters` count job (budget); instruction counts above are N100 perf stat.
+
+## Open / next
+* memcmp_256 still 1.06 (N100) / 1.26 (Ivy Bridge): needs its own idea (the interleave did nothing).
+* +3 instructions on memcmp_64k (size test + jmp); timing is at parity.
+Do not redo: 128-byte one-branch step, 129-256 interleave (both NEGATIVE, docs/saturation/03).
