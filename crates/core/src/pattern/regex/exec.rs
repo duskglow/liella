@@ -62,6 +62,11 @@ const HASH_BASE: u64 = 0x0100_0000_01b3;
 /// steps) instead of building prefix tables (two heap blocks per search).
 const DIRECT_HASH: usize = 64;
 
+/// Buckets a frontier holds before it builds its bucket table ([`Frontier::build_table`]): below
+/// this a lookup walks the node's chain (at most this long), and a short subject's search does
+/// not clear a table per frontier (a 64-slot table was 256 of the 296 bytes each set up).
+const LAZY_TABLE: usize = 8;
+
 /// The largest starting room per frontier (threads, buckets, best slots).
 const ROOM_CAP: usize = 4096;
 
@@ -335,8 +340,13 @@ struct Frontier<'s> {
     /// Patterns with back-references: the buckets by node and key hash (open addressing, a
     /// bucket's index plus one per slot, 0 empty; at most half full, since its size is fixed
     /// at twice the buckets' room), so that finding a thread's bucket does not walk every
-    /// bucket of its node (which made `\(a*\)\1...` cubic).
+    /// bucket of its node (which made `\(a*\)\1...` cubic). Built when the frontier reaches
+    /// [`LAZY_TABLE`] buckets ([`Frontier::build_table`]); until then (`len() == 0`) a lookup
+    /// walks its node's bucket chain, so a short subject neither clears nor reads it.
     table: Buf<'s, u32>,
+    /// Every slot of the table's storage is 0 (a table emptied by [`Frontier::clear`]): building
+    /// it again needs no fill. False at the start of a search (the storage is reused).
+    table_zeroed: bool,
     /// Its states, and whether `node_gen`, `active` and `table` are initialised: a frontier is
     /// set up at its first insertion, not per search ([`Frontier::prepare`]; BACKREF-ARCH: a
     /// short subject touches a few of the 16 frontiers of a back-reference search).
@@ -404,7 +414,6 @@ impl<'s> Frontier<'s> {
             f.head = pools.u32s.take(nodes)?;
             f.head.expose(nodes)?;
             f.buckets = pools.buckets.take(room.buckets.saturating_mul(4))?;
-            f.table = pools.u32s.take(table_len(room.buckets))?;
         } else {
             // Read only where `node_gen` marks the node present, so never written here.
             f.start = pools.usizes.take(nodes)?;
@@ -414,8 +423,16 @@ impl<'s> Frontier<'s> {
         Ok(f)
     }
 
+    /// The bucket table's storage (patterns with back-references), taken after every frontier's
+    /// other buffers so that those, which every search touches, share cache lines.
+    fn take_table(&mut self, pools: &mut Pools<'s>, room: &Room) -> Result<(), Fail> {
+        self.table = pools.u32s.take(table_len(room.buckets))?;
+        Ok(())
+    }
+
     /// Initialise the frontier before its first insertion (its buffers were taken in
-    /// [`Frontier::new`] with exactly these lengths, so the fills cannot fail).
+    /// [`Frontier::new`] with exactly these lengths, so the fills cannot fail). The bucket table
+    /// is left unbuilt ([`Frontier::build_table`]).
     fn prepare(&mut self) {
         if self.ready {
             return;
@@ -423,9 +440,29 @@ impl<'s> Frontier<'s> {
         self.ready = true;
         let n = self.nodes;
         let ok = self.node_gen.fill(n, 0).is_ok() && self.active.fill(n.div_ceil(64), 0).is_ok();
-        let len = self.table.capacity();
-        let ok = ok && (!self.indexed || self.table.fill(len, 0).is_ok());
         debug_assert!(ok, "regex frontier buffers shorter than taken");
+    }
+
+    /// Build the bucket table over the frontier's buckets (at [`LAZY_TABLE`] of them): every
+    /// bucket is entered and remembers its slot, as if the table had been used from the start.
+    fn build_table(&mut self) {
+        let cap = self.table.capacity();
+        let ok = if self.table_zeroed { self.table.expose(cap) } else { self.table.fill(cap, 0) };
+        if ok.is_err() || cap == 0 {
+            return;
+        }
+        // [`Frontier::slot`] masks by the length; a slot left set by an earlier use (of this
+        // search or the storage's previous one) is never wrong, only slow, so check both here.
+        debug_assert!(cap.is_power_of_two(), "regex bucket table length not a power of two");
+        debug_assert!(!self.table_zeroed || self.table.as_slice().iter().all(|&t| t == 0), "regex bucket table not zeroed before reuse");
+        self.table_zeroed = false;
+        for b in 0..self.buckets.len() / 4 {
+            let Some(bk) = bucket_at(&self.buckets, b) else { continue };
+            let slot = self.index(u32::try_from(b).unwrap_or(0), Frontier::slot(bk.node, bk.key, cap));
+            if let Some(w) = self.buckets.as_mut_slice().get_mut(b * 4 + 2) {
+                *w = u64::from(bk.node) | u64::from(slot) << 32;
+            }
+        }
     }
 
     fn clear(&mut self) {
@@ -442,8 +479,13 @@ impl<'s> Frontier<'s> {
         self.caps.clear();
         self.threads = 0;
         if self.indexed {
-            // Before the buckets are emptied: the table is reset through them.
-            self.clear_table();
+            // Before the buckets are emptied: the table is reset through them. The emptied table
+            // is unbuilt again (a later position may have few buckets) but stays all zeros.
+            if self.table.len() > 0 {
+                self.clear_table();
+                self.table.clear();
+                self.table_zeroed = true;
+            }
             self.buckets.clear();
             self.bests.clear();
         }
@@ -760,7 +802,22 @@ impl<P: Policy> Matcher<'_, P> {
         let mut cost = u64::try_from(classes.saturating_mul(stride / 2)).unwrap_or(u64::MAX);
         if indexed {
             let len = f.table.len();
-            if len > 0 {
+            if len == 0 {
+                // Fewer than [`LAZY_TABLE`] buckets in the frontier: its node's chain, at most
+                // that long (one unit, as for the table's first probe, plus one per bucket).
+                cost += 1;
+                let mut c = f.first_bucket(node);
+                while c != NONE {
+                    let Some(bk) = bucket_at(&f.buckets, idx(c)) else { break };
+                    let rep = f.bests.get(idx(bk.best)).copied().unwrap_or(NONE);
+                    if bk.key == key && self.same_key(caps, f.thread(rep, stride)) {
+                        b = c;
+                        break;
+                    }
+                    cost += 1;
+                    c = bk.next;
+                }
+            } else {
                 let mut i = Frontier::slot(node, key, len);
                 for _ in 0..len {
                     cost += 1;
@@ -795,13 +852,17 @@ impl<P: Policy> Matcher<'_, P> {
             let i = idx(node);
             let next = f.first_bucket(node);
             let nb = u32::try_from(f.buckets.len() / 4).map_err(|_| Fail::Re(ReError::ESpace))?;
-            let slot = if indexed { f.index(nb, empty) } else { 0 };
+            let built = f.table.len() > 0;
+            let slot = if indexed && built { f.index(nb, empty) } else { 0 };
             if f.buckets.extend_from_slice(&Bucket { next, start, best, node, key, slot }.pack()).is_err() {
                 // Leave no slot naming the bucket that was not stored (the search reruns larger).
-                if let Some(t) = f.table.get_mut(idx(slot)) {
+                if let (true, Some(t)) = (built, f.table.get_mut(idx(slot))) {
                     *t = 0;
                 }
                 return Err(Fail::Grow(Dim::Buckets));
+            }
+            if indexed && !built && f.buckets.len() / 4 >= LAZY_TABLE {
+                f.build_table();
             }
             if let (Some(g), Some(h)) = (f.node_gen.get_mut(i), f.head.get_mut(i)) {
                 *g = f.epoch;
@@ -1300,6 +1361,11 @@ impl<P: Policy> Matcher<'_, P> {
         let mut ring: [Frontier<'s>; RING] = Default::default();
         for f in ring.iter_mut().take(r) {
             *f = Frontier::new(pools, room, nodes, stride, indexed, classes)?;
+        }
+        if indexed {
+            for f in ring.iter_mut().take(r) {
+                f.take_table(pools, room)?;
+            }
         }
         let mut unset = pools.i32s.take(stride)?;
         unset.fill(stride, -1)?;
