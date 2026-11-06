@@ -150,14 +150,6 @@ pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
     exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
 }
 
-/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
-/// `x != 1` (the gamma fast tier, `crate::fast_gamma`).
-#[inline(always)]
-pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
-    let (y, tail) = log_kernel(x)?;
-    Some((y, log_eps(y, tail)))
-}
-
 /// [`exp10`]'s reduced argument `(x − k·log10(2)/64)·ln10` as a normalized double-double for
 /// `k = kf = nearest(x·64/log10(2))` and `2^-60 <= |x| <= 325` (LIBM-F64-FAST-KERNELS): the
 /// argument [`exp_kernel`] takes, since `10^x = 2^(k/64)·e^((x − k·log10(2)/64)·ln10)`. One
@@ -408,6 +400,16 @@ fn reduce_exp(x: f64, kf: f64) -> Dd {
 fn reduce_pow(z: Dd, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(z.hi, kf);
     fast_two_sum(h, l + z.lo)
+}
+
+/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel fast tier's `y0`, `y1` for
+/// `x < 2^-5`, `crate::fast_bessel`), or `None` when the kernel declines. Baseline build only (no
+/// FMA caller), so it sits outside [`kernels!`].
+#[inline(always)]
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
 }
 
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
