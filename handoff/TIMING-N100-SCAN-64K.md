@@ -1,51 +1,53 @@
-# TIMING-N100-SCAN-64K (handoff)
+# TIMING-N100-SCAN-64K (handoff, after run -2)
 
-State: branch task/timing-n100-scan-64k, code head c35d7c4f (scan.S + machine_scanners.rs; later commits handoff/ only).
-Stacks on TIMING-IVB-STRSCAN-DISPATCH-2 (base 883a05df). Role keke:~/w/n1. Scratch: keke:~/work/TIMING-N100-SCAN-64K
-(stage.sh, jobs.sh, scan-{base,pf0,pf512,pf1024}.S, measure-<variant>-{avx2,sse2}.tsv, *.tar), nozomi:~/work/TIMING-N100-SCAN-64K.
+State: branch task/timing-n100-scan-64k-2 (stacks on task/timing-n100-scan-64k), code head c35d7c4f (scan.S +
+machine_scanners.rs), later commits handoff/ only. Role mei:~/w/s4. Verdict of run -2: **DO NOT LAND** (an Ivy Bridge
+row is slower in time, see below). Scratch: keke:~/work/TIMING-N100-SCAN-64K (stage.sh, scan-*.S, {base,pf0,pf512,pf1024}.tar),
+nozomi and nico:~/work/TIMING-N100-SCAN-64K (run.sh, extracted trees, out/ = last run; nozomi out-base-pf0/ = base vs pf0).
 
-## Change (csys/src/machine/scan.S, AVX2 level only)
-The AVX2 long loops of memchr and rawmemchr already ran four 32-byte loads OR-reduced before one test (the brief's
-first suggestion was in place). They now take 256-byte groups, 256-aligned (eight loads, seven vpor, one vptest; a
-256-aligned group never spans two pages). When the 128-aligned loop entry is not 256-aligned, one 128-byte group runs
-first. On exit, vptest of the first-half fold picks the half; the second half is resolved from ymm5-ymm8 (no reload).
-memchr keeps its r8 end test at each group start. Per 128 bytes: memchr 12 -> 10, rawmemchr 10 -> 9 instructions.
-Test: scanners_find_the_first_terminator... now runs from a 256-aligned base with lengths up to 1099, so rawmemchr's
-alignment group, both halves and the second iteration are reached (before that, lengths < 300 never reached the loop).
+## Change (csys/src/machine/scan.S, AVX2 level only; unchanged since run -1)
+AVX2 memchr/rawmemchr long loops take 256-byte aligned groups (8 loads, 7 vpor, 1 vptest); a 128-byte group first when
+the entry is not 256-aligned; no software prefetch (ruling #3322). Instructions (Zen 1, run -1): memchr_64k 6192 -> 5172,
+rawmemchr_64k 5175 -> 4675, memchr_4k 422 -> 364, rawmemchr_4k 366 -> 348 (glibc 6713/5690/466/403). SSE2 code unchanged.
 
-## Profile / design note
-I did not annotate the brief's rec.<row>.data (out of budget). Instead I designed from the counter evidence:
-non_mem_scheduler stalls plus few loads in flight fit compare uops (fused with their loads) filling the vector
-scheduler while they wait on L2. The wider body cuts the test, branch and pointer uops per byte. NOT VERIFIED on the
-N100 yet (timing job below).
+## Run -2: what was fixed
+* keke:timing-n100-scan-64k-plants rc 3: xtask plants refused 4 plants whose pattern began at a local label; all now
+  start at `liella_machine_<fn>:` (commit 854f2aa8). Rerun mei:timing-n100-scan-64k-2-plants rc 0: 9 plants, 6 CAUGHT,
+  0 SURVIVED, 3 WARN-NO-MSG (memchr-256-end, raw-256-hi, raw-256-fold: caught by SIGSEGV on machine_scanners' guard
+  page after the planted scan.S was rebuilt; the msg regex did not name SIGSEGV. Add `|SIGSEGV` to them next time).
+* Timing staging: the staged trees (target/liella, bench/, xtask/Cargo.toml, xtask-bin) cannot run `bench --no-build`:
+  xtask's root() needs a top-level Cargo.toml (else it falls back to the build host's path: "bench/budgets.tsv: No such
+  file"), and the --no-build freshness check needs crates/ and csys/ sources (with none it reports libc.a "older than its
+  inputs"). Fixed on both timing hosts by adding Cargo.toml and `git archive <commit> crates csys` of each variant's own
+  commit (base 883a05df, pf0 c35d7c4f, pf512 64a80d58), mtimes set to 2026-11-06 00:00Z (before the builds). Failed
+  attempts: nozomi:timing-n100-scan-64k-2-n100 and -n100b (rc 1, staging), not results.
+* pf0.tar = the final code (scan.S differs from c35d7c4f only by an empty prefetch macro and a comment).
 
-## Instruction counts (Zen 1 build host, cbench_memref --compare --counters --runs 3; Liella instr/call, glibc)
-| row | base | 256 loop (final) | 256 + prefetch 512 | glibc |
-|---|---|---|---|---|
-| memchr_64k | 6191.5 | 5171.9 | 6194.7 | 6713.1 |
-| rawmemchr_64k | 5175.3 | 4675.1 | 5700.0 | 5690.0 |
-| memchr_4k | 422.0 | 364.0 | 423.9 | 465.8 |
-| rawmemchr_4k | 365.9 | 347.9 | 412.1 | 402.8 |
-memchr/rawmemchr _16, _64, _16_mix, _64_mix unchanged (+-0.1). SSE2 class (--tunables glibc.cpu.hwcaps=-AVX2):
-every row unchanged within 1 instruction (SSE2 code untouched). No other row moved more than 0.5, except
-strcasestr_miss_4k at pf1024 only (+13; not the final code). Jobs: keke:timing-n100-scan-64k-count-before (base,
-rc 0), keke:timing-n100-scan-64k-variants (pf0/pf1024/pf512, rc 0; evidence, not on the final head).
-Prefetch (4 x prefetcht0 per 256 B, distance 512 or 1024) was measured and dropped: rawmemchr_64k and _4k went
-above glibc's count (the brief's limit). Its timing effect was NOT measured.
+## Timing (run.sh 5 rounds x 3 alternations, interleaved; ratio = median of per-round ratios; glibc drift = check)
+N100 (booking 52, load ~0.3), base -> final (nozomi:timing-n100-scan-64k-2-n100c):
+| row | L/g time base | L/g time final | L final/base | glibc drift | instr L/g final |
+|---|---|---|---|---|---|
+| memchr_64k | 1.148 | 1.057 | 0.918 | 1.002 | 0.770 |
+| rawmemchr_64k | 1.062 | 1.057 | 0.995 | 1.000 | 0.822 |
+| memchr_4k | 1.036 | 0.988 | 0.953 | 1.000 | 0.782 |
+| rawmemchr_4k | 1.047 | 1.035 | 0.988 | 1.000 | 0.863 |
+_16_mix / _64_mix rows: 1.000 (unchanged). The 64k rows are still ~6% slower than glibc with 18-23% fewer instructions.
 
-## Jobs on the final head (started detached at hand-back, chained on keke in this order)
-keke:timing-n100-scan-64k-lint (cargo clippy -D warnings, xtask clippy, xtask static), keke:timing-n100-scan-64k-gate
-(affected --base origin/next --run), keke:timing-n100-scan-64k-plants (9 plants, handoff/TIMING-N100-SCAN-64K-plants.txt,
---dir /dev/shm/claude/TIMING-N100-SCAN-64K/plants-1), keke:timing-n100-scan-64k-count-after (measure-after-*.tsv).
-nozomi:timing-n100-scan-64k-n100: ~/bin/timing run.sh 5 3 base pf0 (pf0.tar = the final code: an empty prefetch
-macro, so the same machine code), queued for booking #52 (nozomi, 120 min, booked 01:15Z). Cancel #52 when it ends.
+N100, pf0 (final) -> pf512 (prefetcht0 x4 per 256 B, 512 ahead; nozomi:timing-n100-scan-64k-2-n100-pf):
+memchr_64k 1.069 -> 1.000 (0.940), rawmemchr_64k 1.054 -> 0.920 (0.875), memchr_4k 0.998, rawmemchr_4k 1.003, mix
+rows 1.000; instructions +20% (rawmemchr_64k L/g 1.001, rawmemchr_4k 1.022, i.e. above glibc's count). -> RULING NEEDED.
 
-## Open / exact next step
-1. Read nozomi out/{base,pf0}-{1,2,3}/rounds.tsv and counters.tsv for the 8 rows (median of per-round Liella ns
-   ratios, after/before; glibc drift as the check; handoff/TIMING-IVB-STRSCAN-DISPATCH-2-analyze.py works with the
-   side names changed). Verdict: memchr_64k / rawmemchr_64k time ratio vs glibc (was 1.169 / 1.060).
-2. The Ivy Bridge check (nico) was NOT run. The SSE2 code is unchanged and its counts are identical, but the layout of
-   scan.S changed. Stage base/pf0 as above and run run.sh there.
-3. If the 64k rows are still L2-bound, profile the final loop on the N100 (perf annotate on a build host). Prefetch
-   would need a ruling, because it puts rawmemchr above glibc's count.
-Not to redo: the variant builds and counts (the tars are on keke).
+Ivy Bridge (booking 57, SSE2 level), base -> final (nico:timing-n100-scan-64k-2-ivb): instructions identical, but
+memchr_16_mix 1.164 -> 1.330 (L final/base 1.142, glibc 0.999, spread 0.000) and memchr_64_mix 0.939 -> 0.978 (1.046);
+rawmemchr_16_mix 0.937 (faster); 64k rows 1.000; memchr_4k/rawmemchr_4k spread ~0.5 (noise). A layout effect: the SSE2
+code is unchanged. In cbench_memref, memchr's entry is at the same address (0x425200) in both builds; the first
+difference is the target liella_hot_memchr_rest (0x679680 -> 0x6797c0, both 64-aligned); code after the AVX2 loop inside
+memchr moved (memchr body ~20 instructions shorter). Cause NOT pinned down.
+
+## Exact next step
+1. On Ivy Bridge: find which moved code memchr_16_mix runs (perf record on the timing host while booked; annotate on a
+   build host, nico has no objdump), then pin its alignment (`.p2align` on the moved block, or keep the earlier layout)
+   so base layout is restored; re-time Ivy Bridge (memchr_16_mix, _64_mix) and N100 (no row slower), recount.
+2. Apply the prefetch ruling (pf512 if accepted: N100 times the whole set again, plus one other AVX2 class).
+3. Rerun lint, gate, plants (with `|SIGSEGV` in the three msg regexes), counts on the new head.
+Not to redo: the N100 and Ivy Bridge staging (trees ready on both hosts), base/pf0/pf512 timings above.
