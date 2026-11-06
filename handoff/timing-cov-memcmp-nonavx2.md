@@ -1,6 +1,24 @@
-# TIMING-COV-MEMCMP-NONAVX2 (handoff, after run -2)
+# TIMING-COV-MEMCMP-NONAVX2 (handoff, after run -3)
 
-State: branch `task/timing-cov-memcmp-nonavx2-2` = -1's branch (025c6c53) + merge of origin/next 18a2b58e (4f5eeeac)
+State (-3): branch `task/timing-cov-memcmp-nonavx2-3` = -2's head 47828fec + 91b851e1 (regenerated hot-text list)
++ this handoff. Role kanon:~/w/kn1. Not merged with origin/next (the -3 brief allows no merge); the list was generated on
+a scratch merge (origin/next 31ecf574) and merges cleanly (next has not changed the list, tools/hottext or the test).
+
+## -3: CI red (hot_text_products init_second_bindtextdomain_gettext_takes_no_text_fault, rebind 1 fault)
+* Cause: composition only. Branch alone passes (kanon, rebind 0); branch + origin/next fails on kanon too (Broadwell
+  AVX2, rebind runs [1,1,1,1,1]), so it is the layout, not the CPU. perf `minor-faults -d` on the rebind program: the
+  one fault in the window is the instruction fetch of `Resolution::same_texts` at 0x4802c0. The committed list had
+  same_texts / Mo::hinted / Mo::form at h533-535, after the fork and _Exit functions, though p_cold first-touches them
+  right after set_plan (h521): the list was older than its traces. This story's SSE2 compare code makes the hot group
+  a few hundred bytes larger, which pushed same_texts across 0x480000 into a window nothing else touches first.
+* Fix: `tools/hottext/regen.sh ~/w/kn1` (fast profile) on the scratch merge, output committed as is (no hand edit):
+  the three now follow set_plan (0x47e080-0x47e900, ~6 KiB inside the first lookup's window). hot_text_products on
+  the merge: 8 passed, rebind 0, true 17, locale 57, tool 60, fork 7 (before 1, 18, 59, 62, 8). Release-profile
+  regen not run (merge.py keeps release-only keys anchored). No memcmp code changed: no re-count, no re-time, no plants.
+* Jobs (kanon): tcm-nonavx2-3-check (clippy/static/so on 47828fec), -htp (branch alone), -htp-merged (reproduces),
+  -regen, -htp-regen (fix on the merge), tcm-nonavx2-3-gate (clippy, static, direct gate on 91b851e1).
+
+State (-2): branch `task/timing-cov-memcmp-nonavx2-2` = -1's branch (025c6c53) + merge of origin/next 18a2b58e (4f5eeeac)
 + 394fd4b0 (the SSE2 NULL fold) + this handoff. Role mei:~/w/s3. Decision row D-4.62 (s04 file; -1's classes + the fold).
 
 ## -1 (unchanged, see D-4.62): SSE2 head probe first in memcmp 65-128/long; SSE2 asm equality classes 33-64, 65-128, long.
