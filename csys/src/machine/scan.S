@@ -3228,43 +3228,18 @@ liella_machine_strcmp:
 	 * level test and the AVX2 head's page test of a (was: a load-compare of the level and a taken
 	 * branch to the AVX2 head before its own test of a, 2 instructions more per AVX2 call). The
 	 * AVX2 head's first block follows as the fall-through; the SSE2 level (vlim 0) and the AVX2
-	 * level's a near its page end or NULL take the branch to the SSE2 head (its own page test
+	 * level's a near its page end or NULL go on to the SSE2 head (its own page test
 	 * sends page ends and NULL to the SSE2 slow path, which holds the NULL tests). The SSE2
 	 * level runs as many instructions as before (the compare and branch replace the level
-	 * test); an AVX2 a near its page end runs no more than the AVX2 slow path did. */
+	 * test); an AVX2 a near its page end runs no more than the AVX2 slow path did.
+	 * The SSE2 head is the fall-through and the AVX2 first block the branch target (out of line,
+	 * .Lstrcmp_v_first): with the AVX2 block as the fall-through, every SSE2 call took the branch
+	 * and the strcmp rows ran 3-12% more cycles on the SSE2 class (Ivy Bridge) at equal
+	 * instructions. */
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_strcmp_vlim(%rip), %ecx
-	jae .Lstrcmp_s_head
-	leal -1(%rsi), %edx
-	andl $4095, %edx
-	cmpl $3967, %edx
-	ja .Lstrcmp_v_start
-	vmovdqu (%rdi), %xmm1
-	vpcmpeqb (%rsi), %xmm1, %xmm2
-	vpminub %xmm1, %xmm2, %xmm2
-	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
-	vpmovmskb %xmm2, %edx
-	bsfl %edx, %edx
-	jz .Lstrcmp_v_head16
-	movzbl (%rdi,%rdx), %eax
-	cmpb (%rsi,%rdx), %al
-	jne .Lstrcmp_v_ret_head_differ
-	testl %eax, %eax
-	jnz .Lstrcmp_v_head_rescan
-	/* The first block's returns ran only VEX.128 instructions, which zero the upper halves of
-	 * what they write: no vzeroupper (STRCMP-3, D-4.38; a caller that came in clean leaves clean). */
-.Lstrcmp_v_ret_head_equal:
-	ret
-.Lstrcmp_v_ret_head_differ:
-	sbbl %eax, %eax
-	orl $1, %eax
-	ret
-.Lstrcmp_v_head_rescan:
-	vpxor %xmm0, %xmm0, %xmm0
-	movl %edx, %eax
-	jmp .Lstrcmp_v_rescan
-	.p2align 4
+	jb .Lstrcmp_v_first
 .Lstrcmp_s_head:
 	/* Head (STRCMP-3, STRCMP-HEAD, D-4.38): the AVX2 head below in SSE2, as four 16-byte blocks
 	 * (both loads movdqu; the zero vector from the aligned .rodata constant). Each later block's
@@ -3574,6 +3549,38 @@ liella_machine_strcmp:
 	lock incq liella_machine_strcmp_rescans(%rip)
 	incq %rax
 	jmp .Lstrcmp_top
+	/* strcmp's AVX2 first block (TIMING-COV-STRCMP-SHORT-AVX2): the entry's branch target, see
+	 * liella_machine_strcmp. */
+	.p2align 4
+.Lstrcmp_v_first:
+	leal -1(%rsi), %edx
+	andl $4095, %edx
+	cmpl $3967, %edx
+	ja .Lstrcmp_v_start
+	vmovdqu (%rdi), %xmm1
+	vpcmpeqb (%rsi), %xmm1, %xmm2
+	vpminub %xmm1, %xmm2, %xmm2
+	vpcmpeqb .Lstrcmp_zero32(%rip), %xmm2, %xmm2
+	vpmovmskb %xmm2, %edx
+	bsfl %edx, %edx
+	jz .Lstrcmp_v_head16
+	movzbl (%rdi,%rdx), %eax
+	cmpb (%rsi,%rdx), %al
+	jne .Lstrcmp_v_ret_head_differ
+	testl %eax, %eax
+	jnz .Lstrcmp_v_head_rescan
+	/* The first block's returns ran only VEX.128 instructions, which zero the upper halves of
+	 * what they write: no vzeroupper (STRCMP-3, D-4.38; a caller that came in clean leaves clean). */
+.Lstrcmp_v_ret_head_equal:
+	ret
+.Lstrcmp_v_ret_head_differ:
+	sbbl %eax, %eax
+	orl $1, %eax
+	ret
+.Lstrcmp_v_head_rescan:
+	vpxor %xmm0, %xmm0, %xmm0
+	movl %edx, %eax
+	jmp .Lstrcmp_v_rescan
 .Lstrcmp_avx2:
 	/* AVX2 (scan level 1): the same steps with 32-byte blocks and VEX encoding throughout
 	 * (no legacy-SSE transition); vzeroupper before each return that ran a 256-bit instruction.
