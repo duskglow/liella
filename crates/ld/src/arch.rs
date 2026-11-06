@@ -50,5 +50,6 @@ impl Arch for X86_64 {
 /// module leaves `Native` undefined there instead, because `cargo xtask arch-check` (A-2) builds
 /// `liella-ld` for aarch64 and must keep passing: nothing in the crate uses `Native` yet, and the
 /// first use on another target fails to compile just as the design intends.
+// ARCH(x86_64): the loader's Arch seam (design §0a); A-12 adds the aarch64 arm.
 #[cfg(target_arch = "x86_64")]
 pub type Native = X86_64;

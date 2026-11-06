@@ -48,7 +48,6 @@ const ALLOWED: &[(&str, &[&str], &str)] = &[
     ("crates/math/src/", &["fpu"], "software model of the x87 80-bit format, portable code chosen per type, not per target; A-10"),
     ("crates/rt/tests/core_contracts.rs", &["fpu"], "test double of the Machine trait; follows the trait, A-9"),
     ("crates/rt/tests/cpuid_feature_leaf.rs", &["fpu"], "test double of the Machine trait; follows the trait, A-9"),
-    ("crates/ld/src/arch.rs", &[], "the loader's Arch seam (plan/ph14/design.md §0a, L14-13): one zero-sized type per architecture, `Native` picked per target_arch; A-12"),
     ("crates/boundary/tests/appendix_a_primitives.rs", &["fpu", "thread-pointer"], "tests of the x86_64 Machine and arch_prctl primitives; A-3, A-9"),
 ];
 
