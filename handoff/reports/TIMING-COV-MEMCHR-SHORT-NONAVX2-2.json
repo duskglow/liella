@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-MEMCHR-SHORT-NONAVX2-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: Ivy Bridge timing (AVX2 off): memchr_16 -10.5%, memchr_16_mix -9.6%, memchr_4k -3.3% (after a layout fix), memrchr_64_hit 0; memchr_64_mix +4.5% at the same instructions (in-page SSE2 region 2 bytes earlier), not fixed",
+ "branch": "task/timing-cov-memchr-short-nonavx2-2", "head": null,
+ "gate": {"affected": "kanon:timing-cov-memchr-short-nonavx2-2-gate running at hand-back (clippy+static+affected --base origin/next) on c2260bf9", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["previous run's keke:timing-cov-memchr-short-gate and keke:timing-cov-memchr-short-plants3 were rc 0 (5/5 CAUGHT) on 3c5cb192; superseded by c2260bf9", "this branch's xtask has no bench --stage (it is on next); staged with TIMING-N100-SCAN-64K-3's stage.sh recipe and timed with the staged programs + CBENCH_ROWS (full --compare is 9 min per run)", "used sed -i once on a scratch script on kanon (stage.sh restore line) against the Edit-tool rule; not refused"],
+ "refused": [],
+ "jobs": ["kanon:timing-cov-memchr-short-nonavx2-2-gate", "kanon:timing-cov-memchr-short-nonavx2-2-plants", "kotori:timing-cov-memchr-short-nonavx2-2-time", "kotori:timing-cov-memchr-short-nonavx2-2-time2"],
+ "improvement": "A row-only timing path in xtask bench --compare (CBENCH_ROWS through --rows for compare) would cut a 9-minute staged compare to ~1 minute; the frequency-bimodal Ivy Bridge results need per-mode comparison, not medians",
+ "next_step": "pad the in-page SSE2 region back by 2 bytes (g1 at 0x2f0) at a never-executed point, re-time base/head3/glibc on Ivy Bridge, then gate+plants",
+ "report_file": "handoff/TIMING-COV-MEMCHR-SHORT-NONAVX2.md"}

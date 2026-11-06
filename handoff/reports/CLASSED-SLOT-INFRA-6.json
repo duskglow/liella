@@ -1,0 +1,12 @@
+{"task": "CLASSED-SLOT-INFRA-6", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: swap off by default (COMPAT-20 unset/=1 keeps page 0, =0 turns it on), tested both ways, 12/12 plants CAUGHT, kernel -6.8k per start vs merge-base; gate RED in liella-boundary (exports interposed), cause not yet read; N100 timing queued",
+ "branch": "task/classed-slot-infra-6", "head": null,
+ "gate": {"affected": "RED: test -p liella-boundary (exports interposed) FAIL; liella, liella (interposed), liella-boundary, liella-abi, liella-legacy, liella-math, products, xtask unit ok; gate stopped at hand-back", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["With the swap off, the AVX2 class runs page 0's SSE2 memset body at 129-256 bytes (merge-base tested the D-4.25 AVX2 flag there); no bench row covers 129-256: add one and measure in CLASSED-SLOT-SWAP-COST or a follow-up", "xtask affected prints FAIL for a test step without the failing test's output (gate log has no panic/FAILED line), so a red step costs a separate rerun to diagnose (same class as -5's conformance stderr note)"],
+ "refused": [],
+ "jobs": ["shiki:classed-slot-infra-6-gate", "shiki:classed-slot-infra-6-plants", "shiki:classed-slot-infra-6-kcount", "shiki:classed-slot-infra-6-stage", "nozomi:classed-slot-infra-6-n100"],
+ "improvement": "xtask affected should print the tail of a failed test step's output (or its log path) in the gate log; two runs in a row lost a diagnosis cycle to it",
+ "next_step": "rerun `cargo test -p liella-boundary` with exports interposed on shiki sh1 (the failing step), read the failing test and fix the cause; then read nozomi:~/logs/classed-slot-infra-6-n100.log (mb vs branch medians, within noise = done)",
+ "report_file": "handoff/classed-slot-infra.md"}

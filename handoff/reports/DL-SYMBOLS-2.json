@@ -1,0 +1,12 @@
+{"task": "DL-SYMBOLS-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: symbol lookup (DL-9) finished; plants file fixed (19/19 caught), undefined-entry test strengthened, ruling #3655 recorded in D-27.11 and the DL-10 plan item",
+ "branch": "task/dl-symbols-2", "head": "3a488d14",
+ "gate": {"affected": "67 passed / 0 failed (plus symbols 9/9, clippy, static)", "peak": "966M"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["mei dl-symbols-plants rc 3 was the plants tool refusing a lit: pattern containing ' | ' (the field separator); fixed with a perl: pattern"],
+ "refused": [],
+ "improvement": "xtask plants could check the file's syntax before copying the tree (a --check mode) so a refused line costs seconds, not a queued job",
+ "next_step": "DL-10: implement the load-time version check (refuse, exit 127) with the unversioned-stub program as proof",
+ "report_file": "handoff/DL-SYMBOLS.md",
+ "jobs": ["shiki:dl-symbols-2-gate-2", "shiki:dl-symbols-2-plants-2"]}

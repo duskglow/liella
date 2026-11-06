@@ -1,0 +1,12 @@
+{"task": "CLASSED-SLOT-INFRA-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: classed memset pages build and pass on the AVX2 class (dev checks, conformance 5 starts, 7/7 plants CAUGHT); FULL gate and branch counts still running; start-up bound and the booked timing not yet judged",
+ "branch": "task/classed-slot-infra-2", "head": "see git (hand-off commit after b-plant fix)",
+ "gate": {"affected": "running (escalated to FULL: xtask/ and csys header changed): mei classed-slot-infra-2-gate", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [{"item": "csys_symbols (xtask affected) now reads past a .macro body with no global declaration and only .L labels, and a #define UPPER <number>, so fold.S stays mappable", "recommendation": "accept (local tooling detail; unit cases added)"}],
+ "informational": ["base counts (origin/next, mei): AVX2 class memset_144/256 30.3/30.4 instr, SSE2 class 39.4/39.4; startup_instr_c 2154; startup_kinstr_c 166535 AVX2 / 161295 SSE2", "strace of one AVX2-class start: openat pagemap, pread64 16 B, close, mremap: the design's 4 calls", "first xref-bias plant (fold-limit read) SURVIVED: the limit only picks between equivalent paths; replaced by a jump plant, CAUGHT"],
+ "refused": [],
+ "jobs": ["classed-slot-infra-2-gate", "classed-slot-infra-2-plants3", "classed-slot-infra-2-count-base", "classed-slot-infra-2-count-branch"],
+ "improvement": "the -1 run wrote ~950 lines without one compile; a 30-second clippy+static job on the first code commit would have saved a whole run",
+ "next_step": "read gate and count-branch logs on mei; judge startup_kinstr_c branch vs base against ruling #3139; then booked timing on Ivy Bridge and the N100",
+ "report_file": "handoff/classed-slot-infra.md"}

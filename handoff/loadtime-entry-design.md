@@ -1,50 +1,62 @@
-# LOADTIME-ENTRY-DESIGN handoff
+# LOADTIME-ENTRY-DESIGN handoff (updated by LOADTIME-ENTRY-DESIGN-2)
 
-State: branch `task/loadtime-entry-design`, cut from `origin/next` `06cefa93`; deliverable
-`docs/design/loadtime-entry.md` (design only, no product code). HEAD: see the report json / `git log -1`.
+State: branch `task/loadtime-entry-design-2`, stacked on `task/loadtime-entry-design` (cut from `origin/next`
+`06cefa93`). Doc commit `e774f024`, then the handoff/report commit (`git log -1`). The deliverable is
+`docs/design/loadtime-entry.md`: section 4 amended, section 5 new. Design only, no product code.
 
 ## Result
 
-Recommendation **M4**: entries with CPU-variant builds live in fixed-size slots in one page-aligned section
-(`.text.liella_classed`), each slot holding the SSE2 body. At static start-up step 4 (after `cpu::init_with`, before
-`apply_irelative` and every constructor), on the AVX2 class, the start-up maps a private file-backed copy of that
-page, writes the AVX2 bodies plus PC-relative fixups, makes it RX and `mremap`s it over the live page. Result: zero
-per-call cost on both classes, the D-4.25 flag tests go away (-2 on Ivy Bridge too), the live text is never writable,
-every failure leaves the SSE2 baseline. IFUNC + RELRO (M1) is +1 per static call on every class (excluded for `libc.a`
-by the no-Ivy-rise rule; kept as fallback for `libc.so.6`); patched `jmp` (M2) is +1 on every AVX2 call and leaves a
-non-executable page if the second `mprotect` is refused; RELRO pointer (M3) is +1 everywhere.
+**M6 replaces M4.** `.text.liella_classed` holds two pre-built 4096-byte pages with one slot layout: page 0 holds
+the SSE2 bodies (the exported labels), and page 1 the AVX2 bodies, assembled for page 0's address (`XREF(sym)` =
+`sym + 4096` on out-of-page references; no fixups). At static step 4, on the AVX2 class, a pagemap guard (3 calls)
+runs, then `mremap(page1 -> page0, MAYMOVE|FIXED)` (1 call). Nothing is written, no exec permission is gained, no
+private memory is used, and no fd is needed for the swap. Per-call cost is 0 on both classes, and section 3's
+predictions stand.
 
-Predicted (counted from fold.S/scan.S paths, NOT measured): `memset_64` 20.3 -> 17.3 [glibc 18.3], `memset_128`
-27.4 -> 22.4 [24.4], memset ladder 16/31 27 -> 25 [24]; memset 129-256, copy 65-256 and every strcmp call -2 on both
-classes; compares NOT VERIFIED (D-4.52 words mix the lazy fold decision with the CPU one).
+Probe-settled (unprivileged; Linux 6.8.0 build host plus Linux 7.0.14; static and PIE; 80 runs, none wrong):
+* M4's `mprotect` RX on the written copy: **EACCES** under `prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN)` and under
+  `systemd-run --user -p MemoryDenyWriteExecute=yes -p NoNewPrivileges=yes`, and silent: SSE2 stays and nothing is
+  logged. systemd 255 accepted the property in the user manager and applies it as PR_SET_MDWE (`PR_GET_MDWE`=1,
+  `Seccomp: 0`).
+* M6 (`mremap`; also `+DONTUNMAP`; also `mmap MAP_FIXED` RX from the file) works under every policy.
+* gdb: a breakpoint inserted before `run` is lost at the swap. A later stop writes the stale byte into the moved
+  page, and the process then gets SIGSEGV. This hits **both** M4 and M6. The pagemap guard (live page present and
+  not a file page means skip) fixed it under gdb.
+* perf names the slot correctly, but `perf annotate` shows the file's SSE2 bytes.
 
 ## Decisions
 
-Proposed D-4.53 (text in the design doc, section 4); not added to the register (needs the rulings below).
+D-4.53 is **reserved** (`ops reserve`) for this design. Its text is in doc section 4. It is not added to the
+register until the rulings. `cargo xtask static` reports it as "cited without a row (report only)".
 
-## RULING NEEDED
+## RULING NEEDED (doc section 4)
 
-1. Replacing a text page at start-up with a patched private copy (W^X kept, live page never writable): recommend approve.
-2. About 6 system calls + one private page per process on the AVX2 class: recommend accept unless the infra story's
-   start-up row measures worse; then M1 for `libc.so.6` only.
-3. Optional hardening: move the remaining start-up words into RELRO (static) after the slots land: recommend a small
-   follow-up.
+1. Swapping a read+exec text page at start-up (M6, no write): recommend approve. It replaces M4's item 1.
+2. 4 system calls and +2 VMAs on the AVX2 class only: recommend accept unless the start-up row measures worse.
+3. Guard when `/proc` is missing: recommend keep SSE2 (always correct).
+4. Diagnostics (perf annotate, core files, uprobes on the exported symbol after the swap): recommend accept, plus a
+   debugging note.
+5. RELRO for the remaining words: optional follow-up, as before.
 
 ## Not verified / gaps
 
-* The predicted counts (no jobs run: design story). D-4.25 timed an AVX2 fill slower at 33-128 B with a test and a
-  Rust hop in front of it, so the memset story has to time as well as count.
-* Symbol type and `&memset` under M1 against the reference: `readelf` is not installed on this machine.
-* The brief names `handoff/parity-memset-small-avx2.md`, but that file is only on `origin/task/parity-memset-small-avx2`,
-  not on my base. Reading it would have needed `git show` of another agent's branch (forbidden), so I used the brief's
-  summary and the story text in `handoff/parity-rows-avx2/PARITY-MEMSET-SMALL-AVX2.md`.
-* `cargo xtask static` was not run (no cargo on this machine). I checked the doc by hand: no lab host names, LF line endings.
-* SELinux `execmod` behaviour for M4's file-backed copy (whether a denial at step 4 is logged per process start in
-  confined domains) is not probed: settle it in CLASSED-SLOT-INFRA.
+* SELinux `execmod`, seccomp-form MDWE (kernel < 6.3) and PaX: documented behaviour only, UNTESTED. The exact
+  root-only SELinux command for the owner is in doc 5.2. No pre-6.3 kernel was available.
+* The keke run of the same probe (same 6.8 kernel as the build host) sat queued behind gates for about 45 minutes and
+  was cancelled with `kill-label`. The second kernel came from a 7.0.14 machine instead.
+* Not probed: uprobes after the swap, core-file contents, symbolisation when attaching to a running process, and THP
+  text. All are marked NOT VERIFIED in 5.6.
+* Predicted counts from -1 remain unmeasured.
+
+## Things not to redo
+
+M4's fixup tables and private copy are dropped, so do not design them further. M6b (`DONTUNMAP`, Linux 5.13+) and
+M6c (fd plus `mmap`, 3 calls, and for `libc.so.6` a path that can be replaced on disk) were considered and set aside
+for M6a.
 
 ## Next step
 
-The coordinator rules on the three items above, then cuts CLASSED-SLOT-INFRA (doc section 4, story 1) first. The
-kernel stories (memset, copy, strcmp, compares) stack on it.
+The coordinator rules on items 1-4, then cuts CLASSED-SLOT-INFRA (doc section 4, story 1, with its tests and
+plants), and the debugging note (story 7) with it.
 
 Plan rows to read: D-4.25, D-4.14, D-4.45, D-4.52, D-X.15, D-10.50, D-1.13.

@@ -1,0 +1,16 @@
+{"task": "CLASSED-SLOT-INFRA-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: the fixed start-up cost is found and removed (a second cpu::features call outlined it, +80 user instr every class; -3's 'every class +65k kernel' was the bench dropping GLIBC_TUNABLES for its child, now fixed); SSE2 class user parity (+8 exact), AVX2 class = the swap's 4 calls; N100 timing and a ~+8k kernel gap on no-swap classes (one run of two) remain",
+ "branch": "task/classed-slot-infra-4", "head": "7ffdb9b3",
+ "gate": {"affected": "shiki classed-slot-infra-4-r2-gate (direct tier, tree of 7ffdb9b3): still running at hand-back (clippy, xtask units, so, liella, abi, boundary, boundary interposed, legacy, math ok so far); plants chained after it", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cbench_startup gave its children PATH only, so `cargo xtask bench --tunables` never reached startup_* rows (fixed on this branch; any earlier startup row measured with --tunables was the default class)",
+  "COMPAT-20 costs 174 user instructions in config::key_of/signed_number when the flag is set (paid only by its users)",
+  "kernel instructions COMPAT-20/-AVX2 vs merge-base: equal in one run, +8-9k (3-4%) in another; spread about 8k at load 15: not settled"
+ ],
+ "refused": [],
+ "improvement": "exact user-instruction profiles by symbol from a 40-line ptrace single-step tracer (perf on Zen 1 rejects sample periods below ~20); worth adding to validation/ as the per-phase tool for start-up rows",
+ "next_step": "check r2-gate/r2-plants, settle the no-swap kernel gap with interleaved perf stat -r 50, then re-time the N100 start-up row",
+ "report_file": "handoff/classed-slot-infra.md",
+ "jobs": ["shiki:classed-slot-infra-4-r2-dev", "shiki:classed-slot-infra-4-r2-prof", "shiki:classed-slot-infra-4-r2-gate", "shiki:classed-slot-infra-4-r2-plants"]}

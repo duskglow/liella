@@ -1,0 +1,12 @@
+{"task": "DL-ELF-READ-3", "model": "opus", "tokens": null,
+ "result": "ELF reader part 2 complete: the 3 plant survivors resolved (2 new tests, 1 equivalent with reason), elf fuzz target + seeds + settings + docs row, 5-min RAM fuzz run 18.5M execs zero crashes, design table TextRel(width, pc_relative, signed)",
+ "branch": "task/dl-elf-read-3", "head": "see hand-back (final head = the commit holding this file)",
+ "gate": {"affected": "see keke:dl-elf-read-3-gate-2 (FULL, escalated by the fuzz manifest/xtask change)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["fuzz/Cargo.lock (tracked) is stale on origin/next: no liella-boundary entry although fuzz/Cargo.toml names it",
+                   "nightly fuzz build warns unused import AcqRel in crates/boundary/src/timer.rs:93"],
+ "refused": [],
+ "improvement": "the plants tool could flag a plant whose mutant fails with the same error value as the original (a redundant check) before the 30-min run, so equivalents are declared up front",
+ "next_step": "none for part 2; extend the elf fuzz target with symbol lookups when that API lands",
+ "report_file": "handoff/DL-ELF-READ-3.md",
+ "jobs": ["keke:dl-elf-read-3-gate-2", "keke:dl-elf-read-3-plants-2", "keke:dl-elf-read-3-fuzz-2"]}

@@ -152,8 +152,12 @@ Implementation:
     host-side tests over a versioned-symbol corpus; plants on version matching.
 14. **DL-10 `DL-RELOC`** (M, after DL-7 and DL-9, HIGH, R14-13). Eager relocation of every
     non-TLS x86-64 type, IFUNC/IRELATIVE ordering, COPY, TEXTREL policy, RELRO, `PT_GNU_STACK`
-    refusal; `-nostdlib` programs with several shared objects run. Proof: relocation-type corpus
-    (one object per type), plants on addend/bias arithmetic. **seam:** `Arch::classify` and
+    refusal; `-nostdlib` programs with several shared objects run. Load-time version check before
+    relocation: each `DT_VERNEED` entry is checked against the named dependency's version tables, and
+    a versioned reference to an object without version tables stops the load (exit 127, a message
+    naming the object and the version; no warn-and-continue, no COMPAT option; ruling #3655, D-27.11).
+    Proof: relocation-type corpus (one object per type), plants on addend/bias arithmetic, a program
+    needing a version run against an unversioned stub. **seam:** `Arch::classify` and
     `Arch::apply` for the non-TLS kinds; which TEXTREL widths exist is a table entry; the
     `PT_GNU_PROPERTY` notes are parsed per arch.
 15. **DL-11 `DL-INIT-ORDER`** (M, after DL-8 and DL-10). Init/fini order (preinit, dependencies

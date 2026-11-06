@@ -1,14 +1,19 @@
-//! ELF64 reader, part 1 (IP-24, plan/ph14/design.md §2): the ELF header, the program headers, the
-//! dynamic section and notes. Part 2 (DL-3) adds hash tables, symbol versions and relocation iterators.
+//! ELF64 reader (IP-24, plan/ph14/design.md §2). Part 1 (DL-2): the ELF header, the program headers, the
+//! dynamic section and notes. Part 2 (DL-3): the GNU and SysV hash tables (structure only; symbol lookup
+//! is DL-9), the symbol version tables (`versym`, `verdef`, `verneed`) and the RELA and RELR iterators.
 //!
 //! The reader works on a byte slice (a file prefix, a whole file or a mapped image) and does no I/O.
 //! Every offset, count and size from the object is checked with checked arithmetic against the slice
 //! before use (threat-model rule 4): a malformed object gives an [`ElfError`], never a panic and never a
-//! read outside the slice. Nothing here allocates. The error rules are decision D-27.7 (plan/07-decisions/s26-29.md).
+//! read outside the slice. Nothing here allocates. The error rules are decisions D-27.7 (part 1) and D-27.8
+//! (part 2) in plan/07-decisions/s26-29.md.
 //!
-//! The ELF identity (class, byte order, machine) is checked only through [`Arch`] (design §0a).
+//! The ELF identity (class, byte order, machine) is checked only through [`Arch`], and relocation types
+//! are seen only as [`RelocKind`] through [`Arch::classify`] (design §0a).
 
-use crate::arch::{Arch, ELFCLASS64, ELFDATA2MSB};
+use core::marker::PhantomData;
+
+use crate::arch::{Arch, RelocKind, ELFCLASS64, ELFDATA2MSB};
 
 /// Size of the ELF64 file header.
 pub const EHDR_SIZE: usize = 64;
@@ -18,6 +23,24 @@ pub const PHDR_SIZE: usize = 56;
 pub const DYN_SIZE: usize = 16;
 /// `e_phnum` value that means "the count is in section header 0" (`PN_XNUM`); refused.
 pub const PN_XNUM: u16 = 0xffff;
+/// Size of one ELF64 RELA entry (`r_offset`, `r_info`, `r_addend`).
+pub const RELA_SIZE: usize = 24;
+/// Size of one ELF64 RELR entry.
+pub const RELR_SIZE: usize = 8;
+/// Size of one symbol table entry (`Elf64_Sym`).
+pub const SYM_SIZE: usize = 24;
+/// Size of an `Elf64_Verdef`.
+pub const VERDEF_SIZE: usize = 20;
+/// Size of an `Elf64_Verdaux`.
+pub const VERDAUX_SIZE: usize = 8;
+/// Size of an `Elf64_Verneed`.
+pub const VERNEED_SIZE: usize = 16;
+/// Size of an `Elf64_Vernaux`.
+pub const VERNAUX_SIZE: usize = 16;
+/// The only `vd_version` / `vn_version` value (`VER_DEF_CURRENT`, `VER_NEED_CURRENT`).
+pub const VER_CURRENT: u16 = 1;
+/// `versym` bit that marks a hidden (non-default) version.
+pub const VERSYM_HIDDEN: u16 = 0x8000;
 
 /// Object file types (`e_type`) the reader accepts.
 pub mod et {
@@ -65,16 +88,52 @@ pub mod dt {
     pub const NULL: u64 = 0;
     /// Name of a needed library (string table offset).
     pub const NEEDED: u64 = 1;
+    /// Size in bytes of the PLT relocations (`DT_JMPREL`).
+    pub const PLTRELSZ: u64 = 2;
+    /// Address of the SysV hash table.
+    pub const HASH: u64 = 4;
     /// Address of the dynamic string table.
     pub const STRTAB: u64 = 5;
+    /// Address of the dynamic symbol table.
+    pub const SYMTAB: u64 = 6;
+    /// Size in bytes of one symbol table entry.
+    pub const SYMENT: u64 = 11;
+    /// Address of the RELA relocations.
+    pub const RELA: u64 = 7;
+    /// Size in bytes of the RELA relocations.
+    pub const RELASZ: u64 = 8;
+    /// Size of one RELA entry.
+    pub const RELAENT: u64 = 9;
     /// Size of the dynamic string table in bytes.
     pub const STRSZ: u64 = 10;
     /// The object's soname (string table offset).
     pub const SONAME: u64 = 14;
     /// Library search path (string table offset).
     pub const RPATH: u64 = 15;
+    /// Type of the PLT relocations (`DT_RELA` or `DT_REL`).
+    pub const PLTREL: u64 = 20;
+    /// Address of the PLT relocations.
+    pub const JMPREL: u64 = 23;
     /// Library search path (string table offset).
     pub const RUNPATH: u64 = 29;
+    /// Size in bytes of the RELR relocations.
+    pub const RELRSZ: u64 = 35;
+    /// Address of the RELR relocations.
+    pub const RELR: u64 = 36;
+    /// Size of one RELR entry.
+    pub const RELRENT: u64 = 37;
+    /// Address of the GNU hash table.
+    pub const GNU_HASH: u64 = 0x6fff_fef5;
+    /// Address of the symbol version table (`versym`).
+    pub const VERSYM: u64 = 0x6fff_fff0;
+    /// Address of the version definitions.
+    pub const VERDEF: u64 = 0x6fff_fffc;
+    /// Number of version definitions.
+    pub const VERDEFNUM: u64 = 0x6fff_fffd;
+    /// Address of the version requirements.
+    pub const VERNEED: u64 = 0x6fff_fffe;
+    /// Number of version requirement entries (files).
+    pub const VERNEEDNUM: u64 = 0x6fff_ffff;
 }
 
 /// Note types of the `GNU` owner.
@@ -94,6 +153,27 @@ pub enum Part {
     ProgramHeaders,
     /// The file range of the program header with this index.
     Segment(u16),
+}
+
+/// Which table a part-2 error is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Table {
+    /// The SysV hash table (`DT_HASH`).
+    SysvHash,
+    /// The GNU hash table (`DT_GNU_HASH`).
+    GnuHash,
+    /// The symbol version table (`DT_VERSYM`).
+    Versym,
+    /// The version definitions (`DT_VERDEF`).
+    Verdef,
+    /// The version requirements (`DT_VERNEED`).
+    Verneed,
+    /// The RELA relocations (`DT_RELA`).
+    Rela,
+    /// The PLT relocations (`DT_JMPREL`).
+    Jmprel,
+    /// The RELR relocations (`DT_RELR`).
+    Relr,
 }
 
 /// Why an object was refused. Every variant is a property of the bytes, so the same input always
@@ -162,6 +242,34 @@ pub enum ElfError {
     BadNoteName(usize),
     /// A program property runs past the end of its note descriptor (offset of the property in the descriptor).
     PropertyTruncated(usize),
+    /// A dynamic tag that another present tag requires is absent (the missing tag).
+    MissingDynamic(u64),
+    /// A dynamic entry has a value the reader does not accept (`DT_RELAENT` not 24, `DT_RELRENT` not 8,
+    /// `DT_PLTREL` not `DT_RELA`); the tag.
+    BadDynamicValue(u64),
+    /// A table's size is not a multiple of its entry size.
+    TableSize(Table),
+    /// A hash table header the reader refuses (GNU: no Bloom words, or a Bloom shift of 64 or more).
+    BadHashHeader(Table),
+    /// A hash bucket or chain names a symbol index outside the table (the index).
+    HashIndex(Table, u32),
+    /// A SysV hash chain visits more entries than the table holds (a loop).
+    HashChainLoop(u32),
+    /// A version entry or auxiliary entry runs past the end of its segment (offset in the table).
+    VersionTruncated(Table, usize),
+    /// A version entry's revision is not 1.
+    BadVersionRevision(Table, u16),
+    /// A version chain ends (next offset 0) before its count (`DT_VERDEFNUM`, `DT_VERNEEDNUM`, `vd_cnt`,
+    /// `vn_cnt`) is reached; the offset of the entry whose chain ended early.
+    VersionCount(Table, usize),
+    /// A `versym` entry names a version index that no definition or requirement has (symbol, index).
+    VersionIndex(u32, u16),
+    /// A symbol index at or past the symbol count.
+    SymbolIndex(u32),
+    /// A RELR bitmap entry with no address entry before it (entry index).
+    RelrNoBase(usize),
+    /// A RELR entry's addresses overflow the address space (entry index).
+    RelrOverflow(usize),
 }
 
 /// Reads fixed-size integers from a slice in the object's byte order. `None` means out of range.
@@ -448,6 +556,22 @@ impl<'a> Elf<'a> {
         sub(seg, rel, len).ok_or(ElfError::AddressNotMapped(vaddr))
     }
 
+    /// The file bytes from virtual address `vaddr` to the end of the file-backed part of the `PT_LOAD`
+    /// segment holding it (possibly empty), for tables whose length is found by walking them.
+    ///
+    /// # Errors
+    ///
+    /// As [`Elf::bytes_at`].
+    pub fn bytes_from(&self, vaddr: u64) -> Result<&'a [u8], ElfError> {
+        let ph = self
+            .program_headers()
+            .find(|p| p.p_type == pt::LOAD && p.vaddr <= vaddr && p.vaddr.checked_add(p.filesz).is_some_and(|e| vaddr <= e))
+            .ok_or(ElfError::AddressNotMapped(vaddr))?;
+        let rel = vaddr.checked_sub(ph.vaddr).ok_or(ElfError::AddressNotMapped(vaddr))?;
+        let seg = self.segment_bytes(&ph)?;
+        usize::try_from(rel).ok().and_then(|r| seg.get(r..)).ok_or(ElfError::AddressNotMapped(vaddr))
+    }
+
     /// The program interpreter path (without its NUL), if the object has `PT_INTERP`.
     ///
     /// # Errors
@@ -505,7 +629,7 @@ impl<'a> Elf<'a> {
             (None, None) => None,
         };
         let used = all.get(..count.checked_mul(DYN_SIZE).ok_or(ElfError::DynamicUnterminated)?).ok_or(ElfError::DynamicUnterminated)?;
-        Ok(Some(Dynamic { rd: Rd { b: used, be: self.rd.be }, strtab }))
+        Ok(Some(Dynamic { rd: Rd { b: used, be: self.rd.be }, strtab, elf: *self }))
     }
 
     /// The notes of a `PT_NOTE` segment (or any segment laid out as notes, such as `PT_GNU_PROPERTY`).
@@ -571,6 +695,7 @@ pub struct DynEntry {
 pub struct Dynamic<'a> {
     rd: Rd<'a>,
     strtab: Option<&'a [u8]>,
+    elf: Elf<'a>,
 }
 
 impl<'a> Dynamic<'a> {
@@ -738,6 +863,939 @@ impl<'a> Iterator for Properties<'a> {
             return None;
         }
         let r = self.step();
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Part 2 (DL-3): hash tables, symbol versions, relocation iterators. Error rules: decision D-27.8.
+
+/// `n * size` as a `u64` byte count, checked.
+fn bytes_for(n: u64, size: usize) -> Option<u64> {
+    n.checked_mul(u64::try_from(size).ok()?)
+}
+
+impl<'a> Dynamic<'a> {
+    /// The value of tag `tag`, which may occur at most once.
+    fn once(&self, tag: u64) -> Result<Option<u64>, ElfError> {
+        let mut it = self.entries().filter(|e| e.tag == tag);
+        let first = it.next().map(|e| e.val);
+        if it.next().is_some() {
+            return Err(ElfError::DuplicateDynamic(tag));
+        }
+        Ok(first)
+    }
+
+    /// An (address, size or count) pair of tags: both or neither.
+    fn pair(&self, addr: u64, size: u64) -> Result<Option<(u64, u64)>, ElfError> {
+        match (self.once(addr)?, self.once(size)?) {
+            (Some(a), Some(s)) => Ok(Some((a, s))),
+            (None, None) => Ok(None),
+            (Some(_), None) => Err(ElfError::MissingDynamic(size)),
+            (None, Some(_)) => Err(ElfError::MissingDynamic(addr)),
+        }
+    }
+
+    /// The SysV hash table (`DT_HASH`): `nbucket`, `nchain`, then the buckets and chains (32-bit words).
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::DuplicateDynamic`], or the [`Elf::bytes_at`] errors when the header or the
+    /// `nbucket + nchain` words are not wholly mapped.
+    pub fn sysv_hash(&self) -> Result<Option<SysvHash<'a>>, ElfError> {
+        let Some(addr) = self.once(dt::HASH)? else { return Ok(None) };
+        let be = self.rd.be;
+        let head = Rd { b: self.elf.bytes_at(addr, 8)?, be };
+        let (Some(nbucket), Some(nchain)) = (head.u32(0), head.u32(4)) else { return Err(ElfError::AddressNotMapped(addr)) };
+        let len = bytes_for(u64::from(nbucket).saturating_add(u64::from(nchain)), 4)
+            .and_then(|n| n.checked_add(8))
+            .ok_or(ElfError::AddressNotMapped(addr))?;
+        let all = self.elf.bytes_at(addr, len)?;
+        Ok(Some(SysvHash { rd: Rd { b: all, be }, nbucket, nchain }))
+    }
+
+    /// The GNU hash table (`DT_GNU_HASH`): `nbuckets`, `symoffset`, `bloom_size`, `bloom_shift`, the
+    /// 64-bit Bloom words, the buckets, then the chain, which runs to the end of the mapped bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::DuplicateDynamic`], [`ElfError::BadHashHeader`] (no Bloom words, or a shift of 64
+    /// or more), or the [`Elf::bytes_at`] errors when the header, Bloom words or buckets are not mapped.
+    pub fn gnu_hash(&self) -> Result<Option<GnuHash<'a>>, ElfError> {
+        let Some(addr) = self.once(dt::GNU_HASH)? else { return Ok(None) };
+        let be = self.rd.be;
+        let head = Rd { b: self.elf.bytes_at(addr, 16)?, be };
+        let field = |o| head.u32(o).ok_or(ElfError::AddressNotMapped(addr));
+        let (nbuckets, symoffset, bloom_size, bloom_shift) = (field(0)?, field(4)?, field(8)?, field(12)?);
+        if bloom_size == 0 || bloom_shift >= 64 {
+            return Err(ElfError::BadHashHeader(Table::GnuHash));
+        }
+        let unmapped = ElfError::AddressNotMapped(addr);
+        let bloom_len = bytes_for(u64::from(bloom_size), 8).ok_or(unmapped)?;
+        let bucket_len = bytes_for(u64::from(nbuckets), 4).ok_or(unmapped)?;
+        let fixed = bloom_len.checked_add(bucket_len).and_then(|n| n.checked_add(16)).ok_or(unmapped)?;
+        let all = self.elf.bytes_at(addr, fixed)?;
+        let bloom = sub(all, 16, bloom_len).ok_or(unmapped)?;
+        let buckets = sub(all, bloom_len.checked_add(16).ok_or(unmapped)?, bucket_len).ok_or(unmapped)?;
+        let chain = self.elf.bytes_from(addr.checked_add(fixed).ok_or(unmapped)?)?;
+        Ok(Some(GnuHash { bloom: Rd { b: bloom, be }, buckets: Rd { b: buckets, be }, chain: Rd { b: chain, be }, nbuckets, symoffset, bloom_shift }))
+    }
+
+    /// The number of dynamic symbols: the SysV table's `nchain` when there is one (exact), else the
+    /// symbols the GNU table covers (exact when the hashed symbols come last, as linkers place them; an
+    /// object whose buckets are all empty gives `symoffset`, a lower bound); `None` without either.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Dynamic::sysv_hash`], [`Dynamic::gnu_hash`] and [`GnuHash::symbol_count`].
+    pub fn symbol_count(&self) -> Result<Option<u32>, ElfError> {
+        if let Some(h) = self.sysv_hash()? {
+            return Ok(Some(h.nchain()));
+        }
+        self.gnu_hash()?.map(|g| g.symbol_count()).transpose()
+    }
+
+    /// The dynamic symbol table (`DT_SYMTAB`; `DT_SYMENT`, when present, must be 24). Its length is not
+    /// recorded, so an entry is read wherever it lies in the mapped bytes, and an index at or past the
+    /// [`Dynamic::symbol_count`] hint is refused.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::DuplicateDynamic`], [`ElfError::BadDynamicValue`]`(DT_SYMENT)`, the [`Elf::bytes_from`]
+    /// errors for the address and the [`Dynamic::symbol_count`] errors.
+    pub fn symtab(&self) -> Result<Option<Symtab<'a>>, ElfError> {
+        let Some(addr) = self.once(dt::SYMTAB)? else { return Ok(None) };
+        if let Some(e) = self.once(dt::SYMENT)? {
+            if usize::try_from(e).ok() != Some(SYM_SIZE) {
+                return Err(ElfError::BadDynamicValue(dt::SYMENT));
+            }
+        }
+        let count = self.symbol_count()?;
+        let b = self.elf.bytes_from(addr)?;
+        Ok(Some(Symtab { rd: Rd { b, be: self.rd.be }, count }))
+    }
+
+    /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The table's length is
+    /// not recorded, so an entry is read wherever it lies in the mapped bytes; [`Versym::count`] is the
+    /// [`Dynamic::symbol_count`] hint. Every entry is checked against the highest version index the
+    /// definitions and requirements give (walked here, names included).
+    ///
+    /// # Errors
+    ///
+    /// The [`Elf::bytes_from`] errors for the address, the [`Dynamic::symbol_count`] errors, and the
+    /// errors of the version walks.
+    pub fn versym(&self) -> Result<Option<Versym<'a>>, ElfError> {
+        let Some(addr) = self.once(dt::VERSYM)? else { return Ok(None) };
+        let count = self.symbol_count()?;
+        let tab = self.elf.bytes_from(addr)?;
+        let mut max = 1u16;
+        if let Some(defs) = self.verdef()? {
+            for d in defs {
+                let d = d?;
+                for a in d.names() {
+                    a?;
+                }
+                max = max.max(d.ndx & !VERSYM_HIDDEN);
+            }
+        }
+        if let Some(needs) = self.verneed()? {
+            for n in needs {
+                for a in n?.auxes() {
+                    max = max.max(a?.other & !VERSYM_HIDDEN);
+                }
+            }
+        }
+        Ok(Some(Versym { rd: Rd { b: tab, be: self.rd.be }, count, max }))
+    }
+
+    /// The version definitions (`DT_VERDEF`, `DT_VERDEFNUM` entries).
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::MissingDynamic`] unless both tags are present, the [`Elf::bytes_from`] errors for
+    /// the address; each entry's own errors come from the iterator.
+    pub fn verdef(&self) -> Result<Option<Verdefs<'a>>, ElfError> {
+        let Some((addr, num)) = self.pair(dt::VERDEF, dt::VERDEFNUM)? else { return Ok(None) };
+        let b = self.elf.bytes_from(addr)?;
+        Ok(Some(Verdefs { dynm: *self, rd: Rd { b, be: self.rd.be }, off: 0, left: num, done: false }))
+    }
+
+    /// The version requirements (`DT_VERNEED`, `DT_VERNEEDNUM` entries).
+    ///
+    /// # Errors
+    ///
+    /// As [`Dynamic::verdef`].
+    pub fn verneed(&self) -> Result<Option<Verneeds<'a>>, ElfError> {
+        let Some((addr, num)) = self.pair(dt::VERNEED, dt::VERNEEDNUM)? else { return Ok(None) };
+        let b = self.elf.bytes_from(addr)?;
+        Ok(Some(Verneeds { dynm: *self, rd: Rd { b, be: self.rd.be }, off: 0, left: num, done: false }))
+    }
+
+    /// A RELA table at `addr` of `size` bytes (entry size already checked).
+    fn rela_table<A: Arch>(&self, table: Table, addr: u64, size: u64) -> Result<Relas<'a, A>, ElfError> {
+        let ent = u64::try_from(RELA_SIZE).map_err(|_| ElfError::TableSize(table))?;
+        if size.checked_rem(ent) != Some(0) {
+            return Err(ElfError::TableSize(table));
+        }
+        Ok(Relas { rd: Rd { b: self.elf.bytes_at(addr, size)?, be: self.rd.be }, off: 0, arch: PhantomData })
+    }
+
+    /// The RELA relocations (`DT_RELA`, `DT_RELASZ`, `DT_RELAENT` = 24). The whole table is checked here,
+    /// so the iterator cannot fail; each entry's type is classified by `A`.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::MissingDynamic`], [`ElfError::BadDynamicValue`]`(DT_RELAENT)`, [`ElfError::TableSize`],
+    /// or the [`Elf::bytes_at`] errors.
+    pub fn rela<A: Arch>(&self) -> Result<Option<Relas<'a, A>>, ElfError> {
+        let Some((addr, size)) = self.pair(dt::RELA, dt::RELASZ)? else { return Ok(None) };
+        match self.once(dt::RELAENT)? {
+            None => return Err(ElfError::MissingDynamic(dt::RELAENT)),
+            Some(e) if usize::try_from(e).ok() != Some(RELA_SIZE) => return Err(ElfError::BadDynamicValue(dt::RELAENT)),
+            Some(_) => {}
+        }
+        self.rela_table(Table::Rela, addr, size).map(Some)
+    }
+
+    /// The PLT relocations (`DT_JMPREL`, `DT_PLTRELSZ`; `DT_PLTREL` must be `DT_RELA`).
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::MissingDynamic`], [`ElfError::BadDynamicValue`]`(DT_PLTREL)`, [`ElfError::TableSize`],
+    /// or the [`Elf::bytes_at`] errors.
+    pub fn jmprel<A: Arch>(&self) -> Result<Option<Relas<'a, A>>, ElfError> {
+        let Some((addr, size)) = self.pair(dt::JMPREL, dt::PLTRELSZ)? else { return Ok(None) };
+        match self.once(dt::PLTREL)? {
+            None => return Err(ElfError::MissingDynamic(dt::PLTREL)),
+            Some(dt::RELA) => {}
+            Some(_) => return Err(ElfError::BadDynamicValue(dt::PLTREL)),
+        }
+        self.rela_table(Table::Jmprel, addr, size).map(Some)
+    }
+
+    /// The RELR relocations (`DT_RELR`, `DT_RELRSZ`, `DT_RELRENT` = 8), decoded into the addresses they
+    /// name.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::MissingDynamic`], [`ElfError::BadDynamicValue`]`(DT_RELRENT)`, [`ElfError::TableSize`],
+    /// or the [`Elf::bytes_at`] errors; each entry's own errors come from the iterator.
+    pub fn relr(&self) -> Result<Option<Relrs<'a>>, ElfError> {
+        let Some((addr, size)) = self.pair(dt::RELR, dt::RELRSZ)? else { return Ok(None) };
+        match self.once(dt::RELRENT)? {
+            None => return Err(ElfError::MissingDynamic(dt::RELRENT)),
+            Some(e) if usize::try_from(e).ok() != Some(RELR_SIZE) => return Err(ElfError::BadDynamicValue(dt::RELRENT)),
+            Some(_) => {}
+        }
+        let ent = u64::try_from(RELR_SIZE).map_err(|_| ElfError::TableSize(Table::Relr))?;
+        if size.checked_rem(ent) != Some(0) {
+            return Err(ElfError::TableSize(Table::Relr));
+        }
+        let b = self.elf.bytes_at(addr, size)?;
+        Ok(Some(Relrs { rd: Rd { b, be: self.rd.be }, idx: 0, base: None, bits: 0, bit_base: 0, bit_idx: 0, done: false }))
+    }
+}
+
+/// The SysV hash table: `nbucket` buckets and `nchain` chain words, one per dynamic symbol.
+#[derive(Clone, Copy, Debug)]
+pub struct SysvHash<'a> {
+    rd: Rd<'a>,
+    nbucket: u32,
+    nchain: u32,
+}
+
+impl<'a> SysvHash<'a> {
+    /// The number of buckets.
+    #[must_use]
+    pub fn nbucket(&self) -> u32 {
+        self.nbucket
+    }
+
+    /// The number of chain words, which is the number of dynamic symbols.
+    #[must_use]
+    pub fn nchain(&self) -> u32 {
+        self.nchain
+    }
+
+    fn word(&self, i: u64) -> Option<u32> {
+        self.rd.u32(usize::try_from(i.checked_mul(4)?.checked_add(8)?).ok()?)
+    }
+
+    /// Bucket `i` (`None` past `nbucket`).
+    #[must_use]
+    pub fn bucket(&self, i: u32) -> Option<u32> {
+        if i < self.nbucket { self.word(u64::from(i)) } else { None }
+    }
+
+    /// The symbol indices of the chain for hash value `hash` (bucket `hash % nbucket`), in chain order.
+    /// The iterator yields one error and then stops; a table without buckets yields nothing.
+    #[must_use]
+    pub fn chain(&self, hash: u32) -> SysvChain<'a> {
+        let start = hash.checked_rem(self.nbucket).and_then(|b| self.bucket(b)).unwrap_or(0);
+        SysvChain { h: *self, next: start, steps: 0, done: false }
+    }
+}
+
+/// The symbol indices of one SysV hash chain.
+#[derive(Clone, Debug)]
+pub struct SysvChain<'a> {
+    h: SysvHash<'a>,
+    next: u32,
+    steps: u32,
+    done: bool,
+}
+
+impl Iterator for SysvChain<'_> {
+    type Item = Result<u32, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done || self.next == 0 {
+            return None;
+        }
+        let i = self.next;
+        let r = if i >= self.h.nchain {
+            Err(ElfError::HashIndex(Table::SysvHash, i))
+        } else if self.steps >= self.h.nchain {
+            Err(ElfError::HashChainLoop(i))
+        } else {
+            self.steps = self.steps.saturating_add(1);
+            match self.h.word(u64::from(self.h.nbucket).saturating_add(u64::from(i))) {
+                Some(n) => {
+                    self.next = n;
+                    Ok(i)
+                }
+                None => Err(ElfError::HashIndex(Table::SysvHash, i)),
+            }
+        };
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+/// The GNU hash table. Symbols below `symoffset` are not hashed; the chain word of symbol `i`
+/// (`i >= symoffset`) is its hash with bit 0 replaced by "last in chain".
+#[derive(Clone, Copy, Debug)]
+pub struct GnuHash<'a> {
+    bloom: Rd<'a>,
+    buckets: Rd<'a>,
+    chain: Rd<'a>,
+    nbuckets: u32,
+    symoffset: u32,
+    bloom_shift: u32,
+}
+
+/// One entry of a GNU hash chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GnuEntry {
+    /// The symbol index.
+    pub sym: u32,
+    /// The chain word: the symbol's hash, bit 0 set on the chain's last entry.
+    pub hash: u32,
+}
+
+impl<'a> GnuHash<'a> {
+    /// The number of buckets.
+    #[must_use]
+    pub fn nbuckets(&self) -> u32 {
+        self.nbuckets
+    }
+
+    /// The index of the first hashed symbol.
+    #[must_use]
+    pub fn symoffset(&self) -> u32 {
+        self.symoffset
+    }
+
+    /// The number of 64-bit Bloom words (at least 1).
+    #[must_use]
+    pub fn bloom_size(&self) -> usize {
+        self.bloom.b.len().checked_div(8).unwrap_or(0)
+    }
+
+    /// The second Bloom shift (below 64).
+    #[must_use]
+    pub fn bloom_shift(&self) -> u32 {
+        self.bloom_shift
+    }
+
+    /// Bloom word `i` (`None` past the last).
+    #[must_use]
+    pub fn bloom_word(&self, i: usize) -> Option<u64> {
+        self.bloom.u64(i.checked_mul(8)?)
+    }
+
+    /// Bucket `i`: the first symbol of its chain, 0 for an empty bucket (`None` past `nbuckets`).
+    #[must_use]
+    pub fn bucket(&self, i: u32) -> Option<u32> {
+        self.buckets.u32(usize::try_from(i).ok()?.checked_mul(4)?)
+    }
+
+    /// The chain word of symbol `sym`.
+    fn chain_word(&self, sym: u32) -> Result<u32, ElfError> {
+        let bad = ElfError::HashIndex(Table::GnuHash, sym);
+        let rel = sym.checked_sub(self.symoffset).ok_or(bad)?;
+        self.chain.u32(usize::try_from(rel).map_err(|_| bad)?.checked_mul(4).ok_or(bad)?).ok_or(bad)
+    }
+
+    /// The chain for hash value `hash` (bucket `hash % nbuckets`), in order. The iterator yields one
+    /// error and then stops; an empty bucket or a table without buckets yields nothing.
+    #[must_use]
+    pub fn chain(&self, hash: u32) -> GnuChain<'a> {
+        let start = hash.checked_rem(self.nbuckets).and_then(|b| self.bucket(b)).unwrap_or(0);
+        GnuChain { h: *self, next: start, done: start == 0 }
+    }
+
+    /// The number of dynamic symbols the table covers: one past the end of the chain that starts at
+    /// the highest bucket, or `symoffset` when every bucket is empty.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::HashIndex`] for a bucket below `symoffset` or a chain that runs past the mapped bytes.
+    pub fn symbol_count(&self) -> Result<u32, ElfError> {
+        let mut top = 0u32;
+        for i in 0..self.nbuckets {
+            let b = self.bucket(i).ok_or(ElfError::HashIndex(Table::GnuHash, i))?;
+            if b != 0 && b < self.symoffset {
+                return Err(ElfError::HashIndex(Table::GnuHash, b));
+            }
+            top = top.max(b);
+        }
+        if top == 0 {
+            return Ok(self.symoffset);
+        }
+        let mut last = top;
+        for e in (GnuChain { h: *self, next: top, done: false }) {
+            last = e?.sym;
+        }
+        last.checked_add(1).ok_or(ElfError::HashIndex(Table::GnuHash, last))
+    }
+}
+
+/// The entries of one GNU hash chain.
+#[derive(Clone, Debug)]
+pub struct GnuChain<'a> {
+    h: GnuHash<'a>,
+    next: u32,
+    done: bool,
+}
+
+impl Iterator for GnuChain<'_> {
+    type Item = Result<GnuEntry, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        let sym = self.next;
+        let r = self.h.chain_word(sym).and_then(|hash| {
+            if hash & 1 == 1 {
+                self.done = true;
+            } else {
+                self.next = sym.checked_add(1).ok_or(ElfError::HashIndex(Table::GnuHash, sym))?;
+            }
+            Ok(GnuEntry { sym, hash })
+        });
+        if r.is_err() {
+            self.done = true;
+        }
+        Some(r)
+    }
+}
+
+/// A `versym` entry: a version index and the hidden bit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VersionIndex {
+    /// The index: 0 local, 1 global (base), otherwise a `vd_ndx` or `vna_other`.
+    pub index: u16,
+    /// The symbol's version is hidden (not the default version).
+    pub hidden: bool,
+}
+
+/// The symbol version table.
+#[derive(Clone, Copy, Debug)]
+pub struct Versym<'a> {
+    rd: Rd<'a>,
+    count: Option<u32>,
+    max: u16,
+}
+
+impl Versym<'_> {
+    /// The dynamic symbol count from the hash tables (see [`Dynamic::symbol_count`]), if known.
+    #[must_use]
+    pub fn count(&self) -> Option<u32> {
+        self.count
+    }
+
+    /// The highest version index a definition or requirement gives (at least 1).
+    #[must_use]
+    pub fn max_index(&self) -> u16 {
+        self.max
+    }
+
+    /// The version of symbol `sym`.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::SymbolIndex`] for an entry past the mapped bytes, [`ElfError::VersionIndex`] for an
+    /// index above [`Versym::max_index`].
+    pub fn get(&self, sym: u32) -> Result<VersionIndex, ElfError> {
+        let off = usize::try_from(sym).ok().and_then(|s| s.checked_mul(2));
+        let raw = off.and_then(|o| self.rd.u16(o)).ok_or(ElfError::SymbolIndex(sym))?;
+        let index = raw & !VERSYM_HIDDEN;
+        if index > self.max {
+            return Err(ElfError::VersionIndex(sym, raw));
+        }
+        Ok(VersionIndex { index, hidden: raw & VERSYM_HIDDEN != 0 })
+    }
+}
+
+/// `STB_LOCAL`.
+pub const STB_LOCAL: u8 = 0;
+/// `STB_GLOBAL`.
+pub const STB_GLOBAL: u8 = 1;
+/// `STB_WEAK`.
+pub const STB_WEAK: u8 = 2;
+/// `STB_GNU_UNIQUE`: one definition per namespace.
+pub const STB_GNU_UNIQUE: u8 = 10;
+/// `STT_NOTYPE`.
+pub const STT_NOTYPE: u8 = 0;
+/// `STT_OBJECT`.
+pub const STT_OBJECT: u8 = 1;
+/// `STT_FUNC`.
+pub const STT_FUNC: u8 = 2;
+/// `STT_COMMON`.
+pub const STT_COMMON: u8 = 5;
+/// `STT_TLS`.
+pub const STT_TLS: u8 = 6;
+/// `STT_GNU_IFUNC`: the value is a resolver, called at bind time.
+pub const STT_GNU_IFUNC: u8 = 10;
+/// `STV_DEFAULT`.
+pub const STV_DEFAULT: u8 = 0;
+/// `STV_INTERNAL`.
+pub const STV_INTERNAL: u8 = 1;
+/// `STV_HIDDEN`.
+pub const STV_HIDDEN: u8 = 2;
+/// `STV_PROTECTED`.
+pub const STV_PROTECTED: u8 = 3;
+/// `SHN_UNDEF`: the symbol is not defined in this object.
+pub const SHN_UNDEF: u16 = 0;
+
+/// One dynamic symbol (`Elf64_Sym`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sym {
+    /// `st_name`: offset of the name in the string table.
+    pub name: u32,
+    /// `st_info`: binding (high four bits) and type (low four bits).
+    pub info: u8,
+    /// `st_other`: the visibility in the low two bits.
+    pub other: u8,
+    /// `st_shndx`: [`SHN_UNDEF`] for an undefined symbol.
+    pub shndx: u16,
+    /// `st_value`.
+    pub value: u64,
+    /// `st_size`.
+    pub size: u64,
+}
+
+impl Sym {
+    /// The binding (`STB_*`).
+    #[must_use]
+    pub fn bind(&self) -> u8 {
+        self.info >> 4
+    }
+    /// The type (`STT_*`).
+    #[must_use]
+    pub fn kind(&self) -> u8 {
+        self.info & 0xf
+    }
+    /// The visibility (`STV_*`).
+    #[must_use]
+    pub fn visibility(&self) -> u8 {
+        self.other & 3
+    }
+}
+
+/// The dynamic symbol table.
+#[derive(Clone, Copy, Debug)]
+pub struct Symtab<'a> {
+    rd: Rd<'a>,
+    count: Option<u32>,
+}
+
+impl Symtab<'_> {
+    /// The dynamic symbol count from the hash tables (see [`Dynamic::symbol_count`]), if known.
+    #[must_use]
+    pub fn count(&self) -> Option<u32> {
+        self.count
+    }
+
+    /// Symbol `i`.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::SymbolIndex`] for an index at or past [`Symtab::count`] or an entry past the mapped bytes.
+    pub fn get(&self, i: u32) -> Result<Sym, ElfError> {
+        let bad = ElfError::SymbolIndex(i);
+        if self.count.is_some_and(|c| i >= c) {
+            return Err(bad);
+        }
+        let at = usize::try_from(i).ok().and_then(|n| n.checked_mul(SYM_SIZE)).ok_or(bad)?;
+        let e = Rd { b: sub(self.rd.b, u64::try_from(at).map_err(|_| bad)?, 24).ok_or(bad)?, be: self.rd.be };
+        let [info, other] = e.bytes::<2>(4).ok_or(bad)?;
+        let (name, shndx) = (e.u32(0).ok_or(bad)?, e.u16(6).ok_or(bad)?);
+        Ok(Sym { name, info, other, shndx, value: e.u64(8).ok_or(bad)?, size: e.u64(16).ok_or(bad)? })
+    }
+}
+
+/// `off + rel` as a new offset in a version table, checked (`None` on overflow).
+fn advance(off: usize, rel: u32) -> Option<usize> {
+    off.checked_add(usize::try_from(rel).ok()?)
+}
+
+/// One version definition (`Elf64_Verdef`).
+#[derive(Clone, Copy, Debug)]
+pub struct Verdef<'a> {
+    /// Offset of the entry in the table.
+    pub offset: usize,
+    /// `vd_flags` (`VER_FLG_BASE` 1, `VER_FLG_WEAK` 2).
+    pub flags: u16,
+    /// `vd_ndx`: the version index `versym` entries use.
+    pub ndx: u16,
+    /// `vd_cnt`: the number of names (the version, then its parents).
+    pub cnt: u16,
+    /// `vd_hash`.
+    pub hash: u32,
+    aux: u32,
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+}
+
+impl<'a> Verdef<'a> {
+    /// The names (`Elf64_Verdaux`): the version's own name, then its parents. Yields one error and stops.
+    #[must_use]
+    pub fn names(&self) -> Verdauxes<'a> {
+        Verdauxes { dynm: self.dynm, rd: self.rd, at: self.offset, off: advance(self.offset, self.aux), left: self.cnt, done: false }
+    }
+}
+
+/// The version definitions; yields one error and then stops.
+#[derive(Clone, Debug)]
+pub struct Verdefs<'a> {
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+    off: usize,
+    left: u64,
+    done: bool,
+}
+
+impl<'a> Verdefs<'a> {
+    fn step(&mut self) -> Result<Verdef<'a>, ElfError> {
+        let at = self.off;
+        let bad = ElfError::VersionTruncated(Table::Verdef, at);
+        let f16 = |o: usize| self.rd.u16(at.checked_add(o)?);
+        let f32 = |o: usize| self.rd.u32(at.checked_add(o)?);
+        let version = f16(0).ok_or(bad)?;
+        let (flags, ndx, cnt) = (f16(2).ok_or(bad)?, f16(4).ok_or(bad)?, f16(6).ok_or(bad)?);
+        let (hash, aux, next) = (f32(8).ok_or(bad)?, f32(12).ok_or(bad)?, f32(16).ok_or(bad)?);
+        if version != VER_CURRENT {
+            return Err(ElfError::BadVersionRevision(Table::Verdef, version));
+        }
+        self.left = self.left.saturating_sub(1);
+        if self.left > 0 {
+            if next == 0 {
+                return Err(ElfError::VersionCount(Table::Verdef, at));
+            }
+            self.off = advance(at, next).ok_or(bad)?;
+        }
+        Ok(Verdef { offset: at, flags, ndx, cnt, hash, aux, dynm: self.dynm, rd: self.rd })
+    }
+}
+
+impl<'a> Iterator for Verdefs<'a> {
+    type Item = Result<Verdef<'a>, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done || self.left == 0 {
+            return None;
+        }
+        let r = self.step();
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+/// One name of a version definition (`Elf64_Verdaux`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Verdaux<'a> {
+    /// Offset of the entry in the table.
+    pub offset: usize,
+    /// The name.
+    pub name: &'a [u8],
+}
+
+/// The names of one version definition; yields one error and then stops.
+#[derive(Clone, Debug)]
+pub struct Verdauxes<'a> {
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+    /// Offset of the owning definition (for errors).
+    at: usize,
+    off: Option<usize>,
+    left: u16,
+    done: bool,
+}
+
+impl<'a> Verdauxes<'a> {
+    fn step(&mut self) -> Result<Verdaux<'a>, ElfError> {
+        let at = self.off.ok_or(ElfError::VersionTruncated(Table::Verdef, self.at))?;
+        let bad = ElfError::VersionTruncated(Table::Verdef, at);
+        let name = self.rd.u32(at).ok_or(bad)?;
+        let next = self.rd.u32(at.checked_add(4).ok_or(bad)?).ok_or(bad)?;
+        self.left = self.left.saturating_sub(1);
+        if self.left > 0 {
+            if next == 0 {
+                return Err(ElfError::VersionCount(Table::Verdef, self.at));
+            }
+            self.off = Some(advance(at, next).ok_or(bad)?);
+        }
+        Ok(Verdaux { offset: at, name: self.dynm.string(u64::from(name))? })
+    }
+}
+
+impl<'a> Iterator for Verdauxes<'a> {
+    type Item = Result<Verdaux<'a>, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done || self.left == 0 {
+            return None;
+        }
+        let r = self.step();
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+/// One version requirement (`Elf64_Verneed`): a needed file and the versions required of it.
+#[derive(Clone, Copy, Debug)]
+pub struct Verneed<'a> {
+    /// Offset of the entry in the table.
+    pub offset: usize,
+    /// `vn_cnt`: the number of required versions.
+    pub cnt: u16,
+    /// The file name (`vn_file`).
+    pub file: &'a [u8],
+    aux: u32,
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+}
+
+impl<'a> Verneed<'a> {
+    /// The required versions (`Elf64_Vernaux`). Yields one error and stops.
+    #[must_use]
+    pub fn auxes(&self) -> Vernauxes<'a> {
+        Vernauxes { dynm: self.dynm, rd: self.rd, at: self.offset, off: advance(self.offset, self.aux), left: self.cnt, done: false }
+    }
+}
+
+/// The version requirements; yields one error and then stops.
+#[derive(Clone, Debug)]
+pub struct Verneeds<'a> {
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+    off: usize,
+    left: u64,
+    done: bool,
+}
+
+impl<'a> Verneeds<'a> {
+    fn step(&mut self) -> Result<Verneed<'a>, ElfError> {
+        let at = self.off;
+        let bad = ElfError::VersionTruncated(Table::Verneed, at);
+        let f32 = |o: usize| self.rd.u32(at.checked_add(o)?);
+        let version = self.rd.u16(at).ok_or(bad)?;
+        let cnt = self.rd.u16(at.checked_add(2).ok_or(bad)?).ok_or(bad)?;
+        let (file, aux, next) = (f32(4).ok_or(bad)?, f32(8).ok_or(bad)?, f32(12).ok_or(bad)?);
+        if version != VER_CURRENT {
+            return Err(ElfError::BadVersionRevision(Table::Verneed, version));
+        }
+        self.left = self.left.saturating_sub(1);
+        if self.left > 0 {
+            if next == 0 {
+                return Err(ElfError::VersionCount(Table::Verneed, at));
+            }
+            self.off = advance(at, next).ok_or(bad)?;
+        }
+        Ok(Verneed { offset: at, cnt, file: self.dynm.string(u64::from(file))?, aux, dynm: self.dynm, rd: self.rd })
+    }
+}
+
+impl<'a> Iterator for Verneeds<'a> {
+    type Item = Result<Verneed<'a>, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done || self.left == 0 {
+            return None;
+        }
+        let r = self.step();
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+/// One required version (`Elf64_Vernaux`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Vernaux<'a> {
+    /// Offset of the entry in the table.
+    pub offset: usize,
+    /// `vna_hash`.
+    pub hash: u32,
+    /// `vna_flags` (`VER_FLG_WEAK` 2).
+    pub flags: u16,
+    /// `vna_other`: the version index `versym` entries use.
+    pub other: u16,
+    /// The version name.
+    pub name: &'a [u8],
+}
+
+/// The required versions of one file; yields one error and then stops.
+#[derive(Clone, Debug)]
+pub struct Vernauxes<'a> {
+    dynm: Dynamic<'a>,
+    rd: Rd<'a>,
+    at: usize,
+    off: Option<usize>,
+    left: u16,
+    done: bool,
+}
+
+impl<'a> Vernauxes<'a> {
+    fn step(&mut self) -> Result<Vernaux<'a>, ElfError> {
+        let at = self.off.ok_or(ElfError::VersionTruncated(Table::Verneed, self.at))?;
+        let bad = ElfError::VersionTruncated(Table::Verneed, at);
+        let f32 = |o: usize| self.rd.u32(at.checked_add(o)?);
+        let hash = self.rd.u32(at).ok_or(bad)?;
+        let flags = self.rd.u16(at.checked_add(4).ok_or(bad)?).ok_or(bad)?;
+        let other = self.rd.u16(at.checked_add(6).ok_or(bad)?).ok_or(bad)?;
+        let (name, next) = (f32(8).ok_or(bad)?, f32(12).ok_or(bad)?);
+        self.left = self.left.saturating_sub(1);
+        if self.left > 0 {
+            if next == 0 {
+                return Err(ElfError::VersionCount(Table::Verneed, self.at));
+            }
+            self.off = Some(advance(at, next).ok_or(bad)?);
+        }
+        Ok(Vernaux { offset: at, hash, flags, other, name: self.dynm.string(u64::from(name))? })
+    }
+}
+
+impl<'a> Iterator for Vernauxes<'a> {
+    type Item = Result<Vernaux<'a>, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done || self.left == 0 {
+            return None;
+        }
+        let r = self.step();
+        self.done = r.is_err();
+        Some(r)
+    }
+}
+
+/// One RELA relocation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rela {
+    /// `r_offset`: the address of the field to relocate.
+    pub offset: u64,
+    /// The symbol index (`r_info >> 32`).
+    pub sym: u32,
+    /// The raw type (`r_info & 0xffff_ffff`), for diagnostics only: code matches on `kind`.
+    pub r_type: u32,
+    /// The type as the architecture classifies it (an unknown type is `Unsupported`).
+    pub kind: RelocKind,
+    /// `r_addend`.
+    pub addend: i64,
+}
+
+/// The entries of a RELA table, in order. The table was range-checked when made, so items cannot fail.
+#[derive(Clone, Debug)]
+pub struct Relas<'a, A: Arch> {
+    rd: Rd<'a>,
+    off: usize,
+    arch: PhantomData<A>,
+}
+
+impl<'a, A: Arch> Relas<'a, A> {
+    /// The number of entries in the table.
+    #[must_use]
+    pub fn entry_count(&self) -> usize {
+        self.rd.b.len().checked_div(RELA_SIZE).unwrap_or(0)
+    }
+}
+
+impl<A: Arch> Iterator for Relas<'_, A> {
+    type Item = Rela;
+    fn next(&mut self) -> Option<Rela> {
+        let at = self.off;
+        let offset = self.rd.u64(at)?;
+        let info = self.rd.u64(at.checked_add(8)?)?;
+        let addend = i64::from_ne_bytes(self.rd.u64(at.checked_add(16)?)?.to_ne_bytes());
+        self.off = at.checked_add(RELA_SIZE)?;
+        let r_type = u32::try_from(info & 0xffff_ffff).ok()?;
+        let sym = u32::try_from(info.checked_shr(32)?).ok()?;
+        Some(Rela { offset, sym, r_type, kind: A::classify(r_type), addend })
+    }
+}
+
+/// The bytes one RELR bitmap covers: 63 words of 8 bytes; the next bitmap starts after them.
+const RELR_BITMAP_SPAN: u64 = 504;
+
+/// The addresses a RELR table names, in order: an even entry is an address, an odd entry a bitmap of
+/// the 63 words after the previous address or bitmap. Yields one error and then stops.
+#[derive(Clone, Debug)]
+pub struct Relrs<'a> {
+    rd: Rd<'a>,
+    idx: usize,
+    /// Where the next bitmap's first bit points (`None`: no address entry yet; `Err`: past the address space).
+    base: Option<Result<u64, ElfError>>,
+    /// The current bitmap's remaining bits (bit 0 = `bit_base`).
+    bits: u64,
+    bit_base: u64,
+    /// Entry index of the current bitmap (for errors).
+    bit_idx: usize,
+    done: bool,
+}
+
+impl Relrs<'_> {
+    fn step(&mut self) -> Option<Result<u64, ElfError>> {
+        loop {
+            if self.bits != 0 {
+                let k = self.bits.trailing_zeros();
+                self.bits &= self.bits.wrapping_sub(1);
+                let addr = u64::from(k).checked_mul(8).and_then(|d| self.bit_base.checked_add(d));
+                return Some(addr.ok_or(ElfError::RelrOverflow(self.bit_idx)));
+            }
+            let i = self.idx;
+            let e = self.rd.u64(i.checked_mul(RELR_SIZE)?)?;
+            self.idx = i.checked_add(1)?;
+            if e & 1 == 0 {
+                self.base = Some(e.checked_add(8).ok_or(ElfError::RelrOverflow(i)));
+                return Some(Ok(e));
+            }
+            let base = match self.base {
+                None => return Some(Err(ElfError::RelrNoBase(i))),
+                Some(Err(_)) => return Some(Err(ElfError::RelrOverflow(i))),
+                Some(Ok(b)) => b,
+            };
+            self.bits = e.checked_shr(1).unwrap_or(0);
+            self.bit_base = base;
+            self.bit_idx = i;
+            self.base = Some(base.checked_add(RELR_BITMAP_SPAN).ok_or(ElfError::RelrOverflow(i)));
+        }
+    }
+}
+
+impl Iterator for Relrs<'_> {
+    type Item = Result<u64, ElfError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        let r = self.step()?;
         self.done = r.is_err();
         Some(r)
     }

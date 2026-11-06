@@ -1,0 +1,12 @@
+# SSE2-COPY-MID-SPLIT plants (D-4.61: the SSE2 129-256 copy stores six 16-byte blocks per end for 129-192):
+# run with `cargo xtask plants handoff/SSE2-COPY-MID-SPLIT-plants.txt --dir <new RAM dir>`
+# The split one size high: 193 takes six blocks per end and misses byte 96.
+split-193 | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_sse2:\n)\tcmpq \$192, %rdx/$1\tcmpq \$193, %rdx/s | cargo test -p liella-boundary --test small_copy moves_of_128_to_193 | msg:sse2 (checked|folded) \w+ n 193 shift
+# The split condition inverted: 193-256 takes six blocks per end and misses the middle.
+split-inverted | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_sse2:\n\tcmpq \$192, %rdx\n)\tjbe \.Lmove_129_192_sse2\n/$1\tja .Lmove_129_192_sse2\n/s | cargo test -p liella-boundary --test small_copy moves_of_128_to_193 | msg:sse2 (checked|folded) \w+ n 193 shift
+# A store before the tail loads (the ORDER): an overlapping move reads a byte it already overwrote.
+store-before-tail | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_192_sse2:\n.*?)(\tmovups -96\(%rsi,%rdx\), %xmm6\n)/$1\tmovups %xmm0, (%rdi)\n$2/s | cargo test -p liella-boundary --test small_copy moves_of_128_to_193 | msg:sse2 (checked|folded) \w+ n 1[0-9][0-9] shift
+# A tail block read one byte off.
+tail-offset | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_192_sse2:\n.*?)-96\(%rsi,%rdx\), %xmm6/$1-95(%rsi,%rdx), %xmm6/s | cargo test -p liella-boundary --test small_copy copies_match_a_byte_loop_at_every_size_alignment_pair | msg:sse2 (checked|folded) \w+ n 1[0-9][0-9] src
+# A head store dropped: [80, 96) is left unwritten once the tail no longer reaches it (n above 176).
+head-store-dropped | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_192_sse2:\n.*?)\tmovups %xmm5, 80\(%rdi\)\n/$1/s | cargo test -p liella-boundary --test small_copy copies_match_a_byte_loop_at_every_size_alignment_pair | msg:sse2 (checked|folded) \w+ n 1(7[7-9]|8[0-9]|9[0-2]) src

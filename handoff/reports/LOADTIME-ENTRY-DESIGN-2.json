@@ -1,0 +1,21 @@
+{"task": "LOADTIME-ENTRY-DESIGN-2", "model": "opus", "tokens": null,
+ "result": "Design addendum: M6 (two pre-built R+X pages, one mremap swap behind a pagemap guard) replaces M4. Probes show M4's mprotect-to-exec refused (EACCES) under PR_SET_MDWE and systemd MemoryDenyWriteExecute; M6 works under all probed policies, static and PIE, Linux 6.8 and 7.0",
+ "branch": "task/loadtime-entry-design-2", "head": "e774f024",
+ "gate": {"affected": "design only (no code); cargo xtask static rc=0", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["loadtime-entry-design-2-probe-mei", "loadtime-entry-design-2-probe2-mei", "loadtime-entry-design-2-static", "loadtime-entry-design-2-probe-keke (queued, cancelled before start)"],
+ "rulings": [
+  {"item": "Swap a read+exec text page at start-up with mremap (M6, no write, no exec gain)", "recommendation": "approve; replaces M4's ruling 1"},
+  {"item": "4 system calls and +2 VMAs per process on the AVX2 class", "recommendation": "accept unless CLASSED-SLOT-INFRA's start-up row measures worse"},
+  {"item": "Guard when /proc is unavailable", "recommendation": "keep SSE2 (always correct; avoids the debugger-breakpoint crash)"},
+  {"item": "Diagnostics: perf annotate/core files show SSE2 bytes; uprobes on the exported symbol miss after the swap", "recommendation": "accept with a debugging note (story 7)"}
+ ],
+ "informational": [
+  "gdb: a breakpoint set before run is lost at a start-up page swap, and a later stop writes the stale byte into the moved page (SIGSEGV); affects M4 and M6; the pagemap guard prevents it (probed)",
+  "systemd 255 applies MemoryDenyWriteExecute= through PR_SET_MDWE in the user manager (PR_GET_MDWE=1, Seccomp 0)",
+  "SELinux execmod, seccomp-form MDWE (<6.3) and PaX: documented only, UNTESTED; root-only SELinux command in doc 5.2"
+ ],
+ "refused": [],
+ "improvement": "jobrun on a busy host queues a 1-minute probe behind full gates (45 min on one host); a small-job lane (e.g. kind=probe at 1 core) would let design probes run on a second host without waiting",
+ "next_step": "Rule on the four items, then cut CLASSED-SLOT-INFRA (doc section 4 story 1) with the debugging note",
+ "report_file": "handoff/loadtime-entry-design.md"}

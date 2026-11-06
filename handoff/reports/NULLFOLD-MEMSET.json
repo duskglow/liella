@@ -1,0 +1,12 @@
+{"task": "NULLFOLD-MEMSET", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: memset/__memset_chk 65-256 NULL-folded (D-4.60); gate and plants green; instr -2/-3 at 128/144-256; timing 128 faster on N100 and Ivy Bridge, but memset_256 slower on the N100 (3.78 -> 4.19 ns, 4/4 rounds), cause unexplained",
+ "branch": "task/nullfold-memset", "head": "a45d7f3f",
+ "gate": {"affected": "affected: ok (shiki nullfold-memset-gate rc 0, direct tier --base origin/next)", "peak": "16G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "memset_256 slower on the N100 with 3 fewer instructions (Ivy Bridge equal, 128 faster on both)", "recommendation": "continuation: profile cycles and test the 129-256 body's alignment; if not layout, land the 65-128 fold alone"}],
+ "informational": ["The bench did not swap to the AVX2 page under GLIBC_TUNABLES=liella.compat.no_classed_swap=0 (counts equal page 0's), so page-1 counts were not taken; page 1 correctness is tested in classed_slots.", "Plant tool: perl interpolates '@:' in a pattern; write \\x40 for '@' in fold.S label patterns.", "The internal fill (D-X.15) has no NULL test to fold; every fill above 256 keeps its explicit test."],
+ "refused": [],
+ "improvement": "plants.md could warn that perl interpolates @: and @ before a newline in perl: patterns (cost two dry-run calls here); a bench flag to force the classed swap would let page-1 counts run",
+ "next_step": "find the N100 memset_256 slowdown (cycles profile, 129-256 body alignment), re-time 128/144/256 on the N100, then land",
+ "report_file": "handoff/NULLFOLD-MEMSET.md",
+ "jobs": ["shiki:nullfold-memset-gate", "shiki:nullfold-memset-plants-2", "shiki:nullfold-memset-counts", "shiki:nullfold-memset-counts-2", "nozomi:nullfold-memset-time-nozomi", "nico:nullfold-memset-time-nico"]}

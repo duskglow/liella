@@ -2378,6 +2378,13 @@ liella_machine_rawmemchr:
 	bsfl %edx, %edx
 	leaq 48(%rdi,%rdx), %rax
 	ret
+	/* PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
+	 * .Lraw_sse_loop (0xa8 bytes on) at entry + 0x3e0, 32-byte aligned, so the 117-byte loop
+	 * spans four 32-byte fetch windows instead of five (at entry + 0x3d0 it did, and
+	 * rawmemchr_4k timed slower on Ivy Bridge). The fill keeps the function's end before the
+	 * next section's 64-byte boundary: nothing after it moves. Assembly fails here if the code
+	 * above grows past this offset; re-check the loop's address after any edit in between. */
+	.org liella_machine_rawmemchr_entry + 0x338, 0xcc
 .Lraw_sse_masked:
 	andl $63, %ecx
 	/* mask64 %rax */
@@ -2848,13 +2855,15 @@ liella_machine_memchr:
 	addq %rdi, %rax
 	ret
 .Lmemchr_sse_head16:
-	/* [s, s + 16) holds no match. Blocks 1-3 ([s + 16, s + 64), inside s's page) fold with por
-	 * whatever n is: with n <= 16 a hit there is at or past n and a miss ends at head_miss's
-	 * n <= 64 test, so no n <= 16 test is spent on the common long calls (SSE2-GAP-4). The fold
-	 * goes into block 3's compare (no copy), so its mask is block 3's own when blocks 1-2 hold
+	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-4.57:
+	 * a 16-byte miss skips the fold below; a long call pays the test and its not-taken
+	 * branch). Blocks 1-3 ([s + 16, s + 64), inside s's page) fold with por whatever n > 16
+	 * is. The fold goes into block 3's compare (no copy), so its mask is block 3's own when blocks 1-2 hold
 	 * no match. A hit is resolved per block (SSE2-GAP-2 measured a combined 48-bit mask: 2 more
 	 * instructions per miss). A match at or past n is outside the region, and then so is every
 	 * later one, so the lowest match decides. */
+	cmpq $16, %rdx
+	jbe .Lmemchr_none
 	movdqu 16(%rdi), %xmm1
 	movdqu 32(%rdi), %xmm2
 	movdqu 48(%rdi), %xmm3
@@ -6025,6 +6034,14 @@ strchrnul:
 	addq $64, %rdi
 	xorl %r11d, %r11d
 	jmp .Lschr_body
+	/* TIMING-COV-STRSCAN-FRONTEND-SSE2 (D-4.59): the AVX2 level's page-end and NULL calls, placed
+	 * before the head so the head's `jae` to it is a 2-byte backward branch (a 6-byte forward one
+	 * before): the head's first 32-byte window then holds its first load too. */
+.Lschrnul_snull:
+	testq %rdi, %rdi
+	jz liella_hot_strchr_null
+	xorl %r11d, %r11d
+	jmp .Lschr_body
 	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, on a 32-byte boundary
 	 * (the padding follows the jmp above and never runs): no second mask test, no second taken
 	 * branch before the SSE2 head (measured on an Ivy Bridge host: the decoded-uop cache delivers
@@ -6048,9 +6065,9 @@ strchrnul:
 	pxor %xmm3, %xmm3
 	movdqu (%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s16
@@ -6059,9 +6076,9 @@ strchrnul:
 .Lschrnul_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s32
@@ -6070,9 +6087,9 @@ strchrnul:
 .Lschrnul_s32:
 	movdqu 32(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s48
@@ -6081,9 +6098,9 @@ strchrnul:
 .Lschrnul_s48:
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
-	pxor %xmm0, %xmm2
-	pminub %xmm1, %xmm2
-	pcmpeqb %xmm3, %xmm2
+	pcmpeqb %xmm0, %xmm2
+	pcmpeqb %xmm3, %xmm1
+	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
 	jz .Lschrnul_s64
@@ -6095,11 +6112,6 @@ strchrnul:
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
-.Lschrnul_snull:
-	testq %rdi, %rdi
-	jz liella_hot_strchr_null
-	xorl %r11d, %r11d
-	jmp .Lschr_body
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
 	.section .text.liella_machine_strchr,"ax",@progbits
 
@@ -6165,6 +6177,12 @@ index:
 	xorl %eax, %eax
 	vzeroupper
 	ret
+	/* The AVX2 level's page-end and NULL calls, before the head for a 2-byte `jae` (as strchrnul's
+	 * .Lschrnul_snull, D-4.59). */
+.Lschr_snullchk:
+	testq %rdi, %rdi
+	jz liella_hot_strchr_null
+	jmp .Lschr_pre1
 	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, 32-byte aligned (as
 	 * strchrnul's .Lschrnul_pre); the AVX2 level's page-end and NULL calls leave at the compare
 	 * to .Lschr_snullchk. */
@@ -6247,9 +6265,6 @@ index:
 	subq $16, %rax
 	movl $1, %r11d
 	jmp .Lschr_next
-.Lschr_snullchk:
-	testq %rdi, %rdi
-	jz liella_hot_strchr_null
 .Lschr_pre1:
 	movl $1, %r11d
 .Lschr_body:
@@ -6890,10 +6905,26 @@ strncmp:
 	xorl %eax, %eax
 	ret
 .Lsnc_hit:
+	/* TIMING-COV-STRSCAN-FRONTEND-SSE2 (D-4.59): a hit before n falls through into the byte step
+	 * (no taken branch), and an equal NUL returns there (no taken branch to a shared ret): the
+	 * decoded-uop cache stops a cycle's delivery at each taken branch. */
 	bsfl %eax, %eax
 	addq %rax, %rcx
 	cmpq %rdx, %rcx
-	jb .Lsnc_byte
+	jae .Lsnc_zero
+.Lsnc_byte:
+	/* One byte at i < n: near a page end, or the deciding byte of a vector step. */
+	movzbl (%rdi,%rcx), %eax
+	movzbl (%rsi,%rcx), %r8d
+	cmpl %r8d, %eax
+	jne .Lsnc_order
+	testl %eax, %eax
+	jnz .Lsnc_bnext
+	ret
+.Lsnc_bnext:
+	incq %rcx
+	cmpq %rdx, %rcx
+	jb .Lsnc_step
 	xorl %eax, %eax
 	ret
 .Lsnc_step16:
@@ -6923,20 +6954,6 @@ strncmp:
 	cmpq %rdx, %rcx
 	jb .Lsnc_step
 	xorl %eax, %eax
-	ret
-.Lsnc_byte:
-	/* One byte at i < n: near a page end, or the deciding byte of a vector step. */
-	movzbl (%rdi,%rcx), %eax
-	movzbl (%rsi,%rcx), %r8d
-	cmpl %r8d, %eax
-	jne .Lsnc_order
-	testl %eax, %eax
-	jz .Lsnc_ret
-	incq %rcx
-	cmpq %rdx, %rcx
-	jb .Lsnc_step
-	xorl %eax, %eax
-.Lsnc_ret:
 	ret
 .Lsnc_order:
 	/* CF = a's byte below b's: -1, else 1. */
