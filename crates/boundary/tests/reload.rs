@@ -272,6 +272,54 @@ fn a_fork_child_reloads_on_its_own() {
 }
 
 #[test]
+fn an_implicit_selection_sees_a_replaced_zone_file_after_the_interval() {
+    // Clauses: s23_6_g_0, s23_6_c_2 (D-23.6, D-7.14's TSC gate): the once-a-second check of the current zone's
+    // file is never skipped for good, however often the zone is used in between (the gate is primed first).
+    if let Some(d) = probe() {
+        let zone = d.join("zone");
+        set("TZ", &format!(":{}", zone.display()));
+        tm::tzset();
+        for _ in 0..1000 {
+            assert_eq!(implicit(), 7200);
+        }
+        replace(Path::new("/usr/share/zoneinfo/Asia/Tokyo"), &zone);
+        // Past the one-second interval (the coarse clock's tick included); no invalidation.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        assert_eq!(implicit(), 32400, "the replaced file is seen by an implicit tzset once the interval has passed");
+        println!("child: ok");
+        return;
+    }
+    let d = scratch::Scratch::dir("reload-interval");
+    zone_fixture(&d);
+    in_child("an_implicit_selection_sees_a_replaced_zone_file_after_the_interval", &d);
+}
+
+#[test]
+fn a_changed_tz_is_seen_by_the_next_implicit_selection() {
+    // Clauses: s23_6_g_0, s23_6_c_0 (D-23.6): a changed `TZ` is compared on every implicit tzset, ahead of the
+    // TSC gate, so it is seen at the next call however recently the zone file was checked.
+    if let Some(d) = probe() {
+        let zone = d.join("zone");
+        let berlin = format!(":{}", zone.display());
+        set("TZ", &berlin);
+        for _ in 0..1000 {
+            assert_eq!(implicit(), 7200);
+        }
+        set("TZ", ":/usr/share/zoneinfo/Asia/Tokyo");
+        assert_eq!(implicit(), 32400, "the changed TZ, at once");
+        set("TZ", &berlin);
+        assert_eq!(implicit(), 7200, "and back, at once");
+        set("TZ", "EST5EDT,M3.2.0,M11.1.0");
+        assert_eq!(implicit(), -4 * 3600, "a rule value");
+        println!("child: ok");
+        return;
+    }
+    let d = scratch::Scratch::dir("reload-tz-change");
+    zone_fixture(&d);
+    in_child("a_changed_tz_is_seen_by_the_next_implicit_selection", &d);
+}
+
+#[test]
 fn the_locale_file_table_is_bounded() {
     // Clauses: s7_2_c_0, s7_1_c_0 (D-7.7, D-X.13): loading more distinct locale files than the
     // tables hold fails those loads cleanly; a load that fails maps nothing (repeating it does

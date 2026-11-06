@@ -8,7 +8,7 @@
 //! owner ruling 2026-10-07, D-7.12), the invalidate calls). The time of the last check is one atomic word kept with the file's record;
 //! reading and writing it takes no lock.
 
-use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use core::sync::atomic::{AtomicU64, Ordering::Acquire, Ordering::Relaxed, Ordering::Release};
 
 use liella_kernel::sys::Sys;
 use liella_kernel::uapi::CLOCK_MONOTONIC_COARSE;
@@ -59,6 +59,45 @@ pub fn tsc_allow(oldest: u64, at: u64) -> u64 {
 /// backwards or wrapped, and a jump of `allow` or more all say no, and the caller reads the clock.
 pub fn tsc_holds(stamp: u64, allow: u64, tsc: u64) -> bool {
     stamp != 0 && tsc >= stamp && tsc.saturating_sub(stamp) < allow
+}
+
+/// The TSC gate in front of a [`LastCheck`] (the D-7.14 rule, used by the time zone's implicit `tzset`,
+/// D-23.6, COLDSTART-SECOND-LATENCY-3): the counter read just before the last clock read that found no
+/// check due (0: none), and the ticks then left of the interval ([`tsc_allow`]). While [`tsc_holds`] says
+/// yes no check can be due, so the clock is not read. Lock-free: `allow` is stored before `stamp` (Release)
+/// and read after it (Acquire), so a new stamp is never paired with an older, longer allowance; an older
+/// stamp with a newer allowance ends earlier than the newer pair.
+#[derive(Debug, Default)]
+pub struct TscGate {
+    stamp: AtomicU64,
+    allow: AtomicU64,
+}
+
+impl TscGate {
+    /// No gate: the next use reads the clock.
+    pub const fn new() -> Self {
+        TscGate { stamp: AtomicU64::new(0), allow: AtomicU64::new(0) }
+    }
+
+    /// Whether `last` is not due for a check, with `tsc` the counter just read (0: none): yes without
+    /// calling `clock` while the gate holds; else `clock` is read once ([`now`]) and, when no check is due,
+    /// the gate restarts from `tsc`. A due check (`false`) leaves the gate as it is: it had already
+    /// expired, or the counter went backwards. A forgotten `last` ([`LastCheck::forget`]) is due at once.
+    pub fn fresh(&self, last: &LastCheck, tsc: u64, clock: impl FnOnce() -> u64) -> bool {
+        let at = last.0.load(Relaxed);
+        if at != 0 && tsc_holds(self.stamp.load(Acquire), self.allow.load(Relaxed), tsc) {
+            return true;
+        }
+        let now = clock();
+        if due(at, now) {
+            return false;
+        }
+        if tsc != 0 {
+            self.allow.store(tsc_allow(at, now), Relaxed);
+            self.stamp.store(tsc, Release);
+        }
+        true
+    }
 }
 
 /// The last check of one file.
@@ -119,6 +158,49 @@ mod tests {
             let ns_at_slowest = u128::from(ticks) * 1_000_000_000 / (1 << 28);
             assert!(ns_at_slowest <= u128::from(INTERVAL_NS - age), "age {age}");
         }
+    }
+
+    // no spec clause (D-7.14 / D-23.6 internal: the gate in front of the zone's once-a-second check)
+    #[test]
+    fn tsc_gate_in_front_of_a_check() {
+        let reads = core::cell::Cell::new(0u32);
+        let clock = |t: u64| {
+            reads.set(reads.get() + 1);
+            t
+        };
+        let last = LastCheck::new();
+        last.checked(1_000);
+        let g = TscGate::new();
+        // No gate yet: the clock is read; not due, so the gate starts from the counter.
+        assert!(g.fresh(&last, 500, || clock(1_000 + 10)));
+        assert_eq!(reads.get(), 1);
+        // Inside the allowance: no clock read.
+        assert!(g.fresh(&last, 501, || clock(1_000 + 20)));
+        assert!(g.fresh(&last, 500 + (1 << 20), || clock(1_000 + 30)));
+        assert_eq!(reads.get(), 1, "the gate held");
+        // Past the allowance: the clock decides, and a due check is reported.
+        assert!(!g.fresh(&last, 500 + TSC_SPAN, || clock(1_000 + INTERVAL_NS)));
+        assert_eq!(reads.get(), 2);
+        // The due check stays due until the caller checks: the gate did not restart.
+        assert!(!g.fresh(&last, 501 + TSC_SPAN, || clock(1_000 + INTERVAL_NS + 1)));
+        assert_eq!(reads.get(), 3);
+        // Checked again: the next use reads the clock and restarts the gate.
+        last.checked(1_000 + INTERVAL_NS + 2);
+        assert!(g.fresh(&last, 600 + TSC_SPAN, || clock(1_000 + INTERVAL_NS + 3)));
+        assert!(g.fresh(&last, 601 + TSC_SPAN, || clock(u64::MAX)));
+        assert_eq!(reads.get(), 4);
+        // A counter that went backwards, or none: the clock is read every time, and a due check is seen.
+        assert!(!g.fresh(&last, 10, || clock(1_000 + 3 * INTERVAL_NS)));
+        assert_eq!(reads.get(), 5);
+        let none = TscGate::new();
+        assert!(none.fresh(&last, 0, || clock(1_000 + INTERVAL_NS + 3)));
+        assert!(!none.fresh(&last, 0, || clock(1_000 + 3 * INTERVAL_NS)));
+        assert_eq!(reads.get(), 7, "no counter: the gate never holds");
+        // Never checked (or forgotten): always due, even while the gate would hold.
+        assert!(g.fresh(&last, 602 + TSC_SPAN, || clock(u64::MAX)), "the gate holds");
+        last.forget();
+        assert!(!g.fresh(&last, 602 + TSC_SPAN, || clock(1_000 + INTERVAL_NS + 4)));
+        assert_eq!(reads.get(), 8);
     }
 
     #[test]
