@@ -178,9 +178,12 @@ fn check_relocatable(path: &Path) -> Result<usize, String> {
     pair(&page0, &page1).map_err(|bad| format!("{} ({member} {name}):\n  {}", path.display(), bad.join("\n  ")))
 }
 
-/// One `objdump -d` line: (address, mnemonic, target, objdump's name for the target) for a direct branch or
-/// call, or an instruction with a RIP-relative operand (objdump's `# <address>` comment).
-fn instruction(line: &str) -> Option<(i64, String, Option<(i64, String)>)> {
+/// An instruction's address, mnemonic, and target with objdump's name for it.
+type Insn = (i64, String, Option<(i64, String)>);
+
+/// One `objdump -d` line: the target is set for a direct branch or call, or an instruction with a RIP-relative
+/// operand (objdump's `# <address>` comment).
+fn instruction(line: &str) -> Option<Insn> {
     let (addr, rest) = line.split_once(":\t")?;
     let addr = hex(addr.trim())?;
     let mut t = rest.split_whitespace().skip_while(|w| matches!(*w, "bnd" | "notrack" | "lock" | "rex" | "rex.W" | "data16" | "cs" | "ds"));
