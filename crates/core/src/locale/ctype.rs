@@ -87,25 +87,7 @@ fn names(item: &'static [u8]) -> impl Iterator<Item = &'static [u8]> {
 
 impl CtypeFile {
     /// Check the file: the magic, the items this module reads, and the tables' headers.
-    #[inline]
     pub fn parse(cat: Category) -> Option<CtypeFile> {
-        CtypeFile::check(cat, true)
-    }
-
-    /// The codeset of `cat` when it is a valid `LC_CTYPE` ([`CtypeFile::parse`] accepts it),
-    /// without deriving the ASCII case flag: candidate selection asks only this, and the
-    /// selected file is parsed once more when the view is built (COLDSTART-SETLOCALE-FIRST).
-    #[inline]
-    pub fn valid_codeset(cat: Category) -> Option<&'static [u8]> {
-        CtypeFile::check(cat, false).map(|f| f.codeset())
-    }
-
-    /// The checks of [`CtypeFile::parse`]: the magic, the items this module reads, and the
-    /// tables' headers; with `derive_case`, also the ASCII case flag (else `false`). Inlined
-    /// into its two callers, so the checks stay on the locale code's text pages (an outlined
-    /// copy measured one more text page fault on the first `setlocale`).
-    #[inline]
-    fn check(cat: Category, derive_case: bool) -> Option<CtypeFile> {
         if cat.magic() != MAGIC || cat.len() <= MAP_OFFSET {
             return None;
         }
@@ -132,9 +114,7 @@ impl CtypeFile {
         if !tables_ok {
             return None;
         }
-        if derive_case {
-            f.ascii_case = f.ascii_case_runs() || f.ascii_case_each();
-        }
+        f.ascii_case = f.ascii_case_runs() || f.ascii_case_each();
         Some(f)
     }
 

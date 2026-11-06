@@ -558,10 +558,8 @@ fn path<'b>(buf: &'b mut [u8; 3 * name::MAX_NAME], parts: &[&[u8]]) -> Option<&'
 /// Whether a candidate's `LC_CTYPE` names the requested codeset (Appendix D.1).
 fn codeset_matches(ctype: Option<&'static [u8]>, codeset: Option<&[u8]>) -> bool {
     let Some(cs) = codeset else { return true };
-    // Validity and the codeset only: the ASCII case flag is derived once, for the selected
-    // file, when the view is built.
-    let Some(f) = ctype.and_then(Category::parse).and_then(CtypeFile::valid_codeset) else { return false };
-    name::same_codeset(f, cs)
+    let Some(f) = ctype.and_then(Category::parse).and_then(CtypeFile::parse) else { return false };
+    name::same_codeset(f.codeset(), cs)
 }
 
 /// The most archive candidates of a name [`FindCache`] keeps (a name has at most a dozen).
