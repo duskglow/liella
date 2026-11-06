@@ -2646,8 +2646,14 @@ liella_machine_memchr:
 	ret
 .Lmemchr_entry:
 	movd %esi, %xmm0
+	/* TIMING-COV-MEMCHR-SHORT-NONAVX2 (D-NEW): ecx >= short_lim here, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page (as strlen's
+	 * SSE2-STRLEN-2): one test for both. The rest is the AVX2 level past 4032 or the SSE2 page
+	 * edge, split by the level. */
+	cmpl $4032, %ecx
+	jbe .Lmemchr_sse2
 	cmpl $0, liella_machine_scan_level(%rip)
-	je .Lmemchr_sse2
+	je .Lmemchr_sse_edge
 	vpbroadcastb %xmm0, %ymm0
 	cmpq $32, %rdx
 	ja .Lmemchr_avx_setup
@@ -2799,11 +2805,10 @@ liella_machine_memchr:
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
 	 * located per 16-byte block with a branch each (STR-K1's measurement). */
 .Lmemchr_sse2:
+	/* Page offset <= 4032 (the entry's test). */
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
-	cmpl $4032, %ecx
-	ja .Lmemchr_sse_edge
 	/* MEMCHR-SSE2 (the AVX2 head's order, MEMCHR-2): [s, s + 64) lies in s's page, so all four
 	 * of its 16-byte blocks may be read whatever n is. Block 0 goes first and alone: a match
 	 * there settles with one compare against n and no branch on n's class. A match at or past n
@@ -2819,13 +2824,16 @@ liella_machine_memchr:
 	addq %rdi, %rax
 	ret
 .Lmemchr_sse_head16:
-	/* [s, s + 16) holds no match. Blocks 1-3 ([s + 16, s + 64), inside s's page) fold with por
-	 * whatever n is: with n <= 16 a hit there is at or past n and a miss ends at head_miss's
-	 * n <= 64 test, so no n <= 16 test is spent on the common long calls (SSE2-GAP-4). The fold
+	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-NEW:
+	 * the two instructions are paid back by the entry's merged level and page test, so a long
+	 * call runs as many as before and a 16-byte miss skips the fold below). Blocks 1-3
+	 * ([s + 16, s + 64), inside s's page) fold with por whatever n > 16 is. The fold
 	 * goes into block 3's compare (no copy), so its mask is block 3's own when blocks 1-2 hold
 	 * no match. A hit is resolved per block (SSE2-GAP-2 measured a combined 48-bit mask: 2 more
 	 * instructions per miss). A match at or past n is outside the region, and then so is every
 	 * later one, so the lowest match decides. */
+	cmpq $16, %rdx
+	jbe .Lmemchr_none
 	movdqu 16(%rdi), %xmm1
 	movdqu 32(%rdi), %xmm2
 	movdqu 48(%rdi), %xmm3
@@ -2918,7 +2926,10 @@ liella_machine_memchr:
 	addq %rdi, %rax
 	ret
 .Lmemchr_sse_edge:
-	/* [s, s + 64) leaves s's page. */
+	/* [s, s + 64) leaves s's page; c is in xmm0's low byte (the entry's movd). */
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	pshufd $0, %xmm0, %xmm0
 	cmpq $16, %rdx
 	ja .Lmemchr_sse_setup
 	cmpl $4080, %ecx

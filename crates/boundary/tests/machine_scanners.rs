@@ -762,6 +762,61 @@ fn bounded_scanners_never_read_outside_the_region() {
     CSys.munmap(lo).unwrap();
 }
 
+/// TIMING-COV-MEMCHR-SHORT-NONAVX2: `memchr` and `memrchr` over every length 0..=80 with no match
+/// and with one match at every position, the region placed at every offset from 144 bytes before
+/// an unmapped page up to its end, and at every offset 0..=80 after an unmapped page. Every byte
+/// outside the region in its page is the target, so a load or an answer outside [s, s + n) shows
+/// (as a wrong answer or a fault), on both dispatch paths (the short SSE2 classes: block 0 alone
+/// for n <= 16, the page-edge vector, the first-block memrchr hit).
+#[test]
+fn short_memchr_and_memrchr_answer_at_every_length_position_and_page_placement() {
+    // Clauses: s4_5_c_1, s4_5_c_2 (D-4.14, D-4.35, P7).
+    let _g = level();
+    let (lo, hi, base) = guarded();
+    let r = CSys.mmap(0, 2 * PAGE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, None, 0).unwrap();
+    let (mut lo2, hi2) = r.split_at(PAGE).ok().unwrap();
+    CSys.mprotect(&mut lo2, PROT_NONE).unwrap();
+    let start = hi2.addr();
+    let end = base + PAGE;
+    let hash = c_int::from(b'#');
+    let mut places: Vec<(usize, usize)> = Vec::new();
+    for k in 1..=144usize {
+        for n in 0..=k.min(80) {
+            places.push((end - k, n));
+        }
+    }
+    for k in 0..=80usize {
+        for n in 0..=80usize {
+            places.push((start + k, n));
+        }
+    }
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        s::memset(base as *mut c_void, hash, PAGE);
+        s::memset(start as *mut c_void, hash, PAGE);
+        for &(p, n) in &places {
+            let v = p as *const c_void;
+            s::memset(p as *mut c_void, c_int::from(b'.'), n);
+            let w = format!("avx2={avx2}, page offset {}, n {n}", p & (PAGE - 1));
+            assert!(s::memchr(v, hash, n).is_null(), "memchr none, {w}");
+            assert!(s::memrchr(v, hash, n).is_null(), "memrchr none, {w}");
+            for pos in 0..n {
+                s::memset((p + pos) as *mut c_void, hash, 1);
+                assert_eq!(s::memchr(v, hash, n) as usize, p + pos, "memchr at {pos}, {w}");
+                assert_eq!(s::memrchr(v, hash, n) as usize, p + pos, "memrchr at {pos}, {w}");
+                s::memset((p + pos) as *mut c_void, c_int::from(b'.'), 1);
+            }
+            s::memset(p as *mut c_void, hash, n);
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+    CSys.munmap(hi2).unwrap();
+    CSys.munmap(lo2).unwrap();
+    CSys.munmap(hi).unwrap();
+    CSys.munmap(lo).unwrap();
+}
+
 /// The sign of `strcmp` on two buffers' strings at `pa` and `pb`.
 fn cmp_at(pa: usize, pb: usize) -> c_int {
     s::strcmp(pa as *const c_char, pb as *const c_char).signum()
