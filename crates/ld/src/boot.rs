@@ -267,8 +267,9 @@ mod tests {
         let r = rela(&[(0x1000, 8, 0x40), (0x1008, 37, 0x99), (0x1018, 0, 0)]);
         let j = rela(&[(0x1020, 8, 0x50)]);
         // 0x1010 (+bias), then bitmap bits 0 and 2 -> 0x1018, 0x1028; then 0x1030 run and bit 62
-        // of the next bitmap -> 0x1038 + 62*8.
-        let rr = words(&[0x1010, 0b1011, 0x1030, 1 | (1 << 63)]);
+        // of the next bitmap -> 0x1038 + 62*8; bit 1 of the bitmap after it -> 0x1038 + 63*8 (a
+        // bitmap covers 63 words: the second one's base tells a 63-word span from 64).
+        let rr = words(&[0x1010, 0b1011, 0x1030, 1 | (1 << 63), 0b11]);
         relocate::<X86_64>(&r, &j, &rr, &mut seg, 0x7000_0000).unwrap();
         assert_eq!(at(&mem, 0), 0x7000_0040);
         assert_eq!(at(&mem, 1), 0, "IRELATIVE waits for pass 2");
@@ -278,7 +279,8 @@ mod tests {
         assert_eq!(at(&mem, 5), 0x7000_0000);
         assert_eq!(at(&mem, 6), 0x7000_0000);
         assert_eq!(at(&mem, 7 + 62), 0x7000_0000);
-        assert_eq!(mem.chunks(8).filter(|w| w != &[0; 8]).count(), 7, "no other word written");
+        assert_eq!(at(&mem, 7 + 63), 0x7000_0000, "the second bitmap starts 63 words on");
+        assert_eq!(mem.chunks(8).filter(|w| w != &[0; 8]).count(), 8, "no other word written");
         assert_eq!(irelative::<X86_64>(&r).collect::<alloc::vec::Vec<_>>(), [(0x1008, 0x99)]);
     }
 

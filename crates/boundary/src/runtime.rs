@@ -74,8 +74,10 @@ fn count_auxv(addr: usize) -> usize {
 
 /// A static program's initial thread: map its static TLS and thread block, copy the TLS image,
 /// set the guards from `AT_RANDOM`, and make it the thread pointer. Returns what the headers
-/// said (the TLS image and the RELRO pages), read once.
-fn initial_thread(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocated>) {
+/// said (the TLS image and the RELRO pages), read once. `PIE`: started by `liella-rcrt1.o`, the
+/// static-PIE start object (D-27.10), which relocates the executable first; the choice is made
+/// at link time, so `liella-crt1.o`'s start pays for no test of the executable's type.
+fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocated>) {
     let as_usize = |v: Option<u64>| v.and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
     let (phdr, phnum) = (as_usize(aux.get(AT_PHDR)), as_usize(aux.get(AT_PHNUM)));
     // UNSAFE(slice): the program headers the kernel mapped with the executable.
@@ -84,7 +86,12 @@ fn initial_thread(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocate
     let words = unsafe { conv::words_at(phdr, phnum.saturating_mul(start::PHDR_WORDS)) };
     let mut prog = start::program(words, phnum, phdr);
     let mut pie = None;
-    if let Some(ehdr) = bootstrap::static_pie_header() {
+    if !PIE {
+        if prog.bias != 0 {
+            // A static PIE must relocate itself before any address in static data is used.
+            die(b"a static PIE starts from liella-rcrt1.o, not liella-crt1.o");
+        }
+    } else if let Some(ehdr) = bootstrap::static_pie_header() {
         // A static PIE relocates itself before any address in its data is used (D-27.10). Until
         // then no diagnostic path that reads relocated data may run: one write, then exit 127.
         let Ok(r) = bootstrap::relocate_self(phdr, phnum, ehdr) else {
@@ -254,8 +261,9 @@ fn addr0(f: Fn0) -> usize {
     f as usize
 }
 
-/// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`.
-pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
+/// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
+/// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
+pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
     let n_args = usize::try_from(argc).unwrap_or(0);
     let argv_addr = argv.expose_provenance();
     let envp = argv_addr.wrapping_add(n_args.wrapping_add(1).wrapping_mul(8));
@@ -277,7 +285,7 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
     let mut relro = None;
     let mut pie = None;
     if static_program {
-        let (prog, relocated) = initial_thread(&aux);
+        let (prog, relocated) = initial_thread::<PIE>(&aux);
         pie = relocated;
         crate::thread::set_tls_image(prog.tls);
         relro = prog.relro;
@@ -353,7 +361,8 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
     // before `.preinit_array`, probe-settled) and before its RELRO is protected.
     // A static PIE's indirect functions are in its dynamic relocation tables (pass 2 of the
     // self-relocator, D-27.10).
-    if let Some(r) = pie.as_ref() {
+    // (`PIE` first: `liella-crt1.o`'s start compiles no test here.)
+    if let Some(r) = if PIE { pie.as_ref() } else { None } {
         if bootstrap::irelative(r).is_err() {
             die(b"static PIE: an IRELATIVE relocation is outside the writable segment");
         }

@@ -48,9 +48,11 @@ root=$(cd "$here/.." && pwd)
 target=${CARGO_TARGET_DIR:-$root/target}
 libc="$target/liella/libc.a"
 crt="$target/liella/liella-crt1.o"
+# A static PIE's start object (D-27.10: its _start relocates the executable first).
+rcrt="$target/liella/liella-rcrt1.o"
 cc=${CC:-cc}
 
-if [ ! -f "$libc" ] || [ ! -f "$crt" ]; then
+if [ ! -f "$libc" ] || [ ! -f "$crt" ] || [ ! -f "$rcrt" ]; then
     count=$(ls "$here"/c/*.c 2>/dev/null | wc -l)
     echo "conformance: SKIPPED ($count C tests; run cargo xtask so to build libc.a and the start object)"
     exit 0
@@ -71,12 +73,12 @@ cflags="-std=c17 -O1 -static -nostdlib -fno-builtin -fstack-protector-strong -Wl
 # A program is relinked only when an input changed. Its key: the products' contents, the headers,
 # the source, the compiler and the flags. The products' hash is cached by their size, mtime and
 # inode, so it is computed once per build of the products, not once per run.
-pstat=$(stat -c '%s %y %i' "$libc" "$crt" | tr '\n' ' ')
+pstat=$(stat -c '%s %y %i' "$libc" "$crt" "$rcrt" | tr '\n' ' ')
 pcache="$here/build/.products.key"
 if [ -f "$pcache" ] && [ "$(sed -n 1p "$pcache")" = "$pstat" ]; then
     phash=$(sed -n 2p "$pcache")
 else
-    phash=$(cat "$libc" "$crt" | sha256sum | cut -d' ' -f1)
+    phash=$(cat "$libc" "$crt" "$rcrt" | sha256sum | cut -d' ' -f1)
     printf '%s\n%s\n' "$pstat" "$phash" > "$pcache.$$" && mv -f "$pcache.$$" "$pcache"
 fi
 ihash=$(cd "$root" && find include -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -d' ' -f1)
@@ -130,11 +132,13 @@ for name in "$@"; do
         flags="$flags -Wl,-z,now -Wl,-z,relro"
     fi
     # LINK-STATIC-PIE: a static PIE that relocates itself at start (D-27.10), its relative
-    # relocations as RELA entries (rela) or packed (relr, -z pack-relative-relocs).
+    # relocations as RELA entries (rela) or packed (relr, -z pack-relative-relocs). It starts from
+    # liella-rcrt1.o, as a -static-pie link with the system's C library starts from its rcrt1.o.
+    start=$crt
     case "$(directive LINK-STATIC-PIE "$src")" in
         "") ;;
-        rela) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /')" ;;
-        relr) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /') -Wl,-z,pack-relative-relocs" ;;
+        rela) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /')"; start=$rcrt ;;
+        relr) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /') -Wl,-z,pack-relative-relocs"; start=$rcrt ;;
         *) echo "conformance: FAIL $name (LINK-STATIC-PIE: rela or relr)"; fail=$((fail + 1)); continue ;;
     esac
     # LINK-HELPERS: dynamic-link mode, reference C library only (Liella has no loader yet).
@@ -170,7 +174,7 @@ for name in "$@"; do
     if [ -n "$dyn" ] || { [ -x "$exe" ] && [ -f "$exe.key" ] && [ "$(cat "$exe.key")" = "$key" ]; }; then
         :   # unchanged: no relink, nothing written
     # shellcheck disable=SC2086
-    elif ! "$comp" $flags -I "$root/include" "$crt" $cxxbegin $lang "$src" $lang_end $cxxlibs $libm "$libc" $unwind -lgcc $cxxend -o "$exe.$$" >"$log" 2>&1 \
+    elif ! "$comp" $flags -I "$root/include" "$start" $cxxbegin $lang "$src" $lang_end $cxxlibs $libm "$libc" $unwind -lgcc $cxxend -o "$exe.$$" >"$log" 2>&1 \
           || ! mv -f "$exe.$$" "$exe" || ! printf '%s\n' "$key" > "$exe.key"; then
         rm -f "$exe.$$" "$exe.key"
         echo "conformance: FAIL $name (does not build; see conformance/build/$name.log)"

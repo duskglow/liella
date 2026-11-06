@@ -13,7 +13,8 @@
 //! 3. The shared object, linked from that archive with the script and soname `libc.so.6`:
 //!    `target/liella/libc.so.6`. Its dynamic symbol table is then checked: every native symbol
 //!    is exported as `name@@LIELLA_NATIVE_<n>`, and no other `liella_` name is exported.
-//! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`; the profiling
+//! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`, and from the
+//!    same file the static-PIE start object `target/liella/liella-rcrt1.o` (D-27.10); the profiling
 //!    start object for `-pg` programs from `csys/start/gcrt1.S`: `target/liella/liella-gcrt1.o`.
 //! 5. Placeholders: `libpthread.so.0` and `libpthread.a` (libpthread is part of libc), and an
 //!    empty `libresolv.a` (D-16.6: libresolv's symbols are in `libc.a`).
@@ -163,6 +164,32 @@ pub fn boot_anchor_errors(readelf: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// D-27.10: the static-PIE start object (`liella-rcrt1.o`) runs before the executable is
+/// relocated, so it has no GOT-typed relocation (a GOT slot still holds a link-time address).
+fn start_object_pc_relative(object: &Path) -> Result<(), String> {
+    let out = Command::new("readelf").args(["-rW"]).arg(object).output().map_err(|e| format!("readelf: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("readelf -r {} failed", object.display()));
+    }
+    start_object_errors(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{}: {e}", object.display()))
+}
+
+/// The check of [`start_object_pc_relative`] on `readelf -rW` text of one object: no relocation
+/// whose type names the GOT, and the call of the relocating start is there.
+pub fn start_object_errors(readelf: &str) -> Result<(), String> {
+    let relocs: Vec<&str> = readelf.lines().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.starts_with("R_"))).collect();
+    if let Some(first) = relocs.iter().find(|l| l.split_whitespace().nth(2).is_some_and(|t| t.contains("GOT"))) {
+        return Err(format!("the static-PIE start object reaches a symbol through the GOT ({}): it runs before relocation (D-27.10)", first.trim()));
+    }
+    if !relocs.iter().any(|l| l.split_whitespace().nth(4) == Some(STATIC_PIE_START)) {
+        return Err(format!("the static-PIE start object does not call {STATIC_PIE_START} (D-27.10)"));
+    }
+    Ok(())
+}
+
+/// The relocating start that `liella-rcrt1.o`'s `_start` calls (D-27.10).
+const STATIC_PIE_START: &str = "liella_start_main_static_pie";
 
 /// Symbols defined (globally) in an archive or object, by `nm`.
 fn defined(path: &Path) -> Result<BTreeSet<String>, String> {
@@ -907,6 +934,11 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let crt1 = tmp_name(&release.join("liella-crt1.o"));
     run(Command::new(&cc).arg("-c").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
     publish(&crt1, &release.join("liella-crt1.o"))?;
+    // The static-PIE start object (D-27.10): the same file, calling the relocating start.
+    let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
+    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
+    start_object_pc_relative(&rcrt1)?;
+    publish(&rcrt1, &release.join("liella-rcrt1.o"))?;
     // The profiling start object for `-pg` programs (GCRT1-START): the same `_start`, plus
     // `__gmon_start__` in `.preinit_array` (monstartup over the text, atexit(_mcleanup)).
     let gcrt1 = tmp_name(&release.join("liella-gcrt1.o"));
@@ -935,7 +967,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let kept: usize = copies.kept.values().sum();
     println!("so: internal copies (D-X.15): {} references to the internal entries (redirected now: {}; made relaxable: {}), {kept} other uses of memcpy/memmove/memset kept", copies.internal, redirected.join(", "), copies.relaxable_internal);
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
-    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-gcrt1.o, libpthread and libresolv placeholders", weak.0, weak.1);
+    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libpthread and libresolv placeholders", weak.0, weak.1);
     run_libm(root, &cargo, &cc, &ar, profile)?;
     check_placement(root, &release)?;
     // After the last product: no build path may be left in any of them (PRODUCT-PATH-REMAP).
@@ -1228,6 +1260,23 @@ mod tests {
         assert!(boot_anchor_errors(other).is_err_and(|e| e.contains("no member defines")));
         let undefined_only = member("R_X86_64_PC32").replace("FUNC    GLOBAL DEFAULT    4", "NOTYPE  GLOBAL DEFAULT  UND");
         assert!(boot_anchor_errors(&undefined_only).is_err(), "a reference to the anchor is not its definition");
+    }
+
+    /// D-27.10 (no spec clause: start-up internals): the static-PIE start object passes with
+    /// PC-relative references to `main` and the relocating start, and fails with a GOT-typed
+    /// one or when it calls `__libc_start_main` instead.
+    #[test]
+    fn static_pie_start_object_is_pc_relative() {
+        let object = |main: &str, start: &str, target: &str| {
+            format!(
+                "\nRelocation section '.rela.text.startup._start' at offset 0x1c8 contains 2 entries:\n    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend\n0000000000000013  0000000500000002 {main}      0000000000000000 main - 4\n0000000000000018  0000000600000004 {start}      0000000000000000 {target} - 4\n"
+            )
+        };
+        assert_eq!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_PLT32", STATIC_PIE_START)), Ok(()));
+        let got_main = start_object_errors(&object("R_X86_64_REX_GOTPCRELX", "R_X86_64_PLT32", STATIC_PIE_START));
+        assert!(got_main.as_ref().is_err_and(|e| e.contains("through the GOT") && e.contains("main")), "{got_main:?}");
+        assert!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_GOTPCRELX", STATIC_PIE_START)).is_err_and(|e| e.contains("through the GOT")));
+        assert!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_PLT32", "__libc_start_main")).is_err_and(|e| e.contains("does not call")));
     }
 
     /// Planted mismatch: the binding check names a symbol whose binding differs from the table, in

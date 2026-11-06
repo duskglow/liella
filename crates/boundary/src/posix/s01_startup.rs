@@ -30,7 +30,16 @@ use crate::runtime::{Fn0, Main};
 export! { runtime "GLIBC_2.34";
 #[cfg(feature = "runtime")]
 pub extern "C" fn __libc_start_main(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> c_int {
-    crate::runtime::start(main, argc, argv, init, fini, rtld_fini, stack_end)
+    crate::runtime::start::<false>(main, argc, argv, init, fini, rtld_fini, stack_end)
+}}
+
+crate::internal_entry! {
+/// The static-PIE start (D-27.10), called by `liella-rcrt1.o`'s `_start` with
+/// `__libc_start_main`'s arguments: the same start, which first relocates the executable. A
+/// `liella_` name, local in `libc.so.6`; only `libc.a` links it.
+#[cfg(feature = "runtime")]
+pub extern "C" fn liella_start_main_static_pie(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> c_int {
+    crate::runtime::start::<true>(main, argc, argv, init, fini, rtld_fini, stack_end)
 }}
 
 export! { runtime "GLIBC_2.2.5";
