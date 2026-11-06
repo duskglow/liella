@@ -50,6 +50,8 @@ AVX2 class).
 **INFORMATIONAL:** the slot tests check results, not which data word a page reads: both biasless data-word plants
 (fold limit, set_mid) survive by result. A static check that page 1's RIP-relative displacements to out-of-page
 symbols equal page 0's plus 4096 (objdump of the classed section) would catch them whatever the link layout.
+Done by CLASSED-SLOT-XREF-CHECK (D-X.34, `cargo xtask classed-xref`, also in `static` and `so`); both plants are real
+plants again (handoff/CLASSED-SLOT-XREF-CHECK.md).
 
 **Exact next step:** read the Skylake-SP timing (above); if memset_144/256 is slower beyond noise there, the
 coordinator rules on ruling #3434 (a per-function AVX2 129-256 body on page 0 without the swap, or land as is); then CLASSED-SLOT-SWAP-COST.
