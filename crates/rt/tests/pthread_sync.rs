@@ -70,6 +70,9 @@ fn every_mutex_type_excludes() {
                         m.mutex().lock(&T, LockWait::Block).unwrap();
                         assert_eq!(inside.fetch_add(1, SeqCst), 0, "kind {kind}: two holders");
                         counter.fetch_add(1, SeqCst);
+                        // MUTEX-MT: whichever path took it (fast or contended), `__count` is
+                        // the recursion depth of a recursive mutex and 0 in the other types.
+                        assert_eq!(m.w[1].load(SeqCst), u32::from(kind == ps::MUTEX_RECURSIVE), "kind {kind}: count word");
                         inside.fetch_sub(1, SeqCst);
                         m.mutex().unlock(&T).unwrap();
                     }
@@ -81,6 +84,32 @@ fn every_mutex_type_excludes() {
         }
         assert_eq!(counter.load(SeqCst), 40_000);
         assert_eq!(m.mutex().destroy(), Ok(()));
+    }
+}
+
+#[test]
+fn only_a_recursive_mutex_keeps_a_count() {
+    // Clauses: s22_4_c_0, s22_4_c_1 (MUTEX-MT: black-box probes show `__count` 0 for normal,
+    // error-checking and adaptive mutexes, held or not, and the depth for a recursive one).
+    for kind in [ps::MUTEX_NORMAL, ps::MUTEX_RECURSIVE, ps::MUTEX_ERRORCHECK, ps::MUTEX_ADAPTIVE] {
+        for alone in [true, false] {
+            let o = Obj::new(10);
+            o.mutex().init(kind, 0);
+            let lock = || if alone { o.mutex().lock(&Alone, LockWait::Block) } else { o.mutex().lock(&T, LockWait::Block) };
+            let unlock = || if alone { o.mutex().unlock(&Alone) } else { o.mutex().unlock(&T) };
+            let rec = kind == ps::MUTEX_RECURSIVE;
+            lock().unwrap();
+            assert_eq!(o.w[1].load(SeqCst), u32::from(rec), "kind {kind} alone {alone}: held once");
+            if rec {
+                lock().unwrap();
+                assert_eq!(o.w[1].load(SeqCst), 2, "kind {kind} alone {alone}: held twice");
+                unlock().unwrap();
+                assert_eq!(o.w[1].load(SeqCst), 1, "kind {kind} alone {alone}: held once again");
+            }
+            unlock().unwrap();
+            assert_eq!(o.w[1].load(SeqCst), 0, "kind {kind} alone {alone}: released");
+            assert_eq!(o.w[0].load(SeqCst), 0, "kind {kind} alone {alone}: lock word");
+        }
     }
 }
 
