@@ -1,59 +1,53 @@
 # CLASSED-SLOT-INFRA handoff (one page)
 
-**State:** branch `task/classed-slot-infra` (cut from `task/loadtime-entry-design-2`, which is not on next yet), code
-commit `bb24a548` (WIP), plus the hand-off commit that adds this file. Status: **INCOMPLETE. Not built and not tested.**
-The dev check was queued on keke role r1. It had not started after about 25 minutes, because CI `ci-instr-*` and the
-libm tier-3 gates held the cores.
+**State:** branch `task/classed-slot-infra-2` (continues `task/classed-slot-infra`; cut from
+`task/loadtime-entry-design-2`, not on next yet). Code head `51cb820c` plus the plants-anchor and
+hand-off commits. Role mei:~/w/s4 (Skylake-SP, AVX2 class).
 
-**Done (code, unverified):**
-* `csys/src/machine/fold.S`: memset is now a two-page classed section, built by the GAS macro
-  `LIELLA_MEMSET_BODY bias, avx2`. Page 0 holds the SSE2 body at `memset`/`liella_machine_memset`. Page 1 holds the
-  AVX2 body at the local `liella_machine_memset_avx2`. Every out-of-page reference is written XREF = `+\bias`. The
-  129-256 flag test is gone from both pages (page 0 is SSE2 there, page 1 AVX2). The `classed_id` slot is at offset
-  4032. The `.org` lines check the page size. The section keeps the name `.text.liella_machine_memset`, so the
-  generated hot-text list still groups it. This is a local detail recorded in D-4.53; the design said
-  `.text.liella_classed`.
-* `crates/boundary/src/classed.rs` holds the class rule (`Features::avx2`, which includes the XCR0 check, and the
-  `-AVX2` tunable), the pagemap guard, the `MREMAP_FIXED` move, and a `mincore` check after a failed move (one retry,
-  then a fatal message). It records the outcome. `runtime.rs` calls it at step 4, right after `cpu::init_with`, in
-  static programs only. Unit tests use a fake `SwapOps` to inject failures.
-* The tunable `liella.compat.no_classed_swap=1` (COMPAT-20, reserved with `ops reserve`), in `crates/core/src/config.rs`,
-  with a unit test.
-* `PrctlInt::SetMdwe`/`GetMdwe` (65/66), `selftest::classed_install` and `selftest::set_mdwe_refuse_exec_gain`.
-* `crates/boundary/tests/classed_slots.rs` runs each case in a forked child (one thread):
-  * memset sweeps on the AVX2 page and on the forced SSE2 page;
-  * COMPAT-20 keeps the SSE2 page;
-  * the guard keeps SSE2 after a byte is written back through `/proc/self/mem`;
-  * the swap under `PR_SET_MDWE`;
-  * after the swap, the live page is still a file page.
-  Each skip prints its reason.
-* Docs: the D-4.53 row (`plan/07-decisions/s04-byte-arrays-and-strings.md`), the COMPAT-20 row
-  (`docs/compat-flags.md`), and the debugging note as section 5.7 of the design doc. The plants are in
-  `handoff/classed-slot-infra-plants.txt` (7 plants, not run): xref-bias, no-guard, guard-inverted, skip-mremap,
-  no-mapped-check, no-xcr0, slot-write.
+**Decisions in force:** D-4.53 (classed entries, M6; section name `.text.liella_machine_memset` kept until
+the next hot-text regen, ruling #3274), COMPAT-20 (`liella.compat.no_classed_swap=1`), rulings #3138-#3141.
 
-**Not done:**
-* No build, clippy, static check or test has run.
-* Jobs not run: the gate, the plants, the counts (`cbench_memref` on the AVX2 class and on Ivy Bridge), and the booked
-  timing on Ivy Bridge and the N100.
-* The start-up row with system calls counted, which the design names, has not been added.
-* The design's static-export conformance test (default and `-AVX2`) and its `PTRACE_TRACEME` guard test are not
-  written. The forked-child tests stand in for them, but no test yet covers the real start-up call.
-* The `docs/tunables.md` row has not been checked.
-* No differences-from-glibc row was added. The design says this is not an ABI difference, but the static check may
-  want a row for COMPAT-20.
+**Run -2 (this run):**
+* The -1 dev job (keke `classed-slot-infra-dev`) had failed at clippy (two `as` conversions). Fixed, plus:
+  io::Error comparison in the guard test, unchecked arithmetic in the unit fake, a `Tunables` literal in
+  `s01_startup_clauses.rs`, `liella_classed_id` missing from `liella_csys.h` (K5), `eprintln!` in raw-fork
+  children (fork-child-alloc; now one raw `write`), and `csys_symbols` (xtask/src/affected.rs), which called
+  fold.S unmappable because of the macro and the slot `#define`s. It now reads past a `.macro` body with no
+  global declaration and only `.L` labels, and a `#define UPPER <number>`. Unit cases added.
+* New `conformance/c/s04_classed_memset.c` (the design's export test, guard test, MDWE test): re-executes
+  itself five times and reads the live page from /proc/self/maps (a one-page mapping one page further into
+  the file, with a hole after it). On the AVX2 class: default AVX2, `-AVX2` SSE2, COMPAT-20 SSE2,
+  PTRACE_TRACEME with one word written back SSE2, PR_SET_MDWE before execve AVX2. All pass, and memset is
+  correct in each start.
+* New bench row `cbench_startup/startup_kinstr_c`: exec to exit, user and kernel instructions together, so
+  the swap's system calls count. strace of one start on the AVX2 class: `openat /proc/self/pagemap`,
+  `pread64` 16 bytes, `close`, `mremap(0x411000 -> 0x410000)`, which is the design's 4 calls.
+* The dev check (dev5) passed clippy, static, the classed unit tests, classed_slots (5 run, none skipped:
+  swap, forced SSE2, COMPAT-20, guard via /proc/self/mem, MDWE), small_copy (9) and config.
+* Plants (`classed-slot-infra-2-plants3`): 7 of 7 CAUGHT. The first xref-bias plant was a biasless read of the fold
+  limit, and it SURVIVED because the limit only picks between paths with the same result. It is now a
+  biasless jump to the AVX2 fill entry.
+* Gate `classed-slot-infra-2-gate`: escalated to FULL by itself (xtask/ and csys header changed). It was still
+  running at hand-back.
+* `docs/tunables.md` now has a row for the COMPAT-20 tunable. No differences row was added: the compat id
+  static check passed without one, and the design says this is not an ABI difference.
 
-**Check these first:**
-* `jz sym+4096` and `cmpq sym+4096(%rip)` assemble as intended (PLT32/PC32 with an addend; every target is hidden).
-* `safe static liella_classed_page0: u8` declared on a text label is accepted.
-* `hot_text_products` still finds `liella_machine_memset` in the hot group.
-* The forked child does not allocate (stack buffers only).
+**Counts, base = origin/next (mei, `classed-slot-infra-2-count-base`), Liella instructions per call (glibc):**
+AVX2 class memset_128 27.3 (24.3), _144 30.3 (32.4), _256 30.4 (32.4), _16 20.3, _64 20.4, _4k 26.8;
+SSE2 class (-AVX2 both sides) _144 39.4 (45.4), _256 39.4 (52.4). startup_instr_c 2154 (121383);
+startup_kinstr_c 166535 AVX2 / 161295 SSE2 (the kernel count varies by a few percent between runs).
+Branch counts: job `classed-slot-infra-2-count-branch` (it runs after the gate in the same shell);
+results are in the report, if it finished before hand-back.
 
-**Exact next step:**
-1. Read the dev log: `ssh claude@10.0.100.53 'grep -E "^error|test result|FAILED|panicked" ~/w/r1-classed-dev.log'`.
-   The job is `classed-slot-infra-dev`; cancel it with `~/bin/kill-label classed-slot-infra-dev --kill`.
-2. Fix any compile errors.
-3. Run the plants: `cargo xtask plants handoff/classed-slot-infra-plants.txt --dir /dev/shm/claude/CLASSED-SLOT-INFRA/plants-1`.
-4. Run the gate, the counts and the start-up row.
+**Open / next step:**
+1. Read `~/logs/classed-slot-infra-2-{gate,plants2,count-branch}.log` on mei. All 7 plants must be CAUGHT.
+   Compare count-branch with the base above. Expected: -2 at 129-256 on the AVX2 class, everything
+   else the same, and startup_instr_c up by about 100 user instructions on AVX2 only.
+2. The start-up bound (ruling #3139): startup_kinstr_c on the AVX2 class, branch against base. The
+   extra cost should be just the 4 calls. If not, DO NOT LAND with the numbers.
+3. The booked timing of memset and the start-up on Ivy Bridge and the N100 (has not run).
 
-**Read:** `docs/design/loadtime-entry.md` section 4 (story 1) and sections 5.3-5.5; D-4.53; D-4.25.
+**Not to redo:** the export, guard and MDWE tests are already in the conformance program. Don't add a
+selftest symbol: libc.a localizes hidden symbols, so a C program cannot call `liella_classed_id`.
+
+**Read:** docs/design/loadtime-entry.md 4 and 5.3-5.7; D-4.53; handoff/classed-slot-infra-plants.txt.
