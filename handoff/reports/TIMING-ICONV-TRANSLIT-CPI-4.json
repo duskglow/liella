@@ -1,0 +1,17 @@
+{"task": "TIMING-ICONV-TRANSLIT-CPI-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: counted ASCII step in the fused UTF-8 -> wide loop; Ivy Bridge A/B vs base: utf16_4k 0.887x time (i 0.810x), 8859-15 0.999x, translit 0.374x (target <= 1.03x met)",
+ "branch": "task/timing-iconv-translit-cpi-4", "head": "see git log (code 4bef1230, docs after)",
+ "gate": {"affected": "1584 passed / 0 failed (5 suites, direct tier, --base origin/next)", "peak": "3.0G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "translit vs the unlanded -3 memo head on Ivy Bridge: 1.053x time at 0.985x instructions (placement in Conv::convert, not profiled); vs base it is 0.374x, so no row of next gets slower",
+  "N100 not timed: booking 49 was still pending at hand-back and was cancelled; stages A, E and ab.sh are staged on the N100 host under ~/work/timing-iconv-translit-cpi-4/",
+  "-3's open 8859-15 +18% instructions came from its out-of-line variants, not the build host: E built on another host than A has 8859-15 i 0.999x",
+  "cargo xtask bench --compare does not accept --rows (only the A/B mode does); the counts job ran the whole cbench_locale binary"
+ ],
+ "refused": [],
+ "improvement": "The A/B tool could take --rows in --compare mode too; the first counts job was lost to that, and a full cbench_locale count costs 10 min",
+ "next_step": "Optional: time the staged A/E on the N100 in the next timing sweep; perf stat translit B2 vs E if the 5% vs the memo head matters",
+ "report_file": "handoff/TIMING-ICONV-TRANSLIT-CPI.md",
+ "jobs": ["timing-iconv-translit-cpi-4-gate", "timing-iconv-translit-cpi-4-plants", "timing-iconv-translit-cpi-4-counts-2", "nico:timing-iconv-translit-cpi-4-ivb", "nico:timing-iconv-translit-cpi-4-ivb-b2"]}
