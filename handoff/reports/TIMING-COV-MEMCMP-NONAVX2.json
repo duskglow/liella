@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-MEMCMP-NONAVX2", "model": "opus", "tokens": null,
+ "result": "SSE2 head probe first in memcmp 65-128/long and SSE2 asm equality classes (33-64, 65-128, long) for bcmp/__memcmpeq: no SSE2 row slower than base, eq/tail rows <= glibc, memcmp_256 1.03; head/diff8 rows still 1.15-1.46 (target not reached); AVX2 rows identical",
+ "branch": "task/timing-cov-memcmp-nonavx2", "head": "see git (handoff commit on 092dc543)",
+ "gate": {"affected": "tcmn-gate-2 (kanon) pending at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "NULL folding for the SSE2 65-2048 compare/equality classes (as D-4.52 for AVX2): -4 instructions per call above 64 without AVX2", "recommendation": "allow if SIGSEGV for NULL at those sizes is acceptable without AVX2, as it is with AVX2"}],
+ "informational": ["memcmp head/diff8 above 64 without AVX2 floor at ~38 vs glibc 26: the shared entry ladder (8) and S6 NULL tests (4); a separately dispatched SSE2 entry is the larger lever (not tried)", "meq/bcmp 17-32 (1.14) is the AVX2-shared class, left as PARITY-MEMCMP-SMALL-EQ left it", "Rust liella_hot_equal_tail now unreferenced by the kernels", "booked timing (Ivy Bridge, AVX2 class) not run: context budget"],
+ "refused": [],
+ "improvement": "wl_percall's base column (with wl_prime_base) gave before/after/glibc in one job per build; briefs could say so instead of asking for separate before/after jobs",
+ "next_step": "book timing of the brief rows (Ivy Bridge: nico or kotori; AVX2 class: nozomi) from cargo xtask bench --stage on kn1",
+ "report_file": "handoff/timing-cov-memcmp-nonavx2.md",
+ "jobs": ["kanon:tcmn-gate-2", "kanon:tcmn-plants-2", "kanon:tcmn-percall-sse2-2", "kanon:tcmn-percall-avx2"]}
