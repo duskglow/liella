@@ -120,6 +120,17 @@ pub struct Mutex<'a> {
     entry: usize,
 }
 
+/// What [`Mutex::unlock_fast_deferred`] did.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FastUnlock {
+    /// Released (or one recursion level less); nothing more to do.
+    Done,
+    /// Released; a waiter was marked: call [`Mutex::wake_one`].
+    Wake,
+    /// Nothing was changed: call [`Mutex::unlock`].
+    Slow,
+}
+
 /// How a lock attempt waits.
 #[derive(Clone, Copy)]
 pub enum LockWait<'t> {
@@ -181,80 +192,137 @@ impl<'a> Mutex<'a> {
             let k = kind.load(Relaxed);
             // MUTEX-3: the TID first (nothing changed yet if it needs a system call).
             let Some(tid) = c.fast_tid() else { return false };
-            // MUTEX-2: the only thread takes a free private mutex without a LOCK-prefixed CAS
-            // (no other thread can race it; a signal handler that takes and releases it between
-            // the load and the store leaves it free again). The compiler fences keep the
-            // critical section's accesses between the two stores (no CPU fence: one thread).
-            // A held one goes on to the recursive check below without a CAS that must fail.
-            if k & !3 == 0
-                && if c.alone() {
-                    lock.load(Relaxed) == 0 && {
-                        lock.store(1, Relaxed);
-                        compiler_fence(SeqCst);
-                        true
-                    }
-                } else {
-                    lock.compare_exchange(0, 1, Acquire, Relaxed).is_ok()
-                }
-            {
-                owner.store(tid, Relaxed);
-                count.store(1, Relaxed);
-                return true;
-            }
-            // MUTEX-FAST: a recursive mutex the caller already holds, below the count limit:
-            // one more level, exactly as `lock` counts it (no atomic read-modify-write: only the
-            // owner writes `__count`). `lock` reports EAGAIN at the limit.
-            if k == MUTEX_RECURSIVE && owner.load(Relaxed) == tid && lock.load(Relaxed) != 0 {
-                let n = count.load(Relaxed);
-                if n != u32::MAX {
-                    count.store(n + 1, Relaxed);
+            // MUTEX-MT: `__count` is the recursion depth, kept by recursive mutexes only (the
+            // probes show 0 there for the other types, held or not). The type is split
+            // off BEFORE the acquire, so neither path tests it again after the CAS (a test there
+            // kept `k` live and LLVM folded the entry tests into setcc chains: +3 instructions
+            // on the recursive rows), and the other types store nothing to `__count` (one store
+            // fewer for the next LOCK-prefixed instruction to drain).
+            // A normal mutex (0) takes the plain path after one compare (below 1); a recursive
+            // one (1) is the equal case of the same compare; error-checking and adaptive (2, 3)
+            // test the type range once more.
+            if k == MUTEX_NORMAL || (k != MUTEX_RECURSIVE && k & !3 == 0) {
+                if Self::acquire_free(lock, c) {
+                    owner.store(tid, Relaxed);
                     return true;
+                }
+                return false;
+            }
+            if k == MUTEX_RECURSIVE {
+                if Self::acquire_free(lock, c) {
+                    owner.store(tid, Relaxed);
+                    count.store(1, Relaxed);
+                    return true;
+                }
+                // MUTEX-FAST: a recursive mutex the caller already holds, below the count
+                // limit: one more level, exactly as `lock` counts it (no atomic
+                // read-modify-write: only the owner writes `__count`). `lock` reports EAGAIN at
+                // the limit.
+                if owner.load(Relaxed) == tid && lock.load(Relaxed) != 0 {
+                    let n = count.load(Relaxed);
+                    if n != u32::MAX {
+                        count.store(n + 1, Relaxed);
+                        return true;
+                    }
                 }
             }
         }
         false
     }
 
+    /// Takes a free plain private mutex word (0 -> 1) for [`Mutex::lock_fast`]; `false`: it
+    /// was held (nothing changed).
+    // MUTEX-2: the only thread takes a free private mutex without a LOCK-prefixed CAS (no other
+    // thread can race it; a signal handler that takes and releases it between the load and the
+    // store leaves it free again). The compiler fences keep the critical section's accesses
+    // between the two stores (no CPU fence: one thread). A held one goes on without a CAS that
+    // must fail.
+    #[inline(always)]
+    fn acquire_free<C: Ctx>(lock: &AtomicU32, c: &C) -> bool {
+        if c.alone() {
+            lock.load(Relaxed) == 0 && {
+                lock.store(1, Relaxed);
+                compiler_fence(SeqCst);
+                true
+            }
+        } else {
+            lock.compare_exchange(0, 1, Acquire, Relaxed).is_ok()
+        }
+    }
+
+    /// The common case of [`Mutex::unlock`] (TINY-HOT): [`Mutex::unlock_fast_deferred`], with
+    /// the waiter's wake made here. `false`: nothing was changed; call `unlock`.
+    #[inline(always)]
+    pub fn unlock_fast<C: Ctx>(&self, c: &C) -> bool {
+        match self.unlock_fast_deferred(c) {
+            FastUnlock::Done => true,
+            FastUnlock::Wake => {
+                self.wake_one(c);
+                true
+            }
+            FastUnlock::Slow => false,
+        }
+    }
+
     /// The common case of [`Mutex::unlock`] (TINY-HOT): a plain mutex (as in `lock_fast`)
     /// released for good: a normal or adaptive one, or a recursive or error-checking one the
-    /// caller holds once, exactly as `unlock` releases it. `false`: nothing was changed (not the
-    /// owner: `unlock` reports EPERM; a recursion count above 1; another type); call `unlock`.
+    /// caller holds once, exactly as `unlock` releases it; or a recursive one the caller holds
+    /// more than once, one level less. [`FastUnlock::Wake`]: released, and a waiter was marked:
+    /// the caller must call [`Mutex::wake_one`] (MUTEX-MT: the wake's call then shares the
+    /// export's one cold call site, so the fast path needs no stack frame and pushes nothing
+    /// ahead of its `xchg`). [`FastUnlock::Slow`]: nothing was changed (not the owner: `unlock`
+    /// reports EPERM; another type); call `unlock`.
     // MUTEX-5: `always`: LLVM kept `unlock_fast` out of line (two callers), a call and a
     // saved register on every release.
     #[inline(always)]
-    pub fn unlock_fast<C: Ctx>(&self, c: &C) -> bool {
+    pub fn unlock_fast_deferred<C: Ctx>(&self, c: &C) -> FastUnlock {
         if let [lock, count, owner, _, kind, ..] = self.words {
             let k = kind.load(Relaxed);
-            if k & !3 == 0
-                && (k == MUTEX_NORMAL
-                    || k == MUTEX_ADAPTIVE
-                    || (c.fast_tid() == Some(owner.load(Relaxed)) && lock.load(Relaxed) != 0 && (k != MUTEX_RECURSIVE || count.load(Relaxed) <= 1)))
-            {
-                owner.store(0, Relaxed);
-                count.store(0, Relaxed);
-                // MUTEX-2: the only thread releases with a plain store (see `lock_fast`); a
-                // waiter mark (2, e.g. left in a fork child) takes the general release below.
-                if c.alone() && lock.load(Relaxed) == 1 {
-                    compiler_fence(SeqCst);
-                    lock.store(0, Relaxed);
-                    return true;
-                }
-                if lock.swap(0, Release) == 2 {
-                    let _ = futex::wake(c.sys(), lock, 1, Scope::Private);
-                }
-                return true;
+            if k & !3 != 0 {
+                return FastUnlock::Slow;
             }
-            // MUTEX-FAST: a recursive mutex the caller holds more than once: one level less,
-            // still held (as `unlock` does it; owner-only, so a plain store).
-            if k == MUTEX_RECURSIVE && c.fast_tid() == Some(owner.load(Relaxed)) && lock.load(Relaxed) != 0 {
-                let n = count.load(Relaxed);
-                if n > 1 {
-                    count.store(n - 1, Relaxed);
-                    return true;
+            if k != MUTEX_NORMAL && k != MUTEX_ADAPTIVE {
+                // Error-checking or recursive: only the owner may release it.
+                // MUTEX-MT: the TID's test before the owner's compare (comparing the Options
+                // made LLVM build the result with setcc and test it again: +3 instructions).
+                let Some(tid) = c.fast_tid() else { return FastUnlock::Slow };
+                if owner.load(Relaxed) != tid || lock.load(Relaxed) == 0 {
+                    return FastUnlock::Slow;
+                }
+                // MUTEX-MT: `__count` is kept by recursive mutexes only (see `lock_fast`).
+                if k == MUTEX_RECURSIVE {
+                    let n = count.load(Relaxed);
+                    // MUTEX-FAST: held more than once: one level less, still held (as `unlock`
+                    // does it; owner-only, so a plain store).
+                    if n > 1 {
+                        count.store(n - 1, Relaxed);
+                        return FastUnlock::Done;
+                    }
+                    count.store(0, Relaxed);
                 }
             }
+            owner.store(0, Relaxed);
+            // MUTEX-2: the only thread releases with a plain store (see `lock_fast`); a
+            // waiter mark (2, e.g. left in a fork child) takes the general release below.
+            if c.alone() && lock.load(Relaxed) == 1 {
+                compiler_fence(SeqCst);
+                lock.store(0, Relaxed);
+                return FastUnlock::Done;
+            }
+            // The release and the waiter test in one read-modify-write (the futex protocol's
+            // only one in unlock): 2 means a waiter may sleep on the word.
+            return if lock.swap(0, Release) == 2 { FastUnlock::Wake } else { FastUnlock::Done };
         }
-        false
+        FastUnlock::Slow
+    }
+
+    /// Wakes one waiter of a mutex [`Mutex::unlock_fast_deferred`] released with
+    /// [`FastUnlock::Wake`].
+    #[inline]
+    pub fn wake_one<C: Ctx>(&self, c: &C) {
+        if let Some(lock) = self.words.first() {
+            let _ = futex::wake(c.sys(), lock, 1, Scope::Private);
+        }
     }
 
     /// Locks the mutex: [`Mutex::lock_fast`] for the plain uncontended case (TINY-HOT), else the general path,
@@ -310,7 +378,11 @@ impl<'a> Mutex<'a> {
                 if r.is_ok() {
                     w(self.words, M_OWNER).store(me, Relaxed);
                 }
-                w(self.words, M_COUNT).store(1, Relaxed);
+                // MUTEX-MT: a private plain non-recursive mutex keeps `__count` at 0, as
+                // `lock_fast` leaves it (the probed types); the other kinds as before.
+                if ty == MUTEX_RECURSIVE || kind & !3 != 0 {
+                    w(self.words, M_COUNT).store(1, Relaxed);
+                }
                 r
             }
             Err(e) => Err(e),
