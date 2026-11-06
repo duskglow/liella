@@ -1,51 +1,42 @@
 # DL-BOOT-RELOC (phase 14 DL-4): self-relocator, first used by libc.a's static-PIE start
 
-**State:** branch `task/dl-boot-reloc-2` (stacks on `task/dl-boot-reloc`, base origin/next `349b94d0`), HEAD after
-this handoff's commit. Role shiki:~/w/sh2. INCOMPLETE (budget): static PIEs now start; the gate's
-last run failed at `static` K5 (fixed in `3bf2bbcf`, not rerun); 2 plants survive; static counts not measured.
+**State:** branch `task/dl-boot-reloc-3` (stacks on dl-boot-reloc-2; base origin/next), code head `79821fcf`
+(handoff commit on top). Role shiki:~/w/sh1. Jobs on 79821fcf: shiki `dl-boot-reloc-3-gate-2` (clippy, static,
+`affected --run --base origin/next`; clippy + static passed, affected still running at hand-back) and
+`dl-boot-reloc-3-plants-2` (rc 0: 24 plants, 24 CAUGHT, 0 WARN). Superseded: dl-boot-reloc-3-gate (killed,
+head moved), dl-boot-reloc-3-plants (tls-rebase survived, fixed in 79821fcf).
 
-## Done (DL-BOOT-RELOC-2)
-* Crash cause fixed: the anchor was a weak hidden `_DYNAMIC`, which gcc reaches through a GOT slot that is
-  unrelocated in a static PIE. Now `csys/src/adapter/image_anchor.c` declares `__ehdr_start` hidden and NOT
-  weak (one `R_X86_64_PC32` lea, seen in `readelf -r libc.a`), helper `liella_link_image_header`
-  (prototype in liella_csys.h). `bootstrap::static_pie_header()` relocates only when `e_type == ET_DYN`
-  (`boot::position_independent`); bias = header address minus `Image::header` (p_vaddr of the PT_LOAD at
-  file offset 0); PT_DYNAMIC = bias + p_vaddr. `liella_link_dynamic` removed.
-* Build check: `cargo xtask so` runs `boot_anchor_pc_relative` (so.rs): the member defining the anchor
-  must reference `__ehdr_start` and have no GOT-typed relocation. Unit test
-  `boot_anchor_reference_is_pc_relative`; plant `weak-anchor` (weak declaration) CAUGHT.
-* Unit tests: `dynamic_and_headers` (header search), `position_independent_header`.
-* Pre-existing clippy failures fixed: `len % ent` -> `checked_rem`; three-op unsafe block -> `table()` helper.
-* D-27.10 rule (1) rewritten; design §0a checklist item 9 (pre-relocation references PC-relative, not weak).
-* Job shiki:dl-boot-reloc-2-t1 (head 7d776e68): `so` ok, ld unit 4/4, xtask anchor test ok, conformance
-  `s01_static_pie` (RELR) and `s01_static_pie_rela` (RELA) PASS: each does the 100 starts (50 random,
-  50 ADDR_NO_RANDOMIZE). It ended rc 1 only on the clippy lint above.
+## Done (DL-BOOT-RELOC-3)
+* Cause of the last red (dl-boot-reloc-2-t1 rc 1): clippy `arithmetic_side_effects` in liella-ld, already fixed
+  in ebb71c51; clippy + static clean on the inherited head (job dl-boot-reloc-3-lint, rc 0).
+* **Link-time selection, no runtime test on the non-PIE start** (coordinator item 1): `entry.S` assembled with
+  `-DLIELLA_STATIC_PIE` is the new `target/liella/liella-rcrt1.o`; its `_start` does `leaq main(%rip)` and
+  `call liella_start_main_static_pie` (PC-relative; `cargo xtask so` refuses a GOT-typed relocation in it, unit
+  test `static_pie_start_object_is_pc_relative`). That entry (`internal_entry!`, local in libc.so.6) runs
+  `runtime::start::<true>`; `__libc_start_main` runs `start::<false>`, which compiles neither the ET_DYN test nor
+  the relocation step nor the pass-2 IRELATIVE branch and keeps origin/next's `prog.bias != 0` refusal (message now
+  names liella-rcrt1.o). The conformance runner links LINK-STATIC-PIE programs with liella-rcrt1.o. D-27.10 updated.
+  Static non-PIE instruction delta vs origin/next: zero by construction (same code as origin/next in that
+  instantiation); NOT MEASURED with perf stat (budget).
+* `relr-span` (item 2): the RELR unit test sets a bit in a second consecutive bitmap word (63- vs 64-word span).
+* `tls-rebase` (item 2), cause: the conformance program's `static __thread` variables were never written, so gcc
+  folded them; the linked static PIE had NO PT_TLS (readelf), and the RELRO half of the delta only feeds an
+  mprotect whose failure is ignored by design. Fix: external-linkage `__thread` variables (79821fcf).
+* WARN-NO-MSG (item 3): msg patterns now `conformance FAILED: s01_static_pie(_rela|:)`. Run plants-1 (head
+  5246efe1): 24 plants, 23 CAUGHT, tls-rebase SURVIVED (cause above), 0 WARN.
+* New plants: `rcrt-check-got` (so.rs check), `pie-entry-plain` (rcrt1's entry runs start::<false>).
 
-## Exact next steps (in order)
-1. Rerun the gate on HEAD: `~/bin/jobrun <label> gate -- sh -c ". ~/.cargo/env; ~/bin/gate 16G sh
-   ~/work/DL-BOOT-RELOC-2/gate.sh"` (clippy, static, `affected --run --base origin/next`). clippy was clean
-   in the foreground on ebb71c51; static failed only on K5 (fixed in 3bf2bbcf).
-2. Plants (run dl-boot-reloc-2-plants-2 on ebb71c51: 22 plants, 15 CAUGHT, 2 SURVIVED, 5 WARN-NO-MSG):
-   * `relr-span` SURVIVED: the unit test never sets bitmap bit 62 far enough to tell 63*8 from 64*8 spans;
-     add a RELR case with two bitmap words (the second word's base depends on the span).
-   * `tls-rebase` SURVIVED: `delta = 0` passed the RELA conformance program; find out why the TLS image
-     copy still works (does `start::program` already give the right TLS address, or does the program's TLS
-     check not read the image?). Fix the test or remove dead code. Do not loosen the plant.
-   * WARN-NO-MSG on relr-skip-word, no-relocate, pie-type-run, irelative-skip, irelative-bias: the
-     conformance runner's failure text is not `FAIL s01_static_pie...`; read one log under
-     /mnt/zram/claude/DL-BOOT-RELOC-2/plants-2/logs/ and fix the `msg:` regex.
-3. Static non-PIE counts (INVIOLABLE): NOT MEASURED. `validation/wl_count.sh --base 349b94d0... . seq du`
-   on shiki fails with `wl_prep: no link command for seq` (the workload kit tree is missing on that host;
-   base source is primed there). Run it on a host with the kit (the script says it measures on the Zen 1
-   host). Expected change on the non-PIE path: one direct call to the anchor (lea, ret), a 2-byte load and a
-   compare, in place of the old call + test: a few instructions per process start.
+## Open / next
+1. If gate-2 / plants-2 are red: fix, run only the failing suite.
+2. docs/toolchain.md (and README) should tell users that a static PIE links liella-rcrt1.o (not done: it would
+   have moved the head after the jobs started). Small docs follow-up.
+3. Optional: a conformance check that RELRO is read-only in a static PIE (the RELRO half of the bias delta has no
+   test of its own; the tls-rebase plant is caught through the TLS half).
+4. PT_PHDR load offset: already cut as STATIC-PIE-LOAD-OFFSET; not here.
 
 ## Arch seam (§0a checklist)
-1 ticked (the new xtask check matches GOT-typed relocation names generically); 2 ticked; 3 n/a; 4 ticked (no
-asm added: the anchor is C); 5-6 n/a; 7 ticked (unit tests use `X86_64`); 8 n/a; 9 (new) ticked.
-
-## Not this story (follow-up the coordinator cuts)
-* PT_PHDR load offset: `start::read_only` (D-12.4 `%n`) and static `dl_iterate_phdr`/`_dl_find_object` take the
-  bias from PT_PHDR; a static PIE has none, so they see bias 0.
+1 ticked (GOT check matches type names generically); 2 ticked; 3 n/a; 4 entry.S variant: x86_64 asm, the
+aarch64 start will need its own rcrt1 variant (same -D switch); 5-6 n/a; 7 ticked; 8 n/a; 9 ticked (rcrt1 refs
+PC-relative, checked).
 
 Decisions: D-27.10. Plan rows: design §0a (item 9), §1; phase-14 item 8; R14-1. Plants: handoff/DL-BOOT-RELOC-plants.txt.
