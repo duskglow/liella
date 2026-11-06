@@ -1,0 +1,18 @@
+# TIMING-IVB-MEMREF-ENTRY plants: the SSE2 129-192 fill/copy split (csys/src/machine/fold.S) and the memchr /
+# rawmemchr direct SSE2 entries (csys/src/machine/scan.S). small_copy runs every size 0-257 on both builds (SSE2 and,
+# on the build host, AVX2); machine_scanners runs each scanner on both scan levels, page ends included.
+# memset: the 129-192 cut moved up (193-208 skip the middle stores).
+set-cut | csys/src/machine/fold.S | perl:s/(\.Lset_129_sse2:.*?)cmpq \$192, %rdx/$1cmpq \$208, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:fills_match|FAILED|panicked
+# memset: one 193-256 store dropped.
+set-193-store | csys/src/machine/fold.S | perl:s/(\.Lset_193_sse2:.*?)\tmovups %xmm0, -128\(%rdi,%rdx\)\n/$1/s | cargo test -p liella-boundary --test small_copy | msg:fills_match|FAILED|panicked
+# memmove: the 129-192 cut moved up (193-208 copy only six blocks from each end).
+move-cut | csys/src/machine/fold.S | perl:s/(\.Lmove_129_sse2:\s*)cmpq \$192, %rdx/$1cmpq \$208, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:copies_match|moves_match|FAILED|panicked
+# memmove: a 129-192 tail block loaded from the wrong offset.
+move-tail-off | csys/src/machine/fold.S | perl:s/(\.Lmove_129_sse2:.*?)movups -96\(%rsi,%rdx\), %xmm6/$1movups -80(%rsi,%rdx), %xmm6/s | cargo test -p liella-boundary --test small_copy | msg:copies_match|moves_match|FAILED|panicked
+# memchr: the direct SSE2 entry's page compare widened (offsets 4033-4094 run the 64-byte head across the page end;
+# AVX2-level page-end calls take the SSE2 head).
+memchr-pre-page | csys/src/machine/scan.S | perl:s/(\.Lmemchr_sse_pre:\s*)cmpl \$4032, %ecx/$1cmpl \$4095, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr|FAILED|SIGSEGV|panicked
+# memchr: the direct SSE2 head's broadcast dropped (the compare uses a stale xmm0).
+memchr-pre-bcast | csys/src/machine/scan.S | perl:s/(\.Lmemchr_sse_pre:\s*cmpl \$4032, %ecx\n\tja \.Lmemchr_entry\n)\tmovd %esi, %xmm0\n/$1/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr|FAILED|panicked
+# rawmemchr: the direct SSE2 entry's page compare widened.
+raw-pre-page | csys/src/machine/scan.S | perl:s/(\.Lraw_sse_fast:\s*)cmpl \$4032, %ecx/$1cmpl \$4095, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr|FAILED|SIGSEGV|panicked
