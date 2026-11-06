@@ -1,7 +1,7 @@
 {"task": "CLASSED-SLOT-INFRA-4", "model": "opus", "tokens": null,
  "result": "INCOMPLETE: the fixed start-up cost is found and removed (a second cpu::features call outlined it, +80 user instr every class; -3's 'every class +65k kernel' was the bench dropping GLIBC_TUNABLES for its child, now fixed); SSE2 class user parity (+8 exact), AVX2 class = the swap's 4 calls; N100 timing and a ~+8k kernel gap on no-swap classes (one run of two) remain",
- "branch": "task/classed-slot-infra-4", "head": "see git log",
- "gate": {"affected": "shiki classed-slot-infra-4-r2-gate (direct tier): see jobs", "peak": null},
+ "branch": "task/classed-slot-infra-4", "head": "7ffdb9b3",
+ "gate": {"affected": "shiki classed-slot-infra-4-r2-gate (direct tier, tree of 7ffdb9b3): still running at hand-back (clippy, xtask units, so, liella, abi, boundary, boundary interposed, legacy, math ok so far); plants chained after it", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
