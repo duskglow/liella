@@ -2633,8 +2633,11 @@ pub fn main(root: &Path, args: &[String]) -> ExitCode {
     }
 }
 
-/// The work of one `affected` command; `runner` runs a selection (`run_selection`; a recorder in the unit tests).
-fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String>) -> Result<(), String> {
+/// Runs a selection: `run_selection`, or a recorder in the unit tests.
+type Runner<'a> = dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String> + 'a;
+
+/// The work of one `affected` command; `runner` runs a selection when the mode is `--run`.
+fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result<(), String> {
     let tier = o.tier;
     if let Some(path) = &o.replay_file {
         let repo = Repo::load(root);
