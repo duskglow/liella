@@ -1,6 +1,7 @@
 /* Page faults of a short program (PAGEFAULTS-2): argv[1] = "true" (startup only), "strings" (see main), "locale"
  * (setlocale(LC_ALL, "") + malloc + printf, the shape of most command-line tools) or "tool" (the
- * shape of a coreutils program such as printf: HOTTEXT-FAULT-TEST). Prints the
+ * shape of a coreutils program such as printf: HOTTEXT-FAULT-TEST) or "fork" (a fork child's faults,
+ * see main). Prints the
  * process's own minor-fault count at the end (getrusage RUSAGE_SELF ru_minflt) on stderr. */
 #include <fcntl.h>
 #include <inttypes.h>
@@ -11,6 +12,7 @@
 #include <string.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static size_t (*volatile len_fn)(const char *) = strlen;
@@ -60,6 +62,25 @@ static int write_mo(const char *path) {
 }
 
 int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "fork") == 0) {
+        /* TIMING-COV-FORK-COW-FAULTS: "fork" = fork + _exit(0) + wait4, twice; prints the minor
+         * faults of the second child (wait4's rusage: from fork to exit). fork copies no page
+         * tables of the file-backed text, so the child faults once per 64 KiB text window its
+         * path touches, plus its copy-on-write writes. */
+        long child = -1;
+        for (int i = 0; i < 2; i++) {
+            pid_t p = fork();
+            if (p == 0)
+                _exit(0);
+            struct rusage ru;
+            int st;
+            if (p < 0 || wait4(p, &st, 0, &ru) != p || !WIFEXITED(st) || WEXITSTATUS(st) != 0)
+                return 4;
+            child = ru.ru_minflt;
+        }
+        fprintf(stderr, "minflt %ld\n", child);
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "rebind") == 0) {
         /* COLDSTART-BINDTEXTDOMAIN-REBIND-2: a catalog looked up, then bound again to the same
          * directory and looked up again (cbench_opt's second pass); prints only the faults of the

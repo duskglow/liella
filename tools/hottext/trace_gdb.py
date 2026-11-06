@@ -21,6 +21,11 @@ for line in nm.splitlines():
 
 for cmd in ("set confirm off", "set pagination off", "set breakpoint always-inserted on", "set startup-with-shell off"):
     gdb.execute(cmd)
+# HOT_TEXT_FOLLOW_FORK=child (TIMING-COV-FORK-COW-FAULTS): trace the parent up to its first fork,
+# then the child to its exit. `fork` does not copy the page tables of file-backed text, so a fork
+# child faults on every 64 KiB text window its path touches; the parent's later path is not traced.
+if os.environ.get("HOT_TEXT_FOLLOW_FORK") == "child":
+    gdb.execute("set follow-fork-mode child")
 # Stop at the entry first (breakpoints on a static non-PIE binary can be placed before `run`).
 by_bp = {}
 for addr in names:
