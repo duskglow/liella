@@ -2844,6 +2844,11 @@ liella_machine_memchr:
 	jae .Lmemchr_none
 	addq %rdi, %rax
 	ret
+	/* int3 fill, never reached (it follows the ret above): the n <= 16 test starts at offset 0x25e
+	 * of the section, so blocks 1-3, head_miss, g1 and the hit tails below keep their D-4.56
+	 * offsets (the fold at 0x268, g1 at 0x2f0). Two bytes earlier, Ivy Bridge timed memchr_64_mix
+	 * 4.5% slower with the same instructions (TIMING-COV-MEMCHR-SHORT-NONAVX2-2). */
+	.org liella_machine_memchr_entry + 0x25e, 0xcc
 .Lmemchr_sse_head16:
 	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-4.57:
 	 * the two instructions are paid back by the entry's merged level and page test, so a long
