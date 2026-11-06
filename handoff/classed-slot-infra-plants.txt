@@ -17,4 +17,5 @@ slot-write | crates/boundary/src/classed.rs | perl:s/(impl SwapOps for Kernel \{
 # CLASSED-SLOT-INFRA-4: the state byte read with the AVX2 test inverted.
 avx2-in-inverted | crates/boundary/src/cpu.rs | lit:    state & AVX2 != 0 ==>     state & AVX2 == 0 | cargo test -p liella-boundary --lib classed | msg:the_class_needs_avx2.*FAILED|panicked
 # CLASSED-SLOT-INFRA-4: the start-up passes the SSE2 class whatever init_with decided (a real start on an AVX2 host must show the AVX2 page).
-start-sse2-always | crates/boundary/src/runtime.rs | lit:crate::classed::start(cpu::avx2_in(cpu_state), &tunables) ==> crate::classed::start(false, &tunables) | cargo xtask affected --only conformance:s04_classed_memset --with-exports --run | msg:expected the avx2 page at memset
+# (xtask affected names a failed conformance program but not its stderr, where the reason is; the cmd prints that file on failure.)
+start-sse2-always | crates/boundary/src/runtime.rs | lit:crate::classed::start(cpu::avx2_in(cpu_state), &tunables) ==> crate::classed::start(false, &tunables) | cargo xtask affected --only conformance:s04_classed_memset --with-exports --run || { cat conformance/build/s04_classed_memset.log.stderr; false; } | msg:expected the avx2 page at memset
