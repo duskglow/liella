@@ -1,0 +1,12 @@
+{"task": "COLDSTART-SETLOCALE-FIRST", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: row still ~2.1x on N100 (probe deltas at 730f416b); costs measured (heap ~14 faults + 7-9 syscalls, archive 7 faults, CtypeFile::parse twice per selection); no code change",
+ "branch": "task/coldstart-setlocale-first", "head": null,
+ "gate": {"affected": "not run (no code change)", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["keke:csf-counts-before", "keke:csf-counts-before2"],
+ "rulings": [{"item": "part 1 (heap-free first setlocale): the row gains the whole heap init, real workloads only the locale-only slab pages (~5 faults)", "recommendation": "do it: fixed .bss slot for the first global view, tables and names"},
+             {"item": "defer CtypeFile Table3 checks to first use (changes when a corrupt LC_CTYPE is rejected)", "recommendation": "no; only split a validate-only codeset_matches (CtypeFile::parse runs twice per selection)"}],
+ "informational": ["jobrun scripts on keke: cargo is not on PATH (export $HOME/.cargo/bin)", "perf sampling throttles on the short probe (~30 samples); keke has no valgrind"],
+ "refused": [],
+ "improvement": "a planning story's counts should state per-step glibc ratios and keep the probe source in the repo (tools/probe/) so a follow-up story does not rebuild it",
+ "next_step": "validate-only codeset_matches, then .bss storage for the first global view; count with the S/ST probe; tests, plants, direct gate, N100 staged bench",
+ "report_file": "handoff/coldstart-setlocale-first.md"}
