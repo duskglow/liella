@@ -16,7 +16,6 @@
 //! | `liella.cpu.rep_movsb_threshold` | `glibc.cpu.x86_rep_movsb_threshold` | bytes, 0x100 or more |
 //! | `liella.cpu.rep_stosb_threshold` | `glibc.cpu.x86_rep_stosb_threshold` | bytes, 1 or more |
 //! | `liella.pthread.rseq` | `glibc.pthread.rseq` | 0 or 1; `0` disables the rseq registration (D-22.7, §22.9) |
-//! | `liella.compat.rpc_reply_any_source` | (none) | 0 or 1; `1` lets the UDP RPC client take a reply from any source address (COMPAT-12, D-29.2) |
 //! | `liella.compat.no_classed_swap` | (none) | 0 or 1; `1` (and unset, the default since ruling #3434) keeps the file's SSE2 page at the classed entries: no page swap at start-up; `0` turns the AVX2-class swap on (COMPAT-20, D-4.53) |
 //! | `liella.malloc.perturb` | `glibc.malloc.perturb` | 0 to 255: `M_PERTURB` for the C `malloc` family (§3.2); overrides `MALLOC_PERTURB_` ([`Tunables::malloc_perturb`]) |
 //!
@@ -55,9 +54,6 @@ pub struct Tunables {
     pub rep_stosb_threshold: Option<usize>,
     /// `Some(false)`: threads register no rseq area (§22.9).
     pub rseq: Option<bool>,
-    /// COMPAT-12 (D-29.2): `Some(true)` makes the UDP RPC client take a reply with the
-    /// call's xid from any source address, as the reference library does.
-    pub rpc_reply_any_source: Option<bool>,
     /// COMPAT-20 (D-4.53): `Some(true)` keeps the file's SSE2 page at the classed entries (no
     /// start-up page swap), so the code that runs is the code in the file, as debuggers,
     /// profilers and core files read it.
@@ -72,7 +68,6 @@ enum Key {
     StosbThreshold,
     Rseq,
     Perturb,
-    RpcReplyAnySource,
     NoClassedSwap,
 }
 
@@ -84,7 +79,6 @@ fn key_of(name: &[u8]) -> Option<Key> {
         b"liella.cpu.rep_stosb_threshold" | b"glibc.cpu.x86_rep_stosb_threshold" => Key::StosbThreshold,
         b"liella.pthread.rseq" | b"glibc.pthread.rseq" => Key::Rseq,
         b"liella.malloc.perturb" | b"glibc.malloc.perturb" => Key::Perturb,
-        b"liella.compat.rpc_reply_any_source" => Key::RpcReplyAnySource,
         b"liella.compat.no_classed_swap" => Key::NoClassedSwap,
         _ => return None,
     })
@@ -280,7 +274,6 @@ impl Tunables {
                 Key::StosbThreshold => t.rep_stosb_threshold = threshold(value, 1).or(t.rep_stosb_threshold),
                 Key::Rseq => t.rseq = ranged(value, 0, 1).map(|n| n != 0).or(t.rseq),
                 Key::Perturb => {} // read on its own by `malloc_perturb`
-                Key::RpcReplyAnySource => t.rpc_reply_any_source = ranged(value, 0, 1).map(|n| n != 0).or(t.rpc_reply_any_source),
                 Key::NoClassedSwap => t.no_classed_swap = ranged(value, 0, 1).map(|n| n != 0).or(t.no_classed_swap),
             }
         }
@@ -337,15 +330,6 @@ mod tests {
         assert_eq!(Tunables::parse(b"liella.compat.no_classed_swap=0", false).no_classed_swap, Some(false));
         assert_eq!(Tunables::parse(b"liella.compat.no_classed_swap=2", false).no_classed_swap, None);
         assert_eq!(Tunables::parse(b"", false).no_classed_swap, None);
-    }
-
-    #[test]
-    fn rpc_reply_any_source() {
-        // Trace: no spec clause (COMPAT-12, D-29.2: honoured only outside a secure process).
-        assert_eq!(Tunables::parse(b"liella.compat.rpc_reply_any_source=1", false).rpc_reply_any_source, Some(true));
-        assert_eq!(Tunables::parse(b"liella.compat.rpc_reply_any_source=0", false).rpc_reply_any_source, Some(false));
-        assert_eq!(Tunables::parse(b"liella.compat.rpc_reply_any_source=2", false).rpc_reply_any_source, None);
-        assert_eq!(Tunables::parse(b"liella.compat.rpc_reply_any_source=1", true).rpc_reply_any_source, None);
     }
 
     #[test]
