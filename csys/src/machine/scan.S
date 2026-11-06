@@ -3567,12 +3567,8 @@ liella_machine_strcmp:
 	incq %rax
 	jmp .Lstrcmp_top
 	/* strcmp's AVX2 first block (TIMING-COV-STRCMP-SHORT-AVX2): the entry's branch target, see
-	 * liella_machine_strcmp. On a 32-byte boundary (TIMING-COV-STRCMP-NAMES-AVX2, D-4.58): at 16
-	 * the fused page-test cmp/ja crossed a 32-byte boundary, which keeps the block out of the
-	 * decoded-uop cache on Skylake-family cores (jump-crossing rule); every short AVX2 call then
-	 * ran it from the legacy decoders. Aligned, no jump of the block crosses or ends on one. The
-	 * padding follows the unconditional jmp above and never runs. */
-	.p2align 5
+	 * liella_machine_strcmp. */
+	.p2align 4
 .Lstrcmp_v_first:
 	leal -1(%rsi), %edx
 	andl $4095, %edx
@@ -5224,11 +5220,6 @@ liella_machine_casecmp_ord_avx2:
 	testq %rsi, %rsi
 	jz .Lcord_open
 	jmp .Lcord_generic
-	/* On a 32-byte boundary (TIMING-COV-STRCMP-NAMES-AVX2, D-4.58): unaligned, the second block's
-	 * fused test/jnz crossed a 32-byte boundary, which keeps it out of the decoded-uop cache on
-	 * Skylake-family cores (every strncasecmp of n <= 64 passing 32 bytes ran it from the legacy
-	 * decoders). The padding follows the unconditional jmp above and never runs. */
-	.p2align 5
 .Lcord_head_next:
 	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
 	 * no bound test there). A bound of 64 or less (PERF-STRNCASECMP-64-AVX2) needs one more
