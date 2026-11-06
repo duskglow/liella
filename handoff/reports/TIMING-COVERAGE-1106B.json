@@ -1,6 +1,6 @@
 {"task": "TIMING-COVERAGE-1106B", "model": "opus", "tokens": null,
  "result": "COMPLETE: 98 rows re-checked (open 38, re-time 38, new brief 4, deferred 9, out of scope 9); only 4 uncovered groups remained, 4 code briefs written (fork COW faults, regex backref scratch, regex first-byte IVB, spawn heap256m IVB repro-first)",
- "branch": "task/timing-coverage-1106b", "head": null,
+ "branch": "task/timing-coverage-1106b", "head": "5f01fd9c",
  "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
  "jobs": ["keke:tc1106b-profile"],
  "rulings": [],
