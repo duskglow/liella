@@ -1,6 +1,6 @@
 # CLASSED-SLOT-INFRA plants (D-4.53). Run: cargo xtask plants handoff/classed-slot-infra-plants.txt --dir <dir>
 # (Anchored at liella_machine_mempcpy:, the last label before the macro, which page 0 and page 1 expand.)
-# The AVX2 page loses the +4096 bias on one out-of-page jump (to the AVX2 fill entry, 257-320 bytes in the sweep). A biasless read of the fold limit (run 1) survived: that limit only picks between paths with the same result.
+# The AVX2 page loses the +4096 bias on one out-of-page jump (to the AVX2 fill entry, 257-320 bytes in the sweep). The biasless data-word reads (fold limit, set_mid) are below: the slot tests cannot see them by result, the XREF check (D-X.34) does.
 xref-bias | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)jmp liella_machine_fill_avx2_entry\+\\bias/$1jmp liella_machine_fill_avx2_entry/s | cargo test -p liella-boundary --test classed_slots | msg:avx2 page: child ended|the_avx2_page_after_the_swap.*FAILED
 # The swap runs without the pagemap guard.
 no-guard | crates/boundary/src/classed.rs | lit:    if !pages_unmodified(entries) { ==>     if false && !pages_unmodified(entries) { | cargo test -p liella-boundary --test classed_slots | msg:guard: child ended|a_page_written_before_the_swap.*FAILED
@@ -25,5 +25,21 @@ swap-on-by-default | crates/boundary/src/classed.rs | lit:pub const SWAP_BY_DEFA
 flag-ignored | crates/boundary/src/classed.rs | lit:    no_classed_swap.unwrap_or(!SWAP_BY_DEFAULT) ==>     no_classed_swap.map_or(!SWAP_BY_DEFAULT, |_| !SWAP_BY_DEFAULT) | cargo xtask affected --only conformance:s04_classed_memset --with-exports --run || { cat conformance/build/s04_classed_memset.log.stderr; false; } | msg:expected the avx2 page at memset
 # CLASSED-SLOT-INFRA-6: the same default flip, seen by the unit test.
 swap-on-by-default-unit | crates/boundary/src/classed.rs | lit:pub const SWAP_BY_DEFAULT: bool = false; ==> pub const SWAP_BY_DEFAULT: bool = true; | cargo test -p liella-boundary --lib classed | msg:the_swap_is_off_unless_the_flag_is_zero.*FAILED|panicked
-# CLASSED-SLOT-INFRA-7 (equivalent, like run 1's biasless fold-limit read): the AVX2 page reads the 65-128 class word (PARITY-MEMSET-SMALL-AVX2, merged from next) without the +4096 bias.
-xref-bias-set-mid | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)cmpq liella_machine_set_mid\+\\bias/$1cmpq liella_machine_set_mid/s | cargo test -p liella-boundary --test classed_slots | equivalent:the word only picks between the 65-128 assembly class and the Rust path, which give the same bytes; without the bias page 1 reads the word 4096 bytes below, which in this link holds a value of at most 128 (run 7: survived), so every size still gets the right result. A link where that word held 129 or more would break the 129+ classes; the slot tests check results, not which word is read (INFORMATIONAL in the handoff)
+# CLASSED-SLOT-INFRA-7, real plants since CLASSED-SLOT-XREF-CHECK (were `equivalent:` by result): the AVX2 page reads a data word
+# without the +4096 bias, the 65-128 class word (set_mid) and the fold limit. The word read 4096 bytes below happened to give the
+# same bytes in that link; the XREF check (D-X.34, `cargo xtask classed-xref`, also in `static` and `so`) catches it in any layout.
+xref-bias-set-mid | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)cmpq liella_machine_set_mid\+\\bias/$1cmpq liella_machine_set_mid/s | cargo xtask classed-xref | msg:reference [0-9]+: page 1 [^ ]+ R_X86_64_PC32 -> liella_machine_set_mid-0x4 does not match page 0
+xref-bias-fold-limit | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)cmpq liella_machine_fold_limit\+\\bias/$1cmpq liella_machine_fold_limit/s | cargo xtask classed-xref | msg:reference 0: page 1 [^ ]+ R_X86_64_PC32 -> liella_machine_fold_limit-0x4 does not match page 0
+# CLASSED-SLOT-XREF-CHECK: the check itself (xtask/src/classed.rs), seen by its unit tests.
+# An unpaired reference no longer reported (page 1 with one reference more than page 0 passes).
+xref-no-count | xtask/src/classed.rs | lit:    if page0.len() != page1.len() { ==>     if false { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|extra .*: Ok
+# The target no longer compared (a biasless page 1 passes).
+xref-no-target | xtask/src/classed.rs | lit: || a.sym != b.sym || b.target != want { ==>  || a.sym != b.sym { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|(load|jump) \.(o|so): Ok
+# A section with nothing to check passes.
+xref-empty-passes | xtask/src/classed.rs | lit:    if page0.is_empty() && page1.is_empty() { ==>     if false { | cargo test -p xtask classed | msg:the_readers_parse_relocations_and_instructions.*FAILED
+# Relocations taken in readelf's order (grouped by type), not by offset.
+xref-unsorted | xtask/src/classed.rs | lit:    out.sort_by_key(|r| r.0); ==>     let _ = &out; | cargo test -p xtask classed | msg:the_readers_parse_relocations_and_instructions.*FAILED
+# PLT32 (`jz sym`) and PC32 (`jz sym+4096`) compared as different kinds (every correct jump pair fails).
+xref-plt-kind | xtask/src/classed.rs | lit:    if what == "R_X86_64_PLT32" { ==>     if false { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED
+# The linked reader ignores direct jumps and calls (a biasless page 1 jump passes in a linked object).
+xref-linked-no-jumps | xtask/src/classed.rs | lit:let direct = mnem.starts_with('j') ==> let direct = false && mnem.starts_with('j') | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|jump \.so: Ok

@@ -892,6 +892,9 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     run_libm(root, &cargo, &cc, &ar, profile)?;
     check_placement(root, &release)?;
     // After the last product: no build path may be left in any of them (PRODUCT-PATH-REMAP).
+    // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
+    crate::classed::check_file(&release.join("libc.a"))?;
+    crate::classed::check_file(&release.join("libc.so.6"))?;
     crate::remap::check(root)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
