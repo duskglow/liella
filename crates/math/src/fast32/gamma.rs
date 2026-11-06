@@ -275,4 +275,53 @@ mod tests {
     fn lgammaf_fast_path_agrees_exhaustively() {
         exhaustive_oracle(Fast::Lgamma, "lgammaf");
     }
+
+    /// Where a gamma sweep spends its time: the oracle check (as the exhaustive sweeps) over the
+    /// 512 slices of one sign and exponent each, every `LIELLA_PROFILE_STRIDE`-th encoding
+    /// (default 4099; 1 = in full), only the slices `LIELLA_PROFILE_SLICES=lo-hi` (slice = top 9
+    /// bits, default all) and only `LIELLA_PROFILE_FN` (`lgammaf`, the default, or `tgammaf`).
+    /// Prints per slice: operands checked, fast-path calls taken, oracle mp modes, near-zero
+    /// refusals and the slice's wall time (a diagnostic, never asserted). (No spec clause.)
+    #[test]
+    #[ignore]
+    fn gamma_sweep_profile() {
+        let env = |k: &str| std::env::var(k).ok();
+        let stride = env("LIELLA_PROFILE_STRIDE").and_then(|s| s.parse::<u32>().ok()).filter(|&k| k > 0).unwrap_or(4099);
+        let (lo, hi) = env("LIELLA_PROFILE_SLICES")
+            .and_then(|s| s.split_once('-').and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))))
+            .unwrap_or((0, 511));
+        let f = if env("LIELLA_PROFILE_FN").as_deref() == Some("tgammaf") { Fast::Tgamma } else { Fast::Lgamma };
+        let next = AtomicU64::new(u64::from(lo));
+        let n = std::thread::available_parallelism().map_or(8, |n| n.get());
+        let mut rows: std::vec::Vec<(u32, u64, u64, u64, u64, f64)> = std::thread::scope(|sc| {
+            let hs: std::vec::Vec<_> = (0..n).map(|_| sc.spawn(|| {
+                let mut out = std::vec::Vec::new();
+                loop {
+                    let s = next.fetch_add(1, Ordering::Relaxed) as u32;
+                    if s > hi {
+                        return out;
+                    }
+                    let tally = crate::oracle32::Tally::default();
+                    let nz = AtomicU64::new(0);
+                    let xs = ((s << 23)..=((s << 23) | 0x7f_ffff)).step_by(stride as usize).map(f32::from_bits);
+                    let t0 = std::time::Instant::now();
+                    let taken = agree_oracle(f, xs, &tally, &nz);
+                    let secs = t0.elapsed().as_secs_f64();
+                    let ops = (0x80_0000u64).div_ceil(u64::from(stride));
+                    out.push((s, ops, taken, tally.mp_modes.load(Ordering::Relaxed), nz.load(Ordering::Relaxed), secs));
+                }
+            })).collect();
+            hs.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+        });
+        rows.sort_by_key(|r| r.0);
+        let total: f64 = rows.iter().map(|r| r.5).sum();
+        std::println!("profile {f:?} stride {stride} slices {lo}-{hi}: {total:.2} s summed over slices");
+        std::println!("slice  first-x        operands  taken  mp-modes  near-zero  secs  share");
+        for (s, ops, taken, mp, nz, secs) in rows {
+            if taken > 0 || mp > 0 || secs > total / 1000.0 {
+                let x0 = f32::from_bits(s << 23);
+                std::println!("{s:5}  {x0:<13e}  {ops:8}  {taken:6}  {mp:8}  {nz:9}  {secs:.3}  {:.3}", secs / total.max(1e-9));
+            }
+        }
+    }
 }
