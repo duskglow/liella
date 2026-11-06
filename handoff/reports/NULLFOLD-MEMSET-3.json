@@ -1,0 +1,16 @@
+{"task": "NULLFOLD-MEMSET-3", "model": "opus", "tokens": null,
+ "result": "Ruling #3621 branch 3: no memset code change (D-4.60 REJECTED), fill tests kept; N100 profile: memset_256 slowdown is decode-bound front-end slots (layout), not mispredicts/icache/aliasing; one-load variant d had no memset_128 gain in time",
+ "branch": "task/nullfold-memset-3", "head": "db090059",
+ "gate": {"affected": "see shiki nullfold-memset-3-gate (affected --run --base origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "N100 topdown_fe_bound.decode per run: memset_256 0.32M explicit tests / 1.14M 65-128 fold / 0.20M one-load; memset_128 1.35M / 0.98M / 1.32M; mispredicts, BACLEARs, icache misses, resteers, 4K aliasing equal",
+   "N100 bench ns (6 x 25): memset_128 3.35 / 2.94 (65-128 fold) / 3.35 (one load); memset_256 3.78 / 4.19 / 3.78",
+   "Optional story: decode-layout study of the memset entry on Alder Lake-N; only then could the fill fold return"
+ ],
+ "refused": [],
+ "improvement": "A topdown pass (4 groups of 4 events, no multiplexing) settled in one run what six blind layout variants could not; profile front-end events before building layout variants on the N100",
+ "next_step": "none for this story; land the tests-only branch",
+ "report_file": "handoff/NULLFOLD-MEMSET.md",
+ "jobs": ["shiki:nullfold-memset-3-gate", "shiki:nullfold-memset-3-plants"]}

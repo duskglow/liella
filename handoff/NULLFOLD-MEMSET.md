@@ -1,46 +1,39 @@
-# NULLFOLD-MEMSET handoff (one page; NULLFOLD-MEMSET-2 run)
+# NULLFOLD-MEMSET handoff (one page; NULLFOLD-MEMSET-3 run, final)
 
-**State:** branch `task/nullfold-memset-2` (= task/nullfold-memset + merge of origin/next `18a2b58e` + the narrowing
-commit `d0de5adb`). Role shiki:~/w/sh1 (Haswell-EP). Report: handoff/reports/NULLFOLD-MEMSET-2.json.
-**Decisions in force:** D-4.60 (AMENDED this run: 65-128 only), D-4.55 (copies 129-256, from next), D-4.52 (model),
-D-4.53 (slot pages), ruling #3603 (profile 256; if layout does not explain it, land 65-128 alone).
+**State:** branch `task/nullfold-memset-3` (= task/nullfold-memset-2 + `db090059` + this handoff). Role shiki:~/w/sh1
+(Haswell-EP). Report: handoff/reports/NULLFOLD-MEMSET-3.json. Plants: handoff/NULLFOLD-MEMSET-3-plants.txt.
+**Decisions in force:** D-4.60 is now **REJECTED** (memset/__memset_chk keep the explicit NULL test on 65-256; D-4.22
+option B unchanged for fills, its fill amendment removed). D-4.55 (copies 129-256), D-4.52, D-4.53 unchanged.
+Ruling #3621 applied (branch 3: tests only, no memset code change, negative result recorded).
 
-**Change now:** with folding on, `memset`/`__memset_chk` 65-128 has no NULL test (reached only while
-`liella_machine_set_mid` = 128). 129-256 is back to `lea/cmp/ja` + explicit `testq/jz` (the pre-D-4.60 code); the
-`liella_machine_set_hi` word is gone. Tests: fills expect SIGSEGV up to 128 (small_copy, classed_slots renamed
-`the_avx2_page_folds_null_up_to_128_and_stores_head_first`); the head-first tests for 17-256 are kept unchanged.
+**Change now (vs next):** no memset code change (the `LIELLA_MEMSET_BODY` macro is byte-identical to origin/next's;
+dispatch.rs/ffi.rs as next). Tests kept, expecting the abort above 64: small_copy `null_faults_in_the_folded_sizes...`
+gains sizes 130, 255, 65_537, 1 MiB; `fills_store_their_head_block_first` (17-256, memset and __memset_chk, SSE2 page);
+`null_fills_above_64_kib_abort_and_leave_a_page_at_64_kib_untouched`; classed_slots
+`the_avx2_page_folds_null_up_to_64_and_stores_head_first` (AVX2 page: NULL 1-65537 both fold states; head-first 65-256).
 
-**Why (N100 probe, 6 rounds x 25 runs, Liella cbench_memref one row per run under `perf stat`, fixed iteration
-count, user cycles per run, medians; nozomi jobs `nullfold-memset-2-layout-n100`, `-n100-2`):**
+**Profile (ruling #3621, ONE pass, N100 (nozomi), Liella cbench_memref, one row per run, perf stat :u, 4 event
+groups of 4 + fixed, no multiplexing; 4 rounds x 15 runs, medians per run; job nozomi `nullfold-memset-3-prof-n100`):**
 
-| variant (page 0 memset) | memset_128 | memset_144 | memset_256 |
-|---|---:|---:|---:|
-| pre (D-4.60 reversed: both tests) | 1.361M | 1.511M | **1.450M** |
-| head (65-256 folded, 2 memory compares on the 256 path) | **1.259M** | 1.513M | 1.501M |
-| a: head, body padded (int3, never run) to pre's 0xf8 | 1.261M | 1.515M | 1.501M |
-| b: head, body padded to 0x100 | 1.260M | 1.514M | 1.501M |
-| c: head, `set_hi` moved 1 KiB (other page offset) | 1.258M | 1.517M | 1.505M |
-| d: one `set_mid` load, 129-256 bound 2*rcx | 1.341M | 1.510M | 1.453M |
+| event (per run) | m128 pre | m128 final(65-128 fold) | m128 d(one load) | m256 pre | m256 final | m256 d |
+|---|---:|---:|---:|---:|---:|---:|
+| cycles | 1.369M | 1.262M | 1.345M | 1.455M | 1.518M | 1.453M |
+| topdown_fe_bound.decode | 1.346M | 0.983M | 1.318M | 0.316M | **1.143M** | 0.202M |
+| topdown_fe_bound.frontend_bandwidth | 1.846M | 1.500M | 1.835M | 0.837M | 1.664M | 0.719M |
+| fe_latency / icache / resteer / branch_detect | equal | equal | equal | equal | equal | equal |
+| br_misp_retired / baclears / icache.misses / ld_blocks.address_alias | equal | equal | equal | equal | equal | equal |
 
-Layout (a, b) and 4K aliasing of the word (c) do not explain it; the second memory compare does (d). Haswell-EP
-showed no difference. NEGATIVE row in docs/saturation/03-memory-and-string-kernels.md.
+Cause: decode-bound front-end slots, layout dependent (the 256 path runs pre's exact instructions in `final`); not
+mispredicts, resteers, icache or aliasing. Fixing it means more layout variants: excluded by the ruling.
+**Timing (nozomi `nullfold-memset-3-time-n100`, run.sh 6 x 25, bench ns / cycles):** m128 pre 3.35 / d 3.35 / final
+2.94 ns; m144 4.19 all; m256 pre 3.78 / d 3.78 / final 4.19 ns. d's 128 gain (-1.8% cycles) is not visible in ns ->
+ruling branch (2) fails -> branch (3).
 
-**Jobs on the code head `d0de5adb`:** shiki `nullfold-memset-2-gate` (clippy --all-features, xtask clippy, static,
-affected --base origin/next), `nullfold-memset-2-plants` (handoff/NULLFOLD-MEMSET-2-plants.txt, 4 plants),
-`nullfold-memset-2-stage-3` (stage of the final head). Earlier: `nullfold-memset-2-stage`, `-stage-2` (probe stages),
-`-trycmd`, `-trycmd-2` (script trial on shiki). The old `nullfold-memset-counts` rc 5: its script called
-`cargo xtask bench --stage` without the tarball path (counts were fine; counts-2 had them).
+**Jobs on `db090059`:** shiki `nullfold-memset-3-gate` (clippy --all-features, xtask clippy, static, affected --run
+--base origin/next), `nullfold-memset-3-plants` (6 plants). Evidence (old staged trees, not the final head): nozomi
+`nullfold-memset-3-prof-n100`, `nullfold-memset-3-time-n100`; trials `-proftry` (rc 3: an invalid event, dropped),
+`-proftry-2`. Scripts: nozomi ~/work/NULLFOLD-MEMSET-3/prof.sh, ~/work/NULLFOLD-MEMSET-2/run.sh + stage-*.tar.
 
-**FINAL HEAD MEASURED WORSE (DO NOT LAND as is):** nozomi `nullfold-memset-2-final-n100-2` (same probe, 6 x 25):
-memset_128 final 1.263M / pre 1.359M / head 1.261M; memset_144 1.522M / 1.518M / 1.518M; **memset_256 1.516M / 1.457M /
-1.502M**. The final head's 256 path executes exactly pre's instructions (only the 65-128 test/jz before it is gone, so the
-129-256 block sits 9 bytes earlier, `.Lset_129` at 0xd9 as in head), yet it is slower: the "second memory compare" model
-is WRONG. Facts so far: slow = head (target 0xd9, body 0xe2), a (0xef/0xf8), b (0xf7/0x100), c, final (0xd9/0xef);
-fast = pre (0xe2/0xf8), d (one load, rcx bound). Suspect the branch layout of the whole entry (the 0xa2 `ja`, its target,
-predictor aliasing) or the 65-128 block's length, not one offset. Next: perf on the N100 (branch-misses,
-topdown/front-end events if available) for pre vs final memset_256; try pre with only the 65-128 testq/jz replaced by
-an equal-length never-taken form or nop padding inside the 65-128 class (keeps the layout of pre).
-**Next step (after that):** read the jobs above; time the final head against next on the N100 (`run.sh` probe, stage-final) and
-Ivy Bridge (`--compare cbench_memref`, kotori or nico); expected memset_128 faster, 144/256 equal to pre.
-Scripts: shiki and nozomi ~/work/NULLFOLD-MEMSET-2/{stage.sh,run.sh} (run.sh <rounds> <reps> <variant>...).
-**Not to redo:** the layout/aliasing probe above. Then CLASSED-SLOT-SWAP-COST (unchanged).
+**Open / next:** none for this story. Optional own story: a decode-layout study of the memset entry on Alder Lake-N
+(where the 65-128 and 129-256 bodies fall in the decoders' fetch blocks); only then could the fold come back.
+**Not to redo:** padding/aliasing variants (a, b, c), the one-load variant d, this profile.
