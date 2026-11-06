@@ -553,7 +553,7 @@ fn check_bench_names(names: &[String], valid: &[String], dir: &Path) -> Result<(
             return Err(format!(
                 "bench --compare: `{n}` is not a benchmark (no bench/c/{n}.c). {found}. A row or function name does not belong here: \
                  --compare takes bench names only, positionally or as `--only a,b`, and accepts --runs N, --v3, --sorted, --counters, --tunables V, \
-                 --build-only, --no-build. It has no row filter (`--rows`/`--affected` exist only on the plain `bench` command)"
+                 --build-only, --no-build, and `--rows <row>,<bench>/<row>,<glob>` to time only some rows (XTASK-BENCH-ROWS-BASE)"
             ));
         }
     }
@@ -568,6 +568,27 @@ fn only_list(v: Option<&str>) -> Result<Vec<String>, String> {
         return Err("--only needs a comma list of bench names".into());
     }
     Ok(list)
+}
+
+/// XTASK-BENCH-ROWS-BASE: the arguments of the base tree's `bench --stage` run: these, without `--base <ref>`, with
+/// `--stage` writing `base_out`.
+fn base_args(args: &[String], base_out: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--base" => {
+                it.next();
+            }
+            "--stage" => {
+                it.next();
+                out.push(a.clone());
+                out.push(base_out.display().to_string());
+            }
+            _ => out.push(a.clone()),
+        }
+    }
+    out
 }
 
 /// `cargo xtask bench --compare [--runs N] [--v3] [--sorted] [--counters] [--only a,b | <cbench>...]` (rule
@@ -601,6 +622,8 @@ struct CompareArgs {
     build_only: bool,
     no_build: bool,
     tunables: Option<String>,
+    /// XTASK-BENCH-ROWS-BASE: `--rows` items (`row`, `bench/row`, or a glob of either); empty: every row.
+    rows: Vec<String>,
 }
 
 fn parse_compare_args(args: &[String]) -> Result<CompareArgs, String> {
@@ -620,17 +643,114 @@ fn parse_compare_args(args: &[String]) -> Result<CompareArgs, String> {
                 o.tunables = Some(v.clone());
             }
             "--only" => o.names.extend(only_list(it.next().map(String::as_str))?),
+            "--rows" => {
+                let v = it.next().filter(|v| !v.starts_with('-')).ok_or("--rows needs a comma list of rows (`memchr_16`, `cbench_memref/memchr_16` or a glob such as `memchr_16*`)")?;
+                let before = o.rows.len();
+                o.rows.extend(v.split(',').filter(|r| !r.is_empty()).map(str::to_string));
+                if o.rows.len() == before {
+                    return Err("--rows needs at least one row name".into());
+                }
+            }
             n => o.names.push(positional_name(n)?),
         }
     }
     if o.names.is_empty() {
         o.names.push("cbench_opt".into());
     }
+    if !o.rows.is_empty() {
+        for n in &o.names {
+            compare_row_patterns(n, &o.names, &o.rows)?;
+        }
+    }
     Ok(o)
 }
 
+/// XTASK-BENCH-ROWS-BASE: the `--rows` patterns that apply to bench `name`: the unqualified items (every named
+/// bench) and the `name/...` items. A `b/row` whose `b` is not a named bench, or a named bench no item applies to
+/// (only qualified items, none for it), is an error: never a bench run whole or skipped silently.
+fn compare_row_patterns(name: &str, names: &[String], items: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for it in items {
+        match it.split_once('/') {
+            Some((b, _)) if !names.iter().any(|n| n == b) => {
+                return Err(format!("--rows: `{it}` names bench `{b}`, which is not compared here (benches: {}); add it or drop the item", names.join(", ")));
+            }
+            Some((b, r)) if b == name => out.push(r.to_string()),
+            Some(_) => {}
+            None => out.push(it.clone()),
+        }
+    }
+    if out.is_empty() {
+        return Err(format!("--rows: no item selects a row of `{name}` (use `{name}/<row>` or an unqualified row name)"));
+    }
+    Ok(out)
+}
+
+/// A shell-style glob over a row name: `*` any run, `?` one character; anything else literal.
+fn glob_match(p: &[u8], s: &[u8]) -> bool {
+    match p.split_first() {
+        None => s.is_empty(),
+        Some((b'*', rest)) => (0..=s.len()).any(|k| glob_match(rest, &s[k..])),
+        Some((b'?', rest)) => !s.is_empty() && glob_match(rest, &s[1..]),
+        Some((c, rest)) => s.first() == Some(c) && glob_match(rest, &s[1..]),
+    }
+}
+
+fn is_glob(p: &str) -> bool {
+    p.contains(['*', '?'])
+}
+
+/// The rows a bench's patterns select, in the bench's own row order (`all`: the rows its Liella build prints
+/// without a filter; needed only for globs, `None` otherwise). A glob matching nothing is an error listing `all`.
+fn resolve_row_patterns(name: &str, pats: &[String], all: Option<&[String]>) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in pats {
+        if is_glob(p) {
+            let all = all.ok_or_else(|| format!("{name}: --rows glob `{p}` needs the bench's row list"))?;
+            let hit: Vec<&String> = all.iter().filter(|r| glob_match(p.as_bytes(), r.as_bytes())).collect();
+            if hit.is_empty() {
+                return Err(unknown_rows_error(name, &[p.clone()], all));
+            }
+            out.extend(hit.into_iter().filter(|r| !out.contains(r)).cloned().collect::<Vec<_>>());
+        } else if !out.contains(p) {
+            out.push(p.clone());
+        }
+    }
+    if let Some(all) = all {
+        out.sort_by_key(|r| all.iter().position(|a| a == r).unwrap_or(usize::MAX));
+    }
+    Ok(out)
+}
+
+/// The error for `--rows` names that are not rows of `name`, listing the rows the bench prints.
+fn unknown_rows_error(name: &str, bad: &[String], all: &[String]) -> String {
+    let names = bad.iter().map(|b| format!("`{b}`")).collect::<Vec<_>>().join(", ");
+    let verb = if bad.len() == 1 { "is" } else { "are" };
+    format!("bench --compare --rows: {names} {verb} not a row of {name}; its rows (the Liella build, unfiltered): {}", all.join(", "))
+}
+
+/// The benchmark command of `--compare` (every build of the comparison goes through here, so a row filter is the
+/// same `CBENCH_ROWS` value on each side).
+fn compare_command(name: &str, exe: &Path, rows: Option<&str>) -> Command {
+    let mut c = c_command(name, exe);
+    if let Some(list) = rows {
+        c.env("CBENCH_ROWS", list);
+    }
+    c
+}
+
+/// The rows a bench's Liella build prints with no filter (one extra run: only for globs and the unknown-row error).
+fn listed_rows(name: &str, exe: &Path) -> Result<Vec<String>, String> {
+    println!("{name}: --rows: one unfiltered run of the Liella build to list its rows");
+    let out = compare_command(name, exe, None).output().map_err(|e| format!("{name}: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("{} failed:\n{}", exe.display(), String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(parse_rows(name, &out.stdout)?.into_iter().map(|(r, _)| r).collect())
+}
+
 pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
-    let CompareArgs { runs, names, v3, sorted, counters, build_only, no_build, tunables } = parse_compare_args(args)?;
+    let CompareArgs { runs, names, v3, sorted, counters, build_only, no_build, tunables, rows: row_items } = parse_compare_args(args)?;
     if let Some(v) = tunables {
         let _ = TUNABLES.set(v);
     }
@@ -688,12 +808,27 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
             println!("{name}: built, not measured (--build-only)");
             continue;
         }
+        // XTASK-BENCH-ROWS-BASE: `--rows` becomes one CBENCH_ROWS list, the same for every build (`compare_command`).
+        let mut all_rows: Option<Vec<String>> = None;
+        let selected: Option<Vec<String>> = if row_items.is_empty() {
+            None
+        } else {
+            let pats = compare_row_patterns(name, &names, &row_items)?;
+            if pats.iter().any(|p| is_glob(p)) {
+                let liella = exes[0].as_ref().ok_or_else(|| format!("{name}: no Liella build"))?;
+                all_rows = Some(listed_rows(name, liella)?);
+            }
+            let sel = resolve_row_patterns(name, &pats, all_rows.as_deref())?;
+            println!("{name}: --rows: CBENCH_ROWS={} (every build)", sel.join(","));
+            Some(sel)
+        };
+        let row_env = selected.as_ref().map(|v| v.join(","));
         let mut order: Vec<String> = Vec::new();
         let mut values: Vec<BTreeMap<String, Vec<f64>>> = vec![BTreeMap::new(); builds.len()];
         for round in 0..=runs {
             for (k, (b, _)) in builds.iter().enumerate() {
                 let Some(exe) = exes[k].clone() else { continue };
-                let out = c_command(name, &exe).output().map_err(|e| format!("{name}: {e}"))?;
+                let out = compare_command(name, &exe, row_env.as_deref()).output().map_err(|e| format!("{name}: {e}"))?;
                 if !out.status.success() {
                     let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
                     if *b == Build::HostStatic {
@@ -705,6 +840,18 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
                     return Err(format!("{} failed:\n{why}", exe.display()));
                 }
                 if round == 0 {
+                    // The warm-up of the Liella build proves every selected row exists (a typo is an error, never an empty table).
+                    if let (Some(sel), Build::Liella) = (&selected, *b) {
+                        let printed: Vec<String> = parse_rows(name, &out.stdout)?.into_iter().map(|(r, _)| r).collect();
+                        let missing: Vec<String> = sel.iter().filter(|r| !printed.contains(r)).cloned().collect();
+                        if !missing.is_empty() {
+                            let all = match all_rows.take() {
+                                Some(a) => a,
+                                None => listed_rows(name, &exe)?,
+                            };
+                            return Err(unknown_rows_error(name, &missing, &all));
+                        }
+                    }
                     continue;
                 }
                 for (row, v) in parse_rows(name, &out.stdout)? {
@@ -719,11 +866,19 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
         if counters {
             for (k, exe) in exes.iter().enumerate() {
                 let Some(exe) = exe else { continue };
-                let out = c_command(name, exe).env("CBENCH_COUNTERS", "1").output().map_err(|e| format!("{name}: {e}"))?;
+                let out = compare_command(name, exe, row_env.as_deref()).env("CBENCH_COUNTERS", "1").output().map_err(|e| format!("{name}: {e}"))?;
                 if out.status.success() {
                     ctr[k] = parse_counters(&out.stderr);
                 }
             }
+        }
+        if let Some(sel) = &selected {
+            // A row a bench prints outside its MEASURE filter (cold-start or `put` rows) is not what was asked for.
+            let extra: Vec<&String> = order.iter().filter(|r| !sel.contains(r)).collect();
+            if !extra.is_empty() {
+                println!("{name}: --rows: printed outside the filter and left out of the table: {}", extra.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", "));
+            }
+            order.retain(|r| sel.contains(r));
         }
         let cell = |k: usize, row: &str| values[k].get(row).filter(|v| !v.is_empty()).map(|v| stats(v));
         let mut tsv = String::from("row\thost_median\thost_min\thost_max\tliella_median\tliella_min\tliella_max\tratio\thost_static_median\thost_static_min\thost_static_max\n");
@@ -1310,6 +1465,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut mode = Mode::Normal;
     let mut stage_out: Option<std::path::PathBuf> = None;
     let mut staged_flag = false;
+    let mut base_ref: Option<String> = None;
     let (mut counters, mut counters_only) = (false, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -1330,6 +1486,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
                 stage_out = Some(crate::benchstage::out_path(it.next().ok_or("--stage needs the tarball to write (for example stage.tar)")?));
                 mode = Mode::BuildOnly;
             }
+            "--base" => base_ref = Some(it.next().filter(|v| !v.starts_with('-')).ok_or("--base needs a git ref (for example origin/next)")?.clone()),
             "--staged" => {
                 staged_flag = true;
                 mode = Mode::NoBuild;
@@ -1372,6 +1529,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             }
             other => return Err(format!("bench: unknown argument `{other}`")),
         }
+    }
+    if base_ref.is_some() && stage_out.is_none() {
+        return Err("bench: --base <ref> stages a second tree and needs --stage <out.tar>".into());
     }
     if stage_out.is_some() && mode != Mode::BuildOnly {
         return Err("bench: --stage builds and stages; it does not combine with --no-build/--staged".into());
@@ -1489,6 +1649,19 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             let m = crate::benchstage::write_stage(root, out, &rust, &exe)?;
             println!("bench: {}", crate::benchstage::header(&m));
             println!("bench: wrote {}; on the timing host: mkdir <dir> && tar -xf {} -C <dir> && cd <dir> && ./xtask-bin bench --no-build --staged [--only ...|--rows ...]", out.display(), out.file_name().and_then(|n| n.to_str()).unwrap_or("<out.tar>"));
+            if let Some(rf) = &base_ref {
+                // XTASK-BENCH-ROWS-BASE: the same command, minus `--base`, staging `<ref>` from a temporary worktree.
+                let bo = crate::benchstage::base_out(out);
+                let fwd = base_args(args, &bo);
+                let base = crate::benchstage::stage_base(root, rf, &bo, |wt| {
+                    let st = Command::new(&cargo).current_dir(wt).args(["xtask", "bench"]).args(&fwd).status().map_err(|e| format!("--base: cargo xtask bench in {}: {e}", wt.display()))?;
+                    if st.success() { Ok(()) } else { Err(format!("--base {rf}: `cargo xtask bench {}` failed in the base worktree ({st})", fwd.join(" "))) }
+                })?;
+                println!("bench: staged two trees: current {} (commit {}); base {} (commit {}, from --base {rf})", out.display(), m.commit, bo.display(), base.commit);
+                if base.commit == m.commit {
+                    println!("bench: NOTE: both trees were built from the same commit");
+                }
+            }
         }
         return Ok(());
     }
@@ -1997,9 +2170,79 @@ ctr	short	1
         assert_eq!((o.runs, o.counters, o.v3, o.names.clone()), (3, true, true, vec!["cbench_a".to_string(), "cbench_b".to_string()]));
         let o = v(&["--compare", "--no-build", "--tunables", "glibc.cpu.hwcaps=-AVX2"]).unwrap();
         assert!(o.no_build && o.names == ["cbench_opt"] && o.tunables.as_deref() == Some("glibc.cpu.hwcaps=-AVX2"));
-        assert!(v(&["--compare", "cbench_a", "--rows", "x/y"]).unwrap_err().contains("unknown option --rows"));
+        // XTASK-BENCH-ROWS-BASE: --rows is a compare option now; a bench it names must be compared
+        assert!(v(&["--compare", "cbench_a", "--rows", "x/y"]).unwrap_err().contains("`x/y` names bench `x`"));
         assert!(v(&["--compare", "--no-archive"]).is_err());
         assert!(v(&["--compare", "--runs", "0"]).is_err() && v(&["--compare", "--tunables"]).is_err());
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). `--compare --rows`: unqualified items apply to every
+    // compared bench, `bench/row` items to that bench only; a bench with no item, an item naming a bench that is not
+    // compared, and an empty or missing list are errors.
+    #[test]
+    fn compare_rows_select_per_bench() {
+        let v = |a: &[&str]| parse_compare_args(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let o = v(&["--compare", "cbench_memref", "--rows", "memchr_16,memchr_16_mix"]).unwrap();
+        assert_eq!(o.rows, ["memchr_16", "memchr_16_mix"]);
+        let names = vec!["cbench_a".to_string(), "cbench_b".to_string()];
+        let items: Vec<String> = ["x", "cbench_b/y", "z*"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(compare_row_patterns("cbench_a", &names, &items).unwrap(), ["x", "z*"]);
+        assert_eq!(compare_row_patterns("cbench_b", &names, &items).unwrap(), ["x", "y", "z*"]);
+        let only_b = vec!["cbench_b/y".to_string()];
+        assert!(compare_row_patterns("cbench_a", &names, &only_b).unwrap_err().contains("no item selects a row of `cbench_a`"));
+        assert!(v(&["--compare", "cbench_a", "cbench_b", "--rows", "cbench_b/y"]).unwrap_err().contains("cbench_a"));
+        assert!(v(&["--compare", "cbench_a", "--rows"]).is_err());
+        assert!(v(&["--compare", "cbench_a", "--rows", "--counters"]).is_err());
+        assert!(v(&["--compare", "cbench_a", "--rows", ","]).unwrap_err().contains("at least one row"));
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). Globs resolve against the bench's own row list in its
+    // order; exact names pass through; a glob matching nothing and an unknown name are errors that list the rows.
+    #[test]
+    fn compare_rows_globs_and_unknown_rows() {
+        let all: Vec<String> = ["memchr_16", "memchr_64", "memchr_16_mix", "strlen_16"].iter().map(|s| s.to_string()).collect();
+        let p = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(resolve_row_patterns("b", &p(&["memchr_16*"]), Some(&all)).unwrap(), ["memchr_16", "memchr_16_mix"]);
+        assert_eq!(resolve_row_patterns("b", &p(&["strlen_16", "memchr_?4"]), Some(&all)).unwrap(), ["memchr_64", "strlen_16"]);
+        assert_eq!(resolve_row_patterns("b", &p(&["memchr_16", "memchr_16"]), None).unwrap(), ["memchr_16"]);
+        let e = resolve_row_patterns("b", &p(&["nope*"]), Some(&all)).unwrap_err();
+        assert!(e.contains("`nope*` is not a row of b") && e.contains("memchr_16, memchr_64, memchr_16_mix, strlen_16"), "{e}");
+        assert!(resolve_row_patterns("b", &p(&["x*"]), None).is_err());
+        let e = unknown_rows_error("b", &p(&["a", "c"]), &all);
+        assert!(e.contains("`a`, `c` are not a row of b"), "{e}");
+        assert!(glob_match(b"*", b"") && glob_match(b"a*c", b"abbc") && !glob_match(b"a?c", b"ac") && !glob_match(b"abc", b"abcd"));
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). Both sides of a comparison get the same CBENCH_ROWS
+    // (one command builder for every build), no filter sets none, and a bench honouring CBENCH_ROWS prints only
+    // the selected rows while the unfiltered listing run sees every row.
+    #[test]
+    fn compare_rows_reach_both_builds_identically() {
+        let env_of = |c: &Command| c.get_envs().find(|(k, _)| *k == "CBENCH_ROWS").and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()));
+        let l = compare_command("cbench_rowtest", Path::new("/t/liella"), Some("memchr_16,memchr_16_mix"));
+        let g = compare_command("cbench_rowtest", Path::new("/t/glibc_dyn"), Some("memchr_16,memchr_16_mix"));
+        assert_eq!(env_of(&l).as_deref(), Some("memchr_16,memchr_16_mix"));
+        assert_eq!(env_of(&l), env_of(&g));
+        assert_eq!(env_of(&compare_command("cbench_rowtest", Path::new("/t/liella"), None)), None);
+        let dir = std::env::temp_dir().join(format!("xtask-rows-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("fakebench");
+        fs::write(&exe, "#!/bin/sh\nfor r in memchr_16 memchr_64 memchr_16_mix; do\n  case \",$CBENCH_ROWS,\" in *,$r,*|,,) printf '%s\\t1.5\\n' $r;; esac\ndone\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(listed_rows("cbench_rowtest", &exe).unwrap(), ["memchr_16", "memchr_64", "memchr_16_mix"]);
+        let out = compare_command("cbench_rowtest", &exe, Some("memchr_16_mix,memchr_16")).output().unwrap();
+        let rows: Vec<String> = parse_rows("cbench_rowtest", &out.stdout).unwrap().into_iter().map(|(r, _)| r).collect();
+        assert_eq!(rows, ["memchr_16", "memchr_16_mix"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). The base tree's run is the same command without
+    // `--base`, staging to the base tarball.
+    #[test]
+    fn base_run_forwards_the_command_without_base() {
+        let a: Vec<String> = ["--stage", "s.tar", "--only", "cbench_memref", "--base", "origin/next"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(base_args(&a, Path::new("/w/s.base.tar")), ["--stage", "/w/s.base.tar", "--only", "cbench_memref"]);
     }
 
     #[test]
