@@ -27,6 +27,16 @@ fn at(bias: usize, (addr, len): (u64, u64)) -> (usize, usize) {
     (usize::try_from(addr).unwrap_or(0).wrapping_add(bias), usize::try_from(len).unwrap_or(0))
 }
 
+/// A relocation table of the mapped image (run-time address and length), as bytes.
+fn table((addr, len): (usize, usize)) -> &'static [u8] {
+    // UNSAFE(slice): one relocation table of the mapped image.
+    #[allow(unsafe_code)]
+    // SAFETY: `boot::tables` checked the table holds whole entries, lies in the address space
+    // and does not overlap the writable segment, so the read never aliases a segment view; the
+    // linker places it in a read-only segment of the image, mapped by the kernel.
+    unsafe { conv::bytes_at(addr, len) }
+}
+
 /// The writable segment as a mutable byte view, for one relocation step.
 fn segment(bias: usize, (vaddr, memsz): (u64, u64)) -> Segment<'static> {
     let (addr, len) = at(bias, (vaddr, memsz));
@@ -70,12 +80,7 @@ pub(crate) fn relocate_self(phdr: usize, phnum: usize, ehdr: usize) -> Result<Re
     let words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
     let t = boot::tables(words, img.writable)?;
     let (rela, jmprel, relr) = (at(bias, t.rela), at(bias, t.jmprel), at(bias, t.relr));
-    // UNSAFE(slice): the three relocation tables of the mapped image.
-    #[allow(unsafe_code)]
-    // SAFETY: `boot::tables` checked each table holds whole entries, lies in the address space
-    // and does not overlap the writable segment, so these reads never alias the view below; the
-    // linker places them in a read-only segment of the image, mapped by the kernel.
-    let (ra, ja, rr) = unsafe { (conv::bytes_at(rela.0, rela.1), conv::bytes_at(jmprel.0, jmprel.1), conv::bytes_at(relr.0, relr.1)) };
+    let (ra, ja, rr) = (table(rela), table(jmprel), table(relr));
     let mut seg = segment(bias, img.writable);
     boot::relocate::<Native>(ra, ja, rr, &mut seg, u64::try_from(bias).unwrap_or(0))?;
     Ok(Relocated { bias, writable: img.writable, rela, jmprel })
