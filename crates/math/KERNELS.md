@@ -5,6 +5,15 @@ Read this first; open kernel code only by range (`file:line` below) for the func
 Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `domain:`, `declines:`;
 `bound: undocumented` when the doc has no `bound:` line) and its first sentence.
 
+## fast32/bessel.rs (f32 bessel)
+
+- `fast32/bessel.rs:52` `const fn hankel_coeffs(nu: u32) -> [[f64; 11]; 2]` — bound: undocumented — doc: Hankel's coefficients for order ν: P takes (-1)^m a_2m, Q (-1)^m a_(2m+1), with a_0 = 1 and a_(k+1) = a_k·(4ν² - (2k+1)²)/(8(k+1)) (DLMF 10.17.1), k < 22.
+- `fast32/bessel.rs:68` `fn horner(c: &[u64], t: f64) -> f64` — bound: undocumented
+- `fast32/bessel.rs:80` `fn horner_f(c: &[f64; 11], t: f64) -> f64` — bound: undocumented
+- `fast32/bessel.rs:102` `fn hankel_core(f: usize, x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: Hankel's form for x in [24, 2^19): f = √(2/(πx))·(P cos ω ∓ ...), ω = x - νπ/2 - π/4, written with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P…
+- `fast32/bessel.rs:123` `pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: J0 (f = 0), J1 (1), Y0 (2), Y1 (3) of a `float` x as (y, e) with |y - f| ≤ e, or `None` (x outside [2^-20, 2^19) in magnitude, x ≤ 0 for Y, NaN).
+- `fast32/bessel.rs:176` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
+
 ## fast32/erf.rs (f32 erf)
 
 - `fast32/erf.rs:49` `fn erf_small(v: f64) -> f64` — bound: undocumented — doc: erf v for |v| < 1 as v·P(v²), ε ≤ 7u: the fit 3.67u; s = RN(v²) moves P by under s·|P'/P|·u < 0.4u; Horner in s ∈ [0, 1) with |c_k s^k| falling by over 3 per st…
@@ -58,13 +67,13 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast32.rs (f32 core)
 
-- `fast32.rs:317` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:351` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:361` `include!("fast32_tables.rs");`
-- `fast32.rs:375` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:402` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:452-466` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:482-504` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
+- `fast32.rs:327` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
+- `fast32.rs:365` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:375` `include!("fast32_tables.rs");`
+- `fast32.rs:389` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:416` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:467-481` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:497-519` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
 
 ## fast32_tables.rs (fast32_tables)
 
