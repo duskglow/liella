@@ -107,7 +107,11 @@ const SETTLE_POLLS: u32 = 100_000;
 /// main thread spawns the thread that runs the test and then waits for the result, and its first
 /// wait sets up per-thread state that needs memory (std's current-thread handle, a
 /// `pthread_setspecific` value, the channel's waiter entry). Under the limit that setup fails and
-/// std aborts the child ("Unexpected TLS failure"). Once parked, that thread stays so until this
+/// std aborts the child ("Unexpected TLS failure"). The `pthread_setspecific` part is particular
+/// to this test process: its threads are the host C library's, and Liella gives such a thread its
+/// key storage on first use (D-22.10); in Liella's products every thread has it from creation
+/// (D-22.15). The rest (std's handle, the waiter entry) is std allocating, so the wait stays
+/// whatever `pthread_setspecific` needs. Once parked, that thread stays so until this
 /// process exits: the result is never sent, the child ends with `exit_group`. This thread holds no
 /// lock while it polls, so a sibling asleep in `futex` waits for that result, not for this thread.
 fn others_settled() -> bool {

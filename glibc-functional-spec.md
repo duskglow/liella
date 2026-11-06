@@ -4259,6 +4259,14 @@ versions (⚑ COMPAT).
 **Guarantees.** Static TLS for the executable and initially loaded libraries is at a fixed
 offset from the thread pointer.
 
+**Failure.** `pthread_setspecific` (and `tss_set`) never fails with `ENOMEM` in Liella: every
+thread holds the value storage for all its keys from its creation (D-22.15). glibc 2.39, with the
+address space exhausted, sets the first 32 keys a process creates (creation index 0 to 31) on a
+thread that has never stored a value, on the initial thread and on a new thread alike, and
+returns `ENOMEM` for a later key (index 32 and up), after which `pthread_getspecific` returns
+NULL for it (probe `spec/behaviour/key-nomem.probe.c`, spec/behaviour/key-nomem.md). POSIX
+allows `ENOMEM` here, so Liella succeeds wherever glibc does.
+
 **Kernel.** The thread pointer register (`arch_prctl(ARCH_SET_FS)` for the main thread, and
 `CLONE_SETTLS` for others). `mmap` for dynamic TLS blocks.
 
