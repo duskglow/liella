@@ -10,7 +10,7 @@ extern crate std;
 use core::alloc::{GlobalAlloc, Layout};
 use std::alloc::System;
 
-use super::failinject::{count_live, should_fail};
+use super::failinject::{call_begins, call_done, count_live, should_fail};
 
 fn bytes(n: usize) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
@@ -31,9 +31,11 @@ unsafe impl GlobalAlloc for FailAlloc {
         if should_fail(layout.size()) {
             return core::ptr::null_mut();
         }
+        call_begins();
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: the caller's contract (a non-zero-size layout) is passed on unchanged.
         let p = unsafe { System.alloc(layout) };
+        call_done();
         if !p.is_null() {
             count_live(bytes(layout.size()));
         }
@@ -43,9 +45,11 @@ unsafe impl GlobalAlloc for FailAlloc {
     // UNSAFE(allocator): the trait's required method.
     #[allow(unsafe_code)]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        call_begins();
         // UNSAFE(allocator): returning the block to the host allocator.
         // SAFETY: `ptr` came from `System` (this allocator's only source) with `layout`.
         unsafe { System.dealloc(ptr, layout) };
+        call_done();
         count_live(bytes(layout.size()).wrapping_neg());
     }
 
@@ -55,9 +59,11 @@ unsafe impl GlobalAlloc for FailAlloc {
         if should_fail(layout.size()) {
             return core::ptr::null_mut();
         }
+        call_begins();
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: as `alloc`.
         let p = unsafe { System.alloc_zeroed(layout) };
+        call_done();
         if !p.is_null() {
             count_live(bytes(layout.size()));
         }
@@ -70,9 +76,11 @@ unsafe impl GlobalAlloc for FailAlloc {
         if new_size > layout.size() && should_fail(new_size) {
             return core::ptr::null_mut();
         }
+        call_begins();
         // UNSAFE(allocator): passing the request on to the host allocator.
         // SAFETY: `ptr` came from `System` with `layout`; the caller guarantees `new_size`.
         let p = unsafe { System.realloc(ptr, layout, new_size) };
+        call_done();
         if !p.is_null() {
             count_live(bytes(new_size).wrapping_sub(bytes(layout.size())));
         }

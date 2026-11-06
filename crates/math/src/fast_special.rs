@@ -52,12 +52,32 @@
 //! about `2·eps/ulp` of the operands, at most `2·2^-71.3/2^-53 = 2^-17.3` for `erf` and `erfc`
 //! above 1, and `2^-15.6` for `erfc` just below 1 (`1 − erf x` near 0.157 carries `erf`'s
 //! absolute bound); the tests' ceiling of 1 in 10^4 is above all of these.
+//!
+//! **In-place entries** ([`erf_nearest`], [`erfc_nearest`], LIBM-SPECIAL-FAST-TIER-3): the
+//! round-to-nearest results for the boundary's in-place envelope (`mret::elem_fast`, the contract
+//! of `fast64::exp_nearest`): `fast64`'s constant test `near` first (one multiply, one add, one
+//! compare), `settle` when it misses, `None` for every operand they do not take. `near` needs
+//! `eps <= rho·|y.hi|`: `rho = RHO_EXP = 1.125·2^-70` holds for `erf` on `[2^-55, 6)` (2^-71.31 and
+//! 2^-73.5 + 2^-104 above), for `erfc` on `(−6, 0)` (`1 + erf|x|` with `|r.hi| >= 1` and
+//! `|y.hi| <= |r.hi|`: `2^-71.31 + 2^-103`) and for `erfc` on `[1, 27.25)` (`2^-71.40 + 2^-72 +
+//! 2^-49·|tail|`, `|tail| < 2^-24.72` by `fast64::RHO_EXP`'s proof: `0.71·2^-70`). On `(0, 1)`
+//! `1 − erf x` carries `erf`'s absolute bound over `|r.hi| >= 0.157`: `eps/|r.hi| <=
+//! (0.8427·2^-71.31 + 2^-103)/0.1572 < 2^-68.88`, so that branch uses `RHO_ERFC_LOW = 2^-68` and its
+//! multiplier `C_ERFC_LOW`. Results are taken only where they are normal (`erfc`: `m >= -1021` with
+//! `y.hi` in `[1, 2)`) and every intermediate is normal, so the arithmetic raises inexact (the test
+//! proves an addition inexact) and nothing else; the exact `±1`/`2` limits of `±∞` and the operands
+//! below `2^-55` are left to the caller's accurate path.
+//!
+//! **Builds** (MATH-F64-FMA-PATH, D-10.25): the kernels exist in the baseline build (Dekker's
+//! [`two_prod`]) and in [`fused`] (one FMA per exact product, [`dd::two_prod_fma`]). Every product
+//! formed is exact in both (operands near 1, far from overflow and underflow), so the two builds
+//! return the same pairs bit for bit, take the same branches and return the same results.
 
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // slot indices bounded by the ranges checked before each lookup
 
 use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
-use crate::fast64;
+use crate::fast64::{self, finish, C_EXP};
 use crate::mp::Mp;
 use crate::status::{Rounding, Status};
 use crate::wide::{beside, near_one};
@@ -84,9 +104,26 @@ const TAIL: f64 = f64::from_bits(0x3ce0_0000_0000_0000);
 const ERF_ONE: f64 = 6.0;
 /// The upper end of `erfc`'s fast range (module doc).
 pub const ERFC_MAX: f64 = 27.25;
+/// 2^-63: the in-place `±1` and `2` limits subtract `w` in `[6, 8]·2^-63` (inexact in hardware).
+const E63: f64 = f64::from_bits(0x3c00_0000_0000_0000);
+/// The relative bound of `erfc`'s in-place `1 − erf x` branch (module doc): 2^-68.
+#[allow(dead_code)] // the stated bound; the multiplier below is derived from it (tests)
+pub(crate) const RHO_ERFC_LOW: f64 = f64::from_bits(0x3bb0_0000_0000_0000);
+/// The least `double` `C` with `C·(1 − 2^54·RHO_ERFC_LOW) > 1 + 2^-53`, the multiplier of
+/// `fast64`'s `near` for that bound: `1 + 2^-14 + 2^-28 + 2^-42 + 2^-52` (checked exactly by the
+/// tests below).
+pub(crate) const C_ERFC_LOW: f64 = f64::from_bits(0x3ff0_0040_0100_0401);
+/// The least `m` of an in-place `erfc` result `y.hi·2^m` (`y.hi` in `[1, 2)`: normal).
+const M_NORMAL: i32 = -1021;
 
+// The kernels and in-place entries in two builds (module doc, "Builds"): `$prod` is the exact
+// product, `$exp_dd` the matching build of `fast64::exp_dd`; `$i` is
+// the inlining (`#[inline(always)]` cannot be combined with `#[target_feature]`).
+macro_rules! kernels {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path; $exp_dd:path) => {
 /// The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
-#[inline(always)]
+$(#[$a])*
+$(#[$i])*
 fn taylor(row: &[u64; 19], t: f64) -> Dd {
     const M: usize = 4;
     const D: usize = 14;
@@ -97,7 +134,7 @@ fn taylor(row: &[u64; 19], t: f64) -> Dd {
     }
     let (mut sh, mut sl) = (r, 0.0);
     for k in (0..M).rev() {
-        let p = two_prod(sh, t);
+        let p = $prod(sh, t);
         let h = two_sum(c(2 * k), p.hi);
         sl = h.lo + (c(2 * k + 1) + (p.lo + sl * t));
         sh = h.hi;
@@ -117,32 +154,47 @@ fn slot(x: f64, base: u64) -> (usize, f64) {
 /// this order): `z = x²` exact, `R = q2 + zh·(q3 + … + zh·q6)` in `f64`,
 /// `S = q0 + q1·z + zh²·R` in double-double (`q1·z = two_prod(q1h, zh) + (q1h·zl + q1l·zh)`, the
 /// small parts summed first and `zh²·R` last), then `x·S`.
-#[inline(always)]
+$(#[$a])*
+$(#[$i])*
 fn erf_small(x: f64) -> Dd {
     let q = |k: usize| f64::from_bits(t::ERF_SMALL[k]);
-    let z = two_prod(x, x);
+    let z = $prod(x, x);
     let mut r = q(8);
     for k in (4..8).rev() {
         r = r * z.hi + q(k);
     }
-    let p = two_prod(q(2), z.hi);
+    let p = $prod(q(2), z.hi);
     let s = fast_two_sum(q(0), p.hi);
     let lo = ((s.lo + q(1)) + (p.lo + (q(2) * z.lo + q(3) * z.hi))) + (z.hi * z.hi) * r;
     let sum = fast_two_sum(s.hi, lo);
-    let y = two_prod(x, sum.hi);
+    let y = $prod(x, sum.hi);
     fast_two_sum(y.hi, y.lo + x * sum.lo)
 }
 
-/// `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
-pub fn erf_kernel(x: f64) -> (Dd, f64, i32) {
+/// `erf x` for `2^-55 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+$(#[$a])*
+$(#[$i])*
+fn erf_dd(x: f64) -> (Dd, f64) {
     if x >= SMALL {
         let (i, c) = slot(x, 0x3fa0);
         let y = taylor(&t::ERF_T[i], x - c);
-        return (y, dd::abs(y.hi) * f64::from_bits(t::ERF_T_EPS), 0);
+        return (y, dd::abs(y.hi) * f64::from_bits(t::ERF_T_EPS));
     }
+    let y = erf_small(x);
+    (y, dd::abs(y.hi) * (f64::from_bits(t::ERF_SMALL_EPS) + E104))
+}
+
+/// `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erf_kernel(x: f64) -> (Dd, f64, i32) {
     if x >= LINEAR {
-        let y = erf_small(x);
-        return (y, dd::abs(y.hi) * (f64::from_bits(t::ERF_SMALL_EPS) + E104), 0);
+        let (y, eps) = erf_dd(x);
+        return (y, eps, 0);
     }
     let (xs, m) = if x < SCALED {
         // exact: both products are normal; then xs·2^m = x with xs in [1, 2)
@@ -152,7 +204,7 @@ pub fn erf_kernel(x: f64) -> (Dd, f64, i32) {
     } else {
         (x, 0)
     };
-    let p = two_prod(xs, f64::from_bits(t::ERF_SMALL[0]));
+    let p = $prod(xs, f64::from_bits(t::ERF_SMALL[0]));
     let y = fast_two_sum(p.hi, p.lo + xs * f64::from_bits(t::ERF_SMALL[1]));
     // Scaled: keep y.hi in [1, 2) (exact halving) so `settle` sees a normalized significand.
     let (y, m) = if m != 0 && y.hi >= 2.0 { (y.scale(0.5), m + 1) } else { (y, m) };
@@ -161,16 +213,106 @@ pub fn erf_kernel(x: f64) -> (Dd, f64, i32) {
 
 /// `erfc x` for `1 <= x < ERFC_MAX` as `(y, eps, m)`, `1 <= y.hi < 2`: `|erfc x − y·2^m| <= eps·2^m`
 /// (module doc), or `None` when `e^(−x²)`'s kernel declines.
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
 pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)> {
-    let s = two_prod(x, x);
-    let (e, m, tail) = fast64::exp_dd(s.neg())?;
+    let s = $prod(x, x);
+    let (e, m, tail) = $exp_dd(s.neg())?;
     let (i, c) = slot(x, 0x3ff0);
-    let y = e.mul(taylor(&t::ERFCX_T[i], x - c));
+    let b = taylor(&t::ERFCX_T[i], x - c);
+    // `Dd::mul` with this build's product (the same arithmetic).
+    let p = $prod(e.hi, b.hi);
+    let y = fast_two_sum(p.hi, p.lo + (e.hi * b.lo + e.lo * b.hi));
     // y.hi = 2^k·f with f in [1, 2): scale to [1, 2) (exact), m + k.
     let k = i32::try_from((y.hi.to_bits() >> 52) & 0x7ff).unwrap_or(0) - 1023;
     let y = y.scale(dd::pow2(-k));
     let eps = dd::abs(y.hi) * (f64::from_bits(t::ERFCX_T_EPS) + TAIL * dd::abs(tail) + E72);
     Some((y, eps, m + k))
+}
+
+/// `erf x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or
+/// `None`: NaN, `±∞` and `|x| < 2^-55` always, and the rare operands both rounding tests refuse.
+///
+/// # Safety
+///
+/// In [`fused`] the CPU must support FMA and the OS must save the AVX state (the
+/// `#[target_feature]` contract); the baseline build has no requirement.
+$(#[$a])*
+$(#[$i])*
+pub fn erf_nearest(x: f64) -> Option<f64> {
+    let ax = dd::abs(x);
+    if !(LINEAR..).contains(&ax) {
+        return None;
+    }
+    if ax >= ERF_ONE {
+        if ax == f64::INFINITY {
+            return None;
+        }
+        // erf x within 2^-55 of ±1 (module doc): ±1, the subtraction inexact.
+        let v = 1.0 - ax.min(8.0) * E63;
+        return Some(if x < 0.0 { -v } else { v });
+    }
+    let (y, eps) = erf_dd(ax);
+    let v = finish(y, Some(C_EXP), 0, || eps, &mut 0)?;
+    Some(if x < 0.0 { -v } else { v })
+}
+
+/// `erfc x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or
+/// `None`: NaN, `±∞`, `|x| < 2^-55`, results below `2^-1021` and the rare operands both
+/// rounding tests refuse.
+///
+/// # Safety
+///
+/// As [`erf_nearest`].
+$(#[$a])*
+$(#[$i])*
+pub fn erfc_nearest(x: f64) -> Option<f64> {
+    if x < 1.0 {
+        let ax = dd::abs(x);
+        if !(LINEAR..).contains(&ax) {
+            return None;
+        }
+        if x <= -ERF_ONE {
+            if x == f64::NEG_INFINITY {
+                return None;
+            }
+            // erfc x within 2^-55 of 2 (module doc): 2, the subtraction inexact.
+            return Some(2.0 - ax.min(8.0) * E63);
+        }
+        let (y, eps) = erf_dd(ax);
+        let (y, c) = if x < 0.0 { (y, C_EXP) } else { (y.neg(), C_ERFC_LOW) };
+        let s = fast_two_sum(1.0, y.hi);
+        let r = fast_two_sum(s.hi, s.lo + y.lo);
+        return finish(r, Some(c), 0, || eps + E103, &mut 0);
+    }
+    if !(..ERFC_MAX).contains(&x) {
+        return None;
+    }
+    let (y, eps, m) = erfc_kernel(x)?;
+    if m < M_NORMAL {
+        return None;
+    }
+    finish(y, Some(C_EXP), m, || eps, &mut 0)
+}
+    };
+}
+
+kernels!(; #[inline(always)]; two_prod; fast64::exp_dd);
+
+/// The FMA build of the kernels and in-place entries (module doc, "Builds"; MATH-F64-FMA-PATH,
+/// D-10.25): the same arithmetic with every exact product a single FMA, so the same results bit
+/// for bit. Callable only on a CPU with FMA and the OS-enabled AVX state; the boundary selects it
+/// once at startup (`dispatch::fma`).
+// ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
+#[cfg(target_arch = "x86_64")]
+pub mod fused {
+    use super::*;
+
+    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd);
 }
 
 /// `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
@@ -213,4 +355,46 @@ pub fn erfc(x: f64, mode: Rounding) -> Option<(f64, Status)> {
     }
     let (y, eps, m) = erfc_kernel(x)?;
     fast64::settle(y, eps, m, mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `n` operands spread over `[lo, hi)` (a fixed Weyl sequence).
+    fn operands(n: u32, lo: f64, hi: f64) -> impl Iterator<Item = f64> {
+        (0..n).map(move |k| lo + (hi - lo) * ((f64::from(k) * 0.618_033_988_749_894_9) % 1.0))
+    }
+
+    // Clauses: s10_3_c_0 (D-10.13): the in-place entries' constant test only answers within the
+    // bound its multiplier was derived for.
+    #[test]
+    fn in_place_bounds_are_within_their_multipliers() {
+        // C_ERFC_LOW is the least double with C·(1 − 2^54·rho) > 1 + 2^-53 (exact in Mp).
+        let one_u = Mp::from_f64(1.0).add(Mp::from_f64(f64::EPSILON / 2.0));
+        let k = Mp::from_f64(1.0).sub(Mp::from_f64(RHO_ERFC_LOW * dd::pow2(54)));
+        assert!(Mp::from_f64(C_ERFC_LOW).mul(k).cmp_abs(one_u).is_gt(), "C_ERFC_LOW below its bound");
+        let below = f64::from_bits(C_ERFC_LOW.to_bits() - 1);
+        assert!(Mp::from_f64(below).mul(k).cmp_abs(one_u).is_le(), "C_ERFC_LOW not the least");
+        // erf on [2^-55, 6) and erfc on (−6, 0) within RHO_EXP; erfc on (0, 1) within RHO_ERFC_LOW.
+        let tiny = (0..4000u32).map(|k| dd::pow2(i32::try_from(k % 50).unwrap_or(0) - 55) * (1.0 + f64::from(k) / 4000.0));
+        for x in operands(40_000, LINEAR, ERF_ONE).chain(tiny) {
+            let (y, eps) = erf_dd(x);
+            assert!(eps <= fast64::RHO_EXP * dd::abs(y.hi), "erf({x:e})");
+            for (sign, rho) in [(1.0, fast64::RHO_EXP), (-1.0, RHO_ERFC_LOW)] {
+                if sign < 0.0 && x >= 1.0 {
+                    continue;
+                }
+                let s = fast_two_sum(1.0, sign * y.hi);
+                let r = fast_two_sum(s.hi, s.lo + sign * y.lo);
+                assert!(eps + E103 <= rho * dd::abs(r.hi), "erfc({:e})", -sign * x);
+            }
+        }
+        // erfc on [1, 27.25) within RHO_EXP.
+        for x in operands(40_000, 1.0, ERFC_MAX) {
+            if let Some((y, eps, _)) = erfc_kernel(x) {
+                assert!(eps <= fast64::RHO_EXP * dd::abs(y.hi), "erfc({x:e})");
+            }
+        }
+    }
 }

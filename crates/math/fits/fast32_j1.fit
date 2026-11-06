@@ -1,0 +1,10 @@
+# LIBM-F32-BESSEL (D-10.3): J1(c + t), t on [-1, 1], for the pieces [c - 1, c + 1) of [2, 24), c = 3, 5, ..., 23; absolute error (the kernel turns it into a per-call margin).
+
+name = fast32_j1
+target = j1
+interval = -1, 1
+powers = 0..13
+error = absolute
+format = f64
+centers = 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23
+output = crates/math/src/coeffs/fast32_j1.rs

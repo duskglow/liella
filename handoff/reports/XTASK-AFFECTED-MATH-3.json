@@ -1,0 +1,7 @@
+{"task": "XTASK-AFFECTED-MATH-3", "model": "opus", "tokens": null, "result": "COMPLETE: math fits and tables generator map to the math set; -2's surviving plant fixed by a shared ordinary_mapping helper; gate, plants (10/10 caught), lint, replay green", "branch": "task/xtask-affected-math-3", "head": "9523eaa8",
+ "gate": {"affected": "199 passed / 0 failed", "peak": "981M"}, "accepted_first_attempt": null,
+ "jobs": ["shiki:xam3-lint", "shiki:xam3-gate", "shiki:xam3-plants", "shiki:xam3-replay"],
+ "rulings": [], "informational": ["replay: 4 of the last 10 libm merges still go FULL for files outside the math set (xtask/src/*.rs, crates/boundary build.rs and src, csys .S, crates/mathtools/src/bin/tables.rs and special_tables.rs); mapping the generator's siblings would need a ruling extending #3204"], "refused": [],
+ "improvement": "a plant on a call that duplicates another call's effect survives by design; factoring the duplicated mapping into one helper and planting the helper gave a test that sees it",
+ "next_step": "none for this story; optional follow-up: map crates/mathtools/src/bin/tables.rs and special_tables.rs like tables.rs",
+ "report_file": "handoff/XTASK-AFFECTED-MATH-3.md"}

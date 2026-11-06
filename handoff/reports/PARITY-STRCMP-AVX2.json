@@ -1,0 +1,11 @@
+{"task": "PARITY-STRCMP-AVX2", "model": "opus", "tokens": null,
+ "result": "AVX2 strcmp: four tested blocks then 128-byte groups from .Lstrcmp_v_top; percall strcmp_eq 1024-65536 now 1.11/0.99/1.00/1.01 (from 1.19-1.25), 16-256 unchanged; case-insensitive rows and short heads not started",
+ "branch": "task/parity-strcmp-avx2", "head": "see git (report commit after ec2ad25b)",
+ "gate": {"affected": "parity-strcmp-avx2-gate-3 running at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "Skylake-SP and Ivy Bridge bench counts need a count job on a host of that class (no role there)", "recommendation": "dispatcher runs cargo xtask bench --compare --counters --runs 3 on both classes for this head; Ivy Bridge is unchanged by construction (SSE2 path not edited)"}],
+ "informational": ["percall avx2_families.c strcmp_eq rows run the kernel's start path (one 64-aligned buffer starts 64 bytes before a page end), not the ordinary head", "first-plants run: locate-half and group-count survived; tests strengthened in ec2ad25b"],
+ "refused": [],
+ "improvement": "sync_role refuses while any job runs in the role, so a test-only fix after a gate costs a kill and resync: run the gate after the plants pass, not alongside",
+ "next_step": "same group-count hoist for the casecmp_ord_avx2 loop (page + bound test per 64 B), then an EVEX level for the Skylake-SP rows",
+ "report_file": "handoff/parity-strcmp-avx2.md",
+ "jobs": ["parity-strcmp-avx2-gate-3", "parity-strcmp-avx2-plants-3", "parity-strcmp-avx2-count", "parity-strcmp-avx2-percall", "parity-strcmp-avx2-count-before", "parity-strcmp-avx2-percall-before"]}

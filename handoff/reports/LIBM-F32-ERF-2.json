@@ -1,0 +1,11 @@
+{"task": "LIBM-F32-ERF-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fixed the -1 gate failure (erfcx pieces 3-5 fitted on half or off-centre intervals; subnormal erfc refused after the kernel; a test checked erfc saturation against its bound); gate and plants queued detached on keke; counts, tiered oracle and sweeps not done",
+ "branch": "task/libm-f32-erf-2", "head": "772c17ab",
+ "gate": {"affected": "not read (libm-f32-erf-2-gate queued on keke)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["keke slots were full with another story's 150-min sweeps; a jobrun started in a foreground ssh died with it when the local tool timeout hit (refit job lost once)"],
+ "refused": [],
+ "improvement": "remez .fit files could state the piece [lo, hi] instead of shift + half-width: the tool would derive both, and the half-width slip in three files could not happen",
+ "next_step": "jobwait libm-f32-erf-2-gate and -plants on keke, fix any red; counts for cbench_libm erff/erfcf; then the tiered dd oracle (#2889) and the sweeps",
+ "report_file": "handoff/libm-f32-erf.md",
+ "jobs": ["libm-f32-erf-2-gate", "libm-f32-erf-2-plants"]}

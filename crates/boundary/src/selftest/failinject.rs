@@ -33,6 +33,7 @@
 extern crate std;
 
 use core::cell::Cell;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// What the calling thread's next allocations do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,6 +64,41 @@ pub fn live_bytes() -> i64 {
 /// [`live_bytes`] moves by `d`. Called by [`FailAlloc`] only.
 pub(super) fn count_live(d: i64) {
     let _ = LIVE.try_with(|c| c.set(c.get().wrapping_add(d)));
+}
+
+// Calls into the host allocator through [`FailAlloc`], all threads: counted when a call begins
+// and again when it has returned, so a reader can tell whether a call of another thread
+// overlapped a window (see [`others_begun`]). `CALLS` counts the calling thread's own calls.
+static BEGUN: AtomicU64 = AtomicU64::new(0);
+static DONE: AtomicU64 = AtomicU64::new(0);
+std::thread_local! {
+    static CALLS: Cell<u64> = const { Cell::new(0) };
+}
+
+/// A call of the calling thread into the host allocator begins. Called by [`FailAlloc`] only.
+pub(super) fn call_begins() {
+    let _ = CALLS.try_with(|c| c.set(c.get().wrapping_add(1)));
+    BEGUN.fetch_add(1, Ordering::SeqCst);
+}
+
+/// That call has returned. Called by [`FailAlloc`] only.
+pub(super) fn call_done() {
+    DONE.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Global-allocator calls OTHER threads have begun (process-wide count minus the calling
+/// thread's own). With [`others_done`] it tells a test whether a process-wide measure, such as
+/// the C heap's `mallinfo2().uordblks`, may include another thread's traffic: read
+/// `d = others_done()` BEFORE the first measurement and `b = others_begun()` AFTER the last;
+/// `b == d` proves that no other thread's allocator call ran (even in part) between them.
+/// Calls a thread makes to the C heap without the global allocator are not counted.
+pub fn others_begun() -> u64 {
+    BEGUN.load(Ordering::SeqCst).wrapping_sub(CALLS.try_with(Cell::get).unwrap_or(0))
+}
+
+/// Global-allocator calls other threads have completed (see [`others_begun`]).
+pub fn others_done() -> u64 {
+    DONE.load(Ordering::SeqCst).wrapping_sub(CALLS.try_with(Cell::get).unwrap_or(0))
 }
 
 /// Fail the `n`-th allocation of the calling thread from now (1: the next one), once; the

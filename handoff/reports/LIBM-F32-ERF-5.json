@@ -1,0 +1,17 @@
+{"task": "LIBM-F32-ERF-5", "model": "opus", "tokens": null,
+ "result": "COMPLETE: merged origin/next (per-family coeffs/fast32 layout); erf kernels, oracle and -4's test edits carried over byte-identical apart from paths and indent (proof in handoff); clippy+static clean; plants 12/12 caught; counts erff 180.3 / erfcf 191.7 (= -3); FULL gate running",
+ "branch": "task/libm-f32-erf-5", "head": "17a5cdfe",
+ "gate": {"affected": "libm-f32-erf-5-gate (FULL) running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Jobs ran on the tree at 17a5cdfe; the commit after it touches only handoff/ (this report and the handoff).",
+   "Two edits used `sed -i` against the Edit-tool-only rule (neither was refused): one on crates/math/src/coeffs.rs deleting a leftover conflict marker (result checked by clippy and static), one on handoff/libm-f32-erf.md rewording a line.",
+   "No tables regeneration: this story never changed crates/mathtools/src/tables.rs; xtask static reports tables up to date.",
+   "Exhaustive erff/erfcf sweeps not rerun (coordinator: unnecessary given the byte-identity proof)."
+ ],
+ "refused": [],
+ "jobs": ["mei:libm-f32-erf-5-gate", "mei:libm-f32-erf-5-plants", "mei:libm-f32-erf-5-counts"],
+ "improvement": "A merge-only continuation could be done by a tool: re-apply a branch's hunks to moved code by exact-text match after dedent (as apply_tests.py did) and emit the identity proof automatically.",
+ "next_step": "none for the story once the FULL gate is rc 0",
+ "report_file": "handoff/libm-f32-erf.md"}

@@ -416,6 +416,14 @@ pub fn enter_from(m: &impl Machine, saved: u32) -> bool {
     in_place
 }
 
+/// [`enter_from`] for a caller that already knows `saved` does not hold the default control
+/// word (a fast entry's directed-mode branch): switch to the default without testing again.
+/// Leave with [`leave`] and [`raise`].
+#[inline]
+pub fn switch_default(m: &impl Machine) {
+    m.set_mxcsr(MX_DEFAULT);
+}
+
 /// Read MXCSR once and say whether its control word is the default one, writing nothing: the
 /// fast-path entry (MATH-M6-ENVELOPE-COST), which runs only in place.
 #[inline]

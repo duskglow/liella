@@ -189,10 +189,19 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     let args: Vec<(f64, f64)> = args.into_iter().chain(specials).collect();
     let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     let (mut checked, mut bad) = (0usize, Vec::new());
-    for (name, f, _) in double_fast_entries() {
+    for (name, f, _) in double_fast_entries().into_iter().chain(double_trig_entries()) {
+        let trig = double_trig_entries().iter().any(|e| e.0 == name);
         for &(x, y) in &args {
+            if trig && x.is_subnormal() {
+                continue; // sin x and tan x are about x: a subnormal result, flushed under FTZ
+            }
             for (rc, &mode) in (0u32..).zip(modes.iter()) {
                 let (want, st) = match name {
+                    "sin" => Real::sin(x, mode),
+                    "cos" => Real::cos(x, mode),
+                    "tan" => Real::tan(x, mode),
+                    "sincos.sin" => (Real::sincos(x, mode).0 .0, Real::sincos(x, mode).1),
+                    "sincos.cos" => (Real::sincos(x, mode).0 .1, Real::sincos(x, mode).1),
                     "exp" => Real::exp(x, mode),
                     "exp2" => Real::exp2(x, mode),
                     "log" => Real::log(x, mode),
@@ -201,7 +210,9 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
                     "exp10" => Real::exp10(x, mode),
                     _ => Real::pow(x, y, mode),
                 };
-                for extra in [0, 0x8000, 0x40, 0x8040] {
+                // 0x3f: every flag already sticky in the caller's word, so leaving the word means
+                // writing it back even when the result raises nothing new.
+                for extra in [0, 0x8000, 0x40, 0x8040, 0x3f, 0x803f] {
                     if extra & 0x40 != 0 && x < f64::MIN_POSITIVE {
                         continue; // DAZ reads a subnormal argument as zero: another function value
                     }
@@ -223,11 +234,86 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
 
 /// Every argument of `args` through each double fast entry ([`math_double_fast_entry_matches_the_envelope_in_every_mode`]):
 /// the number checked and one line per mismatch.
-#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
 fn double_fast_entry_mismatches(args: &[(f64, f64)]) -> (usize, Vec<String>) {
+    fast_entry_mismatches(&double_fast_entries(), args)
+}
+
+/// The `double` sin, cos, tan and sincos exports (LIBM-F64-TRIG-TIER) as [`double_fast_entries`]
+/// does; `sincos` twice, once per result.
+#[allow(clippy::type_complexity)]
+fn double_trig_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 5] {
+    use liella_math::real::Real;
+    [
+        ("sin", |x, _| m::sin(x), |x, _, r| Real::sin(x, r).0),
+        ("cos", |x, _| m::cos(x), |x, _, r| Real::cos(x, r).0),
+        ("tan", |x, _| m::tan(x), |x, _, r| Real::tan(x, r).0),
+        ("sincos.sin", |x, _| sincos_pair(x).0, |x, _, r| Real::sincos(x, r).0 .0),
+        ("sincos.cos", |x, _| sincos_pair(x).1, |x, _, r| Real::sincos(x, r).0 .1),
+    ]
+}
+
+/// `sincos` through its export.
+fn sincos_pair(x: f64) -> (f64, f64) {
+    let (mut s, mut c) = (0.0, 0.0);
+    m::sincos(x, Some(&mut s), Some(&mut c));
+    (s, c)
+}
+
+/// Trig arguments over and around the fast domain [2^-30, 2^20): the refused edges (zeros,
+/// subnormals, 2^-339 and 2^-30, 2^20, huge, specials), a few ulps around the multiples of π/2 and
+/// the cell edges k·π/64 ± π/128, then random values in every binade from 2^-36 to 2^23.
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions)] // bounded sample arithmetic
+fn double_trig_arguments() -> Vec<(f64, f64)> {
+    let ulps = |c: f64, w: u64| (0..=2 * w).map(move |d| f64::from_bits(c.to_bits().wrapping_add(d).wrapping_sub(w)));
+    let mut v: Vec<f64> = vec![0.0, f64::MIN_POSITIVE, 1e-310, f64::MAX, 1e300, f64::INFINITY, f64::NAN, 1.0, 0.5, 3.0, 1e5, 7e5];
+    // 2^-360 and 2^-1000: below the in-place cubic's range (x³ would underflow and raise it).
+    for c in [2f64.powi(-339), 2f64.powi(-30), 2f64.powi(20), 2f64.powi(-36), 2f64.powi(-200), 2f64.powi(-360), 2f64.powi(-1000)] {
+        v.extend(ulps(c, 3));
+    }
+    let q = core::f64::consts::PI / 128.0;
+    for k in (1u32..400).chain([1001, 4097, 65_535, 1_000_001, 8_000_001, 33_000_001, 42_000_001]) {
+        v.extend(ulps(f64::from(k) * core::f64::consts::FRAC_PI_2, 2)); // n·π/2: cancellation, tan's poles
+        v.extend(ulps(f64::from(2 * k + 1) * q, 1)); // the cell edges (2j + 1)·π/128
+    }
+    let mut s = 0x243f_6a88_85a3_08d3u64;
+    let mut next = || {
+        s = s.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        s
+    };
+    for _ in 0..4000 {
+        let (a, b) = (next(), next());
+        v.push(2f64.powi((b % 60) as i32 - 36) * (1.0 + (a >> 12) as f64 * 2f64.powi(-52)));
+    }
+    let n = v.len();
+    v.extend_from_within(..n);
+    for x in v.iter_mut().skip(n) {
+        *x = -*x;
+    }
+    v.into_iter().map(|x| (x, 0.0)).collect()
+}
+
+// ARCH(x86_64): the in-place fast entry of the double trig exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_double_trig_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // As math_double_fast_entry_matches_the_envelope_in_every_mode for sin, cos, tan and sincos
+    // (LIBM-F64-TRIG-TIER): the in-place entry (default word) against the full envelope (DAZ), bits,
+    // flags and errno; the directed modes against liella-math's accurate path. The arguments are
+    // the trig hard cases: the domain edges, n·π/2 and the reduction cells' edges.
+    let (checked, mut bad) = fast_entry_mismatches(&double_trig_entries(), &double_trig_arguments());
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 50_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// [`double_fast_entry_mismatches`] over the given entries.
+#[allow(clippy::arithmetic_side_effects, clippy::type_complexity)] // counters over bounded test loops
+fn fast_entry_mismatches(entries: &[(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64)], args: &[(f64, f64)]) -> (usize, Vec<String>) {
     let mut checked = 0usize;
     let mut bad = Vec::new();
-    for (name, f, reference) in double_fast_entries() {
+    for &(name, f, reference) in entries {
         for &(x, y) in args {
             let sub = |a: f64| a != 0.0 && a.abs() < f64::MIN_POSITIVE;
             if sub(x) || sub(y) {
@@ -1857,6 +1943,114 @@ fn math_hypotf_fast_path_is_the_accurate_hypotf() {
     // Finite random operands of comparable magnitude overwhelmingly take the fast path.
     assert!(eligible > 40_000 && fast * 10 > eligible * 9, "fast path taken {fast} of {eligible} comparable");
     fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+#[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_precision_loss, clippy::float_arithmetic)] // test operand arithmetic
+fn math_double_invtrig_hypot_fast_tier_is_the_accurate_path() {
+    // Clauses: s10_0_f_0, s10_0_c_0. LIBM-F64-INVTRIG-HYPOT-TIER: the `double` atan, asin, acos,
+    // atan2 and hypot entries (fast tier in the default MXCSR, accurate path otherwise) give the
+    // accurate path's bits, flags and errno in every direction as an entry delivers them: the
+    // envelope `mr::elem` (the pre-story entry), which runs the double-double arithmetic in the
+    // default MXCSR (under the caller's directed hardware rounding it is not exact) and drops
+    // what that arithmetic raised in hardware but the result does not (acos(5e-324)'s steps
+    // underflow, its result π/2 is not tiny). Every flag set also obeys §10.0 and C F.10 on its
+    // own (`annex_f`): underflow exactly for a tiny inexact result, overflow and ERANGE only as
+    // §10.0 says, invalid and EDOM only for a domain error. An exact root raises nothing, and
+    // atan(1/2), whose fast-tier arithmetic is exact up to the last addition, raises inexact.
+    use liella_boundary::mathret as mr;
+    use liella_math::{pow, trig};
+    let d_in = |rc: u32, f: &dyn Fn() -> f64| {
+        liella_boundary::errno::set_raw(0);
+        let (v, after) = around(0x1f80 | rc << 13, || f().to_bits());
+        (v, after & 0x3d, liella_boundary::errno::get())
+    };
+    // The entry against the accurate path's envelope, then the spec rule on the entry's own.
+    let check = |what: &str, rc: u32, args: &[f64], entry: &dyn Fn() -> f64, envelope: &dyn Fn() -> f64| {
+        let got = d_in(rc, entry);
+        assert_eq!(got, d_in(rc, envelope), "{what} in direction {rc}: (bits, flags, errno) against the accurate path");
+        assert_eq!(annex_f(args, f64::from_bits(got.0), got.1, got.2), Ok(()), "{what} in direction {rc}: §10.0 flags (bits {:#x}, flags {:#x}, errno {})", got.0, got.1, got.2);
+    };
+    let tiny = [5e-324, -5e-324, 1e-323, f64::MIN_POSITIVE, -f64::MIN_POSITIVE, 2.225_073_858_507_201e-308, 1e-300, -1e-160, 1e-155];
+    let mut xs = vec![0.5, 1.0, -1.0, 0.3, -0.7, 2.5, -1e10, 1e-10, 0.999_999_9, 1e-20, 1e300, 0.0, -0.0, 1.5, f64::INFINITY, f64::NAN];
+    xs.extend_from_slice(&tiny);
+    let mut pairs: Vec<(f64, f64)> = vec![(3.0, 4.0), (1.0, 2f64.powi(-30)), (0.5, 0.25), (-2.0, 3.0), (1e300, 1e300), (f64::MAX, f64::MAX), (1e-300, 1e-300), (5e-324, 1.0), (1.0, 5e-324), (5e-324, 0.0), (5e-324, 5e-324), (1e-300, 1e10), (-1e-300, 1e20), (f64::INFINITY, f64::NAN), (0.0, -0.0)];
+    let mut s: u64 = 0x9e37_79b9_7f4a_7c15;
+    for i in 0..3000u32 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        let x = f64::from_bits(s) % 4.0;
+        xs.push(if i % 2 == 0 { x * 0.25 } else { x * 1e5 });
+        pairs.push((x, f64::from_bits(s.rotate_left(17)) % 9.0));
+    }
+    for rc in 0..4u32 {
+        for &x in &xs {
+            check(&format!("atan({x:e})"), rc, &[x], &|| m::atan(x), &|| mr::elem(x, mr::Unit::Sse, trig::atan::<f64>));
+            check(&format!("asin({x:e})"), rc, &[x], &|| m::asin(x), &|| mr::elem(x, mr::Unit::Sse, trig::asin::<f64>));
+            check(&format!("acos({x:e})"), rc, &[x], &|| m::acos(x), &|| mr::elem(x, mr::Unit::Sse, trig::acos::<f64>));
+        }
+        for &(y, x) in &pairs {
+            for (y, x) in [(y, x), (x, y)] {
+                check(&format!("atan2({y:e}, {x:e})"), rc, &[y, x], &|| m::atan2(y, x), &|| mr::elem((y, x), mr::Unit::Sse, |(y, x), md| trig::atan2::<f64>(y, x, md)));
+                check(&format!("hypot({y:e}, {x:e})"), rc, &[y, x], &|| m::hypot(y, x), &|| mr::elem((y, x), mr::Unit::Sse, |(y, x), md| pow::hypot::<f64>(y, x, md)));
+            }
+        }
+    }
+    // The case run -3's FULL gate found (the raw computation raises underflow in hardware), in
+    // every direction and for both signs: π/2 rounded, inexact only.
+    for rc in 0..4u32 {
+        for x in [5e-324, -5e-324] {
+            let (v, flags, errno) = d_in(rc, &|| m::acos(x));
+            assert!((f64::from_bits(v) - core::f64::consts::FRAC_PI_2).abs() < 1e-15 && flags == 0x20 && errno == 0, "acos({x:e}) in direction {rc}: ({v:#x}, {flags:#x}, {errno})");
+        }
+    }
+    assert_eq!(d_in(0, &|| m::hypot(3.0, 4.0)), (5f64.to_bits(), 0, 0), "hypot(3, 4) exact-root flags");
+    assert_eq!(d_in(0, &|| m::hypot(1.0, 2f64.powi(-30))), (1f64.to_bits(), 0x20, 0), "hypot(1, 2^-30) must raise inexact");
+    assert_eq!(d_in(0, &|| m::atan(0.5)).1, 0x20, "atan(1/2) must raise inexact");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// §10.0 (s10_0_f_0) and C F.10 for a `double` result `r` of the operands `args` (quiet NaNs,
+/// infinities or finite values), its MXCSR flags (`0x3d` bits: invalid, divide-by-zero, overflow,
+/// underflow, inexact) and `errno`, decided from the result alone: invalid and `EDOM` exactly for
+/// a NaN from non-NaN operands; never divide-by-zero; underflow only for an inexact result at or
+/// below the smallest normal and always for an inexact one below it (tininess is detected after
+/// rounding, so a result rounded up to `DBL_MIN` may carry it); overflow only for an inexact
+/// result of finite operands that is infinite or `DBL_MAX`, and always for an infinite one;
+/// `ERANGE` exactly for an overflow to ±∞ or an underflow to ±0.
+#[allow(clippy::float_cmp)] // exact comparisons against the format's limits
+fn annex_f(args: &[f64], r: f64, flags: u32, errno: i32) -> Result<(), String> {
+    const EDOM: i32 = 33;
+    const ERANGE: i32 = 34;
+    let finite = args.iter().all(|a| a.is_finite());
+    let domain = r.is_nan() && !args.iter().any(|a| a.is_nan());
+    let inexact = flags & 0x20 != 0;
+    let (uf, of) = (flags & 0x10 != 0, flags & 0x08 != 0);
+    if (flags & 0x01 != 0) != domain {
+        return Err(format!("invalid must be raised exactly for a domain error (domain: {domain})"));
+    }
+    if flags & 0x04 != 0 {
+        return Err("divide-by-zero raised".into());
+    }
+    if uf && !(inexact && r.abs() <= f64::MIN_POSITIVE) {
+        return Err("underflow raised for a result that is exact or not tiny".into());
+    }
+    if !uf && inexact && r.abs() < f64::MIN_POSITIVE {
+        return Err("underflow missing for a tiny inexact result".into());
+    }
+    if of && !(inexact && finite && (r.is_infinite() || r.abs() == f64::MAX)) {
+        return Err("overflow raised for a result that did not overflow".into());
+    }
+    if !of && finite && r.is_infinite() {
+        return Err("overflow missing for an infinite result of finite operands".into());
+    }
+    let range = finite && (r.is_infinite() || (r == 0.0 && inexact));
+    let want = if domain { EDOM } else if range { ERANGE } else { 0 };
+    if errno != want {
+        return Err(format!("errno {errno}, §10.0 gives {want}"));
+    }
+    Ok(())
 }
 
 /// Whether `f` is √(x²+y²) rounded in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward

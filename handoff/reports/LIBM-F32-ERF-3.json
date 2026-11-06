@@ -1,0 +1,13 @@
+{"task": "LIBM-F32-ERF-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: tiered test oracle (ruling #2889) in crates/math/src/oracle32.rs; erff/erfcf exhaustive sweeps against it, mp needed for 4 of 1.7e10 modes (erff) and 0 (erfcf); erff 228016 -> 180.2 instr/call, erfcf 191.6 (glibc 135.3 / 138.7)",
+ "branch": "task/libm-f32-erf-3", "head": null,
+ "gate": {"affected": "see libm-f32-erf-3-gate on mei", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The oracle's per-operation dd bounds (U = 2^-100, exp_dd 2^-98) are slack over dd's stated accuracy, not proven; the end-to-end bound is checked against 384-bit mp at 20k points.",
+                   "erff/erfcf still run about 1.33x/1.38x glibc's instruction count."],
+ "refused": [],
+ "jobs": ["mei:libm-f32-erf-3-gate", "mei:libm-f32-erf-3-plants-2", "mei:libm-f32-erf-3-counts", "mei:libm-f32-erf-3-sweep-erfcf", "mei:libm-f32-erf-3-sweep-erff"],
+ "improvement": "Run exhaustive sweeps as the prebuilt test binary from a RAM copy under taskset: no cargo lock on the role, and the role stays free for the counts build.",
+ "next_step": "none; optional: estimators for the next float families in oracle32.rs",
+ "report_file": "handoff/libm-f32-erf.md"}

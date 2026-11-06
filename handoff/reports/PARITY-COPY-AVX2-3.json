@@ -1,0 +1,12 @@
+{"task": "PARITY-COPY-AVX2-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: AVX2 copy held-end-block change measured on Zen 1: -8 instructions per call at 1/4/16/64 KiB (memcpy and memmove), no ladder size higher; 1e8ffb15 kept",
+ "branch": "task/parity-copy-avx2-3", "head": null,
+ "gate": {"affected": "keke:parity-copy-avx2-gate2 rc 0 (product identical); plants 6 CAUGHT / 0 SURVIVED; keke lint on final head", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["predicted -9 per call by reading, measured -8; the +3 sizes (n mod 128 in 1..32 past the aligned start) are not in the avx2_families ladder"],
+ "refused": [],
+ "jobs": ["keke:parity-copy-avx2-3-percall", "keke:parity-copy-avx2-3-lint", "keke:parity-copy-avx2-gate2", "kanon:parity-copy-avx2-2-plants"],
+ "improvement": "the coordinator note fixing kanon's disk plus a primed base made this a 15-call run; a story whose only remaining step is a count could be run by the dispatcher itself without an agent",
+ "next_step": "optional: timing of 1e8ffb15 on a booked AVX2 host (or leave to the sweep); measure a +3 size such as 385",
+ "report_file": "handoff/PARITY-COPY-AVX2.md"}

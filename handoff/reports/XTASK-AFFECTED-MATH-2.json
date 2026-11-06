@@ -1,0 +1,7 @@
+{"task": "XTASK-AFFECTED-MATH-2", "model": "opus", "tokens": null, "result": "INCOMPLETE: fits and tables-generator mapping committed; lint, replay, gate and plants queued on mei, not collected", "branch": "task/xtask-affected-math-2", "head": "50f0b63a",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["xam2-lint", "xam2-replay", "xam2-gate", "xam2-plants"],
+ "rulings": [], "informational": ["kernel-index --check is also run inside tables --check; listed separately as the brief asks", "a removed fit escalates to FULL (remez --check cannot check it)"], "refused": [],
+ "improvement": "a waiting local ssh to jobrun survives as a remote job when killed, and a re-launch under the same label is refused: the brief should say to start jobs detached from the first call",
+ "next_step": "collect xam2-lint, xam2-replay, xam2-gate, xam2-plants on mei (~/work/XTASK-AFFECTED-MATH-2/); fix only a failing job",
+ "report_file": "handoff/XTASK-AFFECTED-MATH-2.md"}
