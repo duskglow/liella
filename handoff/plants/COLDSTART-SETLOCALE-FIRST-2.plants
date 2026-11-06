@@ -1,0 +1,3 @@
+# COLDSTART-SETLOCALE-FIRST-2: plants for the new tests (run with cargo xtask plants)
+ctype-c-after-load | crates/core/src/locale/mod.rs | lit:Data::File(f) => Ctype::File(CtypeFile::parse(f)?), ==> Data::File(_) => Ctype::C, | cargo xtask affected --only conformance:s07_setlocale_first_case --with-exports --run | msg:FAIL: towupper/towlower of e-acute
+width-check-dropped | crates/core/src/locale/ctype.rs | lit:&& Table3::parse(cat.item(WIDTH)).is_some(); ==> && true; | cargo test -p liella --test locale_data ctype_parse_rejects | msg:ctype_parse_rejects_a_corrupt_file_at_load.*FAILED|parse rejects a corrupt width
