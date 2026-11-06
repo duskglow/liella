@@ -6,7 +6,7 @@
 //! rule 4 ("parsing never trusts lengths, offsets or counts"), which has no clause ID.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, missing_docs)]
 
-use liella_ld::arch::{Arch, X86_64, ELFDATA2MSB};
+use liella_ld::arch::{Arch, RelocKind, X86_64, ELFDATA2MSB};
 use liella_ld::elf::{dt, pt, DynEntry, Elf, ElfError, Part};
 
 // Layout of the valid image (offsets in the file; the one PT_LOAD maps file offset == vaddr).
@@ -45,6 +45,9 @@ impl Arch for BigOther {
     const E_MACHINE: u16 = 183;
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = ELFDATA2MSB;
+    fn classify(r_type: u32) -> RelocKind {
+        RelocKind::Unsupported(r_type)
+    }
 }
 
 struct Img {
@@ -211,7 +214,7 @@ fn valid_image_reads_back() {
     let m = image();
     let elf = Elf::parse::<X86_64>(&m.b).unwrap();
     let h = elf.header();
-    assert_eq!((h.e_type, h.machine, h.entry, h.phoff, h.phnum), (3, 62, 0x1000, 64, PHNUM as u16));
+    assert_eq!((h.e_type, h.machine, h.entry, h.phoff, h.phnum), (3, X86_64::E_MACHINE, 0x1000, 64, PHNUM as u16));
     let d = elf.dynamic().unwrap().unwrap();
     assert_eq!(d.len(), DYN_N);
     assert_eq!(d.entries().last(), Some(DynEntry { tag: dt::NULL, val: 0 }));
@@ -265,6 +268,9 @@ fn s27_1_f_0_wrong_class() {
         const E_MACHINE: u16 = 62;
         const EI_CLASS: u8 = 1;
         const EI_DATA: u8 = 1;
+        fn classify(r_type: u32) -> RelocKind {
+            RelocKind::Unsupported(r_type)
+        }
     }
     let mut m = image();
     m.b[4] = 1;

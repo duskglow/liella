@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use liella_ld::arch::X86_64;
+use liella_ld::arch::{RelocKind, X86_64};
 use liella_ld::elf::{dt, pt, Elf};
 
 struct Member {
@@ -50,13 +50,27 @@ fn corpus() -> Option<&'static [Member]> {
             let lib = dir.join("lib.c");
             std::fs::write(&main, "int main(void) { return 0; }\n").unwrap();
             std::fs::write(&lib, "int corpus_f(void) { return 1; }\n").unwrap();
+            // A versioned library: definitions with a parent, a hidden old version, data pointers (RELR or
+            // RELATIVE), PLT calls, TLS (DTPMOD64/DTPOFF64) and a needed version from the C library.
+            let vlib = dir.join("vlib.c");
+            let vmap = dir.join("v.map");
+            std::fs::write(&vmap, "VER_1 { global: f1; g; local: *; };\nVER_2 { global: f2; t; } VER_1;\n").unwrap();
+            std::fs::write(
+                &vlib,
+                "#include <stdio.h>\nint f1(void) { return 1; }\nint f2(void) { return 2; }\nint g_old(void) { return 3; }\n__asm__(\".symver g_old,g@VER_1\");\nint g_new(void) { return 4; }\n__asm__(\".symver g_new,g@@VER_2\");\n__thread int t;\nstatic int x; int *px = &x; int *py[3] = {&x, &x, &x};\nint use(void) { printf(\"%d\\n\", f1() + t); return puts(\"x\"); }\n",
+            )
+            .unwrap();
             let (main, lib) = (main.to_str().unwrap().to_string(), lib.to_str().unwrap().to_string());
-            let members: [(&'static str, Vec<&str>); 5] = [
+            let (vlib, vscript) = (vlib.to_str().unwrap().to_string(), format!("-Wl,--version-script={}", vmap.to_str().unwrap()));
+            let members: [(&'static str, Vec<&str>); 8] = [
                 ("static", vec!["-static", &main]),
                 ("pie", vec!["-fPIE", "-pie", "-Wl,-z,pack-relative-relocs", "-Wl,--hash-style=both", &main]),
                 ("nopie-rpath", vec!["-fno-PIE", "-no-pie", "-Wl,--disable-new-dtags,-rpath,/opt/corpus-r", &main]),
                 ("shared", vec!["-shared", "-fPIC", "-Wl,-soname,libcorpus.so.1", "-Wl,--enable-new-dtags,-rpath,/opt/corpus-run", &lib]),
                 ("shared-nonotes", vec!["-shared", "-fPIC", "-nostdlib", "-fcf-protection=none", "-Wl,--build-id=none", &lib]),
+                ("versioned-relr", vec!["-shared", "-fPIC", &vscript, "-Wl,-z,pack-relative-relocs", "-Wl,--hash-style=both", &vlib]),
+                ("versioned-sysv", vec!["-shared", "-fPIC", &vscript, "-Wl,-z,nopack-relative-relocs", "-Wl,--hash-style=sysv", &vlib]),
+                ("versioned-gnu", vec!["-shared", "-fPIC", &vscript, "-Wl,--hash-style=gnu", "-Wl,-z,now", &vlib]),
             ];
             let mut out = Vec::new();
             for (name, args) in members {
@@ -286,4 +300,163 @@ fn readelf_n_parity() {
             }
         }
     }
+}
+
+/// The `readelf -r` name of an x86_64 relocation kind (the x86-64 psABI names).
+fn reloc_name(k: RelocKind) -> &'static str {
+    match k {
+        RelocKind::None => "R_X86_64_NONE",
+        RelocKind::Relative => "R_X86_64_RELATIVE",
+        RelocKind::Abs64 => "R_X86_64_64",
+        RelocKind::GlobDat => "R_X86_64_GLOB_DAT",
+        RelocKind::JumpSlot => "R_X86_64_JUMP_SLOT",
+        RelocKind::Copy => "R_X86_64_COPY",
+        RelocKind::Irelative => "R_X86_64_IRELATIVE",
+        RelocKind::DtpMod => "R_X86_64_DTPMOD64",
+        RelocKind::DtpOff => "R_X86_64_DTPOFF64",
+        RelocKind::TpOff => "R_X86_64_TPOFF64",
+        RelocKind::TlsDesc => "R_X86_64_TLSDESC",
+        RelocKind::TextRel { pc_relative: true, .. } => "R_X86_64_PC32",
+        RelocKind::TextRel { signed: true, .. } => "R_X86_64_32S",
+        RelocKind::TextRel { .. } => "R_X86_64_32",
+        RelocKind::Unsupported(_) => "?",
+    }
+}
+
+/// The rows of each `readelf` section block whose header line contains `start`, keyed by section name.
+fn blocks(text: &str, start: &str) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    for line in text.lines() {
+        if line.contains(start) {
+            let name = line.split('\'').nth(1).unwrap_or("").to_string();
+            out.push((name, Vec::new()));
+        } else if let Some(b) = out.last_mut() {
+            if !line.trim().is_empty() {
+                b.1.push(line.to_string());
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn readelf_r_parity() {
+    // no spec clause: readelf -r parity of the RELA, PLT and RELR iterators (see the file comment).
+    let Some(corpus) = corpus() else { return };
+    let mut seen_relr = 0;
+    for m in corpus {
+        let bytes = std::fs::read(&m.path).unwrap();
+        let elf = Elf::parse::<X86_64>(&bytes).unwrap();
+        let Some(d) = elf.dynamic().unwrap() else { continue };
+        let text = readelf("-r", &m.path);
+        let mut ours: Vec<(String, Vec<String>)> = Vec::new();
+        for (sec, it) in [(".rela.dyn", d.rela::<X86_64>().unwrap()), (".rela.plt", d.jmprel::<X86_64>().unwrap())] {
+            let rows = it.into_iter().flatten().map(|r| {
+                assert!(!matches!(r.kind, RelocKind::Unsupported(_)), "{}: type {} unsupported", m.name, r.r_type);
+                format!("{:016x} {:08x}{:08x} {}", r.offset, r.sym, r.r_type, reloc_name(r.kind))
+            });
+            let rows: Vec<String> = rows.collect();
+            if !rows.is_empty() {
+                ours.push((sec.to_string(), rows));
+            }
+        }
+        if let Some(r) = d.relr().unwrap() {
+            let addrs: Vec<String> = r.map(|a| format!("{:016x}", a.unwrap())).collect();
+            ours.push((".relr.dyn".to_string(), addrs));
+            seen_relr += 1;
+        }
+        let theirs: Vec<(String, Vec<String>)> = blocks(&text, "Relocation section")
+            .into_iter()
+            .map(|(name, rows)| {
+                let rows = if name.starts_with(".relr") {
+                    rows.iter().filter(|l| !l.contains("offsets")).map(|l| l.split_whitespace().next().unwrap().to_string()).collect()
+                } else {
+                    rows.iter().skip(1).map(|l| l.split_whitespace().take(3).collect::<Vec<_>>().join(" ")).collect()
+                };
+                (name, rows)
+            })
+            .collect();
+        assert_eq!(ours, theirs, "{}: readelf -r", m.name);
+    }
+    assert!(seen_relr >= 2, "the corpus has RELR members");
+}
+
+#[test]
+fn readelf_v_and_dyn_syms_parity() {
+    // no spec clause: readelf -V parity of versym/verdef/verneed and --dyn-syms parity of the hash-table
+    // symbol counts (see the file comment).
+    let Some(corpus) = corpus() else { return };
+    let mut seen = 0;
+    for m in corpus {
+        let bytes = std::fs::read(&m.path).unwrap();
+        let elf = Elf::parse::<X86_64>(&bytes).unwrap();
+        let Some(d) = elf.dynamic().unwrap() else { continue };
+        let syms = readelf("--dyn-syms", &m.path);
+        let n: u32 = syms.lines().find(|l| l.contains("contains")).map_or(0, |l| num(l.split("contains ").nth(1).unwrap()) as u32);
+        assert_eq!(d.symbol_count().unwrap(), Some(n), "{}: --dyn-syms count", m.name);
+        if let Some(g) = d.gnu_hash().unwrap() {
+            assert_eq!(g.symbol_count().unwrap(), n, "{}: GNU hash count", m.name);
+        }
+        if let Some(h) = d.sysv_hash().unwrap() {
+            assert_eq!(h.nchain(), n, "{}: SysV nchain", m.name);
+        }
+        let text = readelf("-V", &m.path);
+        let blk = blocks(&text, " section '");
+        // Version names by index, from the reader.
+        let mut names = std::collections::BTreeMap::new();
+        let mut ours_d = Vec::new();
+        if let Some(defs) = d.verdef().unwrap() {
+            for v in defs {
+                let v = v.unwrap();
+                let ns: Vec<String> = v.names().map(|a| String::from_utf8(a.unwrap().name.to_vec()).unwrap()).collect();
+                let flags = match v.flags { 0 => "none", 1 => "BASE", 2 => "WEAK", _ => "?" };
+                ours_d.push(format!("{} {} {} {} {}", v.offset, flags, v.ndx, v.cnt, ns[0]));
+                for (k, p) in ns.iter().enumerate().skip(1) {
+                    ours_d.push(format!("Parent {k}: {p}"));
+                }
+                names.insert(v.ndx, ns[0].clone());
+            }
+        }
+        let mut ours_n = Vec::new();
+        if let Some(needs) = d.verneed().unwrap() {
+            for v in needs {
+                let v = v.unwrap();
+                ours_n.push(format!("{} {} {}", v.offset, String::from_utf8_lossy(v.file), v.cnt));
+                for a in v.auxes() {
+                    let a = a.unwrap();
+                    let name = String::from_utf8(a.name.to_vec()).unwrap();
+                    ours_n.push(format!("{} {} {}", a.offset, name, a.other));
+                    names.insert(a.other, name);
+                }
+            }
+        }
+        let rows = |sec: &str| blk.iter().find(|b| b.0 == sec).map(|b| b.1.iter().skip(1).cloned().collect::<Vec<_>>()).unwrap_or_default();
+        let field = |l: &str, key: &str| l.split(key).nth(1).unwrap().split_whitespace().next().unwrap().to_string();
+        let off = |l: &str| num(l.trim_start().split(':').next().unwrap()).to_string();
+        let theirs_d: Vec<String> = rows(".gnu.version_d")
+            .iter()
+            .map(|l| if l.contains("Parent") { l.split_once(": ").unwrap().1.trim().to_string() } else { format!("{} {} {} {} {}", off(l), field(l, "Flags: "), field(l, "Index: "), field(l, "Cnt: "), field(l, "Name: ")) })
+            .collect();
+        assert_eq!(ours_d, theirs_d, "{}: readelf -V definitions", m.name);
+        let theirs_n: Vec<String> = rows(".gnu.version_r")
+            .iter()
+            .map(|l| if l.contains("File: ") { format!("{} {} {}", off(l), field(l, "File: "), field(l, "Cnt: ")) } else { format!("{} {} {}", off(l), field(l, "Name: "), field(l, "Version: ")) })
+            .collect();
+        assert_eq!(ours_n, theirs_n, "{}: readelf -V requirements", m.name);
+        let Some(vs) = d.versym().unwrap() else { continue };
+        seen += 1;
+        let ours_s: Vec<String> = (0..vs.count())
+            .map(|i| {
+                let v = vs.get(i).unwrap();
+                let name = match v.index { 0 => "*local*".to_string(), 1 => "*global*".to_string(), k => names[&k].clone() };
+                format!("{}{}({name})", v.index, if v.hidden { "h" } else { "" })
+            })
+            .collect();
+        let theirs_s: Vec<String> = rows(".gnu.version")
+            .iter()
+            .flat_map(|l| l.split_once(':').unwrap().1.split(')').map(|c| c.replace(' ', "")).filter(|c| !c.is_empty()).map(|c| format!("{c})")).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(ours_s, theirs_s, "{}: readelf -V versym", m.name);
+    }
+    assert!(seen >= 3, "the corpus has versioned members");
 }
