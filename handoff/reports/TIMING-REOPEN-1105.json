@@ -1,0 +1,8 @@
+{"task": "TIMING-REOPEN-1105", "model": "opus", "tokens": null, "result": "COMPLETE: Ivy Bridge profiles name the stall per REOPEN group; 5 code briefs + summary in handoff/timing-reopen-1105/", "branch": "task/timing-reopen-1105", "head": null,
+ "gate": {"affected": "n/a (planning, no code)", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["timing-reopen-1105-prof", "timing-reopen-1105-prof2", "timing-reopen-1105-prof3"],
+ "rulings": [{"item": "strscan dispatch: start-up resolved entry (IRELATIVE) vs layout fix", "recommendation": "layout fix (one class test, aligned SSE2 body) first; ruling only if it falls short"},
+             {"item": "malloc latest-block fast path in free (allocator design)", "recommendation": "measure behind a branch on Ivy Bridge and Skylake-SP before ruling"}],
+ "informational": ["memref per-function stall sampling produced empty output twice; attribution NOT VERIFIED", "N100 rows not profiled; listed for a later round", "cbench_nscache rows not separable with CBENCH_ROWS", "cbench_malloc whole-process counts are diluted by the mix set-up (mix_step2 18-21% of samples)", "glibc profiled by counts and symbol shares only (no disassembly, clean-room rule)", "the brief says the sweep results are on next; they were on task/timing-sweep-1105-2 (queued_ci), so the raw tsvs were re-analysed from the timing hosts"],
+ "refused": [], "improvement": "a CBENCH_ITERS multiplier for cbench_memref/malloc (or a per-row loop mode) would let perf stat profile a single row directly instead of probes or sampling",
+ "next_step": "coordinator submits TIMING-IVB-STRSCAN-DISPATCH first; TIMING-IVB-MEMREF-ENTRY stacks on it", "report_file": "handoff/timing-reopen-1105.md"}

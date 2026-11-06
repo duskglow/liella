@@ -95,3 +95,65 @@ fn libm_product_selects_the_fma_builds() {
     // tunable reached its decision.
     assert!(fused + CALLS <= plain, "libm FMA selection: default {fused} instructions, -FMA {plain}: the FMA builds did not run (or the tunable was ignored)");
 }
+
+/// The `double` trig exports' bits over a fixed argument set: every binade 2^-36..2^20 (both
+/// signs) and multiples of pi/2, the range of the in-place fast entries (LIBM-F64-TRIG-TIER).
+const TRIG_PROGRAM: &str = r#"
+#define _GNU_SOURCE
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+static unsigned long long b(double v) { unsigned long long u; memcpy(&u, &v, sizeof u); return u; }
+int main(void) {
+    for (int i = 0; i < 1400; i++) {
+        double x = i < 1200 ? ldexp(1.0 + i * 0.0123456789, i % 57 - 36) * (i & 1 ? -1.0 : 1.0)
+                            : (i - 1199) * 1.5707963267948966;
+        volatile double v = x;
+        double s, c;
+        sincos(v, &s, &c);
+        printf("%d %016llx %016llx %016llx %016llx %016llx\n", i, b(sin(v)), b(cos(v)), b(tan(v)), b(s), b(c));
+    }
+    return 0;
+}
+"#;
+
+#[test]
+fn libm_product_trig_fma_builds_return_the_baseline_bits() {
+    // Trace: no spec clause (D-10.25 the FMA builds return the baseline's bits; D-10.50 the libm product's decision).
+    if !std::arch::is_x86_feature_detected!("fma") {
+        println!("SKIP: this CPU has no FMA (or the OS does not save the AVX state): one build only");
+        return;
+    }
+    let products = std::env::var_os("LIELLA_PRODUCTS").map_or_else(|| root().join("target/liella"), PathBuf::from);
+    assert!(products.join("libc.a").exists() && products.join("libm.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = root().join("target/test-scratch/libm_fma_select_trig").join(format!("{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("t.c"), TRIG_PROGRAM).unwrap();
+    let out = Command::new(root().join("scripts/liella-cc"))
+        .env("LIELLA_PRODUCTS", &products)
+        .env_remove("LIELLA_CC_NO_LIBM")
+        .env_remove("LIELLA_CC_EXTRA")
+        .current_dir(&dir)
+        .args(["-O1", "-o", "t", "t.c", "-lm"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "liella-cc failed: {}", String::from_utf8_lossy(&out.stderr));
+    let run = |tunables: Option<&str>| {
+        let mut cmd = Command::new(dir.join("t"));
+        cmd.env_remove("GLIBC_TUNABLES");
+        if let Some(t) = tunables {
+            cmd.env("GLIBC_TUNABLES", t);
+        }
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let fused = run(None);
+    let plain = run(Some("glibc.cpu.hwcaps=-FMA"));
+    assert_eq!(fused.lines().count(), 1400, "unexpected output: {fused:.200}");
+    assert_eq!(plain.lines().count(), 1400, "unexpected output: {plain:.200}");
+    // Columns: index, sin, cos, tan, sincos sine, sincos cosine.
+    for (f, p) in fused.lines().zip(plain.lines()) {
+        assert_eq!(f, p, "trig FMA build (left) differs from the baseline (right)");
+    }
+}

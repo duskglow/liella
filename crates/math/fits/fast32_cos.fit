@@ -1,0 +1,11 @@
+# LIBM-F32-SINF-SHRINK (D-10.3): cos on [-0.0246, 0.0246], the reduced range of the `float`
+# sin/cos/tan kernel (as for fast32_sin). Even powers up to 6; the constant is fixed at 1 so that
+# the kernel can carry cos r - 1 = z(c2 + z(c4 + z·c6)), z = r², apart from the leading 1.
+name = fast32_cos
+target = cos
+interval = -0.0246, 0.0246
+powers = even 0..6
+fixed = 0:1
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_cos.rs

@@ -6,7 +6,7 @@
  * versions from spec/abi/versions.tsv): a call reaches the kernel with no Rust hop in between
  * (COPY-FILL: the Rust entry's load, two compares and tail jump were 7 of memset(16)'s 17
  * instructions). Test builds define only the liella_machine_* names; the Rust twins
- * (crates/boundary/src/hot.rs `move_bytes`, `set_bytes`) call them, so the tests run this code.
+ * (crates/boundary/src/hot/mem.rs `move_bytes`, `set_bytes`) call them, so the tests run this code.
  *
  * Why assembly: with NULL folding on, the 1-64 byte classes let a NULL pointer fault on page zero
  * instead of testing it. In Rust a NULL access is undefined behaviour; here it is an ordinary
@@ -211,7 +211,7 @@ memcpy:
 	movups %xmm15, -16(%rdi,%rdx)
 	ret
 /* void liella_machine_move_mid(void *d, const void *s, size_t n): the library's internal copy
- * (crates/boundary/src/hot.rs `internal_move`, D-X.15) for 65 <= n <= 256 with d and s non-NULL
+ * (crates/boundary/src/hot/mem.rs `internal_move`, D-X.15) for 65 <= n <= 256 with d and s non-NULL
  * (its contract; no NULL tests, no range test beyond the class split): the classes above. Returns
  * nothing (rax is not set). */
 	.globl liella_machine_move_mid

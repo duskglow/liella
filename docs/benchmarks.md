@@ -199,6 +199,23 @@ Median instructions-per-call ratio without libm: 0.93 (Ivy Bridge 0.86). The lib
 section 5; I did not identify the other four), so the totals are not a like-for-like difference; the per-row comparison
 below is: all 529 rows of this run are in the appendix of the Ivy Bridge run.
 
+**What the counter counts for a rep string instruction (PARITY-COPY-AVX2 probe, 2026-11-05).** `perf stat -e
+instructions:u` of a loop of 100,000 `rep movsb` (and, separately, `rep stosb`) at 0, 1, 64, 1024, 4096, 16384 and 65536
+bytes counted 9.00 instructions per iteration at every size on a Skylake-SP host (Xeon Platinum 8151), a Haswell-EP host
+(E5-2697 v3) and an Ivy Bridge host (E3-1265L V2): the loop's 8 plus **one** for the `rep` instruction, whatever its
+length. On all three classes a `rep movsb`/`rep stosb` is one instruction, so a row where either side runs one counts
+that side's setup only, not the copy. Such rows are judged by timing on a booked timing host (Liella and the reference
+on the same host, interleaved, same-host ratio; cycles there are that measurement), not by instructions (owner ruling,
+2026-11-05: timing is the final arbiter). Rows where neither side runs a rep string instruction keep instruction counts
+as the development gate, and the periodic timing sweep gives their verdict. Copy rows this concerns (the side
+that runs `rep movsb` follows from its per-size count; Liella's dispatch is in `crates/boundary/src/cpu.rs`):
+`memcpy_4k` (Skylake-SP: Liella's `rep movsb` window starts at 4 KiB on an ERMS CPU with AVX-512, 73 instructions;
+Ivy Bridge: the reference's count of about 27 against Liella's 718-instruction SSE2 loop, which runs below
+`COPY_ERMS_MIN` = 6144), `memcpy_64k` (both sides `rep movsb` on Skylake-SP: 85.5 against 57.5 is setup against setup;
+Ivy Bridge 100 against 54, the same), and on Haswell-EP 16 and 64 KiB (the reference's 44 is setup; Liella's 80 at 16 KiB
+is its `rep movsb` window, 5718 at 64 KiB its vector loop). `memmove_4k`, `memcpy_64`, `memmove_64` and the 1 KiB copies
+run vector code on both sides: developed and gated on instructions, verdict from the timing sweep.
+
 **Where the two classes give a different verdict.** 89 of the 529 rows change band between the Ivy Bridge and the
 AVX2 class (bands on instructions per call vs glibc): faster to parity 31, faster to slower 21, slower to parity 13,
 parity to faster 10, parity to slower 9, slower to faster 5. The pattern in the lists below: on Ivy Bridge Liella's string and memory rows mostly use fewer
@@ -352,10 +369,23 @@ the file's header).
 Which flags exist is defined in [`xtask/src/bench.rs`](../xtask/src/bench.rs); read it before
 relying on a flag from this page. The raw logs of the two runs above are not in the repository.
 
-Timing hosts have no compiler. For a timing-host run build once with `cargo xtask bench --build-only --counters` on a
-build host, copy `target/liella/` (the benchmark programs, `libc.a`, `libm.a`, the `.profile` marker), `bench/`, and the
-`xtask` binary to the timing host, create stub `crates/*.rs` and `csys/*.c` files older than `libc.a` (the staleness
-check reads their mtimes), and run `xtask bench --no-build --counters` there with the host booked.
+Timing hosts have no compiler. A timing-host run is two commands (XTASK-BENCH-STAGE):
+
+```bash
+# on a build host, in the tree to measure (the same selection flags as the measuring run):
+cargo xtask bench --stage /tmp/stage.tar [--only <benches> | --rows <bench>/<row>,...]
+# on the timing host, with the host booked:
+mkdir ~/work/<story>/tree && tar -xf stage.tar -C ~/work/<story>/tree && cd ~/work/<story>/tree
+./xtask-bin bench --no-build --staged --counters [--only <benches> | --rows ...]
+```
+
+`--stage` builds as `--build-only` does, then writes one tarball: the workspace `Cargo.toml` and `xtask/Cargo.toml`,
+`bench/`, `target/liella/` (without the generated `bench/stress/`), the selected Rust bench examples, the xtask
+binary as `xtask-bin`, and `bench-stage.manifest` (commit, a sha256 of the source tree, build profile, built-on
+host, and the sha256 of every staged product), with the build's mtimes. A `--no-build` run in a tree that holds the
+manifest (`--staged` requires one) checks every product against its sha256 instead of comparing mtimes, needs no
+git and no source tree, and prints a `staged: commit ...` header line naming what it timed; a product that does not
+match is refused. The commit comes from git, or from the `head=` line of a role directory's `.synced` file.
 
 ## Appendix: all rows
 

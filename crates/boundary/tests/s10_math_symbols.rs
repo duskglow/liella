@@ -189,10 +189,19 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     let args: Vec<(f64, f64)> = args.into_iter().chain(specials).collect();
     let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     let (mut checked, mut bad) = (0usize, Vec::new());
-    for (name, f, _) in double_fast_entries() {
+    for (name, f, _) in double_fast_entries().into_iter().chain(double_trig_entries()) {
+        let trig = double_trig_entries().iter().any(|e| e.0 == name);
         for &(x, y) in &args {
+            if trig && x.is_subnormal() {
+                continue; // sin x and tan x are about x: a subnormal result, flushed under FTZ
+            }
             for (rc, &mode) in (0u32..).zip(modes.iter()) {
                 let (want, st) = match name {
+                    "sin" => Real::sin(x, mode),
+                    "cos" => Real::cos(x, mode),
+                    "tan" => Real::tan(x, mode),
+                    "sincos.sin" => (Real::sincos(x, mode).0 .0, Real::sincos(x, mode).1),
+                    "sincos.cos" => (Real::sincos(x, mode).0 .1, Real::sincos(x, mode).1),
                     "exp" => Real::exp(x, mode),
                     "exp2" => Real::exp2(x, mode),
                     "log" => Real::log(x, mode),
@@ -201,7 +210,9 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
                     "exp10" => Real::exp10(x, mode),
                     _ => Real::pow(x, y, mode),
                 };
-                for extra in [0, 0x8000, 0x40, 0x8040] {
+                // 0x3f: every flag already sticky in the caller's word, so leaving the word means
+                // writing it back even when the result raises nothing new.
+                for extra in [0, 0x8000, 0x40, 0x8040, 0x3f, 0x803f] {
                     if extra & 0x40 != 0 && x < f64::MIN_POSITIVE {
                         continue; // DAZ reads a subnormal argument as zero: another function value
                     }
@@ -223,11 +234,86 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
 
 /// Every argument of `args` through each double fast entry ([`math_double_fast_entry_matches_the_envelope_in_every_mode`]):
 /// the number checked and one line per mismatch.
-#[allow(clippy::arithmetic_side_effects)] // counters over bounded test loops
 fn double_fast_entry_mismatches(args: &[(f64, f64)]) -> (usize, Vec<String>) {
+    fast_entry_mismatches(&double_fast_entries(), args)
+}
+
+/// The `double` sin, cos, tan and sincos exports (LIBM-F64-TRIG-TIER) as [`double_fast_entries`]
+/// does; `sincos` twice, once per result.
+#[allow(clippy::type_complexity)]
+fn double_trig_entries() -> [(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64); 5] {
+    use liella_math::real::Real;
+    [
+        ("sin", |x, _| m::sin(x), |x, _, r| Real::sin(x, r).0),
+        ("cos", |x, _| m::cos(x), |x, _, r| Real::cos(x, r).0),
+        ("tan", |x, _| m::tan(x), |x, _, r| Real::tan(x, r).0),
+        ("sincos.sin", |x, _| sincos_pair(x).0, |x, _, r| Real::sincos(x, r).0 .0),
+        ("sincos.cos", |x, _| sincos_pair(x).1, |x, _, r| Real::sincos(x, r).0 .1),
+    ]
+}
+
+/// `sincos` through its export.
+fn sincos_pair(x: f64) -> (f64, f64) {
+    let (mut s, mut c) = (0.0, 0.0);
+    m::sincos(x, Some(&mut s), Some(&mut c));
+    (s, c)
+}
+
+/// Trig arguments over and around the fast domain [2^-30, 2^20): the refused edges (zeros,
+/// subnormals, 2^-339 and 2^-30, 2^20, huge, specials), a few ulps around the multiples of π/2 and
+/// the cell edges k·π/64 ± π/128, then random values in every binade from 2^-36 to 2^23.
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions)] // bounded sample arithmetic
+fn double_trig_arguments() -> Vec<(f64, f64)> {
+    let ulps = |c: f64, w: u64| (0..=2 * w).map(move |d| f64::from_bits(c.to_bits().wrapping_add(d).wrapping_sub(w)));
+    let mut v: Vec<f64> = vec![0.0, f64::MIN_POSITIVE, 1e-310, f64::MAX, 1e300, f64::INFINITY, f64::NAN, 1.0, 0.5, 3.0, 1e5, 7e5];
+    // 2^-360 and 2^-1000: below the in-place cubic's range (x³ would underflow and raise it).
+    for c in [2f64.powi(-339), 2f64.powi(-30), 2f64.powi(20), 2f64.powi(-36), 2f64.powi(-200), 2f64.powi(-360), 2f64.powi(-1000)] {
+        v.extend(ulps(c, 3));
+    }
+    let q = core::f64::consts::PI / 128.0;
+    for k in (1u32..400).chain([1001, 4097, 65_535, 1_000_001, 8_000_001, 33_000_001, 42_000_001]) {
+        v.extend(ulps(f64::from(k) * core::f64::consts::FRAC_PI_2, 2)); // n·π/2: cancellation, tan's poles
+        v.extend(ulps(f64::from(2 * k + 1) * q, 1)); // the cell edges (2j + 1)·π/128
+    }
+    let mut s = 0x243f_6a88_85a3_08d3u64;
+    let mut next = || {
+        s = s.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        s
+    };
+    for _ in 0..4000 {
+        let (a, b) = (next(), next());
+        v.push(2f64.powi((b % 60) as i32 - 36) * (1.0 + (a >> 12) as f64 * 2f64.powi(-52)));
+    }
+    let n = v.len();
+    v.extend_from_within(..n);
+    for x in v.iter_mut().skip(n) {
+        *x = -*x;
+    }
+    v.into_iter().map(|x| (x, 0.0)).collect()
+}
+
+// ARCH(x86_64): the in-place fast entry of the double trig exports (s10_0_f_0); FPCR/FPSR on aarch64 (A-9)
+#[test]
+fn math_double_trig_fast_entry_matches_the_envelope_in_every_mode() {
+    // Clauses: s10_0_f_0.
+    // As math_double_fast_entry_matches_the_envelope_in_every_mode for sin, cos, tan and sincos
+    // (LIBM-F64-TRIG-TIER): the in-place entry (default word) against the full envelope (DAZ), bits,
+    // flags and errno; the directed modes against liella-math's accurate path. The arguments are
+    // the trig hard cases: the domain edges, n·π/2 and the reduction cells' edges.
+    let (checked, mut bad) = fast_entry_mismatches(&double_trig_entries(), &double_trig_arguments());
+    let n = bad.len();
+    bad.truncate(24);
+    assert!(n == 0, "{n} mismatches, the first:\n{}", bad.join("\n"));
+    assert!(checked > 50_000, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+/// [`double_fast_entry_mismatches`] over the given entries.
+#[allow(clippy::arithmetic_side_effects, clippy::type_complexity)] // counters over bounded test loops
+fn fast_entry_mismatches(entries: &[(&'static str, fn(f64, f64) -> f64, fn(f64, f64, liella_math::Rounding) -> f64)], args: &[(f64, f64)]) -> (usize, Vec<String>) {
     let mut checked = 0usize;
     let mut bad = Vec::new();
-    for (name, f, reference) in double_fast_entries() {
+    for &(name, f, reference) in entries {
         for &(x, y) in args {
             let sub = |a: f64| a != 0.0 && a.abs() < f64::MIN_POSITIVE;
             if sub(x) || sub(y) {

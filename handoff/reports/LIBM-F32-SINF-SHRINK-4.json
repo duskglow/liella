@@ -1,0 +1,33 @@
+{
+ "task": "LIBM-F32-SINF-SHRINK-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "-3's sinf/cosf/tanf work moved onto the per-family fast32 layout (stacked on LIBM-TABLES-PER-FAMILY, which has not landed; origin/next not merged); generators unchanged, clippy/static clean",
+ "branch": "task/libm-f32-sinf-shrink-4",
+ "head": "see git (code merge 3ad240da)",
+ "gate": {
+  "affected": "libm-f32-sinf-shrink-4-gate running at hand-back (dispatcher reads jobs.tsv)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "LIBM-TABLES-PER-FAMILY not in origin/next yet, so origin/next was not merged",
+   "recommendation": "land the tables branch first, then this one; if next moved in fast32 again, a -5 merges next (no design work)"
+  }
+ ],
+ "informational": [
+  "plants libm-f32-sinf-shrink-4-plants rc 0: 8 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN",
+  "counts are head-only, compared with -3's recorded base/head tsvs (tables change proven .text-identical by its own story)"
+ ],
+ "refused": [],
+ "improvement": "a stacked story's brief should say what to do when the stack base has not landed yet (merge the predecessor into the stack, as done here)",
+ "next_step": "after the gate/counts are green and both branches land: the handoff's Next list (inline MXCSR read, integer domain test, drop small-r refusal, cheaper rounding test)",
+ "report_file": "handoff/libm-f32-sinf-shrink.md",
+ "jobs": [
+  "mei:libm-f32-sinf-shrink-4-check",
+  "mei:libm-f32-sinf-shrink-4-gate",
+  "mei:libm-f32-sinf-shrink-4-plants",
+  "mei:libm-f32-sinf-shrink-4-counts"
+ ]
+}

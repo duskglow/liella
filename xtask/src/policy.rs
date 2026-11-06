@@ -319,9 +319,10 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                 } else if l.contains("unsafe {") && is_asm_block(&code_lines, n) {
                     // Owner ruling 2026-10-06 (plan S2): the one `%fs`-relative field load.
                     ("tb-field", &["src/tb.rs"])
-                } else if (l.contains("unsafe fn") || l.contains("unsafe {")) && rel == "src/hot.rs" {
-                    // Owner ruling 2026-10-08 (plan S2, D-4.22): the small copy and fill kernels.
-                    ("hot-kernel", &["src/hot.rs"])
+                } else if (l.contains("unsafe fn") || l.contains("unsafe {")) && rel.starts_with("src/hot/") {
+                    // Owner ruling 2026-10-08 (plan S2, D-4.22): the small copy and fill kernels (the `hot`
+                    // module, one directory since LIBM-HOT-PER-FAMILY).
+                    ("hot-kernel", &["src/hot/"])
                 } else if l.contains("unsafe fn") || l.contains("unsafe {") {
                     ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
                 } else {

@@ -1,0 +1,18 @@
+{"task": "NSCACHE-SECOND-LOOKUP", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: cache attach path grouped as hot text; cached 2nd lookup 171.5k->121.6k kernel instr, 11->7 faults, 1st lookup ~397k->300k; break-even 5th->4th lookup by instructions; target (2nd cached <= uncached) not reached; booked timing not run",
+ "branch": "task/nscache-second-lookup", "head": null,
+ "gate": {"affected": "escalated to FULL by xtask (hot-text.list is a linker input); running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Skip the boot_id read and boot-word comparison when fstatfs shows the region on tmpfs (13.4k kernel instr per attach)", "recommendation": "allow: a tmpfs file cannot outlive a boot; keep writing the boot words"},
+  {"item": "Attach at the break-even lookup instead of the 2nd", "recommendation": "no: moves the cost, does not cut it"}],
+ "informational": [
+  "Attach floor with every amendment check kept is ~95k kernel instr of syscalls (5 validation stats 24k, /proc/self/ns/user 13.7-26k, boot_id 13.4k, open/fstat/mmap 15k) plus 3 region faults: about 2x the uncached 2nd call (58.9k)",
+  "Full-profile hot-text regen not run: only fast-profile names are grouped",
+  "A shared region /dev/shm/liella-nscache-1001 on shiki was created by the probes (the product's normal per-user file)",
+  "One accidental empty heredoc (python3 - <<X) ran in a local call; no effect"],
+ "refused": [],
+ "jobs": ["nscache-second-lookup-gate", "nscache-second-lookup-plants3", "nscache-second-lookup-prof-base", "nscache-second-lookup-hot1"],
+ "improvement": "Keep measurement probes (per-call self-counters, per-syscall steps) in the repo (validation/) so a continuation does not rewrite them; this run rewrote the lost TIMING-NSCACHE-FIRSTCALL probe",
+ "next_step": "Book Ivy Bridge + AVX2 timing hosts, time percall before/after interleaved, print break-even in us; regen hot text for the full profile",
+ "report_file": "handoff/NSCACHE-SECOND-LOOKUP.md"}

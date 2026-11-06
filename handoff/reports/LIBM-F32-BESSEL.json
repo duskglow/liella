@@ -1,0 +1,11 @@
+{"task": "LIBM-F32-BESSEL", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: Remez tool gained Bessel targets and centered fits; float Bessel kernels written (WIP, not built: centered coefficient files not yet generated)",
+ "branch": "task/libm-f32-bessel", "head": null,
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "No zero table: absolute error bounds turned into a per-call rounding margin; near a zero the rounding test refuses and the accurate path answers", "recommendation": "accept (record as a D-10.x row; D-NEW placeholder)"}],
+ "informational": ["Remez fits at even 0..22 reach levelled 2^-80: the degrees can drop a lot (fewer instructions, faster fits)", "I used one heredoc (a python3 - <<X patch of remez.rs) before I noticed the no-heredoc rule"],
+ "refused": [],
+ "jobs": ["libm-f32-bessel-remez (evidence only, stopped before the end)"],
+ "improvement": "the brief's jobrun line blocks when called over ssh; a documented detached form (or jobrun --detach) would save a call and a stray job",
+ "next_step": "lower the fit degrees, run the 8 fits detached, copy the coefficient files back, build, then tests, sweeps, plants, gate, counts (handoff/libm-f32-bessel.md)",
+ "report_file": "handoff/libm-f32-bessel.md"}
