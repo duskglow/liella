@@ -14,7 +14,7 @@ use crate::ctype::{self, Class, Trans};
 use crate::error::Errno;
 use crate::mem::{TryBox, TryVec};
 use super::{Tables, C_CATS, C_UTF8_CATS};
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 /// The item table of one compiled category: word items decoded, string items as their data.
 /// Item `i` equals `Locale::item_parsed` for every `i < len`; past the end the reader answers
@@ -175,24 +175,63 @@ pub struct LocaleView {
     /// The words of this locale's `struct lconv`, worked out by the first `localeconv` that
     /// asks (the same values every time, so a racing second fill stores the same words).
     lconv: LconvWords,
-    /// `nl_langinfo`'s answer for every entry of `cats`, by the same category number and index
-    /// (PARITY-SMALL-ENTRY): a word item's value, else the address of the item's bytes ([`EMPTY`]
-    /// for an empty one). Worked out once when the view is built, so the call is one bounds check
-    /// and one load instead of decoding a `Tab` and an `Item`. The const `"C"` view has none
-    /// (every slice empty): its callers take the `cats` path.
-    answers: [&'static [usize]; 13],
+    /// `nl_langinfo`'s answer table ([`Answers`]): [`NO_ANSWERS`] until the view's
+    /// [`ANSWERS_AFTER`]th decoded call builds it (PARITY-SMALL-ENTRY-2), then a leaked table
+    /// that is never freed or changed. Never built when the view is: start-up and `setlocale`
+    /// do not pay for it (INSTR-REGRESS, +4.4k instructions per start-up when it was eager).
+    answers: AtomicPtr<Answers>,
+    /// The calls that decoded an entry while `answers` was [`NO_ANSWERS`] (a racy count: it
+    /// only paces the build).
+    decoded: AtomicU32,
 }
 
 /// The empty string every empty `nl_langinfo` item answers with.
 pub static EMPTY: [u8; 1] = [0];
 
-/// [`LocaleView::answers`]' word for one item.
+/// `nl_langinfo`'s answer for every entry of a view's `cats`, by the same category number and
+/// index (PARITY-SMALL-ENTRY): a word item's value, else the address of the item's bytes
+/// ([`EMPTY`] for an empty one). The call is then one bounds check and one load instead of
+/// decoding a `Tab` and an `Item`.
+#[derive(Debug)]
+pub struct Answers {
+    tabs: [&'static [usize]; 13],
+}
+
+impl Answers {
+    /// The answer for entry `index` of category number `number` ([`LocaleView::entry`] worked
+    /// out ahead; `None` where `entry` is `None`, and always in [`NO_ANSWERS`]).
+    #[inline]
+    pub fn get(&self, number: u32, index: usize) -> Option<usize> {
+        self.tabs.get(usize::try_from(number).ok()?)?.get(index).copied()
+    }
+}
+
+/// The table of a view whose answers are not built: every lookup misses.
+pub static NO_ANSWERS: Answers = Answers { tabs: [&[]; 13] };
+
+/// How many decoded `nl_langinfo` calls a view answers before it builds its [`Answers`]: a
+/// program that asks a few items (`CODESET` after `setlocale`) never pays for the table, one
+/// that asks in a loop pays once (the build is a few hundred items, about the decode surplus
+/// of a few hundred calls).
+pub const ANSWERS_AFTER: u32 = 256;
+
+/// [`Answers`]' word for one item.
 fn answer(item: Item) -> usize {
     match item {
         Item::Word(v) => usize::try_from(v).unwrap_or(0),
         Item::Bytes([]) => EMPTY.as_ptr().expose_provenance(),
         Item::Bytes(b) => b.as_ptr().expose_provenance(),
     }
+}
+
+/// The address of [`NO_ANSWERS`] as the views' `answers` word holds it.
+const fn no_answers_ptr() -> *mut Answers {
+    core::ptr::from_ref(&NO_ANSWERS).cast_mut()
+}
+
+/// A view's `answers` word before its table is built.
+const fn no_answers() -> AtomicPtr<Answers> {
+    AtomicPtr::new(no_answers_ptr())
 }
 
 /// The answer tables of `cats` in one allocation, leaked with the view (views are never freed).
@@ -337,7 +376,7 @@ impl LocaleView {
     /// The view of `"C"` (handle 0).
     #[allow(clippy::indexing_slicing)] // a const fn (no `get`): `Cat::Time.index()` is 2, below the 12 tables
     pub const fn c() -> LocaleView {
-        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: [&[]; 13] }
+        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
     }
 
     /// The words of this locale's `struct lconv`: `fill` works them out on the first call, later
@@ -409,15 +448,38 @@ impl LocaleView {
             Ctype::File(f) => Some((f.wide(), f.ascii_case())),
             Ctype::C | Ctype::CUtf8 => None,
         };
-        let answers = answers_of(&cats)?;
-        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers })
+        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
     }
 
-    /// `nl_langinfo`'s answer for entry `index` of category number `number` ([`Self::entry`]
-    /// worked out ahead; `None` where `entry` is `None`, and always for the const `"C"` view).
+    /// The address of this view's [`Answers`] (Acquire: a built table is seen whole): the
+    /// address of [`NO_ANSWERS`], or of a leaked table that is never freed or changed.
     #[inline]
-    pub fn answer(&self, number: u32, index: usize) -> Option<usize> {
-        self.answers.get(usize::try_from(number).ok()?)?.get(index).copied()
+    pub fn answers(&self) -> *const Answers {
+        self.answers.load(Acquire)
+    }
+
+    /// Note one `nl_langinfo` call that decoded an entry; the [`ANSWERS_AFTER`]th builds the
+    /// view's [`Answers`] and publishes it (Release). Two threads may both build: the first
+    /// store wins and the other table stays unused (leaked, once). Out of memory: the count
+    /// starts again and the calls go on decoding.
+    #[cold]
+    #[inline(never)]
+    pub fn note_decoded(&self) {
+        let n = self.decoded.load(Relaxed);
+        if n < ANSWERS_AFTER {
+            self.decoded.store(n.wrapping_add(1), Relaxed);
+            return;
+        }
+        if !core::ptr::eq(self.answers(), &NO_ANSWERS) {
+            return;
+        }
+        let built = answers_of(&self.cats).and_then(|tabs| TryBox::new(Answers { tabs }));
+        let Ok(b) = built else {
+            self.decoded.store(0, Relaxed);
+            return;
+        };
+        let new = core::ptr::from_mut(b.leak());
+        let _ = self.answers.compare_exchange(no_answers_ptr(), new, Release, Relaxed);
     }
 
     /// The entry `index` of the table of category number `number` (`nl_langinfo`'s fast path):
@@ -599,25 +661,50 @@ impl LocaleView {
 
 #[cfg(test)]
 mod answer_tests {
-    use super::{answer, Locale, LocaleView};
+    use super::{answer, answers_of, Locale, LocaleView, ANSWERS_AFTER, NO_ANSWERS};
 
-    /// no spec clause (the `nl_langinfo` answers of §7, PARITY-SMALL-ENTRY): the answer table of a
-    /// built view equals the `cats` decode for every category number and index, past the end of
-    /// each table included; the const `"C"` view has no table.
+    /// no spec clause (the `nl_langinfo` answers of §7, PARITY-SMALL-ENTRY): the answer table
+    /// built for a view equals the `cats` decode for every category number and index, past the
+    /// end of each table included; [`NO_ANSWERS`] answers nothing.
     #[test]
     fn answer_table_matches_entries() {
         let built = LocaleView::new(Locale::C, 0, &|_, _| None);
         assert!(built.is_ok(), "the view of \"C\" is built");
         let Ok(v) = built else { return };
+        let tabs = answers_of(&v.cats);
+        assert!(tabs.is_ok(), "the answer table is built");
+        let Ok(tabs) = tabs else { return };
+        let table = super::Answers { tabs };
         let mut seen = 0usize;
         for number in 0..15u32 {
             for index in 0..1100usize {
                 let want = v.entry(number, index).map(answer);
-                assert_eq!(v.answer(number, index), want, "category {number} item {index}");
+                assert_eq!(table.get(number, index), want, "category {number} item {index}");
+                assert_eq!(NO_ANSWERS.get(number, index), None, "no table: category {number} item {index}");
                 seen += usize::from(want.is_some());
             }
         }
         assert!(seen > 100, "the C view answers its items ({seen})");
-        assert_eq!(LocaleView::c().answer(2, 0), None, "the const view has no table");
+    }
+
+    /// no spec clause (PARITY-SMALL-ENTRY-2: no eager work when a view is built): a new view,
+    /// the const `"C"` view included, has no table; its first [`ANSWERS_AFTER`] decoded calls
+    /// build none, the next one publishes one, and later calls keep it.
+    #[test]
+    fn answer_table_is_built_late() {
+        let built = LocaleView::new(Locale::C, 0, &|_, _| None);
+        assert!(built.is_ok(), "the view of \"C\" is built");
+        let Ok(v) = built else { return };
+        assert!(core::ptr::eq(LocaleView::c().answers(), &NO_ANSWERS), "the const view starts without a table");
+        assert!(core::ptr::eq(v.answers(), &NO_ANSWERS), "a new view starts without a table");
+        for n in 0..ANSWERS_AFTER {
+            v.note_decoded();
+            assert!(core::ptr::eq(v.answers(), &NO_ANSWERS), "no table after {} decoded calls", n + 1);
+        }
+        v.note_decoded();
+        let first = v.answers();
+        assert!(!core::ptr::eq(first, &NO_ANSWERS), "the table is built after {ANSWERS_AFTER} decoded calls");
+        v.note_decoded();
+        assert!(core::ptr::eq(v.answers(), first), "a later call keeps the published table");
     }
 }
