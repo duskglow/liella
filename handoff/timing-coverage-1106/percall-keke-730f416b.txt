@@ -1,0 +1,51 @@
+== avx2
+instructions:u per call, deterministic (new 730f416b4; glibc dynamic, LC_ALL=en_US.UTF-8); sorted by (new-glib
+case                   glibc      base       new new/glibc   sd_new  sd_glibc (new-glibc)*calls  check
+strstr_miss_64         339.0         -     144.0      0.42     0.00      0.00              -  ok
+strstr_hit_64          166.0         -     139.0      0.84     0.00      0.00              -  ok
+strstr_hit_4k          827.0         -     667.0      0.81     0.00      0.00              -  ok
+strncasecmp_c_64        71.0         -      80.0      1.13     0.00      0.00              -  ok
+strcasecmp_c_16         53.0         -      58.0      1.09     0.00      0.00              -  ok
+realloc_grow_x2        199.5         -     252.9      1.27     0.00      0.00              -  ok
+meq_tail_64             27.0         -      28.0      1.04     0.00      0.00              -  MISMATCH
+meq_head_1k             21.0         -      27.0      1.29     0.00      0.00              -  MISMATCH
+memrchr_64_hit          29.0         -      29.0      1.00     0.00      0.00              -  ok
+memcmp_diff8_96         25.0         -      32.0      1.28     0.00      0.00              -  ok
+memcmp_diff8_64         25.0         -      33.0      1.32     0.00      0.00              -  ok
+memcmp_256              58.0         -      55.0      0.95     0.00      0.00              -  ok
+memchr_16               30.0         -      29.0      0.97     0.00      0.00              -  ok
+bcmp_head_128           25.0         -      27.0      1.08     0.00      0.00              -  MISMATCH
+bcmp_eq_64              28.0         -      28.0      1.00     0.00      0.00              -  ok
+bcmp_eq_1k             168.0         -     160.0      0.95     0.00      0.00              -  ok
+check meq_tail_64: glibc [-1] 730f416b4 [1]
+check meq_head_1k: glibc [-1] 730f416b4 [1]
+== noavx2
+instructions:u per call, deterministic (new 730f416b4; glibc dynamic, LC_ALL=en_US.UTF-8); sorted by (new-glib
+case                   glibc      base       new new/glibc   sd_new  sd_glibc (new-glibc)*calls  check
+strstr_miss_64         409.0         -     245.0      0.60     0.00      0.00              -  ok
+strstr_hit_64          204.0         -     220.0      1.08     0.00      0.00              -  ok
+strstr_hit_4k         1506.0         -    2299.0      1.53     0.00      0.00              -  ok
+strncasecmp_c_64       135.0         -     127.0      0.94     0.00      0.00              -  ok
+strcasecmp_c_16         96.0         -      98.0      1.02     0.00      0.00              -  ok
+realloc_grow_x2        199.5         -     287.8      1.44     0.00      0.00              -  ok
+meq_tail_64             41.0         -      57.0      1.39     0.00      0.00              -  MISMATCH
+meq_head_1k             22.0         -      42.0      1.91     0.00      0.00              -  MISMATCH
+memrchr_64_hit          30.0         -      33.0      1.10     0.00      0.00              -  ok
+memcmp_diff8_96         26.0         -      45.0      1.73     0.00      0.00              -  ok
+memcmp_diff8_64         26.0         -      36.0      1.38     0.00      0.00              -  ok
+memcmp_256             107.0         -     118.0      1.10     0.00      0.00              -  ok
+memchr_16               31.0         -      50.0      1.61     0.00      0.00              -  ok
+bcmp_head_128           26.0         -      42.0      1.62     0.00      0.00              -  MISMATCH
+bcmp_eq_64              42.0         -      57.0      1.36     0.00      0.00              -  ok
+bcmp_eq_1k             323.0         -     392.0      1.21     0.00      0.00              -  ok
+check meq_tail_64: glibc [-1] 730f416b4 [1]
+check meq_head_1k: glibc [-1] 730f416b4 [1]
+== gl
+instructions:u per call, deterministic (new 730f416b4; glibc dynamic, LC_ALL=en_US.UTF-8); sorted by (new-glib
+case                   glibc      base       new new/glibc   sd_new  sd_glibc (new-glibc)*calls  check
+gl_long               4251.8         -    5170.6      1.22     0.00      0.00       18376800  ok
+== sc
+instructions:u per call, deterministic (new 730f416b4; glibc dynamic, LC_ALL=en_US.UTF-8); sorted by (new-glib
+case                   glibc      base       new new/glibc   sd_new  sd_glibc (new-glibc)*calls  check
+strcmp_names            38.0         -      46.4      1.22     0.00      0.00              -  ok
+strcmp_16_mix           50.5         -      59.8      1.18     0.00      0.00              -  ok

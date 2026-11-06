@@ -175,13 +175,13 @@ mod tests {
             let xd = f64::from(x);
             if let Some(y) = gamma_core(xd) {
                 tg += 1;
-                let f = crate::special::tgamma_acc::<f64>(xd, Rounding::Nearest).0;
+                let f = crate::special::tgamma_accurate::<f64>(xd, Rounding::Nearest).0;
                 let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
                 assert!(crate::dd::abs(y - f) <= (GAMMA_BOUND + 0.5) * ulp, "gamma_core({x:e}): {} ulp", (y - f) / ulp);
             }
             if let Some((y, d)) = lgamma_core(x) {
                 lg += 1;
-                let f = crate::special::lgamma_acc::<f64>(xd, Rounding::Nearest).0.0;
+                let f = crate::special::lgamma_accurate::<f64>(xd, Rounding::Nearest).0.0;
                 let ulp = f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
                 let b = if d == LGAMMA_SMALL_DELTA { LGAMMA_SMALL_BOUND } else { LGAMMA_BOUND };
                 assert!(crate::dd::abs(y - f) <= (b + 0.5) * ulp, "lgamma_core({x:e}): {} ulp", (y - f) / ulp);
@@ -198,7 +198,7 @@ mod tests {
         for m in MODES {
             for x in gamma_sample() {
                 if let Some(r) = eval_lgamma(x, m) {
-                    assert_eq!((x.to_bits(), r.1), (x.to_bits(), crate::special::lgamma_acc::<f32>(x, m).1), "signgam");
+                    assert_eq!((x.to_bits(), r.1), (x.to_bits(), crate::special::lgamma_accurate::<f32>(x, m).1), "signgam");
                 }
             }
         }

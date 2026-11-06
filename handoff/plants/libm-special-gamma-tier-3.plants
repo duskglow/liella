@@ -1,0 +1,10 @@
+# LIBM-SPECIAL-GAMMA-TIER-3 (layout after next's per-family tables): plants on the double lgamma/tgamma fast tier (cargo xtask plants; docs/plants.md).
+# bound: the LG_T bound dropped to zero (the kernel test compares every error with its bound).
+gamma-bound | crates/math/src/fast_gamma.rs | lit:(y, dd::abs(y.hi) * f64::from_bits(t::LG_T_EPS)) ==> (y, dd::abs(y.hi) * f64::from_bits(t::LG_T_EPS) * 0.0) | cargo test -p liella-math --release --test fast_gamma | msg:times its bound|fast tier in .*oracle
+# table entry: LG_T slot 116 ([5, 5.25)), the c1 coefficient, one bit at 2^-44 relative.
+gamma-table-entry | crates/math/src/coeffs/gamma.rs | lit:0x3ff888d79081fcbe ==> 0x3ff888d79081fdbe | cargo test -p liella-math --release --test fast_gamma | msg:times its bound|fast tier in .*oracle
+# region edge: the window of the expansion at 1 widened from 17/16 to 9/8 (outside LG_Z1's proved window).
+gamma-region-edge | crates/math/src/fast_gamma.rs | lit:if (0.968_75..1.0625).contains(&u) { ==> if (0.968_75..1.125).contains(&u) { | cargo test -p liella-math --release --test fast_gamma | msg:times its bound|fast tier in .*oracle
+# near-zero refusal: lgamma's absolute bound (from |L| and |ln D|) replaced by one relative to the result, so the
+# cancellation at the negative zeros is no longer refused.
+gamma-near-zero-refusal | crates/math/src/fast_gamma.rs | lit:Some((y, eps + le + E96 * (dd::abs(l.hi) + dd::abs(ln.hi) + 1.0), ==> Some((y, eps.min(le) * 0.0 + dd::abs(y.hi) * E72, | cargo test -p liella-math --release --test fast_gamma | msg:times its bound|fast tier in .*oracle

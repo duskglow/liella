@@ -1,0 +1,16 @@
+{"task": "LIBM-SPECIAL-FAST-TIER-6", "model": "opus", "tokens": null,
+ "result": "COMPLETE: -5 merged with next (hot.rs family split: erf/erfc wrappers into hot/erf.rs; tsv f=fast32, d=in-place, lq=special; fast64/math_fma_paths both sides kept; KERNELS.md regenerated); gate, plants 9/9, counts green; erf 376->166, erfc above 1 565->248 instr/call vs next",
+ "branch": "task/libm-special-fast-tier-6", "head": null,
+ "gate": {"affected": "Direct tier: 10 suites ok, 3474 passed / 0 failed / 1072 ignored, conformance 17/0, 2 SKIPPED lines (absent tools)", "peak": "12G (page cache included), oom_kill 0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "every erf/erfc percall row is +1.0 instr/call against -5's counts (other host and base); common to all rows, so in the shared boundary entry, not a kernel; not diagnosed in this merge-only run; every row still 187-317 below base (next)",
+  "the gate stayed Direct tier this time (-4/-5 escalated to FULL on s10_math.tsv)",
+  "percall erfc row check MISMATCH is the reference's last bit (documented in the handoff)",
+  "rule slips in scratch only: one empty no-op heredoc (python3 - <<X) and one sed -i on a scratch script (gen.sh), neither on repository files"],
+ "refused": [],
+ "improvement": "the merge-base product for counts was not cached on the role's host; the dispatcher could prime ~/wl/src/<merge_base> at admission (wl_prime_base.sh) so a count job never needs a manual priming step",
+ "next_step": "optional: profile erf series (113 vs 63) and erfc above 1 (248 vs 194) with wl_trace before any design",
+ "report_file": "handoff/libm-special-fast-tier.md",
+ "jobs": ["libm-special-fast-tier-6-gate", "libm-special-fast-tier-6-plants", "libm-special-fast-tier-6-counts", "libm-special-fast-tier-6-lint"]}

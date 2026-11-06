@@ -19,6 +19,9 @@
 // NaN-rejecting form (`!(a > 0.0)` is true for NaN).
 #![allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing, clippy::neg_cmp_op_on_partial_ord)]
 
+pub(crate) mod bessel;
+pub(crate) use bessel::bessel_est;
+
 use crate::dd::{self, Dd};
 use crate::status::{Flags, Rounding, Status};
 use core::sync::atomic::{AtomicU64, Ordering};

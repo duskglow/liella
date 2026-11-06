@@ -27,6 +27,7 @@ use crate::coeffs::tables as t;
 use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
+mod bessel;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -34,6 +35,7 @@ mod hyperbolic;
 mod inv_trig;
 mod trig;
 
+use bessel::{bessel_core, bessel_finish};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
@@ -99,6 +101,14 @@ pub enum Fast {
     Tgamma,
     /// `lgammaf` (LIBM-F32-GAMMA; the sign by [`eval_lgamma`]).
     Lgamma,
+    /// `j0f` (LIBM-F32-BESSEL).
+    J0,
+    /// `j1f` (LIBM-F32-BESSEL).
+    J1,
+    /// `y0f` (LIBM-F32-BESSEL).
+    Y0,
+    /// `y1f` (LIBM-F32-BESSEL).
+    Y1,
 }
 
 /// The rounding test's margins, in units of the last place of the `double` approximation y:
@@ -354,6 +364,10 @@ pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)> {
             let (y, d) = lgamma_core(x)?;
             (y, d, "lgammaf")
         }
+        Fast::J0 => return bessel_finish(x, bessel_core(0, x)?, mode, "j0f"),
+        Fast::J1 => return bessel_finish(x, bessel_core(1, x)?, mode, "j1f"),
+        Fast::Y0 => return bessel_finish(x, bessel_core(2, x)?, mode, "y0f"),
+        Fast::Y1 => return bessel_finish(x, bessel_core(3, x)?, mode, "y1f"),
     };
     finish(x, y, delta, mode, name)
 }
@@ -445,7 +459,8 @@ pub fn eval_nearest(f: Fast, x: f32) -> Option<f32> {
         }
         // No in-place nearest entry yet (their flags on subnormal operands are unproven here):
         // the caller takes [`eval`].
-        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::Erf | Fast::Erfc | Fast::Tgamma | Fast::Lgamma => {
+        Fast::Log1p | Fast::Expm1 | Fast::Cbrt | Fast::Asin | Fast::Acos | Fast::Atan | Fast::Erf | Fast::Erfc | Fast::Tgamma | Fast::Lgamma | Fast::J0
+        | Fast::J1 | Fast::Y0 | Fast::Y1 => {
             return None;
         }
     };

@@ -1,0 +1,12 @@
+{"task": "LIBM-SPECIAL-GAMMA-TIER", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT: lgamma/tgamma double fast tier written (generator, evaluator with proof, tests) but not compiled or tested; tables not regenerated",
+ "branch": "task/libm-special-gamma-tier", "head": "18ad79de",
+ "gate": {"affected": "not run", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["near lgamma's negative zeros the fast tier refuses to the mp path (no dd step); rate not measured yet", "x >= 16 and x <= -16 still take the mp path (bench range is [-10, 10])", "process slip: one python heredoc edit"],
+ "refused": [],
+ "jobs": [],
+ "improvement": "the brief's context budget (180k) is spent largely reading the pattern; a 1-page API summary of fast64/dd/settle/special_tables in the PATTERN handoff would save ~40k per family story",
+ "next_step": "sync to keke n3, cargo xtask tables, compile and run tests/fast_gamma.rs, then counts, gate, plants",
+ "report_file": "handoff/libm-special-gamma-tier.md"}

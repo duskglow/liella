@@ -1,0 +1,11 @@
+{"task": "TIMING-ICONV-TRANSLIT-CPI-2", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND: Ivy Bridge A/B base vs head: translit time 0.354 of base (Liella/glibc 0.469), 8859-15 0.997, but iconv_utf8_utf16_4k 1.052 slower at equal instructions; D-NEW -> D-6.14; hot-text name fix did not change utf16",
+ "branch": "task/timing-iconv-translit-cpi-2", "head": "2679c686",
+ "gate": {"affected": "1584 passed / 0 failed", "peak": "3.5G"}, "accepted_first_attempt": null,
+ "rulings": [{"item": "iconv_utf8_utf16_4k 1.052x of base in time (Ivy Bridge, spread 0.5%, instructions 0.999) against translit 0.354x", "recommendation": "do not accept; a -3 run profiles the utf16 row (perf stat front-end events, A vs head) and fixes the fused path's layout, then re-times"}],
+ "informational": ["hot-text.list keys depend on impl-block order (Ms_ vs Ms0_): an impl added before `impl Conv` silently dropped Conv::convert and Conv::from_words from hot text; keys.py could strip impl disambiguators or static could flag list entries with no matching symbol", "xtask bench --compare refuses --rows; the plain bench with --rows interleaves glibc per round"],
+ "refused": [],
+ "improvement": "a static check that every hot-text.list key matches a symbol in the built libc would have caught the renamed Conv::convert at build time",
+ "next_step": "-3: perf stat the utf16 row on the Ivy Bridge host for stages A and head (DSB/MITE/LSD events), then move the fused UTF-8->wide path out of line if front-end bound, re-time A/B",
+ "report_file": "handoff/TIMING-ICONV-TRANSLIT-CPI.md",
+ "jobs": ["timing-iconv-translit-cpi-2-gate", "timing-iconv-translit-cpi-2-plants", "timing-iconv-translit-cpi-2-static2", "nico:timing-iconv-translit-cpi-2-ivb2"]}
