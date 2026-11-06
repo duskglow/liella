@@ -3,7 +3,7 @@
  "branch": "task/timing-n100-mutex-mt-2", "head": "see git log (commit adding this file)",
  "gate": {"affected": "852 passed / 0 failed (6 suites, 92 ignored); conformance 16 passed / 0 failed", "peak": "2.6G"},
  "accepted_first_attempt": null,
- "rulings": [{"item": "D-NEW placeholder in plan/07-decisions/s22-threads.md (__count kept by recursive mutexes only; no D-id reserved in the brief)", "recommendation": "reserve a D-22 id and replace D-NEW before landing"}],
+ "rulings": [{"item": "D-22.14 placeholder in plan/07-decisions/s22-threads.md (__count kept by recursive mutexes only; no D-id reserved in the brief)", "recommendation": "reserve a D-22 id and replace D-22.14 before landing"}],
  "informational": [
    "__nusers: glibc 1 while a mutex is held, Liella 0; observable only by reading the private __data.__nusers field, no public interface reports it; not changed (out of scope)",
    "-1 plants survivor boundary-wake-dropped: cause was no test reaching the export's deferred wake; s22_sync now waits until a waiter is asleep (state S) before unlocking (cases 31-33); CAUGHT",

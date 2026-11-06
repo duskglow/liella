@@ -5,7 +5,7 @@
  "accepted_first_attempt": null,
  "rulings": [
    {"item": "exp10 with glibc.cpu.hwcaps=-FMA measures 220.0 vs 218.9 before this run (+1.1, unprofiled); FMA default row 218.9 -> 147.4", "recommendation": "accept: FMA is the default on every x86-64-v3 CPU; profile the +1.1 in the next run"},
-   {"item": "D-NEW: libm product decides its FMA builds itself (placeholder decision id)", "recommendation": "reserve a D-10.x id and replace D-NEW in plan/07-decisions/s10-mathematics.md, dispatch.rs, conv.rs, caller_alloc.rs, libm_fma_select.rs"}],
+   {"item": "D-22.14: libm product decides its FMA builds itself (placeholder decision id)", "recommendation": "reserve a D-10.x id and replace D-22.14 in plan/07-decisions/s10-mathematics.md, dispatch.rs, conv.rs, caller_alloc.rs, libm_fma_select.rs"}],
  "informational": [
    "every libm-side run-time CPU decision has the same problem: libm's copy of liella-boundary never sees libc's startup; only dispatch::FMA is read by libm today",
    "libm_fma_select: 4000 exp + 4000 log user instructions 1,220,031 (FMA) vs 1,672,031 (-FMA) on mei",

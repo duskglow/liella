@@ -16,7 +16,7 @@ adding this file. Base origin/next 730f416b. Role shiki:~/w/sh1 (the -1 run used
    had become sete + re-test).
    Disassembly (shiki, `__liella_libc___pthread_mutex_lock`): entry `cmp $1; je rec; test; je plain; cmp $4; jae slow`.
    The normal path still pays 4 type-test instructions (LLVM put the recursive compare first); recursive pays 2.
-3. Decision row D-NEW (placeholder, no id reserved) in plan/07-decisions/s22-threads.md: `__count` kept by recursive
+3. Decision row D-22.14 (placeholder, no id reserved) in plan/07-decisions/s22-threads.md: `__count` kept by recursive
    mutexes only (probe-settled, matches glibc).
 
 ## Results (final code 369c1872)

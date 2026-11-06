@@ -14,7 +14,7 @@ The pinned fuzz input (fuzz/seeds/glob/timeout-5351ade2, 359 bytes) is far over 
 patterns was made (none in the repo name more than a few dozen alternatives); the bound is a judgement, cheap to move.
 
 ## Decisions in force
-D-NEW (plan/07-decisions/s14-...md; PROVISIONAL coordinator decision from #2401): needs a D-id. Differences row in
+D-22.14 (plan/07-decisions/s14-...md; PROVISIONAL coordinator decision from #2401): needs a D-id. Differences row in
 docs/differences-from-glibc.md (no compat flag: restoring means unbounded expansion).
 
 ## Tests
@@ -28,5 +28,5 @@ glob-brace-expansion-bound-lint3 (clippy -D warnings + the test + cargo xtask st
 glob-brace-expansion-bound-gate (affected --run, rc 0), glob-brace-expansion-bound-plants2 (3 plants CAUGHT; the wrapping-product plant of the first run, glob-brace-expansion-bound-plants rc 1, is equivalent by design and superseded).
 
 ## Next step
-Coordinator assigns the D-id (replace D-NEW in the decision row and the differences row).
+Coordinator assigns the D-id (replace D-22.14 in the decision row and the differences row).
 Note: the fuzz harness still limits `{` to 8; with the engine bound that limit is no longer needed for time.
