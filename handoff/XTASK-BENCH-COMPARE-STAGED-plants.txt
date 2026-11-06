@@ -1,0 +1,13 @@
+# XTASK-BENCH-COMPARE-STAGED plants: `cargo xtask plants handoff/XTASK-BENCH-COMPARE-STAGED-plants.txt --dir <new RAM dir>`
+# the old fallback: a directory with no root markers resolves to the build-time root even when that is no tree
+nonroot-falls-back | xtask/src/benchstage.rs | lit:    if is_root(built) { ==>     if true { | cargo test -p xtask --bin xtask compare_in_a_staged_tree | msg:compare_in_a_staged_tree_finds_its_root_and_benches.*FAILED
+# the build-time root is preferred over the staged tree the command runs in
+built-root-first | xtask/src/benchstage.rs | lit:    if let Some(r) = cwd.and_then(|d| d.ancestors().find(|a| is_root(a))) { ==>     if let Some(r) = cwd.filter(|_| !is_root(built)).and_then(|d| d.ancestors().find(|a| is_root(a))) { | cargo test -p xtask --bin xtask compare_in_a_staged_tree | msg:compare_in_a_staged_tree_finds_its_root_and_benches.*FAILED
+# a tree holding only the manifest is not recognised as a root
+manifest-not-a-root | xtask/src/benchstage.rs | lit:|| dir.join(MANIFEST).is_file() ==> || false | cargo test -p xtask --bin xtask compare_in_a_staged_tree | msg:compare_in_a_staged_tree_finds_its_root_and_benches.*FAILED
+# compare --no-build skips the staged products' hash check
+compare-no-hash-check | xtask/src/bench.rs | lit:let staged = if no_build { crate::benchstage::load_verified(root)? } else { None }; ==> let staged: Option<crate::benchstage::Manifest> = None; | cargo test -p xtask --bin xtask compare_in_a_staged_tree | msg:compare_in_a_staged_tree_finds_its_root_and_benches.*FAILED
+# the name list does not say where it looked
+list-without-dir | xtask/src/bench.rs | lit:format!("Valid names (the *.c files in {}): {}", dir.display(), valid.join(", ")) ==> format!("Valid names: {}", valid.join(", ")) | cargo test -p xtask --bin xtask compare_ | msg:(compare_in_a_staged_tree_finds_its_root_and_benches|compare_rejects_unknown_bench_name_listing_valid_ones).*FAILED
+# no names found prints an empty list again ("Valid names: .")
+empty-list-message | xtask/src/bench.rs | lit:            let found = if valid.is_empty() { ==>             let found = if false { | cargo test -p xtask --bin xtask compare_rejects_unknown | msg:compare_rejects_unknown_bench_name_listing_valid_ones.*FAILED
