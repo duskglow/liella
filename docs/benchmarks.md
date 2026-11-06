@@ -393,8 +393,9 @@ match is refused. The commit comes from git, or from the `head=` line of a role 
 `bench --compare --no-build` works the same way in a staged tree (XTASK-BENCH-COMPARE-STAGED): it checks the products
 against the manifest, prints the `staged:` header, and measures the staged Liella and glibc (dynamic) programs, so the
 Liella/glibc time ratio of any row (the `second_*`/`first_*` rows included) comes from the timing host itself
-(`./xtask-bin bench --compare --no-build --counters --runs 5 cbench_opt`; stage with `--only cbench_opt`; a
-`.host-static` program is not staged, so that column stays empty). xtask works on the nearest directory at or above the
+(`./xtask-bin bench --compare --no-build --counters --runs 5 cbench_opt`; stage with `--only cbench_opt`; the static
+glibc column is filled when the build host's `target/liella/bench` holds a `.host-static` program, which `--stage`
+then stages like every other file there, and is left empty otherwise). xtask works on the nearest directory at or above the
 working directory that holds `bench-stage.manifest` or `Cargo.toml` with `xtask/Cargo.toml`. Unpack the tarball
 whole: a tree repacked without its manifest and `Cargo.toml` is no root, and xtask stops with an error naming the
 directory (it used to fall back to the build host's path, where `--compare` found no bench and printed
