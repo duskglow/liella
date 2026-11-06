@@ -300,6 +300,24 @@ static void diff8_row(size_t n, const char *tag)
     free(b);
 }
 
+/* BENCH-MEMMOVE-OVERLAP-SHORT: a 4 KiB overlapping move DOWN (source above the destination, the
+ * forward-copy direction) by a short distance, 8 and 64 bytes: shifting a buffer down by a few bytes.
+ * memmove_4k moves up (backward direction). The destination starts 16 bytes past a 4096-aligned
+ * allocation (malloc's guaranteed alignment and no more), so the alignment the kernel sees does not
+ * move with the allocator. */
+static void overlap_rows(void)
+{
+    size_t n = 4096;
+    unsigned char *raw = aligned_alloc(4096, 2 * 4096);
+    if (!raw)
+        abort();
+    memset(raw, 0x5A, 2 * 4096);
+    unsigned char *buf = raw + 16;
+    MEASURE("memmove_overlap8_4k", { unsigned char *d = buf; HIDE(d); memmove(d, d + 8, n); });
+    MEASURE("memmove_overlap64_4k", { unsigned char *d = buf; HIDE(d); memmove(d, d + 64, n); });
+    free(raw);
+}
+
 int main(void)
 {
     unsigned long mixsum = mix_build();
@@ -344,5 +362,6 @@ int main(void)
     MEASURE("memset_4k_off", { unsigned char *d = dst + 64; HIDE(d); memset(d, 7, n); });
     free(src);
     free(dst);
+    overlap_rows();
     return 0;
 }
