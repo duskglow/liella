@@ -1,5 +1,7 @@
-//! `cargo xtask affected [--base <ref>] [--files <path>...] [--only <names>] [--list | --run]`: run only the tests a
-//! change can affect (PR-4; owner item: token cost).
+//! `cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>]`: list (`--list`) or run
+//! (`--run`) only the tests a change can affect (PR-4; owner item: token cost). One of `--list` and `--run` is required:
+//! without either the command prints the one-line usage and exits 2 (XTASK-AFFECTED-EXPLICIT; a gate that forgot `--run`
+//! listed the selection, ran nothing and exited 0).
 //!
 //! Compiling the workspace is cheap; the nine thousand tests and the conformance programs are
 //! the cost. This command maps the changed files to the tests that can reach them, CONSERVATIVELY:
@@ -89,7 +91,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
 
 /// Crates whose changes are narrowed through the module graph.
@@ -2463,7 +2465,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     println!("affected: {}{}", if ok { "ok" } else { "FAILED" }, if sel.only { " (ONLY mode: named binaries, NOT A GATE)" } else { "" });
     if !ok {
         // D-X.23: test builds carry no DWARF; panics still name file:line (core::panic::Location).
-        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target>");
+        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target> --run");
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
@@ -2548,58 +2550,114 @@ fn default_base(env: Option<String>) -> String {
     env.map(|b| b.trim().to_string()).filter(|b| !b.is_empty()).unwrap_or_else(|| "origin/main".to_string())
 }
 
-pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
-    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
-    let mut base = default_base(std::env::var("AFFECTED_BASE").ok());
-    let mut run = false;
-    let mut with_exports = false;
-    let mut files: Option<Vec<String>> = None;
-    let mut only: Option<String> = None;
-    let mut tier = Tier::Direct;
-    let mut replay_file: Option<String> = None;
+/// XTASK-AFFECTED-EXPLICIT: the one line printed (exit 2) when `affected` is given neither `--list` nor `--run`. There is
+/// no default mode: a gate that ran `cargo xtask affected` without `--run` used to list the selection, run nothing and
+/// exit 0, a green gate that tested nothing.
+pub const USAGE: &str = "usage: cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports]  or  affected --replay <records> [--tier direct|wide|full]; --list prints the selection, --run runs it, one of them is required";
+
+/// `--list` prints the selection; `--run` runs it. Exactly one is required (except with `--replay`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    List,
+    Run,
+}
+
+/// The parsed arguments of `cargo xtask affected`.
+#[derive(Debug)]
+struct Opts {
+    base: String,
+    mode: Option<Mode>,
+    with_exports: bool,
+    files: Option<Vec<String>>,
+    only: Option<String>,
+    tier: Tier,
+    replay_file: Option<String>,
+}
+
+impl Opts {
+    /// The mode to act in, or `None` when the command must be refused with [`USAGE`] (exit 2). `--replay` is a mode of
+    /// its own (it reads gate records, lists and runs nothing) and needs neither flag.
+    fn mode(&self) -> Option<Mode> {
+        if self.replay_file.is_some() { Some(self.mode.unwrap_or(Mode::List)) } else { self.mode }
+    }
+}
+
+fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
+    let mut o = Opts { base: default_base, mode: None, with_exports: false, files: None, only: None, tier: Tier::Direct, replay_file: None };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--base" => base = it.next().ok_or("--base needs a ref")?.clone(),
-            "--tier" => tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
-            "--replay" => replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
-            "--run" => run = true,
-            "--list" => run = false,
-            "--with-exports" => with_exports = true,
-            "--only" => only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
+            "--base" => o.base = it.next().ok_or("--base needs a ref")?.clone(),
+            "--tier" => o.tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
+            "--replay" => o.replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
+            "--run" | "--list" => {
+                let m = if a == "--run" { Mode::Run } else { Mode::List };
+                if o.mode.is_some_and(|prev| prev != m) {
+                    return Err(format!("--list and --run together: give one ({USAGE})"));
+                }
+                o.mode = Some(m);
+            }
+            "--with-exports" => o.with_exports = true,
+            "--only" => o.only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
             "--files" => {
                 let mut v = Vec::new();
                 while let Some(f) = it.clone().next().filter(|f| !f.starts_with("--")) {
                     v.push(f.clone());
                     it.next();
                 }
-                files = Some(v);
+                o.files = Some(v);
             }
-            other => return Err(format!("unknown argument `{other}` (usage: affected [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--replay <records>] [--list | --run] [--with-exports])")),
+            other => return Err(format!("unknown argument `{other}` ({USAGE})")),
         }
     }
-    if let Some(path) = replay_file {
+    Ok(o)
+}
+
+/// `cargo xtask affected`: exit 2 with [`USAGE`] when neither `--list` nor `--run` is given, 1 on any other error.
+pub fn main(root: &Path, args: &[String]) -> ExitCode {
+    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
+    let result = parse_args(args, default_base(std::env::var("AFFECTED_BASE").ok())).and_then(|o| match o.mode() {
+        None => Ok(None),
+        Some(mode) => execute(root, &o, mode, &mut run_selection).map(Some),
+    });
+    match result {
+        Ok(Some(())) => ExitCode::SUCCESS,
+        Ok(None) => {
+            eprintln!("{USAGE}");
+            ExitCode::from(2)
+        }
+        Err(e) => {
+            eprintln!("xtask affected: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// The work of one `affected` command; `runner` runs a selection (`run_selection`; a recorder in the unit tests).
+fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String>) -> Result<(), String> {
+    let tier = o.tier;
+    if let Some(path) = &o.replay_file {
         let repo = Repo::load(root);
-        let text = fs::read_to_string(&path).map_err(|e| format!("--replay {path}: {e}"))?;
+        let text = fs::read_to_string(path).map_err(|e| format!("--replay {path}: {e}"))?;
         let (report, misses) = replay(&repo, &text, tier);
         print!("{report}");
         return if misses == 0 { Ok(()) } else { Err(format!("replay: {misses} failures outside the {tier:?} tier")) };
     }
-    if let Some(list) = only {
+    if let Some(list) = &o.only {
         let repo = Repo::load(root);
-        let sel = select_only(&repo, &list)?;
+        let sel = select_only(&repo, list)?;
         print_selection(&repo, &[], &sel);
-        return if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) };
+        return if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) };
     }
-    let files = match files {
-        Some(f) => f,
-        None => changed_files(root, &base)?,
+    let files = match &o.files {
+        Some(f) => f.clone(),
+        None => changed_files(root, &o.base)?,
     };
     let repo = Repo::load(root);
     let sel = select_tier(&repo, &files, tier);
     println!("tier: {tier:?} (per-fix gates: direct; the landing gate runs everything)");
     print_selection(&repo, &files, &sel);
-    if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) }
+    if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2614,6 +2672,47 @@ mod tests {
         assert_eq!(default_base(Some(String::new())), "origin/main");
         assert_eq!(default_base(Some("  ".into())), "origin/main");
         assert_eq!(default_base(Some("origin/opt/lv3".into())), "origin/opt/lv3");
+    }
+
+    fn opts(args: &[&str]) -> Result<Opts, String> {
+        parse_args(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>(), "origin/main".into())
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: no default mode. Without --list or --run there is no mode (main exits 2 with USAGE; the
+    // binary's exit status is checked in xtask/tests/affected_mode.rs); --replay needs neither; both together are refused.
+    #[test]
+    fn affected_requires_list_or_run() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        assert_eq!(opts(&[]).unwrap().mode(), None);
+        assert_eq!(opts(&["--base", "origin/next", "--tier", "direct", "--files", "docs/plants.md"]).unwrap().mode(), None);
+        assert_eq!(opts(&["--list"]).unwrap().mode(), Some(Mode::List));
+        assert_eq!(opts(&["--files", "a.rs", "--run", "--base", "x"]).unwrap().mode(), Some(Mode::Run));
+        assert_eq!(opts(&["--replay", "records.txt"]).unwrap().mode(), Some(Mode::List));
+        let both = opts(&["--list", "--run"]).unwrap_err();
+        assert!(both.contains("--list and --run together"), "{both}");
+        assert!(USAGE.contains("--list") && USAGE.contains("--run") && !USAGE.contains('\n'), "{USAGE}");
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: --run hands the selection to the runner, --list does not.
+    #[test]
+    fn affected_run_runs_the_selection_and_list_does_not() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        for (flag, want_runs) in [("--run", 1), ("--list", 0)] {
+            let o = opts(&["--files", "docs/plants.md", flag]).unwrap();
+            let mut runs = 0;
+            let mut seen_docs_note = false;
+            let mut rec = |_: &Path, _: &Repo, sel: &Selection, exports: bool| -> Result<(), String> {
+                runs += 1;
+                seen_docs_note = sel.notes.iter().any(|n| n.starts_with("docs/plants.md: docs only")) && sel.full.is_empty() && !exports;
+                Ok(())
+            };
+            execute(&root(), &o, o.mode().unwrap(), &mut rec).unwrap();
+            assert_eq!(runs, want_runs, "{flag}");
+            assert_eq!(seen_docs_note, want_runs == 1, "{flag}: the runner got the docs-only selection");
+        }
+        let mut fail = |_: &Path, _: &Repo, _: &Selection, _: bool| -> Result<(), String> { Err("a selected test failed".into()) };
+        let o = opts(&["--files", "docs/plants.md", "--run"]).unwrap();
+        assert_eq!(execute(&root(), &o, Mode::Run, &mut fail).unwrap_err(), "a selected test failed");
     }
 
     // TOOLS-7 (1): a failed step's FULL output lands in target/<name> (only that step's, not earlier steps'), and a
