@@ -1,0 +1,17 @@
+{"task": "TIMING-N100-MUTEX-MT-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: mutex lock fast path split by type before the acquire; every mutex row fewer instructions (normal 64.0->61.0, recursive 83.0->79.0, normal_mt 63.1->61.1, recursive_mt 82.1->79.1) and no row slower in time (N100 normal_mt 1.215->0.985 of glibc, recursive_mt 0.847->0.707; Ivy Bridge normal_mt 0.999->0.820, others faster or at parity)",
+ "branch": "task/timing-n100-mutex-mt-2", "head": "see git log (commit adding this file)",
+ "gate": {"affected": "852 passed / 0 failed (6 suites, 92 ignored); conformance 16 passed / 0 failed", "peak": "2.6G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW placeholder in plan/07-decisions/s22-threads.md (__count kept by recursive mutexes only; no D-id reserved in the brief)", "recommendation": "reserve a D-22 id and replace D-NEW before landing"}],
+ "informational": [
+   "__nusers: glibc 1 while a mutex is held, Liella 0; observable only by reading the private __data.__nusers field, no public interface reports it; not changed (out of scope)",
+   "-1 plants survivor boundary-wake-dropped: cause was no test reaching the export's deferred wake; s22_sync now waits until a waiter is asleep (state S) before unlocking (cases 31-33); CAUGHT",
+   "rt-general-count-always was caught by the 600 s timeout here, rc 101 with its message in the -1 run: an assertion failing in a contended test thread can leave the test waiting instead of failing fast",
+   "staged timing trees cannot be run twice: a bench run rewrites target/liella/bench/bench_times.tsv, then --staged refuses the tree (first timing attempts -n100/-ivb rc 1); worked around in run.sh by re-extracting per round",
+   "one accidental empty heredoc (python3 -I - <<'X') in a local command while editing the handoff; it ran nothing"],
+ "refused": [],
+ "jobs": ["shiki:timing-n100-mutex-mt-2-gate", "shiki:timing-n100-mutex-mt-2-plants", "shiki:timing-n100-mutex-mt-2-counts2", "shiki:timing-n100-mutex-mt-2-lint2", "nozomi:timing-n100-mutex-mt-2-n100b", "nico:timing-n100-mutex-mt-2-ivbb"],
+ "improvement": "xtask bench --staged should write its run outputs outside the manifest-checked target/liella/bench (or exclude bench_times.tsv from the manifest) so a staged tree can be timed for several interleaved rounds",
+ "next_step": "land; optional: drop the normal lock path's two extra type-test instructions (cmp $1/je ahead of the plain test)",
+ "report_file": "handoff/timing-n100-mutex-mt.md"}

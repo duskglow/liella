@@ -28,11 +28,18 @@ adding this file. Base origin/next 730f416b. Role shiki:~/w/sh1 (the -1 run used
   rt-wake-dropped, rt-waiter-mark-missed and rt-general-count-always caught by the 600 s timeout (the last one was
   rc 101 with its message in the -1 run: a failing assertion inside a contended thread can leave the test waiting).
 - Lint (timing-n100-mutex-mt-2-lint): cargo xtask clippy + static clean on 369c1872.
-- Gate: timing-n100-mutex-mt-2-gate (shiki, direct tier, --base origin/next), see the report json / hand-back.
+- Gate: timing-n100-mutex-mt-2-gate (shiki, direct tier, --base origin/next): rc 0; 6 suites, 852 passed / 0 failed /
+  92 ignored; conformance 16 passed; peak 2.6G. Final clippy (--all-features) + static: timing-n100-mutex-mt-2-lint2 rc 0.
 - Timing: staged trees before.tar (origin/next's pthread_sync.rs and sync.rs over the branch tree; manifest commit
   reads 369c1872 because the role's .synced head names the branch) and after.tar; 3 interleaved rounds of the 4 rows
   under `~/bin/timing`: nozomi (N100) timing-n100-mutex-mt-2-n100, nico (Ivy Bridge) timing-n100-mutex-mt-2-ivb;
-  bookings 62 (nozomi) and 63 (nico). Results: see the hand-back; if not in, read `~/logs/<label>.log` on each host.
+  bookings 62 (nozomi) and 63 (nico). First attempts (-n100, -ivb) rc 1 in round 2: a bench run rewrites
+  target/liella/bench/bench_times.tsv in the staged tree and the manifest check then refuses it; run.sh now
+  re-extracts the tree before every round (labels -n100b, -ivbb, rc 0).
+  Liella/glibc time, median of the 3 rounds, before -> after:
+  N100:       normal 0.904 -> 0.667; recursive 0.714 -> 0.616; normal_mt 1.215 -> 0.985; recursive_mt 0.847 -> 0.707.
+  Ivy Bridge: normal 0.953 -> 0.951; recursive 0.813 -> 0.782; normal_mt 0.999 -> 0.820; recursive_mt 0.959 -> 0.960
+  (rounds 0.958-0.960 before, 0.957-0.962 after: parity). No row slower on either class.
 
 ## Open / informational
 - `__nusers` (out of scope): glibc reports 1 while a mutex is held, Liella 0. A program sees it only by reading the
@@ -40,9 +47,7 @@ adding this file. Base origin/next 730f416b. Role shiki:~/w/sh1 (the -1 run used
   the cond wait paths do not expose it). Not changed.
 
 ## Exact next step
-Read the two timing logs: every row Liella/glibc after <= before on both classes -> the branch lands (COMPLETE).
-A row slower in time -> profile that row (perf annotate on the timing host's staged tree) before changing anything.
-The normal lock path's 2 extra type-test instructions (cmp $1/je before the plain test) are the next candidate if the
+None required: the branch lands (COMPLETE). Optional: the normal lock path's 2 extra type-test instructions (cmp $1/je before the plain test) are the next candidate if the
 N100 normal rows need more.
 
 ## Do not redo
