@@ -79,6 +79,15 @@ impl TscGate {
         TscGate { stamp: AtomicU64::new(0), allow: AtomicU64::new(0) }
     }
 
+    /// Start the gate at a check just made: `tsc` the counter read just before the clock read `at`
+    /// that the check recorded (0: no counter, the gate stays closed). The whole interval is left.
+    pub fn start(&self, tsc: u64, at: u64) {
+        if tsc != 0 {
+            self.allow.store(tsc_allow(at, at), Relaxed);
+            self.stamp.store(tsc, Release);
+        }
+    }
+
     /// Whether `last` is not due for a check, with `tsc` the counter just read (0: none): yes without
     /// calling `clock` while the gate holds; else `clock` is read once ([`now`]) and, when no check is due,
     /// the gate restarts from `tsc`. A due check (`false`) leaves the gate as it is: it had already
@@ -130,6 +139,29 @@ impl LastCheck {
 #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tsc_gate_started_at_a_check_holds_without_the_clock() {
+        // No spec clause (D-7.14 gate; PERF-FIRSTCALL-MKTIME-SNPRINTF): a gate started at a check
+        // just made answers the next use from the counter alone; without a counter it stays closed.
+        let last = LastCheck::new();
+        last.checked(1_000);
+        let g = TscGate::new();
+        g.start(500, 1_000);
+        let mut read = false;
+        assert!(g.fresh(&last, 600, || {
+            read = true;
+            1_000
+        }));
+        assert!(!read, "the clock was read with the gate started");
+        let none = TscGate::new();
+        none.start(0, 1_000);
+        assert!(none.fresh(&last, 600, || {
+            read = true;
+            1_000
+        }));
+        assert!(read, "a gate started without a counter must read the clock");
+    }
 
     #[test]
     fn tsc_gate_cases() {

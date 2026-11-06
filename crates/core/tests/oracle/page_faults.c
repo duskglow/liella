@@ -13,6 +13,7 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 static size_t (*volatile len_fn)(const char *) = strlen;
@@ -106,6 +107,33 @@ int main(int argc, char **argv) {
         rmdir(sub);
         rmdir(dir);
         fprintf(stderr, "minflt %ld\n", n == 4 ? f1 - f0 : -1);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "mktime") == 0) {
+        /* PERF-FIRSTCALL-MKTIME-SNPRINTF: the first mktime after localtime_r loaded the zone
+         * (cbench_opt's cold rows); prints only that call's faults. The zone's one-time setup
+         * belongs to the load, not to this call. */
+        setenv("TZ", "America/New_York", 1);
+        time_t when = 1759579200;
+        struct tm r, t;
+        long n = localtime_r(&when, &r) != NULL;
+        t = r;
+        t.tm_isdst = -1;
+        long f0 = minflt();
+        n += mktime(&t) == when;
+        long f1 = minflt();
+        fprintf(stderr, "minflt %ld\n", n == 2 ? f1 - f0 : -1);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "float") == 0) {
+        /* PERF-FIRSTCALL-MKTIME-SNPRINTF: the faults of a program's first float conversion
+         * (cbench_opt's first_snprintf shape); the common %.2f must not probe a large stack frame. */
+        char b[64];
+        volatile double v = 3.25;
+        long f0 = minflt();
+        long n = snprintf(b, sizeof b, "%s=%d (%.2f)", "key", 42, v) == 13;
+        long f1 = minflt();
+        fprintf(stderr, "minflt %ld\n", n == 1 ? f1 - f0 : -1);
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "strings") == 0) {
