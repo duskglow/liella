@@ -6,10 +6,13 @@ tail-first-65 | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.Ls
 tail-first-129 | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.Lset_129_body\\\x40:.*?\.else\n\tmovd %esi, %xmm0\n\tpunpcklbw %xmm0, %xmm0\n\tpshuflw \$0, %xmm0, %xmm0\n\tpunpcklqdq %xmm0, %xmm0\n)/$1\tmovups %xmm0, -16(%rdi,%rdx)\n/s | cargo test -p liella-boundary --test small_copy folded_fills_store_their_head_block_first | msg:store past the head block came before it
 # Tail first, AVX2 page 129-256 (after the swap, in classed_slots).
 tail-first-avx2 | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?vpbroadcastb %xmm0, %ymm0\n)/$1\tvmovdqu %ymm0, -32(%rdi,%rdx)\n/s | cargo test -p liella-boundary --test classed_slots the_avx2_page_folds_null | msg:avx2 page NULL: child ended|head block came before it
+# Folding without the guard: with folding off the 129-256 class then takes every n <= 256, so n <= 128 stores before d
+# (d + n - 128) and corrupts the heap of the fill tests' checked build: the test binary's allocator aborts it (run 1:
+# 'free(): invalid pointer', SIGABRT) before an assertion can name it. That abort is the expected failure.
 # Folding without the guard (Rust): the 129-256 word raised with folding off.
-unguarded-word | crates/boundary/src/dispatch.rs | perl:s/(fn select_null_fold.*?)SET_HI\.store\(0, Relaxed\)/$1SET_HI.store(SET_HI_ON, Relaxed)/s | cargo test -p liella-boundary --test small_copy | msg:null_faults_in_the_folded_sizes_and_aborts_in_every_other.*FAILED|fold false avx2 false call [46] n 1[2-9]|checked memset
+unguarded-word | crates/boundary/src/dispatch.rs | perl:s/(fn select_null_fold.*?)SET_HI\.store\(0, Relaxed\)/$1SET_HI.store(SET_HI_ON, Relaxed)/s | cargo test -p liella-boundary --test small_copy | msg:free\(\): invalid pointer|fold false avx2 false call [46] n
 # Folding without the guard (assembly): the 129-256 class gated by a constant instead of the word.
-unguarded-const | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?)cmpq liella_machine_set_hi\+\\bias\(%rip\), %rdx/$1cmpq \$256, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:null_faults_in_the_folded_sizes_and_aborts_in_every_other.*FAILED|sse2 checked memset|fold false
+unguarded-const | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?)cmpq liella_machine_set_hi\+\\bias\(%rip\), %rdx/$1cmpq \$256, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:free\(\): invalid pointer|fold false avx2 false call [46] n
 # Guard off: the explicit NULL test of the 129-256 class on the .Lset_rest path dropped.
 rest-no-null-test | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.Lset_rest\\\x40:.*?)\ttestq %rdi, %rdi\n\tjz liella_hot_fill_rest\+\\bias\n/$1/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes_and_aborts_in_every_other | msg:fold false avx2 false call [46] n (129|144|200|256)
 # Above 256 the explicit test stays: dropping it on the aligned rep stosb path must fail the 64 KiB test.
