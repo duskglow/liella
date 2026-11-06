@@ -1,57 +1,51 @@
 # DL-BOOT-RELOC (phase 14 DL-4): self-relocator, first used by libc.a's static-PIE start
 
-**State:** branch `task/dl-boot-reloc` (from origin/next `349b94d0`), WIP. Role mei:~/w/s1. INCOMPLETE: the
-code, tests, plants file and D-27.10 are written; the two static-PIE conformance programs link but crash
-(SIGSEGV) for the reason below. No gate and no plants run yet (pointless on a failing head).
+**State:** branch `task/dl-boot-reloc-2` (stacks on `task/dl-boot-reloc`, base origin/next `349b94d0`), HEAD after
+this handoff's commit. Role shiki:~/w/sh2. INCOMPLETE (budget): static PIEs now start; the gate's
+last run failed at `static` K5 (fixed in `3bf2bbcf`, not rerun); 2 plants survive; static counts not measured.
 
-## Done
-* `crates/ld/src/boot.rs` (`liella_ld::boot`, pure): `image` (one PT_DYNAMIC, exactly one writable PT_LOAD),
-  `tables` (DT_RELA/JMPREL/RELR; refuses DT_TEXTREL, bad RELAENT/RELRENT/PLTREL, partial tables, tables
-  overlapping the writable segment, no DT_NULL), `relocate` (pass 1: `RelocKind::Relative` of RELA then
-  JMPREL via `Arch::classify`, then RELR; Irelative/None wait; others refused), `irelative` (pass 2 list),
-  `Segment::store` (bounds-checked). No panics. 3 unit tests pass (job mei:dl-boot-reloc-t3).
-* `crates/boundary/src/bootstrap.rs` (category *slice*; added to the slice placement list in
-  xtask/src/policy.rs, no new category): `relocate_self(phdr, phnum, dynamic)`, `irelative(&Relocated)`.
-* `runtime.rs`: `initial_thread` calls the relocator when `liella_link_dynamic() != 0` (non-PIE path
-  unchanged apart from that test replacing `bias != 0`), rebases TLS image and RELRO by the real bias (a GNU
-  ld static PIE has NO PT_PHDR, so the old bias was 0 and the old refusal never fired: it crashed instead);
-  pass 2 where `apply_irelative` runs. Pass-1 failure: one fixed write to fd 2, `exit_group(127)`.
-* `xtask/src/so.rs` `shared_personality_ref`: libc.a could not be linked `-static-pie` at all
-  (the product crate's LTO object keeps `DW.ref.rust_eh_personality` LOCAL in its COMDAT group, so the
-  compiler_builtins members' references are undefined; non-PIE resolves them to 0 silently). Made weak
-  hidden after `weaken_archive` (which rebuilds that object). With it the programs link.
-* `conformance/run.sh` directive `LINK-STATIC-PIE: rela|relr`; `conformance/c/s01_static_pie.c` (RELR) and
-  `s01_static_pie_rela.c` (RELA): relocated tables, TLS-image pointer, constructor, IFUNC called and taken
-  by address, 100 starts (50 random, 50 ADDR_NO_RANDOMIZE).
-* D-27.10 written (plan/07-decisions/s26-29.md); phase-4 deviation 2 marked closed.
-* Plants file: `handoff/DL-BOOT-RELOC-plants.txt` (16 plants incl. "skip one RELR word", bounds, ordering).
+## Done (DL-BOOT-RELOC-2)
+* Crash cause fixed: the anchor was a weak hidden `_DYNAMIC`, which gcc reaches through a GOT slot that is
+  unrelocated in a static PIE. Now `csys/src/adapter/image_anchor.c` declares `__ehdr_start` hidden and NOT
+  weak (one `R_X86_64_PC32` lea, seen in `readelf -r libc.a`), helper `liella_link_image_header`
+  (prototype in liella_csys.h). `bootstrap::static_pie_header()` relocates only when `e_type == ET_DYN`
+  (`boot::position_independent`); bias = header address minus `Image::header` (p_vaddr of the PT_LOAD at
+  file offset 0); PT_DYNAMIC = bias + p_vaddr. `liella_link_dynamic` removed.
+* Build check: `cargo xtask so` runs `boot_anchor_pc_relative` (so.rs): the member defining the anchor
+  must reference `__ehdr_start` and have no GOT-typed relocation. Unit test
+  `boot_anchor_reference_is_pc_relative`; plant `weak-anchor` (weak declaration) CAUGHT.
+* Unit tests: `dynamic_and_headers` (header search), `position_independent_header`.
+* Pre-existing clippy failures fixed: `len % ent` -> `checked_rem`; three-op unsafe block -> `table()` helper.
+* D-27.10 rule (1) rewritten; design §0a checklist item 9 (pre-relocation references PC-relative, not weak).
+* Job shiki:dl-boot-reloc-2-t1 (head 7d776e68): `so` ok, ld unit 4/4, xtask anchor test ok, conformance
+  `s01_static_pie` (RELR) and `s01_static_pie_rela` (RELA) PASS: each does the 100 starts (50 random,
+  50 ADDR_NO_RANDOMIZE). It ended rc 1 only on the clippy lint above.
 
-## The open defect (exact next step)
-strace at a fixed base: `arch_prctl(ARCH_GET_FS)` then SIGSEGV at si_addr=0x94e00 = the LINK-time
-`_DYNAMIC`. `liella_link_dynamic()` in csys/src/adapter/runtime.c reads a weak hidden `_DYNAMIC` that gcc
--fPIC reaches through a GOT slot, and the GOT slot is itself unrelocated. (The same applies to every weak
-`liella_link_*` helper: none may be used before pass 1.) Fix options, in order of preference:
-1. Find the bias with no symbol at all: walk the headers at AT_PHDR for the PT_LOAD with p_offset 0
-   and use AT_PHDR - (its p_vaddr + e_phoff)... needs e_phoff; or require PT_DYNAMIC and take the
-   dynamic address from a NON-weak hidden `_DYNAMIC` in a separate C member pulled only by PIE links.
-2. Make the helper's reference PC-relative: declare `_DYNAMIC` hidden and non-weak inside a member only
-   static-PIE starts pull in, keeping non-PIE links free of it (non-PIE ld does not define `_DYNAMIC`).
-3. A one-instruction `lea _DYNAMIC(%rip)` (weak hidden) as a machine primitive in `machine/*.S`
-   (K2-clean: no logic), declared once; check a non-PIE static link resolves it to 0.
-Then: rerun `sh ~/work/DL-BOOT-RELOC/t1.sh` (so, unit, 4 conformance, clippy, static), gate
-(`cargo xtask affected --run --base origin/next`), plants (`cargo xtask plants handoff/DL-BOOT-RELOC-plants.txt
---dir /mnt/zram/claude/DL-BOOT-RELOC/plants-1 --timeout 600`), and the static workload count before/after
-(INVIOLABLE static gate; not measured yet).
+## Exact next steps (in order)
+1. Rerun the gate on HEAD: `~/bin/jobrun <label> gate -- sh -c ". ~/.cargo/env; ~/bin/gate 16G sh
+   ~/work/DL-BOOT-RELOC-2/gate.sh"` (clippy, static, `affected --run --base origin/next`). clippy was clean
+   in the foreground on ebb71c51; static failed only on K5 (fixed in 3bf2bbcf).
+2. Plants (run dl-boot-reloc-2-plants-2 on ebb71c51: 22 plants, 15 CAUGHT, 2 SURVIVED, 5 WARN-NO-MSG):
+   * `relr-span` SURVIVED: the unit test never sets bitmap bit 62 far enough to tell 63*8 from 64*8 spans;
+     add a RELR case with two bitmap words (the second word's base depends on the span).
+   * `tls-rebase` SURVIVED: `delta = 0` passed the RELA conformance program; find out why the TLS image
+     copy still works (does `start::program` already give the right TLS address, or does the program's TLS
+     check not read the image?). Fix the test or remove dead code. Do not loosen the plant.
+   * WARN-NO-MSG on relr-skip-word, no-relocate, pie-type-run, irelative-skip, irelative-bias: the
+     conformance runner's failure text is not `FAIL s01_static_pie...`; read one log under
+     /mnt/zram/claude/DL-BOOT-RELOC-2/plants-2/logs/ and fix the `msg:` regex.
+3. Static non-PIE counts (INVIOLABLE): NOT MEASURED. `validation/wl_count.sh --base 349b94d0... . seq du`
+   on shiki fails with `wl_prep: no link command for seq` (the workload kit tree is missing on that host;
+   base source is primed there). Run it on a host with the kit (the script says it measures on the Zen 1
+   host). Expected change on the non-PIE path: one direct call to the anchor (lea, ret), a 2-byte load and a
+   compare, in place of the old call + test: a few instructions per process start.
 
 ## Arch seam (§0a checklist)
-1 ticked (no R_X86_64_* outside arch; the non-PIE `apply_irelative` raw 37 is pre-existing, unchanged on
-purpose: "static NON-PIE start must not change"); 2 ticked (`RelocKind::Relative`/`Irelative`); 3 n/a;
-4 ticked (no asm added); 5 n/a; 6 n/a; 7 ticked (unit tests use `X86_64`, commented); 8 n/a.
+1 ticked (the new xtask check matches GOT-typed relocation names generically); 2 ticked; 3 n/a; 4 ticked (no
+asm added: the anchor is C); 5-6 n/a; 7 ticked (unit tests use `X86_64`); 8 n/a; 9 (new) ticked.
 
-## Informational
-* `start::read_only` (D-12.4 `%n`) and static `dl_iterate_phdr`/`_dl_find_object` take the bias from
-  PT_PHDR: in a static PIE (no PT_PHDR) they see bias 0. Follow-up story after this one lands.
-* Commit `Relocate a static PIE...` used a python heredoc for edits (against developer-flow's no-heredoc
-  rule); later edits use files.
+## Not this story (follow-up the coordinator cuts)
+* PT_PHDR load offset: `start::read_only` (D-12.4 `%n`) and static `dl_iterate_phdr`/`_dl_find_object` take the
+  bias from PT_PHDR; a static PIE has none, so they see bias 0.
 
-Decisions: D-27.10 (this story). Plan rows: design §0a, §1; phase-14 item 8; R14-1.
+Decisions: D-27.10. Plan rows: design §0a (item 9), §1; phase-14 item 8; R14-1. Plants: handoff/DL-BOOT-RELOC-plants.txt.
