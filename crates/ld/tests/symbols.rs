@@ -45,6 +45,8 @@ int m_2(void) { return 52; }
 __asm__(".symver m_2,m@VER_2");
 int m_3(void) { return 53; }
 __asm__(".symver m_3,m@@VER_3");
+extern int x_undef(void) __attribute__((weak));
+int calls_x(void) { return x_undef ? x_undef() : 0; }
 #endif
 #ifdef LIBV_STUB
 int f(void) { return -1; } int h(void) { return -1; } int b(void) { return -1; } int g(void) { return -1; } int m(void) { return -1; }
@@ -268,6 +270,16 @@ fn programs_bind_like_the_reference() {
     }
     // The program's own undefined entries are not definitions.
     assert_eq!(found(&obj(&c["ver"], HashStyle::Gnu), "f", Want::Oldest), "-");
+    // Nor are a library's: the SysV table indexes undefined entries too (the GNU table does not).
+    let vb = obj(&c["vb/libv.so"], HashStyle::Sysv);
+    let st = vb.symtab();
+    let undef = (1..st.count().unwrap()).map(|i| st.get(i).unwrap()).find(|s| vb.dynamic().string(u64::from(s.name)).unwrap() == b"x_undef");
+    assert_eq!(undef.map(|s| s.shndx), Some(0), "the corpus library has an undefined x_undef");
+    for style in [HashStyle::Sysv, HashStyle::Gnu] {
+        for want in [Want::Oldest, Want::Default] {
+            assert_eq!(found(&obj(&c["vb/libv.so"], style), "x_undef", want), "-", "{style:?} {want:?}");
+        }
+    }
 }
 
 #[test]
