@@ -37,8 +37,9 @@ differences row, no compat option, no new D-row.
   pre-existing on this host: mei's CI gate logs hold 12 such failures (exit 14 x8, exit 10 x4, both "limit never
   bit") on 4 other commits (ci-gate-18077d4d1, -635a721bb, -cbd522f24, -d999f7104); none on keke, shiki, kanon.
 * `libm-special-bessel-tier-4-counts` (`cargo xtask bench --compare --counters cbench_libm`, starts after the gate):
-  see the report file / hand-back for the j0/j1/y0/y1 rows; expected equal to run 3 (j0 1.20x, j1 1.22x, y0 1.14x,
-  y1 1.15x on Zen 1) since the double path's code is unchanged; this run is on Skylake-SP.
+  rc 0, instructions per call Liella / reference (Skylake-SP): j0 498.5 / 415.0 (1.20x), j1 513.4 / 420.1 (1.22x),
+  y0 499.2 / 435.7 (1.15x), y1 499.6 / 435.4 (1.15x): equal to run 3 within 0.5, as an unchanged double path should
+  be. Target (parity) not reached.
 
 ## Open / next
 * RULING NEEDED: the gate's only failure is the pre-existing mei `search_nomem` hsearch test above; recommend
