@@ -1,0 +1,19 @@
+{"task": "TIMING-COVERAGE-1106C", "model": "opus", "tokens": null,
+ "result": "1106 verdicts mapped: (c) 1 open story to close (TIMING-COV-SPAWN-HEAP256M-IVB), 18 already landed; (b) 18 rows covered, 19 NONE in 4 groups, 2 noise; 3 code briefs written from a role-host profile",
+ "branch": "task/timing-coverage-1106c", "head": "cd541b8c",
+ "gate": {"affected": "n/a (planning, no code)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "close TIMING-COV-SPAWN-HEAP256M-IVB", "recommendation": "close: sweep time 0.971 (spread 0.699) meets its <= 1.05 exit"},
+  {"item": "TIMING-COV-MALLOC-PAIR-CHAIN touches the allocator after owner rulings #2826/#3210", "recommendation": "submit: different technique (power-of-two shifts for the two chain imuls), not the refused latest-block fast path"}
+ ],
+ "informational": [
+  "malloc_free, strchr/strchrnul/strncmp (SSE2) and strcmp_names (AVX2) gaps reproduce on the Haswell-EP build host: develop there, book timing hosts only for the final check",
+  "first_bindtextdomain_gettext re-time must use a build containing COLDSTART-BINDTEXTDOMAIN-REBIND (landed after 4d454f06)",
+  "CBENCH_ROWS did not drop cbench_malloc's xthread rows from the process; whole-process samples are polluted by them",
+  "the 1106B coverage table was not opened (on next only); its notes are the ones carried in the sweep table"
+ ],
+ "refused": [],
+ "jobs": ["shiki:tc1106c-prof"],
+ "improvement": "a build-host region-counter profile (CBENCH_COUNTERS per row) shows whether an IVB/N100 time gap reproduces locally; doing that first would keep most timing-coverage stories off the two booked timing hosts",
+ "next_step": "coordinator: submit the three briefs with ops submit --reserve, close TIMING-COV-SPAWN-HEAP256M-IVB, re-time first_bindtextdomain_gettext on current next",
+ "report_file": "handoff/timing-coverage-1106c/README.md"}
