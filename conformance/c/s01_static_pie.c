@@ -28,8 +28,10 @@ static int (*const ops_ro[])(int) = { twice, square };
 static int (*ops_rw[])(int) = { square, twice };
 static const char *const names[] = { "alpha", "beta", "gamma" };
 static const char *greeting = "hello";
-static __thread const char *tls_name = "tls-image";
-static __thread int tls_value = 41;
+/* External linkage: a never-written static would be folded to its initializer, leaving the
+ * executable without a PT_TLS image for the start to move by the load bias. */
+__thread const char *tls_name = "tls-image";
+__thread int tls_value = 41;
 
 static int triple(int x) { return 3 * x; }
 static int resolved;
