@@ -1,0 +1,3 @@
+# PERF-ZONE-LOAD-FAULTS-2: plants on the hot-text pin of the first-mktime path and the combined fault bound (cargo xtask plants, docs/plants.md).
+mktime-pin-lost | crates/libc-so/hot-text.list | lit:_RNvNtNtC6liella4time5civil17days_from_civil64 ==> _RNvNtNtC6liella4time5civil17days_from_civil64_unpinned | cargo test -p liella --test hot_text_products init_first_ | msg:first mktime after localtime_r: [1-9][0-9]* page faults
+rule-years-grown | crates/core/src/time/zone.rs | lit:const RULE_YEARS: i64 = 300; ==> const RULE_YEARS: i64 = 1200; | cargo test -p liella --test hot_text_products init_first_ | msg:first localtime_r \+ first mktime: [0-9]+ page faults >

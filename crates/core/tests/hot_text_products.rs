@@ -235,7 +235,37 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// names and a temporary type table each grown or copied through their own allocation size),
 /// 22 after. Bound = that plus 2 for layout-only deltas, under the old count;
 /// `zone_load_alloc.rs` pins each table at one allocation exactly.
-const LOCALTIME_BOUND: u64 = 24;
+/// PERF-ZONE-LOAD-FAULTS-2: the zone-load functions the list lacked (`zone_path`, the transition
+/// table's `TryVec::resize`, `rule::when_of`, `Zone::kind_period`) and the first-mktime path now
+/// sit in the localtime block of `hot-text.list`: Skylake-SP host role, every run identical,
+/// 22 -> 20 (and the first mktime 1 -> 0). LOCALTIME_BOUND 24 -> 22 (20 plus 2).
+const LOCALTIME_BOUND: u64 = 22;
+
+/// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
+/// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
+/// leaner zone load once left `days_from_civil64`'s text window to the first mktime) shows here
+/// as no change, an added one as a rise, while the per-call bounds above still hold each call.
+/// Skylake-SP host role, every run identical: 20 after the hot-text pin (before it the per-call
+/// modes read 22 + 1; this mode did not exist yet).
+/// Bound = 20 plus 2, as for LOCALTIME_BOUND.
+const LOCALTIME_MKTIME_BOUND: u64 = 22;
+
+#[test]
+fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
+    // No spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS-2.
+    if !Path::new("/usr/share/zoneinfo/America/New_York").exists() {
+        eprintln!("skipped: no /usr/share/zoneinfo/America/New_York on this host");
+        return;
+    }
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_localtime_mktime");
+    build(&exe);
+    let s = faults(&exe, "localtime_mktime");
+    assert!(s <= LOCALTIME_MKTIME_BOUND, "first localtime_r + first mktime: {s} page faults > {LOCALTIME_MKTIME_BOUND} (zone-load or mktime text left the hot group?)");
+}
 
 #[test]
 fn init_first_localtime_r_stays_within_its_page_fault_bound() {
