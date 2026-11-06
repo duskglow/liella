@@ -76,6 +76,8 @@ pub struct Statx {
     pub rdev_minor: u32, pub dev_major: u32, pub dev_minor: u32, pub mnt_id: u64,
     pub dio_mem_align: u32, pub dio_offset_align: u32, _spare: [u64; 12],
 }
+/// `f_type` of a tmpfs file system (`statfs(2)`).
+pub const TMPFS_MAGIC: i64 = 0x0102_1994;
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct Statfs {

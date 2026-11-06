@@ -40,14 +40,19 @@ struct Dir(PathBuf);
 
 impl Dir {
     fn new(tag: &str) -> Dir {
-        let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nscache-test-{}-{tag}", std::process::id()));
+        Dir::under(std::path::Path::new(env!("CARGO_TARGET_TMPDIR")), tag).unwrap()
+    }
+
+    /// A private directory under `base` (`None`: it cannot be made there).
+    fn under(base: &std::path::Path, tag: &str) -> Option<Dir> {
+        let d = base.join(format!("nscache-test-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        std::fs::create_dir_all(&d).ok()?;
         let mut bytes = d.as_os_str().as_encoded_bytes().to_vec();
         bytes.push(b'/');
         selftest::nscache_region_dir(Some(&bytes));
         selftest::nscache_reattach();
-        Dir(d)
+        Some(Dir(d))
     }
 
     fn region(&self) -> PathBuf {
@@ -212,4 +217,111 @@ fn damaged_regions_never_answer_wrong() {
         }
         assert_eq!(status().mode, LIELLA_NSCACHE_MODE_SHARED, "round {round}: reinitialised and used");
     }
+}
+
+/// Whether `p` is on tmpfs (`statfs(2)`).
+fn on_tmpfs(p: &std::path::Path) -> bool {
+    let mut b = p.as_os_str().as_encoded_bytes().to_vec();
+    b.push(0);
+    let s = liella_kernel::sys::Sys::statfs(&liella_boundary::sys::CSys, liella_kernel::path::KStr::from_nul_terminated(&b).unwrap()).unwrap();
+    s.ftype == liella_kernel::uapi::TMPFS_MAGIC
+}
+
+/// The `read` system calls this thread has made (`/proc/thread-self/io`; one `pread` per call).
+fn reads(io: &std::fs::File) -> u64 {
+    let mut buf = [0u8; 1024];
+    let n = std::os::unix::fs::FileExt::read_at(io, &mut buf, 0).unwrap();
+    let text = std::str::from_utf8(&buf[..n]).unwrap();
+    text.lines().find_map(|l| l.strip_prefix("syscr:")).unwrap().trim().parse().unwrap()
+}
+
+/// The `read`s of a lookup answered by the region just after attaching to it, and of one
+/// answered without attaching.
+fn attach_reads() -> (u64, u64) {
+    let io = std::fs::File::open("/proc/thread-self/io").unwrap();
+    assert_eq!(root_uid(), Some(0));
+    let (a, b) = (reads(&io), (root_uid(), reads(&io)));
+    assert_eq!(b.0, Some(0));
+    selftest::nscache_reattach();
+    let h = status().hits;
+    let (c, d) = (reads(&io), (root_uid(), reads(&io)));
+    assert_eq!(d.0, Some(0));
+    assert_eq!(status().hits, h + 1, "answered by the region after attaching");
+    (d.1 - c, b.1 - a)
+}
+
+/// The header's boot ID words (bytes 32..48) of the region at `p`.
+fn boot_words(p: &std::path::Path) -> Vec<u8> {
+    std::fs::read(p).unwrap()[32..48].to_vec()
+}
+
+/// Write `bytes` at `at` in the region (in place: the mapping stays backed).
+fn poke(p: &std::path::Path, at: u64, bytes: &[u8]) {
+    std::os::unix::fs::FileExt::write_all_at(&std::fs::OpenOptions::new().write(true).open(p).unwrap(), bytes, at).unwrap();
+}
+
+/// A region made, then attached again with the files it was verified against recorded: the
+/// header's boot ID as made (read from `/proc`).
+fn made(d: &Dir) -> Vec<u8> {
+    assert_eq!(root_uid(), Some(0));
+    assert_eq!(root_uid(), Some(0));
+    assert_eq!(status().mode, LIELLA_NSCACHE_MODE_SHARED);
+    selftest::nscache_reattach();
+    assert_eq!(root_uid(), Some(0));
+    boot_words(&d.region())
+}
+
+#[test]
+fn a_region_on_tmpfs_attaches_without_reading_the_boot_id() {
+    // Clauses: s17_3_c_1, s16_1_g_3 (D-16.10: the boot ID is not compared on tmpfs).
+    let _g = serial();
+    let shm = std::path::Path::new("/dev/shm");
+    if !shm.is_dir() || !on_tmpfs(shm) {
+        println!("SKIP: /dev/shm is not a tmpfs directory here");
+        return;
+    }
+    let d = Dir::under(shm, "boot-tmpfs").unwrap();
+    let real = made(&d);
+    assert_ne!(real, vec![0u8; 16], "a region made records the boot ID");
+    let (attached, plain) = attach_reads();
+    assert_eq!(attached, plain, "attaching to a region on tmpfs reads nothing (no boot ID)");
+    // A boot word that is not this boot's is not compared: the stored answer is used.
+    let path = d.region();
+    poke(&path, 32, &[0x5a; 16]);
+    selftest::nscache_reattach();
+    let h = status().hits;
+    assert_eq!(root_uid(), Some(0));
+    assert_eq!((status().hits, status().mode), (h + 1, LIELLA_NSCACHE_MODE_SHARED), "answered by the region");
+    assert_eq!(boot_words(&path), vec![0x5a; 16], "the header is not rewritten");
+    // A region reinitialised (here: its magic damaged) records the boot ID from /proc.
+    let mut magic = std::fs::read(&path).unwrap()[..1].to_vec();
+    magic[0] ^= 1;
+    poke(&path, 0, &magic);
+    selftest::nscache_reattach();
+    assert_eq!(root_uid(), Some(0));
+    assert_eq!(status().mode, LIELLA_NSCACHE_MODE_SHARED);
+    assert_eq!(boot_words(&path), real, "a reinitialised region records this boot's ID");
+}
+
+#[test]
+fn a_region_on_another_file_system_compares_the_boot_id() {
+    // Clauses: s17_3_c_1, s16_1_g_3 (D-16.10: a region from another boot starts afresh).
+    let _g = serial();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let candidates = [Some(PathBuf::from(env!("CARGO_TARGET_TMPDIR"))), home, Some(PathBuf::from("/var/tmp"))];
+    let Some(d) = candidates.iter().flatten().filter(|b| b.is_dir() && !on_tmpfs(b)).find_map(|b| Dir::under(b, "boot-disk")) else {
+        println!("SKIP: every candidate directory (CARGO_TARGET_TMPDIR, HOME, /var/tmp) is on tmpfs or missing");
+        return;
+    };
+    let real = made(&d);
+    let (attached, plain) = attach_reads();
+    assert_eq!(attached, plain + 1, "attaching off tmpfs reads the boot ID (one read)");
+    // A boot word that is not this boot's: the region starts afresh with this boot's ID.
+    let path = d.region();
+    poke(&path, 32, &[0x5a; 16]);
+    selftest::nscache_reattach();
+    let h = status().hits;
+    assert_eq!(root_uid(), Some(0));
+    assert_eq!((status().hits, status().mode), (h, LIELLA_NSCACHE_MODE_SHARED), "a stale region does not answer");
+    assert_eq!(boot_words(&path), real, "reinitialised with this boot's ID");
 }

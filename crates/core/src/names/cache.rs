@@ -452,6 +452,11 @@ impl<'a> Table<'a> {
         self.read(|| self.ld(H_ACCOUNT))
     }
 
+    /// The boot ID the header holds (`None`: busy).
+    pub fn boot(&self) -> Option<[u64; 2]> {
+        self.read(|| [self.ld(H_BOOT), self.ld(H_BOOT.saturating_add(1))])
+    }
+
     /// The identities of `passwd` and `nsswitch.conf` the stamp was verified against (`None`:
     /// busy).
     pub fn stamp_files(&self) -> Option<[FileId; 2]> {
