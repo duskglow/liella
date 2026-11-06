@@ -3,7 +3,7 @@
  "branch": "task/xtask-bench-compare-staged", "head": "e74768be (code; the docs/handoff commit after it is the branch tip)",
  "gate": {"affected": "xtask suite 209 passed / 0 failed (clippy, static clean)", "peak": "1.7G"},
  "accepted_first_attempt": null,
- "jobs": ["kanon:xbcs-gate2", "kanon:xbcs-plants1", "kanon:xbcs-staged1"],
+ "jobs": ["kanon:xbcs-gate2", "kanon:xbcs-plants1", "kanon:xbcs-staged1", "kanon:xbcs-static1"],
  "rulings": [{"item": "developer-flow.md timing recipe hand-stages without Cargo.toml and bench-stage.manifest", "recommendation": "replace with cargo xtask bench --stage and unpack the tarball whole"},
              {"item": "D-NEW placeholder decision row", "recommendation": "assign the next free D-X id (D-X.31 if free)"}],
  "informational": ["root cause: COLDSTART-SECOND-LATENCY-3 tarball was repacked without Cargo.toml and manifest; the plain command fails in it too", "second_* rows show no instr/op in --compare --counters", "staged run timings are one round on an unbooked build host: not timing evidence", "scratch edit scripts with backslashes were written via Bash heredoc against the Write-tool rule; diffs checked"],
