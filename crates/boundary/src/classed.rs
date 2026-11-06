@@ -104,13 +104,6 @@ pub fn page0_addr() -> usize {
     core::ptr::from_ref(&ffi::liella_classed_page0).addr()
 }
 
-/// Whether the AVX2 page is wanted: the CPU reports AVX2 with the YMM state saved by the OS
-/// (`Features::avx2` reads XCR0) and the tunables do not say `-AVX2`. The same rule as the
-/// kernels' AVX2 flag (`cpu::init_with`).
-pub fn avx2_class(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) -> bool {
-    f.avx2() && t.avx2.unwrap_or(true)
-}
-
 /// The pagemap guard: `true` when neither entry shows a present page that is no longer a file
 /// page. A page not yet faulted in (present clear) is still the file's.
 pub fn pages_unmodified(entries: [u64; 2]) -> bool {
@@ -165,7 +158,8 @@ impl SwapOps for Kernel {
     }
 }
 
-/// The swap at start-up: `want` is [`avx2_class`] and `disabled` the COMPAT-20 tunable.
+/// The swap at start-up: `want` is the AVX2 class (`cpu::avx2_wanted`, as decided by
+/// `cpu::init_with`) and `disabled` the COMPAT-20 tunable.
 /// Records and returns the outcome.
 pub fn install_with(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outcome {
     let o = decide(ops, page0, want, disabled);
@@ -200,9 +194,10 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
     ops.fatal(b"liella: start-up: the classed entry page is unmapped after a failed mremap\n")
 }
 
-/// The start-up step (static step 4, right after `cpu::init_with`).
-pub(crate) fn start(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) {
-    let _ = install_with(&Kernel, page0_addr(), avx2_class(f, t), t.no_classed_swap == Some(true));
+/// The start-up step (static step 4, right after `cpu::init_with`): `avx2` is the class that
+/// `init_with` decided (`cpu::avx2_in` of its state), so the step reads no CPU features itself.
+pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
+    let _ = install_with(&Kernel, page0_addr(), avx2, t.no_classed_swap == Some(true));
 }
 
 #[cfg(test)]
@@ -285,12 +280,16 @@ mod tests {
         let osxsave_avx = (1 << 27) | (1 << 28);
         let mut f = liella_rt::cpu::Features { leaf1_ecx: osxsave_avx, leaf7_ebx: avx2_bit, xcr0: 0x7, ..Default::default() };
         let t = liella::config::Tunables::default();
-        assert!(avx2_class(&f, &t));
+        assert!(crate::cpu::avx2_wanted(&f, &t));
         f.xcr0 = 0x3; // the OS does not save the YMM state
-        assert!(!avx2_class(&f, &t));
+        assert!(!crate::cpu::avx2_wanted(&f, &t));
         f.xcr0 = 0x7;
-        assert!(!avx2_class(&f, &liella::config::Tunables::parse(b"glibc.cpu.hwcaps=-AVX2", false)));
+        assert!(!crate::cpu::avx2_wanted(&f, &liella::config::Tunables::parse(b"glibc.cpu.hwcaps=-AVX2", false)));
         f.leaf7_ebx = 0;
-        assert!(!avx2_class(&f, &t));
+        assert!(!crate::cpu::avx2_wanted(&f, &t));
+        // The start-up reads the class from `init_with`'s state: the same decision as the kernels'.
+        let state = crate::cpu::init_with(&t);
+        assert_eq!(crate::cpu::avx2_in(state), crate::cpu::avx2());
+        assert_eq!(crate::cpu::avx2_in(state), crate::cpu::avx2_wanted(&crate::cpu::features_cached(), &t));
     }
 }

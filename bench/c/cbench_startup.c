@@ -115,8 +115,23 @@ static void fail(const char *what)
 extern char **environ;
 
 static posix_spawn_file_actions_t actions;
-static char *env_plain[] = {"PATH=/usr/bin:/bin", NULL};
-static char *env_locale[] = {"PATH=/usr/bin:/bin", "LC_ALL=en_US.UTF-8", NULL};
+/* The children's environments; `GLIBC_TUNABLES`, when this program has it (`bench --tunables`), is
+ * added in `main` so the measured start runs with the tunables the row was asked for. */
+static char *env_plain[] = {"PATH=/usr/bin:/bin", NULL, NULL};
+static char *env_locale[] = {"PATH=/usr/bin:/bin", "LC_ALL=en_US.UTF-8", NULL, NULL};
+static char tunables_var[4096];
+
+static void pass_tunables(void)
+{
+    const char *v = getenv("GLIBC_TUNABLES");
+    if (!v)
+        return;
+    int n = snprintf(tunables_var, sizeof tunables_var, "GLIBC_TUNABLES=%s", v);
+    if (n < 0 || (size_t)n >= sizeof tunables_var)
+        return;
+    env_plain[1] = tunables_var;
+    env_locale[2] = tunables_var;
+}
 
 /* Spawn this program in `mode` with stdout on /dev/null; 0 when the child exits with status 0. */
 static long run(char *mode, char **envp)
@@ -240,6 +255,7 @@ int main(int argc, char **argv)
         }
         return 4;
     }
+    pass_tunables();
     if (posix_spawn_file_actions_init(&actions) != 0 ||
         posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0) != 0)
         fail("posix_spawn_file_actions");
