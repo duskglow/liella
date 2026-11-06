@@ -208,11 +208,26 @@ pub fn init() -> u8 {
     init_with(&Tunables::default())
 }
 
+/// Whether the AVX2 paths are wanted: the CPU reports AVX2 with the YMM state saved by the OS
+/// (`Features::avx2` reads XCR0) and the tunables do not say `-AVX2`. The kernels' AVX2 flag and
+/// the classed entries' page (D-4.53) both follow it, through [`init_with`]'s state.
+pub fn avx2_wanted(f: &Features, t: &Tunables) -> bool {
+    f.avx2() && t.avx2.unwrap_or(true)
+}
+
+/// Whether a state byte returned by [`init_with`] decided the AVX2 paths. The start-up reads
+/// the decision from it instead of asking for the features again: a second `features()` caller
+/// on the start-up path took it out of line, +80 user instructions on every start
+/// (CLASSED-SLOT-INFRA-4).
+pub fn avx2_in(state: u8) -> bool {
+    state & AVX2 != 0
+}
+
 /// Decide the paths from CPUID and the tunables (startup, spec §1.8): a tunable can switch a
 /// feature off, or ask for it (honoured only if the CPU has it), and set the thresholds.
 pub fn init_with(t: &Tunables) -> u8 {
     let f = features();
-    let avx2 = f.avx2() && t.avx2.unwrap_or(true);
+    let avx2 = avx2_wanted(&f, t);
     let erms = f.erms() && t.erms.unwrap_or(true);
     ffi::liella_machine_set_scan_level(u32::from(avx2));
     // The hot kernels' builds (D-4.25): the same decision as the scanners'.

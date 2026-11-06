@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-MEMCHR-SHORT-NONAVX2-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: head16 pad restores base offsets (fold 0x268, g1 0x2f0) but Ivy Bridge memchr_64_mix stays +4.5% (9.23/14.43 vs 8.83/13.80 ns; glibc ~9.4/~14.7); diag shows the n<=16 branch is not the cause (entry/block-0 part is); memchr_16 -10.5%, 16_mix -9.6%, 4k -3.3%; ruling needed",
+ "branch": "task/timing-cov-memchr-short-nonavx2-3", "head": null,
+ "gate": {"affected": "shiki:timing-cov-memchr-short-nonavx2-3-gate: 10223 passed / 0 failed, conformance 117/117 (on 62d6b9dc; later commits handoff/ only)", "peak": "15G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "memchr_64_mix +4.5% on Ivy Bridge AVX2-off at the same instructions (still ~2% faster than glibc) against memchr_16 -10.5%, memchr_16_mix -9.6%, memchr_4k -3.3%", "recommendation": "accept and land; else run 4 isolates the entry merged test vs block 0 position (handoff Next step)"}],
+ "informational": ["-2's jobs (kanon gate/plants, kotori time/time2) all rc 0", "diag (n<=16 test replaced by a 10-byte nop, same offsets): memchr_64_mix 14.43 = head3, memchr_16 12.55 vs base 11.92: one ~1-cycle quantum per in-page call sits in the entry/block-0 part", "first plants run (plants) refused a new unanchored .S plant; plants2 started on an unsynced role (sync_role skipped while the gate built) and was stopped; plants3 is the run"],
+ "refused": [],
+ "jobs": ["shiki:timing-cov-memchr-short-nonavx2-3-gate", "shiki:timing-cov-memchr-short-nonavx2-3-plants3", "kotori:timing-cov-memchr-short-nonavx2-3-time3", "kotori:timing-cov-memchr-short-nonavx2-3-diag"],
+ "improvement": "sync_role.sh silently skips a sync while the role builds (prints a process line, exit 0?); a clear 'NOT SYNCED' line and non-zero exit would have saved a plants run",
+ "next_step": "ruling on memchr_64_mix; if rejected, isolate entry merged test vs block-0 position with two same-offset variants",
+ "report_file": "handoff/TIMING-COV-MEMCHR-SHORT-NONAVX2.md"}

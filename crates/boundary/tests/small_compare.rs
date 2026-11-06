@@ -198,31 +198,41 @@ fn sweep_shard(i: usize) {
 
 #[test]
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_0() {
-    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    // Clause: s4_3_c_1 (memcmp orders by the first differing unsigned char), s4_3_c_2 and s4_3_c_3
+    // (bcmp, __memcmpeq: equal or not), a shard of the byte-loop sweep, both builds forced
+    // (TIMING-COV-MEMCMP-NONAVX2: the SSE2 head probes and equality classes).
     sweep_shard(0);
 }
 
 #[test]
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_1() {
-    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    // Clause: s4_3_c_1 (memcmp orders by the first differing unsigned char), s4_3_c_2 and s4_3_c_3
+    // (bcmp, __memcmpeq: equal or not), a shard of the byte-loop sweep, both builds forced
+    // (TIMING-COV-MEMCMP-NONAVX2: the SSE2 head probes and equality classes).
     sweep_shard(1);
 }
 
 #[test]
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_2() {
-    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    // Clause: s4_3_c_1 (memcmp orders by the first differing unsigned char), s4_3_c_2 and s4_3_c_3
+    // (bcmp, __memcmpeq: equal or not), a shard of the byte-loop sweep, both builds forced
+    // (TIMING-COV-MEMCMP-NONAVX2: the SSE2 head probes and equality classes).
     sweep_shard(2);
 }
 
 #[test]
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_3() {
-    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    // Clause: s4_3_c_1 (memcmp orders by the first differing unsigned char), s4_3_c_2 and s4_3_c_3
+    // (bcmp, __memcmpeq: equal or not), a shard of the byte-loop sweep, both builds forced
+    // (TIMING-COV-MEMCMP-NONAVX2: the SSE2 head probes and equality classes).
     sweep_shard(3);
 }
 
 #[test]
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_4() {
-    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    // Clause: s4_3_c_1 (memcmp orders by the first differing unsigned char), s4_3_c_2 and s4_3_c_3
+    // (bcmp, __memcmpeq: equal or not), a shard of the byte-loop sweep, both builds forced
+    // (TIMING-COV-MEMCMP-NONAVX2: the SSE2 head probes and equality classes).
     sweep_shard(4);
 }
 

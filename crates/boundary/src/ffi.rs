@@ -355,6 +355,9 @@ unsafe extern "C" {
     /// written only by `crate::dispatch::select` (its proof obligation: `true` only while the CPU
     /// has AVX2 and the OS saves the YMM state).
     pub(crate) safe static liella_machine_avx2: core::sync::atomic::AtomicBool;
+    /// The classed section's page 0, the SSE2 page (machine/fold.S, D-4.53); page 1, the AVX2
+    /// page, follows at `+ 4096`. Only its address is used (`classed::page0_addr`).
+    pub(crate) safe static liella_classed_page0: u8;
     /// The `memset` entry's `rep stosb` word (machine/fold.S, MEMSET-4K-3): sizes above 256 with
     /// `n >= word` set the first 64 bytes and run `rep stosb` from the next 64-byte boundary in
     /// the entry itself. `usize::MAX` until the startup decision; written only by
@@ -405,6 +408,9 @@ unsafe extern "C" {
     /// returns `d`. Proof obligation as `liella_machine_memmove`, for `d` alone; other sizes go
     /// to `hot::fill_rest`.
     pub(crate) safe fn liella_machine_memset(d: *mut u8, c: i32, n: usize) -> *mut u8;
+    /// The `classed_id` slot (machine/fold.S, D-4.53): 0 while the SSE2 page is live at page 0's
+    /// address, 1 once the AVX2 page is. Reads nothing, writes `eax` only.
+    pub(crate) safe fn liella_classed_id() -> u32;
     /// The direct compare entry (machine/fold.S, MEMCMP-FOLD; `memcmp` in the products): -1, 0 or
     /// 1 for the order of `n` bytes at `a` against `n` bytes at `b`. Proof obligation
     /// (`crate::hot::compare_direct`): the `memcmp` contract (`a`, `b` readable for `n` bytes).

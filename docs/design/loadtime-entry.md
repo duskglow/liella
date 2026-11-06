@@ -66,9 +66,15 @@ of M2 is an unconditional direct `jmp` (cheap, but the instruction counter count
 Considered and set aside: **M5**, mapping the AVX2 page of the executable file over the entry page (no writes at all,
 zero cost, page stays shared), fails because the AVX2 copy's PC-relative references were linked for its own address;
 it would need a page-aligned file layout and position-independent bodies (M4's fixups, plus an fd of the own file).
+*(LOADTIME-ENTRY-DESIGN-2: M6, section 5, removes that objection. It assembles the AVX2 page for the SSE2 page's
+address, so the references are right with no fixups, and it moves the already-mapped page with `mremap`, so no fd is
+needed.)*
 **M3 with a per-call index** (`and $1` + `jmp *table(,%rax,8)`) costs as much as M0 and adds an indirect branch.
 
 ### 2.1 M4 in detail
+
+*Superseded by M6 (section 5). The probes show M4's step (4) is refused under `PR_SET_MDWE` and systemd
+`MemoryDenyWriteExecute=`. Kept as the record.*
 
 * **Layout.** The entries that have per-class builds live in one page-aligned section, `.text.liella_classed`: each
   exported label is the start of a fixed-size **slot** holding the SSE2 body (the slots keep D-4.33's 64-byte
@@ -137,56 +143,241 @@ the test and a Rust hop), so the memset story also times cycles per call and kee
 
 ## 4. Recommendation and plan
 
-**Recommendation: M4** for `libc.a` now, and the same installer in `libc.so.6`'s initialisation once phase 14
-loads it (one mechanism, one test matrix). It is the only mechanism with zero per-call cost on both classes, no Ivy
-Bridge rise, no change to symbol types, correct early calls, and no writable code at any time in the live mapping.
-M1 (IFUNC + RELRO) stays the fallback for `libc.so.6` if the start-up system calls measure too dear there (a PLT
-call already pays its `jmp *GOT`); it is excluded for `libc.a` by the Ivy Bridge rule. M2 is excluded by its +1 on
-classes without a gain and its non-executable-page failure mode.
+Amended by LOADTIME-ENTRY-DESIGN-2 (section 5). The original recommendation was M4. Sections 2.1 and 2.2 are kept
+as the record of M4.
+
+**Recommendation: M6** (section 5): both page variants pre-built in the file, both mapped read+exec, never written.
+At start-up on the AVX2 class, a single `mremap` moves the AVX2 page over the SSE2 page, after a guard checks that
+neither page has been modified since it was mapped. M4 is dropped. The probes (5.2) show that its step (4)
+(`mprotect` to read+exec on the written copy) is refused under `PR_SET_MDWE` and under systemd
+`MemoryDenyWriteExecute=yes`. SELinux `execmod` is documented to refuse it too. Under those policies a service would
+stay on SSE2 without any message. M6 passes every probed policy. It has the same zero per-call cost as M4, costs 1
+system call instead of 5 (4 with the guard, 8 for M4 with the guard), uses no private memory, opens no file, and does
+not need `/proc` for the swap itself. Use it for `libc.a` now, and the same code in `libc.so.6`'s initialisation once
+phase 14 loads it. M1 (IFUNC + RELRO) stays the fallback for `libc.so.6` only. M2 is excluded (section 4 as before).
 
 Stories (the coordinator splits further as needed). JOBS labels follow the story id.
 
-1. **CLASSED-SLOT-INFRA** (wiring, M): the `.text.liella_classed` section, slot size checks, fixup tables, the
-   installer (protocol 2.1) at step 4, the selftest query and the failure-injection hook; `memset` moves into a slot
-   with its SSE2 body unchanged except the 129-256 flag test, and an AVX2 body identical to it (so behaviour and
-   counts are unchanged except -2 at 129-256). JOBS: `-gate` (direct tier), `-plants`, `-count-avx2`, `-count-ivy`
-   (`cargo xtask bench --compare --counters --runs 3 cbench_memref` and a start-up row, syscalls counted). Plants: drop
-   one fixup entry (the AVX2-host export sweep must fail); drop the XCR0 condition from the install decision (the
-   test that forces `Features` without the YMM state and expects SSE2 must fail); skip the `mremap` but report installed (the selftest's byte comparison must
-   catch it); make step (4) failure leave the copy mapped over the live page (failure-injection test must catch).
-2. **MEMSET-AVX2-SLOT** (kernel, S): the AVX2 body for 16-256 as in section 3. JOBS: `-gate`, `-plants`, `-count-avx2`,
-   `-count-ivy`, `-percall` (`validation/wl_percall.sh` with `validation/percall/avx2_families.c`, before and after),
-   plus cycles per call on a booked AVX2 timing host. Plants: wrong second store offset in 33-64 (the AVX2 body test
-   catches), missing `vzeroupper` (counted, perf-only: EQUIVALENT with reason or a count assertion), broadcast from
-   the int's high byte (the fill-value test catches).
-3. **COPY-SLOT** (kernel + wiring, S): `memcpy`/`memmove`/`mempcpy` 65-256 into slots, flag tests removed. JOBS as 2.
-   Plants: AVX2 body loads after the first store on overlap (overlap tests catch), SSE2 body jumping to the AVX2 129-256
-   class (the SSE2-body test with AVX2 reported absent, and the Ivy Bridge run, must fail).
-4. **STRCMP-SLOT** (kernel + wiring, S): `strcmp` (and `strncmp`/`strcasecmp` where they test the level) into slots.
-   JOBS as 2. Plants: AVX2 body's page test off by one (the page-end tests catch), the SSE2 body jumping to the AVX2
-   loop (Ivy Bridge run and the SSE2-forced run catch).
-5. **CMP-SLOT** (kernel, M): the compare and equality classes, after settling how the D-4.52 class words split
-   between the fold part (stays a word) and the CPU part (goes into the slot). JOBS as 2.
-6. **Phase 14 note** (no story now): the loader runs libc's initialisation (and so the installer) before any other
-   object's constructors; record it in the phase-14 plan.
+1. **CLASSED-SLOT-INFRA** (wiring, M): the `.text.liella_classed` section with its two pages (5.3), the `XREF` bias
+   macro and the page-size checks, the guard and the swap at step 4 (5.4), the failure handling (5.5), and the
+   `classed_id` slot (5.3). `memset` moves into a slot with its SSE2 body unchanged except the 129-256 flag test, and
+   an AVX2 page body identical to it (so behaviour and counts are unchanged except -2 at 129-256). JOBS: `-gate`
+   (direct tier), `-plants`, `-count-avx2`, `-count-ivy` (`cargo xtask bench --compare --counters --runs 3
+   cbench_memref` and a start-up row with system calls counted). Tests: the export sweep by default and under
+   `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2`, checked with `classed_id`. A guard test: a parent starts the program under
+   `PTRACE_TRACEME`, writes back one unchanged byte of the live page at the exec stop (the page becomes anonymous, its
+   content is the same), and the child must report SSE2. A failure-injection test for the `mremap`. A policy test: the
+   swap under `prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN)` set by a parent before `execve`, which must report AVX2 on
+   an AVX2 host. Skip it, with the reason printed, where the kernel has no `PR_SET_MDWE`. Plants: drop the `XREF` bias
+   on one out-of-page reference in the AVX2 page (the AVX2-host export sweep must fail); drop the XCR0 condition (the
+   forced-`Features` test must report SSE2 and fail); skip the `mremap` but record "installed" (the `classed_id` query
+   catches it); invert the guard (the guard test catches it); on an injected `mremap` failure, skip the check that the
+   live page is still mapped (the failure-injection test catches it).
+2. **MEMSET-AVX2-SLOT** (kernel, S): as before (section 3 bodies, now in the AVX2 page). JOBS: `-gate`, `-plants`,
+   `-count-avx2`, `-count-ivy`, `-percall` (`validation/wl_percall.sh` with `validation/percall/avx2_families.c`, before
+   and after), plus cycles per call on a booked AVX2 timing host. The plants are unchanged from the M4 plan.
+3. **COPY-SLOT**, 4. **STRCMP-SLOT**, 5. **CMP-SLOT**: as before. Each new slot adds its body to both pages at the
+   same offset. The AVX2 page must not jump into the SSE2 page (after the swap, that address holds the AVX2 page).
+   Shared helpers live outside the section.
+6. **Phase 14 note** (no story now): the loader runs libc's initialisation, and so the swap, before any other
+   object's constructors. The swap needs no path or descriptor for `libc.so.6`. Record this in the phase-14 plan.
+7. **Debugging note** (docs, XS, with story 1): a user-facing paragraph covering 5.6 (perf annotate, uprobes, core
+   files, and how to keep SSE2 with `glibc.cpu.hwcaps=-AVX2`).
 
-### Decision-register entry (next free at this base: D-4.53)
+### Decision-register entry (reserved: D-4.53)
 
-| D-4.53 | §4.1–4.3 | PERF | **One entry per CPU class, installed once at start-up, never writable in place** (LOADTIME-ENTRY-DESIGN, owner ruling #3069 option b; design `docs/design/loadtime-entry.md`). Entries with CPU-variant builds (memset, the copy entries, strcmp, then the compares) live in fixed-size slots in one page-aligned section `.text.liella_classed`, each slot holding the SSE2 body (correct on every x86-64, and what runs before start-up step 4). At step 4, after `cpu::init_with` and before the program's IFUNC resolvers and constructors, on a CPU whose `Features` report AVX2 with the YMM state saved and no `glibc.cpu.hwcaps=-AVX2`, the start-up maps a private copy of that page from the object's own file, writes the AVX2 bodies with their PC-relative fixups, makes it read+exec, and `mremap`s it over the live page; any failure leaves the live page untouched. No per-call CPU test, no code pointer, the live text never writable. Chosen over the D-4.25 flag (two instructions per call on tested classes), IFUNC + RELRO (+1 instruction per static call on every class, Ivy Bridge included, and a symbol-type change), a patched `jmp` (+1 on every AVX2-class call and a non-executable page if the second `mprotect` is refused) and a RELRO pointer (+1 per call everywhere). Amends D-4.25's mechanism for the entries moved. Tests: both bodies in test builds; the installed export by default and with `-AVX2`; failure injection. |
+| D-4.53 | §4.1–4.3 | PERF | **One entry per CPU class: pre-built read-only pages, one swapped in at start-up, never written** (LOADTIME-ENTRY-DESIGN, -2; owner ruling #3069 option b; design `docs/design/loadtime-entry.md` sections 4-5). Entries with CPU-variant builds (memset, the copy entries, strcmp, then the compares) live in one page-aligned input section `.text.liella_classed` of two 4096-byte pages with the same slot layout: page 0 holds the SSE2 bodies at the exported labels (correct on every x86-64, and what runs before start-up step 4), page 1 the AVX2 bodies, assembled for page 0's address (every out-of-page PC-relative reference biased by +4096). At step 4, after `cpu::init_with` and before the program's IFUNC resolvers and constructors, on a CPU whose `Features` report AVX2 with the YMM state saved and no `glibc.cpu.hwcaps=-AVX2`, the start-up reads the two pages' `/proc/self/pagemap` entries and, if neither has become an anonymous (modified) page, runs `mremap(page1, 4096, 4096, MREMAP_MAYMOVE\|MREMAP_FIXED, page0)`. Any refusal or failure keeps page 0 (SSE2). A failed `mremap` that leaves page 0 unmapped ends the process with a message. No write to code, no gain of exec permission, no private memory, no per-call CPU test, no code pointer. Chosen over writing a patched private copy (M4: refused under `PR_SET_MDWE`, systemd `MemoryDenyWriteExecute=` and SELinux `execmod`; 5 system calls and one private page), the D-4.25 flag (two instructions per call on tested classes), IFUNC + RELRO (+1 instruction per static call on every class, Ivy Bridge included, and a symbol-type change), a patched `jmp` and a RELRO pointer. Amends D-4.25's mechanism for the entries moved. Tests: both bodies in test builds; the installed export by default and with `-AVX2`, read back by the `classed_id` slot; the guard under a tracer; `mremap` failure injection; the swap under `PR_SET_MDWE`. |
 
-**Compat-flag note:** none needed. Results are bit-identical, symbol names, versions and types do not change, and
-`&memset` is the same address before and after installation. The `glibc.cpu.hwcaps=-AVX2` tunable keeps the SSE2
-bodies, as it keeps them today.
+**Compat-flag note:** none needed. Results are bit-identical. Symbol names, versions and types do not change.
+`&memset` is the same address before and after the swap. The `glibc.cpu.hwcaps=-AVX2` tunable keeps the SSE2 page,
+as it keeps the SSE2 code today. The diagnostics effects in 5.6 are tooling behaviour, not ABI.
 
 ### RULING NEEDED
 
-1. **Replacing a text page at start-up** (trust boundary): M4 never makes the live page writable, but it does put a
-   private, patched copy of libc text in place (file-backed, W^X kept). Recommendation: approve; it meets "chosen
-   once, read-only afterwards" with no per-call cost, and every failure falls back to the baseline.
-2. **Start-up cost on the AVX2 class** (about 6 system calls and one private page per process, every program,
-   whether or not it calls the functions). Recommendation: accept if CLASSED-SLOT-INFRA's start-up row shows no
-   measured slowdown beyond those system calls; otherwise fall back to M1 for `libc.so.6` only.
-3. **Hardening the remaining start-up words** (informational, optional): `liella_machine_avx2`, `scan_level` and
-   the `cmp_*` words stay writable for the process lifetime. Once the entries move into slots they lose readers;
-   the ones left (the fold limit is decided lazily, STARTUP-1) could move into RELRO in a static program.
-   Recommendation: a small follow-up story after story 5.
+1. **Swapping a text page at start-up** (trust boundary): M6 moves one read+exec, file-backed page of libc text over
+   another. Nothing is written and no permission is gained. Recommendation: approve. It replaces M4's item 1 and is
+   strictly weaker: no writable code exists at any point, and it passes MDWE.
+2. **Start-up cost on the AVX2 class:** 4 system calls (`openat`, `pread64` and `close` of `/proc/self/pagemap`, then
+   `mremap`), no private page, and +2 VMAs. Recommendation: accept if CLASSED-SLOT-INFRA's start-up row shows no
+   slowdown beyond those calls. Otherwise drop the guard's `close` by reusing a descriptor the start-up already
+   holds, if one exists. The SSE2 class pays nothing.
+3. **Guard policy when `/proc` is unavailable** (chroot or container without `/proc`): recommendation: keep SSE2. That
+   is always correct, it only loses speed, and the alternative is a crash when a debugger breakpoint was inserted
+   before start-up (5.2, the debugger rows).
+4. **Diagnostics trade-off** (informational, 5.6): on AVX2 hosts, `perf annotate` and core files show the file's
+   SSE2 bytes for a classed slot, and uprobes placed on the exported symbol do not fire after the swap. M4 has the
+   last two as well. Recommendation: accept, with the debugging note (story 7).
+5. **Hardening the remaining start-up words**: as before (optional follow-up after story 5).
+
+## 5. Addendum: pre-built per-class pages (M6), checked against hardening policies
+
+Story LOADTIME-ENTRY-DESIGN-2 (owner 11-05). Additional sources: `prctl(2)` (`PR_SET_MDWE`, Linux 6.3+), `mremap(2)`,
+`mmap(2)`, the kernel's `admin-guide/mm/pagemap.rst` (bit 61 "page is file-page or shared-anon", bit 63 "present"),
+`systemd.exec(5)` (`MemoryDenyWriteExecute=`), the SELinux Notebook (file permissions `execmod` and `execmem`), and
+the kernel's `trace/uprobetracer.rst`. Black-box probes, described below. No C library's source was consulted.
+
+### 5.1 What hardening policies refuse
+
+M4 maps a private copy of a file-backed text page as read+write, writes into it, then calls `mprotect` to make it
+read+exec. That is a gain of exec permission on memory that has been written, which these policies exist to stop:
+
+* `PR_MDWE_REFUSE_EXEC_GAIN` (`prctl(2)`): new mappings cannot be writable and executable, and non-executable mappings
+  cannot become executable. It is inherited across `fork` and kept across `execve`.
+* systemd `MemoryDenyWriteExecute=yes` (`systemd.exec(5)`): the same rule. The probe shows systemd 255 applies it
+  with `PR_SET_MDWE`. On kernels without it, systemd uses a seccomp filter on `mmap` (write and exec together),
+  `mprotect`/`pkey_mprotect` (adding exec) and `shmat` (`SHM_EXEC`).
+* SELinux `execmod` (SELinux Notebook): making a file mapping executable after it was modified by copy-on-write
+  needs `execmod` on the file. Confined domains usually lack it, and each denial is logged as an AVC record.
+
+### 5.2 Probes (black box, unprivileged)
+
+Probe program (scratch, not in the tree): a page-aligned section of two pages. The live page's function returns 410
+and the alternative page's returns 420. The alternative page is assembled for the live page's address and holds one
+RIP-relative data load and one tail jump out of the page, both biased by +4096. The program is built static non-PIE
+and PIE with the system compiler. Modes: **M4** (`/proc/self/exe`, `mmap` RW private copy, write, `mprotect` RX,
+`mremap` over the live page); **M6a** `mremap(alt, 4096, 4096, MREMAP_MAYMOVE|MREMAP_FIXED, live)`; **M6b** the same
+with `MREMAP_DONTUNMAP`; **M6c** `mmap(live, 4096, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, fd, alt's offset)`. Each
+mode ran under (a) no policy, (b) `systemd-run --user -p MemoryDenyWriteExecute=yes -p NoNewPrivileges=yes`, (c)
+`prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN)` before the swap, and (b) and (c) together. Two kernels: Linux 6.8.0 (a
+build host; Ubuntu 24.04, systemd 255) and Linux 7.0.14 (a second machine; systemd 255 user manager; there the
+process also ran under an unrelated seccomp sandbox, `Seccomp: 2`). Results were the same on both kernels, static and
+PIE (80 runs in all, none wrong):
+
+| Mode | (a) none | (b) systemd MDWE | (c) prctl MDWE | (b)+(c) | System calls (strace) |
+|---|---|---|---|---|---|
+| M4 | AVX2 live | step 4 `mprotect` RX: **EACCES**, SSE2 kept | **EACCES**, SSE2 kept | **EACCES**, SSE2 kept | `openat`, `mmap`, `mprotect`, `mremap`, `close` |
+| M6a `mremap` | AVX2 live | AVX2 live | AVX2 live | AVX2 live | `mremap` |
+| M6b `+DONTUNMAP` | AVX2 live | AVX2 live | AVX2 live | AVX2 live | `mremap` |
+| M6c `mmap` FIXED | AVX2 live | AVX2 live | AVX2 live | AVX2 live | `openat`, `mmap`, `close` |
+
+* systemd's user manager accepted the property. In the unit, `PR_GET_MDWE` reads 1 and, on 6.8, `Seccomp: 0`, so it
+  is the prctl form. The refusal is silent: the call returns `EACCES` and nothing is logged. Under M4, a hardened
+  service would run SSE2 and nothing would show it.
+* `/proc/self/maps` after the swap: M6a leaves the live address mapped at the **alternative page's file offset**,
+  and an unmapped hole where the alternative page was. M6b and M6c show the alternative offset at both addresses.
+  M4 shows the live page's own offset, but its content is private and differs from the file.
+* **Debugger (gdb), both mechanisms:** with `break` on a slot set before `run`, the swap discards the inserted
+  breakpoint, so it never fires. If the process stops between the swap and the call (any signal or other
+  breakpoint), gdb removes the breakpoint by writing the pre-swap byte into the moved page, and the next call faults
+  (SIGSEGV observed). M4 replaces the page the same way and has the same failure. **The guard fixes it:** after gdb
+  inserted the breakpoint, the live page's pagemap entry read present=1, file=0. The probe then skipped the swap and
+  ran the SSE2 page correctly under gdb. Without a debugger, it read present=1, file=1 and swapped, under
+  systemd MDWE too. A breakpoint set after the swap fires. gdb disassembles the live AVX2 bytes (it reads memory),
+  and the backtrace is correct.
+* **perf** (`perf record -e cpu-clock`, unprivileged): samples in the swapped page are named by the live slot's
+  symbol (correct name). `perf annotate` disassembles the file's bytes at that symbol (the SSE2 page), not the code
+  that ran.
+
+Untested here (needs root, or a kernel without `PR_SET_MDWE`). Each row gives the documented behaviour:
+
+| Policy | M4 | M6 | Source | Command for the owner |
+|---|---|---|---|---|
+| SELinux, confined domain without `execmod` | `mprotect` RX refused, AVC `execmod` denial per process start | allowed: no write, so no `execmod`. It needs only `execute` on its own file, as any text does | SELinux Notebook, file class | as root on an enforcing host: `install -m755 probe-static /usr/local/libexec/ && chcon -t httpd_exec_t /usr/local/libexec/probe-static && for m in m4 vremap; do systemd-run --wait --pipe -p SELinuxContext=system_u:system_r:httpd_t:s0 /usr/local/libexec/probe-static $m; done; ausearch -m avc -ts recent \| grep -E 'execmod\|execmem'` |
+| seccomp-form `MemoryDenyWriteExecute=` (kernel < 6.3) | `mprotect` with exec: EPERM | allowed: `mremap` is not in the documented filter | `systemd.exec(5)` | unprivileged on such a host: the probe's (b) runs |
+| PaX/grsecurity MPROTECT | refused (exec gain after write) | no protection change. How PaX treats `mremap` is NOT VERIFIED | PaX documentation | needs a PaX kernel |
+| EDR / security review | write then exec on text, flagged by design | no write and no anonymous exec memory. Whether a heuristic flags an `mremap` of an executable mapping is UNKNOWN | none | none |
+| seccomp allow-lists without `mremap` | EPERM at some step, SSE2 kept | EPERM, SSE2 kept (correct) | `seccomp(2)` | none |
+
+The probe source and driver are in the story's scratch directory. They are not part of the tree (design story).
+
+### 5.3 Layout and linker placement
+
+* **One input section, two pages.** `.text.liella_classed` (`"ax"`, `.balign 4096`) holds page 0 (the SSE2 bodies)
+  and page 1 (the AVX2 bodies). Each page has the same slot offsets: `.org page + SLOT_<fn>` with one set of constants
+  for both pages, and `.org page + 4096` at the end of each page. GAS rejects a body that outgrows its slot or page
+  (".org backwards"), so both pages are exactly 4096 bytes. The exported labels (`memset`, ...) and the hidden
+  `liella_machine_*` names point into page 0. Page 1 carries local symbols (`liella_machine_<fn>_avx2`) at the same
+  offsets and with the same sizes, so a tool that symbolises by the moved mapping's file offset (5.6) still finds a
+  name.
+* **References.** A body in page 1 executes at page 0's address. Jumps within the page need nothing. Every reference
+  that leaves the page (RIP-relative data, tail jumps to `liella_hot_fill_rest` and similar) is written
+  `XREF(sym)` = `sym + 4096` in page 1. This is fixed at assembly and link time, with no fixup tables and no runtime
+  writes. Page 1 must not reference page 0 or itself through `XREF`. The story-1 export sweep on an AVX2 host is the
+  proof, and one plant drops a bias. Both bodies are leaf code with no stack adjustment, so one CFI description (CFA
+  = rsp+8) holds for both pages and unwinding through either is correct.
+* **Static programs.** The section is in one object of `libc.a`. The program's linker (GNU ld, gold, lld, mold)
+  places it with the default script's `*(.text .text.*)` and honours the 4096 alignment. An executable's `PT_LOAD`
+  has `p_offset` ≡ `p_vaddr` mod the page size, so the file offset is page-aligned too. One input section is never
+  split, reordered or dropped while a symbol in it is referenced (start-up uses `memset`), and its contents are
+  unique, so ICF cannot fold it. Both pages lie in the text `PT_LOAD`. Cost per program: 4096 bytes for page 1, plus
+  0-4095 bytes of alignment padding in the file and the address space. A post-link layout rewriter (BOLT and
+  similar) is not supported for this section.
+* **`libc.so.6`.** It is the same section in libc's text `PT_LOAD`. The swap moves a page inside libc's own mapping,
+  so it needs no path or descriptor. M4 needed libc's path from the loader, and a file replaced on disk by a package
+  upgrade between exec and initialisation could have supplied the wrong page. Both kinds of position-independent
+  code (PIE, the shared object) work unchanged: the probe's PIE build behaved like the static one.
+* **Memory.** The SSE2 class never touches page 1 (page cache at most, shared). The AVX2 class keeps page 1's
+  file-backed page in place of page 0, with no private memory. M4 used one private page per process.
+
+### 5.4 Start-up sequence (static step 4; `libc.so.6` initialisation later)
+
+1. After `cpu::init_with`, decide the class: AVX2 if `Features` reports AVX2, XCR0 shows the YMM state saved, and the
+   tunables do not say `-AVX2`. Otherwise stop here: **0 system calls**.
+2. Guard: `openat("/proc/self/pagemap", O_RDONLY|O_CLOEXEC)`, one `pread64` of the 16 bytes for the two pages
+   (offset = page 0 / 4096 × 8), then `close`. If either entry is present (bit 63) and not a file page (bit 61), a
+   tracer or uprobe has written into it: keep SSE2. If the open or the read fails, also keep SSE2 (RULING 3). Reading
+   one's own pagemap needs no privilege. Since Linux 4.0 the frame numbers read as zero without
+   `CAP_SYS_ADMIN`, and the flag bits stay readable.
+3. `mremap(page1, 4096, 4096, MREMAP_MAYMOVE|MREMAP_FIXED, page0)`, the M6a form. M6b needs Linux 5.13 or later for
+   file mappings (`mremap(2)`) and gains nothing. M6c needs a descriptor and two more system calls, and for
+   `libc.so.6` a path.
+4. Record the outcome in a test-visible place (the `classed_id` slot, below, already shows it).
+
+Total on the AVX2 class: **4 system calls** (1 without the guard), +2 VMAs (the text mapping splits around page 0;
+page 1's range becomes a hole). That compares with M4's 5 system calls, or 8 with the same guard, which M4 also needs.
+The process has one thread and no handlers at this point, as in 2.1. The `classed_id` slot: a 6-byte body at a fixed
+slot (`mov $0, %eax; ret` in page 0, `mov $1, %eax; ret` in page 1) that the selftest calls to ask which page is live.
+It costs nothing in calls to other slots.
+
+### 5.5 Failure handling
+
+Any refusal (`EACCES`, `EPERM`, `EINVAL`, `ENOMEM`) before or by the `mremap` keeps page 0. `mremap(2)` says
+`MREMAP_FIXED` unmaps whatever was at the destination, and does not say what is left there when the move then fails.
+After an error, the start-up therefore checks that page 0 is still mapped (`mincore(page0, 4096, &v)`; `ENOMEM` means
+unmapped). If it is gone, the start-up tries the same `mremap` once more, since page 1 is still at its own address.
+If that also fails, the process ends with a message on stderr instead of faulting at its next `memset`. At start-up,
+with about 20 mappings and no other threads, the move is not expected to fail. The check makes the rare case
+diagnosable instead of silent. A refusal of the guard's `openat` (no `/proc`, or a filter) keeps SSE2.
+
+### 5.6 Debuggers, profilers, core files, per-call cost
+
+* **gdb:** covered by the guard (5.2). Attaching after start-up works normally.
+* **perf:** names are right. `perf annotate` on an AVX2 host shows the SSE2 bytes for classed slots (probed). Tools
+  that rebuild maps from `/proc/<pid>/maps` (attaching to a running process) see page 0's address at page 1's file
+  offset and name the slot with page 1's local symbol. That naming is predicted from the maps line and NOT VERIFIED.
+* **uprobes** (`uprobetracer.rst`: probes are placed by file and offset): a uprobe on `memset` (page 0's offset) that
+  is registered before start makes the guard keep SSE2. One registered after the swap does not fire, because nothing
+  maps that offset any more. It has to target `liella_machine_memset_avx2` (page 1's offset) instead. M4 also loses
+  uprobes, because the copy is written. NOT VERIFIED by a probe.
+* **Core files:** the default `coredump_filter` does not dump clean file-backed text. A debugger reading a core then
+  shows the executable's page 0 bytes at page 0's address, although page 1's code ran there. The shared CFI keeps
+  backtraces right. M4's written copy is anonymous and was dumped. Recommendation: the debugging note (story 7).
+  NOT VERIFIED by a probe.
+* **Huge pages:** if text is mapped with a PMD-sized page (read-only THP for file text), a 4 KiB `mremap` splits it.
+  That is functional but loses the large page for that range. NOT VERIFIED.
+* **Per-call cost (section 2 table, M6 column = M4's):** 0 on both classes. The exported label is the slot, called
+  directly, with no flag test and no indirection. Section 3's predictions stand unchanged. On the SSE2 class and
+  Ivy Bridge, no row rises.
+
+### 5.7 Debugging note (story 7, written with CLASSED-SLOT-INFRA)
+
+On a CPU of the AVX2 class, a static program's start-up replaces the page of libc text that holds the classed
+entries (today `memset`) with the AVX2 page from the same file. Nothing changes in results, symbols or addresses,
+but tools that read the file instead of the process see the other page:
+
+* **gdb** works as usual. A breakpoint on `memset` set before `run` makes the start-up keep the SSE2 page (the
+  pagemap guard sees the written page), so the breakpoint fires. Attaching later, or setting it after start-up,
+  places it in the live AVX2 page, and gdb disassembles that page.
+* **perf**: samples are named correctly (`memset`). `perf annotate` shows the file's SSE2 bytes for that symbol, not
+  the AVX2 code that ran.
+* **uprobes** are placed by file offset: one on `memset` registered after start-up does not fire. Use
+  `liella_machine_memset_avx2` (the AVX2 page's local symbol), or keep the SSE2 page.
+* **Core files**: the default `coredump_filter` does not dump clean file-backed text, so a debugger reading a core
+  shows the file's SSE2 bytes at `memset`. Backtraces are correct.
+* **The swap is off by default** (ruling #3434, D-4.53: it cost 22-26 us per process start on an Alder Lake-N
+  class CPU with no measured `memset` gain; CLASSED-SLOT-SWAP-COST cuts that cost). The notes above apply when
+  `GLIBC_TUNABLES=liella.compat.no_classed_swap=0` (COMPAT-20) turns it on.
+* **To run the file's SSE2 page** (the code at every exported label is then the code in the file): the default, or
+  `GLIBC_TUNABLES=liella.compat.no_classed_swap=1` (COMPAT-20), keeps it and leaves the other AVX2 paths on;
+  `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2` keeps it and turns every AVX2 path off. A program without `/proc` also
+  keeps it.

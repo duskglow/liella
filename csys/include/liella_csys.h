@@ -126,6 +126,9 @@ void liella_machine_move_mid(void *d, const void *s, size_t n);
 /* The direct entries exported as memmove/memcpy and memset (D-4.22 COPY-FILL; src/machine/fold.S): return d. */
 void *liella_machine_memmove(void *d, const void *s, size_t n);
 void *liella_machine_memset(void *d, int c, size_t n);
+/* The classed section's classed_id slot (D-4.53; src/machine/fold.S): 0 while the SSE2 page is live at
+ * page 0's address, 1 once the AVX2 page is. */
+uint32_t liella_classed_id(void);
 /* The direct compare entries exported as memcmp and bcmp/__memcmpeq (MEMCMP-FOLD; src/machine/fold.S). */
 int liella_machine_compare(const void *a, const void *b, size_t n);
 int liella_machine_equal(const void *a, const void *b, size_t n);
