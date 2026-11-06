@@ -24,7 +24,9 @@ pub(crate) mod fast32_j0;
 pub(crate) mod fast32_j0_small;
 pub(crate) mod fast32_j1;
 pub(crate) mod fast32_j1_small;
+pub(crate) mod fast32_lgamma;
 pub(crate) mod fast32_sin;
+pub(crate) mod fast32_tgamma;
 pub(crate) mod fast32_y0;
 pub(crate) mod fast32_y0_reg;
 pub(crate) mod fast32_y1;
@@ -33,6 +35,7 @@ pub(crate) mod fast32_y1_reg;
 // The constant tables (D-10.3): one `@generated` file per family, written by `cargo xtask
 // tables` from `crates/mathtools/src/tables.rs` (never edited by hand; `cargo xtask static`
 // fails on a stale one). Callers use them all through `coeffs::tables`.
+mod bessel;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -42,6 +45,7 @@ mod trig;
 
 /// Every generated table, under the one path the kernels use (`use crate::coeffs::tables as t`).
 pub(crate) mod tables {
+    pub(crate) use super::bessel::*;
     pub(crate) use super::erf::*;
     pub(crate) use super::exp_log::*;
     pub(crate) use super::gamma::*;

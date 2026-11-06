@@ -71,7 +71,7 @@ cargo xtask stubs     # regenerate test stubs and spec/clauses.tsv from the spec
 cargo xtask so        # build libc.a, libc.so.6, liella-crt1.o into target/liella/
 cargo xtask test      # the full test gate (long)
 cargo xtask affected --list   # only the tests your change can reach (--tier direct, the default)
-cargo xtask affected          # run them
+cargo xtask affected --run    # run them (--list or --run is required: without either, exit 2)
 cargo xtask clippy            # must be clean (workspace, all targets, -D warnings)
 cargo xtask static            # static policy checks
 ```
@@ -92,7 +92,7 @@ against `next`; the maintainers run the lab steps (counts, the merge queue) for 
 
 1. **Branch** from `origin/next` (the integration branch), one story per branch.
 2. **Direct-tier gate.** `cargo xtask clippy`, `cargo xtask static`, then
-   `cargo xtask affected` (default `--tier direct`: the changed module, its one-hop users, the
+   `cargo xtask affected --run` (default `--tier direct`: the changed module, its one-hop users, the
    test targets naming either and the spec sections of those modules; anything the selector is
    unsure of escalates to the full run). Pass `--base origin/next` when the branch was cut from
    `next`. `--tier wide` and `--tier full` exist; the header of `xtask/src/affected.rs` has the

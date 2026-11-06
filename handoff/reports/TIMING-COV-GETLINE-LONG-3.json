@@ -1,0 +1,13 @@
+{"task": "TIMING-COV-GETLINE-LONG-3", "model": "opus", "tokens": null,
+ "result": "merged origin/next (PERF-GETLINE-LONG-3) into the getline-long-2 branch: one cookie stub with chunk, fail_at and reads, both tests kept; gate green, 17/17 plants CAUGHT, no getline row rises vs next",
+ "branch": "task/timing-cov-getline-long-3", "head": "2613e9f9",
+ "gate": {"affected": "4589 passed / 0 failed", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["counts cover both dispatch paths (AVX2, and non-AVX2 via GLIBC_TUNABLES) on one Skylake-SP host, as in -2; a Zen 1 host was not counted",
+                   "no test dropped as a duplicate: long_records_cross_the_window and records_around_the_buffer_size cover different buffers, locking modes and error cases"],
+ "refused": [],
+ "jobs": ["timing-cov-getline-long-3-lint", "timing-cov-getline-long-3-gate", "timing-cov-getline-long-3-plants", "timing-cov-getline-long-3-percall"],
+ "improvement": "CI's merge could keep a struct field union automatically when both sides add fields to one struct and every literal uses ..Default; this conflict needed an agent only for that and a two-line read-callback merge",
+ "next_step": "wl_trace on gl_long (non-AVX2) so it hits getline, then a per-phase split of one call (handoff Next 1-2)",
+ "report_file": "handoff/perf-getline-long.md"}

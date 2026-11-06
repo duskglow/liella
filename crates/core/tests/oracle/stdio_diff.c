@@ -719,6 +719,81 @@ static void eofs(void) {
     }
 }
 
+/* Every read entry started with an indicator already set, errno preset to a sentinel
+ * (STDIO-STICKY-ERROR-ERRNO, D-12.1): the result, whether errno changed, both indicators and the
+ * backing reads asked. Backings: a cookie that fails (or ends) once and then has "xy\n" (byte
+ * entries), a directory descriptor (every read fails, EISDIR) and an empty file that gets "xy\n"
+ * after the first read saw its end. */
+static int sk_fail, sk_reads;
+static ssize_t sk_read(void *c, char *b, size_t n) {
+    (void)c;
+    sk_reads++;
+    if (sk_fail >= 0) { int f = sk_fail; sk_fail = -1; if (f) { errno = EIO; return -1; } return 0; }
+    size_t k = n < 3 ? n : 3;
+    memcpy(b, "xy\n", k);
+    return (ssize_t)k;
+}
+
+static long sk_call(int e, FILE *f) {
+    char b[16]; wchar_t w[16]; char *p = 0; size_t n = 0; long r; char c; wchar_t wc;
+    switch (e) {
+    case 0: return fgetc(f);
+    case 1: return getc(f);
+    case 2: return getc_unlocked(f);
+    case 3: return fgetc_unlocked(f);
+    case 4: { FILE *o = stdin; stdin = f; r = getchar(); stdin = o; return r; }
+    case 5: return fgets(b, sizeof b, f) ? (long)strlen(b) : -1;
+    case 6: return (long)fread(b, 1, sizeof b, f);
+    case 7: return (long)fread_unlocked(b, 1, sizeof b, f);
+    case 8: r = getdelim(&p, &n, '\n', f); free(p); return r;
+    case 9: r = getline(&p, &n, f); free(p); return r;
+    case 10: return fscanf(f, "%c", &c);
+    case 11: r = ungetc('q', f); return r == EOF ? r : r * 1000 + fgetc(f);
+    case 12: return (long)fgetwc(f);
+    case 13: return (long)getwc(f);
+    case 14: return fgetws(w, 16, f) ? (long)wcslen(w) : -1;
+    case 15: return fwscanf(f, L"%lc", &wc);
+    }
+    return -2;
+}
+
+static void sticky_indicators(void) {
+    static const char *names[] = { "fgetc", "getc", "getc_unlocked", "fgetc_unlocked", "getchar", "fgets", "fread",
+        "fread_unlocked", "getdelim", "getline", "fscanf", "ungetc", "fgetwc", "getwc", "fgetws", "fwscanf" };
+    static const char *backings[] = { "cookie-error", "cookie-eof", "dir-error", "file-eof" };
+    char path[600];
+    snprintf(path, sizeof path, "%s/sticky", dir);
+    str("== sticky indicators"); nl();
+    for (int k = 0; k < 4; k++)
+        for (int e = 0; e < 16; e++) {
+            int wide = e >= 12;
+            if (k < 2 && wide) continue; /* the cookie backings are for the byte entries */
+            FILE *f = 0;
+            sk_reads = 0;
+            if (k < 2) {
+                cookie_io_functions_t io = { sk_read, 0, 0, 0 };
+                sk_fail = k == 0;
+                f = fopencookie(0, "r", io);
+            } else if (k == 2) {
+                f = fdopen(open("/", O_RDONLY), "r");
+            } else {
+                int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0600);
+                f = fdopen(fd, "r");
+            }
+            if (!f) { str(names[e]); str(" open failed"); nl(); continue; }
+            long first = wide ? (long)fgetwc(f) : (long)fgetc(f);
+            if (k == 3) { int fd = open(path, O_WRONLY | O_APPEND); if (write(fd, "xy\n", 3) != 3) str(" write failed"); close(fd); }
+            int before = sk_reads;
+            errno = 4242;
+            long r = sk_call(e, f);
+            int en = errno;
+            str(names[e]); ch(' '); str(backings[k]); kv("first", first); kv("r", r);
+            str(en == 4242 ? " errno=kept" : " errno="); if (en != 4242) num(en);
+            kv("err", ferror(f) != 0); kv("eof", feof(f) != 0); kv("reads", sk_reads - before); nl();
+            fclose(f);
+        }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) return 2;
     strcpy(dir, argv[1]);
@@ -735,6 +810,7 @@ int main(int argc, char **argv) {
     seeks();
     refills();
     eofs();
+    sticky_indicators();
     flush_out();
     return 0;
 }

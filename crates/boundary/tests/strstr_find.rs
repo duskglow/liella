@@ -384,6 +384,47 @@ fn strstr_large_haystacks_find_every_position_in_the_wide_groups() {
 }
 
 #[test]
+fn strpair_names_the_first_candidate_or_the_terminator_exactly() {
+    // Clauses: s4_6_c_0 (D-4.28; the scanner contract under strstr). TIMING-N100-STRSTR-64:
+    // the head blocks' one-mask test names the first stop itself, not an earlier unit that
+    // strstr's compare would reject and resume after. A candidate or the terminator at every
+    // position of the first 160 bytes from p, a lone c1 (no candidate) before it, 34 alignments,
+    // four distances, both paths.
+    let _g = level();
+    liella_boundary::cpu::init();
+    let (c0, c1) = (b'x', b'y');
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for off in [1usize, 4, 7, 15] {
+            for align in 0..34usize {
+                for stop in 0..160usize {
+                    for cand in [false, true] {
+                        let mut buf = vec![b'a'; 512];
+                        buf[511] = 0;
+                        let p = align + off;
+                        if stop > 3 {
+                            buf[p + stop / 2] = c1;
+                        }
+                        if cand {
+                            buf[p + stop - off] = c0;
+                            buf[p + stop] = c1;
+                            buf[p + stop + 3] = 0;
+                        } else {
+                            buf[p + stop] = 0;
+                        }
+                        let want = 2 * stop + usize::from(!cand);
+                        let got = selftest::strpair(&buf[align..], off, c0, c1);
+                        assert_eq!(got, Some(want), "avx2={avx2} off={off} align={align} stop={stop} cand={cand}");
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+#[test]
 fn strstr_filter_switch_keeps_every_candidate() {
     // Clauses: s4_6_c_0 (D-4.28). STRSTR-ADAPTIVE-FILTER-EXP: a haystack whose start holds no
     // last needle byte runs the one-stream filter; a lone last byte ("decoy") is a one-stream stop

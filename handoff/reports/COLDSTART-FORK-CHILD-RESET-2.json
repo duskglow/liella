@@ -1,0 +1,12 @@
+{"task": "COLDSTART-FORK-CHILD-RESET-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fork child reset tested (s18_fork_reset) and recorded (D-18.8); gate green; plants 11 caught + 1 equivalent; per fork user instr 6728->421 (glibc 275), faults 29.1->15.1 (12.3), kernel 354k->299k (283k); N100/Ivy Bridge timing running, verdict not read",
+ "branch": "task/coldstart-fork-child-reset-2", "head": null,
+ "gate": {"affected": "9790 passed / 0 failed (conformance 50/0)", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["stream-owner-kept plant marked equivalent: a stale stream owner differs only after thread-id reuse, not deterministically testable", "parent-side post-fork writes not examined", "origin/next moved past the branch base 41b8737b; no merge done"],
+ "refused": [],
+ "improvement": "a staged bench filter for a single row (--only cbench_process/fork_exit_wait) would cut the timing run from all process rows x6 to minutes",
+ "next_step": "read nozomi:cfcr2-n100 and nico:cfcr2-ivb fork_exit_wait/vfork_exit_wait per round (before vs after vs glibc); no row slower -> COMPLETE",
+ "report_file": "handoff/COLDSTART-FORK-CHILD-RESET.md",
+ "jobs": ["keke:cfcr2-check", "keke:cfcr2-gate", "keke:cfcr2-plants-2", "keke:cfcr2-counts", "keke:cfcr2-stage", "nozomi:cfcr2-n100", "nico:cfcr2-ivb"]}

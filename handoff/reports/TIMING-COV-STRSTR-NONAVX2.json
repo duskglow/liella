@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-STRSTR-NONAVX2", "model": "opus", "tokens": null,
+ "result": "strpair SSE2 path: one-mask blocks, 4-block 64-byte head, rotated group loop; -AVX2 instr hit_64 212.5->154.4, miss_64 237.5->157.4, hit_4k 2292.9->2219.6 (glibc 99.4/173.5/2244.0); IVB sweep ratios reproduced on Haswell -AVX2",
+ "branch": "task/timing-cov-strstr-nonavx2", "head": "22cd8586",
+ "gate": {"affected": "clippy, static, strstr_find green; affected tier running at hand-back (timing-cov-strstr-nonavx2-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Zen 1 probe ratios differ from IVB because glibc's own count changes under -AVX2 on Zen 1; Liella's IVB build equals any -AVX2 build", "hit_64 still 1.55x instr on -AVX2: remaining cost is the Rust entry (TIMING-N100-STRSTR-64 next design)", "shiki ns under load: -AVX2 hit_4k time ratio 1.05 before / 1.07 after, not decidable; nico timing pending"],
+ "refused": [],
+ "improvement": "xtask bench --rows only works staged and only for budgets.tsv rows; positional/--only errors cost two job cycles - a dry-run row check (or rows from any bench) would save them",
+ "next_step": "collect shiki timing-cov-strstr-nonavx2-gate and nico timing-cov-strstr-nonavx2-time; land only if no strstr row is slower in IVB time",
+ "report_file": "handoff/timing-cov-strstr-nonavx2.md",
+ "jobs": ["timing-cov-strstr-nonavx2-counts-before2", "timing-cov-strstr-nonavx2-counts-after", "timing-cov-strstr-nonavx2-plants2", "timing-cov-strstr-nonavx2-gate", "timing-cov-strstr-nonavx2-stage2", "nico:timing-cov-strstr-nonavx2-time"]}

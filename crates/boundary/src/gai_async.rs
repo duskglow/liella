@@ -48,6 +48,7 @@ use liella_rt::thread::Attr;
 use crate::conv;
 use crate::errno;
 use crate::ffi;
+use crate::fork;
 use crate::netdb;
 use crate::sys::CSys;
 use crate::thread;
@@ -305,6 +306,8 @@ fn group(e: &SigEvent, n: usize) -> Option<usize> {
 
 /// `getaddrinfo_a(mode, list, nitems, sevp)` (`list`: the entries' addresses, 0 for NULL).
 pub fn getaddrinfo_a(mode: i32, list: KList<'_>, sig: Option<&SigEvent>) -> i32 {
+    // Before any request exists: a `fork` child from here on resets the queue and the groups.
+    fork::mark_used(fork::USED_GAI);
     if mode != GAI_WAIT && mode != GAI_NOWAIT {
         errno::set(Errno::EINVAL);
         return EAI_SYSTEM;
@@ -481,9 +484,14 @@ pub fn gai_cancel(req: usize) -> i32 {
     r
 }
 
-/// The child of `fork`: no workers, an empty queue, no groups.
-pub(crate) fn after_fork_child() {
+/// The child of `fork`: no workers, an empty queue, no groups. `used`: `getaddrinfo_a` ever ran
+/// ([`fork::USED_GAI`]); before that the queue and the groups hold their initial values and the
+/// child reads and writes none of their pages (D-18.8).
+pub(crate) fn after_fork_child(used: bool) {
     LOCK.reset();
+    if !used {
+        return;
+    }
     for s in QUEUED.iter() {
         s.store(0, Relaxed);
     }
