@@ -1,0 +1,13 @@
+{"task": "TIMING-COV-STRSCAN-FRONTEND-SSE2", "model": "opus", "tokens": null,
+ "result": "Front-end hypothesis refuted (MITE <1% of uops on all 7 rows); strncmp hit path one taken branch fewer (eq16 cycle parity on Haswell-EP); strchr/strchrnul layout and compare-form changes neutral; instructions unchanged; Ivy Bridge timing not run (no bench --stage)",
+ "branch": "task/timing-cov-strscan-frontend-sse2", "head": "8a5f4ed5",
+ "gate": {"affected": "pending: shiki:timing-cov-strscan-frontend-sse2-gate-2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["xtask on origin/next has no `bench --stage`, which the developer-flow timing recipe requires; bookings 84/85 cancelled unused",
+                   "strchrnul_16_hit stays ~1 cycle/call above glibc on Haswell at equal instructions and uops; not the decoder, not the compare chain, not the stub layout"],
+ "refused": [],
+ "improvement": "perf.sh (per-row DSB/MITE/not-delivered split for Liella and glibc in one job) should be an xtask bench option: it settled the hypothesis in one job",
+ "next_step": "Ivy Bridge timing of the seven rows once bench --stage is available; Liella-only cycle samples of strchrnul_16_hit vs strchr_16_hit",
+ "report_file": "handoff/TIMING-COV-STRSCAN-FRONTEND-SSE2.md",
+ "jobs": ["shiki:timing-cov-strscan-frontend-sse2-gate-2", "shiki:timing-cov-strscan-frontend-sse2-plants-2", "shiki:timing-cov-strscan-frontend-sse2-counts-sse2-2", "shiki:timing-cov-strscan-frontend-sse2-counts-default-2"]}
