@@ -2145,7 +2145,7 @@ liella_machine_rawmemchr:
 	leaq 32(%rdi,%rdx), %rax
 	vzeroupper
 	ret
-	/* TIMING-N100-SCAN-64K-3 (D-NEW): the AVX2 long path in subsection 1, after the SSE2
+	/* TIMING-N100-SCAN-64K-3 (D-4.56): the AVX2 long path in subsection 1, after the SSE2
 	 * path, which keeps its offset (memchr's layout rule, below). */
 	.subsection 1
 .Lraw_avx_at0:
@@ -2654,7 +2654,7 @@ liella_machine_memchr:
 	cmpl $4064, %ecx
 	ja .Lmemchr_avx_setup
 	jmp .Lmemchr_n32
-	/* TIMING-N100-SCAN-64K-3 (D-NEW): the AVX2 long path is assembled in subsection 1, after
+	/* TIMING-N100-SCAN-64K-3 (D-4.56): the AVX2 long path is assembled in subsection 1, after
 	 * the SSE2 path, and the SSE2 path keeps the offset it had with the 128-byte loop (pinned by
 	 * the .org below): a longer AVX2 loop then moves no SSE2-reached block (Ivy Bridge timed
 	 * memchr_16_mix 14% slower when it moved). */
