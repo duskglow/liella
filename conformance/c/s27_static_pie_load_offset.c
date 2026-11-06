@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdexcept>
+#include "expect_crash.h"
 
 extern "C" int __printf_chk(int flag, const char *__restrict fmt, ...);
 
@@ -69,13 +70,15 @@ static bool in_load(const Seen &s, uintptr_t bias, uintptr_t addr, unsigned *fla
     return false;
 }
 
-/* The status of a child that runs __printf_chk(1, fmt, &n) and exits 0 when n == 2. */
-static int printf_chk_status(const char *fmt) {
+/* The status of a child that runs __printf_chk(1, fmt, &n) and exits 0 when n == 2; `crash`:
+ * the child is meant to abort (no core dump). */
+static int printf_chk_status(const char *fmt, bool crash) {
     fflush(stdout);
     pid_t pid = fork();
     if (pid == 0) {
         int null = open("/dev/null", O_WRONLY);
         if (null >= 0) { dup2(null, 1); dup2(null, 2); }
+        if (crash) expect_crash();
         int n = -1;
         __printf_chk(1, fmt, &n);
         fflush(stdout);
@@ -138,9 +141,9 @@ static int checks(uintptr_t *base_out) {
     CHECK("§12.6", in_load(s, base, (uintptr_t)ro_format, &flags) && (flags & PF_W) == 0);
     memcpy(rw_format, ro_format, sizeof ro_format);
     CHECK("§12.6", in_load(s, base, (uintptr_t)rw_format, &flags) && (flags & PF_W) != 0);
-    int st = printf_chk_status(ro_format);
+    int st = printf_chk_status(ro_format, false);
     CHECK("§12.6", WIFEXITED(st) && WEXITSTATUS(st) == 0);
-    st = printf_chk_status(rw_format);
+    st = printf_chk_status(rw_format, true);
     CHECK("§12.6", WIFSIGNALED(st) && WTERMSIG(st) == SIGABRT);
 
     /* A C++ exception through three frames, their destructors run. */
