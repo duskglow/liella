@@ -1,0 +1,12 @@
+{"task": "COLDSTART-SETLOCALE-FIRST-2", "model": "opus", "tokens": null,
+ "result": "No product change: validate-only codeset_matches saved 811 user instr but added 1 text-page fault (+12-14k kernel) in 3 layouts, so it was reverted (NEGATIVE row); tests + plants added; part 1 (static first view) analysed, not built",
+ "branch": "task/coldstart-setlocale-first-2", "head": null,
+ "gate": {"affected": "direct tier --base origin/next: ok (conformance 1 passed, 0 failed), rc 0", "peak": "1.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Part 1 (#3347) needs a one-shot .bss arena in liella-boundary handing out &'static mut (new unsafe category)", "recommendation": "allow it: claim flag + heap fallback, used for the first view's items, Tables, LocaleView and names; same leaked lifetime, no free path exists"}],
+ "informational": ["plants ctype-c-after-load: WARN-NO-MSG (rc 1 but the program's FAIL line was not in the plant log)", "commit 998e2029 message names the probe host class as Zen 1 by mistake (Skylake-SP)", "gate ran on a14e928b; the final head adds only the handoff, report and a host-class word in the saturation row"],
+ "refused": [],
+ "improvement": "the meas.sh probe (cargo by full path, perf stat -r 21 interleaved, perf record -d for faults) separates layout faults from logic: reuse it for coldstart rows",
+ "next_step": "rule on the boundary arena, then build part 1 with the validate-only codeset_matches folded in and count S/ST with meas.sh; then N100 timing",
+ "report_file": "handoff/coldstart-setlocale-first.md",
+ "jobs": ["mei:coldstart-setlocale-first-2-gate", "mei:coldstart-setlocale-first-2-plants"]}
