@@ -360,7 +360,9 @@ fn mid_null_call(k: &CSys) -> i32 {
     if k.prctl_int(liella_kernel::ops::PrctlInt::SetDumpable, 0, 0).is_err() {
         return 4;
     }
-    if !selftest::set_null_fold(MID_FOLD.load(SeqCst)) || !selftest::set_kernel_avx2(MID_AVX2.load(SeqCst)) {
+    // The production order: the build at startup, then the (lazy) folding decision, so the
+    // decision's own word store is the one the call reads.
+    if !selftest::set_kernel_avx2(MID_AVX2.load(SeqCst)) || !selftest::set_null_fold(MID_FOLD.load(SeqCst)) {
         return 3;
     }
     let case = MID_CASE.load(SeqCst);
