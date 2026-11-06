@@ -368,6 +368,12 @@ unsafe extern "C" {
     /// 65-128 class. Written only by `crate::dispatch` (its proof obligation: never nonzero while
     /// the fold limit is 0, which would send 1-64 to the 65-128 class).
     pub(crate) safe static liella_machine_set_mid: core::sync::atomic::AtomicUsize;
+    /// The `memset` entry's 129-256 class word (machine/fold.S, NULLFOLD-MEMSET, D-4.60): 256
+    /// while NULL folding is on, else 0; sizes above `liella_machine_set_mid` with `n <= word`
+    /// take the 129-256 class, which has no NULL test. Written only by `crate::dispatch` (its
+    /// proof obligation: nonzero only while NULL folding is on and `liella_machine_set_mid` is
+    /// 128, which would otherwise send 1-128 to the 129-256 class or a NULL to its stores).
+    pub(crate) safe static liella_machine_set_hi: core::sync::atomic::AtomicUsize;
     /// The compare entries' 33-64 class word (machine/fold.S, MEMCMP-EQ64, SEQ-REGRESS): 32 only
     /// while NULL folding is on AND the AVX2 builds run, else 0; written only by `crate::dispatch`
     /// (its proof obligation: never nonzero while the fold limit is 0 or the AVX2 flag is false).

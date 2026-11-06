@@ -14,8 +14,10 @@
  * 64 while folding is on and 0 otherwise, so `n <= limit` is the folded classes' one gate (n == 0
  * always passes it: the classes return at once for 0 without touching memory). Every other size
  * tail-jumps to Rust: `liella_hot_move_rest` / `liella_hot_fill_rest` (the folding decision, the
- * explicit S6 NULL checks, the large sizes). The 65-256 copy and fill classes are here, after an explicit NULL test (owner ruling 2026-10-08, option B: 65 and up keeps
- * the explicit checks); a NULL goes to Rust, which aborts with EFAULT (S6).
+ * explicit S6 NULL checks, the large sizes). The 65-256 copy classes are here, after an explicit NULL test (owner ruling 2026-10-08, option B: 65 and up keeps
+ * the explicit checks); a NULL goes to Rust, which aborts with EFAULT (S6). The 65-256 fill classes
+ * are folded too while folding is on (D-4.60, owner ruling 2026-11-06); above 256 the fill keeps
+ * its explicit test.
  *
  * HOT-KERNEL CONTRACT (what the callers rely on): the C contract only - d valid for writing n
  * bytes and s valid for reading n bytes (or NULL, handled as above). Each class reads only
@@ -336,16 +338,18 @@ __mempcpy:
 	movb %cl, (%rdi)
 .Lset_none\@:
 	ret
-/* Not folded: 65-256 here after the explicit NULL test (MEMSET-MID: 129-256 straight-line, no
- * loop, as the copy's class); a NULL d, 1-128 without folding and every other size in Rust. The
- * 65-128 class is `n <= liella_machine_set_mid` (128 with folding on, so n > 64 here; 0 with
- * folding off, so every n goes on: one compare against memory, no subtraction), then one unsigned
- * compare n - 129 <= 127 for 129-256. */
+/* Folded too (NULLFOLD-MEMSET, D-4.60): 65-128 and 129-256 have no NULL test while folding is on.
+ * Each class's first store is its head block at d (offset 0), and every store of either class lies
+ * in [d, d + 256), inside the guard's [0, 64 KiB): a NULL d faults on page zero before anything is
+ * written. The 65-128 class is `n <= liella_machine_set_mid` (128 with folding on, so n > 64 here;
+ * 0 with folding off, so every n goes on: one compare against memory, no subtraction); the
+ * 129-256 class `n <= liella_machine_set_hi` (256 with folding on, else 0: n > 128 here). With
+ * folding off both words are 0 and every n reaches .Lset_out, whose .Lset_rest keeps 129-256 here
+ * after the explicit NULL test (MEMSET-MID: straight-line, no loop) and sends a NULL d, 1-128 and
+ * every other size to Rust. */
 .Lset_big\@:
 	cmpq liella_machine_set_mid+\bias(%rip), %rdx
 	ja .Lset_129\@
-	testq %rdi, %rdi
-	jz liella_hot_fill_rest+\bias
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
@@ -360,11 +364,9 @@ __mempcpy:
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
 .Lset_129\@:
-	leaq -129(%rdx), %rcx
-	cmpq $127, %rcx
-	ja .Lset_out\@				/* n < 129 (the wrapped compare) with folding off, or n > 256 */
-	testq %rdi, %rdi
-	jz liella_hot_fill_rest+\bias
+	cmpq liella_machine_set_hi+\bias(%rip), %rdx
+	ja .Lset_out\@				/* folding off (the word is 0), or n > 256 */
+.Lset_129_body\@:				/* 129 <= n <= 256; head blocks first (D-4.60) */
 	.if \avx2
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
@@ -447,8 +449,15 @@ __mempcpy:
 	rep stosb
 	movq %rdx, %rax
 	ret
+/* Folding off (or the words not yet raised), n <= 256: 129-256 after the explicit NULL test, as
+ * before D-4.60; a NULL d and 1-128 in Rust. */
 .Lset_rest\@:
-	jmp liella_hot_fill_rest+\bias
+	leaq -129(%rdx), %rcx
+	cmpq $127, %rcx
+	ja liella_hot_fill_rest+\bias
+	testq %rdi, %rdi
+	jz liella_hot_fill_rest+\bias
+	jmp .Lset_129_body\@
 	.endm
 
 	.section .text.liella_machine_memset,"ax",@progbits
@@ -1467,12 +1476,22 @@ liella_machine_fill_erms_from:
  * 128 while NULL folding is on, else 0 (written by `crate::dispatch::select_null_fold`: dropped
  * before the fold limit, raised after it). Sizes above the fold limit with `n <= word` take the
  * 65-128 class. Read only by `memset` and written only by the startup decision, as the word above,
- * so it shares that word's line; the padding completes it. */
+ * so it shares that word's line. */
 	.globl liella_machine_set_mid
 	.hidden liella_machine_set_mid
 	.type liella_machine_set_mid, @object
 liella_machine_set_mid:
-	.zero 56
+	.zero 8
 	.size liella_machine_set_mid, 8
+/* The `memset` entry's 129-256 class word (NULLFOLD-MEMSET, D-4.60; `ffi::liella_machine_set_hi`):
+ * 256 while NULL folding is on, else 0 (written by `crate::dispatch::select_null_fold`: dropped
+ * before set_mid, raised after it, so it is nonzero only while set_mid is 128). Sizes above set_mid
+ * with `n <= word` take the 129-256 class with no NULL test. Same line; the padding completes it. */
+	.globl liella_machine_set_hi
+	.hidden liella_machine_set_hi
+	.type liella_machine_set_hi, @object
+liella_machine_set_hi:
+	.zero 48
+	.size liella_machine_set_hi, 8
 
 	.section .note.GNU-stack,"",@progbits

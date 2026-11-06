@@ -151,14 +151,16 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
 /// where a NULL faults on page zero (SIGSEGV, what glibc observably does: it has no NULL check of
 /// its own). Every other size, 65-128 included, keeps the explicit S6 checks in Rust (option B:
 /// no Rust code performs a deliberate NULL access); the compare and equality entries also fold
-/// 65-2048 in their AVX2 classes (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS; `CMP_LONG_WORD`). `0` (the start value, and the value whenever
+/// 65-2048 in their AVX2 classes (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS; `CMP_LONG_WORD`)
+/// and `memset` 65-256 in its assembly classes (D-4.60). `0` (the start value, and the value whenever
 /// page zero could be mapped) keeps the explicit checks for every size.
 ///
 /// Proof obligation (every fold relies on it): `FOLD` is nonzero only while no access in
 /// `[0, 64 KiB)` can succeed, which [`page_zero_unmappable`] establishes at startup
 /// (`runtime`; `selftest` forces it in tests). A folded kernel touches at most
 /// `[d, d + FOLD_MAX)` with `FOLD_MAX` = 64 <= 64 KiB, so a NULL `d` or `s` faults; the 65-2048
-/// compare classes first touch `[a, a + 32)` and `[b, b + 32)` (their head block).
+/// compare classes first touch `[a, a + 32)` and `[b, b + 32)` (their head block); the 65-256
+/// fill classes (D-4.60, `SET_MID`, `SET_HI`) store only in `[d, d + 256)`, head block first.
 // The word itself lives in machine/fold.S (`liella_machine_fold_limit`), which reads it on every
 // call (D-4.22 COPY-FILL).
 use crate::ffi::liella_machine_fold_limit as FOLD;
@@ -174,6 +176,16 @@ use crate::ffi::liella_machine_set_mid as SET_MID;
 /// The word's value with folding on: the upper bound of the entry's 65-128 class (four 16-byte
 /// blocks from each end), fixed by the assembly, not a tunable.
 const SET_MID_ON: usize = 128;
+// The memset entry's 129-256 class word (machine/fold.S, NULLFOLD-MEMSET, D-4.60): `SET_HI_ON`
+// with folding on, else 0. The class has no NULL test and the entry tests the word only for sizes
+// above `SET_MID`, so it must be 0 whenever `SET_MID` is 0 (else 1-128 would take the 129-256
+// class, and with the fold limit 0 a NULL would reach its stores): stored 0 before `SET_MID`
+// drops, `SET_HI_ON` after it rises.
+use crate::ffi::liella_machine_set_hi as SET_HI;
+/// The word's value with folding on: the upper bound of the entry's 129-256 class (eight 16-byte
+/// blocks, or four 32-byte blocks, from each end), fixed by the assembly, not a tunable. Every
+/// store of the class lies in `[d, d + 256)`, inside the guard's 64 KiB.
+const SET_HI_ON: usize = 256;
 
 /// The folded sizes: `1..=FOLD_MAX`, the classes the entries keep inline (D-4.22).
 pub(crate) const FOLD_MAX: usize = 64;
@@ -193,11 +205,13 @@ static FOLD_RESOLVED: AtomicBool = AtomicBool::new(false);
 pub(crate) fn select_null_fold(fold: bool) {
     if !fold {
         store_cmp_gates(false, false);
+        SET_HI.store(0, Relaxed);
         SET_MID.store(0, Relaxed);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
     if fold {
         SET_MID.store(SET_MID_ON, Relaxed);
+        SET_HI.store(SET_HI_ON, Relaxed);
     }
     // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
     // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,
@@ -249,6 +263,7 @@ fn resolve_fold_slow() {
 #[cfg(feature = "selftest")]
 pub(crate) fn unresolve_null_fold() {
     store_cmp_gates(false, false);
+    SET_HI.store(0, Relaxed);
     SET_MID.store(0, Relaxed);
     FOLD.store(0, Relaxed);
     FOLD_CHR.store(0, Relaxed);
