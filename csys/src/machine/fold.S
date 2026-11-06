@@ -180,6 +180,10 @@ memcpy:
 	vmovdqu %ymm7, -32(%rdi,%rdx)
 	vzeroupper
 	ret
+/* The SSE2 129-256 body starts a 64-byte line (NULLFOLD-COPY-MID-2, D-4.55): the padding follows a
+ * `ret`, so no path runs it. Without it the body started 46 bytes into a line after the 129 class lost
+ * its NULL tests, and memcpy_144/256 took 0.5 cycles more on the Ivy Bridge host than before. */
+	.p2align 6
 .Lmove_129_sse2:
 	movups (%rsi), %xmm0
 	movups 16(%rsi), %xmm1
