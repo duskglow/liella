@@ -1,0 +1,29 @@
+{
+ "task": "RPC-STUB-HEAP-CHECK-ISOLATE",
+ "model": "opus",
+ "tokens": null,
+ "result": "export-build RPC stub heap check runs in a child forked from the test thread (its only thread): equality kept, 0/3900 repro failures; optional dead_code cfg_attr done",
+ "branch": "task/rpc-stub-heap-check-isolate",
+ "head": "de8cfd52",
+ "gate": {
+  "affected": "pending (mei:rpc-stub-heap-check-isolate-gate; clippy+static passed inside it; boundary, boundary interposed, ld, legacy, math ok so far)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Repro loop: 0 failures in 3900 runs of the export,selftest build (half with --test-threads=1), load 4 of 48 threads alongside the gate (mei:rpc-stub-heap-check-isolate-repro)",
+  "Item 2 survey: no other process-wide heap equality in a libtest-shares-the-heap build (heap_threads and sym_mallinfo2 use tolerances, wordexp_* per-thread caller_blocks, enomem_fs_walk re-measures disturbed windows); s29_rpc_auth_stubs does not exist on next",
+  "handoff/DL-BOOT-RELOC.md is not on this branch, so the repro loop was written for this story (~/work/RPC-STUB-HEAP-CHECK-ISOLATE/repro.sh on the host)",
+  "SUPERSEDED: mei:rpc-stub-heap-check-isolate-plants (leak plant's unused allocation optimised away, survived; fixed with black_box in plants-2)"
+ ],
+ "refused": [],
+ "improvement": "The 'loaded host' requirement has no load definition; mei sat at load 4/48 - a brief should name the load (or allow --load burners) it wants.",
+ "next_step": "Read the gate job result; nothing else.",
+ "report_file": "handoff/RPC-STUB-HEAP-CHECK-ISOLATE.md",
+ "jobs": [
+  "mei:rpc-stub-heap-check-isolate-gate",
+  "mei:rpc-stub-heap-check-isolate-plants-2",
+  "mei:rpc-stub-heap-check-isolate-repro"
+ ]
+}

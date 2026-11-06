@@ -46,6 +46,7 @@ impl nscache::Memory for Memory {
 
 /// At process start (`crate::runtime`): `LIELLA_NSCACHE=0` disables the cache, except in
 /// secure-execution mode; the regions are in `/dev/shm/`.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn start(secure: bool) {
     let off = !secure && process::getenv(crate::startup_names::LIELLA_NSCACHE).map(strz::env_value) == Some(&b"0"[..]);
     NSCACHE.start(off, secure, Some(b"/dev/shm/"));
