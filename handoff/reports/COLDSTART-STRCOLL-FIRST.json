@@ -1,0 +1,34 @@
+{
+ "task": "COLDSTART-STRCOLL-FIRST",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: on-demand ASCII fill at the first general-path strcoll (D-4.54) implemented and tested locally; gate/plants/counts running on keke, N100 timing not run",
+ "branch": "task/coldstart-strcoll-first",
+ "head": null,
+ "gate": {
+  "affected": "running (keke:csf-gate2); collate_lazy 2 passed, clippy+static clean",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "D-4.54: after the first compare decide_first decides nothing until a second general-path compare completes the tables (compare_stream answers meanwhile)",
+   "recommendation": "accept if second_strcoll and strcoll_en_us_* N100 rows are not slower; else complete the fill on the second strcoll of any kind"
+  }
+ ],
+ "informational": [
+  "step 0: N100 next 730f416b SC-S deltas: Liella +11781 iu/+31875 ik/+3 pf, glibc +348/+1805/0; first_strcoll Liella 11367 ns (no glibc ratio in the partial bench)",
+  "perf-record split by symbol not done (budget)",
+  "keke:csf-gate (affected without --run) selected 104 targets but ran none, rc=0: not a gate result"
+ ],
+ "refused": [],
+ "improvement": "`cargo xtask affected` without --run exits 0 after only listing; a gate wrapper should refuse that, and the coldsteps probe should ship its source next to its binaries so a story can relink it",
+ "next_step": "collect keke:csf-gate2, keke:csf-plants, keke:csf-counts; relink the S/SC probe on this branch for counts; staged N100 timing of first_strcoll/second_strcoll/strcoll_en_us_*",
+ "report_file": "handoff/COLDSTART-STRCOLL-FIRST.md",
+ "jobs": [
+  "keke:csf-gate",
+  "keke:csf-gate2",
+  "keke:csf-plants",
+  "keke:csf-counts"
+ ]
+}
