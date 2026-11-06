@@ -1,0 +1,13 @@
+{"task": "TIMING-COVERAGE-1106B", "model": "opus", "tokens": null,
+ "result": "COMPLETE: 98 rows re-checked (open 38, re-time 38, new brief 4, deferred 9, out of scope 9); only 4 uncovered groups remained, 4 code briefs written (fork COW faults, regex backref scratch, regex first-byte IVB, spawn heap256m IVB repro-first)",
+ "branch": "task/timing-coverage-1106b", "head": "5f01fd9c",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["keke:tc1106b-profile"],
+ "rulings": [],
+ "informational": ["Four briefs, not six: no other in-scope row above 1.05x time is uncovered; a further pass needs a newer sweep table",
+                   "posix_spawn_true_heap256m does not reproduce on Zen 1 (time 0.99, kernel counters equal): its brief reproduces on Ivy Bridge first and closes as noise if <= 1.05",
+                   "nozomi = N100 not verified; nico = Ivy Bridge from the active booking"],
+ "refused": [],
+ "improvement": "a sweep-table to coverage-table generator (ops.db states + continuations, like mktable.py in scratch) as a repo/ops tool would make each coverage pass a few calls",
+ "next_step": "coordinator submits the four briefs in rank order; the next coverage pass waits for a newer timing sweep",
+ "report_file": "handoff/timing-coverage-1106b/README.md"}

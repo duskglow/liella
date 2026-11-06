@@ -1,0 +1,11 @@
+{"task": "COLDSTART-BINDTEXTDOMAIN-REBIND-2", "model": "opus", "tokens": null,
+ "result": "second bindtextdomain+dgettext cost was 2 text faults in the repeat lookup's code (same_texts, Mo::hinted) outside the hot group; p_cold probe extended and hot-text.list regenerated: 2 -> 0 faults on the row, cold sequence 101 -> 93",
+ "branch": "task/coldstart-bindtextdomain-rebind-2", "head": "f84c4ee9",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "first_regcomp_regexec_regfree +1 page fault (25 -> 26) from the hot-group layout shift while the cold sequence nets -8", "recommendation": "land; the timing sweep arbitrates; a follow-up can look at the regcomp page"}],
+ "informational": ["coordinator step 1 (fresh N100 glibc time) not run for budget; no allocation on the repeat lookup path (no heap fault in the row)"],
+ "refused": [],
+ "improvement": "tools/hottext probes should exercise each first-use path twice (a repeat path's code is not the first call's); a per-row counter probe that #includes the bench source found the cause in 3 calls",
+ "next_step": "time cbench_opt cold rows on the N100 (Liella vs glibc) on this head; look at the regcomp +1 fault",
+ "report_file": "handoff/coldstart-bindtextdomain-rebind.md",
+ "jobs": ["mei:coldstart-bindtextdomain-rebind-2-gate", "mei:coldstart-bindtextdomain-rebind-2-plants"]}

@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-GAMMA-3", "model": "opus", "tokens": null,
+ "result": "lgammaf sweep timeout explained and fixed (lgamma oracle refused every integer and |x| >= 2^23, ~0.9e9 operands on mp); exhaustive lgammaf sweep PASS in 555 s; plants 6/6; counts tgammaf 0.48x, lgammaf 8.08x of glibc (target not reached)",
+ "branch": "task/libm-f32-gamma-3", "head": "2b1392b1",
+ "gate": {"affected": "running: libm-f32-gamma-3-gate (escalated to FULL by the .fit generated sources; clippy -D warnings and static passed in it)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plants-1 lp-shortcut-value (1e-9 shift, ~1/2000 ulp) SURVIVED the sample tests: below their resolution, only the exhaustive sweep resolves it; plants2 uses 1e-6 (~0.5 ulp) and all 6 are CAUGHT", "the direct-tier gate escalates to FULL for this branch because crates/math/fits/*.fit count as generated sources", "slice 248 (x ~ 2.7e36-5.3e36) still needs mp in the sweep: oracle32::decide refuses results >= 3e38 (~3% of sweep CPU)"],
+ "refused": [],
+ "improvement": "a per-slice profile of an exhaustive sweep (gamma_sweep_profile) named the slow range in one 3-minute job; a shared sliced profiler in fast32/tests.rs would serve every family's sweep",
+ "next_step": "lgammaf at 8.08x by instructions: profile its bench call first (near-zero refusals |y| < 2^-8 and |x| < 2^-20 to mp suspected, not verified), then a double-double piece beside the negative zeros",
+ "report_file": "handoff/libm-f32-gamma.md",
+ "jobs": ["kanon:libm-f32-gamma-3-gate", "kanon:libm-f32-gamma-3-plants2", "kanon:libm-f32-gamma-3-sweep-lgammaf", "kanon:libm-f32-gamma-3-check", "kanon:libm-f32-gamma-3-counts-before", "kanon:libm-f32-gamma-3-counts-after"]}

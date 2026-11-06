@@ -1,0 +1,255 @@
+== compare
+compare rc=0
+== stat none liella
+13664117,instructions:u 318510738,instructions:k 54979676,cycles:u 321053158,cycles:k 65973,page-faults 15,context-switches 
+== stat none glibc
+15892859,instructions:u 319061143,instructions:k 54026857,cycles:u 308721132,cycles:k 65954,page-faults 15,context-switches 
+== stat fork_exit_wait liella
+61266998,instructions:u 3013310197,instructions:k 283426776,cycles:u 4477680781,cycles:k 247983,page-faults 7212,context-switches 
+== stat fork_exit_wait glibc
+17918374,instructions:u 2399838313,instructions:k 145560591,cycles:u 3500470489,cycles:k 149965,page-faults 7163,context-switches 
+== stat vfork_exit_wait liella
+14632796,instructions:u 920083557,instructions:k 68255950,cycles:u 1545758479,cycles:k 65983,page-faults 7152,context-switches 
+== stat vfork_exit_wait glibc
+16462270,instructions:u 928192696,instructions:k 74220734,cycles:u 1748957656,cycles:k 65957,page-faults 7143,context-switches 
+== stat posix_spawn_true liella
+210575776,instructions:u 1589103517,instructions:k 350606786,cycles:u 2404587170,cycles:k 141398,page-faults 2932,context-switches 
+== stat posix_spawn_true glibc
+213533562,instructions:u 1581361877,instructions:k 348412237,cycles:u 2335592952,cycles:k 140009,page-faults 2946,context-switches 
+== stat posix_spawn_true_heap256m liella
+62894452,instructions:u 633338307,instructions:k 130671955,cycles:u 859611486,cycles:k 84844,page-faults 748,context-switches 
+== stat posix_spawn_true_heap256m glibc
+65305332,instructions:u 631917574,instructions:k 139123788,cycles:u 886884567,cycles:k 84499,page-faults 742,context-switches 
+== strace fork_exit_wait liella
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 68.26    1.052768         150      7001           clone
+ 31.01    0.478331          68      7009         1 wait4
+  0.51    0.007870           1      7008           set_robust_list
+  0.04    0.000635          10        62           mmap
+  0.03    0.000490          81         6           clone3
+  0.02    0.000306          18        17           openat
+  0.01    0.000230          16        14           munmap
+  0.01    0.000230          19        12         5 execve
+  0.01    0.000180          16        11         2 ioctl
+  0.01    0.000160           8        19           close
+  0.01    0.000154           7        20           rt_sigprocmask
+  0.01    0.000136           6        21           rt_sigaction
+  0.01    0.000116          10        11           prlimit64
+  0.01    0.000083          83         1           vfork
+  0.01    0.000082           4        19           mprotect
+  0.00    0.000069          13         5           newfstatat
+  0.00    0.000058           4        13           fstat
+  0.00    0.000058           4        12           pread64
+  0.00    0.000052           7         7           read
+  0.00    0.000047           4        10           brk
+== strace fork_exit_wait glibc
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 73.13    0.912255         130      7001           clone
+ 26.10    0.325591          46      7009         1 wait4
+  0.40    0.004965           0      7008           set_robust_list
+  0.08    0.001022          16        63           mmap
+  0.04    0.000528          88         6           clone3
+  0.04    0.000515          42        12         5 execve
+  0.03    0.000328          15        21           mprotect
+  0.03    0.000320          17        18           openat
+  0.02    0.000278          21        13           munmap
+  0.01    0.000168           8        20           close
+  0.01    0.000150          10        14           pread64
+  0.01    0.000146           7        20           rt_sigaction
+  0.01    0.000140           9        15           fstat
+  0.01    0.000109           8        13           prlimit64
+  0.01    0.000108           4        26           rt_sigprocmask
+  0.01    0.000097           7        13         1 ioctl
+  0.01    0.000072          10         7           rseq
+  0.01    0.000065           9         7           read
+  0.01    0.000065          65         1           vfork
+  0.01    0.000065           9         7           arch_prctl
+== strace posix_spawn_true_heap256m liella
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 61.93    0.184393         513       359         1 wait4
+  8.62    0.025665           7      3212           mmap
+  8.45    0.025160          70       356           clone3
+  5.52    0.016434          45       362         5 execve
+  3.25    0.009681          13       714           munmap
+  2.78    0.008288           7      1069           mprotect
+  1.91    0.005674           5      1070           rt_sigprocmask
+  1.26    0.003749           5       717           openat
+  0.86    0.002555           3       719           close
+  0.85    0.002524           3       712           pread64
+  0.71    0.002118           2       713           fstat
+  0.52    0.001557           4       358           arch_prctl
+  0.52    0.001540           4       361           prlimit64
+  0.49    0.001473           4       357           rseq
+  0.49    0.001454           4       357           set_tid_address
+  0.49    0.001449           4       358           set_robust_list
+  0.44    0.001298           3       357           read
+  0.37    0.001089           3       356       356 access
+  0.29    0.000878           2       360           brk
+  0.06    0.000182           8        21           rt_sigaction
+== strace posix_spawn_true_heap256m glibc
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 63.04    0.197651         550       359         1 wait4
+  8.30    0.026031           8      3213           mmap
+  7.01    0.021979          61       356           clone3
+  6.52    0.020427          56       362         5 execve
+  3.02    0.009480          13       713           munmap
+  2.91    0.009123           8      1071           mprotect
+  1.76    0.005507           3      1426           rt_sigprocmask
+  1.27    0.003985           5       718           openat
+  0.83    0.002605           3       714           pread64
+  0.83    0.002596           3       720           close
+  0.78    0.002446           3       715           fstat
+  0.53    0.001672           4       363           prlimit64
+  0.50    0.001559           4       357           arch_prctl
+  0.47    0.001479           4       357           rseq
+  0.47    0.001461           4       357           set_tid_address
+  0.46    0.001452           4       358           set_robust_list
+  0.43    0.001361           3       357           read
+  0.41    0.001289           3       357       357 access
+  0.28    0.000873           2       363           brk
+  0.04    0.000112           8        13         1 ioctl
+== record liella fork_exit_wait (cpu-clock, user+kernel)
+    13.94%  [k] 0xffffffffa9bdfbb7
+     9.80%  [k] 0xffffffffa9c708e1
+     4.05%  [k] 0xffffffffa8da9cbf
+     3.30%  [k] 0xffffffffa8ad90bb
+     2.83%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary4fork11child_reset
+     2.20%  [k] 0xffffffffa9c70b12
+     2.08%  [k] 0xffffffffa9c611f6
+     1.78%  [k] 0xffffffffa9c611fe
+     1.73%  [k] 0xffffffffa9c711e5
+     1.23%  [k] 0xffffffffa8e2a9e5
+     1.10%  [k] 0xffffffffa9c61225
+     0.90%  [k] 0xffffffffa8dc92c7
+     0.89%  [.] __liella_libc_liella_machine_fill_avx2
+     0.72%  [k] 0xffffffffa8e2a557
+     0.69%  [k] 0xffffffffa9c611f2
+     0.68%  [k] 0xffffffffa8b58f99
+     0.67%  [k] 0xffffffffa9c611e6
+     0.54%  [k] 0xffffffffa8ed52b8
+     0.52%  [k] 0xffffffffa9c611ee
+     0.42%  [k] 0xffffffffa8da99cc
+     0.42%  [k] 0xffffffffa9c611fa
+     0.40%  [k] 0xffffffffa8e2a9fd
+     0.38%  [k] 0xffffffffa8e26105
+     0.38%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary4fork4fork
+     0.36%  [k] 0xffffffffa9c71057
+     0.36%  [k] 0xffffffffa8e5d2f7
+     0.36%  [k] 0xffffffffa8ed07c6
+     0.36%  [k] 0xffffffffa8ed5e07
+     0.35%  [k] 0xffffffffa9bd09a8
+     0.33%  [k] 0xffffffffa8addc15
+== record liella posix_spawn_true_heap256m
+    16.28%  [k] 0xffffffffa9bdfbb7
+     5.30%  [k] 0xffffffffa8ad90bb
+     4.90%  [k] 0xffffffffa9c708e1
+     4.42%  [.] __liella_libc_liella_machine_fill_avx2
+     2.56%  [.] handle_amd
+     1.25%  [.] _dl_relocate_object
+     1.11%  [k] 0xffffffffa8da9cbf
+     0.96%  [.] init_cpu_features.constprop.0
+     0.89%  [k] 0xffffffffa8ed52b8
+     0.86%  [.] do_lookup_x
+     0.77%  [.] update_active.constprop.0
+     0.74%  [.] strcmp
+     0.62%  [k] 0xffffffffa8da1150
+     0.60%  [k] 0xffffffffa9157e22
+     0.57%  [k] 0xffffffffa8e1b007
+     0.56%  [k] 0xffffffffa9c611f6
+     0.55%  [.] get_common_indices.constprop.0
+     0.53%  [k] 0xffffffffa8dc92e2
+     0.52%  [k] 0xffffffffa9c611fe
+     0.51%  [k] 0xffffffffa9c711e5
+     0.50%  [k] 0xffffffffa9c70b12
+     0.46%  [.] _dl_lookup_symbol_x
+     0.43%  [k] 0xffffffffa9be01a7
+     0.40%  [k] 0xffffffffa8e26105
+     0.37%  [k] 0xffffffffa8b12154
+== stat none liella
+3217128,instructions:u 1938841,cycles:u 12656,branch-misses:u 37206,L1-dcache-load-misses 
+== stat none glibc
+643084102,instructions:u 181788069,cycles:u 29850,branch-misses:u 353567,L1-dcache-load-misses 
+== stat regexec_backref liella
+2294419940,instructions:u 986700171,cycles:u 3544074,branch-misses:u 4997000,L1-dcache-load-misses 
+== stat regexec_backref glibc
+2825771321,instructions:u 1078209536,cycles:u 1400210,branch-misses:u 509042,L1-dcache-load-misses 
+== record liella regexec_backref (instructions:u)
+    33.82%  [.] _RNCNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB7_7MatcherNtNtB9_6policy5PosixE3runs0_0Bd_
+    14.44%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE6insertBb_
+    12.65%  [.] _RNvMsb_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE7attemptBb_
+     6.17%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE4walkBb_
+     3.80%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE8key_hashBb_
+     3.67%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary4conv13internal_move
+     3.31%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE5succsBb_
+     1.94%  [.] __liella_libc_liella_internal_memset
+     1.93%  [.] __liella_libc_liella_machine_copy_avx2
+     1.81%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary5regex7regexec
+     1.72%  [.] __liella_libc_liella_machine_fill_avx2
+     1.70%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier12first_bucket
+     1.69%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier7prepare
+     1.64%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier10add_thread
+     1.32%  [.] _RNvMsb_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE6searchBb_
+     1.17%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier5index
+     1.05%  [.] __liella_libc_liella_machine_memmove
+     0.93%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB5_6SetRef7matches
+     0.69%  [.] _RNvNtNtCshKaiKfqV03I_6liella7pattern5regex11search_with
+     0.61%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE11backref_lenBb_
+== record liella regexec_backref (cycles:u)
+    34.55%  [.] _RNCNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB7_7MatcherNtNtB9_6policy5PosixE3runs0_0Bd_
+    14.46%  [.] _RNvMsb_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE7attemptBb_
+    13.93%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE6insertBb_
+     6.21%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE4walkBb_
+     3.84%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE5succsBb_
+     3.18%  [.] _RNvMs7_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execINtB5_7MatcherNtNtB7_6policy5PosixE8key_hashBb_
+     2.95%  [.] __liella_libc_liella_machine_copy_avx2
+     2.88%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary4conv13internal_move
+     1.88%  [.] __liella_libc_liella_internal_memset
+     1.75%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier7prepare
+     1.63%  [.] _RNvMs6_NtNtNtCshKaiKfqV03I_6liella7pattern5regex4execNtB5_8Frontier12first_bucket
+     1.50%  [.] __liella_libc_liella_machine_fill_avx2
+== stat regexec_class_nomatch_1k liella
+84689293,instructions:u 26230780,cycles:u 24741,branch-misses:u 40352,L1-dcache-load-misses 
+== stat regexec_class_nomatch_1k glibc
+729676102,instructions:u 205069627,cycles:u 41150,branch-misses:u 341834,L1-dcache-load-misses 
+== record liella regexec_class_nomatch_1k (instructions:u)
+    51.64%  [.] _RNvMs8_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB5_7ProgRef11first_start
+     6.25%  [.] _RNvNtNtCshKaiKfqV03I_6liella7pattern7fnmatch6direct
+     4.61%  [.] _RNvNtNtCshKaiKfqV03I_6liella7pattern5regex11search_with
+     3.95%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary5regex7regexec
+     3.62%  [.] _RNvMs8_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB5_7ProgRef10from_bytes
+     3.29%  [.] __liella_libc_liella_machine_strlen
+     2.96%  [.] _RNvMs1_NtNtCshKaiKfqV03I_6liella7pattern4globINtB5_4WalkINtB5_12KernelAccessINtNtCs1UG9vzEyc1u_15liella_boundary3sys8CSysImplKb0_EEE4listB1h_
+     2.96%  [.] __liella_libc_liella_machine_copy_avx2
+     2.30%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary4conv13internal_move
+     1.97%  [.] _RNvMNtCs1UG9vzEyc1u_15liella_boundary5regexNtB2_13ThreadScratch5table
+     1.32%  [.] _RNvMs0_NtNtCshKaiKfqV03I_6liella7pattern4globNtB5_7Entries3add
+     1.32%  [.] _RNvMs1_NtNtCshKaiKfqV03I_6liella7pattern7fnmatchNtB5_7Pattern7matches
+     0.99%  [.] _RINvNtNtNtCshKaiKfqV03I_6liella7pattern5regex4text6listedNtB2_7CharSetEB8_
+     0.99%  [.] _RNvMNtNtNtCshKaiKfqV03I_6liella7pattern5regex5parseNtB2_6Parser3set
+     0.99%  [k] 0xffffffffa9c611ea
+     0.66%  [.] _RNvMs_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB4_5Built5build
+     0.66%  [.] __liella_libc_regexec
+     0.66%  [k] 0xffffffffa9c611e6
+     0.66%  [k] 0xffffffffa9c611ee
+     0.66%  [k] 0xffffffffa9c611f2
+== record liella regexec_class_nomatch_1k (cycles:u)
+    53.37%  [.] _RNvMs8_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB5_7ProgRef11first_start
+     4.91%  [.] _RNvMs8_NtNtNtCshKaiKfqV03I_6liella7pattern5regex7programNtB5_7ProgRef10from_bytes
+     3.07%  [.] _RNvNtNtCshKaiKfqV03I_6liella7pattern5regex11search_with
+     2.76%  [.] __liella_libc_liella_machine_strlen
+     2.45%  [.] _RNvNtCs1UG9vzEyc1u_15liella_boundary5regex7regexec
+     2.15%  [.] _RNvNtNtCshKaiKfqV03I_6liella7pattern7fnmatch6direct
+     2.15%  [.] __liella_libc_liella_machine_copy_avx2
+     1.84%  [k] 0xffffffffa9c611f2
+     1.84%  [k] 0xffffffffa9e00ba0
+     1.53%  [.] _RNvMNtCs1UG9vzEyc1u_15liella_boundary5regexNtB2_13ThreadScratch5table
+     1.53%  [.] _RNvMs1_NtNtCshKaiKfqV03I_6liella7pattern4globINtB5_4WalkINtB5_12KernelAccessINtNtCs1UG9vzEyc1u_15liella_boundary3sys8CSysImplKb0_EEE4listB1h_
+     1.23%  [k] 0xffffffffa9c611e6
+== maps (VMA count at row none, static Liella vs dynamic glibc)
+11
+23
+done
