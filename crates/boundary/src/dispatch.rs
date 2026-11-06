@@ -170,6 +170,16 @@ use crate::ffi::liella_machine_chr_limit as FOLD_CHR;
 /// The folded sizes: `1..=FOLD_MAX`, the classes the entries keep inline (D-4.22).
 pub(crate) const FOLD_MAX: usize = 64;
 
+// The copy entry's 129-256 gate (machine/fold.S, NULLFOLD-COPY-MID, D-4.55, owner ruling #3304):
+// `MOVE_FOLD_MAX` with folding on, else 0. Its folded calls load `[s, s + 32)` (or 16 bytes
+// without AVX2) before any store and store `d` first at `d + 0`, and touch at most
+// `[x, x + MOVE_FOLD_MAX)` of either region, page zero for a NULL, so the module proof obligation
+// covers them.
+use crate::ffi::liella_machine_move_long as FOLD_MOVE;
+
+/// The largest folded copy size: the copy entry's 129-256 class has no NULL test with folding on.
+pub(crate) const MOVE_FOLD_MAX: usize = 256;
+
 /// Whether NULL folding is on (the explicit S6 checks are off for the kernel sizes).
 #[inline(always)]
 pub(crate) fn null_folded() -> bool {
@@ -184,9 +194,14 @@ static FOLD_RESOLVED: AtomicBool = AtomicBool::new(false);
 /// Also marks the decision as taken, so a forced setting is never overridden by [`resolve_fold`].
 pub(crate) fn select_null_fold(fold: bool) {
     if !fold {
+        // The 129-256 copy word drops before anything else, as the compare words do.
+        FOLD_MOVE.store(0, Relaxed);
         store_cmp_gates(false, false);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
+    if fold {
+        FOLD_MOVE.store(MOVE_FOLD_MAX, Relaxed);
+    }
     // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
     // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,
     // D-4.22 PORTABLE-SCAN). The gate stays 0 there, whatever the copy and fill entries do.
@@ -204,6 +219,16 @@ pub(crate) fn select_null_fold(fold: bool) {
 #[inline(always)]
 pub(crate) fn resolve_fold(n: usize) {
     if n <= FOLD_MAX && !FOLD_RESOLVED.load(Relaxed) {
+        resolve_fold_slow();
+    }
+}
+
+/// [`resolve_fold`] for the copy entry, whose folded sizes go up to [`MOVE_FOLD_MAX`] (D-4.55): a
+/// program whose first copies are 129-256 bytes takes the decision there, not only at its first
+/// copy of 64 bytes or fewer. Same cost as [`resolve_fold`] (one compare, then one load).
+#[inline(always)]
+pub(crate) fn resolve_fold_move(n: usize) {
+    if n <= MOVE_FOLD_MAX && !FOLD_RESOLVED.load(Relaxed) {
         resolve_fold_slow();
     }
 }
@@ -236,6 +261,7 @@ fn resolve_fold_slow() {
 /// Test-only: forget the folding decision (folding off, undecided), as at process start.
 #[cfg(feature = "selftest")]
 pub(crate) fn unresolve_null_fold() {
+    FOLD_MOVE.store(0, Relaxed);
     store_cmp_gates(false, false);
     FOLD.store(0, Relaxed);
     FOLD_CHR.store(0, Relaxed);

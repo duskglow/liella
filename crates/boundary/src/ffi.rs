@@ -378,6 +378,12 @@ unsafe extern "C" {
     /// AVX2 long class (which re-tests `n <= 128` itself). Written only by `crate::dispatch::select`
     /// (proof obligation: never nonzero while the AVX2 flag is false).
     pub(crate) safe static liella_machine_cmp_long: core::sync::atomic::AtomicUsize;
+    /// The copy entry's 129-256 class word (machine/fold.S, NULLFOLD-COPY-MID, D-4.55):
+    /// `dispatch::MOVE_FOLD_MAX` (256) while NULL folding is on, else 0; sizes above 128 with
+    /// `n <= word` take the 129-256 classes with no NULL test. Written only by
+    /// `crate::dispatch::select_null_fold` (proof obligation: nonzero only while the folding
+    /// guard holds, i.e. no access in `[0, 64 KiB)` can succeed).
+    pub(crate) safe static liella_machine_move_long: core::sync::atomic::AtomicUsize;
     pub(crate) safe fn liella_machine_memmove(d: *mut u8, s: *const u8, n: usize) -> *mut u8;
     /// The direct `mempcpy` entry (machine/fold.S, WL-HOT-SEQ2; `mempcpy` and `__mempcpy` in the
     /// products): the copy of `liella_machine_memmove`, returning `d + n`. Proof obligation
