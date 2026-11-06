@@ -741,3 +741,30 @@ fn ascii_case_run_compare_sees_every_entry() {
         }
     }
 }
+
+#[test]
+fn valid_codeset_accepts_exactly_what_parse_accepts() {
+    // Clauses: s7_1_c_0, s5_3_c_0 (Appendix D.1, ruling #3348, COLDSTART-SETLOCALE-FIRST): candidate
+    // selection asks CtypeFile::valid_codeset, which checks the file as CtypeFile::parse does
+    // (only the ASCII case flag is not derived), so a corrupt LC_CTYPE is still rejected when the
+    // locale is selected.
+    for name in ["en_US.UTF-8", "de_DE.ISO-8859-1", "tr_TR.UTF-8"] {
+        let Some(dir) = locale(name) else { return skip("no localedef") };
+        let data = leak(&dir.join(name).join("LC_CTYPE")).unwrap();
+        let f = CtypeFile::parse(Category::parse(data).unwrap()).unwrap();
+        assert_eq!(CtypeFile::valid_codeset(Category::parse(data).unwrap()), Some(f.codeset()), "{name}: codeset of a valid file");
+        // The width table (item 12): its first header word (the level-1 shift) out of range.
+        let word = |d: &[u8], at: usize| usize::try_from(u32::from_le_bytes(d[at..at + 4].try_into().unwrap())).unwrap();
+        let width_at = word(data, 8 + 4 * 12);
+        // The class names (item 10): the first standard name changed.
+        let names_at = word(data, 8 + 4 * 10);
+        for (what, at, byte) in [("magic", 0, 0u8), ("width table shift", width_at, 0xff), ("class name", names_at, b'X')] {
+            let mut bad = data.to_vec();
+            bad[at] = byte;
+            let bad: &'static [u8] = Box::leak(bad.into_boxed_slice());
+            let parsed = Category::parse(bad).and_then(CtypeFile::parse);
+            assert!(parsed.is_none(), "{name}: parse rejects a corrupt {what}");
+            assert_eq!(Category::parse(bad).and_then(CtypeFile::valid_codeset), None, "{name}: valid_codeset rejects a corrupt {what}");
+        }
+    }
+}

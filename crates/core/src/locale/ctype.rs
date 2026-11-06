@@ -87,26 +87,29 @@ fn names(item: &'static [u8]) -> impl Iterator<Item = &'static [u8]> {
 
 impl CtypeFile {
     /// Check the file: the magic, the items this module reads, and the tables' headers.
+    #[inline]
     pub fn parse(cat: Category) -> Option<CtypeFile> {
-        let mut f = CtypeFile::check(cat)?;
-        f.ascii_case = f.ascii_case_runs() || f.ascii_case_each();
-        Some(f)
+        CtypeFile::check(cat, true)
     }
 
     /// The codeset of `cat` when it is a valid `LC_CTYPE` ([`CtypeFile::parse`] accepts it),
     /// without deriving the ASCII case flag: candidate selection asks only this, and the
     /// selected file is parsed once more when the view is built (COLDSTART-SETLOCALE-FIRST).
+    #[inline]
     pub fn valid_codeset(cat: Category) -> Option<&'static [u8]> {
-        CtypeFile::check(cat).map(|f| f.codeset())
+        CtypeFile::check(cat, false).map(|f| f.codeset())
     }
 
     /// The checks of [`CtypeFile::parse`]: the magic, the items this module reads, and the
-    /// tables' headers. `ascii_case` of the result is not derived yet (`false`).
-    fn check(cat: Category) -> Option<CtypeFile> {
+    /// tables' headers; with `derive_case`, also the ASCII case flag (else `false`). One body
+    /// for both callers (a second copy measured one more text page fault on the first
+    /// `setlocale`).
+    #[inline(never)]
+    fn check(cat: Category, derive_case: bool) -> Option<CtypeFile> {
         if cat.magic() != MAGIC || cat.len() <= MAP_OFFSET {
             return None;
         }
-        let f = CtypeFile { cat, ascii_case: false };
+        let mut f = CtypeFile { cat, ascii_case: false };
         let byte_tables = [(CLASS, 768), (TOUPPER, 1536), (TOLOWER, 1536), (CLASS32, 1024), (TOUPPER32, 1024), (TOLOWER32, 1024)];
         if byte_tables.iter().any(|&(i, len)| cat.item(i).len() < len) {
             return None;
@@ -128,6 +131,9 @@ impl CtypeFile {
             && Table3::parse(cat.item(WIDTH)).is_some();
         if !tables_ok {
             return None;
+        }
+        if derive_case {
+            f.ascii_case = f.ascii_case_runs() || f.ascii_case_each();
         }
         Some(f)
     }
