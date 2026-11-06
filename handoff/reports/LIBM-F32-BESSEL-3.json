@@ -1,0 +1,11 @@
+{"task": "LIBM-F32-BESSEL-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (checkpoint): Bessel oracle estimator built; 4 exhaustive sweeps green (mp tier 0 modes; near-zero refusals 3.4e-6..6.8e-6, in D-10.49); gate, plants, counts started detached on final head",
+ "branch": "task/libm-f32-bessel-3", "head": "8d0b83c7",
+ "gate": {"affected": "running (libm-f32-bessel-3-gate-2)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["sweep driver moved from fast32/erf.rs into fast32/tests.rs with the estimator as a parameter (erf uses it too)", "xtask bench --compare takes bench names only (cbench_libm), not rows: first count job rc 1"],
+ "refused": [],
+ "jobs": ["libm-f32-bessel-3-size-2", "libm-f32-bessel-3-exh-j0f", "libm-f32-bessel-3-exh-j1f", "libm-f32-bessel-3-exh-y0f", "libm-f32-bessel-3-exh-y1f", "libm-f32-bessel-3-gate-2", "libm-f32-bessel-3-plants", "libm-f32-bessel-3-counts-before-2", "libm-f32-bessel-3-counts-after"],
+ "improvement": "the story brief should give the bench command form (--only <bench name>) and a before-tree recipe; one count job was lost to the row-name mistake",
+ "next_step": "read gate-2, plants, counts jobs; record before/after/glibc counts for j0f/j1f/y0f/y1f; hand back COMPLETE",
+ "report_file": "handoff/libm-f32-bessel.md"}

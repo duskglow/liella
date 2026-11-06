@@ -49,6 +49,7 @@ mod abi;
 mod affected;
 mod align;
 mod bench;
+mod benchstage;
 mod forkalloc;
 mod fs_order;
 mod benchrows;
@@ -94,7 +95,7 @@ use std::process::{Command, ExitCode};
 /// tree (TOOLS-10).
 fn root() -> PathBuf {
     let here = std::env::current_dir().ok();
-    let found = here.as_deref().and_then(|d| d.ancestors().find(|a| a.join("Cargo.toml").is_file() && a.join("xtask/Cargo.toml").is_file()));
+    let found = here.as_deref().and_then(|d| d.ancestors().find(|a| (a.join("Cargo.toml").is_file() && a.join("xtask/Cargo.toml").is_file()) || a.join(benchstage::MANIFEST).is_file()));
     found.map(Path::to_path_buf).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(Path::to_path_buf).unwrap_or_default())
 }
 

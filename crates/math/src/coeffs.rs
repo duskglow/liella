@@ -20,7 +20,15 @@ pub(crate) mod fast32_erfcx2;
 pub(crate) mod fast32_erfcx3;
 pub(crate) mod fast32_erfcx4;
 pub(crate) mod fast32_erfcx5;
+pub(crate) mod fast32_j0;
+pub(crate) mod fast32_j0_small;
+pub(crate) mod fast32_j1;
+pub(crate) mod fast32_j1_small;
 pub(crate) mod fast32_sin;
+pub(crate) mod fast32_y0;
+pub(crate) mod fast32_y0_reg;
+pub(crate) mod fast32_y1;
+pub(crate) mod fast32_y1_reg;
 
 // The constant tables (D-10.3): one `@generated` file per family, written by `cargo xtask
 // tables` from `crates/mathtools/src/tables.rs` (never edited by hand; `cargo xtask static`

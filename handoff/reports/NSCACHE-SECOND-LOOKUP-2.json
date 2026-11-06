@@ -1,0 +1,13 @@
+{"task": "NSCACHE-SECOND-LOOKUP-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: hot-text regen for release too; first lookup -18%/-20% time, cached 2nd 230.7->200.4 us (IvB) / 91.9->78.3 us (N100); break-even 8.3->7.5 / 10.6->9.1 lookups; target (2nd cached <= uncached) not reached: security-syscall floor",
+ "branch": "task/nscache-second-lookup-2", "head": "2a40c53a",
+ "gate": {"affected": "FULL: 10873 passed / 0 failed, conformance 117 passed", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cached 1st lookup 1-8 us slower than uncached 1st on N100 with the same system calls; not investigated",
+                   "break-even by time (7.5-9 lookups) is about twice the instruction estimate (3.7): attach kernel work costs more time per instruction"],
+ "refused": [],
+ "jobs": ["nscache-second-lookup-2-gate", "nscache-second-lookup-2-plants", "nscache-second-lookup-2-bounds", "nico:nscache-second-lookup-2-nico", "nozomi:nscache-second-lookup-2-nozomi"],
+ "improvement": "the hot-text grouping test named functions that only one profile keeps as sections; checks on products should be written against both profiles from the start",
+ "next_step": "none required; if the owner allows ruling #3233 (boot_id on tmpfs), re-time with validation/probes/nscache/timing.sh",
+ "report_file": "handoff/NSCACHE-SECOND-LOOKUP.md"}
