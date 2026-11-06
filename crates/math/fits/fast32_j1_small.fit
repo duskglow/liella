@@ -1,0 +1,9 @@
+# LIBM-F32-BESSEL (D-10.3): J1(x)/x on [-2, 2] (piece 0 of J1 = x·q(x)); even, relative.
+
+name = fast32_j1_small
+target = j1_over_x
+interval = -2, 2
+powers = even 0..16
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_j1_small.rs

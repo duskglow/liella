@@ -1,0 +1,9 @@
+# LIBM-F32-BESSEL (D-10.3): Y1(x) + 2/(pi x) - (2/pi) ln(x) J1(x) on [2^-20, 2] (piece 0 of Y1); odd, absolute.
+
+name = fast32_y1_reg
+target = y1_reg
+interval = 1/1048576, 2
+powers = odd 1..17
+error = absolute
+format = f64
+output = crates/math/src/coeffs/fast32_y1_reg.rs
