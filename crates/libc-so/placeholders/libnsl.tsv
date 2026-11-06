@@ -1,0 +1,135 @@
+# The failure table of libnsl.so.1 (D-29.6, owner rulings R13 / SCOPE-REVIEW-LEGACY; spec §29.2): one row per
+# export of spec/abi/versions.tsv (GLIBC_PRIVATE rows excepted, R14-12). `cargo xtask so` generates each body from its
+# row (xtask/src/placeholders.rs) and crates/core/tests/s29_legacy_clauses.rs s29_2_c_0 checks every row against the
+# built bodies; edit this file, never the generated C. Kinds:
+#   int N      return N, errno untouched (YPERR_* for YP calls, NIS_UNAVAIL 41 for nis_error calls, FALSE for xdr_*)
+#   null       return NULL with errno EOPNOTSUPP
+#   result N   return a new NIS+ result object: status N, no objects, no cookie (freed by nis_freeresult)
+#   void       no effect
+#   free       free the pointer given (nis_freeresult: every result comes from a `result` stub)
+#   text T     return the constant text T
+#   textbuf T  copy T into the caller's buffer (truncated, NUL-terminated) and return it; NULL buffer or size 0: NULL
+#   perror T   print `<label>: T` (or T alone without a label) and a newline to stderr
+# Values from black-box probes of the reference with no NIS domain, ypbind or NIS+ cold-start file (D-29.6).
+symbol	kind	value
+__free_fdresult	void	-
+__nis_default_access	int	0
+__nis_default_group	null	-
+__nis_default_owner	null	-
+__nis_default_ttl	int	0
+__nis_finddirectory	null	-
+__nis_hash	int	0
+__nisbind_connect	int	41
+__nisbind_create	int	41
+__nisbind_destroy	void	-
+__nisbind_next	int	41
+__yp_check	int	0
+nis_add	result	41
+nis_add_entry	result	41
+nis_addmember	int	41
+nis_checkpoint	result	41
+nis_clone_directory	null	-
+nis_clone_object	null	-
+nis_clone_result	null	-
+nis_creategroup	int	41
+nis_destroy_object	void	-
+nis_destroygroup	int	41
+nis_dir_cmp	int	3
+nis_domain_of	null	-
+nis_domain_of_r	null	-
+nis_first_entry	result	41
+nis_free_directory	void	-
+nis_free_object	void	-
+nis_free_request	void	-
+nis_freenames	void	-
+nis_freeresult	free	-
+nis_freeservlist	void	-
+nis_freetags	void	-
+nis_getnames	null	-
+nis_getservlist	null	-
+nis_ismember	int	0
+nis_leaf_of	null	-
+nis_leaf_of_r	null	-
+nis_lerror	void	-
+nis_list	result	41
+nis_local_directory	null	-
+nis_local_group	null	-
+nis_local_host	null	-
+nis_local_principal	null	-
+nis_lookup	result	41
+nis_mkdir	int	41
+nis_modify	result	41
+nis_modify_entry	result	41
+nis_name_of	null	-
+nis_name_of_r	null	-
+nis_next_entry	result	41
+nis_perror	perror	NIS and NIS+ are not supported
+nis_ping	void	-
+nis_print_directory	void	-
+nis_print_entry	void	-
+nis_print_group	void	-
+nis_print_group_entry	void	-
+nis_print_link	void	-
+nis_print_object	void	-
+nis_print_result	void	-
+nis_print_rights	void	-
+nis_print_table	void	-
+nis_read_obj	null	-
+nis_remove	result	41
+nis_remove_entry	result	41
+nis_removemember	int	41
+nis_rmdir	int	41
+nis_servstate	int	41
+nis_sperrno	text	NIS and NIS+ are not supported
+nis_sperror	text	NIS and NIS+ are not supported
+nis_sperror_r	textbuf	NIS and NIS+ are not supported
+nis_stats	int	41
+nis_verifygroup	int	41
+nis_write_obj	int	0
+readColdStartFile	null	-
+writeColdStartFile	int	0
+xdr_cback_data	int	0
+xdr_domainname	int	0
+xdr_keydat	int	0
+xdr_mapname	int	0
+xdr_obj_p	int	0
+xdr_peername	int	0
+xdr_valdat	int	0
+xdr_yp_buf	int	0
+xdr_ypall	int	0
+xdr_ypbind_binding	int	0
+xdr_ypbind_resp	int	0
+xdr_ypbind_resptype	int	0
+xdr_ypbind_setdom	int	0
+xdr_ypdelete_args	int	0
+xdr_ypmap_parms	int	0
+xdr_ypmaplist	int	0
+xdr_yppush_status	int	0
+xdr_yppushresp_xfr	int	0
+xdr_ypreq_key	int	0
+xdr_ypreq_nokey	int	0
+xdr_ypreq_xfr	int	0
+xdr_ypresp_all	int	0
+xdr_ypresp_key_val	int	0
+xdr_ypresp_maplist	int	0
+xdr_ypresp_master	int	0
+xdr_ypresp_order	int	0
+xdr_ypresp_val	int	0
+xdr_ypresp_xfr	int	0
+xdr_ypstat	int	0
+xdr_ypupdate_args	int	0
+xdr_ypxfrstat	int	0
+yp_all	int	3
+yp_bind	int	10
+yp_first	int	2
+yp_get_default_domain	int	12
+yp_maplist	int	6
+yp_master	int	6
+yp_match	int	6
+yp_next	int	6
+yp_order	int	6
+yp_unbind	void	-
+yp_update	int	6
+ypbinderr_string	text	NIS and NIS+ are not supported
+yperr_string	text	NIS and NIS+ are not supported
+ypprot_err	int	6
