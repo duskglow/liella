@@ -22,7 +22,8 @@ in memory. No harness opens a system file, runs a command or uses the network.
 | elf | the dynamic loader's ELF reader (`liella_ld::elf`, D-27.7, D-27.8): headers, notes, the dynamic section, both hash tables, the symbol version tables, RELA/RELR |
 
 The `elf` seeds (`fuzz/seeds/elf`) are small stripped objects linked with `-nostdlib`, so no C library start files are in
-them: a versioned library `dep.so`; three libraries that define versions (one hidden), need `dep.so`'s versions and carry
+them (the shared objects' files have no `.so` suffix, which the repository ignores): a versioned library `dep`; three libraries
+that define versions (one hidden), need `dep`'s versions and carry
 TLS, PLT and data relocations, linked with both hash tables and RELR, with the SysV hash only, and with the GNU hash only and
 `-z now`; a library without notes; and a PIE with `PT_INTERP`.
 

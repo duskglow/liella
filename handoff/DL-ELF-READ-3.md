@@ -17,7 +17,9 @@ Supersedes `handoff/DL-ELF-READ-2.md` (kept for its design notes: arch seam chec
    each walk capped at 4096 items. `fuzz/Cargo.toml` (`[[bin]] elf`, `liella-ld` dep), `xtask/src/fuzz.rs`
    (`elf`: max_len 64 KiB, timeout 10 s, 2048 MB, chunk 30), docs/fuzzing.md row + seed description.
    Seeds `fuzz/seeds/elf/` (6 stripped `-nostdlib` objects; sources and build script were scratch only:
-   versioned lib + needer with both/SysV/GNU hash, RELR, TLS, PLT, a no-notes lib, a PIE with PT_INTERP).
+   versioned lib + needer with both/SysV/GNU hash, RELR, TLS, PLT, a no-notes lib, a PIE with PT_INTERP). The
+   files have no `.so` suffix: `.gitignore` has `*.so`, which first left five of the six out of the commit
+   (the first gate/plants were stopped and rerun on the fixed head; the first fuzz run had all six in the role).
    `cargo xtask fuzz-check`: 27 targets type-check (job dl-elf-read-3-t1).
 3. Fuzz run: `LIELLA_FUZZ_CORPUS=/dev/shm/claude/DL-ELF-READ-3/fuzz-1 cargo xtask fuzz elf --time 5` (job
    keke:dl-elf-read-3-fuzz, rc 0): 18,517,651 executions, cov 478, ft 1456, 581 corpus inputs, **zero crashes**
@@ -26,8 +28,9 @@ Supersedes `handoff/DL-ELF-READ-2.md` (kept for its design notes: arch seam chec
    the fuzz target.
 
 ## Jobs (keke)
-dl-elf-read-3-t1 (elf_tables 17 passed + fuzz-check), dl-elf-read-3-fuzz (5 min), dl-elf-read-3-gate
-(clippy, static, affected on the final head), dl-elf-read-3-plants (31 plants, `handoff/DL-ELF-READ-3-plants.txt`).
+dl-elf-read-3-t1 (elf_tables 17 passed + fuzz-check), dl-elf-read-3-lint (full clippy -D warnings + static, rc 0),
+final head: dl-elf-read-3-fuzz-2 (5 min), dl-elf-read-3-gate-2 (escalated to FULL by the xtask/fuzz manifest
+change), dl-elf-read-3-plants-2 (31 plants, `handoff/DL-ELF-READ-3-plants.txt`).
 Results: `handoff/reports/DL-ELF-READ-3.json` and the hand-back.
 
 ## Decisions in force
