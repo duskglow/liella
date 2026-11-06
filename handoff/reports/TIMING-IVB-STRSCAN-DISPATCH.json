@@ -1,0 +1,13 @@
+{"task": "TIMING-IVB-STRSCAN-DISPATCH", "model": "opus", "tokens": null,
+ "result": "SSE2-class strchr/strchrnul reach their head with one taken branch and one mask load (32-aligned); instructions vs glibc 1.036-1.069 -> 1.000 (misses 0.714/0.698), AVX2 rows unchanged; strncmp loses a taken branch, counts unchanged; Ivy Bridge timing NOT done (staging failed)",
+ "branch": "task/timing-ivb-strscan-dispatch", "head": null,
+ "gate": {"affected": "mei timing-ivb-strscan-dispatch-gate rc 0 (clippy, static, affected --base origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Ivy Bridge timing not measured: stage tar lacked the root Cargo.toml (xtask root fell back to the build path), then bench --no-build refused 'libc.a is older than its' sources after tar extraction; a timing story should stage per handoff/timing-sweep-1105.md exactly",
+                   "strncmp_eq16 remaining gap is load-use latency of the deciding-byte re-read; strncmp_diff8 SSE2 instructions 1.436 is the larger strncmp gap"],
+ "refused": [],
+ "jobs": ["timing-ivb-strscan-dispatch-gate", "timing-ivb-strscan-dispatch-plants2", "timing-ivb-strscan-dispatch-before2", "timing-ivb-strscan-dispatch-after"],
+ "improvement": "bench --compare --counters runs full timing rounds (20+ min on a loaded host); stories needing counts should use --counters-only --rows (1 min); and timing staging should be a tool, not a recipe (two failed attempts here)",
+ "next_step": "time the 11 rows on the Ivy Bridge host with a correctly staged tree (target time ratio <= 1.05); N100 no-regression timing",
+ "report_file": "handoff/TIMING-IVB-STRSCAN-DISPATCH.md"}
