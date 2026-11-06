@@ -1,7 +1,7 @@
 # key-nomem
 
 **Spec:** §22.6 (`pthread_setspecific`, `pthread_getspecific`).
-**Clauses:** `s22_6_f_0`. Decision D-NEW (plan/07-decisions/s22-threads.md).
+**Clauses:** `s22_6_f_0`. Decision D-22.15 (plan/07-decisions/s22-threads.md).
 
 **Question:** with the address space exhausted, which keys does `pthread_setspecific` set on a
 thread that has never stored a key value, and which fail with `ENOMEM`? What does

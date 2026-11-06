@@ -286,7 +286,7 @@ fn s22_6_g_0() {
 #[test]
 fn s22_6_f_0() {
     // Under an exhausted address space, keys inside and outside the reference's in-thread range,
-    // on the initial thread and on a new thread (D-NEW).
+    // on the initial thread and on a new thread (D-22.15).
     conformance(&["s22_key_nomem"]);
 }
 /// §22.7 Contract: A counting semaphore.
