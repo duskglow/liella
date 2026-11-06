@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-EXPM1-HYPER-CBRT-TIER-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: merged origin/next (hot.rs split: wrappers moved to hot/exp_log.rs and hot/hyperbolic.rs; tsv rows merged by type, math-gen byte-identical; both sides' FMA tests kept; KERNELS.md regenerated); lint, gate, plants 10/10 and counts green; target 1.05x reached for cbrt only",
+ "branch": "task/libm-f64-expm1-hyper-cbrt-tier-4", "head": null,
+ "gate": {"affected": "direct tier: 14 suites ok, 0 failed; conformance 17 passed, 0 failed; rc 0", "peak": "12G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["the gate selected the DIRECT tier for the s10_math.tsv change (the math mapping of ruling #3188 is on next), not FULL as the brief expected", "crates/math/KERNELS.md (new on next, generated) had to be regenerated after the merge: static tables-fresh failed on the merge commit (lint job -lint, superseded by -lint-2)", "counts on Haswell-EP: log1p 210.5 instructions vs run 2's 204.5 on Zen 1; the other rows within 0.3; product code unchanged", "gate printed 2 SKIPPED lines (a tool or capability absent on the host)"],
+ "refused": [],
+ "jobs": ["libm-f64-expm1-hyper-cbrt-tier-4-lint-2", "libm-f64-expm1-hyper-cbrt-tier-4-gate", "libm-f64-expm1-hyper-cbrt-tier-4-plants", "libm-f64-expm1-hyper-cbrt-tier-4-counts"],
+ "improvement": "merge_next could run `cargo xtask kernel-index` and `math-gen` itself after resolving (both are generated, deterministic and take seconds), so a merge-only story does not spend a lint cycle discovering a stale generated index.",
+ "next_step": "profile one call per row (wl_trace) for expm1/log1p/sinh/cosh/tanh, then the saturation section 23 candidates (one table lookup in exp_pm; near instead of settle; log1p's division)",
+ "report_file": "handoff/libm-f64-expm1-hyper-cbrt-tier.md"}
