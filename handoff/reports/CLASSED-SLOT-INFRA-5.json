@@ -1,17 +1,38 @@
-{"task": "CLASSED-SLOT-INFRA-5", "model": "opus", "tokens": null,
+{
+ "task": "CLASSED-SLOT-INFRA-5",
+ "model": "opus",
+ "tokens": null,
  "result": "INCOMPLETE: no-swap kernel gap settled (+5k was the bench's own 4 KiB .bss buffer, fixed: now -6k vs merge-base, user +8); plant WARN fixed and CAUGHT; N100 timing: the AVX2-class swap costs +22-26 us per start (+14% exec_true_static) with memset rows unchanged: RULING NEEDED",
- "branch": "task/classed-slot-infra-5", "head": null,
- "gate": {"affected": "kanon classed-slot-infra-5-gate (direct tier, final tree): running at write time", "peak": null},
+ "branch": "task/classed-slot-infra-5",
+ "head": "c78c65e1",
+ "gate": {
+  "affected": "kanon classed-slot-infra-5-gate rc 0 (direct tier, tree of 69b133a2; later commits handoff-only): 12 suites ok, 11314 passed, 0 failed, conformance 113 passed 0 failed, 148 SKIPPED lines on this host",
+  "peak": "15G"
+ },
  "accepted_first_attempt": null,
- "rulings": [{"item": "AVX2-class swap meets #3139's count (4 calls, +2 VMAs) but costs +22-26 us per process start on the N100 (+14% static true exec) and +56k kernel instructions on Broadwell, with no memset gain at 16-128 B", "recommendation": "do not enable the swap by default until the guard/mremap split is measured and cut, or an AVX2-page body repays it in real workloads"}],
+ "rulings": [
+  {
+   "item": "AVX2-class swap meets #3139's count (4 calls, +2 VMAs) but costs +22-26 us per process start on the N100 (+14% static true exec) and +56k kernel instructions on Broadwell, with no memset gain at 16-128 B",
+   "recommendation": "do not enable the swap by default until the guard/mremap split is measured and cut, or an AVX2-page body repays it in real workloads"
+  }
+ ],
  "informational": [
   "xtask affected names a failed conformance program but never prints its stderr, so a plant msg on a conformance program's message cannot match without the cmd printing the file (done in this plants file)",
   "a `bench --no-build --staged` run rewrites target/liella/bench/bench_times.tsv, a staged product, so the next --staged run in the same tree refuses it; unpack the tarball again per run",
   "perf trace -s prints nothing for the claude user on kanon (no tracefs access), so the per-syscall time split needs an in-process probe",
-  "perf stat's user count reads +59 on the SSE2 class where the exact single-step tracer reads +8"
+  "perf stat's user count reads +59 on the SSE2 class where the exact single-step tracer reads +8",
+  "the kanon gate prints 148 SKIPPED lines (shiki printed 4 for the same product code): tests that skip part of their checks on that host"
  ],
  "refused": [],
  "improvement": "the startup rows measure the bench program itself, so any static in cbench_startup.c moves start-up costs; a row-level check that the bench's .bss stays within the start-up's first touched page would have caught -4's buffer",
  "next_step": "ruling on the swap's per-start time cost; then a per-call time probe (openat/pread/close/mremap) on N100 and Broadwell and cut the largest part, or make the swap opt-in",
  "report_file": "handoff/classed-slot-infra.md",
- "jobs": ["kanon:classed-slot-infra-5-gate", "kanon:classed-slot-infra-5-plants", "kanon:classed-slot-infra-5-dev", "kanon:classed-slot-infra-5-r2", "nozomi:classed-slot-infra-5-n100-r2", "shiki:classed-slot-infra-4-r2-plants"]}
+ "jobs": [
+  "kanon:classed-slot-infra-5-gate",
+  "kanon:classed-slot-infra-5-plants",
+  "kanon:classed-slot-infra-5-dev",
+  "kanon:classed-slot-infra-5-r2",
+  "nozomi:classed-slot-infra-5-n100-r2",
+  "shiki:classed-slot-infra-4-r2-plants"
+ ]
+}
