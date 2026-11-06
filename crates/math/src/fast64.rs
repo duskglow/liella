@@ -151,7 +151,8 @@ pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
 }
 
 /// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
-/// `x != 1` (the gamma fast tier, `crate::fast_gamma`).
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel fast tier's `y0`, `y1` for
+/// `x < 2^-5`, `crate::fast_bessel`).
 #[inline(always)]
 pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
     let (y, tail) = log_kernel(x)?;

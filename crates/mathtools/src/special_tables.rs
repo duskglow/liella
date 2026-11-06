@@ -39,7 +39,7 @@ use crate::mp::{self, Big, Round};
 use crate::tables::{dd, f64_of};
 
 const P: u32 = 640;
-const U: f64 = 1.0 / 9_007_199_254_740_992.0;
+pub(crate) const U: f64 = 1.0 / 9_007_199_254_740_992.0;
 /// The bound every table is sized for (relative): `2^-71`.
 const TARGET: f64 = 4.235_164_736_271_502e-22;
 pub(crate) const MAX_DEG: usize = 30;
@@ -137,7 +137,7 @@ fn erfcx_slot(e0: i32, i: usize, k2: &Big) -> Slot {
 
 /// The relative bound of the evaluation with `m` double-double and `d + 1 − m` `f64`
 /// coefficients (module doc, items 1-3).
-fn bound(s: &Slot, m: usize, d: usize) -> f64 {
+pub(crate) fn bound(s: &Slot, m: usize, d: usize) -> f64 {
     let h = s.h;
     let mut rb = vec![0.0; d + 2];
     for k in (0..=d).rev() {
@@ -156,7 +156,7 @@ fn bound(s: &Slot, m: usize, d: usize) -> f64 {
 
 /// The cheapest `(m, d, eps)` meeting `target` on every slot (cost: about 12 operations a
 /// double-double step, 2 an `f64` step).
-fn choose(slots: &[Slot], target: f64) -> (usize, usize, f64) {
+pub(crate) fn choose(slots: &[Slot], target: f64) -> (usize, usize, f64) {
     let mut best: Option<(usize, usize, usize, f64)> = None;
     for m in 1..=8 {
         for d in m..=MAX_DEG {

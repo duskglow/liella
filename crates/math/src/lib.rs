@@ -33,6 +33,7 @@ pub mod fast64;
 pub mod invtrig;
 pub mod fast_special;
 pub mod fast_gamma;
+pub mod fast_bessel;
 #[cfg(test)]
 pub(crate) mod oracle32;
 pub mod pow;
