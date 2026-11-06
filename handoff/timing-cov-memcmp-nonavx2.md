@@ -1,49 +1,42 @@
-# TIMING-COV-MEMCMP-NONAVX2 (handoff)
+# TIMING-COV-MEMCMP-NONAVX2 (handoff, after run -2)
 
-State: branch `task/timing-cov-memcmp-nonavx2` from origin/next e119b8bc (PARITY-MEMCMP-SMALL-EQ already merged there).
-Code commits ac5ef91e (classes), ab5ff78d (diff search by block group), 092dc543 (plant escape); handoff on top.
-Role kanon:~/w/kn1. Decision row D-4.57 (plan/07-decisions/s04-byte-arrays-and-strings.md).
+State: branch `task/timing-cov-memcmp-nonavx2-2` = -1's branch (025c6c53) + merge of origin/next 18a2b58e (4f5eeeac)
++ 394fd4b0 (the SSE2 NULL fold) + this handoff. Role mei:~/w/s3. Decision row D-4.62 (s04 file; -1's classes + the fold).
 
-## Change (csys/src/machine/fold.S, non-AVX2 paths only)
-* Compare 65-128 (`.Lcmp_sse_mid`): explicit NULL tests, then the block at 0 **alone** (was 0 and 16 ANDed), a head
-  difference goes straight to `.Lcmp_first`; then blocks 16, 32, 48, n-64, n-48, n-32, n-16 ANDed into the last
-  block's register (no `movdqa`); the first difference: the three blocks at 16-63 ANDed pick the group, then that
-  group's masks in order (the last block's from the AND).
-* Compare >128 (`.Lcmp_sse_long`): probe the block at 0 alone; loop from (a+16)&-16 (in [a+1, a+16]); chunks AND
-  into the fourth block (no copy); `.Lcmp_sse_ldiff` takes that mask from the AND (it decides only when the three
-  blocks before are equal).
-* Equality (`bcmp`, `__memcmpeq`): 33-64 `.Leq_33` (word at 8, blocks 16, n-32, n-16) instead of the Rust
-  `liella_hot_equal_tail`; above 64 without AVX2 (`.Leq_huge`, cmp_mid 0) `.Leq_sse` instead of the Rust
-  `liella_hot_equal_big`: NULL tests (NULL -> the checked entry, S6 unchanged), words at 0 and 8, then 7 blocks
-  (65-128) or 64-byte chunks + a last chunk at n-64. AVX2 code paths untouched (no instruction changed on them).
-* Tests: crates/boundary/tests/small_compare.rs already sweeps 0-300 (+129-2049, NULL cases) with both builds
-  forced and folding on/off; the five sweep shards now name clauses s4_3_c_1/2/3 (were "no spec clause").
-* Percall spec handoff/timing-cov-memcmp-nonavx2/tcm.c (tc1106.c's shapes, bcmp/__memcmpeq checked as `r != 0`).
+## -1 (unchanged, see D-4.62): SSE2 head probe first in memcmp 65-128/long; SSE2 asm equality classes 33-64, 65-128, long.
 
-## Profile (in-function instructions; the bench loop adds ~10-11)
-memcmp head/diff8 65-127 after: entry ladder 5 + jns 1 + cmp_long 2 + `n > 128` 2 + NULL tests 4 + probe 6 +
-bsf 1 + re-read/order 6 = 27 (38 measured; glibc 26 total). Ladder + NULL tests (14) alone exceed glibc's whole
-call minus overhead (~15). bcmp/meq head: 5+1+2+2+4+3+2 = 19 (30 measured; glibc 26 / 22).
+## -2: NULL fold of the SSE2 65-2048 classes (ruling #3592, owner's standing NULL-folding rule)
+* fold.S: `liella_machine_cmp_sse` (2048 with folding on and no AVX2, else 0) replaces the compare's `n <= 128`
+  test at `.Lcmp_sse_mid` (the 65-128 split moves after the head probe) and gates `.Leq_sse`; no NULL test below
+  it (first access: offset 0 of a, then b; read-only). Above it `.Lcmp_sse_over` / `.Leq_sse_over`: AVX2 test (compare),
+  then `cmpq liella_machine_cmp_sse_null, %rdi; jbe checked` (0 while folded: a NULL test; else SIZE_MAX: folding off
+  sends every size > 64 to `liella_hot_compare_big` / `liella_hot_equal_big`), b NULL test, probe, long class.
+  Why two words: the only way to keep AVX2 rows and SSE2 >2048 rows at their old instruction count (the a-bound word
+  stands in for the a NULL test, the size word for the 128 test). Store order in `dispatch::store_cmp_gates`:
+  up size word first, down a-bound first (the bound is never 0 while the size word is 0, else 65-128 would reach the
+  long class). AVX2 with folding off now sends 65-128 to `.Lcmp_avx_long` (AVX2 class, explicit NULL tests).
+* Tests (small_compare.rs): new `null_faults_at_every_sse2_folded_size_and_aborts_with_folding_off` (every n 64-2049,
+  6 calls, SSE2, fold on SIGSEGV to 2048 / abort at 2049, off abort; ~25 s); the old NULL test expects SIGSEGV 65-2048
+  in both builds.
 
-## Counts (kanon, SSE2 build = GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2; glibc / base e119b8bc / new; job tcmn-percall-sse2-2)
-memcmp_diff8_96 26/45/38, diff8_127 26/45/38, diff8_64 26/36/36, head_128 26/45/38, head_1k 26/47/40, eq_128 67/63/62,
-tail_128 75/94/91, 256 107/118/110, 1k 323/334/314, 4k 1187/1198/1130; bcmp head_128 26/42/30, head_1k 26/42/30,
-eq_64 42/57/41, eq_128 67/74/64, eq_1k 323/392/312, eq_4k 1187/1448/1128, tail_64 50/57/41; meq head_128/1k 22/42/30,
-eq_64 41/57/41, eq_128 65/74/64, eq_1k 322/392/312, tail_64 41/57/41, tail_128 65/74/64, eq_32/tail_32 29/33/33,
-diff8_100 22/42/33. No row above base; 0 MISMATCH. AVX2 build: job tcmn-percall-avx2 (see report json).
-Superseded: tcmn-percall-sse2 (ac5ef91e: memcmp_tail_128 94 -> 98, fixed by ab5ff78d), tcmn-gate / tcmn-plants
-(stopped, old head).
+## Counts (mei, job timing-cov-memcmp-nonavx2-2-percall-sse2-b; glibc / base next 18a2b58e / new; -1's new on kanon)
+memcmp head_128 26/45/34 (-1: 38), head_1k 26/47/34 (40), diff8_96 & _127 26/45/34 (38), diff8_64 26/36/36,
+eq_128 67/63/60 (62), tail_128 75/94/89 (91), 256 107/118/106 (110), 1k 323/334/310 (314), 4k 1187/1198/1130 (1130);
+bcmp head 26/42/28 (30), eq_128 67/74/62 (64), eq_1k 323/392/310 (312), eq_4k 1187/1448/1128 (1128);
+meq head 22/42/28 (30), diff8_100 22/42/31 (33), eq_1k 322/392/310. No row above base or above -1. AVX2 (job
+...-percall-avx2-b): base = new on every row.
 
-## Target (1.05x) NOT reached for: memcmp diff8_64/96/127 (1.38-1.46), bcmp head (1.15), meq head (1.36),
-meq/bcmp 17-32 (1.14, the AVX2-shared class of PARITY-MEMCMP-SMALL-EQ, untouched). Reached: every eq/tail row
->= 64, memcmp_256 (1.03), 1k, 4k. Why the head rows stop: the shared entry ladder (8, fixed by the AVX2 classes'
-carry gates) and the S6 NULL tests (4). RULING NEEDED: NULL folding for the SSE2 65-2048 classes (as D-4.52 for
-AVX2; -4 per call above 64) - recommend yes if the owner accepts SIGSEGV for those sizes without AVX2.
-Bigger lever (design, not tried): a separately dispatched SSE2 entry (no AVX2 carry ladder), est. -8.
-diff8_64 (33-64 class): the word at 8 sits behind `n > 16` and `n > 32` (17-32 class shared with AVX2).
+## Target (1.05x) NOT reached: memcmp head/diff8 1.31-1.38, meq head 1.27, meq diff8 1.41, bcmp head 1.08,
+memcmp tail_128 1.19. Profile (memcmp head_128, 34 measured, ~23 in function): entry ladder 5 + jns 1 + cmp_long 2
++ cmp_sse 2 + probe 6 + bsf/re-read/order 7. glibc's whole call ~15 in function. The shared entry ladder (8,
+AVX2 carry gates) is the remaining surplus: a separately dispatched SSE2 entry (no AVX2 gates; est. -8 on every
+SSE2 row) is the next lever, not built (context budget; the brief's condition "head rows above 1.10x" holds).
 
-## Not done / next step
-Booked timing (nico or kotori: Ivy Bridge rows; nozomi: AVX2-class rows not slower) NOT run (context budget);
-a continuation books it: `cargo xtask bench --stage` on kn1, rows of this file, Liella vs glibc. The Rust
-`liella_hot_equal_tail` export is now unreferenced by the kernels (kept; removal is a follow-up).
-Jobs to read: tcmn-gate-2, tcmn-plants-2 (9 plants), tcmn-percall-sse2-2, tcmn-percall-avx2 (kanon).
+## Not done / next step (in order)
+1. BOOKED TIMING (required by the coordinator before landing; NOT run in -1 or -2): memcmp/bcmp/__memcmpeq head,
+   diff8, tail, eq rows, next vs head, Ivy Bridge (less busy of kotori/nico) and the N100 forced SSE2
+   (GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2); `cargo xtask bench --stage` on the role, unpacked whole; CBENCH_ROWS.
+2. Then the separate SSE2 entry (profile above).
+Plants: handoff/TIMING-COV-MEMCMP-NONAVX2-2-plants.txt (8: 4 CAUGHT, 4 WARN-NO-MSG: the fold-gate-off and
+a-null-dropped plants failed the correctness sweep (65-128 into the long class), not the NULL test named).
+Jobs (mei): timing-cov-memcmp-nonavx2-2-check, -gate, -plants, -percall-sse2-b, -percall-avx2-b.
