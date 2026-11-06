@@ -1,0 +1,25 @@
+{
+ "task": "DL-BOOT-RELOC",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: relocator, tests, plants file and D-27.10 written; static-PIE programs link but crash (weak _DYNAMIC read through an unrelocated GOT slot)",
+ "branch": "task/dl-boot-reloc",
+ "head": null,
+ "gate": {
+  "affected": "not run",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "start::read_only and static dl_iterate_phdr take the bias from PT_PHDR, absent in a GNU ld static PIE",
+  "libc.a could not link -static-pie: LOCAL DW.ref.rust_eh_personality in a COMDAT group; fixed in xtask so"
+ ],
+ "refused": [],
+ "improvement": "a 10-line static-PIE link probe before coding found two blockers early; a checklist item \"every pre-relocation symbol reference must be PC-relative (no weak GOT)\" would have caught the third",
+ "next_step": "make the _DYNAMIC anchor PC-relative (handoff options 1-3), rerun t1.sh, then gate, plants, static count",
+ "report_file": "handoff/DL-BOOT-RELOC.md",
+ "jobs": [
+  "mei:dl-boot-reloc-t3"
+ ]
+}
