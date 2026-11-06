@@ -1,49 +1,51 @@
 # CLASSED-SLOT-INFRA handoff (one page)
 
-**State:** branch `task/classed-slot-infra-4` (continues -3/-2/-1; origin/next `41b8737b` merged in at `c97fa7bc`, so
-the story's base is now origin/next; profile comparisons use the old merge-base `fbce527e` tree). Code head `d6838ffc`,
-plants `7a3c12b9` tree. Role shiki:~/w/sh2 (Zen 1, AVX2 class).
-**Verdict: INCOMPLETE.** The fixed start-up cost is found and removed. Still to do: the N100 start-up timing, and
-settling a possible ~+8k kernel-instruction difference on the no-swap classes (below).
+**State:** branch `task/classed-slot-infra-5` (continues -4/-3/-2/-1; base origin/next, merge-base `41b8737b`). Product
+code unchanged since `7ffdb9b3`; this run changed `bench/c/cbench_startup.c` (69b133a2) and the plants file (422be02f).
+Role kanon:~/w/kn1 (Broadwell E5-2699 v4, AVX2 class).
+**Verdict: INCOMPLETE (RULING NEEDED).** The no-swap classes are settled (no kernel gap, it was the bench's own
+.bss). On the N100 the AVX2 class's swap costs 22-26 us per Liella process start, and the memset rows show no gain.
 
-**Decisions in force:** D-4.53 (classed entries, M6; row updated: the class comes from `cpu::init_with`'s state),
-COMPAT-20 (`liella.compat.no_classed_swap=1`), rulings #3138-#3141, #3297.
+**Decisions in force:** D-4.53 (classed entries, M6), COMPAT-20 (`liella.compat.no_classed_swap=1`), rulings
+#3138-#3141 (#3139: AVX2 class about 4 system calls and +2 VMAs per process, none on SSE2), #3297.
 
-**Run -4 (this run):**
-* **-3's "every class pays +65k" was a measurement error.** cbench_startup gives its children `PATH` only, so
-  `bench --tunables` never reached the measured start: -3's COMPAT-20 and -AVX2 rows were the default class with
-  the swap. With the tunables in the child (`~/work/classed-slot-infra-4/prof3.sh`), COMPAT-20 and -AVX2 make
-  the same system calls (9 / 12) and faults as the merge-base. Fixed: the bench now passes `GLIBC_TUNABLES` to its
-  children (d6838ffc).
-* **The real fixed cost (+80 user instructions, every class)** came from an exact single-step tracer
-  (`~/work/classed-slot-infra-4/step.c`, one RIP per user instruction, mapped to symbols with nm). `classed::start`
-  called `cpu::features_cached()` a second time. With a second caller, `features()` went out of line
-  (+169 in `cpu::features`, -89 in `init_with`). Fix d6838ffc: `init_with` already returns its state byte.
-  `runtime::start` passes `cpu::avx2_in(state)`, and the class rule is `cpu::avx2_wanted`, used by `init_with`
-  (`classed::avx2_class` is removed).
-* **After the fix** (job `classed-slot-infra-4-r2-prof`, exact user instructions, merge-base -> branch):
-  SSE2 class (-AVX2) 5330 -> 5338 (+8: runtime::start +10, resolve_fold_slow +5, strlen -7); COMPAT-20
-  5622 -> 5826 (+204: `key_of` +120 and `signed_number` +54 parse the flag that the merge-base ignores, start +41);
-  default AVX2 class 2145 -> 2319 (+174, the swap's code) and 9 -> 13 system calls. Kernel, perf stat, 5 runs each:
-  default 197k -> 270k (the swap's 4 calls, within #3139); COMPAT-20 218k -> 227k and -AVX2 247k -> 255k in this
-  run, but equal in the earlier run (`prof3.sh`: 215-220k vs 213-220k, 241-247k vs 237-254k). Run-to-run spread
-  is about ±8k at load ~15, so that gap is NOT settled. Bench rows on the role (now with tunables): startup_kinstr_c
-  224.8k default / 192.4k COMPAT-20 / 209.3k -AVX2. startup_instr_c 2331 / 5870 / 5356.
-* Gate/plants: `classed-slot-infra-4-r2-dev` rc 0 (full clippy, xtask clippy, static, classed unit tests, bench build);
-  `-r2-gate` (direct tier) then `-r2-plants` (alone in the role, `/dev/shm/claude/CLASSED-SLOT-INFRA-4/plants-1`), chained
-  by `~/work/classed-slot-infra-4/chain.sh`; results in the report json.
+**Run -5 (this run):**
+* **-4's gate and plants (shiki):** `classed-slot-infra-4-r2-gate` rc 0 (11314 passed, 0 failed); `-r2-plants` rc 0,
+  8 CAUGHT, 1 WARN-NO-MSG (start-sse2-always). That plant failed for the right reason: the program's stderr says
+  "expected the avx2 page at memset". But `xtask affected` names a failed conformance program and never prints its
+  stderr. Fix 422be02f: the plant's cmd prints that file on failure. Rerun alone (kanon `classed-slot-infra-5-plants`):
+  CAUGHT with the message.
+* **The +5k kernel on no-swap classes was real, and it was the bench.** Interleaved `perf stat -r 50`, 12 rounds,
+  order flipped each round (kanon `classed-slot-infra-5-perfmix`, load 2.5): COMPAT-20 +5395 kernel instructions
+  (round sd 2479, se 716), SSE2 class (-AVX2) +4934 (sd 2397, se 692), each with exactly +1 minor fault. `perf record
+  -e minor-faults -d` (`-faults`): the extra fault is a write from `cpu::init_with` to .bss page 0x7a1000. -4's
+  `static char tunables_var[4096]` in cbench_startup.c (the measured child IS that program) sits first in .bss and
+  pushed start-up's .bss onto an untouched page. Fix 69b133a2: pass the parent's own `GLIBC_TUNABLES=` entry (no
+  buffer). After the fix (`-r2`, same method, load 23): COMPAT-20 -6398 (se 461), SSE2 class -6076 (se 817), each
+  with 1-2 fewer faults than the merge-base (layout). Exact user instructions (single-step tracer): SSE2 class
+  5345 -> 5353 (+8), COMPAT-20 5622 -> 5826 (+204, the flag's parse in key_of/signed_number). perf's user count
+  reads +59 on the SSE2 class. Not chased: the exact tracer is the reference.
+* **AVX2 class (default) on kanon:** kernel 195.5k -> 251.6k (+56k, se 0.5k), user +168, faults -1.
+* **N100 timing** (nozomi `classed-slot-infra-5-n100-r2`, booked, load <1, 3 rounds, order alternating, medians,
+  ns/op): exec_true_static 165180 -> 188892 (+14.4%), exec_true_echo 234989 -> 260970 (+11.1%), exec_hello_locale
+  355505 -> 377225 (+6.1%). spawn_bin_true is unchanged (it spawns /bin/true, which is not Liella). memset_16/16_mix/64/64_mix/128
+  are identical on both trees (1.89/17.04/2.10/17.04/3.35). Run 1 (`-n100`) agreed: startup +22.2 us. Its branch
+  memset step failed because a `--staged` bench run rewrites `target/liella/bench/bench_times.tsv`, a staged
+  product, so the next run refuses the tree. run2.sh unpacks the tarball again before every call.
 
-**Open:** (1) is the ~+8k kernel on no-swap classes real? Use many interleaved runs (perf stat -r 50, mb and branch
-alternating) on a quiet moment; suspects are the +11 KB text (page-cache/readahead of the bigger LOAD) and the
-page-aligned classed section. (2) COMPAT-20 parsing costs 174 user instructions in `key_of`/`signed_number` whenever
-the flag is set. It is the cost of honouring the flag, paid only by those who set it; `key_of`'s 120 could shrink.
+**RULING NEEDED:** the swap meets #3139's count (4 calls, +2 VMAs), but in time it is +22-26 us per start on the N100
+(+14% on a static `true` exec) and +56k kernel instructions on Broadwell, with no memset gain at 16-128 B.
+Recommendation: do not enable the swap by default until (a) the guard/mremap split of that cost is measured
+(`perf trace` printed nothing for the claude user; use a probe that times each of the 4 calls with clock_gettime)
+and cut, and/or (b) an AVX2-page body is measured faster by enough to repay it in real workloads.
 
-**Exact next step:** 1) check -r2-gate and -r2-plants (fix any red); 2) settle the kernel gap (Open 1); 3) re-time the
-N100 start-up row (stage per handoff/timing-sweep-1105.md, now `cargo xtask bench --stage` works on this branch; run
-`~/bin/timing <label> ...` directly on the N100 host, base = origin/next).
+**Exact next step:** get the ruling. If the swap stays, write the per-call time probe (openat pagemap, pread, close,
+mremap, each timed 1000x in a fresh process) on the N100 and Broadwell, and shrink the largest part. If it goes
+default-off, invert COMPAT-20's sense (a new opt-in tunable) and re-time.
 
-**Not to redo:** the syscall/VMA bound is measured; memset timing on both classes is done (redo only if fold.S changes);
-the fixed user cost is found and fixed. Scripts: shiki `~/work/classed-slot-infra-4/{step.c,prof3.sh,prof5.sh,prof6.sh,chain.sh}`;
-merge-base tree `/mnt/zram/claude/classed-slot-infra-3/mb`.
+**Not to redo:** no-swap class costs (settled above); the fixed user cost (-4); syscall/VMA bound (-3); memset
+timing on both classes. Scripts: kanon `~/work/classed-slot-infra-5/{perfmix.sh,faults.sh,bss.sh,r2.sh,step.c}`,
+nozomi `~/work/classed-slot-infra-5/run2.sh`; merge-base tree kanon `/mnt/zram/claude/classed-slot-infra-5/mb`.
+Analyzer: chisato `/home/claude/w/.scratch/CLASSED-SLOT-INFRA-5/analyze.py`.
 
-**Read:** docs/design/loadtime-entry.md 4 and 5.3-5.7; D-4.53; handoff/classed-slot-infra-plants.txt.
+**Read:** docs/design/loadtime-entry.md 5.3-5.5; D-4.53; handoff/classed-slot-infra-plants.txt.
