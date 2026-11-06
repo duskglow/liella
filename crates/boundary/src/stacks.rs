@@ -33,7 +33,7 @@
 //! **Processes.** A child of `fork` has no notification thread: nothing is inherited (the
 //! parent's records stay allocated: `_Fork`'s child may not use the heap's locks).
 
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering::{Relaxed, Release, SeqCst}};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering::{Relaxed, SeqCst}};
 
 use liella_kernel::errno::{Errno, KResult};
 use liella_legacy::pthread_compat::ATTR_WORDS;
