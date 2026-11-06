@@ -109,6 +109,12 @@ its reason, in its handoff and report:
    `Arch` implementation can run them unchanged.
 8. Any new arch-specific item that the table does not cover yet is added to the table (in this
    section and in `liella_ld::arch`), not open-coded.
+9. Code that runs before its image is relocated (a static PIE's start up to the end of pass 1,
+   `ld.so`'s bootstrap) reaches every symbol PC-relatively: declared hidden and **not weak**. A
+   weak or preemptible reference compiles to a GOT load, and the GOT is not relocated yet
+   (DL-BOOT-RELOC's static PIEs crashed on a weak `_DYNAMIC`). Linker-defined anchors
+   (`__ehdr_start`, `_DYNAMIC`) live in a C file of their own whose member `cargo xtask so`
+   checks for GOT-typed relocations (D-27.10).
 
 ## 1. Bootstrap (`boundary/src/bootstrap.rs` + `liella_ld::boot`)
 

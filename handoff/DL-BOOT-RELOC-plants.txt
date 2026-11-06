@@ -8,7 +8,7 @@ jmprel-skip | crates/ld/src/boot.rs | lit:    relative::<A>(jmprel, seg, bias)?;
 unsupported | crates/ld/src/boot.rs | lit:_ => return Err(BootError::Unsupported(r_type)), ==> _ => {} | cargo test -p liella-ld --lib boot | msg:refusals \.\.\. FAILED|panicked
 seg-low | crates/ld/src/boot.rs | lit:let off = at.checked_sub(self.vaddr) ==> let off = Some(at.saturating_sub(self.vaddr)) | cargo test -p liella-ld --lib boot | msg:refusals \.\.\. FAILED|panicked
 table-overlap | crates/ld/src/boot.rs | lit:(addr < w_end && end > writable.0) ==> (addr < w_end && end > writable.0 && false) | cargo test -p liella-ld --lib boot | msg:dynamic_and_headers \.\.\. FAILED|panicked
-table-whole | crates/ld/src/boot.rs | lit:if len % ent != 0 || ==> if false || | cargo test -p liella-ld --lib boot | msg:dynamic_and_headers \.\.\. FAILED|panicked
+table-whole | crates/ld/src/boot.rs | lit:if len.checked_rem(ent) != Some(0) || ==> if false || | cargo test -p liella-ld --lib boot | msg:dynamic_and_headers \.\.\. FAILED|panicked
 textrel | crates/ld/src/boot.rs | lit:DT_TEXTREL => return Err(BootError::BadDynamic(tag)), ==> DT_TEXTREL => {} | cargo test -p liella-ld --lib boot | msg:dynamic_and_headers \.\.\. FAILED|panicked
 one-writable | crates/ld/src/boot.rs | lit:if n_writable == 1 => ==> if n_writable >= 1 => | cargo test -p liella-ld --lib boot | msg:dynamic_and_headers \.\.\. FAILED|panicked
 no-relocate | crates/boundary/src/runtime.rs | lit:if let Some(ehdr) = bootstrap::static_pie_header() { ==> if let Some(ehdr) = bootstrap::static_pie_header().filter(|_| false) { | cargo xtask affected --only conformance:s01_static_pie_rela --with-exports --run | msg:FAIL s01_static_pie_rela

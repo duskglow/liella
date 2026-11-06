@@ -145,7 +145,7 @@ pub fn tables(dynamic: &[u64], writable: (u64, u64)) -> Result<Tables, BootError
             continue;
         }
         let end = addr.checked_add(len).ok_or(BootError::Table(tag))?;
-        if len % ent != 0 || (addr < w_end && end > writable.0) {
+        if len.checked_rem(ent) != Some(0) || (addr < w_end && end > writable.0) {
             return Err(BootError::Table(tag));
         }
     }
