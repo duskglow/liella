@@ -1,6 +1,6 @@
 {"task": "TIMING-COV-MALLOC-PAIR-CHAIN", "model": "opus", "tokens": null,
  "result": "NEGATIVE: the shift form for power-of-two classes was slower on every cbench_malloc row on Haswell-EP (+9 instr, malloc_free +1.4 to +1.7 cycles, heap_mix_real +7 to +9%); reverted; the block-placement test and plants kept; D-3.18 and register row recorded",
- "branch": "task/timing-cov-malloc-pair-chain", "head": null,
+ "branch": "task/timing-cov-malloc-pair-chain", "head": "3957b9c3",
  "gate": {"affected": "50 passed / 0 failed", "peak": "1.2G"},
  "accepted_first_attempt": null,
  "rulings": [],
