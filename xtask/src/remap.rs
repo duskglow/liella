@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 /// The files of `target/liella` that go public (libraries, archives, the start object).
-const PRODUCTS: &[&str] = &["libc.so.6", "libm.so.6", "libc.a", "libm.a", "liella-crt1.o", "liella-gcrt1.o", "libpthread.so.0", "libpthread.a", "libresolv.a"];
+const PRODUCTS: &[&str] = &["libc.so.6", "libm.so.6", "libc.a", "libm.a", "liella-crt1.o", "liella-gcrt1.o", "libresolv.a"];
 
 /// The path strings that must not appear in a product: the workspace root (as given and
 /// canonical), `$CARGO_HOME` and `$HOME`'s `.cargo` and `.rustup`. Never shorter than 4 bytes
@@ -49,7 +49,7 @@ pub fn find_paths(bytes: &[u8], needles: &[String]) -> Vec<(String, usize)> {
 pub fn check_dir(dir: &Path, needles: &[String]) -> Result<usize, String> {
     let mut bad = Vec::new();
     let mut scanned = 0;
-    for p in PRODUCTS {
+    for p in PRODUCTS.iter().chain(&crate::placeholders::LIBRARIES).chain(&crate::placeholders::ARCHIVES) {
         let path = dir.join(p);
         let Ok(bytes) = fs::read(&path) else { continue };
         scanned += 1;
