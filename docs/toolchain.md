@@ -53,7 +53,7 @@ own. Building needs only the tools above.
 | Product | Interface it offers | Bound to the exact rustc? |
 |---|---|---|
 | `libc.a`, `libc.so.6` | The C ABI (glibc's symbols and versions; the native C ABI) | No. Any rustc that builds the workspace produces a compatible library; only its bytes differ. |
-| `liella-crt1.o` | The C start-up convention | No (it is assembly). |
+| `liella-crt1.o`, `liella-rcrt1.o` | The C start-up convention | No (it is assembly). |
 | A static Rust program (`liella-native`, feature `static`) | Nothing: one compiler compiles all of its Rust code in one link | No. |
 | A dynamic Rust program compiling `liella-native` in (feature `dynamic`) | It calls only the native C ABI | No. |
 | The Rust dylib `libliella_rust.so.<abi>` and its programs | Rust's own ABI, which is not stable | **Yes**: the exact rustc (version and commit), the target, the target features, the panic strategy, and the dylib's other options. This is what the Rust ABI version records. |
@@ -117,14 +117,25 @@ cc -shared -nostdlib -Wl,--gc-sections -Wl,-z,now -Wl,-z,relro -Wl,--hash-style=
 `cargo xtask so` then checks with `readelf --dyn-syms` that every native function is
 exported as `name@@LIELLA_NATIVE_<n>` and no other `liella_` name is exported.
 
-### 3.3 liella-crt1.o and the libpthread placeholders
+### 3.3 liella-crt1.o, liella-rcrt1.o and the libpthread placeholders
 
 ```sh
 cc -c csys/src/machine/entry.S -o target/liella/liella-crt1.o
 ```
 
 The start object must be the first object of every program's link: its `.eh_frame` label
-marks the start of the program's call-frame information (D-2.7). Two placeholders let
+marks the start of the program's call-frame information (D-2.7).
+
+```sh
+cc -c -DLIELLA_STATIC_PIE csys/src/machine/entry.S -o target/liella/liella-rcrt1.o
+```
+
+`liella-rcrt1.o` is the start object of a static PIE (`-static-pie`; it takes the place
+`rcrt1.o` has in such a link with the system's C library): its `_start` relocates the
+executable (its RELATIVE and RELR relocations) before anything else runs (D-27.10). Every
+reference it makes is PC-relative; `cargo xtask so` refuses the object if it has a GOT-typed
+relocation. A static non-PIE program keeps `liella-crt1.o`, whose start has no relocation
+step. Two placeholders let
 `-lpthread` and `DT_NEEDED libpthread.so.0` resolve (libpthread is part of libc.so.6 since
 glibc 2.34): `libpthread.so.0`, an empty shared object with that soname
 (`cc -shared -nostdlib -Wl,-soname,libpthread.so.0`), and `libpthread.a`, an empty archive.
@@ -149,6 +160,13 @@ Static link (the conformance suite's line; `conformance/c/native_v1.c` is such a
 ```sh
 cc -std=c17 -O1 -static -nostdlib -fno-builtin -I include \
     target/liella/liella-crt1.o program.c target/liella/libc.a -lgcc -o program
+```
+
+Static PIE (`-z pack-relative-relocs` may be added for RELR; `conformance/c/s01_static_pie*.c`):
+
+```sh
+cc -std=c17 -O1 -static-pie -fPIE -nostdlib -fno-builtin -I include \
+    target/liella/liella-rcrt1.o program.c target/liella/libc.a -lgcc -o program
 ```
 
 Dynamic link:
