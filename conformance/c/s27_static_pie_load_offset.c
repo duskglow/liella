@@ -20,6 +20,7 @@
 #include <elf.h>
 #include <fcntl.h>
 #include <link.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -35,6 +36,11 @@
 extern "C" int __printf_chk(int flag, const char *__restrict fmt, ...);
 
 #define CHECK(clause, cond) do { if (!(cond)) return __LINE__; } while (0)
+
+/* The compiler's unwinder calls pthread_once through a weak reference, and a weak reference does
+ * not pull a member out of libc.a; a threaded C++ program links it anyway (std::call_once does
+ * in s22_once_cxx). This program has no threads, so it names pthread_once itself. */
+__attribute__((used)) static int (*const link_pthread_once)(pthread_once_t *, void (*)(void)) = pthread_once;
 
 int known_object = 7;
 __attribute__((noinline)) int known_function(int x) { return x + known_object; }
