@@ -1,0 +1,7 @@
+# XTASK-BENCH-ROWS-BASE plants (D-X.33): bench --compare --rows and bench --stage --base <ref>
+glob-star-nonempty | xtask/src/bench.rs | lit:Some((b'*', rest)) => (0..=s.len()) ==> Some((b'*', rest)) => (1..=s.len()) | cargo test -p xtask --bins -- compare_rows | msg:compare_rows_globs_and_unknown_rows.*(FAILED|panicked)
+rows-env-dropped | xtask/src/bench.rs | perl:s/(fn compare_command.*?)c\.env\("CBENCH_ROWS", list\);/$1let _ = list;/s | cargo test -p xtask --bins -- compare_rows | msg:compare_rows_reach_both_builds_identically.*(FAILED|panicked)
+qualified-other-bench | xtask/src/bench.rs | lit:Some((b, r)) if b == name => ==> Some((b, r)) if b != name => | cargo test -p xtask --bins -- compare_rows | msg:compare_rows_select_per_bench.*(FAILED|panicked)
+base-keeps-base-flag | xtask/src/bench.rs | lit:"--base" => { ==> "--base-x" => { | cargo test -p xtask --bins -- base_run | msg:base_run_forwards_the_command_without_base.*(FAILED|panicked)
+worktree-not-removed | xtask/src/benchstage.rs | lit:    fn drop(&mut self) { ==>     fn drop(&mut self) { return; | cargo test -p xtask --bins -- stage_base | msg:stage_base_.*(FAILED|panicked)
+base-builds-head | xtask/src/benchstage.rs | lit:.arg(&path).arg(&sha) ==> .arg(&path).arg("HEAD") | cargo test -p xtask --bins -- stage_base | msg:stage_base_stages_two_trees_with_their_commits_and_cleans_up.*(FAILED|panicked)

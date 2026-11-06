@@ -1,0 +1,13 @@
+{"task": "TIMING-COV-REGEX-FIRSTBYTE-IVB", "model": "opus", "tokens": null,
+ "result": "One-range first-byte maps scan by range in 16-byte SSE2 chunks; class_nomatch_1k instr 8164 -> 1701 (glibc 8655, 0.20); Ivy Bridge timing pending",
+ "branch": "task/timing-cov-regex-firstbyte-ivb", "head": "fbe4e079",
+ "gate": {"affected": "direct tier rc 0 (affected: ok)", "peak": "2.7G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "regcomp_regexec_regfree_email +35 instr/call default, +121 with -AVX2 (0.02%/0.08%, ratio stays 0.28)", "recommendation": "accept; optional follow-up: contiguity test without count_ones"},
+             {"item": "D-NEW placeholder decision row in plan/07-decisions/s14 and two code comments", "recommendation": "reserve a D-14 id and assign"}],
+ "informational": ["plants run 1: base += 16 -> 15 survived as an equivalent mutant (rescans known non-hits); replaced by -> 17, caught in plants2"],
+ "refused": [],
+ "jobs": ["mei:timing-cov-regex-firstbyte-ivb-gate", "mei:timing-cov-regex-firstbyte-ivb-plants2", "mei:timing-cov-regex-firstbyte-ivb-before", "mei:timing-cov-regex-firstbyte-ivb-before-noavx2", "mei:timing-cov-regex-firstbyte-ivb-after", "mei:timing-cov-regex-firstbyte-ivb-after-noavx2", "nico:timing-cov-regex-firstbyte-ivb-timing-ivb"],
+ "improvement": "build hosts cannot reach timing hosts, so a 124 MB stage tar is relayed through the agent machine; a host-to-host stage helper would save calls and bandwidth",
+ "next_step": "read nico:timing-cov-regex-firstbyte-ivb-timing-ivb; class_nomatch_1k time < 1.0 and no regex/fnmatch row slower -> COMPLETE and saturation row; else revert",
+ "report_file": "handoff/TIMING-COV-REGEX-FIRSTBYTE-IVB.md"}

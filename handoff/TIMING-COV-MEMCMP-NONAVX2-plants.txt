@@ -1,0 +1,10 @@
+# TIMING-COV-MEMCMP-NONAVX2 plants (cargo xtask plants; format docs/plants.md). Each anchored to its function label.
+cmp-mid-head-probe-dropped | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_sse_mid:.*?xorl \$0xffff, %ecx\n)\tjnz \.Lcmp_first\n/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-long-head-sign-swapped | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_sse_long:.*?xorl \$0xffff, %ecx\n)\tjnz \.Lcmp_first\n/$1\tjnz .Lcmp_sign\n/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-long-loop-start-late | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_sse_long:.*?)leaq 16\(%rdi\), %r9/$1leaq 32(%rdi), %r9/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq33-word8-test-dropped | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_33:.*?cmpq 8\(%rsi\), %rax\n)\tjne \.Leq_one\n/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-sse-head-word-dropped | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_sse:.*?cmpq \(%rsi\), %rax\n)\tjne \.Leq_one\n/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-sse-mid-last-block-skipped | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_sse:.*?)\tpand %xmm6, %xmm0\n/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-sse-long-last-block-skipped | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_sse_long:.*?)movdqu 48\(%r8,%r11\), %xmm7/$1movdqu 48(%r8), %xmm7/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-mid-front-group-skipped | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_sse_diff:.*?)\tjne \.Lcmp_sse_front\n/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-long-fourth-mask-lost | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_sse_ldiff:\n)\tmovl %eax, %r8d/$1\tmovl \$0xffff, %r8d/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)

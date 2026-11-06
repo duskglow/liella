@@ -239,6 +239,58 @@ pub(crate) fn find_root(cwd: Option<&Path>, built: &Path) -> Result<PathBuf, Str
     ))
 }
 
+/// XTASK-BENCH-ROWS-BASE: where `--stage <out> --base <ref>` writes the base tree: `<stem>.base.tar` next to `out`.
+pub(crate) fn base_out(out: &Path) -> PathBuf {
+    let stem = out.file_stem().and_then(|n| n.to_str()).unwrap_or("stage");
+    out.with_file_name(format!("{stem}.base.tar"))
+}
+
+/// A detached git worktree under the tree's `target/`, removed when dropped (success, error or panic alike).
+struct TempWorktree {
+    repo: PathBuf,
+    path: PathBuf,
+}
+
+impl Drop for TempWorktree {
+    fn drop(&mut self) {
+        let _ = Command::new("git").arg("-C").arg(&self.repo).args(["worktree", "remove", "--force"]).arg(&self.path).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        let _ = fs::remove_dir_all(&self.path);
+        let _ = Command::new("git").arg("-C").arg(&self.repo).args(["worktree", "prune"]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+}
+
+/// The directory `stage_base` checks `<ref>` out into (one per process, below `root/target`).
+pub(crate) fn base_worktree_dir(root: &Path) -> PathBuf {
+    root.join("target/bench-base").join(std::process::id().to_string())
+}
+
+/// XTASK-BENCH-ROWS-BASE: `bench --stage <out> --base <ref>`: checks `<ref>` out as a temporary detached worktree
+/// below `root/target`, runs `build` in it (which must stage that tree to `base_out`), and returns the base tree's
+/// manifest read back from `base_out`. The worktree is removed afterwards whether `build` succeeded or not.
+pub(crate) fn stage_base(root: &Path, rf: &str, base_out: &Path, build: impl FnOnce(&Path) -> Result<(), String>) -> Result<Manifest, String> {
+    let o = Command::new("git").arg("-C").arg(root).args(["rev-parse", "--verify", "--quiet"]).arg(format!("{rf}^{{commit}}")).output().map_err(|e| format!("--base: git: {e}"))?;
+    let sha = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    if !o.status.success() || sha.is_empty() {
+        return Err(format!("--base: `{rf}` is not a commit of {} (fetch it first?)", root.display()));
+    }
+    let path = base_worktree_dir(root);
+    let wt = TempWorktree { repo: root.to_path_buf(), path: path.clone() };
+    drop(TempWorktree { repo: root.to_path_buf(), path: path.clone() }); // a leftover of an earlier process with this pid
+    fs::create_dir_all(path.parent().unwrap_or(root)).map_err(|e| format!("{}: {e}", path.display()))?;
+    let o = Command::new("git").arg("-C").arg(root).args(["worktree", "add", "--detach", "--quiet"]).arg(&path).arg(&sha).output().map_err(|e| format!("--base: git worktree add: {e}"))?;
+    if !o.status.success() {
+        return Err(format!("--base: git worktree add {} {sha} failed: {}", path.display(), String::from_utf8_lossy(&o.stderr).trim()));
+    }
+    println!("bench: --base {rf}: staging {sha} from the temporary worktree {}", path.display());
+    let _ = fs::remove_file(base_out);
+    build(&wt.path)?;
+    let o = Command::new("tar").arg("-xOf").arg(base_out).arg(MANIFEST).output().map_err(|e| format!("tar: {e}"))?;
+    if !o.status.success() {
+        return Err(format!("--base: {} holds no {MANIFEST}: the base tree was not staged", base_out.display()));
+    }
+    Manifest::parse(&String::from_utf8_lossy(&o.stdout))
+}
+
 /// The path `--stage` was given, made absolute (the build runs with other working directories).
 pub(crate) fn out_path(arg: &str) -> PathBuf {
     let p = PathBuf::from(arg);
@@ -460,6 +512,90 @@ mod tests {
 
     // XTASK-BENCH-STAGE: no spec clause (developer tooling). The manifest reads back what it wrote and refuses
     // malformed lines and paths that leave the tree.
+    fn git(dir: &Path, a: &[&str]) -> String {
+        let o = Command::new("git").arg("-C").arg(dir).args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]).args(a).output().unwrap();
+        assert!(o.status.success(), "git {a:?}: {}", String::from_utf8_lossy(&o.stderr));
+        String::from_utf8_lossy(&o.stdout).trim().to_string()
+    }
+
+    /// A repository with two commits (returns the root, the first and the second commit) and a fake product.
+    fn two_commit_repo(tag: &str) -> (PathBuf, String, String) {
+        let root = std::env::temp_dir().join(format!("xtask-base-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        write(&root.join("Cargo.toml"), "[workspace]\n");
+        write(&root.join("xtask/Cargo.toml"), "[package]\n");
+        write(&root.join("bench/budgets.tsv"), "# rows\n");
+        write(&root.join(".gitignore"), "target/\n");
+        git(&root, &["init", "-q"]);
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-q", "-m", "a"]);
+        let a = git(&root, &["rev-parse", "HEAD"]);
+        write(&root.join("bench/budgets.tsv"), "# rows, changed\n");
+        git(&root, &["commit", "-q", "-am", "b"]);
+        let b = git(&root, &["rev-parse", "HEAD"]);
+        write(&root.join("target/liella/libc.a"), "current");
+        (root, a, b)
+    }
+
+    fn worktrees(root: &Path) -> usize {
+        git(root, &["worktree", "list", "--porcelain"]).lines().filter(|l| l.starts_with("worktree ")).count()
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). `--stage --base <ref>` stages a second tree from
+    // `<ref>` next to the current one; the two manifests record their own commits (they differ), and the temporary
+    // worktree is gone afterwards.
+    #[test]
+    fn stage_base_stages_two_trees_with_their_commits_and_cleans_up() {
+        let (root, a, b) = two_commit_repo("ok");
+        let exe = root.join("target/fake-xtask");
+        write(&exe, "bin");
+        let out = root.join("target/stage.tar");
+        let cur = write_stage(&root, &out, &[], &exe).unwrap();
+        let bo = base_out(&out);
+        assert_eq!(bo, root.join("target/stage.base.tar"));
+        let mut seen = None;
+        let base = stage_base(&root, "HEAD~1", &bo, |wt| {
+            seen = Some(wt.to_path_buf());
+            assert!(wt.starts_with(root.join("target")) && wt.join("bench/budgets.tsv").is_file());
+            assert_eq!(fs::read_to_string(wt.join("bench/budgets.tsv")).unwrap(), "# rows\n");
+            write(&wt.join("target/liella/libc.a"), "base");
+            write_stage(wt, &bo, &[], &exe).map(|_| ())
+        })
+        .unwrap();
+        assert_eq!((cur.commit.as_str(), base.commit.as_str()), (b.as_str(), a.as_str()));
+        assert_ne!(cur.products, base.products);
+        assert!(out.is_file() && bo.is_file());
+        assert!(!seen.unwrap().exists());
+        assert_eq!(worktrees(&root), 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // XTASK-BENCH-ROWS-BASE: no spec clause (developer tooling). A failing base build, a build that stages nothing
+    // and an unknown ref are errors, and no worktree is left behind.
+    #[test]
+    fn stage_base_cleans_up_on_failure() {
+        let (root, _, _) = two_commit_repo("fail");
+        let bo = root.join("target/stage.base.tar");
+        let mut seen = None;
+        let e = stage_base(&root, "HEAD~1", &bo, |wt| {
+            seen = Some(wt.to_path_buf());
+            assert!(wt.is_dir());
+            Err("base build failed".into())
+        })
+        .err()
+        .unwrap();
+        assert_eq!(e, "base build failed");
+        assert!(!seen.unwrap().exists() && !bo.exists());
+        assert_eq!(worktrees(&root), 1);
+        let e = stage_base(&root, "HEAD~1", &bo, |_| Ok(())).err().unwrap();
+        assert!(e.contains("holds no bench-stage.manifest"), "{e}");
+        assert_eq!(worktrees(&root), 1);
+        let e = stage_base(&root, "no-such-ref", &bo, |_| panic!("not reached")).err().unwrap();
+        assert!(e.contains("`no-such-ref` is not a commit"), "{e}");
+        assert_eq!(worktrees(&root), 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn manifest_round_trips_and_rejects_bad_lines() {
         let h = "a".repeat(64);

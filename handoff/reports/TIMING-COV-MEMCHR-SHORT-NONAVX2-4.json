@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-MEMCHR-SHORT-NONAVX2-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: merged next, kept MEMREF-ENTRY's .Lmemchr_sse_pre, re-applied only the n<=16 early return; Ivy Bridge AVX2-off vs next: memchr_16 -21%, memchr_16_mix -19%, memchr_4k -6.4%, memchr_64_mix +5.0% (+2 instr), rawmemchr_4k/memrchr_64_hit 0; AVX2 counts unchanged; ruling needed",
+ "branch": "task/timing-cov-memchr-short-nonavx2-4", "head": "see git",
+ "gate": {"affected": "see mei:timing-cov-memchr-short-nonavx2-4-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "memchr_64_mix +5.0% on Ivy Bridge AVX2-off vs next (2 more instructions, still 9% faster than glibc) against memchr_16 -21%, memchr_16_mix -19%, memchr_4k -6.4%", "recommendation": "accept and land (same trade as #3579); else remove the two lines and record D-4.57 REJECTED"}],
+ "informational": ["rawmemchr_4k +1.3% after MEMREF-ENTRY (coordinator note 2) not investigated; this story does not change rawmemchr (identical counts and timing)",
+                   "an ssh start of the plants job was chained after `ls &&` and held ssh open; the local ssh was killed by PID, the job ran normally (rc 0)"],
+ "refused": [],
+ "improvement": "a bench --stage of a base built in RAM with one perl edit gave an exact next-vs-head pair in one job; a wl_count-style --base for bench --stage would make that a flag",
+ "next_step": "ruling on memchr_64_mix; then land, or revert the two lines and record D-4.57 REJECTED",
+ "report_file": "handoff/TIMING-COV-MEMCHR-SHORT-NONAVX2.md",
+ "jobs": ["mei:timing-cov-memchr-short-nonavx2-4-gate", "mei:timing-cov-memchr-short-nonavx2-4-plants", "mei:timing-cov-memchr-short-nonavx2-4-counts", "mei:timing-cov-memchr-short-nonavx2-4-lint", "kotori:timing-cov-memchr-short-nonavx2-4-time"]}

@@ -1,0 +1,18 @@
+# TIMING-COV-STRSCAN-FRONTEND-SSE2 plants: strchr / strchrnul SSE2 heads and the strncmp hit path (csys/src/machine/scan.S).
+# machine_scanners runs each kernel on both scan levels (SSE2, and AVX2 on the build host); spec §4.5 (strchr/strchrnul), §4.3 (strncmp).
+# strchr: hit one block late (the SSE2 head's first block returns 16 bytes past the match).
+strchr-hit-late | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_pre:.*?)leaq \(%rdi,%rcx\), %rax/$1leaq 16(%rdi,%rcx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: terminator not matched for c == 0 (first SSE2 block: c lanes XOR NUL lanes, equal to OR for c != 0, empty for c == 0).
+strchr-c0-terminator | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_pre:.*?)por %xmm2, %xmm1/$1pxor %xmm2, %xmm1/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: the moved NULL test dropped (AVX2 level's page-end / NULL path).
+strchr-null-moved | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_snullchk:\s*testq %rdi, %rdi\n)\tjz liella_hot_strchr_null\n/$1/s | cargo test -p liella-boundary --test machine_scanners | msg:abort_on_null.*(FAILED|panicked)|SIGSEGV
+# strchr: the moved stub skips the strchr flag (a miss returns the terminator, as strchrnul).
+strchr-flag-moved | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_snullchk:.*?)jmp \.Lschr_pre1/$1jmp .Lschr_body/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchrnul: the moved NULL test dropped.
+strchrnul-null-moved | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_snull:\s*testq %rdi, %rdi\n)\tjz liella_hot_strchr_null\n/$1/s | cargo test -p liella-boundary --test machine_scanners | msg:abort_on_null.*(FAILED|panicked)|SIGSEGV
+# strncmp: limit off by one (a hit at index n decides).
+strncmp-limit-off-by-one | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_hit:.*?)jae \.Lsnc_zero/$1ja .Lsnc_zero/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# strncmp: an equal NUL no longer ends the comparison (the byte step's in-place return dropped).
+strncmp-nul-continues | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_byte:.*?)jnz \.Lsnc_bnext/$1jmp .Lsnc_bnext/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# strchrnul: terminator not matched for c == 0 (first SSE2 block: c lanes XOR NUL lanes).
+strchrnul-c0-terminator | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_pre:.*?)por %xmm1, %xmm2/$1pxor %xmm1, %xmm2/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchrnul.*(FAILED|panicked)

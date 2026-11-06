@@ -5,8 +5,10 @@
 //! implementation; the rest of the crate names no architecture and takes `A: Arch` (or [`Native`]).
 //!
 //! DL-2 (`DL-ELF-READ-1`) adds the first row of the §0a table, the ELF identity: the reader in
-//! [`crate::elf`] checks `EI_CLASS`, `EI_DATA` and `e_machine` only through these constants. Later
-//! stories add the other rows (relocation kinds, TLS variant, loader name and paths, ...) here.
+//! [`crate::elf`] checks `EI_CLASS`, `EI_DATA` and `e_machine` only through these constants. DL-3
+//! (`DL-ELF-READ-2`) adds the second row, the relocation types: [`Arch::classify`] turns an `r_type`
+//! into the arch-neutral [`RelocKind`], and the RELA iterators of [`crate::elf`] yield only that. Later
+//! stories add the other rows (relocation arithmetic, TLS variant, loader name and paths, ...) here.
 
 /// `EI_CLASS` value of a 64-bit object (ELF gABI).
 pub const ELFCLASS64: u8 = 2;
@@ -30,6 +32,50 @@ pub trait Arch {
     /// The `EI_DATA` (byte order) of this architecture's objects; the reader decodes every field in
     /// this byte order.
     const EI_DATA: u8;
+    /// The kind of relocation type `r_type` (design §0a "Relocation types"). Every value maps to a
+    /// kind: a type this table does not know is [`RelocKind::Unsupported`], never an error or a panic.
+    fn classify(r_type: u32) -> RelocKind;
+}
+
+/// What a relocation does, independent of the architecture's numbering (design §0a). Relocation code
+/// matches on this, never on a raw `r_type` (§0a checklist item 2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelocKind {
+    /// No operation.
+    None,
+    /// Load base plus addend (B + A).
+    Relative,
+    /// A word-sized absolute symbol value plus addend (S + A).
+    Abs64,
+    /// A GOT slot holding a symbol's address (S).
+    GlobDat,
+    /// A PLT slot holding a function's address (S).
+    JumpSlot,
+    /// Copy the symbol's data from its definition into the program.
+    Copy,
+    /// The result of calling the resolver at B + A (IFUNC).
+    Irelative,
+    /// The TLS module ID of the symbol's object.
+    DtpMod,
+    /// The symbol's offset in its module's TLS block.
+    DtpOff,
+    /// The symbol's offset from the thread pointer (static TLS).
+    TpOff,
+    /// A TLS descriptor (resolver and argument).
+    TlsDesc,
+    /// A field allowed only in text-relocated objects: `width` bytes, relative to the field's own
+    /// address when `pc_relative`, and checked as a signed value when `signed` (a 32-bit field of a
+    /// 64-bit value, sign- or zero-extended).
+    TextRel {
+        /// Field width in bytes.
+        width: u8,
+        /// The value is S + A - P rather than S + A.
+        pc_relative: bool,
+        /// The value must fit the field as a signed (rather than unsigned) number.
+        signed: bool,
+    },
+    /// A type this architecture's table does not handle (the raw `r_type`).
+    Unsupported(u32),
 }
 
 /// x86-64 (the x86-64 psABI): `EM_X86_64`, 64-bit, little-endian.
@@ -42,6 +88,28 @@ impl Arch for X86_64 {
     const E_MACHINE: u16 = 62;
     const EI_CLASS: u8 = ELFCLASS64;
     const EI_DATA: u8 = ELFDATA2LSB;
+
+    /// The `R_X86_64_*` numbers of the x86-64 psABI (§4.4.1, table "Relocation Types") the loader
+    /// handles (design §6); every other number, the x32-only ones included, is `Unsupported`.
+    fn classify(r_type: u32) -> RelocKind {
+        match r_type {
+            0 => RelocKind::None,                                                                // R_X86_64_NONE
+            1 => RelocKind::Abs64,                                                               // R_X86_64_64
+            2 => RelocKind::TextRel { width: 4, pc_relative: true, signed: true },               // R_X86_64_PC32
+            5 => RelocKind::Copy,                                                                // R_X86_64_COPY
+            6 => RelocKind::GlobDat,                                                             // R_X86_64_GLOB_DAT
+            7 => RelocKind::JumpSlot,                                                            // R_X86_64_JUMP_SLOT
+            8 => RelocKind::Relative,                                                            // R_X86_64_RELATIVE
+            10 => RelocKind::TextRel { width: 4, pc_relative: false, signed: false },            // R_X86_64_32
+            11 => RelocKind::TextRel { width: 4, pc_relative: false, signed: true },             // R_X86_64_32S
+            16 => RelocKind::DtpMod,                                                             // R_X86_64_DTPMOD64
+            17 => RelocKind::DtpOff,                                                             // R_X86_64_DTPOFF64
+            18 => RelocKind::TpOff,                                                              // R_X86_64_TPOFF64
+            36 => RelocKind::TlsDesc,                                                            // R_X86_64_TLSDESC
+            37 => RelocKind::Irelative,                                                          // R_X86_64_IRELATIVE
+            n => RelocKind::Unsupported(n),
+        }
+    }
 }
 
 /// The architecture this crate is built for.

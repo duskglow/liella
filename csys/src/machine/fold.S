@@ -1015,10 +1015,13 @@ memcmp:
 	leaq -64(%rdx,%rcx), %rcx
 	jmp .Lcmp_big_byte
 /* 65-128 without AVX2 or with folding off (PERF-MEMCMP-NONAVX2; cmp_long is 0 only then, so with
- * both on only sizes above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit NULL tests, the two blocks at 0 and 16 as the early
- * probe (as the AVX2 class's 32-byte head), then the blocks at 32, 48, n - 64, n - 48, n - 32 and
- * n - 16 ANDed into one test; the first differing byte (first block first; the last block's from the
- * ANDed mask, the blocks before it being equal) is re-read and ordered at .Lcmp_byte. */
+ * both on only sizes above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit
+ * NULL tests, the block at 0 alone as the early probe (TIMING-COV-MEMCMP-NONAVX2: a difference in
+ * the first 16 bytes, sort -C's shape, is ordered after one block, not two), then the blocks at 16,
+ * 32, 48, n - 64, n - 48, n - 32 and n - 16 ANDed into the last block's register (one test, no
+ * copy); the first differing byte (first block first: the three blocks at 16-63 ANDed decide which
+ * group holds it, then that group's blocks in order; the last block's from the ANDed mask, the
+ * blocks before it being equal) is re-read and ordered at .Lcmp_byte. */
 .Lcmp_sse_mid:
 	cmpq $128, %rdx
 	ja .Lcmp_sse_long
@@ -1029,80 +1032,84 @@ memcmp:
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
-	movdqu 16(%rdi), %xmm1
-	movdqu 16(%rsi), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	pand %xmm0, %xmm1
-	pmovmskb %xmm1, %eax
-	subl $0xffff, %eax
-	jne .Lcmp_sse_head
-	movdqu 32(%rdi), %xmm0
-	movdqu 32(%rsi), %xmm1
-	pcmpeqb %xmm1, %xmm0
-	movdqu 48(%rdi), %xmm1
-	movdqu 48(%rsi), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	movdqa %xmm0, %xmm7
-	pand %xmm1, %xmm7
-	movdqu -64(%rdi,%rdx), %xmm2
-	movdqu -64(%rsi,%rdx), %xmm3
-	pcmpeqb %xmm3, %xmm2
-	pand %xmm2, %xmm7
-	movdqu -48(%rdi,%rdx), %xmm3
-	movdqu -48(%rsi,%rdx), %xmm4
-	pcmpeqb %xmm4, %xmm3
-	pand %xmm3, %xmm7
-	movdqu -32(%rdi,%rdx), %xmm4
-	movdqu -32(%rsi,%rdx), %xmm5
-	pcmpeqb %xmm5, %xmm4
-	pand %xmm4, %xmm7
-	movdqu -16(%rdi,%rdx), %xmm5
-	movdqu -16(%rsi,%rdx), %xmm6
-	pcmpeqb %xmm6, %xmm5
-	pand %xmm5, %xmm7
-	pmovmskb %xmm7, %eax
+	pmovmskb %xmm0, %ecx
+	xorl $0xffff, %ecx
+	jnz .Lcmp_first
+	movdqu 16(%rdi), %xmm0
+	movdqu 16(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm0
+	movdqu 32(%rdi), %xmm1
+	movdqu 32(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm1
+	movdqu 48(%rdi), %xmm2
+	movdqu 48(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm2
+	movdqu -64(%rdi,%rdx), %xmm3
+	movdqu -64(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm3
+	movdqu -48(%rdi,%rdx), %xmm4
+	movdqu -48(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm4
+	movdqu -32(%rdi,%rdx), %xmm5
+	movdqu -32(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm5
+	movdqu -16(%rdi,%rdx), %xmm6
+	movdqu -16(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm6
+	pand %xmm0, %xmm6
+	pand %xmm1, %xmm6
+	pand %xmm2, %xmm6
+	pand %xmm3, %xmm6
+	pand %xmm4, %xmm6
+	pand %xmm5, %xmm6
+	pmovmskb %xmm6, %eax
 	subl $0xffff, %eax
 	jne .Lcmp_sse_diff
 	ret
 .Lcmp_sse_diff:
-	pmovmskb %xmm0, %ecx
-	movl $32, %r8d
-	xorl $0xffff, %ecx
-	jnz .Lcmp_at
-	pmovmskb %xmm1, %ecx
-	movl $48, %r8d
-	xorl $0xffff, %ecx
-	jnz .Lcmp_at
-	pmovmskb %xmm2, %ecx
+	movdqa %xmm0, %xmm7
+	pand %xmm1, %xmm7
+	pand %xmm2, %xmm7
+	pmovmskb %xmm7, %ecx
+	cmpl $0xffff, %ecx
+	jne .Lcmp_sse_front
+	pmovmskb %xmm3, %ecx
 	leaq -64(%rdx), %r8
 	xorl $0xffff, %ecx
 	jnz .Lcmp_at
-	pmovmskb %xmm3, %ecx
+	pmovmskb %xmm4, %ecx
 	leaq -48(%rdx), %r8
 	xorl $0xffff, %ecx
 	jnz .Lcmp_at
-	pmovmskb %xmm4, %ecx
+	pmovmskb %xmm5, %ecx
 	leaq -32(%rdx), %r8
 	xorl $0xffff, %ecx
 	jnz .Lcmp_at
 	leaq -16(%rdx), %r8
 	movl %eax, %ecx
 	jmp .Lcmp_at
-.Lcmp_sse_head:
+.Lcmp_sse_front:
 	pmovmskb %xmm0, %ecx
-	xorl $0xffff, %ecx
-	jnz .Lcmp_first
 	movl $16, %r8d
-	movl %eax, %ecx
+	xorl $0xffff, %ecx
+	jnz .Lcmp_at
+	pmovmskb %xmm1, %ecx
+	movl $32, %r8d
+	xorl $0xffff, %ecx
+	jnz .Lcmp_at
+	pmovmskb %xmm2, %ecx
+	movl $48, %r8d
+	xorl $0xffff, %ecx
 	jmp .Lcmp_at
 /* Above 128 bytes without AVX2 (PERF-MEMCMP-LONG-NONAVX2; it was a tail-jump to the Rust
  * `liella_hot_compare_big`): an AVX2 build reaches here only above cmp_long (its cmp_mid is not 0)
- * and keeps the Rust large class. Otherwise the explicit NULL tests, the blocks at 0 and 16 as the
- * early probe (as the 65-128 class), then 64-byte chunks of four 16-byte blocks ANDed into one
- * test: from a + 32 rounded down to 16 (a aligned, so a's side is compared from memory; the first
+ * and keeps the Rust large class. Otherwise the explicit NULL tests, the block at 0 as the early
+ * probe (as the 65-128 class; TIMING-COV-MEMCMP-NONAVX2), then 64-byte chunks of four 16-byte blocks
+ * ANDed into one test: from a + 16 rounded down to 16 (in [a + 1, a + 16], so nothing below a) (a aligned, so a's side is compared from memory; the first
  * chunk may overlap the probe), a cursor in a and the distance b - a, while the cursor is below
  * a + n - 64, then a last chunk at n - 64 that may overlap the one before (unaligned, both sides
- * loaded). A differing chunk's four masks give the first differing byte (rcx), re-read and ordered
+ * loaded). A differing chunk's four masks (the fourth from the AND: it decides only when the three
+ * before it are equal) give the first differing byte (rcx), re-read and ordered
  * at .Lcmp_big_byte (re-read equal, D-4.21 -> `liella_hot_compare_rescan`). n is read from rdx
  * only (MEMCMP-MID-4's torn-read bound). */
 .Lcmp_sse_long:
@@ -1115,16 +1122,12 @@ memcmp:
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
-	movdqu 16(%rdi), %xmm1
-	movdqu 16(%rsi), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	pand %xmm0, %xmm1
-	pmovmskb %xmm1, %eax
-	subl $0xffff, %eax
-	jne .Lcmp_sse_head
+	pmovmskb %xmm0, %ecx
+	xorl $0xffff, %ecx
+	jnz .Lcmp_first
 	movq %rsi, %r11
 	subq %rdi, %r11
-	leaq 32(%rdi), %r9
+	leaq 16(%rdi), %r9
 	andq $-16, %r9
 	leaq -64(%rdi,%rdx), %r8
 .Lcmp_sse_loop:
@@ -1136,11 +1139,10 @@ memcmp:
 	pcmpeqb 16(%r9), %xmm1
 	pcmpeqb 32(%r9), %xmm2
 	pcmpeqb 48(%r9), %xmm3
-	movdqa %xmm0, %xmm4
-	pand %xmm1, %xmm4
-	pand %xmm2, %xmm4
-	pand %xmm3, %xmm4
-	pmovmskb %xmm4, %eax
+	pand %xmm0, %xmm3
+	pand %xmm1, %xmm3
+	pand %xmm2, %xmm3
+	pmovmskb %xmm3, %eax
 	cmpl $0xffff, %eax
 	jne .Lcmp_sse_ldiff
 	addq $64, %r9
@@ -1159,20 +1161,19 @@ memcmp:
 	movdqu 48(%r9), %xmm3
 	movdqu 48(%r9,%r11), %xmm4
 	pcmpeqb %xmm4, %xmm3
-	movdqa %xmm0, %xmm4
-	pand %xmm1, %xmm4
-	pand %xmm2, %xmm4
-	pand %xmm3, %xmm4
-	pmovmskb %xmm4, %eax
+	pand %xmm0, %xmm3
+	pand %xmm1, %xmm3
+	pand %xmm2, %xmm3
+	pmovmskb %xmm3, %eax
 	cmpl $0xffff, %eax
 	jne .Lcmp_sse_ldiff
 	xorl %eax, %eax
 	ret
 .Lcmp_sse_ldiff:
+	movl %eax, %r8d
 	pmovmskb %xmm0, %eax
 	pmovmskb %xmm1, %ecx
 	pmovmskb %xmm2, %r10d
-	pmovmskb %xmm3, %r8d
 	shll $16, %ecx
 	orl %ecx, %eax
 	shll $16, %r8d
@@ -1196,12 +1197,14 @@ memcmp:
  * from one test, no order), except 17-32: the head probe has proved bytes 0-7, so the word at 8 (an
  * unequal word returns 1) and one 16-byte block at n - 16 cover the rest, which together cover [8, n)
  * for every n in 17-32 (one instruction fewer than a second 16-byte block and the AND;
- * PARITY-MEMCMP-SMALL-EQ); 33-64 without AVX2 tail-jumps to `liella_hot_equal_tail` (Rust), more
- * than 64 bytes (sign clear) up to `liella_machine_cmp_long` take the compare entry's 65-128 AVX2
+ * PARITY-MEMCMP-SMALL-EQ); 33-64 without AVX2 the word at 8 (unequal: 1) and the blocks at 16, n - 32
+ * and n - 16 ANDed into one test (TIMING-COV-MEMCMP-NONAVX2; it was a tail-jump to the Rust
+ * `liella_hot_equal_tail`), more than 64 bytes (sign clear) up to `liella_machine_cmp_long` take the compare entry's 65-128 AVX2
  * class (MEMCMP-MID; no NULL test, the head load faults on page zero, PERF-MEMCMP-TAILS: the
  * 32-byte head block first, then three blocks in one test; 0 or 1) and its 129-2048 class with the
  * last chunk first (an early reject where only the tail differs; MEMCMP-MID-4), then the chunks from
- * byte 32 (0 or 1, nothing located), else `liella_hot_equal_big`;
+ * byte 32 (0 or 1, nothing located), else (no AVX2) the SSE2 classes at .Leq_sse or (AVX2 above
+ * 2048) .Leq_huge's NULL tests and the AVX2 classes;
  * 8-64 with folding off to `liella_hot_equal_rest`
  * (the checked entry, after the 4-7 class's `n < 8` test); 0 to 7 bytes (MEMCMP-SHORT): explicit NULL
  * tests (NULL -> the checked entry), then both end words XORed and ORed into one test (4-7: 4-byte
@@ -1209,7 +1212,6 @@ memcmp:
  * (most unequal pairs differ in their first 8 bytes); proving equality reads every byte once.
  * Reads only [a, a + n) and [b, b + n). */
 	.hidden liella_hot_equal_rest
-	.hidden liella_hot_equal_tail
 	.hidden liella_hot_equal_big
 	.section .text.liella_machine_equal,"ax",@progbits
 	.globl liella_machine_equal
@@ -1242,13 +1244,32 @@ __memcmpeq:
 	ret
 .Leq_17:
 	cmpq $32, %rdx
-	ja liella_hot_equal_tail
+	ja .Leq_33
 	movq 8(%rdi), %rax
 	cmpq 8(%rsi), %rax
 	jne .Leq_one
 	movdqu -16(%rdi,%rdx), %xmm0
 	movdqu -16(%rsi,%rdx), %xmm1
 	pcmpeqb %xmm1, %xmm0
+	pmovmskb %xmm0, %eax
+	subl $0xffff, %eax
+	shrl $31, %eax
+	ret
+.Leq_33:
+	movq 8(%rdi), %rax
+	cmpq 8(%rsi), %rax
+	jne .Leq_one
+	movdqu 16(%rdi), %xmm0
+	movdqu 16(%rsi), %xmm1
+	pcmpeqb %xmm1, %xmm0
+	movdqu -32(%rdi,%rdx), %xmm1
+	movdqu -32(%rsi,%rdx), %xmm2
+	pcmpeqb %xmm2, %xmm1
+	movdqu -16(%rdi,%rdx), %xmm2
+	movdqu -16(%rsi,%rdx), %xmm3
+	pcmpeqb %xmm3, %xmm2
+	pand %xmm1, %xmm0
+	pand %xmm2, %xmm0
 	pmovmskb %xmm0, %eax
 	subl $0xffff, %eax
 	shrl $31, %eax
@@ -1383,16 +1404,111 @@ __memcmpeq:
 /* Above `liella_machine_cmp_long` (every size above 64 with folding off) and AVX2 on (the
  * `liella_machine_cmp_mid` flag word, nonzero only then): the explicit NULL tests (a NULL a or b ->
  * the checked entry's S6 abort; no folding above 2048), then the AVX2 classes above (PARITY-MEMCMP-AVX2:
- * the long class's 16-instruction 128-byte step instead of the Rust loop). Without AVX2 the
- * checked entry. */
+ * the long class's 16-instruction 128-byte step instead of the Rust loop). Without AVX2 the SSE2
+ * classes below. */
 .Leq_huge:
 	cmpq $0, liella_machine_cmp_mid(%rip)
-	je liella_hot_equal_big
+	je .Leq_sse
 	testq %rdi, %rdi
 	je liella_hot_equal_big
 	testq %rsi, %rsi
 	je liella_hot_equal_big
 	jmp .Leq_big_load
+/* Above 64 bytes without AVX2 (TIMING-COV-MEMCMP-NONAVX2; it was a tail-jump to the Rust
+ * `liella_hot_equal_big`): the explicit NULL tests (a NULL a or b -> the checked entry's S6 abort),
+ * the words at 0 and 8 as the early reject (an unequal word returns 1), then 65-128 the blocks at 16,
+ * 32, 48, n - 64, n - 48, n - 32 and n - 16 ANDed into one test (they cover [16, n) for every n up
+ * to 128); above 128 64-byte chunks of four 16-byte blocks ANDed into one test, from a + 16 rounded
+ * down to 16 (in [a + 1, a + 16], so nothing below a; a's side aligned, compared from memory), a
+ * cursor in a and the distance b - a, while the cursor is below a + n - 64, then a last chunk at
+ * n - 64 that may overlap the one before (both sides loaded). 0 or 1, nothing located. */
+.Leq_sse:
+	testq %rdi, %rdi
+	je liella_hot_equal_big
+	testq %rsi, %rsi
+	je liella_hot_equal_big
+	movq (%rdi), %rax
+	cmpq (%rsi), %rax
+	jne .Leq_one
+	movq 8(%rdi), %rax
+	cmpq 8(%rsi), %rax
+	jne .Leq_one
+	cmpq $128, %rdx
+	ja .Leq_sse_long
+	movdqu 16(%rdi), %xmm0
+	movdqu 16(%rsi), %xmm1
+	pcmpeqb %xmm1, %xmm0
+	movdqu 32(%rdi), %xmm1
+	movdqu 32(%rsi), %xmm2
+	pcmpeqb %xmm2, %xmm1
+	pand %xmm1, %xmm0
+	movdqu 48(%rdi), %xmm2
+	movdqu 48(%rsi), %xmm3
+	pcmpeqb %xmm3, %xmm2
+	pand %xmm2, %xmm0
+	movdqu -64(%rdi,%rdx), %xmm3
+	movdqu -64(%rsi,%rdx), %xmm4
+	pcmpeqb %xmm4, %xmm3
+	pand %xmm3, %xmm0
+	movdqu -48(%rdi,%rdx), %xmm4
+	movdqu -48(%rsi,%rdx), %xmm5
+	pcmpeqb %xmm5, %xmm4
+	pand %xmm4, %xmm0
+	movdqu -32(%rdi,%rdx), %xmm5
+	movdqu -32(%rsi,%rdx), %xmm6
+	pcmpeqb %xmm6, %xmm5
+	pand %xmm5, %xmm0
+	movdqu -16(%rdi,%rdx), %xmm6
+	movdqu -16(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm6
+	pand %xmm6, %xmm0
+	pmovmskb %xmm0, %eax
+	subl $0xffff, %eax
+	shrl $31, %eax
+	ret
+.Leq_sse_long:
+	movq %rsi, %r11
+	subq %rdi, %r11
+	leaq 16(%rdi), %r9
+	andq $-16, %r9
+	leaq -64(%rdi,%rdx), %r8
+.Leq_sse_loop:
+	movdqu (%r9,%r11), %xmm0
+	movdqu 16(%r9,%r11), %xmm1
+	movdqu 32(%r9,%r11), %xmm2
+	movdqu 48(%r9,%r11), %xmm3
+	pcmpeqb (%r9), %xmm0
+	pcmpeqb 16(%r9), %xmm1
+	pcmpeqb 32(%r9), %xmm2
+	pcmpeqb 48(%r9), %xmm3
+	pand %xmm1, %xmm0
+	pand %xmm3, %xmm2
+	pand %xmm2, %xmm0
+	pmovmskb %xmm0, %eax
+	cmpl $0xffff, %eax
+	jne .Leq_one
+	addq $64, %r9
+	cmpq %r8, %r9
+	jb .Leq_sse_loop
+	movdqu (%r8), %xmm0
+	movdqu (%r8,%r11), %xmm4
+	pcmpeqb %xmm4, %xmm0
+	movdqu 16(%r8), %xmm1
+	movdqu 16(%r8,%r11), %xmm5
+	pcmpeqb %xmm5, %xmm1
+	movdqu 32(%r8), %xmm2
+	movdqu 32(%r8,%r11), %xmm6
+	pcmpeqb %xmm6, %xmm2
+	movdqu 48(%r8), %xmm3
+	movdqu 48(%r8,%r11), %xmm7
+	pcmpeqb %xmm7, %xmm3
+	pand %xmm1, %xmm0
+	pand %xmm3, %xmm2
+	pand %xmm2, %xmm0
+	pmovmskb %xmm0, %eax
+	subl $0xffff, %eax
+	shrl $31, %eax
+	ret
 #ifdef LIELLA_EXPORT
 	.size __memcmpeq, .-__memcmpeq
 	.size bcmp, .-bcmp
