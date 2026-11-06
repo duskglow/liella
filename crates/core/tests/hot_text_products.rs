@@ -230,6 +230,31 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
     assert!(s == 0, "first mktime after localtime_r: {s} page faults (counter query back on the first implicit tzset?)");
 }
 
+/// The faults of the first `localtime_r` (PERF-ZONE-LOAD-FAULTS): it reads, parses and keeps
+/// the zone file. Zen 1 host role, every run identical: 25 before the change (the path, the
+/// names and a temporary type table each grown or copied through their own allocation size),
+/// 22 after. Bound = that plus 2 for layout-only deltas, under the old count;
+/// `zone_load_alloc.rs` pins each table at one allocation exactly.
+const LOCALTIME_BOUND: u64 = 24;
+
+#[test]
+fn init_first_localtime_r_stays_within_its_page_fault_bound() {
+    // No spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS: the zone load makes one
+    // allocation per table, each sized once, so it touches few heap regions.
+    if !Path::new("/usr/share/zoneinfo/America/New_York").exists() {
+        eprintln!("skipped: no /usr/share/zoneinfo/America/New_York on this host");
+        return;
+    }
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_localtime");
+    build(&exe);
+    let s = faults(&exe, "localtime");
+    assert!(s <= LOCALTIME_BOUND, "first localtime_r: {s} page faults > {LOCALTIME_BOUND} (zone tables grown through several sizes again?)");
+}
+
 /// The faults of a program's first `%.2f` (PERF-FIRSTCALL-MKTIME-SNPRINTF). `format_float` with the
 /// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound

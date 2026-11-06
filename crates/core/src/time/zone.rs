@@ -409,9 +409,14 @@ impl Zone {
     pub fn from_tzif(bytes: &[u8]) -> Result<Zone> {
         let f = tzif::parse(bytes)?;
         let mut z = Zone::fixed(b"\0", b"\0");
-        z.types.reserve(f.types.len())?;
-        for t in f.types.iter() {
-            let name = intern(&mut z.names, f.designation(t))?;
+        // Every name the zone keeps fits at once (PERF-ZONE-LOAD-FAULTS): the designations,
+        // each with its NUL (`intern` only shares or appends one), and the footer's two names,
+        // each shorter than the footer, plus their NULs. The table is then made in one
+        // allocation, not grown through several sizes.
+        z.names.reserve_exact(f.designations.len().saturating_add(1).saturating_add(f.footer.len().saturating_add(1).saturating_mul(2)))?;
+        z.types.reserve_exact(f.type_count())?;
+        for t in f.types() {
+            let name = intern(&mut z.names, f.designation(&t))?;
             z.types.push(Kind { offset: t.utoff, isdst: t.isdst, name })?;
         }
         z.base = *z.types.first().ok_or(Errno::EINVAL)?;

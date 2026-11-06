@@ -125,6 +125,18 @@ int main(int argc, char **argv) {
         fprintf(stderr, "minflt %ld\n", n == 2 ? f1 - f0 : -1);
         return 0;
     }
+    if (argc > 1 && strcmp(argv[1], "localtime") == 0) {
+        /* PERF-ZONE-LOAD-FAULTS: the first localtime_r, which reads and parses the zone file
+         * (cbench_opt's first_localtime_r row); prints only that call's faults. */
+        setenv("TZ", "America/New_York", 1);
+        time_t when = 1759579200;
+        struct tm r;
+        long f0 = minflt();
+        long n = localtime_r(&when, &r) != NULL;
+        long f1 = minflt();
+        fprintf(stderr, "minflt %ld\n", n == 1 && r.tm_isdst == 1 ? f1 - f0 : -1);
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "float") == 0) {
         /* PERF-FIRSTCALL-MKTIME-SNPRINTF: the faults of a program's first float conversion
          * (cbench_opt's first_snprintf shape); the common %.2f must not probe a large stack frame. */
