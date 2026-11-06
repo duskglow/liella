@@ -1,21 +1,61 @@
-# PERF-GETLINE-LONG (WIP, NOT READY: no plants, gate2 not read, gl_80 base not measured)
+# getline / getdelim on long records (PERF-GETLINE-LONG, -2, TIMING-COV-GETLINE-LONG)
 
-Branch task/perf-getline-long. Role keke:~/w/n2. Per-call instructions:u (keke, wl_percall, strstr_getline.c):
-gl_long 3592.0 (before, label PERF-GETLINE-LONG-percall-before) -> 3392.7 (known-miss skip only, percall-after, superseded)
--> 3108.3 (final, percall-after2); glibc 2639.2 (now 1.18). gl_long_win 1926.8 -> 1932.8 (glibc 2071). gl_80 190.4 vs glibc 178.1 (no base number taken: CHECK it did not rise).
+State: branch task/timing-cov-getline-long (stacked on task/perf-getline-long-2 a521f95c, which origin/next already
+contains). Role keke:~/w/r1. Code head: d46915ba (later commits on the branch are handoff only). NOT READY: plants3 rc 1 (see Plants).
 
-Cause (counter-confirmed): a line longer than the unread window made the getdelim front path run its fused scan+copy over the
-whole window, miss, and the general path scanned and copied the same window again.
-Change: front path, on a miss where the whole window fits the caller's buffer, finishes the copy (the AVX2 kernel already stored
-every whole 32-byte block: Env::find_copy_done), consumes the window and passes `prefix` bytes to the general getdelim, which
-continues after them (EOF after a prefix returns the prefix as the record). Not done under the stream lock path, nor with the error indicator set.
-Remaining gap to glibc (~470/call): the wasted fused scan of the first window on a miss; the second piece's find+copy.
-Ideas: predict a miss from the previous call (record longer than window) and go straight to the general path; fused scan for the general pieces.
+## What is on the branch
+- PERF-GETLINE-LONG (D-12.19 front path, "GETLINE-LONG" comment in `getdelim_front`): on a miss where the whole unread
+  window fits the caller's buffer, the window is copied and consumed (`Partial(n)`), and the general getdelim goes on
+  after those `prefix` bytes.
+- TIMING-COV-GETLINE-LONG (d46915ba): the general `getdelim` no longer loads the stream state before `run()` (which loads
+  it again) on a fully buffered stream; it reads the error indicator from `_flags`. Line-buffered / unbuffered streams
+  still load first, for the flush-before-input test.
+- Tests (crates/core/tests/s12_stdio_clauses.rs): `s12_5_c_5_records_around_the_buffer_size` (64-byte buffer through
+  setvbuf on a fopencookie stream: records of 1, 63, 64, 65, 192 bytes after shifts 0/1/7/31/40, with and without the
+  delimiter at EOF; read error in mid-record at 64/128/150/330/359; sticky EOF with a read count) and a getline step in
+  `s12_1_g_1` (line-buffered output flushed before getline on a line-buffered input stream). The cookie test backing
+  gained `fail_at` (reads at or past it return -1 with EIO) and `reads`.
 
-NOT DONE: plants (partial-consumption logic: prefix, EOF after prefix, err-flag guard, done offset), a regression test (long line, EOF without
-newline after a full window, cap == window+1 boundary, multithread), bench --compare counts, gate2 result, saturation-register row.
-Jobs: static2 rc0 and percall-after2 rc0 on this head's code; gate2 started (read jobs.tsv).
+## Probe-settled (keke, ~/work/TIMING-COV-GETLINE-LONG/sticky.c, glibc black box)
+- After getline reached EOF, more data later: getline returns -1 without calling read; after clearerr it reads it.
+- Read error mid-record (cookie read -1/EIO at byte 150 of a 300-byte line, 64-byte buffer): returns 150, record
+  NUL-terminated, errno EIO, ferror 1, feof 0. The next getline returns -1 and leaves errno unchanged (0 in the probe).
 
-## Run 2 (PERF-GETLINE-LONG-2): NOT READY, plants all survive
-Added test s12_5_c_5_long_records_cross_the_window (crates/core/tests/s12_stdio_clauses.rs): lengths 1..12289 around the 4096 window, tail with/without newline, record after, flockfile held/not. It passes, but plants (script ~/work/perf-getline-long-2/plants2.sh on keke; copy of $S/plants.sh) ALL SURVIVE: eof-after-prefix, prefix-not-counted, window-not-consumed, copy-skipped, partial-count-short, done-overclaims. So the test does not reach the Partial path under cargo test (suspect: Glue.record/read_room/by_caller false in the harness, so delim_front returns General or Locked; or the window is not <= caller cap). Next step: find which branch getline takes in the test (temporary eprintln in a RAM copy), make the test reach `getdelim_front(.., partial=true)`; if a unit test of sc::getdelim_front with a mock Env is easier (crates/core/tests/stream_engine.rs has Mem), do that. Not covered at all: error mid-line, ERR_SEEN guard.
-Jobs: lint rc0 and gate rc0 ran on the first test commit (before the flockfile edit); counts2 and gate2 were started on the final head (read jobs.tsv); counts (first) killed because I synced under it. Percall tool wl_percall no longer exists; counts use `cargo xtask bench --compare --counters cbench_hot`.
+## Measurements (keke, AVX2 path, wl_percall strstr_getline.c, job timing-cov-getline-long-percall)
+gl_long glibc 2639.2 / base a521f95c 3108.3 / new 3081.7 (1.17). gl_80 178.1 / 190.4 / 189.8 (1.07). No row slower.
+
+## Findings
+- The brief's hypothesis (load/store paid per refill) does not hold in the code: `State::read_until_with` refills
+  inside one `run()`, so load / store_read happen once per call. The extra per-call load was the one before `run()`,
+  removed above for fully buffered streams. Reasoned from the code; the step-1 trace (wl_trace) was NOT run.
+- The brief's evidence (5170.6 vs 4251.8) is the non-AVX2 path on next 730f416b; the numbers here are the AVX2 path
+  (keke). The non-AVX2 path was not counted in this run.
+- PERF-GETLINE-LONG-2's plants "all survived" under a hand-written script; this run's plants go through
+  `cargo xtask plants` with a plant that panics in the partial branch (`partial-reached`) to prove it is reached.
+
+## Plants (cargo xtask plants, keke, plants file ~/work/TIMING-COV-GETLINE-LONG/plants.txt, job plants3)
+12 plants: CAUGHT err-store-skipped, last-piece-dropped, refill-pos-lost, flush-guard-full. SURVIVED partial-reached
+(a panic in the `Partial(n)` branch), partial-pos-lost, partial-count-short, partial-copy-skipped, eof-after-prefix,
+done-overclaims, err-flag-not-checked. prefix-not-counted is WARN-NO-MSG: the mutant `let mut len = 0;` does not compile
+(ambiguous integer), so write `0usize`. err-flag-not-checked survives because the test's failing cookie keeps failing.
+So the partial branch is NEVER reached under cargo test, by either s12_5_c_5 test: that is why run 2's plants survived.
+Diagnostic (job timing-cov-getline-long-diag, ~/work/TIMING-COV-GETLINE-LONG/diag.txt, evidence only): the new test
+reaches past read_room, past Glue.record, the front-path miss with a non-empty window, and `delim_locked`. The test
+harness has other threads (`thread::alone()` false) and the new test does not hold the stream, so it takes the locked
+path with `partial = false`. The old test's flockfile cases also never reach the branch, so one of the remaining
+guards fails there: `sc::by_caller` (USER_LOCK in `_flags` after flockfile?), `room == n + 1`, or ERR_SEEN. Not
+split further (budget).
+
+## Open / next
+- FIRST: add flockfile-held variants to `s12_5_c_5_records_around_the_buffer_size`, then one diag plants run that panics
+  separately on `partial`, `by_caller`, `room == n + 1` to find the failing guard. Fix the test (or the guard, if
+  flockfile does not set what `by_caller` reads, which would also mean the front path never helps a flockfile caller),
+  until partial-reached is CAUGHT. Then rerun plants.txt (fix prefix-not-counted to `0usize`; give err-flag-not-checked
+  a backing that recovers after one failure).
+- Next step: count the non-AVX2 path (the row's evidence), then wl_trace one gl_long call to split the remaining
+  ~440 instructions (front path's wasted first fused scan on a miss; find then copy per piece in the general path).
+  Ideas from run 1: predict a miss from the previous call's record length; fused find+copy for general pieces.
+- Timing (nico) not run: a 0.9% instruction change is below what a timing run resolves; left for the periodic sweep.
+- RULING NEEDED: with the error indicator set, Liella's getdelim returns `Err(EIO)` (by the code, not tested); the reference leaves
+  errno unchanged (probe). Not changed or asserted here; needs a ruling on whether to match.
+- Report: handoff/reports/TIMING-COV-GETLINE-LONG.json. Plants file: keke ~/work/TIMING-COV-GETLINE-LONG/plants.txt.
