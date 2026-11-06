@@ -2799,7 +2799,28 @@ liella_machine_memchr:
 	ret
 
 	.subsection 0
-	/* int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
+	/* SSE2 page edge (cold, reached only from .Lmemchr_entry): placed in the reserve before the
+	 * 0x231 pin so that the hot SSE2 blocks after it keep their offsets (D-4.57). */
+.Lmemchr_sse_edge:
+	/* [s, s + 64) leaves s's page; c is in xmm0's low byte (the entry's movd). */
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	pshufd $0, %xmm0, %xmm0
+	cmpq $16, %rdx
+	ja .Lmemchr_sse_setup
+	cmpl $4080, %ecx
+	ja .Lmemchr_sse_setup
+	/* STR-K3: 1 <= n <= 16 and [s, s + 16) inside s's page: one vector, as the AVX2 path. */
+	movdqu (%rdi), %xmm1
+	pcmpeqb %xmm0, %xmm1
+	pmovmskb %xmm1, %eax
+	bsfl %eax, %eax
+	jz .Lmemchr_none
+	cmpl %edx, %eax
+	jae .Lmemchr_none
+	addq %rdi, %rax
+	ret
+	/* int3 fill, never reached (it follows the ret above): the SSE2 path starts at offset 0x231
 	 * of the section, as before (the assembler refuses if the code above grows past it). */
 	.org liella_machine_memchr_entry + 0x231, 0xcc
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
@@ -2925,25 +2946,11 @@ liella_machine_memchr:
 	jae .Lmemchr_none
 	addq %rdi, %rax
 	ret
-.Lmemchr_sse_edge:
-	/* [s, s + 64) leaves s's page; c is in xmm0's low byte (the entry's movd). */
-	punpcklbw %xmm0, %xmm0
-	punpcklwd %xmm0, %xmm0
-	pshufd $0, %xmm0, %xmm0
-	cmpq $16, %rdx
-	ja .Lmemchr_sse_setup
-	cmpl $4080, %ecx
-	ja .Lmemchr_sse_setup
-	/* STR-K3: 1 <= n <= 16 and [s, s + 16) inside s's page: one vector, as the AVX2 path. */
-	movdqu (%rdi), %xmm1
-	pcmpeqb %xmm0, %xmm1
-	pmovmskb %xmm1, %eax
-	bsfl %eax, %eax
-	jz .Lmemchr_none
-	cmpl %edx, %eax
-	jae .Lmemchr_none
-	addq %rdi, %rax
-	ret
+	/* int3 fill, never reached (it follows the ret above): the page-edge setup starts at offset 0x3ba
+	 * of the section, its offset before TIMING-COV-MEMCHR-SHORT-NONAVX2 (D-4.57), so the setup, body,
+	 * g1 and the 64-byte loop keep the D-4.56 layout (the loop at 0x480; at 0x490 Ivy Bridge timed
+	 * memchr_64_mix and memchr_4k 4.5% slower with the same instructions). */
+	.org liella_machine_memchr_entry + 0x3ba, 0xcc
 .Lmemchr_sse_setup:
 	/* Page offset > 4032: the aligned 64-byte group holding s, masked below s. */
 	movq %rdi, %rax
