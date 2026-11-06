@@ -2,7 +2,7 @@
 
 Branch `task/libm-f64-fast-kernels-3` (run 2's branch plus this run's commits; cut from origin/next 2c1e25b9).
 Role kanon:~/w/kn1 (Broadwell-EP E5-2699 v4, FMA). Code head e976b48c. Decisions in force: D-10.13, D-10.25,
-**D-10.50** (reserved by ruling #2965; replaces run 2's D-22.14 everywhere), rulings #2760 A, #932, #2964.
+**D-10.50** (reserved by ruling #2965; replaces run 2's D-NEW everywhere), rulings #2760 A, #932, #2964.
 
 ## Runs 1-2 (kept)
 Run 1: the exp10 slice (`fast64::reduce_exp10` into the shared exp kernel, `exp10_nearest` + FMA build).
