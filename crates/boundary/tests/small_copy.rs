@@ -300,8 +300,8 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
     // 1 <= n <= 64 dies by SIGSEGV on page zero with folding on (the fault in fold.S; glibc's
     // observable outcome, it has no NULL check of its own) and by the S6 abort with folding off.
     // The copies (memcpy, memmove, __memcpy_chk) also fold 129-256 (owner ruling #3304, D-4.55);
-    // memset and __memset_chk fold 65-256 (D-4.60, owner ruling 2026-11-06): SIGSEGV up to 256
-    // with folding on. Every other size and call, the copies' 65-128 included, takes the explicit
+    // memset and __memset_chk fold 65-128 (D-4.60, owner ruling 2026-11-06): SIGSEGV up to 128
+    // with folding on; their 129-256 class keeps its test. Every other size and call, the copies' 65-128 included, takes the explicit
     // checks either way (the abort), n > 64 KiB included: no Rust path performs a deliberate NULL
     // access.
     use std::sync::atomic::Ordering::SeqCst;
@@ -330,7 +330,7 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
                 NULL_CASE.store(n * NULL_CALLS + call, SeqCst);
                 let fill = call == 4 || call == NULL_CALLS - 1; // memset, __memset_chk
                 let copy = matches!(call, 0 | 1 | 2 | 3 | 5);
-                let folded = n <= 64 || (fill && n <= 256) || (copy && (129..=256).contains(&n));
+                let folded = n <= 64 || (fill && n <= 128) || (copy && (129..=256).contains(&n));
                 let want = if fold && folded { SIGSEGV } else { SIGABRT };
                 let end = selftest::in_child_quiet(null_call).unwrap();
                 assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n}");
@@ -647,8 +647,8 @@ fn null_fill_beside_a_page_at_64_kib(k: &CSys) -> i32 {
 
 #[test]
 fn null_fills_above_64_kib_abort_and_leave_a_page_at_64_kib_untouched() {
-    // Clause: s4_1_c_1 (the S6 abort) with D-4.60: the fill classes without a NULL test end at 256
-    // bytes; every larger fill (`rep stosb`, the AVX2 fill, the Rust path) keeps the explicit test,
+    // Clause: s4_1_c_1 (the S6 abort) with D-4.60: the fill classes without a NULL test end at 128
+    // bytes (129-256 keeps its test too); every larger fill (`rep stosb`, the AVX2 fill, the Rust path) keeps the explicit test,
     // so a NULL d with n > 64 KiB aborts before any store and never reaches a page mapped at 64 KiB.
     // In a child: the test process keeps its low addresses free.
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);

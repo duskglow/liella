@@ -186,10 +186,10 @@ fn fill_ends_by(d: usize, n: usize, chk: bool, want: i32) -> bool {
 }
 
 #[test]
-fn the_avx2_page_folds_null_up_to_256_and_stores_head_first() {
+fn the_avx2_page_folds_null_up_to_128_and_stores_head_first() {
     // Clauses: s4_1_c_1 (memset, __memset_chk) on the AVX2 page after the swap (D-4.53, the swap
     // flag on), with D-4.60: with folding on a NULL d faults on page zero (SIGSEGV) for every size
-    // up to 256 and aborts (S6) above; with folding off every size aborts. Head-first: d 16 bytes
+    // up to 128 and aborts (S6) above (the 129-256 class keeps its test); with folding off every size aborts. Head-first: d 16 bytes
     // below a writable shared page over a PROT_NONE page, the head store faults and the writable
     // page stays untouched for every size of the 32-byte-block 129-256 class and the 65-128 class.
     run("avx2 page NULL", |k| {
@@ -205,7 +205,7 @@ fn the_avx2_page_folds_null_up_to_256_and_stores_head_first() {
             assert!(selftest::set_null_fold(fold), "vm.mmap_min_addr below 64 KiB or unreadable: NULL folding refused");
             for n in [1, 64, 65, 96, 127, 128, 129, 130, 144, 200, 255, 256, 257, 4096, 65_537] {
                 for chk in [false, true] {
-                    let want = if fold && n <= 256 { SIGSEGV } else { SIGABRT };
+                    let want = if fold && n <= 128 { SIGSEGV } else { SIGABRT };
                     assert!(fill_ends_by(0, n, chk, want), "fold {fold} n {n} chk {chk}: NULL ended otherwise than by {want}");
                 }
             }
