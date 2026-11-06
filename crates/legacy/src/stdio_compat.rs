@@ -2131,15 +2131,20 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     if !byte_oriented(file) {
         return Ok(None);
     }
-    load(file, ext);
     // The error indicator stops a record read before it reads, and the result is -1 with
     // `errno` left as the caller had it: the indicator is the report, no error happens in this
-    // call (the reference; STDIO-STICKY-ERROR-ERRNO, D-12.1).
-    if ext.state.err {
+    // call (the reference; STDIO-STICKY-ERROR-ERRNO, D-12.1). The bit is read from `_flags`,
+    // the word [`load`] takes `ext.state.err` from, so no load is needed here.
+    if get(file, word::FLAGS) & ERR_SEEN != 0 {
         return Ok(None);
     }
-    if input_flushes(ext) {
-        flush_line_buffered(env, true);
+    // TIMING-COV-GETLINE-LONG: `run` loads the window itself; only the flush test needs it
+    // earlier, and a fully buffered stream never flushes before input.
+    if ext.state.policy != Policy::Full {
+        load(file, ext);
+        if input_flushes(ext) {
+            flush_line_buffered(env, true);
+        }
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {

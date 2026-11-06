@@ -1,0 +1,16 @@
+{"task": "TIMING-COV-GETLINE-LONG-2", "model": "opus", "tokens": null,
+ "result": "getdelim partial (long-record) path now reached under cargo test (BYCALLER mode, room boundary, recovering-backing sticky error); 13/13 plants CAUGHT; no code change in -2; non-AVX2 gl_long 5156.4 vs glibc 4258.2 counted",
+ "branch": "task/timing-cov-getline-long-2", "head": "98769b38",
+ "gate": {"affected": "direct tier rc 0 (shiki timing-cov-getline-long-2-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "by_caller is __fsetlocking(BYCALLER), not flockfile: the partial path needs alone() or BYCALLER; a flockfile-holding caller in a threaded process never gets it (possible small win, not measured)",
+   "wl_trace.sh never hits the getline breakpoint in the gl_long case (jobs timing-cov-getline-long-2-trace, -trace2, rc 2); the per-phase split was not obtained",
+   "probe errrecover.c: after a read error with a recovered backing the reference returns -1 with no read; clearerr resumes"
+ ],
+ "refused": [],
+ "improvement": "wl_percall could prime a missing base itself (or sync_role could) instead of exiting 2; and wl_trace needs a fix for exported stdio entries like getline",
+ "next_step": "fix wl_trace for getline, split one non-AVX2 gl_long call per phase, then attack the larger phase (non-AVX2 gl_long +898, AVX2 gl_long_win 1.63)",
+ "report_file": "handoff/perf-getline-long.md",
+ "jobs": ["shiki:timing-cov-getline-long-2-gate", "shiki:timing-cov-getline-long-2-lint", "shiki:timing-cov-getline-long-2-plants1", "shiki:timing-cov-getline-long-2-percall2"]}
