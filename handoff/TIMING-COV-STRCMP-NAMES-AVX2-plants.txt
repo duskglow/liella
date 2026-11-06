@@ -1,0 +1,13 @@
+# TIMING-COV-STRCMP-NAMES-AVX2 plants: the two blocks moved onto 32-byte boundaries (D-4.58) in
+# csys/src/machine/scan.S. machine_scanners runs strcmp on both scan levels; casecmp_avx2 runs the casecmp kernels.
+# Every plant is anchored to its function label (liella_machine_strcmp / liella_machine_casecmp_ord_avx2).
+# strcmp (§4.3): the sign of the AVX2 first block's result inverted (first differing byte).
+strcmp-v-first-sign | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_v_ret_head_differ:\n\tsbbl %eax, %eax\n\torl \$1, %eax\n)/$1\tnegl %eax\n/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED
+# strcmp (§4.3): the AVX2 first block's page test of b one byte late (b's last page offset 3968 reads the 128-byte head).
+strcmp-v-first-page-late | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_v_first:.*?)cmpl \$3967, %edx/$1cmpl \$3968, %edx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# strcmp: the page-end case taken one byte early (3966) only sends offset 3967 to the slow path, which answers it correctly.
+strcmp-v-first-page-early | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_v_first:.*?)cmpl \$3967, %edx/$1cmpl \$3966, %edx/s | cargo test -p liella-boundary --test machine_scanners | equivalent:the slow path serves every offset; one more offset taken there changes no answer
+# strncasecmp (§5.3): the second block's bound limit off by one (n = 65 takes the 64-byte path and misses a difference at index 64).
+casecmp-second-limit | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?\.Lcord_head_next:.*?)cmpq \$64, %rdx/$1cmpq \$65, %rdx/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:casecmp.*FAILED|panicked
+# strncasecmp (§5.3): the second block's stop index one byte off (a difference at 32-63 is ordered at the wrong byte).
+casecmp-second-index | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?\.Lcord_head_next:.*?)movl \$32, %eax/$1movl \$33, %eax/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:casecmp.*FAILED|panicked
