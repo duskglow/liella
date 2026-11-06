@@ -1,61 +1,72 @@
-# getline / getdelim on long records (PERF-GETLINE-LONG, -2, TIMING-COV-GETLINE-LONG)
+# getline / getdelim on long records (PERF-GETLINE-LONG, -2, TIMING-COV-GETLINE-LONG, -2)
 
-State: branch task/timing-cov-getline-long (stacked on task/perf-getline-long-2 a521f95c, which origin/next already
-contains). Role keke:~/w/r1. Code head: d46915ba (later commits on the branch are handoff only). NOT READY: plants3 rc 1 (see Plants).
+State: branch task/timing-cov-getline-long-2 (stacked on task/timing-cov-getline-long, code d46915ba). Role shiki:~/w/sh1.
+Code head: d46915ba (unchanged in -2). Test head: 98769b38. Later commits are handoff only. COMPLETE: test-only gain on top of
+the small code gain; target (parity) not reached.
 
 ## What is on the branch
-- PERF-GETLINE-LONG (D-12.19 front path, "GETLINE-LONG" comment in `getdelim_front`): on a miss where the whole unread
-  window fits the caller's buffer, the window is copied and consumed (`Partial(n)`), and the general getdelim goes on
-  after those `prefix` bytes.
-- TIMING-COV-GETLINE-LONG (d46915ba): the general `getdelim` no longer loads the stream state before `run()` (which loads
-  it again) on a fully buffered stream; it reads the error indicator from `_flags`. Line-buffered / unbuffered streams
-  still load first, for the flush-before-input test.
-- Tests (crates/core/tests/s12_stdio_clauses.rs): `s12_5_c_5_records_around_the_buffer_size` (64-byte buffer through
-  setvbuf on a fopencookie stream: records of 1, 63, 64, 65, 192 bytes after shifts 0/1/7/31/40, with and without the
-  delimiter at EOF; read error in mid-record at 64/128/150/330/359; sticky EOF with a read count) and a getline step in
-  `s12_1_g_1` (line-buffered output flushed before getline on a line-buffered input stream). The cookie test backing
-  gained `fail_at` (reads at or past it return -1 with EIO) and `reads`.
+- PERF-GETLINE-LONG (D-12.19 front path, "GETLINE-LONG" in `getdelim_front`): on a miss where the whole unread window fits
+  the caller's buffer, the window is copied and consumed (`Partial(n)`), and the general getdelim goes on after `prefix`.
+- TIMING-COV-GETLINE-LONG (d46915ba): on a fully buffered stream the general `getdelim` no longer loads the stream state
+  before `run()`, which loads it again. It reads the error indicator from `_flags`.
+- TIMING-COV-GETLINE-LONG-2 (98769b38, tests only, crates/core/tests/s12_stdio_clauses.rs
+  `s12_5_c_5_records_around_the_buffer_size`):
+  - Every case runs in three locking modes: the stream's own locking, flockfile held by the caller, and
+    `__fsetlocking(BYCALLER)`.
+  - A new section sets the caller's `*n` to w-1 .. w+2 around the unread window w. The records are exactly the window
+    then end of file, and 200 bytes ending in the delimiter.
+  - After a mid-record read error the backing recovers: the next getline returns -1 with no read, and `clearerr`
+    resumes the record.
 
-## Probe-settled (keke, ~/work/TIMING-COV-GETLINE-LONG/sticky.c, glibc black box)
-- After getline reached EOF, more data later: getline returns -1 without calling read; after clearerr it reads it.
-- Read error mid-record (cookie read -1/EIO at byte 150 of a 300-byte line, 64-byte buffer): returns 150, record
-  NUL-terminated, errno EIO, ferror 1, feof 0. The next getline returns -1 and leaves errno unchanged (0 in the probe).
+## Why the partial branch was never reached (found in -2)
+`delim_front` passes `partial = true` only when `thread::alone() || sc::by_caller(file)`. `by_caller` reads USER_LOCK,
+which is `__fsetlocking(FSETLOCKING_BYCALLER)`, not flockfile. The cargo test harness has other threads, and the old
+tests used internal locking or flockfile, so they always took `delim_locked` with `partial = false`. A BYCALLER stream
+reaches the branch: plant partial-reached is now CAUGHT.
+Side note, not changed: in a multi-threaded process a flockfile-holding caller never gets the partial path, because
+`delim_locked` releases the lock between the front and general paths. When the caller already owns the lock, nothing
+can interleave there, so the partial path would be safe. That could be a small win for a threaded flockfile reader.
+Not measured; no workload row uses it.
 
-## Measurements (keke, AVX2 path, wl_percall strstr_getline.c, job timing-cov-getline-long-percall)
-gl_long glibc 2639.2 / base a521f95c 3108.3 / new 3081.7 (1.17). gl_80 178.1 / 190.4 / 189.8 (1.07). No row slower.
+## Probe-settled (glibc black box)
+- keke ~/work/TIMING-COV-GETLINE-LONG/sticky.c (run 1): EOF is sticky (no read until clearerr). A mid-record read error
+  returns the bytes before it, NUL-terminated, with errno EIO, ferror 1, feof 0.
+- shiki ~/work/TIMING-COV-GETLINE-LONG-2/errrecover.c (run 2): the cookie fails once at byte 150, then recovers.
+  getline returns 150 (EIO). The next getline returns -1 with errno 0 and 0 reads. After clearerr, getline returns
+  151 (the rest of the record), and the next returns 5.
+- errno with the error indicator already set: ruling #3408 (follow glibc: -1, errno untouched) goes to the story
+  STDIO-STICKY-ERROR-ERRNO. Not changed or asserted here.
 
-## Findings
-- The brief's hypothesis (load/store paid per refill) does not hold in the code: `State::read_until_with` refills
-  inside one `run()`, so load / store_read happen once per call. The extra per-call load was the one before `run()`,
-  removed above for fully buffered streams. Reasoned from the code; the step-1 trace (wl_trace) was NOT run.
-- The brief's evidence (5170.6 vs 4251.8) is the non-AVX2 path on next 730f416b; the numbers here are the AVX2 path
-  (keke). The non-AVX2 path was not counted in this run.
-- PERF-GETLINE-LONG-2's plants "all survived" under a hand-written script; this run's plants go through
-  `cargo xtask plants` with a plant that panics in the partial branch (`partial-reached`) to prove it is reached.
+## Jobs (shiki, head 98769b38)
+- timing-cov-getline-long-2-gate (direct tier) rc 0. timing-cov-getline-long-2-lint (xtask clippy + static) rc 0.
+- timing-cov-getline-long-2-plants1 rc 0: 13 plants, 13 CAUGHT, 0 WARN. Plants file: shiki
+  ~/work/TIMING-COV-GETLINE-LONG-2/plants.txt. It is run 1's file plus prefix-not-counted fixed to `0usize` and the new
+  room-guard-short (`room >= n.saturating_sub(1)`).
+- timing-cov-getline-long-2-percall2 rc 0 (instructions per call; columns glibc / base a521f95c / new):
 
-## Plants (cargo xtask plants, keke, plants file ~/work/TIMING-COV-GETLINE-LONG/plants.txt, job plants3)
-12 plants: CAUGHT err-store-skipped, last-piece-dropped, refill-pos-lost, flush-guard-full. SURVIVED partial-reached
-(a panic in the `Partial(n)` branch), partial-pos-lost, partial-count-short, partial-copy-skipped, eof-after-prefix,
-done-overclaims, err-flag-not-checked. prefix-not-counted is WARN-NO-MSG: the mutant `let mut len = 0;` does not compile
-(ambiguous integer), so write `0usize`. err-flag-not-checked survives because the test's failing cookie keeps failing.
-So the partial branch is NEVER reached under cargo test, by either s12_5_c_5 test: that is why run 2's plants survived.
-Diagnostic (job timing-cov-getline-long-diag, ~/work/TIMING-COV-GETLINE-LONG/diag.txt, evidence only): the new test
-reaches past read_room, past Glue.record, the front-path miss with a non-empty window, and `delim_locked`. The test
-harness has other threads (`thread::alone()` false) and the new test does not hold the stream, so it takes the locked
-path with `partial = false`. The old test's flockfile cases also never reach the branch, so one of the remaining
-guards fails there: `sc::by_caller` (USER_LOCK in `_flags` after flockfile?), `room == n + 1`, or ERR_SEEN. Not
-split further (budget).
+| row | path | glibc | base | new | new/glibc |
+|---|---|---|---|---|---|
+| gl_long | AVX2 | 2645.6 | 3108.3 | 3081.7 | 1.16 |
+| gl_80 | AVX2 | 180.0 | 190.4 | 189.8 | 1.05 |
+| gl_long_win | AVX2 | 1184.6 | 1932.8 | 1930.7 | 1.63 |
+| gl_long | non-AVX2 | 4258.2 | 5183.0 | 5156.4 | 1.21 |
+| gl_80 | non-AVX2 | 195.0 | 206.6 | 206.0 | 1.06 |
+| gl_long_win | non-AVX2 | 2758.7 | 2788.8 | 2786.7 | 1.01 |
 
-## Open / next
-- FIRST: add flockfile-held variants to `s12_5_c_5_records_around_the_buffer_size`, then one diag plants run that panics
-  separately on `partial`, `by_caller`, `room == n + 1` to find the failing guard. Fix the test (or the guard, if
-  flockfile does not set what `by_caller` reads, which would also mean the front path never helps a flockfile caller),
-  until partial-reached is CAUGHT. Then rerun plants.txt (fix prefix-not-counted to `0usize`; give err-flag-not-checked
-  a backing that recovers after one failure).
-- Next step: count the non-AVX2 path (the row's evidence), then wl_trace one gl_long call to split the remaining
-  ~440 instructions (front path's wasted first fused scan on a miss; find then copy per piece in the general path).
-  Ideas from run 1: predict a miss from the previous call's record length; fused find+copy for general pieces.
-- Timing (nico) not run: a 0.9% instruction change is below what a timing run resolves; left for the periodic sweep.
-- RULING NEEDED: with the error indicator set, Liella's getdelim returns `Err(EIO)` (by the code, not tested); the reference leaves
-  errno unchanged (probe). Not changed or asserted here; needs a ruling on whether to match.
-- Report: handoff/reports/TIMING-COV-GETLINE-LONG.json. Plants file: keke ~/work/TIMING-COV-GETLINE-LONG/plants.txt.
+No row slower than base. The non-AVX2 gl_long gap (+898) is larger than the AVX2 one (+436). The largest AVX2 gap is
+gl_long_win (+746, 1.63).
+- Superseded and diagnostic jobs: timing-cov-getline-long-2-t1 (the test before the commit, rc 0) and
+  timing-cov-getline-long-2-percall (rc 2: base not primed, then primed with wl_prime_base.sh).
+  timing-cov-getline-long-2-trace and -trace2 (rc 2): wl_trace on gl_long getline (non-AVX2) said "getline was called
+  N times or fewer; nothing traced" with skip 10 and with skip 3. GL_LOOP calls getline 20000 times, so the breakpoint
+  at the `getline` symbol (0x61a580) is never hit. That is a wl_trace problem, not diagnosed.
+
+## Next (in order)
+1. Make wl_trace hit getline in the gl_long case. Check that the traced binary is the one the case runs, and whether
+   the static binary reaches getline through another symbol. Then split one non-AVX2 gl_long call per phase.
+2. Attack the phase that holds the surplus, non-AVX2 first. Ideas from run 1: predict a miss from the previous call's
+   record length (skip the wasted first fused scan); fused find+copy for the general path's pieces. The AVX2
+   gl_long_win row (1.63) is the other large gap.
+3. Timing (Ivy Bridge, N100) was not run: this run changed no code, and a 0.9% instruction change is below what timing
+   resolves.
+- Report: handoff/reports/TIMING-COV-GETLINE-LONG-2.json.
