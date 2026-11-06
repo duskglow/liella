@@ -1,4 +1,4 @@
-## 23. f64 expm1/log1p/sinh/cosh/tanh/cbrt fast tier: counts and the residual over glibc (LIBM-F64-EXPM1-HYPER-CBRT-TIER-2/-3, 2026-11-05, counted)
+## 24. f64 expm1/log1p/sinh/cosh/tanh/cbrt fast tier: counts and the residual over glibc (LIBM-F64-EXPM1-HYPER-CBRT-TIER-2/-3, 2026-11-05, counted)
 
 Code: the round-to-nearest fast tier in `crates/math/src/fast64/exp_log.rs` (expm1, log1p, cbrt) and
 `crates/math/src/fast64/hyperbolic.rs` (sinh, cosh, tanh), on the shared `fast64` exp and log kernels (Ziv's first
