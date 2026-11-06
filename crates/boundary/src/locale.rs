@@ -600,7 +600,17 @@ pub fn langinfo(item: i32, v: &LocaleView) -> usize {
     if let Some(a) = tb::answers_at(v.answers()).get(bits >> 16, index) {
         return a;
     }
-    if let Some(entry) = v.entry(bits >> 16, index) {
+    langinfo_decode(item, v)
+}
+
+/// [`langinfo`] without a table answer: decode the entry (and count the call towards the view's
+/// table), else [`langinfo_slow`]. Out of line so that the table path stays a leaf: inline, the
+/// `note_decoded` call made every `nl_langinfo` save and restore three registers
+/// (PARITY-SMALL-ENTRY-2, +5 instructions per call).
+#[inline(never)]
+fn langinfo_decode(item: i32, v: &LocaleView) -> usize {
+    let bits = u32::from_ne_bytes(item.to_ne_bytes());
+    if let Some(entry) = v.entry(bits >> 16, usize::try_from(bits & 0xffff).unwrap_or(usize::MAX)) {
         v.note_decoded();
         return match entry {
             Item::Word(v) => usize::try_from(v).unwrap_or(0),
