@@ -1,57 +1,50 @@
-# TIMING-N100-MUTEX-MT handoff (INCOMPLETE: do not land as it stands)
+# TIMING-N100-MUTEX-MT handoff (continued by TIMING-N100-MUTEX-MT-2)
 
-State: branch task/timing-n100-mutex-mt, code 815af0ca, tests 26ab6e90 (HEAD = the commit that adds this file).
-Base origin/next 730f416b. Role keke:~/w/n3.
+State: branch task/timing-n100-mutex-mt-2 (stacked on task/timing-n100-mutex-mt), code 369c1872, HEAD = the commit
+adding this file. Base origin/next 730f416b. Role shiki:~/w/sh1 (the -1 run used keke:~/w/n3).
 
-## What was found (step 1 of the brief)
-Annotated the N100 sweep profile (rec.mutex_lock_unlock_normal_mt.data + the staged cbench_hot, disassembled on a build
-host): 90.7k of ~175k cycle samples sit on the instruction after unlock's `xchg`, and 39k after lock's `lock cmpxchg`.
-Locked instructions per pair: exactly one in lock (`lock cmpxchg`, Acquire) and one in unlock (`xchg`, Release); no fence,
-no SeqCst RMW. So the protocol already has the minimum. The difference was what sat ahead of each one: none ahead of the
-cmpxchg; ahead of the xchg a `push %rax` (the frame LLVM placed at the entry because the export had two call sites, the
-inline futex wake and the cold slow path) plus the owner and count stores (and lock's owner/count stores still in the
-store buffer).
+## Run -2 (2026-11-06)
+1. The -1 plants job (keke TIMING-N100-MUTEX-MT-plants, rc 1): `boundary-wake-dropped` SURVIVED. Cause: no test
+   reached the export's deferred wake (`mutex_unlock_slow(.., wake=true)` in crates/boundary/src/sync.rs): s22_sync
+   never had a waiter asleep in `pthread_mutex_lock` at the unlock. Fix: s22_sync gains `wakes_sleeper` (normal,
+   error-checking, recursive; returns 31/32/33): the waiter publishes its TID and blocks; main waits until
+   /proc/self/task/<tid>/stat shows state S (asleep in the kernel), then unlocks; join with a 60 s hang guard. A dropped
+   wake now fails every run (plant CAUGHT, rc 1).
+2. Lock fast path split by type BEFORE the acquire (`Mutex::lock_fast`, helper `acquire_free`): normal/error-checking/
+   adaptive path stores only the owner; recursive path stores owner and `__count` = 1 and keeps the relock. Nothing is
+   tested after the CAS. Unlock (`unlock_fast_deferred`) tests the TID before comparing the owner (the Option compare
+   had become sete + re-test).
+   Disassembly (shiki, `__liella_libc___pthread_mutex_lock`): entry `cmp $1; je rec; test; je plain; cmp $4; jae slow`.
+   The normal path still pays 4 type-test instructions (LLVM put the recursive compare first); recursive pays 2.
+3. Decision row D-NEW (placeholder, no id reserved) in plan/07-decisions/s22-threads.md: `__count` kept by recursive
+   mutexes only (probe-settled, matches glibc).
 
-Probe (black-box, keke, `~/bin/probe`, hash b2d4f23094db): glibc leaves `__count` 0 for normal, error-checking and
-adaptive mutexes, held or free, before and after pthread_create; 1 for a recursive one held once. Liella stored 1/0 for
-every type. glibc also sets `__nusers` 1 while held; Liella leaves it 0 (existing difference, not changed, INFORMATIONAL).
+## Results (final code 369c1872)
+- Counts (Skylake-SP host, `cargo xtask bench --compare --counters cbench_hot`, job timing-n100-mutex-mt-2-counts2,
+  same host and run; instructions per call Liella, glibc in brackets):
+  normal 64.0 -> 61.0 (72.0); recursive 83.0 -> 79.0 (90.1); normal_mt 63.1 -> 61.1 (74.2); recursive_mt 82.1 -> 79.1 (93.2).
+  Every row lost instructions (the -1 head had recursive 86.0 / 85.2).
+- Plants (shiki timing-n100-mutex-mt-2-plants, `cargo xtask plants`, 7 plants): 7 CAUGHT, 0 SURVIVED, 0 WARN.
+  rt-wake-dropped, rt-waiter-mark-missed and rt-general-count-always caught by the 600 s timeout (the last one was
+  rc 101 with its message in the -1 run: a failing assertion inside a contended thread can leave the test waiting).
+- Lint (timing-n100-mutex-mt-2-lint): cargo xtask clippy + static clean on 369c1872.
+- Gate: timing-n100-mutex-mt-2-gate (shiki, direct tier, --base origin/next), see the report json / hand-back.
+- Timing: staged trees before.tar (origin/next's pthread_sync.rs and sync.rs over the branch tree; manifest commit
+  reads 369c1872 because the role's .synced head names the branch) and after.tar; 3 interleaved rounds of the 4 rows
+  under `~/bin/timing`: nozomi (N100) timing-n100-mutex-mt-2-n100, nico (Ivy Bridge) timing-n100-mutex-mt-2-ivb;
+  bookings 62 (nozomi) and 63 (nico). Results: see the hand-back; if not in, read `~/logs/<label>.log` on each host.
 
-## The change (815af0ca)
-- `__count` is kept by recursive mutexes only (lock_fast, unlock_fast_deferred, and the general lock path for the private
-  plain types; robust/PI/PP/pshared unchanged).
-- `Mutex::unlock_fast_deferred` returns Done/Wake/Slow; the export does the wake through the single cold call
-  (`mutex_unlock_slow(.., wake)`), so the fast path has no frame. No ordering changed (no D-row needed for ordering; a
-  D-row for the `__count` layout is still to write, see next step).
-- Tests (26ab6e90): `only_a_recursive_mutex_keeps_a_count`, and a count-word assertion in `every_mutex_type_excludes`
-  (covers the contended general path).
-
-## Results
-- Gate TIMING-N100-MUTEX-MT-gate (keke, on 26ab6e90): rc 0; clippy and static clean; 6 suites, 852 passed / 0 failed /
-  92 ignored; conformance 16 passed / 0 failed.
-- Counts (keke, Zen 1 AVX2; instr per call Liella / glibc), before -> after:
-  normal 64.0 -> 64.0; normal_mt 63.2 -> 63.1; recursive 83.1 -> 86.0 (+2.9); recursive_mt 82.2 -> 85.2 (+3.0).
-  The recursive rows FAIL the brief's "no row gains instructions" gate.
-- N100 timing (nozomi, booking 51, ~/bin/timing label TIMING-N100-MUTEX-MT-n100b, 3 interleaved rounds, staged trees;
-  ratio Liella/glibc, stable across rounds): normal_mt 1.215 -> 1.013 (28.06 -> 23.40 ns); normal 0.904 -> 0.761
-  (7.95 -> 6.69 ns); recursive_mt 0.848 -> 0.940 (24.87 -> 27.62 ns, SLOWER).
-  Note: both stage manifests say commit 815af0ca; the before tree was the origin/next versions of the two files checked
-  out over it (tree hashes 40734fe8 before, e2d3067d after).
-- Plants TIMING-N100-MUTEX-MT-plants (keke, `cargo xtask plants`, 6 plants) still running at hand-back; rt-wake-dropped
-  CAUGHT (by timeout). WARN-DEV-SHM printed (dir under /dev/shm, as developer-flow says for Zen 1).
-- Ivy Bridge timing: not run (budget).
-
-## Why recursive regressed
-The new `if k == MUTEX_RECURSIVE { count.store(1) }` after the CAS keeps `k` live; LLVM then folded lock's entry tests
-into setcc/test chains (`test ecx; setg; cmp $4; setb; test r8b,sil`), the pattern MUTEX-5 had removed, and laid out the
-recursive store as the fall-through: +2 in the prologue, +1 after the CAS. Unlock lost its push/pop.
+## Open / informational
+- `__nusers` (out of scope): glibc reports 1 while a mutex is held, Liella 0. A program sees it only by reading the
+  private `__data.__nusers` field: no public interface reports it (pthread_mutex_* return values, trylock, timedlock,
+  the cond wait paths do not expose it). Not changed.
 
 ## Exact next step
-Fix lock_fast's codegen so recursive does not gain: e.g. split lock_fast by type before the CAS (normal/errorcheck/
-adaptive path without the count store; recursive path with it), or keep the entry tests as separate branches (check the
-disassembly of `__liella_libc___pthread_mutex_lock` in target/liella/libc.a; disassemble one member, the full archive
-takes minutes). Then: counts (no row up), N100 timing of the 3 rows + Ivy Bridge check, plants rerun, D-row for the
-`__count` layout (probe-settled, matches glibc) in plan/07-decisions/, saturation note. If no layout keeps recursive
-level, the push removal alone (no count change) is the fallback to measure.
+Read the two timing logs: every row Liella/glibc after <= before on both classes -> the branch lands (COMPLETE).
+A row slower in time -> profile that row (perf annotate on the timing host's staged tree) before changing anything.
+The normal lock path's 2 extra type-test instructions (cmp $1/je before the plain test) are the next candidate if the
+N100 normal rows need more.
 
 ## Do not redo
-The annotation (above); the probe (cached, hash b2d4f23094db); staged trees on nozomi ~/work/TIMING-N100-MUTEX-MT/{before,after}.
+The -1 annotation and probe (hash b2d4f23094db); the before/after staged tars in ~/work/TIMING-N100-MUTEX-MT-2/ on
+shiki, nozomi and nico.
