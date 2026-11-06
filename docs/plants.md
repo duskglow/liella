@@ -66,8 +66,9 @@ id | path | pattern | cmd
     `perl:s/(liella_machine_strchr:.*?)<pattern>/$1<replacement>/s`. An unanchored pattern mutates the first match in the
     file, which is often another function.
 - `cmd`: the direct tests of the planted file, for example `cargo test -p liella-core --test stdio_short_io`. For code
-  reached only from C programs: `cargo xtask affected --only conformance:<prog> --with-exports --run`. A `cmd` may contain
-  ` | `, but a job's output should not be piped.
+  reached only from C programs: `cargo xtask affected --only conformance:<prog> --with-exports --run`; a failed program's
+  status and the last 40 lines of its stdout and stderr are on the console (D-X.27), so `msg:` can name the program's own
+  failure message. A `cmd` may contain ` | `, but a job's output should not be piped.
 - The last field:
   - `msg:<regex>` (a `grep -E` regular expression): the failing test or message the plant must produce. Name the
     failure, not just the test, because a passing run prints the test's name too (for example `msg:my_test.*FAILED|panicked`).
