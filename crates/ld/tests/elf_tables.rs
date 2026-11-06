@@ -177,7 +177,7 @@ fn walk_dyn<A: Arch>(d: &Dynamic<'_>) -> Result<Summary, ElfError> {
     let g = d.gnu_hash()?.unwrap();
     let gnu = (g.symbol_count()?, g.chain(0).collect::<Result<_, _>>()?);
     let vs = d.versym()?.unwrap();
-    let versym = (0..vs.count()).map(|i| vs.get(i)).collect::<Result<_, _>>()?;
+    let versym = (0..vs.count().unwrap()).map(|i| vs.get(i)).collect::<Result<_, _>>()?;
     let mut verdef = Vec::new();
     for v in d.verdef()?.unwrap() {
         let v = v?;
@@ -315,18 +315,20 @@ fn versym_index_out_of_range() {
     let m = image();
     let elf = Elf::parse::<X86_64>(&m.0).unwrap();
     let vs = elf.dynamic().unwrap().unwrap().versym().unwrap().unwrap();
-    assert_eq!((vs.max_index(), vs.get(4)), (4, Err(ElfError::SymbolIndex(4))));
+    assert_eq!((vs.max_index(), vs.get(4).is_ok(), vs.get(128)), (4, false, Err(ElfError::SymbolIndex(128))));
 }
 
 #[test]
-fn versym_needs_a_symbol_count() {
-    // no spec clause: D-27.8, versym without a hash table to count the symbols.
+fn versym_bounded_by_the_mapping() {
+    // no spec clause: D-27.8, versym entries are read within the mapped bytes; the count is a hint.
     let mut m = image();
     m.drop_tag(dt::HASH);
     m.drop_tag(dt::GNU_HASH);
     let elf = Elf::parse::<X86_64>(&m.0).unwrap();
-    assert_eq!(elf.dynamic().unwrap().unwrap().versym().err(), Some(ElfError::MissingDynamic(dt::HASH)));
-    assert_eq!(with(|m| m.set(dt::VERSYM, TOTAL as u64 - 6)), ElfError::AddressNotMapped(TOTAL as u64 - 6));
+    let vs = elf.dynamic().unwrap().unwrap().versym().unwrap().unwrap();
+    assert_eq!((vs.count(), vs.get(3)), (None, Ok(VersionIndex { index: 3, hidden: true })));
+    assert_eq!(with(|m| m.set(dt::VERSYM, TOTAL as u64 - 6)), ElfError::SymbolIndex(3));
+    assert_eq!(with(|m| m.set(dt::VERSYM, TOTAL as u64 + 2)), ElfError::AddressNotMapped(TOTAL as u64 + 2));
 }
 
 #[test]

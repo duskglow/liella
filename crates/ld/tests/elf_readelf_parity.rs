@@ -393,9 +393,16 @@ fn readelf_v_and_dyn_syms_parity() {
         let Some(d) = elf.dynamic().unwrap() else { continue };
         let syms = readelf("--dyn-syms", &m.path);
         let n: u32 = syms.lines().find(|l| l.contains("contains")).map_or(0, |l| num(l.split("contains ").nth(1).unwrap()) as u32);
-        assert_eq!(d.symbol_count().unwrap(), Some(n), "{}: --dyn-syms count", m.name);
+        let hashed_only_empty = d.sysv_hash().unwrap().is_none() && d.gnu_hash().unwrap().is_some_and(|g| (0..g.nbuckets()).all(|i| g.bucket(i) == Some(0)));
+        if !hashed_only_empty {
+            assert_eq!(d.symbol_count().unwrap(), Some(n), "{}: --dyn-syms count", m.name);
+        }
         if let Some(g) = d.gnu_hash().unwrap() {
-            assert_eq!(g.symbol_count().unwrap(), n, "{}: GNU hash count", m.name);
+            // Exact unless every bucket is empty (then symoffset, a lower bound: an executable that
+            // defines nothing it exports).
+            let all_empty = (0..g.nbuckets()).all(|i| g.bucket(i) == Some(0));
+            let c = g.symbol_count().unwrap();
+            assert!(c == n || (all_empty && c == g.symoffset() && c <= n), "{}: GNU hash count {c} of {n}", m.name);
         }
         if let Some(h) = d.sysv_hash().unwrap() {
             assert_eq!(h.nchain(), n, "{}: SysV nchain", m.name);
@@ -445,7 +452,7 @@ fn readelf_v_and_dyn_syms_parity() {
         assert_eq!(ours_n, theirs_n, "{}: readelf -V requirements", m.name);
         let Some(vs) = d.versym().unwrap() else { continue };
         seen += 1;
-        let ours_s: Vec<String> = (0..vs.count())
+        let ours_s: Vec<String> = (0..n)
             .map(|i| {
                 let v = vs.get(i).unwrap();
                 let name = match v.index { 0 => "*local*".to_string(), 1 => "*global*".to_string(), k => names[&k].clone() };

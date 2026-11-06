@@ -938,32 +938,33 @@ impl<'a> Dynamic<'a> {
         Ok(Some(GnuHash { bloom: Rd { b: bloom, be }, buckets: Rd { b: buckets, be }, chain: Rd { b: chain, be }, nbuckets, symoffset, bloom_shift }))
     }
 
-    /// The number of dynamic symbols, from the GNU hash table when there is one, else from the SysV
-    /// hash table's `nchain`; `None` without either.
+    /// The number of dynamic symbols: the SysV table's `nchain` when there is one (exact), else the
+    /// symbols the GNU table covers (exact when the hashed symbols come last, as linkers place them; an
+    /// object whose buckets are all empty gives `symoffset`, a lower bound); `None` without either.
     ///
     /// # Errors
     ///
-    /// The errors of [`Dynamic::gnu_hash`], [`GnuHash::symbol_count`] and [`Dynamic::sysv_hash`].
+    /// The errors of [`Dynamic::sysv_hash`], [`Dynamic::gnu_hash`] and [`GnuHash::symbol_count`].
     pub fn symbol_count(&self) -> Result<Option<u32>, ElfError> {
-        if let Some(g) = self.gnu_hash()? {
-            return g.symbol_count().map(Some);
+        if let Some(h) = self.sysv_hash()? {
+            return Ok(Some(h.nchain()));
         }
-        Ok(self.sysv_hash()?.map(|h| h.nchain()))
+        self.gnu_hash()?.map(|g| g.symbol_count()).transpose()
     }
 
-    /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The symbol count
-    /// comes from [`Dynamic::symbol_count`], and every entry is checked against the highest version
-    /// index the definitions and requirements give (walked here, names included).
+    /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The table's length is
+    /// not recorded, so an entry is read wherever it lies in the mapped bytes; [`Versym::count`] is the
+    /// [`Dynamic::symbol_count`] hint. Every entry is checked against the highest version index the
+    /// definitions and requirements give (walked here, names included).
     ///
     /// # Errors
     ///
-    /// [`ElfError::MissingDynamic`]`(DT_HASH)` without a hash table to count the symbols, the
-    /// [`Elf::bytes_at`] errors for the table, and the errors of the version walks.
+    /// The [`Elf::bytes_from`] errors for the address, the [`Dynamic::symbol_count`] errors, and the
+    /// errors of the version walks.
     pub fn versym(&self) -> Result<Option<Versym<'a>>, ElfError> {
         let Some(addr) = self.once(dt::VERSYM)? else { return Ok(None) };
-        let count = self.symbol_count()?.ok_or(ElfError::MissingDynamic(dt::HASH))?;
-        let len = bytes_for(u64::from(count), 2).ok_or(ElfError::AddressNotMapped(addr))?;
-        let tab = self.elf.bytes_at(addr, len)?;
+        let count = self.symbol_count()?;
+        let tab = self.elf.bytes_from(addr)?;
         let mut max = 1u16;
         if let Some(defs) = self.verdef()? {
             for d in defs {
@@ -1289,14 +1290,14 @@ pub struct VersionIndex {
 #[derive(Clone, Copy, Debug)]
 pub struct Versym<'a> {
     rd: Rd<'a>,
-    count: u32,
+    count: Option<u32>,
     max: u16,
 }
 
 impl Versym<'_> {
-    /// The number of entries (the dynamic symbol count).
+    /// The dynamic symbol count from the hash tables (see [`Dynamic::symbol_count`]), if known.
     #[must_use]
-    pub fn count(&self) -> u32 {
+    pub fn count(&self) -> Option<u32> {
         self.count
     }
 
@@ -1310,10 +1311,10 @@ impl Versym<'_> {
     ///
     /// # Errors
     ///
-    /// [`ElfError::SymbolIndex`] for `sym` at or past the count, [`ElfError::VersionIndex`] for an index
-    /// above [`Versym::max_index`].
+    /// [`ElfError::SymbolIndex`] for an entry past the mapped bytes, [`ElfError::VersionIndex`] for an
+    /// index above [`Versym::max_index`].
     pub fn get(&self, sym: u32) -> Result<VersionIndex, ElfError> {
-        let off = usize::try_from(sym).ok().and_then(|s| s.checked_mul(2)).filter(|_| sym < self.count);
+        let off = usize::try_from(sym).ok().and_then(|s| s.checked_mul(2));
         let raw = off.and_then(|o| self.rd.u16(o)).ok_or(ElfError::SymbolIndex(sym))?;
         let index = raw & !VERSYM_HIDDEN;
         if index > self.max {
