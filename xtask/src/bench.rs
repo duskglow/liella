@@ -122,6 +122,9 @@ static NO_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 /// XTASK-BENCH-STAGE: this `--no-build` run measures a staged tree whose products matched `bench-stage.manifest`
 /// by hash, so the mtime checks (`require_fresh`, `host_build_cached`) only require the programs to exist.
 static STAGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Tests that call `run`/`compare` hold this: the run state above is process-wide and tests run in parallel.
+#[cfg(test)]
+pub(crate) static RUN_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn mtime(p: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(p).and_then(|m| m.modified()).ok()
@@ -652,6 +655,12 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
         builds.push((Build::LiellaSorted, "liella_sorted"));
     }
     let mut measure = measure_header();
+    // XTASK-BENCH-OUTPUTS: `--counters` writes counters.tsv (this run's rows only) and counters-<bench>.tsv.
+    let (mut ctr_lines, mut ctr_benches): (Vec<(String, String)>, Vec<&str>) = (Vec::new(), Vec::new());
+    if counters && !build_only {
+        // emptied first: a run failing before its first bench is counted leaves no earlier run's rows in it
+        write_counters(&out_dir(root)?, &[], &[])?;
+    }
     for name in &names {
         let mut exes: Vec<Option<std::path::PathBuf>> = Vec::new();
         for (b, _) in &builds {
@@ -730,6 +739,16 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
                 println!("| `{row}` | {} | {} | {ratio} | {} |", fmt(h), fmt(l), fmt(s));
             }
             tsv.push_str(&format!("{row}\t{}\t{}\t{ratio}\t{}\n", num(h), num(l), num(s)));
+            if counters {
+                if let (Some(lc), Some(gc)) = (ctr[0].get(row), ctr[1].get(row)) {
+                    let ns = match (l, h) {
+                        (Some((lm, ..)), Some((hm, ..))) if hm > 0.0 => Some(lm / hm),
+                        _ => None,
+                    };
+                    // one counted run per side here: no spread, no sanity flags
+                    ctr_lines.push((name.clone(), counters_line(name, row, ns, lc, gc, "-", "")));
+                }
+            }
             // measure.tsv: ratios of medians to glibc dynamic, counter ratios on both pairings.
             let med = |k: Option<usize>| k.and_then(|k| cell(k, row)).map(|(m, ..)| m);
             let host = med(Some(1));
@@ -779,8 +798,12 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
             }
             measure.push('\n');
         }
-        let path = root.join(format!("target/liella/bench/{name}.compare.tsv"));
+        let path = out_dir(root)?.join(format!("{name}.compare.tsv"));
         fs::write(&path, tsv).map_err(|e| format!("{}: {e}", path.display()))?;
+        if counters {
+            ctr_benches.push(name);
+            write_counters(&out_dir(root)?, &ctr_benches, &ctr_lines)?;
+        }
         // After EACH bench (an overrun of a booking keeps what was measured); the file holds every bench so far.
         flush_measure(root, &measure)?;
     }
@@ -802,10 +825,60 @@ fn measure_header() -> String {
     h
 }
 
+/// XTASK-BENCH-OUTPUTS: where a staged tree's runs write their outputs (relative to the staged root).
+pub(crate) const STAGED_OUT: &str = "bench-out";
+/// The tables a bench run writes (besides `counters-<bench>.tsv` and `<bench>.compare.tsv`): outputs, never
+/// products, so `bench --stage` leaves them out of the tarball.
+const OUTPUT_FILES: [&str; 6] = ["counters.tsv", "ratio_host.tsv", "rounds.tsv", "bench_times.tsv", "decision.tsv", "measure.tsv"];
+
+/// Whether the file `name` in `target/liella/bench` is a bench run's output (see `OUTPUT_FILES`).
+pub(crate) fn is_output(name: &str) -> bool {
+    OUTPUT_FILES.contains(&name) || (name.starts_with("counters-") && name.ends_with(".tsv")) || name.ends_with(".compare.tsv")
+}
+
+/// The directory a run writes its tables to: `target/liella/bench`, or `bench-out/` at the root of a staged tree
+/// (one holding `bench-stage.manifest`), so a run never writes into the staged products and the same unpacked
+/// tree can be run any number of times (XTASK-BENCH-OUTPUTS).
+pub(crate) fn out_dir(root: &Path) -> Result<std::path::PathBuf, String> {
+    let dir = if root.join(crate::benchstage::MANIFEST).is_file() { root.join(STAGED_OUT) } else { root.join("target/liella/bench") };
+    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+/// The columns of `counters.tsv` and `counters-<bench>.tsv` (both `bench --counters` and `bench --compare --counters`).
+const COUNTERS_HEADER: &str = "bench\trow\tns_ratio\tcycles_ratio\tuops_ratio\tinstr_ratio\tliella_cycles\tglibc_cycles\tliella_uops\tglibc_uops\tliella_instr\tglibc_instr\tspread\tsuspect\n";
+
+/// One `counters.tsv` line: Liella (`l`) and glibc dynamic (`g`) counters per operation (`parse_counters` order),
+/// the ns ratio when known, the spread over the counted runs and the sanity flags.
+fn counters_line(b: &str, row: &str, ns: Option<f64>, l: &[f64; 6], g: &[f64; 6], spread: &str, flags: &str) -> String {
+    let q = |a: f64, b: f64| if a > 0.0 && b > 0.0 { Some(a / b) } else { None };
+    let cell = |x: Option<f64>| x.map_or("-".to_string(), |v| format!("{v:.3}"));
+    let abs = |v: f64| if v > 0.0 { format!("{v:.1}") } else { "-".to_string() };
+    let (cy, up, ins) = (q(l[1], g[1]), q(l[5], g[5]), q(l[0], g[0]));
+    format!("{b}\t{row}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{spread}\t{flags}\n", cell(ns), cell(cy), cell(up), cell(ins), abs(l[1]), abs(g[1]), abs(l[5]), abs(g[5]), abs(l[0]), abs(g[0]))
+}
+
+/// XTASK-BENCH-OUTPUTS: writes the counted rows of THIS run (`lines`: bench, line). `counters.tsv` is rewritten
+/// with every row of this run and nothing else (no row of an earlier run of another bench survives in it, also
+/// when this run's counting failed part-way), and `counters-<bench>.tsv` with the rows of that bench, for each
+/// bench of `benches` (the ones this run counted; one without a counted row gets the header only).
+fn write_counters(dir: &Path, benches: &[&str], lines: &[(String, String)]) -> Result<(), String> {
+    let put = |name: String, b: Option<&str>| {
+        let body: String = lines.iter().filter(|(lb, _)| b.is_none_or(|b| lb == b)).map(|(_, l)| l.as_str()).collect();
+        let path = dir.join(name);
+        fs::write(&path, format!("{COUNTERS_HEADER}{body}")).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    put("counters.tsv".into(), None)?;
+    for b in benches {
+        put(format!("counters-{b}.tsv"), Some(b))?;
+    }
+    println!("bench: counters of this run in {} (all rows) and counters-<bench>.tsv for {}", dir.join("counters.tsv").display(), if benches.is_empty() { "no bench".to_string() } else { benches.join(", ") });
+    Ok(())
+}
+
 /// Writes the cumulative `measure.tsv` of a compare run (header plus the rows of every bench finished so far).
 fn flush_measure(root: &Path, measure: &str) -> Result<std::path::PathBuf, String> {
-    let dir = root.join("target/liella/bench");
-    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let dir = out_dir(root)?;
     let path = dir.join("measure.tsv");
     fs::write(&path, measure).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
@@ -883,19 +956,28 @@ type CountedRow = ([f64; 6], f64, f64);
 /// One counted run (`CBENCH_COUNTERS=1`) of the Liella build and of the host C library per benchmark, outside
 /// the timed rounds, and a compact table per row: Liella/glibc ratios of ns (the timing rounds' median, when
 /// given), cycles, uops (issued) and instructions; `-` where the PMU lacks the event (TOOLS-5, MEASUREMENT RULE:
-/// time decides, counts explain). Also `target/liella/bench/counters.tsv` (per-op values of both sides).
+/// time decides, counts explain). Also `counters.tsv` and `counters-<bench>.tsv` in `out_dir` (per-op values of
+/// both sides; `write_counters`), written also when a counted run fails, with the rows counted before it.
 fn counted_table(root: &Path, names: &[&str], no_build: bool, ns_ratio: &BTreeMap<(String, String), f64>) -> Result<Counted, String> {
+    let (mut lines, mut started) = (Vec::new(), Vec::new());
+    let res = count_rows(root, names, no_build, ns_ratio, &mut lines, &mut started);
+    write_counters(&out_dir(root)?, &started, &lines)?;
+    res
+}
+
+/// The counted runs of `counted_table`; each table line goes to `lines` (bench, line), each bench it starts to `started`.
+fn count_rows<'a>(root: &Path, names: &[&'a str], no_build: bool, ns_ratio: &BTreeMap<(String, String), f64>, lines: &mut Vec<(String, String)>, started: &mut Vec<&'a str>) -> Result<Counted, String> {
     let mut instr: BTreeMap<(String, String), f64> = BTreeMap::new();
     let mut cyc: BTreeMap<(String, String), CycleCell> = BTreeMap::new();
     let mut printed = 0usize;
     NO_BUILD.store(no_build, std::sync::atomic::Ordering::Relaxed);
-    let mut tsv = String::from("bench\trow\tns_ratio\tcycles_ratio\tuops_ratio\tinstr_ratio\tliella_cycles\tglibc_cycles\tliella_uops\tglibc_uops\tliella_instr\tglibc_instr\tspread\tsuspect\n");
     println!("\ncounters per operation (median of 3 counted runs per side; ratio = Liella / glibc dynamic; `-` = event not available):");
     println!("{:<14} {:<26} {:>7} {:>7} {:>7} {:>7}  {:>9} {:>9} {:>9}", "bench", "row", "ns", "cycles", "uops", "instr", "cyc/op L", "cyc/op G", "spread L/G");
     let q = |a: f64, b: f64| if a > 0.0 && b > 0.0 { Some(a / b) } else { None };
     let cell = |x: Option<f64>| x.map_or("-".to_string(), |v| format!("{v:.3}"));
     let abs = |v: f64| if v > 0.0 { format!("{v:.1}") } else { "-".to_string() };
     for b in names {
+        started.push(b);
         let host = host_build_cached(root, b)?;
         let liella = if no_build { root.join(format!("target/liella/bench/{b}")) } else { c_build(root, b, Build::Liella)? };
         // TOOLS-6: three counted runs per side; per row the MEDIAN of every column, a spread column, and sanity flags.
@@ -959,12 +1041,9 @@ fn counted_table(root: &Path, names: &[&str], no_build: bool, ns_ratio: &BTreeMa
             let sp = format!("{:.0}%/{:.0}%", lsp * 100.0, gsp * 100.0);
             printed += 1;
             println!("{b:<14} {row:<26} {:>7} {:>7} {:>7} {:>7}  {:>9} {:>9} {:>9}{}", cell(ns), cell(cy), cell(up), cell(ins), abs(lv[1]), abs(gv[1]), sp, if flags.is_empty() { String::new() } else { format!("  SUSPECT:{flags}") });
-            tsv.push_str(&format!("{b}\t{row}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{sp}\t{}\n", cell(ns), cell(cy), cell(up), cell(ins), abs(lv[1]), abs(gv[1]), abs(lv[5]), abs(gv[5]), abs(lv[0]), abs(gv[0]), flags.trim()));
+            lines.push((b.to_string(), counters_line(b, row, ns, lv, gv, &sp, flags.trim())));
         }
     }
-    let dir = root.join("target/liella/bench");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    fs::write(dir.join("counters.tsv"), tsv).map_err(|e| e.to_string())?;
     Ok(Counted { instr, cyc, rows: printed })
 }
 
@@ -1579,8 +1658,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             failures.push(format!("{bench}/{name}: {got:.2} ns exceeds {what}"));
         }
     }
-    let dir = root.join("target/liella/bench");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // XTASK-BENCH-OUTPUTS: never into a staged tree's products (`out_dir`).
+    let dir = out_dir(root)?;
     let path = dir.join("ratio_host.tsv");
     fs::write(&path, out_tsv).map_err(|e| format!("{}: {e}", path.display()))?;
     // Every round of every ratio_host row, so the adaptive rule can be replayed on real data.
@@ -1599,6 +1678,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 {times}")).map_err(|e| format!("{}: {e}", tpath.display()))?;
     let path = dir.join("rounds.tsv");
     fs::write(&path, rounds_tsv).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!("bench: ratio_host.tsv, rounds.tsv and bench_times.tsv in {}", dir.display());
     println!(
         "\nbench: {ratio_rows} ratio_host rows, {target_misses} above the target {TARGET} (informational), {ungated} not gated{}",
         if gated { "" } else { " (no limits for this CPU)" }
@@ -1649,7 +1729,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             dec.push_str(&format!("{bench}\t{name}\t{metric}\t{med:.3}\t{}\t{}\t{}\t{}\t{verdict}\n", f(c.ratio, 3), f(c.ghz_l, 3), f(c.ghz_g, 3), f(lim, 3)));
         }
         println!("bench: {} rows decided on the cycles CPU's limits, {cyc_ungated} not gated (no cycle or ns limit)", pending.len() - cyc_ungated);
-        let path = root.join("target/liella/bench/decision.tsv");
+        let path = dir.join("decision.tsv");
         fs::write(&path, dec).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     if failures.is_empty() && known.is_empty() {
@@ -2073,5 +2153,86 @@ ctr	short	1
         let (_, _, v, fail, kn) = decide_cycles(("b", "k"), (1.0, 1.0), None, Some(&cell(Some(1.05))), limit_for(&cy, "C", "b", "k"));
         assert_eq!((v.as_str(), fail), ("FAIL (known regression, PERF-REGRESS)", None));
         assert!(kn.unwrap().contains("PERF-REGRESS"));
+    }
+
+    /// The benches of each data line of a counters table (the first column), after checking its header.
+    fn counters_benches(path: &Path) -> Vec<String> {
+        let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert!(text.starts_with(COUNTERS_HEADER), "{}: {text}", path.display());
+        text.lines().skip(1).map(|l| l.split('\t').next().unwrap().to_string()).collect()
+    }
+
+    // XTASK-BENCH-OUTPUTS: no spec clause (developer tooling). Each `--counters` run (bench and bench --compare)
+    // rewrites counters.tsv with its own rows only and writes counters-<bench>.tsv per bench it counted, holding that
+    // bench's rows only; a run whose counted run fails leaves no earlier run's rows in counters.tsv.
+    #[test]
+    fn counters_files_hold_only_their_own_runs_rows() {
+        use std::os::unix::fs::PermissionsExt;
+        let _run = RUN_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/xtask-bench-counters-test");
+        let _ = fs::remove_dir_all(&root);
+        let write = |rel: &str, text: &str| {
+            let p = root.join(rel);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(&p, text).unwrap();
+            p
+        };
+        let mut budgets = String::new();
+        for b in ["cbench_ta", "cbench_tb", "cbench_tc"] {
+            budgets.push_str(&format!("{b}\t{b}_r1\tratio_host\t1.10\ttest\n{b}\t{b}_r2\tratio_host\t1.10\ttest\n"));
+            write(&format!("bench/c/{b}.c"), "/* source */\n");
+        }
+        write("bench/budgets.tsv", &budgets);
+        write("bench/host_limits.tsv", "# none\n");
+        write("bench/instr_limits.tsv", "# none\n");
+        write("crates/a/src/lib.rs", "// source\n");
+        write("csys/src/b.c", "/* source */\n");
+        write("target/liella/libc.a", "!<arch>\n");
+        write("target/liella/.profile", "release\n");
+        // an earlier run of another bench
+        let out = root.join("target/liella/bench");
+        write("target/liella/bench/counters.tsv", &format!("{COUNTERS_HEADER}cbench_hot\told\n"));
+        for b in ["cbench_ta", "cbench_tb", "cbench_tc"] {
+            for (suffix, instr) in [("", 100), (".host-dynamic", 90)] {
+                // cbench_tc's counted run fails
+                let fail = if b == "cbench_tc" { "[ -n \"$CBENCH_COUNTERS\" ] && exit 1\n" } else { "" };
+                let script = format!("#!/bin/sh\n{fail}printf '{b}_r1\\t5\\n{b}_r2\\t6\\n'\n[ -n \"$CBENCH_COUNTERS\" ] && printf 'ctr\\t{b}_r1\\t{instr}\\t50\\t0\\t0\\t{instr}\\t70\\nctr\\t{b}_r2\\t{instr}\\t50\\t0\\t0\\t{instr}\\t70\\n' >&2\nexit 0\n");
+                let p = write(&format!("target/liella/bench/{b}{suffix}"), &script);
+                fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+            }
+        }
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let own = |b: &str| vec![b.to_string(), b.to_string()];
+
+        run(&root, &a(&["--no-build", "--counters", "--runs", "1", "--only", "cbench_ta,cbench_tb"])).unwrap();
+        assert_eq!(counters_benches(&out.join("counters.tsv")), [own("cbench_ta"), own("cbench_tb")].concat());
+        assert_eq!(counters_benches(&out.join("counters-cbench_ta.tsv")), own("cbench_ta"));
+        assert_eq!(counters_benches(&out.join("counters-cbench_tb.tsv")), own("cbench_tb"));
+
+        run(&root, &a(&["--no-build", "--counters", "--runs", "1", "--only", "cbench_ta"])).unwrap();
+        assert_eq!(counters_benches(&out.join("counters.tsv")), own("cbench_ta"));
+        assert_eq!(counters_benches(&out.join("counters-cbench_ta.tsv")), own("cbench_ta"));
+        assert_eq!(counters_benches(&out.join("counters-cbench_tb.tsv")), own("cbench_tb"));
+
+        // the counted run fails: reported (not a bench failure), and nothing of the earlier runs is left in the table
+        let _ = run(&root, &a(&["--no-build", "--counters", "--runs", "1", "--only", "cbench_tc"]));
+        assert_eq!(counters_benches(&out.join("counters.tsv")), Vec::<String>::new());
+        assert_eq!(counters_benches(&out.join("counters-cbench_tc.tsv")), Vec::<String>::new());
+
+        compare(&root, &a(&["--compare", "--no-build", "--counters", "--runs", "1", "cbench_tb"])).unwrap();
+        COMPARE_NO_BUILD.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(counters_benches(&out.join("counters.tsv")), own("cbench_tb"));
+        assert_eq!(counters_benches(&out.join("counters-cbench_tb.tsv")), own("cbench_tb"));
+        let text = fs::read_to_string(out.join("counters-cbench_tb.tsv")).unwrap();
+        // instr ratio 100/90 and both instruction counts
+        assert!(text.lines().nth(1).unwrap().contains("\t1.111\t50.0\t50.0\t70.0\t70.0\t100.0\t90.0\t"), "{text}");
+
+        // a compare run failing before its first bench is counted leaves no earlier run's rows either
+        fs::remove_file(out.join("cbench_tc")).unwrap();
+        let e = compare(&root, &a(&["--compare", "--no-build", "--counters", "--runs", "1", "cbench_tc"])).unwrap_err();
+        COMPARE_NO_BUILD.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(e.contains("does not exist"), "{e}");
+        assert_eq!(counters_benches(&out.join("counters.tsv")), Vec::<String>::new());
+        let _ = fs::remove_dir_all(&root);
     }
 }
