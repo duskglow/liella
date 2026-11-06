@@ -1,6 +1,6 @@
 {"task": "TIMING-COVERAGE-1106C", "model": "opus", "tokens": null,
  "result": "1106 verdicts mapped: (c) 1 open story to close (TIMING-COV-SPAWN-HEAP256M-IVB), 18 already landed; (b) 18 rows covered, 19 NONE in 4 groups, 2 noise; 3 code briefs written from a role-host profile",
- "branch": "task/timing-coverage-1106c", "head": null,
+ "branch": "task/timing-coverage-1106c", "head": "cd541b8c",
  "gate": {"affected": "n/a (planning, no code)", "peak": null}, "accepted_first_attempt": null,
  "rulings": [
   {"item": "close TIMING-COV-SPAWN-HEAP256M-IVB", "recommendation": "close: sweep time 0.971 (spread 0.699) meets its <= 1.05 exit"},
