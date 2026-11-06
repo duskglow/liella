@@ -19,7 +19,7 @@ D-29.4 (secure-RPC/DES stubs), D-27.9 (placeholder machinery), D-15.7 (rcmd fami
   `yp_match` reference does not link; a static single-threaded driver over the product's generated bodies checks every
   row (value, errno sentinel / EOPNOTSUPP), stderr text, heap bytes in use (mallinfo2 in the child) and the open
   descriptor set (BTreeSet) before/after.
-- Differences row after the RPC client/server row; plants file `~/work/legacy-rpc-libnsl-placeholder/plants.txt` (7).
+- Differences row after the RPC client/server row; plants file `~/work/legacy-rpc-libnsl-placeholder/plants.txt` (6).
 
 ## Results (keke r5, code head 16522abb)
 - `legacy-rpc-libnsl-placeholder-prep5` rc 0: `cargo xtask clippy`, `cargo xtask static`, symcov (libnsl: only the 6 private names missing).
@@ -32,8 +32,8 @@ D-29.4 (secure-RPC/DES stubs), D-27.9 (placeholder machinery), D-15.7 (rcmd fami
 ## Open / informational
 - The dynamic path (an old program actually loading libnsl.so.1) cannot run before Liella's ld.so (DL-14); the link
   and readelf checks stand in for it (NOT VERIFIED at run time).
-- `docs/spec-symbol-gaps.tsv` lists the 121 names as missing until it is regenerated (`cargo xtask symcov --tsv`); see the
-  report for whether this run regenerated it.
+- `docs/spec-symbol-gaps.tsv` lists the 121 names as missing until it is regenerated (`cargo xtask symcov --tsv`); it was
+  already stale (DL-1, D-29.5) and is left for lane step 4 (docs).
 
 ## Things not to redo
 - Probing the reference's NIS+ calls with a NULL object pointer crashes the probe (caller error); pass real objects or skip.
