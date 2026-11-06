@@ -17,3 +17,37 @@ pub(crate) fn asinhf_nearest(x: f32) -> Option<f32> {
 pub(crate) fn acoshf_nearest(x: f32) -> Option<f32> {
     liella_math::fast32::acosh_nearest_sqrt(x, sqrtsd)
 }
+
+/// The `double` `sinh` fast path (LIBM-F64-EXPM1-HYPER-CBRT-TIER) in its build chosen at startup
+/// (as [`super::exp_nearest`]).
+#[inline(always)]
+pub(crate) fn sinh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::sinh_nearest(x) };
+    }
+    liella_math::fast64::sinh_nearest(x)
+}
+
+/// The `double` `cosh` fast path in its build chosen at startup (as [`super::exp_nearest`]).
+#[inline(always)]
+pub(crate) fn cosh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::cosh_nearest(x) };
+    }
+    liella_math::fast64::cosh_nearest(x)
+}
+
+/// The `double` `tanh` fast path in its build chosen at startup (as [`super::exp_nearest`]).
+#[inline(always)]
+pub(crate) fn tanh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::tanh_nearest(x) };
+    }
+    liella_math::fast64::tanh_nearest(x)
+}

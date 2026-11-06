@@ -1,0 +1,15 @@
+# LIBM-F64-TRIG-TIER(-2) plants: cargo xtask plants handoff/LIBM-F64-TRIG-TIER-plants.txt --dir <new RAM dir>
+# Reduction constant: P3 off by 2^-79 relative (k·P3 error up to 2^-55 near 2^20).
+trig-p3 | crates/math/src/trig.rs | perl:s/0x3c0a_6263_3145_c06e/0x3c0a_6273_3145_c06e/ | cargo test -p liella-math --lib trig | msg:trig_fast_path_matches_the_accurate_path.*(FAILED|panicked)|panicked.*trig_fast_path
+# A polynomial coefficient: cos's r^6 term 1/720 -> 1/721.
+trig-coeff-c6 | crates/math/src/trig.rs | perl:s/const C6: f64 = -1\.0 \/ 720\.0;/const C6: f64 = -1.0 \/ 721.0;/ | cargo test -p liella-math --lib trig | msg:trig_fast_path_matches_the_accurate_path.*(FAILED|panicked)|panicked.*trig_fast_path
+# The bound: the exact rounding test told the assembly (S != 0) has no error.
+trig-bound | crates/math/src/trig.rs | perl:s/\} else \{ E_ABS \}/} else { 0.0 }/ | cargo test -p liella-math --lib trig | msg:trig_assembly_error_is_within_the_stated_bound.*(FAILED|panicked)|above the bound
+# The large-argument switch: the in-place entries take |x| up to 2^30 (k·P1 no longer exact).
+trig-limit | crates/math/src/trig.rs | perl:s/const LIMIT_BITS: u64 = 0x4130_0000_0000_0000;/const LIMIT_BITS: u64 = 0x41d0_0000_0000_0000;/ | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|mismatches
+# The small-argument edge: the in-place cubic down to 2^-400 (x³ underflows in hardware).
+trig-small | crates/math/src/trig.rs | perl:s/const SMALL_BITS: u64 = 0x2ac0_0000_0000_0000;/const SMALL_BITS: u64 = 0x26f0_0000_0000_0000;/ | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|mismatches
+# The sincos wiring: the in-place answer stores the sine through both out-parameters.
+trig-sincos-wire | crates/boundary/src/mathret.rs | perl:s/\*c = cv;(\n\s+return;)/*c = sv;$1/ | cargo test -p liella-boundary --test s10_math_symbols math_double_trig | msg:math_double_trig_fast_entry_matches_the_envelope_in_every_mode.*(FAILED|panicked)|sincos\.cos
+# The boundary dispatch (hot/trig.rs, TIER-3 move): the FMA build of sin/cos/tan answers with the cosine kernel.
+trig-hot-dispatch | crates/boundary/src/hot/trig.rs | lit:kernel_fma::$name(x) ==> kernel_fma::cos_nearest(x) | cargo test -p liella-boundary --test libm_fma_select libm_product_trig | msg:libm_product_trig_fma_builds_return_the_baseline_bits.*(FAILED|panicked)|differs from the baseline

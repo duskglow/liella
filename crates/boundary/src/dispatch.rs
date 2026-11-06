@@ -169,6 +169,14 @@ use crate::ffi::liella_machine_fold_limit as FOLD;
 // folded calls touch `[s & -64, s + 64)` first, page zero for a NULL `s`, so the same guard covers
 // them for every `n` (the module proof obligation).
 use crate::ffi::liella_machine_chr_limit as FOLD_CHR;
+// The memset entry's 65-128 class word (machine/fold.S, PARITY-MEMSET-SMALL-AVX2): `SET_MID_ON`
+// with folding on, else 0. The entry tests it only for sizes above the fold limit, so it must be
+// 0 whenever the fold limit is 0 (else 1-64 would take the 65-128 class): stored 0 before the
+// fold limit drops, `SET_MID_ON` after it rises.
+use crate::ffi::liella_machine_set_mid as SET_MID;
+/// The word's value with folding on: the upper bound of the entry's 65-128 class (four 16-byte
+/// blocks from each end), fixed by the assembly, not a tunable.
+const SET_MID_ON: usize = 128;
 
 /// The folded sizes: `1..=FOLD_MAX`, the classes the entries keep inline (D-4.22).
 pub(crate) const FOLD_MAX: usize = 64;
@@ -221,10 +229,12 @@ pub(crate) fn select_null_fold(fold: bool) {
         // The 129-256 copy word drops before anything else, as the compare words do.
         FOLD_MOVE.store(0, Relaxed);
         store_cmp_gates(false, false);
+        SET_MID.store(0, Relaxed);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
     if fold {
         store_move_word(true, AVX2.load(Relaxed));
+        SET_MID.store(SET_MID_ON, Relaxed);
     }
     // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
     // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,
@@ -287,6 +297,7 @@ fn resolve_fold_slow() {
 pub(crate) fn unresolve_null_fold() {
     FOLD_MOVE.store(0, Relaxed);
     store_cmp_gates(false, false);
+    SET_MID.store(0, Relaxed);
     FOLD.store(0, Relaxed);
     FOLD_CHR.store(0, Relaxed);
     FOLD_RESOLVED.store(false, Relaxed);

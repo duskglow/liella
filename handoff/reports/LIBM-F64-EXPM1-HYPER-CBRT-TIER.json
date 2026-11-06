@@ -1,0 +1,13 @@
+{"task": "LIBM-F64-EXPM1-HYPER-CBRT-TIER", "model": "opus", "tokens": null,
+ "result": "CHECKPOINT (context): fast64x module with expm1/log1p/sinh/cosh/tanh/cbrt in-place entries and proofs written, NOT compiled, NOT wired, no jobs",
+ "branch": "task/libm-f64-expm1-hyper-cbrt-tier", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The two overlap branches (perf-libm-expm1-log1p, perf-libm-hyperbolic) were not merged or read beyond their handoffs (rules forbid show of others' code); their verified pieces were not reused",
+                   "Two deviations from the brief's design: e^-a from a second kernel call (two table loads), and cbrt uses two degree-3 refinements (one Newton step reaches only about 2^-22)",
+                   "Bound at the series/kernel switch is about 2^-63.6 relative, not 2^-66"],
+ "refused": [],
+ "jobs": [],
+ "improvement": "Reading fast64.rs (66 KB) by range for its kernels took about 40k of context. A one-page kernel API note (signatures plus bound statements) in docs/codemap would let libm stories start under 60k.",
+ "next_step": "Sync to kanon kn1, compile with clippy, add the bit-equality and answer-rate tests, wire hot.rs and s10_math.tsv, then run the plants, gate and counts (handoff steps 1-5)",
+ "report_file": "handoff/libm-f64-expm1-hyper-cbrt-tier.md"}

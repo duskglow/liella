@@ -1,0 +1,12 @@
+{"task": "TIMING-N100-STRSTR-64", "model": "opus", "tokens": null,
+ "result": "strpair head blocks one mask per block: strstr_miss_64 139.4->128.4, hit_64 134.4->125.4 (glibc 99.3, target not reached), 4k rows -12; timing not run",
+ "branch": "task/timing-n100-strstr-64", "head": "df0ada21",
+ "gate": {"affected": "gate2 pending on final head (gate1 killed rc 143, superseded)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["count-after shows +0.1 on 20 unreached rows (memset_64k +0.4): per-call noise, no code path", "plants1: stop32 survived strstr tests (caller verifies candidates); new exact kernel test added"],
+ "refused": [],
+ "jobs": ["shiki:TIMING-N100-STRSTR-64-count-before", "shiki:TIMING-N100-STRSTR-64-count-after", "shiki:TIMING-N100-STRSTR-64-gate2", "shiki:TIMING-N100-STRSTR-64-plants2"],
+ "improvement": "a disassembly of strstr from the bench binary (objdump on the build host) gave the per-phase split in 2 calls; the brief's N100 annotate step is unnecessary for instruction attribution",
+ "next_step": "read gate2/plants2; booked N100 and Ivy Bridge timing of the strstr rows; then a Rust leaf fast path for hit_64 (-26 needed)",
+ "report_file": "handoff/timing-n100-strstr-64.md"}
