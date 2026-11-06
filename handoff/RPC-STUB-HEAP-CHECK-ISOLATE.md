@@ -31,10 +31,11 @@ State: branch task/rpc-stub-heap-check-isolate (cut from origin/next 6faf9548), 
 - Repro loop (`~/work/RPC-STUB-HEAP-CHECK-ISOLATE/repro.sh` on the build host, written for this story since
   handoff/DL-BOOT-RELOC.md is not on this branch): builds the test in the export,selftest build in its own RAM target
   dir, runs the binary 3900 times (every second run `--test-threads=1`), concurrent with this story's gate and plants
-  for load. Result: see the report.
+  for load. Result: fails=0 of 3900, every run ran its test; load 4.0-4.4 on 48 threads (mei, job rpc-stub-heap-check-isolate-repro).
 - Plants (`handoff/RPC-STUB-HEAP-CHECK-ISOLATE-plants.txt`, `cargo xtask plants`): svc_exit without its errno (export
   and host builds) and svc_exit keeping a 100-byte block (export build); the msg regexes require the forked child's
-  message, so they prove the child's failures reach the parent.
+  message, so they prove the child's failures reach the parent. plants-2: 3/3 CAUGHT, no WARN (plants-1 superseded: the
+  leak plant's unused allocation was optimised away; black_box keeps it).
 
 ## Next step
 None beyond the jobs in the report. Do not redo: the item-2 survey above.
