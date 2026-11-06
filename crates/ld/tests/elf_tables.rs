@@ -154,6 +154,9 @@ fn image() -> Img {
     m
 }
 
+/// One required version: flags, index, name.
+type Need = (u16, u16, Vec<u8>);
+
 /// Everything a full walk read.
 #[derive(Debug, PartialEq)]
 struct Summary {
@@ -161,7 +164,7 @@ struct Summary {
     gnu: (u32, Vec<GnuEntry>),
     versym: Vec<VersionIndex>,
     verdef: Vec<(usize, u16, u16, Vec<Vec<u8>>)>,
-    verneed: Vec<(Vec<u8>, Vec<(u16, u16, Vec<u8>)>)>,
+    verneed: Vec<(Vec<u8>, Vec<Need>)>,
     rela: Vec<(u64, u32, RelocKind, i64)>,
     jmprel: Vec<(u64, u32, RelocKind, i64)>,
     relr: Vec<u64>,
