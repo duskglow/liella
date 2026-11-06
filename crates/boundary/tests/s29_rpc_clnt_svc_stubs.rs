@@ -28,6 +28,21 @@ fn open_fds() -> BTreeSet<OsString> {
     std::fs::read_dir("/proc/self/fd").unwrap().map(|e| e.unwrap().file_name()).collect::<BTreeSet<_>>()
 }
 
+/// 1 for a non-NULL pointer.
+fn p(q: *mut c_void) -> i64 {
+    i64::from(!q.is_null())
+}
+
+/// The canary buffer as an untyped output.
+fn v(b: *mut c_char) -> *mut c_void {
+    b.cast::<c_void>()
+}
+
+/// A socket-number output inside the canary buffer.
+fn fd(b: *mut c_char) -> *mut c_int {
+    b.wrapping_add(32).cast::<c_int>()
+}
+
 fn in_use() -> u64 {
     m::mallinfo2().uordblks
 }
@@ -37,10 +52,7 @@ fn in_use() -> u64 {
 fn table() -> Vec<(&'static str, i64, bool, Stub)> {
     let host = c"localhost".as_ptr();
     let udp = c"udp".as_ptr();
-    let p = |q: *mut c_void| i64::from(!q.is_null());
     let t = Timeval { tv_sec: 1, tv_usec: 0 };
-    let v = |b: *mut c_char| b.cast::<c_void>();
-    let fd = |b: *mut c_char| b.wrapping_add(32).cast::<c_int>();
     vec![
         ("clnt_create", 0, true, Box::new(move |_| p(c::liella_compat_clnt_create(host, 1, 1, udp).cast()))),
         ("clntudp_create", 0, true, Box::new(move |b| p(c::liella_compat_clntudp_create(v(b), 1, 1, t, fd(b)).cast()))),
