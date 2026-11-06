@@ -17,4 +17,4 @@ raw-256-fold | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?)vp
 # rawmemchr: the alignment group skipped the wrong way.
 raw-256-align | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_avx_align:.*?)jz \.Lraw_avx_loop\n/$1jnz .Lraw_avx_loop\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr.*FAILED|SIGSEGV|panicked
 # rawmemchr: a hit in the first half of a 256-byte group taken as the second half's.
-raw-256-lo | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_avx_loop:.*?)jnz \.Lraw_avx_lo\n/$1jz .Lraw_avx_lo\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true
+raw-256-lo | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_avx_loop:.*?)jnz \.Lraw_avx_lo\n/$1jz .Lraw_avx_lo\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true|SIGSEGV
