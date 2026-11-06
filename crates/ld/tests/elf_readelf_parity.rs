@@ -209,7 +209,7 @@ fn readelf_d_parity() {
             assert_eq!(num(tag), e.tag, "{ctx}: {r}");
             let value = rest.split_once(')').unwrap().1.trim();
             if let (Some(open), true) = (value.find('['), value.ends_with(']')) {
-                assert_eq!(d.string(e.val).unwrap(), value[open + 1..value.len() - 1].as_bytes(), "{ctx}: {r}");
+                assert_eq!(d.string(e.val).unwrap(), &value.as_bytes()[open + 1..value.len() - 1], "{ctx}: {r}");
                 strings += 1;
             } else if value.starts_with("0x") || value.split_whitespace().next().is_some_and(|t| t.bytes().all(|b| b.is_ascii_digit())) {
                 assert_eq!(num(value), e.val, "{ctx}: {r}");
@@ -225,6 +225,9 @@ fn readelf_d_parity() {
         assert!(shape && (strings > 0 || m.name == "shared-nonotes"), "{ctx}: corpus shape ({strings} strings)");
     }
 }
+
+/// One `readelf -n` block: (file offset, length) of the segment and the whitespace-split note rows.
+type NoteBlock<'a> = ((u64, u64), Vec<Vec<&'a str>>);
 
 fn note_type(name: &[u8], t: u32) -> &'static str {
     match (name, t) {
@@ -247,7 +250,7 @@ fn readelf_n_parity() {
         let out = readelf("-n", &m.stripped);
         let ctx = m.name;
         // readelf: one block per segment, each with its rows.
-        let mut blocks: Vec<((u64, u64), Vec<Vec<&str>>)> = Vec::new();
+        let mut blocks: Vec<NoteBlock<'_>> = Vec::new();
         for l in out.lines() {
             if let Some(rest) = l.strip_prefix("Displaying notes found at file offset ") {
                 let w: Vec<&str> = rest.split_whitespace().collect();
