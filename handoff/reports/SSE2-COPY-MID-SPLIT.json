@@ -1,0 +1,12 @@
+{"task": "SSE2-COPY-MID-SPLIT", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND: copy split gains memmove_144/192 15-17% (Ivy Bridge, N100 SSE2) but memcpy_256 is slower on both hosts in both layouts (Ivy 1.155 / 1.045, N100 1.077)",
+ "branch": "task/sse2-copy-mid-split", "head": "464bc9ba",
+ "gate": {"affected": "gate-2 on 464bc9ba running at hand-back (mei:sse2-copy-mid-split-gate-2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Land or drop the SSE2 129-192 copy split: memcpy_256 measured slower (statx size)", "recommendation": "drop; mark D-4.61 REJECTED, add a NEGATIVE register row; optional follow-up profiles memcpy_256 on the N100 and tries keeping the 8-block body at next's address"}],
+ "informational": ["Ivy Bridge timing runs end rc 1 on both sides: cbench_memref/bcmp_eq_128 fails its cycle limit in 8 of 8 runs (next and head)", "the plants tool's msg regex does not accept \\d (WARN-NO-MSG on a caught plant); use [0-9]", "bench --stage trees cannot run cbench_startup with --no-build (no host static build): run it with a build"],
+ "refused": [],
+ "jobs": ["mei:sse2-copy-mid-split-gate-2", "mei:sse2-copy-mid-split-plants-2", "mei:sse2-copy-mid-split-stage-next", "mei:sse2-copy-mid-split-stage-head2", "kotori:sse2-copy-mid-split-ivb2", "nozomi:sse2-copy-mid-split-n100b"],
+ "improvement": "time every row of the touched class (memcpy_* as well as memmove_*) before a ruling: the earlier measurement listed only memmove rows and missed memcpy_256",
+ "next_step": "coordinator ruling on land/drop; if dropped revert fold.S, keep test and bench rows, mark D-4.61 REJECTED",
+ "report_file": "handoff/SSE2-COPY-MID-SPLIT.md"}
