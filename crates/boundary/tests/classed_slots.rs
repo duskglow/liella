@@ -69,7 +69,7 @@ fn the_avx2_page_after_the_swap_fills_like_a_byte_loop() {
         if liella_boundary::cpu::avx2() {
             assert_eq!(o, Outcome::Installed, "an AVX2 CPU with an unmodified section swaps");
             assert_eq!(classed::live_page(), 1, "the AVX2 page is live after the swap");
-            assert_eq!(file_backed(classed::page0()), Some(true), "the live slot page was written: it is no longer the file's page");
+            assert_eq!(file_backed(classed::page0_addr()), Some(true), "the live slot page was written: it is no longer the file's page");
         } else {
             say(b"classed_slots: no AVX2 on this CPU: the SSE2 page only\n");
             assert_eq!(o, Outcome::Sse2Class);
@@ -119,7 +119,7 @@ fn a_page_written_before_the_swap_keeps_the_sse2_page() {
             say(b"classed_slots: /proc/self/mem cannot be opened for writing\n");
             return SKIP;
         };
-        let at = classed::page0() as u64 + 16;
+        let at = classed::page0_addr() as u64 + 16;
         let mut b = [0u8; 1];
         if mem.read_at(&mut b, at).ok() != Some(1) || mem.write_at(&b, at).ok() != Some(1) {
             say(b"classed_slots: /proc/self/mem refuses a write to text (proc_mem.force_override)\n");

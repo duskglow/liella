@@ -747,7 +747,7 @@ pub fn null_fold_allowed_by(text: &[u8]) -> bool {
 /// CPU or OS without AVX2 never gets) and `disabled` as COMPAT-20. Only for a single-threaded
 /// child ([`in_child`]): the move replaces code that another thread could be running.
 pub fn classed_install(want: bool, disabled: bool) -> crate::classed::Outcome {
-    crate::classed::install_with(&crate::classed::Kernel, crate::classed::page0(), want && crate::cpu::avx2(), disabled)
+    crate::classed::install_with(&crate::classed::Kernel, crate::classed::page0_addr(), want && crate::cpu::avx2(), disabled)
 }
 
 /// `prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN)` for this process (Linux 6.3 and later; `EINVAL`

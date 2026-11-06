@@ -96,8 +96,11 @@ pub fn live_page() -> u32 {
     ffi::liella_classed_id()
 }
 
-/// Page 0's address (page 1 is at `+ PAGE`).
-pub fn page0() -> usize {
+/// Page 0's address (page 1 is at `+ PAGE`). Not named `page0`: the functions below take a
+/// `page0` argument, and `cargo xtask affected` follows a csys symbol's users by name, so a
+/// function of that name made every one of them (the `SwapOps` trait methods too) a user of
+/// fold.S and escalated a change to fold.S or scan.S to FULL.
+pub fn page0_addr() -> usize {
     core::ptr::from_ref(&ffi::liella_classed_page0).addr()
 }
 
@@ -199,7 +202,7 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
 
 /// The start-up step (static step 4, right after `cpu::init_with`).
 pub(crate) fn start(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) {
-    let _ = install_with(&Kernel, page0(), avx2_class(f, t), t.no_classed_swap == Some(true));
+    let _ = install_with(&Kernel, page0_addr(), avx2_class(f, t), t.no_classed_swap == Some(true));
 }
 
 #[cfg(test)]

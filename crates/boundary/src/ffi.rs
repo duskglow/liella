@@ -356,7 +356,7 @@ unsafe extern "C" {
     /// has AVX2 and the OS saves the YMM state).
     pub(crate) safe static liella_machine_avx2: core::sync::atomic::AtomicBool;
     /// The classed section's page 0, the SSE2 page (machine/fold.S, D-4.53); page 1, the AVX2
-    /// page, follows at `+ 4096`. Only its address is used (`classed::page0`).
+    /// page, follows at `+ 4096`. Only its address is used (`classed::page0_addr`).
     pub(crate) safe static liella_classed_page0: u8;
     /// The `memset` entry's `rep stosb` word (machine/fold.S, MEMSET-4K-3): sizes above 256 with
     /// `n >= word` set the first 64 bytes and run `rep stosb` from the next 64-byte boundary in
