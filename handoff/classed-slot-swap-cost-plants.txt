@@ -1,0 +1,9 @@
+# CLASSED-SLOT-SWAP-COST plants (D-4.53). Run: cargo xtask plants handoff/classed-slot-swap-cost-plants.txt --dir <dir>
+# The brief's two cases at sites handoff/classed-slot-infra-plants.txt does not plant (the kernel layer and the class test).
+# A slot left unswapped on an AVX2 host: the kernel call reports success without moving the page.
+mremap-not-called | crates/boundary/src/classed.rs | lit:        crate::raw::mremap_c(from, PAGE, PAGE, flags, to).map(|_| ()) ==>         let _ = (from, to, flags); Ok(()) | cargo test -p liella-boundary --test classed_slots | msg:the AVX2 page is live after the swap|avx2 page: child ended
+# A slot swapped on the SSE2 class: the class test dropped from the decision (unit test, forced class).
+sse2-class-swaps | crates/boundary/src/classed.rs | lit:    if !want { ==>     if false && !want { | cargo test -p liella-boundary --lib classed | msg:sse2_class_and_compat_flag_make_no_call.*FAILED|panicked
+# A slot swapped on the SSE2 class in a real start: the start-up passes the AVX2 class whatever init_with decided
+# (the conformance start with glibc.cpu.hwcaps=-AVX2 must keep the SSE2 page).
+start-avx2-always | crates/boundary/src/runtime.rs | lit:crate::classed::start(cpu::avx2_in(cpu_state), &tunables) ==> crate::classed::start(true, &tunables) | cargo xtask affected --only conformance:s04_classed_memset --with-exports --run || { cat conformance/build/s04_classed_memset.log.stderr; false; } | msg:expected the sse2 page at memset

@@ -203,7 +203,8 @@ pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
 
 /// Whether the AVX2-class swap runs when `liella.compat.no_classed_swap` is not set. Off
 /// (ruling #3434, D-4.53): on an Alder Lake-N class CPU the swap cost 22-26 us per process start
-/// with no measured `memset` gain; CLASSED-SLOT-SWAP-COST cuts that cost before the default flips.
+/// with no measured `memset` gain. CLASSED-SLOT-SWAP-COST split it per call: the `mremap` alone
+/// costs 30k+ kernel instructions on kernel 6.8, so no page swap is free there (D-4.53).
 pub const SWAP_BY_DEFAULT: bool = false;
 
 /// COMPAT-20's value (`liella.compat.no_classed_swap`, `None` when not set) to the `disabled`
