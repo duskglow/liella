@@ -1094,6 +1094,7 @@ s22_6_c_2	22.6	Contract	At thread exit, destructors run for non-NULL values, rep
 s22_6_c_3	22.6	Contract	Keys are limited to `PTHREAD_KEYS_MAX` (1024). ⚑ ARB.
 s22_6_c_4	22.6	Contract	**Language-level TLS** (`__thread`, `_Thread_local`, `thread_local`) gives each thread its own instance of a variable. For dynamically loaded modules, the storage is allocated lazily through `__tls_get_addr(module, offset)`.
 s22_6_g_0	22.6	Guarantees	Static TLS for the executable and initially loaded libraries is at a fixed offset from the thread pointer.
+s22_6_f_0	22.6	Failure	`pthread_setspecific` (and `tss_set`) never fails with `ENOMEM` in Liella: every thread holds the value storage for all its keys from its creation (D-NEW). glibc 2.39, with the address space exhausted, sets the first 32 keys a process creates (creation index 0 to 31) on a thread that has never stored a value, on the initial thread and on a new thread alike, and returns `ENOMEM` for a later key (index 32 and up), after which `pthread_getspecific` returns NULL for it (probe `spec/behaviour/key-nomem.probe.c`, spec/behaviour/key-nomem.md). POSIX allows `ENOMEM` here, so Liella succeeds wherever glibc does.
 s22_7_c_0	22.7	Contract	A counting semaphore.
 s22_7_c_1	22.7	Contract	`post` increments and wakes a waiter. It is **async-signal-safe**, the only synchronization primitive that is.
 s22_7_c_2	22.7	Contract	`wait` decrements, blocking while the count is 0. The timed forms take an absolute time.
