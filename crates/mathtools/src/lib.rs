@@ -36,4 +36,5 @@ pub mod cplx;
 pub mod mp;
 pub mod remez;
 pub mod special_tables;
+pub mod gamma_tables;
 pub mod tables;

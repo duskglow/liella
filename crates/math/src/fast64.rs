@@ -402,6 +402,16 @@ fn reduce_pow(z: Dd, kf: f64) -> Dd {
     fast_two_sum(h, l + z.lo)
 }
 
+/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel fast tier's `y0`, `y1` for
+/// `x < 2^-5`, `crate::fast_bessel`), or `None` when the kernel declines. Baseline build only (no
+/// FMA caller), so it sits outside [`kernels!`].
+#[inline(always)]
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
+}
+
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
 ///
 /// `r = Fast2Sum(h, l)` of [`reduce_ln2`]: exact, since `h` is a multiple of `2^-80` and `|l| <

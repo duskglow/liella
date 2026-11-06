@@ -221,6 +221,8 @@ pub fn generate() -> Vec<(&'static str, String)> {
     o.close("mp_const.rs", "Constants of the special functions in the fixed-precision formats");
     crate::special_tables::emit(&mut o.src);
     o.close("erf.rs", "Taylor tables of the `erf`/`erfc` fast tier");
+    crate::gamma_tables::emit(&mut o.src);
+    o.close("gamma.rs", "Taylor tables of the `lgamma`/`tgamma` fast tier");
     o.files
 }
 
