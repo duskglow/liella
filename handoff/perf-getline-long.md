@@ -1,8 +1,41 @@
-# getline / getdelim on long records (PERF-GETLINE-LONG -1..-3, TIMING-COV-GETLINE-LONG -1..-3)
+# getline / getdelim on long records (PERF-GETLINE-LONG -1..-3, TIMING-COV-GETLINE-LONG -1..-4)
 
-State: branch task/timing-cov-getline-long-3 (TIMING-COV-GETLINE-LONG-2's branch plus a merge of origin/next cc39389c,
-merge commit 2613e9f9). Role shiki:~/w/sh1. Code head: d46915ba (unchanged in -2 and -3). COMPLETE: test-only gain on top of
-the small code gain; target (parity) not reached.
+State: branch task/timing-cov-getline-long-4 (-3's branch plus a merge of origin/next eef6b2dd, merge commit 1781f828;
+plants file b44e7a57; handoff commits after that). Role mei:~/w/s2. COMPLETE: test-only gain on top of the small code
+gain; target (parity) not reached. Decisions in force: D-12.19 (front path), D-12.1 (ruling #3408: getdelim with the error
+indicator already set returns -1, errno untouched).
+
+## Run -4 (TIMING-COV-GETLINE-LONG-4): merge of origin/next (STDIO-STICKY-ERROR-ERRNO), no new work
+- CI could not merge -3: STDIO-STICKY-ERROR-ERRNO (120d409c, D-12.1) changed the same getdelim check and the cookie stub.
+- stdio_compat.rs `getdelim`: next's result is taken: the indicator already set -> `Ok(None)` (-1, errno untouched). The
+  branch's `Err(EIO)` is gone. The check reads `_flags & ERR_SEEN`, not next's `load(file, ext); ext.state.err`. `load`
+  sets `ext.state.err` from exactly that bit, so the answer is the same. Using it keeps the branch's only code change (no
+  early `load` on a fully buffered stream; `run` loads), which is the whole gl_long gain below. The coordinator's note said
+  `ext.state.err`. I kept the branch's form because the literal form would undo the branch's code change (INFORMATIONAL).
+- s12_stdio_clauses.rs: one `Cookie` with `fail_at`, `reads`, `chunk` and `fail_once`. The auto-merge had left `reads` in
+  twice; one is kept. The only literal is `..Cookie::default()`. `ck_read` order: fail_once, then the failure offset, then
+  the chunk limit. `records_around_the_buffer_size`: the getline after a mid-record error now sets errno to 4242 and
+  asserts it unchanged. EIO is asserted only for the read that fails.
+- Plants: handoff/TIMING-COV-GETLINE-LONG-4-plants.txt = -3's 17 + STDIO-STICKY's 3. Those 3 targeted `if ext.state.err {`,
+  which matched no site after the merge, so they were moved to the merged check, with the same mutations. Each runs both
+  s12_5_c_5 tests.
+- Jobs (mei, code head b44e7a57): -lint rc 0 (xtask clippy, all-features clippy -D warnings, xtask static, run on 1781f828;
+  b44e7a57 adds only the plants file). -gate rc 0 (affected --run --base origin/next, direct tier): 6 suites ok, 1
+  skipped (abi: no test matched), 4592 passed / 0 failed, conformance 14/0, peak 12G, oom_kill 0. -plants rc 0: 20
+  plants, 20 CAUGHT, 0 SURVIVED, 0 WARN (RAM copy /mnt/zram/claude/TIMING-COV-GETLINE-LONG-4/plants-1).
+- -percall rc 0 (wl_percall, strstr_getline.c; base = origin/next eef6b2dd; Skylake-SP host). No row rises:
+
+| row | path | glibc | next | merged | merged/glibc |
+|---|---|---|---|---|---|
+| gl_long | AVX2 | 2578.6 | 3048.9 | 3021.3 | 1.17 |
+| gl_80 | AVX2 | 175.9 | 190.4 | 189.8 | 1.08 |
+| gl_long_win | AVX2 | 1109.0 | 1928.9 | 1926.7 | 1.74 |
+| gl_long | non-AVX2 | 4255.0 | 5176.6 | 5149.0 | 1.21 |
+| gl_80 | non-AVX2 | 194.0 | 206.6 | 206.0 | 1.06 |
+| gl_long_win | non-AVX2 | 2757.8 | 2787.5 | 2785.2 | 1.01 |
+
+  The glibc column differs from -3's (different host, same CPU class). The Liella columns agree with -3's to within 0.1%.
+- Next: unchanged, see "Next (in order)" below (wl_trace on gl_long, then the per-phase split).
 
 ## Run -3 (TIMING-COV-GETLINE-LONG-3): merge of origin/next, no new code
 - CI could not merge -2 into next: PERF-GETLINE-LONG-3 had landed its own cookie-stub `chunk` field and its rewrite of
