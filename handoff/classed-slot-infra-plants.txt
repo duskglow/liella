@@ -11,6 +11,10 @@ skip-mremap | crates/boundary/src/classed.rs | perl:s/(let page1 = page0\.wrappi
 # After a failed mremap, page 0 assumed still mapped.
 no-mapped-check | crates/boundary/src/classed.rs | lit:    if ops.mapped(page0) { ==>     if true { | cargo test -p liella-boundary --lib classed | msg:a_refused_mremap_keeps_page0.*FAILED|panicked
 # The XCR0 (saved YMM state) condition dropped from the class rule.
-no-xcr0 | crates/boundary/src/classed.rs | lit:    f.avx2() && t.avx2.unwrap_or(true) ==>     f.leaf7_ebx & (1 << 5) != 0 && t.avx2.unwrap_or(true) | cargo test -p liella-boundary --lib classed | msg:the_class_needs_avx2.*FAILED|panicked
+no-xcr0 | crates/boundary/src/cpu.rs | lit:    f.avx2() && t.avx2.unwrap_or(true) ==>     f.leaf7_ebx & (1 << 5) != 0 && t.avx2.unwrap_or(true) | cargo test -p liella-boundary --lib classed | msg:the_class_needs_avx2.*FAILED|panicked
 # A write to a slot page (the same byte written back through /proc/self/mem before the move).
 slot-write | crates/boundary/src/classed.rs | perl:s/(impl SwapOps for Kernel \{.*?fn move_page\(&self, from: usize, to: usize\) -> Result<\(\), Errno> \{)/$1 if let Ok(p) = KStr::from_nul_terminated(b"\/proc\/self\/mem\\0") { if let Ok(fd) = CSys.openat(Fd::CWD, p, liella_kernel::uapi::O_RDWR, 0) { let mut b = [0u8; 1]; let _ = CSys.pread(fd, &mut b, from as i64); let _ = CSys.pwrite(fd, &b, from as i64); let _ = CSys.close(fd); } }/s | cargo test -p liella-boundary --test classed_slots | msg:the live slot page was written|avx2 page: child ended
+# CLASSED-SLOT-INFRA-4: the state byte read with the AVX2 test inverted.
+avx2-in-inverted | crates/boundary/src/cpu.rs | lit:    state & AVX2 != 0 ==>     state & AVX2 == 0 | cargo test -p liella-boundary --lib classed | msg:the_class_needs_avx2.*FAILED|panicked
+# CLASSED-SLOT-INFRA-4: the start-up passes the SSE2 class whatever init_with decided (a real start on an AVX2 host must show the AVX2 page).
+start-sse2-always | crates/boundary/src/runtime.rs | lit:crate::classed::start(cpu::avx2_in(cpu_state), &tunables) ==> crate::classed::start(false, &tunables) | cargo xtask affected --only conformance:s04_classed_memset --with-exports --run | msg:expected the avx2 page at memset
