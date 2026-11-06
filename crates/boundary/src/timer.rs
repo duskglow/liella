@@ -90,7 +90,10 @@
 //! Under another `ld.so` no thread can be created (D-22.10), so `SIGEV_THREAD` is `EAGAIN`
 //! there.
 
-use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering::{AcqRel, Acquire, Relaxed, Release, SeqCst}};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering::{Acquire, Relaxed, Release, SeqCst}};
+// The selftest counters and trace are the only read-modify-write sites that need AcqRel.
+#[cfg(feature = "selftest")]
+use core::sync::atomic::Ordering::AcqRel;
 
 use liella_abi::layout::pthread_attr_t;
 use liella_kernel::errno::{Errno, KResult};

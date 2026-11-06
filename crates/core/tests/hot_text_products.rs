@@ -212,6 +212,44 @@ fn init_second_bindtextdomain_gettext_takes_no_text_fault() {
 }
 
 #[test]
+fn init_first_mktime_after_localtime_r_takes_no_fault() {
+    // No spec clause (cost of the products). PERF-FIRSTCALL-MKTIME-SNPRINTF: the zone load starts
+    // the TSC gate, so the first mktime after localtime_r neither queries the counter (a cold
+    // text page and a system call: 1 fault on next before the change) nor reads the clock.
+    if !Path::new("/usr/share/zoneinfo/America/New_York").exists() {
+        eprintln!("skipped: no /usr/share/zoneinfo/America/New_York on this host");
+        return;
+    }
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_mktime");
+    build(&exe);
+    let s = faults(&exe, "mktime");
+    assert!(s == 0, "first mktime after localtime_r: {s} page faults (counter query back on the first implicit tzset?)");
+}
+
+/// The faults of a program's first `%.2f` (PERF-FIRSTCALL-MKTIME-SNPRINTF). `format_float` with the
+/// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
+/// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
+/// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
+const FLOAT_BOUND: u64 = 6;
+
+#[test]
+fn init_first_float_conversion_stays_within_its_page_fault_bound() {
+    // No spec clause (cost of the products): the common float conversion keeps a small frame.
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_float");
+    build(&exe);
+    let s = faults(&exe, "float");
+    assert!(s <= FLOAT_BOUND, "first %.2f: {s} page faults > {FLOAT_BOUND} (a large stack frame back on the float path?)");
+}
+
+#[test]
 fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     // HOTTEXT-FAULT-TEST: the hot-text list is regenerated from traces; PRINTF-LOOP-FAULTS found it
     // stale for the coreutils printf (text 14 -> 17 pages, +6.7% faults per exec in the printf-loop

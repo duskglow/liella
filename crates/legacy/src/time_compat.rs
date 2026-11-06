@@ -204,9 +204,17 @@ pub fn select<S: Sys>(sys: &S, objs: &impl ZoneObjects, env: Env<'_>, g: &Global
 fn add<S: Sys>(sys: &S, tz: Option<&[u8]>, tzdir: Option<&[u8]>, default: &[u8]) -> KResult<&'static Entry> {
     let generation = AtomicUsize::new(GENERATION.load(Acquire));
     let loaded = time::load(sys, tz, tzdir, default)?;
+    // A file zone starts its TSC gate here (PERF-FIRSTCALL-MKTIME-SNPRINTF): the load already
+    // makes its system calls, so the counter's one-time `PR_GET_TSC` query (D-7.14) is made on
+    // this path, and the first implicit `tzset` after it (`mktime` after `localtime_r`) takes the
+    // gate without the query or a clock read. A rule zone has no file check and no gate.
+    let tsc = if loaded.file.is_some() { sys.tsc() } else { 0 };
+    let now = recheck::now(sys);
     let checked = LastCheck::new();
-    checked.checked(recheck::now(sys));
-    let e = Entry { loaded, tz: copy(tz)?, dir: copy(tzdir)?, next: AtomicUsize::new(HEAD.load(Acquire)), checked, gate: TscGate::new(), generation };
+    checked.checked(now);
+    let gate = TscGate::new();
+    gate.start(tsc, now);
+    let e = Entry { loaded, tz: copy(tz)?, dir: copy(tzdir)?, next: AtomicUsize::new(HEAD.load(Acquire)), checked, gate, generation };
     let e: &'static Entry = TryBox::new(e)?.leak();
     HEAD.store(addr_of(e), Release);
     Ok(e)
