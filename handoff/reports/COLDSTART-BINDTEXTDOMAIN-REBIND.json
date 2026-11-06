@@ -1,0 +1,12 @@
+{"task": "COLDSTART-BINDTEXTDOMAIN-REBIND", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: hypothesis refuted, no code change; same-dir rebind already keeps the catalog (D-7.12) and a mei probe shows 0 faults / 0 syscalls for the second bind+dgettext; the bench row's residual cost is unexplained",
+ "branch": "task/coldstart-bindtextdomain-rebind", "head": "f0c614df",
+ "gate": {"affected": "not run (no code change)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["nozomi:CSP1106-n100 (730f416b) times only Liella for cold rows: second_bindtextdomain_gettext 8899 ns/op, no glibc figure; the 7.7x is from TIMING-SWEEP-1105 (f2157504)",
+                   "probe deltas: second same-dir bindtextdomain+dgettext = 0 page faults, 0 syscalls on Liella and glibc (mei, Liella built from this branch's tree)"],
+ "refused": [],
+ "jobs": ["mei:coldstart-rebind-probe", "nozomi:CSP1106-n100 (read only)"],
+ "improvement": "brief hypotheses should be checked against the code's existing decision rows (D-7.12 already covered this) before a story is cut; a 2-call grep would have redirected it to the interleaved-rows cause",
+ "next_step": "profile page faults by symbol in the bench's own cold child around round-2 row 11 (marker pages), and count allocations per repeated dgettext; remove any lookup-path allocation",
+ "report_file": "handoff/coldstart-bindtextdomain-rebind.md"}
