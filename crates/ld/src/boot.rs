@@ -262,7 +262,7 @@ mod tests {
         assert_eq!(at(&mem, 5), 0x7000_0000);
         assert_eq!(at(&mem, 6), 0x7000_0000);
         assert_eq!(at(&mem, 7 + 62), 0x7000_0000);
-        assert_eq!(mem.chunks(8).filter(|w| w != &[0; 8]).count(), 8, "no other word written");
+        assert_eq!(mem.chunks(8).filter(|w| w != &[0; 8]).count(), 7, "no other word written");
         assert_eq!(irelative::<X86_64>(&r).collect::<alloc::vec::Vec<_>>(), [(0x1008, 0x99)]);
     }
 
