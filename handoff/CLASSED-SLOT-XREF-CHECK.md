@@ -24,10 +24,25 @@ D-X.34, plants), `5f410dcf` (clippy type alias). Role keke:~/w/n1 (Zen 1 host).
   `cargo xtask classed-xref`, `equivalent:` dropped); `xref-bias-fold-limit` (run 1's biasless fold-limit read, only
   mentioned in a comment before) added as a real plant; six plants on the check's own code against its unit tests.
 
-**Results:** see handoff/CLASSED-SLOT-XREF-CHECK-report.md (gate and plants on `5f410dcf`).
+* `xtask/src/affected.rs` (`38ddde2e`): `STATIC_CHECKERS` (only `xtask/src/classed.rs`). A csys symbol named there is
+  no user of it: the check runs in `static` and `so`, which every gate runs. Without this, every direct-tier fold.S
+  change escalated to FULL (gate-2: `affected::tests::csys_falls_back_to_full_when_unsure` failed on that).
 
-**Not to redo:** the layout study above; `classed-slot-xref-check-gate` (rc 1, clippy type_complexity, fixed in
-`5f410dcf`) and `classed-slot-xref-check-plants` (stopped: older head) are superseded.
+**Results (keke, all jobs keke):**
+* `classed-slot-xref-check-plants-2` (`5f410dcf`, handoff/classed-slot-infra-plants.txt as it was then, 20 plants):
+  19 CAUGHT, 1 WARN-NO-MSG (`xref-plt-kind`: caught by the products' check in `cargo xtask so` before its unit test;
+  msg widened, moved to the story's file). The 14 plants left in classed-slot-infra-plants.txt, including
+  `xref-bias-set-mid` and `xref-bias-fold-limit`, were all CAUGHT; that file has not changed since.
+* `classed-slot-xref-check-plants-3` (the six check plants, msg fixed): 6 CAUGHT, 0 WARN, rc 0.
+* `classed-slot-xref-check-lint-2` (`38ddde2e`): clippy, static (with classed-xref: 11 pairs), and
+  `csys_falls_back_to_full_when_unsure` ok.
+* PENDING on `38ddde2e`: `classed-slot-xref-check-gate-3` (clippy, static, affected --base origin/next; changes under
+  xtask/ escalate to FULL `cargo xtask test`, about 35 min) and `classed-slot-xref-check-plants-4`
+  (handoff/CLASSED-SLOT-XREF-CHECK-plants.txt, 7 plants including the new `affected-checker-user`).
+
+**Not to redo:** the layout study above. SUPERSEDED: `classed-slot-xref-check-gate` (rc 1, clippy type_complexity),
+`classed-slot-xref-check-plants` (stopped, older head), `classed-slot-xref-check-gate-2` (rc 1, the affected
+escalation above, fixed in `38ddde2e`).
 
 **Open questions:** none. The pairing assumes both pages make their out-of-page references in the same order, which
 holds while one macro expands both bodies; a later slot whose pages differ in out-of-page references would fail the
