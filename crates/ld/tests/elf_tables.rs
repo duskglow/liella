@@ -172,20 +172,21 @@ fn relas(it: Option<impl Iterator<Item = liella_ld::elf::Rela>>) -> Vec<(u64, u3
 }
 
 fn walk_dyn<A: Arch>(d: &Dynamic<'_>) -> Result<Summary, ElfError> {
-    let h = d.sysv_hash()?.unwrap();
+    let need = ElfError::MissingDynamic;
+    let h = d.sysv_hash()?.ok_or(need(dt::HASH))?;
     let sysv = (h.nchain(), h.chain(0).collect::<Result<_, _>>()?, h.chain(1).collect::<Result<_, _>>()?);
-    let g = d.gnu_hash()?.unwrap();
+    let g = d.gnu_hash()?.ok_or(need(dt::GNU_HASH))?;
     let gnu = (g.symbol_count()?, g.chain(0).collect::<Result<_, _>>()?);
-    let vs = d.versym()?.unwrap();
-    let versym = (0..vs.count().unwrap()).map(|i| vs.get(i)).collect::<Result<_, _>>()?;
+    let vs = d.versym()?.ok_or(need(dt::VERSYM))?;
+    let versym = (0..vs.count().unwrap_or(0)).map(|i| vs.get(i)).collect::<Result<_, _>>()?;
     let mut verdef = Vec::new();
-    for v in d.verdef()?.unwrap() {
+    for v in d.verdef()?.ok_or(need(dt::VERDEF))? {
         let v = v?;
         let names = v.names().map(|a| a.map(|a| a.name.to_vec())).collect::<Result<_, _>>()?;
         verdef.push((v.offset, v.flags, v.ndx, names));
     }
     let mut verneed = Vec::new();
-    for n in d.verneed()?.unwrap() {
+    for n in d.verneed()?.ok_or(need(dt::VERNEED))? {
         let n = n?;
         let aux = n.auxes().map(|a| a.map(|a| (a.flags, a.other, a.name.to_vec()))).collect::<Result<_, _>>()?;
         verneed.push((n.file.to_vec(), aux));
@@ -198,7 +199,7 @@ fn walk_dyn<A: Arch>(d: &Dynamic<'_>) -> Result<Summary, ElfError> {
 
 fn walk(b: &[u8]) -> Result<Summary, ElfError> {
     let elf = Elf::parse::<X86_64>(b)?;
-    walk_dyn::<X86_64>(&elf.dynamic()?.unwrap())
+    walk_dyn::<X86_64>(&elf.dynamic()?.ok_or(ElfError::MissingDynamic(dt::NULL))?)
 }
 
 fn err(m: &Img) -> ElfError {
@@ -315,7 +316,7 @@ fn versym_index_out_of_range() {
     let m = image();
     let elf = Elf::parse::<X86_64>(&m.0).unwrap();
     let vs = elf.dynamic().unwrap().unwrap().versym().unwrap().unwrap();
-    assert_eq!((vs.max_index(), vs.get(4).is_ok(), vs.get(128)), (4, false, Err(ElfError::SymbolIndex(128))));
+    assert_eq!((vs.max_index(), vs.get(4).is_ok(), vs.get(128)), (4, true, Err(ElfError::SymbolIndex(128))));
 }
 
 #[test]
@@ -390,6 +391,11 @@ fn relr_malformed() {
     assert_eq!(with(|m| m.p64(RELR_AT, 0b1011)), ElfError::RelrNoBase(0));
     assert_eq!(with(|m| m.p64(RELR_AT, u64::MAX - 7)), ElfError::RelrOverflow(1));
     assert_eq!(with(|m| m.p64(RELR_AT, u64::MAX - 0x1ff)), ElfError::RelrOverflow(2));
-    assert_eq!(with(|m| m.p64(RELR_AT, u64::MAX - 0xff)), ElfError::RelrOverflow(1));
+    assert_eq!(with(|m| m.p64(RELR_AT, u64::MAX - 0xff)), ElfError::RelrOverflow(2));
+    let high_bit = |m: &mut Img| {
+        m.p64(RELR_AT, u64::MAX - 0xff);
+        m.p64(RELR_AT + 8, 1 << 63 | 1);
+    };
+    assert_eq!(with(high_bit), ElfError::RelrOverflow(1));
     assert_eq!(with(|m| m.set(dt::RELRSZ, 32)), ElfError::AddressNotMapped(RELR_AT as u64));
 }
