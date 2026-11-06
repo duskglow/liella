@@ -244,6 +244,10 @@ fn bad_magic() {
         m.b[i] ^= 0x20;
         assert_eq!(err(&m), ElfError::BadMagic);
     }
+    // A file shorter than the ELF header is refused as short before its identity is judged.
+    let mut m = image();
+    m.b[0] = 0;
+    assert_eq!(walk(&m.b[..40]), Err(ElfError::TooShort));
 }
 
 #[test]
@@ -254,6 +258,18 @@ fn s27_1_f_0_wrong_class() {
         m.b[4] = c;
         assert_eq!(err(&m), ElfError::WrongClass(c));
     }
+    // The reader decodes ELF64 only: an architecture declaring a 32-bit class accepts no object.
+    struct Class32;
+    impl Arch for Class32 {
+        const NAME: &'static str = "test-class32";
+        const E_MACHINE: u16 = 62;
+        const EI_CLASS: u8 = 1;
+        const EI_DATA: u8 = 1;
+    }
+    let mut m = image();
+    m.b[4] = 1;
+    assert_eq!(walk_as::<Class32>(&m.b), Err(ElfError::WrongClass(1)));
+    assert_eq!(walk_as::<Class32>(&image().b), Err(ElfError::WrongClass(2)));
 }
 
 #[test]
@@ -493,7 +509,13 @@ fn missing_strtab_or_strsz() {
     let mut m = image();
     m.dynent(3, dt::NEEDED, 1);
     m.dynent(4, dt::NEEDED, 1);
-    assert_eq!(err(&m), ElfError::MissingStrtab);
+    assert_eq!(Elf::parse::<X86_64>(&m.b).unwrap().dynamic().map(|_| ()), Err(ElfError::MissingStrtab));
+    // DT_STRSZ alone, with no string-valued entry, is refused as well.
+    let mut m = image();
+    for i in 0..4 {
+        m.dynent(i, 0x6fff_fff0, 0);
+    }
+    assert_eq!(Elf::parse::<X86_64>(&m.b).unwrap().dynamic().map(|_| ()), Err(ElfError::MissingStrtab));
 }
 
 #[test]
