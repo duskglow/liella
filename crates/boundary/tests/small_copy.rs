@@ -299,9 +299,8 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
     // Clause: s4_1_c_1 with D-4.22's NULL folding (owner rulings 2026-10-08, option B): NULL with
     // 1 <= n <= 64 dies by SIGSEGV on page zero with folding on (the fault in fold.S; glibc's
     // observable outcome, it has no NULL check of its own) and by the S6 abort with folding off.
-    // The copies (memcpy, memmove, __memcpy_chk) also fold 129-256 (owner ruling #3304, D-4.55);
-    // memset and __memset_chk fold 65-128 (D-4.60, owner ruling 2026-11-06): SIGSEGV up to 128
-    // with folding on; their 129-256 class keeps its test. Every other size and call, the copies' 65-128 included, takes the explicit
+    // The copies (memcpy, memmove, __memcpy_chk) also fold 129-256 (owner ruling #3304, D-4.55).
+    // Every other size and call, 65-128 included, and every memset above 64, takes the explicit
     // checks either way (the abort), n > 64 KiB included: no Rust path performs a deliberate NULL
     // access.
     use std::sync::atomic::Ordering::SeqCst;
@@ -328,9 +327,8 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
         for n in sizes {
             for call in 0..NULL_CALLS {
                 NULL_CASE.store(n * NULL_CALLS + call, SeqCst);
-                let fill = call == 4 || call == NULL_CALLS - 1; // memset, __memset_chk
                 let copy = matches!(call, 0 | 1 | 2 | 3 | 5);
-                let folded = n <= 64 || (fill && n <= 128) || (copy && (129..=256).contains(&n));
+                let folded = n <= 64 || (copy && (129..=256).contains(&n));
                 let want = if fold && folded { SIGSEGV } else { SIGABRT };
                 let end = selftest::in_child_quiet(null_call).unwrap();
                 assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n}");
@@ -579,9 +577,10 @@ fn fill_call(k: &CSys) -> i32 {
 }
 
 #[test]
-fn folded_fills_store_their_head_block_first() {
-    // Clause: s4_1_c_1 (memset, __memset_chk) with D-4.60's head-first obligation: the first store
-    // of each fill class without a NULL test is its head block at d, before any store further out.
+fn fills_store_their_head_block_first() {
+    // Clause: s4_1_c_1 (memset, __memset_chk). The store order D-4.60 records for 17-256: the
+    // first store of each fill class is its head block at d, before any store further out (what
+    // folding a class's NULL test into the page-zero fault would rely on).
     // Here d sits 16 bytes below a writable page, with a PROT_NONE page under it: the head store
     // faults (SIGSEGV), and the writable page, shared with the child, must be left untouched. A
     // class that stored a later block first would have written it before the fault.
@@ -601,7 +600,7 @@ fn folded_fills_store_their_head_block_first() {
             let end = selftest::in_child_quiet(fill_call).unwrap();
             assert_eq!(end, ChildEnd::Signaled(SIGSEGV), "n {n} chk {chk}: the head store must fault");
             let same = s::memcmp(edge as *const c_void, clean.as_ptr().cast(), PAGE) == 0;
-            assert!(same, "n {n} chk {chk}: a store past the head block came before it (D-4.60 head-first)");
+            assert!(same, "n {n} chk {chk}: a store past the head block came before it (head-first)");
         }
     }
     CSys.munmap(lo).unwrap();
@@ -647,8 +646,8 @@ fn null_fill_beside_a_page_at_64_kib(k: &CSys) -> i32 {
 
 #[test]
 fn null_fills_above_64_kib_abort_and_leave_a_page_at_64_kib_untouched() {
-    // Clause: s4_1_c_1 (the S6 abort) with D-4.60: the fill classes without a NULL test end at 128
-    // bytes (129-256 keeps its test too); every larger fill (`rep stosb`, the AVX2 fill, the Rust path) keeps the explicit test,
+    // Clause: s4_1_c_1 (the S6 abort) with D-4.22: the fill classes without a NULL test end at 64
+    // bytes (65-256 keeps its test, D-4.60); every larger fill (`rep stosb`, the AVX2 fill, the Rust path) keeps the explicit test,
     // so a NULL d with n > 64 KiB aborts before any store and never reaches a page mapped at 64 KiB.
     // In a child: the test process keeps its low addresses free.
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);

@@ -168,8 +168,7 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
 /// `[0, 64 KiB)` can succeed, which [`page_zero_unmappable`] establishes at startup
 /// (`runtime`; `selftest` forces it in tests). A folded kernel touches at most
 /// `[d, d + FOLD_MAX)` with `FOLD_MAX` = 64 <= 64 KiB, so a NULL `d` or `s` faults; the 65-2048
-/// compare classes first touch `[a, a + 32)` and `[b, b + 32)` (their head block); the 65-128 fill
-/// class (D-4.60, `SET_MID`) stores only in `[d, d + 128)`, head block first.
+/// compare classes first touch `[a, a + 32)` and `[b, b + 32)` (their head block).
 // The word itself lives in machine/fold.S (`liella_machine_fold_limit`), which reads it on every
 // call (D-4.22 COPY-FILL).
 use crate::ffi::liella_machine_fold_limit as FOLD;

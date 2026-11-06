@@ -14,11 +14,9 @@
  * 64 while folding is on and 0 otherwise, so `n <= limit` is the folded classes' one gate (n == 0
  * always passes it: the classes return at once for 0 without touching memory). Every other size
  * tail-jumps to Rust: `liella_hot_move_rest` / `liella_hot_fill_rest` (the folding decision, the
- * explicit S6 NULL checks, the large sizes). The 65-256 copy classes are here, after an explicit NULL test (owner ruling 2026-10-08, option B: 65 and up keeps
- * the explicit checks); a NULL goes to Rust, which aborts with EFAULT (S6). Exceptions: the 129-256
- * copy class is folded while `liella_machine_move_long` is 256 (owner ruling #3304, D-4.55), and
- * the 65-128 fill class is folded while folding is on (D-4.60, owner ruling 2026-11-06); from 129
- * up the fill keeps its explicit test.
+ * explicit S6 NULL checks, the large sizes). The 65-256 copy and fill classes are here, after an explicit NULL test (owner ruling 2026-10-08, option B: 65 and up keeps
+ * the explicit checks); a NULL goes to Rust, which aborts with EFAULT (S6). Exception: the 129-256
+ * copy class is folded while `liella_machine_move_long` is 256 (owner ruling #3304, D-4.55).
  *
  * HOT-KERNEL CONTRACT (what the callers rely on): the C contract only - d valid for writing n
  * bytes and s valid for reading n bytes (or NULL, handled as above). Each class reads only
@@ -352,16 +350,16 @@ __mempcpy:
 	movb %cl, (%rdi)
 .Lset_none\@:
 	ret
-/* 65-128 folded (NULLFOLD-MEMSET, D-4.60): the class is `n <= liella_machine_set_mid` (128 with
- * folding on, so n > 64 here; 0 with folding off, so every n goes on: one compare against memory, no
- * subtraction), so it runs only with folding on and has no NULL test. Its first store is the head
- * block at d and every store lies in [d, d + 128), inside the guard's [0, 64 KiB): a NULL d faults
- * on page zero before anything is written. 129-256 after the explicit NULL test (MEMSET-MID:
- * straight-line, no loop, as the copy's class; one unsigned compare n - 129 <= 127; folding it
- * measured slower on the N100, D-4.60); a NULL d, 1-128 without folding and every other size in Rust. */
+/* Not folded: 65-256 here after the explicit NULL test (MEMSET-MID: 129-256 straight-line, no
+ * loop, as the copy's class); a NULL d, 1-128 without folding and every other size in Rust. The
+ * 65-128 class is `n <= liella_machine_set_mid` (128 with folding on, so n > 64 here; 0 with
+ * folding off, so every n goes on: one compare against memory, no subtraction), then one unsigned
+ * compare n - 129 <= 127 for 129-256. */
 .Lset_big\@:
 	cmpq liella_machine_set_mid+\bias(%rip), %rdx
 	ja .Lset_129\@
+	testq %rdi, %rdi
+	jz liella_hot_fill_rest+\bias
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
