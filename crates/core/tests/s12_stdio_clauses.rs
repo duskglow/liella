@@ -347,6 +347,9 @@ struct Cookie {
     room: Option<usize>,
     seeks: usize,
     closed: bool,
+    /// Reads fail (`EIO`, -1) once the position reaches this offset; none reach past it.
+    fail_at: Option<usize>,
+    reads: usize,
 }
 
 static COOKIES: Mutex<Vec<Cookie>> = Mutex::new(Vec::new());
@@ -364,7 +367,13 @@ fn with_cookie<T>(id: usize, f: impl FnOnce(&mut Cookie) -> T) -> T {
 
 extern "C" fn ck_read(id: usize, buf: *mut c_char, n: usize) -> isize {
     with_cookie(id, |c| {
-        let src = c.data.get(c.pos..).unwrap_or(&[]);
+        c.reads += 1;
+        if c.fail_at.is_some_and(|f| c.pos >= f) {
+            errno::set(Errno::EIO);
+            return -1;
+        }
+        let end = c.fail_at.map_or(c.data.len(), |f| f.min(c.data.len()));
+        let src = c.data.get(c.pos..end).unwrap_or(&[]);
         let k = n.min(src.len());
         st::memcpy(buf.cast(), src.as_ptr().cast(), k);
         c.pos += k;
@@ -686,7 +695,14 @@ fn s12_1_g_1() {
         let line_buffered = fopen(&i, "r");
         x::setvbuf(line_buffered, null_mut(), IOLBF, 0);
         x::fgetc(line_buffered);
-        let ok = held && flushed && o.read() == b"prompt again";
+        let again = o.read() == b"prompt again";
+        // getline reads input too (TIMING-COV-GETLINE-LONG).
+        puts(" third", out);
+        let by_record = fopen(&i, "r");
+        x::setvbuf(by_record, null_mut(), IOLBF, 0);
+        let (mut p, mut cap): (*mut c_char, usize) = (null_mut(), 0);
+        let got = x::getline(Some(&mut p), Some(&mut cap), by_record);
+        let ok = held && flushed && again && got == 2 && o.read() == b"prompt again third";
         drop((o, i));
         ok
     });
@@ -1470,6 +1486,96 @@ fn s12_5_c_5_long_records_cross_the_window() {
             }
         }
     }
+}
+
+/// §12.5 getline/getdelim on a stream with a 64-byte buffer: records of 1, 63, 64, 65 and 192
+/// bytes (one byte, buffer - 1, buffer, buffer + 1, three buffers) after a short record that
+/// shifts the unread window, with and without the delimiter before end of file; a read error in
+/// the middle of a record (the bytes read before it are the record, terminated, `errno` is
+/// `EIO`, the error indicator is set, and the next call reads nothing and returns -1); end of
+/// file is sticky (no read until `clearerr`). Probe sticky.c (task TIMING-COV-GETLINE-LONG)
+/// settled the reference's results for the error and end-of-file cases.
+#[test]
+fn s12_5_c_5_records_around_the_buffer_size() {
+    let pattern = |n: usize, seed: u8| -> Vec<u8> { (0..n).map(|i| b'a' + ((i as u8).wrapping_mul(5).wrapping_add(seed) % 26)).collect() };
+    let open = |data: &[u8], fail_at: Option<usize>| {
+        let id = cookie(data, None);
+        with_cookie(id, |c| c.fail_at = fail_at);
+        let fp = fopencookie(id, "r");
+        assert_eq!(x::setvbuf(fp, null_mut(), IOFBF, 64), 0);
+        (id, fp)
+    };
+    for (idx, len) in [1usize, 63, 64, 65, 192].into_iter().enumerate() {
+        for shift in [0usize, 1, 7, 31, 40] {
+            for tail in [&b"\n"[..], &b""[..]] {
+                let warm = pattern(300, 3);
+                let rec = pattern(len, idx as u8);
+                let mut data = [&warm[..], b"\n"].concat();
+                data.extend(std::iter::repeat_n(b'q', shift));
+                data.push(b'\n');
+                data.extend_from_slice(&rec);
+                data.extend_from_slice(tail);
+                if !tail.is_empty() {
+                    data.extend_from_slice(b"z\n");
+                }
+                let (_, fp) = open(&data, None);
+                let mut p: *mut c_char = null_mut();
+                let mut cap = 0usize;
+                // The warm-up record grows the caller's buffer past the stream's.
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 301);
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(shift + 1).unwrap());
+                let want = len + tail.len();
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "len {len} shift {shift} tail {}", tail.len());
+                assert_eq!(bytes(p.cast(), want + 1), [&rec[..], tail, b"\0"].concat(), "len {len} shift {shift} tail {}", tail.len());
+                if !tail.is_empty() {
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 2, "the next record");
+                    assert_eq!(text(p), b"z\n");
+                }
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file");
+                assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, len {len}");
+                x::fclose(fp);
+            }
+        }
+    }
+    // A read error in the middle of a record, after the window was consumed more than once.
+    for fail in [150usize, 128, 64, 330, 359] {
+        let mut data = pattern(300, 1);
+        data.push(b'\n');
+        data.extend(pattern(200, 2));
+        data.push(b'\n');
+        let (_, fp) = open(&data, Some(fail));
+        let mut p: *mut c_char = null_mut();
+        let mut cap = 0usize;
+        let mut start = 0;
+        if fail > 301 {
+            assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 301);
+            start = 301;
+        }
+        errno::set_raw(0);
+        let want = fail - start;
+        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "error at {fail}");
+        assert_eq!(errno::get(), Errno::EIO.get(), "error at {fail}");
+        assert_eq!(bytes(p.cast(), want + 1), [&data[start..fail], b"\0"].concat(), "error at {fail}");
+        assert!(x::ferror(fp) != 0 && x::feof(fp) == 0, "the error indicator, error at {fail}");
+        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "after the error");
+        x::fclose(fp);
+    }
+    // End of file is sticky: data that arrives later is not read before `clearerr`.
+    let (id, fp) = open(b"abc", None);
+    let mut p: *mut c_char = null_mut();
+    let mut cap = 0usize;
+    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 3);
+    assert!(x::feof(fp) != 0);
+    let reads = with_cookie(id, |c| {
+        c.data.extend_from_slice(b"def\n");
+        c.reads
+    });
+    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "sticky end of file");
+    assert_eq!(with_cookie(id, |c| c.reads), reads, "no read while end of file is set");
+    x::clearerr(fp);
+    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 4);
+    assert_eq!(text(p), b"def\n");
+    x::fclose(fp);
 }
 
 /// §12.5: `fputs` writes a Text without a newline; `puts` writes it to `stdout` with one.

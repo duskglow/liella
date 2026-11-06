@@ -2061,13 +2061,17 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     if !byte_oriented(file) {
         return Ok(None);
     }
-    load(file, ext);
     // The error indicator stops a record read before it reads (the reference).
-    if ext.state.err {
+    if get(file, word::FLAGS) & ERR_SEEN != 0 {
         return Err(Errno::EIO);
     }
-    if input_flushes(ext) {
-        flush_line_buffered(env, true);
+    // TIMING-COV-GETLINE-LONG: `run` loads the window itself; only the flush test needs it
+    // earlier, and a fully buffered stream never flushes before input.
+    if ext.state.policy != Policy::Full {
+        load(file, ext);
+        if input_flushes(ext) {
+            flush_line_buffered(env, true);
+        }
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {
