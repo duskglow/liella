@@ -1,8 +1,44 @@
 # getline / getdelim on long records (PERF-GETLINE-LONG -1..-3, TIMING-COV-GETLINE-LONG -1..-3)
 
-State: branch task/timing-cov-getline-long-2 (stacked on task/timing-cov-getline-long, code d46915ba). Role shiki:~/w/sh1.
-Code head: d46915ba (unchanged in -2). Test head: 98769b38. Later commits are handoff only. COMPLETE: test-only gain on top of
+State: branch task/timing-cov-getline-long-3 (TIMING-COV-GETLINE-LONG-2's branch plus a merge of origin/next cc39389c,
+merge commit 2613e9f9). Role shiki:~/w/sh1. Code head: d46915ba (unchanged in -2 and -3). COMPLETE: test-only gain on top of
 the small code gain; target (parity) not reached.
+
+## Run -3 (TIMING-COV-GETLINE-LONG-3): merge of origin/next, no new code
+- CI could not merge -2 into next: PERF-GETLINE-LONG-3 had landed its own cookie-stub `chunk` field and its rewrite of
+  `s12_5_c_5_long_records_cross_the_window`. Merged origin/next (allowed by the brief). One `Cookie` stub now has `fail_at`,
+  `reads` and `chunk`. The only struct literal (`cookie()`) uses `..Cookie::default()`, so all three are set. `ck_read`
+  counts the call, fails at the failure offset, and caps each read at the chunk limit; a short read never crosses the
+  failure offset.
+- No test dropped: `long_records_cross_the_window` (next: file and cookie sources, BUFSIZ and st_blksize buffers, short
+  reads, getdelim ':', BYCALLER/internal) and `records_around_the_buffer_size` (this branch: 64-byte setvbuf buffer,
+  flockfile mode, the caller's *n around the window, mid-record errors with recovery, sticky EOF) are not duplicates.
+- stdio_compat.rs auto-merged. Checked: next's GETLINE-LONG partial path (`getdelim_front`, `Partial(n)`) and this
+  branch's general-getdelim change (ERR_SEEN from `_flags`, no early load on a fully buffered stream) are both there and
+  do not overlap. The diff against next is that one hunk.
+- Plants: one file with both stories' plants, shiki ~/work/TIMING-COV-GETLINE-LONG-3/plants.txt. It has -2's 13 plus 4 from
+  PERF-GETLINE-LONG-3 that -2 did not have (window-not-consumed, copy-skipped, room-guard, partial-flag-ignored). PERF-3's
+  other 4 are the same mutations as -2's.
+- Jobs (shiki, head 2613e9f9; later commits are handoff only):
+  - timing-cov-getline-long-3-lint (xtask clippy, all-features clippy -D warnings, xtask static) rc 0.
+  - timing-cov-getline-long-3-gate (affected --base origin/next, direct tier) rc 0: 6 suites ok, 1 skipped (abi: no test
+    matched), 4589 passed / 0 failed, conformance 14/0, peak 12G, oom_kill 0.
+  - timing-cov-getline-long-3-plants rc 0: 17 plants, 17 CAUGHT, 0 SURVIVED, 0 WARN (RAM copy
+    /mnt/zram/claude/TIMING-COV-GETLINE-LONG-3/plants-1).
+  - timing-cov-getline-long-3-percall rc 0 (wl_percall, instructions per call; base = origin/next cc39389c, new = merged).
+    Both dispatch paths on one Skylake-SP host (non-AVX2 via GLIBC_TUNABLES, as in -2). No row rises:
+
+| row | path | glibc | next | merged | merged/glibc |
+|---|---|---|---|---|---|
+| gl_long | AVX2 | 2645.6 | 3029.6 | 3003.0 | 1.14 |
+| gl_80 | AVX2 | 180.0 | 190.4 | 189.8 | 1.05 |
+| gl_long_win | AVX2 | 1184.6 | 1928.0 | 1925.9 | 1.63 |
+| gl_long | non-AVX2 | 4258.2 | 5176.6 | 5150.0 | 1.21 |
+| gl_80 | non-AVX2 | 195.0 | 206.6 | 206.0 | 1.06 |
+| gl_long_win | non-AVX2 | 2758.7 | 2785.5 | 2783.3 | 1.01 |
+
+- The next steps below (wl_trace on gl_long, then the per-phase split) still hold. This run did no optimisation work,
+  as the brief said.
 
 ## What is on the branch
 - PERF-GETLINE-LONG (D-12.19 front path, "GETLINE-LONG" in `getdelim_front`): on a miss where the whole unread window fits
