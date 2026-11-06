@@ -67,6 +67,7 @@ cargo xtask stubs             # regenerate the test stubs from the spec
 cargo xtask so                # build libc.a, libc.so.6 and liella-crt1.o into target/liella/
 cargo xtask test              # the full test gate (long; see docs/toolchain.md)
 cargo xtask affected --list   # the tests a change can reach (direct tier by default)
+cargo xtask affected --run    # run them (one of --list and --run is required)
 ```
 
 `scripts/dev.sh xtask test` runs the same through a helper script. Every build parameter is in
