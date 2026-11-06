@@ -387,7 +387,7 @@ unsafe extern "C" {
     /// `dispatch::MOVE_FOLD_MAX` (256) while NULL folding is on, with the sign bit
     /// (`dispatch::MOVE_SSE2`, the SSE2 body) under the SSE2 build, else 0; sizes above 128 with
     /// `n <= word` (sign bit cleared) take the 129-256 classes with no NULL test. Written only by
-    /// `crate::dispatch::store_move_word` (proof obligations: nonzero only while the folding
+    /// `crate::dispatch::store_cmp_gates` (with folding on) and `drop_move_word` (proof obligations: nonzero only while the folding
     /// guard holds, i.e. no access in `[0, 64 KiB)` can succeed; positive and nonzero only while
     /// the AVX2 flag is set).
     pub(crate) safe static liella_machine_move_long: core::sync::atomic::AtomicUsize;

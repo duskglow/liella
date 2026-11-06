@@ -89,16 +89,14 @@ pub(crate) fn select(avx2: bool) {
         // is false).
         CMP_LONG_WORD.store(0, Relaxed);
         CMP_MID.store(0, Relaxed);
+        // Also gives the 129-256 copy word its SSE2 mark before the flag drops.
         store_cmp_gates(FOLD.load(Relaxed) != 0, false);
-        // The 129-256 copy word takes its SSE2 mark before the flag drops.
-        store_move_word(FOLD.load(Relaxed) != 0, false);
     }
     AVX2.store(avx2, Relaxed);
     if avx2 {
         CMP_MID.store(128, Relaxed);
     }
     update_cmp_gates();
-    store_move_word(FOLD.load(Relaxed) != 0, avx2);
 }
 
 // The AVX2 flag word of the ordered compare's SSE2 long class (machine/fold.S, MEMCMP-MID-3): 128
@@ -130,8 +128,17 @@ fn update_cmp_gates() {
 /// both (8-32 carry), 57 with folding alone (8-64), 0 with folding off. Their sum never exceeds
 /// 57, so `n - 65 + WIDE + LOW` carries only for `8..=64`, also between the two stores (a racing
 /// call may see one old word): a smaller WIDE is stored before LOW grows, LOW shrinks before WIDE
-/// grows.
+/// grows. With folding on it also stores the 129-256 copy word ([`move_word`]): every caller runs
+/// before the AVX2 flag goes off and after folding and the flag are set (the same points as the
+/// compare words), so that word never names the AVX2 body while the flag is off, also between the
+/// stores; it is independent of the compare words. With folding off the word is already 0
+/// ([`drop_move_word`] runs before every fold-off store of the fold limit, and nothing else
+/// raises it), so the startup `select`, which runs before the lazy folding decision, does not
+/// touch it (NULLFOLD-COPY-MID-4: start-up instructions no more than before D-4.55).
 fn store_cmp_gates(fold: bool, avx2: bool) {
+    if fold {
+        FOLD_MOVE.store(move_word(true, avx2), Relaxed);
+    }
     let wide = if fold && avx2 { 32 } else { 0 };
     let low = if !fold { 0 } else if avx2 { 25 } else { 57 };
     // The 65-2048 word (sizes above 64 only, independent of WIDE and LOW): dropped first, raised last.
@@ -205,11 +212,10 @@ pub(crate) const fn move_word(fold: bool, avx2: bool) -> usize {
     }
 }
 
-/// Store the 129-256 copy word for `fold` / `avx2`. Callers store it before folding or the AVX2
-/// flag goes off and after both are set, so the word never names folding or the AVX2 body that
-/// the state does not allow, also between the stores.
-fn store_move_word(fold: bool, avx2: bool) {
-    FOLD_MOVE.store(move_word(fold, avx2), Relaxed);
+/// Drop the 129-256 copy word to 0 (no folded size): run before the fold limit goes to 0, so the
+/// word is 0 whenever folding is off ([`store_cmp_gates`] raises it only with folding on).
+fn drop_move_word() {
+    FOLD_MOVE.store(0, Relaxed);
 }
 
 /// Whether NULL folding is on (the explicit S6 checks are off for the kernel sizes).
@@ -226,14 +232,13 @@ static FOLD_RESOLVED: AtomicBool = AtomicBool::new(false);
 /// Also marks the decision as taken, so a forced setting is never overridden by [`resolve_fold`].
 pub(crate) fn select_null_fold(fold: bool) {
     if !fold {
-        // The 129-256 copy word drops before anything else, as the compare words do.
-        FOLD_MOVE.store(0, Relaxed);
+        // The 129-256 copy word and the compare words drop before the fold limit.
+        drop_move_word();
         store_cmp_gates(false, false);
         SET_MID.store(0, Relaxed);
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
     if fold {
-        store_move_word(true, AVX2.load(Relaxed));
         SET_MID.store(SET_MID_ON, Relaxed);
     }
     // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
@@ -295,7 +300,7 @@ fn resolve_fold_slow() {
 /// Test-only: forget the folding decision (folding off, undecided), as at process start.
 #[cfg(feature = "selftest")]
 pub(crate) fn unresolve_null_fold() {
-    FOLD_MOVE.store(0, Relaxed);
+    drop_move_word();
     store_cmp_gates(false, false);
     SET_MID.store(0, Relaxed);
     FOLD.store(0, Relaxed);

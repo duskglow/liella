@@ -1415,7 +1415,7 @@ liella_machine_cmp_long:
 	.size liella_machine_cmp_long, 8
 /* The copy entry's 129-256 class word (NULLFOLD-COPY-MID, D-4.55; `ffi::liella_machine_move_long`):
  * 256 while NULL folding is on with the AVX2 build, 2^63 | 256 (sign bit: the SSE2 body) while
- * folding is on with the SSE2 build, else 0 (written by `crate::dispatch::store_move_word`: dropped
+ * folding is on with the SSE2 build, else 0 (written by `crate::dispatch::store_cmp_gates` and `drop_move_word`: dropped
  * before folding or the AVX2 flag goes off, raised after both are set). The 129-256 copy classes
  * have no NULL test (their first load, s at offset 0, faults on page zero before any store), so the
  * word is their only gate: sizes above 128 with `n > word` (sign bit cleared) tail-jump to the
