@@ -1498,15 +1498,29 @@ fn s12_5_c_5_long_records_cross_the_window() {
 #[test]
 fn s12_5_c_5_records_around_the_buffer_size() {
     let pattern = |n: usize, seed: u8| -> Vec<u8> { (0..n).map(|i| b'a' + ((i as u8).wrapping_mul(5).wrapping_add(seed) % 26)).collect() };
-    let open = |data: &[u8], fail_at: Option<usize>| {
+    // Locking `mode`: 0 the stream's own locking, 1 held by the caller (flockfile), 2 the caller
+    // does the locking (`__fsetlocking(FSETLOCKING_BYCALLER)`). The test harness runs other
+    // threads, so only mode 2 lets a record start in the window and go on past it (`Partial`).
+    let open = |data: &[u8], fail_at: Option<usize>, mode: u8| {
         let id = cookie(data, None);
         with_cookie(id, |c| c.fail_at = fail_at);
         let fp = fopencookie(id, "r");
         assert_eq!(x::setvbuf(fp, null_mut(), IOFBF, 64), 0);
+        match mode {
+            1 => x::flockfile(fp),
+            2 => assert_eq!(x::__fsetlocking(fp, FSETLOCKING_BYCALLER), FSETLOCKING_INTERNAL),
+            _ => {}
+        }
         (id, fp)
     };
+    let close = |fp: *mut FILE, mode: u8| {
+        if mode == 1 {
+            x::funlockfile(fp);
+        }
+        x::fclose(fp);
+    };
     for (idx, len) in [1usize, 63, 64, 65, 192].into_iter().enumerate() {
-        for shift in [0usize, 1, 7, 31, 40] {
+        for (shift, mode) in [0usize, 1, 7, 31, 40].into_iter().flat_map(|s| [(s, 0u8), (s, 1), (s, 2)]) {
             for tail in [&b"\n"[..], &b""[..]] {
                 let warm = pattern(300, 3);
                 let rec = pattern(len, idx as u8);
@@ -1518,32 +1532,80 @@ fn s12_5_c_5_records_around_the_buffer_size() {
                 if !tail.is_empty() {
                     data.extend_from_slice(b"z\n");
                 }
-                let (_, fp) = open(&data, None);
+                let (_, fp) = open(&data, None, mode);
                 let mut p: *mut c_char = null_mut();
                 let mut cap = 0usize;
                 // The warm-up record grows the caller's buffer past the stream's.
                 assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 301);
                 assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(shift + 1).unwrap());
                 let want = len + tail.len();
-                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "len {len} shift {shift} tail {}", tail.len());
-                assert_eq!(bytes(p.cast(), want + 1), [&rec[..], tail, b"\0"].concat(), "len {len} shift {shift} tail {}", tail.len());
+                let what = format!("len {len} shift {shift} tail {} mode {mode}", tail.len());
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "{what}");
+                assert_eq!(bytes(p.cast(), want + 1), [&rec[..], tail, b"\0"].concat(), "{what}");
                 if !tail.is_empty() {
-                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 2, "the next record");
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 2, "the next record, {what}");
                     assert_eq!(text(p), b"z\n");
                 }
-                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file");
-                assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, len {len}");
-                x::fclose(fp);
+                assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file, {what}");
+                assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, {what}");
+                close(fp, mode);
+            }
+        }
+    }
+    // The caller's buffer around the unread window: a first record of `s + 1` bytes leaves
+    // `w = 63 - s` unread bytes with no delimiter; the caller's `*n` is then `w - 1` to `w + 2`
+    // (`w + 1` is the record's first piece and its NUL exactly). Records: exactly the window
+    // and then end of file, and 200 bytes ending in the delimiter.
+    let mut p: *mut c_char = null_mut();
+    let mut real = 0usize;
+    {
+        // A buffer of `real` bytes from the library's allocator; the cases claim less of it.
+        let (_, fp) = open(&[&pattern(300, 4)[..], b"\n"].concat(), None, 0);
+        assert_eq!(x::getline(Some(&mut p), Some(&mut real), fp), 301);
+        x::fclose(fp);
+    }
+    for s in [0usize, 3, 30] {
+        let w = 63 - s;
+        for (len, tail) in [(w, &b""[..]), (200, &b"\n"[..])] {
+            for room in [w - 1, w, w + 1, w + 2] {
+                for mode in [0u8, 1, 2] {
+                    let rec = pattern(len, (s + room) as u8);
+                    let mut data = [&b"q".repeat(s)[..], b"\n", &rec, tail].concat();
+                    if !tail.is_empty() {
+                        data.extend_from_slice(b"z\n");
+                    }
+                    let (_, fp) = open(&data, None, mode);
+                    let mut cap = real;
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(s + 1).unwrap());
+                    let mut cap = room;
+                    let want = len + tail.len();
+                    let what = format!("shift {s} len {len} room {room} mode {mode}");
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "{what}");
+                    assert_eq!(bytes(p.cast(), want + 1), [&rec[..], tail, b"\0"].concat(), "{what}");
+                    if cap != room {
+                        real = cap;
+                    }
+                    if !tail.is_empty() {
+                        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 2, "the next record, {what}");
+                        assert_eq!(text(p), b"z\n");
+                        real = real.max(cap);
+                    }
+                    assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "end of file, {what}");
+                    assert!(x::feof(fp) != 0 && x::ferror(fp) == 0, "end of file, {what}");
+                    close(fp, mode);
+                }
             }
         }
     }
     // A read error in the middle of a record, after the window was consumed more than once.
-    for fail in [150usize, 128, 64, 330, 359] {
+    // The backing then recovers: the error indicator still stops the next record before it
+    // reads (probe errrecover.c, task TIMING-COV-GETLINE-LONG-2), and `clearerr` resumes it.
+    for (fail, mode) in [150usize, 128, 64, 330, 359].into_iter().flat_map(|f| [(f, 0u8), (f, 1), (f, 2)]) {
         let mut data = pattern(300, 1);
         data.push(b'\n');
         data.extend(pattern(200, 2));
         data.push(b'\n');
-        let (_, fp) = open(&data, Some(fail));
+        let (id, fp) = open(&data, Some(fail), mode);
         let mut p: *mut c_char = null_mut();
         let mut cap = 0usize;
         let mut start = 0;
@@ -1553,15 +1615,25 @@ fn s12_5_c_5_records_around_the_buffer_size() {
         }
         errno::set_raw(0);
         let want = fail - start;
-        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "error at {fail}");
-        assert_eq!(errno::get(), Errno::EIO.get(), "error at {fail}");
-        assert_eq!(bytes(p.cast(), want + 1), [&data[start..fail], b"\0"].concat(), "error at {fail}");
-        assert!(x::ferror(fp) != 0 && x::feof(fp) == 0, "the error indicator, error at {fail}");
-        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "after the error");
-        x::fclose(fp);
+        let what = format!("error at {fail} mode {mode}");
+        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(want).unwrap(), "{what}");
+        assert_eq!(errno::get(), Errno::EIO.get(), "{what}");
+        assert_eq!(bytes(p.cast(), want + 1), [&data[start..fail], b"\0"].concat(), "{what}");
+        assert!(x::ferror(fp) != 0 && x::feof(fp) == 0, "the error indicator, {what}");
+        let reads = with_cookie(id, |c| {
+            c.fail_at = None;
+            c.reads
+        });
+        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), -1, "after the error, {what}");
+        assert_eq!(with_cookie(id, |c| c.reads), reads, "no read while the error indicator is set, {what}");
+        x::clearerr(fp);
+        let end = if fail > 301 { data.len() } else { 301 };
+        assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), isize::try_from(end - fail).unwrap(), "after clearerr, {what}");
+        assert_eq!(bytes(p.cast(), end - fail + 1), [&data[fail..end], b"\0"].concat(), "after clearerr, {what}");
+        close(fp, mode);
     }
     // End of file is sticky: data that arrives later is not read before `clearerr`.
-    let (id, fp) = open(b"abc", None);
+    let (id, fp) = open(b"abc", None, 0);
     let mut p: *mut c_char = null_mut();
     let mut cap = 0usize;
     assert_eq!(x::getline(Some(&mut p), Some(&mut cap), fp), 3);
