@@ -1,50 +1,49 @@
 # CLASSED-SLOT-INFRA handoff (one page)
 
-**State:** branch `task/classed-slot-infra-3` (continues -2 and -1; real base = merge-base with next
-`fbce527e`, 209 commits behind origin/next `e39b9799`). Code head `3b1821cc`. Role shiki:~/w/sh2 (Zen 1, AVX2 class).
-**Verdict: DO NOT LAND.** The swap meets ruling #3139's system-call and VMA bound, but every start costs more
-on every class (below).
+**State:** branch `task/classed-slot-infra-4` (continues -3/-2/-1; origin/next `41b8737b` merged in at `c97fa7bc`, so
+the story's base is now origin/next; profile comparisons use the old merge-base `fbce527e` tree). Code head `d6838ffc`,
+plants `7a3c12b9` tree. Role shiki:~/w/sh2 (Zen 1, AVX2 class).
+**Verdict: INCOMPLETE.** The fixed start-up cost is found and removed. Still to do: the N100 start-up timing, and
+settling a possible ~+8k kernel-instruction difference on the no-swap classes (below).
 
-**Decisions in force:** D-4.53 (classed entries, M6; section name `.text.liella_machine_memset` kept until the next
-hot-text regen, ruling #3274), COMPAT-20 (`liella.compat.no_classed_swap=1`), rulings #3138-#3141, #3297.
+**Decisions in force:** D-4.53 (classed entries, M6; row updated: the class comes from `cpu::init_with`'s state),
+COMPAT-20 (`liella.compat.no_classed_swap=1`), rulings #3138-#3141, #3297.
 
-**Run -3 (this run):**
-* The -2 gate (mei `classed-slot-infra-2-gate`, FULL) failed in `affected::tests::csys_falls_back_to_full_when_unsure`:
-  scan.S/fold.S escalated to FULL ("`pagemap` ... is a trait method"). Cause: `affected` follows a csys symbol's
-  users by name, and the function `classed::page0()` (it reads `liella_classed_page0`) shared its name with the
-  `page0` argument of `pagemap`, `install_with` and `decide`. Fix 3b1821cc: renamed it `page0_addr()`. Dev job
-  `classed-slot-infra-3-dev` rc 0: xtask clippy, static, the 5 `affected::tests::csys*` tests (csys_symbol_reading
-  included), classed unit tests (5), classed_slots (5). -2's count-branch never ran (it was chained after the red gate).
-* Plants `classed-slot-infra-3-plants` rc 3: the tool REFUSED because its copy of the role lacked
-  `conformance/build/s22_cancel_race.lock`. The gate I started at the same time in that role wrote that transient
-  file. Not rerun (budget). Rerun AFTER the gate, alone in the role: same file handoff/classed-slot-infra-plants.txt.
-* Start-up bound, shiki (AVX2 class), strace + VMA probe (`~/work/classed-slot-infra-3/vmas.c`): branch default
-  = base + exactly openat(/proc/self/pagemap), pread64 16 B, close, mremap, and 13 VMAs vs 11. With `-AVX2` and with
-  COMPAT-20: 28 calls / 11 VMAs, the same as base. **Within the bound.**
-* **Over the bound: a fixed cost on every start, all classes.** Same host, release products, 2 passes x 5 runs:
-  startup_kinstr_c merge-base 162.7-165.8k (default, COMPAT-20 and -AVX2 alike); branch 226.8-237.9k (default,
-  COMPAT-20 and -AVX2 alike). startup_instr_c (user only) 2148 -> 2432 on every class. Inside the branch, swap on vs
-  off is within noise, so the 4 calls are not the cost. Minor faults 60-63 -> 63-64 and text +11 KB (same LOAD
-  segments) do not explain ~65k instructions. Cause NOT found. Job logs: shiki `classed-slot-infra-3-kin-{mb,branch}`.
-* Counts vs origin/next (`classed-slot-infra-3-count-{base,branch}`, Liella instr/call): AVX2 class memset_144/256
-  30.4 -> 28.4 (-2, as designed), others the same; SSE2 class _144/_256 39.4 -> 37.4; 16/64/128/4k the same.
-* Booked timing (`timing` jobs, base staged by next's `bench --stage`, the branch by the manual recipe because the
-  branch predates XTASK-BENCH-STAGE): Ivy Bridge (nico, SSE2 class) memset_16..4k time ratios identical to base
-  in all 3 rounds (unchanged). N100 (nozomi, AVX2 class) memset at parity or a little better (_256 0.89 vs
-  0.90-1.00), no slower row. N100 start-up: startup_kinstr_c time ratio vs glibc 0.52-0.56 base -> 0.60-0.65
-  branch, slower, matching the instruction counts.
+**Run -4 (this run):**
+* **-3's "every class pays +65k" was a measurement error.** cbench_startup gives its children `PATH` only, so
+  `bench --tunables` never reached the measured start: -3's COMPAT-20 and -AVX2 rows were the default class with
+  the swap. With the tunables in the child (`~/work/classed-slot-infra-4/prof3.sh`), COMPAT-20 and -AVX2 make
+  the same system calls (9 / 12) and faults as the merge-base. Fixed: the bench now passes `GLIBC_TUNABLES` to its
+  children (d6838ffc).
+* **The real fixed cost (+80 user instructions, every class)** came from an exact single-step tracer
+  (`~/work/classed-slot-infra-4/step.c`, one RIP per user instruction, mapped to symbols with nm). `classed::start`
+  called `cpu::features_cached()` a second time. With a second caller, `features()` went out of line
+  (+169 in `cpu::features`, -89 in `init_with`). Fix d6838ffc: `init_with` already returns its state byte.
+  `runtime::start` passes `cpu::avx2_in(state)`, and the class rule is `cpu::avx2_wanted`, used by `init_with`
+  (`classed::avx2_class` is removed).
+* **After the fix** (job `classed-slot-infra-4-r2-prof`, exact user instructions, merge-base -> branch):
+  SSE2 class (-AVX2) 5330 -> 5338 (+8: runtime::start +10, resolve_fold_slow +5, strlen -7); COMPAT-20
+  5622 -> 5826 (+204: `key_of` +120 and `signed_number` +54 parse the flag that the merge-base ignores, start +41);
+  default AVX2 class 2145 -> 2319 (+174, the swap's code) and 9 -> 13 system calls. Kernel, perf stat, 5 runs each:
+  default 197k -> 270k (the swap's 4 calls, within #3139); COMPAT-20 218k -> 227k and -AVX2 247k -> 255k in this
+  run, but equal in the earlier run (`prof3.sh`: 215-220k vs 213-220k, 241-247k vs 237-254k). Run-to-run spread
+  is about ±8k at load ~15, so that gap is NOT settled. Bench rows on the role (now with tunables): startup_kinstr_c
+  224.8k default / 192.4k COMPAT-20 / 209.3k -AVX2. startup_instr_c 2331 / 5870 / 5356.
+* Gate/plants: `classed-slot-infra-4-r2-dev` rc 0 (full clippy, xtask clippy, static, classed unit tests, bench build);
+  `-r2-gate` (direct tier) then `-r2-plants` (alone in the role, `/dev/shm/claude/CLASSED-SLOT-INFRA-4/plants-1`), chained
+  by `~/work/classed-slot-infra-4/chain.sh`; results in the report json.
 
-**Exact next step:**
-1. Profile the fixed start-up cost before changing anything: per-phase split of one start (validation/wl_trace.sh)
-   for merge-base vs branch, with `-AVX2` so no swap runs. Start with the +284 user instructions (they show what
-   runs); then kernel instructions by phase (exec, faults, exit). Suspects to rule out: what `runtime.rs`/`config.rs`
-   now run on every start, and text layout (the page-aligned classed pages in fold.S, hot-text order).
-2. Fix it, rerun kin.sh on both trees (bound: branch = base on SSE2/COMPAT-20; AVX2 = base + 4 calls' cost).
-3. Then gate (direct tier, `--base origin/next`), then plants alone in the role, then a re-timed N100 start-up row.
+**Open:** (1) is the ~+8k kernel on no-swap classes real? Use many interleaved runs (perf stat -r 50, mb and branch
+alternating) on a quiet moment; suspects are the +11 KB text (page-cache/readahead of the bigger LOAD) and the
+page-aligned classed section. (2) COMPAT-20 parsing costs 174 user instructions in `key_of`/`signed_number` whenever
+the flag is set. It is the cost of honouring the flag, paid only by those who set it; `key_of`'s 120 could shrink.
 
-**Not to redo:** the export, guard and MDWE tests are in the conformance program; the syscall/VMA bound is
-measured; memset timing on both classes is done (redo only if fold.S changes). No selftest symbol (libc.a localizes
-hidden symbols). Scripts: shiki `~/work/classed-slot-infra-3/{counts,kin,faults,stage}.sh`; trees
-`/mnt/zram/claude/classed-slot-infra-3/{base,mb,branch}`.
+**Exact next step:** 1) check -r2-gate and -r2-plants (fix any red); 2) settle the kernel gap (Open 1); 3) re-time the
+N100 start-up row (stage per handoff/timing-sweep-1105.md, now `cargo xtask bench --stage` works on this branch; run
+`~/bin/timing <label> ...` directly on the N100 host, base = origin/next).
+
+**Not to redo:** the syscall/VMA bound is measured; memset timing on both classes is done (redo only if fold.S changes);
+the fixed user cost is found and fixed. Scripts: shiki `~/work/classed-slot-infra-4/{step.c,prof3.sh,prof5.sh,prof6.sh,chain.sh}`;
+merge-base tree `/mnt/zram/claude/classed-slot-infra-3/mb`.
 
 **Read:** docs/design/loadtime-entry.md 4 and 5.3-5.7; D-4.53; handoff/classed-slot-infra-plants.txt.
