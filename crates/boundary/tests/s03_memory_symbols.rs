@@ -879,3 +879,92 @@ fn kernel_pages_align_and_prefer_a_node() {
     pages.unmap(a, SEG);
     pages.unmap(b, 3 * PAGE);
 }
+
+/// no spec clause (Liella's in-place rule, REALLOC-FUSE): `realloc` returns the same pointer
+/// while the request fits the block's class and is more than half the class below it, and moves
+/// the block otherwise. The export tests this before its general path (PERF-REALLOC-USABLE-2).
+#[test]
+// opaque-ok: the test needs the export's own in-place rule (pointer identity), not a folded call
+fn realloc_in_place_fit_rule() {
+    let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+    let p = s::malloc(17);
+    assert!(!p.is_null());
+    let q = s::realloc(p, 24);
+    assert_eq!(q, p, "17 -> 24 stays in the same class");
+    let r = s::realloc(q, 1000);
+    assert!(!r.is_null());
+    assert_ne!(r, q, "a request beyond the class moves the block");
+    let t = s::realloc(r, 2);
+    assert!(!t.is_null());
+    assert_ne!(t, r, "a request at most half the class below moves the block back down");
+    let u = s::realloc(t, 0);
+    assert!(u.is_null(), "size 0 frees and returns NULL");
+
+    // The lower bound is exact: in the 32-byte class a request of 9 stays (more than half of 16)
+    // and 8 moves; in the 1024-byte class 449 stays (more than half of 896) and 448 moves.
+    for (first, keep, moved) in [(17usize, 9usize, 8usize), (1000, 449, 448)] {
+        let p = s::malloc(first);
+        assert!(!p.is_null());
+        assert_eq!(s::realloc(p, keep), p, "{first} -> {keep} stays");
+        let m = s::realloc(p, moved);
+        assert!(!m.is_null());
+        assert_ne!(m, p, "{first} -> {moved} moves to the class below");
+        s::free(m);
+    }
+}
+
+/// `realloc` across every small size class boundary (REALLOC-ONE-LOOKUP): growing one byte past
+/// a class, back to it, and shrinking to half the class below, through the export (the fused
+/// path `Heap::fit` / `resize_held`), keeps the old bytes and returns a block whose usable size
+/// covers the request; a request that fits the class and is above half the class below stays
+/// in place.
+// Clauses: s3_1_c_3, s3_1_g_2 (and malloc_usable_size: at least the request).
+#[test]
+fn realloc_keeps_bytes_and_usable_size_at_every_class_boundary() {
+    let _g = global();
+    // The class sizes, from the heap itself: 1, then one past each usable size, up to 64 KiB.
+    let mut classes = Vec::new();
+    let mut n = 1;
+    while n <= 65536 {
+        let p = opaque::malloc(n);
+        let u = s::malloc_usable_size(p);
+        opaque::free(p);
+        assert!(u >= n);
+        classes.push(u);
+        n = u + 1;
+    }
+    assert!(classes.len() > 20, "small classes found: {classes:?}");
+    let pattern = |i: usize| u8::try_from(i * 7 % 251).unwrap_or(0) ^ 0x5a;
+    for (i, &u) in classes.iter().enumerate() {
+        let below = if i == 0 { 0 } else { classes[i - 1] };
+        let mut p = opaque::malloc(u);
+        assert_eq!(s::malloc_usable_size(p), u);
+        // Every usable byte (malloc_usable_size's bytes are the caller's).
+        let src: Vec<u8> = (0..u).map(pattern).collect();
+        st::memcpy(p, src.as_ptr().cast(), u);
+        // Within the class: in place.
+        for n in [u, below / 2 + 1, (below / 2 + u) / 2] {
+            if n == 0 || n > u {
+                continue;
+            }
+            let q = opaque::realloc(p, n);
+            assert_eq!(q, p, "class {u}: realloc to {n} stays in place");
+            assert!(s::malloc_usable_size(q) >= n);
+        }
+        // Growth past the class: all `u` old bytes kept.
+        let grown = opaque::realloc(p, u + 1);
+        assert!(!grown.is_null());
+        assert!(s::malloc_usable_size(grown) > u, "class {u}: growth by one byte gets room for it");
+        let got = bytes(grown, u);
+        assert!(got.iter().enumerate().all(|(k, &b)| b == pattern(k)), "class {u}: growth kept every byte");
+        // Back to the class size, then to half the class below: the bytes the request covers.
+        p = opaque::realloc(grown, u);
+        assert!(s::malloc_usable_size(p) >= u);
+        assert!(bytes(p, u).iter().enumerate().all(|(k, &b)| b == pattern(k)), "class {u}: back to {u} kept every byte");
+        let half = (below / 2).max(1);
+        let small = opaque::realloc(p, half);
+        assert!(s::malloc_usable_size(small) >= half);
+        assert!(bytes(small, half).iter().enumerate().all(|(k, &b)| b == pattern(k)), "class {u}: shrink to {half} kept its bytes");
+        opaque::free(small);
+    }
+}

@@ -382,3 +382,127 @@ fn strstr_large_haystacks_find_every_position_in_the_wide_groups() {
     selftest::set_scan_avx2(false);
     liella_boundary::cpu::init();
 }
+
+#[test]
+fn strpair_names_the_first_candidate_or_the_terminator_exactly() {
+    // Clauses: s4_6_c_0 (D-4.28; the scanner contract under strstr). TIMING-N100-STRSTR-64:
+    // the head blocks' one-mask test names the first stop itself, not an earlier unit that
+    // strstr's compare would reject and resume after. A candidate or the terminator at every
+    // position of the first 160 bytes from p, a lone c1 (no candidate) before it, 34 alignments,
+    // four distances, both paths.
+    let _g = level();
+    liella_boundary::cpu::init();
+    let (c0, c1) = (b'x', b'y');
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for off in [1usize, 4, 7, 15] {
+            for align in 0..34usize {
+                for stop in 0..160usize {
+                    for cand in [false, true] {
+                        let mut buf = vec![b'a'; 512];
+                        buf[511] = 0;
+                        let p = align + off;
+                        if stop > 3 {
+                            buf[p + stop / 2] = c1;
+                        }
+                        if cand {
+                            buf[p + stop - off] = c0;
+                            buf[p + stop] = c1;
+                            buf[p + stop + 3] = 0;
+                        } else {
+                            buf[p + stop] = 0;
+                        }
+                        let want = 2 * stop + usize::from(!cand);
+                        let got = selftest::strpair(&buf[align..], off, c0, c1);
+                        assert_eq!(got, Some(want), "avx2={avx2} off={off} align={align} stop={stop} cand={cand}");
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+#[test]
+fn strstr_filter_switch_keeps_every_candidate() {
+    // Clauses: s4_6_c_0 (D-4.28). STRSTR-ADAPTIVE-FILTER-EXP: a haystack whose start holds no
+    // last needle byte runs the one-stream filter; a lone last byte ("decoy") is a one-stream stop
+    // that is no candidate. One decoy at `d`, then the match at every offset after it, so the match
+    // lies in the group of a sparse stop (d far from the start), of a dense switch (d near the start,
+    // or the match within 1024 bytes of the decoy), and past either.
+    let _g = level();
+    set_ctype(b"C\0");
+    let nd = b"needle";
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for d in [40usize, 300, 1100, 1500] {
+            for gap in (1..1300usize).step_by(5).chain([1023, 1024, 1025, 1150]) {
+                for align in [0usize, 1, 33] {
+                    let n = align + d + gap + nd.len() + 200;
+                    let mut h = vec![b'a'; n + 1];
+                    h[n] = 0;
+                    h[align + d] = b'e';
+                    let at = align + d + gap;
+                    h[at..at + nd.len()].copy_from_slice(nd);
+                    let r = s::strstr(h[align..].as_ptr().cast(), c"needle".as_ptr());
+                    assert_eq!(r as usize, h.as_ptr() as usize + at, "avx2={avx2} d={d} gap={gap} align={align}");
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+#[test]
+fn strstr_dense_last_byte_then_first_byte_stream_keeps_every_candidate() {
+    // Clauses: s4_6_c_0 (D-4.28). STRSTR-SHORT-DENSE-PARITY-4: a one-stream stop on the last needle
+    // byte close to the previous one tests its group for a pair and for the first needle byte; with
+    // neither, the scan goes on with a one-stream filter on the first byte. 'a's, then from `d` a run
+    // of "xe" (the last byte every 2 bytes, never a candidate) of length `run`, then the needle or
+    // the terminator (a copy of the needle past its group), so both lie at every offset of the groups after
+    // the switch; an optional lone
+    // first byte `n` at `d + c` in the run: in the switch group (pair mode follows), or later (a
+    // first-byte stop that is a false candidate, c even, or no candidate at all, c odd).
+    let _g = level();
+    set_ctype(b"C\0");
+    let nd = b"needle";
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for d in [100usize, 200, 900] {
+            for c in [None, Some(0usize), Some(3), Some(130), Some(700), Some(701)] {
+                for run in (0..1100usize).step_by(5).chain([255, 256, 257, 511, 512]) {
+                    for found in [false, true] {
+                        for align in [0usize, 16, 33] {
+                            let start = align + d;
+                            let n = start + run + if found { nd.len() } else { 0 };
+                            // A copy of the needle 130 bytes after the terminator, past the terminator's
+                            // 128-byte group: a scan that misses the terminator finds that copy.
+                            let bait = n + 1 + 130;
+                            let mut h = vec![b'a'; bait + nd.len() + 1];
+                            h[bait..bait + nd.len()].copy_from_slice(nd);
+                            h[bait + nd.len()] = 0;
+                            for i in 0..run {
+                                h[start + i] = if i % 2 == 0 { b'x' } else { b'e' };
+                            }
+                            if let Some(c) = c.filter(|&c| c < run) {
+                                h[start + c] = b'n';
+                            }
+                            if found {
+                                h[start + run..n].copy_from_slice(nd);
+                            }
+                            h[n] = 0;
+                            let want = naive(&h[align..n], nd, false);
+                            let r = s::strstr(h[align..].as_ptr().cast(), c"needle".as_ptr());
+                            let got = (!r.is_null()).then(|| r as usize - h[align..].as_ptr() as usize);
+                            assert_eq!(got, want, "avx2={avx2} d={d} c={c:?} run={run} found={found} align={align}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}

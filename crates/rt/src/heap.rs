@@ -302,6 +302,23 @@ const MAGIC: [u64; 44] = {
 /// reduced by a mask instead of a division and needs no bounds check. A padding entry is all
 /// zero: no offset passes `q * size == off && q < blocks` with it, so a corrupt index can only
 /// send the free to the slow path.
+/// Half the size of the class below class `c`: a request at or under it belongs to a smaller
+/// class, so `fits_in_place` keeps the block only above it. Class 0 (and any index past the
+/// classes, which never reaches it) has no lower bound.
+const HALF_BELOW: [u64; 64] = {
+    let mut t = [0u64; 64];
+    let mut i = 1;
+    while i < 44 {
+        // A const context: CLASSES fits in 64 bits.
+        #[allow(clippy::as_conversions)]
+        {
+            t[i] = (CLASSES[i - 1] / 2) as u64;
+        }
+        i += 1;
+    }
+    t
+};
+
 const FREE_VIEW: [[u64; 3]; 64] = {
     let mut t = [[0u64; 3]; 64];
     let mut i = 0;
@@ -326,6 +343,25 @@ pub struct Block {
     pub usable: usize,
     /// True if the memory is known to read as zero (a fresh mapping).
     pub zeroed: bool,
+}
+
+/// What the first test of a resize found ([`Heap::fit`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Fit {
+    /// The block stays where it is; its usable size.
+    Same(usize),
+    /// A live block of the calling thread's current slab that moves ([`Heap::resize_held`]).
+    Held(Held),
+    /// Anything else: the general path decides.
+    Other,
+}
+
+/// A block [`Heap::fit`] found and [`Heap::resize_held`] moves: its class and its index in
+/// the slab. Only `fit` makes one (the fields are private).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Held {
+    c: usize,
+    q: usize,
 }
 
 /// A misuse the caller made, which C leaves undefined and the boundary turns into an abort.
@@ -1883,56 +1919,108 @@ impl Heap {
     /// mapping a secure block gives up passes through [`Pages::wipe`]).
     ///
     /// A small block of a current slab of the calling thread's cache, resized to at most
-    /// [`FORECAST_CAP`] bytes, takes one fused path (REALLOC-FUSE): the block is found once
+    /// [`MAX_SMALL`] bytes, takes one fused path (REALLOC-FUSE, REALLOC-ONE-LOOKUP: [`Heap::fit`]
+    /// then [`Heap::resize_held`]): the block is found once
     /// through the slab hint (as [`Heap::free`]'s fast path finds it), checked live, kept in
     /// place when its class still fits, or else moved into a block from the target class's hint
     /// word and its old bit cleared, without looking it up again. Anything else, and any miss on
-    /// the way, takes the general path. A block that moves upward gets the class for about
-    /// twice the request ([`Heap::forecast`]).
+    /// the way, takes the general path. A block that moves upward gets the general path's
+    /// growth forecast ([`Heap::move_target`]).
     #[inline(always)]
     pub fn resize<S: Sys, P: Pages>(&self, sys: &S, pages: &P, addr: usize, size: usize, copy: impl FnOnce(usize, usize, usize)) -> Result<Option<Block>, Misuse> {
-        if size <= FORECAST_CAP {
-            if let Some(k) = Self::own_cache(pages) {
-                let last = k.get(slab_hint(addr));
-                let off = w64(addr).wrapping_sub(last & !(SLAB64 - 1));
-                if last != 0 && off < SLAB64 {
-                    let c = uz(last & 63);
-                    let [csize, magic, n] = FREE_VIEW[c];
-                    let q = (off * magic) >> 40;
-                    if q * csize == off && q < n {
-                        if let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) {
-                            let (j, b) = bit(uz(q));
-                            // `q < n` keeps `j` in the bitmap; the mask lets the compiler see it.
-                            let j = j & (BITMAP_WORDS - 1);
-                            let word = &r.local[j];
-                            // Not live: the general path decides (and reports a double free).
-                            if word.load(Relaxed) & b != 0 && !(k.remote_any() && r.remote_has(j, b)) {
-                                let usable = uz(csize);
-                                // `c` came from the masked hint: a padding entry has no blocks,
-                                // so `c` is a class here; the `min` lets the compiler see it.
-                                let below = CLASSES[c.min(CLASSES.len() - 1).saturating_sub(1)];
-                                if size <= usable && (c == 0 || size > below / 2) {
-                                    return Ok(Some(Block { addr, usable, zeroed: false }));
-                                }
-                                let target = if size > usable { Self::forecast(size) } else { size };
-                                // `target <= FORECAST_CAP`: the table's class (at most 19, so the
-                                // mask is the identity and spares the cache words' bounds checks).
-                                let nc = usize::from(SMALL_CLASS[((target + 15) >> 4).min(FORECAST_CAP >> 4)]) & 31;
-                                if let Some(new) = Self::alloc_hint(pages, &k, nc) {
-                                    copy(addr, new.addr, usable.min(size));
-                                    // The old block's bit, cleared as the free fast path does.
-                                    let v = word.load(Relaxed);
-                                    word.store(v & !b, Relaxed);
-                                    k.freed_into(c, j);
-                                    return Ok(Some(new));
-                                }
-                            }
-                        }
-                    }
+        match Self::fit(pages, addr, size) {
+            Fit::Same(usable) => Ok(Some(Block { addr, usable, zeroed: false })),
+            Fit::Held(h) => self.resize_held(sys, pages, addr, size, h, copy),
+            Fit::Other => self.resize_slow(sys, pages, addr, size, copy),
+        }
+    }
+
+    /// The first test of [`Heap::resize`] (REALLOC-ONE-LOOKUP): for a live small block of the
+    /// calling thread's current slab resized to `0 < size <= MAX_SMALL`, found once through the
+    /// slab hint (as [`Heap::free`]'s fast path finds it), whether it stays where it is
+    /// ([`Fit::Same`], by the rule of [`Heap::keeps_in_place`]) or moves ([`Fit::Held`]: its
+    /// class and index, which [`Heap::resize_held`] completes the move with, without finding
+    /// the block again). Separate so that a caller can return the same pointer without the
+    /// frame the moving path needs. [`Fit::Other`] decides nothing: the general path does.
+    #[inline(always)]
+    pub fn fit<P: Pages>(pages: &P, addr: usize, size: usize) -> Fit {
+        if size == 0 || size > MAX_SMALL {
+            return Fit::Other;
+        }
+        let Some(k) = Self::own_cache(pages) else { return Fit::Other };
+        let last = k.get(slab_hint(addr));
+        let off = w64(addr).wrapping_sub(last & !(SLAB64 - 1));
+        if last == 0 || off >= SLAB64 {
+            return Fit::Other;
+        }
+        let c = uz(last & 63);
+        let [csize, magic, n] = FREE_VIEW[c];
+        let q = (off * magic) >> 40;
+        if q * csize != off || q >= n {
+            return Fit::Other;
+        }
+        let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return Fit::Other };
+        let (j, b) = bit(uz(q));
+        // `q < n` keeps `j` in the bitmap; the mask lets the compiler see it.
+        let j = j & (BITMAP_WORDS - 1);
+        // Not live (or remotely freed): the general path decides and reports a double free.
+        if r.local[j].load(Relaxed) & b == 0 || (k.remote_any() && r.remote_has(j, b)) {
+            return Fit::Other;
+        }
+        let usable = uz(csize);
+        // Up to the cap, `HALF_BELOW` is `keeps_in_place`'s rule (its slack is 2 for these
+        // sizes: a class four times the need is above `MID_GROWTH * MID_FORECAST`, whose lower
+        // bound is above the cap). `c` came from the masked hint: a padding entry has no blocks,
+        // so `c` is a class here; the `min` lets the compiler see it.
+        let keep = if size <= FORECAST_CAP { size <= usable && size > uz(HALF_BELOW[c]) } else { Self::keeps_in_place(c.min(CLASSES.len() - 1), size) };
+        if keep {
+            return Fit::Same(usable);
+        }
+        Fit::Held(Held { c, q: uz(q) })
+    }
+
+    /// Move the block [`Heap::fit`] found as `h` into a block of the class for its growth
+    /// target ([`Heap::move_target`]) taken from that class's hint word, and clear its old bit
+    /// as the free fast path does, without looking it up again. Nothing between the two calls
+    /// may touch the heap; any miss (no current slab of the target class, its hint word full)
+    /// takes the general path.
+    #[inline(always)]
+    pub fn resize_held<S: Sys, P: Pages>(&self, sys: &S, pages: &P, addr: usize, size: usize, h: Held, copy: impl FnOnce(usize, usize, usize)) -> Result<Option<Block>, Misuse> {
+        let c = h.c & 63;
+        if let Some(k) = Self::own_cache(pages) {
+            if let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) {
+                let (j, b) = bit(h.q);
+                let j = j & (BITMAP_WORDS - 1);
+                let word = &r.local[j];
+                let usable = uz(FREE_VIEW[c][0]);
+                let target = Self::move_target(usable, size);
+                // `target <= FORECAST_CAP`: the table's class (at most 19, so the mask is the
+                // identity and spares the cache words' bounds checks); above it, the general rule.
+                let nc = if target <= FORECAST_CAP { Some(usize::from(SMALL_CLASS[(target + 15) >> 4]) & 31) } else { class_for(target, ALIGN) };
+                if let Some(new) = nc.and_then(|nc| Self::alloc_hint(pages, &k, nc)) {
+                    copy(addr, new.addr, usable.min(size));
+                    let v = word.load(Relaxed);
+                    word.store(v & !b, Relaxed);
+                    k.freed_into(c, j);
+                    return Ok(Some(new));
                 }
             }
         }
         self.resize_slow(sys, pages, addr, size, copy)
+    }
+
+    /// The size a small block of `usable` bytes resized to `size` moves into: the growth
+    /// forecast ([`Heap::forecast`] below `FORECAST_CAP`, [`Heap::forecast_mid`] from
+    /// `MID_FORECAST`), or `size` itself when it shrinks or for the sizes between.
+    #[inline(always)]
+    fn move_target(usable: usize, size: usize) -> usize {
+        if size > usable && usable < FORECAST_CAP {
+            Self::forecast(size)
+        } else if size > usable && (MID_FORECAST..MAX_SMALL).contains(&usable) {
+            Self::forecast_mid(size)
+        } else {
+            size
+        }
     }
 
     /// The size a small block that `resize` moves upward is allocated for (REALLOC-FUSE growth
@@ -2023,13 +2111,7 @@ impl Heap {
             }
         };
         // A small block growing: the forecast size (a large block's `usable` is above both caps).
-        let want = if size > usable && usable < FORECAST_CAP {
-            Self::forecast(size)
-        } else if size > usable && (MID_FORECAST..MAX_SMALL).contains(&usable) {
-            Self::forecast_mid(size)
-        } else {
-            size
-        };
+        let want = Self::move_target(usable, size);
         let new = if secure { self.alloc_secure(sys, pages, size, ALIGN) } else { self.alloc(sys, pages, want, ALIGN) };
         let Some(new) = new else { return Ok(None) };
         copy(addr, new.addr, usable.min(size));

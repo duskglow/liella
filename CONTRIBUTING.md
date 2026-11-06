@@ -71,7 +71,7 @@ cargo xtask stubs     # regenerate test stubs and spec/clauses.tsv from the spec
 cargo xtask so        # build libc.a, libc.so.6, liella-crt1.o into target/liella/
 cargo xtask test      # the full test gate (long)
 cargo xtask affected --list   # only the tests your change can reach (--tier direct, the default)
-cargo xtask affected          # run them
+cargo xtask affected --run    # run them (--list or --run is required: without either, exit 2)
 cargo xtask clippy            # must be clean (workspace, all targets, -D warnings)
 cargo xtask static            # static policy checks
 ```
@@ -92,14 +92,16 @@ against `next`; the maintainers run the lab steps (counts, the merge queue) for 
 
 1. **Branch** from `origin/next` (the integration branch), one story per branch.
 2. **Direct-tier gate.** `cargo xtask clippy`, `cargo xtask static`, then
-   `cargo xtask affected` (default `--tier direct`: the changed module, its one-hop users, the
+   `cargo xtask affected --run` (default `--tier direct`: the changed module, its one-hop users, the
    test targets naming either and the spec sections of those modules; anything the selector is
    unsure of escalates to the full run). Pass `--base origin/next` when the branch was cut from
    `next`. `--tier wide` and `--tier full` exist; the header of `xtask/src/affected.rs` has the
    rules. A developer proves their own change; whole-tree runs are the merge queue's job.
 3. **Plants** (mutation checks). For a code change, deliberately break the new code in a
    scratch copy and show that the direct tests fail with the expected message; a plant that
-   survives means a missing test, or is written up as equivalent with a reason.
+   survives means a missing test, or is written up as equivalent with a reason. Plants run only
+   through `cargo xtask plants` (required, owner 2026-11-05; format and the 600 s per-plant limit
+   in [docs/plants.md](docs/plants.md)); do not write a plants script.
 4. **Counts** for performance work: `validation/wl_count.sh` (instructions, page faults and
    system calls of whole workloads, new versus base versus glibc, with an output check) and
    `validation/wl_percall.sh` (instructions per call of single functions). Counts are

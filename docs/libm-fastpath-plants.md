@@ -1,7 +1,7 @@
 # Plants template for a libm fast path (Track M milestone 6, M6-0)
 
 Every fast-path story (M6-1 onwards) runs these five plants on its own code with its direct tests, one
-plant per line in the `tools/plant.sh` form, each with a `msg:<regex>` naming the failing test. All must
+plant per line in the `cargo xtask plants` file format ([plants.md](plants.md); the tool is the required way to run plants), each with a `msg:<regex>` naming the failing test. All must
 be CAUGHT; an EQUIVALENT one needs a written reason. Replace `<file>`, `<fn>`, the patterns and the test.
 
 | # | Plant | What it proves |

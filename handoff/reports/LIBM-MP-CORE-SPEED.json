@@ -1,0 +1,11 @@
+{"task": "LIBM-MP-CORE-SPEED", "model": "opus", "tokens": null,
+ "result": "mp div_u64 without 128-bit software division, shift-light pack/shr, MP_LN10/MP_LN_PI table constants, direct double-double rounder in elem::finish; kernel digest unchanged except the ln10 constant; jobs running at the budget checkpoint",
+ "branch": "task/libm-mp-core-speed", "head": "6e4aa8cc",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Two commits instead of four (changes 1-3 share mp.rs); one before/after count pair, not read yet", "One heredoc was used in a python edit early in the run, against the no-heredoc rule"],
+ "refused": [],
+ "improvement": "A cheap way to read counters.tsv before/after for a row filter (a summary script on the host) would save several calls in every perf story",
+ "next_step": "Read gate, plants, accuracy and counts-after on keke; compare before/after counters for the brief's rows",
+ "report_file": "handoff/libm-mp-core-speed.md",
+ "jobs": ["keke:libm-mp-core-speed-gate", "keke:libm-mp-core-speed-plants", "keke:libm-mp-core-speed-accuracy", "keke:libm-mp-core-speed-counts-before", "keke:libm-mp-core-speed-counts-after"]}

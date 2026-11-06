@@ -661,6 +661,18 @@ pub fn set_scan_avx2(avx2: bool) -> bool {
     true
 }
 
+/// `liella_machine_strpair`'s answer from `s[off..]` for c0 at q - off and c1 at q
+/// (TIMING-N100-STRSTR-64), so a test checks the scanner's exact contract (the first candidate or
+/// the terminator, not merely a unit that `strstr`'s compare rejects). `None`, without a call,
+/// when `s` breaks the scanner's proof obligation: no 0 byte in `s`, or one before `off`.
+pub fn strpair(s: &[u8], off: usize, c0: u8, c1: u8) -> Option<usize> {
+    let end = s.iter().position(|&b| b == 0)?;
+    if end < off {
+        return None;
+    }
+    Some(crate::ffi::liella_machine_strpair(s.as_ptr().wrapping_add(off), off, i32::from(c0), i32::from(c1)))
+}
+
 /// Force the `strcasecmp`/`strncasecmp` kernel (CASECMP): 0 = none (the measured path), 1 = SSE2,
 /// 2 = AVX2. Returns `false` (and changes nothing) for another value or AVX2 on a CPU or OS
 /// without it. [`set_scan_avx2`] also sets it (AVX2 or SSE2).
@@ -748,10 +760,10 @@ pub fn kernel_avx2() -> bool {
 }
 
 /// The AVX2 copy into `dst` from `src` (the size range and placement checks are bypassed):
-/// the bytes copied, or `None` (nothing copied) on a CPU or OS without AVX2 or below 64 bytes.
+/// the bytes copied, or `None` (nothing copied) on a CPU or OS without AVX2 or below 128 bytes.
 pub fn copy_avx2(dst: &mut [u8], src: &[u8]) -> Option<usize> {
     let n = dst.len().min(src.len());
-    if n < 64 || !crate::cpu::avx2() {
+    if n < 128 || !crate::cpu::avx2() {
         return None;
     }
     crate::ffi::liella_machine_copy_avx2(dst.as_mut_ptr(), src.as_ptr(), n);
@@ -760,10 +772,10 @@ pub fn copy_avx2(dst: &mut [u8], src: &[u8]) -> Option<usize> {
 
 /// The AVX2 copy over regions that may overlap inside `buf` (MEM-BULK): `n` bytes from offset
 /// `src` to offset `dst`, the direction chosen by the routine. The bytes moved, or `None` (nothing
-/// moved) on a CPU or OS without AVX2, below 64 bytes, or when a range leaves `buf`.
+/// moved) on a CPU or OS without AVX2, below 128 bytes, or when a range leaves `buf`.
 pub fn move_avx2(buf: &mut [u8], src: usize, dst: usize, n: usize) -> Option<usize> {
     let end = src.max(dst).checked_add(n)?;
-    if n < 64 || end > buf.len() || !crate::cpu::avx2() {
+    if n < 128 || end > buf.len() || !crate::cpu::avx2() {
         return None;
     }
     let p = buf.as_mut_ptr();

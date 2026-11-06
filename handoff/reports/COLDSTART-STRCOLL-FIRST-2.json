@@ -1,0 +1,13 @@
+{"task": "COLDSTART-STRCOLL-FIRST-2", "model": "opus", "tokens": null,
+ "result": "NEGATIVE: D-4.54 on-demand ASCII fill cut first-strcoll user instr 11,749->1,601 but was slower in time on the N100 (first_strcoll 1.13x, second_strcoll 1.10x vs base, strcoll_en_us_* 1.00x); reverted, D-4.54 marked rejected, saturation negative row added; target not reached",
+ "branch": "task/coldstart-strcoll-first-2", "head": "see git (commit after 7eaa03af)",
+ "gate": {"affected": "0 passed / 0 failed (crates/ identical to base after the revert; docs only)", "peak": "169M"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["first strcoll in a rules locale costs 3 page faults and ~30k kernel instructions on the base (glibc 0 faults, ~0.5k); the fill's user instructions are not the time: profile the faults first",
+                   "cargo xtask bench --rows only accepts rows in bench/budgets.tsv, so the cold first_*/second_* rows cannot be staged or run by row; run.sh drove the staged binaries directly with CBENCH_ONLY"],
+ "refused": [],
+ "improvement": "a cold-row story should count page faults and kernel instructions (perf stat -e page-faults,instructions:k) before designing a user-instruction cut; xtask bench should let cold rows through --rows",
+ "next_step": "new story: classify the first strcoll's page faults (text / locale data / .bss) on the base with perf, then design against that class; judge by N100 timing",
+ "report_file": "handoff/COLDSTART-STRCOLL-FIRST.md",
+ "jobs": ["keke:csf2-gate", "keke:csf2-prep2", "nozomi:csf2-n100"]}

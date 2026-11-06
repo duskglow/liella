@@ -3,7 +3,7 @@
 //! | Command        | What it does |
 //! |----------------|--------------|
 //! | `stubs`        | Parse `glibc-functional-spec.md`; (re)generate pending test stubs per clause, per exported symbol and per kernel primitive; write `spec/clauses.tsv`, `spec/symbols.tsv`, `spec/primitives.tsv`. Files that already contain specified tests are never overwritten; instead their coverage of the spec is checked. |
-//! | `trace`        | Clause traceability: every test, every row of `docs/differences-from-glibc.md` and every behaviour document names the clause IDs it bears on (or says why it has none), and every clause ID named exists in `spec/clauses.tsv`. Also run by `stubs` and `test`. |
+//! | `trace`        | Clause traceability: every test, every row of `docs/differences-from-glibc.md` and every behaviour document names the clause IDs it bears on (or says why it has none), and every clause ID named exists in `spec/clauses.tsv`. Also run by `stubs` and `test`. `trace --untested [--out F]` is report only (never fails): every clause no test names, by section, with counts. |
 //! | `symgap`       | Report the ABI names glibc's installed `libc.a` defines and Liella's does not, apart from those phases 14 and 15 own (report only). Also run by `test`. |
 //! | `register`     | Check the saturation register layout (`docs/saturation-register.md` index, one file per section in `docs/saturation/`: all listed, numbers unique and contiguous, row ids unique across files); also part of `static`. |
 //! | `compat-plan`  | Check that `spec/abi/compat-plan.tsv` (the phase-15 dispatch table: kind, owning story and D-row of every compat version, LG-0a) matches the `compat` rows of `spec/abi/versions.tsv` row for row; also part of `static`. |
@@ -20,7 +20,8 @@
 //! | `math-gen`     | Generate the math exports (`crates/boundary/src/posix/s10_math_gen.rs`) and their C forwarders (`csys/src/adapter/math_*.c`) from `crates/boundary/src/posix/s10_math.tsv` and spec Appendix C (D-10.7); `--check` fails if stale. |
 //! | `mathcmp`      | Compare glibc and Liella on one math function and format, bit for bit, and classify each result against the test oracle (D-10.3; `crates/mathtools`). |
 //! | `remez`        | The minimax (Remez) fitting tool: generate or `--check` the coefficient files of `crates/math/fits/*.fit` (D-10.3). |
-//! | `tables`       | Generate or `--check` the elementary functions' constant tables, `crates/math/src/coeffs/tables.rs` (D-10.3). |
+//! | `tables`       | Generate or `--check` the elementary functions' constant tables, one `@generated` file per family in `crates/math/src/coeffs/` (D-10.3); also regenerates or checks `crates/math/KERNELS.md` (`kernel-index`). |
+//! | `kernel-index` | Generate or `--check` `crates/math/KERNELS.md`, the one-page index of the libm fast-tier kernels (file:line, signature, doc tags). |
 
 //! | `bench`        | Run the release-mode benchmarks and check `bench/budgets.tsv` (rule P6); `ratio_host` rows are gated on the median Liella/glibc ratio against the limit for this CPU model in `bench/host_limits.tsv` (`--runs N`, default 5 rounds; `--build-only` builds everything and stops, `--no-build` measures only and fails on a missing or stale program (the timing-lock split of `vm_bench.sh`), `BENCH_SETTLE_SECS` (default 12) idles before the first round; `--only a,b` runs just those benchmarks and says PARTIAL BENCH, not a merge bench); a CPU without entries is reported, not gated. With `--compare [--runs N] [<cbench>...]` (rule P10 (9); names are checked against `bench/c/*.c` before anything is built; `--compare` has no row filter: `--rows`/`--affected` are plain-`bench` only): build each C benchmark (default `cbench_opt`) against the products and against the host C library (dynamic and static), run them alternately N times after a discarded warm-up run (default 5), and print medians with min and max and the same-run ratio; no budgets are checked. Measurement columns (MEASURE-1): `--v3` (archive built with `-Ctarget-cpu=x86-64-v3`), `--sorted` (Liella linked with `--sort-section=name`: layout effect), `--counters` (per-row aggregate perf counters, `CBENCH_COUNTERS=1`; the summary table shows instr/op for Liella and glibc and the ratio); all columns in `target/liella/bench/measure.tsv`. `--stress env,path,fds,names,locale,deep,threads` (or `all`, STRESS-ENV-AUDIT, -2): advisory runs of the C benchmarks in a large environment (2,000 extra variables, a 200-directory `PATH`, 10,000 open descriptors; `names`: 50,000 users and groups, `locale`: 500 more names in the locale archive, both through an unprivileged user and mount namespace; `deep`: the fstree rows 64 directories down; `threads`: 64 idle threads), normally with `--counters-only`, compared with the same command without `--stress` to find costs that grow with the environment; limits are not set for it. |
 //! | `csys-audit`   | Enforce the C syscall layer's rules: single-statement wrappers, freestanding, assembly only in machine/ (plan §2.5). |
@@ -30,7 +31,7 @@
 //! | `test`         | policy checks, the workspace tests (internal + translation suites; under cargo-nextest when installed, `LIELLA_NO_NEXTEST=1` for `cargo test`, see `nextest.rs`), then the C conformance suite, `native` and `rust-dylib`. |
 //! | `ctest`        | Only the C conformance suite (`conformance/run.sh`). |
 //! | `nextest`      | `cargo nextest run <args>` with the summary lines of a `cargo test` log added (`nextest.rs`); `affected --run` runs its tests through it. |
-//! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` (default) prints the selection with a reason per item, `--run` runs it and prints a summary; `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
+//! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` prints the selection with a reason per item, `--run` runs it and prints a summary; one of the two is required (without either: the one-line usage, exit 2; XTASK-AFFECTED-EXPLICIT); `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
 //! | `so`           | Build the products: `libc.a`, `libc.so.6` (version script from Appendix C.3 and the native C ABI's nodes, D-X.10) and `liella-crt1.o` in `target/liella` (never on Cargo's library path). Built with `[profile.fast]` (thin LTO, 16 codegen units; TOOL-PROFILE) for tests and iteration; `LIELLA_FULL_PROFILE=1` uses the shipped `release` profile (fat LTO). `bench` always builds `release` and refuses fast products (`target/liella/.profile` records which). |
 //! | `repro`        | The products must not depend on the build directory (ruling #713): builds them in two fresh source copies under `target/repro` (`--dir <base>` elsewhere; not `/dev/shm` under `~/bin/gate`, #714) with the `fast` profile (`--release`: the shipped one) and compares every file of `target/liella`: whole files, then ELF sections (archive members too), accepting differences in `.symtab`/`.strtab` only. Fails naming the first differing file, member and section (`repro.rs`). A nightly job, not part of the gate. |
 //! | `native`       | The native Rust interface (D-X.10): `liella-native` with each feature on its own (clippy, unit tests); its static example built against `libc.a` and run, its dynamic example built against `libc.so.6` and checked with `readelf`. |
@@ -48,6 +49,7 @@ mod abi;
 mod affected;
 mod align;
 mod bench;
+mod benchstage;
 mod forkalloc;
 mod fs_order;
 mod benchrows;
@@ -82,6 +84,7 @@ mod register;
 mod arch;
 mod plants;
 mod labnames;
+mod kernel_index;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -92,7 +95,7 @@ use std::process::{Command, ExitCode};
 /// tree (TOOLS-10).
 fn root() -> PathBuf {
     let here = std::env::current_dir().ok();
-    let found = here.as_deref().and_then(|d| d.ancestors().find(|a| a.join("Cargo.toml").is_file() && a.join("xtask/Cargo.toml").is_file()));
+    let found = here.as_deref().and_then(|d| d.ancestors().find(|a| (a.join("Cargo.toml").is_file() && a.join("xtask/Cargo.toml").is_file()) || a.join(benchstage::MANIFEST).is_file()));
     found.map(Path::to_path_buf).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(Path::to_path_buf).unwrap_or_default())
 }
 
@@ -105,6 +108,7 @@ fn main() -> ExitCode {
         "status" => status::run(&root, args.iter().any(|a| a == "--schedule")),
         "symgap" => symgap::run(&root),
         "symcov" => symcov::run(&root, &args[1..]),
+        "trace" if args.iter().any(|a| a == "--untested") => trace::untested(&root, args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1)).map(Path::new)),
         "trace" => trace::run(&root),
         "static" => static_checks(&root),
         "compat-plan" => compat_plan::check(&root),
@@ -133,6 +137,7 @@ fn main() -> ExitCode {
         "mathcmp" => math::run_mathcmp(&root, &args[1..]),
         "remez" => math::run_remez(&root, &args[1..]),
         "tables" => math::run_tables(&root, &args[1..]),
+        "kernel-index" => kernel_index::run(&root, args[1..].iter().any(|a| a == "--check")),
         "bench" if args.iter().any(|a| a == "--compare") => bench::compare(&root, &args[1..]),
         "bench" => bench::run(&root, &args[1..]),
         "fuzz" => fuzz::run(&root, &args[1..]),
@@ -140,7 +145,7 @@ fn main() -> ExitCode {
         "test" => test_all(&root, &args[1..]),
         "ctest" => ctest(&root),
         "nextest" => nextest::run(&std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()), &root, &args[1..]),
-        "affected" => affected::run(&root, &args[1..]),
+        "affected" => return affected::main(&root, &args[1..]),
         "bench-rows" => benchrows::run(&root, &args[1..]),
         "so" => so::run_so(&root),
         "repro" => repro::run(&root, &args[1..]),
@@ -148,7 +153,7 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected [--base <ref>] [--files <path>...] [--list | --run] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -186,8 +191,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 22] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit)];
+    let checks: [(&str, Check); 23] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()]))];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }

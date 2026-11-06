@@ -1,5 +1,7 @@
-//! `cargo xtask affected [--base <ref>] [--files <path>...] [--only <names>] [--list | --run]`: run only the tests a
-//! change can affect (PR-4; owner item: token cost).
+//! `cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>]`: list (`--list`) or run
+//! (`--run`) only the tests a change can affect (PR-4; owner item: token cost). One of `--list` and `--run` is required:
+//! without either the command prints the one-line usage and exits 2 (XTASK-AFFECTED-EXPLICIT; a gate that forgot `--run`
+//! listed the selection, ran nothing and exited 0).
 //!
 //! Compiling the workspace is cheap; the nine thousand tests and the conformance programs are
 //! the cost. This command maps the changed files to the tests that can reach them, CONSERVATIVELY:
@@ -19,7 +21,7 @@
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
 //!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
-//!    `include/`, the math fits and coefficients), the product crates, linker and export lists,
+//!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
 //! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
 //!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
@@ -53,12 +55,24 @@
 //!    `#include` or `.set` (which can define symbols unseen), a symbol not prefixed `liella_`
 //!    (may be exported C ABI), a symbol named by another csys source, a link list, a script or
 //!    xtask, or no user at all.
-//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule): the
+//! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
+//! 8. XTASK-AFFECTED-MATH (ruling #3188): the math export wiring (`crates/boundary/src/posix/s10_math.tsv`,
+//!    `s10_math_gen.rs`, `csys/src/adapter/math_*.c`) selects the math export tests (`Selection::math_exports`: the
+//!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
+//!    or `libm` or carries section 10, the conformance programs of section 10 or calling a math export) plus `cargo
+//!    xtask math-gen --check`; a coefficient file `crates/math/src/coeffs/<family>.rs` selects the `coeffs` module as if
+//!    changed, the same math export tests and `cargo xtask tables --check`. XTASK-AFFECTED-MATH-2 (ruling #3204): a
+//!    fit file `crates/math/fits/<name>.fit` selects what a coefficient file selects plus `cargo xtask remez --check
+//!    <fit>` (a removed fit: FULL); the tables generator `crates/mathtools/src/tables.rs` selects its own mapping as a
+//!    `liella-mathtools` source, what a coefficient file selects, and `cargo xtask tables --check` / `kernel-index
+//!    --check`. In every tier but `--tier full`; the other files under `fits/` (the `.py` table scripts, subdirectories),
+//!    other generated files and anything else of rule 1 still escalate.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
-//! naming either (not through hubs or test-support modules), and the spec sections of those modules only; no reverse
+//! naming either (not through hubs or test-support modules), the spec sections of those modules and of the C entries
+//! whose bodies name one of them (the products tests reach code only through C entries); no reverse
 //! closure, no section 0, no "carries no section". Rules 1-3 and 5-7 (and every escalation to FULL) are unchanged.
 //! `--tier wide` is the rule 4 above; `--tier full` runs everything, as the landing gate (`cargo xtask test`) does.
 //! `--replay <records>` checks that the failures of past gates fall inside a tier (`replay`).
@@ -77,7 +91,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
 
 /// Crates whose changes are narrowed through the module graph.
@@ -181,6 +195,9 @@ pub struct Repo {
     /// TOOLS-7 (3): `git diff -U0` of `csys/include/` against the base, which the sync writes to `.changed.hdr` (a VM
     /// tree has no history). `None`: not available, so a changed header is not mapped (FULL).
     hdr_diff: Option<String>,
+    /// XTASK-AFFECTED-MATH-2: the fit files in the tree (`crates/math/fits/<name>.fit`). A changed fit that is not
+    /// here was removed, and `cargo xtask remez --check` cannot check it: FULL.
+    fits: BTreeSet<String>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -612,6 +629,17 @@ impl Repo {
         self.test_only.contains(&(krate.to_string(), module.to_string()))
     }
 
+    /// XTASK-PLANTS-PRODUCTS-REBUILD: does test target `name` (of package `krate`, or of any package) use the products,
+    /// by the rule `run` uses to build them? `None` when no target or more than one has that name.
+    pub fn test_uses_products(&self, krate: Option<&str>, name: &str) -> Option<bool> {
+        let mut found = self.targets.iter().filter(|t| t.name == name && krate.is_none_or(|k| t.krate == k));
+        let first = found.next()?;
+        if found.next().is_some() {
+            return None;
+        }
+        Some(first.products)
+    }
+
     pub fn load(root: &Path) -> Repo {
         let top = read(&root.join("Cargo.toml"));
         let mut members = Vec::new();
@@ -781,7 +809,7 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok() }
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root) }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -899,6 +927,54 @@ impl Selection {
         }
     }
 
+    /// XTASK-AFFECTED-MATH (ruling #3188): the tests that can observe the math exports, for a change of their wiring
+    /// (`s10_math.tsv`, `s10_math_gen.rs`, the `math_*.c` forwarders) or of a generated coefficient file. The export
+    /// module itself as if it had changed (rule 4 of the tier: its users, the targets naming it, the conformance
+    /// programs calling its entries), every test target of `liella-math` (the libm product, clause and kernel suites),
+    /// every target of any crate whose own source names `s10_math` or `libm` or carries section 10, the unit tests of
+    /// both crates, and every conformance program that carries section 10 or calls an entry of the export modules.
+    fn math_exports(&mut self, repo: &Repo, why: &str) {
+        let via = |what: &str| format!("{why}: {what}");
+        if self.direct {
+            self.narrow_direct(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        } else {
+            self.narrow(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        }
+        for c in [MATH_EXPORTS_CRATE, MATH_CRATE] {
+            add(&mut self.libs, c.to_string(), &via("the unit tests of the export and kernel crates"));
+            add(&mut self.clippy, c.to_string(), &via("the export and kernel crates"));
+        }
+        for t in &repo.targets {
+            let own = &t.text[..t.own.min(t.text.len())];
+            if t.krate == MATH_CRATE {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("a liella-math suite (they call the math exports)"));
+            } else if own.contains("s10_math") || own.contains("libm") || t.sections.contains(&10) {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("the test names s10_math or libm, or carries section 10"));
+            }
+        }
+        let export_nodes: BTreeSet<usize> = repo.nodes.iter().enumerate().filter(|(_, n)| n.krate == MATH_EXPORTS_CRATE && (n.name == "s10_math_gen" || n.name == "s10_math")).map(|(i, _)| i).collect();
+        for c in &repo.conf {
+            if c.sections.contains(&10) {
+                add(&mut self.conf, c.name.clone(), &via("the program carries section 10"));
+            } else if let Some(sym) = c.calls.iter().find(|s| repo.entries[*s].iter().any(|e| export_nodes.contains(&e.node))) {
+                add(&mut self.conf, c.name.clone(), &via(&format!("the program calls the math export `{sym}`")));
+            }
+        }
+    }
+
+    /// XTASK-AFFECTED-MATH: what a generated coefficient file selects (also for its fit and the tables generator,
+    /// XTASK-AFFECTED-MATH-2). The family's users: the `coeffs` module as if it had changed (its one-hop users in the
+    /// tier), the math export tests and `cargo xtask tables --check`.
+    fn math_coeffs(&mut self, repo: &Repo, f: &str) {
+        if self.direct {
+            self.narrow_direct(repo, MATH_CRATE, "coeffs", f);
+        } else {
+            self.narrow(repo, MATH_CRATE, "coeffs", f);
+        }
+        self.math_exports(repo, &format!("{f}: generated coefficients"));
+        self.xtask_cmds.insert("tables --check".to_string());
+    }
+
     /// A change in module `name` of crate `krate`.
     fn narrow(&mut self, repo: &Repo, krate: &str, name: &str, file: &str) {
         let Some(start) = repo.nodes.iter().position(|n| n.krate == krate && n.name == name) else {
@@ -1006,7 +1082,9 @@ impl Selection {
     /// * the test targets that name the module or one of those users (a user that is a hub or a test-only module,
     ///   e.g. `selftest`, does not select its own namers: that would reach most of the workspace again),
     /// * the targets and conformance programs carrying a spec section of the module or of a one-hop `posix/sNN`
-    ///   user (never section 0 by default, never "carries no section").
+    ///   user (never section 0 by default, never "carries no section"),
+    /// * the targets carrying the spec section of a C entry (a `posix/sNN` definition) whose body names the module or
+    ///   a one-hop user that is not a hub, an entry hub or test support: the products tests reach a helper module this way.
     ///
     /// A module re-exported at its crate root cannot be followed by name: wide, as before. Escalations to FULL are
     /// decided before this (`classify`). Data (GATE-TIME, 100 gates): every real failure was in a target the change
@@ -1058,6 +1136,27 @@ impl Selection {
         sections.extend(ns.section);
         sections.extend(users.iter().filter_map(|&i| repo.nodes[i].section));
         let secs: Vec<String> = sections.iter().map(u32::to_string).collect();
+        // XTASK-PLANTS-TRACKED-COPY: the sections of the C entries the change reaches. A test that diffs the products
+        // (`catalogs_products`) reaches a module only through the entries its C program calls, so it names no module and
+        // carries only sections; a module behind a helper (legacy::intl, used by boundary::catalog, which the
+        // `posix/s07_locale` entries name) has no section of its own nor a `posix/sNN` one-hop user, and selected none of
+        // them. An entry counts when its body names the module or a one-hop user that is neither a hub, an entry hub nor
+        // test support (as for conformance programs, which have their own call-based rule below and do not use these).
+        let entry_names = |e: &Entry, i: usize| e.refs.iter().any(|(m_c, m)| repo.nodes[i].name == *m && repo.nodes[i].krate == *m_c.as_deref().unwrap_or(repo.nodes[e.node].krate.as_str()));
+        let mut entry_secs: BTreeMap<u32, String> = BTreeMap::new();
+        for (sym, es) in &repo.entries {
+            for e in es {
+                let Some(s) = repo.nodes[e.node].section.filter(|s| !sections.contains(s) && !entry_secs.contains_key(s)) else {
+                    continue;
+                };
+                if let Some(i) = named.iter().copied().find(|&i| !repo.entry_hubs.contains(&i) && entry_names(e, i)) {
+                    entry_secs.insert(s, format!("`{sym}` in {} names {}", label(e.node), label(i)));
+                }
+            }
+        }
+        if !entry_secs.is_empty() {
+            self.notes.push(format!("{file}: DIRECT tier: sections of the C entries reached: {}", entry_secs.iter().map(|(s, w)| format!("{s} ({w})")).collect::<Vec<_>>().join(", ")));
+        }
         let via = |t: &str| format!("{file}: {t}");
         add(&mut self.clippy, krate.to_string(), &format!("{file} changed"));
         let mut crates_in: BTreeSet<&str> = users.iter().map(|&i| repo.nodes[i].krate.as_str()).collect();
@@ -1071,6 +1170,8 @@ impl Selection {
                 via(&format!("names `{r}` (the module, a name it re-exports or a one-hop user)"))
             } else if let Some(s) = t.sections.intersection(&sections).next() {
                 via(&format!("spec section {s} (sections of the module and its one-hop users: {})", secs.join(",")))
+            } else if let Some((s, w)) = entry_secs.iter().find(|(s, _)| t.sections.contains(s)) {
+                via(&format!("spec section {s} of a C entry the change reaches ({w})"))
             } else {
                 continue;
             };
@@ -1131,6 +1232,52 @@ enum Class {
     /// bench/ and benchmarks/: data the xtask unit tests read (limits, rows, sentinels), so `-p xtask` runs.
     XtaskData,
     XtaskAudit(&'static [&'static str]),
+    /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
+    MathWiring,
+    /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
+    MathCoeffs,
+    /// XTASK-AFFECTED-MATH-2: a fit file `crates/math/fits/<name>.fit` (the input of `cargo xtask remez`).
+    MathFit,
+    /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
+    MathTables,
+}
+
+const MATH_EXPORTS_CRATE: &str = "liella-boundary";
+const MATH_CRATE: &str = "liella-math";
+const MATH_TSV: &str = "crates/boundary/src/posix/s10_math.tsv";
+const MATH_GEN: &str = "crates/boundary/src/posix/s10_math_gen.rs";
+const MATH_FITS: &str = "crates/math/fits/";
+const MATH_TABLES_GEN: &str = "crates/mathtools/src/tables.rs";
+
+/// XTASK-AFFECTED-MATH-2: the fit files of the tree, `crates/math/fits/<name>.fit` (no subdirectory).
+fn fit_files(root: &Path) -> BTreeSet<String> {
+    let Ok(dir) = fs::read_dir(root.join(MATH_FITS)) else { return BTreeSet::new() };
+    dir.filter_map(Result::ok).filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.ends_with(".fit")).map(|n| format!("{MATH_FITS}{n}")).collect()
+}
+
+/// XTASK-AFFECTED-MATH (ruling #3188): the generated math files that map to the math suites instead of FULL. Only these
+/// exact files: the math fits (`crates/math/fits/`), any other `*_gen.rs` and a file in a subdirectory of `coeffs/` or
+/// `adapter/` keep escalating. `cargo xtask math-gen --check` / `tables --check` prove the generated files match their
+/// inputs; the selected suites prove what the exports do. XTASK-AFFECTED-MATH-2 (ruling #3204): a fit file
+/// `crates/math/fits/<name>.fit` (not a subdirectory, not the `.py` table scripts) and exactly the tables generator
+/// `crates/mathtools/src/tables.rs` map too (`remez --check` / `tables --check` / `kernel-index --check`).
+fn math_class(path: &str) -> Option<Class> {
+    if path == MATH_TSV || path == MATH_GEN {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("csys/src/adapter/math_").is_some_and(|f| f.ends_with(".c") && !f.contains('/')) {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("crates/math/src/coeffs/").is_some_and(|f| f.ends_with(".rs") && !f.contains('/')) {
+        return Some(Class::MathCoeffs);
+    }
+    if path.strip_prefix(MATH_FITS).is_some_and(|f| f.ends_with(".fit") && !f.contains('/')) {
+        return Some(Class::MathFit);
+    }
+    if path == MATH_TABLES_GEN {
+        return Some(Class::MathTables);
+    }
+    None
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1142,6 +1289,8 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/policy.rs", &[]),
     ("xtask/src/forkalloc.rs", &[]),
     ("xtask/src/fs_order.rs", &[]),
+    // `cargo xtask plants` only (ruling #2993): no other command or gate step runs it.
+    ("xtask/src/plants.rs", &[]),
     ("xtask/src/symgap.rs", &["symgap"]),
     ("xtask/src/status.rs", &["status"]),
     ("xtask/src/schedule.rs", &["status"]),
@@ -1155,6 +1304,9 @@ fn classify(path: &str) -> Option<Class> {
     }
     if let Some((_, cmds)) = XTASK_AUDITS.iter().find(|(m, _)| *m == path) {
         return Some(Class::XtaskAudit(cmds));
+    }
+    if let Some(c) = math_class(path) {
+        return Some(c);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1182,6 +1334,9 @@ fn classify(path: &str) -> Option<Class> {
     }
     if path.ends_with(".map") || path.ends_with(".ld") || path.ends_with(".lds") || path.ends_with(".version") || path.starts_with("scripts/") {
         return full("linker or export list, or a script");
+    }
+    if path == "conformance/README.md" {
+        return Some(Class::Docs);
     }
     if path == "conformance/run.sh" || path.starts_with("conformance/tools/") {
         return Some(Class::AllConf);
@@ -1256,13 +1411,42 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.xtask_cmds.extend(cmds.iter().map(|c| c.to_string()));
                 sel.notes.push(format!("{f}: an audit/report module of xtask (xtask unit tests, clippy, the policy checks{})", cmds.iter().map(|c| format!(", `cargo xtask {c}`")).collect::<String>()));
             }
-            None => {
-                classify_path(repo, f, &mut sel);
-                sel.own_suite(repo, f);
+            Some(Class::MathWiring) => {
+                sel.math_exports(repo, &format!("{f}: math export wiring"));
+                sel.xtask_cmds.insert("math-gen --check".to_string());
+                sel.notes.push(format!("{f}: math export wiring (the math export suites and `cargo xtask math-gen --check`, not FULL)"));
             }
+            Some(Class::MathCoeffs) => {
+                sel.math_coeffs(repo, f);
+                sel.notes.push(format!("{f}: generated coefficients (liella-math's suites, the math export suites and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathFit) if !repo.fits.contains(f) => sel.full.push(format!("{f}: a removed fit file (`cargo xtask remez --check` cannot check it)")),
+            Some(Class::MathFit) => {
+                // The fit's family: what its generated coefficient file selects, plus the fit's own check.
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert(format!("remez --check {f}"));
+                sel.notes.push(format!("{f}: a fit file (the family's math suites, `cargo xtask remez --check {f}` and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathTables) => {
+                // The generator is a liella-mathtools source like any other (its own mapping), and it writes every
+                // coefficient family: the whole math set and both checks.
+                ordinary_mapping(repo, f, &mut sel);
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert("kernel-index --check".to_string());
+                sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
+            }
+            None => ordinary_mapping(repo, f, &mut sel),
         }
     }
     sel
+}
+
+/// The mapping of a source file that no rule above claims: its path class and the unit tests of the crate that owns
+/// it (AFF-OWNER). One helper for the unclaimed files and the tables generator (XTASK-AFFECTED-MATH-3), so the
+/// generator's selection cannot drift from what any other liella-mathtools source selects.
+fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
+    classify_path(repo, f, sel);
+    sel.own_suite(repo, f);
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -1297,6 +1481,12 @@ pub fn select_only(repo: &Repo, list: &str) -> Result<Selection, String> {
 }
 
 fn classify_path(repo: &Repo, f: &str, sel: &mut Selection) {
+    // A LINK-HELPERS helper source: the programs that link it are found by directive, not by name
+    // (every conformance program is the safe selection).
+    if f.starts_with("conformance/c/helpers/") && f.ends_with(".c") {
+        sel.all_conf(repo, &format!("{f}: a dynamic-link helper source (every conformance program)"));
+        return;
+    }
     if let Some(name) = f.strip_prefix("conformance/c/") {
         let stem = name.strip_suffix(".c").unwrap_or(name);
         if f.ends_with(".c") {
@@ -2261,7 +2451,8 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             ok &= step(root, &log, &format!("conformance ({} programs)", sel.conf.len()), &mut cmd);
         }
         for c in &sel.xtask_cmds {
-            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).args(["xtask", c]));
+            // A command may carry its flags (`math-gen --check`).
+            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
         }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
@@ -2274,7 +2465,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     println!("affected: {}{}", if ok { "ok" } else { "FAILED" }, if sel.only { " (ONLY mode: named binaries, NOT A GATE)" } else { "" });
     if !ok {
         // D-X.23: test builds carry no DWARF; panics still name file:line (core::panic::Location).
-        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target>");
+        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target> --run");
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
@@ -2359,58 +2550,117 @@ fn default_base(env: Option<String>) -> String {
     env.map(|b| b.trim().to_string()).filter(|b| !b.is_empty()).unwrap_or_else(|| "origin/main".to_string())
 }
 
-pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
-    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
-    let mut base = default_base(std::env::var("AFFECTED_BASE").ok());
-    let mut run = false;
-    let mut with_exports = false;
-    let mut files: Option<Vec<String>> = None;
-    let mut only: Option<String> = None;
-    let mut tier = Tier::Direct;
-    let mut replay_file: Option<String> = None;
+/// XTASK-AFFECTED-EXPLICIT: the one line printed (exit 2) when `affected` is given neither `--list` nor `--run`. There is
+/// no default mode: a gate that ran `cargo xtask affected` without `--run` used to list the selection, run nothing and
+/// exit 0, a green gate that tested nothing.
+pub const USAGE: &str = "usage: cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports]  or  affected --replay <records> [--tier direct|wide|full]; --list prints the selection, --run runs it, one of them is required";
+
+/// `--list` prints the selection; `--run` runs it. Exactly one is required (except with `--replay`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    List,
+    Run,
+}
+
+/// The parsed arguments of `cargo xtask affected`.
+#[derive(Debug)]
+struct Opts {
+    base: String,
+    mode: Option<Mode>,
+    with_exports: bool,
+    files: Option<Vec<String>>,
+    only: Option<String>,
+    tier: Tier,
+    replay_file: Option<String>,
+}
+
+impl Opts {
+    /// The mode to act in, or `None` when the command must be refused with [`USAGE`] (exit 2). `--replay` is a mode of
+    /// its own (it reads gate records, lists and runs nothing) and needs neither flag.
+    fn mode(&self) -> Option<Mode> {
+        if self.replay_file.is_some() { Some(self.mode.unwrap_or(Mode::List)) } else { self.mode }
+    }
+}
+
+fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
+    let mut o = Opts { base: default_base, mode: None, with_exports: false, files: None, only: None, tier: Tier::Direct, replay_file: None };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--base" => base = it.next().ok_or("--base needs a ref")?.clone(),
-            "--tier" => tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
-            "--replay" => replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
-            "--run" => run = true,
-            "--list" => run = false,
-            "--with-exports" => with_exports = true,
-            "--only" => only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
+            "--base" => o.base = it.next().ok_or("--base needs a ref")?.clone(),
+            "--tier" => o.tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
+            "--replay" => o.replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
+            "--run" | "--list" => {
+                let m = if a == "--run" { Mode::Run } else { Mode::List };
+                if o.mode.is_some_and(|prev| prev != m) {
+                    return Err(format!("--list and --run together: give one ({USAGE})"));
+                }
+                o.mode = Some(m);
+            }
+            "--with-exports" => o.with_exports = true,
+            "--only" => o.only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
             "--files" => {
                 let mut v = Vec::new();
                 while let Some(f) = it.clone().next().filter(|f| !f.starts_with("--")) {
                     v.push(f.clone());
                     it.next();
                 }
-                files = Some(v);
+                o.files = Some(v);
             }
-            other => return Err(format!("unknown argument `{other}` (usage: affected [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--replay <records>] [--list | --run] [--with-exports])")),
+            other => return Err(format!("unknown argument `{other}` ({USAGE})")),
         }
     }
-    if let Some(path) = replay_file {
+    Ok(o)
+}
+
+/// `cargo xtask affected`: exit 2 with [`USAGE`] when neither `--list` nor `--run` is given, 1 on any other error.
+pub fn main(root: &Path, args: &[String]) -> ExitCode {
+    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
+    let result = parse_args(args, default_base(std::env::var("AFFECTED_BASE").ok())).and_then(|o| match o.mode() {
+        None => Ok(None),
+        Some(mode) => execute(root, &o, mode, &mut run_selection).map(Some),
+    });
+    match result {
+        Ok(Some(())) => ExitCode::SUCCESS,
+        Ok(None) => {
+            eprintln!("{USAGE}");
+            ExitCode::from(2)
+        }
+        Err(e) => {
+            eprintln!("xtask affected: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Runs a selection: `run_selection`, or a recorder in the unit tests.
+type Runner<'a> = dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String> + 'a;
+
+/// The work of one `affected` command; `runner` runs a selection when the mode is `--run`.
+fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result<(), String> {
+    let tier = o.tier;
+    if let Some(path) = &o.replay_file {
         let repo = Repo::load(root);
-        let text = fs::read_to_string(&path).map_err(|e| format!("--replay {path}: {e}"))?;
+        let text = fs::read_to_string(path).map_err(|e| format!("--replay {path}: {e}"))?;
         let (report, misses) = replay(&repo, &text, tier);
         print!("{report}");
         return if misses == 0 { Ok(()) } else { Err(format!("replay: {misses} failures outside the {tier:?} tier")) };
     }
-    if let Some(list) = only {
+    if let Some(list) = &o.only {
         let repo = Repo::load(root);
-        let sel = select_only(&repo, &list)?;
+        let sel = select_only(&repo, list)?;
         print_selection(&repo, &[], &sel);
-        return if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) };
+        return if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) };
     }
-    let files = match files {
-        Some(f) => f,
-        None => changed_files(root, &base)?,
+    let files = match &o.files {
+        Some(f) => f.clone(),
+        None => changed_files(root, &o.base)?,
     };
     let repo = Repo::load(root);
     let sel = select_tier(&repo, &files, tier);
     println!("tier: {tier:?} (per-fix gates: direct; the landing gate runs everything)");
     print_selection(&repo, &files, &sel);
-    if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) }
+    if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2425,6 +2675,47 @@ mod tests {
         assert_eq!(default_base(Some(String::new())), "origin/main");
         assert_eq!(default_base(Some("  ".into())), "origin/main");
         assert_eq!(default_base(Some("origin/opt/lv3".into())), "origin/opt/lv3");
+    }
+
+    fn opts(args: &[&str]) -> Result<Opts, String> {
+        parse_args(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>(), "origin/main".into())
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: no default mode. Without --list or --run there is no mode (main exits 2 with USAGE; the
+    // binary's exit status is checked in xtask/tests/affected_mode.rs); --replay needs neither; both together are refused.
+    #[test]
+    fn affected_requires_list_or_run() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        assert_eq!(opts(&[]).unwrap().mode(), None);
+        assert_eq!(opts(&["--base", "origin/next", "--tier", "direct", "--files", "docs/plants.md"]).unwrap().mode(), None);
+        assert_eq!(opts(&["--list"]).unwrap().mode(), Some(Mode::List));
+        assert_eq!(opts(&["--files", "a.rs", "--run", "--base", "x"]).unwrap().mode(), Some(Mode::Run));
+        assert_eq!(opts(&["--replay", "records.txt"]).unwrap().mode(), Some(Mode::List));
+        let both = opts(&["--list", "--run"]).unwrap_err();
+        assert!(both.contains("--list and --run together"), "{both}");
+        assert!(USAGE.contains("--list") && USAGE.contains("--run") && !USAGE.contains('\n'), "{USAGE}");
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: --run hands the selection to the runner, --list does not.
+    #[test]
+    fn affected_run_runs_the_selection_and_list_does_not() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        for (flag, want_runs) in [("--run", 1), ("--list", 0)] {
+            let o = opts(&["--files", "docs/plants.md", flag]).unwrap();
+            let mut runs = 0;
+            let mut seen_docs_note = false;
+            let mut rec = |_: &Path, _: &Repo, sel: &Selection, exports: bool| -> Result<(), String> {
+                runs += 1;
+                seen_docs_note = sel.notes.iter().any(|n| n.starts_with("docs/plants.md: docs only")) && sel.full.is_empty() && !exports;
+                Ok(())
+            };
+            execute(&root(), &o, o.mode().unwrap(), &mut rec).unwrap();
+            assert_eq!(runs, want_runs, "{flag}");
+            assert_eq!(seen_docs_note, want_runs == 1, "{flag}: the runner got the docs-only selection");
+        }
+        let mut fail = |_: &Path, _: &Repo, _: &Selection, _: bool| -> Result<(), String> { Err("a selected test failed".into()) };
+        let o = opts(&["--files", "docs/plants.md", "--run"]).unwrap();
+        assert_eq!(execute(&root(), &o, Mode::Run, &mut fail).unwrap_err(), "a selected test failed");
     }
 
     // TOOLS-7 (1): a failed step's FULL output lands in target/<name> (only that step's, not earlier steps'), and a
@@ -2542,15 +2833,115 @@ mod tests {
             "spec/clauses.tsv",
             "spec/abi/layouts.tsv",
             "include/liella/native.h",
-            "crates/boundary/src/posix/s10_math_gen.rs",
             "crates/core/src/unicode/tables.rs",
-            "crates/boundary/src/posix/s10_math.tsv",
+            // XTASK-AFFECTED-MATH(-2): the math generated files outside the mapped set still escalate.
+            "crates/math/fits/fast32_tables_gen.py",
+            "crates/math/fits/sub/x.fit",
+            "crates/math/fits/removed_in_this_change.fit",
+            "crates/mathtools/src/sub/tables.rs",
+            "crates/math/src/coeffs/sub/x.rs",
+            "csys/src/adapter/math_libm.h",
+            "csys/src/adapter/other.c",
+            "crates/core/src/foo_gen.rs",
             "crates/libc-so/src/lib.rs",
             "scripts/anything.sh",
             "somewhere/unknown.bin",
         ] {
             let (_, s) = sel(&[f]);
             assert!(!s.full.is_empty(), "{f} must escalate to full");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH (ruling #3188), no spec clause: a change of the math export wiring or of a generated
+    // coefficient file selects the math export tests and the generator's check, not FULL, in the direct and wide tiers.
+    #[test]
+    fn math_wiring_and_coefficients_select_the_math_suites_not_full() {
+        let math_set: &[(&str, &str)] = &[
+            ("liella-boundary", "s10_math_symbols"),
+            ("liella-boundary", "math_fma_paths"),
+            ("liella-boundary", "libm_fma_select"),
+            ("liella-math", "s10_math_clauses"),
+            ("liella-math", "special_products"),
+            ("liella-math", "elem_products"),
+            ("liella-math", "fast64"),
+        ];
+        for (f, cmd) in [
+            (MATH_TSV, "math-gen --check"),
+            (MATH_GEN, "math-gen --check"),
+            ("csys/src/adapter/math_libm.c", "math-gen --check"),
+            ("crates/math/src/coeffs/trig.rs", "tables --check"),
+            ("crates/math/src/coeffs/fast32_sin.rs", "tables --check"),
+        ] {
+            for tier in [Tier::Direct, Tier::Wide] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.xtask_cmds.contains(cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                for (c, t) in math_set {
+                    assert!(s.tests.contains_key(&(c.to_string(), t.to_string())), "{f} ({tier:?}): {c}::{t} not selected");
+                }
+                // Every liella-math suite, and every target whose own source names the math exports or libm.
+                for t in repo().targets.iter().filter(|t| {
+                    let own = &t.text[..t.own.min(t.text.len())];
+                    t.krate == MATH_CRATE || own.contains("s10_math") || own.contains("libm")
+                }) {
+                    assert!(s.tests.contains_key(&(t.krate.clone(), t.name.clone())), "{f} ({tier:?}): {}::{} not selected", t.krate, t.name);
+                }
+                assert!(s.libs.contains_key("liella-boundary") && s.libs.contains_key("liella-math"), "{f} ({tier:?}): unit tests {:?}", s.libs.keys());
+                // Targeted, not everything: a test of another section stays out.
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+        }
+        // The coefficient family's users come from the `coeffs` module: its one-hop users' targets are a subset.
+        let c = select_tier(repo(), &["crates/math/src/coeffs/trig.rs".to_string()], Tier::Direct);
+        let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
+        for k in m.tests.keys() {
+            assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH-2 (ruling #3204), no spec clause: a fit file selects its family's math set (everything its
+    // generated coefficient file selects) plus `remez --check <fit>`; the tables generator selects its own mapping as a
+    // liella-mathtools source, the whole math set, `tables --check` and `kernel-index --check`. Not FULL, in the direct
+    // and wide tiers.
+    #[test]
+    fn math_fits_and_tables_generator_select_the_math_set_not_full() {
+        let fit = "crates/math/fits/fast32_sin.fit";
+        assert!(repo().fits.contains(fit), "the fit files of the tree: {:?}", repo().fits);
+        for tier in [Tier::Direct, Tier::Wide] {
+            let coeffs = select_tier(repo(), &["crates/math/src/coeffs/fast32_sin.rs".to_string()], tier);
+            for (f, cmds) in [
+                (fit, &["remez --check crates/math/fits/fast32_sin.fit", "tables --check"][..]),
+                (MATH_TABLES_GEN, &["tables --check", "kernel-index --check"][..]),
+            ] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                for cmd in cmds {
+                    assert!(s.xtask_cmds.contains(*cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                }
+                // Everything the family's coefficient file selects (the math export suites, every liella-math suite).
+                for k in coeffs.tests.keys() {
+                    assert!(s.tests.contains_key(k), "{f} ({tier:?}) misses {k:?}, which coeffs/fast32_sin.rs selects");
+                }
+                for k in coeffs.libs.keys().chain(coeffs.clippy.keys()) {
+                    assert!(s.libs.contains_key(k) || s.clippy.contains_key(k), "{f} ({tier:?}) misses the crate {k}");
+                }
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+            // The generator is also a liella-mathtools source: its own crate's unit tests and its ordinary mapping.
+            let s = select_tier(repo(), &[MATH_TABLES_GEN.to_string()], tier);
+            assert!(s.libs.contains_key("liella-mathtools"), "{MATH_TABLES_GEN} ({tier:?}): unit tests {:?}", s.libs.keys());
+            let mut own = Selection { direct: tier == Tier::Direct, ..Selection::default() };
+            ordinary_mapping(repo(), MATH_TABLES_GEN, &mut own);
+            assert!(own.libs.contains_key("liella-mathtools"), "the ordinary mapping of {MATH_TABLES_GEN} ({tier:?}): {:?}", own.libs.keys());
+            for k in own.libs.keys() {
+                assert!(s.libs.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the unit tests of {k} of its own mapping");
+            }
+            for k in own.tests.keys() {
+                assert!(s.tests.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses {k:?} of its own mapping");
+            }
+            for k in own.conf.keys() {
+                assert!(s.conf.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the program {k} of its own mapping");
+            }
         }
     }
 
@@ -2856,6 +3247,15 @@ mod tests {
     }
 
     #[test]
+    fn a_plants_change_selects_exactly_the_xtask_tests_and_clippy() {
+        // no spec clause: ruling #2993, plants.rs is a leaf like the audit modules, not FULL.
+        let (_, s) = sel(&["xtask/src/plants.rs"]);
+        assert!(s.full.is_empty(), "plants.rs must not escalate to FULL: {s:?}");
+        assert!(s.xtask_tests && s.xtask_cmds.is_empty() && s.tests.is_empty() && s.conf.is_empty(), "{s:?}");
+        assert!(s.clippy.len() == 1 && s.clippy.contains_key("xtask"), "only the xtask clippy: {s:?}");
+    }
+
+    #[test]
     fn audit_modules_are_leaves() {
         let audit: Vec<&str> = XTASK_AUDITS.iter().map(|(m, _)| *m).collect();
         let mut files = Vec::new();
@@ -2895,6 +3295,23 @@ mod tests {
 
     fn tier(files: &[&str], t: Tier) -> Selection {
         select_tier(repo(), &files.iter().map(|s| s.to_string()).collect::<Vec<_>>(), t)
+    }
+
+    // XTASK-PLANTS-TRACKED-COPY red-before-green: legacy::intl has no section and no `posix/sNN` one-hop user (its users
+    // are boundary::catalog and boundary::data); the gettext entries of posix/s07_locale name boundary::catalog. The
+    // products test diffing the catalogs names no module, only §7.7/§7.8. Before: not selected for an intl.rs change.
+    #[test]
+    fn direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches() {
+        let repo = repo();
+        let t = repo.targets.iter().find(|t| t.name == "catalogs_products").unwrap_or_else(|| panic!("catalogs_products"));
+        assert!(t.products && t.sections.contains(&7), "catalogs_products diffs the products and carries §7");
+        let d = tier(&["crates/legacy/src/intl.rs"], Tier::Direct);
+        assert!(d.full.is_empty() && d.direct, "{:?}", d.full);
+        let k = (t.krate.clone(), t.name.clone());
+        assert!(d.tests.contains_key(&k), "intl.rs must select catalogs_products: {:?}", d.tests.keys().collect::<Vec<_>>());
+        assert!(d.tests[&k].contains("C entry the change reaches"), "{}", d.tests[&k]);
+        let w = tier(&["crates/legacy/src/intl.rs"], Tier::Wide);
+        assert!(d.tests.keys().all(|k| w.tests.contains_key(k)), "direct stays inside wide");
     }
 
     // GATE-TIER-2 red-before-green: a conformance program is C, so no module name reaches it; it is reached through the

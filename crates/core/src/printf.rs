@@ -654,6 +654,15 @@ impl Unit for u32 {
 pub trait Out<U: Unit> {
     /// Append units.
     fn put(&mut self, s: &[U]);
+
+    /// The next `n` units of the output, to be written in place of `n` units' worth of
+    /// [`Out::put`] calls, when the sink can lend them and all `n` fit; `None` (nothing taken)
+    /// otherwise, the caller then [`Out::put`]s its pieces. A renderer that knows its whole
+    /// length writes its pieces into the slice without a call per piece (SPRINTF-CHK-LS).
+    fn room(&mut self, n: usize) -> Option<&mut [U]> {
+        let _ = n;
+        None
+    }
 }
 
 /// A byte sink over a number's text for the formatters.
@@ -1425,6 +1434,38 @@ pub struct SimpleFormat {
     kinds: u8,
 }
 
+/// Where the pieces of a [`SimpleFormat::pair_s`] plan lie in the format, and the second string's field.
+#[derive(Clone, Copy, Debug)]
+pub struct PairS {
+    /// Start of the first `%s`, and the start of the text after it.
+    pub at0: usize,
+    /// The text after the first `%s` starts here.
+    pub after0: usize,
+    /// Start of the second conversion, and the start of the text after it.
+    pub at1: usize,
+    /// The text after the second conversion starts here.
+    pub after1: usize,
+    /// The written width (0 with a `*`).
+    width: usize,
+    /// Whether the second conversion's width is a `*` (an `int` argument before its string).
+    pub star: bool,
+    /// Whether the conversion has `-`.
+    left: bool,
+}
+
+impl PairS {
+    /// The second string's field width and whether it is left-justified; `star_arg` is the
+    /// `int` argument of a `*` width (ignored without one): a negative one left-justifies its
+    /// magnitude, as [`render_simple`] does.
+    pub fn field(&self, star_arg: u64) -> (usize, bool) {
+        if !self.star {
+            return (self.width, self.left);
+        }
+        let w = star_width(&mut || star_arg);
+        (usize::try_from(w.unsigned_abs()).unwrap_or(0), self.left || w < 0)
+    }
+}
+
 impl SimpleFormat {
     /// An empty plan for [`simple_into`].
     pub const fn new() -> SimpleFormat {
@@ -1464,6 +1505,30 @@ impl SimpleFormat {
         }
         let &(c, len, lit) = self.convs.first()?;
         (c.letter == b'c' && c.width == 0 && c.flags == 0 && lit != LIT_SCAN).then(|| (usize::from(lit), usize::from(lit) + usize::from(len)))
+    }
+
+    /// The plan of text around TWO strings: a plain `%s` and then `%s`, `%Ns`, `%-Ns`, `%*s` or `%-*s` (ls -l's
+    /// `"%s %*s "`: the mode column and the link count), nothing else to convert. The caller may write
+    /// the pieces as [`render_simple`] would (SPRINTF-CHK-NLINK).
+    pub fn pair_s(&self) -> Option<PairS> {
+        // Exactly two kept conversions leaves no room for [`F_MORE`], and two `s` leave none for
+        // [`F_FLOAT`]: only a `*` width can be among the kinds.
+        if self.n != 2 {
+            return None;
+        }
+        let &(c0, len0, lit0) = self.convs.first()?;
+        let &(c1, len1, lit1) = self.convs.get(1)?;
+        if c0.letter != b's' || c0.width != 0 || c0.flags != 0 || c1.letter != b's' || c1.flags & !(F_LEFT | F_STAR) != 0 || lit0 == LIT_SCAN || lit1 == LIT_SCAN {
+            return None;
+        }
+        let after0 = usize::from(lit0) + usize::from(len0);
+        let at1 = after0 + usize::from(lit1);
+        Some(PairS { at0: usize::from(lit0), after0, at1, after1: at1 + usize::from(len1), width: usize::from(c1.width), star: c1.has(F_STAR), left: c1.has(F_LEFT) })
+    }
+
+    /// Whether the plan has exactly two conversions (the only plans [`SimpleFormat::pair_s`] accepts).
+    pub fn is_pair(&self) -> bool {
+        self.n == 2 && self.kinds & !F_STAR == 0
     }
 
     /// Whether the plan has exactly one conversion and no `*` width or floating one: the only
@@ -2385,6 +2450,54 @@ mod simple_tests {
         for fmt in not {
             if let Some(plan) = simple(fmt) {
                 assert_eq!(plan.lone_s(), None, "{}", std::string::String::from_utf8_lossy(fmt));
+            }
+        }
+    }
+
+    /// no spec clause: a pair plan's pieces and field are what render_simple writes.
+    #[test]
+    fn pair_s_pieces_are_what_render_simple_writes() {
+        let pair: [&[u8]; 6] = [b"%s %*s ", b"%s%*s", b"%s|%-*s|", b"[%s] %6s.", b"%s %-4s", b"%s%s"];
+        let not: [&[u8]; 24] = [
+            b"%5s %s", b"%s %d", b"%-s %s", b"%s %c", b"%s %s %s", b"%s %*.*f", b"%s", b"%ls %s", b"%s %ls", b"%s %5ls", b"%S %s", b"%s %S", b"%s %.3s", b"%s %5.3s",
+            b"%.2s %s", b"%s %+s", b"%s % s", b"%s %#s", b"%s %05s", b"%1$s %2$s", b"%s %2$s", b"%s %5c", b"%s %*.3s", b"%s %f",
+        ];
+        for fmt in pair {
+            let name = std::string::String::from_utf8_lossy(fmt).into_owned();
+            let plan = simple(fmt).unwrap();
+            let p = plan.pair_s().unwrap_or_else(|| panic!("{name}"));
+            for star in [0i32, 2, 5, 20, -3, -20] {
+                let star_arg = u64::from(u32::from_ne_bytes(star.to_ne_bytes()));
+                for (a0, a1) in [(1, 1), (1, TEXTS.len()), (TEXTS.len(), 1)] {
+                    let mut args = vec![u64::try_from(a0).unwrap()];
+                    if p.star {
+                        args.push(star_arg);
+                    }
+                    args.push(u64::try_from(a1).unwrap());
+                    let mut it = args.into_iter();
+                    let mut quick = Vec::new();
+                    let n = render_simple::<false, true, _>(fmt, &plan, &mut || it.next().unwrap(), &mut || unreachable!(), &mut TestEnv, &mut quick).unwrap();
+                    let (width, left) = p.field(star_arg);
+                    let s1 = TestEnv.text(a1, None);
+                    let fill = vec![b' '; width.saturating_sub(s1.len())];
+                    let mut lane = fmt[..p.at0].to_vec();
+                    lane.extend_from_slice(TestEnv.text(a0, None));
+                    lane.extend_from_slice(&fmt[p.after0..p.at1]);
+                    if left {
+                        lane.extend_from_slice(s1);
+                        lane.extend_from_slice(&fill);
+                    } else {
+                        lane.extend_from_slice(&fill);
+                        lane.extend_from_slice(s1);
+                    }
+                    lane.extend_from_slice(&fmt[p.after1..]);
+                    assert_eq!((n, &quick), (lane.len(), &lane), "{name} star {star}");
+                }
+            }
+        }
+        for fmt in not {
+            if let Some(plan) = simple(fmt) {
+                assert!(plan.pair_s().is_none(), "{}", std::string::String::from_utf8_lossy(fmt));
             }
         }
     }

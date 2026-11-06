@@ -13,6 +13,9 @@ import gdb
 func = os.environ.get("WL_TRACE_FUNC", "")
 skip = int(os.environ.get("WL_TRACE_SKIP", "10"))
 limit = int(os.environ.get("WL_TRACE_MAX", "200000"))
+# WL_TRACE_LIST=1 (wl_trace.sh --list): also print every executed instruction ("I <n> <pc> <sym+off>: <insn>"), so
+# one call can be split into phases by address, not only by function (STRSTR-SHORT-DENSE-PARITY-2).
+listing = os.environ.get("WL_TRACE_LIST", "") == "1"
 
 gdb.execute("set pagination off")
 gdb.execute("set confirm off")
@@ -82,6 +85,12 @@ while n < limit:
     except gdb.error:
         name = "?"
     counts[name] += 1
+    if listing:
+        try:
+            ins = gdb.execute("x/i $pc", to_string=True).strip().lstrip("=> ")
+        except gdb.error:
+            ins = "?"
+        print("I %5d %s" % (n, ins[:150]))
     if order and order[-1][0] == name:
         order[-1][1] += 1
     else:

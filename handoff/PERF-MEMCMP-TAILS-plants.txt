@@ -1,0 +1,6 @@
+# PERF-MEMCMP-TAILS plants (cargo xtask plants; format docs/plants.md)
+cmp-mid-bound | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_big:.*?)cmpq \$128, %rdx/$1cmpq \$160, %rdx/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-mid-bound | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_big:.*?)cmpq \$128, %rdx/$1cmpq \$160, %rdx/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+cmp-head-skip | csys/src/machine/fold.S | perl:s/(liella_machine_compare:.*?\.Lcmp_big:.*?)jne \.Lcmp_big_head/$1jne .Lcmp_big_blocks/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq-head-skip | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_big:.*?)jne \.Leq_big_one/$1jne .Leq_big_blocks/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+long-word-fold-off | crates/boundary/src/dispatch.rs | lit:let long = if fold && avx2 ==> let long = if avx2 | cargo test -p liella-boundary --test small_compare null_faults | msg:null_faults.*(FAILED|panicked)|fold false avx2 true

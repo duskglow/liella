@@ -26,7 +26,7 @@ quality of a contribution, not about which tools produced it.
   hallucinated API, or a broken test. Low-quality contributions will be treated as
   low-quality contributions, whatever tool produced them.
 * **Test it and review it yourself before you submit it.** Run the tests your change can
-  reach (`cargo xtask affected`). Compare behaviour with a black-box probe where that makes
+  reach (`cargo xtask affected --run`). Compare behaviour with a black-box probe where that makes
   sense. Read every line. If you cannot explain what a change does and why it is correct, it
   is not ready.
 * **Check the facts.** Anything that claims something about glibc behaviour, the ABI, POSIX or

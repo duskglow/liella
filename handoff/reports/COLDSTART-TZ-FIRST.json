@@ -1,0 +1,32 @@
+{
+ "task": "COLDSTART-TZ-FIRST",
+ "model": "opus",
+ "tokens": null,
+ "result": "PENDING JOBS: one-pass TZif transition parse; first localtime_r (New York) user instr 52.7k -> 30.7k, faults 41 -> 38 (undiluted probe, keke); gate/plants/N100 timing running",
+ "branch": "task/coldstart-tz-first",
+ "head": "b12ec539",
+ "gate": {
+  "affected": "pending (keke:tzf-gate, direct tier via --files); keke:tzf-check clippy/static green, time:: unit 36 passed / 0 failed",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Step 0: nozomi:CSP1106-n100 on next 730f416b: first_localtime_r_new_york 46874 ns/op on the N100 (no glibc side printed for first_ rows); SCIL-SCI there: Liella +37.0k/+100.6k/+16, glibc +11.8k/+36.2k/+4",
+  "The parser already skipped the v1 body; the zone file is already read with one read of the body",
+  "Undiluted probe includes Liella's first heap use (four large reservations, two munmaps): most of the remaining fault/kernel gap, outside this story",
+  "Role dir has no .git: gate run with affected --files instead of --base origin/next"
+ ],
+ "refused": [],
+ "jobs": [
+  "keke:tzf-base",
+  "keke:tzf-check",
+  "keke:tzf-stage",
+  "keke:tzf-gate",
+  "keke:tzf-plants",
+  "nozomi:tzf-n100"
+ ],
+ "improvement": "Keep the planning probe source (coldsteps.c) in the repo under tools/probe so follow-up stories can re-run the bench-context delta instead of writing a new probe",
+ "next_step": "Collect keke:tzf-gate, keke:tzf-plants (expect 5 CAUGHT) and nozomi:tzf-n100 (compare 46874 ns); if still above 1.05x, follow up with a lazily allocated rule-year table and a compact transition layout",
+ "report_file": "handoff/coldstart-tz-first.md"
+}

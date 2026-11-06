@@ -301,6 +301,49 @@ impl DirStream {
         rec.get(..rec.iter().position(|&b| b == 0).map_or(0, |n| n.saturating_add(1))).unwrap_or(&[])
     }
 
+    /// The next entry's `d_type` and its name with terminator, for a caller that only copies
+    /// names out (a tree walk's listing): one pass over the record, no [`Entry`] built, the name
+    /// scanned once. `EIO` for a record without a terminated name (the kernel never makes one).
+    pub fn next_named<S: Sys>(&mut self, sys: &S) -> Result<Option<(u8, &[u8])>> {
+        loop {
+            if self.pos < self.len {
+                break;
+            }
+            if !self.refill(sys)? {
+                return Ok(None);
+            }
+        }
+        let (pos, len, base, cap) = (self.pos, self.len, self.base, self.cap);
+        let area = self.buf.get(base..base.saturating_add(cap)).unwrap_or(&[]);
+        let rec = area.get(pos..len).ok_or(Errno::EIO)?;
+        let reclen = field::<2>(rec, D_RECLEN).map(u16::from_ne_bytes).ok_or(Errno::EIO)?;
+        let n = usize::from(reclen);
+        if n <= D_NAME || n > rec.len() {
+            return Err(Errno::EIO);
+        }
+        let kind = rec.get(D_TYPE).copied().ok_or(Errno::EIO)?;
+        let off = field::<8>(rec, D_OFF).map(i64::from_ne_bytes).ok_or(Errno::EIO)?;
+        let tail = rec.get(D_NAME..n).ok_or(Errno::EIO)?;
+        let end = tail.iter().position(|&b| b == 0).ok_or(Errno::EIO)?;
+        let namez = tail.get(..end.saturating_add(1)).ok_or(Errno::EIO)?;
+        self.pos = pos.saturating_add(n);
+        self.offset = off;
+        Ok(Some((kind, namez)))
+    }
+
+    /// The records not yet handed out, as the kernel wrote them (whole records, `getdents64`
+    /// layout), refilling when none are left; `None` at the end. For a caller that copies a
+    /// directory out whole (a tree walk's listing).
+    pub fn next_chunk<S: Sys>(&mut self, sys: &S) -> Result<Option<&[u8]>> {
+        if self.pos >= self.len && !self.refill(sys)? {
+            return Ok(None);
+        }
+        let (pos, len, base, cap) = (self.pos, self.len, self.base, self.cap);
+        self.pos = len;
+        let area = self.buf.get(base..base.saturating_add(cap)).unwrap_or(&[]);
+        Ok(Some(area.get(pos..len).ok_or(Errno::EIO)?))
+    }
+
     /// The address of `e`'s record, which stays valid until the stream reads again (a C
     /// caller's `struct dirent *`).
     pub fn record_addr(&self, e: &Entry) -> usize {
@@ -343,5 +386,61 @@ impl DirStream {
     /// Give up the stream, keeping its descriptor open.
     pub fn into_fd(self) -> Fd {
         self.fd
+    }
+
+    /// [`into_fd`](Self::into_fd), handing back the buffer for a later stream.
+    pub fn into_fd_keep(self) -> (Fd, TryVec<u8>) {
+        (self.fd, self.buf)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+mod tests {
+    use super::*;
+
+    /// A `getdents64` record of `reclen` bytes for name `n`, offset `off`.
+    fn record(reclen: u16, off: i64, n: u8) -> [u8; 24] {
+        let mut r = [0u8; 24];
+        r[D_OFF..D_OFF + 8].copy_from_slice(&off.to_ne_bytes());
+        r[D_RECLEN..D_RECLEN + 2].copy_from_slice(&reclen.to_ne_bytes());
+        r[D_NAME] = n;
+        r
+    }
+
+    /// A stream whose buffer holds `bytes` as if `getdents64` had just returned them.
+    fn stream_holding(bytes: &[u8]) -> DirStream {
+        let mut s = DirStream::with_fd_reusing(Fd::new(-1), 1024, OFFSET_UNKNOWN, None).unwrap();
+        let at = s.base;
+        s.buf.get_mut(at..at + bytes.len()).unwrap().copy_from_slice(bytes);
+        s.len = bytes.len();
+        s
+    }
+
+    /// No spec clause (READDIR-1, the `getdents64` record walk): every record is returned once,
+    /// in order, with `d_off` kept for `telldir`; then the buffer is used up.
+    #[test]
+    fn buffered_addr_walks_each_record_once() {
+        let bytes = [record(24, 7, b'a'), record(24, 9, b'b'), record(24, 11, b'c')].concat();
+        let mut s = stream_holding(&bytes);
+        let first = s.buf.as_slice().as_ptr().addr() + s.base;
+        for (i, off) in [7i64, 9, 11].into_iter().enumerate() {
+            assert_eq!(s.buffered_addr(), Ok(Some(first + 24 * i)), "record {i}");
+            assert_eq!(s.offset, off, "d_off of record {i}");
+        }
+        assert_eq!(s.buffered_addr(), Ok(None));
+    }
+
+    /// No spec clause (READDIR-1): a record too short to hold a name, or one whose `d_reclen`
+    /// runs past the bytes `getdents64` returned, is `EIO`, never an entry.
+    #[test]
+    fn buffered_addr_rejects_bad_record_lengths() {
+        for reclen in [0u16, 8, 19] {
+            let mut s = stream_holding(&record(reclen, 1, b'a'));
+            assert_eq!(s.buffered_addr(), Err(Errno::EIO), "d_reclen {reclen}");
+        }
+        let mut s = stream_holding(&[record(24, 1, b'a'), record(32, 2, b'b')].concat());
+        assert!(matches!(s.buffered_addr(), Ok(Some(_))));
+        assert_eq!(s.buffered_addr(), Err(Errno::EIO), "a record past the buffer");
     }
 }

@@ -103,35 +103,28 @@ static void pre1970(const char *scratch) {
     unsetenv("TZDIR");
 }
 
-static void field(const char *n, int v, int cur) {
-    if (v == cur) printf(" %s=cur", n); else printf(" %s=%d", n, v);
+/* The bracket of a getdate call: the earliest second any clock reads just before it and the latest
+   just after. time() and CLOCK_REALTIME_COARSE follow the clock tick and can trail CLOCK_REALTIME by
+   up to a tick, so a call reading any of them reads a second in [lo() before, hi() after]. */
+static long long clocks(int last) {
+    struct timespec c, f;
+    long long t = (long long)time(NULL);
+    clock_gettime(CLOCK_REALTIME_COARSE, &c);
+    clock_gettime(CLOCK_REALTIME, &f);
+    long long m = t;
+    if (last ? c.tv_sec > m : c.tv_sec < m) m = c.tv_sec;
+    if (last ? f.tv_sec > m : f.tv_sec < m) m = f.tv_sec;
+    return m;
 }
+static long long lo(void) { return clocks(0); }
+static long long hi(void) { return clocks(1); }
 
-static void gd(const char *scratch, const char *tmpl, const char *in) {
-    char path[4096];
-    snprintf(path, sizeof path, "%s/datemsk", scratch);
-    FILE *f = fopen(path, "w");
-    if (!f) { printf("getdate: cannot write %s\n", path); exit(1); }
-    fprintf(f, "%s\n", tmpl);
-    fclose(f);
-    setenv("DATEMSK", path, 1);
-    time_t now;
-    struct tm c, *r;
-    int tries = 0;
-    do { /* again if the second changed during the call: the current fields must be the call's */
-        now = time(NULL);
-        localtime_r(&now, &c);
-        r = getdate(in);
-    } while (time(NULL) != now && ++tries < 5);
-    printf("getdate(\"%s\", \"%s\") ->", in, tmpl);
-    if (!r) { printf(" NULL getdate_err=%d\n", getdate_err); return; }
-    struct tm a = *r, b = c;
-    a.tm_hour = b.tm_hour = 12; a.tm_min = b.tm_min = a.tm_sec = b.tm_sec = 0; a.tm_isdst = b.tm_isdst = -1;
-    long days = (long)((timegm(&a) - timegm(&b)) / 86400);
-    printf(" days=%+ld", days);
-    printf(" year=%d mon=%d mday=%d", r->tm_year + 1900, r->tm_mon + 1, r->tm_mday);
-    field("hour", r->tm_hour, c.tm_hour); field("min", r->tm_min, c.tm_min); field("sec", r->tm_sec, c.tm_sec);
-    printf(" wday=%s isdst=%d zone=%s\n", r->tm_wday == (c.tm_wday + days % 7 + 7) % 7 ? "ok" : "BAD", r->tm_isdst, r->tm_zone ? r->tm_zone : "(null)");
+/* Returns once every clock reads a second after `s`. */
+static void past(long long s) {
+    while (lo() <= s) {
+        struct timespec ts = {0, 1000000};
+        nanosleep(&ts, NULL);
+    }
 }
 
 /* The test's instant (argv "@<epoch seconds>"), captured once by the test and given to both programs;
@@ -140,25 +133,92 @@ static void gd(const char *scratch, const char *tmpl, const char *in) {
    them two dates (#2012). */
 static long long inst = -1;
 
-/* Sets TZ to `std`<offset>`rest`, the offset chosen so the local time of day is now `want` seconds
-   after midnight (on the date of the test's instant): the getdate cases see a clock the test sets, not
-   the time of day of the run. Prints the rule without its offset and the local time reached. */
-static void clockat(const char *std, const char *rest, long want) {
-    time_t now = time(NULL);
-    /* the POSIX offset: west of UTC is positive */
-    long w = (long)((inst >= 0 ? inst : (long long)now) % 86400) - want;
+/* The clock the getdate cases see, set again before every call (pin()): `std`<offset>`rest` with the
+   offset chosen so CLOCK_REALTIME's current second reads `pin_tod` seconds after midnight on the date of
+   the test's instant (pin_mode 1; 86400 and on: the next date), or the UTC instant `pin_at` (pin_mode 2, no DST correction). A
+   call therefore sees its pinned second or the next, however long the run before it took. */
+static const char *pin_std = "UTC", *pin_rest = "";
+static int pin_mode;
+static long pin_tod;
+static long long pin_at;
+
+static void settz_off(long w, struct tm *c, time_t now) {
     char tz[96];
-    struct tm c;
+    long a = w < 0 ? -w : w; /* the POSIX offset: west of UTC is positive */
+    snprintf(tz, sizeof tz, "%s%s%ld:%02ld:%02ld%s", pin_std, w < 0 ? "-" : "", a / 3600, a / 60 % 60, a % 60, pin_rest);
+    setenv("TZ", tz, 1);
+    tzset();
+    localtime_r(&now, c);
+}
+
+/* Pins the clock (see pin_mode) at CLOCK_REALTIME's current second, which it returns; `c` gets the
+   local time pinned. */
+static long long pin(struct tm *c) {
+    struct timespec f;
+    clock_gettime(CLOCK_REALTIME, &f);
+    time_t now = f.tv_sec;
+    if (pin_mode == 2) { settz_off((long)((long long)now - pin_at), c, now); return now; }
+    long w = (long)((inst >= 0 ? inst : (long long)now) % 86400) - pin_tod;
     for (int i = 0; i < 3; i++) {
-        long a = w < 0 ? -w : w;
-        snprintf(tz, sizeof tz, "%s%s%ld:%02ld:%02ld%s", std, w < 0 ? "-" : "", a / 3600, a / 60 % 60, a % 60, rest);
-        setenv("TZ", tz, 1);
-        tzset();
-        localtime_r(&now, &c);
-        long got = c.tm_hour * 3600L + c.tm_min * 60L + c.tm_sec;
-        if (got == want) break;
-        w += got - want; /* DST in force: one more hour west */
+        settz_off(w, c, now);
+        long got = c->tm_hour * 3600L + c->tm_min * 60L + c->tm_sec;
+        if (got == pin_tod % 86400) break;
+        /* DST in force (one more hour west), or the seconds since the test's instant, taken modulo a day */
+        w += ((got - pin_tod % 86400) % 86400 + 86400 + 43200) % 86400 - 43200;
     }
+    return now;
+}
+
+/* How a call is placed against a second boundary (the forced-edge test, argv "!<instant>,<edge>"):
+   0 as it falls; 1 within the pinned second; 2 every clock passes the boundary after the bracket opens
+   and before the call; 3 after the call and before the bracket closes. */
+static int edge;
+
+/* Prints the result's own fields and the local time of every second of the call's bracket; the test
+   classifies each field as current or not against that bracket, per program. */
+static void gd(const char *scratch, const char *tmpl, const char *in) {
+    char path[4096];
+    snprintf(path, sizeof path, "%s/datemsk", scratch);
+    FILE *f = fopen(path, "w");
+    if (!f) { printf("getdate: cannot write %s\n", path); exit(1); }
+    fprintf(f, "%s\n", tmpl);
+    fclose(f);
+    setenv("DATEMSK", path, 1);
+    struct tm c, *r;
+    long long t0, t1;
+    int placed, tries = 0;
+    do { /* a forced edge is arranged again when the run was descheduled across the planned second */
+        long long s = pin(&c);
+        if (edge == 1) past(s - 1); /* the bracket is then the pinned second alone */
+        t0 = lo();
+        if (edge == 2) past(s);
+        r = getdate(in);
+        long long mid = hi();
+        if (edge == 3) past(s);
+        t1 = hi();
+        placed = edge == 0 || (edge == 1 && t1 == s) || (edge == 2 && mid == s + 1) || (edge == 3 && mid == s);
+    } while (!placed && ++tries < 20);
+    printf("getdate(\"%s\", \"%s\") ->", in, tmpl);
+    if (!placed) { printf(" edge not arranged\n"); return; }
+    if (!r) { printf(" NULL getdate_err=%d\n", getdate_err); return; }
+    printf(" at=%04d-%02d-%02d %02d:%02d:%02d w%d isdst=%d zone=%s now=", r->tm_year + 1900, r->tm_mon + 1, r->tm_mday,
+           r->tm_hour, r->tm_min, r->tm_sec, r->tm_wday, r->tm_isdst, r->tm_zone ? r->tm_zone : "(null)");
+    for (long long T = t0; T <= t1; T++) {
+        time_t x = (time_t)T;
+        struct tm q;
+        localtime_r(&x, &q);
+        printf("%s%04d-%02d-%02d %02d:%02d:%02d w%d", T == t0 ? "" : ",", q.tm_year + 1900, q.tm_mon + 1, q.tm_mday, q.tm_hour, q.tm_min, q.tm_sec, q.tm_wday);
+    }
+    printf("\n");
+}
+
+/* Pins the getdate clock at `want` seconds after midnight (on the date of the test's instant): the
+   getdate cases see a clock the test sets, not the time of day of the run. Prints the rule without its
+   offset and the local time pinned. */
+static void clockat(const char *std, const char *rest, long want) {
+    struct tm c;
+    pin_std = std; pin_rest = rest; pin_mode = 1; pin_tod = want;
+    pin(&c);
     printf("== clock %s%s at %02d:%02d:%02d\n", std, rest, c.tm_hour, c.tm_min, c.tm_sec);
 }
 
@@ -174,21 +234,21 @@ static void getdates(const char *scratch) {
         {"%d", "15"}, {"%b %d", "Jun 15"}, {"%y", "30"}, {"%Y %H:%M", "2030 10:00"}, {"%Y-%m-%d", "2030-06-15"},
         {"%Y-%m-%d %a", "2030-06-15 Mon"}};
     for (unsigned t = 0; t < sizeof tzs / sizeof *tzs; t++) {
-        clockat(tzs[t][0], tzs[t][1], 12 * 3600 + 30 * 60);
+        clockat(tzs[t][0], tzs[t][1], 12 * 3600 + 30 * 60 + 30);
         for (unsigned i = 0; i < sizeof cases / sizeof *cases; i++) gd(scratch, cases[i][0], cases[i][1]);
     }
     /* A time alone against the current hour (s23_7_c_3): later, the same hour with the minutes ahead
-       or past, earlier; at 12:30:00, then at 00:40:30 for minutes and seconds alone (hour 0). */
+       or past, earlier; at 12:30:30, then at 00:40:30 for minutes and seconds alone (hour 0). */
     static const char *const at1230[][2] = {{"%H:%M", "13:00"}, {"%H:%M", "12:45"}, {"%H:%M", "12:10"}, {"%H", "12"},
         {"%H:%M:%S", "12:29:59"}, {"%H:%M", "11:59"}, {"%H", "11"}, {"%M", "10"}};
     static const char *const at0040[][2] = {{"%M", "30"}, {"%M", "50"}, {"%M:%S", "40:10"}, {"%S", "15"}, {"%H", "0"}, {"%H:%M", "00:10"}};
-    clockat("UTC", "", 12 * 3600 + 30 * 60);
+    clockat("UTC", "", 12 * 3600 + 30 * 60 + 30);
     for (unsigned i = 0; i < sizeof at1230 / sizeof *at1230; i++) gd(scratch, at1230[i][0], at1230[i][1]);
     clockat("UTC", "", 40 * 60 + 30);
     for (unsigned i = 0; i < sizeof at0040 / sizeof *at0040; i++) gd(scratch, at0040[i][0], at0040[i][1]);
 }
 
-/* The controlled clock reads `at` (epoch seconds, within a day of the real clock) when this starts:
+/* The controlled clock reads `at` (epoch seconds, within a day of the real clock) before every call:
    the rule is chosen from the test's instant, so UTC midnight is crossed (or not) as the test says. */
 static void midnight(const char *scratch, long long at) {
     static const char *const tzs[][2] = {{"UTC", ""}, {"EST", "EDT,M3.2.0,M11.1.0"}};
@@ -196,17 +256,27 @@ static void midnight(const char *scratch, long long at) {
         {"%a", "Mon"}, {"%A", "Sunday"}, {"%a %H:%M", "Wed 10:00"}, {"%Y", "2030"}, {"%Y-%m", "2030-06"}, {"%d", "15"}, {"%b %d", "Jun 15"},
         {"%y", "30"}, {"%Y-%m-%d", "2030-06-15"}, {"%H:%M %Z", "10:30 EST"}, {"%Y-%m-%d %H:%M %Z", "2024-07-15 10:30 UTC"}};
     for (unsigned t = 0; t < sizeof tzs / sizeof *tzs; t++) {
-        time_t now = time(NULL);
-        long w = (long)((long long)now - at); /* the POSIX offset: west of UTC is positive */
-        long a = w < 0 ? -w : w;
-        char tz[96];
         struct tm c;
-        snprintf(tz, sizeof tz, "%s%s%ld:%02ld:%02ld%s", tzs[t][0], w < 0 ? "-" : "", a / 3600, a / 60 % 60, a % 60, tzs[t][1]);
-        setenv("TZ", tz, 1);
-        tzset();
-        localtime_r(&now, &c);
+        pin_std = tzs[t][0]; pin_rest = tzs[t][1]; pin_mode = 2; pin_at = at;
+        pin(&c);
         printf("== clock %s%s at %04d-%02d-%02d hour %02d\n", tzs[t][0], tzs[t][1], c.tm_year + 1900, c.tm_mon + 1, c.tm_mday, c.tm_hour);
         for (unsigned i = 0; i < sizeof cases / sizeof *cases; i++) gd(scratch, cases[i][0], cases[i][1]);
+    }
+}
+
+/* The forced-edge test (argv "!<instant>,<edge>"): each case with the pinned clock one second before a
+   second, minute, hour and day boundary (the boundary itself for edge 1), so the boundary falls inside
+   the call's bracket where `edge` puts it. The headers do not depend on `edge`: the test compares a
+   program forced one way with a program forced another. */
+static void edges(const char *scratch) {
+    static const struct { const char *name; long last; } b[] = {
+        {"second", 12 * 3600 + 30 * 60 + 30}, {"minute", 12 * 3600 + 30 * 60 + 59}, {"hour", 12 * 3600 + 59 * 60 + 59}, {"midnight", 86399}};
+    static const char *const cases[][2] = {{"%a", "Mon"}, {"%Y-%m-%d", "2030-06-15"}, {"%H:%M", "00:00"}};
+    pin_std = "UTC"; pin_rest = ""; pin_mode = 1;
+    for (unsigned i = 0; i < sizeof b / sizeof *b; i++) {
+        printf("== edge %s\n", b[i].name);
+        pin_tod = edge == 1 ? b[i].last + 1 : b[i].last;
+        for (unsigned k = 0; k < sizeof cases / sizeof *cases; k++) gd(scratch, cases[k][0], cases[k][1]);
     }
 }
 
@@ -246,6 +316,14 @@ int main(int argc, char **argv) {
     if (argc > 2 && strcmp(argv[2], "unset") == 0) { unset(); return 0; }
     if (argc > 2 && argv[2][0] == '@') inst = atoll(argv[2] + 1);
     if (argc > 2 && argv[2][0] == '=') { midnight(argv[1], atoll(argv[2] + 1)); return 0; }
+    if (argc > 2 && argv[2][0] == '!') {
+        const char *e = strchr(argv[2], ',');
+        if (!e) return 2;
+        inst = atoll(argv[2] + 1);
+        edge = atoi(e + 1);
+        edges(argv[1]);
+        return 0;
+    }
     gaps();
     pre1970(argv[1]);
     getdates(argv[1]);
@@ -386,6 +464,11 @@ fn time_gaps_equal_the_reference() {
     // Clauses: s23_5_c_2, s23_6_c_1, s23_7_c_2, s23_7_c_3 (record spec/behaviour/time-gaps.md).
     // One instant, read once, gives both programs the same rule strings (#2012).
     let Some((host, ours, dir)) = programs() else { return };
+    // Not started near a minute's edge: at second 0 a field Liella sets to 0 prints as the current
+    // one, and the recorded difference would not match (it failed once in 60 runs).
+    while !(2..=50).contains(&(instant() % 60)) {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
     let (want, got) = run_both(&host, &ours, &dir, &format!("@{}", instant()));
     check(&want, &got, true);
 }
@@ -394,17 +477,139 @@ fn time_gaps_equal_the_reference() {
 fn time_gaps_agree_across_utc_midnight() {
     // Clauses: s23_7_c_3 (record spec/behaviour/time-gaps.md): the getdate dates follow a clock the test
     // sets (#2012): both programs run with it reading 23:59:50 UTC, and 00:00:10 UTC, the nearest such
-    // instants to the real clock (within a day of it, so a rule string can carry the offset). The 10 s
-    // margin is the time the run may take; a program reading the real clock gives other dates and fails.
+    // instants to the real clock (within a day of it, so a rule string can carry the offset). The probe
+    // pins the clock again before every call, so the 10 s margin bounds one call, not the run; a
+    // program reading the real clock gives other dates and fails.
     let Some((host, ours, dir)) = programs() else { return };
     let now = instant();
     let before = (now + 12 * 3600) / 86400 * 86400 - 10; // 23:59:50 of some day, within 12 h of now
     let after = before + 20; // 00:00:10 of the next day
     let (want_b, got_b) = run_both(&host, &ours, &dir, &format!("={before}"));
     let (want_a, got_a) = run_both(&host, &ours, &dir, &format!("={after}"));
-    assert_ne!(want_b, want_a, "the reference ignores the test's clock: the two sides of midnight give one answer");
+    assert_ne!(settled(&want_b), settled(&want_a), "the reference ignores the test's clock: the two sides of midnight give one answer");
     check(&want_b, &got_b, false);
     check(&want_a, &got_a, false);
+}
+
+#[test]
+fn time_gaps_hold_across_forced_clock_edges() {
+    // Clauses: s23_7_c_3 (record spec/behaviour/time-gaps.md): getdate's current hour, minute and second
+    // are judged against each program's own clock reads around its call. Each program runs with a
+    // second, minute, hour and day boundary placed in turn within its call's second (edge 1), between
+    // the probe's first clock read and the call (2), and between the call and the probe's last read
+    // (3); every pairing of two placements across the programs must agree.
+    let Some((host, ours, dir)) = programs() else { return };
+    let inst = instant();
+    let run = |exe: &Path, e: u32| -> String {
+        let s = scratch(&dir, &format!("edge{e}_{}", exe.file_name().unwrap().to_str().unwrap()));
+        let o = Command::new("timeout").arg(timeout::secs(120)).arg(exe).arg(&s).arg(format!("!{inst},{e}")).env_clear().output().unwrap();
+        let _ = std::fs::remove_dir_all(&s);
+        assert!(o.status.success(), "{} failed: {:?}", exe.display(), o.status);
+        let out = String::from_utf8_lossy(&o.stdout).into_owned();
+        assert_eq!(out.matches("== edge ").count(), 4, "edge {e}: the probe did not run every boundary:\n{out}");
+        assert!(!out.contains("edge not arranged"), "edge {e}: a call could not be placed against its boundary:\n{out}");
+        out
+    };
+    let want: Vec<String> = (1..=3).map(|e| run(&host, e)).collect();
+    let got: Vec<String> = (1..=3).map(|e| run(&ours, e)).collect();
+    // Edges 1 and 2 call in the boundary's second, edge 3 in the second before. Two calls on either
+    // side of a day boundary ask about two dates ("Mon" is days away from a Thursday and from a
+    // Friday), so those pairings compare the second, minute and hour boundaries; the pairings with
+    // both calls on one side compare all four, a bracket spanning midnight on both sides included.
+    let after = |e: usize| e != 2;
+    for (a, b) in [(0, 1), (1, 0), (1, 1), (2, 2), (0, 2), (2, 0), (1, 2), (2, 1)] {
+        eprintln!("forced edges: reference edge {} against Liella edge {}", a + 1, b + 1);
+        let keep = |o: &str| if after(a) == after(b) { o.to_owned() } else { o.split("== edge midnight").next().unwrap().to_owned() };
+        check(&keep(&want[a]), &keep(&got[b]), false);
+    }
+}
+
+/// A local time as the probe prints it: `Y-M-D h:m:s w<wday>`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Civil {
+    y: i64,
+    mo: i64,
+    d: i64,
+    h: i64,
+    mi: i64,
+    s: i64,
+    wday: i64,
+}
+
+fn civil(t: &str) -> Option<Civil> {
+    let n: Vec<i64> = t.split(['-', ' ', ':', 'w']).filter(|p| !p.is_empty()).map(str::parse).collect::<Result<_, _>>().ok()?;
+    let [y, mo, d, h, mi, s, wday] = n[..] else { return None };
+    Some(Civil { y, mo, d, h, mi, s, wday })
+}
+
+/// Days from 1970-01-01 to a proleptic Gregorian date (March-based years, 400-year eras of 146097 days).
+fn day_number(c: &Civil) -> i64 {
+    let y = if c.mo <= 2 { c.y - 1 } else { c.y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * ((c.mo + 9) % 12) + 2) / 5 + c.d - 1;
+    era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468
+}
+
+/// A getdate line of the probe: its head (`getdate("in", "tmpl") ->`), the result's fields, the rest
+/// of the result (`isdst=.. zone=..`) and the local time of every second of the call's bracket.
+struct Gd<'a> {
+    head: &'a str,
+    at: Civil,
+    tail: &'a str,
+    now: Vec<Civil>,
+}
+
+fn gd(line: &str) -> Option<Gd<'_>> {
+    let (head, rest) = line.split_once(" -> at=")?;
+    let (at, rest) = rest.split_at(rest.find(" isdst=")?);
+    let (tail, now) = rest.split_once(" now=")?;
+    let now = if now.is_empty() { Vec::new() } else { now.split(',').map(civil).collect::<Option<_>>()? };
+    Some(Gd { head, at: civil(at)?, tail, now })
+}
+
+/// The result `r` read against each second of `now`: days from that date, each of hour, minute and
+/// second as `cur` when it equals that second's, and whether the weekday follows from the days.
+fn render(r: &Gd<'_>, now: &[Civil]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for c in now {
+        let days = day_number(&r.at) - day_number(c);
+        let f = |n: &str, v: i64, cur: i64| if v == cur { format!(" {n}=cur") } else { format!(" {n}={v}") };
+        let wday = if r.at.wday == (c.wday + days).rem_euclid(7) { "ok" } else { "BAD" };
+        let line = format!(
+            "{} -> days={days:+} year={} mon={} mday={}{}{}{} wday={wday}{}",
+            r.head,
+            r.at.y,
+            r.at.mo,
+            r.at.d,
+            f("hour", r.at.h, c.h),
+            f("min", r.at.mi, c.mi),
+            f("sec", r.at.s, c.s),
+            r.tail
+        );
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    }
+    out
+}
+
+/// The two programs' lines as compared: a getdate line becomes its result read against a second of
+/// its own program's bracket, the same reading for both when one exists (a call is current when it
+/// matches its own clock, wherever a second boundary fell between the two programs' calls).
+fn settle(w: &str, g: &str) -> (String, String) {
+    let (Some(rw), Some(rg)) = (gd(w), gd(g)) else { return (w.to_owned(), g.to_owned()) };
+    let (aw, ag) = (render(&rw, &rw.now), render(&rg, &rg.now));
+    assert!(!aw.is_empty() && !ag.is_empty(), "a getdate call with an empty clock bracket:\n  glibc  {w}\n  liella {g}");
+    match aw.iter().find(|a| ag.contains(a)) {
+        Some(a) => (a.clone(), a.clone()),
+        None => (aw[0].clone(), ag[0].clone()),
+    }
+}
+
+/// An output with each getdate line read against the first second of its bracket.
+fn settled(out: &str) -> String {
+    out.lines().map(|l| settle(l, l).0 + "\n").collect()
 }
 
 /// `full`: the run covers every section, so each recorded difference must still show.
@@ -412,6 +617,8 @@ fn check(want: &str, got: &str, full: bool) {
     assert_eq!(want.lines().count(), got.lines().count(), "the outputs differ in length:\n{got}");
     let (mut bad, mut seen) = (Vec::new(), vec![false; KNOWN.len()]);
     for (w, g) in want.lines().zip(got.lines()) {
+        let (w, g) = settle(w, g);
+        let (w, g) = (w.as_str(), g.as_str());
         match KNOWN.iter().position(|(ref_pats, _, _, _)| ref_pats.iter().any(|p| glob(p, w))) {
             Some(i) => {
                 if w != g {

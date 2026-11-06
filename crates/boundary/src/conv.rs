@@ -1675,6 +1675,18 @@ pub(crate) fn process_text(addr: usize) -> &'static [u8] {
     unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
 }
 
+/// The C text at `addr` (empty for NULL): the value of an entry that [`env_find_from`] has just
+/// found in the environment vector the loader handed the libm product's constructor
+/// (`dispatch::liella_libm_start`, D-10.50), which parses it at once.
+#[cfg(feature = "libm")]
+pub(crate) fn env_value_text(addr: usize) -> &'static [u8] {
+    // UNSAFE(slice): see the function's documentation.
+    #[allow(unsafe_code)]
+    // SAFETY: `addr` is just past the `NAME=` of a NUL-terminated entry of a NULL-terminated
+    // environment vector (the loader's, D-10.50); the caller parses it before any other code runs.
+    unsafe { crate::strz::strz(core::ptr::with_exposed_provenance(addr)) }.unwrap_or(&[])
+}
+
 /// The C text at `addr` (empty for NULL) that a caller handed to the running entry point by
 /// address inside one of its arguments: `getopt`'s argument-vector entries and long-option
 /// names, `getsubopt`'s tokens, the texts of an `argp` tree and a help filter's result (spec

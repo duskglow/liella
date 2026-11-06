@@ -745,3 +745,34 @@ fn sym___wctype_l() {
 fn sym_wctype_l() {
     assert_eq!(s::wctype_l(c("digit").as_ptr(), null_mut()), s::wctype(c("digit").as_ptr()));
 }
+
+/// Spec clause: no spec clause (the C-library convention that a byte class test of a value
+/// outside -128..255 answers false). The first value past each end of the table, a sweep
+/// beyond both ends and the extreme ints all answer false for every class.
+#[test]
+fn byte_class_out_of_range_is_false() {
+    // Store the thread's table words first: with none stored the answer comes from the locale, not
+    // from the range test under test.
+    let _ = s::__ctype_b_loc();
+    let fs: [(&str, extern "C" fn(c_int) -> c_int); 12] = [
+        ("alnum", s::isalnum),
+        ("alpha", s::isalpha),
+        ("blank", s::isblank),
+        ("cntrl", s::iscntrl),
+        ("digit", s::isdigit),
+        ("graph", s::isgraph),
+        ("lower", s::islower),
+        ("print", s::isprint),
+        ("punct", s::ispunct),
+        ("space", s::isspace),
+        ("upper", s::isupper),
+        ("xdigit", s::isxdigit),
+    ];
+    let mut probes: Vec<c_int> = (256..4352).chain(-4352..-128).collect();
+    probes.extend([c_int::MAX, c_int::MIN, c_int::MIN + 1, 65536, -65536, 0x7fff_0000, -0x7fff_0000]);
+    for (name, f) in fs {
+        for &ch in &probes {
+            assert_eq!(f(ch), 0, "{name}({ch}) is outside -128..255");
+        }
+    }
+}

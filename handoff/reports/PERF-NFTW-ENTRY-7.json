@@ -1,0 +1,32 @@
+{
+ "task": "PERF-NFTW-ENTRY-7",
+ "model": "sonnet",
+ "tokens": null,
+ "result": "nftw_phys_1000 instr 1.023 (within 1.05, split recorded); fts_physical_1000 1.082 -> 1.078, 1.05 not reached; fts status key kept, padded-stat variant reverted",
+ "branch": "task/perf-nftw-entry-7",
+ "head": "8a6c2a16",
+ "gate": {
+  "affected": "gate2 rc 0",
+  "peak": null
+ },
+ "jobs": [
+  "perf-nftw-entry-7-counts2",
+  "perf-nftw-entry-7-plants2",
+  "perf-nftw-entry-7-gate2",
+  "perf-nftw-entry-7-percall3"
+ ],
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "fts_physical_1000 needs ~200 instr/entry more for 1.05; needs a 1000-entry percall case first",
+   "recommendation": "one more story: profile the 1000-entry shape, then cut"
+  }
+ ],
+ "informational": [
+  "the 38-entry percall shape overstated the fts gain (138 vs 20 per entry in the bench row)"
+ ],
+ "refused": [],
+ "improvement": "a percall case should mirror the bench row's directory size, or the bench shape should be named in the case",
+ "next_step": "percall case with 1000 files for fts, trace one build, cut what it names",
+ "report_file": "handoff/PERF-NFTW-ENTRY-7.md"
+}

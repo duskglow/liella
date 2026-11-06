@@ -4,7 +4,7 @@
 
 //! Translation-layer tests for the exported symbols of spec §28 (12 entries).
 //! Test names keep the exported C name verbatim (`sym_<name>`) for traceability.
-#![allow(non_snake_case, clippy::as_conversions, clippy::arithmetic_side_effects, clippy::unwrap_used)]
+#![allow(non_snake_case, clippy::as_conversions, clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing)]
 
 use std::sync::Once;
 
@@ -62,12 +62,86 @@ fn sym__mcount() {
     sym_mcount();
 }
 
-symbol!(sym___cyg_profile_func_enter, "__cyg_profile_func_enter", "28", "2.2.5", r##"(no installed header declares it)"##);
-symbol!(sym___cyg_profile_func_exit, "__cyg_profile_func_exit", "28", "2.2.5", r##"(no installed header declares it)"##);
-symbol!(sym__mcleanup, "_mcleanup", "28", "2.2.5", r##""##);
 symbol!(sym_moncontrol, "moncontrol", "28", "2.2.5", r##"(no installed header declares it)"##);
 symbol!(sym___monstartup, "__monstartup", "28", "2.2.5", r##""##);
-symbol!(sym_monstartup, "monstartup", "28", "2.2.5", r##""##);
 symbol!(sym_profil, "profil", "28", "2.2.5", r##""##);
 symbol!(sym___profile_frequency, "__profile_frequency", "28", "2.2.5", r##"(no installed header declares it)"##);
 symbol!(sym_sprofil, "sprofil", "28", "2.2.5", r##""##);
+
+/// Set in a child this binary re-executes (monstartup is one-shot per process).
+const CHILD: &str = "LIELLA_S28_SYM_CHILD";
+
+/// Re-execute this binary running only `test` in a fresh directory; the files it left there.
+fn child_files(test: &str) -> Vec<(String, Vec<u8>)> {
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{test}.{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let o = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
+        .env(CHILD, "1")
+        .env_remove("GMON_OUT_PREFIX")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&o.stdout).contains("running 1 test") && o.status.success(), "{test} child: {o:?}");
+    let mut files: Vec<(String, Vec<u8>)> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap()).map(|e| (e.file_name().to_string_lossy().into_owned(), std::fs::read(e.path()).unwrap())).collect();
+    files.sort();
+    files
+}
+
+/// The child's half: `monstartup` over the fixtures, three mcount calls, then `_mcleanup` when
+/// asked; whether the arc was recorded.
+fn child_profile(cleanup: bool) -> bool {
+    let [_, site, caller] = pr::probe_sites();
+    pr::probe_run(true, 3);
+    assert_eq!(arcs_into(site, caller), (0, 0), "nothing is recorded before monstartup");
+    let low = site.min(caller) - (1 << 20);
+    pr::monstartup(low, site.max(caller) + (1 << 20));
+    pr::probe_run(true, 3);
+    // Read before _mcleanup: the arcs are not reported once profiling has ended.
+    let recorded = arcs_into(site, caller) == (1, 3);
+    if cleanup {
+        pr::_mcleanup();
+    }
+    recorded
+}
+
+#[test]
+fn sym_monstartup() {
+    // Spec 28.1 (s28_1_c_1): monstartup starts recording arcs over its range; nothing is
+    // written until _mcleanup.
+    if std::env::var_os(CHILD).is_some() {
+        assert!(child_profile(false), "monstartup did not start recording");
+        return;
+    }
+    assert!(child_files("sym_monstartup").is_empty(), "monstartup alone writes no file");
+}
+
+#[test]
+fn sym__mcleanup() {
+    // Spec 28.1 (s28_1_c_1): _mcleanup writes gmon.out in the working directory (no
+    // GMON_OUT_PREFIX), starting with the gmon header.
+    if std::env::var_os(CHILD).is_some() {
+        assert!(child_profile(true), "the arc was not recorded");
+        return;
+    }
+    let files = child_files("sym__mcleanup");
+    assert!(files.len() == 1 && files[0].0 == "gmon.out", "files written: {:?}", files.iter().map(|f| &f.0).collect::<Vec<_>>());
+    assert!(files[0].1.starts_with(b"gmon\x01\0\0\0"), "gmon.out header");
+}
+
+#[test]
+fn sym___cyg_profile_func_enter() {
+    // Spec 28.1 (s28_1_c_4): an empty hook; errno is left as it was.
+    liella_boundary::errno::set_raw(4242);
+    pr::__cyg_profile_func_enter(core::ptr::null_mut(), core::ptr::null_mut());
+    assert_eq!(liella_boundary::errno::get(), 4242);
+}
+
+#[test]
+fn sym___cyg_profile_func_exit() {
+    // Spec 28.1 (s28_1_c_4): an empty hook; errno is left as it was.
+    liella_boundary::errno::set_raw(4242);
+    pr::__cyg_profile_func_exit(core::ptr::null_mut(), core::ptr::null_mut());
+    assert_eq!(liella_boundary::errno::get(), 4242);
+}

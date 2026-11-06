@@ -52,17 +52,13 @@ liella_machine_short_lim:
 liella_machine_rshort_mask:
 	.long 0
 
-/* PERF-STRCHR-NONAVX2-3: strchr / strchrnul's slow-entry mask. All ones on the AVX2 level, 0 on SSE2.
- * The slow entry's `testq %rdi, mask` is then the NULL test on the AVX2 level (the same two
- * instructions as before the SSE2 head) and sends every SSE2 call (ZF always set) to the SSE2 head,
- * which re-tests the page and leaves NULL to the NULL test. Set with the level. */
-	.p2align 3
-	.globl liella_machine_schr_mask
-	.hidden liella_machine_schr_mask
-	.type liella_machine_schr_mask, @object
-	.size liella_machine_schr_mask, 8
-liella_machine_schr_mask:
-	.quad 0
+/* TIMING-COV-STRCMP-SHORT-AVX2: strcmp's entry limit for (a - 1) & 4095, set with the level:
+ * 3968 on the AVX2 level (below it, the 129 bytes from a - 1 lie in a's page: the AVX2 head's
+ * page test of a), 0 on SSE2 (no offset is below 0). One compare at the entry is the level test
+ * and a's page test of the AVX2 head; every other call takes the SSE2 head. */
+	.p2align 2
+liella_machine_strcmp_vlim:
+	.long 0
 
 	.text
 
@@ -79,18 +75,16 @@ liella_machine_set_scan_level:
 	movl $4033, %edx
 	cmovnzl %edx, %eax
 	movl %eax, liella_machine_short_lim(%rip)
+	/* strcmp's vlim: level 1 -> 3968 (4033 & 0xf80), level 0 -> 0. */
+	movl %eax, %ecx
+	andl $0xf80, %ecx
+	movl %ecx, liella_machine_strcmp_vlim(%rip)
 	/* level 1 -> 0xfc0, level 0 -> 0 (REGEX-WL, memrchr's end-page mask). */
 	andl $0xfc0, %eax
 	movl %eax, liella_machine_rshort_mask(%rip)
-	/* level 1 -> all ones, level 0 -> 0 (PERF-STRCHR-NONAVX2-3). */
-	xorl %eax, %eax
-	testl %edi, %edi
-	setz %al
-	decq %rax
-	movq %rax, liella_machine_schr_mask(%rip)
 	ret
 	.size liella_machine_set_scan_level, .-liella_machine_set_scan_level
-	.text
+	.section .text.liella_machine_scan_level_get,"ax",@progbits
 
 /* uint32_t liella_machine_scan_level_get(void): the current path, for the self-tests (SHORT-3). */
 	.globl liella_machine_scan_level_get
@@ -325,8 +319,9 @@ liella_machine_strlen:
 	vpminub %ymm1, %ymm2, %ymm3
 	vpcmpeqb %ymm0, %ymm3, %ymm3
 	subq $-128, %rax
-	vpmovmskb %ymm3, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest is the any-match test (ZF set iff no byte compared equal), one
+	 * instruction for vpmovmskb + test: 9 per 128 bytes. */
+	vptest %ymm3, %ymm3
 	jz .Lstrlen_avx_loop
 	addq $-128, %rax
 	/* ymm1 = the minimum of the group's first 64 bytes. */
@@ -493,7 +488,7 @@ liella_machine_strlen:
 	bsfq %rdx, %rax
 	ret
 	.size liella_machine_strlen, .-liella_machine_strlen
-	.text
+	.section .text.liella_machine_strcpy,"ax",@progbits
 
 /* The direct strcpy entry (STRCPY-SHORT-2, D-4.22): in the products this IS `strcpy` (second
  * label under LIELLA_EXPORT); the Rust export is its twin and calls it (ffi). One pass for a
@@ -693,6 +688,7 @@ strcpy:
  * [s, s + 64) leaving s's page tail-jump to the Rust rest entry with nothing written and %rdi,
  * %rsi, %rdx unchanged (it reports NULLs (S6) and a failed check).
  * SAFETY: as liella_machine_strcpy; every store lies in [d, d + len + 1) with len < room. */
+	.section .text.liella_machine_stpcpy,"ax",@progbits
 	.hidden liella_hot_stpcpy_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.hidden liella_hot_strcpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 
@@ -909,6 +905,7 @@ __stpcpy_chk:
  * len < destlen (%rdx) is checked BEFORE any store; else, for a NULL, or for [s, s + 64)
  * leaving s's page, a tail jump to the Rust rest with nothing written and %rdi, %rsi, %rdx
  * unchanged. SAFETY: as liella_machine_stpcpy_chk. */
+	.section .text.liella_machine_strcpy_chk,"ax",@progbits
 	.globl liella_machine_strcpy_chk
 	.hidden liella_machine_strcpy_chk
 	.type liella_machine_strcpy_chk, @function
@@ -1110,7 +1107,7 @@ __strcpy_chk:
 .Lsn_keep:
 	.fill 64, 1, 0xff
 	.fill 64, 1, 0
-	.text
+	.section .text.liella_machine_strncpy,"ax",@progbits
 
 /* The one-pass body (.Lsn_*) is written out here and again, returning d + min(first NUL, n),
  * in stpncpy (.Lspn_*): no .macro in .S files (the affected map scans them for symbols). */
@@ -1251,6 +1248,7 @@ strncpy:
  * check n <= destlen comes before any load or store; n > destlen or a NULL d or s: tail jump to
  * the Rust rest entry with the arguments unchanged (it fails the check / reports S6). Else the
  * strncpy body, whose own general path (n > 64, page edge) then sees n <= destlen. */
+	.section .text.liella_machine_strncpy_chk,"ax",@progbits
 	.hidden liella_hot_strncpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncpy_chk
 	.hidden liella_machine_strncpy_chk
@@ -1277,6 +1275,7 @@ __strncpy_chk:
 /* The direct stpncpy entry (STRNCPY-FAMILY; `stpncpy` and, STPNCPY-ALIAS, `__stpncpy` in the
  * products): the strncpy body returning d + min(strlen(s), n); NULLs and the general path:
  * liella_hot_stpncpy_rest. */
+	.section .text.liella_machine_stpncpy,"ax",@progbits
 	.hidden liella_hot_stpncpy_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_stpncpy
 	.hidden liella_machine_stpncpy
@@ -1424,6 +1423,7 @@ __stpncpy:
  * check n <= destlen comes before any load or store; n > destlen or a NULL d or s: tail jump to
  * the Rust rest entry with the arguments unchanged (it fails the check / reports S6). Else the
  * stpncpy body, whose own general path (n > 64, page edge) then sees n <= destlen. */
+	.section .text.liella_machine_stpncpy_chk,"ax",@progbits
 	.hidden liella_hot_stpncpy_chk_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_stpncpy_chk
 	.hidden liella_machine_stpncpy_chk
@@ -1465,14 +1465,13 @@ liella_machine_strnlen:
 	jae .Lstrnlen_pre
 	/* SMALL-STR head (D-4.45), max > 64: on the AVX2 level with [s, s + 64) inside s's page,
 	 * two unaligned 32-byte blocks [s, s + 32) and [s + 32, s + 64), one branch each (SAFETY:
-	 * both loads lie in s's page, mapped because max >= 1). Answers are clamped to max. */
+	 * both loads lie in s's page, mapped because max >= 1). PARITY-SCAN-AVX2: an answer from
+	 * these two blocks is below 64 < max, so it needs no clamp. */
 	vpxor %xmm0, %xmm0, %xmm0
 	vpcmpeqb (%rdi), %ymm0, %ymm1
 	vpmovmskb %ymm1, %eax
 	bsfl %eax, %eax
 	jz .Lstrnlen_f32
-	cmpq %rsi, %rax
-	cmovaq %rsi, %rax
 	vzeroupper
 	ret
 .Lstrnlen_f32:
@@ -1481,8 +1480,6 @@ liella_machine_strnlen:
 	bsfl %edx, %edx
 	jz .Lstrnlen_f64
 	leaq 32(%rdx), %rax
-	cmpq %rsi, %rax
-	cmovaq %rsi, %rax
 	vzeroupper
 	ret
 .Lstrnlen_f64:
@@ -1873,8 +1870,8 @@ liella_machine_strnlen:
 	vpminub %ymm1, %ymm2, %ymm3
 	vpcmpeqb %ymm0, %ymm3, %ymm3
 	subq $-128, %rax
-	vpmovmskb %ymm3, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop). */
+	vptest %ymm3, %ymm3
 	jz .Lstrnlen_avx_loop
 	addq $-128, %rax
 	/* ymm1 = the minimum of the group's first 64 bytes. */
@@ -2025,7 +2022,7 @@ liella_machine_strnlen:
 	xorl %eax, %eax
 	ret
 	.size liella_machine_strnlen, .-liella_machine_strnlen
-	.text
+	.section .text.liella_machine_rawmemchr_entry,"ax",@progbits
 
 /* const void *liella_machine_rawmemchr(const void *s, int c): a POINTER to the first byte equal
  * to (unsigned char)c, which the caller asserts exists (STR-K2: a pointer, so the rawmemchr
@@ -2062,7 +2059,7 @@ liella_machine_rawmemchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lraw_pre
+	jae .Lraw_sse_fast
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpcmpeqb (%rdi), %ymm0, %ymm1
@@ -2129,11 +2126,8 @@ liella_machine_rawmemchr:
 	addq $-64, %rax
 	jmp .Lraw_avx_hi
 .Lraw_pre:
-	/* ecx = s's page offset, from the entry test (SSE2-STRLEN). SSE2-STRLEN-2: here ecx >=
-	 * short_lim, which is 4033 on the AVX2 level, so ecx <= 4032 means the SSE2 level AND
-	 * [s, s + 64) inside s's page: one compare is both tests. */
-	cmpl $4032, %ecx
-	jbe .Lraw_sse_fast
+	/* ecx = s's page offset, from the entry test (SSE2-STRLEN), and ecx > 4032 (the compare at
+	 * .Lraw_sse_fast, TIMING-IVB-MEMREF-ENTRY): the AVX2 level, or the SSE2 level near a page end. */
 	movq %rdi, %rax
 	movd %esi, %xmm0
 	cmpl $0, liella_machine_scan_level(%rip)
@@ -2202,8 +2196,8 @@ liella_machine_rawmemchr:
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
 	subq $-128, %rax
-	vpmovmskb %ymm6, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 10 per 128 bytes. */
+	vptest %ymm6, %ymm6
 	jz .Lraw_avx_loop
 	addq $-128, %rax
 	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
@@ -2238,7 +2232,14 @@ liella_machine_rawmemchr:
 	/* Reached only near a page end (ecx > 4032; the fast path below takes the rest). */
 	andq $-64, %rax
 	jmp .Lraw_sse_masked
+	/* TIMING-IVB-MEMREF-ENTRY: the entry's one taken branch lands here, 32-byte aligned (before:
+	 * .Lraw_pre's compare and a second taken branch). ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page (SSE2-STRLEN-2:
+	 * one compare is both tests); every other call continues at .Lraw_pre. */
+	.p2align 5
 .Lraw_sse_fast:
+	cmpl $4032, %ecx
+	ja .Lraw_pre
 	/* SSE2-STRLEN-2: SSE2 level, [s, s + 64) inside s's page (SAFETY: every unaligned load
 	 * below lies in it). Broadcast, then [s, s + 16) and [s + 16, s + 32) one branch each
 	 * (bsf sets ZF on an empty mask: no separate test), then [s + 32, s + 64) folded. */
@@ -2508,6 +2509,7 @@ liella_machine_rawmemchr:
  * 64 KiB, whatever n is (no later load is reached). n == 0 (wraps to the maximum), n > isize::MAX
  * and folding off (limit 0: every n fails the gate) tail-jump to `liella_hot_memchr_rest`, the
  * checked entry (explicit S6 abort, the lazy folding decision). Reads nothing itself. */
+	.section .text.liella_machine_memchr_entry,"ax",@progbits
 	.hidden liella_hot_memchr_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_memchr_entry
 	.hidden liella_machine_memchr_entry
@@ -2535,7 +2537,7 @@ liella_machine_memchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lmemchr_entry
+	jae .Lmemchr_sse_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	/* MEMCHR-2: [s, s + 64) lies in s's page (the short limit), so both of its 32-byte halves
@@ -2681,8 +2683,8 @@ liella_machine_memchr:
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
 	subq $-128, %rax
-	vpmovmskb %ymm6, %r9d
-	testl %r9d, %r9d
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
+	vptest %ymm6, %ymm6
 	jz .Lmemchr_avx_loop
 	addq $-128, %rax
 	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
@@ -2710,13 +2712,26 @@ liella_machine_memchr:
 	ret
 
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
-	 * located per 16-byte block with a branch each (STR-K1's measurement). */
+	 * located per 16-byte block with a branch each (STR-K1's measurement).
+	 * .Lmemchr_sse2 is reached from .Lmemchr_entry only, so with ecx > 4032: the page-end form. */
 .Lmemchr_sse2:
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
+	jmp .Lmemchr_sse_edge
+	/* TIMING-IVB-MEMREF-ENTRY (as TIMING-IVB-STRSCAN-DISPATCH did for strchr): the entry's one
+	 * taken branch lands here, 32-byte aligned. Here ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page: one compare is
+	 * both tests (before: a taken branch to .Lmemchr_entry, its level load and a second taken
+	 * branch). Every other call takes the old dispatch at .Lmemchr_entry. */
+	.p2align 5
+.Lmemchr_sse_pre:
 	cmpl $4032, %ecx
-	ja .Lmemchr_sse_edge
+	ja .Lmemchr_entry
+	movd %esi, %xmm0
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	pshufd $0, %xmm0, %xmm0
 	/* MEMCHR-SSE2 (the AVX2 head's order, MEMCHR-2): [s, s + 64) lies in s's page, so all four
 	 * of its 16-byte blocks may be read whatever n is. Block 0 goes first and alone: a match
 	 * there settles with one compare against n and no branch on n's class. A match at or past n
@@ -2985,6 +3000,7 @@ liella_machine_memchr:
 
 /* size_t liella_machine_memcmp(const void *a, const void *b, size_t n): the index of the first
  * byte where [a, a + n) and [b, b + n) differ, or n. */
+	.section .text.liella_machine_memcmp,"ax",@progbits
 	.globl liella_machine_memcmp
 	.type liella_machine_memcmp, @function
 	.p2align 6
@@ -3225,16 +3241,32 @@ strcmp:
 	.globl liella_machine_strcmp
 	.type liella_machine_strcmp, @function
 liella_machine_strcmp:
-	cmpl $0, liella_machine_scan_level(%rip)
-	jne .Lstrcmp_avx2
+	/* Entry (TIMING-COV-STRCMP-SHORT-AVX2): one compare of (a - 1) & 4095 with strcmp_vlim is the
+	 * level test and the AVX2 head's page test of a (was: a load-compare of the level and a taken
+	 * branch to the AVX2 head before its own test of a, 2 instructions more per AVX2 call). The
+	 * AVX2 head's first block follows as the fall-through; the SSE2 level (vlim 0) and the AVX2
+	 * level's a near its page end or NULL go on to the SSE2 head (its own page test
+	 * sends page ends and NULL to the SSE2 slow path, which holds the NULL tests). The SSE2
+	 * level runs as many instructions as before (the compare and branch replace the level
+	 * test); an AVX2 a near its page end runs no more than the AVX2 slow path did.
+	 * The SSE2 head is the fall-through and the AVX2 first block the branch target (out of line,
+	 * .Lstrcmp_v_first): with the AVX2 block as the fall-through, every SSE2 call took the branch
+	 * and the strcmp rows ran 3-12% more cycles on the SSE2 class (Ivy Bridge) at equal
+	 * instructions. */
+	leal -1(%rdi), %ecx
+	andl $4095, %ecx
+	cmpl liella_machine_strcmp_vlim(%rip), %ecx
+	jb .Lstrcmp_v_first
+.Lstrcmp_s_head:
 	/* Head (STRCMP-3, STRCMP-HEAD, D-4.38): the AVX2 head below in SSE2, as four 16-byte blocks
 	 * (both loads movdqu; the zero vector from the aligned .rodata constant). Each later block's
 	 * stop is settled with its offset in the displacement, sharing the head's returns.
 	 * Page test per string (PERF-STRCMP-LOOP): the 65 bytes from one before the start stay in
 	 * one page iff that byte's page offset is at most 4031 (8 instructions; the bit-12 XOR of
-	 * both ends for both strings took 9). NULL (offset 4095) and page-aligned starts fail it. */
-	leal -1(%rdi), %ecx
-	andl $4095, %ecx
+	 * both ends for both strings took 9). NULL (offset 4095) and page-aligned starts fail it.
+	 * ecx = (a - 1) & 4095 from the entry. On the AVX2 level only a near its page end (or NULL)
+	 * comes here: this head and the SSE2 steps serve it (SSE2 runs on every level, as after
+	 * strchr's AVX2 head), at no more instructions than the AVX2 slow path took. */
 	cmpl $4031, %ecx
 	ja .Lstrcmp_start
 	leal -1(%rsi), %edx
@@ -3534,34 +3566,10 @@ liella_machine_strcmp:
 	lock incq liella_machine_strcmp_rescans(%rip)
 	incq %rax
 	jmp .Lstrcmp_top
-.Lstrcmp_avx2:
-	/* AVX2 (scan level 1): the same steps with 32-byte blocks and VEX encoding throughout
-	 * (no legacy-SSE transition); vzeroupper before each return that ran a 256-bit instruction.
-	 * Every return is labelled .Lstrcmp_v_ret_<path> (SSE2: .Lstrcmp_ret_<path>): the ymm test
-	 * in machine_scanners.rs reads these labels and needs a case for each.
-	 *
-	 * Head (STRCMP-2, STRCMP-HEAD; D-4.38): 16-byte VEX.128 blocks at the strings' starts and at
-	 * 16, with no index register, settle most calls (equal strings and differences in bytes
-	 * 0-31) and return without vzeroupper (a 32-byte first block cost ~5 cycles more per short
-	 * call on Zen 1: 256-bit uops plus vzeroupper). Then 32-byte blocks at 32, 64 and 96, returning
-	 * through the 256-bit returns below. Later blocks settle their stop with the offset in the
-	 * displacement. One page test, exact for the first 128 bytes (STRCMP-MIX), over the 128 bytes and
-	 * the byte before them (NULL and page-aligned starts fail it and meet the NULL tests,
-	 * STRCMP-HEADNULL): a range crosses a page iff bit 12
-	 * differs between its first and last byte (the OR of the two offsets misjudged about 1 in 5
-	 * random pairs, an unpredictable branch). The zero vector comes from memory; the equal
-	 * return gives a's byte (0) as the answer. A miss goes on at index 128 through the general
-	 * page test: the blocks keep their positions relative to the strings' starts (32-byte
-	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on Zen 1 host), and
-	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
-	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
-	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
-	/* Each block's "no stop" test is the bsf itself (ZF set when the mask is empty; the register is
-	 * not read on that path): one instruction fewer per block passed (PERF-STRCMP-MIX). */
-	leal -1(%rdi), %ecx
-	andl $4095, %ecx
-	cmpl $3967, %ecx
-	ja .Lstrcmp_v_start
+	/* strcmp's AVX2 first block (TIMING-COV-STRCMP-SHORT-AVX2): the entry's branch target, see
+	 * liella_machine_strcmp. */
+	.p2align 4
+.Lstrcmp_v_first:
 	leal -1(%rsi), %edx
 	andl $4095, %edx
 	cmpl $3967, %edx
@@ -3590,6 +3598,32 @@ liella_machine_strcmp:
 	vpxor %xmm0, %xmm0, %xmm0
 	movl %edx, %eax
 	jmp .Lstrcmp_v_rescan
+.Lstrcmp_avx2:
+	/* AVX2 (scan level 1): the same steps with 32-byte blocks and VEX encoding throughout
+	 * (no legacy-SSE transition); vzeroupper before each return that ran a 256-bit instruction.
+	 * Every return is labelled .Lstrcmp_v_ret_<path> (SSE2: .Lstrcmp_ret_<path>): the ymm test
+	 * in machine_scanners.rs reads these labels and needs a case for each.
+	 *
+	 * Head (STRCMP-2, STRCMP-HEAD; D-4.38): 16-byte VEX.128 blocks at the strings' starts and at
+	 * 16, with no index register, settle most calls (equal strings and differences in bytes
+	 * 0-31) and return without vzeroupper (a 32-byte first block cost ~5 cycles more per short
+	 * call on Zen 1: 256-bit uops plus vzeroupper). Then 32-byte blocks at 32, 64 and 96, returning
+	 * through the 256-bit returns below. Later blocks settle their stop with the offset in the
+	 * displacement. One page test, exact for the first 128 bytes (STRCMP-MIX), over the 128 bytes and
+	 * the byte before them (NULL and page-aligned starts fail it and meet the NULL tests,
+	 * STRCMP-HEADNULL): a range crosses a page iff bit 12
+	 * differs between its first and last byte (the OR of the two offsets misjudged about 1 in 5
+	 * random pairs, an unpredictable branch). The zero vector comes from memory; the equal
+	 * return gives a's byte (0) as the answer. A miss goes on at index 128 through the general
+	 * page test: the blocks keep their positions relative to the strings' starts (32-byte
+	 * blocks at 16 + 32k split cache lines for aligned strings, measured slower on Zen 1 host), and
+	 * the 16-byte head that restarted at 0 cost 14 instructions more for every stop past 15.
+	 * The test is per string (PERF-STRCMP-LOOP): the 129 bytes from one before the start stay
+	 * in one page iff that byte's page offset is at most 3967 (8 instructions, the XOR form 9). */
+	/* Each block's "no stop" test is the bsf itself (ZF set when the mask is empty; the register is
+	 * not read on that path): one instruction fewer per block passed (PERF-STRCMP-MIX).
+	 * The page tests and the first 16-byte block are at the entry (TIMING-COV-STRCMP-SHORT-AVX2:
+	 * a's test is the level test, strcmp_vlim); the head goes on here. */
 .Lstrcmp_v_head16:
 	vmovdqu 16(%rdi), %xmm1
 	vpcmpeqb 16(%rsi), %xmm1, %xmm2
@@ -3724,14 +3758,104 @@ liella_machine_strcmp:
 	bsfq %rdx, %rdx
 	addq %rdx, %rax
 	jmp .Lstrcmp_v_settle
+.Lstrcmp_v_blocks4:
+	/* PARITY-STRCMP-AVX2: from .Lstrcmp_v_top with both offsets at most 3968, four tested blocks
+	 * (a stop in them costs what it did in the two blocks and the 64-byte group, or less), then
+	 * (3968 - offset) / 128 groups of 128 bytes, all inside both pages: 22 instructions per 128
+	 * bytes against 28 in the 64-byte groups. The 0-127 bytes left before a page end go through
+	 * .Lstrcmp_v_top again. The first page of a call that came through .Lstrcmp_v_start keeps
+	 * the 64-byte groups (a stop at 64-383 there costs up to 11 fewer). */
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpmovmskb %ymm2, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_found
+	addq $32, %rax
+	negl %ecx
+	shrl $7, %ecx
+	jz .Lstrcmp_v_top
+.Lstrcmp_v_group128:
+	vmovdqu (%rdi,%rax), %ymm1
+	vpcmpeqb (%rsi,%rax), %ymm1, %ymm2
+	vpminub %ymm1, %ymm2, %ymm2
+	vmovdqu 32(%rdi,%rax), %ymm3
+	vpcmpeqb 32(%rsi,%rax), %ymm3, %ymm4
+	vpminub %ymm3, %ymm4, %ymm4
+	vmovdqu 64(%rdi,%rax), %ymm5
+	vpcmpeqb 64(%rsi,%rax), %ymm5, %ymm6
+	vpminub %ymm5, %ymm6, %ymm6
+	vmovdqu 96(%rdi,%rax), %ymm7
+	vpcmpeqb 96(%rsi,%rax), %ymm7, %ymm8
+	vpminub %ymm7, %ymm8, %ymm8
+	vpminub %ymm4, %ymm2, %ymm9
+	vpminub %ymm8, %ymm6, %ymm10
+	vpminub %ymm10, %ymm9, %ymm9
+	vpcmpeqb %ymm0, %ymm9, %ymm9
+	vpmovmskb %ymm9, %edx
+	testl %edx, %edx
+	jnz .Lstrcmp_v_locate128
+	subq $-128, %rax
+	decl %ecx
+	jnz .Lstrcmp_v_group128
+	jmp .Lstrcmp_v_top
+.Lstrcmp_v_locate128:
+	/* The four blocks' min vectors are still in ymm2, ymm4, ymm6 and ymm8: each half's two
+	 * masks form one 64-bit mask (no second read). The first half with a stop wins; the fold
+	 * proved one has one. */
+	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb %ymm0, %ymm4, %ymm4
+	vpmovmskb %ymm2, %edx
+	vpmovmskb %ymm4, %ecx
+	shlq $32, %rcx
+	orq %rcx, %rdx
+	jnz .Lstrcmp_v_locate128_at
+	vpcmpeqb %ymm0, %ymm6, %ymm6
+	vpcmpeqb %ymm0, %ymm8, %ymm8
+	vpmovmskb %ymm6, %edx
+	vpmovmskb %ymm8, %ecx
+	shlq $32, %rcx
+	orq %rcx, %rdx
+	addq $64, %rax
+.Lstrcmp_v_locate128_at:
+	bsfq %rdx, %rdx
+	addq %rdx, %rax
+	jmp .Lstrcmp_v_settle
 .Lstrcmp_v_top:
-	/* As .Lstrcmp_top. */
+	/* As .Lstrcmp_top, with the 128-byte groups behind four tested blocks (PARITY-STRCMP-AVX2):
+	 * the OR of the two offsets at most 3968 proves 128 bytes fit in both pages. Above it the
+	 * exact test goes on to the two blocks and 64-byte groups when 64 bytes fit. */
 	leal (%rdi,%rax), %ecx
 	leal (%rsi,%rax), %edx
 	orl %edx, %ecx
 	andl $4095, %ecx
-	subl $4032, %ecx
-	jbe .Lstrcmp_v_blocks
+	subl $3968, %ecx
+	jbe .Lstrcmp_v_blocks4
 .Lstrcmp_v_exact:
 	leal (%rdi,%rax), %ecx
 	leal (%rsi,%rax), %edx
@@ -3796,7 +3920,7 @@ liella_machine_strcmp:
 	incq %rax
 	jmp .Lstrcmp_v_top
 	.size liella_machine_strcmp, .-liella_machine_strcmp
-	.text
+	.section .text.liella_machine_strcmp_rescan_count,"ax",@progbits
 
 /* uint64_t liella_machine_strcmp_rescan_count(void): how often liella_machine_strcmp found the
  * bytes at its index changed by a writer and scanned on (the selftest reads it). */
@@ -3828,6 +3952,7 @@ liella_machine_strcmp_rescan_count:
  * is zero in min(a, a == b ? 0xFF : 0) iff the bytes differ or a's byte is the terminator.
  *
  * The caller reads the bytes at the index itself (the answer is never taken from this scan). */
+	.section .text.liella_machine_strdiff,"ax",@progbits
 	.globl liella_machine_strdiff
 	.type liella_machine_strdiff, @function
 	.p2align 5
@@ -3897,6 +4022,7 @@ liella_machine_strdiff:
  * in between, its result stored at *result, and the OR of the upper halves of ymm0..ymm15 returned:
  * 0 = f left no upper state behind (a caller that came in clean leaves clean). AVX2 only.
  * liella_machine_ymm15_dirty_cmp is its positive control: it sets ymm15 to all ones, returns 0. */
+	.section .text.liella_machine_clean_upper_call,"ax",@progbits
 	.globl liella_machine_clean_upper_call
 	.type liella_machine_clean_upper_call, @function
 	.p2align 4
@@ -3960,6 +4086,7 @@ liella_machine_clean_upper_call:
 	orq -8(%rsp), %rax
 	ret
 	.size liella_machine_clean_upper_call, .-liella_machine_clean_upper_call
+	.section .text.liella_machine_ymm15_dirty_cmp,"ax",@progbits
 
 	.globl liella_machine_ymm15_dirty_cmp
 	.type liella_machine_ymm15_dirty_cmp, @function
@@ -3978,7 +4105,7 @@ liella_machine_ymm15_dirty_cmp:
 	.size liella_machine_strcmp_rescans, 8
 liella_machine_strcmp_rescans:
 	.zero 8
-	.text
+	.section .text.liella_machine_ymm15_dirty_cmp,"ax",@progbits
 
 /* size_t liella_machine_env_find(const char *const *env, const char *name, size_t len)
  * (PJ-8): the address of the first entry of the NULL-terminated array env (0 = no array)
@@ -4119,7 +4246,7 @@ liella_machine_env_find:
 	jnz .Lenv_name_loop
 	jmp .Lenv_name_word
 	.size liella_machine_env_find, .-liella_machine_env_find
-	.text
+	.section .text.liella_machine_env_slot,"ax",@progbits
 
 /* struct liella_env_slot liella_machine_env_slot(const char *const *env, const char *name, size_t len)
  * (ENVIRON-SMALL-CYCLE): liella_machine_env_find's scan, answering also where it stopped.
@@ -4264,6 +4391,7 @@ liella_machine_env_slot:
 
 /* ERMS copy and fill (OD-C2 b): `rep movsb` / `rep stosb`. Rust calls them only for disjoint,
  * validated regions above the measured threshold, and only when CPUID reports ERMS. */
+	.section .text.liella_machine_copy_erms,"ax",@progbits
 
 /* void *liella_machine_copy_erms(void *dst, const void *src, size_t n): returns dst */
 	.globl liella_machine_copy_erms
@@ -4281,6 +4409,7 @@ liella_machine_copy_erms:
  * rest from the next 64-byte-aligned destination (h = -dst & 63 bytes in; h = 0 when aligned,
  * the head store is then rewritten). MEMCPY-POLICY-2: rep movsb from a misaligned destination
  * lost 1.8x on Broadwell, aligned it won (D-4.14). */
+	.section .text.liella_machine_copy_erms_a64,"ax",@progbits
 	.globl liella_machine_copy_erms_a64
 	.type liella_machine_copy_erms_a64, @function
 	.p2align 6
@@ -4304,6 +4433,7 @@ liella_machine_copy_erms_a64:
 	rep movsb
 	ret
 	.size liella_machine_copy_erms_a64, .-liella_machine_copy_erms_a64
+	.section .text.liella_machine_fill_erms,"ax",@progbits
 
 /* void liella_machine_fill_erms(void *dst, int c, size_t n) */
 	.globl liella_machine_fill_erms
@@ -4318,11 +4448,12 @@ liella_machine_fill_erms:
 
 /* AVX2 copy and move (owner ruling 2026-10-05, D-4.14, PJ-7; overlap MEM-BULK). Rust calls it only
  * when the CPU has AVX2 and the OS saves the YMM state (`boundary::cpu`), for validated regions of
- * at least 64 bytes; they may overlap (memmove).
+ * at least 128 bytes (AVX2_COPY_MIN); they may overlap (memmove).
  *
- * The first and last 32 bytes are loaded before anything is stored and written as unaligned
- * vectors after everything else; between them, whole 32-byte vectors go to 32-byte-aligned
- * destination addresses (four per step, then one at a time; the last one may overlap the tail),
+ * The first and last 32 bytes, and the 128-byte block at the end the copy runs towards, are loaded
+ * before anything is stored and written as unaligned vectors after everything else; between
+ * them, whole 32-byte vectors go to 32-byte-aligned destination addresses (four per step, while
+ * more than 128 bytes are left; the rest lies inside the held block),
  * each step loading all its vectors before storing any. Overlapping regions fix the direction:
  * from the end when the destination starts inside the source (dst - src < n), from the start when
  * the source starts inside the destination (src - dst < n); every load then reads bytes no
@@ -4335,7 +4466,7 @@ liella_machine_fill_erms:
  * least 2 KiB keeps each such load further back than the store buffer reaches. No non-temporal
  * stores; `vzeroupper` before returning.
  *
- * void liella_machine_copy_avx2(void *dst, const void *src, size_t n), n >= 64; the same code as
+ * void liella_machine_copy_avx2(void *dst, const void *src, size_t n), n >= 128; the same code as
  * void *liella_machine_move_avx2(void *dst, const void *src, size_t n), which returns dst */
 	.section .text.liella_machine_copy_avx2,"ax",@progbits
 	.globl liella_machine_copy_avx2
@@ -4363,8 +4494,13 @@ liella_machine_move_avx2:
 	jb .Lcpy_back
 
 	/* Forward. One induction pointer: rdi walks the destination, the loads are at rdi + (src -
-	 * dst), so every store has a base-only address (Haswell's store-address port takes no index). */
+	 * dst), so every store has a base-only address (Haswell's store-address port takes no index).
+	 * The last 128 bytes are held too (n >= 128; nothing is stored yet): the 128-byte steps run
+	 * while more than 128 bytes are left, and what they leave lies inside the held block. */
 .Lcpy_fwd:
+	vmovdqu -128(%rsi,%rdx), %ymm6
+	vmovdqu -96(%rsi,%rdx), %ymm7
+	vmovdqu -64(%rsi,%rdx), %ymm8
 	movl %edi, %ecx
 	andl $31, %ecx
 	subq $32, %rcx
@@ -4375,7 +4511,7 @@ liella_machine_move_avx2:
 	leaq (%rdi,%rdx), %r9			/* the end */
 	leaq -128(%r9), %r10
 	cmpq %r10, %rdi
-	jae .Lcpy_f32
+	jae .Lcpy_f_ends
 	.p2align 4
 .Lcpy_f128:					/* while more than 128 bytes are left */
 	vmovdqu (%rsi,%rdi), %ymm0
@@ -4389,19 +4525,24 @@ liella_machine_move_avx2:
 	subq $-128, %rdi
 	cmpq %r10, %rdi
 	jb .Lcpy_f128
-.Lcpy_f32:
-	leaq -32(%r9), %r10
-.Lcpy_f32_next:					/* while more than 32 bytes are left */
-	cmpq %r10, %rdi
-	jae .Lcpy_ends
-	vmovdqu (%rsi,%rdi), %ymm0
-	vmovdqa %ymm0, (%rdi)
-	addq $32, %rdi
-	jmp .Lcpy_f32_next
+.Lcpy_f_ends:					/* the held first 32 and last 128 bytes, stored last */
+	vmovdqu %ymm6, -96(%r8)
+	vmovdqu %ymm7, -64(%r8)
+	vmovdqu %ymm8, -32(%r8)
+	vmovdqu %ymm5, (%r8)
+	vmovdqu %ymm4, (%r11)
+	movq %r11, %rax				/* dst */
+	vzeroupper
+	ret
 
 	/* Backward: r10 walks the destination down from its last 32-byte boundary, the loads at
-	 * r10 + (src - dst). */
+	 * r10 + (src - dst). The first 128 bytes are held too (n >= 128; nothing is stored yet): the
+	 * 128-byte steps run while more than 128 bytes are left below r10, and what they leave lies
+	 * inside the held block. */
 .Lcpy_back:
+	vmovdqu 32(%rsi), %ymm6
+	vmovdqu 64(%rsi), %ymm7
+	vmovdqu 96(%rsi), %ymm8
 	leaq (%rdi,%rdx), %r10
 	leal -1(%r10), %ecx
 	andl $31, %ecx
@@ -4410,7 +4551,7 @@ liella_machine_move_avx2:
 	subq %rdi, %rsi				/* src - dst */
 	leaq 128(%rdi), %r9
 	cmpq %r9, %r10
-	jbe .Lcpy_b32
+	jbe .Lcpy_b_ends
 	.p2align 4
 .Lcpy_b128:					/* while more than 128 bytes are left below r10 */
 	addq $-128, %r10
@@ -4424,18 +4565,10 @@ liella_machine_move_avx2:
 	vmovdqa %ymm3, (%r10)
 	cmpq %r9, %r10
 	ja .Lcpy_b128
-.Lcpy_b32:
-	leaq 32(%rdi), %r9
-.Lcpy_b32_next:					/* while more than 32 bytes are left; the head covers the first 32 */
-	cmpq %r9, %r10
-	jbe .Lcpy_ends
-	subq $32, %r10
-	vmovdqu (%rsi,%r10), %ymm0
-	vmovdqa %ymm0, (%r10)
-	jmp .Lcpy_b32_next
-
-	/* Both directions: the held first and last 32 bytes, stored last. */
-.Lcpy_ends:
+.Lcpy_b_ends:					/* the held first 128 and last 32 bytes, stored last */
+	vmovdqu %ymm6, 32(%r11)
+	vmovdqu %ymm7, 64(%r11)
+	vmovdqu %ymm8, 96(%r11)
 	vmovdqu %ymm5, (%r8)
 	vmovdqu %ymm4, (%r11)
 	movq %r11, %rax				/* dst */
@@ -4443,7 +4576,7 @@ liella_machine_move_avx2:
 	ret
 	.size liella_machine_copy_avx2, .-liella_machine_copy_avx2
 	.size liella_machine_move_avx2, .-liella_machine_move_avx2
-	.text
+	.section .text.liella_machine_move_sse2,"ax",@progbits
 
 /* SSE2 move (MEM-FALLBACK, D-4.14 Amendment MEM-FALLBACK): the AVX2 copy above in 16-byte vectors,
  * for CPUs without AVX2 (SSE2 is the x86-64 baseline). The same rules: the first and last 16
@@ -4582,7 +4715,13 @@ liella_machine_move_sse2:
 	.section .text.liella_machine_fill_avx2,"ax",@progbits
 	.globl liella_machine_fill_avx2
 	.type liella_machine_fill_avx2, @function
+	/* The hidden second label: the `memset` entry (machine/fold.S, MEMSET-4K-3) tail-jumps here
+	 * directly (no PLT hop through the exported name), after its NULL test and AVX2 flag test. */
+	.globl liella_machine_fill_avx2_entry
+	.hidden liella_machine_fill_avx2_entry
+	.type liella_machine_fill_avx2_entry, @function
 	.p2align 6
+liella_machine_fill_avx2_entry:
 liella_machine_fill_avx2:
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
@@ -4594,15 +4733,21 @@ liella_machine_fill_avx2:
 	leaq -128(%r9), %r10			/* the last 128 bytes start here (n >= 128: not below dst) */
 	cmpq %r10, %rcx
 	ja .Lfill_ends
+	/* MEMSET-4K-LOOP: k = (r10 - rcx) / 128 + 1 whole steps; r11 = the end of the last one, rcx the
+	 * negative offset -128 * k from it, so the loop counts rcx up to zero (one add, one branch). */
+	movq %r10, %r11
+	subq %rcx, %r11
+	andq $-128, %r11
+	leaq 128(%rcx,%r11), %r11
+	subq %r11, %rcx
 	.p2align 4
-.Lfill_128:					/* while a whole step ends at or before the end */
-	vmovdqa %ymm0, (%rcx)
-	vmovdqa %ymm0, 32(%rcx)
-	vmovdqa %ymm0, 64(%rcx)
-	vmovdqa %ymm0, 96(%rcx)
-	subq $-128, %rcx
-	cmpq %r10, %rcx
-	jbe .Lfill_128
+.Lfill_128:					/* the whole steps, 128 bytes at r11 + rcx each */
+	vmovdqa %ymm0, (%r11,%rcx)
+	vmovdqa %ymm0, 32(%r11,%rcx)
+	vmovdqa %ymm0, 64(%r11,%rcx)
+	vmovdqa %ymm0, 96(%r11,%rcx)
+	addq $128, %rcx
+	jnz .Lfill_128
 .Lfill_ends:					/* fewer than 128 bytes left from rcx: the last 128 */
 	vmovdqu %ymm0, (%r10)
 	vmovdqu %ymm0, 32(%r10)
@@ -4660,7 +4805,7 @@ liella_machine_fill_sse2:
 	movups %xmm0, 112(%r10)
 	ret
 	.size liella_machine_fill_sse2, .-liella_machine_fill_sse2
-	.text
+	.section .text.liella_machine_move_sse2,"ax",@progbits
 
 /* size_t liella_machine_casecmp_avx2(const char *a, const char *b, size_t n) (CASECMP-K1): the
  * first index i < n where a[i] and b[i] differ after folding the ASCII letters A-Z to a-z, or
@@ -4691,7 +4836,7 @@ liella_machine_fill_sse2:
 	.fill 32, 1, 0x20
 .Lcasecmp_km103:
 	.fill 32, 1, 0x99
-	.text
+	.section .text.liella_machine_casecmp_avx2,"ax",@progbits
 	.globl liella_machine_casecmp_avx2
 	.type liella_machine_casecmp_avx2, @function
 	.p2align 6
@@ -4830,7 +4975,7 @@ liella_machine_casecmp_avx2:
 	.fill 16, 1, 0x25
 .Lcasecmp_k65:
 	.fill 16, 1, 0x65
-	.text
+	.section .text.liella_machine_casecmp_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_sse2
 	.type liella_machine_casecmp_sse2, @function
 	.p2align 6
@@ -5015,27 +5160,30 @@ liella_machine_casecmp_sse2:
  * call (no second call level); equal non-NUL bytes there mean a writer changed the text (open).
  * Scratch: rax, r8-r11, ymm0-ymm11. */
 	.hidden liella_hot_casecmp_rest  /* crates/boundary/src/posix/s04_strings.rs */
-	.text
+	.section .text.liella_machine_casecmp_ord_avx2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_avx2
 	.type liella_machine_casecmp_ord_avx2, @function
 	.p2align 6
 liella_machine_casecmp_ord_avx2:
 	/* Head (PERF-STRCASECMP-AVX2): the first 32 bytes, with the fold's constants as memory
-	 * operands (no register set-up) and no bound test before a stop. The or of the two page
-	 * offsets bounds both from above: at most 4064 -> both blocks lie inside their pages; else
-	 * the exact test. The fold is the loop's: t = x + 0x3f is A-Z iff not (t > -103).
+	 * operands (no register set-up) and no bound test before a stop. The fold is the loop's:
+	 * t = x + 0x3f is A-Z iff not (t > -103).
 	 * A NULL a or b goes to the rest entry (the measured path answers it), so the caller's
-	 * kernel path tests neither. */
-	testq %rdi, %rdi
-	jz .Lcord_open
-	testq %rsi, %rsi
-	jz .Lcord_open
-	movl %edi, %r8d
-	orl %esi, %r8d
+	 * kernel path tests neither.
+	 * Page test (TIMING-COV-STRCMP-SHORT-AVX2): per string, the 65 bytes from one before the
+	 * start lie in one page iff that byte's page offset is at most 4031; it covers both 32-byte
+	 * head blocks, so the second needs no test of its own. A NULL string (offset 4095) and a
+	 * page-aligned start fail it and meet the NULL tests (8 instructions where the NULL tests and
+	 * the or-test took 9, plus the second block's or-test, 5). Every start that fails it takes the
+	 * loop from offset 0 (one pair in about 32 of random starts). */
+	leal -1(%rdi), %r8d
 	andl $4095, %r8d
-	cmpl $4064, %r8d
+	cmpl $4031, %r8d
 	ja .Lcord_head_exact
-.Lcord_head_load:
+	leal -1(%rsi), %r9d
+	andl $4095, %r9d
+	cmpl $4031, %r9d
+	ja .Lcord_head_exact
 	vmovdqu (%rdi), %ymm1
 	vmovdqu (%rsi), %ymm2
 	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
@@ -5066,30 +5214,22 @@ liella_machine_casecmp_ord_avx2:
 	movl %r8d, %eax
 	jmp .Lcord_found_idx
 .Lcord_head_exact:
-	movl %edi, %r8d
-	movl %esi, %r9d
-	andl $4095, %r8d
-	andl $4095, %r9d
-	cmpl $4064, %r8d
-	ja .Lcord_generic
-	cmpl $4064, %r9d
-	jbe .Lcord_head_load
+	/* A start near a page end, page-aligned or NULL: the NULL tests, then the loop from 0. */
+	testq %rdi, %rdi
+	jz .Lcord_open
+	testq %rsi, %rsi
+	jz .Lcord_open
 	jmp .Lcord_generic
 .Lcord_head_next:
 	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
 	 * no bound test there). A bound of 64 or less (PERF-STRNCASECMP-64-AVX2) needs one more
 	 * 32-byte step and no loop (a bound of 32 or less is met in it: any stop is at 32 or above,
 	 * which answers 0): taken here with the
-	 * head's memory-operand constants when both offsets are at most 4032 (so the block at +32
-	 * ends inside both pages; else the exact tests of the loop), and a stop, if any, goes to the
+	 * head's memory-operand constants (the head's page test covered the block at +32 in both
+	 * strings), and a stop, if any, goes to the
 	 * common exit with rax = 32 (an index at or above n answers 0 there). */
 	cmpq $64, %rdx
 	ja .Lcord_long
-	movl %edi, %r8d
-	orl %esi, %r8d
-	andl $4095, %r8d
-	cmpl $4032, %r8d
-	ja .Lcord_loop_in
 	vmovdqu 32(%rdi), %ymm1
 	vmovdqu 32(%rsi), %ymm2
 	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
@@ -5118,14 +5258,6 @@ liella_machine_casecmp_ord_avx2:
 	vmovdqa .Lcasecmp_k20(%rip), %ymm7
 	vpxor %xmm0, %xmm0, %xmm0
 	jmp .Lcord_top64
-.Lcord_loop_in:
-	/* The loop from offset 32, as after its own 32-byte step. */
-	xorl %eax, %eax
-	vmovdqa .Lcasecmp_k3f(%rip), %ymm5
-	vmovdqa .Lcasecmp_km102(%rip), %ymm6
-	vmovdqa .Lcasecmp_k20(%rip), %ymm7
-	vpxor %xmm0, %xmm0, %xmm0
-	jmp .Lcord_after32
 .Lcord_generic:
 	/* A head block would cross a page: the loop from offset 0 (byte steps near the end). */
 	xorl %eax, %eax
@@ -5296,6 +5428,7 @@ liella_machine_casecmp_ord_avx2:
  * bytes takes two blocks. Same page rule (the larger page offset <= 4064 reads 32 bytes, <= 4032
  * reads 64, otherwise one byte), same stop: the two deciding bytes read again and ordered here.
  * Scratch: rax, r8-r10, xmm1-xmm15; rcx (loc) is kept for the rest entry. */
+	.section .text.liella_machine_casecmp_ord_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_sse2
 	.type liella_machine_casecmp_ord_sse2, @function
 	.p2align 6
@@ -5533,6 +5666,7 @@ liella_machine_casecmp_ord_sse2:
  * the previous blocks cleared have no candidate, so the overlap cannot change the first hit).
  * Rust verifies the whole needle at the answer, so a too-small answer is harmless and a
  * too-large one is caught by the tests. */
+	.section .text.liella_machine_pairscan,"ax",@progbits
 	.globl liella_machine_pairscan
 	.type liella_machine_pairscan, @function
 	.p2align 4
@@ -5616,6 +5750,7 @@ liella_machine_pairscan:
  * for the upper and lower case of that letter) and only when the locale's byte fold is plain
  * ASCII. Contract and load pattern are those of `liella_machine_pairscan` (count >= 16,
  * [h, h + count + off) readable); Rust verifies the whole needle at the answer. */
+	.section .text.liella_machine_pairscan_ci,"ax",@progbits
 	.globl liella_machine_pairscan_ci
 	.type liella_machine_pairscan_ci, @function
 	.p2align 4
@@ -5733,6 +5868,7 @@ liella_machine_pairscan_ci:
  * kernels, with no Rust wrapper. The head's page test takes (s - 1) & 4095 below
  * liella_machine_rshort_mask, which a NULL s never passes; the slow path tests s for NULL and
  * tail-jumps to `liella_hot_strchr_null` (the S6 abort) before any read. */
+	.section .text.liella_machine_strchrnul,"ax",@progbits
 	.hidden liella_hot_strchr_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strchrnul
 	.type liella_machine_strchrnul, @function
@@ -5751,7 +5887,7 @@ strchrnul:
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_rshort_mask(%rip), %ecx
-	jae .Lschrnul_slow
+	jae .Lschrnul_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpxor %xmm3, %xmm3, %xmm3
@@ -5781,10 +5917,17 @@ strchrnul:
 	addq $64, %rdi
 	xorl %r11d, %r11d
 	jmp .Lschr_body
+	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, on a 32-byte boundary
+	 * (the padding follows the jmp above and never runs): no second mask test, no second taken
+	 * branch before the SSE2 head (measured on an Ivy Bridge host: the decoded-uop cache delivers
+	 * one 32-byte window per cycle and a taken branch ends that cycle's delivery). */
+	.p2align 5
 .Lschrnul_pre:
 	/* PERF-STRCHR-NONAVX2: ecx = (s - 1) & 4095 >= rshort_mask here (4032 on the AVX2 level), so
 	 * ecx < 4032 means the SSE2 level AND [s, s + 64) inside s's page (page offset 1..4032; a NULL
-	 * s gives 4095): one compare is both tests. Then [s, s + 64) as four unaligned 16-byte blocks,
+	 * s gives 4095): one compare is both tests. On the AVX2 level ecx >= 4032 always holds here,
+	 * so that level's page-end and NULL calls go to .Lschrnul_snull (the NULL test, then the
+	 * aligned body). Then [s, s + 64) as four unaligned 16-byte blocks,
 	 * one exit branch each, with no group fold, no locate step and no strchr flag. SAFETY: all four
 	 * loads lie in s's page. A miss in all four enters the aligned body at .Lschr_next with
 	 * rax = ((s + 64) & -16) - 16: [s, rax + 16) is inside the checked [s, s + 64). */
@@ -5844,18 +5987,13 @@ strchrnul:
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
-.Lschrnul_slow:
-	/* AVX2 level: the NULL test (mask all ones); SSE2 level: always to the SSE2 head. */
-	testq %rdi, liella_machine_schr_mask(%rip)
-	jz .Lschrnul_pre
-	xorl %r11d, %r11d
-	jmp .Lschr_body
 .Lschrnul_snull:
 	testq %rdi, %rdi
 	jz liella_hot_strchr_null
 	xorl %r11d, %r11d
 	jmp .Lschr_body
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
+	.section .text.liella_machine_strchr,"ax",@progbits
 
 	.globl liella_machine_strchr
 	.type liella_machine_strchr, @function
@@ -5880,7 +6018,7 @@ index:
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_rshort_mask(%rip), %ecx
-	jae .Lschr_slow
+	jae .Lschr_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpxor %xmm3, %xmm3, %xmm3
@@ -5919,6 +6057,10 @@ index:
 	xorl %eax, %eax
 	vzeroupper
 	ret
+	/* TIMING-IVB-STRSCAN-DISPATCH: the entry's one taken branch lands here, 32-byte aligned (as
+	 * strchrnul's .Lschrnul_pre); the AVX2 level's page-end and NULL calls leave at the compare
+	 * to .Lschr_snullchk. */
+	.p2align 5
 .Lschr_pre:
 	/* PERF-STRCHR-NONAVX2: strchrnul's SSE2 head (one compare: SSE2 level and [s, s + 64) in s's
 	 * page; four unaligned blocks, SAFETY as there). Each block's c lanes and NUL lanes are two
@@ -6000,11 +6142,6 @@ index:
 .Lschr_snullchk:
 	testq %rdi, %rdi
 	jz liella_hot_strchr_null
-	jmp .Lschr_pre1
-.Lschr_slow:
-	/* AVX2 level: the NULL test (mask all ones); SSE2 level: always to the SSE2 head. */
-	testq %rdi, liella_machine_schr_mask(%rip)
-	jz .Lschr_pre
 .Lschr_pre1:
 	movl $1, %r11d
 .Lschr_body:
@@ -6144,6 +6281,7 @@ index:
  * `liella_hot_memrchr_rest` (strz::rfind_n: NULL for n == 0, else the explicit abort); any other
  * call falls through into the kernel below, saving the Rust entry's tests and jump. Reads
  * nothing itself. */
+	.section .text.liella_machine_memrchr_entry,"ax",@progbits
 	.hidden liella_hot_memrchr_rest  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_memrchr_entry
 	.hidden liella_machine_memrchr_entry
@@ -6314,8 +6452,8 @@ liella_machine_memrchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
+	vptest %ymm5, %ymm5
 	jz .Lmrc_avx
 	vpmovmskb %ymm3, %edx
 	vpmovmskb %ymm4, %esi
@@ -6346,8 +6484,7 @@ liella_machine_memrchr:
 	vpcmpeqb -64(%rax), %ymm0, %ymm1
 	vpcmpeqb -32(%rax), %ymm0, %ymm2
 	vpor %ymm1, %ymm2, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	vptest %ymm5, %ymm5
 	jnz .Lmrc_avx_tail_hit
 	subq $64, %rax
 	cmpq %rdi, %rax
@@ -6355,8 +6492,7 @@ liella_machine_memrchr:
 	vpcmpeqb -64(%rax), %ymm0, %ymm1
 	vpcmpeqb -32(%rax), %ymm0, %ymm2
 	vpor %ymm1, %ymm2, %ymm5
-	vpmovmskb %ymm5, %edx
-	testl %edx, %edx
+	vptest %ymm5, %ymm5
 	jnz .Lmrc_avx_tail_hit
 .Lmrc_avx_null:
 	vzeroupper
@@ -6488,9 +6624,13 @@ liella_machine_memrchr:
  * wrapper: n == 0 returns 0 before any read; the head's page test takes (a - 1) | (b - 1) & 4095
  * below liella_machine_rshort_mask, which a NULL a or b never passes; .Lsnc_pt tests both for
  * NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
+	.section .text.liella_machine_strncmp,"ax",@progbits
 	.hidden liella_hot_strncmp_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncmp
 	.type liella_machine_strncmp, @function
+	/* Its own section, named by the hot-text key `strncmp`: the first call after printf lands in the
+	 * hot group whatever the size of the code linked before this object's shared text. */
+	.section .text.strncmp,"ax",@progbits
 	.p2align 6
 liella_machine_strncmp:
 #ifdef LIELLA_EXPORT
@@ -6515,11 +6655,10 @@ strncmp:
 	cmpl liella_machine_rshort_mask(%rip), %eax
 	jae .Lsnc_pt
 .Lsnc_head:
-	vpxor %xmm0, %xmm0, %xmm0
 	vmovdqu (%rdi), %ymm1
 	vpcmpeqb (%rsi), %ymm1, %ymm2
 	vpminub %ymm1, %ymm2, %ymm2
-	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %eax
 	bsfl %eax, %eax
 	jz .Lsnc_h32
@@ -6527,27 +6666,37 @@ strncmp:
 	vzeroupper
 	cmpq %rdx, %rax
 	jae .Lsnc_zero
-	movq %rax, %rcx
 	/* .Lsnc_byte inline; re-read equal and not NUL (a writer) resumes there. */
-	movzbl (%rdi,%rax), %eax
-	movzbl (%rsi,%rcx), %r8d
-	cmpl %r8d, %eax
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
 	jne .Lsnc_order
-	testl %eax, %eax
-	jz .Lsnc_ret
+	testl %ecx, %ecx
+	jz .Lsnc_zero
+	movq %rax, %rcx
 	jmp .Lsnc_byte
 .Lsnc_h32:
-	cmpq $32, %rdx
-	jbe .Lsnc_hzero
+	/* No n <= 32 exit here: the second block lies in the same pages as the first (the 64-byte
+	 * page test), and a hit at or past n gives 0 as the first block's does (PERF-STRNCMP-ROWS). */
 	vmovdqu 32(%rdi), %ymm1
 	vpcmpeqb 32(%rsi), %ymm1, %ymm2
 	vpminub %ymm1, %ymm2, %ymm2
-	vpcmpeqb %ymm0, %ymm2, %ymm2
+	vpcmpeqb .Lstrcmp_zero32(%rip), %ymm2, %ymm2
 	vpmovmskb %ymm2, %eax
 	bsfl %eax, %eax
 	jz .Lsnc_h64
+	vzeroupper
 	addl $32, %eax
-	jmp .Lsnc_hhit
+	cmpq %rdx, %rax
+	jae .Lsnc_zero
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
+	jne .Lsnc_order
+	testl %ecx, %ecx
+	jz .Lsnc_zero
+	movq %rax, %rcx
+	jmp .Lsnc_byte
 .Lsnc_h64:
 	vzeroupper
 	cmpq $64, %rdx
@@ -6555,10 +6704,8 @@ strncmp:
 	pxor %xmm3, %xmm3
 	movl $64, %ecx
 	jmp .Lsnc_step
-.Lsnc_hzero:
-	vzeroupper
-	xorl %eax, %eax
-	ret
+	/* The entry's taken branch lands on a 32-byte boundary (padding after the jmp above). */
+	.p2align 5
 .Lsnc_pt:
 	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected (or the SSE2
 	 * level: limit 0). */
@@ -6566,14 +6713,12 @@ strncmp:
 	jz liella_hot_strncmp_null
 	testq %rsi, %rsi
 	jz liella_hot_strncmp_null
+	/* TIMING-IVB-STRSCAN-DISPATCH: the SSE2 level (limit 0) falls through to the SSE2 steps with
+	 * no taken branch after the entry's; an AVX2-level a inside its page tests b out of line. */
 	movl %edi, %eax
 	andl $4095, %eax
 	cmpl liella_machine_short_lim(%rip), %eax
-	jae .Lsnc_old
-	movl %esi, %eax
-	andl $4095, %eax
-	cmpl liella_machine_short_lim(%rip), %eax
-	jb .Lsnc_head
+	jb .Lsnc_ptb
 .Lsnc_old:
 	pxor %xmm3, %xmm3
 	xorl %ecx, %ecx
@@ -6690,7 +6835,15 @@ strncmp:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
+.Lsnc_ptb:
+	/* AVX2 level, a's page offset below the limit: the head when b's is too, else the steps. */
+	movl %esi, %eax
+	andl $4095, %eax
+	cmpl liella_machine_short_lim(%rip), %eax
+	jb .Lsnc_head
+	jmp .Lsnc_old
 	.size liella_machine_strncmp, .-liella_machine_strncmp
+	.text
 
 
 /* size_t liella_machine_strpair(const char *p, size_t off, int c0, int c1) and
@@ -6705,26 +6858,89 @@ strncmp:
  * units of the string before its terminator (readable, none 0), and p lies in the string (at or
  * before its terminator); wcspair's p is 4-byte aligned. Loads: when p's page has 32 bytes from
  * p on (page offset <= 4064), one unaligned head block at p and one at p - off, both inside
- * [p - off, p + 32) (the known units, then p's page). Otherwise units one by one up to the next
+ * [p - off, p + 32) (the known units, then p's page); strpair on AVX2, when the page has 64 bytes
+ * from p on (page offset <= 4032), also the blocks at p + 32 and p + 32 - off, inside
+ * [p - off, p + 64), and then the aligned run from the 64-byte boundary in (p, p + 64]. Otherwise
+ * units one by one up to the next
  * 32-byte boundary (stopping at a 0 unit or a candidate). Then aligned blocks A (32 bytes on
  * AVX2, 16 on SSE2), each with the block at A - off, which lies inside [p - off, A + block):
  * units already seen not to be 0, then A's own block; an aligned block never leaves its page.
  * AVX2 from a 64-byte boundary on: 64-byte aligned pairs of blocks (one page each), one test
  * for "any candidate or 0 unit" per pair; a pair that has one is resolved block by block.
+ * Groups of four blocks (128 bytes, one page) run a one-stream filter (c1 at q, or c0 at q - off
+ * after a dense run of c1 in a group free of c0) or the pair test, each with the 0 test of q.
  * Units past the terminator are read only inside the terminator's page and are masked off
  * (the bits from the first 0 unit on). Rust verifies the needle at every candidate. */
-	.text
+	.section .text.liella_machine_strpair,"ax",@progbits
 	.globl liella_machine_strpair
 	.type liella_machine_strpair, @function
 	.p2align 4
 liella_machine_strpair:
 	movq %rdi, %rax
-	xorl %r8d, %r8d
 	movl %edi, %r9d
 	andl $4095, %r9d
 	cmpl $4064, %r9d
-	jbe .Lliella_machine_strpair_vec
-	/* p in the last 32 bytes of its page: unit by unit to the 32-byte boundary. */
+	ja .Lliella_machine_strpair_units
+	cmpl $0, liella_machine_scan_level(%rip)
+	je .Lliella_machine_strpair_sse2
+	vmovd %edx, %xmm0
+	vmovd %ecx, %xmm1
+	vpbroadcastb %xmm0, %ymm0
+	vpbroadcastb %xmm1, %ymm1
+	vpxor %xmm2, %xmm2, %xmm2
+	/* Head blocks (TIMING-N100-STRSTR-64): one test per block, as in the group loops: unit q is
+	 * a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0, so one mask names the first
+	 * stop, and the unit there tells which (0: the terminator; else a candidate, no 0 before it).
+	 * r10 = p - off; r9d keeps p's page offset for the second block's test. */
+	movq %rax, %r10
+	subq %rsi, %r10
+	vmovdqu (%rax), %ymm3
+	vpxor (%r10), %ymm0, %ymm4
+	vpxor %ymm3, %ymm1, %ymm5
+	vpor %ymm4, %ymm5, %ymm5
+	vpminub %ymm3, %ymm5, %ymm5
+	vpcmpeqb %ymm2, %ymm5, %ymm5
+	vpmovmskb %ymm5, %r11d
+	testl %r11d, %r11d
+	jnz .Lliella_machine_strpair_avx_stop
+	/* Second head block (STRSTR-SHORT-DENSE-PARITY-3): when p's page has 64 bytes from p on (page
+	 * offset <= 4032), the unaligned block at p + 32 (and at p + 32 - off), so a string of up to 64
+	 * bytes from p is settled without the walk to a 64-byte boundary, whatever p's alignment. */
+	cmpl $4032, %r9d
+	ja .Lliella_machine_strpair_avx_head1
+	vmovdqu 32(%rax), %ymm6
+	vpxor 32(%r10), %ymm0, %ymm4
+	vpxor %ymm6, %ymm1, %ymm5
+	vpor %ymm4, %ymm5, %ymm5
+	vpminub %ymm6, %ymm5, %ymm5
+	vpcmpeqb %ymm2, %ymm5, %ymm5
+	vpmovmskb %ymm5, %r11d
+	testl %r11d, %r11d
+	jnz .Lliella_machine_strpair_avx_stop32
+	/* Filter mode as below, over both head blocks; the aligned run resumes at the 64-byte
+	 * boundary in (p, p + 64]: the units it sees again were seen here to be neither 0 nor a
+	 * candidate, and its blocks at A - off start at or after p - off. */
+	vpcmpeqb %ymm3, %ymm1, %ymm3
+	vpcmpeqb %ymm6, %ymm1, %ymm6
+	vpor %ymm3, %ymm6, %ymm6
+	vpmovmskb %ymm6, %r8d
+	movq %rax, %rdx
+	addq $64, %rax
+	andq $-64, %rax
+	jmp .Lliella_machine_strpair_avx_al64
+.Lliella_machine_strpair_avx_stop32:
+	addq $32, %rax
+.Lliella_machine_strpair_avx_stop:
+	vzeroupper
+	bsfl %r11d, %r11d
+	addq %r11, %rax
+	cmpb $0, (%rax)
+	je .Lliella_machine_strpair_unit_nul
+	subq %rdi, %rax
+	addq %rax, %rax
+	ret
+	/* p in the last 32 bytes of its page: unit by unit to the 32-byte boundary, then the
+	 * aligned run in pair mode (r8 = 1). */
 .Lliella_machine_strpair_units:
 	movzbl (%rax), %r10d
 	testl %r10d, %r10d
@@ -6741,31 +6957,20 @@ liella_machine_strpair:
 	testl $31, %eax
 	jnz .Lliella_machine_strpair_units
 	movl $1, %r8d
-.Lliella_machine_strpair_vec:
 	cmpl $0, liella_machine_scan_level(%rip)
-	je .Lliella_machine_strpair_sse2
+	je .Lliella_machine_strpair_sse2_units
 	vmovd %edx, %xmm0
 	vmovd %ecx, %xmm1
 	vpbroadcastb %xmm0, %ymm0
 	vpbroadcastb %xmm1, %ymm1
 	vpxor %xmm2, %xmm2, %xmm2
-	testl %r8d, %r8d
-	jnz .Lliella_machine_strpair_avx_loop
-	vmovdqu (%rax), %ymm3
-	movq %rax, %r9
-	subq %rsi, %r9
-	vpcmpeqb (%r9), %ymm0, %ymm4
-	vpcmpeqb %ymm3, %ymm2, %ymm5
-	vpcmpeqb %ymm3, %ymm1, %ymm3
-	vpand %ymm4, %ymm3, %ymm3
-	vpmovmskb %ymm3, %r10d
-	vpmovmskb %ymm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
-	jnz .Lliella_machine_strpair_avx_cand
-	testl %r11d, %r11d
-	jnz .Lliella_machine_strpair_avx_nul
+	jmp .Lliella_machine_strpair_avx_loop
+.Lliella_machine_strpair_avx_head1:
+	/* Filter mode (STRSTR-ADAPTIVE-FILTER-EXP): r8 = 0 (one stream, c1 or 0 only) when the head
+	 * block holds no c1, else nonzero (pair). rdx = where the last one-stream stop was (p). */
+	vpcmpeqb %ymm3, %ymm1, %ymm6
+	vpmovmskb %ymm6, %r8d
+	movq %rax, %rdx
 	andq $-32, %rax
 	addq $32, %rax
 	.p2align 4
@@ -6789,29 +6994,20 @@ liella_machine_strpair:
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_avx_loop
 	/* rax is 64-aligned. One 64-byte group first when it is not 128-aligned (PERF-STRSTR-LONG). */
+.Lliella_machine_strpair_avx_al64:
 	movq %rsi, %r9
 	negq %r9
 	testl $64, %eax
-	jz .Lliella_machine_strpair_avx_loop128
-	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
-	vpxor (%rax), %ymm1, %ymm5
-	vpxor 32(%rax), %ymm1, %ymm8
-	vpxor (%rax,%r9), %ymm0, %ymm4
-	vpxor 32(%rax,%r9), %ymm0, %ymm7
-	vpor %ymm4, %ymm5, %ymm4
-	vpor %ymm7, %ymm8, %ymm7
-	vpminub (%rax), %ymm4, %ymm4
-	vpminub 32(%rax), %ymm7, %ymm7
-	vpminub %ymm4, %ymm7, %ymm4
-	vpcmpeqb %ymm4, %ymm2, %ymm4
-	vpmovmskb %ymm4, %r10d
-	testl %r10d, %r10d
-	jnz .Lliella_machine_strpair_avx_loop
-	addq $64, %rax
+	jnz .Lliella_machine_strpair_avx_loop64
+.Lliella_machine_strpair_avx_mode:
+	testl %r8d, %r8d
+	jz .Lliella_machine_strpair_avx_loop128s
+	/* 128-byte aligned: the same test over a group of four blocks (all in one page), memory operands
+	 * so a block costs four instructions, the step before one vptest per 128 bytes (STRSTR-HIT-4K).
+	 * A hit sends the run back to the block loop from the group's start, which resolves it. From a
+	 * 64-byte boundary that is not a 128-byte one, one pair (loop64) first reaches the next. */
 	.p2align 4
 .Lliella_machine_strpair_avx_loop128:
-	/* The same test over a 128-aligned group of four blocks (all in one page): memory operands,
-	 * so a block costs four instructions, and one loop branch per 128 bytes. */
 	vpxor (%rax), %ymm1, %ymm5
 	vpxor 32(%rax), %ymm1, %ymm8
 	vpxor 64(%rax), %ymm1, %ymm9
@@ -6832,11 +7028,114 @@ liella_machine_strpair:
 	vpminub %ymm11, %ymm12, %ymm11
 	vpminub %ymm4, %ymm11, %ymm4
 	vpcmpeqb %ymm4, %ymm2, %ymm4
+	subq $-128, %rax
+	vptest %ymm4, %ymm4
+	jz .Lliella_machine_strpair_avx_loop128
+	addq $-128, %rax
+	jmp .Lliella_machine_strpair_avx_loop
+	.p2align 4
+.Lliella_machine_strpair_avx_loop64:
+	/* Unit q is a candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0. */
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor (%rax,%r9), %ymm0, %ymm4
+	vpxor 32(%rax,%r9), %ymm0, %ymm7
+	vpor %ymm4, %ymm5, %ymm4
+	vpor %ymm7, %ymm8, %ymm7
+	vpminub (%rax), %ymm4, %ymm4
+	vpminub 32(%rax), %ymm7, %ymm7
+	vpminub %ymm4, %ymm7, %ymm4
+	vpcmpeqb %ymm4, %ymm2, %ymm4
 	vpmovmskb %ymm4, %r10d
 	testl %r10d, %r10d
 	jnz .Lliella_machine_strpair_avx_loop
+	addq $64, %rax
+	jmp .Lliella_machine_strpair_avx_mode
+	.p2align 4
+.Lliella_machine_strpair_avx_loop128s:
+	/* One stream (STRSTR-ADAPTIVE-FILTER-EXP): unit q is c1 or 0 exactly when min(Y ^ c1, Y) is 0;
+	 * 16 instructions per 128 bytes and no load at q - off. */
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor 64(%rax), %ymm1, %ymm9
+	vpxor 96(%rax), %ymm1, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
 	subq $-128, %rax
-	jmp .Lliella_machine_strpair_avx_loop128
+	vptest %ymm5, %ymm5
+	jz .Lliella_machine_strpair_avx_loop128s
+	addq $-128, %rax
+	/* A stop: c1 or 0 in this group. Sparse (1024 bytes or more after the last stop): the block
+	 * loop resolves the group and the run comes back through avx_mode. Dense: this group gets the
+	 * pair test and, when it holds no candidate and no 0, a test for c0 at q - off
+	 * (STRSTR-SHORT-DENSE-PARITY-4): with no c0 either, the rest of the call runs the one-stream
+	 * filter on c0 (loop128c); else the pair filter. A pair or 0 here: the block loop resolves it. */
+	movq %rax, %r10
+	subq %rdx, %r10
+	movq %rax, %rdx
+	cmpq $1024, %r10
+	jae .Lliella_machine_strpair_avx_loop
+	vpxor (%rax), %ymm1, %ymm5
+	vpxor 32(%rax), %ymm1, %ymm8
+	vpxor 64(%rax), %ymm1, %ymm9
+	vpxor 96(%rax), %ymm1, %ymm10
+	vpxor (%rax,%r9), %ymm0, %ymm4
+	vpxor 32(%rax,%r9), %ymm0, %ymm7
+	vpxor 64(%rax,%r9), %ymm0, %ymm11
+	vpxor 96(%rax,%r9), %ymm0, %ymm12
+	vpor %ymm4, %ymm5, %ymm5
+	vpor %ymm7, %ymm8, %ymm8
+	vpor %ymm11, %ymm9, %ymm9
+	vpor %ymm12, %ymm10, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	vptest %ymm5, %ymm5
+	jnz .Lliella_machine_strpair_avx_loop
+	/* No candidate and no 0 in the group: c0 at q - off anywhere in it (min of the L ^ c0 blocks)? */
+	vpminub %ymm4, %ymm7, %ymm4
+	vpminub %ymm11, %ymm12, %ymm11
+	vpminub %ymm4, %ymm11, %ymm4
+	vpcmpeqb %ymm4, %ymm2, %ymm4
+	subq $-128, %rax
+	vptest %ymm4, %ymm4
+	jnz .Lliella_machine_strpair_avx_loop128
+	/* r8 = pair mode for any return through avx_mode after a c0 stop (a c0 that is no candidate). */
+	movl $1, %r8d
+	.p2align 4
+.Lliella_machine_strpair_avx_loop128c:
+	/* One stream on c0 (STRSTR-SHORT-DENSE-PARITY-4): unit q is a candidate only when unit q - off
+	 * is c0, so q is c0 at q - off or 0 exactly when min(L ^ c0, Y) is 0; 16 instructions per 128
+	 * bytes. A stop: the block loop resolves the group (exact pair and 0 test per block); a c0 that
+	 * is no candidate continues in pair mode (r8). */
+	vpxor (%rax,%r9), %ymm0, %ymm5
+	vpxor 32(%rax,%r9), %ymm0, %ymm8
+	vpxor 64(%rax,%r9), %ymm0, %ymm9
+	vpxor 96(%rax,%r9), %ymm0, %ymm10
+	vpminub (%rax), %ymm5, %ymm5
+	vpminub 32(%rax), %ymm8, %ymm8
+	vpminub 64(%rax), %ymm9, %ymm9
+	vpminub 96(%rax), %ymm10, %ymm10
+	vpminub %ymm5, %ymm8, %ymm5
+	vpminub %ymm9, %ymm10, %ymm9
+	vpminub %ymm5, %ymm9, %ymm5
+	vpcmpeqb %ymm5, %ymm2, %ymm5
+	subq $-128, %rax
+	vptest %ymm5, %ymm5
+	jz .Lliella_machine_strpair_avx_loop128c
+	addq $-128, %rax
+	jmp .Lliella_machine_strpair_avx_loop
 .Lliella_machine_strpair_avx_cand:
 	vzeroupper
 .Lliella_machine_strpair_sse_cand:
@@ -6855,6 +7154,17 @@ liella_machine_strpair:
 	subq %rdi, %rax
 	leaq 1(%rax,%rax), %rax
 	ret
+.Lliella_machine_strpair_sse2_units:
+	movd %edx, %xmm0
+	movd %ecx, %xmm1
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	punpcklbw %xmm1, %xmm1
+	punpcklwd %xmm1, %xmm1
+	pshufd $0, %xmm0, %xmm0
+	pshufd $0, %xmm1, %xmm1
+	pxor %xmm2, %xmm2
+	jmp .Lliella_machine_strpair_sse_loop
 .Lliella_machine_strpair_sse2:
 	movd %edx, %xmm0
 	movd %ecx, %xmm1
@@ -6865,8 +7175,6 @@ liella_machine_strpair:
 	pshufd $0, %xmm0, %xmm0
 	pshufd $0, %xmm1, %xmm1
 	pxor %xmm2, %xmm2
-	testl %r8d, %r8d
-	jnz .Lliella_machine_strpair_sse_loop
 	movdqu (%rax), %xmm3
 	movq %rax, %r9
 	subq %rsi, %r9
@@ -6948,6 +7256,7 @@ liella_machine_strpair:
 	addq $64, %rax
 	jmp .Lliella_machine_strpair_sse_loop64
 	.size liella_machine_strpair, .-liella_machine_strpair
+	.section .text.liella_machine_wcspair,"ax",@progbits
 
 	.globl liella_machine_wcspair
 	.type liella_machine_wcspair, @function

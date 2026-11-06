@@ -1,0 +1,12 @@
+{"task": "PERF-SPRINTF-CHK-LS", "model": "opus", "tokens": null,
+ "result": "render_pair_s writes sprintf/__sprintf_chk \"%s %*s \" pieces in place through a new Out::room (trace: 176 of 862 instr/call were 4 out-of-line ToBuffer::put calls); lint and plants green, gate/percall/counts still running at hand-back",
+ "branch": "task/perf-sprintf-chk-ls", "head": "b7e58c4a",
+ "gate": {"affected": "running at hand-back (perf-sprintf-chk-ls-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plants: 6 WARN-NO-MSG because `cargo xtask affected --only conformance:<prog>` does not print the program's FAIL lines; each plant rc 1 with 'conformance: 0 passed, 1 failed' against a green baseline; 1 EQUIVALENT (fits-int)",
+  "the 1.05x instruction target is NOT VERIFIED: perf-sprintf-chk-ls-percall and -counts1 were queued behind the gate at hand-back; if a cbench_opt row is slower, revert b7e58c4a"],
+ "refused": [],
+ "improvement": "affected --only conformance should echo the program's FAIL lines (or plants docs should give the msg to use for conformance plants); and jobrun blocks in the foreground, which cost two queued-then-killed bench jobs here",
+ "next_step": "read perf-sprintf-chk-ls-gate, -percall, -counts1 on keke; if spr_ls/chk_ls stay above ~1.05x, the rest is the per-call parse (simple_into/simple_conv/simple_star ~190 instr)",
+ "report_file": "handoff/perf-sprintf-chk-ls.md",
+ "jobs": ["keke:perf-sprintf-chk-ls-lint", "keke:perf-sprintf-chk-ls-plants", "keke:perf-sprintf-chk-ls-gate", "keke:perf-sprintf-chk-ls-percall", "keke:perf-sprintf-chk-ls-counts1"]}

@@ -1,0 +1,11 @@
+{"task": "PRE14-BENCH-AVX2-COUNTS", "model": "sonnet", "tokens": null,
+ "result": "AVX2-class (Skylake-SP) counted bench of a6fc34c2 added to docs/benchmarks.md: 529 rows, 187 faster / 90 parity / 252 slower; 89 rows change band vs Ivy Bridge",
+ "branch": "task/pre14-bench-avx2-counts", "head": "see git log (report committed after the docs commit 914ed534)",
+ "gate": {"affected": "n/a (docs only); static rc 0", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["pre14-bench-avx2-counts-full1b", "pre14-bench-avx2-counts-full2", "pre14-bench-avx2-counts-static"],
+ "rulings": [],
+ "informational": ["cbench_nscache aborts `xtask bench --compare` (host build lacks -I include for liella/native.h); a bench with no names runs only cbench_opt", "ran at a6fc34c2 (V-4 commit), not current origin/next 87bc22cb, so rows compare with Ivy Bridge on identical code", "Skylake-SP host also has AVX-512: AVX2 vs AVX-512 not separated", "memcpy_4k instr ratio 26.33 (Ivy) vs 0.17: unexplained", "two earlier jobs superseded: pre14-bench-avx2-counts-bench (cbench_opt only, rc 0), pre14-bench-avx2-counts-full (rc 1, nscache build abort after 9 programs)"],
+ "refused": [],
+ "improvement": "make `xtask bench --compare` with no names run every comparable program and skip programs with no host build instead of aborting",
+ "next_step": "owner: decide on an AVX2 timing run and an AVX-512/AVX2 split count; look at the strlen/memchr/memcmp rows slower on the AVX2 class",
+ "report_file": "handoff/pre14-bench-avx2-counts.md"}

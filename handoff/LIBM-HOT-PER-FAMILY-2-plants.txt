@@ -1,0 +1,10 @@
+# LIBM-HOT-PER-FAMILY-2 plants (cargo xtask plants; format docs/plants.md).
+# The changed code is the unsafe audit's hot-kernel location (policy.rs); the moved libm wrappers are planted to show
+# their direct tests still reach them in the new files.
+policy-hot-path-old | xtask/src/policy.rs | lit:&& rel.starts_with("src/hot/") { ==> && rel == "src/hot.rs" { | cargo xtask static | msg:category .slice. is not permitted in src/hot/
+policy-hot-allowed-old | xtask/src/policy.rs | lit:("hot-kernel", &["src/hot/"]) ==> ("hot-kernel", &["src/hot.rs"]) | cargo xtask static | msg:category .hot-kernel. is not permitted in src/hot/
+explog-exp10-fused-wrong | crates/boundary/src/hot/exp_log.rs | lit:return unsafe { liella_math::fast64::fused::exp10_nearest(x) }; ==> return unsafe { liella_math::fast64::fused::exp_nearest(x) }; | cargo test -p liella-boundary --test math_fma_paths | msg:FMA build .*baseline
+shared-sqrtsd-identity | crates/boundary/src/hot/mod.rs | lit:_mm_cvtsd_f64(_mm_sqrt_pd(_mm_set_sd(x))) ==> _mm_cvtsd_f64(_mm_set_sd(x)) | cargo test -p liella-boundary --test s10_math_symbols math_float_hyperbolic_fast_entry | msg:math_float_hyperbolic_fast_entry_matches_the_envelope_in_every_mode.*FAILED|asinhf
+# Merged from next (LIBM-F64-EXPLOGPOW-TIER dispatchers, now in hot/exp_log.rs): their direct test still reaches them.
+explog-exp2-fused-wrong | crates/boundary/src/hot/exp_log.rs | lit:return unsafe { liella_math::fast64::fused::exp2_nearest(x) }; ==> return unsafe { liella_math::fast64::fused::exp_nearest(x) }; | cargo test -p liella-boundary --test math_fma_paths | msg:exp2_logb_pow_fma_build_matches_baseline_bit_for_bit.*FAILED|FMA build .*baseline
+explog-pow-fused-swapped | crates/boundary/src/hot/exp_log.rs | lit:return unsafe { liella_math::fast64::fused::pow_nearest(x, y) }; ==> return unsafe { liella_math::fast64::fused::pow_nearest(y, x) }; | cargo test -p liella-boundary --test math_fma_paths | msg:exp2_logb_pow_fma_build_matches_baseline_bit_for_bit.*FAILED|pow\(.*FMA build

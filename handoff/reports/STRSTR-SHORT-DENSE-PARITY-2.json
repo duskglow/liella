@@ -1,0 +1,12 @@
+{"task": "STRSTR-SHORT-DENSE-PARITY-2", "model": "opus", "tokens": null,
+ "result": "per-phase split traced; strstr fixed Rust cost cut 47: ss_hit_64 188->141 (0.86x Zen 1 glibc), hit_short 173->126 (0.82x); ss_hit_1k 1.10x and dense_4k 1.16x still open; 4k rows carry ~+-50 haystack-alignment layout noise",
+ "branch": "task/strstr-short-dense-parity-2", "head": "5e0526f6",
+ "gate": {"affected": "see job strstr-short-dense-parity-2-gate2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "strstr_hit_4k 1271 -> 1275 (+4) on the final head while every other strstr row is 36-47 lower; between two counts differing only in a miss check, hit_4k moved 1230 -> 1275 and dense 995 -> 950: the kernel's alignment prologue follows the static haystack's address mod 128, which moves with code size", "recommendation": "accept as layout noise for this story; next story pins the percall haystack alignment and makes the kernel prologue alignment-independent"}],
+ "informational": ["On the Skylake-SP host the reference's strstr counts differ completely from the Zen 1 host's (hit_short 87, ss_hit_64 102, dense_4k 2220, scan_4k 2253): the parity targets are Zen 1 numbers; Liella's AVX2-path counts are the same on both hosts", "validation/wl_trace.sh gained --list (every executed instruction with address), needed to split a call by phase"],
+ "refused": [],
+ "jobs": ["strstr-short-dense-parity-2-clippy2", "strstr-short-dense-parity-2-counts2", "strstr-short-dense-parity-2-gate2", "strstr-short-dense-parity-2-plants2"],
+ "improvement": "the percall default base is the merge base, which is never primed on the host: wl_percall could prime it itself or fall back to a cached sha",
+ "next_step": "pin strstr_cycles.c haystack alignment and re-measure; then a fixed-cost unaligned first 128-byte group in strpair (hit_1k holds 146 in the alignment prologue)",
+ "report_file": "handoff/strstr-short-dense-parity.md"}

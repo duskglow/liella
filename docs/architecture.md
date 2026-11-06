@@ -412,8 +412,8 @@ enforced by the Rust caller.
 | Kernel | Where | What | Decision |
 |---|---|---|---|
 | Terminator scans (`strlen`, `strnlen`, `rawmemchr`, every C-string conversion in `strz`) | `csys/src/machine/scan.S` | Aligned 32-byte (AVX2) or 16-byte (SSE2) loads that never cross a page; the path is chosen once from CPUID and XCR0 (`boundary::cpu`), SSE2 until then | D-4.14, D-4.24, D-4.21 |
-| Small copies and fills (`memcpy`, `memmove`, `memset` and fortified forms, up to 128 bytes) | `crates/boundary/src/hot.rs` | 16-byte blocks from both ends, every source byte loaded before the first store (so overlap needs no test); SSE2 only, one kernel for every CPU | D-4.22 |
-| Small compares (`memcmp`, `bcmp`, `__memcmpeq`, up to 64 bytes) | `crates/boundary/src/hot.rs` | the same treatment for compare | D-4.23 |
+| Small copies and fills (`memcpy`, `memmove`, `memset` and fortified forms, up to 128 bytes) | `crates/boundary/src/hot/mem.rs` | 16-byte blocks from both ends, every source byte loaded before the first store (so overlap needs no test); SSE2 only, one kernel for every CPU | D-4.22 |
+| Small compares (`memcmp`, `bcmp`, `__memcmpeq`, up to 64 bytes) | `crates/boundary/src/hot/mem.rs` | the same treatment for compare | D-4.23 |
 | Large copies | `csys/` machine class | ERMS (`rep movsb`) paths | D-4.14 |
 
 **Checks that remain.** For the scanners, Rust checks in constant time that the reported byte is
@@ -506,7 +506,7 @@ test inside Linux (or WSL); the library targets x86-64 Linux only.
 | `cargo xtask stubs` | Regenerate the pending tests and `spec/clauses.tsv` from the spec |
 | `cargo xtask so` | Build the products into `target/liella/`: `libc.a`, `libc.so.6`, `liella-crt1.o`, the `libpthread` placeholders, the `libm` products |
 | `cargo xtask test` | The full gate: static checks, generated-file checks, the products, the workspace tests twice (plain and interposed), the C conformance suite, the native examples, the Rust dylib, the symbol-gap report, the status table |
-| `cargo xtask affected [--list]` | Only the tests a change can reach |
+| `cargo xtask affected --list \| --run` | Only the tests a change can reach: `--list` prints them, `--run` runs them (one is required; without either, exit 2) |
 | `cargo xtask bench` | Benchmarks against budgets and per-CPU limits (release profile only) |
 | `cargo xtask status [--schedule]` | Pending versus specified tests per section; with `--schedule`, pending work per owning phase |
 | `cargo xtask fuzz <target> --time <min>` | Fuzzing |

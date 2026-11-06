@@ -1,0 +1,12 @@
+# TIMING-COV-STRCMP-SHORT-AVX2 plants: strcmp's entry (level-folded page test) and the AVX2 casecmp head
+# (csys/src/machine/scan.S). machine_scanners runs strcmp on both scan levels; casecmp_avx2 runs both kernels.
+# strcmp: the AVX2 head's page test of b removed (every offset of b reads the 128-byte head).
+strcmp-page-b | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)cmpl\s+\$3967, %edx/$1cmpl \$4095, %edx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# strcmp: the AVX2 limit of a set to the 65-byte window (a's page test passes 64 bytes too late).
+strcmp-vlim | csys/src/machine/scan.S | perl:s/(liella_machine_set_scan_level:.*?)andl\s+\$0xf80, %ecx/$1andl \$0xfc0, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# strcmp: the sign of the first block's result inverted.
+strcmp-sign | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_v_ret_head_differ:\n\tsbbl %eax, %eax\n\torl \$1, %eax\n)/$1\tnegl %eax\n/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED
+# casecmp: the fold's upper bound one past 'Z' in the head ('[' folded like a capital).
+casecmp-fold-z1 | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)vpcmpgtb \.Lcasecmp_km103\(%rip\), %ymm3, %ymm3\n\tvpcmpgtb \.Lcasecmp_km103\(%rip\), %ymm4, %ymm4/$1vpcmpgtb .Lcasecmp_km102(%rip), %ymm3, %ymm3\n\tvpcmpgtb .Lcasecmp_km102(%rip), %ymm4, %ymm4/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:casecmp.*FAILED
+# casecmp: the head's page test of b removed (the second 32-byte block has no test of its own now).
+casecmp-page-b | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)cmpl\s+\$4031, %r9d/$1cmpl \$4095, %r9d/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:casecmp.*FAILED|SIGSEGV

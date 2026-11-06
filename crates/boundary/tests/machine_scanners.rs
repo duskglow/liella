@@ -351,6 +351,10 @@ fn erms_copy_and_fill_match_the_loops_at_every_size_and_alignment() {
 /// Sizes around every boundary of the copy paths: the AVX2 copy's 32-byte head and tail and
 /// 128-byte steps, the dispatch thresholds, and 4 KiB.
 const COPY_SIZES: [usize; 24] = [64, 65, 95, 96, 97, 127, 128, 129, 159, 160, 161, 255, 256, 257, 383, 511, 512, 513, 1279, 1280, 1281, 4095, 4096, 4097];
+/// The AVX2 kernel's sizes (its contract is `n >= 128`): every 32-byte step of what the 128-byte
+/// steps leave inside the held 128-byte block (128 to 289), then the larger ones.
+const AVX2_KERNEL_SIZES: [usize; 27] =
+    [128, 129, 159, 160, 161, 191, 192, 193, 223, 224, 225, 255, 256, 257, 287, 288, 289, 383, 511, 512, 513, 1279, 1280, 1281, 4095, 4096, 4097];
 
 #[test]
 fn avx2_copy_matches_the_source_at_every_alignment_pair_and_size() {
@@ -365,7 +369,7 @@ fn avx2_copy_matches_the_source_at_every_alignment_pair_and_size() {
     let mut buf = pattern.clone();
     let mut dirs = [0usize; 2];
     for gap in [64usize, 3000] {
-        for n in COPY_SIZES {
+        for n in AVX2_KERNEL_SIZES {
             for sa in 0..64 {
                 for da in 0..64 {
                     let at = DST + gap + da;
@@ -853,6 +857,56 @@ fn strcmp_kernel_folded_groups_find_every_difference_up_to_length_300_on_level()
 }
 
 #[test]
+fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes() {
+    // Clauses: s4_3_c_1 (PARITY-STRCMP-AVX2: the AVX2 kernel tests 128-byte groups once, with
+    // four blocks' minima folded). Both scan levels (D-4.29).
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level();
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+fn strcmp_kernel_wide_groups_find_every_difference_past_256_bytes_on_level() {
+    // Clauses: s4_3_c_1 (PARITY-STRCMP-AVX2). Lengths around the edges of the first groups after
+    // the four tested blocks (each half of a group, each block, each lane), every position of
+    // the first difference, unsigned bytes above 0x7F, a terminator in a first. With no writer,
+    // no call rescans (each stop is located at its true index).
+    let rescans = selftest::rescans();
+    let mut a = vec![0u8; 64 + 1200 + 64];
+    let mut b = a.clone();
+    let aligns = [0usize, 1, 33, 63];
+    let lens = (250..=262).chain(318..=322).chain(382..=386).chain(446..=450).chain(510..=514).chain(574..=578).chain(638..=642).chain([700, 1100]);
+    for &aa in &aligns {
+        for &ba in &aligns {
+            for len in lens.clone() {
+                for (buf, al) in [(&mut a, aa), (&mut b, ba)] {
+                    buf.fill(b'z');
+                    for i in 0..len {
+                        buf[al + i] = 1 + ((i * 61) % 255) as u8;
+                    }
+                    buf[al + len] = 0;
+                }
+                let (pa, pb) = (a.as_ptr() as usize + aa, b.as_ptr() as usize + ba);
+                assert_eq!(cmp_at(pa, pb), 0, "equal, align {aa}/{ba}, len {len}");
+                for d in 0..len {
+                    let keep = (a[aa + d], b[ba + d]);
+                    (a[aa + d], b[ba + d]) = (0x80, 0x7F);
+                    assert_eq!(cmp_at(pa, pb), 1, "0x80 > 0x7F at {d}, align {aa}/{ba}, len {len}");
+                    assert_eq!(cmp_at(pb, pa), -1, "swapped, at {d}, align {aa}/{ba}, len {len}");
+                    a[aa + d] = 0;
+                    assert_eq!(cmp_at(pa, pb), -1, "a ends at {d}, align {aa}/{ba}, len {len}");
+                    (a[aa + d], b[ba + d]) = keep;
+                }
+            }
+        }
+    }
+    assert_eq!(selftest::rescans(), rescans, "a call without a writer rescanned");
+}
+
+#[test]
 fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators() {
     // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). Both strings end on the last byte of a page whose Both scan levels (D-4.29).
     let _g = level();
@@ -889,10 +943,75 @@ fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators_on_level() 
         // A string in the middle of a page against one ending at a page end.
         assert_eq!(cmp_at(end(base, la), base2 + 1000 - la.min(900)), (la.cmp(&(PAGE - 1 - 1000 + la.min(900)))) as c_int, "mid-page, length {la}");
     }
+    // Long strings (PARITY-STRCMP-AVX2): the 128-byte groups' count must stop them at the page end.
+    for la in (256..PAGE - 2).step_by(29) {
+        for lb in [la - 1, la, la + 1] {
+            let want = (la.cmp(&lb)) as c_int;
+            assert_eq!(cmp_at(end(base, la), end(base2, lb)), want, "long lengths {la}/{lb}");
+            assert_eq!(cmp_at(end(base2, lb), end(base, la)), -want, "long lengths {lb}/{la}");
+        }
+    }
     CSys.munmap(hi2).unwrap();
     CSys.munmap(lo2).unwrap();
     CSys.munmap(hi).unwrap();
     CSys.munmap(lo).unwrap();
+}
+
+#[test]
+fn strcmp_head_finds_every_difference_in_strings_ending_at_a_page_end() {
+    // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). On both scan levels, a string of every length 0-130
+    // whose terminator is the last byte of a page before an unmapped page (so every start the
+    // entry's page tests send to the head or away from it), against the same text ending at
+    // another page end or in the middle of a buffer: equal, and differing (greater, smaller, or
+    // ended) at every position, in both argument orders.
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        let (lo, hi, base) = guarded();
+        let (lo2, hi2, base2) = guarded();
+        let mut mid = vec![0u8; 512];
+        let put = |addr: usize, v: u8| {
+            s::memset(addr as *mut c_void, c_int::from(v), 1);
+        };
+        for len in 0..=130usize {
+            let (pa, pe) = (base + PAGE - 1 - len, base2 + PAGE - 1 - len);
+            for i in 0..=len {
+                let v = if i == len { 0 } else { b'a' + (i % 26) as u8 };
+                put(pa + i, v);
+                put(pe + i, v);
+                mid[100 + i] = v;
+            }
+            for at_end in [true, false] {
+                let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                let wh = if at_end { "page end" } else { "mid-buffer" };
+                assert_eq!(cmp_at(pa, pb), 0, "equal, length {len}, b at {wh}, avx2 {avx2}");
+                for d in 0..len {
+                    let keep = b'a' + (d % 26) as u8;
+                    for (v, want) in [(keep + 1, -1), (keep - 1, 1), (0, 1)] {
+                        if at_end {
+                            put(pb + d, v);
+                        } else {
+                            mid[100 + d] = v;
+                        }
+                        let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                        assert_eq!(cmp_at(pa, pb), want, "b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                        assert_eq!(cmp_at(pb, pa), -want, "swapped, b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                    }
+                    if at_end {
+                        put(pb + d, keep);
+                    } else {
+                        mid[100 + d] = keep;
+                    }
+                }
+            }
+        }
+        CSys.munmap(hi2).unwrap();
+        CSys.munmap(lo2).unwrap();
+        CSys.munmap(hi).unwrap();
+        CSys.munmap(lo).unwrap();
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
 }
 
 #[test]
@@ -1387,6 +1506,14 @@ fn memrchr_kernel_finds_the_last_match_inside_the_region_at_every_alignment_leng
                     buf[align + pos] = b'#';
                     assert_eq!(memrchr_at(&mut buf, align, n), Some(pos), "avx2={avx2}, align {align}, n {n}, pos {pos}");
                 }
+                // One match alone at each position: a block's any-match test must see a match in
+                // any of its vectors when no other vector of the block holds one.
+                buf[align..align + n].fill(b'.');
+                for pos in 0..n {
+                    buf[align + pos] = b'#';
+                    assert_eq!(memrchr_at(&mut buf, align, n), Some(pos), "single, avx2={avx2}, align {align}, n {n}, pos {pos}");
+                    buf[align + pos] = b'.';
+                }
             }
         }
     }
@@ -1545,7 +1672,7 @@ fn avx2_move_matches_a_byte_loop_at_every_overlap_alignment_and_size() {
     let _g = level();
     liella_boundary::cpu::init();
     let mut dirs = [0usize; 2];
-    for n in COPY_SIZES {
+    for n in AVX2_KERNEL_SIZES {
         let mut shifts: Vec<isize> = (1..=40).chain([63, 64, 65, 96, 127, 128, 129, 200, 2047, 2048, 2049]).collect();
         shifts.extend([n - 33, n - 32, n - 31, n - 1].into_iter().filter(|&k| k > 0).map(|k| k as isize));
         let room = n.max(2049) + 64;
@@ -1597,8 +1724,9 @@ fn memmove_matches_a_byte_loop_around_the_64_kib_edge_and_above() {
 
 #[test]
 fn memset_matches_a_byte_loop_around_the_rep_stosb_threshold_at_every_alignment() {
-    // Clause: s4_2_c_1 (memset). MEM-BULK: from the threshold the entry sets the first 64 bytes
-    // and runs `rep stosb` from the next 64-byte boundary; every start offset modulo 64, sizes
+    // Clause: s4_2_c_1 (memset). MEM-BULK: from the threshold the entry runs `rep stosb` from d
+    // when d is 64-byte aligned (MEMSET-4K-4), else sets the first 64 bytes and runs `rep stosb`
+    // from the next 64-byte boundary; every start offset modulo 64, sizes
     // around the threshold and 4 KiB, nothing outside the region written.
     // Both paths on every machine: ERMS forced off (the loops) and on (`rep stosb`, correct
     // without ERMS too; Zen 1 host's Zen 1 has none).

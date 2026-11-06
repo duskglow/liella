@@ -1,8 +1,8 @@
 //! §14 searching and sorting under a real address-space limit (`RLIMIT_AS`).
 //!
 //! Each test re-executes itself as a child, because the limit is process-wide and permanent. The
-//! child lowers `RLIMIT_AS` to a little above its size, then drives the exports until memory runs
-//! out:
+//! child lowers `RLIMIT_AS` to a little above its size as it measures it at the call (never from
+//! the host's memory or CPU count), then drives the exports until memory runs out:
 //! - `qsort`/`qsort_r` on an array whose scratch copy cannot be had still sort, and stably (a
 //!   probe of the host glibc under the same limit sorts but is NOT stable there; Liella keeps its
 //!   stable order on both paths, D-14.1, which gains the caller a defined result);
@@ -11,11 +11,12 @@
 //! - `tsearch` that cannot get a node returns NULL, the tree is unchanged and `twalk` still visits
 //!   exactly the nodes inserted so far, in order.
 //!
-//! Needs only `setrlimit` (RLIMIT_AS) and `/proc/self/statm`.
+//! Needs only `setrlimit` (RLIMIT_AS) and `/proc/self/statm`. A failing child prints its view of
+//! the limit (sizes, limits, ballast, mappings) with its exit code.
 #![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
 
 use std::ffi::CString;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use liella_abi::ctypes::c_void;
 use liella_abi::layout::{struct_hsearch_data, ENTRY};
@@ -24,22 +25,49 @@ use liella_boundary::sys::CSys;
 use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{Rlimit, RLIMIT_AS, RLIM_INFINITY};
 
-/// Address space the child may add to its size when the limit goes on.
+/// Address space the child may add to its size while the ballast is taken.
 const HEADROOM: u64 = 1 << 20;
+/// Address space left free at the call under test, over the size measured just before it: less
+/// than the smallest mapping the calls under test make once their slab room is used (a 98 KiB
+/// hash segment, a 2 MiB qsort scratch copy, a 16 MiB heap segment).
+const SLACK: u64 = 16 << 10;
+/// Ballast blocks at most: enough to take every free page of several 16 MiB heap segments.
+const BALLAST_MAX: usize = 1 << 16;
 const FIND: i32 = 0;
 const ENTER: i32 = 1;
 
+/// Files of this process opened before any limit goes on, read without allocating.
+fn proc_file(which: usize) -> &'static std::fs::File {
+    static FILES: [std::sync::OnceLock<std::fs::File>; 3] = [const { std::sync::OnceLock::new() }; 3];
+    FILES[which].get_or_init(|| std::fs::File::open(["/proc/self/mem", "/proc/self/statm", "/proc/self/maps"][which]).unwrap())
+}
+
+/// The process's address-space size in bytes (`/proc/self/statm`, read into the stack).
 fn size_bytes() -> u64 {
-    let statm = std::fs::read_to_string("/proc/self/statm").unwrap();
-    statm.split_whitespace().next().unwrap().parse::<u64>().unwrap() * 4096
+    let mut b = [0u8; 128];
+    let n = std::os::unix::fs::FileExt::read_at(proc_file(1), &mut b, 0).unwrap();
+    b[..n].iter().take_while(|c| c.is_ascii_digit()).fold(0u64, |a, c| a * 10 + u64::from(c - b'0')) * 4096
+}
+
+/// Mappings of this process (`/proc/self/maps` lines, counted through a stack buffer).
+fn maps_count() -> usize {
+    let mut b = [0u8; 4096];
+    let (mut off, mut lines) = (0u64, 0usize);
+    loop {
+        match std::os::unix::fs::FileExt::read_at(proc_file(2), &mut b, off) {
+            Ok(0) | Err(_) => return lines,
+            Ok(n) => {
+                lines += b[..n].iter().filter(|&&c| c == b'\n').count();
+                off += n as u64;
+            }
+        }
+    }
 }
 
 /// Read memory of this process at `addr` through `/proc/self/mem` (the tests may not use `unsafe`).
 fn peek<const N: usize>(addr: usize) -> [u8; N] {
-    static MEM: std::sync::OnceLock<std::fs::File> = std::sync::OnceLock::new();
-    let f = MEM.get_or_init(|| std::fs::File::open("/proc/self/mem").unwrap());
     let mut b = [0u8; N];
-    std::os::unix::fs::FileExt::read_exact_at(f, &mut b, addr as u64).unwrap();
+    std::os::unix::fs::FileExt::read_exact_at(proc_file(0), &mut b, addr as u64).unwrap();
     b
 }
 
@@ -51,33 +79,79 @@ fn peek64(addr: usize) -> u64 {
     u64::from_ne_bytes(peek(addr))
 }
 
+/// What `limit_now` saw: [size before, first limit, blocks taken, size after the ballast, final limit].
+static VIEW: [AtomicU64; 5] = [const { AtomicU64::new(0) }; 5];
+
+/// The test's view of the limit when a check fails (no allocation: printed under the limit).
+fn report(code: i32) -> i32 {
+    let g = |i: usize| VIEW[i].load(Ordering::Relaxed);
+    eprintln!(
+        "search_nomem view: code {code}; size before {} B, first limit {} B, ballast blocks {}, size after ballast {} B, \
+         limit at the call {} B, size now {} B, mappings {}",
+        g(0), g(1), g(2), g(3), g(4), size_bytes(), maps_count()
+    );
+    code
+}
+
+fn set_limit(cur: u64) {
+    CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur, max: RLIM_INFINITY })).unwrap();
+}
+
+/// Put the process under an address-space limit that the calls under test meet soon and surely,
+/// whatever the host: the limit is set from the size this process measures, never from the
+/// host's memory or CPU count. Under a first limit of size + 1 MiB the allocator's spare memory
+/// is taken at every block size down to a page (kept large blocks, free slab room of any shard
+/// already mapped), 64 pages are given back for the small allocations the calls make, and the
+/// limit is set again to the size measured at that point plus [`SLACK`], so that memory freed
+/// back to the kernel meanwhile (a heap trim, an exited thread's stack) gives no extra room.
 fn limit_now() {
     static ANCHOR: u32 = 7;
-    assert_eq!(peek32(std::ptr::addr_of!(ANCHOR) as usize), 7); // opens the file before the limit goes on
+    assert_eq!(peek32(std::ptr::addr_of!(ANCHOR) as usize), 7); // opens the files before the limit goes on
+    let _ = (size_bytes(), maps_count());
+    let mut ballast: Vec<Vec<u8>> = Vec::with_capacity(BALLAST_MAX);
     let base = size_bytes();
-    CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur: base + HEADROOM, max: RLIM_INFINITY })).unwrap();
-    // The allocator behind the exports may hold spare address space. Take what is left in
-    // blocks, then give back 64 pages, so the calls under test meet the limit soon and surely.
-    let mut ballast: Vec<Vec<u8>> = Vec::with_capacity(1 << 12);
-    for len in [1usize << 20, 1 << 12] {
+    set_limit(base + HEADROOM);
+    let mut len = 1usize << 20;
+    while len >= 1 << 12 {
         loop {
             let mut b: Vec<u8> = Vec::new();
-            if b.try_reserve_exact(len).is_err() || ballast.len() == ballast.capacity() {
+            if ballast.len() == ballast.capacity() || b.try_reserve_exact(len).is_err() {
                 break;
             }
             ballast.push(b);
         }
+        len /= 2;
     }
+    let taken = ballast.len();
+    // Give back 64 page-sized blocks (the last taken), never a larger one: room for the calls'
+    // small allocations, not for all of them.
     for _ in 0..64 {
+        if !ballast.last().is_some_and(|b| b.capacity() <= 1 << 12) {
+            break;
+        }
         ballast.pop();
     }
     let _ = ballast.leak();
+    for (i, x) in [base, base + HEADROOM, taken as u64, size_bytes()].into_iter().enumerate() {
+        VIEW[i].store(x, Ordering::Relaxed);
+    }
+    tighten();
+}
+
+/// Set the limit to the size measured now plus [`SLACK`]: called right before each run of calls
+/// under test, because an allocator may return memory to the kernel in between (a failed call or
+/// a free can shrink the process), which would otherwise leave room the limit was meant to deny.
+fn tighten() {
+    let at = size_bytes() + SLACK;
+    set_limit(at);
+    VIEW[4].store(at, Ordering::Relaxed);
 }
 
 /// Run `body` in a re-executed child (exit code 0 passes; each failure has its own code).
 fn in_child(name: &str, body: fn() -> i32) {
     if std::env::var("LIELLA_SEARCH_NOMEM").is_ok_and(|v| v == name) {
-        CSys.exit_group(body());
+        let code = body();
+        CSys.exit_group(if code == 0 { 0 } else { report(code) });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
         .args([name, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])
@@ -134,6 +208,7 @@ fn qsort_body() -> i32 {
     let mut warm = [Rec { key: 2, seq: 0, pad: [0; 2] }, Rec { key: 1, seq: 1, pad: [0; 2] }];
     sx::qsort(warm.as_mut_ptr().cast(), 2, 16, Some(by_key));
     limit_now();
+    tighten();
     sx::qsort(v.as_mut_ptr().cast(), RECS, 16, Some(by_key));
     if !ordered(&v) {
         return 10;
@@ -187,6 +262,7 @@ fn hash_body() -> i32 {
     if sx::hcreate_r(4, Some(&mut t)) == 0 {
         return 13;
     }
+    tighten();
     let mut ret: *mut ENTRY = std::ptr::null_mut();
     let mut entered = 0usize;
     let mut failed = false;
@@ -224,6 +300,7 @@ fn hash_body() -> i32 {
     if sx::hcreate(4) == 0 {
         return 20;
     }
+    tighten();
     let mut global = 0usize;
     for (i, n) in names.iter().enumerate() {
         let r = sx::hsearch(ENTRY { key: n.as_ptr() as usize, data: i + 1 }, ENTER);
@@ -290,6 +367,7 @@ fn tree_body() -> i32 {
     sx::tsearch(std::ptr::addr_of!(keys[0]).cast(), Some(&mut warm), Some(by_value));
     limit_now();
 
+    tighten();
     let mut root: *mut c_void = std::ptr::null_mut();
     let mut inserted = 0usize;
     let mut failed = false;

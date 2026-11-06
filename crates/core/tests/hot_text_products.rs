@@ -71,7 +71,15 @@ const TRUE_BOUND: u64 = 23;
 const LOCALE_BOUND: u64 = 68;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
-const TOOL_BOUND: u64 = 68;
+/// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
+/// fast-path branch on top of origin/next. Skylake-SP host, four trees built at equal-length paths, 5 runs of
+/// this test each, every run identical (tool / locale / startup): origin/next c3424c99 67 / 65 / 18, the
+/// branch's merge base b1f1f9f3 61 / 58 / 18, the branch alone 62 / 59 / 18, the branch on top of
+/// c3424c99 68 / 66 / 19 (CI's longer role path reads one more). The readdir code has no key in the hot
+/// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
+/// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
+/// (66 plus 2), TRUE_BOUND stays 23.
+const TOOL_BOUND: u64 = 71;
 const RUNS: usize = 5;
 
 fn root() -> PathBuf {
@@ -210,6 +218,10 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// its `.S` file) and its `#[cold]` functions (rustc's `.text.unlikely.<f>`) are in the hot group
 /// of `libc.a`. Outside it, they sat in windows that moved with unrelated code (a 0-60 KiB `.text`
 /// pad moved the startup / setlocale / tool counts by 1-3 faults).
+/// HOTTEXT-ASM-ORDER: the string and memory kernels of scan.S and fold.S (each in its own
+/// `.text.<f>` section since then; in plain `.text` they landed after the whole hot group) are
+/// grouped too: strncmp, the memchr entry gates, the strcpy family, memcmp, memmove and memset.
+/// No spec clause (layout of the products).
 #[test]
 fn init_cold_startup_functions_are_grouped() {
     let out = Command::new("readelf").arg("-SW").arg(root().join("target/liella/libc.a")).output().expect("readelf");
@@ -220,12 +232,43 @@ fn init_cold_startup_functions_are_grouped() {
         .filter_map(|a| a.strip_prefix(".text.sorted.h"))
         .filter_map(|a| a.split_whitespace().next())
         .collect();
-    for f in ["liella_machine_set_scan_level", "liella_machine_env_find", "liella_machine_strlen", "liella_machine_vcall3", "15liella_boundary3cpu4init"] {
+    for f in [
+        "liella_machine_set_scan_level",
+        "liella_machine_env_find",
+        "liella_machine_strlen",
+        "liella_machine_vcall3",
+        "15liella_boundary3cpu4init",
+        "liella_machine_strncmp",
+        "liella_machine_memchr_entry",
+        "liella_machine_strcpy",
+        "liella_machine_compare",
+        "liella_machine_memmove",
+        "liella_machine_memset",
+    ] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
         );
     }
+    // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
+    // group the second lookup of a process took 4 more text faults. Which of them keep a section of
+    // their own depends on the profile (the release build inlines region_path, stamp_files and
+    // Table::get into attach's closure), so: every section of one of them is in the group, and at
+    // least two are present.
+    let text: Vec<&str> = sections
+        .lines()
+        .filter_map(|l| l.split_once("] ").map(|(_, a)| a))
+        .filter_map(|a| a.strip_prefix(".text."))
+        .filter_map(|a| a.split_whitespace().next())
+        .collect();
+    let mut seen = 0;
+    for f in ["7NsCache11region_path", "7NsCache6attach", "6Memory10map_shared", "5Table11stamp_files", "5Table3get"] {
+        for s in text.iter().filter(|s| s.contains(f)) {
+            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text.list?)");
+            seen += 1;
+        }
+    }
+    assert!(seen >= 2, "name-service cache attach path: {seen} sections found in libc.a (renamed? update the names above)");
 }
 
 #[test]

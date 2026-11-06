@@ -1,0 +1,12 @@
+{"task": "TIMING-IVB-MALLOC-CHAIN-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: latest-allocation free path timing recorded as the second NEGATIVE (by time) in docs/saturation/04-allocator.md; experiment code reverted to the base, docs-only branch",
+ "branch": "task/timing-ivb-malloc-chain-2", "head": "91c1681b",
+ "gate": {"affected": "n/a (docs only; crates/ equal to base ff125cce); cargo xtask static rc 0 on 91c1681b", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The first run's timing jobs (timing-ivb-malloc-chain-nico, -nico-wl10, -nozomi) ran under ~/bin/timing without ~/bin/jobrun, so the timing hosts have no jobs.tsv rows or logs for them; raw tsv output is still in ~/work/TIMING-IVB-MALLOC-CHAIN/ship/out/ on both hosts. Not rerun: owner ruled, code reverted."],
+ "refused": [],
+ "improvement": "Have the timing-host recipe (handoff/timing-sweep-1105.md 'Stage') spell out the jobrun wrapper around ~/bin/timing, so timing runs leave jobs.tsv rows that verify can read",
+ "next_step": "Land the docs; nothing else open (a zero-cost-on-other-frees variant would be a new, unspecified story)",
+ "report_file": "handoff/TIMING-IVB-MALLOC-CHAIN.md",
+ "jobs": ["keke:timing-ivb-malloc-chain-2-static", "keke:timing-ivb-malloc-chain-2-static2", "keke:timing-ivb-malloc-chain-2-clippy"]}

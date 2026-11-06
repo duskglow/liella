@@ -1,0 +1,12 @@
+{"task": "TIMING-ICONV-TRANSLIT-CPI", "model": "opus", "tokens": null,
+ "result": "per-call transliteration memo in iconv: translit_4k instructions 395,931 -> 190,502 (glibc 458,239); N100 time ratio 1.453 -> 0.522; Ivy Bridge timing not verified",
+ "branch": "task/timing-iconv-translit-cpi", "head": null,
+ "gate": {"affected": "5 suites, 1584 passed / 0 failed", "peak": "2.6G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW decision row number for the memo (s06 decisions file)", "recommendation": "reserve the next D-6.n with ops reserve and replace D-NEW in the plan row, mod.rs comments and the test doc"}],
+ "informational": ["utf16 row unbooked time on the Haswell build host 0.63 -> 0.70 with 43 fewer instructions and its path unchanged; N100 time ratio 0.765", "Ivy Bridge timing run hit the 500 s timeout before the iconv rows (CBENCH_ROWS not applied there)", "timing staging needs root Cargo.toml, crates/ and csys/ too; ~/bin/timing keeps no log"],
+ "refused": [],
+ "jobs": ["timing-iconv-translit-cpi-gate", "timing-iconv-translit-cpi-plants2", "timing-iconv-translit-cpi-count-after", "timing-iconv-translit-cpi-count-before"],
+ "improvement": "the timing staging recipe in handoff/timing-sweep-1105.md should list the root Cargo.toml, crates/ and csys/, and ~/bin/timing should write ~/logs/<label>.log and a jobs.tsv row itself",
+ "next_step": "time the row on Ivy Bridge (booked, timeout over 10 min); reserve D-NEW; saturation-register row",
+ "report_file": "handoff/TIMING-ICONV-TRANSLIT-CPI.md"}

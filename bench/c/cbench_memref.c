@@ -125,7 +125,11 @@ static void find_rows(void)
     for (int pass = 0; pass < 2; pass++) {
         size_t n = pass ? 64 : 4096;
         const char *tag = pass ? "64" : "4k";
-        char *h = malloc(n + 16);
+        /* The haystack starts 16 bytes past a 4096-aligned allocation (STRSTR-SHORT-DENSE-PARITY-3): the
+         * search kernels' alignment prologue follows the start address mod 128, which with malloc's
+         * address moves with the allocator; 16 is malloc's guaranteed alignment and no more. */
+        char *raw = aligned_alloc(4096, 2 * 4096);
+        char *h = raw ? raw + 16 : 0;
         wchar_t *w = malloc((n + 16) * sizeof(wchar_t));
         if (!h || !w)
             abort();
@@ -150,7 +154,7 @@ static void find_rows(void)
         FROW("memmem_miss", { char *x = h, *y = nm_miss; HIDE(x); HIDE(y); acc += (long)memmem(x, n, y, 8); });
         FROW("wcsstr_miss", { wchar_t *x = w, *y = wmiss; HIDE(x); HIDE(y); acc += (long)wcsstr(x, y); });
         FROW("wcsstr_hit", { wchar_t *x = w, *y = whit; HIDE(x); HIDE(y); acc += (long)wcsstr(x, y); });
-        free(h);
+        free(raw);
         free(w);
     }
 }

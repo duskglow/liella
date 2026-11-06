@@ -1,0 +1,12 @@
+{"task": "PERF-READDIR-ENTRY-5", "model": "opus", "tokens": null,
+ "result": "fast-skips-record survivor explained (fast path only runs in a Liella-started single-threaded program) and covered by a new fstree oracle section (900 varied-length names, readdir vs raw getdents64); gate and plants2 running on mei at hand-back",
+ "branch": "task/perf-readdir-entry-5", "head": "see hand-back",
+ "gate": {"affected": "running at hand-back (perf-readdir-entry-5-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["s13_filesystem_clauses s13_8_c_0 failed once (kernel getcwd ENOENT at s13_filesystem_clauses.rs:325) in the perf-readdir-entry-5-plants baseline on an unplanted tree; it passed 5 times in run 4. Suspected cross-test working-directory race in the threaded suite; plants2 runs that suite with --test-threads=1. Needs its own story (no flakes rule)."],
+ "refused": [],
+ "jobs": ["mei:perf-readdir-entry-5-gate", "mei:perf-readdir-entry-5-plants2"],
+ "superseded": ["mei:perf-readdir-entry-5-plants (rc 2: baseline hit the s13_8_c_0 getcwd ENOENT, no plant ran)"],
+ "improvement": "plants for code reached only from Liella-started programs must include a product rebuild and an oracle/conformance test; a plants template should say so",
+ "next_step": "if gate and plants2 are rc 0, CI; then a story for the s13_8_c_0 cwd race; HOTTEXT-ASM-ORDER as before",
+ "report_file": "handoff/PERF-READDIR-ENTRY.md"}

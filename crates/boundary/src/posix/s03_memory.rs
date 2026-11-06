@@ -11,6 +11,7 @@ use liella_abi::ctypes::{c_int, c_void, size_t};
 use liella_abi::layout::{struct_mallinfo, struct_mallinfo2, struct_obstack, FILE};
 use liella_legacy::malloc_compat;
 use liella_legacy::obstack;
+use liella_rt::heap::{Fit, Held};
 
 use crate::caller_alloc;
 use crate::conv;
@@ -57,12 +58,33 @@ pub extern "C" fn __libc_calloc(k: size_t, n: size_t) -> *mut c_void {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn realloc(p: *mut c_void, n: size_t) -> *mut c_void {
-    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+    match heap::c_realloc_fit(conv::addr(p), n) {
+        Fit::Same(_) => p,
+        Fit::Held(h) => realloc_held(p, n, h),
+        Fit::Other => realloc_general(p, n),
+    }
 }}
+
+/// `realloc` of a block the in-place test found and that moves (REALLOC-ONE-LOOKUP: not looked
+/// up again).
+#[inline(never)]
+fn realloc_held(p: *mut c_void, n: size_t, h: Held) -> *mut c_void {
+    ret::null(heap::checked("realloc", heap::c_realloc_held(conv::addr(p), n, h)))
+}
+
+/// `realloc` past the in-place test: `NULL`, size 0, debugging, large blocks and misuse.
+#[inline(never)]
+fn realloc_general(p: *mut c_void, n: size_t) -> *mut c_void {
+    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __libc_realloc(p: *mut c_void, n: size_t) -> *mut c_void {
-    ret::null(heap::checked("realloc", heap::c_realloc(conv::addr(p), n)))
+    match heap::c_realloc_fit(conv::addr(p), n) {
+        Fit::Same(_) => p,
+        Fit::Held(h) => realloc_held(p, n, h),
+        Fit::Other => realloc_general(p, n),
+    }
 }}
 
 export! { "GLIBC_2.26";

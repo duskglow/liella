@@ -16,6 +16,7 @@ use liella::mem::TryVec;
 use liella::num::float::{self, Float, Format, Rounding, Value};
 use liella::num::format::{Case, Spec, Style};
 use liella::printf::{self as pf, Call, Class, Conv, Count, Flags, Len, Unit};
+use liella_abi::ctypes::wchar_t;
 use liella_abi::layout::struct_printf_info;
 
 use crate::lock::SpinLock;
@@ -314,10 +315,10 @@ impl Info {
         struct_printf_info {
             prec: self.prec,
             width: self.width,
-            spec: i32::from_ne_bytes(self.spec.to_ne_bytes()),
+            spec: wchar_t::from_ne_bytes(self.spec.to_ne_bytes()),
             is_long_double: self.bits.to_le_bytes(),
             user: self.user,
-            pad: i32::from_ne_bytes(self.pad.to_ne_bytes()),
+            pad: wchar_t::from_ne_bytes(self.pad.to_ne_bytes()),
         }
     }
 

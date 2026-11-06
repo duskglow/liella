@@ -399,6 +399,11 @@ impl Locale {
         }
     }
 
+    /// Whether `strcoll` here is a plain byte comparison (the C and C.UTF-8 locales).
+    pub fn collates_by_bytes(&self) -> bool {
+        matches!(self.collation, Collation::CodePoint)
+    }
+
     /// Compare byte strings as `strcoll` does in this locale (D-4.18).
     pub fn compare_bytes(&self, a: &[u8], b: &[u8]) -> core::cmp::Ordering {
         match &self.collation {
@@ -934,7 +939,8 @@ mod tests {
 
     /// D-7.13: a locale view's wide class tests, case maps and widths equal the per-call reads
     /// (`wclasses`, `wtrans`, `display_width`: the oracle), and so does the masked `is_w`, for
-    /// every code point below 0x30000 and the edge values, in C, C.UTF-8 and compiled UTF-8,
+    /// every code point through U+10FFFF (and 0x110000) and the edge values (PERF-WCTYPE-ENUS: the
+    /// inline hit paths of `isw` and `wtrans`), in C, C.UTF-8 and compiled UTF-8,
     /// Latin-1 and EUC-JP locales. This covers the view's U+0000..U+00FF table (WCTYPE-LOCALE)
     /// against the table walk for all 256 entries, every one-bit mask and mixed masks.
     #[test]
@@ -952,7 +958,7 @@ mod tests {
             let v = LocaleView::new(*l, 7, &|_, _| None).unwrap();
             assert_eq!(v.handle(), 7);
             assert!(*v.locale() == *l, "{what}: locale");
-            for c in (0..0x3_0000u32).chain([0x10_ffff, 0x11_0000, 0x7fff_ffff, 0xffff_ffff]) {
+            for c in (0..=0x11_0000u32).chain([0x7fff_ffff, 0xffff_ffff]) {
                 let all = ctype::wclasses(c, l);
                 for &m in &masks {
                     let want = all.intersects(m);

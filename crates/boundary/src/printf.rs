@@ -310,6 +310,10 @@ fn format_routed<O: Out<u8>>(fmt: &[u8], flag: i32, ap: usize, route: pf::Planne
         if let Some(r) = render_lone(fmt, &plan, ap, out) {
             return r;
         }
+    } else if plan.is_pair() {
+        if let Some(r) = render_pair_s(fmt, &plan, ap, out) {
+            return r;
+        }
     }
     render_plan(fmt, &plan, ap, out)
 }
@@ -373,6 +377,101 @@ fn render_lone<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out: 
         return Some(Ok(n));
     }
     None
+}
+
+/// A [`pf::SimpleFormat::pair_s`] plan (ls -l's `"%s %*s "`): the text before, the first string, the text between, the
+/// second string in its field, the text after, as render_simple writes them, without its conversion loop
+/// (SPRINTF-CHK-NLINK); `None` for any other plan.
+#[inline(always)]
+fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out: &mut O) -> Option<KResult<usize>> {
+    const SPACES: [u8; 16] = [b' '; 16];
+    let p = plan.pair_s()?;
+    let text = |raw: u64| -> &'static [u8] {
+        let addr = usize::try_from(raw).unwrap_or(0);
+        if addr == 0 { b"(null)" } else { conv::printf_text(addr, None) }
+    };
+    let s0 = text(liella_abi::va::VaSource::int(&mut CVa(ap)));
+    let star_arg = if p.star { liella_abi::va::VaSource::int(&mut CVa(ap)) } else { 0 };
+    let s1 = text(liella_abi::va::VaSource::int(&mut CVa(ap)));
+    let (width, left) = p.field(star_arg);
+    let fill = width.saturating_sub(s1.len());
+    let (head, mid, tail) = (fmt.get(..p.at0)?, fmt.get(p.after0..p.at1)?, fmt.get(p.after1..)?);
+    let n = head.len().saturating_add(s0.len()).saturating_add(mid.len()).saturating_add(s1.len().max(width)).saturating_add(tail.len());
+    // The result is an `int` (D-12.5).
+    let fits_int = n <= usize::try_from(i32::MAX).unwrap_or(usize::MAX);
+    // The whole result fits the sink (sprintf into a large enough buffer): the pieces written in
+    // place, the same bytes in the same order as the `put`s below, without a call per piece.
+    if fits_int {
+        if let Some(mut rest) = out.room(n) {
+            place(&mut rest, head);
+            place(&mut rest, s0);
+            place(&mut rest, mid);
+            if left {
+                place(&mut rest, s1);
+            }
+            pad(&mut rest, fill);
+            if !left {
+                place(&mut rest, s1);
+            }
+            place(&mut rest, tail);
+            return Some(Ok(n));
+        }
+    }
+    let mut put = |piece: &[u8]| {
+        if !piece.is_empty() {
+            out.put(piece);
+        }
+    };
+    put(head);
+    put(s0);
+    put(mid);
+    // The string first when left-justified; the padding (at most 16 bytes a write) around it.
+    if left {
+        put(s1);
+    }
+    let mut rest = fill;
+    while rest > 0 {
+        let k = rest.min(SPACES.len());
+        put(SPACES.get(..k).unwrap_or(&[]));
+        rest = rest.saturating_sub(k);
+    }
+    if !left {
+        put(s1);
+    }
+    put(tail);
+    if !fits_int {
+        return Some(Err(Errno::EOVERFLOW));
+    }
+    Some(Ok(n))
+}
+
+/// Copy `piece` to the front of `*rest` and keep what follows it (render_pair_s's in-place
+/// write; the room was sized to hold every piece, so the split always succeeds). The format's
+/// text between conversions and a link count are 0-2 bytes: those are stored directly, one
+/// length test each, instead of going through mem::copy's size steps (PARITY-SPRINTF-CHK-LS-2).
+#[inline(always)]
+fn place(rest: &mut &mut [u8], piece: &[u8]) {
+    let Some((d, after)) = core::mem::take(rest).split_at_mut_checked(piece.len()) else { return };
+    match (d, piece) {
+        ([], []) => {}
+        ([d0], [s0]) => *d0 = *s0,
+        ([d0, d1], [s0, s1]) => (*d0, *d1) = (*s0, *s1),
+        (d, piece) => liella::mem::copy(d, piece),
+    }
+    *rest = after;
+}
+
+/// Fill the first `k` bytes of `*rest` with spaces and keep what follows (render_pair_s's
+/// padding; usually 0 or 1 byte for a link count, stored directly).
+#[inline(always)]
+fn pad(rest: &mut &mut [u8], k: usize) {
+    let Some((d, after)) = core::mem::take(rest).split_at_mut_checked(k) else { return };
+    match d {
+        [] => {}
+        [d0] => *d0 = b' ',
+        d => liella::mem::fill(d, b' '),
+    }
+    *rest = after;
 }
 
 /// Render the simple format `fmt`, `plan` being what `pf::simple_into` made of it, its
@@ -745,6 +844,20 @@ impl Out<u8> for ToBuffer {
             return;
         }
         self.put_rest(s);
+    }
+
+    /// The same test as [`Out::put`]'s common case, for all `n` bytes at once: `None` when they
+    /// would reach the terminator's byte or pass the fortified size (the caller's `put`s then
+    /// take the piece-by-piece path and its checks).
+    #[inline]
+    fn room(&mut self, n: usize) -> Option<&mut [u8]> {
+        let end = self.pos.saturating_add(n);
+        if end < self.max && end <= self.slen {
+            let dst = conv::out_bytes(self.addr.wrapping_add(self.pos), n);
+            self.pos = end;
+            return Some(dst);
+        }
+        None
     }
 }
 

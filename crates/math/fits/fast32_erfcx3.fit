@@ -1,0 +1,11 @@
+# LIBM-F32-ERF (D-10.3): erfcx = erfc(x)·e^(x²) on [27/8, 81/16], piece 3 of the `float` erfc kernel
+# (pieces grow by 3/2 up to 243/32, then 37/4: erfc x is below 2^-126 beyond 9.19). Centred on the
+# midpoint; degree 15 from trial fits (degree 12 lost 2^3.5 per piece, 2^-45 by the fourth).
+name = fast32_erfcx3
+target = erfcx
+interval = -27/32, 27/32
+shift = 135/32
+powers = 0..15
+error = relative
+format = f64
+output = crates/math/src/coeffs/fast32_erfcx3.rs

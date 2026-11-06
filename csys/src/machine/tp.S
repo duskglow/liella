@@ -1,6 +1,6 @@
 /* Class machine: thread-pointer read (FS base). x86_64 TLS ABI: the word at %fs:0 holds the
  * thread pointer itself (spec Appendix A.2, KERN/ABI). */
-	.text
+	.section .text.liella_machine_tp,"ax",@progbits
 	.globl liella_machine_tp
 	.hidden liella_machine_tp
 	.type liella_machine_tp, @function

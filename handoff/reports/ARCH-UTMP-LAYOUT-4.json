@@ -1,0 +1,4 @@
+{"task": "ARCH-UTMP-LAYOUT-4", "model": "sonnet", "tokens": null, "result": "merged next; gate, plants, lint all rc 0", "branch": "task/arch-utmp-layout-4", "head": "10df409f",
+ "gate": {"affected": "FULL tier green (rc 0)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": [], "refused": [], "jobs": ["arch-utmp-layout-4-gate","arch-utmp-layout-4-plants","arch-utmp-layout-4-lint"],
+ "improvement": "jobrun runs in the foreground over ssh; chaining three jobrun calls in one ssh call serialises them and outlives the tool timeout", "next_step": "land the branch", "report_file": "handoff/ARCH-UTMP-LAYOUT.md"}

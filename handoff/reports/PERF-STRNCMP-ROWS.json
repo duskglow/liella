@@ -1,0 +1,5 @@
+{"task": "PERF-STRNCMP-ROWS", "model": "sonnet", "tokens": null, "result": "strncmp rows to glibc parity: 36.1/36.1/47.1 -> 34.0/34.0/42.1 instructions (glibc 34/34/43)", "branch": "task/perf-strncmp-rows", "head": "4f01a90f",
+"gate": {"affected": "see PERF-STRNCMP-ROWS-gate in jobs.tsv", "peak": null}, "accepted_first_attempt": null,
+"rulings": [], "informational": ["time ratio not re-measured (no timing booking)"], "refused": [],
+"jobs": ["PERF-STRNCMP-ROWS-gate","PERF-STRNCMP-ROWS-plants","PERF-STRNCMP-ROWS-counts-before","PERF-STRNCMP-ROWS-counts-after","PERF-STRNCMP-ROWS-static"],
+"improvement": "jobrun blocks the caller until the job runs; a note in the brief to start it detached would save a killed call", "next_step": "CI instruction check on keke", "report_file": "handoff/PERF-STRNCMP-ROWS.md"}

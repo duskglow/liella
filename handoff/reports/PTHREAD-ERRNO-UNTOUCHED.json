@@ -1,0 +1,11 @@
+{"task": "PTHREAD-ERRNO-UNTOUCHED", "model": "opus", "tokens": null,
+ "result": "s22_n_2 tested: new conformance program s22_errno (errno sentinel across 8 pthread calls, sem_trywait -1/EAGAIN); glibc probe matches; gate green; both plants CAUGHT",
+ "branch": "task/pthread-errno-untouched", "head": "6859810e",
+ "gate": {"affected": "1 test target + 1 conformance program passed / 0 failed", "peak": "1.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["plants CAUGHT with WARN-NO-MSG: xtask affected does not print a failing conformance program's stderr"],
+ "refused": [],
+ "jobs": ["pthread-errno-untouched-gate", "pthread-errno-untouched-plants"],
+ "improvement": "xtask affected should print the stderr tail of a failing conformance program, so plant msg checks and red diagnoses work",
+ "next_step": "CI / landing",
+ "report_file": "handoff/pthread-errno-untouched.md"}

@@ -21,6 +21,9 @@ use core::f64::consts::LN_2;
 use crate::coeffs::tables as t;
 use crate::dd;
 use crate::elem;
+use crate::fast_gamma;
+use crate::fast_bessel;
+use crate::fast_special;
 use crate::float::{self, Exact, Float, Kind, Num};
 use crate::mp::{self, c, decided, ex, Arith, Bounded, Mp};
 use crate::mpw;
@@ -88,6 +91,13 @@ fn erf_mp(x: Mp) -> Mp {
     c(&t::MP_TWO_OVER_SQRT_PI).mul(x).mul(e).mul(sum)
 }
 
+/// `erf a` and `1 − erf a` for `0 < a < 10` at 384 bits (the `float` oracle's bound test).
+#[cfg(test)]
+pub(crate) fn erf_erfc_mp(a: f64) -> (Mp, Mp) {
+    let e = erf_mp(Mp::from_f64(a));
+    (e, Mp::from_i64(1).sub(e))
+}
+
 /// `erfc a` for `a >= 10` by the continued fraction, evaluated from depth `n` up: the depth
 /// needed falls with `a` (the tail's influence decays like `e^(−2a√(2n))`).
 fn erfc_cf(x: Mp) -> Mp {
@@ -116,8 +126,33 @@ fn erfc_cf_min<F: Float>() -> f64 {
     if F::PREC > 64 { 6.0 } else { 10.0 }
 }
 
-/// `erf(x)`.
+/// The `double` operand `x` (`F::PREC == 53` only).
+fn as_f64<F: Float>(x: F) -> f64 {
+    f64::from_bits(x.to_bits() as u64)
+}
+
+/// The fast tier's `double` result as `F` (`F::PREC == 53` only), counted for the fallback-rate
+/// tests (`crate::stats`).
+fn from_fast<F: Float>(name: &'static str, r: Option<(f64, Status)>) -> Option<(F, Status)> {
+    crate::stats::record(name, r.is_some());
+    r.map(|(v, st)| (F::from_bits(u128::from(v.to_bits())), st))
+}
+
+/// `erf(x)`: for `double` the fast tier ([`crate::fast_special`]) first, then [`erf_accurate`].
 pub fn erf<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("erf", fast_special::erf(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    erf_accurate(x, mode)
+}
+
+/// `erf(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn erf_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
@@ -135,8 +170,23 @@ pub fn erf<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     mp::round(signed(erf_mp(a.v), n.neg), mode)
 }
 
-/// `erfc(x)`.
+/// `erfc(x)`: for `double` the fast tier ([`crate::fast_special`]) first, then [`erfc_accurate`].
 pub fn erfc<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        // Finite, 2^-100 <= |x| (below, erfc x is 1 to the last place) and x below the fast
+        // range's end (erfc(−∞) = 2 is exact: the accurate path's).
+        if xf.is_finite() && dd::abs(xf) >= f64::from_bits(0x39b0_0000_0000_0000) && xf < fast_special::ERFC_MAX {
+            if let Some(r) = from_fast("erfc", fast_special::erfc(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    erfc_accurate(x, mode)
+}
+
+/// `erfc(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn erfc_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
@@ -229,12 +279,28 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     }
     // Γ(x) = π / (sin(πx) Γ(1 − x)).
     let s = sin_pi(x);
-    let lg = mp::ln_atanh(mp::pi()).sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
+    let lg = mp::ln_pi().sub(mp::ln_atanh(s.abs())).sub(lgamma_pos(Mp::from_i64(1).sub(x)));
     (lg, if s.neg { -1 } else { 1 })
 }
 
-/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1).
+/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1): for `double` the fast tier
+/// ([`crate::fast_gamma`]) first, then [`lgamma_accurate`].
 pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if fast_gamma::domain(xf, false) && xf != 1.0 && xf != 2.0 {
+            let r = fast_gamma::lgamma(xf, mode);
+            crate::stats::record("lgamma", r.is_some());
+            if let Some(((v, st), sign)) = r {
+                return ((F::from_bits(u128::from(v.to_bits())), st), sign);
+            }
+        }
+    }
+    lgamma_accurate(x, mode)
+}
+
+/// `lgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn lgamma_accurate<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return (r, 1);
@@ -255,8 +321,21 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     (mp::round(lg, mode), sign)
 }
 
-/// `tgamma(x)`.
+/// `tgamma(x)`: for `double` the fast tier ([`crate::fast_gamma`]) first, then [`tgamma_accurate`].
 pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if fast_gamma::domain(xf, true) {
+            if let Some(r) = from_fast("tgamma", fast_gamma::tgamma(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    tgamma_accurate(x, mode)
+}
+
+/// `tgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+pub fn tgamma_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
         return r;
@@ -592,6 +671,14 @@ fn bessel01(a: &Arg, want_y: bool) -> [Mp; 4] {
     [j0.v, j1.v, y0.v, y1.v]
 }
 
+/// `[J_0(x), J_1(x), Y_0(x), Y_1(x)]` of a positive `float` as double-doubles (the reference of
+/// the `float` fast path's bound test, LIBM-F32-BESSEL).
+#[cfg(test)]
+pub(crate) fn bessel01_dd(x: f32) -> [dd::Dd; 4] {
+    let d = float::decode(x);
+    bessel01(&Arg::of(&d), true).map(mp_to_dd)
+}
+
 /// The double-double value of an `Mp` within the `f64` range.
 fn mp_to_dd(m: Mp) -> dd::Dd {
     let hi = m.to_f64();
@@ -753,23 +840,99 @@ fn ln_mp(v: Mp) -> f64 {
     ln_est(Mp { neg: false, exp: 0, m: v.m }.to_f64()) + v.exp as f64 * LN_2
 }
 
-/// `j0(x)`.
+/// `j0(x)`: `float` takes its fast path first (LIBM-F32-BESSEL), `double` the fast tier
+/// ([`crate::fast_bessel`]); then [`j0_accurate`].
 pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J0, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("j0", fast_bessel::j0(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    j0_accurate(x, mode)
+}
+
+/// `j0(x)` by the 384-bit path alone (the fast paths' fallback and their tests' reference).
+pub fn j0_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     jn(0, x, mode)
 }
 
-/// `j1(x)`.
+/// `j1(x)`: `float` takes its fast path first (LIBM-F32-BESSEL), `double` the fast tier
+/// ([`crate::fast_bessel`]); then [`j1_accurate`].
 pub fn j1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J1, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf.is_finite() && xf != 0.0 {
+            if let Some(r) = from_fast("j1", fast_bessel::j1(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    j1_accurate(x, mode)
+}
+
+/// `j1(x)` by the 384-bit path alone (the fast paths' fallback and their tests' reference).
+pub fn j1_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     jn(1, x, mode)
 }
 
-/// `y0(x)`.
+/// `y0(x)`: `float` takes its fast path first (LIBM-F32-BESSEL), `double` the fast tier
+/// ([`crate::fast_bessel`]); then [`y0_accurate`].
 pub fn y0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y0, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf > 0.0 && xf.is_finite() {
+            if let Some(r) = from_fast("y0", fast_bessel::y0(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    y0_accurate(x, mode)
+}
+
+/// `y0(x)` by the 384-bit path alone (the fast paths' fallback and their tests' reference).
+pub fn y0_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     yn(0, x, mode)
 }
 
-/// `y1(x)`.
+/// `y1(x)`: `float` takes its fast path first (LIBM-F32-BESSEL), `double` the fast tier
+/// ([`crate::fast_bessel`]); then [`y1_accurate`].
 pub fn y1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y1, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
+    if F::PREC == 53 {
+        let xf = as_f64(x);
+        if xf > 0.0 && xf.is_finite() {
+            if let Some(r) = from_fast("y1", fast_bessel::y1(xf, mode)) {
+                return r;
+            }
+        }
+    }
+    y1_accurate(x, mode)
+}
+
+/// `y1(x)` by the 384-bit path alone (the fast paths' fallback and their tests' reference).
+pub fn y1_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     yn(1, x, mode)
 }
 

@@ -1,0 +1,12 @@
+{"task": "PERF-MEMSET-4K-4", "model": "opus", "tokens": null,
+ "result": "memset ERMS path: 64-byte-aligned d runs rep stosb from d (own instructions 28 -> 20 counted, about 41 -> 33 per call aligned, unaligned unchanged; NOT MEASURED on an ERMS host); Zen 1 memset_4k measured 238 vs glibc 250 (0.95); -3 plants red fixed by a new label and RAM dir",
+ "branch": "task/perf-memset-4k-4", "head": "92265e31",
+ "gate": {"affected": "10199 passed / 0 failed", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["ERMS-path counts are from the code: the role host (Zen 1) has no ERMS and tunables cannot enable it, so the product's rep stosb path cannot be counted there", "1.05 at unaligned d needs rep stosb from an unaligned start (about 31 per call): needs a timing booking on an Intel ERMS host first", "gate printed 2 SKIPPED lines (capability absent), not from this change"],
+ "refused": [],
+ "jobs": ["perf-memset-4k-4-lint", "perf-memset-4k-4-gate", "perf-memset-4k-4-plants", "perf-memset-4k-4-percall", "perf-memset-4k-4-trace"],
+ "improvement": "jobrun blocks the ssh while queued and a queued count job holds the role against sync_role: a queued job should not count as running in the role",
+ "next_step": "count memset_4k on an ERMS host (and &m1105 % 64), then time unaligned-start rep stosb on a booked Intel ERMS host",
+ "report_file": "handoff/PERF-MEMSET-4K-4.md"}

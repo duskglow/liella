@@ -1,0 +1,10 @@
+# XTASK-PLANTS-TRACKED-COPY-2 plants (cargo xtask plants; docs/plants.md). Run with --dir under /dev/shm on the Zen 1 host:
+# the baselines of p-nscache-bind and p-nscache-exists (products suites in a /dev/shm copy) are themselves the proof that
+# nscache_mode.sh binds the copy back and leaves a not-yet-existing /dev/shm scratch path to the private /dev/shm.
+p-copy-check | xtask/src/plants.rs | lit:paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err()) ==> paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err() && false) | cargo test -p xtask -- plants::tests | msg:a_tracked_path_missing_from_the_copy_refuses_the_run.*FAILED
+p-ls-others | xtask/src/plants.rs | lit:"ls-files", "-z", "--cached", "--others", "--exclude-standard" ==> "ls-files", "-z", "--cached", "--exclude-standard" | cargo test -p xtask -- plants::tests | msg:every_tracked_path_of_an_unusual_kind_is_copied.*FAILED
+p-entry-secs | xtask/src/affected.rs | lit:entry_secs.iter().find(|(s, _)| t.sections.contains(s)) ==> entry_secs.iter().find(|(s, _)| t.sections.contains(s) && false) | cargo test -p xtask -- affected::tests::direct_tier | msg:direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches.*FAILED
+p-entry-reach | xtask/src/affected.rs | lit:entry_secs.insert(s, format! ==> entry_secs.remove(&s).unwrap_or(format! | cargo test -p xtask -- affected::tests::direct_tier | msg:direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches.*FAILED
+p-plants-leaf | xtask/src/affected.rs | lit:("xtask/src/plants.rs", &[]), ==> | cargo test -p xtask -- affected::tests::a_plants_change | msg:a_plants_change_selects_exactly_the_xtask_tests_and_clippy.*(FAILED|panicked)
+p-nscache-bind | crates/core/tests/oracle/nscache_mode.sh | lit:for n in $k; do ==> for n in ; do | cargo test -p liella --test catalogs_products | msg:cannot open .*catalogs_run.sh
+p-nscache-exists | crates/core/tests/oracle/nscache_mode.sh | lit:[ -d "/proc/$$/fd/3/$n" ] || continue; ==> | cargo test -p liella --test aio_products -- aio_equals_the_reference_allow_off | msg:special device /proc/.*/fd/3/liella-aio-.* does not exist

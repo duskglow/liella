@@ -3,11 +3,411 @@
 // Once a file contains specified tests, `cargo xtask stubs` stops rewriting it and only checks coverage.
 
 //! Clause tests for spec §28 (5 clauses).
+#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::as_conversions, clippy::panic, clippy::indexing_slicing, clippy::expect_used, missing_docs)]
 
-use spectest::clause;
+#[path = "support/oracle.rs"]
+mod oracle;
+#[path = "support/skip_note.rs"]
+mod skip_note;
+#[path = "support/timeout.rs"]
+mod timeout;
 
-clause!(s28_1_c_1, "28.1", "Contract", r##"**`monstartup(lowpc, highpc)`** allocates histogram and arc tables for a text range and starts PC sampling. `_mcleanup` writes `gmon.out` (or `$GMON_OUT_PREFIX.<pid>`) at exit."##);
-clause!(s28_1_c_2, "28.1", "Contract", r##"**`mcount`/`_mcount`** is called at every function entry of `-pg` code and records the call arc."##);
-clause!(s28_1_c_3, "28.1", "Contract", r##"**`profil(buf, size, offset, scale)`** samples the PC into a histogram on every `ITIMER_PROF` tick. **`sprofil`** takes multiple regions."##);
-clause!(s28_1_c_4, "28.1", "Contract", r##"**`__cyg_profile_func_enter/_exit`** are empty hooks called by `-finstrument-functions` code, for the application to interpose."##);
-clause!(s28_3_c_0, "28.3", "Contract", r##"`__fentry__` is the profiling counter call that `-pg -mfentry` code makes before the function prologue; it records the call arc as `mcount` does (§28.1). The others are covered in their sections."##);
+use core::ffi::c_int;
+use std::sync::atomic::{AtomicU16, AtomicU32, Ordering::Relaxed};
+use std::time::{Duration, Instant};
+
+use liella_boundary::posix::{s20_signals as sg, s23_time as tm, s28_profiling as pr};
+use liella_kernel::uapi::{Itimerval, SigSet, SIGPROF};
+use liella_legacy::signal_compat::CSigaction;
+
+
+const ITIMER_PROF: c_int = 2;
+/// One counter per 4 bytes of text (0x10000 would be one per 2 bytes).
+const SCALE: u32 = 0x8000;
+/// The histogram starts this far below `spin`, so a wrong bucket formula moves `spin`'s samples
+/// to other counters of the same buffer instead of dropping them.
+const BELOW: usize = 0x4000;
+/// Counters in the buffer that covers `spin` (64 KiB of text at `SCALE`).
+const NBUF: usize = 0x4000;
+/// `spin`'s code lies within this many bytes of its address.
+const SPAN: usize = 1024;
+/// Iterations between two looks at the histogram.
+const CHUNK: u64 = 2_000_000;
+
+static HITS0: AtomicU32 = AtomicU32::new(0);
+static HITS1: AtomicU32 = AtomicU32::new(0);
+extern "C" fn count0(_: c_int) {
+    HITS0.fetch_add(1, Relaxed);
+}
+extern "C" fn count1(_: c_int) {
+    HITS1.fetch_add(1, Relaxed);
+}
+
+/// The profiled code: a loop of plain arithmetic, no calls and no system calls.
+#[inline(never)]
+fn spin(n: u64) -> u64 {
+    let mut a = 0u64;
+    let mut i = 0u64;
+    while i < n {
+        a = std::hint::black_box(a.wrapping_add(i));
+        i += 1;
+    }
+    a
+}
+
+fn addr_of_spin() -> usize {
+    spin as fn(u64) -> u64 as usize
+}
+fn addr(h: extern "C" fn(c_int)) -> usize {
+    h as usize
+}
+
+fn counters(n: usize) -> Vec<AtomicU16> {
+    (0..n).map(|_| AtomicU16::new(0)).collect()
+}
+fn snapshot(buf: &[AtomicU16]) -> Vec<u16> {
+    buf.iter().map(|c| c.load(Relaxed)).collect()
+}
+
+/// Samples in the buckets whose text (bucket `i` covers `2 * 65536 / scale` bytes from
+/// `off + i * 2 * 65536 / scale`) meets `[spin, spin + SPAN)`, the samples elsewhere, and the
+/// first non-zero buckets.
+fn tally(buf: &[AtomicU16], off: usize, scale: u32) -> (u64, u64, Vec<(usize, u16)>) {
+    let width = (2 * 65536) / usize::try_from(scale).unwrap();
+    let (lo, hi) = (addr_of_spin(), addr_of_spin() + SPAN);
+    let (mut inside, mut outside, mut seen) = (0, 0, Vec::new());
+    for (i, c) in buf.iter().enumerate() {
+        let v = c.load(Relaxed);
+        if v == 0 {
+            continue;
+        }
+        let start = off + i * width;
+        if start < hi && start + width > lo {
+            inside += u64::from(v);
+        } else {
+            outside += u64::from(v);
+        }
+        if seen.len() < 8 {
+            seen.push((i, v));
+        }
+    }
+    (inside, outside, seen)
+}
+
+/// Spin until `want` samples fall in `spin`'s buckets; returns the iterations spent. A fixed
+/// iteration budget per look; the clock only bounds a hang.
+fn spin_until(what: &str, buf: &[AtomicU16], off: usize, want: u64) -> u64 {
+    let start = Instant::now();
+    let deadline = timeout::deadline(Duration::from_secs(10));
+    let mut n = 0;
+    loop {
+        spin(CHUNK);
+        n += CHUNK;
+        let (inside, outside, seen) = tally(buf, off, SCALE);
+        if inside >= want {
+            assert!(inside > outside, "{what}: most samples land in spin's buckets: inside {inside}, outside {outside}, {seen:?}");
+            return n;
+        }
+        if Instant::now() > deadline {
+            let spin_bucket = (addr_of_spin() - off) / 4;
+            panic!(
+                "{what}: no samples in spin's buckets (from {spin_bucket}): inside {inside}, outside {outside}, non-zero {seen:?}; {}",
+                timeout::expired("profil sampling", 10, start.elapsed())
+            );
+        }
+    }
+}
+
+fn itimer() -> Itimerval {
+    let mut it = Itimerval::default();
+    assert_eq!(tm::getitimer(ITIMER_PROF, Some(&mut it)), 0);
+    it
+}
+fn disposition() -> usize {
+    let mut old = CSigaction::new(0, SigSet::empty(), 0);
+    assert_eq!(sg::sigaction(SIGPROF, None, Some(&mut old)), 0);
+    old.handler
+}
+fn assert_stopped(what: &str, handler: usize) {
+    assert_eq!(itimer(), Itimerval::default(), "{what}: ITIMER_PROF is disarmed");
+    assert_eq!(disposition(), handler, "{what}: the SIGPROF action from before profiling is back");
+}
+/// After a stop: spin `n` more iterations; no counter moves and no SIGPROF arrives.
+fn assert_quiet(what: &str, bufs: &[&[AtomicU16]], n: u64) {
+    let before: Vec<Vec<u16>> = bufs.iter().map(|b| snapshot(b)).collect();
+    let hits = (HITS0.load(Relaxed), HITS1.load(Relaxed));
+    spin(n);
+    let after: Vec<Vec<u16>> = bufs.iter().map(|b| snapshot(b)).collect();
+    assert!(before == after, "{what}: the histogram is unchanged after the stop");
+    assert_eq!((HITS0.load(Relaxed), HITS1.load(Relaxed)), hits, "{what}: no SIGPROF after the stop");
+}
+
+/// The caller's `struct prof` (`<sys/profil.h>`): base, size in bytes, offset, scale.
+#[repr(C)]
+struct Region {
+    base: usize,
+    size: usize,
+    off: usize,
+    scale: u64,
+}
+
+/// §28.1 Contract: **`profil(buf, size, offset, scale)`** samples the PC into a histogram on every `ITIMER_PROF` tick. **`sprofil`** takes multiple regions.
+#[test]
+fn s28_1_c_3() {
+    // Probe of glibc 2.39 (PROFIL-SIGPROF-HISTOGRAM): profil arms ITIMER_PROF at 10 ms with its own
+    // SIGPROF action; profil(NULL, ...) and sprofil(NULL, 0, ...) disarm it and restore the action
+    // that was there before; a stop while idle changes nothing.
+    assert_eq!(sg::signal(SIGPROF, addr(count0)), 0, "SIGPROF starts at SIG_DFL");
+    let spin_at = addr_of_spin();
+    let off = spin_at - BELOW;
+
+    // profil: spin's samples land in the buckets that the offset and scale map spin to.
+    let buf = counters(NBUF);
+    assert_eq!(pr::profil(buf.as_ptr().cast::<u16>().cast_mut(), NBUF * 2, off, SCALE), 0);
+    assert_ne!(itimer().interval.usec, 0, "profil arms ITIMER_PROF");
+    assert_ne!(disposition(), addr(count0), "profil installs its own SIGPROF action");
+    let n = spin_until("profil", &buf, off, 3);
+    assert_eq!(HITS0.load(Relaxed), 0, "the caller's handler is out while profil samples");
+
+    // profil(NULL, 0, 0, 0) stops: timer disarmed, the caller's action back, nothing more counted.
+    assert_eq!(pr::profil(core::ptr::null_mut(), 0, 0, 0), 0);
+    assert_stopped("profil stop", addr(count0));
+    let quiet = (2 * n).max(25 * CHUNK);
+    assert_quiet("profil stop", &[&buf], quiet);
+
+    // A handler the caller installs after the stop stays installed through another stop.
+    assert_eq!(sg::signal(SIGPROF, addr(count1)), addr(count0));
+    assert_eq!(pr::profil(core::ptr::null_mut(), 0, 0, 0), 0);
+    assert_stopped("second profil stop", addr(count1));
+    assert_quiet("second profil stop", &[&buf], quiet);
+
+    // sprofil with two regions: the first covers the text just below the second, the second
+    // covers spin; a sample goes to the region whose range holds the pc.
+    for round in ["sprofil", "sprofil again"] {
+        let low = counters(NBUF / 4);
+        let high = counters(NBUF);
+        let regions = [
+            Region { base: low.as_ptr().addr(), size: NBUF / 2, off: off - BELOW, scale: u64::from(SCALE) },
+            Region { base: high.as_ptr().addr(), size: NBUF * 2, off, scale: u64::from(SCALE) },
+        ];
+        assert_eq!(pr::sprofil(regions.as_ptr().cast::<pr::Prof>(), 2, None, 0), 0, "{round}");
+        assert_ne!(itimer().interval.usec, 0, "{round} arms ITIMER_PROF");
+        spin_until(round, &high, off, 3);
+        assert_eq!(pr::sprofil(core::ptr::null(), 0, None, 0), 0, "{round} stop");
+        assert_stopped(round, addr(count1));
+        assert_quiet(round, &[&low, &high], quiet);
+    }
+    assert_eq!(HITS1.load(Relaxed), 0);
+    assert_eq!(sg::signal(SIGPROF, 0), addr(count1));
+}
+
+// ------------------------------------------------------------------ monstartup, mcount, __fentry__
+
+/// Set in a child this binary re-executes: the test it runs does the child's half.
+const CHILD: &str = "LIELLA_S28_GMON_CHILD";
+
+fn in_child() -> bool {
+    std::env::var_os(CHILD).is_some()
+}
+
+fn root() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// A fresh, empty directory for one run.
+fn fresh(tag: &str) -> std::path::PathBuf {
+    let d = root().join("target/test-oracles/s28_gmon").join(format!("{tag}.{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+/// Re-execute this binary running only `test` in `dir`, with `GMON_OUT_PREFIX` set to `prefix`
+/// or unset. Monstartup is one-shot and its sampling shares `ITIMER_PROF` with `s28_1_c_3`, so
+/// every use of it runs in a child of its own. Returns the child's pid and its stdout.
+fn run_child(test: &str, dir: &std::path::Path, prefix: Option<&str>) -> (u32, String) {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(std::env::current_exe().unwrap());
+    cmd.args([test, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"]).env(CHILD, "1").env_remove("GMON_OUT_PREFIX").current_dir(dir);
+    if let Some(p) = prefix {
+        cmd.env("GMON_OUT_PREFIX", p);
+    }
+    let c = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let pid = c.id();
+    let o = c.wait_with_output().unwrap();
+    let out = String::from_utf8_lossy(&o.stdout).into_owned();
+    assert!(out.contains("running 1 test"), "the child ran no test: {:?}", o.status);
+    assert!(o.status.success(), "{test} failed in its child: {out}\n{}", String::from_utf8_lossy(&o.stderr));
+    (pid, out)
+}
+
+/// The child's half: `monstartup` over the fixtures (csys/src/machine/mcount.S) with a MiB of
+/// text either side, then `n` calls of the mcount site (`mcount`) or the fentry site. Prints
+/// `S28 low high site caller` for the parent and returns `(site, caller)`.
+fn start_and_run(mcount: bool, n: u32) -> (usize, usize) {
+    let [fentry, mc, caller] = pr::probe_sites();
+    let (low, high) = (fentry.min(mc).min(caller) - (1 << 20), fentry.max(mc).max(caller) + (1 << 20));
+    let mut before = 0;
+    pr::each_arc(|_, _, _| before += 1);
+    assert_eq!(before, 0, "no arcs before monstartup");
+    pr::monstartup(low, high);
+    pr::probe_run(mcount, n);
+    let site = if mcount { mc } else { fentry };
+    // libtest has printed `test <name> ... ` without a newline: the line may follow it.
+    println!("S28 {low} {high} {site} {caller}");
+    (site, caller)
+}
+
+/// The arcs whose callee is within `site`'s first 16 bytes: `(from, to, count)`.
+fn arcs_into(arcs: &[(usize, usize, u32)], site: usize) -> Vec<(usize, usize, u32)> {
+    arcs.iter().copied().filter(|&(_, to, _)| (site..site + 16).contains(&to)).collect()
+}
+
+/// One arc into `site`, from the caller's first 4 KiB, traversed exactly `n` times.
+fn assert_one_arc(what: &str, arcs: &[(usize, usize, u32)], site: usize, caller: usize, n: u32) {
+    let found = arcs_into(arcs, site);
+    assert!(found.len() == 1, "{what}: one arc into the site, found {found:x?}");
+    let (from, _, count) = found[0];
+    assert!((caller..caller + 4096).contains(&from), "{what}: the arc comes from the caller {caller:#x}: {from:#x}");
+    assert_eq!(count, n, "{what}: the arc's count is the number of calls");
+}
+
+const ARC_CALLS: u32 = 37;
+
+/// Child half of the arc tests: both sites' arcs as recorded in memory.
+fn child_arcs(mcount: bool) {
+    let [fentry, mc, caller] = pr::probe_sites();
+    let (site, _) = start_and_run(mcount, ARC_CALLS);
+    let mut arcs = Vec::new();
+    pr::each_arc(|f, t, c| arcs.push((f, t, c)));
+    let what = if mcount { "mcount" } else { "__fentry__" };
+    assert_one_arc(what, &arcs, site, caller, ARC_CALLS);
+    let other = if mcount { fentry } else { mc };
+    assert!(arcs_into(&arcs, other).is_empty(), "{what}: no arc into the site that was not called: {arcs:x?}");
+}
+
+/// §28.1 Contract: **`mcount`/`_mcount`** is called at every function entry of `-pg` code and records the call arc.
+#[test]
+fn s28_1_c_2() {
+    // Clause s28_1_c_2: N calls of an mcount-instrumented site from one caller are one arc,
+    // caller -> site, counted N times. `_mcount` is the same label as `mcount` (mcount.S).
+    if in_child() {
+        return child_arcs(true);
+    }
+    run_child("s28_1_c_2", &fresh("arcs_mcount"), None);
+}
+
+/// §28.3 Contract: `__fentry__` is the profiling counter call that `-pg -mfentry` code makes before the function prologue; it records the call arc as `mcount` does (§28.1). The others are covered in their sections.
+#[test]
+fn s28_3_c_0() {
+    // Clause s28_3_c_0: the same through a site that calls __fentry__ before its prologue.
+    if in_child() {
+        return child_arcs(false);
+    }
+    run_child("s28_3_c_0", &fresh("arcs_fentry"), None);
+}
+
+/// The records of a gmon.out: (low, high, bins, arcs) after checking the header and the layout:
+/// a 20-byte header (`gmon`, version 1), a histogram record (tag 0, low pc, high pc, bin count,
+/// rate, dimension, abbreviation, then the 16-bit bins), then call-arc records (tag 1, from pc,
+/// self pc, count).
+fn parse_gmon(b: &[u8]) -> (u64, u64, usize, Vec<(usize, usize, u32)>) {
+    let u64_at = |at: usize| u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
+    let u32_at = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+    assert!(b.len() >= 61, "too short for a header and a histogram record: {} bytes", b.len());
+    assert_eq!(&b[..20], b"gmon\x01\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", "the gmon.out header");
+    assert_eq!(b[20], 0, "the histogram record comes first");
+    let (low, high, bins) = (u64_at(21), u64_at(29), u32_at(37) as usize);
+    assert_eq!((u32_at(41), &b[45..52], b[60]), (100, &b"seconds"[..], b's'), "rate and dimension");
+    let mut at = 61 + 2 * bins;
+    let mut arcs = Vec::new();
+    while at < b.len() {
+        assert!(b[at] == 1 && at + 21 <= b.len(), "a call-arc record at {at}");
+        arcs.push((u64_at(at + 1) as usize, u64_at(at + 9) as usize, u32_at(at + 17)));
+        at += 21;
+    }
+    (low, high, bins, arcs)
+}
+
+const GMON_CALLS: u32 = 11;
+
+/// §28.1 Contract: **`monstartup(lowpc, highpc)`** allocates histogram and arc tables for a text range and starts PC sampling. `_mcleanup` writes `gmon.out` (or `$GMON_OUT_PREFIX.<pid>`) at exit.
+#[test]
+fn s28_1_c_1() {
+    // Clause s28_1_c_1. Probe of glibc 2.39 (static -pg program, gcrt1, exit from main, fresh
+    // directory): without GMON_OUT_PREFIX the only file written is `gmon.out`; with
+    // GMON_OUT_PREFIX=p it is `p.<pid>` and no `gmon.out`. The start object registers
+    // `_mcleanup` for exit (gmon_products.rs); this child calls it as that exit would.
+    if in_child() {
+        start_and_run(true, GMON_CALLS);
+        pr::_mcleanup();
+        return;
+    }
+    for prefix in [None, Some("p")] {
+        let dir = fresh(if prefix.is_some() { "gmon_prefix" } else { "gmon_plain" });
+        let (pid, out) = run_child("s28_1_c_1", &dir, prefix);
+        let line = out.lines().find_map(|l| l.split_once("S28 ").map(|(_, r)| r)).expect("the child's range line");
+        let v: Vec<usize> = line.split(' ').map(|w| w.parse().unwrap()).collect();
+        let (low, high, site, caller) = (v[0], v[1], v[2], v[3]);
+        let want = prefix.map_or_else(|| "gmon.out".to_string(), |p| format!("{p}.{pid}"));
+        let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        assert_eq!(names, core::slice::from_ref(&want), "GMON_OUT_PREFIX={prefix:?}: the one file written");
+        let (lo, hi, bins, arcs) = parse_gmon(&std::fs::read(dir.join(&want)).unwrap());
+        assert_eq!((lo, hi), ((low & !3) as u64, ((high + 3) & !3) as u64), "the histogram covers the range given to monstartup");
+        assert!(bins > 0, "monstartup allocated a histogram");
+        assert_one_arc(&want, &arcs, site, caller, GMON_CALLS);
+    }
+}
+
+// ------------------------------------------------------------------ __cyg_profile_func_enter/_exit
+
+/// Builds `tests/oracle/cyg_hooks.c` with `-finstrument-functions`, statically, against the host
+/// C library or against Liella's crt1 and libc.a; `own` adds the program's own hooks.
+fn build_cyg(out: &std::path::Path, liella: bool, own: bool) -> bool {
+    let r = root();
+    let mut cmd = std::process::Command::new("cc");
+    cmd.args(["-std=gnu17", "-O1", "-finstrument-functions", "-static"]);
+    if own {
+        cmd.arg("-DOWN_HOOKS");
+    }
+    let src = r.join("crates/core/tests/oracle/cyg_hooks.c");
+    if liella {
+        cmd.args(["-nostdlib", "-fno-builtin"]).arg(r.join("target/liella/liella-crt1.o")).arg(&src).arg(r.join("target/liella/libc.a")).arg("-lgcc");
+    } else {
+        cmd.arg(&src);
+    }
+    oracle::build(cmd, out)
+}
+
+/// §28.1 Contract: **`__cyg_profile_func_enter/_exit`** are empty hooks called by `-finstrument-functions` code, for the application to interpose.
+#[test]
+fn s28_1_c_4() {
+    // Clause s28_1_c_4. In process: the hooks leave errno as it was.
+    liella_boundary::errno::set_raw(4242);
+    let (f, site) = (core::ptr::null_mut(), core::ptr::null_mut());
+    pr::__cyg_profile_func_enter(f, site);
+    pr::__cyg_profile_func_exit(f, site);
+    assert_eq!(liella_boundary::errno::get(), 4242, "the hooks leave errno unchanged");
+
+    // As programs: probe of glibc 2.39 (static, -finstrument-functions): the library's hooks
+    // print nothing and keep errno (enter=0 exit=0); a program's own hooks link without a
+    // duplicate definition and are called once per instrumented entry and exit (main, 5 mid,
+    // 10 leaf: 16 entries, 15 exits when main prints).
+    assert!(root().join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    if skip_note::missing("cc") {
+        skip_note::skipped("skipped: no C compiler");
+        return;
+    }
+    let dir = root().join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (own, want) in [(false, "r=85 errno=4242 enter=0 exit=0\n"), (true, "r=85 errno=4242 enter=16 exit=15\n")] {
+        for liella in [false, true] {
+            let exe = dir.join(format!("cyg_hooks_{}_{}", if liella { "liella" } else { "host" }, if own { "own" } else { "lib" }));
+            assert!(build_cyg(&exe, liella, own), "cyg_hooks.c (own hooks: {own}) does not link against {}", if liella { "libc.a" } else { "the host" });
+            let o = std::process::Command::new("timeout").arg(timeout::secs(30)).arg(&exe).output().unwrap();
+            assert!(o.status.success(), "{}: {:?}", exe.display(), o.status);
+            assert_eq!((String::from_utf8_lossy(&o.stdout).as_ref(), o.stderr.len()), (want, 0), "{}: output", exe.display());
+        }
+    }
+}

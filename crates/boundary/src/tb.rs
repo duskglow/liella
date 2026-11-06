@@ -424,6 +424,20 @@ pub(crate) fn view_at(addr: usize) -> &'static liella::locale::view::LocaleView 
     }
 }
 
+/// A view's `nl_langinfo` answer table (PARITY-SMALL-ENTRY-2). Crate-private contract: `p` is
+/// what [`LocaleView::answers`](liella::locale::view::LocaleView::answers) returned: the static
+/// `NO_ANSWERS` or a table the view leaked and published whole (Release/Acquire), never freed
+/// or modified.
+#[inline]
+pub(crate) fn answers_at(p: *const liella::locale::view::Answers) -> &'static liella::locale::view::Answers {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: a static, or a leaked, immutable `Answers` that lives for the rest of the process.
+    unsafe {
+        &*p
+    }
+}
+
 /// A loaded charmap (D-6.8). Crate-private contract: `addr` is an address
 /// `liella_legacy::global_locale` recorded for a charmap it leaked; such values are never freed
 /// or modified.
@@ -465,6 +479,20 @@ pub(crate) fn file_words(addr: usize) -> Option<&'static [AtomicUsize]> {
     // SAFETY: a live FILE object of FILE_WORDS words.
     let w = unsafe { words64_at(addr, liella_legacy::stdio_compat::FILE_WORDS) };
     Some(w)
+}
+
+/// [`file_words`] with no null or alignment test, for the `getc`/`putc` front paths
+/// (PERF-STDIO-UNLOCKED-TRIM, owner #1654: libc is not a security boundary). Contract: `addr`
+/// is a `FILE *` the caller holds, as [`file_words`] requires; a null or misaligned pointer is
+/// the caller's undefined behaviour and faults on the first window load, as in the reference.
+#[inline(always)]
+pub(crate) fn file_words_trusted(addr: usize) -> &'static [AtomicUsize] {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: a live FILE object of FILE_WORDS words (the caller's valid stream).
+    unsafe {
+        words64_at(addr, liella_legacy::stdio_compat::FILE_WORDS)
+    }
 }
 
 /// A stream's lock. Crate-private contract: `addr` is a `_lock` word `crate::stdio` stored,

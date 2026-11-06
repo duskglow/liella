@@ -308,13 +308,13 @@ unsafe extern "C" {
     /// `src` are valid for `n` bytes and disjoint (`crate::hot::avx2_erms`, `conv::copy_large`).
     pub(crate) safe fn liella_machine_copy_erms_a64(dst: *mut u8, src: *const u8, n: usize) -> *mut u8;
     /// The AVX2 copy (machine/scan.S). Proof obligation: the CPU has AVX2 and the OS saves the
-    /// YMM state (`crate::cpu::avx2`), `n >= 64`, and `dst` and `src` are valid for `n` bytes
-    /// and disjoint (from a `&mut [u8]` and a `&[u8]`: `crate::conv::copy_units`).
+    /// YMM state (`crate::cpu::avx2`), `n >= 128` (it holds a 128-byte end block), and `dst` and
+    /// `src` are valid for `n` bytes and disjoint (from a `&mut [u8]` and a `&[u8]`: `crate::conv::copy_units`).
     pub(crate) safe fn liella_machine_copy_avx2(dst: *mut u8, src: *const u8, n: usize);
     /// The same AVX2 copy for regions that may overlap (MEM-BULK; machine/scan.S, a second name
     /// for `liella_machine_copy_avx2`): `n` bytes from `s` to `d`; returns `d`. Proof obligation:
     /// the CPU has AVX2 and the OS saves the YMM state (`crate::dispatch::avx2` or
-    /// `crate::cpu::copy_avx2`), `n >= 64`, `d` valid for writing and `s` for reading `n` bytes
+    /// `crate::cpu::copy_avx2`), `n >= 128`, `d` valid for writing and `s` for reading `n` bytes
     /// (the `memmove` contract after its NULL tests: `crate::hot::move_rest`,
     /// `crate::conv::move_regions`; the internal copy's contract: `crate::hot::internal_large`).
     pub(crate) safe fn liella_machine_move_avx2(d: *mut u8, s: *const u8, n: usize) -> *mut u8;
@@ -355,6 +355,16 @@ unsafe extern "C" {
     /// written only by `crate::dispatch::select` (its proof obligation: `true` only while the CPU
     /// has AVX2 and the OS saves the YMM state).
     pub(crate) safe static liella_machine_avx2: core::sync::atomic::AtomicBool;
+    /// The `memset` entry's `rep stosb` word (machine/fold.S, MEMSET-4K-3): sizes above 256 with
+    /// `n >= word` set the first 64 bytes and run `rep stosb` from the next 64-byte boundary in
+    /// the entry itself. `usize::MAX` until the startup decision; written only by
+    /// `crate::cpu` (its proof obligation: never below 257, any value a correct fill).
+    pub(crate) safe static liella_machine_fill_erms_from: core::sync::atomic::AtomicUsize;
+    /// The `memset` entry's 65-128 class word (machine/fold.S, PARITY-MEMSET-SMALL-AVX2): 128
+    /// while NULL folding is on, else 0; sizes above the fold limit with `n <= word` take the
+    /// 65-128 class. Written only by `crate::dispatch` (its proof obligation: never nonzero while
+    /// the fold limit is 0, which would send 1-64 to the 65-128 class).
+    pub(crate) safe static liella_machine_set_mid: core::sync::atomic::AtomicUsize;
     /// The compare entries' 33-64 class word (machine/fold.S, MEMCMP-EQ64, SEQ-REGRESS): 32 only
     /// while NULL folding is on AND the AVX2 builds run, else 0; written only by `crate::dispatch`
     /// (its proof obligation: never nonzero while the fold limit is 0 or the AVX2 flag is false).

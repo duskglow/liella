@@ -1,0 +1,28 @@
+{
+ "task": "TRACE-TAG-COVERED-STUBS",
+ "model": "opus",
+ "tokens": null,
+ "result": "s22_5_c_1_2, s24_5_c_3, s0_6_c0_6_0 are tests now (NIS-domain namespace check, symbol-version check); memcpy overlap test retagged; gate, plants, static green",
+ "branch": "task/trace-tag-covered-stubs",
+ "head": "6cbd577a",
+ "gate": {
+  "affected": "600 passed / 0 failed",
+  "peak": "1.7G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "gets is default (gets@@GLIBC_2.2.5) in spec/abi/versions.tsv and absent from compat-plan.tsv, so it is not checked; the clause text calls it not linkable (possible spec-text gap)",
+  "plant c used stime (the generator never emits gets) and was caught by the cargo xtask so build failing, not by s0_6_c0_6_0",
+  "plant d was put in the Rust liella_compat_memcpy: the retagged test cannot reach the .S stub's jump; no direct test covers that stub"
+ ],
+ "refused": [],
+ "improvement": "briefs that name plant sites should check that the named test can reach them (plant d's .S stub cannot reach a Rust-level test)",
+ "next_step": "none required; optional: a build-accepted @@ plant for s0_6_c0_6_0 and a dynamic memcpy@GLIBC_2.2.5 conformance test",
+ "report_file": "handoff/TRACE-TAG-COVERED-STUBS.md",
+ "jobs": [
+  "trace-tag-covered-stubs-gate",
+  "trace-tag-covered-stubs-plants",
+  "trace-tag-covered-stubs-static"
+ ]
+}

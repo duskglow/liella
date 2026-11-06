@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 use liella::locale::file::Cat;
 use liella::ctype::Class;
-use liella::locale::view::LocaleView;
+use liella::locale::view::{LocaleView, EMPTY};
 use liella::locale::{Ctype, Item, Locale};
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -335,8 +335,13 @@ pub fn byte_class(c: i32) -> Class {
     if w == 0 {
         return class_unstored(c);
     }
-    let Some(o) = entry_offset::<2>(c) else { return Class(0) };
-    table_bytes::<2>(w).get(o..o.wrapping_add(2)).and_then(|b| <[u8; 2]>::try_from(b).ok()).map_or(Class(0), |b| Class(u16::from_ne_bytes(b)))
+    // The entry's address is the word plus twice the (signed) character: one range test, no
+    // rebasing of the word to the table's first entry.
+    if entry_offset::<2>(c).is_none() {
+        return Class(0);
+    }
+    let at = w.wrapping_add_signed(isize::try_from(c).unwrap_or(0).wrapping_mul(2));
+    conv::mapped_bytes(at, 2).first_chunk::<2>().map_or(Class(0), |b| Class(u16::from_ne_bytes(*b)))
 }
 
 /// `toupper` (`upper`) or `tolower` of `c` through the calling thread's word `w` (D-5.5);
@@ -579,9 +584,6 @@ pub fn invalidate() -> Result<(), liella::error::Errno> {
     r
 }
 
-/// An empty string for absent items.
-static EMPTY: [u8; 1] = [0];
-
 /// `nl_langinfo(item)` in `l`: the item's address, or for a word item its value (D-7.10). The
 /// category's item table answers (LV-3); a category without one, the name item and an unknown
 /// category take [`langinfo_slow`].
@@ -591,7 +593,25 @@ pub fn langinfo(item: i32, v: &LocaleView) -> usize {
     // negative item, a number past the table, `LC_ALL` and the name item (index 0xffff: no table
     // has that many entries) find no entry and take the slow path.
     let bits = u32::from_ne_bytes(item.to_ne_bytes());
+    let index = usize::try_from(bits & 0xffff).unwrap_or(usize::MAX);
+    // PARITY-SMALL-ENTRY: the view's answer table (the same words the match below works out),
+    // one bounds check and one load. Until a view has decoded `ANSWERS_AFTER` entries below, its
+    // table is `NO_ANSWERS` (every lookup misses): building a view costs nothing for it.
+    if let Some(a) = tb::answers_at(v.answers()).get(bits >> 16, index) {
+        return a;
+    }
+    langinfo_decode(item, v)
+}
+
+/// [`langinfo`] without a table answer: decode the entry (and count the call towards the view's
+/// table), else [`langinfo_slow`]. Out of line so that the table path stays a leaf: inline, the
+/// `note_decoded` call made every `nl_langinfo` save and restore three registers
+/// (PARITY-SMALL-ENTRY-2, +5 instructions per call).
+#[inline(never)]
+fn langinfo_decode(item: i32, v: &LocaleView) -> usize {
+    let bits = u32::from_ne_bytes(item.to_ne_bytes());
     if let Some(entry) = v.entry(bits >> 16, usize::try_from(bits & 0xffff).unwrap_or(usize::MAX)) {
+        v.note_decoded();
         return match entry {
             Item::Word(v) => usize::try_from(v).unwrap_or(0),
             Item::Bytes([]) => EMPTY.as_ptr().expose_provenance(),
@@ -768,7 +788,9 @@ mod tests {
         let utf8 = LocaleView::new(Locale::c_utf8(b"C.UTF-8"), 1, &|_, _| None).unwrap();
         let mut asked = 0usize;
         let mut hits = 0usize;
-        for v in [&c, &utf8] {
+        // Two passes: the first decodes until the view builds its answer table
+        // (PARITY-SMALL-ENTRY-2), the second answers every entry from the table.
+        for v in [&c, &c, &utf8, &utf8] {
             for cat in (-2..16).chain([0x7fff, 0x8000]) {
                 for index in (0..300).chain([0xfffe]) {
                     let item = (cat << 16) | index;
@@ -782,7 +804,10 @@ mod tests {
         for item in [-1, i32::MIN, i32::MAX, 0xffff, (6 << 16) | 3, 13 << 16] {
             assert_eq!(langinfo(item, &c), langinfo_slow(item, c.locale()), "item {item:#x}");
         }
-        // Not vacuous: plenty of real entries were compared.
-        assert!(asked > 10_000 && hits > 300, "{asked} asked, {hits} non-empty");
+        // Not vacuous: plenty of real entries were compared, and both tables were used.
+        assert!(asked > 20_000 && hits > 600, "{asked} asked, {hits} non-empty");
+        for v in [&c, &utf8] {
+            assert!(!core::ptr::eq(v.answers(), &liella::locale::view::NO_ANSWERS), "{:?}: the answer table was built", v.locale().name(Cat::Ctype));
+        }
     }
 }

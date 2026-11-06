@@ -1,0 +1,7 @@
+# XTASK-PLANTS-TRACKED-COPY plants (cargo xtask plants; docs/plants.md). Run with --dir under /dev/shm on the Zen 1 host:
+# the baseline of p-nscache-bind (catalogs_products in a /dev/shm copy) is itself the proof that nscache_mode.sh binds it back.
+p-copy-check | xtask/src/plants.rs | lit:paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err()) ==> paths.iter().filter(|p| fs::symlink_metadata(copy.join(p)).is_err() && false) | cargo test -p xtask -- plants::tests | msg:a_tracked_path_missing_from_the_copy_refuses_the_run.*FAILED
+p-ls-others | xtask/src/plants.rs | lit:"ls-files", "-z", "--cached", "--others", "--exclude-standard" ==> "ls-files", "-z", "--cached", "--exclude-standard" | cargo test -p xtask -- plants::tests | msg:every_tracked_path_of_an_unusual_kind_is_copied.*FAILED
+p-entry-secs | xtask/src/affected.rs | lit:entry_secs.iter().find(|(s, _)| t.sections.contains(s)) ==> entry_secs.iter().find(|(s, _)| t.sections.contains(s) && false) | cargo test -p xtask -- affected::tests::direct_tier | msg:direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches.*FAILED
+p-entry-reach | xtask/src/affected.rs | lit:entry_secs.insert(s, format! ==> entry_secs.remove(&s).unwrap_or(format! | cargo test -p xtask -- affected::tests::direct_tier | msg:direct_tier_selects_the_products_tests_of_the_c_entries_a_helper_reaches.*FAILED
+p-nscache-bind | crates/core/tests/oracle/nscache_mode.sh | lit:for n in $k; do ==> for n in ; do | cargo test -p liella --test catalogs_products | msg:cannot open .*catalogs_run.sh

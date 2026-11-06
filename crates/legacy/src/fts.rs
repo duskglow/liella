@@ -116,8 +116,7 @@ mod off {
     pub(super) const CYCLE: usize = 0;
     pub(super) const PARENT: usize = 8;
     pub(super) const LINK: usize = 16;
-    /// `fts_number`, then `fts_pointer`: the caller's, never written.
-    pub(super) const NUMBER: usize = 24;
+    // 24..40: `fts_number`, then `fts_pointer`: the caller's, never written.
     pub(super) const ACCPATH: usize = 40;
     pub(super) const PATH: usize = 48;
     pub(super) const ERRNO: usize = 56;
@@ -163,10 +162,33 @@ enum Children {
     NoSearch(Errno),
 }
 
+#[derive(Clone, Copy, Default)]
+struct Key {
+    dev: u64,
+    ino: u64,
+    nlink: u64,
+}
+
+impl Key {
+    fn of(s: &Stat) -> Key {
+        Key { dev: s.dev, ino: s.ino, nlink: s.nlink }
+    }
+}
+
+impl Node {
+    /// The block's length: the status ends it, then the terminator.
+    fn size(&self) -> usize {
+        self.stat_off.saturating_add(STAT_SIZE).saturating_add(1)
+    }
+
+    /// The name's length with its terminator.
+    fn name_cap(&self) -> usize {
+        self.name_len.saturating_add(1)
+    }
+}
+
 struct Node {
     block: usize,
-    size: usize,
-    name_cap: usize,
     stat_off: usize,
     /// `fts_namelen`. The name itself is only in the block (`fts_name`): a copy kept here cost
     /// ~199 instructions per entry (FTS-FLAT-FIXES).
@@ -180,7 +202,8 @@ struct Node {
     level: i32,
     info: u16,
     errno: i32,
-    stat: Option<Stat>,
+    /// The parts of the status the walk itself reads (the block holds the whole status).
+    stat: Option<Key>,
     cycle: usize,
     link: usize,
     children: Children,
@@ -230,8 +253,6 @@ const PATH_START: usize = 256;
 
 const ROOT_PARENT: usize = 0;
 
-/// Zero bytes: a name's terminator and the padding to its 8-aligned status.
-const PAD: [u8; 8] = [0; 8];
 
 /// The buffer a directory is read with.
 const LIST_BUFFER: usize = 16 * 1024;
@@ -242,28 +263,41 @@ fn name_of<'m, M: FtsMem>(mem: &'m mut M, x: &Node) -> &'m [u8] {
     b.get(off::NAME..).unwrap_or(&[])
 }
 
+#[inline(always)]
 fn put(b: &mut [u8], at: usize, v: &[u8]) {
     if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
         d.copy_from_slice(v);
     }
 }
 
-fn stat_bytes(st: &Stat) -> [u8; STAT_SIZE] {
-    let mut b = [0u8; STAT_SIZE];
-    put(&mut b, 0, &st.dev.to_ne_bytes());
-    put(&mut b, 8, &st.ino.to_ne_bytes());
-    put(&mut b, 16, &st.nlink.to_ne_bytes());
-    put(&mut b, 24, &st.mode.to_ne_bytes());
-    put(&mut b, 28, &st.uid.to_ne_bytes());
-    put(&mut b, 32, &st.gid.to_ne_bytes());
-    put(&mut b, 40, &st.rdev.to_ne_bytes());
-    put(&mut b, 48, &st.size.to_ne_bytes());
-    put(&mut b, 56, &st.blksize.to_ne_bytes());
-    put(&mut b, 64, &st.blocks.to_ne_bytes());
+/// [`put`] into a block of known length: with a constant `at` the bounds check is folded away.
+#[inline(always)]
+fn putf<const N: usize>(b: &mut [u8; N], at: usize, v: &[u8]) {
+    if let Some(d) = b.get_mut(at..at.saturating_add(v.len())) {
+        d.copy_from_slice(v);
+    }
+}
+
+/// Zero bytes ahead of the status in [`stat_bytes`]'s result: the slice the block is made from
+/// starts inside them, so the padding after the name and the status are one part of the block.
+const LEAD: usize = 8;
+
+fn stat_bytes(st: &Stat) -> [u8; LEAD + STAT_SIZE] {
+    let mut b = [0u8; LEAD + STAT_SIZE];
+    putf(&mut b, LEAD,&st.dev.to_ne_bytes());
+    putf(&mut b, LEAD + 8, &st.ino.to_ne_bytes());
+    putf(&mut b, LEAD + 16, &st.nlink.to_ne_bytes());
+    putf(&mut b, LEAD + 24, &st.mode.to_ne_bytes());
+    putf(&mut b, LEAD + 28, &st.uid.to_ne_bytes());
+    putf(&mut b, LEAD + 32, &st.gid.to_ne_bytes());
+    putf(&mut b, LEAD + 40, &st.rdev.to_ne_bytes());
+    putf(&mut b, LEAD + 48, &st.size.to_ne_bytes());
+    putf(&mut b, LEAD + 56, &st.blksize.to_ne_bytes());
+    putf(&mut b, LEAD + 64, &st.blocks.to_ne_bytes());
     for (i, t) in [st.atime, st.mtime, st.ctime].iter().enumerate() {
-        let at = 72usize.saturating_add(i.saturating_mul(16));
-        put(&mut b, at, &t.sec.to_ne_bytes());
-        put(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
+        let at = (LEAD + 72usize).saturating_add(i.saturating_mul(16));
+        putf(&mut b, at, &t.sec.to_ne_bytes());
+        putf(&mut b, at.saturating_add(8), &t.nsec.to_ne_bytes());
     }
     b
 }
@@ -295,23 +329,33 @@ fn classify(st: &Stat, dot: bool) -> u16 {
 /// The status of `namez` (a name with its terminator) in `dir`: following links (then a link
 /// naming nothing is `FTS_SLNONE`, whatever made `stat` fail) or not. The listing's names
 /// already end in NUL, so a child's status needs no copy of its name (FTS-FLAT-PROFILE).
-fn stat_entry<S: Sys>(sys: &S, dir: Fd, namez: &[u8], follow: bool, dot: bool) -> Result<(u16, Option<Stat>, i32)> {
+///
+/// The result is written into `out` (info, status, errno), the kernel writing the status straight
+/// into it: no status is built and moved per entry (PERF-NFTW-ENTRY-9).
+fn stat_entry<S: Sys>(sys: &S, dir: Fd, namez: &[u8], follow: bool, dot: bool, out: &mut Probe) -> Result<()> {
     let k = KStr::from_nul_terminated(namez)?;
-    if follow {
-        match sys.fstatat(dir, k, 0) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-                Ok(l) if l.mode & S_IFMT == S_IFLNK => Ok((info::SLNONE, Some(l), 0)),
-                _ => Ok((info::NS, None, e.get())),
-            },
+    let dst = out.1.get_or_insert_with(Stat::default);
+    let flags = if follow { 0 } else { AT_SYMLINK_NOFOLLOW };
+    match sys.fstatat_into(dir, k, flags, dst) {
+        Ok(()) => {
+            out.0 = classify(dst, dot);
+            out.2 = 0;
         }
-    } else {
-        match sys.fstatat(dir, k, AT_SYMLINK_NOFOLLOW) {
-            Ok(st) => Ok((classify(&st, dot), Some(st), 0)),
-            Err(e) => Ok((info::NS, None, e.get())),
+        Err(e) => {
+            let link = follow && sys.fstatat_into(dir, k, AT_SYMLINK_NOFOLLOW, dst).is_ok() && dst.mode & S_IFMT == S_IFLNK;
+            if link {
+                out.0 = info::SLNONE;
+                out.2 = 0;
+            } else {
+                *out = (info::NS, None, e.get());
+            }
         }
     }
+    Ok(())
 }
+
+/// An entry's `fts_info`, status (when it has one) and `fts_errno`.
+type Probe = (u16, Option<Stat>, i32);
 
 impl Fts {
     fn chdir_mode(&self) -> bool {
@@ -353,55 +397,59 @@ impl Fts {
     #[allow(clippy::too_many_arguments)]
     /// A new entry whose path is `path_len` bytes long (its bytes are put in the shared buffer
     /// only when the entry is returned: [`Fts::place`]). A root's path is its name.
-    fn new_node<M: FtsMem>(&mut self, mem: &mut M, name: &[u8], path_len: usize, parent: usize, level: i32, st: (u16, Option<Stat>, i32), cycle: usize, follow: bool, root_dev: u64, root: bool) -> Result<usize> {
+    fn new_node<M: FtsMem>(&mut self, mem: &mut M, name: &[u8], path_len: usize, parent: usize, level: i32, st: &(u16, Option<Stat>, i32), cycle: usize, follow: bool, root_dev: u64, root: bool) -> Result<usize> {
         let name_cap = name.len().saturating_add(1);
         let stat_off = align8(off::NAME.saturating_add(name_cap));
         // The stat ends past the 120-byte structure, so the block is never shorter than an
         // `FTSENT`; no path is kept in it.
-        let size = stat_off.saturating_add(STAT_SIZE).saturating_add(1);
         // Each byte written once (FTS-FLAT-FIXES): the structure zeroed (filled in below), the
         // name, its terminator and padding, the status.
-        let pad = PAD.get(..stat_off.saturating_sub(off::NAME).saturating_sub(name.len())).unwrap_or(&[]);
-        let block = mem.alloc(off::NAME, &[name, pad, &stat_bytes(&st.1.unwrap_or_default())]).ok_or(Errno::ENOMEM)?;
-        let node = Node {
-            block,
-            size,
-            name_cap,
-            stat_off,
-            name_len: name.len(),
-            arg: TryVec::from_slice(if root { name } else { &[] }).inspect_err(|_| mem.free(block))?,
-            path_len,
-            parent,
-            level,
-            info: st.0,
-            errno: st.2,
-            stat: st.1,
-            cycle,
-            link: 0,
-            children: Children::NotBuilt,
-            next_child: 0,
-            follow,
-            root_dev,
-            root,
+        let pad = stat_off.saturating_sub(off::NAME).saturating_sub(name.len());
+        let sb = match &st.1 {
+            Some(s) => stat_bytes(s),
+            None => stat_bytes(&Stat::default()),
         };
+        // The padding is the first `pad` (1..=8) zeros of `sb`: one part for both.
+        let block = mem.alloc(off::NAME, &[name, sb.get(LEAD.saturating_sub(pad)..).unwrap_or(&[])]).ok_or(Errno::ENOMEM)?;
+        let arg = if root { TryVec::from_slice(name).inspect_err(|_| mem.free(block))? } else { TryVec::default() };
         let idx = match self.free_slots.pop() {
-            Some(i) => {
-                if let Some(s) = self.nodes.get_mut(i) {
-                    *s = Some(node);
-                }
-                i
-            }
+            Some(i) => i,
             None => {
                 let i = self.nodes.len();
-                if let Err(e) = self.nodes.push(Some(node)) {
+                if let Err(e) = self.nodes.push(None) {
                     mem.free(block);
                     return Err(e);
                 }
                 i
             }
         };
-        self.write_header(mem, idx);
-        put(mem.bytes(block, off::NAME), off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        // Built in the slot it lives in (no 200-byte value made first and moved).
+        if let Some(s) = self.nodes.get_mut(idx) {
+            *s = Some(Node {
+                block,
+                stat_off,
+                name_len: name.len(),
+                arg,
+                path_len,
+                parent,
+                level,
+                info: st.0,
+                errno: st.2,
+                stat: st.1.as_ref().map(Key::of),
+                cycle,
+                link: 0,
+                children: Children::NotBuilt,
+                next_child: 0,
+                follow,
+                root_dev,
+                root,
+            });
+        }
+        if let Some(x) = self.nodes.get(idx).and_then(Option::as_ref) {
+            let b = mem.bytes(block, off::NAME);
+            self.put_header(idx, x, b);
+            put(b, off::INSTR, &FTS_NOINSTR.to_ne_bytes());
+        }
         Ok(idx)
     }
 
@@ -433,29 +481,32 @@ impl Fts {
     }
 
     /// Entry `n`'s structure: every field before `fts_name`.
-    fn header(&self, n: usize, x: &Node) -> [u8; off::NAME] {
+    /// Write entry `n`'s structure fields straight into the first `off::NAME` bytes `b` of its
+    /// block: each field once, at its offset (PERF-NFTW-ENTRY-8: no temporary structure and no
+    /// copy of it). `fts_number`, `fts_pointer`, `fts_instr` and the padding stay as they are:
+    /// the caller's or `fts_set`'s, and the zeros the block was made with.
+    fn put_header(&self, n: usize, x: &Node, b: &mut [u8]) {
+        // The fixed length lets every field write below drop its bounds check.
+        let Ok(b) = <&mut [u8; off::NAME]>::try_from(b) else { return };
         let parent = if n == ROOT_PARENT { 0 } else { self.block(x.parent) };
         let acc = if self.acc_is_name(n, x) { x.block.saturating_add(off::NAME) } else { self.buf };
         let st = x.stat.unwrap_or_default();
-        let mut b = [0u8; off::NAME];
-        put(&mut b, off::CYCLE, &x.cycle.to_ne_bytes());
-        put(&mut b, off::PARENT, &parent.to_ne_bytes());
-        put(&mut b, off::LINK, &x.link.to_ne_bytes());
-        put(&mut b, off::ACCPATH, &acc.to_ne_bytes());
-        put(&mut b, off::PATH, &self.buf.to_ne_bytes());
-        put(&mut b, off::ERRNO, &x.errno.to_ne_bytes());
-        put(&mut b, off::SYMFD, &0i32.to_ne_bytes());
-        put(&mut b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
-        put(&mut b, off::INO, &st.ino.to_ne_bytes());
-        put(&mut b, off::DEV, &st.dev.to_ne_bytes());
-        put(&mut b, off::NLINK, &st.nlink.to_ne_bytes());
-        put(&mut b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
-        put(&mut b, off::INFO, &x.info.to_ne_bytes());
-        put(&mut b, off::FLAGS, &0u16.to_ne_bytes());
-        // `fts_instr` is not part of it: the block holds the instruction ([`Fts::instr_of`]).
-        put(&mut b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
-        b
+        putf(b, off::CYCLE, &x.cycle.to_ne_bytes());
+        putf(b, off::PARENT, &parent.to_ne_bytes());
+        putf(b, off::LINK, &x.link.to_ne_bytes());
+        putf(b, off::ACCPATH, &acc.to_ne_bytes());
+        putf(b, off::PATH, &self.buf.to_ne_bytes());
+        putf(b, off::ERRNO, &x.errno.to_ne_bytes());
+        putf(b, off::SYMFD, &0i32.to_ne_bytes());
+        putf(b, off::PATHLEN, &u16::try_from(x.path_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::NAMELEN, &u16::try_from(x.name_len).unwrap_or(u16::MAX).to_ne_bytes());
+        putf(b, off::INO, &st.ino.to_ne_bytes());
+        putf(b, off::DEV, &st.dev.to_ne_bytes());
+        putf(b, off::NLINK, &st.nlink.to_ne_bytes());
+        putf(b, off::LEVEL, &i16::try_from(x.level).unwrap_or(i16::MAX).to_ne_bytes());
+        putf(b, off::INFO, &x.info.to_ne_bytes());
+        putf(b, off::FLAGS, &0u16.to_ne_bytes());
+        putf(b, off::STATP, &x.block.saturating_add(x.stat_off).to_ne_bytes());
     }
 
     /// Write entry `n`'s structure into its block (`fts_number`, `fts_pointer` and `fts_instr`
@@ -463,18 +514,14 @@ impl Fts {
     /// [`Fts::visit`]), the status then and by [`Fts::write`].
     fn write_header<M: FtsMem>(&self, mem: &mut M, n: usize) {
         let Ok(x) = self.node(n) else { return };
-        let h = self.header(n, x);
-        let b = mem.bytes(x.block, off::NAME);
-        put(b, 0, h.get(..off::NUMBER).unwrap_or(&[]));
-        put(b, off::ACCPATH, h.get(off::ACCPATH..off::INSTR).unwrap_or(&[]));
-        put(b, off::STATP, h.get(off::STATP..).unwrap_or(&[]));
+        self.put_header(n, x, mem.bytes(x.block, off::NAME));
     }
 
     /// Write entry `n`'s structure and status into its block (its status changed).
-    fn write<M: FtsMem>(&self, mem: &mut M, n: usize) {
+    fn write<M: FtsMem>(&self, mem: &mut M, n: usize, st: &Stat) {
         self.write_header(mem, n);
         let Ok(x) = self.node(n) else { return };
-        put(mem.bytes(x.block, x.size), x.stat_off, &stat_bytes(&x.stat.unwrap_or_default()));
+        put(mem.bytes(x.block, x.size()), x.stat_off, stat_bytes(st).get(LEAD..).unwrap_or(&[]));
     }
 
     /// Make the path buffer at least `need` bytes long, keeping its first `keep` bytes. A new
@@ -499,7 +546,7 @@ impl Fts {
         let to = nb.to_ne_bytes();
         for n in 0..self.nodes.len() {
             let Some(Some(x)) = self.nodes.get(n) else { continue };
-            let b = mem.bytes(x.block, x.size);
+            let b = mem.bytes(x.block, x.size());
             put(b, off::PATH, &to);
             if !self.acc_is_name(n, x) {
                 put(b, off::ACCPATH, &to);
@@ -578,15 +625,18 @@ impl Fts {
 
     fn open_roots<S: Sys, M: FtsMem>(&mut self, sys: &S, mem: &mut M, argv: &[&[u8]]) -> Result<()> {
         self.reserve(mem, 0, PATH_START)?;
-        let rp = self.new_node(mem, b"", 0, ROOT_PARENT, -1, (0, None, 0), 0, false, 0, false)?;
+        let rp = self.new_node(mem, b"", 0, ROOT_PARENT, -1, &(0, None, 0), 0, false, 0, false)?;
         debug_assert_eq!(rp, ROOT_PARENT);
         let follow = self.options & (FTS_LOGICAL | FTS_COMFOLLOW) != 0;
         let base = self.orig.unwrap_or(Fd::CWD);
         let mut roots = TryVec::with_capacity(argv.len())?;
         for a in argv {
-            let st = if u16::try_from(a.len()).is_err() { (info::NS, None, Errno::ENAMETOOLONG.get()) } else { stat_entry(sys, base, &z(a)?, follow, false)? };
+            let mut st: Probe = (info::NS, None, Errno::ENAMETOOLONG.get());
+            if u16::try_from(a.len()).is_ok() {
+                stat_entry(sys, base, &z(a)?, follow, false, &mut st)?;
+            }
             let dev = st.1.map_or(0, |s| s.dev);
-            let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, st, 0, follow, dev, true)?;
+            let n = self.new_node(mem, a, a.len(), ROOT_PARENT, 0, &st, 0, follow, dev, true)?;
             roots.push(n)?;
         }
         if let Some(c) = self.compar {
@@ -616,7 +666,7 @@ impl Fts {
             if let Ok(x) = self.node_mut(n) {
                 x.link = next;
                 // Only `fts_link` changed: the rest of the block is current.
-                put(mem.bytes(x.block, x.size), off::LINK, &next.to_ne_bytes());
+                put(mem.bytes(x.block, x.size()), off::LINK, &next.to_ne_bytes());
             }
         }
     }
@@ -645,17 +695,19 @@ impl Fts {
                 (z(name)?, name == b"." || name == b"..")
             }
         };
-        let (inf, st, e) = stat_entry(sys, dir, &namez, follow, dot)?;
+        let mut probe: Probe = (0, None, 0);
+        stat_entry(sys, dir, &namez, follow, dot, &mut probe)?;
+        let (inf, st, e) = probe;
         let x = self.node_mut(n)?;
         x.info = inf;
-        x.stat = st;
+        x.stat = st.as_ref().map(Key::of);
         x.errno = e;
         x.follow = follow || x.follow;
         x.next_child = 0;
         if x.info == info::D {
             self.check_cycle(n)?;
         }
-        self.write(mem, n);
+        self.write(mem, n, &st.unwrap_or_default());
         Ok(())
     }
 
@@ -666,7 +718,7 @@ impl Fts {
             let Some(st) = x.stat else { return Ok(()) };
             (st, x.parent)
         };
-        let blk = self.cycle_of(parent, &st)?;
+        let blk = self.cycle_of(parent, st.dev, st.ino)?;
         if blk != 0 {
             let x = self.node_mut(n)?;
             x.info = info::DC;
@@ -676,10 +728,10 @@ impl Fts {
     }
 
     /// The block of the directory among `p` and its ancestors that `st` repeats, 0 if none.
-    fn cycle_of(&self, mut p: usize, st: &Stat) -> Result<usize> {
+    fn cycle_of(&self, mut p: usize, dev: u64, ino: u64) -> Result<usize> {
         while p != ROOT_PARENT {
             let a = self.node(p)?;
-            if a.stat.is_some_and(|s| s.dev == st.dev && s.ino == st.ino) {
+            if a.stat.is_some_and(|s| s.dev == dev && s.ino == ino) {
                 return Ok(a.block);
             }
             p = a.parent;
@@ -771,6 +823,7 @@ impl Fts {
         // Only a root's path can end in a slash (names have none).
         let sep_len = usize::from(!slash);
         // Ok(Err(e)): reading the directory failed; Err(e): making an entry failed.
+        let mut st: Probe = (0, None, 0);
         let r = (|| -> Result<core::result::Result<(), Errno>> {
             loop {
                 let e = match d.next(sys) {
@@ -784,20 +837,22 @@ impl Fts {
                     continue;
                 }
                 let cpath_len = path_len.saturating_add(sep_len).saturating_add(cname.len());
-                let st = if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
-                    (info::NS, None, Errno::ENAMETOOLONG.get())
+                if u16::try_from(cpath_len).is_err() || i16::try_from(child_level).is_err() {
+                    st = (info::NS, None, Errno::ENAMETOOLONG.get());
                 } else if how == Build::NameOnly || (nostat && !dot && dtype != DT_DIR && dtype != DT_UNKNOWN) {
-                    (info::NSOK, None, 0)
+                    st = (info::NSOK, None, 0);
                 } else {
-                    stat_entry(sys, fd, namez, logical, dot)?
-                };
+                    stat_entry(sys, fd, namez, logical, dot, &mut st)?;
+                }
                 // A directory repeating an ancestor is `FTS_DC`, known before its block is made.
-                let cycle = match st.1 {
-                    Some(s) if st.0 == info::D => self.cycle_of(n, &s)?,
+                let cycle = match &st.1 {
+                    Some(s) if st.0 == info::D => self.cycle_of(n, s.dev, s.ino)?,
                     _ => 0,
                 };
-                let st = if cycle != 0 { (info::DC, st.1, st.2) } else { st };
-                let c = self.new_node(mem, cname, cpath_len, n, child_level, st, cycle, logical, root_dev, false)?;
+                if cycle != 0 {
+                    st.0 = info::DC;
+                }
+                let c = self.new_node(mem, cname, cpath_len, n, child_level, &st, cycle, logical, root_dev, false)?;
                 if let Err(e) = kids.push(c) {
                     self.free_node(mem, c);
                     return Err(e);
@@ -867,7 +922,7 @@ impl Fts {
             let x = self.node(n)?;
             let cut = x.arg.iter().rposition(|&b| b == b'/').map_or(0, |i| i.saturating_add(1));
             let last = x.arg.get(cut..).unwrap_or(&[]);
-            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap)).get_mut(off::NAME..) {
+            if let Some(d) = mem.bytes(x.block, off::NAME.saturating_add(x.name_cap())).get_mut(off::NAME..) {
                 d.fill(0);
                 put(d, 0, last);
             }
