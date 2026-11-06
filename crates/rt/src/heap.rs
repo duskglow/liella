@@ -319,42 +319,20 @@ const HALF_BELOW: [u64; 64] = {
     t
 };
 
-/// The free fast path's view of a class, fourth word: `log2(size)` for a power-of-two class and 0 for any other (D-3.18): the
-/// block index and the block offset of such a class are a shift, not a multiply.
-const FREE_VIEW: [[u64; 4]; 64] = {
-    let mut t = [[0u64; 4]; 64];
+const FREE_VIEW: [[u64; 3]; 64] = {
+    let mut t = [[0u64; 3]; 64];
     let mut i = 0;
     while i < 44 {
-        // A const context: `as` is the only conversion there; all fit in 64 bits.
+        // A const context: `as` is the only conversion there; both fit in 64 bits.
         #[allow(clippy::as_conversions)]
         {
-            let size = CLASSES[i];
-            let shift = if size.is_power_of_two() { size.trailing_zeros() as u64 } else { 0 };
-            t[i] = [size as u64, MAGIC[i], (SLAB / size) as u64, shift];
+            t[i] = [CLASSES[i] as u64, MAGIC[i], (SLAB / CLASSES[i]) as u64];
         }
         i += 1;
     }
     t
 };
-const _: () = assert!(CLASSES.len() <= 64 && CLASSES[0] > 1);
-
-/// The index of the block at offset `off` in a slab whose class view is `v`, if a block
-/// starts there (D-3.18). A power-of-two class takes a shift, any other the magic multiply; both
-/// then require `q * size == off`, so an interior offset is refused either way.
-#[inline(always)]
-fn block_index(v: [u64; 4], off: u64) -> Option<u64> {
-    let [size, magic, n, shift] = v;
-    let q = if shift != 0 { off >> shift } else { (off * magic) >> 40 };
-    (q * size == off && q < n).then_some(q)
-}
-
-/// The offset of block `i` in a slab of class `c` (D-3.18): `i * size`, as a shift for a
-/// power-of-two class.
-#[inline(always)]
-fn block_offset(c: usize, i: usize) -> usize {
-    let [size, _, _, shift] = FREE_VIEW[c];
-    if shift != 0 { i << shift } else { i * uz(size) }
-}
+const _: () = assert!(CLASSES.len() <= 64);
 
 /// A block handed out.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1235,7 +1213,7 @@ impl Heap {
                     k.set_class(c, K_HINT, w64(j));
                     let i = j * 64 + uz(u64::from(b));
                     k.set(slab_hint(uz(k.class(c, K_BASE))), k.class(c, K_BASE) | w64(c));
-                    return Some(Block { addr: uz(k.class(c, K_BASE)) + block_offset(c, i), usable: CLASSES[c], zeroed: false });
+                    return Some(Block { addr: uz(k.class(c, K_BASE)) + i * CLASSES[c], usable: CLASSES[c], zeroed: false });
                 }
             }
             self.refill(sys, pages, k, c)?;
@@ -1641,7 +1619,7 @@ impl Heap {
         let i = j * 64 + uz(u64::from(b));
         let base = k.class(c, K_BASE);
         k.set(slab_hint(uz(base)), base | w64(c));
-        Some(Block { addr: uz(base) + block_offset(c, i), usable: CLASSES[c], zeroed: false })
+        Some(Block { addr: uz(base) + i * CLASSES[c], usable: CLASSES[c], zeroed: false })
     }
 
     /// A block of class `c` from the word of the current slab that cache `k` searches first.
@@ -1668,7 +1646,7 @@ impl Heap {
         let i = j * 64 + uz(u64::from(b));
         let base = k.class(c, K_BASE);
         k.set(slab_hint(uz(base)), base | w64(c));
-        Some(Block { addr: uz(base) + block_offset(c, i), usable: CLASSES[c], zeroed: false })
+        Some(Block { addr: uz(base) + i * CLASSES[c], usable: CLASSES[c], zeroed: false })
     }
 
     /// Allocate a *secure* block (D-X.11): `size` bytes aligned to `align` (a power of two), in
@@ -1789,7 +1767,9 @@ impl Heap {
                 if c >= CLASSES.len() {
                     return false;
                 }
-                if let Some(q) = block_index(FREE_VIEW[c], off) {
+                let [size, magic, n] = FREE_VIEW[c];
+                let q = (off * magic) >> 40;
+                if q * size == off && q < n {
                     let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return false };
                     let (j, b) = bit(uz(q));
                     // `q < n` keeps `j` in the bitmap; the mask lets the compiler see it.
@@ -1974,7 +1954,11 @@ impl Heap {
             return Fit::Other;
         }
         let c = uz(last & 63);
-        let Some(q) = block_index(FREE_VIEW[c], off) else { return Fit::Other };
+        let [csize, magic, n] = FREE_VIEW[c];
+        let q = (off * magic) >> 40;
+        if q * csize != off || q >= n {
+            return Fit::Other;
+        }
         let Some(r) = Self::record_words(pages, uz(k.class(c, K_REC))) else { return Fit::Other };
         let (j, b) = bit(uz(q));
         // `q < n` keeps `j` in the bitmap; the mask lets the compiler see it.
@@ -1983,7 +1967,7 @@ impl Heap {
         if r.local[j].load(Relaxed) & b == 0 || (k.remote_any() && r.remote_has(j, b)) {
             return Fit::Other;
         }
-        let usable = uz(FREE_VIEW[c][0]);
+        let usable = uz(csize);
         // Up to the cap, `HALF_BELOW` is `keeps_in_place`'s rule (its slack is 2 for these
         // sizes: a class four times the need is above `MID_GROWTH * MID_FORECAST`, whose lower
         // bound is above the cap). `c` came from the masked hint: a padding entry has no blocks,
