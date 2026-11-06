@@ -162,6 +162,7 @@ static FILL_N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::
 static FILL_CHK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn fill_call(k: &CSys) -> i32 {
+    use liella_kernel::sys::Sys;
     use std::sync::atomic::Ordering::SeqCst;
     if k.prctl_int(liella_kernel::ops::PrctlInt::SetDumpable, 0, 0).is_err() {
         return 4;

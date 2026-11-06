@@ -499,9 +499,10 @@ fn null_fills_above_64_kib_abort_and_leave_a_page_at_64_kib_untouched() {
     // so a NULL d with n > 64 KiB aborts before any store and never reaches a page mapped at 64 KiB.
     // In a child: the test process keeps its low addresses free.
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    match selftest::in_child(null_fill_beside_a_page_at_64_kib).unwrap() {
-        ChildEnd::Exited(0) => {}
-        ChildEnd::Exited(77) => eprintln!("small_copy: 64 KiB check skipped (reason printed above)"),
-        end => panic!("NULL fill above 64 KiB: {end:?} (1: a grandchild did not abort, 2: the page at 64 KiB was written)"),
+    let end = selftest::in_child(null_fill_beside_a_page_at_64_kib).unwrap();
+    if end == ChildEnd::Exited(77) {
+        eprintln!("small_copy: 64 KiB check skipped (reason printed above)");
+        return;
     }
+    assert_eq!(end, ChildEnd::Exited(0), "NULL fill above 64 KiB (1: a grandchild did not abort, 2: the page at 64 KiB was written)");
 }
