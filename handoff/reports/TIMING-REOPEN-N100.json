@@ -1,0 +1,7 @@
+{"task": "TIMING-REOPEN-N100", "model": "opus", "tokens": null, "result": "5 N100 groups profiled (perf stat both sides, Liella samples); 5 code briefs + summary in handoff/timing-reopen-n100/", "branch": "task/timing-reopen-n100", "head": "150cd07e",
+ "gate": {"affected": "n/a (docs only; cargo xtask static NOT VERIFIED: no cargo on the agent machine)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "N100 cold-start first_/second_ rows and wordexp rows have no open story", "recommendation": "one planning story for cold-start rows, one instruction story for wordexp"}],
+ "informational": ["perf annotate impossible on the timing host (no objdump): stall sites not located at instruction level", "PARITY-COPY-AVX2-3 landed after the sweep base: memcpy_144/256 need a re-time on next HEAD first"],
+ "refused": [], "jobs": ["N100-timing-host:timing-reopen-n100-prof"],
+ "improvement": "install objdump on timing hosts (or a tools/ helper that ships perf.data to a build host) so Liella annotate works in the booking",
+ "next_step": "submit TIMING-N100-MUTEX-MT, -COPY-MID, -MEMCMP, -SCAN-64K, -STRSTR-64", "report_file": "handoff/timing-reopen-n100.md"}
