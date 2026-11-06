@@ -3,7 +3,7 @@
 //! table is allocated. The ALLOC-FAIL-INJECT hook fails every allocation of a page or more while
 //! such a file is read: a load that sized a table from a lying count reports `ENOMEM` (and the
 //! hook counts the failure) instead of `EINVAL`.
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, missing_docs)]
+#![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, missing_docs)]
 
 use liella::error::Errno;
 use liella::time::{self, Zone};
@@ -38,7 +38,7 @@ fn at_most<T, E: core::fmt::Debug>(n: u64, f: impl FnOnce() -> Result<T, E>) -> 
 
 #[test]
 fn a_zone_load_makes_one_allocation_per_table() {
-    // No spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS: each new allocation size
+    // no spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS: each new allocation size
     // touches its own heap region (a page fault), so the load sizes each table once: the
     // path, the file's bytes, then the zone's transitions, names and types.
     let body: &[u8] = &[
@@ -61,7 +61,7 @@ fn a_zone_load_makes_one_allocation_per_table() {
 
 #[test]
 fn tzif_counts_larger_than_the_file_are_rejected_before_any_table_is_allocated() {
-    // Spec §23.6, RFC 8536 §3.1-§3.2: the data block's size follows from the header's counts;
+    // no clause ID (§23.6 names no malformed-file clause); RFC 8536 §3.1-§3.2: the data block's size follows from the header's counts;
     // a file shorter than that is not a TZif file (EINVAL), and its counts size nothing.
     // One well-formed record (UTC, designation "UTC"), then headers that claim more.
     let body: &[u8] = &[0, 0, 0, 0, 0, 0, b'U', b'T', b'C', 0];
