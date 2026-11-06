@@ -1,0 +1,13 @@
+{"task": "NULLFOLD-COPY-MID-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: D-4.55 129-256 copy NULL folding is green (gate3, plants 5/5) and faster on Alder Lake-N (memcpy_144/256 14.4->13.4 cycles, glibc 13.2) and Zen 1 (instr 38.4->34.4), but memcpy_144/256 are ~2.6% slower on Ivy Bridge (18.9->19.4 cycles): the gate word adds a load on the saturated load/store-address ports; alignment fix measured no effect and was reverted",
+ "branch": "task/nullfold-copy-mid-2", "head": null,
+ "gate": {"affected": "keke NULLFOLD-COPY-MID-gate3: 10229 passed / 0 failed, conformance 117/117 (code tree 52c891c5 = final code)", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["NULLFOLD-COPY-MID-plants3 (rc 0, 5 CAUGHT) printed WARN-NOT-RAM: the first run's plants copy was under ~/work, not RAM",
+                   "Ivy Bridge instruction counter shows only -1.1 instr for the -4 instruction change (uops -4); Zen 1 and Alder Lake-N show -4"],
+ "refused": [],
+ "improvement": "stage_base.sh (reverse the branch patch in the role, stage, re-apply with fresh mtimes) gives a base bench in one job without a second worktree; worth a tool flag (bench --stage --base <ref>)",
+ "next_step": "SSE2 path reads one word: one sign-bit-encoded class word (both paths 1 load, AVX2 +1 instr) or an SSE2-first second word; re-time memcpy_144/256 on Alder Lake-N and Ivy Bridge vs base",
+ "report_file": "handoff/NULLFOLD-COPY-MID.md",
+ "jobs": ["keke:NULLFOLD-COPY-MID-gate3", "keke:NULLFOLD-COPY-MID-plants3", "keke:nullfold-copy-mid-2-lint2", "nozomi:nullfold-copy-mid-2-n100", "nozomi:nullfold-copy-mid-2-n100-r2", "nico:nullfold-copy-mid-2-ivb", "nico:nullfold-copy-mid-2-ivb-r2"]}
