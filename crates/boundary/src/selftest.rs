@@ -747,6 +747,15 @@ pub fn kernel_avx2() -> bool {
     crate::dispatch::avx2()
 }
 
+/// The copy entry's 129-256 class word as the entry reads it (D-4.55, NULLFOLD-COPY-MID-3):
+/// `(gate, sse2)`, the size bound with the sign bit cleared (0: no folded size) and whether the
+/// sign bit sends the class to the SSE2 body. Lets a test confirm the word follows the folding
+/// and build settings, since both bodies copy the same bytes.
+pub fn copy_class_word() -> (usize, bool) {
+    let w = crate::ffi::liella_machine_move_long.load(core::sync::atomic::Ordering::Relaxed);
+    (w & !crate::dispatch::MOVE_SSE2, w & crate::dispatch::MOVE_SSE2 != 0)
+}
+
 /// The AVX2 copy into `dst` from `src` (the size range and placement checks are bypassed):
 /// the bytes copied, or `None` (nothing copied) on a CPU or OS without AVX2 or below 128 bytes.
 pub fn copy_avx2(dst: &mut [u8], src: &[u8]) -> Option<usize> {

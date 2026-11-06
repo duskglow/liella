@@ -447,6 +447,38 @@ fn a_null_source_of_129_to_256_bytes_writes_nothing_into_a_shared_file_mapping()
 }
 
 #[test]
+fn the_129_to_256_copy_word_follows_the_folding_and_build_settings_in_either_order() {
+    // no spec clause (D-4.55, NULLFOLD-COPY-MID-3): the copy entry reads one word for the 129-256
+    // class; its bound is 256 only with folding on, and its SSE2 mark is set exactly when folding
+    // is on with the SSE2 build, whichever setting changed last. Both bodies copy the same bytes,
+    // so only the word itself shows a wrong build choice on a CPU with AVX2.
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (avx2_before, fold_before) = (selftest::kernel_avx2(), selftest::null_fold());
+    let builds = mid_builds();
+    for &(fold, avx2) in &builds {
+        for (from_fold, from_avx2) in &builds {
+            // From every other state, set folding first, then the build; then the other order.
+            for fold_first in [true, false] {
+                assert!(selftest::set_null_fold(*from_fold) && selftest::set_kernel_avx2(*from_avx2));
+                if fold_first {
+                    assert!(selftest::set_null_fold(fold) && selftest::set_kernel_avx2(avx2));
+                } else {
+                    assert!(selftest::set_kernel_avx2(avx2) && selftest::set_null_fold(fold));
+                }
+                let want = (if fold { 256 } else { 0 }, fold && !avx2);
+                assert_eq!(
+                    selftest::copy_class_word(),
+                    want,
+                    "copy word: fold {fold} avx2 {avx2} from fold {from_fold} avx2 {from_avx2} fold first {fold_first}"
+                );
+            }
+        }
+    }
+    assert!(selftest::set_kernel_avx2(avx2_before));
+    assert!(selftest::set_null_fold(fold_before));
+}
+
+#[test]
 fn the_startup_guard_folds_only_from_64_kib() {
     // no spec clause (D-4.22 startup guard): vm.mmap_min_addr >= 65536 allows folding; below it,
     // or unreadable text, does not.

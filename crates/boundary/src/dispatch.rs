@@ -90,12 +90,15 @@ pub(crate) fn select(avx2: bool) {
         CMP_LONG_WORD.store(0, Relaxed);
         CMP_MID.store(0, Relaxed);
         store_cmp_gates(FOLD.load(Relaxed) != 0, false);
+        // The 129-256 copy word takes its SSE2 mark before the flag drops.
+        store_move_word(FOLD.load(Relaxed) != 0, false);
     }
     AVX2.store(avx2, Relaxed);
     if avx2 {
         CMP_MID.store(128, Relaxed);
     }
     update_cmp_gates();
+    store_move_word(FOLD.load(Relaxed) != 0, avx2);
 }
 
 // The AVX2 flag word of the ordered compare's SSE2 long class (machine/fold.S, MEMCMP-MID-3): 128
@@ -171,14 +174,35 @@ use crate::ffi::liella_machine_chr_limit as FOLD_CHR;
 pub(crate) const FOLD_MAX: usize = 64;
 
 // The copy entry's 129-256 gate (machine/fold.S, NULLFOLD-COPY-MID, D-4.55, owner ruling #3304):
-// `MOVE_FOLD_MAX` with folding on, else 0. Its folded calls load `[s, s + 32)` (or 16 bytes
-// without AVX2) before any store and store `d` first at `d + 0`, and touch at most
-// `[x, x + MOVE_FOLD_MAX)` of either region, page zero for a NULL, so the module proof obligation
-// covers them.
+// `MOVE_FOLD_MAX` with folding on, with `MOVE_SSE2` added under the SSE2 build, else 0. Its folded
+// calls load `[s, s + 32)` (or 16 bytes without AVX2) before any store and store `d` first at
+// `d + 0`, and touch at most `[x, x + MOVE_FOLD_MAX)` of either region, page zero for a NULL, so
+// the module proof obligation covers them. The sign bit picks the body, so the entry reads one
+// word (NULLFOLD-COPY-MID-3): the word is positive and nonzero only while the AVX2 flag is set.
 use crate::ffi::liella_machine_move_long as FOLD_MOVE;
 
 /// The largest folded copy size: the copy entry's 129-256 class has no NULL test with folding on.
 pub(crate) const MOVE_FOLD_MAX: usize = 256;
+
+/// The 129-256 copy word's SSE2 mark (its sign bit): the entry clears it before the size compare.
+pub(crate) const MOVE_SSE2: usize = 1 << (usize::BITS - 1);
+
+/// The 129-256 copy word for `fold` / `avx2`: 0 with folding off, [`MOVE_FOLD_MAX`] with both,
+/// `MOVE_SSE2 | MOVE_FOLD_MAX` with folding alone.
+pub(crate) const fn move_word(fold: bool, avx2: bool) -> usize {
+    match (fold, avx2) {
+        (false, _) => 0,
+        (true, true) => MOVE_FOLD_MAX,
+        (true, false) => MOVE_SSE2 | MOVE_FOLD_MAX,
+    }
+}
+
+/// Store the 129-256 copy word for `fold` / `avx2`. Callers store it before folding or the AVX2
+/// flag goes off and after both are set, so the word never names folding or the AVX2 body that
+/// the state does not allow, also between the stores.
+fn store_move_word(fold: bool, avx2: bool) {
+    FOLD_MOVE.store(move_word(fold, avx2), Relaxed);
+}
 
 /// Whether NULL folding is on (the explicit S6 checks are off for the kernel sizes).
 #[inline(always)]
@@ -200,7 +224,7 @@ pub(crate) fn select_null_fold(fold: bool) {
     }
     FOLD.store(if fold { FOLD_MAX } else { 0 }, Relaxed);
     if fold {
-        FOLD_MOVE.store(MOVE_FOLD_MAX, Relaxed);
+        store_move_word(true, AVX2.load(Relaxed));
     }
     // The portable scanners (cfg liella_portable_scan, A-8) never fold a NULL: a NULL read is UB in
     // Rust, so their memchr takes the S6 abort for NULL with n > 0 (coordinator ruling 2026-11-04,

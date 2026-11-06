@@ -105,8 +105,9 @@ memcpy:
 .Lmove_none:
 	ret
 /* 65-128 here after the explicit NULL tests of d and s (option B; one unsigned compare: n - 65 <= 63),
- * 129-256 folded (below: no NULL test while `liella_machine_move_long` is 256), with AVX2 (the flag byte below, set
- * by crates/boundary/src/dispatch.rs only when the CPU has AVX2 and the OS saves the YMM state) two
+ * 129-256 folded (below: no NULL test while `liella_machine_move_long` is nonzero), with AVX2 (the flag byte below,
+ * or for 129-256 the class word's clear sign bit, set by crates/boundary/src/dispatch.rs only when the CPU has AVX2
+ * and the OS saves the YMM state) two
  * (65-128) or four (129-256) 32-byte blocks from each end, without it four or eight 16-byte ones;
  * a NULL, 1-64 without folding and every other size in Rust. The 65-128 class falls through
  * (no compare added to it by COPY-256). */
@@ -150,18 +151,21 @@ memcpy:
 	movups %xmm7, -16(%rdi,%rdx)
 	ret
 /* 129-256 (NULLFOLD-COPY-MID, D-4.55, owner ruling #3304): no NULL test. `liella_machine_move_long`
- * is 256 while NULL folding is on, else 0, so this one compare is the class's range test and its
- * folding gate: sizes above 256, and every size above 128 with folding off or undecided, take
- * `liella_hot_move_rest` (the explicit S6 NULL checks, then the Rust large path). ORDER: the first
- * access is the load of s's head block at offset 0 and every load comes before the first store, so
- * a NULL s faults on page zero before anything is written to d; a NULL d faults on its first
- * store, at d + 0. Both touch [0, 256), inside the [0, 64 KiB) guard (dispatch). */
+ * is 256 while NULL folding is on with the AVX2 build, 2^63 | 256 with folding on and the SSE2 build,
+ * else 0, so its one load is the class's range test, its folding gate and its build choice (the
+ * SSE2 path reads one word, as the checked path did before folding: NULLFOLD-COPY-MID-3; the AVX2
+ * flag byte is not read here): sizes above 256, and every size above 128 with folding off or
+ * undecided, take `liella_hot_move_rest` (the explicit S6 NULL checks, then the Rust large path).
+ * ORDER: the first access is the load of s's head block at offset 0 and every load comes before
+ * the first store, so a NULL s faults on page zero before anything is written to d; a NULL d faults
+ * on its first store, at d + 0. Both touch [0, 256), inside the [0, 64 KiB) guard (dispatch). */
 .Lmove_129:
-	cmpq liella_machine_move_long(%rip), %rdx
+	movq liella_machine_move_long(%rip), %rcx
+	testq %rcx, %rcx
+	js .Lmove_129_sse2_gate
+	cmpq %rcx, %rdx
 	ja liella_hot_move_rest
-.Lmove_129_go:
-	cmpb $0, liella_machine_avx2(%rip)
-	je .Lmove_129_sse2
+.Lmove_129_avx2:
 	vmovdqu (%rsi), %ymm0
 	vmovdqu 32(%rsi), %ymm1
 	vmovdqu 64(%rsi), %ymm2
@@ -180,6 +184,10 @@ memcpy:
 	vmovdqu %ymm7, -32(%rdi,%rdx)
 	vzeroupper
 	ret
+.Lmove_129_sse2_gate:
+	btrq $63, %rcx			/* the SSE2 mark off: 256 */
+	cmpq %rcx, %rdx
+	ja liella_hot_move_rest
 .Lmove_129_sse2:
 	movups (%rsi), %xmm0
 	movups 16(%rsi), %xmm1
@@ -224,7 +232,9 @@ memcpy:
 liella_machine_move_mid:
 	cmpq $128, %rdx
 	jbe .Lmove_65
-	jmp .Lmove_129_go
+	cmpb $0, liella_machine_avx2(%rip)
+	je .Lmove_129_sse2
+	jmp .Lmove_129_avx2
 	.size liella_machine_move_mid, .-liella_machine_move_mid
 #ifdef LIELLA_EXPORT
 	.size memcpy, .-memcpy
@@ -1403,10 +1413,12 @@ liella_machine_cmp_long:
 	.zero 8
 	.size liella_machine_cmp_long, 8
 /* The copy entry's 129-256 class word (NULLFOLD-COPY-MID, D-4.55; `ffi::liella_machine_move_long`):
- * 256 while NULL folding is on, else 0 (written by `crate::dispatch::select_null_fold`: dropped
- * before folding goes off, raised after it is on). The 129-256 copy classes have no NULL test (their
- * first load, s at offset 0, faults on page zero before any store), so the word is their only gate:
- * sizes above 128 with `n > word` tail-jump to the checked entry. It completes the line. */
+ * 256 while NULL folding is on with the AVX2 build, 2^63 | 256 (sign bit: the SSE2 body) while
+ * folding is on with the SSE2 build, else 0 (written by `crate::dispatch::store_move_word`: dropped
+ * before folding or the AVX2 flag goes off, raised after both are set). The 129-256 copy classes
+ * have no NULL test (their first load, s at offset 0, faults on page zero before any store), so the
+ * word is their only gate: sizes above 128 with `n > word` (sign bit cleared) tail-jump to the
+ * checked entry. It completes the line. */
 	.globl liella_machine_move_long
 	.hidden liella_machine_move_long
 	.type liella_machine_move_long, @object

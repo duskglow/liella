@@ -379,10 +379,12 @@ unsafe extern "C" {
     /// (proof obligation: never nonzero while the AVX2 flag is false).
     pub(crate) safe static liella_machine_cmp_long: core::sync::atomic::AtomicUsize;
     /// The copy entry's 129-256 class word (machine/fold.S, NULLFOLD-COPY-MID, D-4.55):
-    /// `dispatch::MOVE_FOLD_MAX` (256) while NULL folding is on, else 0; sizes above 128 with
-    /// `n <= word` take the 129-256 classes with no NULL test. Written only by
-    /// `crate::dispatch::select_null_fold` (proof obligation: nonzero only while the folding
-    /// guard holds, i.e. no access in `[0, 64 KiB)` can succeed).
+    /// `dispatch::MOVE_FOLD_MAX` (256) while NULL folding is on, with the sign bit
+    /// (`dispatch::MOVE_SSE2`, the SSE2 body) under the SSE2 build, else 0; sizes above 128 with
+    /// `n <= word` (sign bit cleared) take the 129-256 classes with no NULL test. Written only by
+    /// `crate::dispatch::store_move_word` (proof obligations: nonzero only while the folding
+    /// guard holds, i.e. no access in `[0, 64 KiB)` can succeed; positive and nonzero only while
+    /// the AVX2 flag is set).
     pub(crate) safe static liella_machine_move_long: core::sync::atomic::AtomicUsize;
     pub(crate) safe fn liella_machine_memmove(d: *mut u8, s: *const u8, n: usize) -> *mut u8;
     /// The direct `mempcpy` entry (machine/fold.S, WL-HOT-SEQ2; `mempcpy` and `__mempcpy` in the
