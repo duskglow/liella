@@ -145,7 +145,7 @@ pub(crate) struct Built {
 
 /// The first-byte map as one contiguous byte range `(lo, hi - lo)`, when it is exactly one
 /// (`[0-9]`, `[a-z]`, a single byte); `None` for an empty map or one with gaps. The scan then
-/// tests a subtraction and a compare per byte instead of a bit of the map (D-NEW).
+/// tests a subtraction and a compare per byte instead of a bit of the map (D-14.21).
 fn byte_range(first: &[u64; 4]) -> Option<(u8, u8)> {
     let n: u32 = first.iter().map(|w| w.count_ones()).sum();
     let bit = |k: usize, at: u32| u32::try_from(k).ok().and_then(|k| k.checked_mul(64)).map(|k| k + at);
@@ -157,7 +157,7 @@ fn byte_range(first: &[u64; 4]) -> Option<(u8, u8)> {
     Some((u8::try_from(lo).ok()?, u8::try_from(hi - lo).ok()?))
 }
 
-/// The index of the first byte of `r` in `lo..=lo + span` (D-NEW): the window's first byte
+/// The index of the first byte of `r` in `lo..=lo + span` (D-14.21): the window's first byte
 /// alone, then sixteen bytes per branch, each byte a subtraction and an unsigned compare with
 /// no variable shift (the chunk test compiles to SSE2 compares), then the tail.
 #[inline]
@@ -1580,7 +1580,7 @@ mod class_tests {
     /// Spec §14.9 (s14_9_c_1_2: regexec finds the leftmost match; no match begins on a byte
     /// outside the first-byte set): `first_start` returns the first byte `can_start_with`
     /// accepts, for every byte value at every position of windows that cover the one-byte
-    /// shortcut, the chunk loops (four and sixteen bytes) and their tails (D-NEW).
+    /// shortcut, the chunk loops (four and sixteen bytes) and their tails (D-14.21).
     #[test]
     fn first_start_agrees_with_can_start_with_for_every_byte() {
         use super::super::cflags::{EXTENDED, ICASE};
