@@ -190,38 +190,13 @@ memcpy:
 	cmpq %rcx, %rdx
 	ja liella_hot_move_rest
 /* SSE2-COPY-MID-SPLIT (D-4.61, ruling #3587): 129-192 six 16-byte blocks from each end (the whole
- * region for n <= 192; 12 loads and 12 stores, not 16 each), 193-256 eight from each end. The ORDER
+ * region for n <= 192; 12 loads and 12 stores, not 16 each), 193-256 eight from each end. 193-256
+ * falls through (a taken branch there measured memcpy_256 slower), 129-192 takes the jump. The ORDER
  * above holds on both paths: all loads, starting at s + 0, before the first store at d + 0; both
  * touch only [x, x + n) of each region. The fill (memset 129-256) keeps eight per end. */
 .Lmove_129_sse2:
 	cmpq $192, %rdx
-	ja .Lmove_193_sse2
-	movups (%rsi), %xmm0
-	movups 16(%rsi), %xmm1
-	movups 32(%rsi), %xmm2
-	movups 48(%rsi), %xmm3
-	movups 64(%rsi), %xmm4
-	movups 80(%rsi), %xmm5
-	movups -96(%rsi,%rdx), %xmm6
-	movups -80(%rsi,%rdx), %xmm7
-	movups -64(%rsi,%rdx), %xmm8
-	movups -48(%rsi,%rdx), %xmm9
-	movups -32(%rsi,%rdx), %xmm10
-	movups -16(%rsi,%rdx), %xmm11
-	movups %xmm0, (%rdi)
-	movups %xmm1, 16(%rdi)
-	movups %xmm2, 32(%rdi)
-	movups %xmm3, 48(%rdi)
-	movups %xmm4, 64(%rdi)
-	movups %xmm5, 80(%rdi)
-	movups %xmm6, -96(%rdi,%rdx)
-	movups %xmm7, -80(%rdi,%rdx)
-	movups %xmm8, -64(%rdi,%rdx)
-	movups %xmm9, -48(%rdi,%rdx)
-	movups %xmm10, -32(%rdi,%rdx)
-	movups %xmm11, -16(%rdi,%rdx)
-	ret
-.Lmove_193_sse2:
+	jbe .Lmove_129_192_sse2
 	movups (%rsi), %xmm0
 	movups 16(%rsi), %xmm1
 	movups 32(%rsi), %xmm2
@@ -254,6 +229,32 @@ memcpy:
 	movups %xmm13, -48(%rdi,%rdx)
 	movups %xmm14, -32(%rdi,%rdx)
 	movups %xmm15, -16(%rdi,%rdx)
+	ret
+.Lmove_129_192_sse2:
+	movups (%rsi), %xmm0
+	movups 16(%rsi), %xmm1
+	movups 32(%rsi), %xmm2
+	movups 48(%rsi), %xmm3
+	movups 64(%rsi), %xmm4
+	movups 80(%rsi), %xmm5
+	movups -96(%rsi,%rdx), %xmm6
+	movups -80(%rsi,%rdx), %xmm7
+	movups -64(%rsi,%rdx), %xmm8
+	movups -48(%rsi,%rdx), %xmm9
+	movups -32(%rsi,%rdx), %xmm10
+	movups -16(%rsi,%rdx), %xmm11
+	movups %xmm0, (%rdi)
+	movups %xmm1, 16(%rdi)
+	movups %xmm2, 32(%rdi)
+	movups %xmm3, 48(%rdi)
+	movups %xmm4, 64(%rdi)
+	movups %xmm5, 80(%rdi)
+	movups %xmm6, -96(%rdi,%rdx)
+	movups %xmm7, -80(%rdi,%rdx)
+	movups %xmm8, -64(%rdi,%rdx)
+	movups %xmm9, -48(%rdi,%rdx)
+	movups %xmm10, -32(%rdi,%rdx)
+	movups %xmm11, -16(%rdi,%rdx)
 	ret
 /* void liella_machine_move_mid(void *d, const void *s, size_t n): the library's internal copy
  * (crates/boundary/src/hot/mem.rs `internal_move`, D-X.15) for 65 <= n <= 256 with d and s non-NULL
