@@ -26,7 +26,7 @@ enum Build {
 }
 
 /// Set by `compare --no-build`: `c_build` returns the existing programs instead of compiling.
-static COMPARE_NO_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static COMPARE_NO_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Builds `bench/c/<name>.c` into `target/liella/bench` and returns the program's path. The
 /// host builds use the same compiler flags as the products' build (`-fno-builtin` included), so
@@ -541,14 +541,19 @@ fn c_bench_names(dir: &Path) -> Vec<String> {
 
 /// XTASK-BENCH-NAMES: every positional name of `--compare` must be a bench file, checked before anything is
 /// built (a row or function name such as `exp` used to become `bench/c/exp.c` and fail in cc1 after the product build).
-fn check_bench_names(names: &[String], valid: &[String]) -> Result<(), String> {
+/// XTASK-BENCH-COMPARE-STAGED: the message names `dir` (where the names were looked for) and says so when it holds none.
+fn check_bench_names(names: &[String], valid: &[String], dir: &Path) -> Result<(), String> {
     for n in names {
         if !valid.iter().any(|v| v == n) {
+            let found = if valid.is_empty() {
+                format!("{} holds no *.c file (is this the tree you meant?)", dir.display())
+            } else {
+                format!("Valid names (the *.c files in {}): {}", dir.display(), valid.join(", "))
+            };
             return Err(format!(
-                "bench --compare: `{n}` is not a benchmark (no bench/c/{n}.c). Valid names: {}. A row or function name does not belong here: \
+                "bench --compare: `{n}` is not a benchmark (no bench/c/{n}.c). {found}. A row or function name does not belong here: \
                  --compare takes bench names only, positionally or as `--only a,b`, and accepts --runs N, --v3, --sorted, --counters, --tunables V, \
-                 --build-only, --no-build. It has no row filter (`--rows`/`--affected` exist only on the plain `bench` command)",
-                valid.join(", ")
+                 --build-only, --no-build. It has no row filter (`--rows`/`--affected` exist only on the plain `bench` command)"
             ));
         }
     }
@@ -629,7 +634,10 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     if let Some(v) = tunables {
         let _ = TUNABLES.set(v);
     }
-    check_bench_names(&names, &c_bench_names(&root.join("bench/c")))?;
+    let dir = root.join("bench/c");
+    check_bench_names(&names, &c_bench_names(&dir), &dir)?;
+    // XTASK-BENCH-COMPARE-STAGED: like the plain `--no-build` run, a staged tree's products are checked by hash first.
+    let staged = if no_build { crate::benchstage::load_verified(root)? } else { None };
     COMPARE_NO_BUILD.store(no_build, std::sync::atomic::Ordering::Relaxed);
     // Measurements always use the shipped profile (fat LTO), never the fast test profile.
     if !no_build {
@@ -645,6 +653,9 @@ pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     let cpu = cpu_model();
     println!("machine: {}, {cpu}, kernel {}, {} (host C library)", first_line("hostname", &[]), first_line("uname", &["-r"]), first_line("ldd", &["--version"]));
     println!("tunables: GLIBC_TUNABLES={} (both sides)", TUNABLES.get().map_or("(unset)", String::as_str));
+    if let Some(m) = &staged {
+        println!("{}", crate::benchstage::header(m));
+    }
     println!("method: {runs} rounds after a discarded warm-up round, the builds alternating; each value is the program's best of 7 rounds (cold rows: median of 31 processes)");
     // Index 0 is Liella (static), 1 the reference (glibc dynamic); the order is the column order.
     let mut builds = vec![(Build::Liella, "liella"), (Build::HostDynamic, "glibc_dyn"), (Build::HostStatic, "glibc_static")];
@@ -1764,14 +1775,19 @@ mod tests {
     #[test]
     fn compare_rejects_unknown_bench_name_listing_valid_ones() {
         let valid = vec!["cbench_libm".to_string(), "cbench_opt".to_string()];
-        let e = check_bench_names(&["exp".to_string()], &valid).unwrap_err();
-        assert!(e.contains("`exp`") && e.contains("cbench_libm, cbench_opt") && e.contains("--only"), "{e}");
-        assert!(check_bench_names(&["cbench_libm".to_string()], &valid).is_ok());
+        let d = Path::new("/t/bench/c");
+        let e = check_bench_names(&["exp".to_string()], &valid, d).unwrap_err();
+        assert!(e.contains("`exp`") && e.contains("cbench_libm, cbench_opt") && e.contains("--only") && e.contains("/t/bench/c"), "{e}");
+        assert!(check_bench_names(&["cbench_libm".to_string()], &valid, d).is_ok());
+        // XTASK-BENCH-COMPARE-STAGED: no names found says where it looked, never an empty list
+        let e = check_bench_names(&["cbench_opt".to_string()], &[], d).unwrap_err();
+        assert!(e.contains("/t/bench/c holds no *.c file") && !e.contains("Valid names"), "{e}");
         // the real tree: nothing is built by the check, and the shipped benches are found
-        let real = c_bench_names(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../bench/c"));
+        let real_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../bench/c");
+        let real = c_bench_names(&real_dir);
         assert!(real.iter().any(|n| n == "cbench_libm"), "{real:?}");
-        assert!(check_bench_names(&["cbench_libm".to_string()], &real).is_ok());
-        assert!(check_bench_names(&["exp".to_string()], &real).is_err());
+        assert!(check_bench_names(&["cbench_libm".to_string()], &real, &real_dir).is_ok());
+        assert!(check_bench_names(&["exp".to_string()], &real, &real_dir).is_err());
     }
 
     // TEST-BENCH-TUNABLES-LEAK: no spec clause (developer tooling). Tests build commands with an explicit

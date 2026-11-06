@@ -213,6 +213,32 @@ pub(crate) fn header(m: &Manifest) -> String {
     )
 }
 
+/// Whether `dir` is the root of a tree xtask works on: a workspace (`Cargo.toml` and `xtask/Cargo.toml`) or a
+/// staged tree (`bench-stage.manifest`).
+fn is_root(dir: &Path) -> bool {
+    (dir.join("Cargo.toml").is_file() && dir.join("xtask/Cargo.toml").is_file()) || dir.join(MANIFEST).is_file()
+}
+
+/// XTASK-BENCH-COMPARE-STAGED: the tree to work on: the nearest ancestor of `cwd` (inclusive) that `is_root`, so a
+/// copied tree (TOOLS-10) or an unpacked staged tree acts on itself; else `built` (the build-time workspace root)
+/// if it is one. Neither: an error naming `cwd`, never a directory that does not exist (a staged tree unpacked
+/// without its `Cargo.toml` and manifest used to fall back to the build host's path, so every bench name was
+/// "not a benchmark" with an empty list).
+pub(crate) fn find_root(cwd: Option<&Path>, built: &Path) -> Result<PathBuf, String> {
+    if let Some(r) = cwd.and_then(|d| d.ancestors().find(|a| is_root(a))) {
+        return Ok(r.to_path_buf());
+    }
+    if is_root(built) {
+        return Ok(built.to_path_buf());
+    }
+    Err(format!(
+        "no tree to work on: neither {} nor a parent holds {MANIFEST} or Cargo.toml with xtask/Cargo.toml, and the build-time root {} is not one. \
+         Run from a workspace, or from a staged tree unpacked whole from the tarball of `cargo xtask bench --stage` (tar -xf <out.tar> -C <dir>)",
+        cwd.map_or_else(|| "(the working directory, unreadable)".to_string(), |d| d.display().to_string()),
+        built.display()
+    ))
+}
+
 /// The path `--stage` was given, made absolute (the build runs with other working directories).
 pub(crate) fn out_path(arg: &str) -> PathBuf {
     let p = PathBuf::from(arg);
@@ -362,6 +388,73 @@ mod tests {
         let after = snapshot(&dst, crate::bench::STAGED_OUT);
         let changed: Vec<&String> = after.keys().chain(before.keys()).filter(|k| before.get(*k) != after.get(*k)).collect();
         assert!(changed.is_empty(), "staged files changed or added by the runs: {changed:?}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    // XTASK-BENCH-COMPARE-STAGED: no spec clause (developer tooling). The root is found from inside an unpacked staged
+    // tree (by its manifest alone too); `bench --compare --no-build` there measures a real bench name, refuses an
+    // unknown one listing the staged names and their directory, and refuses a product changed after staging. A tree
+    // with neither manifest nor Cargo.toml is no root: an error naming it, or the build-time root if that is one.
+    #[test]
+    fn compare_in_a_staged_tree_finds_its_root_and_benches() {
+        let _run = crate::bench::RUN_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // outside the workspace: below it, the ancestor search would find the workspace root itself
+        let base = std::env::temp_dir().join(format!("xtask-stage-compare-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let (src, dst, nowhere) = (base.join("src"), base.join("unpacked"), base.join("not-a-tree"));
+        write(&src.join("Cargo.toml"), "[workspace]\n");
+        write(&src.join("xtask/Cargo.toml"), "[package]\n");
+        write(&src.join("bench/budgets.tsv"), "cbench_stagecmp\trow\tmax_ns\t1000000\tstage test\n");
+        write(&src.join("bench/host_limits.tsv"), "# none\n");
+        write(&src.join("bench/instr_limits.tsv"), "# none\n");
+        for b in ["cbench_stagecmp", "cbench_stageother"] {
+            write(&src.join(format!("bench/c/{b}.c")), "/* the bench source */\n");
+        }
+        write(&src.join("target/liella/libc.a"), "!<arch>\n");
+        write(&src.join("target/liella/.profile"), "release\n");
+        for (suffix, ns) in [("", 5), (".host-dynamic", 4)] {
+            let exe = src.join(format!("target/liella/bench/cbench_stagecmp{suffix}"));
+            write(&exe, &format!("#!/bin/sh\nprintf 'row\\t{ns}\\n'\n"));
+            fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let tar = base.join("stage.tar");
+        write_stage(&src, &tar, &[], &std::env::current_exe().unwrap()).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        assert!(Command::new("tar").arg("-xf").arg(&tar).arg("-C").arg(&dst).status().unwrap().success());
+
+        // found from the staged root and below it, by the manifest alone too, never the build-time root
+        assert_eq!(find_root(Some(&dst), &nowhere).unwrap(), dst);
+        fs::remove_file(dst.join("Cargo.toml")).unwrap();
+        let root = find_root(Some(&dst.join("bench/c")), &src).unwrap();
+        assert_eq!(root, dst);
+
+        let a = |v: &[&str]| args(&[&["--compare", "--no-build", "--runs", "1"], v].concat());
+        let compare = |v: &[&str]| {
+            let r = crate::bench::compare(&root, &a(v));
+            crate::bench::COMPARE_NO_BUILD.store(false, std::sync::atomic::Ordering::Relaxed);
+            r
+        };
+        compare(&["cbench_stagecmp"]).unwrap();
+        let table = fs::read_to_string(dst.join(crate::bench::STAGED_OUT).join("cbench_stagecmp.compare.tsv")).unwrap();
+        assert!(table.lines().any(|l| l.starts_with("row\t")), "{table}");
+        let e = compare(&["cbench_nosuch"]).unwrap_err();
+        let listed = format!("Valid names (the *.c files in {}): cbench_stagecmp, cbench_stageother", dst.join("bench/c").display());
+        assert!(e.contains("`cbench_nosuch` is not a benchmark") && e.contains(&listed), "{e}");
+
+        // a product changed after staging is refused, as by the plain `--no-build` run
+        let staged_exe = dst.join("target/liella/bench/cbench_stagecmp");
+        let mut text = fs::read_to_string(&staged_exe).unwrap();
+        text.push_str("# changed after staging\n");
+        fs::write(&staged_exe, text).unwrap();
+        let e = compare(&["cbench_stagecmp"]).unwrap_err();
+        assert!(e.contains("target/liella/bench/cbench_stagecmp does not match"), "{e}");
+
+        // repacked without its manifest and Cargo.toml: no root (an error naming it), or the build-time root
+        fs::remove_file(dst.join(MANIFEST)).unwrap();
+        let e = find_root(Some(&dst), &nowhere).unwrap_err();
+        assert!(e.contains(&dst.display().to_string()) && e.contains(MANIFEST) && e.contains("bench --stage"), "{e}");
+        assert_eq!(find_root(Some(&dst), &src).unwrap(), src);
+        assert!(find_root(None, &nowhere).is_err());
         let _ = fs::remove_dir_all(&base);
     }
 
