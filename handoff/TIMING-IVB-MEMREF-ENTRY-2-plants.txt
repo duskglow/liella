@@ -1,0 +1,8 @@
+# TIMING-IVB-MEMREF-ENTRY-2 plants: the SSE2 129-192 / 193-256 split of the copy and fill (csys/src/machine/fold.S).
+# small_copy runs every size and alignment of the copy and fill classes in each build (sse2 checked, sse2 folded, avx2).
+# memmove: the split bound raised, so 193-208 take the six-block path and [d + 96, d + n - 96) is never written.
+move-split-bound | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_sse2:\s*)cmpq \$192, %rdx/$1cmpq \$208, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:FAILED|panicked
+# memmove 129-192: the first tail block's store dropped (a gap at [d + 96, d + 112) for n = 192 only: the head blocks cover it below).
+move-split-store | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_sse2:.*?)\tmovups %xmm6, -96\(%rdi,%rdx\)\n/$1/s | cargo test -p liella-boundary --test small_copy | msg:FAILED|panicked
+# memset: the split bound raised, so 193-208 skip the middle stores.
+set-split-bound | csys/src/machine/fold.S | perl:s/(liella_machine_memset:.*?\.Lset_129_sse2:.*?)cmpq \$192, %rdx/$1cmpq \$208, %rdx/s | cargo test -p liella-boundary --test small_copy | msg:FAILED|panicked
