@@ -349,6 +349,10 @@ struct Cookie {
     closed: bool,
     /// At most this many bytes per read (short reads), when set.
     chunk: Option<usize>,
+    /// The next read fails with `EIO` (`Some(true)`) or reports end of file (`Some(false)`), once.
+    fail_once: Option<bool>,
+    /// Reads asked of the backing.
+    reads: usize,
 }
 
 static COOKIES: Mutex<Vec<Cookie>> = Mutex::new(Vec::new());
@@ -366,6 +370,15 @@ fn with_cookie<T>(id: usize, f: impl FnOnce(&mut Cookie) -> T) -> T {
 
 extern "C" fn ck_read(id: usize, buf: *mut c_char, n: usize) -> isize {
     with_cookie(id, |c| {
+        c.reads += 1;
+        match c.fail_once.take() {
+            Some(true) => {
+                errno::set_raw(Errno::EIO.get());
+                return -1;
+            }
+            Some(false) => return 0,
+            None => {}
+        }
         let src = c.data.get(c.pos..).unwrap_or(&[]);
         let k = n.min(src.len()).min(c.chunk.unwrap_or(usize::MAX));
         st::memcpy(buf.cast(), src.as_ptr().cast(), k);
@@ -2329,4 +2342,65 @@ fn child_report(o: &std::process::Output) -> String {
         lines[lines.len().saturating_sub(60)..].join("\n")
     };
     format!("exit {:?}\n--- stdout ---\n{}\n--- stderr ---\n{}", o.status, tail(&o.stdout), tail(&o.stderr))
+}
+
+/// §12.5, §12.8, §12.10: a read that starts with an indicator already set (STDIO-STICKY-ERROR-ERRNO,
+/// D-12.1; black-box probe of the reference). No entry sets `errno` on account of an indicator:
+/// `errno` changes only when this call's own read of the backing fails. With the end-of-file
+/// indicator set, every entry answers end of file without reading. With the error indicator set,
+/// `getline`/`getdelim` answer -1 without reading; the other entries read on, and the indicator
+/// stays set. `ungetc` works with either indicator (and clears end of file). The `scanf` family
+/// takes varargs and is in the oracle (`tests/oracle/stdio_diff.c`, `sticky_indicators`).
+#[test]
+fn s12_5_c_5_sticky_indicators_leave_errno() {
+    // Clauses: s12_5_c_1, s12_5_c_3, s12_5_c_5, s12_8_c_5, s12_10_c_0.
+    const SENTINEL: c_int = 4242;
+    type Entry = fn(*mut FILE) -> i64;
+    // (name, wide, call, the result when it reads on with the error indicator set: None = fails)
+    let table: [(&str, bool, Entry, Option<i64>); 14] = [
+        ("fgetc", false, |f| i64::from(x::fgetc(f)), Some(120)),
+        ("getc", false, |f| i64::from(x::getc(f)), Some(120)),
+        ("fgetc_unlocked", false, |f| i64::from(x::fgetc_unlocked(f)), Some(120)),
+        ("getc_unlocked", false, |f| i64::from(x::getc_unlocked(f)), Some(120)),
+        ("fgets", false, |f| { let mut b = [0 as c_char; 16]; if x::fgets(b.as_mut_ptr(), 16, f).is_null() { -1 } else { st::strlen(b.as_ptr()) as i64 } }, Some(3)),
+        ("fread", false, |f| { let mut b = [0u8; 16]; x::fread(b.as_mut_ptr().cast(), 1, 16, f) as i64 }, Some(3)),
+        ("fread_unlocked", false, |f| { let mut b = [0u8; 16]; x::fread_unlocked(b.as_mut_ptr().cast(), 1, 16, f) as i64 }, Some(3)),
+        ("getline", false, |f| { let (mut p, mut n) = (null_mut::<c_char>(), 0usize); x::getline(Some(&mut p), Some(&mut n), f) as i64 }, None),
+        ("getdelim", false, |f| { let (mut p, mut n) = (null_mut::<c_char>(), 0usize); x::getdelim(Some(&mut p), Some(&mut n), c_int::from(b'\n'), f) as i64 }, None),
+        ("__getdelim", false, |f| { let (mut p, mut n) = (null_mut::<c_char>(), 0usize); x::__getdelim(Some(&mut p), Some(&mut n), c_int::from(b'\n'), f) as i64 }, None),
+        ("ungetc", false, |f| { let r = x::ungetc(c_int::from(b'q'), f); i64::from(r) * 1000 + i64::from(x::fgetc(f)) }, Some(113_113)),
+        ("fgetwc", true, |f| i64::from(x::fgetwc(f)), Some(120)),
+        ("getwc", true, |f| i64::from(x::getwc(f)), Some(120)),
+        ("fgetws", true, |f| { let mut b = [0 as wchar_t; 16]; if x::fgetws(b.as_mut_ptr(), 16, f).is_null() { -1 } else { b.iter().position(|&c| c == 0).unwrap() as i64 } }, Some(3)),
+    ];
+    for (name, wide, call, on_error) in table {
+        for error in [true, false] {
+            let id = cookie(b"xy\n", None);
+            with_cookie(id, |c| c.fail_once = Some(error));
+            let fp = fopencookie(id, "r");
+            let first = if wide { x::fgetwc(fp) == WEOF } else { x::fgetc(fp) == EOF };
+            assert!(first, "{name}: the first read fails");
+            assert_eq!((x::ferror(fp) != 0, x::feof(fp) != 0), (error, !error), "{name}: the indicator is set");
+            let before = with_cookie(id, |c| c.reads);
+            errno::set_raw(SENTINEL);
+            let r = call(fp);
+            let reads = with_cookie(id, |c| c.reads) - before;
+            let which = if error { "error" } else { "end of file" };
+            assert_eq!(errno::get(), SENTINEL, "{name} with the {which} indicator set: errno is left alone");
+            let failed = if name == "fread" || name == "fread_unlocked" { 0 } else { -1 };
+            match (error, on_error, name) {
+                (_, _, "ungetc") => assert_eq!(r, 113_113, "{name}: the pushback is read back"),
+                (true, Some(v), _) => {
+                    assert_eq!(r, v, "{name}: reads on past the error indicator");
+                    assert!(reads >= 1, "{name}: the backing is asked again");
+                }
+                _ => {
+                    assert_eq!(r, if wide && name != "fgetws" { i64::from(WEOF) } else { failed }, "{name} with the {which} indicator set: fails");
+                    assert_eq!(reads, 0, "{name} with the {which} indicator set: nothing is read");
+                }
+            }
+            assert_eq!(x::ferror(fp) != 0, error, "{name}: the error indicator is kept");
+            x::fclose(fp);
+        }
+    }
 }
