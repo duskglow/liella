@@ -498,7 +498,7 @@ memset:
  * (re-read equal, D-4.21 -> `liella_hot_compare_rescan` with the index in rcx: the counted rescan
  * from the next byte, so a reported index that is too low shows in the self-tests; MEMCMP-MID-2). 129 to `liella_machine_cmp_long` (2048 with
  * folding and AVX2, else 0; MEMCMP-MID-4) take the long AVX2 class here: the same 32-byte head
- * block, then (above 288) 256-byte steps from byte 32 (eight blocks ANDed, one test; a negative
+ * block, then (289 to 8 KiB; above that the 128-byte step of two branches at .Lcmp_huge) 256-byte steps from byte 32 (eight blocks ANDed, one test; a negative
  * index counting up to 0 from the bases a + n - 256 and b + n - 256, and ONE branch per step: the
  * equal flag (sbb) ANDed with the advanced index loops while that is negative, so a 4 KiB compare
  * has a 15-trip loop of one branch, which the predictor of a Gracemont-class core follows where a
@@ -783,6 +783,8 @@ memcmp:
 	jbe .Lcmp_256
 	movq %rsi, %r11
 	subq %rdi, %r11
+	cmpq $8192, %rdx
+	ja .Lcmp_huge
 	leaq -256(%rdi,%rdx), %r8
 	leaq (%r8,%r11), %rcx
 	movl $288, %r9d
@@ -855,6 +857,32 @@ memcmp:
 	vzeroupper
 	xorl %eax, %eax
 	ret
+/* Above 8 KiB: 128-byte steps of two branches from byte 32 with a cursor in a (the step before
+ * TIMING-N100-MEMCMP). On a Gracemont-class core the 256-byte step's sixteen load sites, each
+ * striding 256 bytes, leave more of an L2-resident stream to demand misses (memcmp_64k: 308
+ * against 214 L2-hit loads and 6% more cycles per call), and the trip count is long enough here
+ * that the one mispredicted exit is noise. The last chunk at n - 128 follows as for the shorter sizes. */
+.Lcmp_huge:
+	leaq 32(%rdi), %r9
+	leaq -128(%rdi,%rdx), %r8
+.Lcmp_huge_loop:
+	vmovdqu (%r9,%r11), %ymm1
+	vmovdqu 32(%r9,%r11), %ymm2
+	vmovdqu 64(%r9,%r11), %ymm3
+	vmovdqu 96(%r9,%r11), %ymm4
+	vpcmpeqb (%r9), %ymm1, %ymm1
+	vpcmpeqb 32(%r9), %ymm2, %ymm2
+	vpcmpeqb 64(%r9), %ymm3, %ymm3
+	vpcmpeqb 96(%r9), %ymm4, %ymm4
+	vpand %ymm2, %ymm1, %ymm5
+	vpand %ymm4, %ymm3, %ymm6
+	vpand %ymm6, %ymm5, %ymm5
+	vptest %ymm0, %ymm5
+	jnc .Lcmp_long_diff
+	subq $-128, %r9
+	cmpq %r8, %r9
+	jb .Lcmp_huge_loop
+	jmp .Lcmp_long_last
 /* A differing 256-byte step: r9 is 256 past its start (an offset from r8). Its first half
  * (ymm1-ymm4, ANDed in ymm5) differing goes to .Lcmp_long_diff as is, else the second half's
  * masks (ymm6-ymm9) move into ymm1-ymm4 and the cursor 128 further. */
@@ -1019,7 +1047,12 @@ memcmp:
  * both on only sizes above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit NULL tests, the two blocks at 0 and 16 as the early
  * probe (as the AVX2 class's 32-byte head), then the blocks at 32, 48, n - 64, n - 48, n - 32 and
  * n - 16 ANDed into one test; the first differing byte (first block first; the last block's from the
- * ANDed mask, the blocks before it being equal) is re-read and ordered at .Lcmp_byte. */
+ * ANDed mask, the blocks before it being equal) is re-read and ordered at .Lcmp_byte. The SSE2
+ * classes from here start 20 bytes into a 64-byte line (int3 padding after the jmp above, never
+ * run), the phase they were timed at, whatever size the AVX2 code above has: a 257-byte shift
+ * cost memcmp_4k 2.3% on an Ivy Bridge-class core with no SSE2 instruction changed. */
+	.p2align 6, 0xcc
+	.fill 20, 1, 0xcc
 .Lcmp_sse_mid:
 	cmpq $128, %rdx
 	ja .Lcmp_sse_long

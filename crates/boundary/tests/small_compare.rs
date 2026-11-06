@@ -243,7 +243,7 @@ fn the_size_shards_tile_0_to_max() {
 /// n - 128): no step (257-288), one step and a short rest (289-300 in the shards; 416), one step
 /// and the 128-byte rest chunk (417, 543), the step boundary (544, 545), several steps (673-1100),
 /// the class limit and the entry above it (2048, 2049) and the 4 KiB rows (4096, 4097).
-const LONG_SIZES: [usize; 14] = [289, 416, 417, 543, 544, 545, 673, 800, 1056, 1100, 2048, 2049, 4096, 4097];
+const LONG_SIZES: [usize; 17] = [289, 416, 417, 543, 544, 545, 673, 800, 1056, 1100, 2048, 2049, 4096, 4097, 8192, 8193, 8449];
 
 /// The long classes against the byte loop: three alignment pairs, a first difference at the start,
 /// middle and end of every 32-byte block (offsets 0, 17 and 31) and at the edges, each pair order
