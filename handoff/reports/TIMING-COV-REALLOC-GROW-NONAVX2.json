@@ -1,0 +1,33 @@
+{
+ "task": "TIMING-COV-REALLOC-GROW-NONAVX2",
+ "model": "opus",
+ "tokens": null,
+ "result": "realloc_grow_x2 per realloc 252.9->209.8 (AVX2), 288.8->245.7 (non-AVX2), glibc 199.5: one block lookup per moving realloc, fused path up to 64 KiB",
+ "branch": "task/timing-cov-realloc-grow-nonavx2",
+ "head": "96b75b97 (code head; later commits handoff only)",
+ "gate": {
+  "affected": "8810 passed / 0 failed",
+  "peak": "14G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "D-NEW placeholder for REALLOC-ONE-LOOKUP (handoff only)",
+   "recommendation": "reserve a D-3 id"
+  }
+ ],
+ "informational": [
+  "non-AVX2 gap left is mostly the 1-2 KiB copy (move kernel), not realloc",
+  "timing jobs (nico, nozomi) not run: budget"
+ ],
+ "refused": [],
+ "improvement": "plants docs: an equivalent line still needs its cmd field; the tool reads field 4 as the command and fails the baseline otherwise",
+ "next_step": "book nico/nozomi timing for realloc_grow_x2 and the cbench_malloc rows; then the non-AVX2 mid-size move kernel",
+ "report_file": "handoff/TIMING-COV-REALLOC-GROW-NONAVX2-report.md",
+ "jobs": [
+  "kanon:timing-cov-realloc-grow-gate",
+  "kanon:timing-cov-realloc-grow-plants3",
+  "kanon:timing-cov-realloc-grow-percall-avx2",
+  "kanon:timing-cov-realloc-grow-percall-noavx2"
+ ]
+}
