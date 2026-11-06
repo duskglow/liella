@@ -2646,7 +2646,7 @@ liella_machine_memchr:
 	ret
 .Lmemchr_entry:
 	movd %esi, %xmm0
-	/* TIMING-COV-MEMCHR-SHORT-NONAVX2 (D-NEW): ecx >= short_lim here, which is 4033 on the AVX2
+	/* TIMING-COV-MEMCHR-SHORT-NONAVX2 (D-4.57): ecx >= short_lim here, which is 4033 on the AVX2
 	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page (as strlen's
 	 * SSE2-STRLEN-2): one test for both. The rest is the AVX2 level past 4032 or the SSE2 page
 	 * edge, split by the level. */
@@ -2824,7 +2824,7 @@ liella_machine_memchr:
 	addq %rdi, %rax
 	ret
 .Lmemchr_sse_head16:
-	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-NEW:
+	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-4.57:
 	 * the two instructions are paid back by the entry's merged level and page test, so a long
 	 * call runs as many as before and a 16-byte miss skips the fold below). Blocks 1-3
 	 * ([s + 16, s + 64), inside s's page) fold with por whatever n > 16 is. The fold
