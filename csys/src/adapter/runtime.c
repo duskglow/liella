@@ -82,6 +82,11 @@ extern const char __rela_iplt_end[] __attribute__((weak, visibility("hidden")));
 uintptr_t liella_link_rela_iplt_start(void) { return (uintptr_t)__rela_iplt_start; }
 uintptr_t liella_link_rela_iplt_end(void) { return (uintptr_t)__rela_iplt_end; }
 
+/* The run-time address of the executable's own dynamic array (`_DYNAMIC`, PC-relative): a static
+ * PIE has one, a static non-PIE executable has none (0). The self-relocator's anchor (D-27.10). */
+extern const char _DYNAMIC[] __attribute__((weak, visibility("hidden")));
+uintptr_t liella_link_dynamic(void) { return (uintptr_t)_DYNAMIC; }
+
 /* The x87 control word the program asks for in `__fpu_control` (D-10.5; the definition is
  * `fpu_control.c`). In `libc.so.6` the read goes through the GOT, so it sees a program's
  * interposing definition. In a static link a program's own definition satisfies the reference

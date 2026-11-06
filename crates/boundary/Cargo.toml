@@ -33,6 +33,7 @@ portable-scan = []
 [dependencies]
 liella-kernel = { workspace = true }
 liella-rt = { workspace = true }
+liella-ld = { workspace = true }
 liella-abi = { workspace = true }
 liella = { workspace = true }
 liella-legacy = { workspace = true }

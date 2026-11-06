@@ -81,6 +81,7 @@ spectest = { path = "crates/spectest" }
 liella-kernel = { path = "crates/kernel" }
 liella-abi = { path = "crates/abi" }
 liella-rt = { path = "crates/rt" }
+liella-ld = { path = "crates/ld" }
 liella-mem = { path = "crates/mem" }
 liella = { path = "crates/core" }
 liella-legacy = { path = "crates/legacy" }

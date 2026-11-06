@@ -29,6 +29,8 @@
 #                                  use with LINK-LIBM and LINK-UNWIND
 #   /* LINK-NOW: yes */            link with -z now -z relro (the GOT, .got.plt included, lies
 #                                  in PT_GNU_RELRO)
+#   /* LINK-STATIC-PIE: relr */    link a static PIE (-static-pie), relative relocations packed
+#                                  (relr) or as RELA entries (rela); it relocates itself
 #   /* LINK-HELPERS: a b */        dynamic-link mode: the test links dynamically, against the
 #                                  reference C library only (no Liella loader yet). Each name
 #                                  is a helper source conformance/c/helpers/<name>.c, built as
@@ -127,6 +129,14 @@ for name in "$@"; do
     if [ -n "$(directive LINK-NOW "$src")" ]; then
         flags="$flags -Wl,-z,now -Wl,-z,relro"
     fi
+    # LINK-STATIC-PIE: a static PIE that relocates itself at start (D-27.10), its relative
+    # relocations as RELA entries (rela) or packed (relr, -z pack-relative-relocs).
+    case "$(directive LINK-STATIC-PIE "$src")" in
+        "") ;;
+        rela) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /')" ;;
+        relr) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /') -Wl,-z,pack-relative-relocs" ;;
+        *) echo "conformance: FAIL $name (LINK-STATIC-PIE: rela or relr)"; fail=$((fail + 1)); continue ;;
+    esac
     # LINK-HELPERS: dynamic-link mode, reference C library only (Liella has no loader yet).
     dyn=""; helpers=$(directive LINK-HELPERS "$src")
     if [ -n "$helpers" ]; then

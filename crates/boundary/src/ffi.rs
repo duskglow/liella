@@ -516,6 +516,10 @@ unsafe extern "C" {
     pub(crate) safe fn liella_link_rela_iplt_start() -> usize;
     #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
     pub(crate) safe fn liella_link_rela_iplt_end() -> usize;
+    /// The run-time address of the executable's `_DYNAMIC`, 0 in a static non-PIE executable
+    /// (D-27.10).
+    #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+    pub(crate) safe fn liella_link_dynamic() -> usize;
     /// The address of the ELF header of the image the library is linked into (`__ehdr_start`),
     /// 0 where the link defines none (`backtrace`, D-2.7).
     pub(crate) safe fn liella_link_ehdr() -> usize;

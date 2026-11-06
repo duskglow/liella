@@ -774,6 +774,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(&archive))?;
     }
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
+    shared_personality_ref(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("personality-work"))?;
     // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
@@ -978,6 +979,29 @@ fn localize_builtins(ar: &str, archive: &Path, names: &Path, work: &Path) -> Res
         run(Command::new("objcopy").arg(format!("--localize-symbols={}", names.display())).arg(work.join(m)))?;
     }
     run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&builtins))
+}
+
+/// The product crate's own object(s) in `libc.a` carry `DW.ref.rust_eh_personality` (the
+/// personality slot `.eh_frame` names) as a LOCAL symbol inside the COMDAT group of that name:
+/// the link keeps that group and drops the other members' copies, so their references (weak
+/// hidden, the compilers' usual form) find no definition. A non-PIE link resolves them to 0
+/// silently; a static PIE link refuses them (D-27.10). The symbol is made weak hidden, the form
+/// every other member has, so all references bind to the one kept slot. `work` is a scratch
+/// directory.
+fn shared_personality_ref(ar: &str, archive: &Path, work: &Path) -> Result<(), String> {
+    let _ = fs::remove_dir_all(work);
+    fs::create_dir_all(work).map_err(|e| e.to_string())?;
+    let listing = Command::new(ar).arg("t").arg(archive).output().map_err(|e| format!("ar: {e}"))?;
+    let own: Vec<String> = String::from_utf8_lossy(&listing.stdout).lines().filter(|m| m.starts_with("c-") && m.ends_with(".rcgu.o")).map(str::to_string).collect();
+    if own.is_empty() {
+        return Ok(());
+    }
+    run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&own))?;
+    for m in &own {
+        run(Command::new("objcopy").arg("--globalize-symbol=DW.ref.rust_eh_personality").arg(work.join(m)))?;
+        run(Command::new("objcopy").arg("--weaken-symbol=DW.ref.rust_eh_personality").arg(work.join(m)))?;
+    }
+    run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&own))
 }
 
 /// Data objects `libm.so.6` exports (spec §10.3).
