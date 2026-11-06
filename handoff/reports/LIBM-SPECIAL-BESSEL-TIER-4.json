@@ -1,0 +1,12 @@
+{"task": "LIBM-SPECIAL-BESSEL-TIER-4", "model": "opus", "tokens": null,
+ "result": "Merged the Bessel double fast tier onto the gamma tier + next's float Bessel path (dispatch f32 then f64 then accurate); fixed the gamma head's E0133 (log_dd inside kernels!); plants 13 CAUGHT + 1 EQUIVALENT; gate red only on pre-existing mei search_nomem hsearch test",
+ "branch": "task/libm-special-bessel-tier-4", "head": "738dc681",
+ "gate": {"affected": "wide tier: all suites ok except 1 test (liella-boundary::search_nomem hcreate_and_hsearch_fail_with_the_table_intact, exports interposed, exit 14 'limit never bit'); conformance 117/0", "peak": "15G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "gate rc 1 solely from search_nomem hsearch RLIMIT_AS test, which fails the same way in 4 other commits' CI gates on mei (12 failures) and on no other host", "recommendation": "accept this gate for the story; open a separate story to make the test's ballast/headroom bite reliably"}],
+ "informational": ["LIBM-SPECIAL-GAMMA-TIER-3 head 24a78d42 does not compile under workspace clippy: fast64::log_dd inside kernels! calls the FMA log_kernel (E0133); fixed here in 738dc681 by moving log_dd to module level", "no test reaches special::j0::<f32> entry dispatch (fast32 tests call fast32::eval directly)"],
+ "refused": [],
+ "jobs": ["mei:libm-special-bessel-tier-4-gate", "mei:libm-special-bessel-tier-4-plants", "mei:libm-special-bessel-tier-4-lint3", "mei:libm-special-bessel-tier-4-counts"],
+ "improvement": "CI's own mei gates already show the search_nomem failure on 4 commits; a known-flaky register checked by the dispatcher would save every story on mei a red and a ruling",
+ "next_step": "ruling on the search_nomem red; then FMA build of the Bessel kernel (two_prod_fma, D-10.25) for the 1.14-1.22x instruction surplus",
+ "report_file": "handoff/libm-special-bessel-tier.md"}

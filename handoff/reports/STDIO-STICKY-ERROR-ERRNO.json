@@ -1,0 +1,27 @@
+{
+ "task": "STDIO-STICKY-ERROR-ERRNO",
+ "model": "opus",
+ "tokens": null,
+ "result": "getdelim/getline with the error indicator set now return -1 and leave errno alone (was EIO); probe shows every other read entry already matched glibc; D-12.1 amended",
+ "branch": "task/stdio-sticky-error-errno",
+ "head": "120d409c",
+ "gate": {
+  "affected": "pending (sticky-gate-1 on keke)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "jobs": [
+  "sticky-direct-2",
+  "sticky-gate-1",
+  "sticky-plants-1"
+ ],
+ "rulings": [],
+ "informational": [
+  "glibc is not uniform: getdelim/getline stop on the error indicator, other entries read on; the rule that holds for every entry is errno-only-on-own-failure, so Liella keeps glibc's per-entry behaviour and nothing differs",
+  "plants cover only the getdelim check (the one changed site); other entries' code unchanged and not planted"
+ ],
+ "refused": [],
+ "improvement": "ssh to keke has no cargo on PATH in non-interactive shells; jobrun writes test output to ~/logs/<label>.log, not stdout: a one-line note in the brief template would save two calls",
+ "next_step": "collect sticky-gate-1 and sticky-plants-1 on keke (~/bin/jobwait <label>)",
+ "report_file": "handoff/STDIO-STICKY-ERROR-ERRNO.md"
+}

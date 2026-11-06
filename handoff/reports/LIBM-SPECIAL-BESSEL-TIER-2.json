@@ -1,0 +1,12 @@
+{"task": "LIBM-SPECIAL-BESSEL-TIER-2", "model": "opus", "tokens": null,
+ "result": "Bessel double fast tier green: the 4e-4 j0 fallback and the y1 NaN were Dekker-split overflow above 2^997 (Hankel 1/x, y1 (2/pi)/x), fixed by exact scaling; j1 tiny range is x/2 beside; fallback per 1e5: j0 1, j1 0, y0 1, y1 0",
+ "branch": "task/libm-special-bessel-tier-2", "head": "be0ce2c0",
+ "gate": {"affected": "running at hand-back: libm-special-bessel-tier-2-gate2 (keke), escalated to FULL by affected (generated tables changed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The direct-tier gate escalates to FULL for any branch that regenerates crates/math/src/coeffs/tables.rs (generated source), so every fast-tier story gates FULL; a table-aware tier (the tests that include the changed table) would keep these gates short.", "dd::two_prod (Dekker) overflows for an operand of 2^997 or more; any double-double code feeding it huge values gets NaN (here Hankel's 1/x and y1's (2/pi)/x). An FMA kernel (two_prod_fma, D-10.25 dispatch) has no such limit and is much cheaper."],
+ "refused": [],
+ "improvement": "Print each fallback operand in every fast-tier rate test (as fast_special does): it turned an undiagnosed 4e-4 into one region in one run; and sample each kernel up to f64::MAX, not 2^1000.",
+ "next_step": "Read gate2, plants2 and counts-after on keke; if the counts stay above 1.05x, build the Taylor kernel with two_prod_fma behind the existing FMA dispatch (bit-identical where two_prod is exact).",
+ "report_file": "handoff/libm-special-bessel-tier.md",
+ "jobs": ["keke:libm-special-bessel-tier-2-gate2", "keke:libm-special-bessel-tier-2-plants2", "keke:libm-special-bessel-tier-2-counts-after"]}

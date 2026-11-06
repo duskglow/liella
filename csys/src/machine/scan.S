@@ -2059,7 +2059,7 @@ liella_machine_rawmemchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lraw_pre
+	jae .Lraw_sse_fast
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpcmpeqb (%rdi), %ymm0, %ymm1
@@ -2122,15 +2122,12 @@ liella_machine_rawmemchr:
 	vpor %ymm3, %ymm4, %ymm6
 	subq $-128, %rax
 	vptest %ymm6, %ymm6
-	jz .Lraw_avx_loop
+	jz .Lraw_avx_align
 	addq $-64, %rax
 	jmp .Lraw_avx_hi
 .Lraw_pre:
-	/* ecx = s's page offset, from the entry test (SSE2-STRLEN). SSE2-STRLEN-2: here ecx >=
-	 * short_lim, which is 4033 on the AVX2 level, so ecx <= 4032 means the SSE2 level AND
-	 * [s, s + 64) inside s's page: one compare is both tests. */
-	cmpl $4032, %ecx
-	jbe .Lraw_sse_fast
+	/* ecx = s's page offset, from the entry test (SSE2-STRLEN), and ecx > 4032 (the compare at
+	 * .Lraw_sse_fast, TIMING-IVB-MEMREF-ENTRY): the AVX2 level, or the SSE2 level near a page end. */
 	movq %rdi, %rax
 	movd %esi, %xmm0
 	cmpl $0, liella_machine_scan_level(%rip)
@@ -2157,6 +2154,9 @@ liella_machine_rawmemchr:
 	leaq 32(%rdi,%rdx), %rax
 	vzeroupper
 	ret
+	/* TIMING-N100-SCAN-64K-3 (D-4.56): the AVX2 long path in subsection 1, after the SSE2
+	 * path, which keeps its offset (memchr's layout rule, below). */
+	.subsection 1
 .Lraw_avx_at0:
 	bsfl %edx, %edx
 	leaq (%rdi,%rdx), %rax
@@ -2189,8 +2189,12 @@ liella_machine_rawmemchr:
 	jnz .Lraw_avx_found
 	addq $64, %rax
 	andq $-128, %rax
-	.p2align 4
-.Lraw_avx_loop:
+.Lraw_avx_align:
+	/* TIMING-N100-SCAN-64K: rax is 128-aligned; 256-byte groups, 256-aligned (SAFETY: an aligned
+	 * group never spans two pages; its first byte is at or before the asserted match). A rax
+	 * that is not 256-aligned first takes one 128-byte group. */
+	testl $128, %eax
+	jz .Lraw_avx_loop
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3
@@ -2198,12 +2202,48 @@ liella_machine_rawmemchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
-	subq $-128, %rax
-	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 10 per 128 bytes. */
 	vptest %ymm6, %ymm6
+	jnz .Lraw_avx_lo
+	subq $-128, %rax
+	.p2align 4
+.Lraw_avx_loop:
+	/* Eight loads before one test (memchr's loop, TIMING-N100-SCAN-64K): 9 per 128 bytes. */
+	vpcmpeqb (%rax), %ymm0, %ymm1
+	vpcmpeqb 32(%rax), %ymm0, %ymm2
+	vpcmpeqb 64(%rax), %ymm0, %ymm3
+	vpcmpeqb 96(%rax), %ymm0, %ymm4
+	vpcmpeqb 128(%rax), %ymm0, %ymm5
+	vpcmpeqb 160(%rax), %ymm0, %ymm6
+	vpcmpeqb 192(%rax), %ymm0, %ymm7
+	vpcmpeqb 224(%rax), %ymm0, %ymm8
+	vpor %ymm1, %ymm2, %ymm9
+	vpor %ymm3, %ymm4, %ymm10
+	vpor %ymm5, %ymm6, %ymm11
+	vpor %ymm7, %ymm8, %ymm12
+	vpor %ymm9, %ymm10, %ymm9
+	vpor %ymm11, %ymm12, %ymm11
+	vpor %ymm9, %ymm11, %ymm11
+	addq $256, %rax
+	vptest %ymm11, %ymm11
 	jz .Lraw_avx_loop
-	addq $-128, %rax
-	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
+	addq $-256, %rax
+	/* ymm9 = the first 128 bytes' fold; the compares are still in ymm1-ymm8. */
+	vptest %ymm9, %ymm9
+	jnz .Lraw_avx_lo
+	subq $-128, %rax
+	vpmovmskb %ymm5, %edx
+	vpmovmskb %ymm6, %r8d
+	shlq $32, %r8
+	orq %r8, %rdx
+	jnz .Lraw_avx_found
+	addq $64, %rax
+	vpmovmskb %ymm7, %edx
+	vpmovmskb %ymm8, %r8d
+	shlq $32, %r8
+	orq %r8, %rdx
+	jmp .Lraw_avx_found
+	/* The compares of the 128 bytes at rax are in ymm1-ymm4: the mask of the first or the
+	 * second 64 bytes. */
 .Lraw_avx_lo:
 	vpmovmskb %ymm1, %edx
 	vpmovmskb %ymm2, %r8d
@@ -2222,6 +2262,9 @@ liella_machine_rawmemchr:
 	vzeroupper
 	ret
 
+	.subsection 0
+	/* int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
+	.org liella_machine_rawmemchr_entry + 0x1ed, 0xcc
 .Lraw_sse2:
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
@@ -2235,7 +2278,14 @@ liella_machine_rawmemchr:
 	/* Reached only near a page end (ecx > 4032; the fast path below takes the rest). */
 	andq $-64, %rax
 	jmp .Lraw_sse_masked
+	/* TIMING-IVB-MEMREF-ENTRY: the entry's one taken branch lands here, 32-byte aligned (before:
+	 * .Lraw_pre's compare and a second taken branch). ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page (SSE2-STRLEN-2:
+	 * one compare is both tests); every other call continues at .Lraw_pre. */
+	.p2align 5
 .Lraw_sse_fast:
+	cmpl $4032, %ecx
+	ja .Lraw_pre
 	/* SSE2-STRLEN-2: SSE2 level, [s, s + 64) inside s's page (SAFETY: every unaligned load
 	 * below lies in it). Broadcast, then [s, s + 16) and [s + 16, s + 32) one branch each
 	 * (bsf sets ZF on an empty mask: no separate test), then [s + 32, s + 64) folded. */
@@ -2462,6 +2512,8 @@ liella_machine_rawmemchr:
 	bsfq %rdx, %rax
 	addq %rdi, %rax
 	ret
+	/* The sizes run to the end of subsection 1, the section's end. */
+	.subsection 1
 	.size liella_machine_rawmemchr, .-liella_machine_rawmemchr
 	.size liella_machine_rawmemchr_entry, .-liella_machine_rawmemchr_entry
 #ifdef LIELLA_EXPORT
@@ -2533,7 +2585,7 @@ liella_machine_memchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lmemchr_entry
+	jae .Lmemchr_sse_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	/* MEMCHR-2: [s, s + 64) lies in s's page (the short limit), so both of its 32-byte halves
@@ -2618,6 +2670,11 @@ liella_machine_memchr:
 	cmpl $4064, %ecx
 	ja .Lmemchr_avx_setup
 	jmp .Lmemchr_n32
+	/* TIMING-N100-SCAN-64K-3 (D-4.56): the AVX2 long path is assembled in subsection 1, after
+	 * the SSE2 path, and the SSE2 path keeps the offset it had with the 128-byte loop (pinned by
+	 * the .org below): a longer AVX2 loop then moves no SSE2-reached block (Ivy Bridge timed
+	 * memchr_16_mix 14% slower when it moved). */
+	.subsection 1
 .Lmemchr_avx_setup:
 	movq %rdi, %rax
 	andq $-64, %rax
@@ -2667,10 +2724,13 @@ liella_machine_memchr:
 	/* rax = g1; [s, g1 + 64) holds no match. */
 	addq $64, %rax
 	andq $-128, %rax
-	.p2align 4
-.Lmemchr_avx_loop:
+	/* TIMING-N100-SCAN-64K: 256-byte groups, 256-aligned (SAFETY: an aligned group never spans
+	 * two pages, 4096 being a multiple of 256; its first byte lies below r8 after bytes that did
+	 * not match). A 128-aligned rax that is not 256-aligned first takes one 128-byte group. */
 	cmpq %r8, %rax
 	jae .Lmemchr_avx_none
+	testl $128, %eax
+	jz .Lmemchr_avx_loop
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3
@@ -2678,12 +2738,53 @@ liella_machine_memchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
-	subq $-128, %rax
-	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
 	vptest %ymm6, %ymm6
+	jnz .Lmemchr_avx_lo
+	subq $-128, %rax
+	.p2align 4
+.Lmemchr_avx_loop:
+	/* Eight loads before one test: more L2 lines in flight per branch (TIMING-N100-SCAN-64K:
+	 * a 64 KiB scan streams from L2; the 128-byte loop stalled on L2 hits); 10 per 128 bytes. A software prefetch 512 bytes
+	 * ahead measured +1 per 64 bytes, rawmemchr_64k past the reference's count. */
+	cmpq %r8, %rax
+	jae .Lmemchr_avx_none
+	vpcmpeqb (%rax), %ymm0, %ymm1
+	vpcmpeqb 32(%rax), %ymm0, %ymm2
+	vpcmpeqb 64(%rax), %ymm0, %ymm3
+	vpcmpeqb 96(%rax), %ymm0, %ymm4
+	vpcmpeqb 128(%rax), %ymm0, %ymm5
+	vpcmpeqb 160(%rax), %ymm0, %ymm6
+	vpcmpeqb 192(%rax), %ymm0, %ymm7
+	vpcmpeqb 224(%rax), %ymm0, %ymm8
+	vpor %ymm1, %ymm2, %ymm9
+	vpor %ymm3, %ymm4, %ymm10
+	vpor %ymm5, %ymm6, %ymm11
+	vpor %ymm7, %ymm8, %ymm12
+	vpor %ymm9, %ymm10, %ymm9
+	vpor %ymm11, %ymm12, %ymm11
+	vpor %ymm9, %ymm11, %ymm11
+	addq $256, %rax
+	vptest %ymm11, %ymm11
 	jz .Lmemchr_avx_loop
-	addq $-128, %rax
-	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
+	addq $-256, %rax
+	/* ymm9 = the first 128 bytes' fold; the compares are still in ymm1-ymm8. */
+	vptest %ymm9, %ymm9
+	jnz .Lmemchr_avx_lo
+	subq $-128, %rax
+	vpmovmskb %ymm5, %r9d
+	vpmovmskb %ymm6, %r10d
+	shlq $32, %r10
+	orq %r10, %r9
+	jnz .Lmemchr_avx_found
+	addq $64, %rax
+	vpmovmskb %ymm7, %r9d
+	vpmovmskb %ymm8, %r10d
+	shlq $32, %r10
+	orq %r10, %r9
+	jmp .Lmemchr_avx_found
+.Lmemchr_avx_lo:
+	/* The compares of the 128 bytes at rax are in ymm1-ymm4: the mask of the first or the
+	 * second 64 bytes. */
 	vpmovmskb %ymm1, %r9d
 	vpmovmskb %ymm2, %r10d
 	shlq $32, %r10
@@ -2707,14 +2808,31 @@ liella_machine_memchr:
 	xorl %eax, %eax
 	ret
 
+	.subsection 0
+	/* int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
+	 * of the section, as before (the assembler refuses if the code above grows past it). */
+	.org liella_machine_memchr_entry + 0x231, 0xcc
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
-	 * located per 16-byte block with a branch each (STR-K1's measurement). */
+	 * located per 16-byte block with a branch each (STR-K1's measurement).
+	 * .Lmemchr_sse2 is reached from .Lmemchr_entry only, so with ecx > 4032: the page-end form. */
 .Lmemchr_sse2:
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
+	jmp .Lmemchr_sse_edge
+	/* TIMING-IVB-MEMREF-ENTRY (as TIMING-IVB-STRSCAN-DISPATCH did for strchr): the entry's one
+	 * taken branch lands here, 32-byte aligned. Here ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page: one compare is
+	 * both tests (before: a taken branch to .Lmemchr_entry, its level load and a second taken
+	 * branch). Every other call takes the old dispatch at .Lmemchr_entry. */
+	.p2align 5
+.Lmemchr_sse_pre:
 	cmpl $4032, %ecx
-	ja .Lmemchr_sse_edge
+	ja .Lmemchr_entry
+	movd %esi, %xmm0
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	pshufd $0, %xmm0, %xmm0
 	/* MEMCHR-SSE2 (the AVX2 head's order, MEMCHR-2): [s, s + 64) lies in s's page, so all four
 	 * of its 16-byte blocks may be read whatever n is. Block 0 goes first and alone: a match
 	 * there settles with one compare against n and no branch on n's class. A match at or past n
@@ -2975,6 +3093,8 @@ liella_machine_memchr:
 .Lmemchr_none:
 	xorl %eax, %eax
 	ret
+	/* The sizes run to the end of subsection 1, the section's end. */
+	.subsection 1
 	.size liella_machine_memchr, .-liella_machine_memchr
 #ifdef LIELLA_EXPORT
 	.size memchr, .-memchr
@@ -6841,9 +6961,10 @@ strncmp:
  * units of the string before its terminator (readable, none 0), and p lies in the string (at or
  * before its terminator); wcspair's p is 4-byte aligned. Loads: when p's page has 32 bytes from
  * p on (page offset <= 4064), one unaligned head block at p and one at p - off, both inside
- * [p - off, p + 32) (the known units, then p's page); strpair on AVX2, when the page has 64 bytes
- * from p on (page offset <= 4032), also the blocks at p + 32 and p + 32 - off, inside
- * [p - off, p + 64), and then the aligned run from the 64-byte boundary in (p, p + 64]. Otherwise
+ * [p - off, p + 32) (the known units, then p's page); strpair, when the page has 64 bytes
+ * from p on (page offset <= 4032), also the blocks up to p + 64 and their blocks at -off (AVX2:
+ * at p + 32; SSE2: at p + 16, p + 32, p + 48), inside [p - off, p + 64), and then the aligned
+ * run from the 64-byte boundary in (p, p + 64]. Otherwise
  * units one by one up to the next
  * 32-byte boundary (stopping at a 0 unit or a candidate). Then aligned blocks A (32 bytes on
  * AVX2, 16 on SSE2), each with the block at A - off, which lies inside [p - off, A + block):
@@ -7147,7 +7268,16 @@ liella_machine_strpair:
 	pshufd $0, %xmm0, %xmm0
 	pshufd $0, %xmm1, %xmm1
 	pxor %xmm2, %xmm2
+	movq %rsi, %r9
+	negq %r9
 	jmp .Lliella_machine_strpair_sse_loop
+	/* TIMING-COV-STRSTR-NONAVX2: every SSE2 block uses the group loop's test: unit q is a
+	 * candidate or 0 exactly when min((Y ^ c1) | (L ^ c0), Y) is 0, one mask and one branch per
+	 * block; the first stop unit itself says which (0: the terminator). r9 = -off throughout.
+	 * When p's page has 64 bytes from p on (page offset <= 4032): four unaligned head blocks at
+	 * p, p + 16, p + 32, p + 48 with their blocks at -off, inside [p - off, p + 64), then the
+	 * aligned groups from the 64-byte boundary in (p, p + 64]. Otherwise one head block, then
+	 * aligned blocks up to the 64-byte boundary. */
 .Lliella_machine_strpair_sse2:
 	movd %edx, %xmm0
 	movd %ecx, %xmm1
@@ -7158,49 +7288,104 @@ liella_machine_strpair:
 	pshufd $0, %xmm0, %xmm0
 	pshufd $0, %xmm1, %xmm1
 	pxor %xmm2, %xmm2
-	movdqu (%rax), %xmm3
-	movq %rax, %r9
-	subq %rsi, %r9
-	movdqu (%r9), %xmm4
-	pcmpeqb %xmm0, %xmm4
-	movdqa %xmm3, %xmm5
-	pcmpeqb %xmm2, %xmm5
-	pcmpeqb %xmm1, %xmm3
-	pand %xmm4, %xmm3
+	cmpl $4032, %r9d
+	ja .Lliella_machine_strpair_sse_head1
+	movq %rsi, %r9
+	negq %r9
+	movdqu (%rax), %xmm5
+	movdqu (%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	pmovmskb %xmm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
-	jnz .Lliella_machine_strpair_sse_cand
-	testl %r11d, %r11d
-	jnz .Lliella_machine_strpair_sse_nul
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
+	movdqu 16(%rax), %xmm5
+	movdqu 16(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop16
+	movdqu 32(%rax), %xmm5
+	movdqu 32(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop32
+	movdqu 48(%rax), %xmm5
+	movdqu 48(%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop48
+	andq $-64, %rax
+	addq $64, %rax
+	jmp .Lliella_machine_strpair_sse_loop64
+.Lliella_machine_strpair_sse_stop16:
+	addq $16, %rax
+	jmp .Lliella_machine_strpair_sse_stop
+.Lliella_machine_strpair_sse_stop32:
+	addq $32, %rax
+	jmp .Lliella_machine_strpair_sse_stop
+.Lliella_machine_strpair_sse_stop48:
+	addq $48, %rax
+.Lliella_machine_strpair_sse_stop:
+	bsfl %r10d, %r10d
+	addq %r10, %rax
+	cmpb $0, (%rax)
+	je .Lliella_machine_strpair_unit_nul
+	subq %rdi, %rax
+	addq %rax, %rax
+	ret
+.Lliella_machine_strpair_sse_head1:
+	movq %rsi, %r9
+	negq %r9
+	movdqu (%rax), %xmm5
+	movdqu (%rax,%r9), %xmm4
+	movdqa %xmm5, %xmm3
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub %xmm5, %xmm3
+	pcmpeqb %xmm2, %xmm3
+	pmovmskb %xmm3, %r10d
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
 	andq $-16, %rax
 	addq $16, %rax
 	.p2align 4
 .Lliella_machine_strpair_sse_loop:
 	movdqa (%rax), %xmm3
-	movq %rax, %r9
-	subq %rsi, %r9
-	movdqu (%r9), %xmm4
-	pcmpeqb %xmm0, %xmm4
-	movdqa %xmm3, %xmm5
-	pcmpeqb %xmm2, %xmm5
-	pcmpeqb %xmm1, %xmm3
-	pand %xmm4, %xmm3
+	movdqu (%rax,%r9), %xmm4
+	pxor %xmm1, %xmm3
+	pxor %xmm0, %xmm4
+	por %xmm4, %xmm3
+	pminub (%rax), %xmm3
+	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	pmovmskb %xmm5, %r11d
-	leal -1(%r11), %r9d
-	xorl %r11d, %r9d
-	andl %r9d, %r10d
-	jnz .Lliella_machine_strpair_sse_cand
-	testl %r11d, %r11d
-	jnz .Lliella_machine_strpair_sse_nul
+	testl %r10d, %r10d
+	jnz .Lliella_machine_strpair_sse_stop
 	addq $16, %rax
 	testl $63, %eax
 	jnz .Lliella_machine_strpair_sse_loop
-	movq %rsi, %r9
-	negq %r9
 	.p2align 4
 .Lliella_machine_strpair_sse_loop64:
 	/* PERF-STRSTR-LONG: a 64-aligned group of four blocks (one page) tested at once: unit q is a
@@ -7234,10 +7419,12 @@ liella_machine_strpair:
 	pminub %xmm5, %xmm3
 	pcmpeqb %xmm2, %xmm3
 	pmovmskb %xmm3, %r10d
-	testl %r10d, %r10d
-	jnz .Lliella_machine_strpair_sse_loop
 	addq $64, %rax
-	jmp .Lliella_machine_strpair_sse_loop64
+	testl %r10d, %r10d
+	jz .Lliella_machine_strpair_sse_loop64
+	/* The group has a stop: its blocks one by one (the first stop is in it). */
+	subq $64, %rax
+	jmp .Lliella_machine_strpair_sse_loop
 	.size liella_machine_strpair, .-liella_machine_strpair
 	.section .text.liella_machine_wcspair,"ax",@progbits
 

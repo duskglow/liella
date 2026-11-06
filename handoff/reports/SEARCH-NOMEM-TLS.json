@@ -1,0 +1,12 @@
+{"task": "SEARCH-NOMEM-TLS", "model": "opus", "tokens": null,
+ "result": "search_nomem: libtest's main thread aborted in its first recv's TLS setup (Liella pthread_setspecific ENOMEM under the ballast); child now waits until other threads are parked in futex before the limit",
+ "branch": "task/search-nomem-tls", "head": "db0ec040",
+ "gate": {"affected": "mei:search-nomem-tls-gate-2 rc 0 (clippy, static, affected --base origin/next)", "peak": "1.3G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Liella pthread_setspecific returns ENOMEM for a low key with no memory left; glibc 2.39 returns 0 (probe); Rust std aborts on it", "recommendation": "follow-up story: first keys' values in the thread block, no allocation; add the failure rule to spec 22.6"}],
+ "informational": ["pre-fix rate: keke 1 in 400 whole-binary runs (24 at once), mei 0 in 400", "core backtrace: main thread mpmc recv -> Context::new -> thread::current::init_current -> key::unix::fail"],
+ "refused": [],
+ "jobs": ["mei:search-nomem-tls-gate-2", "keke:search-nomem-tls-plants-2", "keke:search-nomem-tls-loops-keke-2", "keke:search-nomem-tls-loop2000-keke-2", "mei:search-nomem-tls-loops-mei-2"],
+ "improvement": "run cargo xtask static before the first gate (I skipped it and lost a gate cycle to fs-order); a ready-made 'get the core of a failing child' recipe (apport path on keke, core in cwd on mei) would save diagnosis calls",
+ "next_step": "read the loop and plants jobs; all rc 0 -> land; cut the pthread_setspecific follow-up story",
+ "report_file": "handoff/SEARCH-NOMEM-TLS.md"}

@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-REGEX-BACKREF-SCRATCH", "model": "opus", "tokens": null,
+ "result": "PENDING JOBS: lazy per-frontier bucket table; regexec_backref 22,932 -> 22,030 instr/call (glibc 21,958; 1.05 -> 1.00), 2,421 -> 2,365 ns on mei; IVB timing not run",
+ "branch": "task/timing-cov-regex-backref-scratch", "head": "7b2ff012",
+ "gate": {"affected": "3468 passed / 0 failed (conformance 2/0)", "peak": "2.9G"},
+ "accepted_first_attempt": null,
+ "jobs": ["mei:tcrb-gate", "mei:tcrb-plants", "mei:tcrb-counts-before", "mei:tcrb-counts-after", "mei:tcrb-percall"],
+ "rulings": [],
+ "informational": ["regexec_submatch_1k +8.3 and regexec_class_nomatch_1k +4.9 instr/call (0.03%/0.06%), on rows that do not take the changed insert path; confirm with the nico timing run", "the brief's 35 L1 misses/call (keke, Zen 1) was not reproduced on mei; after the change Liella ~1.2 vs glibc ~0.13 per call; no before perf stat on mei", "no D-row for LAZY_TABLE (local detail, documented at the constant)"],
+ "refused": [],
+ "improvement": "The brief named no host tools and pointed thread_common at deleted $S/tools; developer-flow.md (rules/) should be named in every brief, since the first queue job was lost to a wrong package name (-p liella-core; the crate is liella).",
+ "next_step": "book nico; run nico:timing-cov-regex-backref-scratch-timing-ivb (cargo xtask bench --compare --no-build --runs 5 cbench_patterns) on 7b2ff012",
+ "report_file": "handoff/TIMING-COV-REGEX-BACKREF-SCRATCH.md"}

@@ -15,7 +15,7 @@ use liella_kernel::uapi::{
     O_CREAT, O_EXCL, O_NOFOLLOW, O_RDWR, PROT_READ, PROT_WRITE, SCHED_FIFO, SCHED_RR,
 };
 use liella_rt::futex::{Clock, Scope};
-use liella_rt::pthread_sync::{self as ps, mattr, Barrier, Cond, Ctx, LockWait, Mutex, RwLock, Sem};
+use liella_rt::pthread_sync::{self as ps, mattr, Barrier, Cond, Ctx, FastUnlock, LockWait, Mutex, RwLock, Sem};
 
 use crate::sys::CSys;
 use crate::{cancel, ffi, raw, tb, thread};
@@ -220,19 +220,28 @@ pub fn mutex_unlock(m: MutexParts<'_>) -> KResult<()> {
     // TINY-HOT: the plain release inlined into the export (a plain mutex has no ceiling to
     // restore); everything else as before.
     // MUTEX-FAST: parts in registers to the slow path (see `mutex_lock_block`).
+    // MUTEX-MT: the waiter's wake goes through the same cold call as the general path, so the
+    // export has one call site and LLVM keeps its frame (a push, one more store for the `xchg`
+    // to drain) off the uncontended release.
     let (w, l, e) = m?;
-    if Mutex::new(w, l, e).unlock_fast(&ThreadCtx) {
+    let r = Mutex::new(w, l, e).unlock_fast_deferred(&ThreadCtx);
+    if r == FastUnlock::Done {
         return Ok(());
     }
-    mutex_unlock_slow(w, l, e)
+    mutex_unlock_slow(w, l, e, r == FastUnlock::Wake)
 }
 
 // MUTEX-5: `cold`: the fast path's tests then stay separate predicted branches (LLVM had
 // folded them into setcc/and chains).
 #[cold]
 #[inline(never)]
-fn mutex_unlock_slow(w: &[AtomicU32], l: &[AtomicUsize], e: usize) -> KResult<()> {
+fn mutex_unlock_slow(w: &[AtomicU32], l: &[AtomicUsize], e: usize, wake: bool) -> KResult<()> {
     let m = Mutex::new(w, l, e);
+    if wake {
+        // Released by `unlock_fast_deferred`, which saw a waiter's mark.
+        m.wake_one(&ThreadCtx);
+        return Ok(());
+    }
     m.unlock(&ThreadCtx)?;
     if m.protected() {
         protect_restore(&m);

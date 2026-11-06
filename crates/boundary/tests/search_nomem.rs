@@ -11,8 +11,10 @@
 //! - `tsearch` that cannot get a node returns NULL, the tree is unchanged and `twalk` still visits
 //!   exactly the nodes inserted so far, in order.
 //!
-//! Needs only `setrlimit` (RLIMIT_AS) and `/proc/self/statm`. A failing child prints its view of
-//! the limit (sizes, limits, ballast, mappings) with its exit code.
+//! Needs only `setrlimit` (RLIMIT_AS) and `/proc/self/{statm,maps,mem,task}`. The limit goes on
+//! only once the child's other threads (libtest's) are parked, so that nothing but the calls under
+//! test meets it. A failing child prints its view of the limit (sizes, limits, ballast, mappings)
+//! with its exit code (3: the other threads never parked).
 #![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
 
 use std::ffi::CString;
@@ -97,6 +99,35 @@ fn set_limit(cur: u64) {
     CSys.prlimit(0, RLIMIT_AS, Some(&Rlimit { cur, max: RLIM_INFINITY })).unwrap();
 }
 
+/// Polls for the other threads to settle, at most (a hang guard, not a time limit).
+const SETTLE_POLLS: u32 = 100_000;
+
+/// Wait, before any limit goes on, until every other thread of this process sleeps in `futex`
+/// (x86-64 syscall 202, from `/proc/self/task/<tid>/syscall`). The child runs under libtest: its
+/// main thread spawns the thread that runs the test and then waits for the result, and its first
+/// wait sets up per-thread state that needs memory (std's current-thread handle, a
+/// `pthread_setspecific` value, the channel's waiter entry). Under the limit that setup fails and
+/// std aborts the child ("Unexpected TLS failure"). Once parked, that thread stays so until this
+/// process exits: the result is never sent, the child ends with `exit_group`. This thread holds no
+/// lock while it polls, so a sibling asleep in `futex` waits for that result, not for this thread.
+fn others_settled() -> bool {
+    let me = std::fs::read_link("/proc/thread-self").unwrap(); // "<pid>/task/<tid>"
+    let me = me.file_name().unwrap().to_owned();
+    for _ in 0..SETTLE_POLLS {
+        // FS-ORDER: every entry must pass (`all`), so the order of the listing does not matter.
+        let parked = std::fs::read_dir("/proc/self/task")
+            .unwrap()
+            .map(Result::unwrap)
+            .filter(|e| e.file_name() != me)
+            .all(|e| std::fs::read(e.path().join("syscall")).is_ok_and(|s| s.starts_with(b"202 ")));
+        if parked {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_micros(100));
+    }
+    false
+}
+
 /// Put the process under an address-space limit that the calls under test meet soon and surely,
 /// whatever the host: the limit is set from the size this process measures, never from the
 /// host's memory or CPU count. Under a first limit of size + 1 MiB the allocator's spare memory
@@ -105,6 +136,9 @@ fn set_limit(cur: u64) {
 /// limit is set again to the size measured at that point plus [`SLACK`], so that memory freed
 /// back to the kernel meanwhile (a heap trim, an exited thread's stack) gives no extra room.
 fn limit_now() {
+    if !others_settled() {
+        CSys.exit_group(report(3));
+    }
     static ANCHOR: u32 = 7;
     assert_eq!(peek32(std::ptr::addr_of!(ANCHOR) as usize), 7); // opens the files before the limit goes on
     let _ = (size_bytes(), maps_count());

@@ -58,4 +58,4 @@ change the copy.
 2. The remaining gap is the non-AVX2 copy of 1-2 KiB, about 36 per realloc compared with the AVX2 dispatch. Look at
    the non-AVX2 move kernel for mid sizes.
 3. The in-place call (63 instructions, glibc about 48) is PERF-REALLOC-USABLE's row. Do not redo it here.
-Decision: D-NEW (placeholder; REALLOC-ONE-LOOKUP as above). The coordinator reserves the id.
+Decision: D-3.17 (REALLOC-ONE-LOOKUP as above; plan/07-decisions/s03-memory-allocation.md).
