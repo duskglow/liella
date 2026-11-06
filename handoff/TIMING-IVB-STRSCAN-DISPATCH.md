@@ -1,7 +1,7 @@
 # TIMING-IVB-STRSCAN-DISPATCH (handoff; -2 continuation: timing)
 
 State: branch task/timing-ivb-strscan-dispatch-2 (= task/timing-ivb-strscan-dispatch + handoff), code commit 9b6419cc
-(csys/src/machine/scan.S only); later commits handoff/ only. -2 role keke:~/w/n1 (lint job rc 0 on the final head).
+(csys/src/machine/scan.S only); later commits handoff/ only. -2 role keke:~/w/n1 (lint job timing-ivb-strscan-dispatch-2-lint2 rc 0 on the final head: clippy -D warnings, xtask static).
 Run 1 role mei:~/w/s2: gate timing-ivb-strscan-dispatch-gate rc 0, plants timing-ivb-strscan-dispatch-plants2 7/7 CAUGHT.
 
 ## Change (csys/src/machine/scan.S)
