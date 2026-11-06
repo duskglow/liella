@@ -1,0 +1,33 @@
+{
+ "task": "SWEEP-RUN-TOOL",
+ "model": "opus",
+ "tokens": null,
+ "result": "xtask sweep run/compare: runner exits 0 when every selected row was measured (flagged rows into sweep.tsv and the summary), nonzero when the measurement did not finish; analyzer prints the 1106E report sections; documented in docs/benchmarks.md",
+ "branch": "task/sweep-run-tool",
+ "head": "6fa6f8b2",
+ "gate": {
+  "affected": "PENDING: kanon:sweep-run-tool-gate (clippy ok, static ok; affected escalated itself to FULL because xtask/src/main.rs changed); sweep unit tests 7 passed (kanon:sweep-run-tool-check)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "Sweep briefs: make `./xtask-bin sweep run --out ~/work/<STORY>/out` the per-host timing job (its rc is the verdict) and `sweep compare` the analysis",
+   "recommendation": "adopt from the next sweep; first comparison with --old-table results/timing-sweep-1106e-table.md (on task/timing-sweep-1106e)"
+  }
+ ],
+ "informational": [
+  "plants kanon:sweep-run-tool-plants-2: 12 plants, 12 CAUGHT, 0 WARN; run 1 (kanon:sweep-run-tool-plants) was REFUSED by the tool (a `|` inside one pattern) and is superseded",
+  "the brief's handoff/timing-sweep-1106e.md and its run.sh/analyze.py/results table exist only on origin/task/timing-sweep-1106e; I read those named files at that branch tip with `git show <branch>:<path>` (no history), which thread_common's git list does not name as allowed",
+  "not run on a real timing host (brief: fixtures only); the next sweep is the first real run"
+ ],
+ "refused": [],
+ "improvement": "a change to xtask/src/main.rs (one dispatch line) escalates `affected` to FULL; registering a new xtask module could map to the xtask unit tests only",
+ "next_step": "collect kanon:sweep-run-tool-gate; then sweep briefs name `sweep run` as their job",
+ "report_file": "handoff/sweep-run-tool.md",
+ "jobs": [
+  "kanon:sweep-run-tool-check",
+  "kanon:sweep-run-tool-plants-2",
+  "kanon:sweep-run-tool-gate"
+ ]
+}
