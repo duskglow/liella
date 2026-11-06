@@ -1,0 +1,3 @@
+exact-inlined | crates/core/src/num/format.rs | lit:#[inline(never)] ==> #[inline(always)] | cargo test -p liella --test hot_text_products init_first_float | msg:first %\.2f: [0-9]+ page faults
+gate-not-started | crates/legacy/src/time_compat.rs | lit:    gate.start(tsc, now); ==>     let _ = (tsc, now); | cargo test -p liella --test hot_text_products init_first_mktime | msg:first mktime after localtime_r: [1-9]
+start-no-allow | crates/legacy/src/recheck.rs | lit:            self.allow.store(tsc_allow(at, at), Relaxed); ==>             self.allow.store(0, Relaxed); | cargo test -p liella-legacy --lib tsc_gate | msg:the clock was read with the gate started

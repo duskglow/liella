@@ -232,7 +232,9 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 
 /// The faults of a program's first `%.2f` (PERF-FIRSTCALL-MKTIME-SNPRINTF). `format_float` with the
 /// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
-const FLOAT_BOUND: u64 = 3;
+/// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
+/// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
+const FLOAT_BOUND: u64 = 6;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
