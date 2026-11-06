@@ -115,7 +115,7 @@ fn a_page_written_before_the_swap_keeps_the_sse2_page() {
         };
         let at = classed::page0() as u64 + 16;
         let mut b = [0u8; 1];
-        if mem.read_at(&mut b, at) != Ok(1) || mem.write_at(&b, at).map_err(|e| e.raw_os_error()) != Ok(1) {
+        if mem.read_at(&mut b, at).ok() != Some(1) || mem.write_at(&b, at).ok() != Some(1) {
             eprintln!("classed_slots: /proc/self/mem refuses a write to text (proc_mem.force_override)");
             return SKIP;
         }

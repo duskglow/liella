@@ -23,6 +23,7 @@ loader rule 1; phase 14 applies the same rule in the dynamic loader).
 | `glibc.cpu.x86_rep_stosb_threshold` (`liella.cpu.rep_stosb_threshold`) | 1 and up | bytes from which fills use `rep stosb` |
 | `glibc.pthread.rseq` (`liella.pthread.rseq`) | 0 or 1 | 0: threads register no rseq area (§22.9) |
 | `glibc.malloc.perturb` (`liella.malloc.perturb`) | 0 to 255 | `M_PERTURB` of the C `malloc` family (§3.2); wins over `MALLOC_PERTURB_` |
+| `liella.compat.no_classed_swap` (Liella only) | 0 or 1 | 1: the classed entries keep the file's SSE2 page; no page swap at start-up on the AVX2 class, so debuggers, profilers and core files see the code that runs (COMPAT-20, D-4.53) |
 
 The ranges are the ones the host loader lists (`ld.so --list-tunables`).
 

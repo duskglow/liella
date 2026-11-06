@@ -20,6 +20,10 @@
  *   startup_instr_setloc   setlocale(LC_ALL, "") under LC_ALL=en_US.UTF-8, exit
  *   startup_instr_printf   as startup_instr_setloc + one printf("%s %d\n")
  *   startup_instr_wctype   as startup_instr_setloc + iswalpha, towupper and wcwidth of U+00E9
+ *   startup_kinstr_c       as startup_instr_c, user AND kernel mode (exclude_kernel off; perf_event_paranoid
+ *                          1 or lower): the start-up's system calls count too, with the kernel's exec and
+ *                          exit work common to both libraries (D-4.53: the classed page swap's 4 calls). Its
+ *                          `ctr` line has the count in the instructions field only.
  *
  * The kernel's exec/mmap/exit work is common to both libraries; compare ratios. Every child is checked
  * once before it is timed and reaped; a failing child ends the program. */
@@ -142,8 +146,9 @@ static long run_bin_true(void)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 3;
 }
 
-/* One instruction row: 5 children in `mode`, each counted from its exec to its exit (user mode only). */
-static double instr_row(const char *name, char *mode, char **envp)
+/* One instruction row: 5 children in `mode`, each counted from its exec to its exit (user mode only,
+ * or user and kernel mode with `kernel`: the start-up's system calls then count too). */
+static double instr_row(const char *name, char *mode, char **envp, int kernel)
 {
     double best_ns = 1e300, best_instr = -1.0;
     for (int r = 0; r < 5; r++) {
@@ -175,7 +180,7 @@ static double instr_row(const char *name, char *mode, char **envp)
         a.config = PERF_COUNT_HW_INSTRUCTIONS;
         a.disabled = 1;
         a.enable_on_exec = 1;
-        a.exclude_kernel = 1;
+        a.exclude_kernel = !kernel;
         a.exclude_hv = 1;
         int fd = (int)syscall(SYS_perf_event_open, &a, pid, -1, -1, 0UL);
         int status;
@@ -196,7 +201,8 @@ static double instr_row(const char *name, char *mode, char **envp)
     const char *on = getenv("CBENCH_COUNTERS");
     if (on && on[0] == '1') {
         char buf[160];
-        int n = snprintf(buf, sizeof buf, "ctr\t%s\t%.3f\t-1\t-1\t-1\t%.3f\t-1\n", name, best_instr, best_instr);
+        int n = kernel ? snprintf(buf, sizeof buf, "ctr\t%s\t%.3f\t-1\t-1\t-1\t-1\t-1\n", name, best_instr)
+                       : snprintf(buf, sizeof buf, "ctr\t%s\t%.3f\t-1\t-1\t-1\t%.3f\t-1\n", name, best_instr, best_instr);
         if (n > 0)
             (void)!write(2, buf, (size_t)n < sizeof buf ? (size_t)n : sizeof buf - 1);
     }
@@ -246,19 +252,23 @@ int main(int argc, char **argv)
     if (run_locale() != 0)
         fail("child locale (setlocale failed: en_US.UTF-8 installed?)");
     if (!cb_skip("startup_instr_c")) {
-        double t = instr_row("startup_instr_c", "true", env_plain);
+        double t = instr_row("startup_instr_c", "true", env_plain, 0);
         put("startup_instr_c", t);
     }
+    if (!cb_skip("startup_kinstr_c")) {
+        double t = instr_row("startup_kinstr_c", "true", env_plain, 1);
+        put("startup_kinstr_c", t);
+    }
     if (!cb_skip("startup_instr_setloc")) {
-        double t = instr_row("startup_instr_setloc", "setlocale", env_locale);
+        double t = instr_row("startup_instr_setloc", "setlocale", env_locale, 0);
         put("startup_instr_setloc", t);
     }
     if (!cb_skip("startup_instr_printf")) {
-        double t = instr_row("startup_instr_printf", "printf", env_locale);
+        double t = instr_row("startup_instr_printf", "printf", env_locale, 0);
         put("startup_instr_printf", t);
     }
     if (!cb_skip("startup_instr_wctype")) {
-        double t = instr_row("startup_instr_wctype", "wctype", env_locale);
+        double t = instr_row("startup_instr_wctype", "wctype", env_locale, 0);
         put("startup_instr_wctype", t);
     }
     MEASURE("spawn_bin_true", 300, run_bin_true());

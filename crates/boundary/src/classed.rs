@@ -58,7 +58,23 @@ pub enum Outcome {
     InstalledOnRetry = 7,
 }
 
-static OUTCOME: AtomicU8 = AtomicU8::new(Outcome::NotRun as u8);
+impl Outcome {
+    /// The stored code ([`outcome`] maps it back).
+    const fn code(self) -> u8 {
+        match self {
+            Outcome::NotRun => 0,
+            Outcome::Sse2Class => 1,
+            Outcome::Disabled => 2,
+            Outcome::NoPagemap => 3,
+            Outcome::Modified => 4,
+            Outcome::Refused => 5,
+            Outcome::Installed => 6,
+            Outcome::InstalledOnRetry => 7,
+        }
+    }
+}
+
+static OUTCOME: AtomicU8 = AtomicU8::new(Outcome::NotRun.code());
 
 /// What the start-up did (for the tests and the selftest).
 pub fn outcome() -> Outcome {
@@ -150,7 +166,7 @@ impl SwapOps for Kernel {
 /// Records and returns the outcome.
 pub fn install_with(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outcome {
     let o = decide(ops, page0, want, disabled);
-    OUTCOME.store(o as u8, Relaxed);
+    OUTCOME.store(o.code(), Relaxed);
     o
 }
 
@@ -189,7 +205,7 @@ pub(crate) fn start(f: &liella_rt::cpu::Features, t: &liella::config::Tunables) 
 #[cfg(test)]
 mod tests {
     // Clauses: no spec clause (D-4.53 start-up mechanism; the entries' behaviour is s4_1_c_1).
-    #![allow(clippy::unwrap_used, clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::panic, clippy::arithmetic_side_effects)]
     use super::*;
     use core::cell::Cell;
 
