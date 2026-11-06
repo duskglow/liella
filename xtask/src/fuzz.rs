@@ -124,6 +124,8 @@ fn settings(target: &str) -> Settings {
     match target {
         "locale" => Settings { max_len: 1 << 20, timeout: 20, rss_mb: 4096, chunk: 10 },
         "charmap" => Settings { max_len: 1 << 16, timeout: 20, rss_mb: 4096, chunk: 20 },
+        // Whole ELF files: the seeds are small shared objects of a few KiB to tens of KiB.
+        "elf" => Settings { max_len: 1 << 16, timeout: 10, rss_mb: 2048, chunk: 30 },
         "nscache" => Settings { max_len: 1 << 16, timeout: 10, rss_mb: 2048, chunk: 30 },
         "regex" | "regex_dfa" | "glob" | "wordexp" | "printf" | "scanf" => Settings { max_len: 4096, timeout: 10, rss_mb: 2048, chunk: 30 },
         _ => Settings { max_len: 16384, timeout: 10, rss_mb: 2048, chunk: 30 },

@@ -29,6 +29,7 @@ liella = { path = "../crates/core" }
 liella-legacy = { path = "../crates/legacy" }
 liella-abi = { path = "../crates/abi" }
 liella-boundary = { path = "../crates/boundary" }
+liella-ld = { path = "../crates/ld" }
 
 [profile.release]
 debug = 1
@@ -210,6 +211,13 @@ bench = false
 [[bin]]
 name = "xdr_rec"
 path = "fuzz_targets/xdr_rec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "elf"
+path = "fuzz_targets/elf.rs"
 test = false
 doc = false
 bench = false
