@@ -1,0 +1,12 @@
+{"task": "CLASSED-SLOT-SWAP-COST", "model": "opus", "tokens": null,
+ "result": "Swap cost split per call (openat 17.8k, pread 3.7k, close 1.9k, mremap 33.1k kernel instr in-call on Broadwell-EP; +65.5k per start; N100 +29.3 us, +15.6%); floor proved above the 5k target (any call that can change page 0's mapping costs 20-31k on kernel 6.8); default stays off; D-4.53 amended",
+ "branch": "task/classed-slot-swap-cost", "head": "2bcd8655",
+ "gate": {"affected": "keke classed-slot-swap-cost-gate (affected --base origin/next on 2bcd8655): see hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Replace the /proc/self/pagemap guard with a user-space int3 (0xcc) scan of both pages (2.05k user instr, 0 kernel; cuts ~48k kernel instr and ~16.7 us per start on the N100; changes #3140)", "recommendation": "only if the swap is ever wanted on; it still leaves +44-60k, so keep the default off and spend nothing more on the swap until a slot shows a measured per-call gain"}],
+ "informational": ["Any GLIBC_TUNABLES value costs Liella's static start-up +38k to +51k kernel instructions and +13.7 us on the N100 (+37 us Ivy Bridge); an unrelated env var costs nothing: worth its own story (profile first)"],
+ "refused": [],
+ "jobs": ["keke:classed-slot-swap-cost-gate", "keke:classed-slot-swap-cost-plants", "keke:classed-slot-swap-cost-lint", "keke:classed-slot-swap-cost-split4", "kanon:classed-slot-swap-cost-bdw", "nozomi:classed-slot-swap-cost-n100", "nico:classed-slot-swap-cost-ivb"],
+ "improvement": "A per-call kernel-instruction probe (perf_event_open, exclude_user, around each syscall) settles start-up cost splits in seconds without perf trace; worth a tools/probe/ template",
+ "next_step": "Coordinator rules on the guard scan; otherwise nothing, the swap stays off",
+ "report_file": "handoff/classed-slot-swap-cost.md"}
