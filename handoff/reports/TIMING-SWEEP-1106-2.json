@@ -1,0 +1,12 @@
+{"task": "TIMING-SWEEP-1106-2", "model": "opus", "tokens": null,
+ "result": "1106 non-libm timing table written (Ivy Bridge + N100, next 4d454f06): 4 regressions (1 real: memmove_4k N100, likely parity-copy-avx2-3), 39 reopen, 19 improved, 38 re-time verdicts",
+ "branch": "task/timing-sweep-1106-2", "head": "26b53646",
+ "gate": {"affected": "docs only: static rc 0; timing runs kotori rc 1 (bench budget check, run complete), nozomi-2 rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "kotori:timing-sweep-1106-kotori ended rc 1 from xtask bench's per-host budget check (11 rows over 1.25x the 5236e77 calibration) although the run finished and wrote every table; this reads as red", "recommendation": "accept the job as complete for the sweep; for future sweeps run.sh should record the budget verdict and exit 0 when the bench finished, keeping non-zero only for a real run failure"}],
+ "informational": ["7 Ivy Bridge memcmpeq/bcmp/memchr_16_mix rows over budget are slower in time and unchanged since 1105 (instr > 1.05)", "openpty_close (IVB) and mkstemp_unlink_close (N100) regressions are noise: no landing on their path, instr unchanged, spread 0.13/0.23"],
+ "refused": ["~/src/liella-ops/bin/ops status 2>/dev/null | grep -nE '#7[5-7]|booking|timing-book' | head; ~/src/liella-ops/bin/ops timing-cancel 76; ~/src/liella-ops/bin/ops timing-cancel 77"],
+ "jobs": ["shiki:timing-sweep-1106-stage", "kotori:timing-sweep-1106-kotori", "nozomi:timing-sweep-1106-nozomi-2", "shiki:timing-sweep-1106-2-static"],
+ "improvement": "sweep run scripts should tell bench budget-check findings apart from run failures, so a finished sweep is not red and is not rerun",
+ "next_step": "coordinator: cancel bookings 76/77 if active; open a story for memmove_4k on N100; re-time first_bindtextdomain_gettext on Ivy Bridge",
+ "report_file": "handoff/timing-sweep-1106.md"}
