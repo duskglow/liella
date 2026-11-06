@@ -309,6 +309,30 @@ fn gnu_chain_out_of_range() {
     let elf = Elf::parse::<X86_64>(&m.0).unwrap();
     let g = elf.dynamic().unwrap().unwrap().gnu_hash().unwrap().unwrap();
     assert_eq!(g.symbol_count(), Err(ElfError::HashIndex(Table::GnuHash, 2 + words as u32)));
+    // Two buckets: one below symoffset is refused even when another bucket holds the highest chain.
+    let low = with(|m| {
+        m.words32(GNU_AT, &[2, 2, 1, 6]);
+        m.words32(GNU_AT + 24, &[2, 1, 0x10, 0x21]);
+    });
+    assert_eq!(low, ElfError::HashIndex(Table::GnuHash, 1));
+}
+
+#[test]
+fn addresses_resolve_through_the_segment_holding_them() {
+    // no spec clause: D-27.8, a table is read from the PT_LOAD whose file-backed range holds its
+    // address, not from an earlier PT_LOAD that starts below it.
+    let mut m = image();
+    let ph1 = 64 + 56;
+    m.p32(ph1, pt::LOAD);
+    for (f, v) in [(8, 0u64), (16, 0x10000), (24, 0x10000), (32, TOTAL as u64), (40, TOTAL as u64), (48, 0x1000)] {
+        m.p64(ph1 + f, v);
+    }
+    let elf = Elf::parse::<X86_64>(&m.0).unwrap();
+    let at = 0x10000 + VERSYM_AT as u64;
+    assert_eq!(elf.bytes_from(at), Ok(&m.0[VERSYM_AT..]));
+    assert_eq!(elf.bytes_at(at, 8), Ok(&m.0[VERSYM_AT..VERSYM_AT + 8]));
+    assert_eq!(elf.bytes_from(0x10000 + TOTAL as u64), Ok(&[][..]));
+    assert_eq!(elf.bytes_from(0x10001 + TOTAL as u64), Err(ElfError::AddressNotMapped(0x10001 + TOTAL as u64)));
 }
 
 #[test]
