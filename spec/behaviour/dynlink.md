@@ -116,7 +116,8 @@ with gcc 13.3 / binutils, black box: only the values the bound functions return 
 | `STB_GNU_UNIQUE` `u_obj` in two objects, each `dlopen`ed `RTLD_LOCAL` | one object for both (the first's); a plain global `u_obj` in a third object stays its own |
 
 Liella's lookup (D-27.11) follows every row; `crates/ld/tests/symbols.rs` checks the same corpus. The stub row is the
-loader's version check (a later DL story): Liella's lookup matches any definition of an object without `versym`.
+loader's version check, not the lookup: Liella's lookup matches any definition of an object without `versym`, and the
+load-time version check (DL-10) refuses the load (exit 127, a message naming the object and the version; D-27.11).
 
 ## Notes for the implementation stories
 

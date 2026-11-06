@@ -320,6 +320,9 @@ impl<'a> Object<'a> {
                     Ok(ok)
                 }
                 Want::Version(name) => {
+                    // An object without `versym` matches any request here; a program that needs a
+                    // version from such an object is refused earlier, by the load-time version
+                    // check (D-27.11).
                     let ok = self.versym.is_none()
                         || (version > VER_NDX_GLOBAL
                             && self.version_name(version)?.ok_or(LookupError::UnknownVersion { sym: i, index: version })? == name);

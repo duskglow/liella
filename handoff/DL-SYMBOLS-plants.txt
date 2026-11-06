@@ -8,7 +8,7 @@ local-index | crates/ld/src/symbols.rs | lit:if version == VER_NDX_LOCAL { ==> i
 undef-def | crates/ld/src/symbols.rs | lit:s.shndx != SHN_UNDEF ==> s.shndx != 0xfff1 | cargo test -p liella-ld --test symbols | msg:test (programs_bind_like_the_reference|weak_definitions_are_ordinary_and_undefined_weak_is_zero) \.\.\. FAILED
 ref-verneed | crates/ld/src/symbols.rs | lit:if a.other & !VERSYM_HIDDEN == index { ==> if a.other == 0xffff { | cargo test -p liella-ld --test symbols | msg:test programs_bind_like_the_reference \.\.\. FAILED
 bloom | crates/ld/src/symbols.rs | lit:if word & mask != mask { ==> if word & mask == mask { | cargo test -p liella-ld --test symbols | msg:test (versions_bind_like_the_reference|gnu_and_sysv_give_the_same_answers) \.\.\. FAILED
-gnu-hashcmp | crates/ld/src/symbols.rs | lit:if (e.hash | 1) == (h | 1) && f(e.sym)? { ==> if (e.hash | 1) != (h | 1) && f(e.sym)? { | cargo test -p liella-ld --test symbols | msg:test versions_bind_like_the_reference \.\.\. FAILED
+gnu-hashcmp | crates/ld/src/symbols.rs | perl:s/(\(e\.hash \| 1\)) == (\(h \| 1\) && f\(e\.sym\))/$1 != $2/ | cargo test -p liella-ld --test symbols | msg:test versions_bind_like_the_reference \.\.\. FAILED
 sysv-fold | crates/ld/src/symbols.rs | lit:h ^= g.wrapping_shr(24); ==> h ^= 0; | cargo test -p liella-ld --test symbols | msg:test hash_functions_match_the_linker \.\.\. FAILED
 gnu-seed | crates/ld/src/symbols.rs | lit:5381u32 ==> 5380u32 | cargo test -p liella-ld --test symbols | msg:test hash_functions_match_the_linker \.\.\. FAILED
 unique | crates/ld/src/symbols.rs | lit:if def.st.bind() == STB_GNU_UNIQUE { ==> if def.st.bind() == 0xff { | cargo test -p liella-ld --test symbols | msg:test unique_definitions_are_shared_in_a_namespace \.\.\. FAILED
