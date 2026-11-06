@@ -774,7 +774,6 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
         run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(&archive))?;
     }
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
-    shared_personality_ref(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("personality-work"))?;
     // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
@@ -786,6 +785,8 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     check_archive_elf(&archive)?;
     let staged = tmp_name(out);
     let weak = weaken_archive(&archive, &product.join("weaken"), &staged)?;
+    // After the weakening pass, which rebuilds the product crate's objects.
+    shared_personality_ref(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &staged, &product.join("personality-work"))?;
     rust_symbols_stay_local(&staged)?;
     check_archive_elf(&staged)?;
     publish(&staged, out)?;
