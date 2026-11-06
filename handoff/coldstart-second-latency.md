@@ -1,87 +1,58 @@
-# COLDSTART-SECOND-LATENCY(-2): second_setlocale_en_US / second_mktime_new_york time without instructions
+# COLDSTART-SECOND-LATENCY(-3): second_setlocale_en_US / second_mktime_new_york time without instructions
 
-State: branch task/coldstart-second-latency-2 (from origin/next c101c4c6 + the -1 run's WIP commit). No code change.
-Result of -2: INCOMPLETE. The in-process probe is built and run on the Broadwell-EP build host. The single-step
-footprint of both second calls is named (Liella only). The N100 run of the same probe (nozomi:csl2-pmc-n100) was still
-queued behind another story's bench at hand-back, so the N100 attribution is still open. Plan rows: none new; the plan is
-handoff/coldstart-plan-1106/COLDSTART-SECOND-LATENCY.md.
+State: branch task/coldstart-second-latency-3 (from -2's branch). Code commit 48843455 (proposal (a)), then this handoff.
+Result of -3: INCOMPLETE. (a) is implemented, gated and planted green. The N100 / Ivy Bridge timing that judges it
+is queued (nozomi:coldstart-second-latency-3-time-n100, nico:coldstart-second-latency-3-time-ivb). Plan rows:
+D-23.6 (amended), D-7.14 (amended: one TSC rule for gettext and the zone check). Plan: handoff/coldstart-plan-1106/.
 
-## Earlier (-1 run, still valid)
-N100 `--compare` re-time (nozomi:CSL-n100): second_setlocale 261 vs glibc 184 ns (1.42x), second_mktime 630 vs 485 ns
-(1.30x), ranges disjoint. Liella runs fewer instructions on both (177 vs 202, 1071 vs 1322). Whole-process `perf stat`
-deltas cannot resolve a call of this size. Do not redo either.
+## Step 1: N100 counters (before the change)
+nozomi:csl2-pmc-n100 (-2) returned rc 0 but every counter read 0. Cause: the NMI watchdog holds one counter, so a pinned
+group of cycles + instructions + 6 raw events cannot be scheduled on Gracemont, and a group that never runs reads
+offset 0 through rdpmc. Fix: at most 5 raw events per set, a `perf stat` group check that fails the run, and a check
+for all-zero cycles (`~/work/COLDSTART-SECOND-LATENCY-2/run2.sh` on nozomi). Rerun: nozomi:coldstart-second-latency-3-pmc-n100,
+310 processes per side. Medians, net of the empty window N2 (Liella 170 / glibc 192 cycles):
+| window | cycles L / g | instr L / g | L2 hits L / g | load-stall cyc L / g | icache miss L / g | ld_head L1 miss L / g | dTLB walks L / g |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| S2 setlocale | 769 / 404 | 165 / 182 | 5 / ~0 | 128 / ~0 | 59 / 34 | 55 / 2 | 1 / 0 |
+| M2 mktime | 1285 / 1134 | 1043 / 1295 | 13 / 4 | 161 / 31 | 106 / 73 | 90 / 21 | 0 / 0 |
+Reading: on the N100 both second calls lose time to data loads served from L2 (L1D misses), and setlocale also to
++25 icache misses; page walks are about 1 per setlocale and 0 per mktime. The setlocale gap (+365 cycles) is the larger
+one on this core and is a data-side problem, not page walks.
 
-## Probe (-2): in-process counters around the one call
-`mkprobe.py` patches a copy of bench/c/cbench_opt.c. It adds `pmc.h` (perf_event_open, user-only, a group of up to 8
-events read with rdpmc through the mmap page, so no syscall in the window). It reads the counters just before and after
-setlocale (S), localtime_r (L) and mktime (M) at k=0/1, plus an empty window (N, the probe's own cost). It also adds a
-`pmc <R>` mode that runs the bench's `fresh()` (31 fresh processes, same env) R times. Events come from `./pmc_events`
-("<type> <hex config>" per line). Sources: kanon:~/work/COLDSTART-SECOND-LATENCY-2/{pmc.h,mkprobe.py,build.sh,run.sh,
-runk.sh,agg.py,trace.py,ana.py}. Binaries: probe.liella (static, libc.a of this tree) and probe.glibc (dynamic). The same
-files are in nozomi:~/work/COLDSTART-SECOND-LATENCY-2/.
+## Step 2: (a) done
+`recheck::TscGate` (D-7.14's rule: `tsc_holds`/`tsc_allow`, 2^28 ticks) sits in front of the zone's once-a-second
+`LastCheck` on `time_compat::select`'s lock-free hot path. `TZ` and the generation are compared first, so a changed `TZ`
+is seen at once. No counter, a counter that went backwards, and a forgotten check all read the clock. Tests:
+`recheck::tests::tsc_gate_in_front_of_a_check`, plus `reload` `an_implicit_selection_sees_a_replaced_zone_file_after_the_interval` and
+`a_changed_tz_is_seen_by_the_next_implicit_selection`.
 
-### Broadwell-EP build host (loaded, job kanon:csl2-pmc-bdw): 155 fresh processes per side, means
-| window | side | cycles | instr | L1D miss | L1I miss | dTLB miss | iTLB miss |
-|---|---|---:|---:|---:|---:|---:|---:|
-| N2 (empty) | Liella / glibc | 1696 / 1500 | 197 / 197 | 17.7 / 16.9 | 8.6 / 2.9 | 0.8 / 0.2 | 0 / 0 |
-| S2 | Liella / glibc | 2142 / 1885 | 378 / 382 | 32.4 / 26.2 | 40.2 / 25.6 | 0.7 / 0.0 | 0 / 0 |
-| M2 | Liella / glibc | 3593 / 3216 | 1228 / 1522 | 54.8 / 34.8 | 70.6 / 74.9 | 0.7 / 0.3 | 0 / 0 |
-| L2 (reference) | Liella / glibc | 3210 / 3260 | 789 / 961 | 49.6 / 42.8 | 67.4 / 65.9 | 2.1 / 0.2 | 0 / 0 |
+## Step 3: counts (Broadwell-EP build host, loaded; kanon:coldstart-second-latency-3-counts2)
+Probe M2 instructions 1228 -> 1165 (-63; glibc 1522). L1D misses 54.8 -> 54 (no change), L1I about the same. Cycles on
+this loaded host moved with the empty window (N2 1696 -> 1583) and settle nothing. cbench_opt compare, loaded host:
+second_mktime 584 vs glibc 736 ns, second_setlocale 217 vs 340 ns. So on Broadwell (a) removes instructions but not
+the L1D misses: the +19 misses are the zone's spread (proposal (b)) and the stack, not the vvar line.
 
-Net of the empty window (medians): S2 384 vs 398 cycles, so parity on this class, with +9 L1I and +5 L1D misses.
-M2 1848 vs 1718 cycles (+130), with **+19 L1D misses** and about the same L1I misses. There are no TLB misses to speak of
-on Broadwell (its STLB is large). The empty window already differs by 8.6 vs 2.9 L1I misses and about 200 cycles: the
-probe's own code lies differently in the two binaries. Subtract N, or compare the sides only after subtracting it.
-
-### Footprint of the second calls (Liella only; gdb single-step of probe.liella, kanon:csl2-trace3)
-Run as the bare cold child (`probe.liella cold /nonexistent`, the bench env), so the gettext rows ran without their
-catalog; this does not change the footprint of the two calls themselves.
-- **2nd setlocale**: 173 instructions over 4 code pages (19 lines): setlocale, boundary::locale::setlocale,
-  legacy::global_locale::setlocale, machine strlen/equal. 42 memory operands over 9 data pages (16 lines). Three of them
-  are .rodata pages read for ONE line each (an llvm constant at 0x75d000, another at 0x7c4000, `liella_machine_short_lim`
-  at 0x82f000). Then cpu::STATE / cmp tables (.data 0x86c000), global_locale (0x86d000 and 0x8ab000), one heap line and
-  the stack.
-- **2nd mktime**: 925 instructions plus one vDSO call over 10 code pages (68 lines). The vDSO call is
-  `recheck::now` -> clock_gettime(CLOCK_MONOTONIC_COARSE), from `time_compat::select`'s "check due?" test on every
-  implicit tzset, through vcall2 and VDSO_ST. It adds the vDSO text page and the vvar page (a line the kernel rewrites on
-  every tick). Code: env_find (TZ compare), time_compat::select, timelocal/zone::mktime/Zone::resolve (0x451000-0x454000),
-  Zone::kind_ at 0x4d1000 (far from the rest). Data: 12 pages / 41 lines. The kept zone is in **five separate anonymous
-  mappings** (0x7ffff4040000, ...4240000 (6 lines), ...4300000, ...4380000 (7 lines), 0x7ffff7fe8000), apparently one per
-  allocation size class. On top of that come 17 stack lines over 3 pages, .data (environ, time_compat CURRENT, VDSO_ST,
-  cpu::STATE) and two .rodata pages.
-
-Reading (Broadwell): M2's +19 L1D misses fit a zone spread over 5 mappings plus a deep stack and the vvar line, which the
-intervening rows (regcomp, wordexp, gettext, ...) have evicted. glibc's absolute miss count is lower (aggregate only).
-
-## Open / next step (in order)
-1. Read nozomi:csl2-pmc-n100 (`~/logs/csl2-pmc-n100.log` on nozomi; raw data in ~/work/COLDSTART-SECOND-LATENCY-2/
-   out.{A,B}.{liella,glibc}). It has two event sets of 10x31 processes per side: A = cycles, instr, mem_load_uops_retired
-   .l2_hit/.l3_hit/.dram_hit, dtlb_load_misses.walk_completed, mem_bound_stalls.load/.ifetch; B = icache.misses, itlb
-   walks, ld_head.l1_miss_at_ret/any_at_ret, mem_bound_stalls.ifetch_l2_hit/load_l2_hit. Subtract N2 per side. If the N100
-   repeats Broadwell's picture (M: L1D/L2 misses and load stalls; S: ifetch / L1I or page walks), the cause is named.
-2. Proposals, by expected gain, each needing a measured before/after on the N100:
-   a. mktime: skip the vDSO coarse-clock read in `time_compat::select`'s hot path with the TSC gate gettext already uses
-      (recheck::tsc_allow / tsc_holds, D-7.12 GETTEXT-6): rdtsc instead of vDSO text + vvar + VDSO_ST. This is local and
-      testable; the TSC-gate tests in intl are the model.
-   b. mktime: allocate a kept zone's parts (transitions, types, abbreviations, Zone record) from one block, so a
-      conversion reads 1-2 pages, not 5 mappings. This touches the zone loader / allocator use, so it needs a ruling
-      (architectural).
-   c. setlocale: on the N100 the gap is 77 ns with 9 data pages for 16 lines. Co-locate the three single-line .rodata
-      reads and the global_locale state (0x86d000 / 0x8ab000) only if set B shows page walks or L1D misses there.
-      Broadwell shows parity, so wait for the N100 first.
-3. Tests/plants only once code changes: the setlocale/mktime conformance tests and the recheck/tsc tests.
+## Next step (in order)
+1. Read nozomi:coldstart-second-latency-3-time-n100 (`~/logs/<label>.log`: the cbench_opt `--compare` table, then the
+   after-probe sets A/B; subtract N2) and nico:coldstart-second-latency-3-time-ivb. second_mktime ratio before (-1, N100):
+   630 vs 485 ns (1.30x). If the N100 is not slower than before -> COMPLETE (land (a)). If it measured worse, revert 48843455
+   (keep the tests) and record a NEGATIVE row.
+2. Coordinator step 4: if N100 mktime is still above 1.10x, do (b), one block per zone, as its own commit with its own
+   counts and timing (the counters above point there: +9 L2 hits per mktime).
+3. (c) setlocale: the N100 now shows the evidence: L1D misses served from L2 (+5 L2 hits, +128 load-stall cycles,
+   ld_head 55 vs 2), 1 dTLB walk, +25 icache misses. Not started (coordinator rule); it is the bigger gap on the N100.
 
 ## Not to redo
-The bench re-time; whole-process perf stat; the probe build (rerun `bash ~/work/COLDSTART-SECOND-LATENCY-2/build.sh`
-on kanon after a code change); the gdb traces (trace3 in kanon:/mnt/zram/claude/csl2/, removed by ram-sweep). The gdb
-trace must break at `*setlocale` / `*mktime` (exact entry) and step over vDSO calls: a single-stepped vDSO
-coarse-clock read spins in its seqlock retry loop.
+-1/-2 probes, traces and re-times; the N100 pre-change counters above; the event-group limit (5 raw + cycles + instr).
 
 ## Report
-- Commits: this handoff and the report json only (no code).
-- Jobs: kanon:csl2-build2 (probe build, rc 0), kanon:csl2-pmc-bdw (rc 0), kanon:csl2-trace3 (rc 0), nozomi:csl2-pmc-n100
-  (queued in the timing queue at hand-back). Superseded: kanon:csl2-build (rc 1, missing -I bench/c), kanon:csl2-trace
-  (killed: it broke after the prologue), kanon:csl2-trace2 (it single-stepped into the vDSO).
-- Gate / plants: not run (no code change).
-- RULING NEEDED: none yet. Proposal 2b, if the N100 confirms it, needs one.
-- Refusals: none. Nothing of mine is running on kanon. nozomi:csl2-pmc-n100 is left queued (data only).
+- Commits: 48843455 (gate + tests + D-23.6/D-7.14 amendments), this handoff + report json.
+- Jobs on the final code head (kanon:kn1): coldstart-second-latency-3-lint (clippy, static, recheck unit + reload, rc 0),
+  coldstart-second-latency-3-gate (affected --base origin/next: 7 suites, 4681 passed, 0 failed, 3 conformance;
+  peak 12G, rc 0), coldstart-second-latency-3-plants (5 CAUGHT, 0 SURVIVED, 0 WARN), coldstart-second-latency-3-counts2 (rc 0).
+  N100: coldstart-second-latency-3-pmc-n100 (rc 0, pre-change data). Queued: nozomi:...-time-n100, nico:...-time-ivb.
+- Superseded: kanon:coldstart-second-latency-3-counts (rc 1: I named a row, `second_mktime_new_york`, as a bench; the
+  rows are in cbench_opt). nozomi:csl2-pmc-n100 (-2; all zero, see step 1).
+- Process slip: one call held an empty heredoc (`python3 - <<'X'` with no body, a no-op); a remote `cmd && setsid ... &`
+  held the ssh open until the harness stopped it (the remote job finished rc 0).
+- RULING NEEDED: none. Refusals: none.
