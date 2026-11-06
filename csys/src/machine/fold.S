@@ -329,13 +329,13 @@ memset:
 	movb %cl, (%rdi)
 .Lset_none:
 	ret
-/* Not folded: 65-256 here after the explicit NULL test (one unsigned compare per class: n - 65
- * <= 63 for 65-128, then <= 191 for 129-256; MEMSET-MID: 129-256 straight-line, no loop, as the
- * copy's class); a NULL d, 1-64 without folding and every other size in Rust. The 65-128 class
- * falls through (no compare added to it). */
+/* Not folded: 65-256 here after the explicit NULL test (MEMSET-MID: 129-256 straight-line, no
+ * loop, as the copy's class); a NULL d, 1-128 without folding and every other size in Rust. The
+ * 65-128 class is `n <= liella_machine_set_mid` (128 with folding on, so n > 64 here; 0 with
+ * folding off, so every n goes on: one compare against memory, no subtraction), then one unsigned
+ * compare n - 129 <= 127 for 129-256. */
 .Lset_big:
-	leaq -65(%rdx), %rcx
-	cmpq $63, %rcx
+	cmpq liella_machine_set_mid(%rip), %rdx
 	ja .Lset_129
 	testq %rdi, %rdi
 	jz liella_hot_fill_rest
@@ -353,8 +353,9 @@ memset:
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
 .Lset_129:
-	cmpq $191, %rcx
-	ja .Lset_out				/* n < 65 (the wrapped compare) with folding off, or n > 256 */
+	leaq -129(%rdx), %rcx
+	cmpq $127, %rcx
+	ja .Lset_out				/* n < 129 (the wrapped compare) with folding off, or n > 256 */
 	testq %rdi, %rdi
 	jz liella_hot_fill_rest
 	cmpb $0, liella_machine_avx2(%rip)
@@ -397,7 +398,7 @@ memset:
  * word (`liella_machine_fill_erms_from`, at least 257; usize::MAX without ERMS or before the
  * startup decision) `rep stosb` from d when d is 64-byte aligned, else the first 64 bytes
  * unaligned and `rep stosb` from the first 64-byte boundary above d; else with the AVX2 flag the AVX2 fill; a NULL d and every
- * other case `hot::fill_large`. Sizes below 65 (folding off) fail both size tests. */
+ * other case `hot::fill_large`. Sizes below 129 (folding off) fail both size tests. */
 .Lset_out:
 	cmpq liella_machine_fill_erms_from(%rip), %rdx
 	jae .Lset_erms
@@ -1410,7 +1411,17 @@ liella_machine_cmp_long:
 	.p2align 6
 liella_machine_fill_erms_from:
 	.quad -1
-	.zero 56
 	.size liella_machine_fill_erms_from, 8
+/* The `memset` entry's 65-128 class word (PARITY-MEMSET-SMALL-AVX2; `ffi::liella_machine_set_mid`):
+ * 128 while NULL folding is on, else 0 (written by `crate::dispatch::select_null_fold`: dropped
+ * before the fold limit, raised after it). Sizes above the fold limit with `n <= word` take the
+ * 65-128 class. Read only by `memset` and written only by the startup decision, as the word above,
+ * so it shares that word's line; the padding completes it. */
+	.globl liella_machine_set_mid
+	.hidden liella_machine_set_mid
+	.type liella_machine_set_mid, @object
+liella_machine_set_mid:
+	.zero 56
+	.size liella_machine_set_mid, 8
 
 	.section .note.GNU-stack,"",@progbits

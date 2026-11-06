@@ -190,6 +190,20 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64.rs:1071` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
 - `fast64.rs:1115` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
 
+## fast_bessel.rs (fast_bessel)
+
+- `fast_bessel.rs:94` `fn taylor(row: &[u64; W], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` at `t` (layout and order in the module doc).
+- `fast_bessel.rs:111` `pub fn table_kernel(f: usize, x: f64) -> (Dd, f64)` — bound: undocumented — doc: `f(x)` (`f`: 0 `J0`, 1 `J1`, 2 `Y0`, 3 `Y1`) for `2^-5 <= x < 32` as `(y, eps)`.
+- `fast_bessel.rs:121` `pub fn small_kernel(f: usize, x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `f(x)` for `2^-1000 <= x < 2^-5` as `(y, eps)`, or `None` when the logarithm declines.
+- `fast_bessel.rs:149` `pub fn hankel_kernel(n: usize, x: f64) -> (Dd, Dd, f64)` — bound: undocumented — doc: `(J_n(x), Y_n(x), eps)` for `n` 0 or 1 and `x >= 32` by Hankel's expansion (module doc).
+- `fast_bessel.rs:169` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped.
+- `fast_bessel.rs:178` `fn round(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y` (within `eps`) correctly rounded in `mode`, or `None`.
+- `fast_bessel.rs:190` `pub fn kernel(f: usize, x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `f(x)` for `x >= 2^-1000` (`f` as in [`table_kernel`]) as `(y, eps)`.
+- `fast_bessel.rs:203` `pub fn j0(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `j0(x)` for a finite nonzero `x`, correctly rounded in `mode`, or `None`.
+- `fast_bessel.rs:213` `pub fn j1(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `j1(x)` for a finite nonzero `x`, or `None`.
+- `fast_bessel.rs:225` `pub fn y0(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y0(x)` for a finite `x > 0`, or `None`.
+- `fast_bessel.rs:234` `pub fn y1(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y1(x)` for a finite `x > 0`, or `None`.
+
 ## fast_gamma.rs (fast_gamma)
 
 - `fast_gamma.rs:58` `fn taylor<const W: usize>(row: &[u64; W], m: usize, d: usize, t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout of `fast_special`: `m` double-doubles, degree `d`) at `t`.

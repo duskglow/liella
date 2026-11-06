@@ -132,20 +132,25 @@ fn block<'a>(r: &mut Reader<'a>, c: &Counts, wide: bool, version: u8) -> Result<
         return Err(Errno::EINVAL);
     }
     let mut out = Tzif { version, ..Tzif::default() };
-    out.transitions.reserve(c.time)?;
-    let mut times = TryVec::with_capacity(c.time)?;
-    for _ in 0..c.time {
-        times.push(r.time(wide)?)?;
-    }
-    for &t in times.iter() {
-        let i = r.byte()?;
-        if usize::from(i) >= c.types {
+    // The times and their type indices in one pass over the two arrays, straight into the
+    // result (the first use of a zone parses every transition of its file), checking each
+    // index and that the times strictly increase.
+    let width = if wide { 8 } else { 4 };
+    let times = r.take(c.time.checked_mul(width).ok_or(Errno::EINVAL)?)?;
+    let indices = r.take(c.time)?;
+    out.transitions.resize(c.time, (0, 0))?;
+    let mut prev = i64::MIN;
+    for (n, ((slot, raw), &i)) in out.transitions.as_mut_slice().iter_mut().zip(times.chunks_exact(width)).zip(indices).enumerate() {
+        let t = match (raw.try_into(), raw.try_into()) {
+            (Ok(w), _) if wide => i64::from_be_bytes(w),
+            (_, Ok(w)) if !wide => i64::from(i32::from_be_bytes(w)),
+            _ => return Err(Errno::EINVAL),
+        };
+        if usize::from(i) >= c.types || (n > 0 && t <= prev) {
             return Err(Errno::EINVAL);
         }
-        out.transitions.push((t, i))?;
-    }
-    if out.transitions.windows(2).any(|w| w.first().map(|x| x.0) >= w.get(1).map(|x| x.0)) {
-        return Err(Errno::EINVAL);
+        prev = t;
+        *slot = (t, i);
     }
     out.types.reserve(c.types)?;
     for _ in 0..c.types {

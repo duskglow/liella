@@ -1,0 +1,14 @@
+# LIBM-SPECIAL-BESSEL-TIER-3: plants on the double Bessel fast tier after the merge onto the per-family tables
+# (crates/math/src/fast_bessel.rs, its family file crates/math/src/coeffs/bessel.rs and the generator's family split).
+# Run: cargo xtask plants handoff/libm-special-bessel-tier-3-plants.txt --dir <new RAM dir> --timeout 600
+row-bound | crates/math/src/fast_bessel.rs | lit:(y, f64::from_bits(row[W - 1]) + dd::abs(y.hi) * E104) ==> (y, 0.0 * f64::from_bits(row[W - 1]) + dd::abs(y.hi) * E104) | cargo test -p liella-math --release --test fast_bessel | msg:kernel\(.*times its bound
+table-coef | crates/math/src/coeffs/bessel.rs | lit:0x3feffddf890c2f65 ==> 0x3feffddf890c2f66 | cargo test -p liella-math --release --test fast_bessel | msg:j0 kernel\(.*times its bound
+hankel-switch | crates/math/src/fast_bessel.rs | lit:pub const HANKEL: f64 = 32.0; ==> pub const HANKEL: f64 = 8.0; | cargo test -p liella-math --release --test fast_bessel | msg:kernel\(.*times its bound
+mirror | crates/math/src/fast_bessel.rs | lit:fast64::settle(y.neg(), eps, 0, mirrored(mode)) ==> fast64::settle(y.neg(), eps, 0, mode) | cargo test -p liella-math --release --test fast_bessel | msg:fast tier in (Up|Down)
+near-zero | crates/math/src/fast_bessel.rs | lit:if eps.partial_cmp(&dd::abs(y.hi)) != Some(Ordering::Less) { ==> if false { | cargo test -p liella-math --release --test fast_bessel | equivalent:an early exit: with eps >= |y.hi| the interval y +- eps holds 0, so fast64::settle refuses anyway (nearest: its ends round apart; directed: y.lo - e < 0 < y.lo + e)
+j1-tiny-side | crates/math/src/fast_bessel.rs | lit:Some(beside::<f64>(Mp::from_f64(x * 0.5), false, mode)) ==> Some(beside::<f64>(Mp::from_f64(x * 0.5), true, mode)) | cargo test -p liella-math --release --test fast_bessel | msg:j1\(.*fast tier in
+j1-half-guard | crates/math/src/fast_bessel.rs | lit:return if ax < J1_HALF { None } else ==> return if false { None } else | cargo test -p liella-math --release --test fast_bessel | msg:j1\(.*fast tier in
+j1-floor | crates/math/src/fast_bessel.rs | lit:(y, dd::abs(y.hi) * E90 + FLOOR) ==> (y, dd::abs(y.hi) * E90) | cargo test -p liella-math --release --test fast_bessel | msg:j1 kernel\(.*times its bound
+hankel-recip | crates/math/src/fast_bessel.rs | lit:let r = Dd::from(1.0).div(Dd::from(m)).scale(dd::pow2(-2 * k)); ==> let r = Dd::from(1.0).div(Dd::from(x)); | cargo test -p liella-math --release --test fast_bessel | msg:kernel\(.*times its bound
+y1-scale | crates/math/src/fast_bessel.rs | lit:k.div(Dd::from(x * S64)).scale(S64) ==> k.div(Dd::from(x)) | cargo test -p liella-math --release --test fast_bessel | msg:y1 kernel\(.*times its bound
+family-emit | crates/mathtools/src/tables.rs | lit:    crate::bessel_tables::emit(&mut o.src); ==> | cargo run -q --release -p liella-mathtools --bin tables -- --check | msg:coeffs/bessel\.rs is out of date

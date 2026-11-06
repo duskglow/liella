@@ -2059,7 +2059,7 @@ liella_machine_rawmemchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lraw_pre
+	jae .Lraw_sse_fast
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vpcmpeqb (%rdi), %ymm0, %ymm1
@@ -2126,11 +2126,8 @@ liella_machine_rawmemchr:
 	addq $-64, %rax
 	jmp .Lraw_avx_hi
 .Lraw_pre:
-	/* ecx = s's page offset, from the entry test (SSE2-STRLEN). SSE2-STRLEN-2: here ecx >=
-	 * short_lim, which is 4033 on the AVX2 level, so ecx <= 4032 means the SSE2 level AND
-	 * [s, s + 64) inside s's page: one compare is both tests. */
-	cmpl $4032, %ecx
-	jbe .Lraw_sse_fast
+	/* ecx = s's page offset, from the entry test (SSE2-STRLEN), and ecx > 4032 (the compare at
+	 * .Lraw_sse_fast, TIMING-IVB-MEMREF-ENTRY): the AVX2 level, or the SSE2 level near a page end. */
 	movq %rdi, %rax
 	movd %esi, %xmm0
 	cmpl $0, liella_machine_scan_level(%rip)
@@ -2235,7 +2232,14 @@ liella_machine_rawmemchr:
 	/* Reached only near a page end (ecx > 4032; the fast path below takes the rest). */
 	andq $-64, %rax
 	jmp .Lraw_sse_masked
+	/* TIMING-IVB-MEMREF-ENTRY: the entry's one taken branch lands here, 32-byte aligned (before:
+	 * .Lraw_pre's compare and a second taken branch). ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page (SSE2-STRLEN-2:
+	 * one compare is both tests); every other call continues at .Lraw_pre. */
+	.p2align 5
 .Lraw_sse_fast:
+	cmpl $4032, %ecx
+	ja .Lraw_pre
 	/* SSE2-STRLEN-2: SSE2 level, [s, s + 64) inside s's page (SAFETY: every unaligned load
 	 * below lies in it). Broadcast, then [s, s + 16) and [s + 16, s + 32) one branch each
 	 * (bsf sets ZF on an empty mask: no separate test), then [s + 32, s + 64) folded. */
@@ -2533,7 +2537,7 @@ liella_machine_memchr:
 	movl %edi, %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_short_lim(%rip), %ecx
-	jae .Lmemchr_entry
+	jae .Lmemchr_sse_pre
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	/* MEMCHR-2: [s, s + 64) lies in s's page (the short limit), so both of its 32-byte halves
@@ -2708,13 +2712,26 @@ liella_machine_memchr:
 	ret
 
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
-	 * located per 16-byte block with a branch each (STR-K1's measurement). */
+	 * located per 16-byte block with a branch each (STR-K1's measurement).
+	 * .Lmemchr_sse2 is reached from .Lmemchr_entry only, so with ecx > 4032: the page-end form. */
 .Lmemchr_sse2:
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
 	pshufd $0, %xmm0, %xmm0
+	jmp .Lmemchr_sse_edge
+	/* TIMING-IVB-MEMREF-ENTRY (as TIMING-IVB-STRSCAN-DISPATCH did for strchr): the entry's one
+	 * taken branch lands here, 32-byte aligned. Here ecx >= short_lim, which is 4033 on the AVX2
+	 * level, so ecx <= 4032 means the SSE2 level AND [s, s + 64) inside s's page: one compare is
+	 * both tests (before: a taken branch to .Lmemchr_entry, its level load and a second taken
+	 * branch). Every other call takes the old dispatch at .Lmemchr_entry. */
+	.p2align 5
+.Lmemchr_sse_pre:
 	cmpl $4032, %ecx
-	ja .Lmemchr_sse_edge
+	ja .Lmemchr_entry
+	movd %esi, %xmm0
+	punpcklbw %xmm0, %xmm0
+	punpcklwd %xmm0, %xmm0
+	pshufd $0, %xmm0, %xmm0
 	/* MEMCHR-SSE2 (the AVX2 head's order, MEMCHR-2): [s, s + 64) lies in s's page, so all four
 	 * of its 16-byte blocks may be read whatever n is. Block 0 goes first and alone: a match
 	 * there settles with one compare against n and no branch on n's class. A match at or past n
