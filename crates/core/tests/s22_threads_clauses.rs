@@ -32,7 +32,53 @@ fn s22_n_1() {
     let o = std::process::Command::new("readelf").arg("-d").arg(root.join("target/liella/libpthread.so.0")).output().unwrap();
     let text = String::from_utf8_lossy(&o.stdout);
     assert!(text.contains("[libpthread.so.0]"), "its soname");
-    assert!(!text.contains("NEEDED"), "empty: it needs nothing and defines nothing");
+    // D-27.9: it forwards to libc.so.6; its exports and version nodes are checked against
+    // versions.tsv by `cargo xtask so` (placeholders.rs).
+    assert!(text.contains("Shared library: [libc.so.6]"), "DT_NEEDED libc.so.6");
+}
+
+/// §22 Notes (s22_n_1) and the other placeholders (D-27.9, design §16; no spec clause names
+/// libdl/librt/libutil/libanl): a program linked with `-lpthread -ldl -lrt -lutil -lanl` links and
+/// runs statically; linked dynamically against `libc.so.6` it links and needs each placeholder
+/// (it cannot run before Liella's loader, DL-14).
+#[test]
+fn s22_n_1_placeholders_link() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let lib = root.join("target/liella");
+    assert!(lib.join("libc.a").exists() && lib.join("libc.so.6").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = std::env::temp_dir().join(format!("liella-s22-n-1-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("p.c");
+    std::fs::write(&src, "#include <pthread.h>\n#include <stdio.h>\n#include <time.h>\nint main(void) {\n  struct timespec t;\n  if (pthread_self() == 0 || clock_gettime(CLOCK_MONOTONIC, &t) != 0) return 1;\n  puts(\"placeholders ok\");\n  return 0;\n}\n").unwrap();
+    let libs = ["-lpthread", "-ldl", "-lrt", "-lutil", "-lanl"];
+    let cc = |args: &[&std::ffi::OsStr]| {
+        let o = std::process::Command::new("cc").args(args).output().unwrap();
+        assert!(o.status.success(), "cc {args:?}: {}", String::from_utf8_lossy(&o.stderr));
+    };
+    let stat = dir.join("static");
+    let crt1 = lib.join("liella-crt1.o");
+    let libc_a = lib.join("libc.a");
+    let lflag = format!("-L{}", lib.display());
+    let mut a: Vec<&std::ffi::OsStr> = vec!["-static".as_ref(), "-nostdlib".as_ref(), "-fno-builtin".as_ref(), "-o".as_ref(), stat.as_os_str(), crt1.as_os_str(), src.as_os_str(), lflag.as_ref()];
+    a.extend(libs.iter().map(std::ffi::OsStr::new));
+    a.extend([libc_a.as_os_str(), "-lgcc".as_ref()]);
+    cc(&a);
+    let o = std::process::Command::new(&stat).output().unwrap();
+    assert!(o.status.success() && o.stdout == b"placeholders ok\n", "the static program: {o:?}");
+    // Dynamically: by file name (`-l:<soname>`), so the host's libraries are never picked.
+    let dynp = dir.join("dynamic");
+    let named: Vec<String> = ["libpthread.so.0", "libdl.so.2", "librt.so.1", "libutil.so.1", "libanl.so.1"].iter().map(|s| format!("-l:{s}")).collect();
+    let libc_so = lib.join("libc.so.6");
+    let mut a: Vec<&std::ffi::OsStr> = vec!["-nostdlib".as_ref(), "-fno-builtin".as_ref(), "-o".as_ref(), dynp.as_os_str(), crt1.as_os_str(), src.as_os_str(), lflag.as_ref(), "-Wl,--no-as-needed".as_ref()];
+    a.extend(named.iter().map(std::ffi::OsStr::new));
+    a.extend([libc_so.as_os_str(), "-lgcc".as_ref()]);
+    cc(&a);
+    let o = std::process::Command::new("readelf").arg("-d").arg(&dynp).output().unwrap();
+    let text = String::from_utf8_lossy(&o.stdout);
+    for so in ["libpthread.so.0", "libdl.so.2", "librt.so.1", "libutil.so.1", "libanl.so.1", "libc.so.6"] {
+        assert!(text.contains(&format!("Shared library: [{so}]")), "the dynamic program needs {so}:\n{text}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 /// §22 Notes: Pthread functions return **error numbers** and do not set `errno` (C0.1). The exceptions are `sem_*`, which use `errno`.
 #[test]

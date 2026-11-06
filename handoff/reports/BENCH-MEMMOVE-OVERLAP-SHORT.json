@@ -1,0 +1,10 @@
+{"task": "BENCH-MEMMOVE-OVERLAP-SHORT", "model": "opus", "tokens": null,
+ "result": "memmove_overlap8_4k / memmove_overlap64_4k rows added; booked timing Liella/glibc N100 0.99 and 0.52, Ivy Bridge 0.78 and 0.95: no gap, no fix",
+ "branch": "task/bench-memmove-overlap-short", "head": "54db10a8 (+ handoff commit on top)",
+ "gate": {"affected": "215 passed / 0 failed", "peak": "1.3G"}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["the reported ~3% N100 forward-path slowdown did not reproduce for memmove(d, d+8, 4096) at d = page+16 (0.99, two booked runs)"],
+ "refused": [],
+ "improvement": "developer-flow should give the exact staged-tree command (bench --no-build --compare <bench>; no --staged flag): one timing job lost to it",
+ "next_step": "none for this story; a host limit for the two rows needs a calibration run",
+ "report_file": "handoff/BENCH-MEMMOVE-OVERLAP-SHORT.md",
+ "jobs": ["mei:bench-memmove-overlap-short-gate2", "mei:bench-memmove-overlap-short-counts", "nozomi:bench-memmove-overlap-short-n100", "nozomi:bench-memmove-overlap-short-n100b", "nico:bench-memmove-overlap-short-ivb2", "nico:bench-memmove-overlap-short-ivb3"]}

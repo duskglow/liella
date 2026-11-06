@@ -16,7 +16,8 @@
 //! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`, and from the
 //!    same file the static-PIE start object `target/liella/liella-rcrt1.o` (D-27.10); the profiling
 //!    start object for `-pg` programs from `csys/start/gcrt1.S`: `target/liella/liella-gcrt1.o`.
-//! 5. Placeholders: `libpthread.so.0` and `libpthread.a` (libpthread is part of libc), and an
+//! 5. Placeholders (`placeholders.rs`, D-27.9): `libpthread.so.0`, `libdl.so.2`, `librt.so.1`, `libutil.so.1`,
+//!    `libanl.so.1`, `libc_malloc_debug.so.0` from versions.tsv, their empty archives, and an
 //!    empty `libresolv.a` (D-16.6: libresolv's symbols are in `libc.a`).
 //!
 //! 7. The libm products (`run_libm`, D-10.7; compat versions from `crates/libm-so/compat_aliases.S`, LG-4): `target/liella/libm.a` (one object of the math exports,
@@ -71,14 +72,14 @@ pub(crate) fn lock_product_dir(product: &Path) -> Result<ProductLock, String> {
 /// The temporary name a product is written under before [`publish`] renames it into place
 /// (same directory, so the rename is atomic): `<dir>/.<name>.tmp`. The product lock is held
 /// while it exists, so one fixed name per product is enough and nothing piles up.
-fn tmp_name(path: &Path) -> std::path::PathBuf {
+pub(crate) fn tmp_name(path: &Path) -> std::path::PathBuf {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     path.with_file_name(format!(".{name}.tmp"))
 }
 
 /// Rename the finished `tmp` over `dst`: a reader sees the old product or the new one, never a
 /// half-written file.
-fn publish(tmp: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn publish(tmp: &Path, dst: &Path) -> Result<(), String> {
     fs::rename(tmp, dst).map_err(|e| format!("rename {} -> {}: {e}", tmp.display(), dst.display()))
 }
 
@@ -945,16 +946,12 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     run(Command::new(&cc).arg("-c").arg(root.join("csys/start/gcrt1.S")).arg("-o").arg(&gcrt1))?;
     publish(&gcrt1, &release.join("liella-gcrt1.o"))?;
 
-    // 5. The libpthread placeholders (spec §22 notes: since 2.34 libpthread is in libc.so.6;
-    //    `-lpthread` and DT_NEEDED entries for libpthread.so.0 must still resolve).
-    let empty = release.join("liella-empty.c");
-    fs::write(&empty, "/* libpthread is part of libc.so.6 (spec §22). */\n").map_err(|e| e.to_string())?;
-    let pthread_so = tmp_name(&release.join("libpthread.so.0"));
-    run(Command::new(&cc).args(["-shared", "-nostdlib", "-Wl,-soname,libpthread.so.0"]).arg(&empty).arg("-o").arg(&pthread_so))?;
-    publish(&pthread_so, &release.join("libpthread.so.0"))?;
+    // 5. The placeholder libraries (D-27.9, design plan/ph14/design.md §16; spec §22 notes: since
+    //    2.34 libpthread is in libc.so.6): libpthread.so.0, libdl.so.2, librt.so.1, libutil.so.1,
+    //    libanl.so.1 and libc_malloc_debug.so.0, generated from versions.tsv, linked against
+    //    libc.so.6 and each checked against the table; empty static archives for `-l<x>`.
     let ar = std::env::var("AR").unwrap_or_else(|_| "ar".into());
-    empty_archive(&ar, &release.join("libpthread.a"))?;
-    let _ = fs::remove_file(&empty);
+    println!("so: {}", crate::placeholders::build(root, &release, &product.join("placeholders"), &cc, &ar)?);
 
     // 6. The static libresolv placeholder (D-16.6): the symbols spec Appendix C places in
     //    `libresolv.so.2` (`inet_net_pton`, `res_*`, `ns_*`, ...) are in `libc.a` like every other
@@ -967,10 +964,15 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let kept: usize = copies.kept.values().sum();
     println!("so: internal copies (D-X.15): {} references to the internal entries (redirected now: {}; made relaxable: {}), {kept} other uses of memcpy/memmove/memset kept", copies.internal, redirected.join(", "), copies.relaxable_internal);
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
-    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libpthread and libresolv placeholders", weak.0, weak.1);
+    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
     run_libm(root, &cargo, &cc, &ar, profile)?;
     check_placement(root, &release)?;
+    // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
+    crate::placeholders::check_no_private(&release)?;
     // After the last product: no build path may be left in any of them (PRODUCT-PATH-REMAP).
+    // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
+    crate::classed::check_file(&release.join("libc.a"))?;
+    crate::classed::check_file(&release.join("libc.so.6"))?;
     crate::remap::check(root)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
@@ -1033,7 +1035,7 @@ fn dynamic_names(path: &Path) -> Result<BTreeSet<String>, String> {
 }
 
 /// An empty `ar` archive at `dst`, written under a temporary name and renamed into place.
-fn empty_archive(ar: &str, dst: &Path) -> Result<(), String> {
+pub(crate) fn empty_archive(ar: &str, dst: &Path) -> Result<(), String> {
     let staged = tmp_name(dst);
     let _ = fs::remove_file(&staged);
     run(Command::new(ar).arg("rcs").arg(&staged))?;
