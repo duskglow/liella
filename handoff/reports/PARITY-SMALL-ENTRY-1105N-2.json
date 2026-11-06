@@ -1,0 +1,13 @@
+{"task": "PARITY-SMALL-ENTRY-1105N-2", "model": "opus", "tokens": null,
+ "result": "nl_langinfo answer table built on demand (after 256 decoded calls per view), not in setlocale; startup rows back under limits on f63e01b7; table path kept a leaf on aa5f6b93",
+ "branch": "task/parity-small-entry-1105n-2", "head": "aa5f6b93",
+ "gate": {"affected": "f63e01b7: 9492 passed / 0 failed (conformance 24/0); aa5f6b93: job parity-small-entry-1105n-2-gate-2", "peak": "6.2G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["percall base ff125cce is not primed on shiki (wl_percall rc 2); ran --base none, before numbers from the first run's record",
+                   "eager table made LocaleView::new fail on ENOMEM; the on-demand build no longer can"],
+ "refused": [],
+ "improvement": "A percall job's default base needs ~/wl products on the role's host; sync_role or the dispatcher could prime the merge base when it admits a story to a host",
+ "next_step": "read gate-2/startup-2/percall-3 on shiki; then strnlen asm entry, isalpha null test, view_of test fold",
+ "report_file": "handoff/PARITY-SMALL-ENTRY-1105N-2.md",
+ "jobs": ["shiki:parity-small-entry-1105n-2-gate-2", "shiki:parity-small-entry-1105n-2-plants-2", "shiki:parity-small-entry-1105n-2-startup-2", "shiki:parity-small-entry-1105n-2-percall-3"]}
