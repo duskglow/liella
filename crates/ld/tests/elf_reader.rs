@@ -600,11 +600,14 @@ fn property_truncated() {
 fn arch_seam_machine_and_byte_order() {
     // no spec clause: the Arch seam (plan/ph14/design.md §0a). A second, big-endian architecture reads its own
     // image exactly as x86_64 reads the little-endian one, and each refuses the other's.
-    let le = walk_as::<X86_64>(&image().b).unwrap();
+    let mut le = walk_as::<X86_64>(&image().b).unwrap();
     let be_img = image_for(BigOther::E_MACHINE, true);
     let mut be = walk_as::<BigOther>(&be_img.b).unwrap();
-    // The property data is raw bytes: the big-endian image stored the value 3 big-endian.
+    // Descriptors and property data are raw bytes: the big-endian image stored their words big-endian.
     be.properties[0].1.reverse();
+    for s in [&mut le, &mut be] {
+        s.notes.iter_mut().skip(1).for_each(|n| n.2.clear());
+    }
     assert_eq!(le, be);
     assert_eq!(walk_as::<BigOther>(&image().b), Err(ElfError::WrongData(1)));
     assert_eq!(walk_as::<X86_64>(&be_img.b), Err(ElfError::WrongData(2)));
