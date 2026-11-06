@@ -369,10 +369,23 @@ the file's header).
 Which flags exist is defined in [`xtask/src/bench.rs`](../xtask/src/bench.rs); read it before
 relying on a flag from this page. The raw logs of the two runs above are not in the repository.
 
-Timing hosts have no compiler. For a timing-host run build once with `cargo xtask bench --build-only --counters` on a
-build host, copy `target/liella/` (the benchmark programs, `libc.a`, `libm.a`, the `.profile` marker), `bench/`, and the
-`xtask` binary to the timing host, create stub `crates/*.rs` and `csys/*.c` files older than `libc.a` (the staleness
-check reads their mtimes), and run `xtask bench --no-build --counters` there with the host booked.
+Timing hosts have no compiler. A timing-host run is two commands (XTASK-BENCH-STAGE):
+
+```bash
+# on a build host, in the tree to measure (the same selection flags as the measuring run):
+cargo xtask bench --stage /tmp/stage.tar [--only <benches> | --rows <bench>/<row>,...]
+# on the timing host, with the host booked:
+mkdir ~/work/<story>/tree && tar -xf stage.tar -C ~/work/<story>/tree && cd ~/work/<story>/tree
+./xtask-bin bench --no-build --staged --counters [--only <benches> | --rows ...]
+```
+
+`--stage` builds as `--build-only` does, then writes one tarball: the workspace `Cargo.toml` and `xtask/Cargo.toml`,
+`bench/`, `target/liella/` (without the generated `bench/stress/`), the selected Rust bench examples, the xtask
+binary as `xtask-bin`, and `bench-stage.manifest` (commit, a sha256 of the source tree, build profile, built-on
+host, and the sha256 of every staged product), with the build's mtimes. A `--no-build` run in a tree that holds the
+manifest (`--staged` requires one) checks every product against its sha256 instead of comparing mtimes, needs no
+git and no source tree, and prints a `staged: commit ...` header line naming what it timed; a product that does not
+match is refused. The commit comes from git, or from the `head=` line of a role directory's `.synced` file.
 
 ## Appendix: all rows
 
