@@ -83,6 +83,7 @@ mod compat_plan;
 mod register;
 mod arch;
 mod plants;
+mod placeholders;
 mod labnames;
 mod kernel_index;
 
