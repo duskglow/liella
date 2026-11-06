@@ -465,11 +465,21 @@ fn decimal_general(out: &mut dyn Sink, x: Float, spec: Spec, radix: &[u8], mode:
             if exact_small_into(mant, exp, sig, frac, &mut d) {
                 decimal_styles(out, &d, x.neg, spec, radix, mode);
             } else {
-                decimal_styles(out, &exact(mant, exp), x.neg, spec, radix, mode);
+                decimal_exact(out, mant, exp, x.neg, spec, radix, mode);
             }
         }
         _ => decimal_styles(out, &Decimal::<SMALL_DIGITS>::zero(), x.neg, spec, radix, mode),
     }
+}
+
+/// The full decimal expansion's branch of [`decimal_general`], kept out of line
+/// (PERF-FIRSTCALL-MKTIME-SNPRINTF): its [`MAX_DIGITS`] decimal and the rounded copy
+/// `decimal_styles` makes of it take about 24 KiB of stack. Inlined, that frame belonged to
+/// `format_float`, whose prologue then probed six stack pages on every float conversion, the
+/// common ones that never reach this branch included (six page faults on a first `%.2f`).
+#[inline(never)]
+fn decimal_exact(out: &mut dyn Sink, mant: u128, exp: i32, neg: bool, spec: Spec, radix: &[u8], mode: Rounding) {
+    decimal_styles(out, &exact(mant, exp), neg, spec, radix, mode);
 }
 
 /// `%.<p>f` of `mant × 2^exp` for `p` up to 19 by scaled integer arithmetic (PRINTF-FLOAT): with
