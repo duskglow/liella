@@ -1,7 +1,7 @@
 # CLASSED-SLOT-INFRA plants (D-4.53). Run: cargo xtask plants handoff/classed-slot-infra-plants.txt --dir <dir>
 # (Anchored at liella_machine_mempcpy:, the last label before the macro, which page 0 and page 1 expand.)
-# The AVX2 page loses the +4096 bias on one out-of-page reference (the fold limit, read on every call).
-xref-bias | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)cmpq liella_machine_fold_limit\+\\bias\(%rip\)/$1cmpq liella_machine_fold_limit(%rip)/s | cargo test -p liella-boundary --test classed_slots | msg:avx2 page: child ended|the_avx2_page_after_the_swap.*FAILED
+# The AVX2 page loses the +4096 bias on one out-of-page jump (to the AVX2 fill entry, 257-320 bytes in the sweep). A biasless read of the fold limit (run 1) survived: that limit only picks between paths with the same result.
+xref-bias | csys/src/machine/fold.S | perl:s/(liella_machine_mempcpy:.*?\.macro LIELLA_MEMSET_BODY bias, avx2.*?)jmp liella_machine_fill_avx2_entry\+\\bias/$1jmp liella_machine_fill_avx2_entry/s | cargo test -p liella-boundary --test classed_slots | msg:avx2 page: child ended|the_avx2_page_after_the_swap.*FAILED
 # The swap runs without the pagemap guard.
 no-guard | crates/boundary/src/classed.rs | lit:    if !pages_unmodified(entries) { ==>     if false && !pages_unmodified(entries) { | cargo test -p liella-boundary --test classed_slots | msg:guard: child ended|a_page_written_before_the_swap.*FAILED
 # The guard inverted.
