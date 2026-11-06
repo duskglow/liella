@@ -89,6 +89,7 @@ pub(crate) fn select(avx2: bool) {
         // is false).
         CMP_LONG_WORD.store(0, Relaxed);
         CMP_MID.store(0, Relaxed);
+        // Also gives the 129-256 copy word its SSE2 mark before the flag drops.
         store_cmp_gates(FOLD.load(Relaxed) != 0, false);
     }
     AVX2.store(avx2, Relaxed);
@@ -127,8 +128,17 @@ fn update_cmp_gates() {
 /// both (8-32 carry), 57 with folding alone (8-64), 0 with folding off. Their sum never exceeds
 /// 57, so `n - 65 + WIDE + LOW` carries only for `8..=64`, also between the two stores (a racing
 /// call may see one old word): a smaller WIDE is stored before LOW grows, LOW shrinks before WIDE
-/// grows.
+/// grows. With folding on it also stores the 129-256 copy word ([`move_word`]): every caller runs
+/// before the AVX2 flag goes off and after folding and the flag are set (the same points as the
+/// compare words), so that word never names the AVX2 body while the flag is off, also between the
+/// stores; it is independent of the compare words. With folding off the word is already 0
+/// ([`drop_move_word`] runs before every fold-off store of the fold limit, and nothing else
+/// raises it), so the startup `select`, which runs before the lazy folding decision, does not
+/// touch it (NULLFOLD-COPY-MID-4: start-up instructions no more than before D-4.55).
 fn store_cmp_gates(fold: bool, avx2: bool) {
+    if fold {
+        FOLD_MOVE.store(move_word(true, avx2), Relaxed);
+    }
     let wide = if fold && avx2 { 32 } else { 0 };
     let low = if !fold { 0 } else if avx2 { 25 } else { 57 };
     // The 65-2048 word (sizes above 64 only, independent of WIDE and LOW): dropped first, raised last.
@@ -178,6 +188,36 @@ const SET_MID_ON: usize = 128;
 /// The folded sizes: `1..=FOLD_MAX`, the classes the entries keep inline (D-4.22).
 pub(crate) const FOLD_MAX: usize = 64;
 
+// The copy entry's 129-256 gate (machine/fold.S, NULLFOLD-COPY-MID, D-4.55, owner ruling #3304):
+// `MOVE_FOLD_MAX` with folding on, with `MOVE_SSE2` added under the SSE2 build, else 0. Its folded
+// calls load `[s, s + 32)` (or 16 bytes without AVX2) before any store and store `d` first at
+// `d + 0`, and touch at most `[x, x + MOVE_FOLD_MAX)` of either region, page zero for a NULL, so
+// the module proof obligation covers them. The sign bit picks the body, so the entry reads one
+// word (NULLFOLD-COPY-MID-3): the word is positive and nonzero only while the AVX2 flag is set.
+use crate::ffi::liella_machine_move_long as FOLD_MOVE;
+
+/// The largest folded copy size: the copy entry's 129-256 class has no NULL test with folding on.
+pub(crate) const MOVE_FOLD_MAX: usize = 256;
+
+/// The 129-256 copy word's SSE2 mark (its sign bit): the entry clears it before the size compare.
+pub(crate) const MOVE_SSE2: usize = 1 << (usize::BITS - 1);
+
+/// The 129-256 copy word for `fold` / `avx2`: 0 with folding off, [`MOVE_FOLD_MAX`] with both,
+/// `MOVE_SSE2 | MOVE_FOLD_MAX` with folding alone.
+pub(crate) const fn move_word(fold: bool, avx2: bool) -> usize {
+    match (fold, avx2) {
+        (false, _) => 0,
+        (true, true) => MOVE_FOLD_MAX,
+        (true, false) => MOVE_SSE2 | MOVE_FOLD_MAX,
+    }
+}
+
+/// Drop the 129-256 copy word to 0 (no folded size): run before the fold limit goes to 0, so the
+/// word is 0 whenever folding is off ([`store_cmp_gates`] raises it only with folding on).
+fn drop_move_word() {
+    FOLD_MOVE.store(0, Relaxed);
+}
+
 /// Whether NULL folding is on (the explicit S6 checks are off for the kernel sizes).
 #[inline(always)]
 pub(crate) fn null_folded() -> bool {
@@ -192,6 +232,8 @@ static FOLD_RESOLVED: AtomicBool = AtomicBool::new(false);
 /// Also marks the decision as taken, so a forced setting is never overridden by [`resolve_fold`].
 pub(crate) fn select_null_fold(fold: bool) {
     if !fold {
+        // The 129-256 copy word and the compare words drop before the fold limit.
+        drop_move_word();
         store_cmp_gates(false, false);
         SET_MID.store(0, Relaxed);
     }
@@ -216,6 +258,16 @@ pub(crate) fn select_null_fold(fold: bool) {
 #[inline(always)]
 pub(crate) fn resolve_fold(n: usize) {
     if n <= FOLD_MAX && !FOLD_RESOLVED.load(Relaxed) {
+        resolve_fold_slow();
+    }
+}
+
+/// [`resolve_fold`] for the copy entry, whose folded sizes go up to [`MOVE_FOLD_MAX`] (D-4.55): a
+/// program whose first copies are 129-256 bytes takes the decision there, not only at its first
+/// copy of 64 bytes or fewer. Same cost as [`resolve_fold`] (one compare, then one load).
+#[inline(always)]
+pub(crate) fn resolve_fold_move(n: usize) {
+    if n <= MOVE_FOLD_MAX && !FOLD_RESOLVED.load(Relaxed) {
         resolve_fold_slow();
     }
 }
@@ -248,6 +300,7 @@ fn resolve_fold_slow() {
 /// Test-only: forget the folding decision (folding off, undecided), as at process start.
 #[cfg(feature = "selftest")]
 pub(crate) fn unresolve_null_fold() {
+    drop_move_word();
     store_cmp_gates(false, false);
     SET_MID.store(0, Relaxed);
     FOLD.store(0, Relaxed);

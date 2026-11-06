@@ -1,0 +1,29 @@
+{
+ "task": "NULLFOLD-COPY-MID",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: 129-256 copy NULL folding (D-4.55) coded and tested (lint2 rc 0, small_copy 11/11); Zen 1 instr 38.4->34.4 (glibc 36.4); gate3/plants3 running; N100 counts and N100/IvB timing not run",
+ "branch": "task/nullfold-copy-mid",
+ "head": "714d8265",
+ "gate": {
+  "affected": "running (keke:NULLFOLD-COPY-MID-gate3)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "jobs": [
+  "keke:NULLFOLD-COPY-MID-lint2",
+  "keke:NULLFOLD-COPY-MID-count-before",
+  "keke:NULLFOLD-COPY-MID-count-after2",
+  "keke:NULLFOLD-COPY-MID-gate3",
+  "keke:NULLFOLD-COPY-MID-plants3"
+ ],
+ "rulings": [],
+ "informational": [
+  "With folding off, 129-256 copies now take the Rust checked path (slower in that rare config). This avoids adding a compare and a taken branch to every copy above 256 with folding on (local decision in D-4.55)",
+  "cargo xtask affected without --run only lists its selection: gate2 rc 0 ran 0 tests"
+ ],
+ "refused": [],
+ "improvement": "The jobrun PATH lacks ~/.cargo/bin and affected defaults to list-only; the brief or a doc should give the exact gate/plants/counts command lines (3 setup runs lost here)",
+ "next_step": "Collect gate3/plants3, then N100 counts and booked timing of memcpy_144/256 and memmove_144/256 on the N100 and Ivy Bridge",
+ "report_file": "handoff/NULLFOLD-COPY-MID.md"
+}

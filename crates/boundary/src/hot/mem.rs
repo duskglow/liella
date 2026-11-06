@@ -523,10 +523,11 @@ unsafe fn fill_checked(d: *mut c_void, c: u8, n: usize) -> *mut c_void {
 }
 
 /// The copy entry's other sizes (from the direct entry, machine/fold.S): 65-128 always, every kernel size without NULL folding (both
-/// with the explicit S6 NULL checks), 0 and the large sizes (the checked path). Out of line, so
+/// with the explicit S6 NULL checks; 129-256 then go on to `move_large`, D-4.55), 0 and the large
+/// sizes (the checked path). Out of line, so
 /// the folded classes in the entry carry none of this. No folded NULL reaches this Rust code
-/// (owner ruling 2026-10-08, option B, D-4.22 MEM-K4c): folding covers only the 1-64 classes,
-/// which run in assembly.
+/// (owner ruling 2026-10-08, option B, D-4.22 MEM-K4c): folding covers only the 1-64 classes and
+/// the 129-256 class (owner ruling #3304, D-4.55), which run in assembly.
 ///
 /// # Safety
 /// The `memmove` contract for `n` bytes.
@@ -536,8 +537,9 @@ unsafe fn fill_checked(d: *mut c_void, c: u8, n: usize) -> *mut c_void {
 // machine/fold.S tail-jumps there): one function, no extra hop.
 #[inline(always)]
 pub(crate) unsafe fn move_rest(d: *mut c_void, s: *const c_void, n: usize) -> *mut c_void {
-    // The first small call decides NULL folding (STARTUP-1: lazy `mmap_min_addr` read).
-    crate::dispatch::resolve_fold(n);
+    // The first call of 1-256 bytes decides NULL folding (STARTUP-1: lazy `mmap_min_addr` read;
+    // 129-256 fold too, D-4.55).
+    crate::dispatch::resolve_fold_move(n);
     if small(n) {
         // The NULL tests, folding on or off: two fused test-and-branch uops, never taken in a
         // correct program. A NULL access is UB in Rust, so this path never relies on the fault.
@@ -655,8 +657,8 @@ pub(crate) fn bulk_fill(n: usize, avx2: bool, erms: bool, erms_min: usize) -> Bu
 }
 
 /// `memmove` (and `memcpy`, D-4.2): `n` bytes from `s` to `d`; returns `d`. NULL with `n > 0`
-/// is the `EFAULT` abort (S6), or with NULL folding (D-4.22, `dispatch`) for `1 <= n <= 64` the
-/// page-zero fault in assembly (SIGSEGV), as glibc observably does.
+/// is the `EFAULT` abort (S6), or with NULL folding (D-4.22, `dispatch`) for `1 <= n <= 64` and
+/// `129 <= n <= 256` (D-4.55) the page-zero fault in assembly (SIGSEGV), as glibc observably does.
 ///
 /// # Safety
 /// `d` is valid for writing and `s` for reading `n` bytes (they may overlap).
