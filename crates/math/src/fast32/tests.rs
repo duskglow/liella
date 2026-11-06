@@ -36,6 +36,8 @@ pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
         Fast::Atanh => crate::hyper::atanh(x, m),
         Fast::Erf => crate::special::erf(x, m),
         Fast::Erfc => crate::special::erfc(x, m),
+        Fast::Tgamma => crate::special::tgamma_accurate::<f32>(x, m),
+        Fast::Lgamma => crate::special::lgamma_accurate::<f32>(x, m).0,
         Fast::J0 => crate::special::j0_accurate(x, m),
         Fast::J1 => crate::special::j1_accurate(x, m),
         Fast::Y0 => crate::special::y0_accurate(x, m),

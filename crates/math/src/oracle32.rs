@@ -257,6 +257,150 @@ pub(crate) fn erfc_est(x: f32) -> Est {
     Est::Near { v, err }
 }
 
+// ----------------------------------------------------------------------------- gamma functions
+
+/// B_2k/(2k(2k − 1)) for k = 1..10, as exact numerator and denominator.
+const STIRLING: [(f64, f64); 10] = [
+    (1.0, 12.0),
+    (-1.0, 360.0),
+    (1.0, 1260.0),
+    (-1.0, 1680.0),
+    (1.0, 1188.0),
+    (-691.0, 360_360.0),
+    (1.0, 156.0),
+    (-3617.0, 122_400.0),
+    (43_867.0, 244_188.0),
+    (-174_611.0, 125_400.0),
+];
+/// Stirling's series is summed at w = x + n ≥ this.
+const STIRLING_W: f64 = 16.0;
+
+/// The bound assumed for `exp_log::log_dd`: absolute error ≤ UE·(|ln v| + 1) (the estimate test
+/// below checks the whole estimate against the accurate path).
+fn log_err(l: Dd) -> f64 {
+    UE * (l.hi.abs() + 1.0)
+}
+
+/// For a `float` value x > 0: (lnΓ(w), its absolute bound, p = x(x + 1)···(x + n − 1), n) with
+/// w = x + n ≥ 16, so lnΓ(x) = lnΓ(w) − ln p and Γ(x) = e^lnΓ(w)/p. The sums x + j are exact
+/// (`two_sum`), p is within nU relative (n products). lnΓ(w) = (w − 1/2)·ln w − w + ln(2π)/2 +
+/// Σ_k B_2k/(2k(2k − 1)·w^(2k−1)) + R, |R| ≤ |B_22|/(22·21·w^21) < 13.41/w^21 for w > 0 (the
+/// remainder is bounded by the first omitted term). ln w ≥ 2.77 within 1.37UE relative, so the
+/// product (w − 1/2)·ln w carries 1.37UE + 2U of |a|; ln(2π) (π within 2^-107) within 2.9UE;
+/// the series (below 0.006) within 40U absolute; three sums U·(|a| + w + 1) each.
+fn stirling(x: f64) -> (Dd, f64, Dd, f64) {
+    let n = if x < STIRLING_W { ((STIRLING_W - x) as u32 + 1) as f64 } else { 0.0 };
+    let w = dd::two_sum(x, n);
+    let mut p = Dd::from(1.0);
+    let mut j = 0.0;
+    while j < n {
+        p = p.mul(dd::two_sum(x, j));
+        j += 1.0;
+    }
+    let lw = crate::exp_log::log_dd(w);
+    let a = w.add_f64(-0.5).mul(lw);
+    let iw = Dd::from(1.0).div(w);
+    let z = iw.sqr();
+    let mut s = Dd::from(0.0);
+    for &(num, den) in STIRLING.iter().rev() {
+        s = s.mul(z).add(Dd::from(num).div(Dd::from(den)));
+    }
+    let c = crate::exp_log::log_dd(Dd::of(crate::coeffs::tables::PI).scale(2.0)).scale(0.5);
+    let v = a.sub(w).add(c).add(s.mul(iw));
+    let mut r = 1.0;
+    for _ in 0..21 {
+        r *= iw.hi;
+    }
+    let err = (2.0 * UE + 8.0 * U) * (a.hi.abs() + w.hi + 2.0) + 13.42 * r;
+    (v, err, p, n)
+}
+
+/// sin(πr) for 0 < |r| ≤ 1/2 and its absolute bound: the Taylor series of sin t, t = π·r (within
+/// 1.01U), alternating with decreasing terms (t² < 2.5 < (2k)(2k + 1)), so the tail is below the
+/// first omitted term; term k carries (4k + 3)U, the k sums U of Σ|terms| each.
+fn sin_pi(r: f64) -> (Dd, f64) {
+    let t = Dd::of(crate::coeffs::tables::PI).mul_f64(r);
+    let t2 = t.sqr();
+    let (mut sum, mut term, mut mag, mut k) = (t, t, t.hi.abs(), 1u64);
+    loop {
+        term = term.mul(t2).div(Dd::from(((2 * k) * (2 * k + 1)) as f64)).neg();
+        if term.hi.abs() <= mag * 1.232_595_164_407_831e-32 {
+            break; // 2^-106 of the magnitudes
+        }
+        sum = sum.add(term);
+        mag += term.hi.abs();
+        k += 1;
+    }
+    let err = (5 * k + 8) as f64 * U * mag * 1.000_001 + term.hi.abs() * 1.000_001;
+    (sum, err)
+}
+
+/// Whether the `float` x is ±0, ±∞, NaN or an integer (the poles, and Γ(n), whose exact results
+/// the tier must not decide): the accurate path answers those for tgamma.
+fn gamma_unknown(xd: f64) -> bool {
+    !(xd.abs() > 0.0) || xd.abs() >= 8_388_608.0 || xd == dd::nearest_int(xd)
+}
+
+/// Whether lgamma's tier must not answer the `float` x: ±0, ±∞, NaN, x < −64, the poles (x ≤ 0
+/// an integer) and lnΓ(1) = lnΓ(2) = 0 (exact). Every other positive integer n ≥ 3 is estimated:
+/// lnΓ(n) = ln((n − 1)!) is the logarithm of an integer ≥ 2, transcendental (Lindemann), so
+/// never a `float` or a midpoint, and [`stirling`]'s bound holds for every x > 0. (Sending the
+/// integers and every |x| ≥ 2^23 to the accurate path put about 0.9·10^9 operands, 4 modes each,
+/// of the exhaustive lgammaf sweep on mp: the fast path takes all of x ≥ 36 up to overflow.)
+fn lgamma_unknown(xd: f64) -> bool {
+    !(xd.abs() > 0.0 && xd.abs() < f64::INFINITY) || xd < -64.0 || xd == 1.0 || xd == 2.0 || (xd < 0.0 && xd == dd::nearest_int(xd))
+}
+
+/// The oracle's estimate of `lgammaf(x)`: [`stirling`] for x > 0; for −64 < x < 0 the reflection
+/// lnΓ(x) = ln π − ln|sin πx| − lnΓ(1 − x) (1 − x exact; sin πx = ±sin π|r|, r = x − [x] exact).
+pub(crate) fn lgamma_est(x: f32) -> Est {
+    let xd = f64::from(x);
+    if lgamma_unknown(xd) {
+        return Est::Unknown;
+    }
+    let (pos, neg) = if xd > 0.0 { (xd, false) } else { (1.0 - xd, true) };
+    let (l, el, p, n) = stirling(pos);
+    // n = 0 (x ≥ 16): p = 1 exactly, ln p = 0 (the bound below keeps log_err's UE all the same).
+    let lp = if n == 0.0 { Dd::from(0.0) } else { crate::exp_log::log_dd(p) };
+    let g = l.sub(lp);
+    let eg = el + n * U * 1.000_1 + log_err(lp) + U * (l.hi.abs() + lp.hi.abs());
+    if !neg {
+        return Est::Near { v: g, err: eg };
+    }
+    let (s, es) = sin_pi((xd - dd::nearest_int(xd)).abs());
+    let lpi = crate::exp_log::log_dd(Dd::of(crate::coeffs::tables::PI));
+    let ls = crate::exp_log::log_dd(s);
+    let v = lpi.sub(ls).sub(g);
+    let err = eg + es / s.hi * 1.000_001 + log_err(lpi) + 1e-32 + log_err(ls) + 2.0 * U * (lpi.hi.abs() + ls.hi.abs() + g.hi.abs());
+    Est::Near { v, err }
+}
+
+/// The oracle's estimate of `tgammaf(x)` for −64 < x < 40: e^lnΓ(w)/p from [`stirling`] (exp_dd
+/// UE, the division U, lnΓ(w)'s absolute bound as a relative one); for x < 0 the reflection
+/// Γ(x) = π/(sin πx·Γ(1 − x)), sin πx = (−1)^[x]·sin πr.
+pub(crate) fn tgamma_est(x: f32) -> Est {
+    let xd = f64::from(x);
+    if gamma_unknown(xd) || !(xd < 40.0 && xd > -64.0) {
+        return Est::Unknown;
+    }
+    let neg = xd < 0.0;
+    let (l, el, p, n) = stirling(if neg { 1.0 - xd } else { xd });
+    let (e, m) = crate::exp_log::exp_dd(l);
+    let g = e.div(p); // Γ(·)·2^-m
+    let rel = el * 1.000_001 + UE + (n + 2.0) * U;
+    if !neg {
+        let v = g.scale(dd::pow2(m));
+        return Est::Near { v, err: rel * 1.000_001 * v.hi.abs() };
+    }
+    let k = dd::nearest_int(xd);
+    let (s, es) = sin_pi(xd - k);
+    let q = Dd::of(crate::coeffs::tables::PI).div(s.mul(g));
+    let q = if (k as i64) & 1 != 0 { q.neg() } else { q };
+    let v = q.scale(dd::pow2(-m));
+    let rel = rel + es / s.hi.abs() + 3.0 * U + 1e-32;
+    Est::Near { v, err: rel * 1.000_001 * v.hi.abs() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

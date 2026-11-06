@@ -283,9 +283,15 @@ fn lgamma_mp(x: Mp) -> (Mp, i32) {
     (lg, if s.neg { -1 } else { 1 })
 }
 
-/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1): for `double` the fast tier
-/// ([`crate::fast_gamma`]) first, then [`lgamma_accurate`].
+/// `lgamma(x)` and the sign of `Γ(x)` (`signgam`: 1 or −1): for `float` the fast path
+/// ([`crate::fast32::eval_lgamma`]) first, for `double` the fast tier ([`crate::fast_gamma`]),
+/// then [`lgamma_accurate`].
 pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
+    if let (24, Ok(b)) = (F::PREC, u32::try_from(x.to_bits())) {
+        if let Some(((r, st), sign)) = crate::fast32::eval_lgamma(f32::from_bits(b), mode) {
+            return ((F::from_bits(u128::from(r.to_bits())), st), sign);
+        }
+    }
     if F::PREC == 53 {
         let xf = as_f64(x);
         if fast_gamma::domain(xf, false) && xf != 1.0 && xf != 2.0 {
@@ -299,7 +305,7 @@ pub fn lgamma<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     lgamma_accurate(x, mode)
 }
 
-/// `lgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+/// `lgamma(x)` by the 384-bit path alone (the fast tiers' fallback; public for their tests).
 pub fn lgamma_accurate<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
@@ -321,8 +327,14 @@ pub fn lgamma_accurate<F: Float>(x: F, mode: Rounding) -> ((F, Status), i32) {
     (mp::round(lg, mode), sign)
 }
 
-/// `tgamma(x)`: for `double` the fast tier ([`crate::fast_gamma`]) first, then [`tgamma_accurate`].
+/// `tgamma(x)`: for `float` the fast path ([`crate::fast32::eval_tgamma`]) first, for `double`
+/// the fast tier ([`crate::fast_gamma`]), then [`tgamma_accurate`].
 pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if let (24, Ok(b)) = (F::PREC, u32::try_from(x.to_bits())) {
+        if let Some((r, st)) = crate::fast32::eval_tgamma(f32::from_bits(b), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), st);
+        }
+    }
     if F::PREC == 53 {
         let xf = as_f64(x);
         if fast_gamma::domain(xf, true) {
@@ -334,7 +346,7 @@ pub fn tgamma<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     tgamma_accurate(x, mode)
 }
 
-/// `tgamma(x)` by the 384-bit path alone (the fast tier's fallback; public for its tests).
+/// `tgamma(x)` by the 384-bit path alone (the fast tiers' fallback; public for their tests).
 pub fn tgamma_accurate<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     let n = float::decode(x);
     if let Some(r) = elem::nan_in(&n) {
