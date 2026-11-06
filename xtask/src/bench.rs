@@ -709,7 +709,7 @@ fn resolve_row_patterns(name: &str, pats: &[String], all: Option<&[String]>) -> 
             let all = all.ok_or_else(|| format!("{name}: --rows glob `{p}` needs the bench's row list"))?;
             let hit: Vec<&String> = all.iter().filter(|r| glob_match(p.as_bytes(), r.as_bytes())).collect();
             if hit.is_empty() {
-                return Err(unknown_rows_error(name, &[p.clone()], all));
+                return Err(unknown_rows_error(name, std::slice::from_ref(p), all));
             }
             out.extend(hit.into_iter().filter(|r| !out.contains(r)).cloned().collect::<Vec<_>>());
         } else if !out.contains(p) {

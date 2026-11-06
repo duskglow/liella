@@ -355,6 +355,21 @@ cargo xtask bench --compare --only cbench_opt,cbench_patterns
 In compare mode `--only a,b` and positional names are the same list; any other argument starting
 with `-` is an error, never a benchmark name.
 
+Time only some rows (XTASK-BENCH-ROWS-BASE, D-X.33): `--rows <item>,...`, where an item is a row name (it applies
+to every compared bench), `<bench>/<row>` (that bench only), or a glob of either (`*`, `?`):
+
+```
+cargo xtask bench --compare --counters --runs 5 cbench_memref --rows memchr_16,memchr_16_mix
+cargo xtask bench --compare cbench_memref cbench_opt --rows 'cbench_memref/memchr_16*,cbench_opt/strlen_16'
+```
+
+Each bench gets one `CBENCH_ROWS` list (`bench/c/cbench_rows.h`), the same for every build of the comparison
+(Liella, glibc dynamic and static, `--v3`, `--sorted`, and the `--counters` runs). The Liella build's warm-up round
+must print every selected row: a name that is not a row is an error listing the bench's rows, which xtask gets from one
+unfiltered run of the Liella build. That run happens only for this error and to expand globs. A `<bench>/` item whose bench is not
+compared, and a compared bench that no item selects from, are errors too. Rows that a bench prints outside its
+`MEASURE` filter (cold-start and `put` rows) are left out of the table, and xtask prints their names.
+
 Measure a lower dispatch level (BENCH-TUNABLES): `--tunables <value>` sets `GLIBC_TUNABLES` for both the
 Liella and the glibc side, in `cargo xtask bench` and in `--compare`, and the output prints a `tunables:` line
 so a reader sees which level ran, for example
@@ -389,6 +404,18 @@ host, and the sha256 of every staged product), with the build's mtimes. A `--no-
 manifest (`--staged` requires one) checks every product against its sha256 instead of comparing mtimes, needs no
 git and no source tree, and prints a `staged: commit ...` header line naming what it timed; a product that does not
 match is refused. The commit comes from git, or from the `head=` line of a role directory's `.synced` file.
+
+Stage the "before" tree in the same command (XTASK-BENCH-ROWS-BASE, D-X.33): `--stage <out.tar> --base <ref>` stages
+the current tree to `<out.tar>` as above, then checks `<ref>` out as a temporary detached git worktree under
+`target/bench-base/<pid>`. There it runs the same `cargo xtask bench` command without `--base`, staging to
+`<stem>.base.tar` next to `<out.tar>`. The worktree is removed afterwards, on success and on failure. The last line
+names both tarballs and the commit in each manifest. Unpack each into its own directory and run `--compare --no-build`
+(or `--no-build --staged`) in both, with the same `--rows`. `--base` needs a tree with git history (a git checkout,
+not a synced role directory), and the base tree is built from scratch in its own `target/`:
+
+```bash
+cargo xtask bench --stage /tmp/s.tar --base origin/next --only cbench_memref   # writes /tmp/s.tar and /tmp/s.base.tar
+```
 
 `bench --compare --no-build` works the same way in a staged tree (XTASK-BENCH-COMPARE-STAGED): it checks the products
 against the manifest, prints the `staged:` header, and measures the staged Liella and glibc (dynamic) programs, so the
