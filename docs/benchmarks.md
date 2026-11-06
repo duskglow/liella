@@ -69,6 +69,9 @@ rows stays reported but is advisory (their `host_limits.tsv` lines are retired).
 glibc's, rounded up; where we are above glibc, current + 1 so a regression fails and the gap
 stays visible. The owner edits the limit files.
 `python3 bench/limits_from_counters.py target/liella/bench/counters.tsv [--headroom 2%|N] [--rows a,b] [--cpu MODEL]`
+(the table of the last `--counters` run: every `--counters` run, `bench` or `bench --compare`, rewrites
+`counters.tsv` with its own rows only and writes `counters-<bench>.tsv` per bench it counted, same columns, so a
+per-bench file is the input for one bench)
 prints limit lines in this format from a counted run (limit = count + max(2 instr, 2%), rounded up); with `--check` it
 diffs them against the current file (LOOSE = more than 5% above the proposal, WOULD-FAIL, NEW, NO-ROW) and edits nothing.
 The owner still edits the limit files.
@@ -386,6 +389,12 @@ host, and the sha256 of every staged product), with the build's mtimes. A `--no-
 manifest (`--staged` requires one) checks every product against its sha256 instead of comparing mtimes, needs no
 git and no source tree, and prints a `staged: commit ...` header line naming what it timed; a product that does not
 match is refused. The commit comes from git, or from the `head=` line of a role directory's `.synced` file.
+
+A run in a staged tree writes its tables (`bench_times.tsv`, `rounds.tsv`, `ratio_host.tsv`, `decision.tsv`,
+`counters.tsv`, `counters-<bench>.tsv`, and for `--compare` `measure.tsv` and `<bench>.compare.tsv`) to `bench-out/` at
+the staged root, never into `target/liella/` (XTASK-BENCH-OUTPUTS), so the same unpacked tree runs any number of times;
+`scp` the tables from `<dir>/bench-out/`. `--stage` leaves the build host's own run tables out of the tarball. Outside a
+staged tree the tables stay in `target/liella/bench/`.
 
 ## Appendix: all rows
 

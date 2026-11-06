@@ -2226,6 +2226,13 @@ ctr	short	1
         let text = fs::read_to_string(out.join("counters-cbench_tb.tsv")).unwrap();
         // instr ratio 100/90 and both instruction counts
         assert!(text.lines().nth(1).unwrap().contains("\t1.111\t50.0\t50.0\t70.0\t70.0\t100.0\t90.0\t"), "{text}");
+
+        // a compare run failing before its first bench is counted leaves no earlier run's rows either
+        fs::remove_file(out.join("cbench_tc")).unwrap();
+        let e = compare(&root, &a(&["--compare", "--no-build", "--counters", "--runs", "1", "cbench_tc"])).unwrap_err();
+        COMPARE_NO_BUILD.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(e.contains("does not exist"), "{e}");
+        assert_eq!(counters_benches(&out.join("counters.tsv")), Vec::<String>::new());
         let _ = fs::remove_dir_all(&root);
     }
 }
