@@ -967,9 +967,10 @@ memcmp:
  * both on only sizes above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit
  * NULL tests, the block at 0 alone as the early probe (TIMING-COV-MEMCMP-NONAVX2: a difference in
  * the first 16 bytes, sort -C's shape, is ordered after one block, not two), then the blocks at 16,
- * 32, 48, n - 64, n - 48, n - 32 and n - 16 ANDed into one test; the first differing byte (first
- * block first; the last block's from the ANDed mask, the blocks before it being equal) is re-read
- * and ordered at .Lcmp_byte. */
+ * 32, 48, n - 64, n - 48, n - 32 and n - 16 ANDed into the last block's register (one test, no
+ * copy); the first differing byte (first block first: the three blocks at 16-63 ANDed decide which
+ * group holds it, then that group's blocks in order; the last block's from the ANDed mask, the
+ * blocks before it being equal) is re-read and ordered at .Lcmp_byte. */
 .Lcmp_sse_mid:
 	cmpq $128, %rdx
 	ja .Lcmp_sse_long
@@ -984,50 +985,43 @@ memcmp:
 	xorl $0xffff, %ecx
 	jnz .Lcmp_first
 	movdqu 16(%rdi), %xmm0
-	movdqu 16(%rsi), %xmm1
-	pcmpeqb %xmm1, %xmm0
+	movdqu 16(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm0
 	movdqu 32(%rdi), %xmm1
-	movdqu 32(%rsi), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	movdqa %xmm0, %xmm7
-	pand %xmm1, %xmm7
+	movdqu 32(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm1
 	movdqu 48(%rdi), %xmm2
-	movdqu 48(%rsi), %xmm3
-	pcmpeqb %xmm3, %xmm2
-	pand %xmm2, %xmm7
+	movdqu 48(%rsi), %xmm7
+	pcmpeqb %xmm7, %xmm2
 	movdqu -64(%rdi,%rdx), %xmm3
-	movdqu -64(%rsi,%rdx), %xmm4
-	pcmpeqb %xmm4, %xmm3
-	pand %xmm3, %xmm7
+	movdqu -64(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm3
 	movdqu -48(%rdi,%rdx), %xmm4
-	movdqu -48(%rsi,%rdx), %xmm5
-	pcmpeqb %xmm5, %xmm4
-	pand %xmm4, %xmm7
+	movdqu -48(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm4
 	movdqu -32(%rdi,%rdx), %xmm5
-	movdqu -32(%rsi,%rdx), %xmm6
-	pcmpeqb %xmm6, %xmm5
-	pand %xmm5, %xmm7
+	movdqu -32(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm5
 	movdqu -16(%rdi,%rdx), %xmm6
-	movdqu -16(%rsi,%rdx), %xmm8
-	pcmpeqb %xmm8, %xmm6
-	pand %xmm6, %xmm7
-	pmovmskb %xmm7, %eax
+	movdqu -16(%rsi,%rdx), %xmm7
+	pcmpeqb %xmm7, %xmm6
+	pand %xmm0, %xmm6
+	pand %xmm1, %xmm6
+	pand %xmm2, %xmm6
+	pand %xmm3, %xmm6
+	pand %xmm4, %xmm6
+	pand %xmm5, %xmm6
+	pmovmskb %xmm6, %eax
 	subl $0xffff, %eax
 	jne .Lcmp_sse_diff
 	ret
 .Lcmp_sse_diff:
-	pmovmskb %xmm0, %ecx
-	movl $16, %r8d
-	xorl $0xffff, %ecx
-	jnz .Lcmp_at
-	pmovmskb %xmm1, %ecx
-	movl $32, %r8d
-	xorl $0xffff, %ecx
-	jnz .Lcmp_at
-	pmovmskb %xmm2, %ecx
-	movl $48, %r8d
-	xorl $0xffff, %ecx
-	jnz .Lcmp_at
+	movdqa %xmm0, %xmm7
+	pand %xmm1, %xmm7
+	pand %xmm2, %xmm7
+	pmovmskb %xmm7, %ecx
+	cmpl $0xffff, %ecx
+	jne .Lcmp_sse_front
 	pmovmskb %xmm3, %ecx
 	leaq -64(%rdx), %r8
 	xorl $0xffff, %ecx
@@ -1043,6 +1037,19 @@ memcmp:
 	leaq -16(%rdx), %r8
 	movl %eax, %ecx
 	jmp .Lcmp_at
+.Lcmp_sse_front:
+	pmovmskb %xmm0, %ecx
+	movl $16, %r8d
+	xorl $0xffff, %ecx
+	jnz .Lcmp_at
+	pmovmskb %xmm1, %ecx
+	movl $32, %r8d
+	xorl $0xffff, %ecx
+	jnz .Lcmp_at
+	pmovmskb %xmm2, %ecx
+	movl $48, %r8d
+	xorl $0xffff, %ecx
+	jmp .Lcmp_at
 /* Above 128 bytes without AVX2 (PERF-MEMCMP-LONG-NONAVX2; it was a tail-jump to the Rust
  * `liella_hot_compare_big`): an AVX2 build reaches here only above cmp_long (its cmp_mid is not 0)
  * and keeps the Rust large class. Otherwise the explicit NULL tests, the block at 0 as the early
@@ -1050,7 +1057,8 @@ memcmp:
  * ANDed into one test: from a + 16 rounded down to 16 (in [a + 1, a + 16], so nothing below a) (a aligned, so a's side is compared from memory; the first
  * chunk may overlap the probe), a cursor in a and the distance b - a, while the cursor is below
  * a + n - 64, then a last chunk at n - 64 that may overlap the one before (unaligned, both sides
- * loaded). A differing chunk's four masks give the first differing byte (rcx), re-read and ordered
+ * loaded). A differing chunk's four masks (the fourth from the AND: it decides only when the three
+ * before it are equal) give the first differing byte (rcx), re-read and ordered
  * at .Lcmp_big_byte (re-read equal, D-4.21 -> `liella_hot_compare_rescan`). n is read from rdx
  * only (MEMCMP-MID-4's torn-read bound). */
 .Lcmp_sse_long:
@@ -1080,11 +1088,10 @@ memcmp:
 	pcmpeqb 16(%r9), %xmm1
 	pcmpeqb 32(%r9), %xmm2
 	pcmpeqb 48(%r9), %xmm3
-	movdqa %xmm0, %xmm4
-	pand %xmm1, %xmm4
-	pand %xmm2, %xmm4
-	pand %xmm3, %xmm4
-	pmovmskb %xmm4, %eax
+	pand %xmm0, %xmm3
+	pand %xmm1, %xmm3
+	pand %xmm2, %xmm3
+	pmovmskb %xmm3, %eax
 	cmpl $0xffff, %eax
 	jne .Lcmp_sse_ldiff
 	addq $64, %r9
@@ -1103,20 +1110,19 @@ memcmp:
 	movdqu 48(%r9), %xmm3
 	movdqu 48(%r9,%r11), %xmm4
 	pcmpeqb %xmm4, %xmm3
-	movdqa %xmm0, %xmm4
-	pand %xmm1, %xmm4
-	pand %xmm2, %xmm4
-	pand %xmm3, %xmm4
-	pmovmskb %xmm4, %eax
+	pand %xmm0, %xmm3
+	pand %xmm1, %xmm3
+	pand %xmm2, %xmm3
+	pmovmskb %xmm3, %eax
 	cmpl $0xffff, %eax
 	jne .Lcmp_sse_ldiff
 	xorl %eax, %eax
 	ret
 .Lcmp_sse_ldiff:
+	movl %eax, %r8d
 	pmovmskb %xmm0, %eax
 	pmovmskb %xmm1, %ecx
 	pmovmskb %xmm2, %r10d
-	pmovmskb %xmm3, %r8d
 	shll $16, %ecx
 	orl %ecx, %eax
 	shll $16, %r8d
