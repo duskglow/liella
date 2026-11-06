@@ -18,7 +18,7 @@ nscache bumps `cred` only with a table attached.
   compared with the caller's thread id; a stale owner names a live parent thread, so dropping that store is visible only
   after thread-id reuse, which no deterministic test can force. Marked `equivalent:` (store kept as the defensive reset).
 - keke:cfcr2-plants-2 rc 0: 11 CAUGHT, 0 SURVIVED, 1 EQUIVALENT, no WARN; same 12 plants, the last marked equivalent (plants file keke:~/work/COLDSTART-FORK-CHILD-RESET-2/plants.txt).
-- keke:cfcr2-counts rc 0, per extra fork+_exit+waitpid ((10 forks - 1 fork)/9, perf stat -r 30, Skylake-SP host, minimal
+- keke:cfcr2-counts rc 0, per extra fork+_exit+waitpid ((10 forks - 1 fork)/9, perf stat -r 30, keke (Zen 1 host), minimal
   static probe forkn.c):
   | | user instr | kernel instr | page faults |
   |---|---|---|---|
