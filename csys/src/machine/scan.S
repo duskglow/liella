@@ -2145,6 +2145,9 @@ liella_machine_rawmemchr:
 	leaq 32(%rdi,%rdx), %rax
 	vzeroupper
 	ret
+	/* TIMING-N100-SCAN-64K-3 (D-NEW): the AVX2 long path in subsection 1, after the SSE2
+	 * path, which keeps its offset (memchr's layout rule, below). */
+	.subsection 1
 .Lraw_avx_at0:
 	bsfl %edx, %edx
 	leaq (%rdi,%rdx), %rax
@@ -2250,6 +2253,9 @@ liella_machine_rawmemchr:
 	vzeroupper
 	ret
 
+	.subsection 0
+	/* int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
+	.org liella_machine_rawmemchr_entry + 0x1ed, 0xcc
 .Lraw_sse2:
 	punpcklbw %xmm0, %xmm0
 	punpcklwd %xmm0, %xmm0
@@ -2490,6 +2496,8 @@ liella_machine_rawmemchr:
 	bsfq %rdx, %rax
 	addq %rdi, %rax
 	ret
+	/* The sizes run to the end of subsection 1, the section's end. */
+	.subsection 1
 	.size liella_machine_rawmemchr, .-liella_machine_rawmemchr
 	.size liella_machine_rawmemchr_entry, .-liella_machine_rawmemchr_entry
 #ifdef LIELLA_EXPORT
@@ -2646,6 +2654,11 @@ liella_machine_memchr:
 	cmpl $4064, %ecx
 	ja .Lmemchr_avx_setup
 	jmp .Lmemchr_n32
+	/* TIMING-N100-SCAN-64K-3 (D-NEW): the AVX2 long path is assembled in subsection 1, after
+	 * the SSE2 path, and the SSE2 path keeps the offset it had with the 128-byte loop (pinned by
+	 * the .org below): a longer AVX2 loop then moves no SSE2-reached block (Ivy Bridge timed
+	 * memchr_16_mix 14% slower when it moved). */
+	.subsection 1
 .Lmemchr_avx_setup:
 	movq %rdi, %rax
 	andq $-64, %rax
@@ -2779,6 +2792,10 @@ liella_machine_memchr:
 	xorl %eax, %eax
 	ret
 
+	.subsection 0
+	/* int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
+	 * of the section, as before (the assembler refuses if the code above grows past it). */
+	.org liella_machine_memchr_entry + 0x231, 0xcc
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
 	 * located per 16-byte block with a branch each (STR-K1's measurement). */
 .Lmemchr_sse2:
@@ -3047,6 +3064,8 @@ liella_machine_memchr:
 .Lmemchr_none:
 	xorl %eax, %eax
 	ret
+	/* The sizes run to the end of subsection 1, the section's end. */
+	.subsection 1
 	.size liella_machine_memchr, .-liella_machine_memchr
 #ifdef LIELLA_EXPORT
 	.size memchr, .-memchr
