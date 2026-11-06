@@ -2306,7 +2306,7 @@ fn signal_name(n: u32) -> Option<&'static str> {
 /// `status N, expected ...` of `run.sh`, with a status above 128 read as the shell does: death by signal N - 128.
 fn describe_status(detail: &str) -> String {
     let Some(rest) = detail.strip_prefix("status ") else { return detail.to_string() };
-    let (n, tail) = rest.split_once(',').unwrap_or((rest, ""));
+    let (n, tail) = rest.split_at(rest.find(',').unwrap_or(rest.len()));
     match n.trim().parse::<u32>() {
         Ok(rc) if rc > 128 && rc <= 128 + 64 => {
             let sig = rc - 128;
