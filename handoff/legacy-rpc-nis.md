@@ -21,6 +21,14 @@ D-29.4 (secure-RPC/DES stubs), D-27.9 (placeholder machinery), D-15.7 (rcmd fami
   descriptor set (BTreeSet) before/after.
 - Differences row after the RPC client/server row; plants file `~/work/legacy-rpc-libnsl-placeholder/plants.txt` (7).
 
+## Results (keke r5, code head 16522abb)
+- `legacy-rpc-libnsl-placeholder-prep5` rc 0: `cargo xtask clippy`, `cargo xtask static`, symcov (libnsl: only the 6 private names missing).
+- `legacy-rpc-libnsl-placeholder-plants` rc 0: 6 plants (`~/work/legacy-rpc-libnsl-placeholder/plants.txt`), 6 CAUGHT,
+  0 WARN-RC-ONLY/NO-MSG; one WARN-DEV-SHM line (RAM dir under /dev/shm, as developer-flow says for this host).
+- `legacy-rpc-libnsl-placeholder-gate` (affected --base origin/next): see the hand-back.
+- Superseded: prep (heap check counted stderr's lazy buffer), prep2 (+224 one-time bytes; check made per row on a second
+  call), prep3/prep4 (clippy: panic/indexing in test helpers, unreachable pub).
+
 ## Open / informational
 - The dynamic path (an old program actually loading libnsl.so.1) cannot run before Liella's ld.so (DL-14); the link
   and readelf checks stand in for it (NOT VERIFIED at run time).
