@@ -101,10 +101,10 @@ impl CtypeFile {
     }
 
     /// The checks of [`CtypeFile::parse`]: the magic, the items this module reads, and the
-    /// tables' headers; with `derive_case`, also the ASCII case flag (else `false`). One body
-    /// for both callers (a second copy measured one more text page fault on the first
-    /// `setlocale`).
-    #[inline(never)]
+    /// tables' headers; with `derive_case`, also the ASCII case flag (else `false`). Inlined
+    /// into its two callers, so the checks stay on the locale code's text pages (an outlined
+    /// copy measured one more text page fault on the first `setlocale`).
+    #[inline]
     fn check(cat: Category, derive_case: bool) -> Option<CtypeFile> {
         if cat.magic() != MAGIC || cat.len() <= MAP_OFFSET {
             return None;
