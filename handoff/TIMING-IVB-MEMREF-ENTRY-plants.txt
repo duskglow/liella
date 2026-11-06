@@ -1,0 +1,9 @@
+# TIMING-IVB-MEMREF-ENTRY plants: the memchr / rawmemchr direct SSE2 entries (csys/src/machine/scan.S).
+# machine_scanners runs each scanner on both scan levels (SSE2, and AVX2 on the build host), page ends included.
+# memchr: the direct SSE2 entry's page compare widened (offsets 4033-4094 run the 64-byte head across the page end;
+# AVX2-level page-end calls take the SSE2 head).
+memchr-pre-page | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?\.Lmemchr_sse_pre:\s*)cmpl \$4032, %ecx/$1cmpl \$4095, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr|FAILED|SIGSEGV|panicked
+# memchr: the direct SSE2 head's broadcast source dropped (the compare uses a stale xmm0).
+memchr-pre-bcast | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?\.Lmemchr_sse_pre:\s*cmpl \$4032, %ecx\n\tja \.Lmemchr_entry\n)\tmovd %esi, %xmm0\n/$1/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr|FAILED|panicked
+# rawmemchr: the direct SSE2 entry's page compare widened.
+raw-pre-page | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_sse_fast:\s*)cmpl \$4032, %ecx/$1cmpl \$4095, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr|FAILED|SIGSEGV|panicked

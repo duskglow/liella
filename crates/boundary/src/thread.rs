@@ -31,7 +31,7 @@ use liella_rt::thread::{
 use liella_rt::tls::{TlsImage, FLAG_OWN};
 
 use crate::sys::CSys;
-use crate::{conv, ffi, raw, tb};
+use crate::{conv, ffi, fork, raw, tb};
 
 /// The process-wide key table (§22.6).
 pub(crate) static KEYS: KeyTable = KeyTable::new();
@@ -448,21 +448,23 @@ pub(crate) fn recycle_lock() -> &'static RawMutex {
 /// `fork`'s child: only the calling thread exists (D-18.6).
 pub(crate) fn after_fork_child() {
     // The lock was taken before the fork by the forking thread, which is this one.
-    HEAD.store(0, Release);
-    CACHE.store(0, Release);
-    CACHE_BYTES.store(0, Release);
-    DEAD.store(0, Release);
+    // Only the words that change are written (D-18.8).
+    fork::set_if_differs!(CACHE, 0);
+    fork::set_if_differs!(CACHE_BYTES, 0);
+    fork::set_if_differs!(DEAD, 0);
+    let mut head = 0;
     if let Some(d) = current() {
-        d.next.store(0, Relaxed);
-        d.prev.store(0, Relaxed);
-        d.robust[0].store(addr_of(&d.robust), Relaxed);
-        d.robust[2].store(0, Relaxed);
+        fork::set_if_differs!(d.next, 0);
+        fork::set_if_differs!(d.prev, 0);
+        fork::set_if_differs!(d.robust[0], addr_of(&d.robust));
+        fork::set_if_differs!(d.robust[2], 0);
         let _ = raw::set_robust_list(addr_of(&d.robust), 24);
         if OWNED.load(Acquire) || d.has(DESC_CREATED) {
-            HEAD.store(addr_of(d), Release);
+            head = addr_of(d);
         }
     }
-    LIVE.store(usize::from(OWNED.load(Acquire)), Release);
+    fork::set_if_differs!(HEAD, head);
+    fork::set_if_differs!(LIVE, usize::from(OWNED.load(Acquire)));
 }
 
 // ------------------------------------------------------------------------------ creation

@@ -39,17 +39,17 @@ use crate::mp::{self, Big, Round};
 use crate::tables::{dd, f64_of};
 
 const P: u32 = 640;
-const U: f64 = 1.0 / 9_007_199_254_740_992.0;
+pub(crate) const U: f64 = 1.0 / 9_007_199_254_740_992.0;
 /// The bound every table is sized for (relative): `2^-71`.
 const TARGET: f64 = 4.235_164_736_271_502e-22;
-const MAX_DEG: usize = 30;
+pub(crate) const MAX_DEG: usize = 30;
 
-struct Slot {
-    h: f64,
-    coef: Vec<Big>,
-    mag: Vec<f64>,
-    rem: Vec<f64>,
-    fmin: f64,
+pub(crate) struct Slot {
+    pub(crate) h: f64,
+    pub(crate) coef: Vec<Big>,
+    pub(crate) mag: Vec<f64>,
+    pub(crate) rem: Vec<f64>,
+    pub(crate) fmin: f64,
 }
 
 fn round(x: &Big) -> Big {
@@ -61,7 +61,7 @@ fn fact(n: usize) -> f64 {
 }
 
 /// The slot `i` of a table starting at `2^e0`: `(a, b, c, h)`.
-fn geometry(e0: i32, i: usize) -> (f64, f64, f64, f64) {
+pub(crate) fn geometry(e0: i32, i: usize) -> (f64, f64, f64, f64) {
     let e = e0 + (i / 16) as i32;
     let j = (i % 16) as f64;
     let s = 2f64.powi(e);
@@ -137,7 +137,7 @@ fn erfcx_slot(e0: i32, i: usize, k2: &Big) -> Slot {
 
 /// The relative bound of the evaluation with `m` double-double and `d + 1 − m` `f64`
 /// coefficients (module doc, items 1-3).
-fn bound(s: &Slot, m: usize, d: usize) -> f64 {
+pub(crate) fn bound(s: &Slot, m: usize, d: usize) -> f64 {
     let h = s.h;
     let mut rb = vec![0.0; d + 2];
     for k in (0..=d).rev() {
@@ -154,14 +154,14 @@ fn bound(s: &Slot, m: usize, d: usize) -> f64 {
     tot * 1.01 / s.fmin
 }
 
-/// The cheapest `(m, d, eps)` meeting [`TARGET`] on every slot (cost: about 12 operations a
+/// The cheapest `(m, d, eps)` meeting `target` on every slot (cost: about 12 operations a
 /// double-double step, 2 an `f64` step).
-fn choose(slots: &[Slot]) -> (usize, usize, f64) {
+pub(crate) fn choose(slots: &[Slot], target: f64) -> (usize, usize, f64) {
     let mut best: Option<(usize, usize, usize, f64)> = None;
     for m in 1..=8 {
         for d in m..=MAX_DEG {
             let eps = slots.iter().map(|s| bound(s, m, d)).fold(0.0, f64::max);
-            if eps <= TARGET {
+            if eps <= target {
                 let cost = 12 * m + 2 * (d - m);
                 if best.is_none_or(|b| cost < b.0) {
                     best = Some((cost, m, d, eps));
@@ -171,12 +171,12 @@ fn choose(slots: &[Slot]) -> (usize, usize, f64) {
         }
     }
     let (_, m, d, eps) = best.unwrap_or((0, 1, MAX_DEG, f64::INFINITY));
-    assert!(eps <= TARGET, "no layout meets the target");
+    assert!(eps <= target, "no layout meets the target");
     (m, d, eps)
 }
 
-fn emit_table(src: &mut String, name: &str, doc: &str, slots: &[Slot]) {
-    let (m, d, eps) = choose(slots);
+pub(crate) fn emit_table(src: &mut String, name: &str, doc: &str, slots: &[Slot], target: f64) {
+    let (m, d, eps) = choose(slots, target);
     let w = 2 * m + d + 1 - m;
     let _ = writeln!(src, "\n/// `{name}` degree `D` (module `fast_special`).\npub(crate) const {name}_DEG: usize = {d};");
     let _ = writeln!(src, "/// `{name}`: the first `M` coefficients are double-doubles.\npub(crate) const {name}_DD: usize = {m};");
@@ -252,7 +252,7 @@ pub fn emit(src: &mut String) {
     src.push_str("\n// ---- erf/erfc fast tier (crates/mathtools/src/special_tables.rs has the derivation and bounds).\n");
     small(src, &k2);
     let erf: Vec<Slot> = (0..120).map(|i| erf_slot(-5, i, &k2)).collect();
-    emit_table(src, "ERF_T", "`erf` on `[2^-5, 6)`, 16 slots a binade from `2^-5` (module `fast_special`).", &erf);
+    emit_table(src, "ERF_T", "`erf` on `[2^-5, 6)`, 16 slots a binade from `2^-5` (module `fast_special`).", &erf, TARGET);
     let erfcx: Vec<Slot> = (0..76).map(|i| erfcx_slot(0, i, &k2)).collect();
-    emit_table(src, "ERFCX_T", "`e^(x²)·erfc x` on `[1, 28)`, 16 slots a binade from 1 (module `fast_special`).", &erfcx);
+    emit_table(src, "ERFCX_T", "`e^(x²)·erfc x` on `[1, 28)`, 16 slots a binade from 1 (module `fast_special`).", &erfcx, TARGET);
 }

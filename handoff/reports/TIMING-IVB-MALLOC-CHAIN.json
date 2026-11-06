@@ -1,0 +1,12 @@
+{"task": "TIMING-IVB-MALLOC-CHAIN", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND (experiment): latest-allocation fast path in free cuts malloc_free_* time 14-15% on Ivy Bridge and 12% on N100 (realloc_within_usable 8% / 7%), but du +4.5% user cycles on Ivy Bridge and gawk-regex +1.8% wall on N100 (non-overlapping ranges)",
+ "branch": "task/timing-ivb-malloc-chain", "head": "03d7c5f7",
+ "gate": {"affected": "918 passed / 0 failed (7 suites; conformance 9 passed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-12: adopt the latest-allocation fast path in free, judged by time", "recommendation": "do not adopt; record as a second negative (pair -15% IVB / -12% N100, but du +4.5% IVB cycles:u and gawk-regex +1.8% N100 wall); a follow-up only as a variant with no cost on non-latest frees, after profiling du's loss on Ivy Bridge"}],
+ "informational": ["Ivy Bridge timing host: workload wall and task-clock spread +-20% for the same binary (du 452-716 ms) while cycles:u stays within 2%; its workload column uses cycles:u", "cargo xtask affected in a role dir (no .git) only lists the selection without --run; the first gate job ran no tests", "the brief's 'variant that costs nothing on the other frees' is not described in the experiment branch's handoff, report or register row"],
+ "refused": [],
+ "improvement": "~/wl/rc_time.sh plus the wl_count kits made the workload timing a 5-minute job; a ship-to-timing-host helper (kits + probe, tar with logs kept off stdout) would save the two calls lost to a corrupted tar stream",
+ "next_step": "owner rules on D-12; if not adopted, add the timing to the register row in docs/saturation/04-allocator.md and close the branch",
+ "report_file": "handoff/TIMING-IVB-MALLOC-CHAIN.md",
+ "jobs": ["shiki:timing-ivb-malloc-chain-gate", "shiki:timing-ivb-malloc-chain-gate2", "shiki:timing-ivb-malloc-chain-plants", "keke:timing-ivb-malloc-chain-wlc", "nico:timing-ivb-malloc-chain-nico", "nico:timing-ivb-malloc-chain-nico-wl10", "nozomi:timing-ivb-malloc-chain-nozomi"]}

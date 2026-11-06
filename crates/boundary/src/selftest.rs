@@ -661,6 +661,18 @@ pub fn set_scan_avx2(avx2: bool) -> bool {
     true
 }
 
+/// `liella_machine_strpair`'s answer from `s[off..]` for c0 at q - off and c1 at q
+/// (TIMING-N100-STRSTR-64), so a test checks the scanner's exact contract (the first candidate or
+/// the terminator, not merely a unit that `strstr`'s compare rejects). `None`, without a call,
+/// when `s` breaks the scanner's proof obligation: no 0 byte in `s`, or one before `off`.
+pub fn strpair(s: &[u8], off: usize, c0: u8, c1: u8) -> Option<usize> {
+    let end = s.iter().position(|&b| b == 0)?;
+    if end < off {
+        return None;
+    }
+    Some(crate::ffi::liella_machine_strpair(s.as_ptr().wrapping_add(off), off, i32::from(c0), i32::from(c1)))
+}
+
 /// Force the `strcasecmp`/`strncasecmp` kernel (CASECMP): 0 = none (the measured path), 1 = SSE2,
 /// 2 = AVX2. Returns `false` (and changes nothing) for another value or AVX2 on a CPU or OS
 /// without it. [`set_scan_avx2`] also sets it (AVX2 or SSE2).
@@ -745,6 +757,15 @@ pub fn null_fold_allowed_by(text: &[u8]) -> bool {
 /// Which build of the hot copy and fill kernels runs: `true` for AVX2.
 pub fn kernel_avx2() -> bool {
     crate::dispatch::avx2()
+}
+
+/// The copy entry's 129-256 class word as the entry reads it (D-4.55, NULLFOLD-COPY-MID-3):
+/// `(gate, sse2)`, the size bound with the sign bit cleared (0: no folded size) and whether the
+/// sign bit sends the class to the SSE2 body. Lets a test confirm the word follows the folding
+/// and build settings, since both bodies copy the same bytes.
+pub fn copy_class_word() -> (usize, bool) {
+    let w = crate::ffi::liella_machine_move_long.load(core::sync::atomic::Ordering::Relaxed);
+    (w & !crate::dispatch::MOVE_SSE2, w & crate::dispatch::MOVE_SSE2 != 0)
 }
 
 /// The AVX2 copy into `dst` from `src` (the size range and placement checks are bypassed):

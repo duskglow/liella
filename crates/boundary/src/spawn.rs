@@ -804,7 +804,9 @@ pub(crate) fn fork_locks(take: bool) {
 pub(crate) fn after_fork_child() {
     POPEN_LOCK.reset();
     SHELL_LOCK.reset();
-    if SHELL_USERS.swap(0, Relaxed) != 0 {
+    // Only the words that change are written (D-18.8).
+    if SHELL_USERS.load(Relaxed) != 0 {
+        SHELL_USERS.store(0, Relaxed);
         for (i, sig) in [SIGINT, SIGQUIT].into_iter().enumerate() {
             let _ = raw::restore_action(sig, &saved(i));
         }

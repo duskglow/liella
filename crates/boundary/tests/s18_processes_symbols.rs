@@ -251,7 +251,8 @@ fn sym___fork() {
 #[test]
 fn sym_fork() {
     exported("fork");
-    conformance(&["s18_fork", "s22_more"]);
+    // s18_fork_reset: §18.2, the child's timer, aio, getaddrinfo_a and stream-lock state (D-18.8).
+    conformance(&["s18_fork", "s22_more", "s18_fork_reset"]);
 }
 #[test]
 fn sym__Fork() {

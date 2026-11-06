@@ -5,17 +5,43 @@ Read this first; open kernel code only by range (`file:line` below) for the func
 Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `domain:`, `declines:`;
 `bound: undocumented` when the doc has no `bound:` line) and its first sentence.
 
+## fast32/bessel.rs (f32 bessel)
+
+- `fast32/bessel.rs:52` `const fn hankel_coeffs(nu: u32) -> [[f64; 11]; 2]` — bound: undocumented — doc: Hankel's coefficients for order ν: P takes (-1)^m a_2m, Q (-1)^m a_(2m+1), with a_0 = 1 and a_(k+1) = a_k·(4ν² - (2k+1)²)/(8(k+1)) (DLMF 10.17.1), k < 22.
+- `fast32/bessel.rs:68` `fn horner(c: &[u64], t: f64) -> f64` — bound: undocumented
+- `fast32/bessel.rs:80` `fn horner_f(c: &[f64; 11], t: f64) -> f64` — bound: undocumented
+- `fast32/bessel.rs:102` `fn hankel_core(f: usize, x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: Hankel's form for x in [24, 2^19): f = √(2/(πx))·(P cos ω ∓ ...), ω = x - νπ/2 - π/4, written with s = sin x, c = cos x: J0 = A·(P(c + s) - Q(s - c)), Y0 = A·(P…
+- `fast32/bessel.rs:123` `pub(super) fn bessel_core(f: usize, x: f32) -> Option<(f64, f64)>` — bound: undocumented — doc: J0 (f = 0), J1 (1), Y0 (2), Y1 (3) of a `float` x as (y, e) with |y - f| ≤ e, or `None` (x outside [2^-20, 2^19) in magnitude, x ≤ 0 for Y, NaN).
+- `fast32/bessel.rs:176` `pub(super) fn bessel_finish(x: f32, (y, e): (f64, f64), mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test for an absolute bound e: margin e/ulp(y) < e·2^53/|y| (ulp(y) > |y|·2^-53), refused at or beyond 2^26 (the test's mask is 2^28; y near a zero …
+
+## fast32/erf.rs (f32 erf)
+
+- `fast32/erf.rs:49` `fn erf_small(v: f64) -> f64` — bound: undocumented — doc: erf v for |v| < 1 as v·P(v²), ε ≤ 7u: the fit 3.67u; s = RN(v²) moves P by under s·|P'/P|·u < 0.4u; Horner in s ∈ [0, 1) with |c_k s^k| falling by over 3 per st…
+- `fast32/erf.rs:65` `fn erfc_big(a: f64) -> f64` — bound: undocumented — doc: erfc a for 1 ≤ a < 37/4 as e^(-a²)·Q_i(a - c_i), ε ≤ 2^-45.74 (153u): a² is exact (a has 24 bits), so z = RN(-a²·INV_L) has |z| < 85.6·184.7 < 2^13.95: INV_L's …
+- `fast32/erf.rs:83` `pub(super) fn erf_core(x: f32) -> Option<f64>` — bound: undocumented — doc: erf x as a `double`, ≤ ERF_BOUND ulp: [`erf_small`] (7u) below 1; 1 - erfc a up to ERF_SAT (erfc a ≤ 0.158 within 2^-45.74, over a result ≥ 0.84 rounded once: 2…
+- `fast32/erf.rs:103` `pub(super) fn erfc_core(x: f32) -> Option<f64>` — bound: undocumented — doc: erfc x as a `double`, ≤ ERFC_BOUND ulp: 1 - erf_small(x) for |x| < 1 (erfc x ≥ 0.157, the 7u of erf x ≤ 0.843 become 37.6u, the sum u); erfc_big up to ERFC_MAX …
+
 ## fast32/exp_log.rs (f32 exp_log)
 
 - `fast32/exp_log.rs:23` `pub(super) fn exp_core(x: f32, lo: f64, hi: f64, c: f64) -> Option<f64>` — bound: undocumented — doc: e^x, 2^x or 10^x as a `double` y with |y/f - 1| ≤ 2^-45.16, for x in (`lo`, `hi`) and `c` = 128·log2(base) rounded (128 exactly for exp2).
-- `fast32/exp_log.rs:56` `pub(super) fn log_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
-- `fast32/exp_log.rs:63` `pub(super) fn log_core_from(x: f32, lo: u32) -> Option<f64>` — bound: undocumented — doc: [`log_core`] for `float`s whose bits are at least `lo` (1: every positive finite one; 0x0080_0000: the normal ones, whose conversion to `double` raises nothing)…
-- `fast32/exp_log.rs:96` `pub(super) fn log1p_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1 with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the roun…
-- `fast32/exp_log.rs:131` `pub(super) fn expm1_core(x: f32) -> Option<f64>` — bound: undocumented — doc: e^x - 1 as a `double` y with |y/f - 1| ≤ 9.1·2^-53, for a `float` x in (-18, 89) with |x| ≥ 2^-45 (below that the rounding test refuses every operand: y is with…
-- `fast32/exp_log.rs:159` `pub(super) fn cbrt_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ∛x as a `double` y with |y/∛x - 1| ≤ 5.4·2^-53, for a finite nonzero `float` x.
-- `fast32/exp_log.rs:206` `pub(super) fn pow_core(ax: f64, yd: f64) -> Option<f64>` — bound: undocumented — doc: |x|^y as a `double` with |result/|x|^y - 1| ≤ 89·2^-53 (MATH-M6-F32-POWF), for a finite nonzero `float` x, a finite nonzero `float` y and t = y·ln|x| in (-104, …
-- `fast32/exp_log.rs:243` `pub fn eval_pow(x: f32, y: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `powf`'s fast path: x, y finite and nonzero, x > 0 or y an integer (the sign from its parity).
-- `fast32/exp_log.rs:277` `pub fn pow(x: f32, y: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `powf`: the fast path, else the accurate path.
+- `fast32/exp_log.rs:34` `pub(super) fn exp_z(z: f64) -> f64` — bound: undocumented — doc: 2^(z/128) for |z| < 2^14.24: the reduction and polynomial of [`exp_core`] (whose proof covers every z in that range, the rounding of z itself aside).
+- `fast32/exp_log.rs:62` `pub(super) fn log_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
+- `fast32/exp_log.rs:69` `pub(super) fn log_core_from(x: f32, lo: u32) -> Option<f64>` — bound: undocumented — doc: [`log_core`] for `float`s whose bits are at least `lo` (1: every positive finite one; 0x0080_0000: the normal ones, whose conversion to `double` raises nothing)…
+- `fast32/exp_log.rs:102` `pub(super) fn log1p_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1 with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the roun…
+- `fast32/exp_log.rs:137` `pub(super) fn expm1_core(x: f32) -> Option<f64>` — bound: undocumented — doc: e^x - 1 as a `double` y with |y/f - 1| ≤ 9.1·2^-53, for a `float` x in (-18, 89) with |x| ≥ 2^-45 (below that the rounding test refuses every operand: y is with…
+- `fast32/exp_log.rs:165` `pub(super) fn cbrt_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ∛x as a `double` y with |y/∛x - 1| ≤ 5.4·2^-53, for a finite nonzero `float` x.
+- `fast32/exp_log.rs:212` `pub(super) fn pow_core(ax: f64, yd: f64) -> Option<f64>` — bound: undocumented — doc: |x|^y as a `double` with |result/|x|^y - 1| ≤ 89·2^-53 (MATH-M6-F32-POWF), for a finite nonzero `float` x, a finite nonzero `float` y and t = y·ln|x| in (-104, …
+- `fast32/exp_log.rs:249` `pub fn eval_pow(x: f32, y: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `powf`'s fast path: x, y finite and nonzero, x > 0 or y an integer (the sign from its parity).
+- `fast32/exp_log.rs:283` `pub fn pow(x: f32, y: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `powf`: the fast path, else the accurate path.
+
+## fast32/gamma.rs (f32 gamma)
+
+- `fast32/gamma.rs:33` `fn horner<const N: usize>(c: &[u64; N], s: f64) -> f64` — bound: undocumented — doc: c[0] + s·(c[1] + s·(...)) by Horner.
+- `fast32/gamma.rs:48` `pub(super) fn gamma_core(xd: f64) -> Option<f64>` — bound: undocumented — doc: Γ(x) as a `double` with relative error ≤ 55.1u (u = 2^-53), for 2^-20 ≤ |x|, -42 < x < 36, x not a negative integer (`None` outside).
+- `fast32/gamma.rs:79` `fn ln64(v: f64) -> f64` — bound: undocumented — doc: ln v for a positive normal `double` v in [2^-181, 2^181], absolute error ≤ (1.45 + 2|y|)u.
+- `fast32/gamma.rs:104` `pub(super) fn lgamma_core(x: f32) -> Option<(f64, u64)>` — bound: undocumented — doc: lnΓ(x) = ln|Γ(x)| as a `double` y and its margin (ulp of y), piecewise, for a finite x: * |x - 1| ≤ 1/8: y = z·q(z), z = x - 1 exact.
+- `fast32/gamma.rs:135` `pub fn eval_lgamma(x: f32, mode: Rounding) -> Option<((f32, Status), i32)>` — bound: undocumented — doc: `lgammaf` by the fast path with the sign of Γ(x) (`signgam`), or `None` (see [`eval`]).
+- `fast32/gamma.rs:142` `pub fn eval_tgamma(x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `tgammaf` by the fast path, or `None` (see [`eval`]).
 
 ## fast32/hyperbolic.rs (f32 hyperbolic)
 
@@ -50,95 +76,168 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast32.rs (f32 core)
 
-- `fast32.rs:310` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:342` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:352` `include!("fast32_tables.rs");`
-- `fast32.rs:366` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:393` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:443-457` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:473-493` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh
+- `fast32.rs:334` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
+- `fast32.rs:377` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:387` `include!("fast32_tables.rs");`
+- `fast32.rs:401` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:428` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:479-493` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:509-531` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
 
 ## fast32_tables.rs (fast32_tables)
 
 (no functions)
 
+## fast64/exp_log.rs (f64 exp_log)
+
+- `fast64/exp_log.rs:53` `pub(super) fn exp_err(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`exp_kernel`](crate::fast64::exp_kernel)'s error in units of `2^m` (module doc).
+- `fast64/exp_log.rs:59` `pub(super) fn round(y: Dd, eps: f64, m: i32) -> Option<f64>` — bound: undocumented — doc: The rounding: `y·2^m` correctly rounded to nearest, or `None` (the exact test).
+- `fast64/exp_log.rs:74` `fn expm1_series(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `x + x²/2 + x³·(1/3! + … + x⁶/9!)` for `TINY <= |x| < 2^-6`, the error at most `2^-49·|tail| + 2^-70·|y|`.
+- `fast64/exp_log.rs:93` `pub fn expm1_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `e^x − 1` for the in-place entry: `2^-60 <= |x|`, `−37 < x < 709`.
+- `fast64/exp_log.rs:123` `pub fn log1p_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `ln(1 + x)` for the in-place entry: `−1 < x < 2^960`, `|x| >= 2^-60`.
+- `fast64/exp_log.rs:160` `pub fn cbrt_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `∛x` for the in-place entry: `x` normal and finite (nonzero).
+- `fast64/exp_log.rs:197` `entries!(#[inline(always)]; ; kern; dd::two_prod);`
+- `fast64/exp_log.rs:212` `entries!(#[target_feature(enable = "fma")] #[inline];`
+
+## fast64/hyperbolic.rs (f64 hyperbolic)
+
+- `fast64/hyperbolic.rs:25` `fn odd_series<const N: usize>(x: f64, c: &[f64; N]) -> (Dd, f64)` — bound: undocumented — doc: `x + x³·q(x²)`, `q` the first `n` Taylor coefficients `C` of an odd function, for `TINY <= |x| < 2^-6`: the error is at most `2^-49·|tail| + 2^-70·|y|` when the…
+- `fast64/hyperbolic.rs:43` `fn exp_pm(a: f64) -> Option<(Dd, i32, f64, Dd, f64)>` — bound: undocumented — doc: `e^a` and `e^-a` as `(p, m, ep, qs, eq)`: `p·2^m` and `qs·2^m` (both in units of `2^m`) within `ep` and `eq`, for `TINY <= a <= 40`.
+- `fast64/hyperbolic.rs:55` `fn exp_half(a: f64) -> Option<f64>` — bound: undocumented — doc: `e^a/2` for `40 < a < 709` as `p·2^(m−1)` with its bound.
+- `fast64/hyperbolic.rs:70` `pub fn sinh_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `sinh x` for the in-place entry: `2^-60 <= |x| < 709`.
+- `fast64/hyperbolic.rs:94` `pub fn cosh_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `cosh x` for the in-place entry: `2^-60 <= |x| < 709`.
+- `fast64/hyperbolic.rs:119` `pub fn tanh_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `tanh x` for the in-place entry: `2^-60 <= |x| <= 22`.
+- `fast64/hyperbolic.rs:147` `entries!(#[inline(always)]; ; kern; dd::two_prod);`
+- `fast64/hyperbolic.rs:162` `entries!(#[target_feature(enable = "fma")] #[inline];`
+
+## fast64/tier_tests.rs (f64 tier_tests)
+
+- `fast64/tier_tests.rs:11` `fn uniform(n: usize, seed: u64, lo: f64, hi: f64) -> impl Iterator<Item = f64>` — bound: undocumented — doc: xorshift64 uniform in `[lo, hi)`.
+- `fast64/tier_tests.rs:23` `fn logscale(n: usize, seed: u64, emax: u64) -> impl Iterator<Item = f64>` — bound: undocumented — doc: Signed magnitudes `±m·2^-e`, `e` uniform in `[0, emax)`, `m` in `[1, 2)` (callers keep the scaled magnitudes above the tier's floor `2^-60`, so the answer rate …
+- `fast64/tier_tests.rs:38` `fn check(name: &str, fast: fn(f64) -> Option<f64>, exact: fn(f64) -> f64, xs: impl Iterator<Item = f64>) -> (usize, usize)` — bound: undocumented — doc: Checks `fast` against `exact` on `xs` and returns `(answered, total)`; every answer must be the accurate result bit for bit.
+- `fast64/tier_tests.rs:45` `assert_eq!(v.to_bits(), e.to_bits(), "{name}({x:e} = {:#x}): fast {v:e}, accurate {e:e}", x.to_bits());`
+- `fast64/tier_tests.rs:51` `fn rate(name: &str, (got, n): (usize, usize))` — bound: undocumented
+- `fast64/tier_tests.rs:52` `assert!(n > 0 && got * 1000 >= n * 999, "{name}: the fast tier answered {got} of {n} (below 99.9%)");`
+- `fast64/tier_tests.rs:66` `fn expm1_tier_matches_the_accurate_path()` — bound: undocumented
+- `fast64/tier_tests.rs:74` `fn log1p_tier_matches_the_accurate_path()` — bound: undocumented
+- `fast64/tier_tests.rs:87` `fn hyperbolic_tier_matches_the_accurate_path()` — bound: undocumented
+- `fast64/tier_tests.rs:137` `fn tier_declines_or_rounds_right_on_hard_cases()` — bound: undocumented — doc: The hard cases above (no spec clause; D-10.13: an answer is the accurate path's result).
+- `fast64/tier_tests.rs:149` `assert!(row.is_some(), "hard case for an unknown function {name}");`
+- `fast64/tier_tests.rs:156` `assert_eq!(got.to_bits(), e.to_bits(), "hard case {name}({v:e} = {:#x}): fast {got:e}, accurate {e:e}", v.to_bits());`
+- `fast64/tier_tests.rs:163` `fn cbrt_tier_matches_the_accurate_path_and_declines_exact_cubes()` — bound: undocumented
+- `fast64/tier_tests.rs:182` `assert_eq!(super::cbrt_nearest(x), None, "cbrt({x:e}) is the exact cube of {n}·2^{k} but the tier answered");`
+- `fast64/tier_tests.rs:183` `assert_eq!(super::cbrt_nearest(-x), None, "cbrt({:e}) is an exact cube but the tier answered", -x);`
+
 ## fast64.rs (f64)
 
-- `fast64.rs:79` `fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `e^r` times `2^(k/64)` as `(y, m, tail)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m` for `eps = `[`exp_eps`]`(y, tail)`, for the reduced `r = rh + rl` (`|rh| <= 0.…
-- `fast64.rs:114` `fn log_kernel(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, tail)` for a positive finite `x != 1`: `|ln x − y| <= eps` for `eps = `[`log_eps`]`(y, tail)` (the computed series tail returned, as in [`exp_ker…
-- `fast64.rs:123` `fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)>` — bound: undocumented — doc: [`log_kernel`] before its assembly: `(e, idx, lh, ll, tail)` with `log1p r = lh + ll` within the series' errors stated there (`|lh| <= 2^-7·1.01`, `|ll| <= |T| …
-- `fast64.rs:176` `fn reduce_exp10(x: f64, kf: f64) -> Dd` — bound: undocumented — doc: [`exp10`]'s reduced argument `(x − k·log10(2)/64)·ln10` as a normalized double-double for `k = kf = nearest(x·64/log10(2))` and `2^-60 <= |x| <= 325` (LIBM-F64-…
-- `fast64.rs:185` `fn ln2_times(r: f64) -> Dd` — bound: undocumented — doc: `r·ln2` for [`exp2`] (proof there).
-- `fast64.rs:213` `fn logb_assemble<const TEN: bool>(e: i32, idx: usize, lh: f64, ll: f64) -> Dd` — bound: undocumented — doc: `log_b x = e·log_b 2 + (−log_b c) + (lh + ll)/ln b` for `b = 2` (`TEN` false) or `10`, from [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GA…
-- `fast64.rs:231` `fn logb_kernel<const TEN: bool>(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `log_b x` as `(y, tail)` (`b = 10` when `TEN`) for a positive finite `x != 1`, within [`logb_eps`] (proof at [`logb_assemble`]).
-- `fast64.rs:268` `fn log_pow(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, el)` with `|ln x − y| <= el` (absolute), for a positive finite `x != 1`, about 2^-73 relative: [`log_kernel`] with the `r³/3` term carried in dou…
-- `fast64.rs:303` `fn pow_kernel(x: f64, y: f64) -> Option<(Dd, i32, f64, f64)>` — bound: undocumented — doc: [`pow`]'s value `v·2^m` of `|x|^y` before rounding, with [`exp_kernel`]'s tail and the bound `dz` on `|z − y·ln x|` (proof at [`pow`]).
-- `fast64.rs:335` `kernels!(; #[inline(always)]; two_prod; ln2_prod);`
-- `fast64.rs:340` `fn ln2_prod(r: f64) -> Dd` — bound: undocumented — doc: `r·LN2[0]` exactly as a pair for [`ln2_times`], baseline build: `RN(r·LN2[0])` and Dekker's error term with `LN2[0]` split ahead of time (`LN2A`, `LN2B`).
-- `fast64.rs:348` `fn exp_eps(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
-- `fast64.rs:374` `fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64)` — bound: undocumented — doc: The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2): `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, …
-- `fast64.rs:381` `fn reduce_exp(x: f64, kf: f64) -> Dd` — bound: undocumented — doc: [`exp`]'s reduced argument (proof there).
-- `fast64.rs:388` `fn reduce_pow(z: Dd, kf: f64) -> Dd` — bound: undocumented — doc: [`pow`]'s reduced argument (proof there).
-- `fast64.rs:399` `pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special…
-- `fast64.rs:409` `pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
-- `fast64.rs:430` `pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `2^x` for `x` in the accurate path's finite range, `x` not an integer.
-- `fast64.rs:441` `pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
-- `fast64.rs:460` `kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; ln2_prod);`
-- `fast64.rs:466` `fn ln2_prod(r: f64) -> Dd` — bound: undocumented — doc: `r·LN2[0]` exactly as a pair for [`ln2_times`], FMA build: one FMA, the same pair as [`super::ln2_prod`] (exact, see [`super::exp2`]).
-- `fast64.rs:477` `pub fn exp2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp2_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
-- `fast64.rs:493` `pub fn log2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log2_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
-- `fast64.rs:508` `pub fn log10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log10_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
-- `fast64.rs:523` `pub fn pow_nearest(x: f64, y: f64) -> Option<f64>` — bound: undocumented — doc: [`super::pow_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
-- `fast64.rs:538` `pub fn exp10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp10_nearest`], FMA build (LIBM-F64-FAST-KERNELS).
-- `fast64.rs:554` `pub fn exp_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp_nearest`], FMA build.
-- `fast64.rs:570` `pub fn log_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log_nearest`], FMA build.
-- `fast64.rs:581` `fn log_eps(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
-- `fast64.rs:605` `fn log_assemble(e: i32, idx: usize, lh: f64, ll: f64) -> Dd` — bound: undocumented — doc: `e·ln2 + (−ln c) + (lh + ll)`, the logarithms' assembly (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <…
-- `fast64.rs:614` `pub fn log(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `ln x` for a positive finite `x != 1`.
-- `fast64.rs:628` `fn logb_eps(y: Dd, tail: f64, scale: f64) -> f64` — bound: undocumented — doc: [`logb_kernel`]'s bound `2^-49·|tail|·scale + 2^-70·|y|` (`scale` = `LOG2_SCALE`/`LOG10_SCALE`).
-- `fast64.rs:633` `pub fn log2(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `log2 x` for a positive finite `x` not a power of two.
-- `fast64.rs:639` `pub fn log10(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `log10 x` for a positive finite `x` not a power of ten.
-- `fast64.rs:649` `fn integral(x: f64) -> bool` — bound: undocumented — doc: Whether `x` is an integer (any `|x| >= 2^51` is).
-- `fast64.rs:723` `fn near(y: Dd, c: f64, m: i32) -> Option<f64>` — bound: undocumented — doc: The round-to-nearest result `y.hi·2^m` when `w = RN(y.lo·c)` leaves `y.hi + w` rounding to `y.hi` (`w != 0`), else `None` (one multiply, one add, one compare: d…
-- `fast64.rs:733` `fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: The in-place entries' rounding: [`near`] with `c` when the caller's bound allows it, then the exact test [`settle`] with `eps()` when that misses.
-- `fast64.rs:753` `pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8` — bound: undocumented — doc: Which step of the in-place entry `which` (0 exp, 1 exp2, 2 log, 3 log2, 4 log10, 5 pow, 6 exp10; `y` only for pow) answers: the codes of [`finish`], 4 refused b…
-- `fast64.rs:773` `fn special(x: f64, neg_inf: Option<f64>) -> Option<f64>` — bound: undocumented — doc: A refused argument the in-place entries still answer before the cold call (ruling #2378): a quiet NaN is its own result, `+∞` is `+∞` (exp, exp2, log, log2, log…
-- `fast64.rs:783` `pub fn exp_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
-- `fast64.rs:788` `fn exp_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:799` `pub fn exp2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
-- `fast64.rs:805` `fn exp2_domain(x: f64) -> bool` — bound: undocumented — doc: [`exp2_nearest`]'s domain (see there); the FMA build is [`fused::exp2_nearest`].
-- `fast64.rs:810` `fn exp2_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:824` `pub fn exp10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `10^x` for the in-place entry: `2^-60 <= |x| < 307` (the result normal and finite), `x` not an integer in `[1, 23]` (`10^1 … 10^22` are doubles and `10^23 = 5^2…
-- `fast64.rs:830` `fn exp10_domain(x: f64) -> bool` — bound: undocumented — doc: [`exp10_nearest`]'s domain (see there).
-- `fast64.rs:835` `fn exp10_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:850` `fn log_domain(x: f64) -> bool` — bound: undocumented — doc: Whether `x` is a positive normal finite `double` other than 1 (the logarithms' fast domain).
-- `fast64.rs:856` `pub fn log_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
-- `fast64.rs:861` `fn log_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:871` `fn log_c(l: Dd) -> Option<f64>` — bound: undocumented — doc: [`near`]'s multiplier for a logarithm whose `ln x` is `l` (see [`RHO_LOG`]).
-- `fast64.rs:878` `fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: `log_b x` rounded for [`log2_near`] and [`log10_near`]: [`near`] with `C_LOG` when `|y.hi| >= near` (see [`RHO_LOG`]), else the exact test with [`logb_eps`].
-- `fast64.rs:885` `pub fn log2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
-- `fast64.rs:890` `fn log2_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:899` `fn log2_domain(x: f64) -> bool` — bound: undocumented — doc: [`log2_nearest`]'s domain; the FMA build is [`fused::log2_nearest`].
-- `fast64.rs:906` `pub fn log10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten `10^1 ..= 10^22` (exact; only integers in that range are compared).
-- `fast64.rs:911` `fn log10_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
-- `fast64.rs:920` `fn log10_domain(x: f64) -> bool` — bound: undocumented — doc: [`log10_nearest`]'s domain; the FMA build is [`fused::log10_nearest`].
-- `fast64.rs:949` `pub fn pow_nearest(x: f64, y: f64) -> Option<f64>` — bound: undocumented — doc: `x^y` for the in-place entry: `x` positive, normal, finite, not 1; `2^-200 <= |y|`, and `y·2^11` not an integer.
-- `fast64.rs:956` `fn pow_near(x: f64, y: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: [`near`] only with `dz <= DZ_NEAR` ([`RHO_POW`]) and `-1021 <= m <= 1022`, where `v.hi·2^m` is normal and finite (`0.99 < |v.hi| < 2`).
-- `fast64.rs:966` `fn pow_domain(x: f64, y: f64) -> bool` — bound: undocumented — doc: [`pow_nearest`]'s domain (see there); the FMA build is [`fused::pow_nearest`].
-- `fast64.rs:973` `fn pow_round(v: Dd, m: i32, tail: f64, dz: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: [`pow_near`]'s rounding of the kernel's `v·2^m` (both builds).
-- `fast64.rs:1007` `pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `x^y = ±e^(y·ln x)` for a positive finite `x != 1` (the magnitude of the caller's `x`), a finite `y`, the sign `neg` (`x < 0` and `y` an odd integer).
-- `fast64.rs:1024` `fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64` — bound: undocumented — doc: [`pow`]'s bound `eps + 1.02·|v.hi|·dz` on the error of `v` (proof at [`pow`]).
-- `fast64.rs:1029` `fn step(h: f64, up: bool) -> f64` — bound: undocumented — doc: The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
-- `fast64.rs:1046` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
-- `fast64.rs:1090` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
+- `fast64.rs:90` `pub(crate) fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `e^r` times `2^(k/64)` as `(y, m, tail)`: `y·2^m` with `|e^x − y·2^m| <= eps·2^m` for `eps = `[`exp_eps`]`(y, tail)`, for the reduced `r = rh + rl` (`|rh| <= 0.…
+- `fast64.rs:125` `pub(crate) fn log_kernel(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, tail)` for a positive finite `x != 1`: `|ln x − y| <= eps` for `eps = `[`log_eps`]`(y, tail)` (the computed series tail returned, as in [`exp_ker…
+- `fast64.rs:134` `fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)>` — bound: undocumented — doc: [`log_kernel`] before its assembly: `(e, idx, lh, ll, tail)` with `log1p r = lh + ll` within the series' errors stated there (`|lh| <= 2^-7·1.01`, `|ll| <= |T| …
+- `fast64.rs:159` `pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)>` — bound: undocumented — doc: `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special…
+- `fast64.rs:199` `fn reduce_exp10(x: f64, kf: f64) -> Dd` — bound: undocumented — doc: [`exp10`]'s reduced argument `(x − k·log10(2)/64)·ln10` as a normalized double-double for `k = kf = nearest(x·64/log10(2))` and `2^-60 <= |x| <= 325` (LIBM-F64-…
+- `fast64.rs:208` `fn ln2_times(r: f64) -> Dd` — bound: undocumented — doc: `r·ln2` for [`exp2`] (proof there).
+- `fast64.rs:236` `fn logb_assemble<const TEN: bool>(e: i32, idx: usize, lh: f64, ll: f64) -> Dd` — bound: undocumented — doc: `log_b x = e·log_b 2 + (−log_b c) + (lh + ll)/ln b` for `b = 2` (`TEN` false) or `10`, from [`log_series`] and the tables pre-scaled by `1/ln b` (MATH-M6-F64-GA…
+- `fast64.rs:254` `fn logb_kernel<const TEN: bool>(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `log_b x` as `(y, tail)` (`b = 10` when `TEN`) for a positive finite `x != 1`, within [`logb_eps`] (proof at [`logb_assemble`]).
+- `fast64.rs:291` `fn log_pow(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, el)` with `|ln x − y| <= el` (absolute), for a positive finite `x != 1`, about 2^-73 relative: [`log_kernel`] with the `r³/3` term carried in dou…
+- `fast64.rs:326` `fn pow_kernel(x: f64, y: f64) -> Option<(Dd, i32, f64, f64)>` — bound: undocumented — doc: [`pow`]'s value `v·2^m` of `|x|^y` before rounding, with [`exp_kernel`]'s tail and the bound `dz` on `|z − y·ln x|` (proof at [`pow`]).
+- `fast64.rs:358` `kernels!(; #[inline(always)]; two_prod; ln2_prod);`
+- `fast64.rs:363` `fn ln2_prod(r: f64) -> Dd` — bound: undocumented — doc: `r·LN2[0]` exactly as a pair for [`ln2_times`], baseline build: `RN(r·LN2[0])` and Dekker's error term with `LN2[0]` split ahead of time (`LN2A`, `LN2B`).
+- `fast64.rs:371` `fn exp_eps(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
+- `fast64.rs:397` `fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64)` — bound: undocumented — doc: The fast paths' Cody–Waite reduction (MATH-M6-F64-GAP-EXP-REDUCE, register 16.5 #2): `(h, l)` with `h + l = xh − k·(C0 + C1) − k·C2` up to one rounding of `l`, …
+- `fast64.rs:404` `pub(crate) fn reduce_exp(x: f64, kf: f64) -> Dd` — bound: undocumented — doc: [`exp`]'s reduced argument (proof there).
+- `fast64.rs:411` `fn reduce_pow(z: Dd, kf: f64) -> Dd` — bound: undocumented — doc: [`pow`]'s reduced argument (proof there).
+- `fast64.rs:421` `pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel…
+- `fast64.rs:431` `pub fn exp(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
+- `fast64.rs:452` `pub fn exp2(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `2^x` for `x` in the accurate path's finite range, `x` not an integer.
+- `fast64.rs:463` `pub fn exp10(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `10^x` for `x` in the accurate path's finite range, not one of its exact cases.
+- `fast64.rs:482` `kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; ln2_prod);`
+- `fast64.rs:488` `fn ln2_prod(r: f64) -> Dd` — bound: undocumented — doc: `r·LN2[0]` exactly as a pair for [`ln2_times`], FMA build: one FMA, the same pair as [`super::ln2_prod`] (exact, see [`super::exp2`]).
+- `fast64.rs:499` `pub fn exp2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp2_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
+- `fast64.rs:515` `pub fn log2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log2_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
+- `fast64.rs:530` `pub fn log10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log10_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
+- `fast64.rs:545` `pub fn pow_nearest(x: f64, y: f64) -> Option<f64>` — bound: undocumented — doc: [`super::pow_nearest`], FMA build (LIBM-F64-EXPLOGPOW-TIER).
+- `fast64.rs:563` `pub fn exp10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp10_nearest`], FMA build (LIBM-F64-FAST-KERNELS).
+- `fast64.rs:579` `pub fn exp_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::exp_nearest`], FMA build.
+- `fast64.rs:595` `pub fn log_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: [`super::log_nearest`], FMA build.
+- `fast64.rs:606` `pub(crate) fn log_eps(y: Dd, tail: f64) -> f64` — bound: undocumented — doc: [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
+- `fast64.rs:630` `fn log_assemble(e: i32, idx: usize, lh: f64, ll: f64) -> Dd` — bound: undocumented — doc: `e·ln2 + (−ln c) + (lh + ll)`, the logarithms' assembly (MATH-M6-F64-GAP-ASSEMBLY, register 16.5 #1), for `|e| <= 1075`, `−ln c = LOG_L[idx] = ch + cl` (`|ch| <…
+- `fast64.rs:639` `pub fn log(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `ln x` for a positive finite `x != 1`.
+- `fast64.rs:653` `fn logb_eps(y: Dd, tail: f64, scale: f64) -> f64` — bound: undocumented — doc: [`logb_kernel`]'s bound `2^-49·|tail|·scale + 2^-70·|y|` (`scale` = `LOG2_SCALE`/`LOG10_SCALE`).
+- `fast64.rs:658` `pub fn log2(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `log2 x` for a positive finite `x` not a power of two.
+- `fast64.rs:664` `pub fn log10(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `log10 x` for a positive finite `x` not a power of ten.
+- `fast64.rs:674` `fn integral(x: f64) -> bool` — bound: undocumented — doc: Whether `x` is an integer (any `|x| >= 2^51` is).
+- `fast64.rs:748` `fn near(y: Dd, c: f64, m: i32) -> Option<f64>` — bound: undocumented — doc: The round-to-nearest result `y.hi·2^m` when `w = RN(y.lo·c)` leaves `y.hi + w` rounding to `y.hi` (`w != 0`), else `None` (one multiply, one add, one compare: d…
+- `fast64.rs:758` `pub(crate) fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: The in-place entries' rounding: [`near`] with `c` when the caller's bound allows it, then the exact test [`settle`] with `eps()` when that misses.
+- `fast64.rs:778` `pub fn nearest_stage(which: usize, x: f64, y: f64) -> u8` — bound: undocumented — doc: Which step of the in-place entry `which` (0 exp, 1 exp2, 2 log, 3 log2, 4 log10, 5 pow, 6 exp10; `y` only for pow) answers: the codes of [`finish`], 4 refused b…
+- `fast64.rs:798` `fn special(x: f64, neg_inf: Option<f64>) -> Option<f64>` — bound: undocumented — doc: A refused argument the in-place entries still answer before the cold call (ruling #2378): a quiet NaN is its own result, `+∞` is `+∞` (exp, exp2, log, log2, log…
+- `fast64.rs:808` `pub fn exp_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `e^x` for the in-place entry: `2^-60 <= |x| < 708` (the result normal and finite).
+- `fast64.rs:813` `fn exp_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:824` `pub fn exp2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `2^x` for the in-place entry: `2^-60 <= |x| < 1021`, `x` not an integer (exact).
+- `fast64.rs:830` `fn exp2_domain(x: f64) -> bool` — bound: undocumented — doc: [`exp2_nearest`]'s domain (see there); the FMA build is [`fused::exp2_nearest`].
+- `fast64.rs:835` `fn exp2_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:849` `pub fn exp10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `10^x` for the in-place entry: `2^-60 <= |x| < 307` (the result normal and finite), `x` not an integer in `[1, 23]` (`10^1 … 10^22` are doubles and `10^23 = 5^2…
+- `fast64.rs:855` `fn exp10_domain(x: f64) -> bool` — bound: undocumented — doc: [`exp10_nearest`]'s domain (see there).
+- `fast64.rs:860` `fn exp10_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:875` `fn log_domain(x: f64) -> bool` — bound: undocumented — doc: Whether `x` is a positive normal finite `double` other than 1 (the logarithms' fast domain).
+- `fast64.rs:881` `pub fn log_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `ln x` for the in-place entry: `x` positive, normal, finite, not 1.
+- `fast64.rs:886` `fn log_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:896` `fn log_c(l: Dd) -> Option<f64>` — bound: undocumented — doc: [`near`]'s multiplier for a logarithm whose `ln x` is `l` (see [`RHO_LOG`]).
+- `fast64.rs:903` `fn logb_near<const TEN: bool>(x: f64, scale: f64, near: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: `log_b x` rounded for [`log2_near`] and [`log10_near`]: [`near`] with `C_LOG` when `|y.hi| >= near` (see [`RHO_LOG`]), else the exact test with [`logb_eps`].
+- `fast64.rs:910` `pub fn log2_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `log2 x` for the in-place entry: as [`log_nearest`], `x` not a power of two (exact).
+- `fast64.rs:915` `fn log2_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:924` `fn log2_domain(x: f64) -> bool` — bound: undocumented — doc: [`log2_nearest`]'s domain; the FMA build is [`fused::log2_nearest`].
+- `fast64.rs:931` `pub fn log10_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `log10 x` for the in-place entry: as [`log_nearest`], `x` not one of the powers of ten `10^1 ..= 10^22` (exact; only integers in that range are compared).
+- `fast64.rs:936` `fn log10_near(x: f64, st: &mut u8) -> Option<f64>` — bound: undocumented
+- `fast64.rs:945` `fn log10_domain(x: f64) -> bool` — bound: undocumented — doc: [`log10_nearest`]'s domain; the FMA build is [`fused::log10_nearest`].
+- `fast64.rs:974` `pub fn pow_nearest(x: f64, y: f64) -> Option<f64>` — bound: undocumented — doc: `x^y` for the in-place entry: `x` positive, normal, finite, not 1; `2^-200 <= |y|`, and `y·2^11` not an integer.
+- `fast64.rs:981` `fn pow_near(x: f64, y: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: [`near`] only with `dz <= DZ_NEAR` ([`RHO_POW`]) and `-1021 <= m <= 1022`, where `v.hi·2^m` is normal and finite (`0.99 < |v.hi| < 2`).
+- `fast64.rs:991` `fn pow_domain(x: f64, y: f64) -> bool` — bound: undocumented — doc: [`pow_nearest`]'s domain (see there); the FMA build is [`fused::pow_nearest`].
+- `fast64.rs:998` `fn pow_round(v: Dd, m: i32, tail: f64, dz: f64, st: &mut u8) -> Option<f64>` — bound: undocumented — doc: [`pow_near`]'s rounding of the kernel's `v·2^m` (both builds).
+- `fast64.rs:1032` `pub fn pow(x: f64, y: f64, neg: bool, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `x^y = ±e^(y·ln x)` for a positive finite `x != 1` (the magnitude of the caller's `x`), a finite `y`, the sign `neg` (`x < 0` and `y` an odd integer).
+- `fast64.rs:1049` `fn pow_eps(v: Dd, tail: f64, dz: f64) -> f64` — bound: undocumented — doc: [`pow`]'s bound `eps + 1.02·|v.hi|·dz` on the error of `v` (proof at [`pow`]).
+- `fast64.rs:1054` `fn step(h: f64, up: bool) -> f64` — bound: undocumented — doc: The neighbour of a nonzero finite `h` toward +∞ (`up`) or −∞.
+- `fast64.rs:1071` `pub(crate) fn settle(y: Dd, eps: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: The correctly rounded `(y ± eps)·2^m` in `mode`, or `None` when the interval holds a rounding boundary (or the result is outside the ranges handled here).
+- `fast64.rs:1115` `fn tiny(y: Dd, e: f64, m: i32, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: [`settle`] for a positive result with `m <= -1022` (subnormal, or in the lowest normal binade, where the grid is 2^-1074 throughout; anything at or above 2^-102…
+
+## fast_bessel.rs (fast_bessel)
+
+- `fast_bessel.rs:94` `fn taylor(row: &[u64; W], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` at `t` (layout and order in the module doc).
+- `fast_bessel.rs:111` `pub fn table_kernel(f: usize, x: f64) -> (Dd, f64)` — bound: undocumented — doc: `f(x)` (`f`: 0 `J0`, 1 `J1`, 2 `Y0`, 3 `Y1`) for `2^-5 <= x < 32` as `(y, eps)`.
+- `fast_bessel.rs:121` `pub fn small_kernel(f: usize, x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `f(x)` for `2^-1000 <= x < 2^-5` as `(y, eps)`, or `None` when the logarithm declines.
+- `fast_bessel.rs:149` `pub fn hankel_kernel(n: usize, x: f64) -> (Dd, Dd, f64)` — bound: undocumented — doc: `(J_n(x), Y_n(x), eps)` for `n` 0 or 1 and `x >= 32` by Hankel's expansion (module doc).
+- `fast_bessel.rs:169` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped.
+- `fast_bessel.rs:178` `fn round(y: Dd, eps: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y` (within `eps`) correctly rounded in `mode`, or `None`.
+- `fast_bessel.rs:190` `pub fn kernel(f: usize, x: f64) -> Option<(Dd, f64)>` — bound: undocumented — doc: `f(x)` for `x >= 2^-1000` (`f` as in [`table_kernel`]) as `(y, eps)`.
+- `fast_bessel.rs:203` `pub fn j0(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `j0(x)` for a finite nonzero `x`, correctly rounded in `mode`, or `None`.
+- `fast_bessel.rs:213` `pub fn j1(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `j1(x)` for a finite nonzero `x`, or `None`.
+- `fast_bessel.rs:225` `pub fn y0(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y0(x)` for a finite `x > 0`, or `None`.
+- `fast_bessel.rs:234` `pub fn y1(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `y1(x)` for a finite `x > 0`, or `None`.
+
+## fast_gamma.rs (fast_gamma)
+
+- `fast_gamma.rs:58` `fn taylor<const W: usize>(row: &[u64; W], m: usize, d: usize, t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout of `fast_special`: `m` double-doubles, degree `d`) at `t`.
+- `fast_gamma.rs:76` `fn zero_row<const W: usize>(row: &[u64; W], m: usize, d: usize, eps: u64, t: f64) -> (Dd, f64)` — bound: undocumented — doc: `t·Q(t)` for a zero row, with its absolute bound.
+- `fast_gamma.rs:85` `fn z1(t: f64) -> (Dd, f64)` — bound: undocumented — doc: `ln Γ(1 + t)` for `|t| <= 1/16`.
+- `fast_gamma.rs:91` `fn lg_shift(x: f64, n: f64) -> (Dd, f64)` — bound: undocumented — doc: `ln Γ(x + n)` with its absolute bound, `RN(x + n)` in `[2^-5, 16)` (module doc).
+- `fast_gamma.rs:107` `pub fn domain(x: f64, tgamma: bool) -> bool` — bound: undocumented — doc: Whether `x` is in the fast tier's domain (module doc; `tgamma` also excludes integers).
+- `fast_gamma.rs:114` `pub fn split(x: f64) -> (Dd, f64, Option<Dd>)` — bound: undocumented — doc: `(L, eps, D)` of the module doc (`None` for `D = 1`), `x` in [`domain`].
+- `fast_gamma.rs:146` `pub fn lgamma_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `lgamma x` as `(y, eps)` with `|ln|Γ(x)| − y| <= eps`, and the sign of `Γ(x)`, or `None`.
+- `fast_gamma.rs:160` `pub fn lgamma(x: f64, mode: Rounding) -> Option<((f64, Status), i32)>` — bound: undocumented — doc: `lgamma x` correctly rounded in `mode` and the sign of `Γ(x)`, for `x` in [`domain`] other than 1 and 2 (exact zeros), or `None` (the caller runs the accurate p…
+- `fast_gamma.rs:169` `pub fn tgamma_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `tgamma x` as `(y, eps, m)`, `1 <= |y.hi| < 2`: `|Γ(x) − y·2^m| <= eps·2^m`, or `None`.
+- `fast_gamma.rs:183` `pub fn tgamma(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `tgamma x` correctly rounded in `mode` for a non-integer `x` in [`domain`], or `None`.
 
 ## fast_special.rs (fast_special)
 
-- `fast_special.rs:90` `fn taylor(row: &[u64; 19], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
-- `fast_special.rs:110` `fn slot(x: f64, base: u64) -> (usize, f64)` — bound: undocumented — doc: The slot centre of `x` (module doc) and its index from `base`.
-- `fast_special.rs:121` `fn erf_small(x: f64) -> Dd` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` (module doc; the generator's bound `ERF_SMALL_EPS` assumes this order): `z = x²` exact, `R = q2 + zh·(q3 + … + zh·q6)` in `f64`,…
-- `fast_special.rs:137` `pub fn erf_kernel(x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
-- `fast_special.rs:164` `pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `erfc x` for `1 <= x < ERFC_MAX` as `(y, eps, m)`, `1 <= y.hi < 2`: `|erfc x − y·2^m| <= eps·2^m` (module doc), or `None` when `e^(−x²)`'s kernel declines.
-- `fast_special.rs:177` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
-- `fast_special.rs:187` `pub fn erf(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erf x` for a finite nonzero `x`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
-- `fast_special.rs:203` `pub fn erfc(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erfc x` for a finite `x` with `2^-100 <= |x|` and `x < ERFC_MAX`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
+- `fast_special.rs:127` `fn taylor(row: &[u64; 19], t: f64) -> Dd` — bound: undocumented — doc: The Taylor row `row` (layout in the module doc, `M = 4` double-doubles, degree 14) at `t`.
+- `fast_special.rs:147` `fn slot(x: f64, base: u64) -> (usize, f64)` — bound: undocumented — doc: The slot centre of `x` (module doc) and its index from `base`.
+- `fast_special.rs:159` `fn erf_small(x: f64) -> Dd` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 2^-5` (module doc; the generator's bound `ERF_SMALL_EPS` assumes this order): `z = x²` exact, `R = q2 + zh·(q3 + … + zh·q6)` in `f64`,…
+- `fast_special.rs:177` `fn erf_dd(x: f64) -> (Dd, f64)` — bound: undocumented — doc: `erf x` for `2^-55 <= x < 6` as `(y, eps)`: `|erf x − y| <= eps` (module doc).
+- `fast_special.rs:194` `pub fn erf_kernel(x: f64) -> (Dd, f64, i32)` — bound: undocumented — doc: `erf x` for `0 < x < 6` as `(y, eps, m)`: `|erf x − y·2^m| <= eps·2^m` (module doc).
+- `fast_special.rs:222` `pub fn erfc_kernel(x: f64) -> Option<(Dd, f64, i32)>` — bound: undocumented — doc: `erfc x` for `1 <= x < ERFC_MAX` as `(y, eps, m)`, `1 <= y.hi < 2`: `|erfc x − y·2^m| <= eps·2^m` (module doc), or `None` when `e^(−x²)`'s kernel declines.
+- `fast_special.rs:246` `pub fn erf_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erf x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN, `±∞` and `|x| < 2^-55` always, and the rare operands both…
+- `fast_special.rs:273` `pub fn erfc_nearest(x: f64) -> Option<f64>` — bound: undocumented — doc: `erfc x` rounded to nearest for the in-place envelope (module doc, "In-place entries"), or `None`: NaN, `±∞`, `|x| < 2^-55`, results below `2^-1021` and the rar…
+- `fast_special.rs:304` `kernels!(; #[inline(always)]; two_prod; fast64::exp_dd);`
+- `fast_special.rs:315` `kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused::exp_dd);`
+- `fast_special.rs:319` `fn mirrored(mode: Rounding) -> Rounding` — bound: undocumented — doc: `mode` with up and down swapped (rounding `−a` is the negation of rounding `a` in it).
+- `fast_special.rs:329` `pub fn erf(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erf x` for a finite nonzero `x`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).
+- `fast_special.rs:345` `pub fn erfc(x: f64, mode: Rounding) -> Option<(f64, Status)>` — bound: undocumented — doc: `erfc x` for a finite `x` with `2^-100 <= |x|` and `x < ERFC_MAX`, correctly rounded in `mode`, or `None` (the caller runs the accurate path).

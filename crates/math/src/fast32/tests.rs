@@ -3,12 +3,15 @@
 use super::*;
 use crate::exp_log as acc;
 
-const ALL: [Fast; 21] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::Sinh, Fast::Cosh, Fast::Tanh, Fast::Asinh, Fast::Acosh, Fast::Atanh];
-const NAMES: [&str; 21] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "sinhf", "coshf", "tanhf", "asinhf", "acoshf", "atanhf"];
+const ALL: [Fast; 23] = [Fast::Exp, Fast::Exp2, Fast::Exp10, Fast::Log, Fast::Log2, Fast::Log10, Fast::Log1p, Fast::Sin, Fast::Cos, Fast::Tan, Fast::Expm1, Fast::Cbrt, Fast::Asin, Fast::Acos, Fast::Atan, Fast::Sinh, Fast::Cosh, Fast::Tanh, Fast::Asinh, Fast::Acosh, Fast::Atanh, Fast::Erf, Fast::Erfc];
+const NAMES: [&str; 23] = ["expf", "exp2f", "exp10f", "logf", "log2f", "log10f", "log1pf", "sinf", "cosf", "tanf", "expm1f", "cbrtf", "asinf", "acosf", "atanf", "sinhf", "coshf", "tanhf", "asinhf", "acoshf", "atanhf", "erff", "erfcf"];
+/// The functions whose accurate path is cheap enough for [`agree`]'s wide strides: not erff and
+/// erfcf (384-bit mp, some 2·10^5 instructions a call), which have their own test.
+const CHEAP: usize = 21;
 const TRIG: [Fast; 3] = [Fast::Sin, Fast::Cos, Fast::Tan];
-const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
+pub(super) const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Up, Rounding::Down, Rounding::Zero];
 
-fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
+pub(super) fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
     match f {
         Fast::Exp => acc::exp(x, m),
         Fast::Exp2 => acc::exp2(x, m),
@@ -31,16 +34,24 @@ fn accurate(f: Fast, x: f32, m: Rounding) -> (f32, Status) {
         Fast::Asinh => crate::hyper::asinh(x, m),
         Fast::Acosh => crate::hyper::acosh(x, m),
         Fast::Atanh => crate::hyper::atanh(x, m),
+        Fast::Erf => crate::special::erf(x, m),
+        Fast::Erfc => crate::special::erfc(x, m),
+        Fast::Tgamma => crate::special::tgamma_accurate::<f32>(x, m),
+        Fast::Lgamma => crate::special::lgamma_accurate::<f32>(x, m).0,
+        Fast::J0 => crate::special::j0_accurate(x, m),
+        Fast::J1 => crate::special::j1_accurate(x, m),
+        Fast::Y0 => crate::special::y0_accurate(x, m),
+        Fast::Y1 => crate::special::y1_accurate(x, m),
     }
 }
 
 /// Compare the fast path with the accurate path on `xs` in every mode; the number taken.
 fn agree(xs: impl Iterator<Item = f32> + Clone) -> u64 {
-    agree_in(&ALL, xs)
+    agree_in(&ALL[..CHEAP], xs)
 }
 
 /// [`agree`] for the functions `fs`; with trig among them also `sincosf` against `sinf`, `cosf`.
-fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
+pub(super) fn agree_in(fs: &[Fast], xs: impl Iterator<Item = f32> + Clone) -> u64 {
     let mut taken = 0;
     if fs.contains(&Fast::Sin) {
         for m in MODES {
@@ -175,6 +186,9 @@ fn fast_path_agrees_with_the_accurate_path() {
             // acoshf over [1, 100], atanhf over [-0.99, 0.99] (the bench rows' ranges).
             19 => (0..1u32 << 17).map(|i| 1.0 + 99.0 * (i as f32) / 131_072.0).collect(),
             20 => (0..1u32 << 17).map(|i| -0.99 + 1.98 * (i as f32) / 131_072.0).collect(),
+            // erff over [-5, 5], erfcf over [-3, 10] (the kernels' working ranges).
+            21 => trigs.clone().map(|x| x / 20.0).collect(),
+            22 => trigs.clone().map(|x| 3.5 + x * 0.065).collect(),
             _ => logs.clone().collect(),
         };
         for x in xs {
@@ -253,6 +267,11 @@ fn trig_core_is_within_its_bound() {
 /// chunks instead of idling while another finishes a fixed slice of expensive operands.
 /// `LIELLA_SWEEP_STRIDE=k` checks every k-th encoding only (sizing a sweep before its job).
 fn exhaustive(fs: &'static [Fast]) -> u64 {
+    exhaustive_by(|xs| agree_in(fs, xs.iter().copied()))
+}
+
+/// [`exhaustive`] with the check `check` on each chunk's operands.
+pub(super) fn exhaustive_by(check: impl Fn(&[f32]) -> u64 + Sync) -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     const CHUNK: u64 = 1 << 16;
     let n = std::thread::available_parallelism().map_or(8, |n| n.get());
@@ -266,9 +285,9 @@ fn exhaustive(fs: &'static [Fast]) -> u64 {
                 if lo >= 1 << 32 {
                     return (taken, seen);
                 }
-                let xs = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32));
-                seen += xs.clone().count() as u64;
-                taken += agree_in(fs, xs);
+                let xs: std::vec::Vec<f32> = (lo..lo + CHUNK).step_by(stride).map(|b| f32::from_bits(b as u32)).collect();
+                seen += xs.len() as u64;
+                taken += check(&xs);
             }
         })).collect();
         hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
@@ -881,4 +900,36 @@ fn fast_path_agrees_exhaustively() {
         hs.into_iter().map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).sum()
     });
     std::println!("fast path taken {taken} of {} calls", (fs.len() as u64 * 4) << 32);
+}
+
+/// `f` against the tiered oracle (ruling #2889) on `xs`, `est` its family's estimator: one
+/// oracle call per operand the fast path takes in any mode, the accurate path only for the
+/// modes the double-double tier leaves undecided; the number of calls taken.
+pub(super) fn agree_oracle(f: Fast, est: impl Fn(f32) -> crate::oracle32::Est, xs: impl Iterator<Item = f32>, tally: &crate::oracle32::Tally) -> u64 {
+    use crate::oracle32 as o;
+    let mut taken = 0;
+    for x in xs {
+        let got = o::MODES.map(|m| eval(f, x, m));
+        if got.iter().all(Option::is_none) {
+            continue;
+        }
+        let want = o::oracle(est(x), tally, |m| accurate(f, x, m));
+        for (i, g) in got.into_iter().enumerate() {
+            if let Some(r) = g {
+                taken += 1;
+                let m = o::MODES[i];
+                assert_eq!((f, m, x.to_bits(), r.0.to_bits(), r.1), (f, m, x.to_bits(), want[i].0.to_bits(), want[i].1));
+            }
+        }
+    }
+    taken
+}
+
+/// `f` on every `float` operand in every mode against the tiered oracle (`est` its family's
+/// estimator; `LIELLA_SWEEP_STRIDE` thins the sweep); prints the calls taken and how often the
+/// oracle needed the mp path.
+pub(super) fn exhaustive_oracle(f: Fast, name: &str, est: impl Fn(f32) -> crate::oracle32::Est + Sync) {
+    let tally = crate::oracle32::Tally::default();
+    let taken = exhaustive_by(|xs| agree_oracle(f, &est, xs.iter().copied(), &tally));
+    std::println!("{name} fast path taken {taken} of {} calls; oracle: {}", 4u64 << 32, tally.summary());
 }

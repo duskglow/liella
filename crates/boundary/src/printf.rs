@@ -402,23 +402,18 @@ fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out
     // The whole result fits the sink (sprintf into a large enough buffer): the pieces written in
     // place, the same bytes in the same order as the `put`s below, without a call per piece.
     if fits_int {
-        if let Some(dst) = out.room(n) {
-            let mut at = 0usize;
-            place(dst, &mut at, head);
-            place(dst, &mut at, s0);
-            place(dst, &mut at, mid);
+        if let Some(mut rest) = out.room(n) {
+            place(&mut rest, head);
+            place(&mut rest, s0);
+            place(&mut rest, mid);
             if left {
-                place(dst, &mut at, s1);
+                place(&mut rest, s1);
             }
-            let end = at.saturating_add(fill);
-            if let Some(pad) = dst.get_mut(at..end) {
-                liella::mem::fill(pad, b' ');
-            }
-            at = end;
+            pad(&mut rest, fill);
             if !left {
-                place(dst, &mut at, s1);
+                place(&mut rest, s1);
             }
-            place(dst, &mut at, tail);
+            place(&mut rest, tail);
             return Some(Ok(n));
         }
     }
@@ -450,15 +445,33 @@ fn render_pair_s<O: Out<u8>>(fmt: &[u8], plan: &pf::SimpleFormat, ap: usize, out
     Some(Ok(n))
 }
 
-/// Copy `piece` into `dst` at `*at` and move `*at` past it (render_pair_s's in-place write;
-/// `dst` was sized to hold every piece).
+/// Copy `piece` to the front of `*rest` and keep what follows it (render_pair_s's in-place
+/// write; the room was sized to hold every piece, so the split always succeeds). The format's
+/// text between conversions and a link count are 0-2 bytes: those are stored directly, one
+/// length test each, instead of going through mem::copy's size steps (PARITY-SPRINTF-CHK-LS-2).
 #[inline(always)]
-fn place(dst: &mut [u8], at: &mut usize, piece: &[u8]) {
-    let end = at.saturating_add(piece.len());
-    if let Some(d) = dst.get_mut(*at..end) {
-        liella::mem::copy(d, piece);
+fn place(rest: &mut &mut [u8], piece: &[u8]) {
+    let Some((d, after)) = core::mem::take(rest).split_at_mut_checked(piece.len()) else { return };
+    match (d, piece) {
+        ([], []) => {}
+        ([d0], [s0]) => *d0 = *s0,
+        ([d0, d1], [s0, s1]) => (*d0, *d1) = (*s0, *s1),
+        (d, piece) => liella::mem::copy(d, piece),
     }
-    *at = end;
+    *rest = after;
+}
+
+/// Fill the first `k` bytes of `*rest` with spaces and keep what follows (render_pair_s's
+/// padding; usually 0 or 1 byte for a link count, stored directly).
+#[inline(always)]
+fn pad(rest: &mut &mut [u8], k: usize) {
+    let Some((d, after)) = core::mem::take(rest).split_at_mut_checked(k) else { return };
+    match d {
+        [] => {}
+        [d0] => *d0 = b' ',
+        d => liella::mem::fill(d, b' '),
+    }
+    *rest = after;
 }
 
 /// Render the simple format `fmt`, `plan` being what `pf::simple_into` made of it, its

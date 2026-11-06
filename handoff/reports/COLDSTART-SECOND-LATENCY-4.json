@@ -1,0 +1,13 @@
+{"task": "COLDSTART-SECOND-LATENCY-4", "model": "opus", "tokens": null,
+ "result": "COMPLETE: N100 A/B keeps (a) (mktime 0.991 same, setlocale 0.973 noisy); target not reached (mktime 1.23x, setlocale 1.34x of glibc); -3's timing failed on a hand-made stage without the workspace root",
+ "branch": "task/coldstart-second-latency-4", "head": null,
+ "gate": {"affected": "see hand-back (mei:coldstart-second-latency-4-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["mei:coldstart-second-latency-4-lint", "mei:coldstart-second-latency-4-gate", "mei:coldstart-second-latency-4-plants", "nozomi:coldstart-second-latency-4-time-n100"],
+ "superseded": ["nozomi:coldstart-second-latency-3-time-n100 (rc 1: stage tar without workspace Cargo.toml/manifest)", "mei:coldstart-second-latency-4-smoke (1-round smoke test of the timing script)"],
+ "rulings": [],
+ "informational": ["nico:coldstart-second-latency-3-time-ivb never started (no jobs.tsv row); not re-queued, the N100 decides", "the agent shell's grep is ugrep -I and silently skips crates/core/src/time/zone.rs as binary"],
+ "refused": [],
+ "improvement": "timing stages must come from `cargo xtask bench --stage` (manifest + workspace root); a hand-made tar fails only on the timing host after a queue wait: the timing wrapper could refuse a tree without bench-stage.manifest at submit time",
+ "next_step": "(b) one allocation for time::Zone's five arrays, own commit, counts (L1D misses) and N100 A/B; then (c) setlocale hot-path layout per the handoff proposal",
+ "report_file": "handoff/coldstart-second-latency.md"}

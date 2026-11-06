@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-EXPM1-HYPER-CBRT-TIER-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: f64 fast tier for expm1/log1p/sinh/cosh/tanh/cbrt wired in per-family layout; counts 928->156 (expm1) ... cbrt 636->142 (glibc 148); bound plant SURVIVED (needs hard cases); final gate/plants started, not waited for",
+ "branch": "task/libm-f64-expm1-hyper-cbrt-tier-2", "head": null,
+ "gate": {"affected": "gate-4 started on final head, result not read", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["bound plant (eps=0 in expm1 kernel branch) survives random sweeps: the real error is far below the proved bound; a hard-case test is needed", "per-package cargo clippy -p liella-boundary fails on dead code (set_sysinfo_ehdr, nscache::start) outside this story; cargo xtask clippy is the right command"],
+ "refused": [],
+ "jobs": ["libm-f64-expm1-hyper-cbrt-tier-2-gate-4", "libm-f64-expm1-hyper-cbrt-tier-2-plants-5", "libm-f64-expm1-hyper-cbrt-tier-2-counts-before", "libm-f64-expm1-hyper-cbrt-tier-2-counts-after-5"],
+ "improvement": "Jobs queued 20+ min each on keke; a cheap local `cargo check`/test lane (or a small-lane slot for lint-only jobs) would have saved most of this run's calls.",
+ "next_step": "read gate-4/plants-5/counts-after-5; add a hard-case test that catches the bound plant; write the saturation row for the five rows above 1.05x",
+ "report_file": "handoff/libm-f64-expm1-hyper-cbrt-tier.md"}

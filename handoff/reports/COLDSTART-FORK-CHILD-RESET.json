@@ -1,0 +1,12 @@
+{"task": "COLDSTART-FORK-CHILD-RESET", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fork child reset skips unused aio/getaddrinfo_a tables (USED word, first-use bits) and stores only differing values; clippy+static clean on keke; gate started, not collected; no new test, plants, counts or timing yet",
+ "branch": "task/coldstart-fork-child-reset", "head": null,
+ "gate": {"affected": "running: keke:gate-cfcr (pid 940995, ~/w/n2.gate-cfcr.log), not collected", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Step 0: N100 fork_exit_wait 1.286x time at 730f416b (nozomi:CSP1106-n100)", "D-18.8 reserved but the row is not written yet (status column value unknown to this run)", "parent-side writes after fork not examined"],
+ "refused": [],
+ "jobs": ["keke:gate-cfcr"],
+ "improvement": "the brief's JOBS list (gate, plants, test, counts, N100 timing) plus the audit does not fit 60 calls when the agent host has no cargo; give M code stories with four jobs about 100 calls, or split them into code+test and measure stories",
+ "next_step": "collect keke:gate-cfcr, write the D-18.8 row, add the after-fork reset test, run the plants, counts and N100 staged timing (handoff lists them)",
+ "report_file": "handoff/COLDSTART-FORK-CHILD-RESET.md"}

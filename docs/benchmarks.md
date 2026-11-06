@@ -69,6 +69,9 @@ rows stays reported but is advisory (their `host_limits.tsv` lines are retired).
 glibc's, rounded up; where we are above glibc, current + 1 so a regression fails and the gap
 stays visible. The owner edits the limit files.
 `python3 bench/limits_from_counters.py target/liella/bench/counters.tsv [--headroom 2%|N] [--rows a,b] [--cpu MODEL]`
+(the table of the last `--counters` run: every `--counters` run, `bench` or `bench --compare`, rewrites
+`counters.tsv` with its own rows only and writes `counters-<bench>.tsv` per bench it counted, same columns, so a
+per-bench file is the input for one bench)
 prints limit lines in this format from a counted run (limit = count + max(2 instr, 2%), rounded up); with `--check` it
 diffs them against the current file (LOOSE = more than 5% above the proposal, WOULD-FAIL, NEW, NO-ROW) and edits nothing.
 The owner still edits the limit files.
@@ -369,10 +372,40 @@ the file's header).
 Which flags exist is defined in [`xtask/src/bench.rs`](../xtask/src/bench.rs); read it before
 relying on a flag from this page. The raw logs of the two runs above are not in the repository.
 
-Timing hosts have no compiler. For a timing-host run build once with `cargo xtask bench --build-only --counters` on a
-build host, copy `target/liella/` (the benchmark programs, `libc.a`, `libm.a`, the `.profile` marker), `bench/`, and the
-`xtask` binary to the timing host, create stub `crates/*.rs` and `csys/*.c` files older than `libc.a` (the staleness
-check reads their mtimes), and run `xtask bench --no-build --counters` there with the host booked.
+Timing hosts have no compiler. A timing-host run is two commands (XTASK-BENCH-STAGE):
+
+```bash
+# on a build host, in the tree to measure (the same selection flags as the measuring run):
+cargo xtask bench --stage /tmp/stage.tar [--only <benches> | --rows <bench>/<row>,...]
+# on the timing host, with the host booked:
+mkdir ~/work/<story>/tree && tar -xf stage.tar -C ~/work/<story>/tree && cd ~/work/<story>/tree
+./xtask-bin bench --no-build --staged --counters [--only <benches> | --rows ...]
+```
+
+`--stage` builds as `--build-only` does, then writes one tarball: the workspace `Cargo.toml` and `xtask/Cargo.toml`,
+`bench/`, `target/liella/` (without the generated `bench/stress/`), the selected Rust bench examples, the xtask
+binary as `xtask-bin`, and `bench-stage.manifest` (commit, a sha256 of the source tree, build profile, built-on
+host, and the sha256 of every staged product), with the build's mtimes. A `--no-build` run in a tree that holds the
+manifest (`--staged` requires one) checks every product against its sha256 instead of comparing mtimes, needs no
+git and no source tree, and prints a `staged: commit ...` header line naming what it timed; a product that does not
+match is refused. The commit comes from git, or from the `head=` line of a role directory's `.synced` file.
+
+`bench --compare --no-build` works the same way in a staged tree (XTASK-BENCH-COMPARE-STAGED): it checks the products
+against the manifest, prints the `staged:` header, and measures the staged Liella and glibc (dynamic) programs, so the
+Liella/glibc time ratio of any row (the `second_*`/`first_*` rows included) comes from the timing host itself
+(`./xtask-bin bench --compare --no-build --counters --runs 5 cbench_opt`; stage with `--only cbench_opt`; the static
+glibc column is filled when the build host's `target/liella/bench` holds a `.host-static` program, which `--stage`
+then stages like every other file there, and is left empty otherwise). xtask works on the nearest directory at or above the
+working directory that holds `bench-stage.manifest` or `Cargo.toml` with `xtask/Cargo.toml`. Unpack the tarball
+whole: a tree repacked without its manifest and `Cargo.toml` is no root, and xtask stops with an error naming the
+directory (it used to fall back to the build host's path, where `--compare` found no bench and printed
+"Valid names: ."). An unknown bench name lists the `*.c` files it found and the directory it looked in.
+
+A run in a staged tree writes its tables (`bench_times.tsv`, `rounds.tsv`, `ratio_host.tsv`, `decision.tsv`,
+`counters.tsv`, `counters-<bench>.tsv`, and for `--compare` `measure.tsv` and `<bench>.compare.tsv`) to `bench-out/` at
+the staged root, never into `target/liella/` (XTASK-BENCH-OUTPUTS), so the same unpacked tree runs any number of times;
+`scp` the tables from `<dir>/bench-out/`. `--stage` leaves the build host's own run tables out of the tarball. Outside a
+staged tree the tables stay in `target/liella/bench/`.
 
 ## Appendix: all rows
 

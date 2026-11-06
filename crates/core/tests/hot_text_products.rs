@@ -196,6 +196,22 @@ fn init_first_string_calls_after_printf_take_no_text_fault() {
 }
 
 #[test]
+fn init_second_bindtextdomain_gettext_takes_no_text_fault() {
+    // No spec clause (layout of the products). COLDSTART-BINDTEXTDOMAIN-REBIND-2: the repeat
+    // lookup's functions (the resolution cache's text compare, the hinted catalog search) are in
+    // the hot group, so a same-directory rebind + dgettext after a first lookup finds its text
+    // mapped (next before the change: 2 file-backed text faults on a Zen 1 host).
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_rebind");
+    build(&exe);
+    let s = faults(&exe, "rebind");
+    assert!(s == 0, "second bindtextdomain + dgettext: {s} page faults (repeat-lookup functions left the hot group?)");
+}
+
+#[test]
 fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     // HOTTEXT-FAULT-TEST: the hot-text list is regenerated from traces; PRINTF-LOOP-FAULTS found it
     // stale for the coreutils printf (text 14 -> 17 pages, +6.7% faults per exec in the printf-loop
@@ -212,6 +228,32 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     let t = faults(&exe, "tool");
     eprintln!("minor faults: coreutils-shaped tool {t} (bound {TOOL_BOUND})");
     assert!(t <= TOOL_BOUND, "coreutils-shaped program: {t} page faults > {TOOL_BOUND} (hot-text list stale? run tools/hottext/regen.sh with a coreutils program)");
+}
+
+/// "fork" mode: the minor faults of a `fork` child that calls `_exit(0)` (the second of two, from
+/// `wait4`'s rusage). `fork` copies no page tables of the file-backed text, so the child faults
+/// once per 64 KiB text window its path touches (fork return, child reset, `_exit`) on top of its
+/// copy-on-write writes (stack, thread block, data). TIMING-COV-FORK-COW-FAULTS: before the fork
+/// path joined the hot list (tools/hottext/probes/p_fork.c), the path spanned 9 windows.
+/// Calibration (Zen 1 host, this test, every run identical): old list, release products 8 and fast
+/// products 13 (perf page-fault addresses: 9 text faults, 4 writes); regenerated list, release 6, fast
+/// 7. Bound = the highest count with the list, 7, plus 2 (the rule above); the old list on fast
+/// products (the gate's) reads 13.
+const FORK_BOUND: u64 = 9;
+
+#[test]
+fn init_fork_child_stays_within_its_page_fault_bound() {
+    // No spec clause (layout of the products): the fork child's text path is grouped in the hot
+    // text, so a child that only exits faults on few text windows.
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_fork");
+    build(&exe);
+    let f = faults(&exe, "fork");
+    eprintln!("minor faults: fork child {f} (bound {FORK_BOUND})");
+    assert!(f <= FORK_BOUND, "fork child: {f} page faults > {FORK_BOUND} (fork path left the hot group? run tools/hottext/regen.sh)");
 }
 
 /// HOTTEXT-COLD-STARTUP: start-up's machine entry points (each in its own `.text.<f>` section of
@@ -250,6 +292,25 @@ fn init_cold_startup_functions_are_grouped() {
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
         );
     }
+    // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
+    // group the second lookup of a process took 4 more text faults. Which of them keep a section of
+    // their own depends on the profile (the release build inlines region_path, stamp_files and
+    // Table::get into attach's closure), so: every section of one of them is in the group, and at
+    // least two are present.
+    let text: Vec<&str> = sections
+        .lines()
+        .filter_map(|l| l.split_once("] ").map(|(_, a)| a))
+        .filter_map(|a| a.strip_prefix(".text."))
+        .filter_map(|a| a.split_whitespace().next())
+        .collect();
+    let mut seen = 0;
+    for f in ["7NsCache11region_path", "7NsCache6attach", "6Memory10map_shared", "5Table11stamp_files", "5Table3get"] {
+        for s in text.iter().filter(|s| s.contains(f)) {
+            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text.list?)");
+            seen += 1;
+        }
+    }
+    assert!(seen >= 2, "name-service cache attach path: {seen} sections found in libc.a (renamed? update the names above)");
 }
 
 #[test]

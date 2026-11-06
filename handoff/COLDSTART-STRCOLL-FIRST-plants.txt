@@ -1,0 +1,4 @@
+# COLDSTART-STRCOLL-FIRST plants (D-4.54): the on-demand fill of the first general-path compare
+lane-wrong-on-demand | crates/core/src/locale/collate.rs | lit:self.fill_byte(table, 64 * k + bit); ==> { let b = 64 * k + bit; self.fill_byte(table, b); if let Some(u) = table.lane.get(b) { u.store(self.ascii_entry(b ^ 1), Ordering::Relaxed); } } | cargo test -p liella --test collate_lazy | msg:first comparison \(on demand\)|first_comparison_fills_only_its_bytes.*FAILED
+ready-before-all-known | crates/core/src/locale/collate.rs | lit:if all { ==> if true { | cargo test -p liella --test collate_lazy | msg:only the pair's bytes are filled
+skip-rank-build | crates/core/src/locale/collate.rs | lit:if fast { ==> if false { | cargo test -p liella --test collate_lazy | msg:probe pair not decided after the fill

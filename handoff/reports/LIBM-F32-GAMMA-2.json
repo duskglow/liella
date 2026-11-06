@@ -1,0 +1,13 @@
+{"task": "LIBM-F32-GAMMA-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: merged next, gamma kernels moved to fast32/gamma.rs, oracle32 lgamma/tgamma estimators; plants 6/6 caught, tgammaf sweep pass (mp 2.2e-5); gate (FULL) and lgammaf sweep running; counts not run",
+ "branch": "task/libm-f32-gamma-2", "head": "da21e569",
+ "gate": {"affected": "running (libm-f32-gamma-2-gate2, escalated to FULL by the tool)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["oracle32 gamma estimators assume exp_log::log_dd within UE*(|ln v|+1); checked only indirectly (decided answers vs the accurate path on a sample)",
+                   "tgammaf sweep: fast path 1683198064 of 4*2^32 mode-calls, oracle mp for 37388 (2.2e-5), 482 s test wall, 2626 s CPU, near-zero refusals n/a"],
+ "refused": [],
+ "jobs": ["libm-f32-gamma-2-check", "libm-f32-gamma-2-plants", "libm-f32-gamma-2-gate2", "libm-f32-gamma-2-sweep-tgammaf", "libm-f32-gamma-2-sweep-lgammaf"],
+ "improvement": "the gate escalates to FULL whenever coefficient files change; a direct tier for crates/math/src/coeffs would save ~45 min per libm story",
+ "next_step": "counts before/after for the tgammaf and lgammaf cbench_libm rows (target <= 1.05x); read the lgammaf sweep's near-zero refusal count",
+ "report_file": "handoff/libm-f32-gamma.md"}

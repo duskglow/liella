@@ -1,0 +1,27 @@
+keys created 1024
+main   first-fail idx=32 rc=ENOMEM get=NULL get-mismatch=0
+main   idx=0 set=0 get=value
+main   idx=1 set=0 get=value
+main   idx=15 set=0 get=value
+main   idx=16 set=0 get=value
+main   idx=30 set=0 get=value
+main   idx=31 set=0 get=value
+main   idx=32 set=ENOMEM get=NULL
+main   idx=33 set=ENOMEM get=NULL
+main   idx=63 set=ENOMEM get=NULL
+main   idx=64 set=ENOMEM get=NULL
+main   idx=500 set=ENOMEM get=NULL
+main   idx=1000 set=ENOMEM get=NULL
+thread first-fail idx=32 rc=ENOMEM get=NULL get-mismatch=0
+thread idx=0 set=0 get=value
+thread idx=1 set=0 get=value
+thread idx=15 set=0 get=value
+thread idx=16 set=0 get=value
+thread idx=30 set=0 get=value
+thread idx=31 set=0 get=value
+thread idx=32 set=ENOMEM get=NULL
+thread idx=33 set=ENOMEM get=NULL
+thread idx=63 set=ENOMEM get=NULL
+thread idx=64 set=ENOMEM get=NULL
+thread idx=500 set=ENOMEM get=NULL
+thread idx=1000 set=ENOMEM get=NULL

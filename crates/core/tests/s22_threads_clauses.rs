@@ -282,6 +282,13 @@ fn s22_6_c_4() {
 fn s22_6_g_0() {
     conformance(&["s22_more"]);
 }
+/// §22.6 Failure: `pthread_setspecific` (and `tss_set`) never fails with `ENOMEM` in Liella.
+#[test]
+fn s22_6_f_0() {
+    // Under an exhausted address space, keys inside and outside the reference's in-thread range,
+    // on the initial thread and on a new thread (D-22.15).
+    conformance(&["s22_key_nomem"]);
+}
 /// §22.7 Contract: A counting semaphore.
 #[test]
 fn s22_7_c_0() {

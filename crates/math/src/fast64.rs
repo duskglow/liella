@@ -18,6 +18,10 @@
 //! The only error near `2^-70` is the `double` evaluation of the series tail `T` (a few roundings:
 //! below `5u·|T| < 2^-50·|T|`), so `eps = 2^-49·|T|·|scale| + 2^-70·|y|` (with the factor 2 for
 //! the table value multiplying `T` in `exp`, at most 1.006). See [`exp_kernel`] and [`log`].
+//!
+//! Layout: this file holds the exp/log kernels and their entries; the fast tier of `expm1`,
+//! `log1p` and `cbrt` is in `fast64/exp_log.rs`, that of `sinh`, `cosh` and `tanh` in
+//! `fast64/hyperbolic.rs` (both reuse these kernels), their tests in `fast64/tier_tests.rs`.
 
 #![allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // table indices reduced to the tables' ranges; exponents of bounded range
 
@@ -25,6 +29,13 @@ use crate::coeffs::tables as t;
 use crate::dd::{self, fast_two_sum, two_prod, two_sum, Dd};
 use crate::float;
 use crate::status::{Flags, Rounding, Status};
+
+mod exp_log;
+mod hyperbolic;
+#[cfg(test)]
+mod tier_tests;
+pub use exp_log::{cbrt_nearest, expm1_nearest, log1p_nearest};
+pub use hyperbolic::{cosh_nearest, sinh_nearest, tanh_nearest};
 
 /// 2^-70: the margin for all the errors far below the series tail's.
 const MARGIN: f64 = f64::from_bits(0x3b90_0000_0000_0000);
@@ -76,7 +87,7 @@ macro_rules! kernels {
 // fused into each entry (register 16.5 #3); no numeric change
 $(#[$a])*
 $(#[$i])*
-fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
+pub(crate) fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
     let (rh, rl) = (r.hi, r.lo);
     if dd::abs(rh) > 0.006 {
         return None;
@@ -111,7 +122,7 @@ fn exp_kernel(r: Dd, k: i32) -> Option<(Dd, i32, f64)> {
 // fused into each entry (register 16.5 #3); no numeric change
 $(#[$a])*
 $(#[$i])*
-fn log_kernel(x: f64) -> Option<(Dd, f64)> {
+pub(crate) fn log_kernel(x: f64) -> Option<(Dd, f64)> {
     let (e, idx, lh, ll, tail) = log_series(x)?;
     Some((log_assemble(e, idx, lh, ll), tail))
 }
@@ -136,6 +147,18 @@ fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)> {
     let tail = rh * s.hi * q;
     let a = two_sum(rh, -0.5 * s.hi);
     Some((e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail), tail))
+}
+
+/// `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and
+/// `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special`). The reduction is
+/// [`pow`]'s ([`reduce_pow`]: `r` within `2^-96.9` of `z − k·ln2/64`), so by [`exp_kernel`]'s proof
+/// `|e^z − y·2^m| <= |y|·(2^-49·|tail| + 2^-73.8)·2^m` (`th·2^-74 + 2^-101` over `|y| >= 0.994·th`,
+/// with the reduction's `2^-96.9`).
+$(#[$a])*
+$(#[$i])*
+pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
+    let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
+    exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
 }
 
 /// [`exp10`]'s reduced argument `(x − k·log10(2)/64)·ln10` as a normalized double-double for
@@ -378,7 +401,7 @@ fn reduce_ln2(xh: f64, kf: f64) -> (f64, f64) {
 
 /// [`exp`]'s reduced argument (proof there).
 #[inline(always)]
-fn reduce_exp(x: f64, kf: f64) -> Dd {
+pub(crate) fn reduce_exp(x: f64, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(x, kf);
     fast_two_sum(h, l)
 }
@@ -390,15 +413,14 @@ fn reduce_pow(z: Dd, kf: f64) -> Dd {
     fast_two_sum(h, l + z.lo)
 }
 
-/// `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and
-/// `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special`). The reduction is
-/// [`pow`]'s ([`reduce_pow`]: `r` within `2^-96.9` of `z − k·ln2/64`), so by [`exp_kernel`]'s proof
-/// `|e^z − y·2^m| <= |y|·(2^-49·|tail| + 2^-73.8)·2^m` (`th·2^-74 + 2^-101` over `|y| >= 0.994·th`,
-/// with the reduction's `2^-96.9`).
+/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`; the Bessel fast tier's `y0`, `y1` for
+/// `x < 2^-5`, `crate::fast_bessel`), or `None` when the kernel declines. Baseline build only (no
+/// FMA caller), so it sits outside [`kernels!`].
 #[inline(always)]
-pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
-    let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
-    exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
 }
 
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
@@ -528,6 +550,9 @@ pub mod fused {
         super::pow_round(v, m, tail, dz, &mut 0)
     }
 
+    pub use super::exp_log::fused::{cbrt_nearest, expm1_nearest, log1p_nearest};
+    pub use super::hyperbolic::fused::{cosh_nearest, sinh_nearest, tanh_nearest};
+
     /// [`super::exp10_nearest`], FMA build (LIBM-F64-FAST-KERNELS).
     ///
     /// # Safety
@@ -578,7 +603,7 @@ pub mod fused {
 
 /// [`log_kernel`]'s bound `2^-49·|tail| + 2^-70·|y|` (proof there).
 #[inline(always)]
-fn log_eps(y: Dd, tail: f64) -> f64 {
+pub(crate) fn log_eps(y: Dd, tail: f64) -> f64 {
     TAIL * dd::abs(tail) + MARGIN * dd::abs(y.hi)
 }
 
@@ -676,7 +701,7 @@ fn integral(x: f64) -> bool {
 /// 0.006³·0.16692·(1 + 4u) < 2^-24.72` and `eps/|y.hi| < 2^-70·(1 + 2^-3.72) < 1.0757·2^-70`;
 /// `RHO_EXP = 1.125·2^-70`.
 #[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
-const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
+pub(crate) const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
 /// [`pow`] with `dz <= DZ_NEAR = 2^-72` (checked before the test): `eps/|v.hi| = 2^-49·|tail| +
 /// 2^-70 + 1.02·dz` ([`pow_eps`]; the computed `dz` is within `4u` of its real formula) `<
 /// (1.0757 + 0.2551)·2^-70`; `RHO_POW = 1.375·2^-70`.
@@ -699,7 +724,7 @@ const LOG10_NEAR: f64 = f64::from_bits(0x3fc2_e686_e56c_5e53);
 /// The multipliers of [`near`]: for each `rho` above, the least `double` `C` with
 /// `C·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests): `1 + 1.12502·2^-16`,
 /// `1 + 1.37503·2^-16` and `1 + 2.00006·2^-16`.
-const C_EXP: f64 = f64::from_bits(0x3ff0_0012_0014_4018);
+pub(crate) const C_EXP: f64 = f64::from_bits(0x3ff0_0012_0014_4018);
 const C_POW: f64 = f64::from_bits(0x3ff0_0016_001e_402b);
 const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
 
@@ -730,7 +755,7 @@ fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
 /// missed, 2 near not allowed, 3 neither: the accurate path; the callers start it at 4, refused
 /// before the test) for [`nearest_stage`]; the entries discard it.
 #[inline(always)]
-fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64> {
+pub(crate) fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64> {
     *st = 2;
     if let Some(c) = c {
         if let Some(v) = near(y, c, m) {

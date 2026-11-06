@@ -1,0 +1,25 @@
+# NULLFOLD-COPY-MID plants (D-4.55; the one-word class gate of NULLFOLD-COPY-MID-3; its writers in
+# store_cmp_gates / drop_move_word since NULLFOLD-COPY-MID-4): run with
+# `cargo xtask plants handoff/NULLFOLD-COPY-MID-plants.txt --dir <new RAM dir>`
+# A store before the first source load (the ordering requirement): only the MAP_SHARED test can see it.
+store-first | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmove_129_sse2:\n)/$1\tmovq %rdx, (%rdi)\n/s | cargo test -p liella-boundary --test small_copy a_null_source_of_129_to_256 | msg:(the file changed|the mapping changed)
+# Folding without the guard, in the kernel: the class word ignored by the size compare.
+fold-unguarded-asm | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)cmpq %rcx, %rdx/$1cmpq \$256, %rdx/s | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold false
+# Folding without the guard, in the decision: the word raised when folding is refused.
+fold-unguarded-word | crates/boundary/src/dispatch.rs | lit:FOLD_MOVE.store(0, Relaxed); ==> FOLD_MOVE.store(MOVE_FOLD_MAX, Relaxed); | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold false
+# The word not dropped when folding goes off (it would keep naming a folded size).
+drop-skipped | crates/boundary/src/dispatch.rs | perl:s/(The 129-256 copy word and the compare words drop before the fold limit\.\n\s*)drop_move_word\(\);/$1/s | cargo test -p liella-boundary --test small_copy the_129_to_256_copy_word | msg:copy word: fold false
+# The raise gated the wrong way: the word set while folding is off.
+raise-inverted | crates/boundary/src/dispatch.rs | perl:s/if fold \{(\n\s*FOLD_MOVE\.store)/if !fold {$1/s | cargo test -p liella-boundary --test small_copy the_129_to_256_copy_word | msg:copy word: fold (true|false)
+# The class bound one short: 256 keeps the explicit check with folding on.
+bound-255 | crates/boundary/src/dispatch.rs | lit:pub(crate) const MOVE_FOLD_MAX: usize = 256; ==> pub(crate) const MOVE_FOLD_MAX: usize = 255; | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold true .*n 256
+# The lazy decision not taken by a 129-256 copy.
+resolve-64 | crates/boundary/src/hot/mem.rs | lit:crate::dispatch::resolve_fold_move(n); ==> crate::dispatch::resolve_fold(n); | cargo test -p liella-boundary --test small_copy the_folding_decision_is_taken | msg:the first small call must decide
+# The SSE2 mark left on: the SSE2 gate compares against 2^63 | 256 and folds every size.
+sse2-mark-kept | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)\tbtrq \$63, %rcx[^\n]*\n/$1/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call [0-9]+ n 257
+# The build test inverted: the SSE2 word takes the AVX2 path and its unsigned bound passes every size.
+sign-inverted | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)js \.Lmove_129_sse2_gate/$1jns .Lmove_129_sse2_gate/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call [0-9]+ n 257
+# The word not raised for the AVX2 build (the SSE2 mark stays after the flag is set).
+word-avx2-stale | crates/boundary/src/dispatch.rs | lit:FOLD_MOVE.store(move_word(true, avx2), Relaxed); ==> FOLD_MOVE.store(move_word(true, false), Relaxed); | cargo test -p liella-boundary --test small_copy the_129_to_256_copy_word | msg:copy word: fold true avx2 true
+# The build ignored: the word claims the AVX2 body under the SSE2 build.
+word-build-ignored | crates/boundary/src/dispatch.rs | lit:FOLD_MOVE.store(move_word(true, avx2), Relaxed); ==> FOLD_MOVE.store(move_word(true, true), Relaxed); | cargo test -p liella-boundary --test small_copy the_129_to_256_copy_word | msg:copy word: fold true avx2 false

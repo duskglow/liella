@@ -1,5 +1,7 @@
-//! `cargo xtask affected [--base <ref>] [--files <path>...] [--only <names>] [--list | --run]`: run only the tests a
-//! change can affect (PR-4; owner item: token cost).
+//! `cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>]`: list (`--list`) or run
+//! (`--run`) only the tests a change can affect (PR-4; owner item: token cost). One of `--list` and `--run` is required:
+//! without either the command prints the one-line usage and exits 2 (XTASK-AFFECTED-EXPLICIT; a gate that forgot `--run`
+//! listed the selection, ran nothing and exited 0).
 //!
 //! Compiling the workspace is cheap; the nine thousand tests and the conformance programs are
 //! the cost. This command maps the changed files to the tests that can reach them, CONSERVATIVELY:
@@ -19,7 +21,7 @@
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
 //!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
-//!    `include/`, the math fits and coefficients), the product crates, linker and export lists,
+//!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
 //! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
 //!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
@@ -55,6 +57,17 @@
 //!    xtask, or no user at all.
 //! 7. An xtask audit/report module (`XTASK_AUDITS`: policy, symgap, status, schedule, plants): the
 //!    xtask unit tests, clippy, the policy checks and the module's own command.
+//! 8. XTASK-AFFECTED-MATH (ruling #3188): the math export wiring (`crates/boundary/src/posix/s10_math.tsv`,
+//!    `s10_math_gen.rs`, `csys/src/adapter/math_*.c`) selects the math export tests (`Selection::math_exports`: the
+//!    `s10_math_gen` module as if changed, every `liella-math` target, every target whose own source names `s10_math`
+//!    or `libm` or carries section 10, the conformance programs of section 10 or calling a math export) plus `cargo
+//!    xtask math-gen --check`; a coefficient file `crates/math/src/coeffs/<family>.rs` selects the `coeffs` module as if
+//!    changed, the same math export tests and `cargo xtask tables --check`. XTASK-AFFECTED-MATH-2 (ruling #3204): a
+//!    fit file `crates/math/fits/<name>.fit` selects what a coefficient file selects plus `cargo xtask remez --check
+//!    <fit>` (a removed fit: FULL); the tables generator `crates/mathtools/src/tables.rs` selects its own mapping as a
+//!    `liella-mathtools` source, what a coefficient file selects, and `cargo xtask tables --check` / `kernel-index
+//!    --check`. In every tier but `--tier full`; the other files under `fits/` (the `.py` table scripts, subdirectories),
+//!    other generated files and anything else of rule 1 still escalate.
 //!
 //! TIERS (GATE-TIER, coordinator ruling 10-11): `--tier direct` (the DEFAULT, per-fix gates) applies rule 4 to EVERY
 //! crate's non-root module through `Selection::narrow_direct`: the changed module, its one-hop users, the targets
@@ -78,7 +91,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
 
 /// Crates whose changes are narrowed through the module graph.
@@ -182,6 +195,9 @@ pub struct Repo {
     /// TOOLS-7 (3): `git diff -U0` of `csys/include/` against the base, which the sync writes to `.changed.hdr` (a VM
     /// tree has no history). `None`: not available, so a changed header is not mapped (FULL).
     hdr_diff: Option<String>,
+    /// XTASK-AFFECTED-MATH-2: the fit files in the tree (`crates/math/fits/<name>.fit`). A changed fit that is not
+    /// here was removed, and `cargo xtask remez --check` cannot check it: FULL.
+    fits: BTreeSet<String>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -793,7 +809,7 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok() }
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root) }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -909,6 +925,54 @@ impl Selection {
         for c in &repo.conf {
             add(&mut self.conf, c.name.clone(), why);
         }
+    }
+
+    /// XTASK-AFFECTED-MATH (ruling #3188): the tests that can observe the math exports, for a change of their wiring
+    /// (`s10_math.tsv`, `s10_math_gen.rs`, the `math_*.c` forwarders) or of a generated coefficient file. The export
+    /// module itself as if it had changed (rule 4 of the tier: its users, the targets naming it, the conformance
+    /// programs calling its entries), every test target of `liella-math` (the libm product, clause and kernel suites),
+    /// every target of any crate whose own source names `s10_math` or `libm` or carries section 10, the unit tests of
+    /// both crates, and every conformance program that carries section 10 or calls an entry of the export modules.
+    fn math_exports(&mut self, repo: &Repo, why: &str) {
+        let via = |what: &str| format!("{why}: {what}");
+        if self.direct {
+            self.narrow_direct(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        } else {
+            self.narrow(repo, "liella-boundary", "s10_math_gen", MATH_GEN);
+        }
+        for c in [MATH_EXPORTS_CRATE, MATH_CRATE] {
+            add(&mut self.libs, c.to_string(), &via("the unit tests of the export and kernel crates"));
+            add(&mut self.clippy, c.to_string(), &via("the export and kernel crates"));
+        }
+        for t in &repo.targets {
+            let own = &t.text[..t.own.min(t.text.len())];
+            if t.krate == MATH_CRATE {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("a liella-math suite (they call the math exports)"));
+            } else if own.contains("s10_math") || own.contains("libm") || t.sections.contains(&10) {
+                add(&mut self.tests, (t.krate.clone(), t.name.clone()), &via("the test names s10_math or libm, or carries section 10"));
+            }
+        }
+        let export_nodes: BTreeSet<usize> = repo.nodes.iter().enumerate().filter(|(_, n)| n.krate == MATH_EXPORTS_CRATE && (n.name == "s10_math_gen" || n.name == "s10_math")).map(|(i, _)| i).collect();
+        for c in &repo.conf {
+            if c.sections.contains(&10) {
+                add(&mut self.conf, c.name.clone(), &via("the program carries section 10"));
+            } else if let Some(sym) = c.calls.iter().find(|s| repo.entries[*s].iter().any(|e| export_nodes.contains(&e.node))) {
+                add(&mut self.conf, c.name.clone(), &via(&format!("the program calls the math export `{sym}`")));
+            }
+        }
+    }
+
+    /// XTASK-AFFECTED-MATH: what a generated coefficient file selects (also for its fit and the tables generator,
+    /// XTASK-AFFECTED-MATH-2). The family's users: the `coeffs` module as if it had changed (its one-hop users in the
+    /// tier), the math export tests and `cargo xtask tables --check`.
+    fn math_coeffs(&mut self, repo: &Repo, f: &str) {
+        if self.direct {
+            self.narrow_direct(repo, MATH_CRATE, "coeffs", f);
+        } else {
+            self.narrow(repo, MATH_CRATE, "coeffs", f);
+        }
+        self.math_exports(repo, &format!("{f}: generated coefficients"));
+        self.xtask_cmds.insert("tables --check".to_string());
     }
 
     /// A change in module `name` of crate `krate`.
@@ -1168,6 +1232,52 @@ enum Class {
     /// bench/ and benchmarks/: data the xtask unit tests read (limits, rows, sentinels), so `-p xtask` runs.
     XtaskData,
     XtaskAudit(&'static [&'static str]),
+    /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
+    MathWiring,
+    /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
+    MathCoeffs,
+    /// XTASK-AFFECTED-MATH-2: a fit file `crates/math/fits/<name>.fit` (the input of `cargo xtask remez`).
+    MathFit,
+    /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
+    MathTables,
+}
+
+const MATH_EXPORTS_CRATE: &str = "liella-boundary";
+const MATH_CRATE: &str = "liella-math";
+const MATH_TSV: &str = "crates/boundary/src/posix/s10_math.tsv";
+const MATH_GEN: &str = "crates/boundary/src/posix/s10_math_gen.rs";
+const MATH_FITS: &str = "crates/math/fits/";
+const MATH_TABLES_GEN: &str = "crates/mathtools/src/tables.rs";
+
+/// XTASK-AFFECTED-MATH-2: the fit files of the tree, `crates/math/fits/<name>.fit` (no subdirectory).
+fn fit_files(root: &Path) -> BTreeSet<String> {
+    let Ok(dir) = fs::read_dir(root.join(MATH_FITS)) else { return BTreeSet::new() };
+    dir.filter_map(Result::ok).filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.ends_with(".fit")).map(|n| format!("{MATH_FITS}{n}")).collect()
+}
+
+/// XTASK-AFFECTED-MATH (ruling #3188): the generated math files that map to the math suites instead of FULL. Only these
+/// exact files: the math fits (`crates/math/fits/`), any other `*_gen.rs` and a file in a subdirectory of `coeffs/` or
+/// `adapter/` keep escalating. `cargo xtask math-gen --check` / `tables --check` prove the generated files match their
+/// inputs; the selected suites prove what the exports do. XTASK-AFFECTED-MATH-2 (ruling #3204): a fit file
+/// `crates/math/fits/<name>.fit` (not a subdirectory, not the `.py` table scripts) and exactly the tables generator
+/// `crates/mathtools/src/tables.rs` map too (`remez --check` / `tables --check` / `kernel-index --check`).
+fn math_class(path: &str) -> Option<Class> {
+    if path == MATH_TSV || path == MATH_GEN {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("csys/src/adapter/math_").is_some_and(|f| f.ends_with(".c") && !f.contains('/')) {
+        return Some(Class::MathWiring);
+    }
+    if path.strip_prefix("crates/math/src/coeffs/").is_some_and(|f| f.ends_with(".rs") && !f.contains('/')) {
+        return Some(Class::MathCoeffs);
+    }
+    if path.strip_prefix(MATH_FITS).is_some_and(|f| f.ends_with(".fit") && !f.contains('/')) {
+        return Some(Class::MathFit);
+    }
+    if path == MATH_TABLES_GEN {
+        return Some(Class::MathTables);
+    }
+    None
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1194,6 +1304,9 @@ fn classify(path: &str) -> Option<Class> {
     }
     if let Some((_, cmds)) = XTASK_AUDITS.iter().find(|(m, _)| *m == path) {
         return Some(Class::XtaskAudit(cmds));
+    }
+    if let Some(c) = math_class(path) {
+        return Some(c);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1298,13 +1411,42 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.xtask_cmds.extend(cmds.iter().map(|c| c.to_string()));
                 sel.notes.push(format!("{f}: an audit/report module of xtask (xtask unit tests, clippy, the policy checks{})", cmds.iter().map(|c| format!(", `cargo xtask {c}`")).collect::<String>()));
             }
-            None => {
-                classify_path(repo, f, &mut sel);
-                sel.own_suite(repo, f);
+            Some(Class::MathWiring) => {
+                sel.math_exports(repo, &format!("{f}: math export wiring"));
+                sel.xtask_cmds.insert("math-gen --check".to_string());
+                sel.notes.push(format!("{f}: math export wiring (the math export suites and `cargo xtask math-gen --check`, not FULL)"));
             }
+            Some(Class::MathCoeffs) => {
+                sel.math_coeffs(repo, f);
+                sel.notes.push(format!("{f}: generated coefficients (liella-math's suites, the math export suites and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathFit) if !repo.fits.contains(f) => sel.full.push(format!("{f}: a removed fit file (`cargo xtask remez --check` cannot check it)")),
+            Some(Class::MathFit) => {
+                // The fit's family: what its generated coefficient file selects, plus the fit's own check.
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert(format!("remez --check {f}"));
+                sel.notes.push(format!("{f}: a fit file (the family's math suites, `cargo xtask remez --check {f}` and `cargo xtask tables --check`, not FULL)"));
+            }
+            Some(Class::MathTables) => {
+                // The generator is a liella-mathtools source like any other (its own mapping), and it writes every
+                // coefficient family: the whole math set and both checks.
+                ordinary_mapping(repo, f, &mut sel);
+                sel.math_coeffs(repo, f);
+                sel.xtask_cmds.insert("kernel-index --check".to_string());
+                sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
+            }
+            None => ordinary_mapping(repo, f, &mut sel),
         }
     }
     sel
+}
+
+/// The mapping of a source file that no rule above claims: its path class and the unit tests of the crate that owns
+/// it (AFF-OWNER). One helper for the unclaimed files and the tables generator (XTASK-AFFECTED-MATH-3), so the
+/// generator's selection cannot drift from what any other liella-mathtools source selects.
+fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
+    classify_path(repo, f, sel);
+    sel.own_suite(repo, f);
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -2046,14 +2188,18 @@ fn count_skips(log: &str) -> u64 {
         .sum()
 }
 
-fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, allow_skip: bool) -> Outcome {
+/// A step's line, and for a failed test step the report of `failed_tests_report`, go to `out` (the console; a buffer in
+/// the unit tests). `test_crate` is `Some(crate)` for a test step: it may be a skip (`no_tests_only`), and when it fails
+/// its failing tests are named right under its FAIL line, before the next step starts (XTASK-AFFECTED-FAIL-EARLY).
+fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, test_crate: Option<&str>, out: &mut dyn std::io::Write) -> Outcome {
+    use std::io::Write;
+    let allow_skip = test_crate.is_some();
     let started = Instant::now();
     // This step's own output starts where the log ends now (the classification never reads earlier steps).
     let from = fs::metadata(log).map_or(0, |m| m.len());
     let file = fs::OpenOptions::new().create(true).append(true).open(log);
     let (success, failed_to_start) = match file.and_then(|f| f.try_clone().map(|g| (f, g))) {
         Ok((out, err)) => {
-            use std::io::Write;
             let _ = writeln!(&out, "== {label}");
             (cmd.current_dir(root).stdout(Stdio::from(out)).stderr(Stdio::from(err)).status().is_ok_and(|s| s.success()), false)
         }
@@ -2084,8 +2230,115 @@ fn step_out(root: &Path, log: &Path, label: &str, cmd: &mut Command, allow_skip:
     if outcome == Outcome::Failed {
         log_step_failed(log, label, "");
     }
-    println!("{:>6.1}s  {shown}  {label}{}", started.elapsed().as_secs_f64(), if outcome == Outcome::Skipped { "  (no test matched the selection: skipped, not failed)" } else { "" });
+    let _ = writeln!(out, "{:>6.1}s  {shown}  {label}{}", started.elapsed().as_secs_f64(), if outcome == Outcome::Skipped { "  (no test matched the selection: skipped, not failed)" } else { "" });
+    if let (Outcome::Failed, Some(c)) = (outcome, test_crate) {
+        let bytes = fs::read(log).unwrap_or_default();
+        let first_line = bytes[..(from as usize).min(bytes.len())].iter().filter(|&&b| b == b'\n').count() + 1;
+        let _ = write!(out, "{}", failed_tests_report(&own, c, log, first_line));
+    }
+    let _ = out.flush();
     outcome
+}
+
+/// How many failing tests a failed test step names under its FAIL line, and how many lines of each one's panic it
+/// shows (XTASK-AFFECTED-FAIL-EARLY); a longer line is cut to `EARLY_WIDTH` characters.
+const EARLY_TESTS: usize = 10;
+const EARLY_PANIC_LINES: usize = 5;
+const EARLY_WIDTH: usize = 300;
+
+/// The failing tests of a test step's own output, in order, each `<crate>[::<binary>] <test>` with the first lines of
+/// its panic (empty when the output holds none). Two runners write it:
+/// - nextest (through `xtask nextest`): a `<STATUS> [ 0.1s] (n/m) <binary id> <test>` line per test, a failing test's
+///   captured output under header lines naming it, and at the end one `---- <binary id> <test> stdout ----` line per
+///   failure (`nextest.rs`);
+/// - `cargo test`: `Running <file> (<deps path>)` per binary, then `---- <test> stdout ----` followed by that test's
+///   output for each failure; the name gets the binary of the `Running` line before it.
+fn failed_tests(own: &str, krate: &str) -> Vec<(String, Vec<String>)> {
+    let lines: Vec<&str> = own.lines().collect();
+    let mut binary = krate.to_string();
+    // (full name, the name as its `---- ` line has it)
+    let mut names: Vec<(String, String)> = Vec::new();
+    for l in &lines {
+        let t = l.trim();
+        if let Some(r) = t.strip_prefix("Running ") {
+            // "Running unittests src/lib.rs (target/debug/deps/liella_mem-0123)", "Running tests/x.rs (.../x-0123)"
+            let deps = r.rsplit_once('(').map_or("", |(_, p)| p.trim_end_matches(')'));
+            let stem = deps.rsplit('/').next().unwrap_or("");
+            let stem = stem.rsplit_once('-').map_or(stem, |(s, _)| s);
+            binary = if r.starts_with("unittests src/lib.rs") || stem.is_empty() { krate.to_string() } else if r.starts_with("unittests ") { format!("{krate}::bin/{stem}") } else { format!("{krate}::{stem}") };
+        } else if let Some(n) = t.strip_prefix("---- ").and_then(|x| x.strip_suffix(" stdout ----")) {
+            let full = if n.contains(' ') { n.to_string() } else { format!("{binary} {n}") };
+            if !names.iter().any(|(f, _)| *f == full) {
+                names.push((full, n.to_string()));
+            }
+        }
+    }
+    let mut panics: Vec<Vec<String>> = vec![Vec::new(); names.len()];
+    // The failure whose output the scan is in: set by a line naming it (a nextest status or output header, a
+    // `---- ` line), cleared by a line naming another test or ending a `cargo test` section.
+    let mut current: Option<usize> = None;
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim();
+        let section = t.strip_prefix("---- ").and_then(|x| x.strip_suffix(" stdout ----"));
+        let named = names.iter().position(|(full, short)| section == Some(short.as_str()) || t.ends_with(full.as_str()) || t.contains(&format!("{full} ")));
+        let status = t.split_once(" [").is_some_and(|(s, _)| !s.is_empty() && s.bytes().all(|b| b.is_ascii_uppercase() || b == b'-'));
+        if named.is_some() {
+            current = named;
+        } else if status || t.starts_with("---- ") || lines[i] == "failures:" || lines[i].starts_with("test result: ") || t.starts_with("Running ") {
+            // nextest indents a test's captured output (its own `failures:` and `test result:` lines too), under
+            // `stdout ───` / `stderr ───` headers that do not name the test: only column-0 lines end a section.
+            current = None;
+        } else if let Some(k) = current.filter(|&k| panics[k].is_empty() && t.contains("panicked at")) {
+            let indent = &lines[i][..lines[i].len() - lines[i].trim_start().len()];
+            let mut j = i;
+            while j < lines.len() && panics[k].len() < EARLY_PANIC_LINES {
+                let p = lines[j].trim_end();
+                let p = p.strip_prefix(indent).unwrap_or(p);
+                let q = p.trim_start();
+                if j > i && (q.is_empty() || q.starts_with("note: run with") || q.starts_with("stack backtrace:") || q.starts_with("---- ")) {
+                    break;
+                }
+                let cut: String = p.chars().take(EARLY_WIDTH).collect();
+                panics[k].push(if cut.len() < p.len() { format!("{cut} [line cut]") } else { cut });
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    names.into_iter().map(|(f, _)| f).zip(panics).collect()
+}
+
+/// What a failed test step prints under its FAIL line: its failing tests (at most `EARLY_TESTS`, with the count of the
+/// rest), the first `EARLY_PANIC_LINES` lines of each one's panic, and the log holding the step's whole output with
+/// the line the step starts at. The end-of-run summary still lists every failure.
+fn failed_tests_report(own: &str, krate: &str, log: &Path, first_line: usize) -> String {
+    let fails = failed_tests(own, krate);
+    let mut out = String::new();
+    if fails.is_empty() {
+        out.push_str("        no failing test named in the step's output (a build error, or a runner that did not finish)\n");
+        for e in own.lines().filter(|l| l.starts_with("error")).take(EARLY_PANIC_LINES) {
+            out.push_str(&format!("          {}\n", e.chars().take(EARLY_WIDTH).collect::<String>()));
+        }
+    } else {
+        out.push_str(&format!("        failing tests ({}):\n", fails.len()));
+        for (name, panic) in fails.iter().take(EARLY_TESTS) {
+            out.push_str(&format!("          {name}\n"));
+            if panic.is_empty() {
+                out.push_str("            (no panic message in the output; see the log)\n");
+            }
+            for p in panic {
+                out.push_str(&format!("            | {p}\n"));
+            }
+        }
+        if fails.len() > EARLY_TESTS {
+            out.push_str(&format!("          ... and {} more failing tests (all are in the summary at the end)\n", fails.len() - EARLY_TESTS));
+        }
+    }
+    out.push_str(&format!("        full output: {} (this step from line {first_line})\n", log.display()));
+    out
 }
 
 /// TOOLS-9: a line `STEP FAILED: <label>: <why>` in the affected log, which `~/bin/test-summary` lists next to the
@@ -2113,7 +2366,7 @@ fn check_logged(log: &Path, label: &str, r: Result<(), String>) -> Result<(), ()
 }
 
 fn step(root: &Path, log: &Path, label: &str, cmd: &mut Command) -> bool {
-    step_out(root, log, label, cmd, false) == Outcome::Ok
+    step_out(root, log, label, cmd, None, &mut std::io::stdout()) == Outcome::Ok
 }
 
 /// TOOLS-7 (1): like `step`, and the step's own output (everything it appended to `log`) is also written to
@@ -2130,6 +2383,116 @@ fn step_saving(root: &Path, log: &Path, label: &str, cmd: &mut Command, name: &s
         println!("        full output of the failed step: {}", dest.display());
     }
     ok
+}
+
+/// How many trailing lines of a failed conformance program's stdout, and of its stderr, `affected` prints (D-X.27).
+const CONF_TAIL_LINES: usize = 40;
+/// A longer line of that output is cut to this many characters (one runaway line does not flood the console).
+const CONF_TAIL_WIDTH: usize = 300;
+
+/// D-X.27: the selected conformance programs as one step (`conformance/run.sh <name>...`): whether it passed, and when
+/// it failed the report of `conformance_failures` (empty when it passed), which the caller prints to the console, where `cargo xtask plants` matches a plant's `msg:` (before, the console
+/// named the step only, and a plant caught for the right reason by a program's own check was WARN-NO-MSG).
+fn run_conformance(root: &Path, log: &Path, names: &[&str]) -> (bool, String) {
+    let from = fs::metadata(log).map_or(0, |m| m.len());
+    let mut cmd = Command::new("sh");
+    cmd.arg("conformance/run.sh").args(names);
+    let ok = step(root, log, &format!("conformance ({} programs)", names.len()), &mut cmd);
+    if ok {
+        return (true, String::new());
+    }
+    let bytes = fs::read(log).unwrap_or_default();
+    let own = String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).into_owned();
+    (false, conformance_failures(&root.join("conformance").join("build"), &own))
+}
+
+/// Linux x86-64 signal numbers (kernel UAPI `asm/signal.h`), for a status of 128 + n.
+fn signal_name(n: u32) -> Option<&'static str> {
+    const NAMES: [&str; 31] = [
+        "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGTRAP", "SIGABRT", "SIGBUS", "SIGFPE", "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM", "SIGTERM", "SIGSTKFLT", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF", "SIGWINCH", "SIGIO", "SIGPWR", "SIGSYS",
+    ];
+    NAMES.get((n as usize).wrapping_sub(1)).copied()
+}
+
+/// `status N, expected ...` of `run.sh`, with a status above 128 read as the shell does: death by signal N - 128.
+fn describe_status(detail: &str) -> String {
+    let Some(rest) = detail.strip_prefix("status ") else { return detail.to_string() };
+    let (n, tail) = rest.split_at(rest.find(',').unwrap_or(rest.len()));
+    match n.trim().parse::<u32>() {
+        Ok(rc) if rc > 128 && rc <= 128 + 64 => {
+            let sig = rc - 128;
+            format!("killed by signal {sig}{} (status {rc}){tail}", signal_name(sig).map(|s| format!(" {s}")).unwrap_or_default())
+        }
+        Ok(rc) => format!("exit status {rc}{tail}"),
+        Err(_) => detail.to_string(),
+    }
+}
+
+/// The last `CONF_TAIL_LINES` lines of `path` under a heading, each line prefixed `    | `, with a note when the file
+/// had more lines (or a line was cut); `(empty)` or `(absent)` otherwise.
+fn conf_tail(what: &str, path: &Path) -> String {
+    let Ok(bytes) = fs::read(path) else { return format!("  {what}: (absent: {})\n", path.display()) };
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return format!("  {what}: (empty)\n");
+    }
+    let skip = lines.len().saturating_sub(CONF_TAIL_LINES);
+    let mut out = if skip > 0 {
+        format!("  {what}: last {CONF_TAIL_LINES} of {} lines ({skip} cut; whole file {}):\n", lines.len(), path.display())
+    } else {
+        format!("  {what} ({} lines):\n", lines.len())
+    };
+    for l in &lines[skip..] {
+        let n = l.chars().count();
+        if n > CONF_TAIL_WIDTH {
+            out.push_str(&format!("    | {} ... ({} more characters cut)\n", l.chars().take(CONF_TAIL_WIDTH).collect::<String>(), n - CONF_TAIL_WIDTH));
+        } else {
+            out.push_str(&format!("    | {l}\n"));
+        }
+    }
+    out
+}
+
+/// D-X.27: for each program the step's own output (`own`, what `run.sh` printed) names as failed - a line
+/// `conformance: FAIL <name> (<why>)` - its name, how it ended (the `conformance: <name>: ...` lines: exit status or
+/// signal, missing stderr text) and the tails of its stdout and stderr in `build`. A program that did not build (or
+/// whose helper did not) shows its build log instead: its stdout and stderr files there are an earlier run's. Programs
+/// that passed print nothing; a failed step that names no program shows the end of its own output.
+fn conformance_failures(build: &Path, own: &str) -> String {
+    let mut failed: Vec<(&str, &str)> = Vec::new();
+    let mut details: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for l in own.lines() {
+        let Some(r) = l.strip_prefix("conformance: ") else { continue };
+        if let Some(f) = r.strip_prefix("FAIL ") {
+            let (name, why) = f.split_once(' ').unwrap_or((f, ""));
+            failed.push((name, why.trim().trim_start_matches('(').trim_end_matches(')')));
+        } else if let Some((name, d)) = r.split_once(": ") {
+            if !name.is_empty() && !name.contains(' ') {
+                details.entry(name).or_default().push(d);
+            }
+        }
+    }
+    let mut out = String::new();
+    if failed.is_empty() {
+        let lines: Vec<&str> = own.lines().collect();
+        out.push_str("conformance: the step failed but named no failed program; the end of its output:\n");
+        for l in &lines[lines.len().saturating_sub(CONF_TAIL_LINES)..] {
+            out.push_str(&format!("    | {l}\n"));
+        }
+        return out;
+    }
+    for (name, why) in failed {
+        let how: Vec<String> = details.get(name).into_iter().flatten().map(|d| describe_status(d)).collect();
+        out.push_str(&format!("conformance FAILED: {name}: {}\n", if how.is_empty() { why.to_string() } else { how.join("; ") }));
+        if why.starts_with("stderr:") {
+            out.push_str(&conf_tail("stdout", &build.join(format!("{name}.log.stdout"))));
+            out.push_str(&conf_tail("stderr", &build.join(format!("{name}.log.stderr"))));
+        } else if build.join(format!("{name}.log")).exists() && (why.contains("does not build") || why.contains("helper")) {
+            out.push_str(&conf_tail("build log", &build.join(format!("{name}.log"))));
+        }
+    }
+    out
 }
 
 /// A few lines from a cargo/xtask log, in the format of `~/bin/test-summary`.
@@ -2235,7 +2598,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             ok &= step_saving(root, &log, &format!("clippy --workspace (changed: {})", sel.clippy.keys().cloned().collect::<Vec<_>>().join(", ")), &mut cmd, "clippy.log");
         }
         if sel.xtask_tests {
-            ok &= step(root, &log, "xtask unit tests", Command::new(&cargo).args(["test", "-p", "xtask"]));
+            ok &= step_out(root, &log, "xtask unit tests", Command::new(&cargo).args(["test", "-p", "xtask"]), Some("xtask"), &mut std::io::stdout()) == Outcome::Ok;
         }
         let needs_products = !sel.conf.is_empty() || sel.xtask_cmds.contains("symgap") || repo.targets.iter().any(|t| t.products && sel.tests.contains_key(&(t.krate.clone(), t.name.clone())));
         if needs_products {
@@ -2293,7 +2656,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["--test", t]);
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
-                match step_out(root, &log, &label, &mut cmd, true) {
+                match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {
                     Outcome::Ok => {}
                     Outcome::Skipped => skipped.push(label),
                     Outcome::Failed => ok = false,
@@ -2301,15 +2664,13 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             }
         }
         if !sel.conf.is_empty() {
-            let mut cmd = Command::new("sh");
-            cmd.arg("conformance/run.sh");
-            for n in sel.conf.keys() {
-                cmd.arg(n);
-            }
-            ok &= step(root, &log, &format!("conformance ({} programs)", sel.conf.len()), &mut cmd);
+            let (passed, report) = run_conformance(root, &log, &sel.conf.keys().map(String::as_str).collect::<Vec<_>>());
+            print!("{report}");
+            ok &= passed;
         }
         for c in &sel.xtask_cmds {
-            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).args(["xtask", c]));
+            // A command may carry its flags (`math-gen --check`).
+            ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
         }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
@@ -2322,7 +2683,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     println!("affected: {}{}", if ok { "ok" } else { "FAILED" }, if sel.only { " (ONLY mode: named binaries, NOT A GATE)" } else { "" });
     if !ok {
         // D-X.23: test builds carry no DWARF; panics still name file:line (core::panic::Location).
-        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target>");
+        println!("hint: for a debugger or source-level backtrace, rerun the red test with debuginfo: CARGO_PROFILE_DEV_DEBUG=full cargo xtask affected --only <target> --run");
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
@@ -2407,58 +2768,117 @@ fn default_base(env: Option<String>) -> String {
     env.map(|b| b.trim().to_string()).filter(|b| !b.is_empty()).unwrap_or_else(|| "origin/main".to_string())
 }
 
-pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
-    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
-    let mut base = default_base(std::env::var("AFFECTED_BASE").ok());
-    let mut run = false;
-    let mut with_exports = false;
-    let mut files: Option<Vec<String>> = None;
-    let mut only: Option<String> = None;
-    let mut tier = Tier::Direct;
-    let mut replay_file: Option<String> = None;
+/// XTASK-AFFECTED-EXPLICIT: the one line printed (exit 2) when `affected` is given neither `--list` nor `--run`. There is
+/// no default mode: a gate that ran `cargo xtask affected` without `--run` used to list the selection, run nothing and
+/// exit 0, a green gate that tested nothing.
+pub const USAGE: &str = "usage: cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports]  or  affected --replay <records> [--tier direct|wide|full]; --list prints the selection, --run runs it, one of them is required";
+
+/// `--list` prints the selection; `--run` runs it. Exactly one is required (except with `--replay`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    List,
+    Run,
+}
+
+/// The parsed arguments of `cargo xtask affected`.
+#[derive(Debug)]
+struct Opts {
+    base: String,
+    mode: Option<Mode>,
+    with_exports: bool,
+    files: Option<Vec<String>>,
+    only: Option<String>,
+    tier: Tier,
+    replay_file: Option<String>,
+}
+
+impl Opts {
+    /// The mode to act in, or `None` when the command must be refused with [`USAGE`] (exit 2). `--replay` is a mode of
+    /// its own (it reads gate records, lists and runs nothing) and needs neither flag.
+    fn mode(&self) -> Option<Mode> {
+        if self.replay_file.is_some() { Some(self.mode.unwrap_or(Mode::List)) } else { self.mode }
+    }
+}
+
+fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
+    let mut o = Opts { base: default_base, mode: None, with_exports: false, files: None, only: None, tier: Tier::Direct, replay_file: None };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--base" => base = it.next().ok_or("--base needs a ref")?.clone(),
-            "--tier" => tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
-            "--replay" => replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
-            "--run" => run = true,
-            "--list" => run = false,
-            "--with-exports" => with_exports = true,
-            "--only" => only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
+            "--base" => o.base = it.next().ok_or("--base needs a ref")?.clone(),
+            "--tier" => o.tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
+            "--replay" => o.replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
+            "--run" | "--list" => {
+                let m = if a == "--run" { Mode::Run } else { Mode::List };
+                if o.mode.is_some_and(|prev| prev != m) {
+                    return Err(format!("--list and --run together: give one ({USAGE})"));
+                }
+                o.mode = Some(m);
+            }
+            "--with-exports" => o.with_exports = true,
+            "--only" => o.only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
             "--files" => {
                 let mut v = Vec::new();
                 while let Some(f) = it.clone().next().filter(|f| !f.starts_with("--")) {
                     v.push(f.clone());
                     it.next();
                 }
-                files = Some(v);
+                o.files = Some(v);
             }
-            other => return Err(format!("unknown argument `{other}` (usage: affected [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--replay <records>] [--list | --run] [--with-exports])")),
+            other => return Err(format!("unknown argument `{other}` ({USAGE})")),
         }
     }
-    if let Some(path) = replay_file {
+    Ok(o)
+}
+
+/// `cargo xtask affected`: exit 2 with [`USAGE`] when neither `--list` nor `--run` is given, 1 on any other error.
+pub fn main(root: &Path, args: &[String]) -> ExitCode {
+    // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
+    let result = parse_args(args, default_base(std::env::var("AFFECTED_BASE").ok())).and_then(|o| match o.mode() {
+        None => Ok(None),
+        Some(mode) => execute(root, &o, mode, &mut run_selection).map(Some),
+    });
+    match result {
+        Ok(Some(())) => ExitCode::SUCCESS,
+        Ok(None) => {
+            eprintln!("{USAGE}");
+            ExitCode::from(2)
+        }
+        Err(e) => {
+            eprintln!("xtask affected: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Runs a selection: `run_selection`, or a recorder in the unit tests.
+type Runner<'a> = dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String> + 'a;
+
+/// The work of one `affected` command; `runner` runs a selection when the mode is `--run`.
+fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result<(), String> {
+    let tier = o.tier;
+    if let Some(path) = &o.replay_file {
         let repo = Repo::load(root);
-        let text = fs::read_to_string(&path).map_err(|e| format!("--replay {path}: {e}"))?;
+        let text = fs::read_to_string(path).map_err(|e| format!("--replay {path}: {e}"))?;
         let (report, misses) = replay(&repo, &text, tier);
         print!("{report}");
         return if misses == 0 { Ok(()) } else { Err(format!("replay: {misses} failures outside the {tier:?} tier")) };
     }
-    if let Some(list) = only {
+    if let Some(list) = &o.only {
         let repo = Repo::load(root);
-        let sel = select_only(&repo, &list)?;
+        let sel = select_only(&repo, list)?;
         print_selection(&repo, &[], &sel);
-        return if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) };
+        return if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) };
     }
-    let files = match files {
-        Some(f) => f,
-        None => changed_files(root, &base)?,
+    let files = match &o.files {
+        Some(f) => f.clone(),
+        None => changed_files(root, &o.base)?,
     };
     let repo = Repo::load(root);
     let sel = select_tier(&repo, &files, tier);
     println!("tier: {tier:?} (per-fix gates: direct; the landing gate runs everything)");
     print_selection(&repo, &files, &sel);
-    if run { run_selection(root, &repo, &sel, with_exports) } else { Ok(()) }
+    if mode == Mode::Run { runner(root, &repo, &sel, o.with_exports) } else { Ok(()) }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2473,6 +2893,47 @@ mod tests {
         assert_eq!(default_base(Some(String::new())), "origin/main");
         assert_eq!(default_base(Some("  ".into())), "origin/main");
         assert_eq!(default_base(Some("origin/opt/lv3".into())), "origin/opt/lv3");
+    }
+
+    fn opts(args: &[&str]) -> Result<Opts, String> {
+        parse_args(&args.iter().map(|a| a.to_string()).collect::<Vec<_>>(), "origin/main".into())
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: no default mode. Without --list or --run there is no mode (main exits 2 with USAGE; the
+    // binary's exit status is checked in xtask/tests/affected_mode.rs); --replay needs neither; both together are refused.
+    #[test]
+    fn affected_requires_list_or_run() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        assert_eq!(opts(&[]).unwrap().mode(), None);
+        assert_eq!(opts(&["--base", "origin/next", "--tier", "direct", "--files", "docs/plants.md"]).unwrap().mode(), None);
+        assert_eq!(opts(&["--list"]).unwrap().mode(), Some(Mode::List));
+        assert_eq!(opts(&["--files", "a.rs", "--run", "--base", "x"]).unwrap().mode(), Some(Mode::Run));
+        assert_eq!(opts(&["--replay", "records.txt"]).unwrap().mode(), Some(Mode::List));
+        let both = opts(&["--list", "--run"]).unwrap_err();
+        assert!(both.contains("--list and --run together"), "{both}");
+        assert!(USAGE.contains("--list") && USAGE.contains("--run") && !USAGE.contains('\n'), "{USAGE}");
+    }
+
+    // XTASK-AFFECTED-EXPLICIT: --run hands the selection to the runner, --list does not.
+    #[test]
+    fn affected_run_runs_the_selection_and_list_does_not() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-EXPLICIT).
+        for (flag, want_runs) in [("--run", 1), ("--list", 0)] {
+            let o = opts(&["--files", "docs/plants.md", flag]).unwrap();
+            let mut runs = 0;
+            let mut seen_docs_note = false;
+            let mut rec = |_: &Path, _: &Repo, sel: &Selection, exports: bool| -> Result<(), String> {
+                runs += 1;
+                seen_docs_note = sel.notes.iter().any(|n| n.starts_with("docs/plants.md: docs only")) && sel.full.is_empty() && !exports;
+                Ok(())
+            };
+            execute(&root(), &o, o.mode().unwrap(), &mut rec).unwrap();
+            assert_eq!(runs, want_runs, "{flag}");
+            assert_eq!(seen_docs_note, want_runs == 1, "{flag}: the runner got the docs-only selection");
+        }
+        let mut fail = |_: &Path, _: &Repo, _: &Selection, _: bool| -> Result<(), String> { Err("a selected test failed".into()) };
+        let o = opts(&["--files", "docs/plants.md", "--run"]).unwrap();
+        assert_eq!(execute(&root(), &o, Mode::Run, &mut fail).unwrap_err(), "a selected test failed");
     }
 
     // TOOLS-7 (1): a failed step's FULL output lands in target/<name> (only that step's, not earlier steps'), and a
@@ -2501,6 +2962,184 @@ mod tests {
         }
         assert!(!saved.contains("STALE") && !saved.contains("earlier-output"), "{saved:?}");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// XTASK-AFFECTED-FAIL-EARLY: an env-gated fixture. It passes unless `LIELLA_AFFECTED_FAIL_FIXTURE` is set; with it
+    /// set, `LIELLA_AFFECTED_FAIL_FIXTURE=1 cargo xtask affected --only xtask --run` shows a real failed test step's
+    /// report (the end-to-end plant in handoff/XTASK-AFFECTED-FAIL-EARLY-plants.txt).
+    #[test]
+    fn affected_fail_early_fixture() {
+        // Trace: no spec clause (test-harness reporting fixture; XTASK-AFFECTED-FAIL-EARLY).
+        if std::env::var_os("LIELLA_AFFECTED_FAIL_FIXTURE").is_some() {
+            panic!("FIXTURE-PANIC-MARKER: this test fails on purpose because LIELLA_AFFECTED_FAIL_FIXTURE is set");
+        }
+    }
+
+    /// The output of `cargo test -p liella-x` with one failure in the unit tests and one in `tests/sweep.rs`.
+    const CARGO_TEST_FAILS: &str = "   Compiling liella-x v0.1.0\n    Finished `test` profile [unoptimized] target(s) in 1.00s\n     Running unittests src/lib.rs (target/debug/deps/liella_x-0123abcd)\n\nrunning 2 tests\ntest a::passes ... ok\ntest a::breaks ... FAILED\n\nfailures:\n\n---- a::breaks stdout ----\n\nthread 'a::breaks' panicked at src/a.rs:9:5:\nassertion `left == right` failed\n  left: 1\n right: 2\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    a::breaks\n\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running tests/sweep.rs (target/debug/deps/sweep-89abcdef)\n\nrunning 1 test\ntest edge ... FAILED\n\nfailures:\n\n---- edge stdout ----\nthread 'edge' panicked at tests/sweep.rs:3:5:\nL1\nL2\nL3\nL4\nL5\n\nfailures:\n    edge\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n";
+
+    // A failed test step names its failing tests and their panics right under its FAIL line, before the next step's
+    // line; a passing test step prints its line only; an earlier step's output is not read.
+    #[test]
+    fn a_failed_test_step_names_its_failures_under_its_fail_line() {
+        // Trace: no spec clause (test-harness reporting; XTASK-AFFECTED-FAIL-EARLY).
+        let root = std::env::temp_dir().join(format!("xtask-failearly-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("target")).unwrap();
+        let log = root.join("target").join("affected.log");
+        fs::write(root.join("fails.txt"), CARGO_TEST_FAILS).unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let sh = |script: &str| {
+            let mut c = Command::new("sh");
+            c.args(["-c", script]);
+            c
+        };
+        assert_eq!(step_out(&root, &log, "test -p liella-w", &mut sh("echo '---- old stdout ----'; echo \"thread 'old' panicked at x\"; exit 0"), Some("liella-w"), &mut out), Outcome::Ok);
+        let passing = String::from_utf8(out.clone()).unwrap();
+        assert_eq!(passing.lines().count(), 1, "a passing step printed more than its line: {passing:?}");
+        assert_eq!(step_out(&root, &log, "test -p liella-x", &mut sh("cat fails.txt; exit 101"), Some("liella-x"), &mut out), Outcome::Failed);
+        assert_eq!(step_out(&root, &log, "test -p liella-z", &mut sh("exit 0"), Some("liella-z"), &mut out), Outcome::Ok);
+        let got = String::from_utf8(out).unwrap();
+        let lines: Vec<&str> = got.lines().map(|l| l.split_once("s  ").map_or(l, |(_, r)| r)).collect();
+        let want = [
+            "ok    test -p liella-w".to_string(),
+            "FAIL  test -p liella-x".to_string(),
+            "        failing tests (2):".to_string(),
+            "          liella-x a::breaks".to_string(),
+            "            | thread 'a::breaks' panicked at src/a.rs:9:5:".to_string(),
+            "            | assertion `left == right` failed".to_string(),
+            "            |   left: 1".to_string(),
+            "            |  right: 2".to_string(),
+            "          liella-x::sweep edge".to_string(),
+            "            | thread 'edge' panicked at tests/sweep.rs:3:5:".to_string(),
+            "            | L1".to_string(),
+            "            | L2".to_string(),
+            "            | L3".to_string(),
+            "            | L4".to_string(),
+            format!("        full output: {} (this step from line 4)", log.display()),
+            "ok    test -p liella-z".to_string(),
+        ];
+        assert_eq!(lines, want, "the console was {got:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // nextest's format: status and output header lines name the binary id and test, `xtask nextest` adds a `---- `
+    // line per failure. At most 10 tests are shown (with the count of the rest), long lines are cut, a failure
+    // without a panic says so, a panic under another test's line is not attributed, and a step naming no failing
+    // test shows its first error lines.
+    #[test]
+    fn the_failed_test_report_reads_nextest_output_and_stays_bounded() {
+        // Trace: no spec clause (test-harness reporting; XTASK-AFFECTED-FAIL-EARLY).
+        let mut own = String::from("== test -p liella-y\n    Starting 14 tests across 1 binary\n        SIGSEGV [   0.010s] (  1/14) liella-y::t crash\n");
+        own.push_str("        PASS [   0.001s] (  2/14) liella-y::t fine\nthread 'fine' panicked at tests/t.rs:1:1:\nnot this one\n");
+        // nextest 0.9.1xx (as on the build hosts, 11-06): indented output under `stdout ───` / `stderr ───`; case_1
+        // has the older `──── STDERR: <binary id> <test>` header, which names the test.
+        for i in 0..12 {
+            let (out_h, err_h, ind) = if i == 1 { (format!("──── STDOUT:             liella-y::t case_{i}"), format!("──── STDERR:             liella-y::t case_{i}"), "") } else { ("  stdout ───".to_string(), "  stderr ───".to_string(), "    ") };
+            own.push_str(&format!("        FAIL [   0.010s] ({:>3}/14) liella-y::t case_{i}\n{out_h}\n\n{ind}running 1 test\n{ind}test case_{i} ... FAILED\n\n{ind}failures:\n\n{ind}failures:\n{ind}    case_{i}\n\n{ind}test result: FAILED. 0 passed; 1 failed\n\n", i + 3));
+            own.push_str(&format!("{err_h}\n\n{ind}thread 'case_{i}' (12{i}) panicked at tests/t.rs:{i}:1:\n{ind}boom {i}{}\n{ind}note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n", if i == 0 { "x".repeat(400) } else { String::new() }));
+        }
+        own.push_str("     Summary [   0.200s] 14 tests run: 1 passed, 13 failed\n---- liella-y::t crash stdout ----\n");
+        for i in 0..12 {
+            own.push_str(&format!("---- liella-y::t case_{i} stdout ----\n"));
+        }
+        let r = failed_tests_report(&own, "liella-y", Path::new("/x/affected.log"), 7);
+        for want in [
+            "        failing tests (13):\n          liella-y::t crash\n            (no panic message in the output; see the log)\n          liella-y::t case_0\n            | thread 'case_0' (120) panicked at tests/t.rs:0:1:\n            | boom 0xxx",
+            "xxx [line cut]\n          liella-y::t case_1\n            | thread 'case_1' (121) panicked at tests/t.rs:1:1:\n            | boom 1\n          liella-y::t case_2\n",
+            "          liella-y::t case_8\n            | thread 'case_8' (128) panicked at tests/t.rs:8:1:\n            | boom 8\n          ... and 3 more failing tests",
+            "        full output: /x/affected.log (this step from line 7)\n",
+        ] {
+            assert!(r.contains(want), "missing {want:?} in {r}");
+        }
+        assert!(!r.contains("case_9\n") && !r.contains("'fine'") && !r.contains("not this one"), "{r}");
+        assert!(r.lines().all(|l| l.chars().count() <= EARLY_WIDTH + 30), "a line was not cut: {r}");
+        let build = failed_tests_report("== test -p liella-y\nerror[E0425]: cannot find value `x` in this scope\n  --> tests/t.rs:1:1\n", "liella-y", Path::new("/x/affected.log"), 1);
+        assert_eq!(build, "        no failing test named in the step's output (a build error, or a runner that did not finish)\n          error[E0425]: cannot find value `x` in this scope\n        full output: /x/affected.log (this step from line 1)\n");
+    }
+
+    /// A temporary root whose `conformance/run.sh` stands in for the real runner, printing its message formats:
+    /// `good` passes; `bad` exits with status 134 (SIGABRT) and a missing stderr text, 5 stdout and 50 stderr lines
+    /// (the last one far wider than the cut); `nobuild` does not build and has an earlier run's stdout and stderr.
+    fn fake_conformance_root(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("xtask-conf-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("conformance").join("build")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        let script = r#"b=conformance/build; fail=0; pass=0
+for n in "$@"; do
+  case $n in
+  good) pass=$((pass + 1)) ;;
+  bad) i=1; while [ $i -le 5 ]; do echo "out-$i"; i=$((i + 1)); done > $b/bad.log.stdout
+       i=1; while [ $i -le 49 ]; do echo "err-$i"; i=$((i + 1)); done > $b/bad.log.stderr
+       printf 'FAIL: strlen returned 3 %0500d\n' 7 >> $b/bad.log.stderr
+       echo "conformance: bad: status 134, expected 0"; echo "conformance: bad: stderr lacks: wanted text"
+       echo "conformance: FAIL bad (stderr: conformance/build/bad.log.stderr)"; fail=$((fail + 1)) ;;
+  nobuild) echo STALE-STDOUT > $b/nobuild.log.stdout; echo STALE-STDERR > $b/nobuild.log.stderr
+       echo "x.c:1: error: boom" > $b/nobuild.log
+       echo "conformance: FAIL nobuild (does not build; see conformance/build/nobuild.log)"; fail=$((fail + 1)) ;;
+  esac
+done
+echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
+"#;
+        fs::write(root.join("conformance").join("run.sh"), script).unwrap();
+        root
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed conformance program's name, its end (signal by
+    // name, the missing stderr text) and the bounded tails of its stdout and stderr reach the report `affected` prints;
+    // a program that did not build shows its build log, not an earlier run's output; a passing program adds nothing.
+    #[test]
+    fn a_failed_conformance_program_reports_its_end_and_output_tails() {
+        let root = fake_conformance_root("fail");
+        let log = root.join("target").join("affected.log");
+        assert!(step(&root, &log, "earlier step", Command::new("sh").args(["-c", "echo 'conformance: FAIL earlier (stderr: x)'"])));
+        let (ok, report) = run_conformance(&root, &log, &["good", "bad", "nobuild"]);
+        assert!(!ok, "{report}");
+        for want in [
+            "conformance FAILED: bad: killed by signal 6 SIGABRT (status 134), expected 0; stderr lacks: wanted text\n",
+            "  stdout (5 lines):\n    | out-1\n",
+            "    | out-5\n",
+            "  stderr: last 40 of 50 lines (10 cut; whole file ",
+            "    | err-11\n",
+            "    | FAIL: strlen returned 3 000",
+            " ... (224 more characters cut)\n",
+            "conformance FAILED: nobuild: does not build; see conformance/build/nobuild.log\n  build log (1 lines):\n    | x.c:1: error: boom\n",
+        ] {
+            assert!(report.contains(want), "missing {want:?} in:\n{report}");
+        }
+        for not in ["| err-10\n", "STALE-", "good", "earlier"] {
+            assert!(!report.contains(not), "unexpected {not:?} in:\n{report}");
+        }
+        let (ok, report) = run_conformance(&root, &log, &["good"]);
+        assert!(ok && report.is_empty(), "a passing program printed: {report:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed step naming no program still shows how it ended.
+    #[test]
+    fn a_conformance_step_failing_without_a_program_shows_its_end() {
+        let report = conformance_failures(Path::new("/nonexistent"), "== conformance (1 programs)\nrun.sh: 3: cc: not found\n");
+        assert!(report.contains("named no failed program") && report.contains("    | run.sh: 3: cc: not found\n"), "{report}");
+        assert_eq!(describe_status("status 3, expected 0"), "exit status 3, expected 0");
+        assert_eq!(describe_status("status 139, expected signal 6"), "killed by signal 11 SIGSEGV (status 139), expected signal 6");
+        assert_eq!(describe_status("stderr lacks: x"), "stderr lacks: x");
+    }
+
+    // Trace: no spec clause (D-X.27): the report reads `run.sh`'s own lines and files; this fails when their format moves.
+    #[test]
+    fn the_conformance_report_matches_the_runner_formats() {
+        let run = fs::read_to_string(root().join("conformance").join("run.sh")).unwrap();
+        for want in [
+            r#"log="$here/build/$name.log""#,
+            r#"2>"$log.stderr" >"$log.stdout""#,
+            r#"echo "conformance: $name: status $rc, expected $want_exit""#,
+            r#"echo "conformance: $name: stderr lacks: $text""#,
+            r#"echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)""#,
+            r#"echo "conformance: FAIL $name (does not build; see conformance/build/$name.log)""#,
+        ] {
+            assert!(run.contains(want), "conformance/run.sh no longer has {want:?}: update conformance_failures");
+        }
     }
 
     fn root() -> PathBuf {
@@ -2590,15 +3229,115 @@ mod tests {
             "spec/clauses.tsv",
             "spec/abi/layouts.tsv",
             "include/liella/native.h",
-            "crates/boundary/src/posix/s10_math_gen.rs",
             "crates/core/src/unicode/tables.rs",
-            "crates/boundary/src/posix/s10_math.tsv",
+            // XTASK-AFFECTED-MATH(-2): the math generated files outside the mapped set still escalate.
+            "crates/math/fits/fast32_tables_gen.py",
+            "crates/math/fits/sub/x.fit",
+            "crates/math/fits/removed_in_this_change.fit",
+            "crates/mathtools/src/sub/tables.rs",
+            "crates/math/src/coeffs/sub/x.rs",
+            "csys/src/adapter/math_libm.h",
+            "csys/src/adapter/other.c",
+            "crates/core/src/foo_gen.rs",
             "crates/libc-so/src/lib.rs",
             "scripts/anything.sh",
             "somewhere/unknown.bin",
         ] {
             let (_, s) = sel(&[f]);
             assert!(!s.full.is_empty(), "{f} must escalate to full");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH (ruling #3188), no spec clause: a change of the math export wiring or of a generated
+    // coefficient file selects the math export tests and the generator's check, not FULL, in the direct and wide tiers.
+    #[test]
+    fn math_wiring_and_coefficients_select_the_math_suites_not_full() {
+        let math_set: &[(&str, &str)] = &[
+            ("liella-boundary", "s10_math_symbols"),
+            ("liella-boundary", "math_fma_paths"),
+            ("liella-boundary", "libm_fma_select"),
+            ("liella-math", "s10_math_clauses"),
+            ("liella-math", "special_products"),
+            ("liella-math", "elem_products"),
+            ("liella-math", "fast64"),
+        ];
+        for (f, cmd) in [
+            (MATH_TSV, "math-gen --check"),
+            (MATH_GEN, "math-gen --check"),
+            ("csys/src/adapter/math_libm.c", "math-gen --check"),
+            ("crates/math/src/coeffs/trig.rs", "tables --check"),
+            ("crates/math/src/coeffs/fast32_sin.rs", "tables --check"),
+        ] {
+            for tier in [Tier::Direct, Tier::Wide] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.xtask_cmds.contains(cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                for (c, t) in math_set {
+                    assert!(s.tests.contains_key(&(c.to_string(), t.to_string())), "{f} ({tier:?}): {c}::{t} not selected");
+                }
+                // Every liella-math suite, and every target whose own source names the math exports or libm.
+                for t in repo().targets.iter().filter(|t| {
+                    let own = &t.text[..t.own.min(t.text.len())];
+                    t.krate == MATH_CRATE || own.contains("s10_math") || own.contains("libm")
+                }) {
+                    assert!(s.tests.contains_key(&(t.krate.clone(), t.name.clone())), "{f} ({tier:?}): {}::{} not selected", t.krate, t.name);
+                }
+                assert!(s.libs.contains_key("liella-boundary") && s.libs.contains_key("liella-math"), "{f} ({tier:?}): unit tests {:?}", s.libs.keys());
+                // Targeted, not everything: a test of another section stays out.
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+        }
+        // The coefficient family's users come from the `coeffs` module: its one-hop users' targets are a subset.
+        let c = select_tier(repo(), &["crates/math/src/coeffs/trig.rs".to_string()], Tier::Direct);
+        let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
+        for k in m.tests.keys() {
+            assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
+        }
+    }
+
+    // XTASK-AFFECTED-MATH-2 (ruling #3204), no spec clause: a fit file selects its family's math set (everything its
+    // generated coefficient file selects) plus `remez --check <fit>`; the tables generator selects its own mapping as a
+    // liella-mathtools source, the whole math set, `tables --check` and `kernel-index --check`. Not FULL, in the direct
+    // and wide tiers.
+    #[test]
+    fn math_fits_and_tables_generator_select_the_math_set_not_full() {
+        let fit = "crates/math/fits/fast32_sin.fit";
+        assert!(repo().fits.contains(fit), "the fit files of the tree: {:?}", repo().fits);
+        for tier in [Tier::Direct, Tier::Wide] {
+            let coeffs = select_tier(repo(), &["crates/math/src/coeffs/fast32_sin.rs".to_string()], tier);
+            for (f, cmds) in [
+                (fit, &["remez --check crates/math/fits/fast32_sin.fit", "tables --check"][..]),
+                (MATH_TABLES_GEN, &["tables --check", "kernel-index --check"][..]),
+            ] {
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                for cmd in cmds {
+                    assert!(s.xtask_cmds.contains(*cmd), "{f} ({tier:?}): `cargo xtask {cmd}` not selected: {:?}", s.xtask_cmds);
+                }
+                // Everything the family's coefficient file selects (the math export suites, every liella-math suite).
+                for k in coeffs.tests.keys() {
+                    assert!(s.tests.contains_key(k), "{f} ({tier:?}) misses {k:?}, which coeffs/fast32_sin.rs selects");
+                }
+                for k in coeffs.libs.keys().chain(coeffs.clippy.keys()) {
+                    assert!(s.libs.contains_key(k) || s.clippy.contains_key(k), "{f} ({tier:?}) misses the crate {k}");
+                }
+                assert!(!s.tests.contains_key(&("liella-core".to_string(), "s04_strings_clauses".to_string())), "{f} ({tier:?}) selected a string test");
+            }
+            // The generator is also a liella-mathtools source: its own crate's unit tests and its ordinary mapping.
+            let s = select_tier(repo(), &[MATH_TABLES_GEN.to_string()], tier);
+            assert!(s.libs.contains_key("liella-mathtools"), "{MATH_TABLES_GEN} ({tier:?}): unit tests {:?}", s.libs.keys());
+            let mut own = Selection { direct: tier == Tier::Direct, ..Selection::default() };
+            ordinary_mapping(repo(), MATH_TABLES_GEN, &mut own);
+            assert!(own.libs.contains_key("liella-mathtools"), "the ordinary mapping of {MATH_TABLES_GEN} ({tier:?}): {:?}", own.libs.keys());
+            for k in own.libs.keys() {
+                assert!(s.libs.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the unit tests of {k} of its own mapping");
+            }
+            for k in own.tests.keys() {
+                assert!(s.tests.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses {k:?} of its own mapping");
+            }
+            for k in own.conf.keys() {
+                assert!(s.conf.contains_key(k), "{MATH_TABLES_GEN} ({tier:?}) misses the program {k} of its own mapping");
+            }
         }
     }
 

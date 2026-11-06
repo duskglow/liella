@@ -1,4 +1,4 @@
-# TIMING-SWEEP-1105 (INCOMPLETE: measurement running, table not yet produced)
+# TIMING-SWEEP-1105 (COMPLETE: table and REOPEN/CLOSE lists in results/timing-sweep-1105.md)
 
 State: branch task/timing-sweep-1105, base origin/next f2157504 (products built from this tree, no code change).
 Build: shiki role sh1, job timing-sweep-1105-build2 rc 0 (`cargo xtask bench --build-only`, 21 programs, 302 s).
@@ -28,3 +28,6 @@ Instruction ratios come from the same run's counters.tsv (same CPUs, same code),
 ## Not to redo
 The build and the staging (done). Do not start the benches again while the runs are alive (kill by PID otherwise).
 No code was changed. Plan rows: V-4 handoff/benchmarks-v4.md, docs/benchmarks.md section 6.
+
+## Run 2 (TIMING-SWEEP-1105-2)
+Copied counters/rounds from nico (.112, bench rc=1: nscache first_getpwnam_r_cached/create budget vs uncached) and nozomi (.118, rc=0), ran the analyzer, wrote results/timing-sweep-1105.md and -table.md. Open follow-ups: REOPEN rows (Ivy Bridge strchr/malloc/memcmp family), nscache budget on Ivy Bridge.

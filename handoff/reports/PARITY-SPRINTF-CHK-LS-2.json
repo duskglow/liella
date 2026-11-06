@@ -1,0 +1,12 @@
+{"task": "PARITY-SPRINTF-CHK-LS-2", "model": "opus", "tokens": null,
+ "result": "render_pair_s in-place writer: ls nlink sprintf trace 809 -> 738 instructions; printf_text inline measured negative on other %s rows and reverted; final-head jobs running",
+ "branch": "task/parity-sprintf-chk-ls-2", "head": "see hand-back (revert commit on top of ae05a3fe)",
+ "gate": {"affected": "ae05a3fe: affected ok, conformance 109 passed / 0 failed; final head: parity-sprintf-chk-ls-2-gate2 running", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["counts noise on untouched rows (iconv, regcomp, strcoll, execvp) of +2..+13 instructions between two runs of the same bench"],
+ "refused": [],
+ "jobs": ["parity-sprintf-chk-ls-2-gate2", "parity-sprintf-chk-ls-2-plants2", "parity-sprintf-chk-ls-2-percall2", "parity-sprintf-chk-ls-2-counts2"],
+ "improvement": "cargo xtask bench --compare should print the per-row before/after delta itself; the join by hand cost calls",
+ "next_step": "read percall2/counts2; if spr_ls stays at ~1.06x, attack the parse (~300 instructions: simple_conv out of line, simple_star)",
+ "report_file": "handoff/perf-sprintf-chk-ls.md"}

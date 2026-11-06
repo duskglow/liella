@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-EXPM1-HYPER-CBRT-TIER-3", "model": "opus", "tokens": null,
+ "result": "COMPLETE: hard-case test (18 inputs found by a bound-zeroed search, ~1 misround per 1e8 operands) catches the bound plant and five new per-path bound plants (10/10 CAUGHT); saturation section 23 written; target 1.05x reached for cbrt only",
+ "branch": "task/libm-f64-expm1-hyper-cbrt-tier-3", "head": null,
+ "gate": {"affected": "escalated to FULL (s10_math.tsv changed by run 2); running detached at hand-back, result not read", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [{"item": "cargo xtask affected escalates every s10_math.tsv change (libm hot wiring) to the FULL tier, so a libm developer gate becomes a landing-size gate", "recommendation": "map s10_math.tsv rows and s10_math_gen.rs to the boundary math tests (math_fma_paths, the s10 export tests) in the direct tier"}],
+ "informational": ["counts are run 2's keke libm-f64-expm1-hyper-cbrt-tier-2-counts-after-5 (rc 0); product code unchanged since (tests, docs and handoff only)", "run 2's gate-4 escalated to FULL as well and has no jobs.tsv row (never finished)", "cbrt and the series paths have no hard case: no misround in 1e8 operands with the bound at zero", "the hard cases are checked on the plain build only; the FMA build is covered by the random bit-identity test"],
+ "refused": [],
+ "jobs": ["libm-f64-expm1-hyper-cbrt-tier-3-lint-2", "libm-f64-expm1-hyper-cbrt-tier-3-plants-1", "libm-f64-expm1-hyper-cbrt-tier-3-gate", "keke:libm-f64-expm1-hyper-cbrt-tier-2-counts-after-5"],
+ "improvement": "A release-mode search in a scratch copy with the bound zeroed found hard cases in 2 jobs (~11 min); a reusable `cargo xtask` hard-case search (zero a named bound, compare with Real::*) would save every libm tier this setup.",
+ "next_step": "read the FULL gate; then profile one call per row (wl_trace) before reworking exp_pm / settle for the five rows above 1.05x",
+ "report_file": "handoff/libm-f64-expm1-hyper-cbrt-tier.md"}

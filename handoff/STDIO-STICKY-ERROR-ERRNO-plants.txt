@@ -1,0 +1,5 @@
+# STDIO-STICKY-ERROR-ERRNO plants: getdelim/getline started with the error indicator set must answer -1 without reading
+# and leave errno alone. Run: cargo xtask plants handoff/STDIO-STICKY-ERROR-ERRNO-plants.txt --dir <new dir>
+sticky-err-eio | crates/legacy/src/stdio_compat.rs | perl:s/(if ext\.state\.err \{\n\s*return )Ok\(None\);/$1Err(Errno::EIO);/ | cargo test -p liella --test s12_stdio_clauses s12_5_c_5_sticky_indicators_leave_errno | msg:errno is left alone
+sticky-err-set-errno | crates/legacy/src/stdio_compat.rs | perl:s/(if ext\.state\.err \{\n)(\s*return Ok\(None\);)/$1        env.set_errno(Errno::EIO);\n$2/ | cargo test -p liella --test s12_stdio_clauses s12_5_c_5_sticky_indicators_leave_errno | msg:errno is left alone
+sticky-err-reads-on | crates/legacy/src/stdio_compat.rs | perl:s/if ext\.state\.err \{(\n\s*return Ok\(None\);)/if false \&\& ext.state.err {$1/ | cargo test -p liella --test s12_stdio_clauses s12_5_c_5_sticky_indicators_leave_errno | msg:indicator set: (fails|nothing is read)

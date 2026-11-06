@@ -1015,6 +1015,63 @@ fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators_on_level() 
 }
 
 #[test]
+fn strcmp_head_finds_every_difference_in_strings_ending_at_a_page_end() {
+    // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). On both scan levels, a string of every length 0-130
+    // whose terminator is the last byte of a page before an unmapped page (so every start the
+    // entry's page tests send to the head or away from it), against the same text ending at
+    // another page end or in the middle of a buffer: equal, and differing (greater, smaller, or
+    // ended) at every position, in both argument orders.
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        let (lo, hi, base) = guarded();
+        let (lo2, hi2, base2) = guarded();
+        let mut mid = vec![0u8; 512];
+        let put = |addr: usize, v: u8| {
+            s::memset(addr as *mut c_void, c_int::from(v), 1);
+        };
+        for len in 0..=130usize {
+            let (pa, pe) = (base + PAGE - 1 - len, base2 + PAGE - 1 - len);
+            for i in 0..=len {
+                let v = if i == len { 0 } else { b'a' + (i % 26) as u8 };
+                put(pa + i, v);
+                put(pe + i, v);
+                mid[100 + i] = v;
+            }
+            for at_end in [true, false] {
+                let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                let wh = if at_end { "page end" } else { "mid-buffer" };
+                assert_eq!(cmp_at(pa, pb), 0, "equal, length {len}, b at {wh}, avx2 {avx2}");
+                for d in 0..len {
+                    let keep = b'a' + (d % 26) as u8;
+                    for (v, want) in [(keep + 1, -1), (keep - 1, 1), (0, 1)] {
+                        if at_end {
+                            put(pb + d, v);
+                        } else {
+                            mid[100 + d] = v;
+                        }
+                        let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                        assert_eq!(cmp_at(pa, pb), want, "b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                        assert_eq!(cmp_at(pb, pa), -want, "swapped, b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                    }
+                    if at_end {
+                        put(pb + d, keep);
+                    } else {
+                        mid[100 + d] = keep;
+                    }
+                }
+            }
+        }
+        CSys.munmap(hi2).unwrap();
+        CSys.munmap(lo2).unwrap();
+        CSys.munmap(hi).unwrap();
+        CSys.munmap(lo).unwrap();
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+}
+
+#[test]
 fn strcmp_scanner_crosses_page_boundaries_inside_the_strings() {
     // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). Strings of 150 bytes that start 1..80 bytes before Both scan levels (D-4.29).
     let _g = level();
