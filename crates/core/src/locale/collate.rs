@@ -8,7 +8,7 @@
 //! them, and `strxfrm` writes the same units.
 #![allow(clippy::arithmetic_side_effects)] // offsets are u32 file values or slice lengths: sums of a few stay far below usize::MAX
 
-use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 use super::file::{i32_at, u32_at, Category};
 use super::table3::Table3;
@@ -50,8 +50,6 @@ static ASCII_POOL: [AsciiSlot; ASCII_SLOTS] = [const {
         ascii_fast: AtomicBool::new(false),
         rank: [const { AtomicU16::new(0) }; 256],
         ready: AtomicBool::new(false),
-        known: [const { AtomicU64::new(0) }; 2],
-        partial: AtomicBool::new(false),
         lead_map: [const { AtomicU8::new(0) }; 256],
         lead_next: AtomicUsize::new(0),
         lead: [const { LeadIndex { at: [const { AtomicU16::new(LEAD_NONE) }; 257] } }; LEAD_SLOTS],
@@ -104,13 +102,6 @@ pub struct AsciiSlot {
     /// process that never collates (`setlocale(LC_ALL, "")` at every program start) pays
     /// only the slot claim.
     ready: AtomicBool,
-    /// The ASCII bytes whose `lane` and `unit` entries are written (bit `b % 64` of word
-    /// `b / 64`; D-4.54): set (Release) after the entries, so a reader that sees every bit
-    /// (Acquire) sees every entry.
-    known: [AtomicU64; 2],
-    /// The first general-path comparison has filled the entries of its own bytes (D-4.54); a
-    /// later one that still finds the tables not `ready` fills the rest.
-    partial: AtomicBool,
     /// Per lead byte with an `extramb` list (PERF-STRCOLL-ELEMENTS, D-4.51): 0 = not looked at
     /// yet, `k + 1` = indexed in `lead[k]`, [`LEAD_WALK`] = walked from the start. Built at the
     /// first element of that lead byte, published after its index (Release).
@@ -208,16 +199,6 @@ impl Collate {
         self.ascii1.map_or(0, |t| t.lane.iter().filter(|u| u.load(Ordering::Relaxed) != ASCII_SLOW).count())
     }
 
-    /// How many ASCII bytes have their table entries written, without filling any (D-4.54; for
-    /// tests), and whether the tables are complete (`ascii_fast` and the ranks set).
-    #[doc(hidden)]
-    pub fn ascii_known_bytes(&self) -> (usize, bool) {
-        self.ascii1.map_or((0, false), |t| {
-            let n = t.known.iter().map(|k| k.load(Ordering::Acquire).count_ones()).sum::<u32>();
-            (usize::try_from(n).unwrap_or(usize::MAX), t.ready.load(Ordering::Acquire))
-        })
-    }
-
     /// The pool slot of this catalog's ASCII table, claimed at load and filled at the first
     /// general-path comparison ([`Self::warm`]). Entries start as [`ASCII_SLOW`] / [`UNIT_SLOW`] / rank 0 and are
     /// written with the same value by every filler, so a reader that meets a table not yet filled,
@@ -240,6 +221,7 @@ impl Collate {
     /// [`compare_stream`]) stay check-free and, until the table is filled, decide nothing (rank 0,
     /// every unit SLOW), so the first `strcoll` of a differing pair reaches the general path,
     /// which fills; later calls take the fast paths.
+    #[inline]
     fn warm(&self) {
         if let Some(table) = self.ascii1 {
             if !table.ready.load(Ordering::Acquire) {
@@ -248,80 +230,17 @@ impl Collate {
         }
     }
 
-    /// [`Self::warm`] for a comparison of texts `a` and `b` (COLDSTART-STRCOLL-FIRST, D-4.54):
-    /// the first one fills only the entries of the bytes it can read (the texts' ASCII bytes
-    /// and the terminator), so its cost follows its input; a later one fills the rest.
-    #[inline]
-    fn warm_for(&self, a: Option<&[u8]>, b: Option<&[u8]>) {
-        if let Some(table) = self.ascii1 {
-            if !table.ready.load(Ordering::Acquire) {
-                self.fill_demand(table, a, b);
-            }
-        }
-    }
-
-    #[cold]
-    #[inline(never)]
-    fn fill_demand(&self, table: &AsciiSlot, a: Option<&[u8]>, b: Option<&[u8]>) {
-        // A text without bytes (wide) reads no entry: nothing to fill for it.
-        let (Some(a), Some(b)) = (a, b) else { return };
-        if table.partial.swap(true, Ordering::AcqRel) {
-            self.fill(table);
-            return;
-        }
-        // The terminator's unit ends a stream; every text has one.
-        let mut need = [1u64, 0];
-        for &x in a.iter().chain(b) {
-            if let Some(w) = need.get_mut(usize::from(x >> 6)) {
-                *w |= 1 << (x & 63);
-            }
-        }
-        let mut all = true;
-        for (k, (want, have)) in need.into_iter().zip(&table.known).enumerate() {
-            let mut miss = want & !have.load(Ordering::Acquire);
-            if miss != 0 {
-                while miss != 0 {
-                    let bit = usize::try_from(miss.trailing_zeros()).unwrap_or(0);
-                    self.fill_byte(table, 64 * k + bit);
-                    miss &= miss.wrapping_sub(1);
-                }
-                let before = have.fetch_or(want, Ordering::AcqRel);
-                all &= (before | want) == u64::MAX;
-            } else {
-                all &= have.load(Ordering::Acquire) == u64::MAX;
-            }
-        }
-        if all {
-            self.finish(table);
-        }
-    }
-
-    /// Write ASCII byte `b`'s `lane` and `unit` entries (the same values from every writer).
-    fn fill_byte(&self, table: &AsciiSlot, b: usize) {
-        let e = self.ascii_entry(b);
-        if let Some(u) = table.lane.get(b) {
-            u.store(e, Ordering::Relaxed);
-        }
-        if let Some(w) = table.unit.get(b) {
-            w.store(self.unit_entry(b, e), Ordering::Relaxed);
-        }
-    }
-
     #[cold]
     #[inline(never)]
     fn fill(&self, table: &AsciiSlot) {
-        for b in 0..table.lane.len() {
-            self.fill_byte(table, b);
+        for (b, u) in table.lane.iter().enumerate() {
+            let e = self.ascii_entry(b);
+            u.store(e, Ordering::Relaxed);
+            if let Some(w) = table.unit.get(b) {
+                w.store(self.unit_entry(b, e), Ordering::Relaxed);
+            }
         }
-        for k in &table.known {
-            k.store(u64::MAX, Ordering::Release);
-        }
-        self.finish(table);
-    }
-
-    /// Every `lane` and `unit` entry is written: set `ascii_fast` and the ranks, then `ready`.
-    fn finish(&self, table: &AsciiSlot) {
-        // Every filler stores the same entries before its `known` bits, so each sees the final ones.
+        // Every filler stores the same entries before this, so each sees the final ones.
         let fast = table.unit.iter().take(128).all(|u| u.load(Ordering::Relaxed) != UNIT_SLOW);
         table.ascii_fast.store(fast, Ordering::Relaxed);
         if fast {
@@ -570,12 +489,6 @@ pub trait Text: Copy {
     fn ascii1(&self, _c: &Collate, _pos: usize) -> u32 {
         ASCII_SLOW
     }
-    /// The bytes whose [`AsciiSlot`] entries a comparison of this text reads (D-4.54); `None`
-    /// (the default) for a text that reads none of them.
-    #[doc(hidden)]
-    fn table_bytes(&self) -> Option<&[u8]> {
-        None
-    }
 }
 
 /// An element, opaque outside this module.
@@ -673,10 +586,6 @@ impl Text for &[u8] {
 
     fn same(&self, other: &Self) -> bool {
         self == other
-    }
-
-    fn table_bytes(&self) -> Option<&[u8]> {
-        Some(self)
     }
 
     #[inline]
@@ -1371,7 +1280,7 @@ fn first_level<T: Text>(c: &Collate, a: T, b: T) -> First {
     if c.nrules < 2 {
         return First::Unknown;
     }
-    c.warm_for(a.table_bytes(), b.table_bytes());
+    c.warm();
     let empty = Weights { data: &[], start: 0, count: 0, wide: false };
     let mut la = FirstLevel { c, s: a, pos: 0, cur: empty, i: 0 };
     let mut lb = FirstLevel { c, s: b, pos: 0, cur: empty, i: 0 };
