@@ -1,4 +1,26 @@
-# LIBM-SPECIAL-GAMMA-TIER report (runs 1 and 2)
+# LIBM-SPECIAL-GAMMA-TIER report (runs 1, 2 and 3)
+
+## Run 3 (LIBM-SPECIAL-GAMMA-TIER-3, merge only; branch task/libm-special-gamma-tier-3, role keke:~/w/n2)
+* Why run 2's gate was red: the FULL gate failed only in liella::enomem_fs_walk enomem_realpath_null, an
+  intermittent defect on next tracked as ENOMEM-REALPATH-INTERMITTENT (coordinator note). That test passed in this
+  run's gate; no change was made for it.
+* Commits: f4dd3b2c merge of origin/next c7c320a2 (per-family tables, per-family hot modules); 7ead191d generated
+  `coeffs/gamma.rs` and `crates/math/KERNELS.md` (`cargo xtask tables`, job libm-special-gamma-tier-3-tables). The
+  other generated coeffs files came out byte-identical to next's.
+* Kernel unchanged apart from paths: `git diff e104133f HEAD` is empty for fast_gamma.rs and tests/fast_gamma.rs;
+  gamma_tables.rs changed one doc line (output path). special.rs and special_tables.rs differ only by next's lines.
+  No gamma boundary wrappers on this branch, so none to move into hot/gamma.rs.
+* clippy (`cargo xtask clippy`, and workspace `-D warnings` in the counts job) and `cargo xtask static` clean on the role.
+* Gate `libm-special-gamma-tier-3-gate` (FULL, escalated: generated source): rc 0; 32 suites ok, 10886 passed, 0
+  failed, 1193 ignored; conformance 117 passed; peak memory 12G, oom_kill 0.
+* Plants `libm-special-gamma-tier-3-plants` (handoff/plants/libm-special-gamma-tier-3.plants, dir
+  /dev/shm/claude/libm-special-gamma-tier-3/plants-1): 4 CAUGHT, 0 SURVIVED, 0 WARN-RC-ONLY, 0 WARN-NO-MSG. The tool
+  printed WARN-DEV-SHM (copy under /dev/shm); it does not apply here, because the plants run only the liella-math
+  fast_gamma test, which mounts nothing.
+* Counts `libm-special-gamma-tier-3-counts` (Zen 1 host, RAM copy, clippy -D warnings and static first): lgamma
+  1.729x glibc instructions (cycles 1.976x, 392.0 / 198.4); tgamma 1.231x (cycles 1.494x, 519.4 / 347.6). The
+  instruction ratios match run 2 on e104133f. Target 1.05x not reached; next step: profile one call per phase.
+* Slip: one Bash call in this run used a heredoc for a Python edit script (it worked; the rule says avoid them).
 
 ## Commits (branch task/libm-special-gamma-tier-2)
 * 18ad79de (run 1) Add the double lgamma/tgamma fast tier; 68657bc9 (run 1) checkpoint handoff.
