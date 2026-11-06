@@ -4,7 +4,7 @@
 //! The reader works on a byte slice (a file prefix, a whole file or a mapped image) and does no I/O.
 //! Every offset, count and size from the object is checked with checked arithmetic against the slice
 //! before use (threat-model rule 4): a malformed object gives an [`ElfError`], never a panic and never a
-//! read outside the slice. Nothing here allocates. The error rules are decision D-NEW (plan/07-decisions/s26-29.md).
+//! read outside the slice. Nothing here allocates. The error rules are decision D-27.7 (plan/07-decisions/s26-29.md).
 //!
 //! The ELF identity (class, byte order, machine) is checked only through [`Arch`] (design §0a).
 
@@ -97,7 +97,7 @@ pub enum Part {
 }
 
 /// Why an object was refused. Every variant is a property of the bytes, so the same input always
-/// gives the same error (decision D-NEW).
+/// gives the same error (decision D-27.7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ElfError {
     /// The slice is shorter than the ELF header.
@@ -280,7 +280,7 @@ impl<'a> Elf<'a> {
     ///
     /// # Errors
     ///
-    /// The first rule the bytes break, in the order of decision D-NEW: identity, header fields, the
+    /// The first rule the bytes break, in the order of decision D-27.7: identity, header fields, the
     /// program header table's range, then each program header in index order.
     pub fn parse<A: Arch>(bytes: &'a [u8]) -> Result<Self, ElfError> {
         let ident = bytes.get(..16).ok_or(ElfError::TooShort)?;

@@ -1,5 +1,5 @@
 //! The ELF reader (`liella_ld::elf`, IP-24 part 1) over a synthetic image and its malformed variants:
-//! every check of decision D-NEW returns its typed error, never a panic or an out-of-range read.
+//! every check of decision D-27.7 returns its typed error, never a panic or an out-of-range read.
 //! The image is built here byte by byte, so these tests are pure logic and run on any host.
 //!
 //! Trace: the identity tests cite s27_1_f_0 (wrong ELF class); the rest is spec/security/threat-model.md
