@@ -2274,6 +2274,116 @@ fn step_saving(root: &Path, log: &Path, label: &str, cmd: &mut Command, name: &s
     ok
 }
 
+/// How many trailing lines of a failed conformance program's stdout, and of its stderr, `affected` prints (D-X.27).
+const CONF_TAIL_LINES: usize = 40;
+/// A longer line of that output is cut to this many characters (one runaway line does not flood the console).
+const CONF_TAIL_WIDTH: usize = 300;
+
+/// D-X.27: the selected conformance programs as one step (`conformance/run.sh <name>...`): whether it passed, and when
+/// it failed the report of `conformance_failures` (empty when it passed), which the caller prints to the console, where `cargo xtask plants` matches a plant's `msg:` (before, the console
+/// named the step only, and a plant caught for the right reason by a program's own check was WARN-NO-MSG).
+fn run_conformance(root: &Path, log: &Path, names: &[&str]) -> (bool, String) {
+    let from = fs::metadata(log).map_or(0, |m| m.len());
+    let mut cmd = Command::new("sh");
+    cmd.arg("conformance/run.sh").args(names);
+    let ok = step(root, log, &format!("conformance ({} programs)", names.len()), &mut cmd);
+    if ok {
+        return (true, String::new());
+    }
+    let bytes = fs::read(log).unwrap_or_default();
+    let own = String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).into_owned();
+    (false, conformance_failures(&root.join("conformance").join("build"), &own))
+}
+
+/// Linux x86-64 signal numbers (kernel UAPI `asm/signal.h`), for a status of 128 + n.
+fn signal_name(n: u32) -> Option<&'static str> {
+    const NAMES: [&str; 31] = [
+        "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGTRAP", "SIGABRT", "SIGBUS", "SIGFPE", "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM", "SIGTERM", "SIGSTKFLT", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF", "SIGWINCH", "SIGIO", "SIGPWR", "SIGSYS",
+    ];
+    NAMES.get((n as usize).wrapping_sub(1)).copied()
+}
+
+/// `status N, expected ...` of `run.sh`, with a status above 128 read as the shell does: death by signal N - 128.
+fn describe_status(detail: &str) -> String {
+    let Some(rest) = detail.strip_prefix("status ") else { return detail.to_string() };
+    let (n, tail) = rest.split_once(',').unwrap_or((rest, ""));
+    match n.trim().parse::<u32>() {
+        Ok(rc) if rc > 128 && rc <= 128 + 64 => {
+            let sig = rc - 128;
+            format!("killed by signal {sig}{} (status {rc}){tail}", signal_name(sig).map(|s| format!(" {s}")).unwrap_or_default())
+        }
+        Ok(rc) => format!("exit status {rc}{tail}"),
+        Err(_) => detail.to_string(),
+    }
+}
+
+/// The last `CONF_TAIL_LINES` lines of `path` under a heading, each line prefixed `    | `, with a note when the file
+/// had more lines (or a line was cut); `(empty)` or `(absent)` otherwise.
+fn conf_tail(what: &str, path: &Path) -> String {
+    let Ok(bytes) = fs::read(path) else { return format!("  {what}: (absent: {})\n", path.display()) };
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return format!("  {what}: (empty)\n");
+    }
+    let skip = lines.len().saturating_sub(CONF_TAIL_LINES);
+    let mut out = if skip > 0 {
+        format!("  {what}: last {CONF_TAIL_LINES} of {} lines ({skip} cut; whole file {}):\n", lines.len(), path.display())
+    } else {
+        format!("  {what} ({} lines):\n", lines.len())
+    };
+    for l in &lines[skip..] {
+        let n = l.chars().count();
+        if n > CONF_TAIL_WIDTH {
+            out.push_str(&format!("    | {} ... ({} more characters cut)\n", l.chars().take(CONF_TAIL_WIDTH).collect::<String>(), n - CONF_TAIL_WIDTH));
+        } else {
+            out.push_str(&format!("    | {l}\n"));
+        }
+    }
+    out
+}
+
+/// D-X.27: for each program the step's own output (`own`, what `run.sh` printed) names as failed - a line
+/// `conformance: FAIL <name> (<why>)` - its name, how it ended (the `conformance: <name>: ...` lines: exit status or
+/// signal, missing stderr text) and the tails of its stdout and stderr in `build`. A program that did not build (or
+/// whose helper did not) shows its build log instead: its stdout and stderr files there are an earlier run's. Programs
+/// that passed print nothing; a failed step that names no program shows the end of its own output.
+fn conformance_failures(build: &Path, own: &str) -> String {
+    let mut failed: Vec<(&str, &str)> = Vec::new();
+    let mut details: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for l in own.lines() {
+        let Some(r) = l.strip_prefix("conformance: ") else { continue };
+        if let Some(f) = r.strip_prefix("FAIL ") {
+            let (name, why) = f.split_once(' ').unwrap_or((f, ""));
+            failed.push((name, why.trim().trim_start_matches('(').trim_end_matches(')')));
+        } else if let Some((name, d)) = r.split_once(": ") {
+            if !name.is_empty() && !name.contains(' ') {
+                details.entry(name).or_default().push(d);
+            }
+        }
+    }
+    let mut out = String::new();
+    if failed.is_empty() {
+        let lines: Vec<&str> = own.lines().collect();
+        out.push_str("conformance: the step failed but named no failed program; the end of its output:\n");
+        for l in &lines[lines.len().saturating_sub(CONF_TAIL_LINES)..] {
+            out.push_str(&format!("    | {l}\n"));
+        }
+        return out;
+    }
+    for (name, why) in failed {
+        let how: Vec<String> = details.get(name).into_iter().flatten().map(|d| describe_status(d)).collect();
+        out.push_str(&format!("conformance FAILED: {name}: {}\n", if how.is_empty() { why.to_string() } else { how.join("; ") }));
+        if why.starts_with("stderr:") {
+            out.push_str(&conf_tail("stdout", &build.join(format!("{name}.log.stdout"))));
+            out.push_str(&conf_tail("stderr", &build.join(format!("{name}.log.stderr"))));
+        } else if build.join(format!("{name}.log")).exists() && (why.contains("does not build") || why.contains("helper")) {
+            out.push_str(&conf_tail("build log", &build.join(format!("{name}.log"))));
+        }
+    }
+    out
+}
+
 /// A few lines from a cargo/xtask log, in the format of `~/bin/test-summary`.
 fn summary(log: &str) -> String {
     let (mut suites, mut ok, mut bad, mut skipped, mut passed, mut failed, mut ignored) = (0, 0, 0, 0, 0u64, 0u64, 0u64);
@@ -2443,12 +2553,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             }
         }
         if !sel.conf.is_empty() {
-            let mut cmd = Command::new("sh");
-            cmd.arg("conformance/run.sh");
-            for n in sel.conf.keys() {
-                cmd.arg(n);
-            }
-            ok &= step(root, &log, &format!("conformance ({} programs)", sel.conf.len()), &mut cmd);
+            let (passed, report) = run_conformance(root, &log, &sel.conf.keys().map(String::as_str).collect::<Vec<_>>());
+            print!("{report}");
+            ok &= passed;
         }
         for c in &sel.xtask_cmds {
             // A command may carry its flags (`math-gen --check`).
@@ -2744,6 +2851,90 @@ mod tests {
         }
         assert!(!saved.contains("STALE") && !saved.contains("earlier-output"), "{saved:?}");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A temporary root whose `conformance/run.sh` stands in for the real runner, printing its message formats:
+    /// `good` passes; `bad` exits with status 134 (SIGABRT) and a missing stderr text, 5 stdout and 50 stderr lines
+    /// (the last one far wider than the cut); `nobuild` does not build and has an earlier run's stdout and stderr.
+    fn fake_conformance_root(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("xtask-conf-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("conformance").join("build")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        let script = r#"b=conformance/build; fail=0; pass=0
+for n in "$@"; do
+  case $n in
+  good) pass=$((pass + 1)) ;;
+  bad) i=1; while [ $i -le 5 ]; do echo "out-$i"; i=$((i + 1)); done > $b/bad.log.stdout
+       i=1; while [ $i -le 49 ]; do echo "err-$i"; i=$((i + 1)); done > $b/bad.log.stderr
+       printf 'FAIL: strlen returned 3 %0500d\n' 7 >> $b/bad.log.stderr
+       echo "conformance: bad: status 134, expected 0"; echo "conformance: bad: stderr lacks: wanted text"
+       echo "conformance: FAIL bad (stderr: conformance/build/bad.log.stderr)"; fail=$((fail + 1)) ;;
+  nobuild) echo STALE-STDOUT > $b/nobuild.log.stdout; echo STALE-STDERR > $b/nobuild.log.stderr
+       echo "x.c:1: error: boom" > $b/nobuild.log
+       echo "conformance: FAIL nobuild (does not build; see conformance/build/nobuild.log)"; fail=$((fail + 1)) ;;
+  esac
+done
+echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
+"#;
+        fs::write(root.join("conformance").join("run.sh"), script).unwrap();
+        root
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed conformance program's name, its end (signal by
+    // name, the missing stderr text) and the bounded tails of its stdout and stderr reach the report `affected` prints;
+    // a program that did not build shows its build log, not an earlier run's output; a passing program adds nothing.
+    #[test]
+    fn a_failed_conformance_program_reports_its_end_and_output_tails() {
+        let root = fake_conformance_root("fail");
+        let log = root.join("target").join("affected.log");
+        assert!(step(&root, &log, "earlier step", Command::new("sh").args(["-c", "echo 'conformance: FAIL earlier (stderr: x)'"])));
+        let (ok, report) = run_conformance(&root, &log, &["good", "bad", "nobuild"]);
+        assert!(!ok, "{report}");
+        for want in [
+            "conformance FAILED: bad: killed by signal 6 SIGABRT (status 134), expected 0; stderr lacks: wanted text\n",
+            "  stdout (5 lines):\n    | out-1\n",
+            "    | out-5\n",
+            "  stderr: last 40 of 50 lines (10 cut; whole file ",
+            "    | err-11\n",
+            "    | FAIL: strlen returned 3 000",
+            " ... (224 more characters cut)\n",
+            "conformance FAILED: nobuild: does not build; see conformance/build/nobuild.log\n  build log (1 lines):\n    | x.c:1: error: boom\n",
+        ] {
+            assert!(report.contains(want), "missing {want:?} in:\n{report}");
+        }
+        for not in ["| err-10\n", "STALE-", "good", "earlier"] {
+            assert!(!report.contains(not), "unexpected {not:?} in:\n{report}");
+        }
+        let (ok, report) = run_conformance(&root, &log, &["good"]);
+        assert!(ok && report.is_empty(), "a passing program printed: {report:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // Trace: no spec clause (test-harness reporting, D-X.27): a failed step naming no program still shows how it ended.
+    #[test]
+    fn a_conformance_step_failing_without_a_program_shows_its_end() {
+        let report = conformance_failures(Path::new("/nonexistent"), "== conformance (1 programs)\nrun.sh: 3: cc: not found\n");
+        assert!(report.contains("named no failed program") && report.contains("    | run.sh: 3: cc: not found\n"), "{report}");
+        assert_eq!(describe_status("status 3, expected 0"), "exit status 3, expected 0");
+        assert_eq!(describe_status("status 139, expected signal 6"), "killed by signal 11 SIGSEGV (status 139), expected signal 6");
+        assert_eq!(describe_status("stderr lacks: x"), "stderr lacks: x");
+    }
+
+    // Trace: no spec clause (D-X.27): the report reads `run.sh`'s own lines and files; this fails when their format moves.
+    #[test]
+    fn the_conformance_report_matches_the_runner_formats() {
+        let run = fs::read_to_string(root().join("conformance").join("run.sh")).unwrap();
+        for want in [
+            r#"log="$here/build/$name.log""#,
+            r#"2>"$log.stderr" >"$log.stdout""#,
+            r#"echo "conformance: $name: status $rc, expected $want_exit""#,
+            r#"echo "conformance: $name: stderr lacks: $text""#,
+            r#"echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)""#,
+            r#"echo "conformance: FAIL $name (does not build; see conformance/build/$name.log)""#,
+        ] {
+            assert!(run.contains(want), "conformance/run.sh no longer has {want:?}: update conformance_failures");
+        }
     }
 
     fn root() -> PathBuf {
