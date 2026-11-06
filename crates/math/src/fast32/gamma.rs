@@ -224,6 +224,23 @@ mod tests {
         assert!(decided > 5_000, "{decided}");
     }
 
+    /// The tier decides lgammaf at the integers n ≥ 3 and above 2^23 (where the fast path's
+    /// Stirling piece runs up to overflow) and refuses its exact zeros and the poles: sending that
+    /// range to mp put the exhaustive sweep past its time limit. (No spec clause: ruling #2889.)
+    #[test]
+    fn lgamma_oracle_decides_integers_and_large_operands() {
+        use crate::oracle32 as o;
+        for x in [3.0f32, 4.0, 15.0, 16.0, 17.0, 1000.0, 8_388_607.0, 8_388_608.0, 1.0e10, 1.0e30, 1.0e36] {
+            for m in MODES {
+                let r = o::decide(&o::lgamma_est(x), m);
+                assert_eq!(r.map(f32::to_bits), Some(accurate(Fast::Lgamma, x, m).0.to_bits()), "lgamma oracle at {x:e} {m:?}");
+            }
+        }
+        for x in [1.0f32, 2.0, 0.0, -0.0, -1.0, -3.0, -64.5, f32::INFINITY, f32::NAN] {
+            assert!(matches!(o::lgamma_est(x), o::Est::Unknown), "lgamma oracle refuses {x:e}");
+        }
+    }
+
     /// `f` against the tiered oracle on `xs` (as erf's): one oracle call per operand the fast path
     /// takes in any mode; the number taken. Counts in `near_zero` the lgammaf operands refused
     /// only for |y| < 2^-8 (next to the negative zeros; they take the accurate path).

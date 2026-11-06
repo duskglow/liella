@@ -332,22 +332,33 @@ fn sin_pi(r: f64) -> (Dd, f64) {
     (sum, err)
 }
 
-/// Whether the `float` x is ±0, ±∞, NaN or an integer (the poles, and Γ(n), lnΓ(1) = lnΓ(2) = 0,
-/// whose exact results the tier must not decide): the accurate path answers those.
+/// Whether the `float` x is ±0, ±∞, NaN or an integer (the poles, and Γ(n), whose exact results
+/// the tier must not decide): the accurate path answers those for tgamma.
 fn gamma_unknown(xd: f64) -> bool {
     !(xd.abs() > 0.0) || xd.abs() >= 8_388_608.0 || xd == dd::nearest_int(xd)
+}
+
+/// Whether lgamma's tier must not answer the `float` x: ±0, ±∞, NaN, x < −64, the poles (x ≤ 0
+/// an integer) and lnΓ(1) = lnΓ(2) = 0 (exact). Every other positive integer n ≥ 3 is estimated:
+/// lnΓ(n) = ln((n − 1)!) is the logarithm of an integer ≥ 2, transcendental (Lindemann), so
+/// never a `float` or a midpoint, and [`stirling`]'s bound holds for every x > 0. (Sending the
+/// integers and every |x| ≥ 2^23 to the accurate path put about 0.9·10^9 operands, 4 modes each,
+/// of the exhaustive lgammaf sweep on mp: the fast path takes all of x ≥ 36 up to overflow.)
+fn lgamma_unknown(xd: f64) -> bool {
+    !(xd.abs() > 0.0 && xd.abs() < f64::INFINITY) || xd < -64.0 || xd == 1.0 || xd == 2.0 || (xd < 0.0 && xd == dd::nearest_int(xd))
 }
 
 /// The oracle's estimate of `lgammaf(x)`: [`stirling`] for x > 0; for −64 < x < 0 the reflection
 /// lnΓ(x) = ln π − ln|sin πx| − lnΓ(1 − x) (1 − x exact; sin πx = ±sin π|r|, r = x − [x] exact).
 pub(crate) fn lgamma_est(x: f32) -> Est {
     let xd = f64::from(x);
-    if gamma_unknown(xd) || xd < -64.0 {
+    if lgamma_unknown(xd) {
         return Est::Unknown;
     }
     let (pos, neg) = if xd > 0.0 { (xd, false) } else { (1.0 - xd, true) };
     let (l, el, p, n) = stirling(pos);
-    let lp = crate::exp_log::log_dd(p);
+    // n = 0 (x ≥ 16): p = 1 exactly, ln p = 0 (the bound below keeps log_err's UE all the same).
+    let lp = if n == 0.0 { Dd::from(0.0) } else { crate::exp_log::log_dd(p) };
     let g = l.sub(lp);
     let eg = el + n * U * 1.000_1 + log_err(lp) + U * (l.hi.abs() + lp.hi.abs());
     if !neg {
