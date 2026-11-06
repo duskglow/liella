@@ -935,22 +935,22 @@ memcmp:
 	jmp .Lcmp_256_g
 .Lcmp_256:
 	vmovdqu 32(%rdi), %ymm1
-	vpcmpeqb 32(%rsi), %ymm1, %ymm1
 	vmovdqu 64(%rdi), %ymm2
-	vpcmpeqb 64(%rsi), %ymm2, %ymm2
 	vmovdqu 96(%rdi), %ymm3
-	vpcmpeqb 96(%rsi), %ymm3, %ymm3
-	vpand %ymm2, %ymm1, %ymm8
 	vmovdqu -128(%rdi,%rdx), %ymm4
-	vpcmpeqb -128(%rsi,%rdx), %ymm4, %ymm4
 	vmovdqu -96(%rdi,%rdx), %ymm5
-	vpcmpeqb -96(%rsi,%rdx), %ymm5, %ymm5
-	vpand %ymm4, %ymm3, %ymm9
 	vmovdqu -64(%rdi,%rdx), %ymm6
-	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
-	vpand %ymm6, %ymm5, %ymm10
 	vmovdqu -32(%rdi,%rdx), %ymm7
+	vpcmpeqb 32(%rsi), %ymm1, %ymm1
+	vpcmpeqb 64(%rsi), %ymm2, %ymm2
+	vpcmpeqb 96(%rsi), %ymm3, %ymm3
+	vpcmpeqb -128(%rsi,%rdx), %ymm4, %ymm4
+	vpcmpeqb -96(%rsi,%rdx), %ymm5, %ymm5
+	vpcmpeqb -64(%rsi,%rdx), %ymm6, %ymm6
 	vpcmpeqb -32(%rsi,%rdx), %ymm7, %ymm7
+	vpand %ymm2, %ymm1, %ymm8
+	vpand %ymm4, %ymm3, %ymm9
+	vpand %ymm6, %ymm5, %ymm10
 	vpand %ymm9, %ymm8, %ymm8
 	vpand %ymm7, %ymm10, %ymm10
 	vpand %ymm10, %ymm8, %ymm8
