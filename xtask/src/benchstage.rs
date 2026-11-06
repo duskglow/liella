@@ -11,6 +11,10 @@
 //! sha256 against the manifest instead of comparing mtimes (unpacking, clock skew or a `touch` can make a correct
 //! product look older than its sources), never asks git or the build host's path, and prints the manifest's
 //! commit in its header. A product that does not match is refused.
+//!
+//! XTASK-BENCH-OUTPUTS: the run tables of the build host (`counters.tsv`, `bench_times.tsv`, ...) are not staged,
+//! and a run in a staged tree writes its tables to `bench-out/` at the staged root (`bench::out_dir`), never into
+//! the products, so the same unpacked tree runs any number of times.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -138,6 +142,9 @@ fn commit_of(root: &Path) -> String {
 /// selection measures (`target/release/examples/<name>`), `xtask_exe` the binary staged as `xtask-bin`.
 pub(crate) fn write_stage(root: &Path, out: &Path, rust_benches: &[&str], xtask_exe: &Path) -> Result<Manifest, String> {
     let mut products = files_below(root, "target/liella", Some(STRESS_DIR));
+    // XTASK-BENCH-OUTPUTS: the tables of earlier runs on the build host are outputs, not products: never staged
+    // (a staged run writes its own into `bench-out/`, outside the products).
+    products.retain(|p| !p.strip_prefix("target/liella/bench/").is_some_and(crate::bench::is_output));
     for b in rust_benches {
         products.push(format!("target/release/examples/{b}"));
     }
@@ -236,6 +243,7 @@ mod tests {
     // a product changed after staging is refused by its hash; `--staged` without a manifest is refused.
     #[test]
     fn staged_tree_runs_without_mtimes_and_refuses_a_changed_product() {
+        let _run = crate::bench::RUN_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/xtask-stage-test");
         let _ = fs::remove_dir_all(&base);
         let (src, dst) = (base.join("src"), base.join("unpacked"));
@@ -287,6 +295,72 @@ mod tests {
         fs::write(&staged_exe, text).unwrap();
         let e = run(&["--staged"]).unwrap_err();
         assert!(e.contains("target/liella/bench/cbench_stagetest does not match"), "{e}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Every file below `root` (relative path -> contents), skipping `skip` (a top-level directory).
+    fn snapshot(root: &Path, skip: &str) -> std::collections::BTreeMap<String, Vec<u8>> {
+        let mut m = std::collections::BTreeMap::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                let rel = p.strip_prefix(root).unwrap().to_str().unwrap().to_string();
+                if rel == skip {
+                    continue;
+                }
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    m.insert(rel, fs::read(&p).unwrap());
+                }
+            }
+        }
+        m
+    }
+
+    // XTASK-BENCH-OUTPUTS: no spec clause (developer tooling). The tables an earlier run left on the build host are
+    // not staged; two staged runs of the same unpacked tree both succeed, write their tables to `bench-out/`, and
+    // leave every staged file as unpacked (no file changed, none added); the refusal of a changed tree stays.
+    #[test]
+    fn a_staged_tree_runs_twice_and_its_files_stay_as_unpacked() {
+        let _run = crate::bench::RUN_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/xtask-stage-twice-test");
+        let _ = fs::remove_dir_all(&base);
+        let (src, dst) = (base.join("src"), base.join("unpacked"));
+        write(&src.join("Cargo.toml"), "[workspace]\n");
+        write(&src.join("xtask/Cargo.toml"), "[package]\n");
+        write(&src.join("bench/budgets.tsv"), "cbench_stagetwice\trow\tmax_ns\t1000000\tstage test\n");
+        write(&src.join("bench/host_limits.tsv"), "# none\n");
+        write(&src.join("bench/instr_limits.tsv"), "# none\n");
+        write(&src.join("bench/c/cbench_stagetwice.c"), "/* the bench source */\n");
+        write(&src.join("target/liella/libc.a"), "!<arch>\n");
+        // an earlier run's tables on the build host
+        for t in ["bench_times.tsv", "counters.tsv", "counters-cbench_hot.tsv", "rounds.tsv", "ratio_host.tsv", "cbench_hot.compare.tsv"] {
+            write(&src.join("target/liella/bench").join(t), "old run\n");
+        }
+        let exe = src.join("target/liella/bench/cbench_stagetwice");
+        write(&exe, "#!/bin/sh\nprintf 'row\\t5\\n'\n");
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        let tar = base.join("stage.tar");
+        let m = write_stage(&src, &tar, &[], &std::env::current_exe().unwrap()).unwrap();
+        let outputs: Vec<&String> = m.products.iter().map(|(_, p)| p).filter(|p| p.ends_with(".tsv")).collect();
+        assert!(outputs.is_empty(), "run tables staged as products: {outputs:?}");
+
+        fs::create_dir_all(&dst).unwrap();
+        assert!(Command::new("tar").arg("-xf").arg(&tar).arg("-C").arg(&dst).status().unwrap().success());
+        let before = snapshot(&dst, crate::bench::STAGED_OUT);
+        let run = || crate::bench::run(&dst, &args(&["--no-build", "--staged", "--only", "cbench_stagetwice", "--runs", "1"]));
+        run().unwrap();
+        let times = dst.join(crate::bench::STAGED_OUT).join("bench_times.tsv");
+        let first = fs::read_to_string(&times).unwrap();
+        assert!(first.contains("cbench_stagetwice"), "{first}");
+        fs::remove_file(&times).unwrap();
+        run().unwrap();
+        assert!(fs::read_to_string(&times).unwrap().contains("cbench_stagetwice"));
+        let after = snapshot(&dst, crate::bench::STAGED_OUT);
+        let changed: Vec<&String> = after.keys().chain(before.keys()).filter(|k| before.get(*k) != after.get(*k)).collect();
+        assert!(changed.is_empty(), "staged files changed or added by the runs: {changed:?}");
         let _ = fs::remove_dir_all(&base);
     }
 
