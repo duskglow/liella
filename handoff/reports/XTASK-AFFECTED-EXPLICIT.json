@@ -1,0 +1,5 @@
+{"task": "XTASK-AFFECTED-EXPLICIT", "model": "opus", "tokens": null, "result": "cargo xtask affected without --list/--run exits 2 with a one-line usage; callers and docs updated; tests and 4/4 plants caught", "branch": "task/xtask-affected-explicit", "head": "9d79081f",
+ "gate": {"affected": "clippy+static+cargo test -p xtask: 203+3 passed / 0 failed (xae-gate3, mei s1); FULL escalation not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["affected --base origin/next escalates this diff to FULL (xtask/src/main.rs, xtask/tests); direct gate used: cargo test -p xtask", "external scripts calling bare `cargo xtask affected` now get rc 2 by design", "plants WARN-DEV-SHM note only (copy under /dev/shm); no WARN-RC-ONLY/WARN-NO-MSG"], "refused": [],
+ "jobs": ["xae-gate3", "xae-plants2"],
+ "improvement": "remote jobrun commands need `. ~/.cargo/env` (bash -lc does not set PATH on mei); one gate run was lost to it - jobrun could source it itself", "next_step": "land; the landing FULL gate covers the xtask escalation", "report_file": "handoff/xtask-affected-explicit.md"}
