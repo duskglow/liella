@@ -13,3 +13,5 @@ xref-unsorted | xtask/src/classed.rs | lit:    out.sort_by_key(|r| r.0); ==>    
 xref-plt-kind | xtask/src/classed.rs | lit:    if what == "R_X86_64_PLT32" { ==>     if false { | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|R_X86_64_PC32 -> [^ ]+ does not match page 0 [^ ]+ R_X86_64_PLT32
 # The linked reader ignores direct jumps and calls (a biasless page 1 jump passes in a linked object).
 xref-linked-no-jumps | xtask/src/classed.rs | lit:let direct = mnem.starts_with('j') ==> let direct = false && mnem.starts_with('j') | cargo test -p xtask classed | msg:the_xref_rule_on_a_synthetic_two_page_object.*FAILED|jump \.so: Ok
+# A reference from the XREF checker counted as a user again (a fold.S change escalates to FULL in the direct tier).
+affected-checker-user | xtask/src/affected.rs | lit:            if STATIC_CHECKERS.contains(&r.file.as_str()) { ==>             if false && STATIC_CHECKERS.contains(&r.file.as_str()) { | cargo test -p xtask csys_falls_back_to_full_when_unsure | msg:is named by .xtask/src/classed.rs. \(not a Rust or conformance source\)

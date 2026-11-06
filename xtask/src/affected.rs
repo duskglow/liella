@@ -96,6 +96,9 @@ use std::time::Instant;
 
 /// Crates whose changes are narrowed through the module graph.
 const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-math"];
+/// xtask sources that name csys symbols only to check the csys source or products, from `cargo xtask static` and
+/// `cargo xtask so` (D-X.34): a reference from one of them is no user of the symbol.
+const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs"];
 
 // ---------------------------------------------------------------------------------------------
 // The repository model
@@ -1872,6 +1875,11 @@ fn csys_map_in(repo: &Repo, f: &str, sel: &mut Selection, seen: &mut BTreeSet<St
             let rust = r.file.starts_with("crates/") && r.file.ends_with(".rs");
             let program = r.file.starts_with("conformance/c/") && r.file.ends_with(".c");
             let sibling = r.file.starts_with("csys/src/machine/") && r.file.ends_with(".S");
+            // A static checker of the csys source names its symbols to find them; it runs in `cargo xtask static`
+            // and `so`, which every gate runs, so it selects nothing more (D-X.34).
+            if STATIC_CHECKERS.contains(&r.file.as_str()) {
+                continue;
+            }
             if sibling && direct && f.starts_with("csys/src/machine/") {
                 siblings.insert(&r.file);
                 continue;
