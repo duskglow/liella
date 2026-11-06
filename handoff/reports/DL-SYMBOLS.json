@@ -1,0 +1,30 @@
+{
+ "task": "DL-SYMBOLS",
+ "model": "opus",
+ "tokens": null,
+ "result": "CHECKPOINT: symbol lookup (hashes, scopes, versions, unique, weak) with probe-settled rules; final head jobs started, not read",
+ "branch": "task/dl-symbols",
+ "head": null,
+ "gate": {
+  "affected": "started, not read (dl-symbols-gate)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "versioned references to an object without version tables (reference loader stops, exit 127)",
+   "recommendation": "warn and continue in the DL load-time version check; add a differences row and a COMPAT option"
+  }
+ ],
+ "informational": [
+  "Scope::next for a caller only in a local scope is a reading of design 5, not probed"
+ ],
+ "refused": [],
+ "improvement": "a local cc (or a fast remote compile-check command) would have caught the test-only bug without a host round trip",
+ "next_step": "read dl-symbols-gate and dl-symbols-plants on mei, fix any red, hand back COMPLETE",
+ "report_file": "handoff/DL-SYMBOLS.md",
+ "jobs": [
+  "mei:dl-symbols-gate",
+  "mei:dl-symbols-plants"
+ ]
+}

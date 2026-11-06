@@ -27,6 +27,8 @@ pub const PN_XNUM: u16 = 0xffff;
 pub const RELA_SIZE: usize = 24;
 /// Size of one ELF64 RELR entry.
 pub const RELR_SIZE: usize = 8;
+/// Size of one symbol table entry (`Elf64_Sym`).
+pub const SYM_SIZE: usize = 24;
 /// Size of an `Elf64_Verdef`.
 pub const VERDEF_SIZE: usize = 20;
 /// Size of an `Elf64_Verdaux`.
@@ -94,6 +96,8 @@ pub mod dt {
     pub const STRTAB: u64 = 5;
     /// Address of the dynamic symbol table.
     pub const SYMTAB: u64 = 6;
+    /// Size in bytes of one symbol table entry.
+    pub const SYMENT: u64 = 11;
     /// Address of the RELA relocations.
     pub const RELA: u64 = 7;
     /// Size in bytes of the RELA relocations.
@@ -952,6 +956,26 @@ impl<'a> Dynamic<'a> {
         self.gnu_hash()?.map(|g| g.symbol_count()).transpose()
     }
 
+    /// The dynamic symbol table (`DT_SYMTAB`; `DT_SYMENT`, when present, must be 24). Its length is not
+    /// recorded, so an entry is read wherever it lies in the mapped bytes, and an index at or past the
+    /// [`Dynamic::symbol_count`] hint is refused.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::DuplicateDynamic`], [`ElfError::BadDynamicValue`]`(DT_SYMENT)`, the [`Elf::bytes_from`]
+    /// errors for the address and the [`Dynamic::symbol_count`] errors.
+    pub fn symtab(&self) -> Result<Option<Symtab<'a>>, ElfError> {
+        let Some(addr) = self.once(dt::SYMTAB)? else { return Ok(None) };
+        if let Some(e) = self.once(dt::SYMENT)? {
+            if usize::try_from(e).ok() != Some(SYM_SIZE) {
+                return Err(ElfError::BadDynamicValue(dt::SYMENT));
+            }
+        }
+        let count = self.symbol_count()?;
+        let b = self.elf.bytes_from(addr)?;
+        Ok(Some(Symtab { rd: Rd { b, be: self.rd.be }, count }))
+    }
+
     /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The table's length is
     /// not recorded, so an entry is read wherever it lies in the mapped bytes; [`Versym::count`] is the
     /// [`Dynamic::symbol_count`] hint. Every entry is checked against the highest version index the
@@ -1321,6 +1345,104 @@ impl Versym<'_> {
             return Err(ElfError::VersionIndex(sym, raw));
         }
         Ok(VersionIndex { index, hidden: raw & VERSYM_HIDDEN != 0 })
+    }
+}
+
+/// `STB_LOCAL`.
+pub const STB_LOCAL: u8 = 0;
+/// `STB_GLOBAL`.
+pub const STB_GLOBAL: u8 = 1;
+/// `STB_WEAK`.
+pub const STB_WEAK: u8 = 2;
+/// `STB_GNU_UNIQUE`: one definition per namespace.
+pub const STB_GNU_UNIQUE: u8 = 10;
+/// `STT_NOTYPE`.
+pub const STT_NOTYPE: u8 = 0;
+/// `STT_OBJECT`.
+pub const STT_OBJECT: u8 = 1;
+/// `STT_FUNC`.
+pub const STT_FUNC: u8 = 2;
+/// `STT_COMMON`.
+pub const STT_COMMON: u8 = 5;
+/// `STT_TLS`.
+pub const STT_TLS: u8 = 6;
+/// `STT_GNU_IFUNC`: the value is a resolver, called at bind time.
+pub const STT_GNU_IFUNC: u8 = 10;
+/// `STV_DEFAULT`.
+pub const STV_DEFAULT: u8 = 0;
+/// `STV_INTERNAL`.
+pub const STV_INTERNAL: u8 = 1;
+/// `STV_HIDDEN`.
+pub const STV_HIDDEN: u8 = 2;
+/// `STV_PROTECTED`.
+pub const STV_PROTECTED: u8 = 3;
+/// `SHN_UNDEF`: the symbol is not defined in this object.
+pub const SHN_UNDEF: u16 = 0;
+
+/// One dynamic symbol (`Elf64_Sym`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sym {
+    /// `st_name`: offset of the name in the string table.
+    pub name: u32,
+    /// `st_info`: binding (high four bits) and type (low four bits).
+    pub info: u8,
+    /// `st_other`: the visibility in the low two bits.
+    pub other: u8,
+    /// `st_shndx`: [`SHN_UNDEF`] for an undefined symbol.
+    pub shndx: u16,
+    /// `st_value`.
+    pub value: u64,
+    /// `st_size`.
+    pub size: u64,
+}
+
+impl Sym {
+    /// The binding (`STB_*`).
+    #[must_use]
+    pub fn bind(&self) -> u8 {
+        self.info >> 4
+    }
+    /// The type (`STT_*`).
+    #[must_use]
+    pub fn kind(&self) -> u8 {
+        self.info & 0xf
+    }
+    /// The visibility (`STV_*`).
+    #[must_use]
+    pub fn visibility(&self) -> u8 {
+        self.other & 3
+    }
+}
+
+/// The dynamic symbol table.
+#[derive(Clone, Copy, Debug)]
+pub struct Symtab<'a> {
+    rd: Rd<'a>,
+    count: Option<u32>,
+}
+
+impl Symtab<'_> {
+    /// The dynamic symbol count from the hash tables (see [`Dynamic::symbol_count`]), if known.
+    #[must_use]
+    pub fn count(&self) -> Option<u32> {
+        self.count
+    }
+
+    /// Symbol `i`.
+    ///
+    /// # Errors
+    ///
+    /// [`ElfError::SymbolIndex`] for an index at or past [`Symtab::count`] or an entry past the mapped bytes.
+    pub fn get(&self, i: u32) -> Result<Sym, ElfError> {
+        let bad = ElfError::SymbolIndex(i);
+        if self.count.is_some_and(|c| i >= c) {
+            return Err(bad);
+        }
+        let at = usize::try_from(i).ok().and_then(|n| n.checked_mul(SYM_SIZE)).ok_or(bad)?;
+        let e = Rd { b: sub(self.rd.b, u64::try_from(at).map_err(|_| bad)?, 24).ok_or(bad)?, be: self.rd.be };
+        let [info, other] = e.bytes::<2>(4).ok_or(bad)?;
+        let (name, shndx) = (e.u32(0).ok_or(bad)?, e.u16(6).ok_or(bad)?);
+        Ok(Sym { name, info, other, shndx, value: e.u64(8).ok_or(bad)?, size: e.u64(16).ok_or(bad)? })
     }
 }
 
