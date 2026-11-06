@@ -146,9 +146,11 @@ atanh	f	mret::elem32_fast::<{ math::Status::HW_ANY.0 }>({x}, math::fast32::atanh
 atanh	dlq	mret::elem({x}, {E}, math::real::Real::atanh)
 # Special functions (milestones 3 and 5b): float, double and long double.
 erf	f	mret::elem({x}, {E}, math::fast32::erf)
-erf	dlq	mret::elem({x}, {E}, math::special::erf)
+erf	d	mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>({x}, crate::hot::erf_nearest, math::special::erf)
+erf	lq	mret::elem({x}, {E}, math::special::erf)
 erfc	f	mret::elem({x}, {E}, math::fast32::erfc)
-erfc	dlq	mret::elem({x}, {E}, math::special::erfc)
+erfc	d	mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>({x}, crate::hot::erfc_nearest, math::special::erfc)
+erfc	lq	mret::elem({x}, {E}, math::special::erfc)
 lgamma	fdlq	mret::lgamma({x}, {E}, math::special::lgamma)
 gamma	fdl	mret::lgamma({x}, {E}, math::special::lgamma)
 lgamma_r	fdlq	mret::lgamma_r({x}, {E}, math::special::lgamma, {y})

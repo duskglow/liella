@@ -1,0 +1,11 @@
+{"task": "LIBM-SPECIAL-FAST-TIER-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (checkpoint): erf/erfc profiled per phase (envelope 169 of 358 instr; reference 159); in-place elem_fast entries + FMA build of the kernels written, unit and fast_special tests green; counts-after, gate and plants not run",
+ "branch": "task/libm-special-fast-tier-3", "head": null,
+ "gate": {"affected": "not run (checkpoint)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["percall erfc row MISMATCH is the reference's last bit: erfc(0x1.b12e88p+0) correctly rounded is 0x1.11c9655380463p-6 (Decimal oracle, 200 digits); the reference gives ...462", "build4 boundary flag test failed on its own expectation (a result rounding to 0 has underflow+inexact); expectation fixed, not rerun"],
+ "refused": [],
+ "improvement": "a local cargo (or a one-call 'check on role' wrapper) would have saved 3 build round-trips on compile/lint errors",
+ "next_step": "rerun build.sh on the role, clippy+static, counts after on both builds (libm_erf.c spec, with and without glibc.cpu.hwcaps=-FMA), then gate and plants",
+ "report_file": "handoff/libm-special-fast-tier.md",
+ "jobs": ["libm-special-fast-tier-3-percall-before", "libm-special-fast-tier-3-trace-before"]}

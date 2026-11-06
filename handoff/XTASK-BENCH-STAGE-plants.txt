@@ -1,0 +1,6 @@
+# XTASK-BENCH-STAGE plants: `cargo xtask plants handoff/XTASK-BENCH-STAGE-plants.txt --dir <new RAM dir>`
+skip-hash-check | xtask/src/benchstage.rs | lit:        if want != got { ==>         if false && want != got { | cargo test -p xtask --bin xtask benchstage | msg:staged_tree_runs_without_mtimes_and_refuses_a_changed_product.*FAILED
+staged-keeps-mtime-check | xtask/src/bench.rs | lit:        (Some(_), _) if STAGED.load(std::sync::atomic::Ordering::Relaxed) => Ok(()), ==> | cargo test -p xtask --bin xtask benchstage | msg:staged_tree_runs_without_mtimes_and_refuses_a_changed_product.*FAILED
+staged-flag-without-manifest | xtask/src/bench.rs | lit:    if staged_flag && staged.is_none() { ==>     if false && staged.is_none() { | cargo test -p xtask --bin xtask benchstage | msg:staged_tree_runs_without_mtimes_and_refuses_a_changed_product.*FAILED
+stage-includes-stress | xtask/src/benchstage.rs | lit:files_below(root, "target/liella", Some(STRESS_DIR)) ==> files_below(root, "target/liella", None) | cargo test -p xtask --bin xtask benchstage | msg:staged_tree_runs_without_mtimes_and_refuses_a_changed_product.*FAILED
+manifest-accepts-dotdot | xtask/src/benchstage.rs | lit:!p.is_empty() && !p.split('/').any(|c| c == "..") => ==> !p.is_empty() => | cargo test -p xtask --bin xtask benchstage | msg:manifest_round_trips_and_rejects_bad_lines.*FAILED

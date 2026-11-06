@@ -1677,12 +1677,12 @@ pub extern "C" fn liella_dsubl_bits(x: LdBits, y: LdBits) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn erf(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erf)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erf_nearest, math::special::erf)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn erfc(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erfc)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erfc_nearest, math::special::erfc)
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -1702,12 +1702,12 @@ pub extern "C" fn erfcf32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erfcf32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erfc)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erfc_nearest, math::special::erfc)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erfcf64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erfc)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erfc_nearest, math::special::erfc)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1737,12 +1737,12 @@ pub extern "C" fn erff32(x: f32) -> f32 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erff32x(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erf)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erf_nearest, math::special::erf)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn erff64(x: f64) -> f64 {
-    mret::elem(x, mret::Unit::Sse, math::special::erf)
+    mret::elem_fast::<{ math::Status::HW_ANY.0 }, _, _>(x, crate::hot::erf_nearest, math::special::erf)
 }}
 
 export! { libm "LIELLA_PRIVATE";

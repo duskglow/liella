@@ -1,0 +1,18 @@
+{"task": "LIBM-F32-BESSEL-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: j0f/j1f/y0f/y1f double kernels built and tested (bounds vs mp, coefficient bounds, sampled agreement), D-10.49 recorded, plants 4/4 caught; exhaustive sweeps wait for the tiered oracle",
+ "branch": "task/libm-f32-bessel-2", "head": null,
+ "gate": {"affected": "running (escalated to FULL: generated coefficient sources changed); label libm-f32-bessel-2-gate on mei", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "cargo xtask affected escalates to FULL whenever a generated coefficient file changes, so every libm fit change runs the whole suite",
+   "cargo clippy -p liella-math --all-targets --all-features fails in liella-boundary (dead code set_sysinfo_ehdr, nscache::start) when the crate is checked alone; the workspace clippy is clean",
+   "Hankel's first neglected term a_22/24^22 is ~2^-59.0 for nu = 1: the old handoff's '< 2^-59' was too tight; the test asserts < 2^-58",
+   "The fallback rate on the exhaustive sweep for the D-10.49 row is not measured yet (grid figure only: <= 2 in 65536 over (0, 64])"
+ ],
+ "refused": [],
+ "jobs": ["libm-f32-bessel-2-remez", "libm-f32-bessel-2-unit-3", "libm-f32-bessel-2-check", "libm-f32-bessel-2-plants", "libm-f32-bessel-2-gate", "libm-f32-bessel-2-counts"],
+ "superseded": ["libm-f32-bessel-2-unit (per-crate clippy --all-features fails in liella-boundary, unrelated)", "libm-f32-bessel-2-unit-2 (same, without --all-features)"],
+ "improvement": "A Bessel double-double oracle is a kernel of its own; the shared tiered oracle should be one story ahead of the float family stories, not built inside each",
+ "next_step": "Build the tiered oracle (ruling #2889), add the four ignored exhaustive tests, run one sweep job per function, measure before/after counts, add the sweep fallback rate to D-10.49",
+ "report_file": "handoff/libm-f32-bessel.md"}

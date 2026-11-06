@@ -1,0 +1,12 @@
+{"task": "XTASK-BENCH-STAGE", "model": "opus", "tokens": null,
+ "result": "COMPLETE: bench --stage writes a self-contained timing tarball with a sha256 manifest; --no-build --staged checks hashes instead of mtimes, needs no git, prints the commit; tests, 5/5 plants caught, e2e on a real release build",
+ "branch": "task/xtask-bench-stage", "head": "49ec9869",
+ "gate": {"affected": "199 passed / 0 failed (cargo test -p xtask; affected escalates xtask to FULL)", "peak": "871M"},
+ "accepted_first_attempt": null,
+ "jobs": ["xbs-gate2 (gate)", "xbs-plants1 (plants)", "xbs-static3 (clippy+static)", "xbs-e2e1 (end-to-end stage check)"],
+ "rulings": [{"item": "decision row for the staging design: ops reserve refuses the D-X series", "recommendation": "reserve the next D-X id and record: staged bench trees are checked by per-product sha256 in bench-stage.manifest, not mtimes"}],
+ "informational": ["cargo xtask affected --base origin/next escalates any xtask/src change to FULL; the direct gate used was cargo test -p xtask", "bench --compare --no-build is not staged-aware (it never checked mtimes)", "head names the last code commit; the handoff commit follows it"],
+ "refused": [],
+ "improvement": "ops reserve should accept D-X; and the brief/rules should give the developer gate command (and cargo's PATH on hosts), since $S/tools is obsolete and the first check job failed with cargo not on the non-login PATH",
+ "next_step": "coordinator review and landing; add the developer-flow line pointing to docs/benchmarks.md section 6",
+ "report_file": "handoff/xtask-bench-stage.md"}
