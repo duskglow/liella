@@ -1,0 +1,43 @@
+# DL-ELF-READ-1 plants: every bounds/identity check of crates/ld/src/elf.rs (cargo xtask plants on this file).
+# Each plant removes or weakens one check; its msg names the elf_reader test that must fail.
+id-short | crates/ld/src/elf.rs | lit:if bytes.len() < EHDR_SIZE { ==> if bytes.len() < 16 { | cargo test -p liella-ld --test elf_reader | msg:test bad_magic \.\.\. FAILED
+id-magic | crates/ld/src/elf.rs | lit:return Err(ElfError::BadMagic); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_magic \.\.\. FAILED
+id-class | crates/ld/src/elf.rs | lit:return Err(ElfError::WrongClass(class)); ==> | cargo test -p liella-ld --test elf_reader | msg:test s27_1_f_0_wrong_class \.\.\. FAILED
+id-class64 | crates/ld/src/elf.rs | lit:class != A::EI_CLASS || class != ELFCLASS64 ==> class != A::EI_CLASS | cargo test -p liella-ld --test elf_reader | msg:test s27_1_f_0_wrong_class \.\.\. FAILED
+id-data | crates/ld/src/elf.rs | lit:return Err(ElfError::WrongData(data)); ==> | cargo test -p liella-ld --test elf_reader | msg:test s27_1_f_0_wrong_data \.\.\. FAILED
+id-identver | crates/ld/src/elf.rs | lit:return Err(ElfError::BadIdentVersion(ident_version)); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_ident_version \.\.\. FAILED
+id-osabi | crates/ld/src/elf.rs | lit:return Err(ElfError::UnsupportedOsAbi(osabi)); ==> | cargo test -p liella-ld --test elf_reader | msg:test osabi_sysv_and_gnu_only \.\.\. FAILED
+hdr-type | crates/ld/src/elf.rs | lit:return Err(ElfError::UnsupportedType(h.e_type)); ==> | cargo test -p liella-ld --test elf_reader | msg:test exec_and_dyn_only \.\.\. FAILED
+hdr-machine | crates/ld/src/elf.rs | lit:return Err(ElfError::WrongMachine(h.machine)); ==> | cargo test -p liella-ld --test elf_reader | msg:test s27_1_f_0_wrong_machine \.\.\. FAILED
+hdr-version | crates/ld/src/elf.rs | lit:return Err(ElfError::BadVersion(h.version)); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_version \.\.\. FAILED
+hdr-ehsize | crates/ld/src/elf.rs | lit:return Err(ElfError::BadEhsize(h.ehsize)); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_ehsize \.\.\. FAILED
+hdr-xnum | crates/ld/src/elf.rs | lit:return Err(ElfError::PhnumExtended); ==> | cargo test -p liella-ld --test elf_reader | msg:test phnum_extended \.\.\. FAILED
+hdr-phentsize | crates/ld/src/elf.rs | lit:return Err(ElfError::BadPhentsize(h.phentsize)); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_phentsize \.\.\. FAILED
+tab-range | crates/ld/src/elf.rs | lit:return Err(ElfError::OutOfRange(Part::ProgramHeaders)); ==> | cargo test -p liella-ld --test elf_reader | msg:test huge_phnum_and_phoff \.\.\. FAILED
+tab-overlap | crates/ld/src/elf.rs | lit:return Err(ElfError::OverlapsHeaders(Part::ProgramHeaders)); ==> | cargo test -p liella-ld --test elf_reader | msg:test phdrs_overlap_header \.\.\. FAILED
+overlap-start | crates/ld/src/elf.rs | lit:a < b.saturating_add(blen) ==> a < b | cargo test -p liella-ld --test elf_reader | msg:test phdrs_overlap_header \.\.\. FAILED
+ph-dup | crates/ld/src/elf.rs | lit:return Err(ElfError::DuplicateSegment(ph.p_type)); ==> | cargo test -p liella-ld --test elf_reader | msg:test duplicate_segments \.\.\. FAILED
+ph-overflow | crates/ld/src/elf.rs | lit:return Err(ElfError::SegmentOverflow(i)); ==> | cargo test -p liella-ld --test elf_reader | msg:test segment_(offset|vaddr)_overflow \.\.\. FAILED
+ph-align | crates/ld/src/elf.rs | lit:return Err(ElfError::BadAlign(i)); ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_align \.\.\. FAILED
+ph-filesz | crates/ld/src/elf.rs | lit:return Err(ElfError::FileszExceedsMemsz(i)); ==> | cargo test -p liella-ld --test elf_reader | msg:test load_filesz_exceeds_memsz \.\.\. FAILED
+ph-overlap | crates/ld/src/elf.rs | lit:return Err(ElfError::OverlapsHeaders(Part::Segment(i))); ==> | cargo test -p liella-ld --test elf_reader | msg:test content_segments_overlap_headers \.\.\. FAILED
+seg-range | crates/ld/src/elf.rs | lit:sub(self.rd.b, ph.offset, ph.filesz) ==> sub(self.rd.b, ph.offset, 0) | cargo test -p liella-ld --test elf_reader | msg:test truncated_at_every_length \.\.\. FAILED
+interp-nul | crates/ld/src/elf.rs | lit:if !path.is_empty() && !path.contains(&0) ==> | cargo test -p liella-ld --test elf_reader | msg:test bad_interp \.\.\. FAILED
+dyn-size | crates/ld/src/elf.rs | lit:return Err(ElfError::DynamicSize); ==> | cargo test -p liella-ld --test elf_reader | msg:test dynamic_size_not_multiple \.\.\. FAILED
+dyn-null | crates/ld/src/elf.rs | lit:dt::NULL => break, ==> dt::NULL => {} | cargo test -p liella-ld --test elf_reader | msg:test valid_image_reads_back \.\.\. FAILED
+dyn-dup | crates/ld/src/elf.rs | lit:return Err(ElfError::DuplicateDynamic(tag)); ==> | cargo test -p liella-ld --test elf_reader | msg:test duplicate_strtab_or_strsz \.\.\. FAILED
+dyn-strsz | crates/ld/src/elf.rs | lit:(Some(_), None) => return Err(ElfError::MissingStrsz), ==> (Some(_), None) => None, | cargo test -p liella-ld --test elf_reader | msg:test missing_strtab_or_strsz \.\.\. FAILED
+dyn-strtab | crates/ld/src/elf.rs | lit:(None, Some(_)) => return Err(ElfError::MissingStrtab), ==> (None, Some(_)) => None, | cargo test -p liella-ld --test elf_reader | msg:test missing_strtab_or_strsz \.\.\. FAILED
+dyn-strtab-wanted | crates/ld/src/elf.rs | lit:(None, None) if wants_strings => return Err(ElfError::MissingStrtab), ==> (None, None) if wants_strings => None, | cargo test -p liella-ld --test elf_reader | msg:test missing_strtab_or_strsz \.\.\. FAILED
+strtab-filesz | crates/ld/src/elf.rs | lit:is_some_and(|e| end <= e) ==> is_some() | cargo test -p liella-ld --test elf_reader | equivalent:double guard; the following sub(seg, rel, len) refuses the same ranges with the same AddressNotMapped (strtab_not_mapped covers the outcome)
+str-offset | crates/ld/src/elf.rs | lit:.filter(|&o| o < tab.len()) ==> | cargo test -p liella-ld --test elf_reader | msg:test string_offsets \.\.\. FAILED
+str-nul | crates/ld/src/elf.rs | lit:.position(|&c| c == 0).ok_or(ElfError::StringUnterminated(off))? ==> .position(|&c| c == 0).unwrap_or(rest.len()) | cargo test -p liella-ld --test elf_reader | msg:test string_offsets \.\.\. FAILED
+note-pad4 | crates/ld/src/elf.rs | lit:0..=4 => 4, ==> 0..=4 => 8, | cargo test -p liella-ld --test elf_reader | msg:test note_padding_follows_align \.\.\. FAILED
+note-pad8 | crates/ld/src/elf.rs | lit:8 => 8, ==> 8 => 4, | cargo test -p liella-ld --test elf_reader | msg:test note_padding_follows_align \.\.\. FAILED
+note-align | crates/ld/src/elf.rs | lit:_ => return Err(ElfError::BadNoteAlign(ph.index)), ==> _ => 4, | cargo test -p liella-ld --test elf_reader | msg:test bad_note_align \.\.\. FAILED
+note-name | crates/ld/src/elf.rs | lit:Some(_) => return Err(ElfError::BadNoteName(at)), ==> Some(_) => name_full, | cargo test -p liella-ld --test elf_reader | msg:test note_name_unterminated \.\.\. FAILED
+note-desc | crates/ld/src/elf.rs | lit:let desc = self.rd.b.get(desc_at..desc_at.checked_add(descsz).ok_or(bad)?).ok_or(bad)?; ==> let desc = self.rd.b.get(desc_at..desc_at.checked_add(descsz).ok_or(bad)?).unwrap_or(&[]); | cargo test -p liella-ld --test elf_reader | msg:test note_truncated \.\.\. FAILED
+note-namesz | crates/ld/src/elf.rs | lit:let name_full = self.rd.b.get(name_at..name_at.checked_add(namesz).ok_or(bad)?).ok_or(bad)?; ==> let name_full = self.rd.b.get(name_at..name_at.checked_add(namesz).ok_or(bad)?).unwrap_or(&[]); | cargo test -p liella-ld --test elf_reader | equivalent:double guard; the descriptor starts after the name, so its range check refuses an oversized name with the same NoteTruncated (note_truncated covers the outcome)
+prop-data | crates/ld/src/elf.rs | lit:let data = self.rd.b.get(data_at..data_at.checked_add(size).ok_or(bad)?).ok_or(bad)?; ==> let data = self.rd.b.get(data_at..data_at.checked_add(size).ok_or(bad)?).unwrap_or(&[]); | cargo test -p liella-ld --test elf_reader | msg:test property_truncated \.\.\. FAILED
+prop-owner | crates/ld/src/elf.rs | lit:let ours = self.name == b"GNU" && self.n_type == nt::GNU_PROPERTY_TYPE_0; ==> let ours = true; | cargo test -p liella-ld --test elf_reader | msg:test valid_image_reads_back \.\.\. FAILED
+rd-overflow | crates/ld/src/elf.rs | lit:let end = off.checked_add(N)?; ==> let end = off.wrapping_add(N); | cargo test -p liella-ld --test elf_reader | equivalent:every Rd offset is derived from a range already checked against the slice (phoff by the table check, segment offsets by sub), so the addition cannot overflow; a wrapped end would still fail the get

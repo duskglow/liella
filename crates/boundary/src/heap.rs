@@ -21,7 +21,7 @@ use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{MAP_ANONYMOUS, MAP_NORESERVE, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use liella_legacy::malloc_compat::{self, Ctx};
 use liella_legacy::malloc_debug::{self, Call, Debug, Mem};
-use liella_rt::heap::{Heap, Misuse, Pages, ALIGN, PAGE};
+use liella_rt::heap::{Fit, Heap, Held, Misuse, Pages, ALIGN, PAGE};
 
 use crate::raw;
 use crate::sys::CSys;
@@ -581,12 +581,24 @@ pub(crate) fn c_realloc(p: usize, n: usize) -> Result<KResult<usize>, Misuse> {
     malloc_compat::realloc(&CTX, p, n, copy_blocks)
 }
 
-/// Whether `realloc(p, n)` returns `p` itself: a live small block of the thread's current slab
-/// whose class still fits `n` (the first test of the resize path, REALLOC-FUSE). Inlined into
-/// the export, so that this case returns before the frame the rest needs.
+/// The first test of the resize path for `realloc(p, n)` (REALLOC-FUSE, REALLOC-ONE-LOOKUP):
+/// [`Fit::Same`] returns `p` itself (a live small block of the thread's current slab whose
+/// class still fits `n`), [`Fit::Held`] goes to [`c_realloc_held`] with the block already
+/// found. Inlined into the export, so that the in-place case returns before the frame the rest
+/// needs. Not while debugging: [`Fit::Other`], the full path.
 #[inline(always)]
-pub(crate) fn c_realloc_fits(p: usize, n: usize) -> bool {
-    p != 0 && !DEBUG.active() && Heap::fits_in_place(&KernelPages, p, n)
+pub(crate) fn c_realloc_fit(p: usize, n: usize) -> Fit {
+    if p == 0 || DEBUG.active() {
+        return Fit::Other;
+    }
+    Heap::fit(&KernelPages, p, n)
+}
+
+/// `realloc(p, n)` of the block [`c_realloc_fit`] found as `h`: moved without a second lookup
+/// (or by the general resize path on a miss; misuse is reported as `realloc` does).
+#[inline(always)]
+pub(crate) fn c_realloc_held(p: usize, n: usize, h: Held) -> Result<KResult<usize>, Misuse> {
+    Ok(HEAP.resize_held(&CSys, &KernelPages, p, n, h, copy_blocks)?.map(|b| b.addr).ok_or(Errno::ENOMEM))
 }
 
 /// `reallocarray`.

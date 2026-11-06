@@ -1,0 +1,20 @@
+# TIMING-N100-SCAN-64K plants: the 256-byte AVX2 loops of memchr and rawmemchr (csys/src/machine/scan.S).
+# machine_scanners runs each kernel on both scan levels (SSE2, and AVX2 on the build host).
+# memchr: the second 128 bytes of a 256-byte group resolved from the first half's compares.
+memchr-256-hi | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?)vpmovmskb %ymm5, %r9d/$1vpmovmskb %ymm1, %r9d/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr_finds.*FAILED|panicked.*avx2=true
+# memchr: the fold drops the first 64 bytes of the group.
+memchr-256-fold | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?)vpor %ymm9, %ymm11, %ymm11/$1vpor %ymm10, %ymm11, %ymm11/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr_finds.*FAILED|panicked.*avx2=true
+# memchr: the alignment group skipped the wrong way (256-byte groups straddle a page end).
+memchr-256-align | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?)jz \.Lmemchr_avx_loop\n/$1jnz .Lmemchr_avx_loop\n/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr.*FAILED|SIGSEGV|panicked
+# memchr: a hit in the alignment group resolved as if it were in the second half.
+memchr-align-hit | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?\.Lmemchr_avx_g2:.*?)jnz \.Lmemchr_avx_lo\n/$1jnz .Lmemchr_avx_found\n/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr.*FAILED|panicked.*avx2=true
+# memchr: the loop's end test off (reads and answers past s + n).
+memchr-256-end | csys/src/machine/scan.S | perl:s/(liella_machine_memchr:.*?\.Lmemchr_avx_loop:.*?)jae \.Lmemchr_avx_none\n/$1jb .Lmemchr_avx_none\n/s | cargo test -p liella-boundary --test machine_scanners | msg:memchr.*FAILED|SIGSEGV|panicked
+# rawmemchr: the second 128 bytes of a 256-byte group resolved from the first half's compares.
+raw-256-hi | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?)vpmovmskb %ymm5, %edx/$1vpmovmskb %ymm1, %edx/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true|SIGSEGV
+# rawmemchr: the fold drops the first 64 bytes of the group.
+raw-256-fold | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?)vpor %ymm9, %ymm11, %ymm11/$1vpor %ymm10, %ymm11, %ymm11/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true|SIGSEGV
+# rawmemchr: the alignment group skipped the wrong way.
+raw-256-align | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_avx_align:.*?)jz \.Lraw_avx_loop\n/$1jnz .Lraw_avx_loop\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr.*FAILED|SIGSEGV|panicked
+# rawmemchr: a hit in the first half of a 256-byte group taken as the second half's.
+raw-256-lo | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?\.Lraw_avx_loop:.*?)jnz \.Lraw_avx_lo\n/$1jz .Lraw_avx_lo\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true|SIGSEGV

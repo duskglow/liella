@@ -196,6 +196,22 @@ fn init_first_string_calls_after_printf_take_no_text_fault() {
 }
 
 #[test]
+fn init_second_bindtextdomain_gettext_takes_no_text_fault() {
+    // No spec clause (layout of the products). COLDSTART-BINDTEXTDOMAIN-REBIND-2: the repeat
+    // lookup's functions (the resolution cache's text compare, the hinted catalog search) are in
+    // the hot group, so a same-directory rebind + dgettext after a first lookup finds its text
+    // mapped (next before the change: 2 file-backed text faults on a Zen 1 host).
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_rebind");
+    build(&exe);
+    let s = faults(&exe, "rebind");
+    assert!(s == 0, "second bindtextdomain + dgettext: {s} page faults (repeat-lookup functions left the hot group?)");
+}
+
+#[test]
 fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     // HOTTEXT-FAULT-TEST: the hot-text list is regenerated from traces; PRINTF-LOOP-FAULTS found it
     // stale for the coreutils printf (text 14 -> 17 pages, +6.7% faults per exec in the printf-loop

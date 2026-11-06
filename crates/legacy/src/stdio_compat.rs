@@ -2127,7 +2127,8 @@ pub fn read_front<E: Env>(env: &E, file: &[AtomicUsize], ext: &Ext, p: usize, ou
 /// `getdelim`: a record up to and including `delim` into the caller's `malloc` buffer
 /// (`*lineptr`, `*n`), grown as needed and terminated. The length, or `None` at end of input.
 /// With `prefix` > 0 the front path has already moved the first `prefix` bytes of the record
-/// into `*lineptr` ([`Partial`]); the record continues at the stream's position.
+/// into `*lineptr` ([`Partial`]); the record continues at the stream's position. `None` also
+/// when the stream's error indicator is already set: nothing is read and `errno` is not changed.
 pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: usize, cap_var: usize, delim: u8, prefix: usize) -> KResult<Option<usize>> {
     let mut buf = env.load_word(lineptr);
     let mut cap = if buf == 0 { 0 } else { env.load_word(cap_var) };
@@ -2137,13 +2138,20 @@ pub fn getdelim<E: Env>(env: &E, file: &[AtomicUsize], ext: &mut Ext, lineptr: u
     if !byte_oriented(file) {
         return Ok(None);
     }
-    load(file, ext);
-    // The error indicator stops a record read before it reads (the reference).
-    if ext.state.err {
-        return Err(Errno::EIO);
+    // The error indicator stops a record read before it reads, and the result is -1 with
+    // `errno` left as the caller had it: the indicator is the report, no error happens in this
+    // call (the reference; STDIO-STICKY-ERROR-ERRNO, D-12.1). The bit is read from `_flags`,
+    // the word [`load`] takes `ext.state.err` from, so no load is needed here.
+    if get(file, word::FLAGS) & ERR_SEEN != 0 {
+        return Ok(None);
     }
-    if input_flushes(ext) {
-        flush_line_buffered(env, true);
+    // TIMING-COV-GETLINE-LONG: `run` loads the window itself; only the flush test needs it
+    // earlier, and a fully buffered stream never flushes before input.
+    if ext.state.policy != Policy::Full {
+        load(file, ext);
+        if input_flushes(ext) {
+            flush_line_buffered(env, true);
+        }
     }
     let r = run(env, file, ext, |s, b, back| {
         s.read_until_with(b, back, delim, &|w, c| env.find(w, c), &mut |piece| {

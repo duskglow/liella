@@ -81,3 +81,39 @@ pub(crate) fn pow_nearest((x, y): (f64, f64)) -> Option<f64> {
     liella_math::fast64::pow_nearest(x, y)
 }
 
+/// The `double` `expm1` fast path (LIBM-F64-EXPM1-HYPER-CBRT-TIER) in its build chosen at
+/// startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn expm1_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::expm1_nearest(x) };
+    }
+    liella_math::fast64::expm1_nearest(x)
+}
+
+/// The `double` `log1p` fast path in its build chosen at startup (as [`exp_nearest`]).
+#[inline(always)]
+pub(crate) fn log1p_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::log1p_nearest(x) };
+    }
+    liella_math::fast64::log1p_nearest(x)
+}
+
+/// The `double` `cbrt` fast path in its build chosen at startup (as [`exp_nearest`]); it declines
+/// exact cubes, so a refused attempt's inexact is undone by `mathret::elem_fast_cold`. Its kernel
+/// lives in `liella_math::fast64::exp_log`, so its wrapper lives here.
+#[inline(always)]
+pub(crate) fn cbrt_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::fused::cbrt_nearest(x) };
+    }
+    liella_math::fast64::cbrt_nearest(x)
+}
+

@@ -54,13 +54,15 @@ fn scanners_find_the_first_terminator_at_every_alignment_and_length() {
     let _g = level();
     for avx2 in paths() {
         assert!(selftest::set_scan_avx2(avx2));
-        // Every offset from a 128-aligned base (0..128): the AVX2 loops step in 128-byte
-        // groups, so a group that starts 128-aligned past the head is exercised at some offset.
-        let mut buf = vec![0u8; 128 + 128 + 300 + 256];
-        let base = buf.as_ptr().align_offset(128);
+        // Every offset from a 256-aligned base (0..128): the AVX2 loops step in 128-byte
+        // groups (rawmemchr and memchr: one 128-byte group to a 256-aligned address, then
+        // 256-byte groups), so both entries of each are exercised at some offset. The long
+        // lengths reach the 256-byte loop's two halves and its second iteration.
+        let mut buf = vec![0u8; 256 + 128 + 1100 + 256];
+        let base = buf.as_ptr().align_offset(256);
         for off in 0..128 {
             let align = base + off;
-            for len in 0..300 {
+            for len in (0..300).chain([447, 448, 449, 511, 575, 576, 577, 703, 704, 705, 831, 960, 1023, 1024, 1025, 1099]) {
                 buf.fill(0); // zero bytes before the string: the scanners must mask them off
                 buf[align..align + len].fill(b'x');
                 buf[align + len] = 0;
@@ -955,6 +957,63 @@ fn strcmp_scanner_never_reads_past_the_pages_holding_the_terminators_on_level() 
     CSys.munmap(lo2).unwrap();
     CSys.munmap(hi).unwrap();
     CSys.munmap(lo).unwrap();
+}
+
+#[test]
+fn strcmp_head_finds_every_difference_in_strings_ending_at_a_page_end() {
+    // Clauses: s4_3_c_1 (D-4.14, P7; PJ-8). On both scan levels, a string of every length 0-130
+    // whose terminator is the last byte of a page before an unmapped page (so every start the
+    // entry's page tests send to the head or away from it), against the same text ending at
+    // another page end or in the middle of a buffer: equal, and differing (greater, smaller, or
+    // ended) at every position, in both argument orders.
+    let _g = level();
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        let (lo, hi, base) = guarded();
+        let (lo2, hi2, base2) = guarded();
+        let mut mid = vec![0u8; 512];
+        let put = |addr: usize, v: u8| {
+            s::memset(addr as *mut c_void, c_int::from(v), 1);
+        };
+        for len in 0..=130usize {
+            let (pa, pe) = (base + PAGE - 1 - len, base2 + PAGE - 1 - len);
+            for i in 0..=len {
+                let v = if i == len { 0 } else { b'a' + (i % 26) as u8 };
+                put(pa + i, v);
+                put(pe + i, v);
+                mid[100 + i] = v;
+            }
+            for at_end in [true, false] {
+                let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                let wh = if at_end { "page end" } else { "mid-buffer" };
+                assert_eq!(cmp_at(pa, pb), 0, "equal, length {len}, b at {wh}, avx2 {avx2}");
+                for d in 0..len {
+                    let keep = b'a' + (d % 26) as u8;
+                    for (v, want) in [(keep + 1, -1), (keep - 1, 1), (0, 1)] {
+                        if at_end {
+                            put(pb + d, v);
+                        } else {
+                            mid[100 + d] = v;
+                        }
+                        let pb = if at_end { pe } else { mid.as_ptr() as usize + 100 };
+                        assert_eq!(cmp_at(pa, pb), want, "b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                        assert_eq!(cmp_at(pb, pa), -want, "swapped, b's byte {v} at {d}, length {len}, b at {wh}, avx2 {avx2}");
+                    }
+                    if at_end {
+                        put(pb + d, keep);
+                    } else {
+                        mid[100 + d] = keep;
+                    }
+                }
+            }
+        }
+        CSys.munmap(hi2).unwrap();
+        CSys.munmap(lo2).unwrap();
+        CSys.munmap(hi).unwrap();
+        CSys.munmap(lo).unwrap();
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
 }
 
 #[test]

@@ -7,6 +7,7 @@
 
 extern crate alloc;
 
+pub mod arch;
 pub mod elf;
 pub mod map;
 pub mod search;

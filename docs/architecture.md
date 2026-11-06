@@ -506,7 +506,7 @@ test inside Linux (or WSL); the library targets x86-64 Linux only.
 | `cargo xtask stubs` | Regenerate the pending tests and `spec/clauses.tsv` from the spec |
 | `cargo xtask so` | Build the products into `target/liella/`: `libc.a`, `libc.so.6`, `liella-crt1.o`, the `libpthread` placeholders, the `libm` products |
 | `cargo xtask test` | The full gate: static checks, generated-file checks, the products, the workspace tests twice (plain and interposed), the C conformance suite, the native examples, the Rust dylib, the symbol-gap report, the status table |
-| `cargo xtask affected [--list]` | Only the tests a change can reach |
+| `cargo xtask affected --list \| --run` | Only the tests a change can reach: `--list` prints them, `--run` runs them (one is required; without either, exit 2) |
 | `cargo xtask bench` | Benchmarks against budgets and per-CPU limits (release profile only) |
 | `cargo xtask status [--schedule]` | Pending versus specified tests per section; with `--schedule`, pending work per owning phase |
 | `cargo xtask fuzz <target> --time <min>` | Fuzzing |

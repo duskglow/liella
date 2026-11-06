@@ -3,6 +3,7 @@
  * shape of a coreutils program such as printf: HOTTEXT-FAULT-TEST) or "fork" (a fork child's faults,
  * see main). Prints the
  * process's own minor-fault count at the end (getrusage RUSAGE_SELF ru_minflt) on stderr. */
+#include <fcntl.h>
 #include <inttypes.h>
 #include <libintl.h>
 #include <locale.h>
@@ -10,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,6 +26,39 @@ static void at_exit_hook(void) {}
 static long minflt(void) {
     struct rusage ru;
     return getrusage(RUSAGE_SELF, &ru) == 0 ? ru.ru_minflt : -1000000;
+}
+
+static void put32(unsigned char *p, uint32_t v) {
+    for (int i = 0; i < 4; i++)
+        p[i] = (unsigned char)(v >> (8 * i));
+}
+
+/* A two-entry catalog (header, "hello" -> "hallo") in the .mo layout the GNU gettext manual
+ * documents: magic, revision, count, the two string-table offsets, an empty hash table. */
+static int write_mo(const char *path) {
+    static const char header[] = "Content-Type: text/plain; charset=UTF-8\n";
+    const char *orig[2] = {"", "hello"}, *trans[2] = {header, "hallo"};
+    unsigned char buf[256] = {0};
+    uint32_t n = 2, o = 28, t = o + 8 * n, at = t + 8 * n;
+    put32(buf, 0x950412de);
+    put32(buf + 8, n);
+    put32(buf + 12, o);
+    put32(buf + 16, t);
+    put32(buf + 24, at);
+    for (uint32_t i = 0; i < 2 * n; i++) {
+        const char *s = i < n ? orig[i] : trans[i - n];
+        uint32_t len = (uint32_t)strlen(s), e = i < n ? o + 8 * i : t + 8 * (i - n);
+        put32(buf + e, len);
+        put32(buf + e + 4, at);
+        memcpy(buf + at, s, len);
+        at += len + 1;
+    }
+    int f = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (f < 0)
+        return -1;
+    int ok = write(f, buf, at) == (ssize_t)at;
+    close(f);
+    return ok ? 0 : -1;
 }
 
 int main(int argc, char **argv) {
@@ -44,6 +79,33 @@ int main(int argc, char **argv) {
             child = ru.ru_minflt;
         }
         fprintf(stderr, "minflt %ld\n", child);
+        return 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "rebind") == 0) {
+        /* COLDSTART-BINDTEXTDOMAIN-REBIND-2: a catalog looked up, then bound again to the same
+         * directory and looked up again (cbench_opt's second pass); prints only the faults of the
+         * second bindtextdomain + dgettext (the repeat lookup's text is in the hot group). */
+        setlocale(LC_ALL, "");
+        char dir[] = "/tmp/liella-pf-rebind.XXXXXX", sub[96], mo[128];
+        if (mkdtemp(dir) == NULL)
+            return 1;
+        snprintf(sub, sizeof sub, "%s/en_US", dir);
+        mkdir(sub, 0700);
+        snprintf(sub, sizeof sub, "%s/en_US/LC_MESSAGES", dir);
+        mkdir(sub, 0700);
+        snprintf(mo, sizeof mo, "%s/pfrebind.mo", sub);
+        long n = write_mo(mo) == 0;
+        n += bindtextdomain("pfrebind", dir) != NULL && strcmp(dgettext("pfrebind", "hello"), "hallo") == 0;
+        n += strcmp(dgettext("pfrebind-absent", "no catalog"), "no catalog") == 0;
+        long f0 = minflt();
+        n += bindtextdomain("pfrebind", dir) != NULL && strcmp(dgettext("pfrebind", "hello"), "hallo") == 0;
+        long f1 = minflt();
+        unlink(mo);
+        rmdir(sub);
+        snprintf(sub, sizeof sub, "%s/en_US", dir);
+        rmdir(sub);
+        rmdir(dir);
+        fprintf(stderr, "minflt %ld\n", n == 4 ? f1 - f0 : -1);
         return 0;
     }
     if (argc > 1 && strcmp(argv[1], "strings") == 0) {
