@@ -46,6 +46,16 @@ Not fixed here, with why:
   (six lying headers: EINVAL, no allocation of a page or more).
 * Plants: handoff/perf-zone-load-faults.plants (names-grown, path-grown, no-header-bound, type-offset-endian).
 
+## GATE RED (final head 05dc6cde): blocks landing
+`init_first_mktime_after_localtime_r_takes_no_fault` (hot_text_products) fails: the first mktime after localtime_r
+now takes **1** fault (base build 0, keke oracle `mktime` mode). perf: the fault is the TEXT page of
+`liella::time::civil::days_from_civil64` (0x452080 in the oracle). The old load pre-faulted that 64 KiB fault-around
+window as a side effect (code the load no longer runs); the leaner load does not. Total load + first mktime is 23
+vs 25 before (net -2), but the test pins 0 and must not be loosened. Fix (next run, first step): group
+`days_from_civil64` (and the rest of the first-mktime path, `kind_period` is in the window already) into the hot
+text with a pin (not a full regen), re-run the oracle (mktime 0, localtime <= 24), then the gate. Everything else in the
+gate passed (conformance 6/6; the only failures are this test, twice).
+
 ## Not done
 * Step 5 timing (booked Ivy Bridge + N100 runs of the time-group rows): not started, budget. Next run books it.
 * Bench cold-child fault count (the predecessor's 18) not re-measured; the oracle shows -3.
