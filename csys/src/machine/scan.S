@@ -4450,10 +4450,11 @@ liella_machine_fill_erms:
  * when the CPU has AVX2 and the OS saves the YMM state (`boundary::cpu`), for validated regions of
  * at least 128 bytes (AVX2_COPY_MIN); they may overlap (memmove).
  *
- * The first and last 32 bytes, and the 128-byte block at the end the copy runs towards, are loaded
+ * The first and last 32 bytes, and in the forward direction the last 128-byte block, are loaded
  * before anything is stored and written as unaligned vectors after everything else; between
  * them, whole 32-byte vectors go to 32-byte-aligned destination addresses (four per step, while
- * more than 128 bytes are left; the rest lies inside the held block),
+ * more than 128 bytes are left; forward the rest lies inside the held block, backward one per
+ * step while more than 32 are left),
  * each step loading all its vectors before storing any. Overlapping regions fix the direction:
  * from the end when the destination starts inside the source (dst - src < n), from the start when
  * the source starts inside the destination (src - dst < n); every load then reads bytes no
@@ -4536,13 +4537,11 @@ liella_machine_move_avx2:
 	ret
 
 	/* Backward: r10 walks the destination down from its last 32-byte boundary, the loads at
-	 * r10 + (src - dst). The first 128 bytes are held too (n >= 128; nothing is stored yet): the
-	 * 128-byte steps run while more than 128 bytes are left below r10, and what they leave lies
-	 * inside the held block. */
+	 * r10 + (src - dst): 128-byte steps while more than 128 bytes are left below r10, then 32-byte
+	 * steps while more than 32 are left; the held head covers the rest. No held 128-byte head
+	 * block here (TIMING-N100-MEMMOVE-4K-REGRESS): on the N100 (Gracemont) it made a 4 KiB
+	 * backward copy 17% slower, overlapping or not, at no gain at 1, 16 or 64 KiB. */
 .Lcpy_back:
-	vmovdqu 32(%rsi), %ymm6
-	vmovdqu 64(%rsi), %ymm7
-	vmovdqu 96(%rsi), %ymm8
 	leaq (%rdi,%rdx), %r10
 	leal -1(%r10), %ecx
 	andl $31, %ecx
@@ -4551,7 +4550,7 @@ liella_machine_move_avx2:
 	subq %rdi, %rsi				/* src - dst */
 	leaq 128(%rdi), %r9
 	cmpq %r9, %r10
-	jbe .Lcpy_b_ends
+	jbe .Lcpy_b32
 	.p2align 4
 .Lcpy_b128:					/* while more than 128 bytes are left below r10 */
 	addq $-128, %r10
@@ -4565,10 +4564,16 @@ liella_machine_move_avx2:
 	vmovdqa %ymm3, (%r10)
 	cmpq %r9, %r10
 	ja .Lcpy_b128
-.Lcpy_b_ends:					/* the held first 128 and last 32 bytes, stored last */
-	vmovdqu %ymm6, 32(%r11)
-	vmovdqu %ymm7, 64(%r11)
-	vmovdqu %ymm8, 96(%r11)
+.Lcpy_b32:
+	leaq 32(%rdi), %r9
+.Lcpy_b32_next:					/* while more than 32 bytes are left below r10 */
+	cmpq %r9, %r10
+	jbe .Lcpy_b_ends
+	subq $32, %r10
+	vmovdqu (%rsi,%r10), %ymm0
+	vmovdqa %ymm0, (%r10)
+	jmp .Lcpy_b32_next
+.Lcpy_b_ends:					/* the held first and last 32 bytes, stored last */
 	vmovdqu %ymm5, (%r8)
 	vmovdqu %ymm4, (%r11)
 	movq %r11, %rax				/* dst */
