@@ -192,43 +192,62 @@ impl<'a> Mutex<'a> {
             let k = kind.load(Relaxed);
             // MUTEX-3: the TID first (nothing changed yet if it needs a system call).
             let Some(tid) = c.fast_tid() else { return false };
-            // MUTEX-2: the only thread takes a free private mutex without a LOCK-prefixed CAS
-            // (no other thread can race it; a signal handler that takes and releases it between
-            // the load and the store leaves it free again). The compiler fences keep the
-            // critical section's accesses between the two stores (no CPU fence: one thread).
-            // A held one goes on to the recursive check below without a CAS that must fail.
-            if k & !3 == 0
-                && if c.alone() {
-                    lock.load(Relaxed) == 0 && {
-                        lock.store(1, Relaxed);
-                        compiler_fence(SeqCst);
-                        true
-                    }
-                } else {
-                    lock.compare_exchange(0, 1, Acquire, Relaxed).is_ok()
-                }
-            {
-                owner.store(tid, Relaxed);
-                // MUTEX-MT: `__count` is the recursion depth, kept by recursive mutexes only (the
-                // probes show 0 there for the other types, held or not). Each store skipped here
-                // is one fewer for the next LOCK-prefixed instruction to drain.
-                if k == MUTEX_RECURSIVE {
-                    count.store(1, Relaxed);
-                }
-                return true;
-            }
-            // MUTEX-FAST: a recursive mutex the caller already holds, below the count limit:
-            // one more level, exactly as `lock` counts it (no atomic read-modify-write: only the
-            // owner writes `__count`). `lock` reports EAGAIN at the limit.
-            if k == MUTEX_RECURSIVE && owner.load(Relaxed) == tid && lock.load(Relaxed) != 0 {
-                let n = count.load(Relaxed);
-                if n != u32::MAX {
-                    count.store(n + 1, Relaxed);
+            // MUTEX-MT: `__count` is the recursion depth, kept by recursive mutexes only (the
+            // probes show 0 there for the other types, held or not). The type is split
+            // off BEFORE the acquire, so neither path tests it again after the CAS (a test there
+            // kept `k` live and LLVM folded the entry tests into setcc chains: +3 instructions
+            // on the recursive rows), and the other types store nothing to `__count` (one store
+            // fewer for the next LOCK-prefixed instruction to drain).
+            // A normal mutex (0) takes the plain path after one compare (below 1); a recursive
+            // one (1) is the equal case of the same compare; error-checking and adaptive (2, 3)
+            // test the type range once more.
+            if k == MUTEX_NORMAL || (k != MUTEX_RECURSIVE && k & !3 == 0) {
+                if Self::acquire_free(lock, c) {
+                    owner.store(tid, Relaxed);
                     return true;
+                }
+                return false;
+            }
+            if k == MUTEX_RECURSIVE {
+                if Self::acquire_free(lock, c) {
+                    owner.store(tid, Relaxed);
+                    count.store(1, Relaxed);
+                    return true;
+                }
+                // MUTEX-FAST: a recursive mutex the caller already holds, below the count
+                // limit: one more level, exactly as `lock` counts it (no atomic
+                // read-modify-write: only the owner writes `__count`). `lock` reports EAGAIN at
+                // the limit.
+                if owner.load(Relaxed) == tid && lock.load(Relaxed) != 0 {
+                    let n = count.load(Relaxed);
+                    if n != u32::MAX {
+                        count.store(n + 1, Relaxed);
+                        return true;
+                    }
                 }
             }
         }
         false
+    }
+
+    /// Takes a free plain private mutex word (0 -> 1) for [`Mutex::lock_fast`]; `false`: it
+    /// was held (nothing changed).
+    // MUTEX-2: the only thread takes a free private mutex without a LOCK-prefixed CAS (no other
+    // thread can race it; a signal handler that takes and releases it between the load and the
+    // store leaves it free again). The compiler fences keep the critical section's accesses
+    // between the two stores (no CPU fence: one thread). A held one goes on without a CAS that
+    // must fail.
+    #[inline(always)]
+    fn acquire_free<C: Ctx>(lock: &AtomicU32, c: &C) -> bool {
+        if c.alone() {
+            lock.load(Relaxed) == 0 && {
+                lock.store(1, Relaxed);
+                compiler_fence(SeqCst);
+                true
+            }
+        } else {
+            lock.compare_exchange(0, 1, Acquire, Relaxed).is_ok()
+        }
     }
 
     /// The common case of [`Mutex::unlock`] (TINY-HOT): [`Mutex::unlock_fast_deferred`], with
@@ -264,7 +283,10 @@ impl<'a> Mutex<'a> {
             }
             if k != MUTEX_NORMAL && k != MUTEX_ADAPTIVE {
                 // Error-checking or recursive: only the owner may release it.
-                if c.fast_tid() != Some(owner.load(Relaxed)) || lock.load(Relaxed) == 0 {
+                // MUTEX-MT: the TID's test before the owner's compare (comparing the Options
+                // made LLVM build the result with setcc and test it again: +3 instructions).
+                let Some(tid) = c.fast_tid() else { return FastUnlock::Slow };
+                if owner.load(Relaxed) != tid || lock.load(Relaxed) == 0 {
                     return FastUnlock::Slow;
                 }
                 // MUTEX-MT: `__count` is kept by recursive mutexes only (see `lock_fast`).
