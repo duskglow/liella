@@ -37,6 +37,7 @@
 //! | `native`       | The native Rust interface (D-X.10): `liella-native` with each feature on its own (clippy, unit tests); its static example built against `libc.a` and run, its dynamic example built against `libc.so.6` and checked with `readelf`. |
 //! | `fuzz`         | The fuzz harnesses of `fuzz/` (a workspace of its own, nightly, libFuzzer through `cargo fuzz`): `--list`; `<target> --time <minutes>` (or `--all`) runs in chunks resuming from the corpus outside the repository (`~/liella-fuzz-corpus`); `--repro`, `--tmin <file>`, `--cmin` for triage (implementation-plan.md §4.5). |
 //! | `bench-rows`   | The bench rows a change can move plus the sentinel rows (`bench/sentinels.tsv`), for a TARGETED bench (`benchrows.rs`, BENCH-AFF): `--base <ref>` / `--range <a>..<b>` / `--files <p>,...`, `--out <file>` for `bench --rows-file`. `bench --affected <base>` selects and times only those rows (`bench/c/cbench_rows.h`). FULL for build, link, allocator, startup and harness changes. The full bench on main stays the safety net. |
+//! | `sweep`        | The timing sweep (`sweep.rs`, SWEEP-RUN-TOOL): `run --out <dir> [--only a,b]` in a staged tree runs `bench --no-build --staged --counters` and exits 0 when every selected row was measured and `<dir>/sweep.tsv` written, flagged rows or not (nonzero: the measurement did not finish); `compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... \| --old-table <results.md>)` prints the report sections against the previous sweep. |
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
 //! | `classed-xref` | The classed pages' XREF bias rule (D-4.53, D-X.34): every out-of-page reference of page 1 addresses page 0's target + 4096, paired in order (an unpaired reference is an error). No file: assemble `csys/src/machine/fold.S` (also a `static` check); `<file>...`: check those archives, objects or linked objects (`so` checks `libc.a` and `libc.so.6`). |
@@ -78,6 +79,7 @@ mod spec;
 mod status;
 mod symcov;
 mod symgap;
+mod sweep;
 mod trace;
 mod unicode;
 mod compat_ids;
@@ -157,6 +159,7 @@ fn main() -> ExitCode {
         "nextest" => nextest::run(&std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()), &root, &args[1..]),
         "affected" => return affected::main(&root, &args[1..]),
         "bench-rows" => benchrows::run(&root, &args[1..]),
+        "sweep" => sweep::run(&root, &args[1..]),
         "so" => so::run_so(&root),
         "repro" => repro::run(&root, &args[1..]),
         "native" => native_examples::run_native(&root),
@@ -164,7 +167,7 @@ fn main() -> ExitCode {
         "plants" => return plants::main(&root, &args[1..]),
         "classed-xref" => classed::run(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
