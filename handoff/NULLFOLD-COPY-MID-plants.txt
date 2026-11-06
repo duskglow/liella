@@ -11,9 +11,9 @@ bound-255 | crates/boundary/src/dispatch.rs | lit:pub(crate) const MOVE_FOLD_MAX
 # The lazy decision not taken by a 129-256 copy.
 resolve-64 | crates/boundary/src/hot/mem.rs | lit:crate::dispatch::resolve_fold_move(n); ==> crate::dispatch::resolve_fold(n); | cargo test -p liella-boundary --test small_copy the_folding_decision_is_taken | msg:the first small call must decide
 # The SSE2 mark left on: the SSE2 gate compares against 2^63 | 256 and folds every size.
-sse2-mark-kept | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)\tbtrq \$63, %rcx[^\n]*\n/$1/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call \d+ n 257
+sse2-mark-kept | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)\tbtrq \$63, %rcx[^\n]*\n/$1/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call [0-9]+ n 257
 # The build test inverted: the SSE2 word takes the AVX2 path and its unsigned bound passes every size.
-sign-inverted | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)js \.Lmove_129_sse2_gate/$1jns .Lmove_129_sse2_gate/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call \d+ n 257
+sign-inverted | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)js \.Lmove_129_sse2_gate/$1jns .Lmove_129_sse2_gate/s | cargo test -p liella-boundary --test small_copy null_faults_in_the_folded_sizes | msg:fold true avx2 false call [0-9]+ n 257
 # The word not raised when the AVX2 build is set after folding (the SSE2 mark stays).
 word-avx2-stale | crates/boundary/src/dispatch.rs | lit:store_move_word(FOLD.load(Relaxed) != 0, avx2); ==> | cargo test -p liella-boundary --test small_copy the_129_to_256_copy_word | msg:copy word: fold true avx2 true
 # The build ignored when folding is set: the word claims the AVX2 body under the SSE2 build.
