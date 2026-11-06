@@ -1,0 +1,12 @@
+{"task": "TIMING-N100-MEMCMP", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: 256-byte one-branch step removes the per-call mispredict (N100 memcmp_4k 1.09 -> 1.02 time, 554 -> 500 instr) but N100 memcmp_64k is 6% slower and IVB memcmp_4k 2.3% slower; do not land as is",
+ "branch": "task/timing-n100-memcmp", "head": "e53ba22d",
+ "gate": {"affected": "running at hand-back (timing-n100-memcmp-gate); clippy, static and the first suites ok", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["N100 br_misp per call memcmp_4k 1.00 -> 0.002, cycles 279.7 -> 261.2", "memcmp_256 interleave neutral (18.18 cycles before and after)", "IVB memcmp_4k slower although no SSE2 code changed: suspect code alignment, not verified", "plants WARN-NO-MSG step-loop-sign (caught by SIGSEGV)"],
+ "refused": [],
+ "jobs": ["timing-n100-memcmp-count-before", "timing-n100-memcmp-count-after", "timing-n100-memcmp-plants", "timing-n100-memcmp-gate", "nozomi:timing-n100-memcmp-n100-2", "kotori:timing-n100-memcmp-ivb-2"],
+ "improvement": "the brief's timing recipe should say --compare takes the bench name positionally (no --rows); one timing run was lost to it",
+ "next_step": "revert the 256 interleave, bound the 256-byte step (<= 8 KiB) or use a 128-byte one-branch step, realign the SSE2 long loop, re-time N100 and IVB",
+ "report_file": "handoff/TIMING-N100-MEMCMP.md"}
