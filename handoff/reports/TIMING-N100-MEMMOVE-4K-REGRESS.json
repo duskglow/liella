@@ -1,0 +1,12 @@
+{"task": "TIMING-N100-MEMMOVE-4K-REGRESS", "model": "opus", "tokens": null,
+ "result": "cause verified (PARITY-COPY-AVX2-3 held 128-byte head block, backward path: +17% at 4 KiB on N100); backward path reverted to 32-byte steps; N100 memmove_4k 1.080-1.085 -> 0.966-0.971 of glibc, other copy rows unchanged; gate has one unexplained failure (search_nomem tsearch, exports interposed)",
+ "branch": "task/timing-n100-memmove-4k-regress", "head": "c18471c5",
+ "gate": {"affected": "1 failed (liella-boundary exports interposed: search_nomem tsearch_returns_null_and_leaves_the_tree_walkable); gate still running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["forward held block costs 3% on a 4 KiB forward overlap by 8 on the N100 (no bench row)", "ff125cce^/ff125cce cannot be staged (no bench --stage in those trees): staged pair is next before/after the fix, old-vs-new kernel via interleaved microbench", "stage2 count step failed on wall-time budget row strcmp_16_mix on the loaded build host (superseded by stage3)"],
+ "refused": [],
+ "jobs": ["shiki:timing-n100-memmove-4k-regress-gate", "shiki:timing-n100-memmove-4k-regress-plants", "shiki:timing-n100-memmove-4k-regress-counts3", "shiki:timing-n100-memmove-4k-regress-stage3", "nozomi:timing-n100-memmove-4k-regress-n100", "kotori:timing-n100-memmove-4k-regress-ivb", "nozomi:timing-n100-memmove-4k-regress-mb2-n100"],
+ "improvement": "bench --counters has no way to skip wall-time budget checks, so a counts job on a loaded build host goes red on an unrelated time row",
+ "next_step": "run search_nomem tsearch interposed on origin/next and this branch on a quiet host; if pre-existing, re-gate and land",
+ "report_file": "handoff/TIMING-N100-MEMMOVE-4K-REGRESS.md"}

@@ -36,7 +36,7 @@ use liella::time::{self, FileId, Zone};
 use liella_kernel::sys::Sys;
 use liella_rt::sync::RawMutex;
 
-use crate::recheck::{self, LastCheck};
+use crate::recheck::{self, LastCheck, TscGate};
 
 /// A selected zone and what it was selected under.
 #[derive(Debug)]
@@ -47,6 +47,8 @@ pub struct Entry {
     next: AtomicUsize,
     /// The last check of the zone's file (`recheck`).
     checked: LastCheck,
+    /// The TSC gate in front of `checked` on the hot path (D-7.14's rule, COLDSTART-SECOND-LATENCY-3).
+    gate: TscGate,
     /// The generation ([`invalidate`]) in which the file's identity was last checked.
     generation: AtomicUsize,
 }
@@ -133,10 +135,11 @@ pub fn publish(z: &'static Zone, g: &Globals<'_>) {
 /// for the current zone at most once per second (D-23.6; owner ruling 2026-10-05).
 pub fn select<S: Sys>(sys: &S, objs: &impl ZoneObjects, env: Env<'_>, g: &Globals<'_>, always: bool) -> &'static Zone {
     let cur = CURRENT.load(Acquire);
-    // The hot path, without the lock: the current zone, the same `TZ`, no check due.
+    // The hot path, without the lock: the current zone, the same `TZ`, no check due. `TZ` and the
+    // generation are compared first; only the once-a-second file check is behind the TSC gate.
     if !always && cur != 0 {
         let e = objs.entry_at(cur);
-        if e.tz.as_deref() == env.tz && (e.loaded.file.is_none() || (e.generation.load(Acquire) == GENERATION.load(Acquire) && !e.checked.due(recheck::now(sys)))) {
+        if e.tz.as_deref() == env.tz && (e.loaded.file.is_none() || (e.generation.load(Acquire) == GENERATION.load(Acquire) && e.gate.fresh(&e.checked, sys.tsc(), || recheck::now(sys)))) {
             return e.zone();
         }
     }
@@ -203,7 +206,7 @@ fn add<S: Sys>(sys: &S, tz: Option<&[u8]>, tzdir: Option<&[u8]>, default: &[u8])
     let loaded = time::load(sys, tz, tzdir, default)?;
     let checked = LastCheck::new();
     checked.checked(recheck::now(sys));
-    let e = Entry { loaded, tz: copy(tz)?, dir: copy(tzdir)?, next: AtomicUsize::new(HEAD.load(Acquire)), checked, generation };
+    let e = Entry { loaded, tz: copy(tz)?, dir: copy(tzdir)?, next: AtomicUsize::new(HEAD.load(Acquire)), checked, gate: TscGate::new(), generation };
     let e: &'static Entry = TryBox::new(e)?.leak();
     HEAD.store(addr_of(e), Release);
     Ok(e)

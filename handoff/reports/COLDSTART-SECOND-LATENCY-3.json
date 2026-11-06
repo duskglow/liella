@@ -1,0 +1,13 @@
+{"task": "COLDSTART-SECOND-LATENCY-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: implicit tzset zone check TSC-gated (D-7.14 rule), gate+plants green, -63 instr in mktime window; N100/IvB timing queued for the verdict; N100 counters fixed and read",
+ "branch": "task/coldstart-second-latency-3", "head": "48843455",
+ "gate": {"affected": "4681 passed / 0 failed (7 suites, 3 conformance)", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["N100 counters: second setlocale +365 cycles net, from L1D misses served from L2 (+128 load-stall cycles, ld_head 55 vs 2) and +25 icache misses; 1 dTLB walk per call. Evidence for (c), not started per coordinator rule.",
+                   "Broadwell-EP: (a) leaves L1D misses of the second mktime unchanged (54); the misses point at (b)."],
+ "refused": [],
+ "jobs": ["kanon:coldstart-second-latency-3-lint", "kanon:coldstart-second-latency-3-gate", "kanon:coldstart-second-latency-3-plants", "kanon:coldstart-second-latency-3-counts2", "nozomi:coldstart-second-latency-3-pmc-n100", "nozomi:coldstart-second-latency-3-time-n100", "nico:coldstart-second-latency-3-time-ivb"],
+ "improvement": "the in-process probe must check that its perf group is scheduled (the NMI watchdog holds a counter on Gracemont); a silent all-zero run cost a whole cycle",
+ "next_step": "read the N100/IvB timing jobs; land (a) if not slower, else revert 48843455; then (b) if N100 mktime > 1.10x",
+ "report_file": "handoff/coldstart-second-latency.md"}

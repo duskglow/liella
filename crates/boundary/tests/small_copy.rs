@@ -299,8 +299,9 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
     // Clause: s4_1_c_1 with D-4.22's NULL folding (owner rulings 2026-10-08, option B): NULL with
     // 1 <= n <= 64 dies by SIGSEGV on page zero with folding on (the fault in fold.S; glibc's
     // observable outcome, it has no NULL check of its own) and by the S6 abort with folding off.
-    // memset and __memset_chk fold 65-256 too (D-4.60, owner ruling 2026-11-06): SIGSEGV up to 256
-    // with folding on. Every other size and call, the copies' 65-256 included, takes the explicit
+    // The copies (memcpy, memmove, __memcpy_chk) also fold 129-256 (owner ruling #3304, D-4.55);
+    // memset and __memset_chk fold 65-256 (D-4.60, owner ruling 2026-11-06): SIGSEGV up to 256
+    // with folding on. Every other size and call, the copies' 65-128 included, takes the explicit
     // checks either way (the abort), n > 64 KiB included: no Rust path performs a deliberate NULL
     // access.
     use std::sync::atomic::Ordering::SeqCst;
@@ -328,12 +329,158 @@ fn null_faults_in_the_folded_sizes_and_aborts_in_every_other() {
             for call in 0..NULL_CALLS {
                 NULL_CASE.store(n * NULL_CALLS + call, SeqCst);
                 let fill = call == 4 || call == NULL_CALLS - 1; // memset, __memset_chk
-                let want = if fold && (n <= 64 || fill && n <= 256) { SIGSEGV } else { SIGABRT };
+                let copy = matches!(call, 0 | 1 | 2 | 3 | 5);
+                let folded = n <= 64 || (fill && n <= 256) || (copy && (129..=256).contains(&n));
+                let want = if fold && folded { SIGSEGV } else { SIGABRT };
                 let end = selftest::in_child_quiet(null_call).unwrap();
                 assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n}");
             }
         }
     }
+}
+
+/// The 129-256 NULL children's call (`case % MID_CALLS`) and size (`case / MID_CALLS`), the build
+/// and, for the shared-mapping test, the destination (set before the fork).
+static MID_CASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static MID_FOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static MID_AVX2: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static MID_DEST: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+const MID_CALLS: usize = 8;
+
+/// The builds of the 129-256 NULL tests: (folding, AVX2 build); AVX2 only where the CPU has it.
+fn mid_builds() -> Vec<(bool, bool)> {
+    let mut runs = vec![(false, false), (true, false)];
+    if liella_boundary::cpu::avx2() {
+        runs.extend([(false, true), (true, true)]);
+    } else {
+        println!("no AVX2 on this CPU: the 129-256 NULL tests run the SSE2 build only");
+    }
+    runs
+}
+
+fn mid_null_call(k: &CSys) -> i32 {
+    use std::sync::atomic::Ordering::SeqCst;
+    if k.prctl_int(liella_kernel::ops::PrctlInt::SetDumpable, 0, 0).is_err() {
+        return 4;
+    }
+    // The production order: the build at startup, then the (lazy) folding decision, so the
+    // decision's own word store is the one the call reads.
+    if !selftest::set_kernel_avx2(MID_AVX2.load(SeqCst)) || !selftest::set_null_fold(MID_FOLD.load(SeqCst)) {
+        return 3;
+    }
+    let case = MID_CASE.load(SeqCst);
+    let (call, n) = (case % MID_CALLS, case / MID_CALLS);
+    let src = [0xA5u8; 256];
+    let dest = MID_DEST.load(SeqCst);
+    let mut buf = [0x5Au8; 256];
+    let d = if dest == 0 { buf.as_mut_ptr().cast::<c_void>() } else { dest as *mut c_void };
+    let (s_ok, null) = (src.as_ptr().cast::<c_void>(), core::ptr::null_mut::<c_void>());
+    let move_chk = core::hint::black_box(s::__memmove_chk as extern "C" fn(*mut c_void, *const c_void, usize, usize) -> *mut c_void);
+    match call {
+        0 => opaque::memcpy(null, s_ok, n),
+        1 => opaque::memcpy(d, null, n),
+        2 => opaque::memcpy(null, null, n),
+        3 => opaque::memmove(null, s_ok, n),
+        4 => opaque::memmove(d, null, n),
+        5 => opaque::memmove(null, null, n),
+        6 => opaque::__memcpy_chk(d, null, n, usize::MAX),
+        _ => move_chk(null, s_ok, n, usize::MAX),
+    };
+    0
+}
+
+#[test]
+fn copies_of_129_to_256_bytes_fault_on_a_null_with_folding_and_abort_without() {
+    // Clause: s4_1_c_1 with D-4.55's NULL folding of the 129-256 copy class (owner ruling #3304):
+    // a NULL source, destination or both, at every size 129-256, through memcpy, memmove,
+    // __memcpy_chk and __memmove_chk, dies by SIGSEGV on page zero with folding on and by the S6
+    // abort with folding off, in the SSE2 and the AVX2 build.
+    use std::sync::atomic::Ordering::SeqCst;
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    MID_DEST.store(0, SeqCst);
+    for (fold, avx2) in mid_builds() {
+        MID_FOLD.store(fold, SeqCst);
+        MID_AVX2.store(avx2, SeqCst);
+        let want = if fold { SIGSEGV } else { SIGABRT };
+        for n in 129..=256 {
+            for call in 0..MID_CALLS {
+                MID_CASE.store(n * MID_CALLS + call, SeqCst);
+                let end = selftest::in_child_quiet(mid_null_call).unwrap();
+                assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_null_source_of_129_to_256_bytes_writes_nothing_into_a_shared_file_mapping() {
+    // Clause: s4_1_c_1 with D-4.55's ordering requirement: the folded 129-256 copy loads the
+    // source's first block before any store, so a NULL source crashes before one byte reaches a
+    // valid destination. The destination is a MAP_SHARED page of a memfd (the parent sees what the
+    // child wrote, and so does the file); after each crash (SIGSEGV folded, the abort otherwise)
+    // the mapping and the file still hold their pattern.
+    use liella_kernel::path::KStr;
+    use liella_kernel::uapi::{MAP_SHARED, MFD_CLOEXEC};
+    use std::sync::atomic::Ordering::SeqCst;
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let fd = CSys.memfd_create(KStr::from_nul_terminated(b"liella-nullfold\0").unwrap(), MFD_CLOEXEC).unwrap();
+    let want_bytes: Vec<u8> = (0..PAGE).map(|i| (i % 251) as u8 | 1).collect();
+    CSys.pwrite(fd, &want_bytes, 0).unwrap();
+    let region = CSys.mmap(0, PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, Some(fd), 0).unwrap();
+    // The destination at the start of the page, and one ending at its end.
+    for (fold, avx2) in mid_builds() {
+        MID_FOLD.store(fold, SeqCst);
+        MID_AVX2.store(avx2, SeqCst);
+        let want = if fold { SIGSEGV } else { SIGABRT };
+        for n in 129..=256 {
+            for (call, at) in [(1, 0), (4, 0), (6, 0), (1, PAGE - n), (4, PAGE - n)] {
+                MID_DEST.store(region.addr() + at, SeqCst);
+                MID_CASE.store(n * MID_CALLS + call, SeqCst);
+                let end = selftest::in_child_quiet(mid_null_call).unwrap();
+                assert_eq!(end, ChildEnd::Signaled(want), "fold {fold} avx2 {avx2} call {call} n {n} at {at}");
+                let mut file = vec![0u8; PAGE];
+                assert_eq!(CSys.pread(fd, &mut file, 0).unwrap(), PAGE);
+                assert!(file == want_bytes, "fold {fold} avx2 {avx2} call {call} n {n} at {at}: the file changed");
+                let mapped = s::memcmp(region.addr() as *const c_void, want_bytes.as_ptr().cast(), PAGE);
+                assert_eq!(mapped, 0, "fold {fold} avx2 {avx2} call {call} n {n} at {at}: the mapping changed");
+            }
+        }
+    }
+    MID_DEST.store(0, SeqCst);
+    CSys.munmap(region).unwrap();
+    CSys.close(fd).unwrap();
+}
+
+#[test]
+fn the_129_to_256_copy_word_follows_the_folding_and_build_settings_in_either_order() {
+    // no spec clause (D-4.55, NULLFOLD-COPY-MID-3): the copy entry reads one word for the 129-256
+    // class; its bound is 256 only with folding on, and its SSE2 mark is set exactly when folding
+    // is on with the SSE2 build, whichever setting changed last. Both bodies copy the same bytes,
+    // so only the word itself shows a wrong build choice on a CPU with AVX2.
+    let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (avx2_before, fold_before) = (selftest::kernel_avx2(), selftest::null_fold());
+    let builds = mid_builds();
+    for &(fold, avx2) in &builds {
+        for (from_fold, from_avx2) in &builds {
+            // From every other state, set folding first, then the build; then the other order.
+            for fold_first in [true, false] {
+                assert!(selftest::set_null_fold(*from_fold) && selftest::set_kernel_avx2(*from_avx2));
+                if fold_first {
+                    assert!(selftest::set_null_fold(fold) && selftest::set_kernel_avx2(avx2));
+                } else {
+                    assert!(selftest::set_kernel_avx2(avx2) && selftest::set_null_fold(fold));
+                }
+                let want = (if fold { 256 } else { 0 }, fold && !avx2);
+                assert_eq!(
+                    selftest::copy_class_word(),
+                    want,
+                    "copy word: fold {fold} avx2 {avx2} from fold {from_fold} avx2 {from_avx2} fold first {fold_first}"
+                );
+            }
+        }
+    }
+    assert!(selftest::set_kernel_avx2(avx2_before));
+    assert!(selftest::set_null_fold(fold_before));
 }
 
 #[test]
@@ -363,21 +510,27 @@ fn the_startup_guard_folds_only_from_64_kib() {
 fn the_folding_decision_is_taken_by_the_first_small_call_not_at_startup() {
     // no spec clause (STARTUP-1, D-4.22): the vm.mmap_min_addr read is lazy. After a reset
     // (process start) folding is off and undecided; a large call leaves it undecided; the first
-    // copy or fill of 1-64 bytes decides it, and the decision equals the startup guard's.
+    // copy of 1-256 bytes (D-4.55) or fill of 1-64 bytes decides it, and the decision equals the
+    // startup guard's.
     let _turn = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let (fold_before, resolved_before) = (selftest::null_fold(), selftest::null_fold_resolved());
     let (mut a, mut b) = ([1u8; 256], [2u8; 256]);
     let (pa, pb) = (a.as_mut_ptr().cast::<c_void>(), b.as_mut_ptr().cast::<c_void>());
     let want = selftest::set_null_fold(true); // what the guard allows on this machine
-    for which in 0..3 {
+    let (mut c, mut e) = (vec![1u8; 300], vec![2u8; 300]);
+    let (pc, pe) = (c.as_mut_ptr().cast::<c_void>(), e.as_mut_ptr().cast::<c_void>());
+    for which in 0..5 {
         selftest::unresolve_null_fold();
         assert!(!selftest::null_fold_resolved() && !selftest::null_fold());
-        opaque::memmove(pa, pb, 200);
+        opaque::memmove(pc, pe, 257);
+        opaque::memcpy(pc, pe, 300);
         opaque::memset(pa, 1, 200);
-        assert!(!selftest::null_fold_resolved(), "a size above 64 must not read mmap_min_addr");
+        assert!(!selftest::null_fold_resolved(), "a copy above 256 or a fill above 64 must not read mmap_min_addr");
         match which {
             0 => drop(opaque::memcpy(pa, pb, 8)),
             1 => drop(opaque::memmove(pa, pb, 64)),
+            2 => drop(opaque::memcpy(pa, pb, 129)),
+            3 => drop(opaque::memmove(pa, pb, 256)),
             _ => drop(opaque::memset(pa, 7, 1)),
         }
         assert!(selftest::null_fold_resolved(), "call {which}: the first small call must decide");

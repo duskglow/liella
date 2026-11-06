@@ -1,0 +1,9 @@
+{"task": "TIMING-COV-SPAWN-HEAP256M-IVB", "model": "opus", "tokens": null, "result": "PENDING JOBS: booked Ivy Bridge reproduction (3 x cbench_process --runs 5 + perf stat k/u/dTLB of the row) queued on nico; no code change", "branch": "task/timing-cov-spawn-heap256m-ivb", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["keke:tcsh-ivb-stage", "nico:timing-cov-spawn-heap256m-ivb-repro-ivb"],
+ "rulings": [],
+ "informational": ["spawn_shared maps and unmaps two regions per spawn (128 KiB child stack and one MAP_SHARED page); both are caching candidates only if the IVB counts show a kernel-side gap", "nico timing queue: job queued at position 2 behind a 58-min timing job; booking 74 (45 min) may lapse before it starts"],
+ "refused": [],
+ "improvement": "a timing launch over ssh with `cmd && ... && setsid nohup X &` backgrounds the whole && list, which holds ssh's stdout and hangs the session; ~/bin/timing could offer a --detach that does the setsid/redirect itself",
+ "next_step": "collect ~/logs/timing-cov-spawn-heap256m-ivb-repro-ivb.log on nico; ratio <= 1.05 in all 3 runs -> DO NOT LAND (noise), else compare perf sets and only a kernel-side gap leads to the cached-stack code",
+ "report_file": "handoff/TIMING-COV-SPAWN-HEAP256M-IVB.md"}

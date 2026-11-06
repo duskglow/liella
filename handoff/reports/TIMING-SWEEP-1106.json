@@ -1,0 +1,29 @@
+{
+ "task": "TIMING-SWEEP-1106",
+ "model": "opus",
+ "tokens": null,
+ "result": "PENDING JOBS: products of next 4d454f06 staged (rc 0); timing runs of 17 non-libm groups started on both booked timing hosts; analyzer ready, table not yet written",
+ "branch": "task/timing-sweep-1106",
+ "head": "cf1e121b",
+ "gate": {
+  "affected": "n/a (docs only; static job timing-sweep-1106-static)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "bookings ops #75 (nico) and #76 (nozomi), 180 min from 07:15Z: cancel when the runs end",
+  "1106B table read at origin/task/timing-coverage-1106b (git cat-file blob): not yet on origin/next",
+  "XTASK-BENCH-OUTPUTS not landed at 4d454f06: tables in target/liella/bench/"
+ ],
+ "refused": [],
+ "jobs": [
+  "shiki:timing-sweep-1106-stage",
+  "nico:timing-sweep-1106-nico",
+  "nozomi:timing-sweep-1106-nozomi",
+  "shiki:timing-sweep-1106-static"
+ ],
+ "improvement": "a sweep whose runs exceed the 20-min wait rule could be cut as two stories (start / collect) up front so the first one is not budgeted for the table",
+ "next_step": "jobwait both timing runs, cancel bookings 75/76, run handoff/timing-sweep-1106/analyze.py, write results/timing-sweep-1106-table.md",
+ "report_file": "handoff/timing-sweep-1106.md"
+}

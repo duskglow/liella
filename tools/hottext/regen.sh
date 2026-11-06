@@ -24,7 +24,7 @@ n=0
 trace() { # <LANG> <program> <args...>
     local lang=$1; shift
     n=$((n + 1))
-    LANG=$lang LC_ALL= HOT_TEXT_OUT=$work/names.$n HOT_TEXT_STDIN=${stdin:-$work/in.txt} timeout 900 \
+    LANG=$lang LC_ALL= HOT_TEXT_OUT=$work/names.$n HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
         gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -53,6 +53,10 @@ for p in $probes; do
         # group below: fwrite ahead of the printf group cost the first snprintf one fault (Ivy Bridge host B:
         # cold.c snprintf 12 -> 13, cold2 first snprintf 8 -> 9).
         stdin=/dev/null trace en_US.UTF-8 ./p_cat
+    elif [ "$p" = p_fork ]; then
+        # TIMING-COV-FORK-COW-FAULTS: trace into the fork child (its text windows fault after fork).
+        follow=child trace en_US.UTF-8 ./p_fork
+        check_calls p_fork
     else
         trace en_US.UTF-8 "./$p"
         check_calls "$p"

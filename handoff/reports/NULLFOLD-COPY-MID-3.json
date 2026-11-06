@@ -1,0 +1,31 @@
+{
+ "task": "NULLFOLD-COPY-MID-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "D-4.55 129-256 copy folding with a one-word gate (sign bit picks the body): Ivy Bridge memcpy_144/256 back to base (18.8-18.9 vs 18.8-19.0; two-word gate 19.4-19.5), Alder Lake-N 14.4/14.2 -> 12.2-12.4 cycles (glibc 13.2-13.4), memmove and memcpy_128 unchanged; no row slower",
+ "branch": "task/nullfold-copy-mid-3",
+ "head": "62cbcec2 (code 0e639269)",
+ "gate": {
+  "affected": "10231 passed / 0 failed (10 suites; conformance 117/117)",
+  "peak": "11G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "plants2: two msg regexes used \\d, which grep -E lacks (WARN-NO-MSG although the intended assertion failed); fixed to [0-9]+ and rerun as plants3",
+  "the 129-256 NULL test children set folding before the build, the reverse of production; with the build setter now writing the class word that order hid a wrong word from the folding decision (plant fold-unguarded-word survived once); the children now use the production order",
+  "plants3: 9 CAUGHT, 0 SURVIVED, 0 WARN; final head 62cbcec2: workspace clippy -D warnings and xtask static rc 0 (job nullfold-copy-mid-3-final)"
+ ],
+ "refused": [],
+ "improvement": "the plants tool could reject msg regexes with Perl-only escapes (\\d, \\w, \\s) up front, since it matches with grep -E; one plants rerun here came from that",
+ "next_step": "land with its parent branches; optional Zen 1 instruction row for memcpy_144/256",
+ "report_file": "handoff/NULLFOLD-COPY-MID.md",
+ "jobs": [
+  "keke:nullfold-copy-mid-3-gate2",
+  "keke:nullfold-copy-mid-3-plants3",
+  "keke:nullfold-copy-mid-3-final",
+  "keke:nullfold-copy-mid-3-lint",
+  "nico:nullfold-copy-mid-3-nico",
+  "nozomi:nullfold-copy-mid-3-nozomi"
+ ]
+}

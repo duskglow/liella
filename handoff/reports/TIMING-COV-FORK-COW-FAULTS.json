@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-FORK-COW-FAULTS", "model": "opus", "tokens": null,
+ "result": "fork child's text path grouped in the hot text (tracer follows the fork child, list regenerated): release per fork faults 10.0 -> 7.2, kernel instr 231.7k -> 202.9k, user instr 400 -> 397 (glibc dynamic 12.0 / 275.7k / 276); gate (escalated to FULL), bench and timing pending",
+ "branch": "task/timing-cov-fork-cow-faults", "head": "5186b8a4",
+ "gate": {"affected": "running (escalated to FULL by the hot-text.list linker input)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW placeholder for the decision row (brief reserved no id)", "recommendation": "reserve a D-X id and assign it"}],
+ "informational": ["the direct-tier gate escalates to FULL for any hot-text.list change, so every hot-text regen story runs the full suite", "the brief's 15.1 faults per fork were measured on fast products; the release products the bench uses read 10.0 before this change", "nico had cfcr2-ivb (previous story's timing job) running for 2h53m at 09:05Z"],
+ "refused": [],
+ "jobs": ["keke:timing-cov-fork-cow-faults-regen", "keke:timing-cov-fork-cow-faults-check", "keke:timing-cov-fork-cow-faults-plants", "keke:timing-cov-fork-cow-faults-gate", "keke:timing-cov-fork-cow-faults-bench"],
+ "improvement": "profile faults by address (perf record -e page-faults -d, placed in /proc maps) before designing: it showed the brief's write-pattern hypothesis was wrong (writes at parity) and the gap was text windows",
+ "next_step": "after keke:timing-cov-fork-cow-faults-stage, copy stage-after.tar to kotori and nozomi and start ~/bin/timing timing-cov-fork-cow-faults-ivb / -n100 bash ~/work/TIMING-COV-FORK-COW-FAULTS/timing.sh",
+ "report_file": "handoff/TIMING-COV-FORK-COW-FAULTS.md"}

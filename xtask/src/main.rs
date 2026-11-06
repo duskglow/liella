@@ -92,17 +92,24 @@ use std::process::{Command, ExitCode};
 /// The tree to work on, found at run time: the nearest ancestor of the current directory holding
 /// `Cargo.toml` and `xtask/Cargo.toml`. The build-time `CARGO_MANIFEST_DIR` is only the fallback: a
 /// binary reused by a copied tree (plant.sh's `<role>-plant`) would otherwise act on the original
-/// tree (TOOLS-10).
-fn root() -> PathBuf {
+/// tree (TOOLS-10). A staged tree (`bench-stage.manifest`) is a root too; no root at all is an error
+/// (`benchstage::find_root`), never the build host's path on another machine.
+fn root() -> Result<PathBuf, String> {
     let here = std::env::current_dir().ok();
-    let found = here.as_deref().and_then(|d| d.ancestors().find(|a| (a.join("Cargo.toml").is_file() && a.join("xtask/Cargo.toml").is_file()) || a.join(benchstage::MANIFEST).is_file()));
-    found.map(Path::to_path_buf).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(Path::to_path_buf).unwrap_or_default())
+    let built = Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(Path::to_path_buf).unwrap_or_default();
+    benchstage::find_root(here.as_deref(), &built)
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cmd = args.first().map(String::as_str).unwrap_or("help");
-    let root = root();
+    let root = match root() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("xtask {cmd}: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let result = match cmd {
         "stubs" => spec::stubs(&root, args.iter().any(|a| a == "--force")),
         "status" => status::run(&root, args.iter().any(|a| a == "--schedule")),
