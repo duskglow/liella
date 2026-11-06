@@ -1,0 +1,12 @@
+{"task": "SSE2-COPY-MID-SPLIT-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: SSE2 129-192 copy split reverted (product equals next); D-4.61 REJECTED and a NEGATIVE saturation row record it",
+ "branch": "task/sse2-copy-mid-split-2", "head": "b7dc73b8",
+ "gate": {"affected": "not run (docs only, per coordinator); static + clippy rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["sse2-copy-mid-split-ivb/-ivb2 rc 1 cause: next's bcmp_eq_128 exceeds its Ivy Bridge cycle limit (1.42-1.45 vs 1.383) on both trees; needs its own story"],
+ "refused": [],
+ "improvement": "A ruling that drops a change could come with the revert done by the coordinator's tooling (restore paths from the base) instead of a full agent run.",
+ "next_step": "none; optional: profile memcpy_256 on Alder Lake-N before any third attempt",
+ "report_file": "handoff/SSE2-COPY-MID-SPLIT-2-report.md",
+ "jobs": ["keke:sse2-copy-mid-split-2-static"]}
