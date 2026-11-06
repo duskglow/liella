@@ -29,8 +29,8 @@ mispredicts, resteers, icache or aliasing. Fixing it means more layout variants:
 2.94 ns; m144 4.19 all; m256 pre 3.78 / d 3.78 / final 4.19 ns. d's 128 gain (-1.8% cycles) is not visible in ns ->
 ruling branch (2) fails -> branch (3).
 
-**Jobs on `db090059`:** shiki `nullfold-memset-3-gate` (clippy --all-features, xtask clippy, static, affected --run
---base origin/next), `nullfold-memset-3-plants` (6 plants). Evidence (old staged trees, not the final head): nozomi
+**Jobs on `db090059` (both rc 0):** shiki `nullfold-memset-3-gate` (clippy --all-features, xtask clippy, static, affected --run
+--base origin/next: 11452 passed, 0 failed, conformance 122/0), `nullfold-memset-3-plants` (6 CAUGHT, no WARN). Evidence (old staged trees, not the final head): nozomi
 `nullfold-memset-3-prof-n100`, `nullfold-memset-3-time-n100`; trials `-proftry` (rc 3: an invalid event, dropped),
 `-proftry-2`. Scripts: nozomi ~/work/NULLFOLD-MEMSET-3/prof.sh, ~/work/NULLFOLD-MEMSET-2/run.sh + stage-*.tar.
 
