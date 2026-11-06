@@ -2010,11 +2010,6 @@ liella_machine_strnlen:
 	xorl %eax, %eax
 	ret
 	.size liella_machine_strnlen, .-liella_machine_strnlen
-/* TIMING-N100-SCAN-64K: the software prefetch of the 256-byte AVX2 loops of rawmemchr and
- * memchr, LIELLA_SCAN_PFD bytes ahead of the group (a prefetch never faults). */
-#define LIELLA_SCAN_PFD 512
-#define LIELLA_SCAN_PF(off) prefetcht0 (LIELLA_SCAN_PFD + (off))(%rax)
-
 	.section .text.liella_machine_rawmemchr_entry,"ax",@progbits
 
 /* const void *liella_machine_rawmemchr(const void *s, int c): a POINTER to the first byte equal
@@ -2201,10 +2196,6 @@ liella_machine_rawmemchr:
 	.p2align 4
 .Lraw_avx_loop:
 	/* Eight loads before one test (memchr's loop, TIMING-N100-SCAN-64K): 9 per 128 bytes. */
-	LIELLA_SCAN_PF(0)
-	LIELLA_SCAN_PF(64)
-	LIELLA_SCAN_PF(128)
-	LIELLA_SCAN_PF(192)
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3
@@ -2724,13 +2715,10 @@ liella_machine_memchr:
 	.p2align 4
 .Lmemchr_avx_loop:
 	/* Eight loads before one test: more L2 lines in flight per branch (TIMING-N100-SCAN-64K:
-	 * a 64 KiB scan streams from L2; the 128-byte loop stalled on L2 hits); 11 per 128 bytes. */
+	 * a 64 KiB scan streams from L2; the 128-byte loop stalled on L2 hits); 10 per 128 bytes. A software prefetch 512 bytes
+	 * ahead measured +1 per 64 bytes, rawmemchr_64k past the reference's count. */
 	cmpq %r8, %rax
 	jae .Lmemchr_avx_none
-	LIELLA_SCAN_PF(0)
-	LIELLA_SCAN_PF(64)
-	LIELLA_SCAN_PF(128)
-	LIELLA_SCAN_PF(192)
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3

@@ -18,5 +18,3 @@ raw-256-fold | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr:.*?)vp
 raw-256-align | csys/src/machine/scan.S | perl:s/(\.Lraw_avx_align:.*?)jz \.Lraw_avx_loop\n/$1jnz .Lraw_avx_loop\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr.*FAILED|SIGSEGV|panicked
 # rawmemchr: a hit in the first half of a 256-byte group taken as the second half's.
 raw-256-lo | csys/src/machine/scan.S | perl:s/(\.Lraw_avx_loop:.*?)jnz \.Lraw_avx_lo\n/$1jz .Lraw_avx_lo\n/s | cargo test -p liella-boundary --test machine_scanners | msg:rawmemchr, avx2=true
-# The prefetch has no architectural effect (prefetcht0 never faults and changes no register or memory).
-pf-none | csys/src/machine/scan.S | perl:s/#define LIELLA_SCAN_PF\(off\) prefetcht0 .*\n/#define LIELLA_SCAN_PF(off)\n/ | cargo test -p liella-boundary --test machine_scanners | equivalent:a prefetch hint changes no architectural state; its removal is a timing change only
