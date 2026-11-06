@@ -119,18 +119,20 @@ static posix_spawn_file_actions_t actions;
  * added in `main` so the measured start runs with the tunables the row was asked for. */
 static char *env_plain[] = {"PATH=/usr/bin:/bin", NULL, NULL};
 static char *env_locale[] = {"PATH=/usr/bin:/bin", "LC_ALL=en_US.UTF-8", NULL, NULL};
-static char tunables_var[4096];
 
+/* The children get this program's own `GLIBC_TUNABLES=...` entry, not a copy: the measured child is this
+ * program, so any buffer here is part of every startup row (a 4096-byte .bss copy buffer moved start-up's own
+ * .bss onto a fresh page: one more page fault, about 5k kernel instructions per start). */
 static void pass_tunables(void)
 {
-    const char *v = getenv("GLIBC_TUNABLES");
-    if (!v)
-        return;
-    int n = snprintf(tunables_var, sizeof tunables_var, "GLIBC_TUNABLES=%s", v);
-    if (n < 0 || (size_t)n >= sizeof tunables_var)
-        return;
-    env_plain[1] = tunables_var;
-    env_locale[2] = tunables_var;
+    static const char key[] = "GLIBC_TUNABLES=";
+    for (char **e = environ; *e; e++) {
+        if (strncmp(*e, key, sizeof key - 1) == 0) {
+            env_plain[1] = *e;
+            env_locale[2] = *e;
+            return;
+        }
+    }
 }
 
 /* Spawn this program in `mode` with stdout on /dev/null; 0 when the child exits with status 0. */
