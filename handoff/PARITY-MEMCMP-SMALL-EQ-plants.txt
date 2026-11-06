@@ -1,0 +1,4 @@
+# PARITY-MEMCMP-SMALL-EQ plants (cargo xtask plants; format docs/plants.md). Each anchored to liella_machine_equal's .Leq_17.
+eq17-word-test-dropped | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_17:.*?cmpq 8\(%rsi\), %rax)\n\tjne \.Leq_one/$1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq17-word-offset | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_17:.*?)movq 8\(%rdi\), %rax\n\tcmpq 8\(%rsi\), %rax/$1movq 16(%rdi), %rax\n\tcmpq 16(%rsi), %rax/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)
+eq17-tail-block-offset | csys/src/machine/fold.S | perl:s/(liella_machine_equal:.*?\.Leq_17:.*?)movdqu -16\(%rdi,%rdx\), %xmm0\n\tmovdqu -16\(%rsi,%rdx\), %xmm1/$1movdqu -15(%rdi,%rdx), %xmm0\n\tmovdqu -15(%rsi,%rdx), %xmm1/s | cargo test -p liella-boundary --test small_compare | msg:(FAILED|panicked)

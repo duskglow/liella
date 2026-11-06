@@ -15,7 +15,7 @@ use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
 
 const PAGE: usize = 4096;
-const MAX: usize = 256;
+const MAX: usize = 300; // every size 0-300 (PARITY-MEMCMP-SMALL-EQ: past the 129-256 class into the long one)
 const WIN: usize = 16;
 
 /// The kernel builds are one process-wide flag: the tests that force one take turns.
@@ -188,7 +188,7 @@ fn zero_length_compares_accept_null_and_are_equal() {
 
 /// GATE-SPEED: the sweep runs in size ranges (one test each, below); `SIZE_SHARDS` tiles 0..=MAX
 /// (checked by `the_size_shards_tile_0_to_max`), so the coverage is the whole sweep's.
-const SIZE_SHARDS: [(usize, usize); 4] = [(0, 64), (65, 130), (131, 190), (191, MAX)];
+const SIZE_SHARDS: [(usize, usize); 5] = [(0, 64), (65, 130), (131, 190), (191, 256), (257, MAX)];
 
 fn sweep_shard(i: usize) {
     // Clauses: s4_3_c_1, s4_3_c_2, s4_3_c_3 (each build of the kernels, D-4.25).
@@ -218,6 +218,12 @@ fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_bui
 fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_3() {
     // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
     sweep_shard(3);
+}
+
+#[test]
+fn compares_match_a_byte_loop_at_every_size_alignment_and_difference_in_each_build_4() {
+    // no spec clause: a shard of the compare kernels byte-loop oracle sweep (D-4 kernels), not a spec clause.
+    sweep_shard(4);
 }
 
 #[test]

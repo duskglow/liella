@@ -1127,7 +1127,10 @@ memcmp:
  * (MEMCMP-FOLD, D-4.41 amendment; `bcmp` and `__memcmpeq` in the products): 0 when equal, else 1.
  * The same gates and head probe as the compare entry: different heads return 1 here, equal heads
  * take the same classes as the compare entry (last word, two 16-byte or two 32-byte blocks; 0 or 1
- * from one test, no order); 33-64 without AVX2 tail-jumps to `liella_hot_equal_tail` (Rust), more
+ * from one test, no order), except 17-32: the head probe has proved bytes 0-7, so the word at 8 (an
+ * unequal word returns 1) and one 16-byte block at n - 16 cover the rest, which together cover [8, n)
+ * for every n in 17-32 (one instruction fewer than a second 16-byte block and the AND;
+ * PARITY-MEMCMP-SMALL-EQ); 33-64 without AVX2 tail-jumps to `liella_hot_equal_tail` (Rust), more
  * than 64 bytes (sign clear) up to `liella_machine_cmp_long` take the compare entry's 65-128 AVX2
  * class (MEMCMP-MID; no NULL test, the head load faults on page zero, PERF-MEMCMP-TAILS: the
  * 32-byte head block first, then three blocks in one test; 0 or 1) and its 129-2048 class with the
@@ -1174,13 +1177,12 @@ __memcmpeq:
 .Leq_17:
 	cmpq $32, %rdx
 	ja liella_hot_equal_tail
-	movdqu (%rdi), %xmm0
-	movdqu (%rsi), %xmm1
+	movq 8(%rdi), %rax
+	cmpq 8(%rsi), %rax
+	jne .Leq_one
+	movdqu -16(%rdi,%rdx), %xmm0
+	movdqu -16(%rsi,%rdx), %xmm1
 	pcmpeqb %xmm1, %xmm0
-	movdqu -16(%rdi,%rdx), %xmm1
-	movdqu -16(%rsi,%rdx), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	pand %xmm1, %xmm0
 	pmovmskb %xmm0, %eax
 	subl $0xffff, %eax
 	shrl $31, %eax
