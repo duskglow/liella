@@ -1,0 +1,12 @@
+{"task": "PERF-RAWMEMCHR-4K-IVB", "model": "opus", "tokens": null,
+ "result": "cause found: SSE2 128-byte loop moved from 32-aligned to 16 mod 32; int3-fill fix -3.0% rawmemchr_4k on Ivy Bridge, other rows flat, but +6.2% on N100 forced SSE2: DO NOT LAND pending ruling",
+ "branch": "task/perf-rawmemchr-4k-ivb", "head": "see git (commit after 555bd57f)",
+ "gate": {"affected": "kanon:perf-rawmemchr-4k-ivb-gate-final running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Land D-4.63 (rawmemchr SSE2 loop 32-aligned): IVB -3.0%, N100 forced-SSE2 +6.2%", "recommendation": "land, as ruling #3588 (N100 forced SSE2 is not a deployed path); else revert 9f4601a3 and mark D-4.63 REJECTED"}],
+ "informational": ["used git log --oneline --first-parent and a worktree of e98e113f to build the before tree the brief asked for; no diffs read", "a staged pre-XTASK-BENCH-OUTPUTS tree runs once per unpack (its xtask writes tables into target/liella/bench)"],
+ "refused": [],
+ "improvement": "bench --stage could refuse or warn when the staged xtask predates bench-out/, so before-tree timing does not fail after one run",
+ "next_step": "coordinator ruling on D-4.63; on reject revert 9f4601a3 and record REJECTED",
+ "report_file": "handoff/PERF-RAWMEMCHR-4K-IVB.md",
+ "jobs": ["kanon:perf-rawmemchr-4k-ivb-gate-final", "kanon:perf-rawmemchr-4k-ivb-plants", "kotori:perf-rawmemchr-4k-ivb-ivb2", "nozomi:perf-rawmemchr-4k-ivb-n100"]}
