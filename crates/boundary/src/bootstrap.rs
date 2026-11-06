@@ -39,19 +39,34 @@ fn segment(bias: usize, (vaddr, memsz): (u64, u64)) -> Segment<'static> {
     Segment { bytes, vaddr }
 }
 
-/// Pass 1 of a static PIE (`dynamic` = run-time `_DYNAMIC`, non-zero): RELATIVE (RELA) then RELR.
-/// `phdr`/`phnum` are `AT_PHDR`/`AT_PHNUM`.
-pub(crate) fn relocate_self(phdr: usize, phnum: usize, dynamic: usize) -> Result<Relocated, BootError> {
+/// The run-time address of the executable's ELF header when the executable is a static PIE
+/// (`ET_DYN`), else `None`. Taken PC-relatively (`adapter/image_anchor.c`), so it is right before
+/// the image is relocated.
+pub(crate) fn static_pie_header() -> Option<usize> {
+    let ehdr = ffi::liella_link_image_header();
+    // UNSAFE(slice): the executable's ELF header, mapped with its first segment.
+    #[allow(unsafe_code)]
+    // SAFETY: the linker defines `__ehdr_start` only where the ELF header lies in a loaded
+    // segment, so `EHDR_SIZE` bytes from it are mapped readable for the process's lifetime.
+    let bytes = unsafe { conv::bytes_at(ehdr, liella_ld::elf::EHDR_SIZE) };
+    boot::position_independent(bytes).then_some(ehdr)
+}
+
+/// Pass 1 of a static PIE (`ehdr` = run-time address of its ELF header, from
+/// [`static_pie_header`]): RELATIVE (RELA) then RELR. `phdr`/`phnum` are `AT_PHDR`/`AT_PHNUM`.
+pub(crate) fn relocate_self(phdr: usize, phnum: usize, ehdr: usize) -> Result<Relocated, BootError> {
     // UNSAFE(slice): the program headers the kernel mapped with the executable.
     #[allow(unsafe_code)]
     // SAFETY: `AT_PHDR`/`AT_PHNUM` describe the loaded headers (⚑ KERN), which stay mapped.
     let headers = unsafe { conv::words_at(phdr, phnum.saturating_mul(7)) };
     let img = boot::image(headers, phnum)?;
-    let bias = dynamic.wrapping_sub(usize::try_from(img.dynamic.0).unwrap_or(0));
+    let bias = ehdr.wrapping_sub(usize::try_from(img.header).unwrap_or(0));
+    let dynamic = bias.wrapping_add(usize::try_from(img.dynamic.0).unwrap_or(0));
     // UNSAFE(slice): the image's dynamic array (`PT_DYNAMIC`), read before any write.
     #[allow(unsafe_code)]
-    // SAFETY: `_DYNAMIC` is the run-time address of `PT_DYNAMIC`'s `p_memsz` bytes in the mapped
-    // image; the array is only read, and dropped before the segment view below is made.
+    // SAFETY: `dynamic` is the run-time address (bias + `p_vaddr`) of `PT_DYNAMIC`'s `p_memsz`
+    // bytes in the mapped image; the array is only read, and dropped before the segment view
+    // below is made.
     let words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
     let t = boot::tables(words, img.writable)?;
     let (rela, jmprel, relr) = (at(bias, t.rela), at(bias, t.jmprel), at(bias, t.relr));

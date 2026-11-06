@@ -7,6 +7,10 @@
 //! * Inputs are the image's program headers and its dynamic array, read in place: one `PT_DYNAMIC`
 //!   and exactly one writable `PT_LOAD`; every relocation target lies inside that segment, and the
 //!   relocation tables lie outside it (the relocator never reads what it writes).
+//! * The image relocates itself only when its ELF header says `ET_DYN` ([`position_independent`]).
+//!   The bias is the run-time address of that header (taken PC-relatively by the caller, never
+//!   through a GOT slot, which is unrelocated) minus the `p_vaddr` of the `PT_LOAD` at file
+//!   offset 0 ([`Image::header`]); every other address follows from the headers and the bias.
 //! * Pass 1 ([`relocate`]): the RELA entries of `DT_RELA` then `DT_JMPREL` whose kind
 //!   ([`Arch::classify`]) is [`RelocKind::Relative`] (word = bias + addend), then every RELR address
 //!   (word += bias). [`RelocKind::Irelative`] and [`RelocKind::None`] are left for pass 2; any other
@@ -19,7 +23,7 @@
 //!   machinery (whose `Location` data is relocated) can be used.
 
 use crate::arch::{Arch, RelocKind};
-use crate::elf::{dt, pt, RELA_SIZE, RELR_SIZE};
+use crate::elf::{dt, et, pt, RELA_SIZE, RELR_SIZE};
 
 /// `DT_TEXTREL` (ELF gABI): relocations against non-writable segments.
 const DT_TEXTREL: u64 = 22;
@@ -56,19 +60,31 @@ pub enum BootError {
 /// The parts of the image the relocator works on, from its program headers (link-time addresses).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Image {
+    /// The link-time address of the ELF header: `p_vaddr` of the `PT_LOAD` that maps file offset 0.
+    /// The caller's run-time address of the header minus this is the bias.
+    pub header: u64,
     /// `PT_DYNAMIC`: address and size in bytes.
     pub dynamic: (u64, u64),
     /// The writable `PT_LOAD`: address and size in memory.
     pub writable: (u64, u64),
 }
 
-/// The image's program headers (`phnum` headers as words, as the kernel mapped them): its dynamic
-/// array and its one writable segment.
+/// Whether the ELF header `ehdr` (its first bytes, as mapped) describes a position-independent
+/// image (`e_type` `ET_DYN`): only such a static program relocates itself (D-27.10).
+pub fn position_independent(ehdr: &[u8]) -> bool {
+    matches!(ehdr.get(16..18), Some(&[a, b]) if u16::from_ne_bytes([a, b]) == et::DYN)
+}
+
+/// The image's program headers (`phnum` headers as words, as the kernel mapped them): where its
+/// ELF header is linked, its dynamic array and its one writable segment.
 pub fn image(words: &[u64], phnum: usize) -> Result<Image, BootError> {
-    let (mut dynamic, mut writable, mut n_writable) = (None, None, 0usize);
+    let (mut header, mut dynamic, mut writable, mut n_writable) = (None, None, None, 0usize);
     for h in words.chunks_exact(PHDR_WORDS).take(phnum) {
         let (w0, vaddr, memsz) = (h.first().copied().unwrap_or(0), h.get(2).copied().unwrap_or(0), h.get(5).copied().unwrap_or(0));
         let ty = u32::try_from(w0 & 0xffff_ffff).unwrap_or(0);
+        if ty == pt::LOAD && h.get(1) == Some(&0) && header.is_none() {
+            header = Some(vaddr);
+        }
         if ty == pt::DYNAMIC && dynamic.is_none() {
             dynamic = Some((vaddr, memsz));
         } else if ty == pt::LOAD && (w0 >> 32) & PF_W != 0 {
@@ -76,8 +92,8 @@ pub fn image(words: &[u64], phnum: usize) -> Result<Image, BootError> {
             writable = Some((vaddr, memsz));
         }
     }
-    match (dynamic, writable) {
-        (Some(dynamic), Some(writable)) if n_writable == 1 => Ok(Image { dynamic, writable }),
+    match (header, dynamic, writable) {
+        (Some(header), Some(dynamic), Some(writable)) if n_writable == 1 => Ok(Image { header, dynamic, writable }),
         _ => Err(BootError::Segments),
     }
 }
@@ -299,11 +315,31 @@ mod tests {
         assert_eq!(bad(1, 0x4ff0), Err(BootError::Table(dt::RELA)), "overlaps the writable segment");
         assert_eq!(bad(7, 0x5ff8), Err(BootError::Table(dt::RELR)));
         assert_eq!(bad(13, u64::MAX - 8), Err(BootError::Table(dt::JMPREL)));
-        let ph = |ty: u64, flags: u64, vaddr: u64, memsz: u64| [ty | flags << 32, 0, vaddr, vaddr, memsz, memsz, 8];
-        let hs: alloc::vec::Vec<u64> = [ph(1, 5, 0, 0x1000), ph(1, 6, 0x5000, 0x800), ph(2, 6, 0x5100, 0x100)].concat();
-        assert_eq!(image(&hs, 3), Ok(Image { dynamic: (0x5100, 0x100), writable: (0x5000, 0x800) }));
+        // Headers as words; file offset = vaddr - `base` (the image is linked at `base`).
+        let ph = |base: u64, ty: u64, flags: u64, vaddr: u64, memsz: u64| [ty | flags << 32, vaddr - base, vaddr, vaddr, memsz, memsz, 8];
+        let hs: alloc::vec::Vec<u64> = [ph(0, 1, 5, 0, 0x1000), ph(0, 1, 6, 0x5000, 0x800), ph(0, 2, 6, 0x5100, 0x100)].concat();
+        assert_eq!(image(&hs, 3), Ok(Image { header: 0, dynamic: (0x5100, 0x100), writable: (0x5000, 0x800) }));
         assert_eq!(image(&hs, 2), Err(BootError::Segments));
-        let two: alloc::vec::Vec<u64> = [hs.clone(), ph(1, 6, 0x9000, 8).to_vec()].concat();
+        let two: alloc::vec::Vec<u64> = [hs.clone(), ph(0, 1, 6, 0x9000, 8).to_vec()].concat();
         assert_eq!(image(&two, 4), Err(BootError::Segments));
+        // The header's link address is the vaddr of the segment at file offset 0, wherever that is.
+        let b = 0x40_0000;
+        let at_b: alloc::vec::Vec<u64> = [ph(b, 2, 6, b + 0x5100, 0x100), ph(b, 1, 6, b + 0x5000, 0x800), ph(b, 1, 5, b, 0x1000)].concat();
+        assert_eq!(image(&at_b, 3).map(|i| i.header), Ok(b));
+        // No segment maps the ELF header: no bias can be found.
+        let no_header: alloc::vec::Vec<u64> = [ph(0, 1, 6, 0x5000, 0x800), ph(0, 2, 6, 0x5100, 0x100)].concat();
+        assert_eq!(image(&no_header, 2), Err(BootError::Segments));
+    }
+
+    #[test]
+    fn position_independent_header() {
+        let mut e = [0u8; 64];
+        e[16..18].copy_from_slice(&et::DYN.to_ne_bytes());
+        assert!(position_independent(&e));
+        e[16..18].copy_from_slice(&et::EXEC.to_ne_bytes());
+        assert!(!position_independent(&e), "a non-PIE executable is not relocated");
+        e[16..18].copy_from_slice(&1u16.to_ne_bytes());
+        assert!(!position_independent(&e), "only ET_DYN is position-independent (ET_REL is not)");
+        assert!(!position_independent(&e[..17]), "a short header is not position-independent");
     }
 }

@@ -120,6 +120,50 @@ fn archive_elf_errors(data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// The function the static-PIE start calls before the image is relocated (D-27.10), and the
+/// linker-defined symbol it must reach PC-relatively.
+const BOOT_ANCHOR: &str = "liella_link_image_header";
+const BOOT_ANCHOR_TARGET: &str = "__ehdr_start";
+
+/// D-27.10: the archive member defining [`BOOT_ANCHOR`] (`csys/src/adapter/image_anchor.c`, alone
+/// in its file) references [`BOOT_ANCHOR_TARGET`] and has no GOT-typed relocation. A static PIE
+/// runs that function before its GOT is relocated: a GOT-indirect read there returns the
+/// link-time address (a weak declaration of the symbol makes the compiler emit one).
+fn boot_anchor_pc_relative(archive: &Path) -> Result<(), String> {
+    let out = Command::new("readelf").args(["-rsW"]).arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("readelf -rs {} failed", archive.display()));
+    }
+    boot_anchor_errors(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{}: {e}", archive.display()))
+}
+
+/// The check of [`boot_anchor_pc_relative`] on `readelf -rsW` text of an archive (one
+/// `File: archive(member)` block per member).
+pub fn boot_anchor_errors(readelf: &str) -> Result<(), String> {
+    let defines = |l: &str| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        f.len() == 8 && f[0].ends_with(':') && f[3] == "FUNC" && f[6] != "UND" && f[7] == BOOT_ANCHOR
+    };
+    let Some(member) = readelf.split("\nFile: ").find(|m| m.lines().any(defines)) else {
+        return Err(format!("no member defines {BOOT_ANCHOR} (D-27.10: the static-PIE start's anchor)"));
+    };
+    let name = member.lines().next().unwrap_or("?");
+    // A relocation line: offset, info, type, value, name (+ addend).
+    let relocs = member.lines().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.starts_with("R_")));
+    let got: Vec<&str> = relocs.clone().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.contains("GOT"))).collect();
+    if let Some(first) = got.first() {
+        return Err(format!(
+            "{name}: {BOOT_ANCHOR} is reached through the GOT ({} GOT-typed relocations; first: {}): a static PIE reads it before relocation (D-27.10); declare {BOOT_ANCHOR_TARGET} hidden and not weak",
+            got.len(),
+            first.trim()
+        ));
+    }
+    if !relocs.clone().any(|l| l.split_whitespace().nth(4) == Some(BOOT_ANCHOR_TARGET)) {
+        return Err(format!("{name}: {BOOT_ANCHOR} does not reference {BOOT_ANCHOR_TARGET} (D-27.10)"));
+    }
+    Ok(())
+}
+
 /// Symbols defined (globally) in an archive or object, by `nm`.
 fn defined(path: &Path) -> Result<BTreeSet<String>, String> {
     let out = Command::new("nm").args(["-g", "--defined-only", "-P"]).arg(path).output().map_err(|e| format!("nm: {e}"))?;
@@ -789,6 +833,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     shared_personality_ref(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &staged, &product.join("personality-work"))?;
     rust_symbols_stay_local(&staged)?;
     check_archive_elf(&staged)?;
+    boot_anchor_pc_relative(&staged)?;
     publish(&staged, out)?;
     Ok((archive, weak, copies))
 }
@@ -1162,6 +1207,27 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// D-27.10 (no spec clause: start-up internals): the static-PIE anchor's member passes with a
+    /// PC-relative reference, and fails with a GOT-typed one, without the reference, or when no
+    /// member defines the anchor.
+    #[test]
+    fn boot_anchor_reference_is_pc_relative() {
+        let member = |reloc: &str| {
+            format!(
+                "\nFile: libc.a(csys_3.o)\n\nRelocation section '.rela.text.liella_link_image_header' at offset 0x1f0 contains 1 entry:\n    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend\n0000000000000003  0000000600000002 {reloc}      0000000000000000 __ehdr_start - 4\n\nSymbol table '.symtab' contains 7 entries:\n   Num:    Value          Size Type    Bind   Vis      Ndx Name\n     5: 0000000000000000     8 FUNC    GLOBAL DEFAULT    4 liella_link_image_header\n     6: 0000000000000000     0 NOTYPE  GLOBAL HIDDEN   UND __ehdr_start\n"
+            )
+        };
+        let other = "\nFile: libc.a(csys_2.o)\n\nSymbol table '.symtab' contains 2 entries:\n     1: 0000000000000000     8 FUNC    GLOBAL DEFAULT    4 liella_link_ehdr\n";
+        assert_eq!(boot_anchor_errors(&format!("{other}{}", member("R_X86_64_PC32"))), Ok(()));
+        let got = boot_anchor_errors(&format!("{other}{}", member("R_X86_64_REX_GOTPCRELX")));
+        assert!(got.as_ref().is_err_and(|e| e.contains("through the GOT") && e.contains("csys_3.o")), "{got:?}");
+        let unrelated = member("R_X86_64_PC32").replace("__ehdr_start - 4", "liella_other - 4");
+        assert!(boot_anchor_errors(&unrelated).is_err_and(|e| e.contains("does not reference")));
+        assert!(boot_anchor_errors(other).is_err_and(|e| e.contains("no member defines")));
+        let undefined_only = member("R_X86_64_PC32").replace("FUNC    GLOBAL DEFAULT    4", "NOTYPE  GLOBAL DEFAULT  UND");
+        assert!(boot_anchor_errors(&undefined_only).is_err(), "a reference to the anchor is not its definition");
     }
 
     /// Planted mismatch: the binding check names a symbol whose binding differs from the table, in

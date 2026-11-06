@@ -84,11 +84,10 @@ fn initial_thread(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocate
     let words = unsafe { conv::words_at(phdr, phnum.saturating_mul(start::PHDR_WORDS)) };
     let mut prog = start::program(words, phnum, phdr);
     let mut pie = None;
-    let dynamic = ffi::liella_link_dynamic();
-    if dynamic != 0 {
+    if let Some(ehdr) = bootstrap::static_pie_header() {
         // A static PIE relocates itself before any address in its data is used (D-27.10). Until
         // then no diagnostic path that reads relocated data may run: one write, then exit 127.
-        let Ok(r) = bootstrap::relocate_self(phdr, phnum, dynamic) else {
+        let Ok(r) = bootstrap::relocate_self(phdr, phnum, ehdr) else {
             let _ = CSys.write(liella_kernel::fd::Fd::STDERR, b"liella: static PIE: cannot relocate the executable\n");
             CSys.exit_group(127)
         };
