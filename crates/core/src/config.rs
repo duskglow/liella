@@ -17,6 +17,7 @@
 //! | `liella.cpu.rep_stosb_threshold` | `glibc.cpu.x86_rep_stosb_threshold` | bytes, 1 or more |
 //! | `liella.pthread.rseq` | `glibc.pthread.rseq` | 0 or 1; `0` disables the rseq registration (D-22.7, §22.9) |
 //! | `liella.compat.rpc_reply_any_source` | (none) | 0 or 1; `1` lets the UDP RPC client take a reply from any source address (COMPAT-12, D-29.2) |
+//! | `liella.compat.no_classed_swap` | (none) | 0 or 1; `1` keeps the file's SSE2 page at the classed entries: no page swap at start-up (COMPAT-20, D-4.53) |
 //! | `liella.malloc.perturb` | `glibc.malloc.perturb` | 0 to 255: `M_PERTURB` for the C `malloc` family (§3.2); overrides `MALLOC_PERTURB_` ([`Tunables::malloc_perturb`]) |
 //!
 //! **Syntax** (black-box probes of glibc 2.39, LEGACY-TUNABLES-POLICY, 2026-10-23):
@@ -57,6 +58,10 @@ pub struct Tunables {
     /// COMPAT-12 (D-29.2): `Some(true)` makes the UDP RPC client take a reply with the
     /// call's xid from any source address, as the reference library does.
     pub rpc_reply_any_source: Option<bool>,
+    /// COMPAT-20 (D-4.53): `Some(true)` keeps the file's SSE2 page at the classed entries (no
+    /// start-up page swap), so the code that runs is the code in the file, as debuggers,
+    /// profilers and core files read it.
+    pub no_classed_swap: Option<bool>,
 }
 
 /// Which tunable a name denotes (its `liella.*` name or the `glibc.*` alias).
@@ -68,6 +73,7 @@ enum Key {
     Rseq,
     Perturb,
     RpcReplyAnySource,
+    NoClassedSwap,
 }
 
 /// The tunable `name` stands for, or `None` for names that mean nothing in this design.
@@ -79,6 +85,7 @@ fn key_of(name: &[u8]) -> Option<Key> {
         b"liella.pthread.rseq" | b"glibc.pthread.rseq" => Key::Rseq,
         b"liella.malloc.perturb" | b"glibc.malloc.perturb" => Key::Perturb,
         b"liella.compat.rpc_reply_any_source" => Key::RpcReplyAnySource,
+        b"liella.compat.no_classed_swap" => Key::NoClassedSwap,
         _ => return None,
     })
 }
@@ -274,6 +281,7 @@ impl Tunables {
                 Key::Rseq => t.rseq = ranged(value, 0, 1).map(|n| n != 0).or(t.rseq),
                 Key::Perturb => {} // read on its own by `malloc_perturb`
                 Key::RpcReplyAnySource => t.rpc_reply_any_source = ranged(value, 0, 1).map(|n| n != 0).or(t.rpc_reply_any_source),
+                Key::NoClassedSwap => t.no_classed_swap = ranged(value, 0, 1).map(|n| n != 0).or(t.no_classed_swap),
             }
         }
         t
@@ -321,6 +329,15 @@ pub fn fields(line: &[u8]) -> impl Iterator<Item = &[u8]> {
 #[cfg(test)]
 mod tests {
     use super::Tunables;
+
+    #[test]
+    fn no_classed_swap() {
+        // COMPAT-20 (D-4.53): no spec clause (a Liella tunable). 0 or 1; other values ignored.
+        assert_eq!(Tunables::parse(b"liella.compat.no_classed_swap=1", false).no_classed_swap, Some(true));
+        assert_eq!(Tunables::parse(b"liella.compat.no_classed_swap=0", false).no_classed_swap, Some(false));
+        assert_eq!(Tunables::parse(b"liella.compat.no_classed_swap=2", false).no_classed_swap, None);
+        assert_eq!(Tunables::parse(b"", false).no_classed_swap, None);
+    }
 
     #[test]
     fn rpc_reply_any_source() {

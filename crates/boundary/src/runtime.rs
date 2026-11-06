@@ -325,6 +325,12 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
         Tunables::parse(text, secure)
     });
     cpu::init_with(&tunables);
+    // The classed entries (D-4.53): on the AVX2 class, the AVX2 page moves over the SSE2 page,
+    // here, with one thread and before the program's IFUNC resolvers and constructors. A program
+    // started by another `ld.so` keeps the SSE2 page (other objects' code may have run).
+    if static_program {
+        crate::classed::start(&cpu::features_cached(), &tunables);
+    }
     crate::posix::s29_rpc_clnt::compat_from_start(&tunables);
     // The program's own indirect functions, before any of its code runs (glibc's resolvers run
     // before `.preinit_array`, probe-settled) and before its RELRO is protected.

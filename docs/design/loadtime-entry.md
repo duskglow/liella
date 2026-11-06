@@ -358,3 +358,23 @@ diagnosable instead of silent. A refusal of the guard's `openat` (no `/proc`, or
 * **Per-call cost (section 2 table, M6 column = M4's):** 0 on both classes. The exported label is the slot, called
   directly, with no flag test and no indirection. Section 3's predictions stand unchanged. On the SSE2 class and
   Ivy Bridge, no row rises.
+
+### 5.7 Debugging note (story 7, written with CLASSED-SLOT-INFRA)
+
+On a CPU of the AVX2 class, a static program's start-up replaces the page of libc text that holds the classed
+entries (today `memset`) with the AVX2 page from the same file. Nothing changes in results, symbols or addresses,
+but tools that read the file instead of the process see the other page:
+
+* **gdb** works as usual. A breakpoint on `memset` set before `run` makes the start-up keep the SSE2 page (the
+  pagemap guard sees the written page), so the breakpoint fires. Attaching later, or setting it after start-up,
+  places it in the live AVX2 page, and gdb disassembles that page.
+* **perf**: samples are named correctly (`memset`). `perf annotate` shows the file's SSE2 bytes for that symbol, not
+  the AVX2 code that ran.
+* **uprobes** are placed by file offset: one on `memset` registered after start-up does not fire. Use
+  `liella_machine_memset_avx2` (the AVX2 page's local symbol), or keep the SSE2 page.
+* **Core files**: the default `coredump_filter` does not dump clean file-backed text, so a debugger reading a core
+  shows the file's SSE2 bytes at `memset`. Backtraces are correct.
+* **To run the file's SSE2 page** (the code at every exported label is then the code in the file):
+  `GLIBC_TUNABLES=liella.compat.no_classed_swap=1` (COMPAT-20) keeps it and leaves the other AVX2 paths on;
+  `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2` keeps it and turns every AVX2 path off. A program without `/proc` also
+  keeps it.

@@ -1,0 +1,15 @@
+# CLASSED-SLOT-INFRA plants (D-4.53). Run: cargo xtask plants handoff/classed-slot-infra-plants.txt --dir <dir>
+# The AVX2 page loses the +4096 bias on one out-of-page reference (the fold limit, read on every call).
+xref-bias | csys/src/machine/fold.S | perl:s/(\.macro LIELLA_MEMSET_BODY bias, avx2.*?)cmpq liella_machine_fold_limit\+\\bias\(%rip\)/$1cmpq liella_machine_fold_limit(%rip)/s | cargo test -p liella-boundary --test classed_slots | msg:avx2 page: child ended|the_avx2_page_after_the_swap.*FAILED
+# The swap runs without the pagemap guard.
+no-guard | crates/boundary/src/classed.rs | lit:    if !pages_unmodified(entries) { ==>     if false && !pages_unmodified(entries) { | cargo test -p liella-boundary --test classed_slots | msg:guard: child ended|a_page_written_before_the_swap.*FAILED
+# The guard inverted.
+guard-inverted | crates/boundary/src/classed.rs | lit:    entries.iter().all(|&e| e & PM_PRESENT == 0 || e & PM_FILE != 0) ==>     entries.iter().all(|&e| e & PM_PRESENT != 0 && e & PM_FILE == 0) | cargo test -p liella-boundary --lib classed | msg:the_guard_keeps_page0.*FAILED|panicked
+# The mremap skipped, "installed" recorded.
+skip-mremap | crates/boundary/src/classed.rs | perl:s/(let page1 = page0\.wrapping_add\(PAGE\);\s*)if ops\.move_page\(page1, page0\)\.is_ok\(\)/$1if true/s | cargo test -p liella-boundary --test classed_slots | msg:the AVX2 page is live after the swap|avx2 page: child ended
+# After a failed mremap, page 0 assumed still mapped.
+no-mapped-check | crates/boundary/src/classed.rs | lit:    if ops.mapped(page0) { ==>     if true { | cargo test -p liella-boundary --lib classed | msg:a_refused_mremap_keeps_page0.*FAILED|panicked
+# The XCR0 (saved YMM state) condition dropped from the class rule.
+no-xcr0 | crates/boundary/src/classed.rs | lit:    f.avx2() && t.avx2.unwrap_or(true) ==>     f.leaf7_ebx & (1 << 5) != 0 && t.avx2.unwrap_or(true) | cargo test -p liella-boundary --lib classed | msg:the_class_needs_avx2.*FAILED|panicked
+# A write to a slot page (the same byte written back through /proc/self/mem before the move).
+slot-write | crates/boundary/src/classed.rs | perl:s/(impl SwapOps for Kernel \{.*?fn move_page\(&self, from: usize, to: usize\) -> Result<\(\), Errno> \{)/$1 if let Ok(p) = KStr::from_nul_terminated(b"\/proc\/self\/mem\\0") { if let Ok(fd) = CSys.openat(Fd::CWD, p, liella_kernel::uapi::O_RDWR, 0) { let mut b = [0u8; 1]; let _ = CSys.pread(fd, &mut b, from as i64); let _ = CSys.pwrite(fd, &b, from as i64); let _ = CSys.close(fd); } }/s | cargo test -p liella-boundary --test classed_slots | msg:the live slot page was written|avx2 page: child ended
