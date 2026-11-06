@@ -52,17 +52,13 @@ liella_machine_short_lim:
 liella_machine_rshort_mask:
 	.long 0
 
-/* TIMING-COV-STRCMP-SHORT-AVX2: strcmp's entry limits for (a - 1) & 4095, set with the level.
- * vlim: 3968 on the AVX2 level (below it, the 129 bytes from a - 1 lie in a's page: the AVX2
- * head's page test of a), 0 on SSE2 (no offset is below 0). slim: 4032 on the SSE2 level (the
- * SSE2 head's 65-byte test of a), 0 on AVX2 (that level's page-end calls of a leave the SSE2 head
- * at once for the slow path, which sends them to the AVX2 slow path). One compare at the entry is
- * the level test and a's page test of the AVX2 head. */
+/* TIMING-COV-STRCMP-SHORT-AVX2: strcmp's entry limit for (a - 1) & 4095, set with the level:
+ * 3968 on the AVX2 level (below it, the 129 bytes from a - 1 lie in a's page: the AVX2 head's
+ * page test of a), 0 on SSE2 (no offset is below 0). One compare at the entry is the level test
+ * and a's page test of the AVX2 head; every other call takes the SSE2 head. */
 	.p2align 2
 liella_machine_strcmp_vlim:
 	.long 0
-liella_machine_strcmp_slim:
-	.long 4032
 
 	.text
 
@@ -86,9 +82,6 @@ liella_machine_set_scan_level:
 	/* level 1 -> 0xfc0, level 0 -> 0 (REGEX-WL, memrchr's end-page mask). */
 	andl $0xfc0, %eax
 	movl %eax, liella_machine_rshort_mask(%rip)
-	/* strcmp's slim: level 1 -> 0, level 0 -> 4032 (0xfc0). */
-	xorl $0xfc0, %eax
-	movl %eax, liella_machine_strcmp_slim(%rip)
 	ret
 	.size liella_machine_set_scan_level, .-liella_machine_set_scan_level
 	.section .text.liella_machine_scan_level_get,"ax",@progbits
@@ -3235,9 +3228,10 @@ liella_machine_strcmp:
 	 * level test and the AVX2 head's page test of a (was: a load-compare of the level and a taken
 	 * branch to the AVX2 head before its own test of a, 2 instructions more per AVX2 call). The
 	 * AVX2 head's first block follows as the fall-through; the SSE2 level (vlim 0) and the AVX2
-	 * level's page-end or NULL a take the branch to the SSE2 head, whose own compare (with
-	 * strcmp_slim, 0 on the AVX2 level) sends the latter to the slow paths. The SSE2 level runs
-	 * as many instructions as before (the compare and branch replace the level test). */
+	 * level's a near its page end or NULL take the branch to the SSE2 head (its own page test
+	 * sends page ends and NULL to the SSE2 slow path, which holds the NULL tests). The SSE2
+	 * level runs as many instructions as before (the compare and branch replace the level
+	 * test); an AVX2 a near its page end runs no more than the AVX2 slow path did. */
 	leal -1(%rdi), %ecx
 	andl $4095, %ecx
 	cmpl liella_machine_strcmp_vlim(%rip), %ecx
@@ -3278,9 +3272,11 @@ liella_machine_strcmp:
 	 * Page test per string (PERF-STRCMP-LOOP): the 65 bytes from one before the start stay in
 	 * one page iff that byte's page offset is at most 4031 (8 instructions; the bit-12 XOR of
 	 * both ends for both strings took 9). NULL (offset 4095) and page-aligned starts fail it.
-	 * ecx = (a - 1) & 4095 from the entry; strcmp_slim is 4032 here on the SSE2 level, 0 on AVX2. */
-	cmpl liella_machine_strcmp_slim(%rip), %ecx
-	jae .Lstrcmp_start
+	 * ecx = (a - 1) & 4095 from the entry. On the AVX2 level only a near its page end (or NULL)
+	 * comes here: this head and the SSE2 steps serve it (SSE2 runs on every level, as after
+	 * strchr's AVX2 head), at no more instructions than the AVX2 slow path took. */
+	cmpl $4031, %ecx
+	ja .Lstrcmp_start
 	leal -1(%rsi), %edx
 	andl $4095, %edx
 	cmpl $4031, %edx
@@ -3381,10 +3377,6 @@ liella_machine_strcmp:
 	incl %ecx
 	jmp .Lstrcmp_group
 .Lstrcmp_start:
-	/* The AVX2 level reaches this only from the entry (a's page end or NULL, strcmp_slim 0): its
-	 * own slow path, which holds the same NULL tests. */
-	cmpl $0, liella_machine_scan_level(%rip)
-	jne .Lstrcmp_v_start
 	/* S6 NULL tests (STRCMP-HEADNULL): the head's page window starts one byte before each
 	 * string, so NULL and page-aligned starts always come here first. */
 	testq %rdi, %rdi
