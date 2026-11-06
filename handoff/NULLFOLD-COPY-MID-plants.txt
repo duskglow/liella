@@ -4,7 +4,7 @@ store-first | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?\.Lmov
 # Folding without the guard, in the kernel: the class word ignored.
 fold-unguarded-asm | csys/src/machine/fold.S | perl:s/(liella_machine_memmove:.*?)cmpq liella_machine_move_long\(%rip\), %rdx/$1cmpq \$256, %rdx/s | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold false
 # Folding without the guard, in the decision: the word raised when folding is refused.
-fold-unguarded-word | crates/boundary/src/dispatch.rs | lit:FOLD_MOVE.store(0, Relaxed); ==> FOLD_MOVE.store(MOVE_FOLD_MAX, Relaxed); | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold false
+fold-unguarded-word | crates/boundary/src/dispatch.rs | perl:s/(drops before anything else, as the compare words do\.\n\s*)FOLD_MOVE\.store\(0, Relaxed\);/$1FOLD_MOVE.store(MOVE_FOLD_MAX, Relaxed);/s | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold false
 # The class bound one short: 256 keeps the explicit check with folding on.
 bound-255 | crates/boundary/src/dispatch.rs | lit:pub(crate) const MOVE_FOLD_MAX: usize = 256; ==> pub(crate) const MOVE_FOLD_MAX: usize = 255; | cargo test -p liella-boundary --test small_copy copies_of_129_to_256 | msg:fold true .*n 256
 # The lazy decision not taken by a 129-256 copy.
