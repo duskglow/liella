@@ -126,28 +126,39 @@ fn ascii_run<const SZ: usize, const BE: bool>(input: &[u8], out: &mut [u8]) -> u
 }
 
 fn run<const SZ: usize, const BE: bool, const UCS2: bool>(input: &[u8], out: &mut [u8]) -> (usize, usize) {
-    let (mut i, mut o, mut run) = (0usize, 0usize, 0usize);
+    let (mut i, mut o) = (0usize, 0usize);
     while let Some(&b0) = input.get(i) {
         if b0 < 0x80 {
-            // After eight in a row, the rest of the run by the out-of-line widening loop (its
-            // setup would otherwise be paid by every short run).
-            if run >= 8 {
-                let n = ascii_run::<SZ, BE>(input.get(i..).unwrap_or(&[]), out.get_mut(o..).unwrap_or(&mut []));
-                run = 0;
-                if n > 0 {
-                    i += n;
-                    o += n * SZ;
-                    continue;
+            // A run of ASCII bytes in its own counted loop: the room is checked once for up to
+            // eight bytes, not per byte, and the run advances `i` and `o` once. Past eight, the
+            // rest of the run by the out-of-line widening loop (its setup would otherwise be paid
+            // by every short run).
+            let src = input.get(i..).unwrap_or(&[]);
+            let dst = out.get_mut(o..).unwrap_or(&mut []);
+            let m = src.len().min(dst.len() / SZ).min(8);
+            let mut k = 0usize;
+            if let (Some(s8), Some(d8)) = (src.get(..m), dst.get_mut(..m * SZ)) {
+                for (unit, &b) in d8.chunks_exact_mut(SZ).zip(s8) {
+                    if !b.is_ascii() {
+                        break;
+                    }
+                    if let Some(unit) = unit.first_chunk_mut::<SZ>() {
+                        put::<SZ, BE>(unit, u32::from(b));
+                    }
+                    k += 1;
                 }
             }
-            run += 1;
-            let Some(dst) = out.get_mut(o..).and_then(|s| s.first_chunk_mut::<SZ>()) else { break };
-            put::<SZ, BE>(dst, u32::from(b0));
-            i += 1;
-            o += SZ;
+            if k == 0 {
+                // `b0` is ASCII: no room for it.
+                break;
+            }
+            if k == 8 && src.get(8).is_some_and(u8::is_ascii) {
+                k += ascii_run::<SZ, BE>(src.get(8..).unwrap_or(&[]), dst.get_mut(8 * SZ..).unwrap_or(&mut []));
+            }
+            i += k;
+            o += k * SZ;
             continue;
         }
-        run = 0;
         let Some((c, n)) = input.get(i..).and_then(decode_multi) else { break };
         if c <= 0xFFFF {
             let Some(dst) = out.get_mut(o..).and_then(|s| s.first_chunk_mut::<SZ>()) else { break };
