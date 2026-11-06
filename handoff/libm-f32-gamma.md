@@ -30,11 +30,12 @@ State: branch `task/libm-f32-gamma-3` (continues `-2`, `-1`; based on origin/nex
   6 035 592 (1.08e-3); near-zero refusals 45 474 operands. The tgammaf sweep was not rerun (tgamma_est unchanged).
 * `libm-f32-gamma-3-plants`: 5 CAUGHT, 1 SURVIVED (`lp-shortcut-value` at 1e-9 ≈ 1/2000 ulp: below the sample
   tests' resolution, only the exhaustive sweep sees it). `libm-f32-gamma-3-plants2`: the same file with that plant
-  at 1e-6 (≈ 0.5 ulp): see the report.
+  at 1e-6 (≈ 0.5 ulp): 6 CAUGHT, 0 SURVIVED, 0 WARN.
 * `libm-f32-gamma-3-counts-before` (origin/next e39b9799 copy in RAM) / `-counts-after` (233ba694),
   `cargo xtask bench --compare --counters --runs 1 cbench_libm`, instructions per call (glibc 2.39 in brackets):
   tgammaf 461 689.5 → 230.2 (476.5): 0.48x; lgammaf 429 599.0 → 2 240.0 (277.2): 8.08x.
-* `libm-f32-gamma-3-gate`: clippy -D warnings + static + direct tier on the final head: see the report.
+* `libm-f32-gamma-3-gate` (2b1392b1; later commits are handoff-only): workspace clippy -D warnings and `cargo xtask static`
+  passed; `affected --run` escalated to FULL (the .fit files count as generated sources) and was still running at hand-back.
 
 ## Next step
 1. lgammaf is at 8.08x of glibc by instructions (target ≤ 1.05x). Probable surplus (NOT VERIFIED; profile first,
