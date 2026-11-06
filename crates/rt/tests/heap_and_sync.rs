@@ -838,6 +838,46 @@ fn realloc_takes_one_fused_path_and_forecasts_growth() {
 }
 
 #[test]
+fn every_class_places_blocks_by_index_and_finds_them_again() {
+    // Trace: s3_1_c_1, s3_1_c_3, s3_1_c_5 (alignment, usable size, in-place resize, release and
+    // reuse for every size class); D-3.18 (the shift form of power-of-two classes), D-3.16.
+    const SLAB: usize = 1 << 18;
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    for (c, &size) in CLASSES.iter().enumerate() {
+        // Past the first bitmap word where the slab has the blocks for it.
+        let count = (SLAB / size).min(130);
+        let blocks: Vec<usize> = (0..count).map(|_| heap.alloc(&CSys, &pages, size, ALIGN).unwrap().addr).collect();
+        let first = blocks[0];
+        for (i, &p) in blocks.iter().enumerate() {
+            assert_eq!(p - first, i * size, "class {c} ({size} B): block {i} sits at index times size");
+            assert_eq!(p % ALIGN, 0, "class {c}: block {i} aligned");
+            assert_eq!(heap.usable(&CSys, &pages, p), Ok(size), "class {c}: block {i} usable size");
+        }
+        for (i, &p) in blocks.iter().enumerate() {
+            // Interior addresses at the alignment step, and the middle of the block.
+            for inner in [ALIGN, size / 2, size - ALIGN] {
+                if inner != 0 && inner < size {
+                    assert_eq!(heap.free(&CSys, &pages, p + inner), Err(Misuse::InvalidPointer), "class {c}: {inner} B inside block {i}");
+                }
+            }
+            if size > ALIGN && i % 7 == 0 {
+                let kept = heap.resize(&CSys, &pages, p, size - ALIGN, |_, _, _| {}).unwrap().unwrap();
+                assert_eq!(kept.addr, p, "class {c}: block {i} resized within its class stays in place");
+            }
+        }
+        // Free from the top, so the lowest free block is the next one handed out again.
+        for (i, &p) in blocks.iter().enumerate().rev() {
+            assert_eq!(heap.free(&CSys, &pages, p), Ok(()), "class {c}: block {i} freed");
+            assert_eq!(heap.free(&CSys, &pages, p), Err(Misuse::DoubleFree), "class {c}: block {i} freed twice");
+        }
+        assert_eq!(heap.alloc(&CSys, &pages, size, ALIGN).unwrap().addr, first, "class {c}: block 0 reused");
+        heap.free(&CSys, &pages, first).unwrap();
+    }
+    assert_eq!(heap.stats(&CSys, &pages).in_use, 0);
+}
+
+#[test]
 fn the_free_fast_path_finds_each_blocks_own_slab() {
     // Trace: no spec clause (the free fast path's slab hints, HEAP-CUTS2 S-C); D-3.11, S6.
     const SLAB: usize = 1 << 18;

@@ -1,0 +1,6 @@
+# Plants for TIMING-COV-MALLOC-PAIR-CHAIN: the kept test every_class_places_blocks_by_index_and_finds_them_again
+# against the allocator's index computation (the shift form was measured slower and reverted; D-3.18). Run with
+# cargo xtask plants handoff/TIMING-COV-MALLOC-PAIR-CHAIN-plants.txt --dir <RAM dir> --timeout 600
+free-fast-start-check-dropped | crates/rt/src/heap.rs | lit:if q * size == off && q < n { ==> if q < n { | cargo test -p liella-rt --test heap_and_sync every_class_places_blocks_by_index_and_finds_them_again | msg:B inside block.*InvalidPointer|InvalidPointer.*B inside block|inside block
+locate-start-check-dropped | crates/rt/src/heap.rs | lit:if q * size != rel || class >= CLASSES.len() ==> if class >= CLASSES.len() | cargo test -p liella-rt --test heap_and_sync every_class_places_blocks_by_index_and_finds_them_again | msg:inside block
+hint-offset-wrong-stride | crates/rt/src/heap.rs | perl:s/(fn alloc_hint<.*?addr: uz\(base\) \+ )i \* CLASSES\[c\]/$1i * CLASSES[c] * 2/s | cargo test -p liella-rt --test heap_and_sync every_class_places_blocks_by_index_and_finds_them_again | msg:sits at index times size
