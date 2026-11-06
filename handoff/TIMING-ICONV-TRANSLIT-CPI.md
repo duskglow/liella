@@ -1,49 +1,41 @@
-# TIMING-ICONV-TRANSLIT-CPI (-3): iconv UTF-8 -> ASCII//TRANSLIT, more cycles than instructions
+# TIMING-ICONV-TRANSLIT-CPI (-4): iconv UTF-8 -> ASCII//TRANSLIT, more cycles than instructions
 
-State: branch `task/timing-iconv-translit-cpi-3` (stacked on -2), code = -2's code head `2679c686` (memo f221e5a2,
-D-6.14 naming 37f05369, hot-text name fix 2679c686); -3 adds only docs (saturation row, this handoff, report).
-Role keke:~/w/n2 (Zen 1 build host). Verdict: DO NOT LAND. The utf16 time loss is now explained (front end, code
-layout of the inlined fused loop) but not fixed; the two fixes tried measured worse and were reverted.
+State: branch `task/timing-iconv-translit-cpi-4` (stacked on -3, cut from origin/next), code head `4bef1230`
+(memo f221e5a2, D-6.14 naming 37f05369, hot-text name fix 2679c686, counted ASCII step 4bef1230); later commits are
+docs only. Role mei:~/w/s3 (Skylake-SP build host). Verdict: COMPLETE, land it: ruling #3254's target is met
+(utf16_4k 0.887x of base in time on Ivy Bridge, translit 0.374x).
 
 ## Decisions in force
-- D-6.14: transliterations kept for one `Conv::convert` call (`iconv::Memo`, 8 slots). D-6.11 (fused UTF-8 -> wide).
+- D-6.11 (fused UTF-8 -> wide), D-6.14 (transliterations kept for one `Conv::convert` call, `iconv::Memo`).
+- The counted ASCII step is a local detail of D-6.11 (no new row): `fast::run` widens an ASCII run by its own counted
+  loop, room checked once for up to eight bytes, `i`/`o` advanced once per run; past eight, `ascii_run` (out of line)
+  takes the rest as before.
 
-## What -3 did (timing host nico, Ivy Bridge E3-1220L v2, booking 42, load ~0.0-0.4)
-Stages: A = base (memo reversed) and B2 = -2 head, both from -2 (built on shiki); C and D built on keke.
-1. `nico:timing-iconv-translit-cpi-3-perf` (perf stat, Liella only, 2 rounds A/B2/C interleaved, groups of <= 4
-   events): utf16 B2/A cycles 1.055, instructions 1.000, idq.mite_uops 10.5x (2.5% of uops), dsb2mite penalty 15x,
-   ild_stall.lcp 8.5x, idq_uops_not_delivered 1.12x; branch misses, store forwards, resource stalls not worse.
-   Cycles per run: A 2.844-2.883G, B2 2.995-3.027G. Translit B2/A cycles 0.355.
-2. Hot IPs (cycles, idq.mite_uops, dsb2mite_switches.count; `nico:timing-iconv-translit-cpi-3-perf2`): all in the
-   ASCII step of the fused UTF-8 -> UTF-16LE loop (`fast::run::<2,false,false>`), which is inlined into
-   `Conv::convert` (`fast::utf8_to_wide` has no symbol: its hot-text key matches nothing). Same instructions in
-   A/B2/C; only the offset in 32-byte windows differs (A loop top 0x452083, C 0x453249). In C the switches sit on
-   `mov $1,%ecx` crossing a 32-byte boundary (975 samples) and on the `cmp $7`/`ja` run check.
-3. C = `#[inline(never)]` on `utf8_to_wide` (own 64-byte-aligned hot-text function, after convert). D = it on each
-   `fast::run` instead. `nico:timing-iconv-translit-cpi-3-ivb`, xtask bench A/B vs A (A1 B A2 B, 5 runs):
-   C: translit 0.363, utf16 1.017 (spread 0.6%), 8859-15 **1.182, instr 1.178**; D: 0.362 / 1.021 (0.4%) /
-   **1.120, instr 1.178**. Both reverted (saturation row in docs/saturation/06). perf stat, same job: C cycles
-   about 1.018x A on utf16.
-4. Gate on the final head: see the report (handoff/reports/TIMING-ICONV-TRANSLIT-CPI-3.json).
+## What -4 did
+1. Code `4bef1230` (crates/core/src/iconv/fast.rs, `run`). objdump of the mei build (`Conv::convert`, where the loop is
+   inlined): the UTF-16LE inner loop is 0x451720-0x451738, 24 bytes in one 32-byte window, no pair across a boundary.
+2. Ivy Bridge (nico, E3-1220L v2, booking 46, load 0.0-1.3), stage E built on mei, A and B2 from -2 (built on shiki):
+   - `nico:timing-iconv-translit-cpi-4-ivb`: perf stat (2 rounds) utf16 E/A cycles 0.882, instructions 0.810;
+     translit E/A cycles 0.375. A/B E vs A (A1 B A2 B, 5 rounds): utf16 **0.887** (spread 0.6%, i 0.810),
+     8859-15 0.999 (i 0.999), translit 0.374 (spread 1.8%, i 0.474).
+   - `nico:timing-iconv-translit-cpi-4-ivb-b2`: A/B E vs B2 (the -3 memo head): utf16 0.841, 8859-15 1.002,
+     translit **1.053 slower** at i 0.985 (spread 0.7%).
+3. Control (-3 open item): the 8859-15 +18% instructions of -3's C/D did not appear in E (built on another host than
+   A; 8859-15 i 0.999 vs A), so it came from C/D's out-of-line code, not from the build host.
+4. Counts (mei, `timing-iconv-translit-cpi-4-counts-2`, all cbench_locale rows): utf16 60,492 instr/call vs glibc
+   124,664 (0.49x); 8859-15 51,558 vs 160,819; translit 187,695 vs 458,232.
+5. Gate `timing-iconv-translit-cpi-4-gate` (direct tier, --base origin/next): 5 suites, 1584 passed, 0 failed, peak
+   3.0G. Plants `timing-iconv-translit-cpi-4-plants` (handoff/TIMING-ICONV-TRANSLIT-CPI-4-plants.txt): 4 CAUGHT,
+   1 EQUIVALENT (cap of eight vs nine), 0 WARN.
+6. N100 (nozomi): booking 49 was still pending at hand-back; stages A, E and ab.sh are staged in
+   ~/work/timing-iconv-translit-cpi-4/ there (run: `~/bin/timing <label> bash ~/work/timing-iconv-translit-cpi-4/ab.sh
+   ~/work/timing-iconv-translit-cpi-4/A ~/work/timing-iconv-translit-cpi-4/E`). See the report for its outcome.
 
 ## Open
-- The 8859-15 +18% instructions in C and D is unexplained. Both stages were built on keke from the same source,
-  while A/B2 were built on shiki. Control first: build B2 on keke and compare its 8859-15 instructions with
-  shiki's B2 (`cargo xtask bench --compare --counters` on the role is enough; no timing host needed).
-- RULING NEEDED (still): land the memo with utf16 1.05x of base in time on Ivy Bridge, or not. Recommendation:
-  not yet; the next step below targets the layout directly.
-
-## Exact next step (-4)
-1. The control build above (instructions only).
-2. Make the ASCII step of `run` layout-robust instead of moving it: a tighter ASCII inner loop (room checked once
-   per run, not per byte; no shared tail with the multibyte step, which today makes LLVM materialise `mov $1`/`mov
-   $2` per byte) cuts its uops and the windows it spans. Check the loop's 32-byte windows with objdump before
-   timing (no instruction or macro-fused pair across a boundary), then time A vs head on the three rows (time3.sh
-   recipe in /home/claude/w/.scratch/TIMING-ICONV-TRANSLIT-CPI-3/; stages A/B2 stay on nico ~/work/timing-iconv-
-   translit-cpi-2, C/D on ~/work/timing-iconv-translit-cpi-3).
+- Translit E vs the memo head B2: 1.053x in time at 0.985x instructions: a placement effect in `Conv::convert` like
+  the utf16 one (not profiled). Against base every row is faster or equal, so it is no regression of next.
+  Optional follow-up: perf stat front-end events of translit B2 vs E (time4.sh in the -4 scratch is the recipe).
 
 ## Not to redo
-The memo and its plants; the hot-text name fix; out-of-line `utf8_to_wide` or `run` (both measured above).
-Mangled names of `run` back-reference repeated const args (`Kj2_Kb0_KBL_` = <2,false,false>), so a grep for
-`Kb0_Kb0_` finds nothing. The bench row's text (16-byte pattern "abcdefg é h €.") never reaches `ascii_run`.
-Plan rows: D-6.11, D-6.14; docs/saturation/06.
+The memo and its plants; out-of-line `utf8_to_wide` / `run` (-3, negative); the counted ASCII step and its plants.
+Plan rows: D-6.11, D-6.14; docs/saturation/06 (the utf16 row records -4).
