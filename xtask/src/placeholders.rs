@@ -195,7 +195,8 @@ pub fn private_errors(so: &str, readelf_v: &str, dynsyms: &str) -> Vec<String> {
     if verdefs(readelf_v).iter().any(|(n, _)| n == PRIVATE_NODE) {
         errors.push(format!("{so} defines the {PRIVATE_NODE} version node (R14-12: no {PRIVATE_NODE} exports; the private interface is LIELLA_PRIVATE)"));
     }
-    for (name, version, _) in defined_dynsyms(dynsyms) {
+    let nodes: BTreeSet<String> = verdefs(readelf_v).into_iter().map(|(n, _)| n).collect();
+    for (name, version, _) in defined_dynsyms(dynsyms, &nodes) {
         if version.as_deref() == Some(PRIVATE_NODE) {
             errors.push(format!("{so} exports {name}@{PRIVATE_NODE} (R14-12: no {PRIVATE_NODE} exports)"));
         }
@@ -203,22 +204,24 @@ pub fn private_errors(so: &str, readelf_v: &str, dynsyms: &str) -> Vec<String> {
     errors
 }
 
-/// The defined dynamic symbols in `readelf --dyn-syms -W` text, version-node symbols (`ABS`,
-/// named as their version) left out: `(name, version, default?)`.
-fn defined_dynsyms(dynsyms: &str) -> Vec<(String, Option<String>, bool)> {
+/// The defined dynamic symbols in `readelf --dyn-syms -W` text, the symbols of the version
+/// definitions `nodes` left out: `(name, version, default?)`.
+fn defined_dynsyms(dynsyms: &str, nodes: &BTreeSet<String>) -> Vec<(String, Option<String>, bool)> {
     let mut out = Vec::new();
     for line in dynsyms.lines() {
         let f: Vec<&str> = line.split_whitespace().collect();
         // Num: Value Size Type Bind Vis Ndx Name[@[@]Version]
         let [num, _, _, _, _, _, ndx, name, ..] = f.as_slice() else { continue };
-        if !num.ends_with(':') || *ndx == "UND" {
+        if num.strip_suffix(':').is_none_or(|n| n.parse::<u32>().is_err()) || *ndx == "UND" {
             continue;
         }
         let (n, v, d) = match name.split_once('@') {
             Some((n, v)) => (n, Some(v.trim_start_matches('@').to_string()), v.starts_with('@')),
             None => (*name, None, false),
         };
-        if *ndx == "ABS" && v.as_deref() == Some(n) {
+        // The symbol ld writes for each version definition: absolute, unversioned, named as the
+        // version.
+        if *ndx == "ABS" && v.is_none() && nodes.contains(n) {
             continue;
         }
         out.push((n.to_string(), v, d));
@@ -268,7 +271,8 @@ pub fn product_errors(table: &str, soname: &str, dynamic: &str, readelf_v: &str,
         errors.push(format!("{soname}: version {n} of versions.tsv is not defined"));
     }
     let mut got = BTreeSet::new();
-    for (name, version, default) in defined_dynsyms(dynsyms) {
+    let all_nodes: BTreeSet<String> = defs.iter().map(|(n, _)| n.clone()).collect();
+    for (name, version, default) in defined_dynsyms(dynsyms, &all_nodes) {
         let Some(version) = version else {
             errors.push(format!("{soname}: exports {name} unversioned; versions.tsv gives every export a version"));
             continue;
