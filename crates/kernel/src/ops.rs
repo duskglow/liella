@@ -93,7 +93,7 @@ commands!(
         CapbsetRead = 23, CapbsetDrop = 24, GetSecurebits = 27, SetSecurebits = 28,
         GetSeccomp = 21, SetTimerslack = 29, GetTimerslack = 30, SetChildSubreaper = 36, SetNoNewPrivs = 38,
         GetNoNewPrivs = 39, SetThpDisable = 41, GetThpDisable = 42, CapAmbient = 47,
-        GetSpeculationCtrl = 52, SetTsc = 26,
+        GetSpeculationCtrl = 52, SetTsc = 26, SetMdwe = 65, GetMdwe = 66,
     }
 );
 

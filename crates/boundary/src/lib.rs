@@ -47,6 +47,7 @@ pub mod mathret;
 pub mod strz;
 pub mod heap;
 pub mod cpu;
+pub mod classed;
 mod diag;
 pub mod tb;
 pub mod process;

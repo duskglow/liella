@@ -275,29 +275,36 @@ __mempcpy:
 #endif
 	.size liella_machine_mempcpy, .-liella_machine_mempcpy
 
+/* The classed entries (D-4.53, CLASSED-SLOT-INFRA; design docs/design/loadtime-entry.md sections 4-5):
+ * one page-aligned input section of two 4096-byte pages with the same slot layout. Page 0 holds the
+ * SSE2 bodies at the exported labels (correct on every x86-64, and what runs before start-up step 4);
+ * page 1 the AVX2 bodies, assembled for page 0's address: every reference that leaves the page is
+ * biased by +4096 (XREF, the macro argument `bias`), so it is right once page 1 lies at page 0's
+ * address. At start-up on the AVX2 class (`classed::install`) one `mremap` moves page 1 over
+ * page 0; nothing is ever written. Neither page refers to page 0 or page 1 through XREF; jumps
+ * within a page need nothing. Both bodies are leaf code with no stack adjustment.
+ * The section keeps the name of its first slot's function section, so the hot-text grouping
+ * (crates/libc-so/hot-text.list, `liella_machine_memset`) still places it with the start-up code.
+ * Slot offsets (one set for both pages; `.org` fails the build when a body outgrows its slot): */
+#define LIELLA_SLOT_MEMSET 0
+#define LIELLA_SLOT_CLASSED_ID 4032
+#define LIELLA_CLASSED_PAGE 4096
+
 /* void *liella_machine_memset(void *d, int c, size_t n), (unsigned char)c: 16 and more bytes take
  * (unsigned char)c in all 16 bytes of xmm0 (movd, punpcklbw, pshuflw, punpcklqdq: the low byte
  * only, whatever the int's other bytes) and store 16-byte blocks from each end (1, 2, 4 or 8 per end
- * for 16-32, 33-64, 65-128, 129-256; with AVX2 129-256 four 32-byte blocks per end instead); 8-15 two 4-byte words from each end, 4-7 one 4-byte word from each
- * end, 2-3 one 2-byte word from each end, 1 one byte, 0 nothing; other sizes in Rust. */
-	.section .text.liella_machine_memset,"ax",@progbits
-	.globl liella_machine_memset
-	.hidden liella_machine_memset
-	.type liella_machine_memset, @function
-	.p2align 6
-liella_machine_memset:
-#ifdef LIELLA_EXPORT
-	.globl memset
-	.type memset, @function
-memset:
-#endif
+ * for 16-32, 33-64, 65-128, 129-256; on the AVX2 page 129-256 four 32-byte blocks per end instead,
+ * with no flag test on either page); 8-15 two 4-byte words from each end, 4-7 one 4-byte word from each
+ * end, 2-3 one 2-byte word from each end, 1 one byte, 0 nothing; other sizes in Rust.
+ * `bias` is XREF: 0 on page 0, 4096 on page 1. `avx2` selects the 129-256 class. */
+	.macro LIELLA_MEMSET_BODY bias, avx2
 	movq %rdi, %rax
-	cmpq liella_machine_fold_limit(%rip), %rdx
-	ja .Lset_big
+	cmpq liella_machine_fold_limit+\bias(%rip), %rdx
+	ja .Lset_big\@
 	cmpq $32, %rdx
-	ja .Lset_33
+	ja .Lset_33\@
 	cmpq $16, %rdx
-	jb .Lset_lt16
+	jb .Lset_lt16\@
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
@@ -305,7 +312,7 @@ memset:
 	movups %xmm0, (%rdi)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
-.Lset_33:
+.Lset_33\@:
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
@@ -315,44 +322,44 @@ memset:
 	movups %xmm0, -32(%rdi,%rdx)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
-.Lset_lt16:
+.Lset_lt16\@:
 	movzbl %sil, %ecx
 	imull $0x01010101, %ecx, %ecx
 	cmpq $8, %rdx
-	jb .Lset_lt8
+	jb .Lset_lt8\@
 	movl %ecx, (%rdi)
 	movl %ecx, 4(%rdi)
 	movl %ecx, -8(%rdi,%rdx)
 	movl %ecx, -4(%rdi,%rdx)
 	ret
-.Lset_lt8:
+.Lset_lt8\@:
 	cmpq $4, %rdx
-	jb .Lset_lt4
+	jb .Lset_lt4\@
 	movl %ecx, (%rdi)
 	movl %ecx, -4(%rdi,%rdx)
 	ret
-.Lset_lt4:
+.Lset_lt4\@:
 	cmpq $2, %rdx
-	jb .Lset_one
+	jb .Lset_one\@
 	movw %cx, (%rdi)
 	movw %cx, -2(%rdi,%rdx)
 	ret
-.Lset_one:
+.Lset_one\@:
 	testq %rdx, %rdx
-	jz .Lset_none
+	jz .Lset_none\@
 	movb %cl, (%rdi)
-.Lset_none:
+.Lset_none\@:
 	ret
 /* Not folded: 65-256 here after the explicit NULL test (MEMSET-MID: 129-256 straight-line, no
  * loop, as the copy's class); a NULL d, 1-128 without folding and every other size in Rust. The
  * 65-128 class is `n <= liella_machine_set_mid` (128 with folding on, so n > 64 here; 0 with
  * folding off, so every n goes on: one compare against memory, no subtraction), then one unsigned
  * compare n - 129 <= 127 for 129-256. */
-.Lset_big:
-	cmpq liella_machine_set_mid(%rip), %rdx
-	ja .Lset_129
+.Lset_big\@:
+	cmpq liella_machine_set_mid+\bias(%rip), %rdx
+	ja .Lset_129\@
 	testq %rdi, %rdi
-	jz liella_hot_fill_rest
+	jz liella_hot_fill_rest+\bias
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
@@ -366,14 +373,13 @@ memset:
 	movups %xmm0, -32(%rdi,%rdx)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
-.Lset_129:
+.Lset_129\@:
 	leaq -129(%rdx), %rcx
 	cmpq $127, %rcx
-	ja .Lset_out				/* n < 129 (the wrapped compare) with folding off, or n > 256 */
+	ja .Lset_out\@				/* n < 129 (the wrapped compare) with folding off, or n > 256 */
 	testq %rdi, %rdi
-	jz liella_hot_fill_rest
-	cmpb $0, liella_machine_avx2(%rip)
-	je .Lset_129_sse2
+	jz liella_hot_fill_rest+\bias
+	.if \avx2
 	vmovd %esi, %xmm0
 	vpbroadcastb %xmm0, %ymm0
 	vmovdqu %ymm0, (%rdi)
@@ -386,7 +392,7 @@ memset:
 	vmovdqu %ymm0, -32(%rdi,%rdx)
 	vzeroupper
 	ret
-.Lset_129_sse2:
+	.else
 	movd %esi, %xmm0
 	punpcklbw %xmm0, %xmm0
 	pshuflw $0, %xmm0, %xmm0
@@ -408,36 +414,37 @@ memset:
 	movups %xmm0, -32(%rdi,%rdx)
 	movups %xmm0, -16(%rdi,%rdx)
 	ret
+	.endif
 /* MEMSET-4K-3: above 256 the kernel choice here, as `hot::bulk_fill` makes it: from the `rep stosb`
  * word (`liella_machine_fill_erms_from`, at least 257; usize::MAX without ERMS or before the
  * startup decision) `rep stosb` from d when d is 64-byte aligned, else the first 64 bytes
  * unaligned and `rep stosb` from the first 64-byte boundary above d; else with the AVX2 flag the AVX2 fill; a NULL d and every
  * other case `hot::fill_large`. Sizes below 129 (folding off) fail both size tests. */
-.Lset_out:
-	cmpq liella_machine_fill_erms_from(%rip), %rdx
-	jae .Lset_erms
+.Lset_out\@:
+	cmpq liella_machine_fill_erms_from+\bias(%rip), %rdx
+	jae .Lset_erms\@
 	cmpq $256, %rdx
-	jbe .Lset_rest
+	jbe .Lset_rest\@
 	testq %rdi, %rdi
-	jz liella_hot_fill_large
-	cmpb $0, liella_machine_avx2(%rip)
-	je liella_hot_fill_large
-	jmp liella_machine_fill_avx2_entry
+	jz liella_hot_fill_large+\bias
+	cmpb $0, liella_machine_avx2+\bias(%rip)
+	je liella_hot_fill_large+\bias
+	jmp liella_machine_fill_avx2_entry+\bias
 /* MEMSET-4K-4: a 64-byte-aligned d (NULL included) takes `rep stosb` over all n from d: the head
  * stores and the alignment below would only end at the boundary `rep stosb` starts from anyway.
  * An unaligned d is not NULL, so the alignment test stands in for the NULL test on that path. */
-.Lset_erms:
+.Lset_erms\@:
 	testb $63, %dil
-	jnz .Lset_erms_head
+	jnz .Lset_erms_head\@
 	testq %rdi, %rdi
-	jz liella_hot_fill_large
+	jz liella_hot_fill_large+\bias
 	movq %rdx, %rcx
 	movl %esi, %eax				/* al = (unsigned char)c */
 	rep stosb
 	movq %rdi, %rax
 	subq %rdx, %rax				/* d: rdi ends at d + n */
 	ret
-.Lset_erms_head:
+.Lset_erms_head\@:
 	movzbl %sil, %eax
 	imull $0x01010101, %eax, %eax		/* al = (unsigned char)c for rep stosb, the 16-byte block below */
 	movd %eax, %xmm0
@@ -454,12 +461,56 @@ memset:
 	rep stosb
 	movq %rdx, %rax
 	ret
-.Lset_rest:
-	jmp liella_hot_fill_rest
+.Lset_rest\@:
+	jmp liella_hot_fill_rest+\bias
+	.endm
+
+	.section .text.liella_machine_memset,"ax",@progbits
+	.balign LIELLA_CLASSED_PAGE
+	.globl liella_classed_page0
+	.hidden liella_classed_page0
+liella_classed_page0:
+/* Page 0, the SSE2 page. */
+	.org liella_classed_page0 + LIELLA_SLOT_MEMSET
+	.globl liella_machine_memset
+	.hidden liella_machine_memset
+	.type liella_machine_memset, @function
+liella_machine_memset:
+#ifdef LIELLA_EXPORT
+	.globl memset
+	.type memset, @function
+memset:
+#endif
+	LIELLA_MEMSET_BODY 0, 0
 #ifdef LIELLA_EXPORT
 	.size memset, .-memset
 #endif
 	.size liella_machine_memset, .-liella_machine_memset
+/* unsigned liella_classed_id(void): which page is live at page 0's address (0 SSE2, 1 AVX2), for
+ * the start-up's record and the tests (`classed::live_page`). */
+	.org liella_classed_page0 + LIELLA_SLOT_CLASSED_ID
+	.globl liella_classed_id
+	.hidden liella_classed_id
+	.type liella_classed_id, @function
+liella_classed_id:
+	movl $0, %eax
+	ret
+	.size liella_classed_id, .-liella_classed_id
+	.org liella_classed_page0 + LIELLA_CLASSED_PAGE
+/* Page 1, the AVX2 page: the same slots, XREF = +4096, local names at the same offsets. */
+liella_classed_page1:
+	.org liella_classed_page1 + LIELLA_SLOT_MEMSET
+	.type liella_machine_memset_avx2, @function
+liella_machine_memset_avx2:
+	LIELLA_MEMSET_BODY LIELLA_CLASSED_PAGE, 1
+	.size liella_machine_memset_avx2, .-liella_machine_memset_avx2
+	.org liella_classed_page1 + LIELLA_SLOT_CLASSED_ID
+	.type liella_classed_id_avx2, @function
+liella_classed_id_avx2:
+	movl $1, %eax
+	ret
+	.size liella_classed_id_avx2, .-liella_classed_id_avx2
+	.org liella_classed_page1 + LIELLA_CLASSED_PAGE
 
 /* int liella_machine_compare(const void *a, const void *b, size_t n): the direct compare entry
  * (MEMCMP-FOLD, D-4.23 amendment; owner ruling 2026-10-10 extending the S6 NULL-folding exception to

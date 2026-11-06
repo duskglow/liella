@@ -754,6 +754,22 @@ pub fn null_fold_allowed_by(text: &[u8]) -> bool {
     crate::dispatch::min_addr_allows_fold(text)
 }
 
+/// The classed entries (D-4.53): run the start-up's page swap in this process, with `want` as
+/// the CPU class decision (`false` forces the SSE2 page; `true` asks for the AVX2 page, which a
+/// CPU or OS without AVX2 never gets) and `disabled` as COMPAT-20. Only for a single-threaded
+/// child ([`in_child`]): the move replaces code that another thread could be running.
+pub fn classed_install(want: bool, disabled: bool) -> crate::classed::Outcome {
+    crate::classed::install_with(&crate::classed::Kernel, crate::classed::page0_addr(), want && crate::cpu::avx2(), disabled)
+}
+
+/// `prctl(PR_SET_MDWE, PR_MDWE_REFUSE_EXEC_GAIN)` for this process (Linux 6.3 and later; `EINVAL`
+/// before): no mapping may gain exec permission afterwards, and none may be writable and
+/// executable.
+pub fn set_mdwe_refuse_exec_gain() -> KResult<i64> {
+    use liella_kernel::ops::PrctlInt;
+    CSys.prctl_int(PrctlInt::SetMdwe, 1, 0)
+}
+
 /// Which build of the hot copy and fill kernels runs: `true` for AVX2.
 pub fn kernel_avx2() -> bool {
     crate::dispatch::avx2()

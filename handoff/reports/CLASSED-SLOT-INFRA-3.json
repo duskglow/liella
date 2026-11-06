@@ -1,0 +1,16 @@
+{"task": "CLASSED-SLOT-INFRA-3", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND: swap meets the 4-syscall/2-VMA bound, but every start (all classes, COMPAT-20 too) costs ~+65k kernel+user and +284 user instructions vs the merge-base, and the N100 start-up time is slower; gate fix (page0 rename) done; memset timing unchanged on Ivy Bridge, parity on N100",
+ "branch": "task/classed-slot-infra-3", "head": "3b1821cc",
+ "gate": {"affected": "classed-slot-infra-3-gate running at hand-back (FULL tier); -2 gate red, cause fixed; dev job 15 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Fixed start-up cost of unknown cause on every class: startup_kinstr_c 163-166k (merge-base) -> 227-238k (branch), startup_instr_c 2148 -> 2432; not the swap (COMPAT-20 and -AVX2 the same)",
+   "Branch predates XTASK-BENCH-STAGE: the base was staged with next's bench --stage, the branch with the manual recipe",
+   "Plants rc 3: the plants copy raced the gate running in the same role (transient conformance/build/*.lock); run plants alone in a role"
+ ],
+ "refused": [],
+ "jobs": ["classed-slot-infra-3-gate", "classed-slot-infra-3-dev", "classed-slot-infra-3-count-base", "classed-slot-infra-3-count-branch", "classed-slot-infra-3-kin-mb", "classed-slot-infra-3-kin-branch", "nico:classed-slot-infra-3-time-nico", "nozomi:classed-slot-infra-3-time-nozomi"],
+ "improvement": "cargo xtask plants could ignore *.lock files under build dirs (or the dispatcher could forbid plants while a gate runs in the same role); a continuation brief should name a merge-base base for start-up counts, since origin/next is 209 commits away",
+ "next_step": "Profile the fixed start-up cost (wl_trace merge-base vs branch, -AVX2), fix it, rerun kin.sh, then gate, plants alone, N100 start-up timing",
+ "report_file": "handoff/classed-slot-infra.md"}

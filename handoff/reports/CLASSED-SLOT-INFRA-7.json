@@ -1,0 +1,12 @@
+{"task": "CLASSED-SLOT-INFRA-7", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: origin/next merged (SEARCH-NOMEM-TLS fixes the -6 red); gate and plants green; N100 start-up and memset 128-256 no slower (memset_256 -10%); AVX2 class +7.1 instr at 129-256 (30.3 -> 37.4, glibc 32.4); Skylake-SP timing queued",
+ "branch": "task/classed-slot-infra-7", "head": null,
+ "gate": {"affected": "mei classed-slot-infra-7-gate rc 0 (affected: ok, 1 skipped: liella-kernel no tests selected)", "peak": "15G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "ruling #3434 reopening: with the swap off, memset 129-256 on the AVX2 class runs page 0's SSE2 body, +7.1 instructions per call (30.3 -> 37.4, glibc 32.4); N100 timing equal at 144 and 10% faster at 256; Skylake-SP timing pending", "recommendation": "land as is if Skylake-SP timing is within noise (the N100 favours the SSE2 body); a per-function AVX2 129-256 body on page 0 only if Skylake-SP is slower beyond noise"}],
+ "informational": ["merge: next's PARITY-MEMSET-SMALL-AVX2 set_mid compare taken into the slot-page macro with the XREF bias; next's runtime AVX2 flag test at 129-256 not taken (D-4.53 pages)", "the slot tests check results, not which data word page 1 reads: both biasless data-word plants (fold limit, set_mid) survive by result; a static check of page 1 RIP-relative displacements (page 0 + 4096) would catch them independent of link layout", "N100 start-up (run -6 job): exec_true_static -2.7%, others within noise", "merge commit 4052dbe5 has the default merge message without a why-body or trailer (pushed before noticing; not rewritten)", "mei classed-slot-infra-7-skx (whole-host timing) was cancelled while queued (66 min, never started, no jobs.tsv row) and requeued as classed-slot-infra-7-skx-2"],
+ "refused": [],
+ "improvement": "~/bin/timing on a shared build host waits for a whole-host drain (66 min, not started): slots-status could print an estimated start, or AVX2-class timing could go to a dedicated timing host",
+ "next_step": "read mei:~/logs/classed-slot-infra-7-skx-2.log memset_128/144/256 rows (mb vs branch); within noise = COMPLETE, else the #3434 ruling",
+ "report_file": "handoff/classed-slot-infra.md",
+ "jobs": ["mei:classed-slot-infra-7-gate", "mei:classed-slot-infra-7-plants-2", "mei:classed-slot-infra-7-prep", "nozomi:classed-slot-infra-7-n100", "mei:classed-slot-infra-7-skx-2"]}
