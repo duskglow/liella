@@ -1,5 +1,26 @@
-# PARITY-MEMSET-SMALL-AVX2 (-2) (branch task/parity-memset-small-avx2-2, base origin/next f2157504)
+# PARITY-MEMSET-SMALL-AVX2 (-3) (branch task/parity-memset-small-avx2-3, origin/next 41b8737b merged in)
 
+## -3 (gate rerun only, coordinator note 11-05)
+- Merged origin/next 41b8737b (cc738ac7; carries ENOMEM-REALPATH-INTERMITTENT-2's measure guard and -3's heap-stats
+  test). No code change of this story's own. next touched fold.S (comments only) and ffi.rs (copy contract docs); the
+  planted files' code and crates/boundary/tests/small_copy.rs are unchanged by the merge.
+- Role mei:~/w/s1 (Skylake-SP). clippy --workspace --all-targets --all-features -D warnings and `cargo xtask static`
+  clean at cc738ac7 (foreground).
+- Gate parity-memset-small-avx2-3-gate (direct tier, --base origin/next) on mei at cc738ac7: rc 0. Every suite ok:
+  liella 435.8 s, liella (exports interposed) 418.9 s (enomem_fs_walk was selected and passed: the -2 failure did not
+  recur on the merged head), liella-abi, liella-boundary (+exports), liella-legacy, liella-math (+exports), liella-rt
+  (+exports), conformance 117/117, fuzz-check. Peak 15G, oom_kill 0. 2 SKIPPED lines (skip_note_visible,
+  skip_precondition_fails: the harness's own skip tests).
+- -2's enomem_fs_walk red: not reproduced here; not shown caused by this change (the memset change touches no
+  allocation path; fold-off 65-128 runs Rust fill_small). The intermittent stays ENOMEM-REALPATH-INTERMITTENT's
+  (cause unproven per its -3 handoff). No base-vs-head rerun was needed (brief: only if it still failed).
+- Plants rerun on the merged head (same file): parity-memset-small-avx2-3-plants rc 0, dir
+  /mnt/zram/claude/PARITY-MEMSET-SMALL-AVX2-3/plants-1: 5 CAUGHT, 0 SURVIVED, psm-unresolve WARN-NO-MSG (same
+  understood cause as -2: panic "call 117901063: the first small call must decide" at small_copy.rs:380).
+- percall: not rerun (memset code identical to fbd23bc4; -2's keke count stands: memset_65/128 34 -> 33, no row up).
+- Next step: land. Follow-up (b) per-class entry is with the owner (LOADTIME-ENTRY-DESIGN rulings #3108-#3110).
+
+## Record of -2
 State: the H-word change (ruling #3069 option (c)) is committed: fbd23bc4 (code), aa95519f (plants file), then this
 handoff. Role keke:~/w/r1. Clippy and `cargo xtask static` clean on the role at fbd23bc4 (foreground).
 Jobs on keke (started 17:40Z, queued behind load ~30): parity-memset-small-avx2-2-gate (direct tier),
