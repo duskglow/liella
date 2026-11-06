@@ -98,6 +98,26 @@ static program or non-ELF, 2 shared library. `--list` of a program with a missin
 static, 666 dynamic with BIND_NOW (DT_FLAGS `BIND_NOW` or DT_FLAGS_1 `NOW`), 14 lazy; 667 are
 `ET_DYN`. Lazy binding is the rare case for system programs (input to R14-13 / DL-10).
 
+**Symbol binding** (DL-SYMBOLS probe, Haswell-EP host, same system; scratch probe of `lib.c`/`prog.c` built
+with gcc 13.3 / binutils, black box: only the values the bound functions return were observed). `libv.so` defines
+`f@VER_1` (hidden) and `f@@VER_2`; `h@VER_1`, `h@VER_2` (both hidden); `b` (base, index 1); `g@@VER_1`, `g@VER_2`
+(hidden, and before `g@@VER_1` in the symbol table); `m@VER_1`, `m@VER_2` (hidden), `m@@VER_3`. The same answers with
+`--hash-style=gnu` and `--hash-style=sysv`:
+
+| Request | Binds |
+|---|---|
+| program linked against an unversioned stub (references without a version) | `f`→VER_1, `h`→VER_1, `b`→base, `g`→VER_1, `m`→VER_1 (lowest version index, hidden or not) |
+| program linked against `libv.so` | `f`→VER_2 (the default at link time), `f@VER_1`→VER_1, `h@VER_2`→VER_2 |
+| `dlsym` | `f`→VER_2, `h`→NULL (`undefined symbol: h`), `b`→base, `g`→VER_1, `m`→VER_3 (base or default only) |
+| `dlvsym` | `f`/VER_1, `f`/VER_2, `h`/VER_1, `h`/VER_2 bind that version; `f`/VER_9, `b`/VER_1, `b`/`libv.so` (the base node's name) → NULL (`undefined symbol: f, version VER_9`) |
+| program needing VER_1/VER_2 run against the unversioned stub | `no version information available (required by ./ver)` twice, then an internal consistency message from the loader, exit 127 |
+| weak `w` in `libw1.so`, strong `w` in `libw2.so` | link order w1,w2 → the weak one; w2,w1 → the strong one; `LD_DYNAMIC_WEAK=1` → unchanged |
+| undefined weak data and function references | both 0 |
+| `STB_GNU_UNIQUE` `u_obj` in two objects, each `dlopen`ed `RTLD_LOCAL` | one object for both (the first's); a plain global `u_obj` in a third object stays its own |
+
+Liella's lookup (D-27.11) follows every row; `crates/ld/tests/symbols.rs` checks the same corpus. The stub row is the
+loader's version check (a later DL story): Liella's lookup matches any definition of an object without `versym`.
+
 ## Notes for the implementation stories
 
 - DL-16: the texts above are the targets; the `e_machine` case reports a file-missing text for

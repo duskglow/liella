@@ -242,7 +242,7 @@ fn gnu_and_sysv_give_the_same_answers() {
 
 /// (name, version found) for every undefined reference of program `prog` named in `names`, against `lib`.
 fn bind_program(prog: &[u8], lib: &[u8], names: &[&str]) -> Vec<(String, String)> {
-    let (p, l) = (obj(prog, HashStyle::Gnu), obj(lib, HashStyle::Gnu));
+    let (p, l) = (obj(prog, HashStyle::Gnu), Object::new(dynm(lib).unwrap()).unwrap());
     let mut out = Vec::new();
     for i in 1..p.symtab().count().unwrap() {
         let st = p.symtab().get(i).unwrap();
