@@ -1,4 +1,27 @@
-# TIMING-COV-MEMCMP-NONAVX2 (handoff, after run -3)
+# TIMING-COV-MEMCMP-NONAVX2 (handoff, after run -4)
+
+State (-4): branch `task/timing-cov-memcmp-nonavx2-4` = -3's head 88ee584c + merge of origin/next 71ffff12 (1ff83649)
++ this handoff. Role shiki:~/w/sh2 (Haswell-EP, AVX2).
+
+## -4: CI conflict with TIMING-N100-MEMCMP-3 (fold.S) and the s04 decisions file
+* fold.S, one hunk before `.Lcmp_sse_mid`: next's comment and its `.p2align 6, 0xcc` + `.fill 20` (the SSE2 classes
+  start 20 bytes into a line) kept as they are; this story's -2 fold comment added after next's comment; the
+  `.Lcmp_sse_mid` body (the `cmp_sse` word test, the 128 split after the probe) unchanged. Everything else merged
+  on its own. Checked: AVX2 with folding off sends 65-128 to `.Lcmp_avx_long` -> `.Lcmp_big_load` -> `.Lcmp_big_blocks`
+  (n <= 128), which next's 256-byte long loop does not reach, so -2's routing still holds.
+* s04 decisions: next already carried -1's D-4.62 text; took next's rows as they are and replaced its D-4.62 with
+  this branch's row (the same text plus the -2 fold paragraph; one D-4.62 row).
+* hot-text.list: next has not changed it, tools/hottext or the test since the merge base 025c6c53, but it added the
+  8 KiB classed memset section to the hot group. The test on the merged head (AVX2 host) is the check, see Jobs.
+* No memcmp instruction changed by the merge: no re-count, no re-time (timing still never run, see "Not done" 1).
+  -2's plants re-run on the merged head: 4 CAUGHT, 0 SURVIVED, the same 4 WARN-NO-MSG as -2 (see Plants below).
+* Jobs (shiki): tcm-nonavx2-4-check0 (clippy+static on 88ee584c, rc 0), tcm-nonavx2-4-check (clippy+static on
+  the merge, rc 0), tcm-nonavx2-4-plants (rc 0), tcm-nonavx2-4-gate (affected escalated to FULL by hot-text.list),
+  tcm-nonavx2-4-htp (`cargo xtask so`, hot_text_products --nocapture, small_compare). Results: gate rc 0
+  (FULL, 61 min: 32 suites, 11122 passed, 0 failed, 1200 ignored; conformance 122/0; peak 16G, oom_kill 0); htp rc 0:
+  hot_text_products 8 passed, rebind warm-up 0, runs [0,0,0,0,0], startup 17 (bound 23), setlocale + printf 57 (68),
+  tool 60 (71), fork 7 (9); small_compare 15 passed. The CI test passes on the merged head on an AVX2 host.
+* Next step: unchanged, "Not done" 1 (booked timing on Ivy Bridge and the N100 forced SSE2), then 2.
 
 State (-3): branch `task/timing-cov-memcmp-nonavx2-3` = -2's head 47828fec + 91b851e1 (regenerated hot-text list)
 + this handoff. Role kanon:~/w/kn1. Not merged with origin/next (the -3 brief allows no merge); the list was generated on
