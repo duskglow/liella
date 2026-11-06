@@ -1,6 +1,6 @@
 {"task": "TIMING-SWEEP-1106E", "model": "opus", "tokens": null,
  "result": "Sweep of next 34c98f61 on Ivy Bridge and N100: IVB 252/99/56, N100 313/74/20 (faster/parity/slower); 21 rows improved; real regression first_mktime_new_york ~4.8x on both classes (+first_snprintf)",
- "branch": "task/timing-sweep-1106e", "head": null,
+ "branch": "task/timing-sweep-1106e", "head": "767132c6 (results commit; the next commit only fills this field)",
  "gate": {"affected": "docs only: no gate (brief); cargo xtask static on shiki sh1", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [],
