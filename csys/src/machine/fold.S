@@ -971,19 +971,22 @@ memcmp:
  * copy); the first differing byte (first block first: the three blocks at 16-63 ANDed decide which
  * group holds it, then that group's blocks in order; the last block's from the ANDed mask, the
  * blocks before it being equal) is re-read and ordered at .Lcmp_byte. */
+/* TIMING-COV-MEMCMP-NONAVX2-2 (D-4.62, ruling #3592): 65 to `liella_machine_cmp_sse` (2048 while
+ * NULL folding is on without AVX2, else 0) have no NULL test: the first access is the block at
+ * offset 0 of a, then of b, so a NULL faults on page zero (read-only, inside the [0, 64 KiB) proof
+ * obligation of `dispatch`). The word's compare replaces the 65-128 split, which comes after the
+ * probe. Larger sizes, folding off and the AVX2 build take .Lcmp_sse_over. */
 .Lcmp_sse_mid:
-	cmpq $128, %rdx
-	ja .Lcmp_sse_long
-	testq %rdi, %rdi
-	je liella_hot_compare_big
-	testq %rsi, %rsi
-	je liella_hot_compare_big
+	cmpq liella_machine_cmp_sse(%rip), %rdx
+	ja .Lcmp_sse_over
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
 	pmovmskb %xmm0, %ecx
 	xorl $0xffff, %ecx
 	jnz .Lcmp_first
+	cmpq $128, %rdx
+	ja .Lcmp_sse_long
 	movdqu 16(%rdi), %xmm0
 	movdqu 16(%rsi), %xmm7
 	pcmpeqb %xmm7, %xmm0
@@ -1061,11 +1064,17 @@ memcmp:
  * before it are equal) give the first differing byte (rcx), re-read and ordered
  * at .Lcmp_big_byte (re-read equal, D-4.21 -> `liella_hot_compare_rescan`). n is read from rdx
  * only (MEMCMP-MID-4's torn-read bound). */
-.Lcmp_sse_long:
+/* .Lcmp_sse_over (above `liella_machine_cmp_sse`): the AVX2 build (every size above 64 with folding
+ * off, above 2048 with it on; `liella_machine_cmp_mid` set) -> .Lcmp_avx_long. Without AVX2 the
+ * explicit NULL tests, the a test against `liella_machine_cmp_sse_null` (0 while the fold word is
+ * 2048, so only a NULL a takes the checked entry; else SIZE_MAX, so with folding off every size
+ * takes `liella_hot_compare_big`: here n is then above 2048 > 128 whenever the long class runs),
+ * then the probe and the long class (.Lcmp_sse_long, entered after the probe). */
+.Lcmp_sse_over:
 	cmpq $0, liella_machine_cmp_mid(%rip)
 	jne .Lcmp_avx_long
-	testq %rdi, %rdi
-	je liella_hot_compare_big
+	cmpq liella_machine_cmp_sse_null(%rip), %rdi
+	jbe liella_hot_compare_big
 	testq %rsi, %rsi
 	je liella_hot_compare_big
 	movdqu (%rdi), %xmm0
@@ -1074,6 +1083,7 @@ memcmp:
 	pmovmskb %xmm0, %ecx
 	xorl $0xffff, %ecx
 	jnz .Lcmp_first
+.Lcmp_sse_long:
 	movq %rsi, %r11
 	subq %rdi, %r11
 	leaq 16(%rdi), %r9
@@ -1371,11 +1381,12 @@ __memcmpeq:
  * down to 16 (in [a + 1, a + 16], so nothing below a; a's side aligned, compared from memory), a
  * cursor in a and the distance b - a, while the cursor is below a + n - 64, then a last chunk at
  * n - 64 that may overlap the one before (both sides loaded). 0 or 1, nothing located. */
+/* TIMING-COV-MEMCMP-NONAVX2-2 (D-4.62, ruling #3592): up to `liella_machine_cmp_sse` (2048 while
+ * NULL folding is on, else 0) no NULL test: the word at offset 0 of a, then of b, is the first
+ * access, so a NULL faults on page zero. Above it .Leq_sse_over. */
 .Leq_sse:
-	testq %rdi, %rdi
-	je liella_hot_equal_big
-	testq %rsi, %rsi
-	je liella_hot_equal_big
+	cmpq liella_machine_cmp_sse(%rip), %rdx
+	ja .Leq_sse_over
 	movq (%rdi), %rax
 	cmpq (%rsi), %rax
 	jne .Leq_one
@@ -1415,6 +1426,21 @@ __memcmpeq:
 	subl $0xffff, %eax
 	shrl $31, %eax
 	ret
+/* Above `liella_machine_cmp_sse`: the a test against `liella_machine_cmp_sse_null` (0 while folding
+ * is on, so only a NULL a takes the checked entry; else SIZE_MAX: with folding off every size above
+ * 64 takes `liella_hot_equal_big`, so the long class below runs only above 2048 > 128), the b NULL
+ * test, the words at 0 and 8, then the long class. */
+.Leq_sse_over:
+	cmpq liella_machine_cmp_sse_null(%rip), %rdi
+	jbe liella_hot_equal_big
+	testq %rsi, %rsi
+	je liella_hot_equal_big
+	movq (%rdi), %rax
+	cmpq (%rsi), %rax
+	jne .Leq_one
+	movq 8(%rdi), %rax
+	cmpq 8(%rsi), %rax
+	jne .Leq_one
 .Leq_sse_long:
 	movq %rsi, %r11
 	subq %rdi, %r11
@@ -1531,6 +1557,28 @@ liella_machine_cmp_mid:
 liella_machine_cmp_long:
 	.zero 8
 	.size liella_machine_cmp_long, 8
+/* The SSE2 65-2048 fold words (TIMING-COV-MEMCMP-NONAVX2-2, D-4.62, ruling #3592;
+ * `ffi::liella_machine_cmp_sse`, `ffi::liella_machine_cmp_sse_null`): `cmp_sse` is 2048 while NULL
+ * folding is on without AVX2, else 0 (sizes 65 to it take the SSE2 classes with no NULL test);
+ * `cmp_sse_null` is 0 exactly while `cmp_sse` is 2048, else SIZE_MAX (above `cmp_sse` an a at or
+ * below it takes the checked entry). Written only by `crate::dispatch::store_cmp_gates`: on the
+ * way up `cmp_sse` first, on the way down `cmp_sse_null` first, so `cmp_sse_null` is never 0 while
+ * `cmp_sse` is 0 (else folding off would send 65-128 to the long class). */
+	.pushsection .data.liella_machine_cmp_sse,"aw",@progbits
+	.p2align 3
+	.globl liella_machine_cmp_sse
+	.hidden liella_machine_cmp_sse
+	.type liella_machine_cmp_sse, @object
+liella_machine_cmp_sse:
+	.zero 8
+	.size liella_machine_cmp_sse, 8
+	.globl liella_machine_cmp_sse_null
+	.hidden liella_machine_cmp_sse_null
+	.type liella_machine_cmp_sse_null, @object
+liella_machine_cmp_sse_null:
+	.quad -1
+	.size liella_machine_cmp_sse_null, 8
+	.popsection
 /* The copy entry's 129-256 class word (NULLFOLD-COPY-MID, D-4.55; `ffi::liella_machine_move_long`):
  * 256 while NULL folding is on with the AVX2 build, 2^63 | 256 (sign bit: the SSE2 body) while
  * folding is on with the SSE2 build, else 0 (written by `crate::dispatch::store_cmp_gates` and `drop_move_word`: dropped

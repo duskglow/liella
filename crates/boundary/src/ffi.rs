@@ -383,6 +383,14 @@ unsafe extern "C" {
     /// AVX2 long class (which re-tests `n <= 128` itself). Written only by `crate::dispatch::select`
     /// (proof obligation: never nonzero while the AVX2 flag is false).
     pub(crate) safe static liella_machine_cmp_long: core::sync::atomic::AtomicUsize;
+    /// The SSE2 compare and equality classes' fold word (machine/fold.S, D-4.62): `hot::CMP_LONG`
+    /// while NULL folding is on without AVX2, else 0; sizes 65 to it have no NULL test. Written only
+    /// by `crate::dispatch` (proof obligation: never nonzero while the fold limit is 0).
+    pub(crate) safe static liella_machine_cmp_sse: core::sync::atomic::AtomicUsize;
+    /// Its pair (D-4.62): 0 exactly while `liella_machine_cmp_sse` is nonzero, else `usize::MAX`
+    /// (above the fold word an `a` at or below it takes the checked entry). Written only by
+    /// `crate::dispatch` (proof obligation: never 0 while `liella_machine_cmp_sse` is 0).
+    pub(crate) safe static liella_machine_cmp_sse_null: core::sync::atomic::AtomicUsize;
     /// The copy entry's 129-256 class word (machine/fold.S, NULLFOLD-COPY-MID, D-4.55):
     /// `dispatch::MOVE_FOLD_MAX` (256) while NULL folding is on, with the sign bit
     /// (`dispatch::MOVE_SSE2`, the SSE2 body) under the SSE2 build, else 0; sizes above 128 with
