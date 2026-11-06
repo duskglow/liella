@@ -2848,13 +2848,15 @@ liella_machine_memchr:
 	addq %rdi, %rax
 	ret
 .Lmemchr_sse_head16:
-	/* [s, s + 16) holds no match. Blocks 1-3 ([s + 16, s + 64), inside s's page) fold with por
-	 * whatever n is: with n <= 16 a hit there is at or past n and a miss ends at head_miss's
-	 * n <= 64 test, so no n <= 16 test is spent on the common long calls (SSE2-GAP-4). The fold
-	 * goes into block 3's compare (no copy), so its mask is block 3's own when blocks 1-2 hold
+	/* [s, s + 16) holds no match: NULL when n <= 16 (TIMING-COV-MEMCHR-SHORT-NONAVX2, D-4.57:
+	 * a 16-byte miss skips the fold below; a long call pays the test and its not-taken
+	 * branch). Blocks 1-3 ([s + 16, s + 64), inside s's page) fold with por whatever n > 16
+	 * is. The fold goes into block 3's compare (no copy), so its mask is block 3's own when blocks 1-2 hold
 	 * no match. A hit is resolved per block (SSE2-GAP-2 measured a combined 48-bit mask: 2 more
 	 * instructions per miss). A match at or past n is outside the region, and then so is every
 	 * later one, so the lowest match decides. */
+	cmpq $16, %rdx
+	jbe .Lmemchr_none
 	movdqu 16(%rdi), %xmm1
 	movdqu 32(%rdi), %xmm2
 	movdqu 48(%rdi), %xmm3
