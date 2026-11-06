@@ -374,7 +374,10 @@ but tools that read the file instead of the process see the other page:
   `liella_machine_memset_avx2` (the AVX2 page's local symbol), or keep the SSE2 page.
 * **Core files**: the default `coredump_filter` does not dump clean file-backed text, so a debugger reading a core
   shows the file's SSE2 bytes at `memset`. Backtraces are correct.
-* **To run the file's SSE2 page** (the code at every exported label is then the code in the file):
-  `GLIBC_TUNABLES=liella.compat.no_classed_swap=1` (COMPAT-20) keeps it and leaves the other AVX2 paths on;
+* **The swap is off by default** (ruling #3434, D-4.53: it cost 22-26 us per process start on an Alder Lake-N
+  class CPU with no measured `memset` gain; CLASSED-SLOT-SWAP-COST cuts that cost). The notes above apply when
+  `GLIBC_TUNABLES=liella.compat.no_classed_swap=0` (COMPAT-20) turns it on.
+* **To run the file's SSE2 page** (the code at every exported label is then the code in the file): the default, or
+  `GLIBC_TUNABLES=liella.compat.no_classed_swap=1` (COMPAT-20), keeps it and leaves the other AVX2 paths on;
   `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2` keeps it and turns every AVX2 path off. A program without `/proc` also
   keeps it.

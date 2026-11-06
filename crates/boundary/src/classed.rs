@@ -16,8 +16,9 @@
 //! destination when the move fails); if it is gone it tries once more, and if that fails too the
 //! process ends with a message instead of faulting at its next `memset`.
 //!
-//! `liella.compat.no_classed_swap=1` (COMPAT-20) keeps the file's page 0, so debuggers,
-//! profilers and core files see the code that runs.
+//! The swap is off by default (ruling #3434, [`SWAP_BY_DEFAULT`]): every class runs page 0
+//! unless `liella.compat.no_classed_swap=0` (COMPAT-20) turns it on. `=1`, or no setting, keeps
+//! the file's page 0, so debuggers, profilers and core files see the code that runs.
 use core::sync::atomic::{AtomicU8, Ordering::Relaxed};
 
 use liella_kernel::errno::Errno;
@@ -44,7 +45,7 @@ pub enum Outcome {
     NotRun = 0,
     /// The CPU class is SSE2 (no AVX2, no saved YMM state, or `glibc.cpu.hwcaps=-AVX2`): no system call.
     Sse2Class = 1,
-    /// `liella.compat.no_classed_swap=1` (COMPAT-20): page 0 kept.
+    /// The swap is off: the default, or `liella.compat.no_classed_swap=1` (COMPAT-20); page 0 kept.
     Disabled = 2,
     /// `/proc/self/pagemap` could not be opened or read: page 0 kept.
     NoPagemap = 3,
@@ -197,7 +198,18 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
 /// The start-up step (static step 4, right after `cpu::init_with`): `avx2` is the class that
 /// `init_with` decided (`cpu::avx2_in` of its state), so the step reads no CPU features itself.
 pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
-    let _ = install_with(&Kernel, page0_addr(), avx2, t.no_classed_swap == Some(true));
+    let _ = install_with(&Kernel, page0_addr(), avx2, swap_disabled(t.no_classed_swap));
+}
+
+/// Whether the AVX2-class swap runs when `liella.compat.no_classed_swap` is not set. Off
+/// (ruling #3434, D-4.53): on an Alder Lake-N class CPU the swap cost 22-26 us per process start
+/// with no measured `memset` gain; CLASSED-SLOT-SWAP-COST cuts that cost before the default flips.
+pub const SWAP_BY_DEFAULT: bool = false;
+
+/// COMPAT-20's value (`liella.compat.no_classed_swap`, `None` when not set) to the `disabled`
+/// argument of [`install_with`]: `=0` turns the swap on, `=1` keeps it off, unset is the default.
+pub fn swap_disabled(no_classed_swap: Option<bool>) -> bool {
+    no_classed_swap.unwrap_or(!SWAP_BY_DEFAULT)
 }
 
 #[cfg(test)]
@@ -243,6 +255,19 @@ mod tests {
         assert_eq!(install_with(&f, 0x40_0000, false, false), Outcome::Sse2Class);
         assert_eq!(install_with(&f, 0x40_0000, true, true), Outcome::Disabled);
         assert_eq!(f.moves.get(), 0);
+    }
+
+    #[test]
+    fn the_swap_is_off_unless_the_flag_is_zero() {
+        // Clauses: no spec clause (ruling #3434: COMPAT-20 unset keeps page 0; `=0` turns the swap on).
+        assert!(swap_disabled(None), "the swap must be off by default");
+        assert!(swap_disabled(Some(true)));
+        assert!(!swap_disabled(Some(false)));
+        let f = fake(Some(FILE), 0, true);
+        assert_eq!(install_with(&f, 0x40_0000, true, swap_disabled(None)), Outcome::Disabled);
+        assert_eq!(f.moves.get(), 0);
+        assert_eq!(install_with(&f, 0x40_0000, true, swap_disabled(Some(false))), Outcome::Installed);
+        assert_eq!(f.moves.get(), 1);
     }
 
     #[test]

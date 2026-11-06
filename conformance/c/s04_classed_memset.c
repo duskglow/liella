@@ -5,18 +5,20 @@
  * swap itself has no spec clause (D-4.53).
  *
  * The program re-executes itself (a static, non-PIE program: the same addresses in every run)
- * in five starts and asks each which page runs at memset, read black-box from /proc/self/maps:
+ * in six starts and asks each which page runs at memset, read black-box from /proc/self/maps:
  * after the swap, memset's page is a mapping of its own, one page long, whose file offset is one
  * page further on, and the page after it is a hole. Without the swap memset's page lies inside
- * the text mapping. Each start then sweeps memset against a byte loop.
- *   default                                 the AVX2 page on an AVX2 host (AVX2 and YMM state
- *                                           saved, /proc/self/pagemap readable), else the SSE2 page
- *   GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2   the SSE2 page (the test override, every host)
- *   GLIBC_TUNABLES=liella.compat.no_classed_swap=1   the SSE2 page (COMPAT-20)
- *   PTRACE_TRACEME, one unchanged word of memset's page written back at the exec stop (as a
- *     debugger's breakpoint makes the page anonymous): the SSE2 page (the pagemap guard)
- *   PR_SET_MDWE(PR_MDWE_REFUSE_EXEC_GAIN) set before execve: the AVX2 page on an AVX2 host
- *     (the swap gains no exec permission); skipped, with the reason, without PR_SET_MDWE. */
+ * the text mapping. Each start then sweeps memset against a byte loop. The swap is off by
+ * default (ruling #3434); `liella.compat.no_classed_swap=0` (COMPAT-20) turns it on.
+ *   default                                 the SSE2 page on every host
+ *   GLIBC_TUNABLES=liella.compat.no_classed_swap=0   the AVX2 page on an AVX2 host (AVX2 and YMM
+ *                                           state saved, /proc/self/pagemap readable), else SSE2
+ *   ...=0 with glibc.cpu.hwcaps=-AVX2       the SSE2 page (the test override, every host)
+ *   GLIBC_TUNABLES=liella.compat.no_classed_swap=1   the SSE2 page
+ *   swap on, PTRACE_TRACEME, one unchanged word of memset's page written back at the exec stop
+ *     (as a debugger's breakpoint makes the page anonymous): the SSE2 page (the pagemap guard)
+ *   swap on, PR_SET_MDWE(PR_MDWE_REFUSE_EXEC_GAIN) set before execve: the AVX2 page on an AVX2
+ *     host (the swap gains no exec permission); skipped, with the reason, without PR_SET_MDWE. */
 #define _GNU_SOURCE
 #include <cpuid.h>
 #include <errno.h>
@@ -232,13 +234,15 @@ int main(int argc, char **argv) {
     if (strcmp(best, "sse2") == 0)
         printf("s04_classed_memset: no AVX2 class here (or no /proc/self/pagemap): every start keeps the SSE2 page\n");
     char *plain[] = {0};
-    char *no_avx2[] = {"GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2", 0};
+    char *swap_on[] = {"GLIBC_TUNABLES=liella.compat.no_classed_swap=0", 0};
+    char *no_avx2[] = {"GLIBC_TUNABLES=liella.compat.no_classed_swap=0:glibc.cpu.hwcaps=-AVX2", 0};
     char *compat[] = {"GLIBC_TUNABLES=liella.compat.no_classed_swap=1", 0};
     int bad = 0;
-    bad |= start("default", PLAIN, plain, best) == 1;
-    bad |= start("glibc.cpu.hwcaps=-AVX2", PLAIN, no_avx2, "sse2") == 1;
-    bad |= start("COMPAT-20", PLAIN, compat, "sse2") == 1;
-    bad |= start("PTRACE_TRACEME guard", TRACED, plain, "sse2") == 1;
-    bad |= start("PR_SET_MDWE", MDWE, plain, best) == 1;
+    bad |= start("default (swap off)", PLAIN, plain, "sse2") == 1;
+    bad |= start("no_classed_swap=0", PLAIN, swap_on, best) == 1;
+    bad |= start("no_classed_swap=0, glibc.cpu.hwcaps=-AVX2", PLAIN, no_avx2, "sse2") == 1;
+    bad |= start("no_classed_swap=1", PLAIN, compat, "sse2") == 1;
+    bad |= start("PTRACE_TRACEME guard (swap on)", TRACED, swap_on, "sse2") == 1;
+    bad |= start("PR_SET_MDWE (swap on)", MDWE, swap_on, best) == 1;
     return bad;
 }

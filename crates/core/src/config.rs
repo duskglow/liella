@@ -17,7 +17,7 @@
 //! | `liella.cpu.rep_stosb_threshold` | `glibc.cpu.x86_rep_stosb_threshold` | bytes, 1 or more |
 //! | `liella.pthread.rseq` | `glibc.pthread.rseq` | 0 or 1; `0` disables the rseq registration (D-22.7, §22.9) |
 //! | `liella.compat.rpc_reply_any_source` | (none) | 0 or 1; `1` lets the UDP RPC client take a reply from any source address (COMPAT-12, D-29.2) |
-//! | `liella.compat.no_classed_swap` | (none) | 0 or 1; `1` keeps the file's SSE2 page at the classed entries: no page swap at start-up (COMPAT-20, D-4.53) |
+//! | `liella.compat.no_classed_swap` | (none) | 0 or 1; `1` (and unset, the default since ruling #3434) keeps the file's SSE2 page at the classed entries: no page swap at start-up; `0` turns the AVX2-class swap on (COMPAT-20, D-4.53) |
 //! | `liella.malloc.perturb` | `glibc.malloc.perturb` | 0 to 255: `M_PERTURB` for the C `malloc` family (§3.2); overrides `MALLOC_PERTURB_` ([`Tunables::malloc_perturb`]) |
 //!
 //! **Syntax** (black-box probes of glibc 2.39, LEGACY-TUNABLES-POLICY, 2026-10-23):
