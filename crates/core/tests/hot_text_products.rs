@@ -250,6 +250,25 @@ fn init_cold_startup_functions_are_grouped() {
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
         );
     }
+    // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
+    // group the second lookup of a process took 4 more text faults. Which of them keep a section of
+    // their own depends on the profile (the release build inlines region_path, stamp_files and
+    // Table::get into attach's closure), so: every section of one of them is in the group, and at
+    // least two are present.
+    let text: Vec<&str> = sections
+        .lines()
+        .filter_map(|l| l.split_once("] ").map(|(_, a)| a))
+        .filter_map(|a| a.strip_prefix(".text."))
+        .filter_map(|a| a.split_whitespace().next())
+        .collect();
+    let mut seen = 0;
+    for f in ["7NsCache11region_path", "7NsCache6attach", "6Memory10map_shared", "5Table11stamp_files", "5Table3get"] {
+        for s in text.iter().filter(|s| s.contains(f)) {
+            assert!(s.starts_with("sorted.h"), "{f}: section .text.{s} is not in the hot group of libc.a (listed in crates/libc-so/hot-text.list?)");
+            seen += 1;
+        }
+    }
+    assert!(seen >= 2, "name-service cache attach path: {seen} sections found in libc.a (renamed? update the names above)");
 }
 
 #[test]

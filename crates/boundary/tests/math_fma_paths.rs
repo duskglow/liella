@@ -148,3 +148,47 @@ fn exp2_logb_pow_fma_build_matches_baseline_bit_for_bit() {
     }
     assert!(selftest::set_math_fma(true));
 }
+
+// s10_3_c_0 (D-10.13), s10_0_g_0: erf and erfc (LIBM-SPECIAL-FAST-TIER-3's in-place paths) give
+// the same correctly rounded result in both builds, and in the default environment raise inexact
+// alone (and underflow for a subnormal result), as the accurate path does.
+#[test]
+fn erf_and_erfc_fma_build_matches_baseline_and_raises_inexact_alone() {
+    use liella_boundary::posix::s10_math::{feclearexcept, fetestexcept};
+    const FE_ALL: i32 = 0x3d;
+    const FE_UNDERFLOW: i32 = 0x10;
+    const FE_INEXACT: i32 = 0x20;
+    if !selftest::set_math_fma(true) {
+        eprintln!("SKIP: this CPU (or its OS) has no FMA; only the baseline build exists here");
+        return;
+    }
+    let mut s = 0x6a09_e667_f3bc_c908u64;
+    let unit = |s: &mut u64| (next(s) >> 11) as f64 * 2f64.powi(-53);
+    // (−7, 7): every branch of both functions; [1, 27.6): erfc's e^(−x²)·Y branch and its end,
+    // subnormal results included; magnitudes down to 2^-60 on both sides of 2^-55.
+    let mut xs: Vec<f64> = (0..100_000).map(|_| unit(&mut s) * 14.0 - 7.0).collect();
+    xs.extend((0..50_000).map(|_| 1.0 + unit(&mut s) * 26.6));
+    xs.extend((0..20_000).map(|_| {
+        let b = next(&mut s);
+        let mag = 2f64.powi(-((b % 60) as i32)) * (1.0 + (b >> 12) as f64 * 2f64.powi(-52));
+        if b & 1 == 0 { mag } else { -mag }
+    }));
+    let n = both(m::erf, |x| liella_math::special::erf(x, Rounding::Nearest).0, &xs);
+    let k = both(m::erfc, |x| liella_math::special::erfc(x, Rounding::Nearest).0, &xs);
+    assert!(n > 2000 && k > 2000, "sample too small: {n} {k}");
+    for build in [true, false] {
+        assert!(selftest::set_math_fma(build));
+        for &x in xs.iter().step_by(7) {
+            for (name, f) in [("erf", m::erf as extern "C" fn(f64) -> f64), ("erfc", m::erfc)] {
+                feclearexcept(FE_ALL);
+                let v = f(x);
+                let raised = fetestexcept(FE_ALL);
+                // Every sampled x is finite and nonzero, so every result is inexact; below 2^-1022
+                // (zero included: erfc x for x above about 27.2) it is tiny, so underflow too.
+                let want = FE_INEXACT | if v.abs() < f64::MIN_POSITIVE { FE_UNDERFLOW } else { 0 };
+                assert_eq!(raised, want, "{name}({x:e}) = {v:e} (FMA build {build}): flags {raised:#x}, expected {want:#x}");
+            }
+        }
+    }
+    assert!(selftest::set_math_fma(true));
+}

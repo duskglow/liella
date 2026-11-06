@@ -670,6 +670,14 @@ fn bessel01(a: &Arg, want_y: bool) -> [Mp; 4] {
     [j0.v, j1.v, y0.v, y1.v]
 }
 
+/// `[J_0(x), J_1(x), Y_0(x), Y_1(x)]` of a positive `float` as double-doubles (the reference of
+/// the `float` fast path's bound test, LIBM-F32-BESSEL).
+#[cfg(test)]
+pub(crate) fn bessel01_dd(x: f32) -> [dd::Dd; 4] {
+    let d = float::decode(x);
+    bessel01(&Arg::of(&d), true).map(mp_to_dd)
+}
+
 /// The double-double value of an `Mp` within the `f64` range.
 fn mp_to_dd(m: Mp) -> dd::Dd {
     let hi = m.to_f64();
@@ -831,23 +839,67 @@ fn ln_mp(v: Mp) -> f64 {
     ln_est(Mp { neg: false, exp: 0, m: v.m }.to_f64()) + v.exp as f64 * LN_2
 }
 
-/// `j0(x)`.
+/// `j0(x)`; `float` takes the fast path first (LIBM-F32-BESSEL).
 pub fn j0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J0, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
     jn(0, x, mode)
 }
 
-/// `j1(x)`.
+/// `j0f` by the accurate path only (the fast path's reference in its tests).
+#[cfg(test)]
+pub(crate) fn j0_accurate(x: f32, mode: Rounding) -> (f32, Status) {
+    jn(0, x, mode)
+}
+
+/// `j1(x)`; `float` takes the fast path first (LIBM-F32-BESSEL).
 pub fn j1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::J1, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
     jn(1, x, mode)
 }
 
-/// `y0(x)`.
+/// `j1f` by the accurate path only (the fast path's reference in its tests).
+#[cfg(test)]
+pub(crate) fn j1_accurate(x: f32, mode: Rounding) -> (f32, Status) {
+    jn(1, x, mode)
+}
+
+/// `y0(x)`; `float` takes the fast path first (LIBM-F32-BESSEL).
 pub fn y0<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y0, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
     yn(0, x, mode)
 }
 
-/// `y1(x)`.
+/// `y0f` by the accurate path only (the fast path's reference in its tests).
+#[cfg(test)]
+pub(crate) fn y0_accurate(x: f32, mode: Rounding) -> (f32, Status) {
+    yn(0, x, mode)
+}
+
+/// `y1(x)`; `float` takes the fast path first (LIBM-F32-BESSEL).
 pub fn y1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
+    if F::PREC == 24 {
+        if let Some((r, s)) = crate::fast32::eval(crate::fast32::Fast::Y1, f32::from_bits(x.to_bits() as u32), mode) {
+            return (F::from_bits(u128::from(r.to_bits())), s);
+        }
+    }
+    yn(1, x, mode)
+}
+
+/// `y1f` by the accurate path only (the fast path's reference in its tests).
+#[cfg(test)]
+pub(crate) fn y1_accurate(x: f32, mode: Rounding) -> (f32, Status) {
     yn(1, x, mode)
 }
 

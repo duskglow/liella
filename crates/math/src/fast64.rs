@@ -138,6 +138,26 @@ fn log_series(x: f64) -> Option<(i32, usize, f64, f64, f64)> {
     Some((e, idx, a.hi, a.lo + ((rl * (1.0 - rh + s.hi) - 0.5 * s.lo) + tail), tail))
 }
 
+/// `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and
+/// `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special`). The reduction is
+/// [`pow`]'s ([`reduce_pow`]: `r` within `2^-96.9` of `z − k·ln2/64`), so by [`exp_kernel`]'s proof
+/// `|e^z − y·2^m| <= |y|·(2^-49·|tail| + 2^-73.8)·2^m` (`th·2^-74 + 2^-101` over `|y| >= 0.994·th`,
+/// with the reduction's `2^-96.9`).
+$(#[$a])*
+$(#[$i])*
+pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
+    let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
+    exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
+}
+
+/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
+/// `x != 1` (the gamma fast tier, `crate::fast_gamma`).
+#[inline(always)]
+pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
+    let (y, tail) = log_kernel(x)?;
+    Some((y, log_eps(y, tail)))
+}
+
 /// [`exp10`]'s reduced argument `(x − k·log10(2)/64)·ln10` as a normalized double-double for
 /// `k = kf = nearest(x·64/log10(2))` and `2^-60 <= |x| <= 325` (LIBM-F64-FAST-KERNELS): the
 /// argument [`exp_kernel`] takes, since `10^x = 2^(k/64)·e^((x − k·log10(2)/64)·ln10)`. One
@@ -388,25 +408,6 @@ fn reduce_exp(x: f64, kf: f64) -> Dd {
 fn reduce_pow(z: Dd, kf: f64) -> Dd {
     let (h, l) = reduce_ln2(z.hi, kf);
     fast_two_sum(h, l + z.lo)
-}
-
-/// `e^z` as [`exp_kernel`]'s `(y, m, tail)` for a double-double `z` with `|z.hi| < 746` and
-/// `|z.lo| <= 2^-44` (the erfc fast tier's `e^(−x²)`, `crate::fast_special`). The reduction is
-/// [`pow`]'s ([`reduce_pow`]: `r` within `2^-96.9` of `z − k·ln2/64`), so by [`exp_kernel`]'s proof
-/// `|e^z − y·2^m| <= |y|·(2^-49·|tail| + 2^-73.8)·2^m` (`th·2^-74 + 2^-101` over `|y| >= 0.994·th`,
-/// with the reduction's `2^-96.9`).
-#[inline(always)]
-pub(crate) fn exp_dd(z: Dd) -> Option<(Dd, i32, f64)> {
-    let kf = dd::nearest_int(z.hi * f64::from_bits(t::SCALES[0]));
-    exp_kernel(reduce_pow(z, kf), dd::to_i32(kf))
-}
-
-/// `ln x` as `(y, eps)` with `|ln x − y| <= eps` ([`log_kernel`], [`log_eps`]) for a positive finite
-/// `x != 1` (the gamma fast tier, `crate::fast_gamma`).
-#[inline(always)]
-pub(crate) fn log_dd(x: f64) -> Option<(Dd, f64)> {
-    let (y, tail) = log_kernel(x)?;
-    Some((y, log_eps(y, tail)))
 }
 
 /// `e^x` for `x` in the accurate path's finite range (`|x| >= 2^-60`, `-746 <= x <= 710`).
@@ -684,7 +685,7 @@ fn integral(x: f64) -> bool {
 /// 0.006³·0.16692·(1 + 4u) < 2^-24.72` and `eps/|y.hi| < 2^-70·(1 + 2^-3.72) < 1.0757·2^-70`;
 /// `RHO_EXP = 1.125·2^-70`.
 #[allow(dead_code)] // the stated bound; the multiplier below is derived from it (bounds tests)
-const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
+pub(crate) const RHO_EXP: f64 = f64::from_bits(0x3b92_0000_0000_0000);
 /// [`pow`] with `dz <= DZ_NEAR = 2^-72` (checked before the test): `eps/|v.hi| = 2^-49·|tail| +
 /// 2^-70 + 1.02·dz` ([`pow_eps`]; the computed `dz` is within `4u` of its real formula) `<
 /// (1.0757 + 0.2551)·2^-70`; `RHO_POW = 1.375·2^-70`.
@@ -707,7 +708,7 @@ const LOG10_NEAR: f64 = f64::from_bits(0x3fc2_e686_e56c_5e53);
 /// The multipliers of [`near`]: for each `rho` above, the least `double` `C` with
 /// `C·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests): `1 + 1.12502·2^-16`,
 /// `1 + 1.37503·2^-16` and `1 + 2.00006·2^-16`.
-const C_EXP: f64 = f64::from_bits(0x3ff0_0012_0014_4018);
+pub(crate) const C_EXP: f64 = f64::from_bits(0x3ff0_0012_0014_4018);
 const C_POW: f64 = f64::from_bits(0x3ff0_0016_001e_402b);
 const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
 
@@ -738,7 +739,7 @@ fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
 /// missed, 2 near not allowed, 3 neither: the accurate path; the callers start it at 4, refused
 /// before the test) for [`nearest_stage`]; the entries discard it.
 #[inline(always)]
-fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64> {
+pub(crate) fn finish(y: Dd, c: Option<f64>, m: i32, eps: impl FnOnce() -> f64, st: &mut u8) -> Option<f64> {
     *st = 2;
     if let Some(c) = c {
         if let Some(v) = near(y, c, m) {
