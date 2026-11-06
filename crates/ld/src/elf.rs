@@ -362,8 +362,8 @@ impl<'a> Elf<'a> {
 
     /// Length in bytes of the program header table (`e_phnum` entries).
     fn table_len(&self) -> u64 {
-        // PHDR_SIZE * u16::MAX fits in u64; checked anyway so no arithmetic can wrap.
-        u64::from(self.header.phnum).checked_mul(phdr_len()).unwrap_or(u64::MAX)
+        // PHDR_SIZE * u16::MAX fits in u64; saturating anyway so no arithmetic can wrap.
+        u64::from(self.header.phnum).saturating_mul(phdr_len())
     }
 
     fn read_phdr(&self, i: u16) -> Option<ProgramHeader> {
