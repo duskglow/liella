@@ -143,6 +143,41 @@ pub(crate) struct Built {
     pub(crate) one_pass: bool,
 }
 
+/// The first-byte map as one contiguous byte range `(lo, hi - lo)`, when it is exactly one
+/// (`[0-9]`, `[a-z]`, a single byte); `None` for an empty map or one with gaps. The scan then
+/// tests a subtraction and a compare per byte instead of a bit of the map (D-NEW).
+fn byte_range(first: &[u64; 4]) -> Option<(u8, u8)> {
+    let n: u32 = first.iter().map(|w| w.count_ones()).sum();
+    let bit = |k: usize, at: u32| u32::try_from(k).ok().and_then(|k| k.checked_mul(64)).map(|k| k + at);
+    let lo = first.iter().enumerate().find(|(_, w)| **w != 0).and_then(|(k, w)| bit(k, w.trailing_zeros()))?;
+    let hi = first.iter().enumerate().rev().find(|(_, w)| **w != 0).and_then(|(k, w)| bit(k, 63 - w.leading_zeros()))?;
+    if hi.checked_sub(lo)?.checked_add(1)? != n {
+        return None;
+    }
+    Some((u8::try_from(lo).ok()?, u8::try_from(hi - lo).ok()?))
+}
+
+/// The index of the first byte of `r` in `lo..=lo + span` (D-NEW): the window's first byte
+/// alone, then sixteen bytes per branch, each byte a subtraction and an unsigned compare with
+/// no variable shift (the chunk test compiles to SSE2 compares), then the tail.
+#[inline]
+fn range_start(r: &[u8], lo: u8, span: u8) -> Option<usize> {
+    let hit = |b: u8| b.wrapping_sub(lo) <= span;
+    match r.first() {
+        None => return None,
+        Some(&b) if hit(b) => return Some(0),
+        Some(_) => {}
+    }
+    let mut base = 0usize;
+    for c in r.chunks_exact(16) {
+        if c.iter().fold(false, |acc, &b| acc | hit(b)) {
+            break;
+        }
+        base += 16;
+    }
+    r.get(base..)?.iter().position(|&b| hit(b)).map(|k| base + k)
+}
+
 fn nomem<T>(r: crate::error::Result<T>) -> Result<T, ReError> {
     r.map_err(|_| ReError::ESpace)
 }
@@ -901,6 +936,8 @@ impl Built {
         let len32 = |n: usize| u32::try_from(n).map_err(|_| ReError::ESpace);
         let mut w: TryVec<u32> = TryVec::new();
         let flags = u32::from(self.icase) | (u32::from(self.multibyte) << 1) | (u32::from(self.can_be_null) << 2) | (u32::from(self.empty_ok) << 3) | (u32::from(self.one_pass) << 4);
+        // Bit 5: the first-byte map is one range, `lo` in bits 8..16 and `hi - lo` in 16..24.
+        let flags = flags | byte_range(&self.first).map_or(0, |(lo, span)| 32 | (u32::from(lo) << 8) | (u32::from(span) << 16));
         for v in [MAGIC, flags, self.start, self.ngroups, self.brefs, self.nsub, self.nodes] {
             nomem(w.push(v))?;
         }
@@ -1211,6 +1248,8 @@ pub struct ProgRef<'a> {
     /// [`Built::one_pass`].
     pub(crate) one_pass: bool,
     first: [u64; 4],
+    /// `first` as one range `(lo, hi - lo)`, when it is one ([`byte_range`], header flag bit 5).
+    first_range: Option<(u8, u8)>,
     report: Recs<'a, 1>,
     insts: Recs<'a, 5>,
     pub(crate) scopes: Recs<'a, 2>,
@@ -1288,6 +1327,10 @@ impl<'a> ProgRef<'a> {
             empty_ok: flags & 8 != 0,
             one_pass: flags & 16 != 0,
             first,
+            first_range: {
+                let [_, lo, span, _] = flags.to_le_bytes();
+                (flags & 32 != 0).then_some((lo, span))
+            },
             report: Recs(report),
             insts: Recs(insts),
             scopes: Recs(scopes),
@@ -1387,6 +1430,9 @@ impl<'a> ProgRef<'a> {
     pub fn first_start(&self, r: &[u8]) -> Option<usize> {
         if self.empty_ok {
             return if r.is_empty() { None } else { Some(0) };
+        }
+        if let Some((lo, span)) = self.first_range {
+            return range_start(r, lo, span);
         }
         let f = self.first;
         let hit = |b: u8| f.get(usize::from(b >> 6)).is_some_and(|w| (w >> (b & 63)) & 1 != 0);
@@ -1528,6 +1574,64 @@ mod class_tests {
         for &(pat, flags) in cases {
             check(pat, flags, &Locale::C);
             check(pat, flags, &utf8);
+        }
+    }
+
+    /// Spec §14.9 (s14_9_c_1_2: regexec finds the leftmost match; no match begins on a byte
+    /// outside the first-byte set): `first_start` returns the first byte `can_start_with`
+    /// accepts, for every byte value at every position of windows that cover the one-byte
+    /// shortcut, the chunk loops (four and sixteen bytes) and their tails (D-NEW).
+    #[test]
+    fn first_start_agrees_with_can_start_with_for_every_byte() {
+        use super::super::cflags::{EXTENDED, ICASE};
+        let utf8 = Locale::c_utf8(b"C.UTF-8");
+        // (pattern, flags, the expected one-range map in the C locale)
+        let cases: &[(&[u8], i32, Option<(u8, u8)>)] = &[
+            (br"[[:digit:]]+", EXTENDED, Some((b'0', 9))),
+            (br"[a-z]+", EXTENDED, Some((b'a', 25))),
+            (b"x", 0, Some((b'x', 0))),
+            (br"[?@]", EXTENDED, Some((0x3f, 1))),
+            (br"[0-?]", EXTENDED, Some((b'0', 15))),
+            (br"[@-Z]", EXTENDED, Some((0x40, 26))),
+            (b"\x7f", 0, Some((0x7f, 0))),
+            (b"\xff", 0, Some((0xff, 0))),
+            (b"\x01", 0, Some((0x01, 0))),
+            (br"[[:alpha:]]", EXTENDED, None),
+            (b"(cat|dog)", EXTENDED, Some((b'c', 1))),
+            (b"(cat|eel)", EXTENDED, None),
+            (br"[^0-9]", EXTENDED, None),
+            (b"hello", ICASE, None),
+            // Can be empty: every position may begin a match, whatever the map holds.
+            (b"a*", EXTENDED, Some((b'a', 0))),
+        ];
+        let lens = [1usize, 2, 3, 4, 5, 7, 8, 15, 16, 17, 19, 31, 32, 33, 47, 50];
+        for &(pat, flags, want) in cases {
+            for (loc, c) in [(&Locale::C, true), (&utf8, false)] {
+                // A lone byte >= 0x80 may not be a valid pattern in UTF-8; it is in C.
+                let Ok(prog) = super::super::compile(pat, super::super::regcomp_syntax(flags), loc) else {
+                    assert!(!c && pat.iter().any(|&b| b >= 0x80), "{pat:?}: compile failed");
+                    continue;
+                };
+                let p = prog.view();
+                if c {
+                    assert_eq!(p.first_range, want, "{pat:?}: one-range map");
+                }
+                assert_eq!(p.first_start(&[]), None, "{pat:?}: empty window");
+                let filler = (0..=255u8).find(|&b| !p.can_start_with(b));
+                for v in 0..=255u8 {
+                    for &len in &lens {
+                        for k in 0..len {
+                            let mut r = std::vec![filler.unwrap_or(v); len];
+                            r[k] = v;
+                            let want = r.iter().position(|&b| p.can_start_with(b));
+                            assert_eq!(p.first_start(&r), want, "{pat:?}: byte {v:#x} at {k} of {len}");
+                            if filler.is_some() {
+                                assert_eq!(want, p.can_start_with(v).then_some(k), "{pat:?}: byte {v:#x} at {k} of {len}");
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
