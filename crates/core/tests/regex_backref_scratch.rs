@@ -107,5 +107,7 @@ fn regex_backref_scratch_reused_across_lengths() {
         assert_eq!(reused(&prog, s, &mut src), fresh(&prog, s), "{:?}", core::str::from_utf8(s));
     }
     assert_eq!(reused(&prog, b"xx bob@bob yy", &mut src), Some((3, 10, vec![(3, 6)])));
-    assert_eq!(reused(&prog, b"bob@bo", &mut src), None);
+    // `b@b` inside it: the group is the single `b`.
+    assert_eq!(reused(&prog, b"bob@bo", &mut src), Some((2, 5, vec![(2, 3)])));
+    assert_eq!(reused(&prog, b"bob@ox", &mut src), None);
 }
