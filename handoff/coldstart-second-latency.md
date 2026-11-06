@@ -1,58 +1,63 @@
-# COLDSTART-SECOND-LATENCY(-3): second_setlocale_en_US / second_mktime_new_york time without instructions
+# COLDSTART-SECOND-LATENCY(-4): second_setlocale_en_US / second_mktime_new_york time without instructions
 
-State: branch task/coldstart-second-latency-3 (from -2's branch). Code commit 48843455 (proposal (a)), then this handoff.
-Result of -3: INCOMPLETE. (a) is implemented, gated and planted green. The N100 / Ivy Bridge timing that judges it
-is queued (nozomi:coldstart-second-latency-3-time-n100, nico:coldstart-second-latency-3-time-ivb). Plan rows:
-D-23.6 (amended), D-7.14 (amended: one TSC rule for gettext and the zone check). Plan: handoff/coldstart-plan-1106/.
+State: branch task/coldstart-second-latency-4 (= -3's branch + this handoff). Code: 48843455 (proposal (a), TSC-gated
+implicit zone check), unchanged in -4. Result of -4: COMPLETE for (a) (N100 not slower; keep); target not reached
+(mktime 1.23x, setlocale 1.34x of glibc on the N100). Plan rows: D-23.6 (amended in -3), D-7.14 (amended in -3).
+Plan: handoff/coldstart-plan-1106/.
 
-## Step 1: N100 counters (before the change)
-nozomi:csl2-pmc-n100 (-2) returned rc 0 but every counter read 0. Cause: the NMI watchdog holds one counter, so a pinned
-group of cycles + instructions + 6 raw events cannot be scheduled on Gracemont, and a group that never runs reads
-offset 0 through rdpmc. Fix: at most 5 raw events per set, a `perf stat` group check that fails the run, and a check
-for all-zero cycles (`~/work/COLDSTART-SECOND-LATENCY-2/run2.sh` on nozomi). Rerun: nozomi:coldstart-second-latency-3-pmc-n100,
-310 processes per side. Medians, net of the empty window N2 (Liella 170 / glibc 192 cycles):
-| window | cycles L / g | instr L / g | L2 hits L / g | load-stall cyc L / g | icache miss L / g | ld_head L1 miss L / g | dTLB walks L / g |
+## Why -3's N100 timing failed (nozomi:coldstart-second-latency-3-time-n100, rc 1 in 0.24 s)
+Its stage.tar was hand-made (target/liella, bench/, xtask/, xtask-bin) without the workspace `Cargo.toml` and
+`bench-stage.manifest`, so `xtask-bin` found no workspace root and listed no benches ("`cbench_opt` is not a benchmark
+... Valid names: ."). -1's tree, made with `cargo xtask bench --stage`, ran `--compare --no-build` fine. Fix: both
+trees staged with `cargo xtask bench --stage <tar> --only cbench_opt` (mei:s2, jobs coldstart-second-latency-4-stage-base
+and -stage-head, rc 0; base = the worktree with 48843455's crates/legacy/src diff reverted, tree 25f47499; head tree
+d2dadd44). Script: nozomi:~/work/COLDSTART-SECOND-LATENCY-4/timing.sh (smoke-tested on mei, ROUNDS=1: rc 0).
+
+## N100 result (nozomi:coldstart-second-latency-4-time-n100, rc 0, 15 min)
+A/B interleaved (A = base, B = head, 5 rounds of A1 B A2 B, ns/op medians):
+| row | base | head | B/A | spread | verdict |
+|---|---:|---:|---:|---:|---|
+| second_mktime_new_york | 621.0 | 615.5 | 0.991 | 6.7% | same |
+| second_setlocale_en_US | 256.0 | 249.0 | 0.973 | 10.8% | NOISY |
+`--compare` on head (5 runs, glibc / Liella ns): second_mktime 492 / 606 (1.23x; -1: 485 / 630, 1.30x);
+second_setlocale 185 / 248 (1.34x; -1: 184 / 261). Verdict: not slower beyond the spread -> keep (a).
+The Ivy Bridge job nico:coldstart-second-latency-3-time-ivb never started (no jobs.tsv row on nico at 08:40Z); its tar
+would have had the same missing-root defect. Not re-queued (the N100 decides).
+
+In-process counters with the head probe (10 rounds per side; medians L / g, raw, N2 = empty window 217 / 193 cycles):
+| window | cycles | instr | L2 hits | load stalls | icache miss | ld_head L1 miss | ifetch stalls |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| S2 setlocale | 769 / 404 | 165 / 182 | 5 / ~0 | 128 / ~0 | 59 / 34 | 55 / 2 | 1 / 0 |
-| M2 mktime | 1285 / 1134 | 1043 / 1295 | 13 / 4 | 161 / 31 | 106 / 73 | 90 / 21 | 0 / 0 |
-Reading: on the N100 both second calls lose time to data loads served from L2 (L1D misses), and setlocale also to
-+25 icache misses; page walks are about 1 per setlocale and 0 per mktime. The setlocale gap (+365 cycles) is the larger
-one on this core and is a data-side problem, not page walks.
-
-## Step 2: (a) done
-`recheck::TscGate` (D-7.14's rule: `tsc_holds`/`tsc_allow`, 2^28 ticks) sits in front of the zone's once-a-second
-`LastCheck` on `time_compat::select`'s lock-free hot path. `TZ` and the generation are compared first, so a changed `TZ`
-is seen at once. No counter, a counter that went backwards, and a forgotten check all read the clock. Tests:
-`recheck::tests::tsc_gate_in_front_of_a_check`, plus `reload` `an_implicit_selection_sees_a_replaced_zone_file_after_the_interval` and
-`a_changed_tz_is_seen_by_the_next_implicit_selection`.
-
-## Step 3: counts (Broadwell-EP build host, loaded; kanon:coldstart-second-latency-3-counts2)
-Probe M2 instructions 1228 -> 1165 (-63; glibc 1522). L1D misses 54.8 -> 54 (no change), L1I about the same. Cycles on
-this loaded host moved with the empty window (N2 1696 -> 1583) and settle nothing. cbench_opt compare, loaded host:
-second_mktime 584 vs glibc 736 ns, second_setlocale 217 vs 340 ns. So on Broadwell (a) removes instructions but not
-the L1D misses: the +19 misses are the zone's spread (proposal (b)) and the stack, not the vvar line.
+| S2 setlocale | 825 / 605 | 397 / 411 | 8 / 2 | 132 / 26 | 57 / 35 | 64 / 10 | 104 / 44 |
+| M2 mktime | 1676 / 1305 | 1196 / 1524 | 17 / 8 | 211 / 65 | 107 / 75 | 123 / 31 | 96 / 103 |
+mktime: Liella runs 330 fewer instructions and still loses ~140 cycles to L2-served loads (ld_head 123 vs 31): the
+data side, i.e. (b). dTLB/iTLB walks 0 in both windows on this run.
 
 ## Next step (in order)
-1. Read nozomi:coldstart-second-latency-3-time-n100 (`~/logs/<label>.log`: the cbench_opt `--compare` table, then the
-   after-probe sets A/B; subtract N2) and nico:coldstart-second-latency-3-time-ivb. second_mktime ratio before (-1, N100):
-   630 vs 485 ns (1.30x). If the N100 is not slower than before -> COMPLETE (land (a)). If it measured worse, revert 48843455
-   (keep the tests) and record a NEGATIVE row.
-2. Coordinator step 4: if N100 mktime is still above 1.10x, do (b), one block per zone, as its own commit with its own
-   counts and timing (the counters above point there: +9 L2 hits per mktime).
-3. (c) setlocale: the N100 now shows the evidence: L1D misses served from L2 (+5 L2 hits, +128 load-stall cycles,
-   ld_head 55 vs 2), 1 dTLB walk, +25 icache misses. Not started (coordinator rule); it is the bigger gap on the N100.
+1. (b) one block per zone (coordinator-approved, internal layout): `time::Zone` (crates/core/src/time/zone.rs:118)
+   holds five separate `TryVec`s (names, types, trans, leaps, rule_years), which is the "five anonymous mappings" of -2.
+   Put them in one allocation (one aligned byte block with per-array offsets/lengths, read through slice accessors;
+   rule_years stays lazily filled but reserved in the same block, or allocated alongside only for a DST rule), so a
+   mktime touches consecutive lines. Its own commit, counts on a build host (L1D misses must drop from 54) and its own
+   N100 A/B (stage both trees with `cargo xtask bench --stage`, reuse timing.sh with base = current head).
+   Size: M (zone.rs is 61 KB: read by range; note `grep` here is ugrep with -I and skips zone.rs as binary: use
+   `/usr/bin/grep -a`).
+2. (c) setlocale, profile-only so far (proposal, no code): S2 is at parity by instructions (397 vs 411) but +6 L2 hits,
+   +106 load_l2_hit stall cycles, ld_head 64 vs 10, +22 icache misses and +60 ifetch stall cycles: the second
+   setlocale's code and data are cold in L1, not page walks (0 walks here; ~1 in -3's run). Proposal: (c1) put the
+   second-call fast path (name compare against the current locale, return) and its data (current name, category
+   table) in one hot section/line group (hottext.rs exists for this), (c2) keep the per-category current names in one
+   cache-line-packed array instead of per-category objects. Measure ld_head and icache.misses per call before coding.
 
 ## Not to redo
--1/-2 probes, traces and re-times; the N100 pre-change counters above; the event-group limit (5 raw + cycles + instr).
+-1/-2/-3 probes, traces and re-times; the N100 pre-change counters (-3); the event-group limit (5 raw + cycles +
+instr); the staged-tree cause above.
 
 ## Report
-- Commits: 48843455 (gate + tests + D-23.6/D-7.14 amendments), this handoff + report json.
-- Jobs on the final code head (kanon:kn1): coldstart-second-latency-3-lint (clippy, static, recheck unit + reload, rc 0),
-  coldstart-second-latency-3-gate (affected --base origin/next: 7 suites, 4681 passed, 0 failed, 3 conformance;
-  peak 12G, rc 0), coldstart-second-latency-3-plants (5 CAUGHT, 0 SURVIVED, 0 WARN), coldstart-second-latency-3-counts2 (rc 0).
-  N100: coldstart-second-latency-3-pmc-n100 (rc 0, pre-change data). Queued: nozomi:...-time-n100, nico:...-time-ivb.
-- Superseded: kanon:coldstart-second-latency-3-counts (rc 1: I named a row, `second_mktime_new_york`, as a bench; the
-  rows are in cbench_opt). nozomi:csl2-pmc-n100 (-2; all zero, see step 1).
-- Process slip: one call held an empty heredoc (`python3 - <<'X'` with no body, a no-op); a remote `cmd && setsid ... &`
-  held the ssh open until the harness stopped it (the remote job finished rc 0).
+- Commits in -4: this handoff + handoff/reports/COLDSTART-SECOND-LATENCY-4.json (no code change).
+- Jobs on the final head (mei:s2): coldstart-second-latency-4-lint (clippy --workspace --all-targets --all-features,
+  xtask static), coldstart-second-latency-4-gate (affected --run --base origin/next), coldstart-second-latency-4-plants
+  (-3's 5 plants, `cargo xtask plants`); results in the hand-back. Timing: nozomi:coldstart-second-latency-4-time-n100.
+- Superseded: nozomi:coldstart-second-latency-3-time-n100 (rc 1, stage without workspace root); mei:
+  coldstart-second-latency-4-smoke (smoke test of the timing script, 1 round, not a verdict).
+- Process slip: one local grep with an empty file list read stdin and hung (killed by PID).
 - RULING NEEDED: none. Refusals: none.
