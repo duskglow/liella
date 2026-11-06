@@ -1,22 +1,19 @@
-# TIMING-IVB-STRSCAN-DISPATCH (handoff)
+# TIMING-IVB-STRSCAN-DISPATCH (handoff; -2 continuation: timing)
 
-State: branch task/timing-ivb-strscan-dispatch, code commit 9b6419cc (scan.S only), later commits handoff/ only.
-Role mei:~/w/s2 (Skylake-SP, AVX2). Ivy Bridge timing NOT DONE: nico booking #40 (until 22:54Z); jobs -ivb (no root Cargo.toml in the stage: xtask fell back to the build path) and -ivb2 (bench --no-build: "libc.a is older than its" sources after tar extraction) failed. Stage exactly per handoff/timing-sweep-1105.md next time.
+State: branch task/timing-ivb-strscan-dispatch-2 (= task/timing-ivb-strscan-dispatch + handoff), code commit 9b6419cc
+(csys/src/machine/scan.S only); later commits handoff/ only. -2 role keke:~/w/n1 (lint job rc 0 on the final head).
+Run 1 role mei:~/w/s2: gate timing-ivb-strscan-dispatch-gate rc 0, plants timing-ivb-strscan-dispatch-plants2 7/7 CAUGHT.
 
 ## Change (csys/src/machine/scan.S)
-- strchr / strchrnul: the entry's `jae` (taken on every SSE2-class call) now lands directly on the SSE2 64-byte head,
+- strchr / strchrnul: the entry's `jae` (taken on every SSE2-class call) lands directly on the SSE2 64-byte head,
   aligned to 32 bytes. Before: entry `jae` to a far block, a second mask load (`liella_machine_schr_mask`) and a
-  second taken branch back to the head at a mid-window address. The head's own compare (ecx < 4032) already separates
-  SSE2 in-page calls; on the AVX2 level ecx >= 4032 always holds there, so AVX2 page-end and NULL calls leave through
-  the existing NULL test into the aligned body. `liella_machine_schr_mask` and its setter are removed (no other user).
-  Verified in the built libc.so.6: strchr's `jae` target is strchr+0xa0, strchrnul's strchrnul+0x80 (32-aligned).
-- strncmp: `.Lsnc_pt` (the entry's taken branch) is 32-aligned; the SSE2 level (short_lim 0) falls through the exact
-  page test into the SSE2 steps (before: a taken `jae` to the adjacent `.Lsnc_old`); the AVX2 test of b moved out of
-  line (`.Lsnc_ptb`). Two dispatch loads remain on the SSE2 strncmp path (rshort_mask, short_lim; both predicted).
-- AVX2 level cost: a page-end call (s page offset 0 or 4033..4095) now runs `cmpl $4032; jae` (+2 instructions, one
-  load fewer, one more taken branch); no bench row reaches it (AVX2 counts unchanged on every row below).
+  second taken branch back to the head. The head's own compare (ecx < 4032) separates SSE2 in-page calls; AVX2
+  page-end and NULL calls leave through the existing NULL test. `liella_machine_schr_mask` and its setter are removed.
+- strncmp: `.Lsnc_pt` is 32-aligned; the SSE2 level falls through the page test into the SSE2 steps (before: a taken
+  `jae` to the adjacent `.Lsnc_old`); the AVX2 test of b moved out of line (`.Lsnc_ptb`).
+- AVX2 level cost: a page-end call now runs `cmpl $4032; jae` (+2 instructions, one load fewer); no bench row reaches it.
 
-## Results (mei, instructions Liella/glibc, cbench_hot, counted runs; before = next ff125cce, after = this branch)
+## Instruction counts (run 1, Skylake-SP host, Liella/glibc; before = next ff125cce)
 | row | AVX2 before/after | SSE2 class before/after |
 |---|---|---|
 | strchr_16_hit | 1.077 / 1.076 | 1.063 / 1.000 |
@@ -26,20 +23,45 @@ Role mei:~/w/s2 (Skylake-SP, AVX2). Ivy Bridge timing NOT DONE: nico booking #40
 | strchrnul_16_miss | 1.042 / 1.042 | 0.736 / 0.698 |
 | strchrnul_64_hit / _miss | 1.000 / 1.000 | 1.038 / 1.000 |
 | strncmp_eq16 / diff8 / names64 | 1.167 / 1.133 / 1.077 unchanged | 1.015 / 1.436 / 1.072 unchanged |
-SSE2-class cycles ratios on the Skylake-SP host (loaded, not a verdict): strchr 0.99-1.02, strchrnul 1.00-1.02 (before 1.06-1.07).
-Ivy Bridge time ratios: NOT MEASURED (see State).
 
-## Jobs (mei unless named)
-gate timing-ivb-strscan-dispatch-gate rc 0 (clippy, static, affected --base origin/next); plants
-timing-ivb-strscan-dispatch-plants2 rc 0 (7/7 CAUGHT, 0 WARN); counts -before2 / -after rc 0; layout and stage2 rc 0.
-Superseded: -plants (rc 0, 2 WARN-NO-MSG: regexes fixed), -before (stopped: full timing rounds, replaced by counters-only).
+## Timing (-2)
+Method: `cargo xtask bench --stage` on keke:~/w/n1 (XTASK-BENCH-STAGE), two trees differing ONLY in scan.S:
+before = next 730f416b (manifest tree 40734fe8), after = next + this branch's scan.S (scratch commit f4235d69, not
+pushed; scan.S byte-identical to this branch's head, tree b6d73ecf). Both tars copied to the booked hosts (nico #47
+Ivy Bridge E3-1220L v2, nozomi #48 N100; cancelled after) and run under ~/bin/timing by
+`run.sh 5 3`: `./xtask-bin bench --no-build --staged --counters --runs 5 --rows <11 rows>`, alternating
+before/after three times (15 paired rounds per row). Analysis: handoff/TIMING-IVB-STRSCAN-DISPATCH-2-analyze.py
+(L after/before = median of paired per-round Liella ns ratios; glibc after/before is the drift check).
+Jobs: nico:timing-ivb-strscan-dispatch-2-nico rc 0 (12 min, load ~1), nozomi:timing-ivb-strscan-dispatch-2-nozomi rc 0.
+
+Ivy Bridge (SSE2 class) - every row faster, none slower:
+| row | L/g time before -> after | Liella after/before | glibc drift | instr L/g before -> after |
+|---|---|---|---|---|
+| strchr_16_hit | 1.318 -> 1.116 | 0.847 | 1.000 | 1.063 -> 1.000 |
+| strchr_16_miss | 1.164 -> 0.919 | 0.789 | 1.000 | 0.750 -> 0.714 |
+| strchr_64_hit | 1.376 -> 1.135 | 0.826 | 1.000 | 1.036 -> 1.000 |
+| strchr_64_miss | 1.469 -> 1.287 | 0.875 | 0.999 | 1.036 -> 1.000 |
+| strchrnul_16_hit | 1.557 -> 1.224 | 0.786 | 1.000 | 1.069 -> 1.000 |
+| strchrnul_16_miss | 1.000 -> 0.750 | 0.750 | 1.000 | 0.736 -> 0.698 |
+| strchrnul_64_hit | 1.535 -> 1.267 | 0.826 | 1.000 | 1.038 -> 1.000 |
+| strchrnul_64_miss | 1.439 -> 1.187 | 0.825 | 1.001 | 1.038 -> 1.000 |
+| strncmp_diff8 | 1.752 -> 1.585 | 0.905 (spread 0.24, bimodal host) | 1.000 | 1.436 unchanged |
+| strncmp_eq16 | 1.265 -> 1.159 | 0.917 | 1.000 | 1.015 unchanged |
+| strncmp_names64 | 1.000 -> 0.968 | 0.968 | 1.000 | 1.072 unchanged |
+Cycles ratios match the time ratios within 0.01 (counters.tsv of the same runs).
+
+N100 (AVX2, no-regression check): all 11 rows Liella after/before 1.000, glibc drift 1.000, instructions identical
+(strchr 0.73-0.91, strchrnul 0.70-0.82, strncmp 0.85-1.00 of glibc's time). keke smoke run (Zen 1, AVX2, 1 round,
+loaded, not a verdict): after/before 0.99-1.00.
+
+Target (time <= 1.05 on the 8 strchr/strchrnul rows) NOT reached: the four misses are at or below glibc
+(0.75-0.92), the hits remain 1.12-1.29 at instruction parity (1.000), so the rest of the gap is IPC, not count.
 
 ## Open / next step
-1. Read the nico timing job; target time ratio <= 1.05 on the 8 strchr/strchrnul rows. If strchr is still slow, profile
-   (perf stat idq_uops_not_delivered) the new layout: the SSE2 head's four 16-byte blocks each span windows.
-2. strncmp_eq16 (instructions 1.015, front end ~11% of its gap per TIMING-REOPEN-1105): the remaining gap is load-use
-   latency of the D-4.21 re-read of the deciding bytes after the vector compare (.Lsnc_hit -> .Lsnc_byte); a follow-up
-   could decide from the loaded vector (as strchr does) - not attempted here. strncmp_diff8 (1.436 instr, SSE2) is the
-   larger strncmp gap.
-3. N100 (AVX2) timing for no regression not run: AVX2 instruction counts are unchanged on every row and the AVX2 fast
-   path's code is byte-identical up to its first taken branch; only page-end AVX2 calls changed.
+Verdict: lands (faster on every Ivy Bridge row, no change on the AVX2 class). Not to redo: staging, timing, counts.
+1. Ivy Bridge strchr/strchrnul hit rows (1.12-1.29 time at instruction parity): profile IPC on the booked host
+   (perf stat idq_uops_not_delivered / resource stalls) of the SSE2 head; candidates: the head's four 16-byte blocks
+   spanning 16-byte fetch windows, the hit path's bsf/tzcnt-to-result latency. Stage with `bench --stage` as here.
+2. strncmp_diff8 (1.436 instructions, 1.585 time, SSE2) is the largest strncmp gap; strncmp_eq16 (1.159 time): the
+   D-4.21 deciding-byte re-read's load-use latency (decide from the loaded vector instead).
+3. Ivy Bridge runs of strncmp_diff8 are bimodal (spread 0.24 of the paired ratio, as TIMING-NSCACHE-FIRSTCALL saw).
