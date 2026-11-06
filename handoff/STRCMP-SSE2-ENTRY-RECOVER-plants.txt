@@ -1,0 +1,10 @@
+# STRCMP-SSE2-ENTRY-RECOVER plants: strcmp's entry and SSE2 head page decisions (csys/src/machine/scan.S).
+# machine_scanners runs strcmp on both scan levels (strcmp_head_finds_every_difference_in_strings_ending_at_a_page_end).
+# SSE2 head: a's page test removed (a near its page end reads the 64-byte head across the page end).
+sse2-page-a | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_s_head:.*?)cmpl\s+\$4031, %ecx/$1cmpl \$4095, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# SSE2 head: b's page test removed.
+sse2-page-b | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_s_head:.*?)cmpl\s+\$4031, %edx/$1cmpl \$4095, %edx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# SSE2 head: a's page limit one too high (the 65-byte window from a - 1 at offset 4032 ends one byte past the page).
+sse2-page-a-off1 | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?\.Lstrcmp_s_head:.*?)cmpl\s+\$4031, %ecx/$1cmpl \$4032, %ecx/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
+# Entry: the level-folded test inclusive (a at vlim takes the AVX2 head, whose 129-byte window then crosses a's page end).
+entry-vlim-incl | csys/src/machine/scan.S | perl:s/(liella_machine_strcmp:.*?)jb \.Lstrcmp_v_first/$1jbe .Lstrcmp_v_first/s | cargo test -p liella-boundary --test machine_scanners | msg:strcmp.*FAILED|SIGSEGV
