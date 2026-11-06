@@ -1,0 +1,11 @@
+{"task": "TIMING-N100-SCAN-64K-3", "model": "opus", "tokens": null,
+ "result": "SSE2 memchr/rawmemchr paths pinned at their base offsets (AVX2 long paths in subsection 1): Ivy Bridge back to base on all 8 rows (memchr_16_mix 1.000 vs +14%), N100 memchr_64k -8.2%, memchr_4k -4.7%, rawmemchr_4k -1.2%; pf512 not adopted (Skylake-SP timing still queued)",
+ "branch": "task/timing-n100-scan-64k-3", "head": null,
+ "gate": {"affected": "timing-n100-scan-64k-3-gate (running at hand-back)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW placeholder for the SSE2 layout-pin decision row (s04)", "recommendation": "reserve a D-4 id and replace D-NEW in scan.S and the row"}],
+ "informational": ["pf512 (#3371): N100 rawmemchr_64k 0.870, memchr_64k 0.940, other rows 0.998-1.003; Ivy Bridge flat; no instr_limits rows for 4k/64k; Skylake-SP job mei:timing-n100-scan-64k-3-skx queued (booking 71)", "plants WARN-NO-MSG x3 were SIGSEGV catches; raw-256-lo also needed |SIGSEGV"],
+ "refused": [],
+ "improvement": "the timing staging recipe (Cargo.toml + crates/ csys/ in the tar) should be a repo xtask (bench --stage) instead of per-story scripts",
+ "next_step": "analyze mei:timing-n100-scan-64k-3-skx; adopt pf512 only if Skylake-SP times no row slower",
+ "report_file": "handoff/TIMING-N100-SCAN-64K.md",
+ "jobs": ["mei:timing-n100-scan-64k-3-gate", "mei:timing-n100-scan-64k-3-plants2", "nico:timing-n100-scan-64k-3-ivb", "nozomi:timing-n100-scan-64k-3-n100"]}
