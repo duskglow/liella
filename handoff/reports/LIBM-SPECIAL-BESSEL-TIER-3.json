@@ -1,0 +1,12 @@
+{"task": "LIBM-SPECIAL-BESSEL-TIER-3", "model": "opus", "tokens": null,
+ "result": "Merged origin/next: the Bessel tables are now their own generated family file coeffs/bessel.rs (byte-identical body), kernel unchanged; gate FULL rc 0, plants 10 CAUGHT + 1 EQUIVALENT, counts j0 1.20x j1 1.22x y0 1.14x y1 1.15x (unchanged)",
+ "branch": "task/libm-special-bessel-tier-3", "head": "88961b83",
+ "gate": {"affected": "10885 passed / 0 failed (FULL, escalated by affected; conformance 117 / 0)", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The branch never had boundary wrappers for j0/j1/y0/y1 (they go through the generated s10_math_gen.rs); next's hot/bessel.rs is empty, so there was nothing to move into the Bessel hot module.", "xtask affected escalates any change to the hand-written generator crates/mathtools/src/tables.rs to FULL: its 'generated source' rule matches every file named tables.rs. Selecting the tests of the files the generator writes would keep generator changes on the direct tier.", "Target not reached: by instructions j0 1.20x, j1 1.22x, y0 1.14x, y1 1.15x of the reference; in time about 1.4x on Zen 1."],
+ "refused": [],
+ "improvement": "The affected classifier should match generated files by their @generated header (or by path), not by the file name tables.rs; this run and run 2 each spent a 50-minute FULL gate on a generator glue change.",
+ "next_step": "Build the Bessel Taylor kernel with two_prod_fma behind the existing FMA dispatch (bit-identical where two_prod is exact), then add hot wrappers in crates/boundary/src/hot/bessel.rs, measuring each.",
+ "report_file": "handoff/libm-special-bessel-tier.md",
+ "jobs": ["keke:libm-special-bessel-tier-3-gate", "keke:libm-special-bessel-tier-3-plants", "keke:libm-special-bessel-tier-3-counts", "keke:libm-special-bessel-tier-3-lint"]}
