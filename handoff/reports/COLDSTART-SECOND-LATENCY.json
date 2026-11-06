@@ -1,0 +1,12 @@
+{"task": "COLDSTART-SECOND-LATENCY", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: N100 re-time confirms second_setlocale_en_US 1.42x (261 vs 184 ns, ranges disjoint) and second_mktime_new_york 1.30x (630 vs 485 ns); fresh-process aggregate counters (1500 runs) do not resolve the per-call latency; no code change",
+ "branch": "task/coldstart-second-latency", "head": null,
+ "gate": {"affected": "not run (no code change)", "peak": null}, "accepted_first_attempt": null,
+ "jobs": ["nozomi:CSL-n100", "nozomi:CSL-lat-n100", "nozomi:CSL-lat2-n100"],
+ "rulings": [],
+ "informational": ["bench --staged --counters prints no glibc time for budget (second_*/first_*) rows; use --compare --no-build in the staged tree to get the ratio",
+                   "aggregate per-call deltas on N100: 2nd S Liella cyc:u +926 instr:u +177 dTLB-load +2 LLC +88; glibc cyc:u -566 instr:u +202; 2nd M Liella cyc:u +1414 instr:u +1071; glibc cyc:u +2075 instr:u +1322; no faults; cycle deltas are within whole-process noise"],
+ "refused": [],
+ "improvement": "planning re-times that decide budget-row ratios should run --compare --no-build (the --counters bench prints no glibc time for second_* rows), which would have saved this story a re-run",
+ "next_step": "in-process perf_event_open counters around the single second call (copy of cbench_opt cold child), N100 booked + build host, then Liella perf record by symbol for dTLB/cycles",
+ "report_file": "handoff/coldstart-second-latency.md"}
