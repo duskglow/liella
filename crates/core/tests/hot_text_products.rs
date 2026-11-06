@@ -214,6 +214,32 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
     assert!(t <= TOOL_BOUND, "coreutils-shaped program: {t} page faults > {TOOL_BOUND} (hot-text list stale? run tools/hottext/regen.sh with a coreutils program)");
 }
 
+/// "fork" mode: the minor faults of a `fork` child that calls `_exit(0)` (the second of two, from
+/// `wait4`'s rusage). `fork` copies no page tables of the file-backed text, so the child faults
+/// once per 64 KiB text window its path touches (fork return, child reset, `_exit`) on top of its
+/// copy-on-write writes (stack, thread block, data). TIMING-COV-FORK-COW-FAULTS: before the fork
+/// path joined the hot list (tools/hottext/probes/p_fork.c), the path spanned 9 windows.
+/// Calibration (Zen 1 host, this test, every run identical): old list, release products 8 and fast
+/// products 13 (perf page-fault addresses: 9 text faults, 4 writes); regenerated list, release 6, fast
+/// 7. Bound = the highest count with the list, 7, plus 2 (the rule above); the old list on fast
+/// products (the gate's) reads 13.
+const FORK_BOUND: u64 = 9;
+
+#[test]
+fn init_fork_child_stays_within_its_page_fault_bound() {
+    // No spec clause (layout of the products): the fork child's text path is grouped in the hot
+    // text, so a child that only exits faults on few text windows.
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_fork");
+    build(&exe);
+    let f = faults(&exe, "fork");
+    eprintln!("minor faults: fork child {f} (bound {FORK_BOUND})");
+    assert!(f <= FORK_BOUND, "fork child: {f} page faults > {FORK_BOUND} (fork path left the hot group? run tools/hottext/regen.sh)");
+}
+
 /// HOTTEXT-COLD-STARTUP: start-up's machine entry points (each in its own `.text.<f>` section of
 /// its `.S` file) and its `#[cold]` functions (rustc's `.text.unlikely.<f>`) are in the hot group
 /// of `libc.a`. Outside it, they sat in windows that moved with unrelated code (a 0-60 KiB `.text`
