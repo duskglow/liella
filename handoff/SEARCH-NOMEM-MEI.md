@@ -31,9 +31,11 @@ Branch task/search-nomem-mei, cut from origin/next 41b8737b. Role mei:~/w/s2; ke
 ## Results
 - mei try2 (8 runs x 2 configurations): 16/16 pass. clippy + static clean (job search-nomem-mei-lint, before the last edit;
   rerun at the head of the gate job).
+- 50x loops DONE: mei:search-nomem-mei-loop50 rc 0 (exports 50/50, plain 50/50; 6 CPUs, 2 nodes); keke:search-nomem-mei-loop50
+  rc 0 (exports 50/50, plain 50/50; 7 CPUs). Both plants runs print WARN-DEV-SHM (copy under /dev/shm); search_nomem does not
+  mount /dev/shm, so it does not bear on these plants.
 - PENDING (started detached, collect with `~/bin/jobwait <label>` on the host): mei: search-nomem-mei-gate (clippy,
-  static, `cargo xtask affected --base origin/next`), search-nomem-mei-loop50 (50 runs x 2 configs, 8 parallel),
-  search-nomem-mei-plants; keke: search-nomem-mei-loop50, search-nomem-mei-plants.
+  static, `cargo xtask affected --base origin/next`), search-nomem-mei-plants; keke: search-nomem-mei-plants.
 - Plants (~/work/search-nomem-mei/plants.txt on both hosts): grow-ignores-nomem (core/src/search.rs growth failure arm
   ignored), hcreate-ignores-nomem (search_c.rs hcreate ignores a failed segment). Expected CAUGHT; not yet read.
 
