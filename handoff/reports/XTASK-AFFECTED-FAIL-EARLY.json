@@ -1,0 +1,34 @@
+{
+ "task": "XTASK-AFFECTED-FAIL-EARLY",
+ "model": "opus",
+ "tokens": null,
+ "result": "a failed test step of cargo xtask affected now names its failing tests (<=10), their first 5 panic lines and the log line under its FAIL line (D-X.29)",
+ "branch": "task/xtask-affected-fail-early",
+ "head": "c6221233",
+ "gate": {
+  "affected": "212 passed / 0 failed (mei:xafe-gate, rc 0)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the per-crate Some(c) call site has no plant (no failing fixture in a product crate); the xtask-step e2e plant covers the same hookup",
+  "nextest on the build hosts indents captured output under 'stdout ───'/'stderr ───' headers that do not name the test; the parser handles both that and the older named headers"
+ ],
+ "refused": [],
+ "jobs": [
+  "mei:xafe-check2",
+  "mei:xafe-e2e",
+  "mei:xafe-check3",
+  "mei:xafe-gate",
+  "mei:xafe-plants2"
+ ],
+ "superseded": [
+  "mei:xafe-check1",
+  "mei:xafe-plants"
+ ],
+ "plants": "12 CAUGHT / 0 SURVIVED / 0 WARN",
+ "improvement": "with `cd dir && A & B &` over ssh the cd applies only to A's background subshell; developer-flow.md could show `cd dir; A & B &` for two detached jobs",
+ "next_step": "coordinator lands it after XTASK-AFFECTED-CONFORMANCE-OUTPUT",
+ "report_file": "handoff/XTASK-AFFECTED-FAIL-EARLY.md"
+}
