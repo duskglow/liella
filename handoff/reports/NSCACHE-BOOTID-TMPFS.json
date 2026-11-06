@@ -1,0 +1,28 @@
+{
+ "task": "NSCACHE-BOOTID-TMPFS",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: tmpfs boot-ID skip, tests, D-16.10 amendment and plants pushed; gate/plants/counts queued on keke, not run",
+ "branch": "task/nscache-bootid-tmpfs",
+ "head": "7bd7966d",
+ "gate": {
+  "affected": "queued (nscache-bootid-tmpfs-gate), not run",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "keke was full (28/28 cores) at 00:06-00:17Z, so all jobs are still queued",
+  "local host has no cargo; even compilation is unverified until the gate runs",
+  "the ops tools that sync and run jobs are not named in the brief; I used the ops repo's tools/sync_role.sh and vm_ssh.sh library, plus ~/bin/jobrun, gate and kill-label on keke"
+ ],
+ "refused": [],
+ "jobs": [
+  "nscache-bootid-tmpfs-gate",
+  "nscache-bootid-tmpfs-plants",
+  "nscache-bootid-tmpfs-counts"
+ ],
+ "improvement": "Briefs should name the sync and run commands (sync_role.sh, jobrun) and the host queue state; an agent whose host is full spends its budget finding that out",
+ "next_step": "collect the gate, plants and counts on keke; on red, fix and rerun only the nscache test; add the after counts next to -2's 129.5k/8 faults",
+ "report_file": "handoff/NSCACHE-BOOTID-TMPFS.md"
+}
