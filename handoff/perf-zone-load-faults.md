@@ -1,68 +1,79 @@
-# PERF-ZONE-LOAD-FAULTS: the first localtime_r's heap faults (zone load)
+# PERF-ZONE-LOAD-FAULTS(-2): the first localtime_r's faults (zone load)
 
-State: branch task/perf-zone-load-faults (stacked on PERF-LOCALTIME-FIRST-SECOND-MKTIME, head 498fa5f9 inherited),
-code commit da632ecd. Role keke:~/w/n1 (Zen 1). Decisions in force: D-23.6, D-7.14. No new decision row (none reserved;
-the change is local: sizing of private tables).
+State: branch task/perf-zone-load-faults-2 (continues task/perf-zone-load-faults, stacked on
+PERF-LOCALTIME-FIRST-SECOND-MKTIME). Code commits: da632ecd (one allocation per table, run 1), 61ac20c4 (hot-text
+pin, run 2). Role run 2: mei:~/w/s1 (Skylake-SP). Decisions in force: D-23.6, D-7.14. No new decision row (none
+reserved; the pin is a local layout detail recorded here and in the test comments).
 
-## What was measured (step 1)
-Oracle `page_faults localtime` (new mode in crates/core/tests/oracle/page_faults.c: TZ=America/New_York, ru_minflt
-around the first localtime_r only), static Liella build, `setarch -R`, 6 runs; perf record of page-faults with
-addresses on the Liella binary only (scratch probe keke ~/work/perf-zone-load-faults/probe.sh, outputs faults-base.txt,
-faults-new.txt). Every run identical: **25 before, 22 after.** (This oracle starts with a nearly empty heap; the
-predecessor's 18 was the bench's cold child, where earlier calls already opened some heap regions.)
+## Counts (fault oracle crates/core/tests/oracle/page_faults.c, static build, no ASLR, every run identical)
+| mode | before run 1 | after run 1 | after run 2 (61ac20c4) |
+|---|---|---|---|
+| localtime (first localtime_r, load included) | 25 (Zen 1) | 22 (Zen 1 and Skylake-SP) | **20** (Skylake-SP) |
+| mktime (first mktime after it) | 0 | 1 (gate red) | **0** |
+| localtime_mktime (new mode: both together) | - | (22 + 1 per call) | **20** |
+glibc's first localtime_r: 4 (original brief). Probe: mei ~/work/PERF-ZONE-LOAD-FAULTS-2/probe.sh (jobs
+perf-zone-load-faults-2-probe-a = inherited head, -probe-b = pinned).
 
-Before: 13 heap faults = 4 allocator metadata pages (one per refill of a new size class) + 9 data pages, one per size class:
-the path (grown 19 -> 38 bytes: realloc copy), the file bytes (3553), the transitions (3776), the parser's temporary
-TypeRecord table (144), the zone's types, the names table (grown 8 -> 16 -> 32: realloc copies), the rule-years table
-(4.8 KiB filled with the sentinel at load: 2 pages), the legacy `copy(tz)` and the Entry box.
+## Run 2: what changed
+* Cause of run 1's red gate (perf page-fault addresses): `civil::days_from_civil64` sat in the hot group behind
+  strftime's functions, in the next 64 KiB window after the localtime block (0x450000 vs 0x44xxxx); the old longer load
+  happened to touch that window, the leaner one does not.
+* `crates/libc-so/hot-text.list`: the mktime path (mktime, zone::mktime, implicit, resolve_in, days_from_civil64)
+  moved from behind strftime to right behind the localtime block; four zone-load functions the list lacked (new or
+  renamed since the last regen) added to the block: `time::zone_path`, `TryVec<(i64,u8)>::resize` (transitions),
+  `rule::when_of`, `Zone::kind_period`. Not moved: `tsc_probe`/`liella_sys_prctl`/`rdtsc` and legacy `finish_grow`
+  (shared with gettext and nss paths; moving them could cost those programs a window: untested idea, next step).
+* `tools/hottext/probes/p_cold.c`: mktime before strftime, so a regen produces the same order (merge.py: the new
+  trace's first-touch order wins).
+* Tests (hot_text_products.rs): new `init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound`
+  (LOCALTIME_MKTIME_BOUND 22 = 20 + 2) beside the unchanged per-call tests; LOCALTIME_BOUND 24 -> 22. The mktime test
+  (bound 0) not loosened.
+* Plants: handoff/perf-zone-load-faults-2.plants (mktime-pin-lost: the mktime test must fail; rule-years-grown: table
+  x4, the combined test must fail).
 
-## What changed (step 2)
-* tzif.rs: the type records stay in the file's bytes (`Tzif::type_records`, read with `types()`), checked in place;
-  no temporary table.
-* zone.rs `from_tzif`: the names table is reserved once (designations + footer names bound), the types exactly.
-* time.rs `zone_path`: the exact length reserved up front.
-* The header counts were ALREADY bounded by the file length before any table is sized (`block` checks `block_len`
-  first; the transitions were already sized from the header). Not changed; now pinned by a test.
+## RULING NEEDED: rule-years zeroed allocation (coordinator ruling #3727's condition is NOT met)
+There is no existing TryVec -> boundary allocation hook: `TryVec` wraps `alloc::Vec` and its `try_reserve*` reach the
+global allocator directly; core (`forbid(unsafe)`, generic over `Sys`) cannot call liella-boundary (boundary depends
+on core). A fallible zeroed table therefore needs (a) a NEW seam (a `Sys` method or an injected function) and (b) a new
+kind of unsafe outside the `allocator` category (`unsafe impl GlobalAlloc` only):
+```rust
+// liella-boundary heap.rs (proposed, not built)
+pub fn try_zeroed_slots<T: ZeroValid>(n: usize) -> Option<Vec<T>> {
+    let layout = core::alloc::Layout::array::<T>(n).ok()?;
+    if layout.size() == 0 { return Some(Vec::new()); }
+    // UNSAFE(allocator): stable Rust has no fallible zeroed Vec; the block has `layout` from the global allocator,
+    // all bytes zero, and `ZeroValid` (sealed: AtomicI64, i64, u8 ...) means all-zero is a valid T, so the Vec owns
+    // n initialised elements with the allocation it will free.
+    #[allow(unsafe_code)]
+    unsafe {
+        let p = alloc::alloc::alloc_zeroed(layout).cast::<T>();
+        if p.is_null() { return None; }
+        Some(Vec::from_raw_parts(p, n, n))
+    }
+}
+```
+plus `YearSlot { start: 0 sentinel }` in zone.rs. Gain: 2-3 heap faults on the first localtime_r of a zone with a DST
+rule (the 4.8 KiB table stays untouched until a year past the last transition is asked). Recommend: the owner rules
+on the seam; until then nothing changes.
 
-## Remaining 22 faults (step 3), each with its cause
-Text pages (7): localtime_r, zone_path, TryVec::resize, rule::when_of (footer parse), tsc_probe, legacy finish_grow,
-kind_period. vDSO data (1: first clock read). Stack (1: the load's frame). Heap (13 -> 10 -> listed): metadata 4 pages
-(new classes), path block, file bytes, transitions, zone types/names (2 regions), rule-years table 2 pages, copy(tz),
-Entry box.
-Not fixed here, with why:
-* rule-years (2-3 faults): a zero sentinel plus a fallible ZEROED allocation would leave the fresh pages untouched until
-  a year past the last transition is asked. The core crate is forbid(unsafe) and stable Rust has no safe fallible zeroed
-  Vec, so it needs a hook from liella-boundary (e.g. `TryVec::zeroed`): **RULING NEEDED** (touches the unsafe boundary;
-  recommend the hook, it also serves other lazily filled tables).
-* file bytes + transitions as one allocation: the zone would keep the file bytes and decode big-endian transition times
-  on lookup; touches every lookup in zone.rs: a story of its own (also saves the parse loop's user instructions).
-* copy(tz) + Entry box + path: three small blocks in three classes; could live inline in the Entry. Next step.
-* text faults: a hot-text pin of the zone-load functions (not a full regen: NEGATIVE row in docs/saturation/07).
+## Not done (run 2)
+* Step 5 of the original brief (booked timing of the time-group rows on Ivy Bridge and the N100, beside the
+  PERF-FIRSTCALL-MKTIME-SNPRINTF-2 numbers): not started; a booking waits 30-60 min and the budget went to the fix.
+* Zen 1 host count of the pinned layout (only Skylake-SP measured in run 2; the bounds keep 2 of margin).
 
-## Tests (step 4)
-* hot_text_products `init_first_localtime_r_stays_within_its_page_fault_bound`: LOCALTIME_BOUND 24 (22 + 2 margin).
-* zone_load_alloc.rs (ALLOC-FAIL-INJECT hook, no unsafe): `a_zone_load_makes_one_allocation_per_table` (from_tzif <= 3
-  allocations, time::load <= 5) and `tzif_counts_larger_than_the_file_are_rejected_before_any_table_is_allocated`
-  (six lying headers: EINVAL, no allocation of a page or more).
-* Plants: handoff/perf-zone-load-faults.plants (names-grown, path-grown, no-header-bound, type-offset-endian).
+## Remaining 20 faults of the first localtime_r (from run 1's split, minus the pinned text)
+Text: the localtime block's window, tsc_probe (0x47 window), legacy finish_grow (0x48). vDSO data 1, stack 1. Heap ~13:
+allocator metadata (new size classes), path, file bytes, transitions, types/names, rule-years 2 pages, copy(tz), Entry box.
 
-## GATE RED (final head 05dc6cde): blocks landing
-`init_first_mktime_after_localtime_r_takes_no_fault` (hot_text_products) fails: the first mktime after localtime_r
-now takes **1** fault (base build 0, keke oracle `mktime` mode). perf: the fault is the TEXT page of
-`liella::time::civil::days_from_civil64` (0x452080 in the oracle). The old load pre-faulted that 64 KiB fault-around
-window as a side effect (code the load no longer runs); the leaner load does not. Total load + first mktime is 23
-vs 25 before (net -2), but the test pins 0 and must not be loosened. Fix (next run, first step): group
-`days_from_civil64` (and the rest of the first-mktime path, `kind_period` is in the window already) into the hot
-text with a pin (not a full regen), re-run the oracle (mktime 0, localtime <= 24), then the gate. Everything else in the
-gate passed (conformance 6/6; the only failures are this test, twice).
-
-## Not done
-* Step 5 timing (booked Ivy Bridge + N100 runs of the time-group rows): not started, budget. Next run books it.
-* Bench cold-child fault count (the predecessor's 18) not re-measured; the oracle shows -3.
-
-## Jobs (keke)
-perf-zone-load-faults-probe-base (before), perf-zone-load-faults-probe-new (after), perf-zone-load-faults-gate
-(clippy, static, affected --base origin/next), perf-zone-load-faults-plants.
+## Jobs (run 2, mei)
+lint0 (clippy + static on the inherited head: green), probe-a / probe-b (counts above), gate2 + plants2 on the final
+head. SUPERSEDED: plants (first plants file: mktime-pin-lost SURVIVED, since unpinning days_from_civil64 alone leaves it
+in ordinary text in a window something else already touched (not verified which); replaced by
+mktime-block-behind-strftime, which restores run 1's order), gate (stopped by me: escalated to FULL because
+hot-text.list is a product linker input, restarted on the final head as gate2).
 
 ## Next step
-Book kotori/nico and nozomi for the time-group rows; then the rule-years zeroed-allocation hook after the ruling.
+1. Booked timing (step 5) of first_localtime_r / first_mktime on kotori or nico (less busy) and the N100.
+2. Try moving tsc_probe+prctl+rdtsc into the localtime block and measure every hot_text_products mode (gettext too).
+3. copy(tz) + Entry box + path inline in the Entry (three small heap blocks); file bytes + transitions as one allocation.
+4. Rule-years zeroed table after the ruling above.

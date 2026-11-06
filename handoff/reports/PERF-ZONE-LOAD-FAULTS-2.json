@@ -1,0 +1,12 @@
+{"task": "PERF-ZONE-LOAD-FAULTS-2", "model": "opus", "tokens": null,
+ "result": "first-mktime path and four unlisted zone-load functions pinned in hot text: first localtime_r 22 -> 20 faults, first mktime after it 1 -> 0, combined 20 (Skylake-SP oracle); new combined-bound test; target (glibc 4) not reached",
+ "branch": "task/perf-zone-load-faults-2", "head": null,
+ "gate": {"affected": "FULL tier (hot-text.list is a product linker input), running at hand-back: mei:perf-zone-load-faults-2-gate2", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Fallible zeroed rule-years table (ruling #3727 condition not met: no existing TryVec->boundary hook; needs a new seam plus Vec::from_raw_parts over alloc_zeroed outside the allocator category; exact block in handoff/perf-zone-load-faults.md)", "recommendation": "owner rules on the seam; worth 2-3 heap faults on the first localtime_r of a DST-rule zone"}],
+ "informational": ["The single-key plant (days_from_civil64 unpinned alone) survived: it then lands in ordinary text in a window already touched (where exactly not verified); replaced by a plant restoring run 1's block order", "Shell grep wrapper (ugrep --ignore-files) skipped crates/core/src/time/zone.rs (it reports the file as binary); use command grep", "Step 5 booked timing not done (budget)"],
+ "refused": [],
+ "improvement": "affected escalates any hot-text.list edit to the FULL tier; a direct tier for it (hot_text_products + the fault oracles) would let a layout pin be gated in minutes",
+ "next_step": "booked timing of first_localtime_r/first_mktime on an Ivy Bridge host and the N100; then try tsc_probe in the localtime block",
+ "report_file": "handoff/perf-zone-load-faults.md",
+ "jobs": ["mei:perf-zone-load-faults-2-gate2", "mei:perf-zone-load-faults-2-plants2"]}
