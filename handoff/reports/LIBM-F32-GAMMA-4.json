@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-GAMMA-4", "model": "opus", "tokens": null,
+ "result": "merged origin/next (float Bessel, double gamma tier, coeffs refactor) keeping both sides; KERNELS.md regenerated; direct gate 1913 passed / 0 failed; plants 8/8 caught; tgammaf (346 s) and lgammaf (608 s) exhaustive sweeps PASS with tallies identical to -2/-3",
+ "branch": "task/libm-f32-gamma-4", "head": "8efc3e55",
+ "gate": {"affected": "1913 passed / 0 failed (direct tier; conformance 14/14)", "peak": "3.9G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["lgammaf sweep 607.5 s vs tgammaf 345.8 s (sequential, same build): lgammaf checks 3.3x as many fast-path calls (its domain covers x >= 36 and most negatives), so per checked call it is cheaper; not the -3 defect", "counts not rerun: the float paths are unchanged by the merge (sweep tallies match -2/-3 exactly); -3 counts stand: tgammaf 0.48x, lgammaf 8.08x of glibc", "special::lgamma/tgamma order is now float fast path, next's double tier, then the 384-bit path (renamed *_accurate by next)"],
+ "refused": [],
+ "improvement": "the CI merge conflict was mechanical (enum variants, match arms, a module list); a per-family file layout for Fast's dispatch (one match arm file per family) would let parallel libm stories stop conflicting in fast32.rs",
+ "next_step": "lgammaf at 8.08x by instructions: profile its bench call (near-zero refusals |y| < 2^-8 and |x| < 2^-20 to mp suspected, not verified), then a double-double piece beside the negative zeros",
+ "report_file": "handoff/libm-f32-gamma.md",
+ "jobs": ["shiki:libm-f32-gamma-4-gate", "shiki:libm-f32-gamma-4-plants", "shiki:libm-f32-gamma-4-sweep-tgammaf", "shiki:libm-f32-gamma-4-sweep-lgammaf", "shiki:libm-f32-gamma-4-check"]}
