@@ -33,7 +33,7 @@ Every call able to change page 0's mapping is >= 4x the 5k target. Lazy swap: ne
 
 **Jobs (final code head 2bcd8655):** keke `classed-slot-swap-cost-lint` (clippy -D warnings + static) rc 0;
 keke `classed-slot-swap-cost-plants` 3 CAUGHT / 0 SURVIVED / 0 WARN (handoff/classed-slot-swap-cost-plants.txt);
-keke `classed-slot-swap-cost-gate` (affected --base origin/next) - see report json; counts keke
+keke `classed-slot-swap-cost-gate` (affected --base origin/next) rc 0, every step ok (conformance 121 programs); counts keke
 `classed-slot-swap-cost-split4`, kanon `classed-slot-swap-cost-bdw`; timing nozomi `classed-slot-swap-cost-n100`,
 nico `classed-slot-swap-cost-ivb`. Superseded: keke `-split1` (probe bug, rc 139: read page 1 after the swap),
 `-split2`, `-split3` (earlier probe versions; numbers consistent with split4).
