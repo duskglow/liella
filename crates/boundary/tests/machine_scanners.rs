@@ -54,13 +54,15 @@ fn scanners_find_the_first_terminator_at_every_alignment_and_length() {
     let _g = level();
     for avx2 in paths() {
         assert!(selftest::set_scan_avx2(avx2));
-        // Every offset from a 128-aligned base (0..128): the AVX2 loops step in 128-byte
-        // groups, so a group that starts 128-aligned past the head is exercised at some offset.
-        let mut buf = vec![0u8; 128 + 128 + 300 + 256];
-        let base = buf.as_ptr().align_offset(128);
+        // Every offset from a 256-aligned base (0..128): the AVX2 loops step in 128-byte
+        // groups (rawmemchr and memchr: one 128-byte group to a 256-aligned address, then
+        // 256-byte groups), so both entries of each are exercised at some offset. The long
+        // lengths reach the 256-byte loop's two halves and its second iteration.
+        let mut buf = vec![0u8; 256 + 128 + 1100 + 256];
+        let base = buf.as_ptr().align_offset(256);
         for off in 0..128 {
             let align = base + off;
-            for len in 0..300 {
+            for len in (0..300).chain([447, 448, 449, 511, 575, 576, 577, 703, 704, 705, 831, 960, 1023, 1024, 1025, 1099]) {
                 buf.fill(0); // zero bytes before the string: the scanners must mask them off
                 buf[align..align + len].fill(b'x');
                 buf[align + len] = 0;

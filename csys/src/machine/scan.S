@@ -2010,6 +2010,11 @@ liella_machine_strnlen:
 	xorl %eax, %eax
 	ret
 	.size liella_machine_strnlen, .-liella_machine_strnlen
+/* TIMING-N100-SCAN-64K: the software prefetch of the 256-byte AVX2 loops of rawmemchr and
+ * memchr, LIELLA_SCAN_PFD bytes ahead of the group (a prefetch never faults). */
+#define LIELLA_SCAN_PFD 512
+#define LIELLA_SCAN_PF(off) prefetcht0 (LIELLA_SCAN_PFD + (off))(%rax)
+
 	.section .text.liella_machine_rawmemchr_entry,"ax",@progbits
 
 /* const void *liella_machine_rawmemchr(const void *s, int c): a POINTER to the first byte equal
@@ -2110,7 +2115,7 @@ liella_machine_rawmemchr:
 	vpor %ymm3, %ymm4, %ymm6
 	subq $-128, %rax
 	vptest %ymm6, %ymm6
-	jz .Lraw_avx_loop
+	jz .Lraw_avx_align
 	addq $-64, %rax
 	jmp .Lraw_avx_hi
 .Lraw_pre:
@@ -2177,8 +2182,12 @@ liella_machine_rawmemchr:
 	jnz .Lraw_avx_found
 	addq $64, %rax
 	andq $-128, %rax
-	.p2align 4
-.Lraw_avx_loop:
+.Lraw_avx_align:
+	/* TIMING-N100-SCAN-64K: rax is 128-aligned; 256-byte groups, 256-aligned (SAFETY: an aligned
+	 * group never spans two pages; its first byte is at or before the asserted match). A rax
+	 * that is not 256-aligned first takes one 128-byte group. */
+	testl $128, %eax
+	jz .Lraw_avx_loop
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3
@@ -2186,12 +2195,52 @@ liella_machine_rawmemchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
-	subq $-128, %rax
-	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 10 per 128 bytes. */
 	vptest %ymm6, %ymm6
+	jnz .Lraw_avx_lo
+	subq $-128, %rax
+	.p2align 4
+.Lraw_avx_loop:
+	/* Eight loads before one test (memchr's loop, TIMING-N100-SCAN-64K): 9 per 128 bytes. */
+	LIELLA_SCAN_PF(0)
+	LIELLA_SCAN_PF(64)
+	LIELLA_SCAN_PF(128)
+	LIELLA_SCAN_PF(192)
+	vpcmpeqb (%rax), %ymm0, %ymm1
+	vpcmpeqb 32(%rax), %ymm0, %ymm2
+	vpcmpeqb 64(%rax), %ymm0, %ymm3
+	vpcmpeqb 96(%rax), %ymm0, %ymm4
+	vpcmpeqb 128(%rax), %ymm0, %ymm5
+	vpcmpeqb 160(%rax), %ymm0, %ymm6
+	vpcmpeqb 192(%rax), %ymm0, %ymm7
+	vpcmpeqb 224(%rax), %ymm0, %ymm8
+	vpor %ymm1, %ymm2, %ymm9
+	vpor %ymm3, %ymm4, %ymm10
+	vpor %ymm5, %ymm6, %ymm11
+	vpor %ymm7, %ymm8, %ymm12
+	vpor %ymm9, %ymm10, %ymm9
+	vpor %ymm11, %ymm12, %ymm11
+	vpor %ymm9, %ymm11, %ymm11
+	addq $256, %rax
+	vptest %ymm11, %ymm11
 	jz .Lraw_avx_loop
-	addq $-128, %rax
-	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
+	addq $-256, %rax
+	/* ymm9 = the first 128 bytes' fold; the compares are still in ymm1-ymm8. */
+	vptest %ymm9, %ymm9
+	jnz .Lraw_avx_lo
+	subq $-128, %rax
+	vpmovmskb %ymm5, %edx
+	vpmovmskb %ymm6, %r8d
+	shlq $32, %r8
+	orq %r8, %rdx
+	jnz .Lraw_avx_found
+	addq $64, %rax
+	vpmovmskb %ymm7, %edx
+	vpmovmskb %ymm8, %r8d
+	shlq $32, %r8
+	orq %r8, %rdx
+	jmp .Lraw_avx_found
+	/* The compares of the 128 bytes at rax are in ymm1-ymm4: the mask of the first or the
+	 * second 64 bytes. */
 .Lraw_avx_lo:
 	vpmovmskb %ymm1, %edx
 	vpmovmskb %ymm2, %r8d
@@ -2655,10 +2704,13 @@ liella_machine_memchr:
 	/* rax = g1; [s, g1 + 64) holds no match. */
 	addq $64, %rax
 	andq $-128, %rax
-	.p2align 4
-.Lmemchr_avx_loop:
+	/* TIMING-N100-SCAN-64K: 256-byte groups, 256-aligned (SAFETY: an aligned group never spans
+	 * two pages, 4096 being a multiple of 256; its first byte lies below r8 after bytes that did
+	 * not match). A 128-aligned rax that is not 256-aligned first takes one 128-byte group. */
 	cmpq %r8, %rax
 	jae .Lmemchr_avx_none
+	testl $128, %eax
+	jz .Lmemchr_avx_loop
 	vpcmpeqb (%rax), %ymm0, %ymm1
 	vpcmpeqb 32(%rax), %ymm0, %ymm2
 	vpcmpeqb 64(%rax), %ymm0, %ymm3
@@ -2666,12 +2718,56 @@ liella_machine_memchr:
 	vpor %ymm1, %ymm2, %ymm5
 	vpor %ymm3, %ymm4, %ymm6
 	vpor %ymm5, %ymm6, %ymm6
-	subq $-128, %rax
-	/* PARITY-SCAN-AVX2: vptest for vpmovmskb + test (as strlen's loop): 12 per 128 bytes. */
 	vptest %ymm6, %ymm6
+	jnz .Lmemchr_avx_lo
+	subq $-128, %rax
+	.p2align 4
+.Lmemchr_avx_loop:
+	/* Eight loads before one test: more L2 lines in flight per branch (TIMING-N100-SCAN-64K:
+	 * a 64 KiB scan streams from L2; the 128-byte loop stalled on L2 hits); 11 per 128 bytes. */
+	cmpq %r8, %rax
+	jae .Lmemchr_avx_none
+	LIELLA_SCAN_PF(0)
+	LIELLA_SCAN_PF(64)
+	LIELLA_SCAN_PF(128)
+	LIELLA_SCAN_PF(192)
+	vpcmpeqb (%rax), %ymm0, %ymm1
+	vpcmpeqb 32(%rax), %ymm0, %ymm2
+	vpcmpeqb 64(%rax), %ymm0, %ymm3
+	vpcmpeqb 96(%rax), %ymm0, %ymm4
+	vpcmpeqb 128(%rax), %ymm0, %ymm5
+	vpcmpeqb 160(%rax), %ymm0, %ymm6
+	vpcmpeqb 192(%rax), %ymm0, %ymm7
+	vpcmpeqb 224(%rax), %ymm0, %ymm8
+	vpor %ymm1, %ymm2, %ymm9
+	vpor %ymm3, %ymm4, %ymm10
+	vpor %ymm5, %ymm6, %ymm11
+	vpor %ymm7, %ymm8, %ymm12
+	vpor %ymm9, %ymm10, %ymm9
+	vpor %ymm11, %ymm12, %ymm11
+	vpor %ymm9, %ymm11, %ymm11
+	addq $256, %rax
+	vptest %ymm11, %ymm11
 	jz .Lmemchr_avx_loop
-	addq $-128, %rax
-	/* The compares are still in ymm1-ymm4: the mask of the first or the second 64 bytes. */
+	addq $-256, %rax
+	/* ymm9 = the first 128 bytes' fold; the compares are still in ymm1-ymm8. */
+	vptest %ymm9, %ymm9
+	jnz .Lmemchr_avx_lo
+	subq $-128, %rax
+	vpmovmskb %ymm5, %r9d
+	vpmovmskb %ymm6, %r10d
+	shlq $32, %r10
+	orq %r10, %r9
+	jnz .Lmemchr_avx_found
+	addq $64, %rax
+	vpmovmskb %ymm7, %r9d
+	vpmovmskb %ymm8, %r10d
+	shlq $32, %r10
+	orq %r10, %r9
+	jmp .Lmemchr_avx_found
+.Lmemchr_avx_lo:
+	/* The compares of the 128 bytes at rax are in ymm1-ymm4: the mask of the first or the
+	 * second 64 bytes. */
 	vpmovmskb %ymm1, %r9d
 	vpmovmskb %ymm2, %r10d
 	shlq $32, %r10
