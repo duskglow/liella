@@ -1,8 +1,7 @@
 # DL-SYMBOLS (phase 14 DL-9): symbol lookup
 
-**State:** branch `task/dl-symbols` from origin/next `349b94d0`; role mei:~/w/s2. CHECKPOINT hand-back (context
-~150k): code, tests, probe record, D-27.11 and plants file written and pushed; the final head's jobs were started
-detached, not yet read.
+**State:** COMPLETE. Branch `task/dl-symbols-2` (continues `task/dl-symbols`, from origin/next `349b94d0`); code head
+`3a488d14`. Role shiki:~/w/sh1 (DL-SYMBOLS-2); the first run used mei:~/w/s2.
 
 ## Done
 * `crates/ld/src/symbols.rs`: `sysv_hash`, `gnu_hash`; `Object` (lookup through the GNU table when present, else
@@ -10,37 +9,40 @@ detached, not yet read.
   `Scope::{global, group(deepbind), next, excluding}`; `lookup` with the `UniqueRegistry` trait for
   `STB_GNU_UNIQUE`; `resolve` (weak undefined binds 0). Typed `LookupError`, no panic, no allocation.
 * `crates/ld/src/elf.rs`: `Dynamic::symtab`, `Symtab::get` (count bound, `DT_SYMENT` = 24), `Sym`, STB/STT/STV/SHN.
-* `crates/ld/tests/symbols.rs`: corpus built with the system linker (libv in GNU, SysV and both hash styles,
-  unversioned stub, weak/strong, unique, two programs); 9 tests (probe bindings, GNU/SysV agreement, programs'
-  references, weak, unique, scopes, malformed tables, byte-flip no-panic).
-* Probe (black box, mei, scratch only): record in `spec/behaviour/dynlink.md` "Symbol binding"; rules in D-27.11.
-* Plants: `handoff/DL-SYMBOLS-plants.txt` (19 plants, each with `msg:`).
+* `crates/ld/tests/symbols.rs`: corpus built with the system linker; 9 tests. DL-SYMBOLS-2 added a weak undefined
+  `x_undef` to the corpus library and checks that neither of its tables finds a definition for it (the GNU table never
+  indexes undefined entries, so the old check could not catch the undef-def plant).
+* Probe record: `spec/behaviour/dynlink.md` "Symbol binding"; rules in D-27.11.
+* Ruling #3655 (coordinator, decided): a program that needs a version from an object without version tables is
+  REFUSED like the reference loader (exit 127, a message naming the object and the version; no warn-and-continue, no
+  COMPAT option). The lookup stays permissive. Recorded in D-27.11, in the DL-10 plan item (load-time version check
+  before relocation, with its proof), in the probe record and as a comment at `Want::Version`.
 
-## Jobs (mei)
-* dl-symbols-t1 (first head 0c88f03d): 8/9 passed; `programs_bind_like_the_reference` failed because the test
-  forced the GNU table on the SysV-only library (test bug, fixed: `Object::new` picks the table). SUPERSEDED.
-* Final head: `dl-symbols-gate` (`cargo test -p liella-ld --test symbols`, `cargo xtask clippy`, `cargo xtask static`,
-  `cargo xtask affected --base origin/next --run`) and `dl-symbols-plants` (`/mnt/zram/claude/DL-SYMBOLS/plants-1`),
-  started detached; NOT READ at hand-back.
+## Jobs
+* Final head 3a488d14, shiki: `dl-symbols-2-gate-2` rc 0 (full `cargo clippy --workspace --all-targets
+  --all-features -D warnings`, `cargo xtask clippy`, `cargo xtask static`, symbols test 9/9, `cargo xtask affected
+  --base origin/next --run` 67 passed, peak 966M); `dl-symbols-2-plants-2` rc 0 (19 plants: 19 CAUGHT, no WARN;
+  `/mnt/zram/claude/DL-SYMBOLS-2/plants-2`).
+* SUPERSEDED: mei `dl-symbols-plants` rc 3 (the tool refused the plants file: the gnu-hashcmp `lit:` pattern contained
+  ` | `, the field separator; now a `perl:` pattern with `\|`); mei `dl-symbols-gate` (head bf829fa0); shiki
+  `dl-symbols-2-gate` and `dl-symbols-2-plants` (head 2179d07c, green, but undef-def was WARN-NO-MSG: fixed by the
+  test above); mei `dl-symbols-t1` (first head, test bug).
 
 ## Arch seam: ticked
 No architecture literal added; lookup uses no `Arch` item; the test is `cfg(target_arch = "x86_64")` with an
-`ARCH(x86_64)` comment (host-built corpus). Checklist items 1-8: nothing new per architecture.
+`ARCH(x86_64)` comment (host-built corpus).
 
 ## Decisions in force
-D-27.7, D-27.8 (reader), D-27.11 (lookup rules, this story). R14-12 (no special version node).
+D-27.7, D-27.8 (reader), D-27.11 (lookup rules + ruling #3655), R14-12 (no special version node).
 
-## Open questions / rulings
-* RULING NEEDED: a program that requires versions from an object without version tables. The reference loader warns
-  twice and then stops with an internal consistency message (exit 127). Liella's lookup matches any definition
-  in such an object. Recommendation: the DL story that adds the load-time version check keeps the warning and
-  continues (the gABI makes versioning optional). This needs a differences row and a COMPAT option, or a recorded
-  reason for not offering one.
+## Open questions
 * `Scope::next` for a caller that is only in a local scope (after it in that scope) is this story's reading of
   design §5; not probed.
 * Not probed: a symbol whose lowest version is not VER_1 (the rule "lowest index" is consistent with every probed row).
 
+## Do not redo
+Hash functions, version rules and scopes are probe-settled (dynlink.md); the plants file is complete for this code.
+
 ## Next step
-Read `~/logs/dl-symbols-gate.log` and `~/logs/dl-symbols-plants.log` on mei; fix anything red (clippy is the most
-likely, since it was not seen on the final head); then hand back COMPLETE. Later: fuzz target `elf` gains lookups
-(DL-ELF-READ-3 next step); L14-7 memo (per-object version-index table) in DL-10.
+DL-10: the load-time version check (now in its plan item) with the unversioned-stub program as its proof. Later: fuzz
+target `elf` gains lookups (DL-ELF-READ-3 next step); L14-7 memo (per-object version-index table).
