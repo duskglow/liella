@@ -2378,6 +2378,13 @@ liella_machine_rawmemchr:
 	bsfl %edx, %edx
 	leaq 48(%rdi,%rdx), %rax
 	ret
+	/* PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
+	 * .Lraw_sse_loop (0xa8 bytes on) at entry + 0x3e0, 32-byte aligned, so the 117-byte loop
+	 * spans four 32-byte fetch windows instead of five (at entry + 0x3d0 it did, and
+	 * rawmemchr_4k timed slower on Ivy Bridge). The fill keeps the function's end before the
+	 * next section's 64-byte boundary: nothing after it moves. Assembly fails here if the code
+	 * above grows past this offset; re-check the loop's address after any edit in between. */
+	.org liella_machine_rawmemchr_entry + 0x338, 0xcc
 .Lraw_sse_masked:
 	andl $63, %ecx
 	/* mask64 %rax */
