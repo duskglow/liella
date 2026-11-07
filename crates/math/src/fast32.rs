@@ -28,6 +28,7 @@ use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
 mod bessel;
+mod cexp;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -36,6 +37,9 @@ mod inv_trig;
 mod trig;
 
 use bessel::{bessel_core, bessel_finish};
+#[cfg(test)]
+pub(crate) use cexp::{cexp_core, CEXP_DELTA};
+pub use cexp::{cexpf, cexpf_nearest};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};

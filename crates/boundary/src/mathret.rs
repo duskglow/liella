@@ -1109,6 +1109,38 @@ pub fn cplx<C: CPart>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Roun
     r
 }
 
+/// [`cplx`] with an in-place attempt (LIBM-CPLX-EXP-TIER, as [`elem_fast`]): in the default
+/// environment `fast` runs first and its parts are the result (it raises inexact in hardware and
+/// nothing else where it answers); otherwise, and in every other mode, [`cplx`] runs, after the
+/// flags the attempt may have raised are dropped again (cold, out of line).
+#[inline(always)]
+pub fn cplx_fast<C: CPart>(
+    z: Complex<C>,
+    unit: Unit,
+    fast: impl FnOnce(C::V, C::V) -> Option<(C::V, C::V)>,
+    f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status),
+) -> Complex<C> {
+    let (saved, in_place) = fpu::peek(&CSys);
+    if in_place {
+        // The barrier as in `elem_fast`.
+        let z = core::hint::black_box(z);
+        if let Some((re, im)) = fast(z.re.v(), z.im.v()) {
+            return Complex { re: C::of_v(re), im: C::of_v(im) };
+        }
+        return cplx_fast_cold(z, saved, unit, f);
+    }
+    cplx(z, unit, f)
+}
+
+/// [`cplx_fast`]'s fallback after an attempt: MXCSR back to `saved` (the attempt's inexact or
+/// denormal-operand bits dropped unless the caller had them), then [`cplx`].
+#[cold]
+#[inline(never)]
+fn cplx_fast_cold<C: CPart>(z: Complex<C>, saved: u32, unit: Unit, f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
+    fpu::settle(&CSys, saved, fpu::Flags(0), FAST_ATTEMPT_HW);
+    cplx(z, unit, f)
+}
+
 /// `cpow`: a complex function of two complex arguments.
 pub fn cplx2<C: CPart>(z: Complex<C>, w: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
     let (e, mode) = enter(unit);
