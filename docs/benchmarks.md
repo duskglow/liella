@@ -462,7 +462,12 @@ wrote:
   verdict counts (selected rows only) and the flagged rows. Flagged rows are findings, not a failed run. With libm
   rows selected it also prints the median time ratio per libm family and precision (exp/log/pow, trig, hyperbolic,
   gamma, bessel, erf, roots/hypot, complex, special; f32, f64, long double, f128) and writes it to
-  `<out>/libm-families.md`.
+  `<out>/libm-families.md`. It also prints the magnitude of the gap over the selected rows and writes it to
+  `<out>/distribution.md` (SWEEP-DISTRIBUTION): the row count per time-ratio bucket (<= 1.05, 1.05-2, 2-10,
+  10-100, > 100; a ratio on an edge is in the lower bucket), the five slowest rows with their ratio, and the median
+  time ratio per family (a `cbench_libm` row by family and precision, the cells of the libm table; any other row by
+  its bench). A family whose median is above 10x is marked `RETHINK?` and named on one line above the family table:
+  the magnitude trigger of the RUT rule (an order-of-magnitude gap calls for a RETHINK story, not another tweak).
 * **nonzero**: the measurement did not finish. Either the bench died on a signal, a table is missing, a selected
   row has no median, or the bench reported a failure that is not a limit flag (a stage refused, a row not measured,
   an instruction value missing). No `sweep.tsv` is written, `summary.txt` says `sweep: INCOMPLETE: <why>`, and the
@@ -484,6 +489,9 @@ judged, calibration rows included, as before, and the report says so in a line a
 * the run-to-run spread (median, p90, max) and the change now/previous (median, p10, p90);
 * the lists (a) regressions (slower now, parity or faster before), (b) reopen (instructions <= 1.05, time > 1.05)
   and (c) improved (slower before, parity or faster now);
+* per class, the distribution of the time ratios in the buckets above, the five slowest rows and the family
+  medians with the `RETHINK?` marks (the same section `sweep run` writes to `distribution.md`), printed after the
+  counts;
 * the median time ratio per libm family and precision, per class with libm rows;
 * rows new in this sweep, rows no longer measured, the deferred `wordexp` rows (timed, not judged) and the rows
   outside the selection.
