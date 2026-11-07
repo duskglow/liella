@@ -436,14 +436,14 @@ staged tree the tables stay in `target/liella/bench/`.
 
 ### The periodic timing sweep (`xtask sweep`, SWEEP-RUN-TOOL)
 
-A sweep times every non-libm row on each timing-host class and compares the result with the previous sweep. `bench`
+A sweep times every `cbench_*` row (libm included; the libm bench takes about two minutes per host) on each timing-host class and compares the result with the previous sweep. `bench`
 exits 1 when its per-host limit check flags a row. A sweep is meant to find flagged rows, so a sweep does not run
 `bench` directly. It runs `sweep run`, whose exit status says only whether the measurement finished (gates still call
 `bench` itself):
 
 ```bash
-# build host: stage the default sweep groups (every cbench_* group of bench/budgets.tsv except cbench_libm)
-cargo xtask bench --stage /tmp/sweep.tar --only "$(grep -o '^cbench_[a-z_]*' bench/budgets.tsv | sort -u | grep -vx cbench_libm | paste -sd,)"
+# build host: stage the default sweep groups (every cbench_* group of bench/budgets.tsv, cbench_libm included)
+cargo xtask bench --stage /tmp/sweep.tar --only "$(grep -o '^cbench_[a-z_]*' bench/budgets.tsv | sort -u | paste -sd,)"
 # each timing host, booked, in the unpacked tree; this is the job a sweep brief names (one per host):
 ./xtask-bin sweep run --out ~/work/<story>/out
 # anywhere with the per-host tables and the previous sweep's tables:
@@ -459,25 +459,34 @@ wrote:
   non-empty `counters.tsv` were written, and a nonzero bench exit is explained entirely by limit flags (every line
   of the bench's `budget regressions` report says that a row exceeds a limit). It writes `<out>/sweep.tsv`, copies
   the bench's tables into `<out>`, and prints one `sweep: COMPLETE: ...` line (also in `<out>/summary.txt`) with the
-  verdict counts and the flagged rows. Flagged rows are findings, not a failed run.
+  verdict counts (selected rows only) and the flagged rows. Flagged rows are findings, not a failed run. With libm
+  rows selected it also prints the median time ratio per libm family and precision (exp/log/pow, trig, hyperbolic,
+  gamma, bessel, erf, roots/hypot, complex, special; f32, f64, long double, f128) and writes it to
+  `<out>/libm-families.md`.
 * **nonzero**: the measurement did not finish. Either the bench died on a signal, a table is missing, a selected
   row has no median, or the bench reported a failure that is not a limit flag (a stage refused, a row not measured,
   an instruction value missing). No `sweep.tsv` is written, `summary.txt` says `sweep: INCOMPLETE: <why>`, and the
   error shows the last lines of `bench.log`.
 
-`sweep.tsv` columns: `bench row instr cycles time spread rounds verdict limit status flagged`. `instr` and
+`sweep.tsv` columns: `bench row instr cycles time spread rounds verdict limit status flagged selected`. `instr` and
 `cycles` are the Liella/glibc ratios per call from `counters.tsv` (`-` for a row that was not counted). `time` is
 the median of the per-round Liella/glibc time ratios. `spread` is (max - min) / median of those round ratios.
 `verdict` is faster (< 0.95), parity, or slower (> 1.05). `status` is the limit check's verdict (from
-`decision.tsv` on a CPU decided on cycles). `flagged` is `yes` when the limit check flagged the row.
+`decision.tsv` on a CPU decided on cycles). `flagged` is `yes` when the limit check flagged the row. `selected` is
+`yes` for a selected `ratio_host` row and `no` for a counted row outside the selection (the libm bench's calibration
+rows `add_baseline`, `mxcsr_pair`, `mxcsr_wrapper_seq`).
 
-`sweep compare` prints a markdown report to stdout:
+`sweep compare` prints a markdown report to stdout. It judges only the rows with `selected` `yes`; the other rows
+are listed, not counted. A table without the `selected` column (written before SWEEP-COMPARE-SELECTED) has every row
+judged, calibration rows included, as before, and the report says so in a line above the counts.
 
 * the verdict counts per class, now and in the previous sweep (over the rows measured now);
 * the run-to-run spread (median, p90, max) and the change now/previous (median, p10, p90);
 * the lists (a) regressions (slower now, parity or faster before), (b) reopen (instructions <= 1.05, time > 1.05)
   and (c) improved (slower before, parity or faster now);
-* rows new in this sweep, rows no longer measured, and the deferred `wordexp` rows (timed, not judged).
+* the median time ratio per libm family and precision, per class with libm rows;
+* rows new in this sweep, rows no longer measured, the deferred `wordexp` rows (timed, not judged) and the rows
+  outside the selection.
 
 The output depends only on the input tables. `--old-table` reads the combined table of a results file written
 before this tool. It reads the rows after `## Table`, and the class names come from its `time <CLASS>` columns,

@@ -23,9 +23,12 @@
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
 //!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
-//! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
-//!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
-//!    `stubs` (which runs `trace`) and the policy checks, no tests.
+//! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `results/`, top-level `*.md`, `spec/**/*.md`, `spec/behaviour`,
+//!    `spec/schedule.tsv`, and the operator tools under the top-level `tools/`, e.g. the probe service, which no test
+//!    reaches): `stubs` (which runs `trace`), the policy checks and `cargo xtask static`, no tests; but a file that code
+//!    names as a path (a quoted path on a non-comment line, e.g. a test's `spec/behaviour/*.glibc.txt` record or
+//!    `docs/codemap/symbols.tsv`, which this command reads) selects its readers: that test target, the crate's unit
+//!    tests, or the xtask unit tests (XTASK-AFFECTED-DOCS-PATHS, D-X.35).
 //! 3. A conformance program (`conformance/c/*.c`): that program, and the tests that name it.
 //!    A header `conformance/c/*.h`: the programs that `#include` it (none: every program) and
 //!    the tests that name it. `conformance/run.sh` and `conformance/tools`: every conformance program.
@@ -92,7 +95,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Crates whose changes are narrowed through the module graph.
 const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-math"];
@@ -201,6 +204,9 @@ pub struct Repo {
     /// XTASK-AFFECTED-MATH-2: the fit files in the tree (`crates/math/fits/<name>.fit`). A changed fit that is not
     /// here was removed, and `cargo xtask remez --check` cannot check it: FULL.
     fits: BTreeSet<String>,
+    /// XTASK-AFFECTED-DOCS-PATHS: the xtask sources (path, text) that may read a documentation file; this command's own
+    /// unit tests are left out (they name made-up paths, not files they read).
+    xtask_texts: Vec<(String, String)>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -838,7 +844,17 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root) }
+        let mut xs = Vec::new();
+        files_under(&root.join("xtask/src"), &["rs"], &mut xs);
+        let xtask_texts = xs
+            .iter()
+            .map(|p| {
+                let text = read(p);
+                let text = if p.ends_with("xtask/src/affected.rs") { text.split("\n#[cfg(test)]\nmod tests {").next().unwrap_or_default().to_string() } else { text };
+                (rel(p), text)
+            })
+            .collect();
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -1370,7 +1386,9 @@ fn classify(path: &str) -> Option<Class> {
     if path == "conformance/run.sh" || path.starts_with("conformance/tools/") {
         return Some(Class::AllConf);
     }
-    if path.starts_with("docs/") || path.starts_with("plan/") || path.starts_with("handoff/") || path.starts_with("spec/behaviour/") || path == "spec/schedule.tsv" || path.starts_with("spec/tools/") || path == "spec/ERRATA.md" || path.starts_with("tools/") || (!path.contains('/') && path.ends_with(".md")) || file.starts_with("LICENSE") || file == ".gitignore" {
+    // XTASK-AFFECTED-DOCS-PATHS: `results/` (timing and sweep tables) and the prose under `spec/` (`*.md`: the errata,
+    // `spec/security/`) join the docs; `docs_readers` then selects whatever names the file in code.
+    if path.starts_with("docs/") || path.starts_with("plan/") || path.starts_with("handoff/") || path.starts_with("results/") || path.starts_with("spec/behaviour/") || path == "spec/schedule.tsv" || path.starts_with("spec/tools/") || (path.starts_with("spec/") && path.ends_with(".md")) || path.starts_with("tools/") || (!path.contains('/') && path.ends_with(".md")) || file.starts_with("LICENSE") || file == ".gitignore" {
         return Some(Class::Docs);
     }
     if path.starts_with("bench/") || path.starts_with("benchmarks/") {
@@ -1423,7 +1441,7 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 }
                 sel.full.push(format!("{f}: {why}"));
             }
-            Some(Class::Docs) => sel.notes.push(format!("{f}: docs only (stubs, trace, policy checks)")),
+            Some(Class::Docs) => docs_readers(repo, f, &mut sel),
             Some(Class::Nothing(why)) => sel.notes.push(format!("{f}: {why}")),
             Some(Class::AllConf) => sel.all_conf(repo, &format!("{f}: every conformance program")),
             Some(Class::XtaskData) => {
@@ -1476,6 +1494,43 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
 fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
     classify_path(repo, f, sel);
     sel.own_suite(repo, f);
+}
+
+/// XTASK-AFFECTED-DOCS-PATHS (D-X.35): a documentation file (rule 2) selects no tests by itself, only the always-run
+/// checks and `cargo xtask static` (lab names, decision and compat ids, the register, trace). A file that code names
+/// as a path (`names_path`) selects what reads it: the test target, the owning crate's unit tests (a crate source),
+/// or the xtask unit tests (an xtask source). Known limit: a path assembled at run time (`format!("docs/{x}")`) is
+/// not seen; the readers found that way today are static checks, which run anyway.
+fn docs_readers(repo: &Repo, f: &str, sel: &mut Selection) {
+    sel.xtask_cmds.insert("static".to_string());
+    let why = format!("{f}: the source names the file");
+    let mut readers = Vec::new();
+    for t in repo.targets.iter().filter(|t| names_path(&t.text, f)) {
+        add(&mut sel.tests, (t.krate.clone(), t.name.clone()), &why);
+        readers.push(format!("{}::{}", t.krate, t.name));
+    }
+    for n in repo.nodes.iter().filter(|n| names_path(&n.text, f)) {
+        add(&mut sel.libs, n.krate.clone(), &why);
+        readers.push(format!("lib:{}", n.krate));
+    }
+    if let Some((x, _)) = repo.xtask_texts.iter().find(|(_, t)| names_path(t, f)) {
+        sel.xtask_tests = true;
+        readers.push(format!("xtask ({x})"));
+    }
+    if readers.is_empty() {
+        sel.notes.push(format!("{f}: docs only (stubs, policy checks, `cargo xtask static`; no tests)"));
+    } else {
+        sel.notes.push(format!("{f}: docs read by code (stubs, policy checks, `cargo xtask static`, and its readers: {})", readers.join(", ")));
+    }
+}
+
+/// Whether `text` names `path` as a path in code: on a line that is not a comment, right after a quote or a `/`
+/// (`"spec/behaviour/x.txt"`, `"/../../spec/behaviour/x.txt"`, `root.join("docs/x.tsv")`). A path cited in a comment
+/// or a doc comment is a reference for the reader, not a read. A top-level file (`README.md`) has no directory to tell
+/// a path from a bare file name (`"README.md"` in a list of names to skip), so it needs a `/` before it or `join("`.
+fn names_path(text: &str, path: &str) -> bool {
+    let at = |pre: &str| pre.ends_with('/') || (pre.ends_with('"') && (path.contains('/') || pre.ends_with("join(\"")));
+    text.lines().filter(|l| !matches!(l.trim_start().get(..2), Some("//" | "/*" | "* "))).any(|l| l.match_indices(path).any(|(i, _)| at(&l[..i])))
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -2607,9 +2662,23 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     let mut skipped: Vec<String> = Vec::new();
     if !sel.full.is_empty() {
         println!("escalated to FULL: running the workspace clippy and `cargo xtask test`");
-        ok &= step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"]));
-        ok &= step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log");
+        // Step times (XTASK-TEST-STEP-TIMES): a `step:` line per step on the console, those `cargo xtask test` wrote
+        // to the log among them, and the summary of all of them, slowest first.
+        let mut times = crate::steptime::Steps::default();
+        ok &= times.time("stubs", || step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"])));
+        ok &= times.time("clippy-workspace", || step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log"));
+        let from = fs::metadata(&log).map_or(0, |m| m.len());
         ok &= step(root, &log, "cargo xtask test", Command::new(&cargo).args(["xtask", "test"]));
+        let bytes = fs::read(&log).unwrap_or_default();
+        for (name, secs) in String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).lines().filter_map(crate::steptime::parse) {
+            // The remez binary's per-fit lines are parts of the `remez-check` step: shown, not summed again.
+            if name.contains('/') {
+                println!("{}", crate::steptime::line(name, Duration::from_secs_f64(secs)));
+            } else {
+                times.add(&format!("test/{name}"), Duration::from_secs_f64(secs));
+            }
+        }
+        times.print_summary();
     } else {
         if sel.only {
             println!("ONLY mode: the named binaries, no stubs, policy checks or clippy. NOT A GATE.");
@@ -2686,8 +2755,13 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                 if sel.libs.contains_key(*c) {
                     cmd.arg("--lib");
                 }
-                for t in ts {
+                for t in &ts {
                     cmd.args(["--test", t]);
+                }
+                // The heavy products sweeps run shard 0 only with the exports interposed
+                // (`nextest::PASS1_SHARD0`, D-X.36); `cargo test` has no filter for it and runs all.
+                if pass == 1 && nextest {
+                    cmd.args(crate::nextest::pass1_shard_filter(c, &ts).unwrap_or_default());
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
                 match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {
@@ -3432,6 +3506,67 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
             let (_, s) = sel(&[f]);
             assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty() && s.clippy.is_empty(), "{f}: {s:?}");
         }
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS (D-X.35); no spec clause. A results table alone: `cargo xtask static`, no tests, in
+    // every tier but full (it used to escalate: "not a path the selection knows"). Paths are built at run time so this
+    // test's own text does not name them.
+    #[test]
+    fn docs_paths_select_static_only() {
+        let made_up = ["results", "spec/security", "spec"].map(|d| format!("{d}/{}.md", "docs-paths-made-up"));
+        for f in made_up.iter().map(String::as_str).chain(["results/timing-sweep-1105.md", "spec/ERRATA.md", "docs/benchmarks.md"]) {
+            for t in [Tier::Direct, Tier::Wide] {
+                let s = tier(&[f], t);
+                assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty() && s.clippy.is_empty() && !s.xtask_tests, "{f} ({t:?}): {s:?}");
+                assert_eq!(s.xtask_cmds, BTreeSet::from(["static".to_string()]), "{f} ({t:?})");
+            }
+        }
+        // A path cited only in comments (the tests that cite the threat model) is no read.
+        let s = tier(&["spec/security/threat-model.md"], Tier::Direct);
+        assert!(s.tests.is_empty() && s.libs.is_empty() && !s.xtask_tests, "{s:?}");
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS; no spec clause. A docs file that code reads selects its readers and nothing wider.
+    #[test]
+    fn docs_read_by_code_select_their_readers() {
+        let has = |s: &Selection, k: &str, n: &str| s.tests.contains_key(&(k.to_string(), n.to_string()));
+        for t in [Tier::Direct, Tier::Wide] {
+            let s = tier(&["spec/behaviour/aio.glibc.txt"], t);
+            assert!(s.full.is_empty() && has(&s, "liella", "aio_products") && s.xtask_cmds.contains("static"), "{t:?}: {s:?}");
+            assert!(!has(&s, "liella", "syslog_products"), "only the readers: {s:?}");
+            // Read by a test target and by a crate's unit-test module (`pattern::regex_oracle_diff`).
+            let s = tier(&["spec/behaviour/patterns.glibc.txt.gz"], t);
+            assert!(has(&s, "liella", "regex_record") && has(&s, "liella", "patterns_products") && s.libs.contains_key("liella"), "{t:?}: {s:?}");
+            // Read by this command (`Repo::load`), so by the xtask unit tests.
+            let s = tier(&["docs/codemap/symbols.tsv"], t);
+            assert!(s.full.is_empty() && s.xtask_tests, "{t:?}: {s:?}");
+        }
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS; no spec clause. Mixed with code: the code's selection as before, plus `static`.
+    #[test]
+    fn docs_mixed_with_code_select_as_before() {
+        let doc = format!("results/{}.md", "docs-paths-made-up");
+        assert!(!tier(&[doc.as_str(), "crates/abi/src/lib.rs"], Tier::Direct).full.is_empty(), "code still escalates");
+        for code in ["crates/kernel/src/lib.rs", "crates/core/tests/aio_products.rs", "conformance/c/fpu_control_own.c"] {
+            for t in [Tier::Direct, Tier::Wide] {
+                let (a, b) = (tier(&[code], t), tier(&[code, doc.as_str()], t));
+                assert!(a.full == b.full && a.tests.keys().eq(b.tests.keys()) && a.conf.keys().eq(b.conf.keys()) && a.libs.keys().eq(b.libs.keys()) && a.xtask_tests == b.xtask_tests, "{code} ({t:?})");
+                assert!(b.xtask_cmds.contains("static"), "{code} ({t:?})");
+            }
+        }
+    }
+
+    #[test]
+    fn names_path_needs_a_quoted_path_outside_comments() {
+        assert!(names_path("let p = root.join(\"spec/behaviour/a.txt\");", "spec/behaviour/a.txt"));
+        assert!(names_path("include_bytes!(\"../../spec/behaviour/a.txt\")", "spec/behaviour/a.txt"));
+        for no in ["//! see spec/behaviour/a.txt", "    /// \"spec/behaviour/a.txt\"", " * \"spec/behaviour/a.txt\"", "let p = \"xspec/behaviour/a.txt\";"] {
+            assert!(!names_path(no, "spec/behaviour/a.txt"), "{no}");
+        }
+        // A top-level file: a bare name in a list is no path; a joined or `/`-prefixed one is.
+        assert!(!names_path("const SKIP: &[&str] = &[\"Makefile\", \"README.md\"];", "README.md"));
+        assert!(names_path("root.join(\"README.md\")", "README.md") && names_path("\"../../README.md\"", "README.md"));
     }
 
     #[test]

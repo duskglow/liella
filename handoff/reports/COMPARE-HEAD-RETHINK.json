@@ -1,0 +1,19 @@
+{"task": "COMPARE-HEAD-RETHINK", "model": "opus", "tokens": null,
+ "result": "Plan written: head-first compare entry H2 (16-byte block at 0 before any size/ISA dispatch, ISA test after it) recommended; prototype head rows 11/1 vs Liella 21/4 instr/taken (glibc 13/2), Ivy Bridge __memcmpeq_head_128 1.75 -> 0.72 and eq_128 1.26 -> 0.70 of glibc; Skylake-family JCC-erratum uop-cache loss found in Liella's compare code; N100 timing pending",
+ "branch": "task/compare-head-rethink", "head": null,
+ "gate": {"affected": "planning story: no product code changed; harness correctness check 4250610 checks / 0 failures", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Extend NULL folding to every n for memcmp/bcmp/__memcmpeq (H2 loads offset 0 first, so NULL with n > 2048 gives SIGSEGV instead of the abort message)", "recommendation": "yes"},
+  {"item": "AVX2 cost for the SSE2 gain: H2 adds one ISA test after the head block on n > 32 (about +1 instr on AVX2 eq rows, head rows -8)", "recommendation": "accept"},
+  {"item": "Classed slot swap (D-4.53) for the compare family", "recommendation": "keep off; H2 needs no per-ISA entry"}],
+ "informational": [
+  "Liella's compare code loses uop-cache delivery on a Skylake-family host (IDQ.MITE_UOPS 8-56 per call where glibc has about 0); padding removes it in the prototype",
+  "This harness's glibc memcmp is slower than in cbench, so memcmp ratios to glibc here are not comparable with the sweep; __memcmpeq ratios agree",
+  "A 3 s correctness check ran directly on the N100 host (outside its timing queue) while another story's timing job ran there",
+  "TIMING-COV-COMPARE-HEAD-SSE2 (#3814) is not in this base (next e0c6b146)"],
+ "refused": [],
+ "jobs": ["mei:compare-head-rethink-so", "mei:compare-head-rethink-count", "mei:compare-head-rethink-count-pad", "nico:compare-head-rethink-ivb", "nozomi:compare-head-rethink-n100"],
+ "improvement": "Add IDQ.MITE_UOPS (legacy-decode uops) to wl_percall's event set on Skylake-family hosts: it exposed a front-end loss that instruction counts cannot show",
+ "next_step": "Read nozomi:compare-head-rethink-n100, then cut COMPARE-HEAD-H2 and MACHINE-JCC-PAD (code briefs in the handoff)",
+ "report_file": "handoff/compare-head-rethink.md"}

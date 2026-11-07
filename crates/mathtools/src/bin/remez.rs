@@ -60,7 +60,13 @@ fn main() -> ExitCode {
     let root = workspace_root();
     let mut ok = true;
     for f in files {
-        match run(f, check, &root) {
+        // One `step: remez/<fit> <seconds>s` line per fit, the gate's step-time format (xtask/src/steptime.rs), so a
+        // fit whose check grows is named in the gate log (XTASK-TEST-STEP-TIMES).
+        let started = std::time::Instant::now();
+        let r = run(f, check, &root);
+        let stem = Path::new(f.as_str()).file_stem().map_or_else(|| f.to_string(), |s| s.to_string_lossy().into_owned());
+        println!("step: remez/{} {:.1}s", stem.split_whitespace().collect::<Vec<_>>().join("-"), started.elapsed().as_secs_f64());
+        match r {
             Ok(good) => ok &= good,
             Err(e) => {
                 eprintln!("error: {e}");
