@@ -6,3 +6,11 @@ main-panic | xtask/src/plants.rs | lit:Some((b, thread)) if thread != "main" && 
 compile | xtask/src/plants.rs | lit:} else if t.starts_with("error: could not compile") { ==> } else if t.starts_with("error: could not compileX") { | cargo test -p xtask --bin xtask plants:: | msg:catcher_without_a_failing_test_line \.\.\. FAILED
 results-replace | xtask/src/plants.rs | lit:let kept = text.find(&format!("\n{RESULTS_HEADER}")).map_or(text, |i| &text[..=i]); ==> let kept = text; | cargo test -p xtask --bin xtask plants:: | msg:results_replace_an_earlier_block \.\.\. FAILED
 results-catcher | xtask/src/plants.rs | lit:results.push(format!("# {}: {}, caught by {by}", p.id, verdict.label())); ==> results.push(format!("# {}: {}", p.id, verdict.label())); | cargo test -p xtask --bin xtask plants:: | msg:a_caught_plant_exits_zero_and_is_restored \.\.\. FAILED
+# cargo xtask plants results (7 plants: 7 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# failed-line: CAUGHT, caught by xtask plants::tests::catcher_names_the_failing_test_of_a_cargo_test_log
+# hash-strip: CAUGHT, caught by xtask plants::tests::catcher_names_the_failing_test_of_a_cargo_test_log
+# nextest-counter: CAUGHT, caught by xtask plants::tests::catcher_names_the_first_of_several_failing_tests
+# main-panic: CAUGHT, caught by xtask plants::tests::catcher_without_a_failing_test_line
+# compile: CAUGHT, caught by xtask plants::tests::catcher_without_a_failing_test_line
+# results-replace: CAUGHT, caught by xtask plants::tests::results_replace_an_earlier_block
+# results-catcher: CAUGHT, caught by xtask plants::tests::a_caught_plant_exits_zero_and_is_restored
