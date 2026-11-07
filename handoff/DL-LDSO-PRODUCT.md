@@ -1,60 +1,49 @@
 # DL-LDSO-PRODUCT (phase 14 DL-5): the ld.so product, its entry and the L14-1 link checks
 
-**State:** branch `task/dl-ldso-product` (from origin/next e0c6b146), one WIP commit on top. Role shiki:~/w/sh1.
-**Verdict: INCOMPLETE.** Everything is written; `ld.so` links and passes its L14-1 check, but it **crashes at
-start** (SIGSEGV before relocation, see "Open"). Do not land until the product tests pass.
+**State:** branch `task/dl-ldso-product-2` (DL-LDSO-PRODUCT's WIP b8c1c7d0 on origin/next e0c6b146, plus 9a9ab2e8
+and this handoff). Role mei:~/w/s2. Decisions in force: D-27.13 (plan/07-decisions/s26-29.md), coordinator
+ruling #3810 (keep Liella's `--version`/`--help` text; row in docs/differences-from-glibc.md).
 
-## What is on the branch (D-27.13, plan/07-decisions/s26-29.md)
-* `liella_ld::arch::Arch::INTERP` (x86_64 `ld-linux-x86-64.so.2`): the product name.
-* `liella_ld::link` (L14-1): `check::<A>(bytes) -> LinkReport` counts undefined dynamic symbols (every symbol a
-  relocation names is checked too: a GNU hash count misses unhashed ones, found on the first build), `DT_NEEDED`,
-  RELA entries by `RelocKind` (Relative vs other), RELR words, `DT_TEXTREL`/`DF_TEXTREL`; `holds()`.
-* `liella_ld::program`: `action(args)` (`--version`, `--help`, unknown option, program, missing) and the texts.
-* `liella_ld::boot::own_headers(ehdr)`: `(e_phoff, e_phnum)` from the image's own ELF header.
-* boundary feature `ld`: `ld.rs` (`liella_ld_start`: relocate own image via `bootstrap::relocate_image`, provisional
-  thread block = zeroed `.bss` block of `ThreadBlock`'s size with word 0 = itself (L14-2), argc/argv/auxv, run as a
-  program iff `AT_ENTRY` == `liella_machine_ld_entry`, else 127; `NoHeap` allocator; local `memcpy`..`bcmp`
-  twins); `arch/mod.rs` (`set_thread_pointer`, `liella_machine_ld_entry` declaration); `bootstrap` built for
-  `runtime` or `ld`; build.rs passes `-DLIELLA_LD`, and `adapter/image_anchor.c` builds under it.
-* `csys/src/machine/entry.S` `#ifdef LIELLA_LD`: `liella_machine_ld_entry` (clear %rbp, %rdi = %rsp, align, call
-  hidden `liella_ld_start`).
-* `crates/ld-so` (product workspace): staticlib, `NoHeap`, panic handler.
-* `xtask so` → `run_ld`: `-shared -nostdlib --gc-sections -z now -z relro -z pack-relative-relocs -Bsymbolic`, entry
-  `liella_machine_ld_entry`, version script `local: *`, soname INTERP, `-Crelocation-model=pie` for the Rust
-  crates; then `check_interp` (refuses the product when L14-1 fails). xtask now depends on `liella-ld`.
-* `crates/ld/tests/ldso_link.rs`: 5 corpus tests (clean RELA and RELR; one object per violation), program
-  arguments, and 3 product tests (link check; 100 `--version` starts, half `setarch -R`; refusal as `PT_INTERP`).
-* Plants: handoff/DL-LDSO-PRODUCT-plants.txt (8 lines, not run yet).
+## Done (DL-LDSO-PRODUCT-2)
+* **The start crash is fixed by design, not flags.** `liella_machine_ld_entry` (entry.S, `-DLIELLA_LD`) does
+  `leaq __ehdr_start(%rip), %rsi` (hidden) and calls `liella_ld_start(sp, ehdr)`; `bootstrap::relocate_image(ehdr)`
+  is `#[inline(never)]`. `adapter/image_anchor.c` is back to libc-only (`LIELLA_RUNTIME`).
+* **Automated pre-relocation check** (`cargo xtask so` → `check_interp_prerelocation`, xtask/src/so.rs): from the
+  `objdump -d` listing, every function reached by direct calls/jumps from `liella_machine_ld_entry`, with
+  `liella_ld_start` cut after its call of `relocate_image`, must not read (non-`lea` RIP-relative operand) a word
+  a dynamic relocation writes (`liella_ld::link::relocated_words`: RELA/JMPREL offsets and RELR addresses); a
+  register-indirect call there is refused as unfollowable; an inlined relocator is refused. ARCH(x86_64) parser.
+  Unit test `interp_prerelocation_reads_are_refused` (xtask). Limit: reads through a computed pointer are not
+  visible to a listing check (recorded in D-27.13).
+* Product (mei, step2): ld.so links, passes L14-1 and the new check; `--version` exits 0; all 9 `ldso_link`
+  tests pass, including `ldso_product_runs_at_random_bases` (100 starts, half `setarch -R`) and
+  `ldso_product_refuses_as_interpreter`.
+* Inherited reds fixed: clippy (3 test `Arch` impls lacked `INTERP`; unused `c_int` under `export`; one `as`
+  with a reasoned allow); static: unsafe audit (policy.rs lists `src/ld.rs` for export/slice/allocator and
+  `src/arch/` for extern; tags moved above `#[unsafe(no_mangle)]`), arch tag on the entry declaration, test
+  clause tags (`no spec clause`), differences row `no clause ID`.
+* Dead code in the product-only boundary build: `null_folded`, `fold_resolved`, `liella_machine_scan_level_get`
+  are now `cfg(feature = "selftest")` (their only readers). `heap::c_malloc` stays: it warns in the libc and libm
+  product builds too (seen in the same `cargo xtask so` log), so it is not ld-specific; left for its owner.
 
-## Results (shiki)
-* Startup counters on origin/next e0c6b146 (job `dl-ldso-product-bench-next`): startup_instr_c **2149** / printf
-  71852 / setloc 68058 / wctype 69108. Branch counts NOT run yet. libc's start code is unchanged by this branch
-  (only `bootstrap.rs` attributes and new `ld`-only items), so no move is expected, but it is NOT VERIFIED.
-* `dl-ldso-product-check4` (so + ldso_link tests): `cargo xtask so` passes L14-1 on the built ld.so (only
-  RELATIVE/RELR); the 5 corpus tests and the arguments test pass; `ldso_product_runs_at_random_bases` and
-  `ldso_product_refuses_as_interpreter` FAIL: ld.so dies with SIGSEGV (139). Clippy/static did not run (script
-  stops at the test failure). check1-3 superseded (attribute typo; anchor not built under `ld`; GLOB_DAT found).
+## Jobs on the final head (mei; labels in jobs.tsv)
+`dl-ldso-product-2-gate` (affected --run --base origin/next), `dl-ldso-product-2-counts` (cbench_startup
+counters; compare with shiki's origin/next startup_instr_c 2149 / printf 71852 / setloc 68058 / wctype 69108:
+mei is another CPU class, so a difference there needs an origin/next run on mei before it is read as a move),
+`dl-ldso-product-2-plants2` (handoff/DL-LDSO-PRODUCT-2-plants.txt, 13 plants; run 1 had a too-weak textrel plant: it left the DF_TEXTREL half, which the linker also sets, so the test rightly passed; fixed and rerun; run 1 `dl-ldso-product-2-plants` was stopped and is superseded). The gate escalated to
+FULL (xtask changed). Results: see the report json and the hand-back.
 
-## Open (exact next step)
-1. **The crash** (gdb on our own binary): `liella_ld_start` calls `liella_link_image_header` through a GOT slot that
-   still holds the link-time address (pc = 0x3b40/0x3b80 = the function's link address). Neither `-Bsymbolic` nor
-   `-Crelocation-model=pie` removed the GOT-indirect call (two attempts: RUT, do not try a third flag). Recommended
-   fix: take the image header in the entry primitive, `leaq __ehdr_start(%rip), %rsi` in `liella_machine_ld_entry`
-   (hidden, PC-relative, as rcrt1's `main`), and pass it as `liella_ld_start(sp, ehdr)`, so no C call happens before
-   relocation; then check with `objdump -d` that nothing in `liella_ld_start` up to the relocation loop does
-   `call *..(%rip)` (also check whether the pie flag reaches the build: `readelf -r` on the archive member).
-2. Then: check.sh (so, tests, clippy `--all-features`, static), gate `affected --run --base origin/next`, plants
-   (`cargo xtask plants handoff/DL-LDSO-PRODUCT-plants.txt --dir /dev/shm/claude/dl-ldso-product/plants-1`),
-   branch startup counters vs the numbers above.
-3. Product-only builds of boundary warn about dead code (`null_folded`, `fold_resolved`, `c_malloc`,
-   `liella_machine_scan_level_get`): harmless; tidy with cfg_attr if wanted.
+## Open / next step
+1. If any job above is red: fix the cause, rerun only that job.
+2. RULING NEEDED: the unsafe-audit file lists now include `src/ld.rs` and `src/arch/` (a trust-boundary list);
+   recommend accept (same categories as the libc start's `runtime.rs`/`bootstrap.rs`).
+3. INFORMATIONAL: ld.so's code keeps ~62 GOT-indirect calls (rustc's foreign-function calls are not relaxed in
+   this `-shared` link). Correct after relocation; a later performance story may remove them. On a failed
+   self-relocation the error message write goes through the GOT and may crash instead of printing (status
+   still non-zero).
+4. Next phase work: DL-6 (load the program).
 
-## Arch seam checklist (§0a)
-1 ticked (literals only in `arch.rs`, `boundary/src/arch/`, entry.S, x86_64-marked test). 2 ticked (L14-1 matches
-`RelocKind`). 3 n/a (no TLS offsets; the provisional block size comes from `ThreadBlock`). 4 ticked
-(`liella_machine_ld_entry`, register convention in entry.S, declared in `boundary/src/arch/`). 5 n/a. 6 ticked
-(name from `Arch::INTERP`). 7 ticked (tests `cfg(target_arch = "x86_64")`, commented). 8 ticked (`INTERP` added
-to the table). 9 **open**: the pre-relocation call goes through the GOT (item 1 above).
+## Do not redo
+Linker flags for the GOT call (`-Bsymbolic`, `-Crelocation-model=pie`: two attempts, no effect).
 
-Process note: one heredoc was used for a local edit early in the run (owner rule: no heredocs); later edits used
-script files.
+Process note: one empty heredoc slipped into a local command early in this run (owner rule: no heredocs).
