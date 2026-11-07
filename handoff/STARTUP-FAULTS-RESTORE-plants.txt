@@ -1,0 +1,9 @@
+# STARTUP-FAULTS-RESTORE plants (cargo xtask plants; format docs/plants.md).
+# 1: the apply_irelative key dropped: no key is left dead, so `so` passes; the structural range check names it (fast keeps it out of line).
+apply-irelative-key-dropped | crates/libc-so/hot-text.list | perl:s/^_RNvNtC15liella_boundary7runtime15apply_irelative\t[^\n]*\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_path_lies_in_the_hot_text_range | msg:runtime::apply_irelative at 0x[0-9a-f]+: outside the hot text
+# 2: a stdio-tier key renamed to a stale form (HOTTEXT-STARTUP-COMPLETE guarded start-up/fork keys only): `so` fails naming it.
+stdio-key-stale | crates/libc-so/hot-text.list | perl:s/^_RNvNtC15liella_boundary6printf9vsnprintf\t/_RNvNtC15liella_boundary6printf8vsprintf\t/m | cargo xtask so | msg:_RNvNtC15liella_boundary6printf8vsprintf \(stdio, traced in fast\)
+# 3: the allow rule loosened to everything (no dead key can fail).
+allow-everything | xtask/src/hottext.rs | lit:if other_only || absent.contains(&(e.key.clone(), p.to_string())) { ==> if true { | cargo test -p xtask --bin xtask hottext | msg:unmatched_keys_of_the_built_profile_fail_unless_allowed.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 4: the start-up state move made a no-op (sections keep their names): the page-fault bounds catch the extra .data/.bss pages.
+state-move-noop | xtask/src/coldbss.rs | lit:format!("{s}={STATE_SECTION}") ==> format!("{s}={s}") | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds init_coreutils_shaped_program_stays_within_its_page_fault_bound | msg:page faults > [0-9]+

@@ -67,8 +67,13 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// tail) to 0x80a8e0, a page of its own: its first access (NSCACHE+0x25a) is the extra fault. No
 /// utmp code runs: gdb breakpoints on all 246 utmp/users/accounting/wtmp/lastlog functions in the
 /// program, none hit. LOCALE_BOUND 65 -> 68 (rule above: the highest count, 66, plus 2).
-const TRUE_BOUND: u64 = 23;
-const LOCALE_BOUND: u64 = 68;
+/// STARTUP-FAULTS-RESTORE: the bounds only ratchet down now (runs are deterministic, see
+/// HOTTEXT-VARIANCE): each is the count after the fix plus 1, no "highest seen plus 2" slack (the
+/// slack let DL-BOOT-RELOC-7's two start-up text faults through). Counts on the fix's build host:
+/// startup only 17, setlocale + printf 56, tool 59. TRUE_BOUND 23 -> 18, LOCALE_BOUND 68 -> 57,
+/// TOOL_BOUND 71 -> 60. [`init_startup_path_lies_in_the_hot_text_range`] checks the structure.
+const TRUE_BOUND: u64 = 18;
+const LOCALE_BOUND: u64 = 57;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -79,7 +84,7 @@ const LOCALE_BOUND: u64 = 68;
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
 /// (66 plus 2), TRUE_BOUND stays 23.
-const TOOL_BOUND: u64 = 71;
+const TOOL_BOUND: u64 = 60;
 const RUNS: usize = 5;
 
 fn root() -> PathBuf {
@@ -87,9 +92,15 @@ fn root() -> PathBuf {
 }
 
 fn build(out: &Path) {
+    build_with(out, &[]);
+}
+
+/// [`build`] with extra compiler driver arguments (e.g. `-Wl,-Map=<file>`).
+fn build_with(out: &Path, extra: &[&str]) {
     let r = root();
     let st = Command::new("cc")
         .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
+        .args(extra)
         .arg(r.join("target/liella/liella-crt1.o"))
         .arg(r.join("crates/core/tests/oracle/page_faults.c"))
         .arg(r.join("target/liella/libc.a"))
@@ -432,6 +443,79 @@ fn init_cold_startup_functions_are_grouped() {
         }
     }
     assert!(seen >= 2, "name-service cache attach path: {seen} sections found in libc.a (renamed? update the names above)");
+}
+
+/// The address range of a linked program's start-up and hot text, from its GNU ld map: the
+/// input sections `.text.startup*` (`_start`, entry.S) and `.text.sorted.h*` (the hot group),
+/// which the default script places next to each other. `(lo, hi)`, hi exclusive.
+fn hot_text_range(map: &str) -> (u64, u64) {
+    let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+    let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
+    let (mut lo, mut hi) = (u64::MAX, 0);
+    for (i, l) in lines.iter().enumerate() {
+        let Some(t) = l.strip_prefix(' ') else { continue };
+        if !(t.starts_with(".text.sorted.h") || t.starts_with(".text.startup")) {
+            continue;
+        }
+        let mut w: Vec<&str> = t.split_whitespace().skip(1).collect();
+        if w.is_empty() {
+            w = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+        }
+        if let (Some(a), Some(s)) = (w.first().and_then(|x| hex(x)), w.get(1).and_then(|x| hex(x))) {
+            if a != 0 && s != 0 {
+                lo = lo.min(a);
+                hi = hi.max(a + s);
+            }
+        }
+    }
+    (lo, hi)
+}
+
+/// STARTUP-FAULTS-RESTORE: the functions every static process runs before `main` lie inside the
+/// hot text range of a linked program, a check that does not depend on fault counts. When
+/// DL-BOOT-RELOC-7 made `runtime::start` generic, its list key went dead and `start::<false>`
+/// and `apply_irelative` ran from two 64 KiB windows of cold `.text` (two more faults), which
+/// fitted inside the count bounds' slack. Required: `_start`, `__libc_start_main` and
+/// `start::<false>`; `apply_irelative` and `liella_rt::start::program` when the profile keeps
+/// them out of line (release inlines them). No spec clause (layout of the products).
+#[test]
+fn init_startup_path_lies_in_the_hot_text_range() {
+    let dir = std::env::temp_dir().join(format!("liella-hot-range-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let (exe, map) = (dir.join("page_faults"), dir.join("page_faults.map"));
+    build_with(&exe, &[&format!("-Wl,-Map={}", map.display())]);
+    let (lo, hi) = hot_text_range(&std::fs::read_to_string(&map).expect("link map"));
+    let out = Command::new("nm").arg(&exe).output().expect("nm");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(lo < hi, "no .text.startup / .text.sorted.h* input sections in the link map");
+    // A v0 name after its crate hash: `_R<prefix>Cs<hash>_<rest>` -> `<rest>`.
+    let path = |name: &str, prefix: &str| name.strip_prefix(prefix).and_then(|r| r.split_once('_')).map(|(_, r)| r.to_string());
+    let mut found = std::collections::BTreeMap::new();
+    for l in String::from_utf8_lossy(&out.stdout).lines() {
+        let w: Vec<&str> = l.split_whitespace().collect();
+        let [addr, kind, name] = w[..] else { continue };
+        // `W`: the products' public functions are weak (`__libc_start_main`).
+        if !matches!(kind, "T" | "t" | "W" | "w") {
+            continue;
+        }
+        let name = name.split(".llvm.").next().unwrap_or(name);
+        let which = match name {
+            "_start" => "_start",
+            "__libc_start_main" => "__libc_start_main",
+            _ if path(name, "_RINvNtCs").is_some_and(|r| r.starts_with("15liella_boundary7runtime5startKb0_E")) => "runtime::start::<false>",
+            _ if path(name, "_RNvNtCs").is_some_and(|r| r == "15liella_boundary7runtime15apply_irelative") => "runtime::apply_irelative",
+            _ if path(name, "_RNvNtCs").is_some_and(|r| r == "9liella_rt5start7program") => "liella_rt::start::program",
+            _ => continue,
+        };
+        found.insert(which, u64::from_str_radix(addr, 16).expect("nm address"));
+    }
+    eprintln!("hot text {lo:#x}..{hi:#x}; start-up functions {found:x?}");
+    for f in ["_start", "__libc_start_main", "runtime::start::<false>"] {
+        assert!(found.contains_key(f), "{f}: not found in the linked program (renamed? update this test)");
+    }
+    for (f, a) in &found {
+        assert!((lo..hi).contains(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (its hot-text.list key dead or missing? run tools/hottext/regen.sh)");
+    }
 }
 
 #[test]
