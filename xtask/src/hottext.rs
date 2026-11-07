@@ -686,16 +686,17 @@ mod tests {
         let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\nold\textra\t-\n").unwrap();
         let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare", "old"].iter().map(|s| s.to_string()).collect();
         let none = BTreeSet::new();
-        let (d, s, a) = unmatched(&e, &all, &none, Some("fast"));
+        let na: BTreeSet<(String, String)> = BTreeSet::new();
+        let (d, s, a) = unmatched(&e, &all, &na, Some("fast"));
         assert_eq!((d.len(), s.len(), a), (0, 0, 0));
         assert_eq!(unmatched_error(&d, &s, "fast"), None);
-        let (d, s, a) = unmatched(&e, &none, &none, Some("fast"));
+        let (d, s, a) = unmatched(&e, &none, &na,Some("fast"));
         assert_eq!(d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk", "io", "bare", "old"]);
         assert_eq!((s.len(), a), (0, 1));
         let msg = unmatched_error(&d, &s, "fast").unwrap();
         assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("io (stdio, traced in fast)"));
         assert!(msg.contains("old (extra, no trace)") && msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
-        let (d, _, a) = unmatched(&e, &none, &none, Some("release"));
+        let (d, _, a) = unmatched(&e, &none, &na,Some("release"));
         assert_eq!((d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), a), (vec!["start", "rel", "bare", "old"], 2));
         // Allowed for fast only: still an error in release; a stale fast line (the key matches, or
         // is not in the list) is an error.
@@ -710,7 +711,7 @@ mod tests {
         assert!(unmatched_error(&d, &s, "fast").unwrap().contains("hot-text.absent: 1 stale fast line(s)"));
         let gone = parse_absent("gone\tfast\tx\n").unwrap();
         assert_eq!(unmatched(&e, &all, &gone, Some("fast")).1, ["gone"]);
-        let (d, s, a) = unmatched(&e, &none, &none, None);
+        let (d, s, a) = unmatched(&e, &none, &na,None);
         assert_eq!((d.len(), s.len(), a), (0, 0, 6));
         // Every allow line needs a profile and a reason.
         assert!(parse_absent("k\tfast\t \n").unwrap_err().contains("line 1"));
