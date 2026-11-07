@@ -771,6 +771,24 @@ pub fn expm1_quick_parts(x: f64) -> Option<(f64, f64)> {
     crate::hot::expm1_quick_parts(x)
 }
 
+/// The `double` `log` quick phase alone (D-10.60; `log`'s tier 1) in the build [`set_math_fma`]
+/// chose: the correctly rounded `ln x`, or `None` when its rounding test does not decide.
+pub fn log_quick(x: f64) -> Option<f64> {
+    crate::hot::log_quick(x)
+}
+
+/// `log`'s in-place tiers (D-10.51: the quick phase, tier 2 on a miss) in the build
+/// [`set_math_fma`] chose, as the `log` entry calls them.
+pub fn log_tiered(x: f64) -> Option<f64> {
+    crate::hot::log_nearest(x)
+}
+
+/// The `log` quick phase's unrounded `(zh, zl)` in the chosen build: `ln x = zh + zl` within
+/// `liella_math::fast64::quick_log::RHO·|zh|`.
+pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
+    crate::hot::log_quick_parts(x)
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it

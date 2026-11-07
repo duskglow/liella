@@ -1689,6 +1689,67 @@ fn strncmp_kernel_never_reads_past_the_bound_at_a_page_end() {
     CSys.munmap(lo).unwrap();
 }
 
+#[test]
+fn strncmp_kernel_stays_in_the_terminators_page_from_every_offset_near_its_end() {
+    // Clauses: s4_3_c_1 (SHORT-1, D-4.35; TIMING-COV-STRNCMP-DIFF8, D-4.69). Terminated texts that
+    // end at the last byte before an unmapped page, starting at each of the last 81 offsets (every
+    // position of a 16-byte block on both sides of the 64-byte head's limit), with an unbounded
+    // n: a load past the terminator's page faults. One side near its page end, the other near
+    // its page end or in the middle of its page.
+    let (lo, hi, base) = guarded();
+    let (lo2, hi2, base2) = guarded();
+    let _g = level();
+    let put = |p: usize, c: u8| {
+        s::memset(p as *mut c_void, c_int::from(c), 1);
+    };
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for len in 0..=80usize {
+            for mid in [false, true] {
+                let pa = base + PAGE - 1 - len;
+                let pb = if mid { base2 + 1024 + (len % 16) } else { base2 + PAGE - 1 - len };
+                s::memset(base as *mut c_void, c_int::from(b'x'), PAGE);
+                s::memset(base2 as *mut c_void, c_int::from(b'x'), PAGE);
+                put(pa + len, 0);
+                put(pb + len, 0);
+                let (a, b) = (pa as *const c_char, pb as *const c_char);
+                for n in [len, len + 1, usize::MAX] {
+                    assert_eq!(s::strncmp(a, b, n), 0, "equal, avx2={avx2}, len {len}, mid {mid}, n {n}");
+                    assert_eq!(s::strncmp(b, a, n), 0, "equal swapped, avx2={avx2}, len {len}, mid {mid}, n {n}");
+                }
+                for pos in 0..len {
+                    // 0xE9 above 'x' as an unsigned byte (below it as a signed one).
+                    put(pa + pos, 0xE9);
+                    for n in [pos, pos + 1, usize::MAX] {
+                        let want = if n > pos { 1 } else { 0 };
+                        assert_eq!(s::strncmp(a, b, n), want, "avx2={avx2}, len {len}, mid {mid}, pos {pos}, n {n}");
+                        assert_eq!(s::strncmp(b, a, n), -want, "swapped, avx2={avx2}, len {len}, mid {mid}, pos {pos}, n {n}");
+                    }
+                    // A common NUL at pos, the difference after it: equal.
+                    put(pa + pos, 0);
+                    put(pb + pos, 0);
+                    if pos + 1 < len {
+                        put(pa + pos + 1, b'y');
+                    }
+                    assert_eq!(s::strncmp(a, b, usize::MAX), 0, "NUL first, avx2={avx2}, len {len}, mid {mid}, pos {pos}");
+                    assert_eq!(s::strncmp(b, a, usize::MAX), 0, "NUL first swapped, avx2={avx2}, len {len}, mid {mid}, pos {pos}");
+                    put(pa + pos, b'x');
+                    put(pb + pos, b'x');
+                    if pos + 1 < len {
+                        put(pa + pos + 1, b'x');
+                    }
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+    CSys.munmap(hi2).unwrap();
+    CSys.munmap(lo2).unwrap();
+    CSys.munmap(hi).unwrap();
+    CSys.munmap(lo).unwrap();
+}
+
 /// The scanning exports make no per-call "paths decided?" test (D-4.39): they run whatever path the
 /// kernels' scan level names. So every startup decision must set that level to the decided path:
 /// AVX2 exactly when the CPU has it and no tunable switched it off.

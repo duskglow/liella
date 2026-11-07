@@ -514,6 +514,7 @@ table above).
 | `fts_open` options with neither or both of `FTS_LOGICAL` and `FTS_PHYSICAL` | Accepted (neither: physical; both: logical), where fts(3) says one is required. | phase 12 | `s13_3_c_4` |
 | `tzset` after `TZDIR` changes with `TZ` unchanged | The explicit `tzset` re-reads `TZDIR`; the implicit one does not. | Neither reads it again (probe `tzdir_probe2.c`, liella-historic:handoff/tz-fresh.md on `fix/tz-fresh`). | owner-accepted 2026-10-09 (note: documents main's `tzset` only once `fix/tz-fresh` has landed) | `s23_6_g_0` |
 | `step`, `advance` (`<regexp.h>`, compat-only) | Return 0 (no match) for every argument and leave `loc1`, `loc2` and `locs` untouched; the exported objects are unchanged. No compatibility option: the interface is obsolete and a program that needs a matcher uses `regcomp`/`regexec` (D-29.3). | owner ruling R6, 2026-11-04 | `s29_4_c_0` |
+| `ld-linux-x86-64.so.2 --version` and `--help` | Name Liella and its version, the GNU C Library 2.39 ABI it implements and the interpreter's file name, and list only the options this interpreter accepts. No compatibility option: the text identifies the installed implementation, and a copy of another implementation's text would misreport it. | Print the GNU C Library's own identification, copyright and option list. | D-27.13 (coordinator ruling #3810) | no clause ID |
 
 Also recorded as candidates in the decision rows: `getopt`'s letter fallback searching the raw
 option string (D-1.6), and `printf_size` never scaling negative values and dropping the sign of a

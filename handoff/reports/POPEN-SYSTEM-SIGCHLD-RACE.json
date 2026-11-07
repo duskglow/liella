@@ -1,0 +1,10 @@
+{"task": "POPEN-SYSTEM-SIGCHLD-RACE", "model": "opus", "tokens": null,
+ "result": "Test defect confirmed (SIGCHLD handler ran on libtest's main thread): case now runs in a single-threaded fork child; loop before 5/2000 fails, after 0/2000 under load; 2/2 plants caught",
+ "branch": "task/popen-system-sigchld-race", "head": "8a140c37c",
+ "gate": {"affected": "rc 0 (clippy, static, affected --base origin/next: ok)", "peak": "1.3G"},
+ "accepted_first_attempt": null,
+ "rulings": [], "informational": ["Other alone_ok cases reading a count of a process-directed signal after the call may share the libtest-main-thread exposure; not audited"], "refused": [],
+ "jobs": ["keke:psr-gate", "keke:psr-plants", "keke:psr-loop-before", "keke:psr-loop-after"],
+ "improvement": "A shared alone_ok variant that forks a single-threaded child would remove this class of thread-delivery races from re-executed signal tests",
+ "next_step": "Land; optionally audit other alone_ok signal-count cases",
+ "report_file": "handoff/POPEN-SYSTEM-SIGCHLD-RACE.md"}

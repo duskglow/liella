@@ -1,0 +1,35 @@
+{
+ "task": "LIBM-F32-ONEPASS",
+ "model": "opus",
+ "tokens": null,
+ "result": "expf/exp2f one-pass without an MXCSR read: 47.2/47.2 instr per call (glibc 39.1/37.1; was 73), exhaustive 2^32x4 0 mismatches both, plants 4/4; time on mei unchanged ~2.2x (likely cvtss2sd false dependency); exp10f/log/trig/pow not converted",
+ "branch": "task/libm-f32-onepass",
+ "head": "a8d5f4a27 (code); plants 4d8f8123f",
+ "gate": {
+  "affected": "1909 passed / 0 failed (7 suites, conformance 15/15)",
+  "peak": "3.9G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "Unmasked inexact trap: the one-pass path traps inside the kernel (inexact results only) instead of after the envelope's MXCSR read",
+   "recommendation": "accept: the same SIGFPE/FPE_FLTRES for the same operands; exact results raise nothing before the envelope"
+  }
+ ],
+ "informational": [
+  "Brief's exception table not needed: the mode-independent rounding test (5 instructions) refuses near-boundary results; plant no-rounding-test stands in for 'table entry dropped'",
+  "sinf/powf plants not applicable this slice",
+  "booked IVB/N100 timing not run",
+  "cvtss2sd %xmm0,%xmm1 without a dependency-breaking xorps in the new expf/exp2f: likely why time did not improve; next step 0 in the handoff"
+ ],
+ "refused": [],
+ "improvement": "A bench option list (`cargo xtask bench --help` is an unknown argument) would save reading bench.rs to find --rows/--only.",
+ "next_step": "exp10f (refuse integer x in [1,10] on the bits), then logf/log2f/log10f, sinf/cosf/tanf, powf on elem32_onepass; book IVB/N100 timing for expf/exp2f/expf_qnan",
+ "report_file": "handoff/libm-f32-onepass.md",
+ "jobs": [
+  "mei:f32op-gate",
+  "mei:f32op-plants",
+  "mei:f32op-sweep",
+  "mei:f32op-counts"
+ ]
+}

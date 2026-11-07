@@ -938,6 +938,50 @@ unsafe fn find_known<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::
     let last = needle.len().saturating_sub(1);
     let (Some(&c0), Some(&c1)) = (needle.first(), needle.get(last)) else { return Ok(None) };
     let r = kernel(p.wrapping_add(last), last, c0.into(), c1.into());
+    // UNSAFE(slice): the rest of the search from the first answer.
+    // SAFETY: as for this function; `r` is the scanner's answer for the pair (0, last) from `last`.
+    unsafe { settle(p, needle, kernel, rank, r) }
+}
+
+/// `strstr` after the direct entry's first scan (TIMING-COV-STRSTR-PAIR,
+/// `liella_machine_strstr`): [`find_known`] from the scanner's answer `r` for the pair
+/// (0, m - 1) from byte m - 1, for the needle of `m` bytes at `n`.
+///
+/// # Safety
+/// `h` and `n` are readable NUL-terminated strings, not written during the call; `n` has `m >= 1`
+/// bytes before its terminator, bytes [0, m - 1) at `h` are text and `r` is that answer.
+// UNSAFE(slice): the measured needle as a slice, then as for `find_known`.
+#[allow(unsafe_code)]
+pub unsafe fn find_str_after(h: *const i8, n: *const i8, m: usize, r: usize) -> KResult<Option<usize>> {
+    if m == 0 {
+        return Ok(Some(0));
+    }
+    // UNSAFE(slice): the measured needle becomes a slice.
+    // SAFETY: `m` readable non-NUL bytes at `n`, not written during the call (contract).
+    let needle = unsafe { core::slice::from_raw_parts(n.cast::<u8>(), m) };
+    crate::cpu::ready();
+    // UNSAFE(slice): the rest of the search from the entry's answer.
+    // SAFETY: the function's contract; `strpair` is the scanner that answered `r`.
+    unsafe { settle(h.cast::<u8>(), needle, ffi::liella_machine_strpair, crate::conv::commonness, r) }
+}
+
+/// [`find_known`] after its first scan: `r` is the scanner's answer for the pair (0, last) from
+/// unit `last`. The first candidate is compared here, a reported terminator re-read, and the
+/// rest goes to [`find_next`].
+///
+/// # Safety
+/// As for [`find_known`], with `r` that answer.
+// UNSAFE(slice): reading the haystack through its terminator via the scanner's answers.
+#[allow(unsafe_code)]
+#[inline(always)]
+unsafe fn settle<T: Copy + PartialEq + Default + Into<i32> + liella::bytes::Unit>(
+    p: *const T,
+    needle: &[T],
+    kernel: extern "C" fn(*const T, usize, i32, i32) -> usize,
+    rank: fn(T) -> u8,
+    r: usize,
+) -> KResult<Option<usize>> {
+    let last = needle.len().saturating_sub(1);
     if r & 1 == 0 {
         let at = r >> 1;
         // UNSAFE(slice): comparing the needle at the first candidate.

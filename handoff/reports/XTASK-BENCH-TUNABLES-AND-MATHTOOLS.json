@@ -1,0 +1,5 @@
+{"task": "XTASK-BENCH-TUNABLES-AND-MATHTOOLS", "model": "opus", "tokens": null, "result": "bench honours caller GLIBC_TUNABLES on every route (conflict refused); affected maps mathtools generator inputs to remez/tables/kernel-index checks", "branch": "task/xtask-bench-tunables-and-mathtools", "head": "0b8f53ce9",
+ "gate": {"affected": "pending (xbt-gate2); clippy+static+43 xtask unit tests passed (xbt-check2)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["sudo route may also drop CBENCH_ROWS/CBENCH_COUNTERS (env reset); not changed"], "refused": [],
+ "jobs": ["keke:xbt-check2", "keke:xbt-gate2", "keke:xbt-plants3", "keke:xbt-counts"],
+ "improvement": "plants tool: allow escaping | in lit: patterns, or say so in its refusal message", "next_step": "read xbt-counts/xbt-plants3/xbt-gate2; ready when green", "report_file": "handoff/XTASK-BENCH-TUNABLES-AND-MATHTOOLS.md"}

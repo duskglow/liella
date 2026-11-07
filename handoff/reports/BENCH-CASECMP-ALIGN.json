@@ -1,0 +1,11 @@
+{"task": "BENCH-CASECMP-ALIGN", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: operands pinned (0/0x800, xpage row at 0xf00), but Liella strcasecmp_c_256 262.4 (was 250.2) and strncasecmp_c_64 103.1 (was 70.0) vs glibc flat 197/60: placement-sensitive code, not layout alone",
+ "branch": "task/bench-casecmp-align", "head": "c90ece4dc",
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "strcasecmp/strncasecmp cost depends on operand placement without page crossing (mutually aligned operands +12/+33 instr)", "recommendation": "follow-up story: placement sweep, fix the code to be flat, then land this bench pinning with representative offsets"}],
+ "informational": ["iconv rows unchanged within 0.1% with 4096-aligned buffers", "Ivy Bridge timing not run (pending)"],
+ "refused": [],
+ "improvement": "bench rows with string operands should print their operands' page offsets so layout drift is visible in the counters table",
+ "next_step": "black-box offset sweep of strcasecmp/strncasecmp instruction counts (Liella vs glibc), profile the slow placement, fix code",
+ "report_file": "handoff/BENCH-CASECMP-ALIGN.md",
+ "jobs": ["mei:casecmp-align-cnt-before", "mei:casecmp-align-cnt-after"]}

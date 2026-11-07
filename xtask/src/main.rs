@@ -28,7 +28,7 @@
 //! | `env-audit`    | Reject an in-process `setenv`/`putenv`/`unsetenv`/`clearenv` in a test binary that also starts processes, unless it runs in `in_child`/`alone` or carries `// env-ok: <why>` (FL-1: the library's `environ` is the process's). |
 //! | `opaque-audit` | Reject a direct call to an exported allocator-family name (`malloc`, `free`, ...) in a test file unless it goes through `selftest::opaque` or the file says `// opaque-ok: <why>` (GATE-SPEED-5: LLVM folds those names at opt-level >= 1); and a test file linking `liella_boundary` that calls any LLVM-builtin libc name (`labs`, `strlen`, `fabs`, ...) directly unless it is `#![no_builtins]` (OPAQUE-AUDIT). |
 //! | `crash-audit`  | Reject a test that expects a core-dumping signal (`.signal(), Some(6)`, `Signaled(SIGABRT)`, `EXPECT-SIGNAL: 6`, `WTERMSIG(st) == SIGSEGV`) without as many `expect_crash` helper calls (`selftest::expect_crash`/`in_child_quiet`, `conformance/c/expect_crash.h`) unless the file says `dump-ok: <why>` (CORE-STORM: no core handler per deliberate crash). |
-//! | `test`         | policy checks, the workspace tests (internal + translation suites; under cargo-nextest when installed, `LIELLA_NO_NEXTEST=1` for `cargo test`, see `nextest.rs`), then the C conformance suite, `native` and `rust-dylib`. |
+//! | `test`         | policy checks, the workspace tests (internal + translation suites; under cargo-nextest when installed, `LIELLA_NO_NEXTEST=1` for `cargo test`, see `nextest.rs`), then the C conformance suite, `native` and `rust-dylib`. The math accuracy sweeps skip a shard whose complete input key matches its last green run (prints `verdict cached: <name> <key>`; records in `target/test-verdicts/`, D-10.57); `LIELLA_NO_VERDICT_CACHE=1` runs every shard (the nightly and release runs). Each step prints `step: <name> <seconds>s` as it ends and the run ends with `step-summary:` lines, slowest first, and `step-total:` (`steptime.rs`; `affected --run` does the same when it escalates to FULL). |
 //! | `ctest`        | Only the C conformance suite (`conformance/run.sh`). |
 //! | `nextest`      | `cargo nextest run <args>` with the summary lines of a `cargo test` log added (`nextest.rs`); `affected --run` runs its tests through it. |
 //! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` prints the selection with a reason per item, `--run` runs it and prints a summary; one of the two is required (without either: the one-line usage, exit 2; XTASK-AFFECTED-EXPLICIT); `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
@@ -41,6 +41,7 @@
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
 //! | `classed-xref` | The classed pages' XREF bias rule (D-4.53, D-X.34): every out-of-page reference of page 1 addresses page 0's target + 4096, paired in order (an unpaired reference is an error). No file: assemble `csys/src/machine/fold.S` (also a `static` check); `<file>...`: check those archives, objects or linked objects (`so` checks `libc.a` and `libc.so.6`). |
+//! | `jcc-check` | The hot machine assembly keeps every jump off 32-byte boundaries (D-4.67, JCC erratum): no jump or fused compare-and-jump crosses or ends on one, and each section holding one is 32-byte aligned. No file: assemble the files of `crates/boundary/jcc_pad.rs` with its flags (also a `static` check); `<file>...`: check those archives or objects (`so` checks `libc.a`). |
 //! | `plants`       | Run a story's plants from a plants file (`plants.rs`, `docs/plants.md`): `<file> --dir <new RAM dir>` copies the tree there without `target/` (an existing `--dir` is refused), runs `cargo xtask so` and the baseline (failed: exit 2), applies each plant (exactly one site; `.S` plants name their `liella_machine_<fn>:` label), runs its command, restores by writing, and prints CAUGHT / SURVIVED / EQUIVALENT / WARN-RC-ONLY / WARN-NO-MSG; any SURVIVED exits 1. |
 #![allow(clippy::disallowed_methods)] // a host tool: S8 governs the library crates only
 
@@ -52,6 +53,7 @@ mod affected;
 mod align;
 mod bench;
 mod classed;
+mod jcc;
 mod benchstage;
 mod forkalloc;
 mod fs_order;
@@ -77,6 +79,7 @@ mod schedule;
 mod so;
 mod spec;
 mod status;
+mod steptime;
 mod symcov;
 mod symgap;
 mod sweep;
@@ -166,8 +169,9 @@ fn main() -> ExitCode {
         "rust-dylib" => rust_dylib::run_rust_dylib(&root, args.get(1).map(String::as_str)),
         "plants" => return plants::main(&root, &args[1..]),
         "classed-xref" => classed::run(&root, &args[1..]),
+        "jcc-check" => jcc::run(&root, &args[1..]),
         _ => {
-            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; GLIBC_TUNABLES in the caller's environment is ignored on purpose, only --tunables V sets it for both sides, so runs are reproducible) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
+            println!("usage: cargo xtask <stubs [--force] | trace [--untested [--out F]] | static | clippy | status [--schedule] | symgap | symcov [--tsv <file | compat-plan | register [--check]>] | arch-audit [--list] | arch-check | purity | unsafe-audit | csys-audit | env-audit | opaque-audit | crash-audit | csys-gen [--check] | abi-gen [--check] | unicode-gen [--check] | locale-gen [--check] | native-gen [--check] | compat-gen [--check] | math-gen [--check] | mathcmp FUNC FMT [opts] (FMT: f32|float|f, f64|double|d, f80|ld|long-double|l, f128|_Float128|q; whole names only) | remez [--check] FIT... | tables [--check] | kernel-index [--check] | bench [--runs N] [--only <bench>,...] [--rows <bench>/<row>,... | --rows-file F | --affected <base>] [--build-only | --no-build] | bench-rows [--base <ref> | --range <a>..<b> | --files <p>,...] [--out F] | sweep (run --out <dir> [--only a,b] | compare --new <class>=<tsv>... (--old <class>=<tsv>... | --old-table <md>) [--label L]) [--compare [--runs N] [--v3] [--sorted] [--counters] [--tunables V] [--only a,b | <cbench>...]] (flags may stand anywhere after bench; an unknown --flag is an error; --tunables V, or else a non-empty GLIBC_TUNABLES in the caller's environment, sets it for both sides; the two differing is an error) | fuzz <target> --time <minutes> | fuzz-check | so | test | ctest | nextest <args> | affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports] | native | rust-dylib [<abi>] | repro [--release] [--dir <base>]>");
             Ok(())
         }
     };
@@ -205,8 +209,8 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 24] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()]))];
+    let checks: [(&str, Check); 25] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()]))];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
@@ -219,70 +223,83 @@ fn clippy_gate(root: &Path) -> Result<(), String> {
     run(Command::new(&cargo).current_dir(root).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]))
 }
 
+/// `cargo xtask test`, the full gate. Every step prints `step: <name> <seconds>s` when it ends and the run ends with
+/// the summary, slowest first, also when a step failed (`steptime.rs`, XTASK-TEST-STEP-TIMES).
 fn test_all(root: &Path, extra: &[String]) -> Result<(), String> {
-    policy::purity(root)?;
-    policy::unsafe_audit(root)?;
-    policy::csys_audit(root)?;
-    policy::env_audit(root)?;
-    policy::opaque_audit(root)?;
-    policy::crash_audit(root)?;
-    policy::reexec_audit(root)?;
-    trace::run(root)?;
+    let mut t = steptime::Steps::default();
+    let r = test_steps(root, extra, &mut t);
+    t.print_summary();
+    r
+}
+
+fn test_steps(root: &Path, extra: &[String], t: &mut steptime::Steps) -> Result<(), String> {
+    t.time("purity", || policy::purity(root))?;
+    t.time("unsafe-audit", || policy::unsafe_audit(root))?;
+    t.time("csys-audit", || policy::csys_audit(root))?;
+    t.time("env-audit", || policy::env_audit(root))?;
+    t.time("opaque-audit", || policy::opaque_audit(root))?;
+    t.time("crash-audit", || policy::crash_audit(root))?;
+    t.time("reexec-audit", || policy::reexec_audit(root))?;
+    t.time("trace", || trace::run(root))?;
     // The fuzz harnesses still compile against the libraries (HYGIENE-1).
-    fuzz::check(root)?;
-    csys::run(root, true)?;
-    abi::run(root, true)?;
-    unicode::run(root, true)?;
-    langinfo::run(root, true)?;
-    native::run(root, true)?;
-    compat::run(root, true)?;
-    math::run(root, true)?;
-    // The generated coefficients still follow from their fit files (D-10.12).
+    t.time("fuzz-check", || fuzz::check(root))?;
+    t.time("csys-gen-check", || csys::run(root, true))?;
+    t.time("abi-gen-check", || abi::run(root, true))?;
+    t.time("unicode-gen-check", || unicode::run(root, true))?;
+    t.time("locale-gen-check", || langinfo::run(root, true))?;
+    t.time("native-gen-check", || native::run(root, true))?;
+    t.time("compat-gen-check", || compat::run(root, true))?;
+    t.time("math-gen-check", || math::run(root, true))?;
+    // The generated coefficients still follow from their fit files (D-10.12). The remez binary prints a
+    // `step: remez/<fit>` line per fit. The fits run in parallel and replay unchanged verdicts (D-10.58), so their
+    // times overlap: they name the slow fit, they do not add up to this step's time.
     let mut fits: Vec<String> = std::fs::read_dir(root.join("crates/math/fits")).map_err(|e| e.to_string())?.flatten().map(|e| e.path().display().to_string()).filter(|p| p.ends_with(".fit")).collect();
     fits.sort();
     fits.insert(0, "--check".into());
-    math::run_remez(root, &fits)?;
-    math::run_tables(root, &["--check".to_string()])?;
+    t.time("remez-check", || math::run_remez(root, &fits))?;
+    t.time("tables-check", || math::run_tables(root, &["--check".to_string()]))?;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     // The products first: tests of what only a process Liella started can show run C
     // conformance programs against them.
-    so::run_so(root)?;
-    workspace_tests(root, &cargo, None, extra)?;
+    t.time("products", || so::run_so(root))?;
+    workspace_tests(root, &cargo, None, extra, t, "tests")?;
     // Again with the exports interposed on the test processes (D-4.13): the harness then runs
     // on Liella's own `malloc` and `memcpy`, so a recursion in their paths crashes the run. Not
     // with `runtime`: a test process must keep the host C library's start and exit.
-    workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra)?;
-    ctest(root)?;
+    workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra, t, "tests-interposed")?;
+    t.time("conformance", || ctest(root))?;
     // The native Rust interface's examples, on the products built above (D-X.10).
-    native_examples::run_native(root)?;
+    t.time("native-examples", || native_examples::run_native(root))?;
     // The Rust dylib of the current Rust ABI version and its program (D-X.10).
-    rust_dylib::run_rust_dylib(root, None)?;
-    symgap::run(root)?;
+    t.time("rust-dylib", || rust_dylib::run_rust_dylib(root, None))?;
+    t.time("symgap", || symgap::run(root))?;
     // The status table and the schedule report: a report only, not failing the gate, until the
     // owners of the flagged work are settled (implementation-plan.md §4.3).
-    status::run(root, false)
+    t.time("status", || status::run(root, false))
 }
 
 /// The workspace's tests: under nextest when it is available (`nextest.rs`; the doctests then
 /// with `cargo test --doc`, which nextest does not run), else one `cargo test --workspace`.
 /// `extra` goes to whichever runs the tests.
-fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[String]) -> Result<(), String> {
+/// `name` is the steps' name: `<name>-nextest` and `<name>-doc` (`<name>-cargo-test` without nextest).
+fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[String], t: &mut steptime::Steps, name: &str) -> Result<(), String> {
     let feat: Vec<String> = features.map(|f| vec!["--features".to_string(), f.to_string()]).unwrap_or_default();
     if !nextest::available(cargo) {
-        return run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace"]).args(&feat).args(extra));
+        return t.time(&format!("{name}-cargo-test"), || run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace"]).args(&feat).args(extra)));
     }
     let mut args = vec!["--workspace".to_string()];
     args.extend(feat.iter().cloned());
-    // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889).
+    // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889)
+    // and runs shard 0 only of the heavy math products sweeps (`nextest::PASS1_SHARD0`, D-X.36).
     // Binaries without liella-boundary code are the same in both passes and run once (CI-GATE-DIET).
     if features.is_some() {
-        let once = if nextest::pass1_filter(extra, &[]).is_some() { nextest::unchanged_binaries(cargo, root, &feat) } else { Vec::new() };
+        let once = if nextest::pass1_filter(extra, &[]).is_some() { t.time(&format!("{name}-unchanged-scan"), || nextest::unchanged_binaries(cargo, root, &feat)) } else { Vec::new() };
         args.extend(nextest::pass1_filter(extra, &once).unwrap_or_default());
     }
     args.extend(extra.iter().cloned());
     // Every failure of both steps is reported before the gate stops.
-    let tests = nextest::run(cargo, root, &args);
-    let docs = run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace", "--doc"]).args(&feat));
+    let tests = t.time(&format!("{name}-nextest"), || nextest::run(cargo, root, &args));
+    let docs = t.time(&format!("{name}-doc"), || run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace", "--doc"]).args(&feat)));
     tests.and(docs)
 }
 

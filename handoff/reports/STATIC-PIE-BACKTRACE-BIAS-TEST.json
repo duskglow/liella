@@ -1,0 +1,11 @@
+{"task": "STATIC-PIE-BACKTRACE-BIAS-TEST", "model": "opus", "tokens": null,
+ "result": "static-PIE backtrace/backtrace_symbols/_fd bias test (PIE + fixed-address builds) and 3 plants written; lint2, gate2, plants2 queued on keke at hand-back",
+ "branch": "task/static-pie-backtrace-bias-test", "head": null,
+ "gate": {"affected": "pending (keke:static-pie-backtrace-bias-test-gate2)", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["keke:static-pie-backtrace-bias-test-lint2", "keke:static-pie-backtrace-bias-test-gate2", "keke:static-pie-backtrace-bias-test-plants2"],
+ "superseded": ["keke:static-pie-backtrace-bias-test-lint", "keke:static-pie-backtrace-bias-test-gate", "keke:static-pie-backtrace-bias-test-plants"],
+ "rulings": [], "informational": ["keke slot queue held the first lint job ~35 min"], "refused": [],
+ "improvement": "a short lint job (clippy/static, seconds when cached) should not wait in the same slot queue as gates",
+ "next_step": "jobwait the three keke jobs; fix the test or the library if lint2 or a plant is red",
+ "report_file": "handoff/STATIC-PIE-BACKTRACE-BIAS-TEST.md"}

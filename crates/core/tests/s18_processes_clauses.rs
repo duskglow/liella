@@ -29,6 +29,10 @@ use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{Rusage, SchedParam, SigInfo};
 use liella_legacy::spawn_compat::{CFileActions, CSpawnAttr};
 
+#[path = "support/single_thread.rs"]
+mod single_thread;
+use single_thread::{single_threaded, sole_thread};
+
 /// Build and run C conformance programs against the products (`conformance/run.sh`).
 fn conformance(names: &[&str]) {
     static RUNNER: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1032,7 +1036,14 @@ fn s18_4_g_2() {
     assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
     let run = |case: &'static str, masked: bool| {
         let fifo = fifo.clone();
-        alone_ok("s18_4_g_2", case, move || {
+        // SIGUSR2 goes to the whole process: in the fork child only the body's two threads can
+        // take it, and the handler has run before the joined sender ends or before the caller
+        // returns from the spawn (D-X.42). Checked before the sender starts: a joined thread may
+        // still be listed in /proc/self/task for a moment after the join.
+        alone_ok("s18_4_g_2", case, move || single_threaded(move || {
+            if !sole_thread() {
+                return false;
+            }
             x::setpgid(0, 0);
             let [rd, wr] = CSys.pipe2(O_CLOEXEC).unwrap();
             SIG_PIPE.store(wr.raw() as u32, Ordering::SeqCst);
@@ -1070,7 +1081,7 @@ fn s18_4_g_2() {
             }
             say(&format!("R:r={r} status={st:#x} handler_here={here} handler_elsewhere={elsewhere}\n"));
             true
-        })
+        }))
     };
     let plain = run("plain", false);
     let masked = run("masked", true);
