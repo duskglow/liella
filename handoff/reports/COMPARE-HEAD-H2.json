@@ -1,0 +1,32 @@
+{
+ "task": "COMPARE-HEAD-H2",
+ "model": "opus",
+ "tokens": null,
+ "result": "H2 head-first entries for memcmp/bcmp/__memcmpeq written (fold.S, new fold words, NULL tests per #3839); gate partly green, plants and timing not run; static count shows AVX2 eq rows >32 B about +6..+8 instr, not +1",
+ "branch": "task/compare-head-h2",
+ "head": "954b52553",
+ "gate": {
+  "affected": "liella, liella-abi, liella-boundary (both modes), liella-ld, liella-legacy ok; rest pending",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "#3840 premise: H2 costs AVX2 equal rows above 32 B about +6..+8 instructions (static), not +1",
+   "recommendation": "measure counts and N100 timing first; if AVX2 eq_64/eq_128 time is worse, keep H2 for SSE2 and route AVX2 n>32 before the head (option c in handoff)"
+  }
+ ],
+ "informational": [
+  "folding off/undecided: sizes >= 8 now take the checked Rust entries (performance only)",
+  "fold.S header prose before D-4.66 is stale for class selection (marked; rewrite later)"
+ ],
+ "refused": [],
+ "improvement": "wl_percall should accept a short sha or say how to prime a base in one line; two runs lost to it",
+ "next_step": "read gate + percall-c logs, run plants, decide AVX2 option, book Ivy Bridge/N100/Skylake timing before 19:30 UTC",
+ "report_file": "handoff/compare-head-h2.md",
+ "jobs": [
+  "keke:compare-head-h2-gate",
+  "keke:compare-head-h2-percall-avx2-c",
+  "keke:compare-head-h2-percall-sse2-c"
+ ]
+}
