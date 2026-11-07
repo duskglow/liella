@@ -61,7 +61,7 @@
 //! `S = 0`: `2^-63.9 + 2^-63.47 + 3·2^-66.2 < 0.25·2^-60`. Stated `RHO = 0.875·2^-61` (margin for
 //! `|yh|` against `|y|`); test multiplier `C_Q` the least double with `C_Q·(1 − 2^54·RHO) > 1 +
 //! 2^-53` rounded up to `1 + 2^-7 + 2^-12`. `tan = s/c`: `qh = RN(sh/ch)`, the residual
-//! `sh − qh·ch` exact (FMA or Dekker's product), `ql = ((sh − qh·ch) + sl − qh·cl)/ch`: relative
+//! `sh − qh·ch` exact (FMA or Dekker's product), `ql = ((sh − qh·ch) + sl − qh·cl)/ch`, then Fast2Sum(`qh`, `ql`): relative
 //! error `<= ρs + ρc + 2ρc(ρs + ρc) + 2^-100 < 2^-60`, multiplier `C_TAN` of today's tier
 //! (`rho = 2^-60`). The test (de Dinechin, Lauter & Muller, RAIRO-ITA 41, 2007) needs `y`
 //! neither a double nor a midpoint (true: `sin`, `cos`, `tan` of a nonzero double are
@@ -254,8 +254,10 @@ pub fn tan_quick(x: f64) -> Option<f64> {
     let qh = sh / ch;
     let m = $prod(qh, ch);
     let ql = ((sh - m.hi - m.lo) + $ma(-qh, cl, sl)) / ch;
-    let w = ql * C_TAN;
-    if qh + w == qh && w != 0.0 && (ss * cs != 0.0 || crate::dd::abs(rh) >= R26) { Some(qh) } else { None }
+    // `qh` is not the rounded quotient (`|ql|` reaches an ulp): normalize before the test.
+    let th = qh + ql;
+    let w = (ql - (th - qh)) * C_TAN;
+    if th + w == th && w != 0.0 && (ss * cs != 0.0 || crate::dd::abs(rh) >= R26) { Some(th) } else { None }
 }
 
 /// The quick `(sin x, cos x)` (round to nearest), both or `None` (module doc).
