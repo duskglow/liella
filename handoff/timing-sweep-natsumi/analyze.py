@@ -50,13 +50,17 @@ def report(name, rows):
     judged = [r for r in rows if not r["deferred"] and r["time"] is not None]
     deferred = [r for r in rows if r["deferred"]]
     for r in judged:
-        if verdict(r["time"]) != r["verdict"]:
+        # sweep.tsv prints 3 decimals and the tool judges the unrounded ratio: at a threshold its verdict stands.
+        at_edge = min(abs(r["time"] - FASTER), abs(r["time"] - SLOWER)) <= 0.0005
+        if verdict(r["time"]) != r["verdict"] and not at_edge:
             sys.exit(f"verdict mismatch {r['bench']}/{r['row']}: {r['time']} {r['verdict']}")
     c = {v: sum(1 for r in judged if r["verdict"] == v) for v in ("faster", "parity", "slower")}
     times = sorted(r["time"] for r in judged)
     spreads = sorted(r["spread"] for r in rows if r["spread"] is not None)
     instr = sorted(r["instr"] for r in judged if r["instr"] is not None)
-    geo = statistics.geometric_mean(times)
+    # A ratio printed 0.000 (< 0.0005) has no logarithm: it counts as faster but stays out of the geometric mean.
+    zero = [r for r in judged if r["time"] <= 0]
+    geo = statistics.geometric_mean([t for t in times if t > 0])
     out = [f"## {name}", ""]
     out.append("| rows judged | faster | parity | slower | time median | time p10 | time p90 | time geomean | "
                "spread median | spread p90 | spread max | instr median (counted rows) |")
@@ -66,7 +70,10 @@ def report(name, rows):
                f"{pct(spreads, 0.9):.3f} | {spreads[-1]:.3f} | "
                f"{(statistics.median(instr) if instr else float('nan')):.3f} ({len(instr)}) |")
     out.append("")
-    flagged = [r for r in rows if r["flagged"] == "yes"]
+    if zero:
+        out.append("Rows with time printed 0.000 (< 0.0005; faster, left out of the geomean): "
+                   + ", ".join(f"{r['bench']}/{r['row']}" for r in zero))
+    flagged =[r for r in rows if r["flagged"] == "yes"]
     out.append(f"Rows flagged by the bench's per-host limit check: {len(flagged)}"
                + ("" if flagged else " (no limits exist for this CPU model; see the handoff)."))
     out += [f"- {r['bench']}/{r['row']} time {f3(r['time'])} limit {r['limit']} status {r['status']}" for r in flagged]
