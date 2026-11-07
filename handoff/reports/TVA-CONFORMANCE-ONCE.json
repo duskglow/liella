@@ -1,0 +1,13 @@
+{"task": "TVA-CONFORMANCE-ONCE", "model": "opus", "tokens": null,
+ "result": "NOT READY: run.sh records a per-program pass stamp (program hash + inherited process state + link key incl. products hash) and skips exact repeats; gate, plants and before/after measure queued on keke",
+ "branch": "task/tva-conformance-once", "head": "19d12d161",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["run.sh passed the test process's env, rlimits, signal mask/ignored set, umask, fds and cwd to programs: all now keyed; NEXTEST_*/CARGO_* are no longer passed (no program reads them)",
+                   "repeats used to give a racy program extra chances to fail; now it runs once per products+environment (a flake is a defect, not a retry)",
+                   "measure-first (brief step 1) not done before coding: keke queue ~5 deep; tvaco-measure reports before/after test-s and exec counts"],
+ "refused": [],
+ "jobs": ["keke:tvaco-gate", "keke:tvaco-plants", "keke:tvaco-measure"],
+ "improvement": "a per-story 'measure first' job waits a full slot cycle before coding can be judged; a small-lane slot for read-only timing scripts (no build) would cut that wait",
+ "next_step": "collect tvaco-gate, tvaco-plants, tvaco-measure (ssh keke ~/bin/jobwait ...); fill -N test-s; red => fix only the failing suite",
+ "report_file": "handoff/TVA-CONFORMANCE-ONCE.md"}
