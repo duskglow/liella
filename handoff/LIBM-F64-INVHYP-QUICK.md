@@ -34,8 +34,10 @@ quick log kernel), D-10.65 (this story: method, ranges, bound), D-10.25/D-10.50 
 * `libm-f64-invhyp-quick-plants` (head 16a511270, rc 1): 5 of 6 CAUGHT (sqrt-low-dropped, atanh-division-error-dropped,
   large-regime-boundary-moved, log1p-small-boundary-moved, pair-low-part-dropped); near-always-true SURVIVED: the
   actual error is far below RHO_PAIR, so bypassing the test rarely misrounds a random operand. Fixed by 0cb8a104b (the
-  fallback rate must stay above 0.05%: Ziv's window is `C_PAIR − 1` wide whatever the error). Rerun: `-plants2`.
-* `libm-f64-invhyp-quick-gate` (head 16a511270): direct tier; see the hand-back for its result. Final-head jobs:
+  fallback rate must stay above 0.05%: Ziv's window is `C_PAIR − 1` wide whatever the error). Rerun on the final
+  head: `libm-f64-invhyp-quick-plants2` rc 0, 6 of 6 CAUGHT, no WARN.
+* `libm-f64-invhyp-quick-gate` (head 16a511270): stopped in liella-math (load 45) after liella, boundary (both
+  modes) and legacy passed, to rerun on the final head. Final-head jobs:
   `-gate2`, `-plants2`, `-counts2` (cbench_libm `--compare --counters`, default build then
   `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`; whether that tunable reaches cbench is NOT VERIFIED, as LIBM-F64-LOG-QUICK
   noted).
