@@ -1298,6 +1298,34 @@ enum Class {
     MathFit,
     /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
     MathTables,
+    /// D-X.39: another `crates/mathtools/src/` source that a generator is built from (`mathtools_feeds`): its own
+    /// mapping plus the check of each generated set it feeds.
+    MathToolFeed(Feeds),
+}
+
+/// D-X.39: which generated sets a liella-mathtools source feeds. `remez`: the fitted coefficient files
+/// (`cargo xtask remez --check <every fit>`); `tables`: the constant tables and `crates/math/KERNELS.md`
+/// (`cargo xtask tables --check`, `kernel-index --check`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Feeds {
+    pub remez: bool,
+    pub tables: bool,
+}
+
+/// D-X.39: the generator inputs under `crates/mathtools/src/` (the fitting code reached CI without `remez --check`
+/// before this map). The remez binary is built from `remez.rs` and `mp/`; the tables binary from `tables.rs`, the
+/// `*_tables.rs` modules and `mp/`; `lib.rs` declares both. `cmp.rs`, `cplx.rs` and `bin/mathcmp.rs` feed no
+/// generated file (the comparison tool): `None`, the ordinary mapping only. `tables.rs` keeps its own class.
+fn mathtools_feeds(path: &str) -> Option<Feeds> {
+    let f = path.strip_prefix("crates/mathtools/src/")?;
+    let (remez, tables) = match f {
+        "remez.rs" | "bin/remez.rs" => (true, false),
+        "bessel_tables.rs" | "gamma_tables.rs" | "special_tables.rs" | "bin/tables.rs" => (false, true),
+        "lib.rs" => (true, true),
+        _ if f.starts_with("mp/") && f.ends_with(".rs") => (true, true),
+        _ => return None,
+    };
+    Some(Feeds { remez, tables })
 }
 
 const MATH_EXPORTS_CRATE: &str = "liella-boundary";
@@ -1335,7 +1363,7 @@ fn math_class(path: &str) -> Option<Class> {
     if path == MATH_TABLES_GEN {
         return Some(Class::MathTables);
     }
-    None
+    mathtools_feeds(path).map(Class::MathToolFeed)
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1580,6 +1608,28 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.math_coeffs(repo, f);
                 sel.xtask_cmds.insert("kernel-index --check".to_string());
                 sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
+            }
+            Some(Class::MathToolFeed(feeds)) => {
+                // A generator input: its own mapping (liella-mathtools' unit tests) and the checks that prove the
+                // generated files still follow from it. The checks pass only when the output is unchanged, so the
+                // math suites are not selected here (a changed output is a changed coefficient file, its own row).
+                ordinary_mapping(repo, f, &mut sel);
+                let mut what = Vec::new();
+                if feeds.remez {
+                    if repo.fits.is_empty() {
+                        sel.full.push(format!("{f}: feeds `cargo xtask remez`, but the tree has no fit file to check"));
+                    } else {
+                        let fits: Vec<&str> = repo.fits.iter().map(String::as_str).collect();
+                        sel.xtask_cmds.insert(format!("remez --check {}", fits.join(" ")));
+                        what.push("`cargo xtask remez --check` (every fit)");
+                    }
+                }
+                if feeds.tables {
+                    sel.xtask_cmds.insert("tables --check".to_string());
+                    sel.xtask_cmds.insert("kernel-index --check".to_string());
+                    what.push("`cargo xtask tables --check` and `kernel-index --check`");
+                }
+                sel.notes.push(format!("{f}: a generator input (its own mapping, {}, not FULL)", what.join(", ")));
             }
             None => ordinary_mapping(repo, f, &mut sel),
         }
@@ -3520,6 +3570,42 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
         for k in m.tests.keys() {
             assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
+        }
+    }
+
+    // D-X.39, no spec clause: each generator input under crates/mathtools/src/ selects its own mapping and the
+    // check of every generated set it feeds (remez: all fits in one `remez --check`; tables: `tables --check` and
+    // `kernel-index --check`); the comparison tool's sources select neither. Not FULL, in the direct and wide tiers.
+    #[test]
+    fn mathtools_generator_inputs_select_their_checks() {
+        let all_fits = format!("remez --check {}", repo().fits.iter().map(String::as_str).collect::<Vec<_>>().join(" "));
+        assert!(repo().fits.len() > 1, "the fit files of the tree: {:?}", repo().fits);
+        let both: &[&str] = &[&all_fits, "tables --check", "kernel-index --check"];
+        let remez: &[&str] = &[&all_fits];
+        let tables: &[&str] = &["tables --check", "kernel-index --check"];
+        let cases: &[(&str, &[&str])] = &[
+            ("crates/mathtools/src/remez.rs", remez),
+            ("crates/mathtools/src/bin/remez.rs", remez),
+            ("crates/mathtools/src/bessel_tables.rs", tables),
+            ("crates/mathtools/src/gamma_tables.rs", tables),
+            ("crates/mathtools/src/special_tables.rs", tables),
+            ("crates/mathtools/src/bin/tables.rs", tables),
+            ("crates/mathtools/src/lib.rs", both),
+            ("crates/mathtools/src/mp/func.rs", both),
+            ("crates/mathtools/src/mp/nat.rs", both),
+            ("crates/mathtools/src/cmp.rs", &[]),
+            ("crates/mathtools/src/cplx.rs", &[]),
+            ("crates/mathtools/src/bin/mathcmp.rs", &[]),
+        ];
+        for tier in [Tier::Direct, Tier::Wide] {
+            for (f, want) in cases {
+                assert!(root().join(f).is_file(), "{f} is not in the tree");
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.libs.contains_key("liella-mathtools"), "{f} ({tier:?}): its own unit tests {:?}", s.libs.keys());
+                let checks: BTreeSet<&str> = s.xtask_cmds.iter().map(String::as_str).filter(|c| c.starts_with("remez") || c.starts_with("tables") || c.starts_with("kernel-index")).collect();
+                assert_eq!(checks, want.iter().copied().collect::<BTreeSet<_>>(), "{f} ({tier:?})");
+            }
         }
     }
 

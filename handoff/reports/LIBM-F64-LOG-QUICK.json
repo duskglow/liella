@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-LOG-QUICK", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: log quick phase written and wired (both builds, RHO 2^-64, measured 2^-65.76, fallback 0.0996%); gate/plants started, not collected; counts, timing, step 1 and log2/log10/log1p not done",
+ "branch": "task/libm-f64-log-quick", "head": "47bd1986a",
+ "gate": {"affected": "running (mei:libm-f64-log-quick-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "Quick-phase degree for log: 9 (brief said 5-6)", "recommendation": "accept degree 9: log's 1/n coefficients leave 2^-45 next to 1 at degree 6; a rigorous minimax fit could save one term later"}],
+ "informational": ["Context checkpoint (~150k) reached at call 53; jobs left running for the dispatcher", "Rule slips: one Bash heredoc (python edit script) and one sed -i on a test doc line; both changes reviewed and committed"],
+ "refused": [],
+ "improvement": "A per-story scratch template for job scripts (lint+tests+gate in one) would save ~4 calls per libm story",
+ "next_step": "Collect gate/plants, then counts (cbench_libm log, plain and -FMA, before/after) and booked IVB/N100 timing; then log2/log10/log1p",
+ "report_file": "handoff/LIBM-F64-LOG-QUICK.md",
+ "jobs": ["mei:libm-f64-log-quick-gate", "mei:libm-f64-log-quick-plants"]}

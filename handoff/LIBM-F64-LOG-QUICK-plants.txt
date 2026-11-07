@@ -1,0 +1,6 @@
+# LIBM-F64-LOG-QUICK plants (docs/plants.md): log's quick phase (D-10.60), both builds, wired as tier 1.
+near-dropped | crates/math/src/fast64/quick_log.rs | lit:{ Some(zh) } else { None } ==> { Some(zh) } else { Some(zh) } | cargo test -p liella-math --lib quick_log::tests::log_quick_declines | msg:quick log\(.*\) misrounded
+index-off-by-one | crates/math/src/fast64/quick_log.rs | lit:usize::try_from((tmp >> 45) & 127) ==> usize::try_from(((tmp >> 45) + 1) & 127) | cargo test -p liella-math --lib quick_log::tests::log_quick_error | msg:quick log\(.*\): error .* above the bound
+ln2-low-dropped | crates/math/src/fast64/quick_log.rs | lit:const KL: f64 = f64::from_bits(t::LN2_Q[1]); ==> const KL: f64 = 0.0; | cargo test -p liella-math --lib quick_log::tests::log_quick_constants | msg:KH \+ KL not within
+coeff-one-ulp | crates/math/src/fast64/quick_log.rs | lit:const C5: f64 = 1.0 / 5.0; ==> const C5: f64 = 0.200_000_000_000_000_04; | cargo test -p liella-math --lib quick_log::tests::log_quick_constants | msg:C is not RN\(1/5\)
+fma-square-low-dropped | crates/math/src/fast64/quick_log.rs | lit:(vh, ma(-0.5, s1, (r - vh) + hh), s) ==> (vh, ma(-0.5, 0.0, (r - vh) + hh), s) | cargo test -p liella-boundary --features selftest --test log_quick log_quick_fma_error | msg:FMA quick log\(.*\): error .* above the bound
