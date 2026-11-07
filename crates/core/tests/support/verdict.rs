@@ -95,6 +95,13 @@ fn own_image() -> Option<&'static (usize, String)> {
     IMAGE.get_or_init(|| std::fs::read("/proc/self/exe").ok().map(|b| (b.len(), digest(&b)))).as_ref()
 }
 
+/// Writes `line` straight to the process's stderr: libtest captures `eprintln!` of a passing test
+/// and hides it, so the log would not say that a cached shard did not run (as `skip_note`).
+fn say(line: &str) {
+    use std::io::Write as _;
+    let _ = std::io::stderr().write_all(line.as_bytes());
+}
+
 /// The `flags` line of a `/proc/cpuinfo` text (the first; every CPU of the host lists the same).
 pub(crate) fn cpu_flags(cpuinfo: &str) -> Option<&str> {
     cpuinfo.lines().find(|l| l.starts_with("flags")).map(str::trim_end)
@@ -268,7 +275,7 @@ impl Key {
     /// [`Key::begin`] with the override given (`forced` runs the shard whatever is on record).
     pub(crate) fn begin_with(self, forced: bool) -> Option<Run> {
         if !forced && self.cached() {
-            eprintln!("verdict cached: {} {}", self.name, self.id());
+            say(&format!("verdict cached: {} {}\n", self.name, self.id()));
             return None;
         }
         // Before the check: a shard that fails (panics) leaves no record.
@@ -296,7 +303,7 @@ impl Run {
         if *now == self.key {
             self.key.record();
         } else {
-            eprintln!("verdict not recorded: {}: an input changed during the run", self.key.name);
+            say(&format!("verdict not recorded: {}: an input changed during the run\n", self.key.name));
         }
     }
 }
