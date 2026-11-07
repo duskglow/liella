@@ -127,6 +127,8 @@ pub(crate) fn log10_nearest(x: f64) -> Option<f64> {
 pub(crate) fn log_family_quick(f: &str, x: f64) -> (Option<(f64, f64)>, Option<f64>) {
     use liella_math::fast64::quick_log as q;
     if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: calls to the FMA build in the arms below; as in
+        // `exp_nearest`, the flag is set only on a CPU with FMA whose AVX state the OS saves.
         #[allow(unsafe_code)]
         return match f {
             "log2" => (
