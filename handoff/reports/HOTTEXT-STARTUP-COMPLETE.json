@@ -1,0 +1,11 @@
+{"task": "HOTTEXT-STARTUP-COMPLETE", "model": "opus", "tokens": null,
+ "result": "hot-text keys carry tier+profiles, stale startup/fork key fails so; list regenerated (merged): start::<false> grouped; startup faults fast 21->18, release 20->17, no counted row worse",
+ "branch": "task/hottext-startup-complete", "head": "6d1cfa3cf",
+ "gate": {"affected": "pending (mei:hsc-gate-1)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "brief step 5: removing the start::<false> key cannot fail `so` with the unmatched-key message (no key left to be unmatched); caught by init_cold_startup_functions_are_grouped instead", "recommendation": "accept; STARTUP-TEXT-GROUPED (LAYOUT-STARTUP-WINDOWS) covers untraced/unlisted start-up functions at build time"}],
+ "informational": ["140 '-' keys from the older list (no current trace hits them, incl. the stale non-generic runtime::start key) kept unguarded: a --replace regeneration dropped them and read fast setlocale+printf and tool +3", "first commit's subject says WIP: although complete (no rebase allowed)", "no bound lowered: one host measured"],
+ "refused": [],
+ "jobs": ["mei:hsc-gate-1", "mei:hsc-plants-1", "mei:hsc-measure-3"],
+ "improvement": "regen.sh should save its per-profile traced keys (new.keys) next to the list so a merge can be redone without re-tracing; and give the 140 untagged keys their source programs",
+ "next_step": "trace the programs behind the 140 '-' keys so they get a tier/profile, then drop the rest; lower TRUE_BOUND once the second host reads the counts deterministically",
+ "report_file": "handoff/HOTTEXT-STARTUP-COMPLETE.md"}
