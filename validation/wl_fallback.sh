@@ -6,6 +6,7 @@
 # .done) and the caller looped  until test -f .done; sleep 20  forever (one agent lost 55 min). Now the command travels
 # base64-encoded into a script file (no quoting at all), and the wait gives up when the log stops growing.
 # WLFB_STALL_MIN (10) = minutes without log growth (and no .done) before wait gives up with exit 4.
+command -v lab_addr >/dev/null 2>&1 || . "$(dirname "${BASH_SOURCE[0]}")/lab_host.sh"   # lab_addr: host name -> ssh destination
 wl_fb_warn() {   # <tool>
     echo "WARNING: $1: S is unset/not exported (or its tools/vm_run.sh missing): the queued vm_run path is SKIPPED; running directly on keke without the queue (export S=<scratchpad>)" >&2
 }
@@ -15,7 +16,7 @@ wl_fb_start() {   # runs $cmd detached on keke; log ~/logs/$label.log, exit stat
     $keke "mkdir -p ~/logs && echo $b64 | base64 -d > ~/logs/$label.sh && (trap '' HUP; setsid nohup bash -l ~/logs/$label.sh > ~/logs/$label.log 2>&1 &) </dev/null"
 }
 wl_fb_reattach() {
-    echo "re-attach: ssh claude@10.0.100.53 'tail -f ~/logs/$label.log'   (done file: keke:~/logs/$label.done, script ~/logs/$label.sh)"
+    echo "re-attach: ssh claude@$(lab_addr keke) 'tail -f ~/logs/$label.log'   (done file: keke:~/logs/$label.done, script ~/logs/$label.sh)"
 }
 wl_fb_wait() {   # returns 0 when .done exists, 4 when the log stalled
     local sz last=-1 lastt now max=$(( ${WLFB_STALL_MIN:-10} * 60 ))

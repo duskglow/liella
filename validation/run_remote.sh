@@ -11,7 +11,8 @@
 set -u
 tag=$1 products=$2 commit=$3
 shift 3
-host=claude@10.0.100.53
+. "$(dirname "$0")/lab_host.sh"
+host=claude@$(lab_addr keke)
 printf '%s\n' "$@" | xargs -P2 -I{} sh -c '
     pkg=${1%%:*}; libc=${1#*:}
     ssh -o BatchMode=yes "$2" "~/bin/shared bash -lc \"cd ~/liella-test && SUITE_COMMIT=\\\"$4\\\" LIELLA_PRODUCTS=$3 bash validation/suite.sh $pkg $libc 6 > ~/validation/$5-$libc-$pkg.out 2>&1; echo $libc-$pkg rc=\\\$?\""
