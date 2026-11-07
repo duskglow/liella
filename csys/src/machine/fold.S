@@ -515,11 +515,15 @@ liella_classed_id_avx2:
 /* COMPARE-HEAD-H2 (D-4.66, ruling #3839), the entry order of this and the equality entry; it
  * replaces the class-word ladder described below (`cmp_wide`/`cmp_low` are gone): with folding on
  * (`liella_machine_cmp_head` 16, else SIZE_MAX), n >= 16 compares the 16-byte block at offset 0 of
- * a, then b, before any size or ISA test (SSE2, valid on every x86-64; a NULL faults on page zero
+ * a, then b, before any other size test (SSE2, valid on every x86-64; a NULL faults on page zero
  * at every size); a difference is ordered at once. Then 16-32 the block at n - 16; above 32 the
- * only ISA test (`n <= liella_machine_cmp_long`, 2048 with AVX2) picks the AVX2 classes (33-64
- * .Lcmp_wide, 65-2048 .Lcmp_big_load) or the SSE2 ones (33-64 the blocks at 16, n - 32, n - 16;
- * 65-2048 .Lcmp_sse_65 past its own head probe; above, .Lcmp_sse_over as before). n < 16, and
+ * SSE2 classes (33-64 the blocks at 16, n - 32, n - 16; 65-2048 .Lcmp_sse_65 past its own head
+ * probe; above, .Lcmp_sse_over as before). In front of all that sits the one ISA test (option (c),
+ * COMPARE-HEAD-H2-3, ruling #3929): `n - 33 < liella_machine_cmp_avx_span` (unsigned; 2016 with
+ * folding and AVX2 on, else 0) sends AVX2 33-2048 to .Lcmp_wide (33-64; 65-2048 .Lcmp_big_load)
+ * with one taken branch and no head block (COMPARE-HEAD-H2-2: behind the head block they were
+ * 8-37% slower in time on a Gracemont-class core); every other size pays three not-taken
+ * instructions there and, above 32, one compare fewer than with H2's ISA test. n < 16, and
  * every n with folding off, fall through the entry's first test (no taken branch; COMPARE-HEAD-H2-2:
  * a taken branch there cost 1-2 cycles on 8-16 byte calls on Ivy Bridge): 8-15 the words at 0 and
  * n - 8 while `liella_machine_cmp_short` is 17 (folding on), else the checked entry; 0-7 .Lcmp_lt8
@@ -553,14 +557,14 @@ liella_classed_id_avx2:
  * (a difference there orders from the two words), then the blocks at 16, n - 32 and n - 16 ANDed into
  * one test, the first differing byte re-read as below. No carry from either add leaves the other sizes: the sign of the
  * sum (`n - 8` with folding on, `n - 65` with it off) is clear only for more than 64 bytes, which
- * reach the 65-2048 AVX2 classes here when `n <= liella_machine_cmp_long` (2048 with folding and
+ * reach the 65-2048 AVX2 classes here when `n <= 2048` (`liella_machine_cmp_avx_span` set: folding and
  * AVX2 on, else 0: one compare, PERF-MEMCMP-TAILS; above it the SSE2 classes or the checked
  * entries). No NULL test: the first 32 bytes of each region are the first load, so a NULL faults
  * on page zero (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048). Those 32 bytes are the early probe,
  * then `n > 128` goes to the long class; 65-128 (MEMCMP-MID) take (sort -C differs within bytes 8-31), then the blocks at 32, n - 64 and n - 32
  * ANDed into one test; the first differing byte (first block first) is re-read and ordered as below
  * (re-read equal, D-4.21 -> `liella_hot_compare_rescan` with the index in rcx: the counted rescan
- * from the next byte, so a reported index that is too low shows in the self-tests; MEMCMP-MID-2). 129 to `liella_machine_cmp_long` (2048 with
+ * from the next byte, so a reported index that is too low shows in the self-tests; MEMCMP-MID-2). 129 to 2048 (`liella_machine_cmp_avx_span` set: with
  * folding and AVX2, else 0; MEMCMP-MID-4) take the long AVX2 class here: the same 32-byte head
  * block, then (289 to 8 KiB; above that the 128-byte step of two branches at .Lcmp_huge) 256-byte steps from byte 32 (eight blocks ANDed, one test; a negative
  * index counting up to 0 from the bases a + n - 256 and b + n - 256, and ONE branch per step: the
@@ -597,6 +601,9 @@ liella_machine_compare:
 	.type memcmp, @function
 memcmp:
 #endif
+	leaq -33(%rdx), %rax
+	cmpq liella_machine_cmp_avx_span(%rip), %rax
+	jb .Lcmp_wide
 	cmpq liella_machine_cmp_head(%rip), %rdx
 	jae .Lcmp_head
 	cmpq $8, %rdx
@@ -638,8 +645,6 @@ memcmp:
 	ja .Lcmp_sse_over
 	jmp .Lcmp_sse_65
 .Lcmp_h33:
-	cmpq liella_machine_cmp_long(%rip), %rdx
-	jbe .Lcmp_wide
 	cmpq $64, %rdx
 	ja .Lcmp_h65
 	movdqu 16(%rdi), %xmm0
@@ -971,7 +976,7 @@ memcmp:
 	bsfq %rax, %rcx
 	addq %r9, %rcx
 	jmp .Lcmp_big_byte
-/* From .Lcmp_sse_long with AVX2 on (`liella_machine_cmp_mid` set): above `liella_machine_cmp_long`
+/* From .Lcmp_sse_long with AVX2 on (`liella_machine_cmp_mid` set): above 2048 (`liella_machine_cmp_avx_span`)
  * (above 128 with folding off). The explicit NULL tests (a NULL a or b -> the checked entry's S6
  * abort; no folding above 2048), then the AVX2 head block and long class as for 129-2048
  * (PARITY-MEMCMP-AVX2: the 16-instruction 128-byte step instead of the Rust loop). */
@@ -1099,8 +1104,8 @@ memcmp:
 	bsfl %ecx, %ecx
 	leaq -64(%rdx,%rcx), %rcx
 	jmp .Lcmp_big_byte
-/* 65-128 without AVX2 or with folding off (PERF-MEMCMP-NONAVX2; cmp_long is 0 only then, so with
- * both on only sizes above cmp_long pay this test and .Lcmp_sse_long's cmp_mid test): the explicit
+/* 65-128 without AVX2 or with folding off (PERF-MEMCMP-NONAVX2; cmp_avx_span is 0 only then, so with
+ * both on only sizes above 2048 pay this test and .Lcmp_sse_long's cmp_mid test): the explicit
  * NULL tests, the block at 0 alone as the early probe (TIMING-COV-MEMCMP-NONAVX2: a difference in
  * the first 16 bytes, sort -C's shape, is ordered after one block, not two), then the blocks at 16,
  * 32, 48, n - 64, n - 48, n - 32 and n - 16 ANDed into the last block's register (one test, no
@@ -1196,7 +1201,7 @@ memcmp:
 	xorl $0xffff, %ecx
 	jmp .Lcmp_at
 /* Above 128 bytes without AVX2 (PERF-MEMCMP-LONG-NONAVX2; it was a tail-jump to the Rust
- * `liella_hot_compare_big`): an AVX2 build reaches here only above cmp_long (its cmp_mid is not 0)
+ * `liella_hot_compare_big`): an AVX2 build reaches here only above 2048 (its cmp_mid is not 0)
  * and keeps the Rust large class. Otherwise the explicit NULL tests, the block at 0 as the early
  * probe (as the 65-128 class; TIMING-COV-MEMCMP-NONAVX2), then 64-byte chunks of four 16-byte blocks
  * ANDed into one test: from a + 16 rounded down to 16 (in [a + 1, a + 16], so nothing below a) (a aligned, so a's side is compared from memory; the first
@@ -1300,7 +1305,7 @@ memcmp:
  * for every n in 17-32 (one instruction fewer than a second 16-byte block and the AND;
  * PARITY-MEMCMP-SMALL-EQ); 33-64 without AVX2 the word at 8 (unequal: 1) and the blocks at 16, n - 32
  * and n - 16 ANDed into one test (TIMING-COV-MEMCMP-NONAVX2; it was a tail-jump to the Rust
- * `liella_hot_equal_tail`), more than 64 bytes (sign clear) up to `liella_machine_cmp_long` take the compare entry's 65-128 AVX2
+ * `liella_hot_equal_tail`), more than 64 bytes (sign clear) up to 2048 (`liella_machine_cmp_avx_span` set) take the compare entry's 65-128 AVX2
  * class (MEMCMP-MID; no NULL test, the head load faults on page zero, PERF-MEMCMP-TAILS: the
  * 32-byte head block first, then three blocks in one test; 0 or 1) and its 129-2048 class with the
  * last chunk first (an early reject where only the tail differs; MEMCMP-MID-4), then the chunks from
@@ -1328,6 +1333,9 @@ bcmp:
 	.type __memcmpeq, @function
 __memcmpeq:
 #endif
+	leaq -33(%rdx), %rax
+	cmpq liella_machine_cmp_avx_span(%rip), %rax
+	jb .Leq_wide
 	cmpq liella_machine_cmp_head(%rip), %rdx
 	ja .Leq_head
 	cmpq $8, %rdx
@@ -1363,8 +1371,6 @@ __memcmpeq:
 	ja .Leq_huge
 	jmp .Leq_sse_65
 .Leq_h33:
-	cmpq liella_machine_cmp_long(%rip), %rdx
-	jbe .Leq_wide
 	cmpq $64, %rdx
 	ja .Leq_h65
 	movdqu 16(%rdi), %xmm0
@@ -1502,7 +1508,7 @@ __memcmpeq:
 	vzeroupper
 	xorl %eax, %eax
 	ret
-/* Above `liella_machine_cmp_long` (every size above 64 with folding off) and AVX2 on (the
+/* Above 2048 (`liella_machine_cmp_avx_span`; every size above 64 with folding off) and AVX2 on (the
  * `liella_machine_cmp_mid` flag word, nonzero only then): the explicit NULL tests (a NULL a or b ->
  * the checked entry's S6 abort; no folding above 2048), then the AVX2 classes above (PARITY-MEMCMP-AVX2:
  * the long class's 16-instruction 128-byte step instead of the Rust loop). Without AVX2 the SSE2
@@ -1679,7 +1685,7 @@ liella_machine_cmp_short:
 	.bss
 /* The memchr entry's gate (MEMCHR-FOLD, D-4.48 amendment; machine/scan.S): isize::MAX while NULL
  * folding is on, 0 otherwise; written with the fold limit by the same startup decision. The eight
- * words (fold limit, avx2, cmp wide, cmp low, chr limit, cmp mid, cmp long, move long) share one
+ * words (fold limit, avx2, cmp wide, cmp low, chr limit, cmp mid, cmp avx span, move long) share one
  * 64-byte line. */
 	.globl liella_machine_chr_limit
 	.hidden liella_machine_chr_limit
@@ -1697,18 +1703,21 @@ liella_machine_chr_limit:
 liella_machine_cmp_mid:
 	.zero 8
 	.size liella_machine_cmp_mid, 8
-/* The compare entries' 65-2048 class word (MEMCMP-MID-4, PERF-MEMCMP-TAILS;
- * `ffi::liella_machine_cmp_long`): 2048 (`hot::CMP_LONG`) while NULL folding and the AVX2 builds
- * are both on, else 0 (written by `crate::dispatch::store_cmp_gates`: dropped before folding or the
- * AVX2 flag goes off, raised after both are on). The AVX2 65-2048 classes have no NULL test (their
- * first load faults on page zero, ruling #2517 (coordinator, 2026-11-04)), so the word is their only gate: sizes above
- * 64 with `n > word` go to the SSE2 classes (compare) or the checked entry (equality). */
-	.globl liella_machine_cmp_long
-	.hidden liella_machine_cmp_long
-	.type liella_machine_cmp_long, @object
-liella_machine_cmp_long:
+/* The compare entries' AVX2 span word (COMPARE-HEAD-H2-3, D-4.66 option (c), ruling #3929; it
+ * replaces the 65-2048 word of MEMCMP-MID-4 / PERF-MEMCMP-TAILS; `ffi::liella_machine_cmp_avx_span`):
+ * 2016 (`hot::CMP_LONG` - 32) while NULL folding and the AVX2 builds are both on, else 0 (written
+ * by `crate::dispatch::store_cmp_gates`: dropped before folding or the AVX2 flag goes off, raised
+ * after both are on). Both entries test `n - 33 < word` (unsigned) first, so 33-2048 reach the AVX2
+ * classes (.Lcmp_wide / .Leq_wide: 33-64 two 32-byte blocks, 65-2048 the big classes) with one
+ * taken branch, and with the word 0 no size does. Those classes have no NULL test (their first load
+ * is offset 0 of each region and faults on page zero, ruling #2517 (coordinator, 2026-11-04)), so
+ * the word is their only gate. */
+	.globl liella_machine_cmp_avx_span
+	.hidden liella_machine_cmp_avx_span
+	.type liella_machine_cmp_avx_span, @object
+liella_machine_cmp_avx_span:
 	.zero 8
-	.size liella_machine_cmp_long, 8
+	.size liella_machine_cmp_avx_span, 8
 /* The SSE2 65-2048 fold words (TIMING-COV-MEMCMP-NONAVX2-2, D-4.62, ruling #3592;
  * `ffi::liella_machine_cmp_sse`, `ffi::liella_machine_cmp_sse_null`): `cmp_sse` is 2048 while NULL
  * folding is on without AVX2, else 0 (sizes 65 to it take the SSE2 classes with no NULL test);

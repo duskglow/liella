@@ -381,11 +381,12 @@ unsafe extern "C" {
     /// builds run, else 0; sizes above 64 with `n <= word` take the AVX2 65-128 class. Written only
     /// by `crate::dispatch::select` (proof obligation: never above 64 while the AVX2 flag is false).
     pub(crate) safe static liella_machine_cmp_mid: core::sync::atomic::AtomicUsize;
-    /// The compare entries' 129-2048 class word (machine/fold.S, MEMCMP-MID-4): `hot::CMP_LONG`
-    /// while the AVX2 builds run, else 0; sizes above the 65-128 word with `n <= word` take the
-    /// AVX2 long class (which re-tests `n <= 128` itself). Written only by `crate::dispatch::select`
-    /// (proof obligation: never nonzero while the AVX2 flag is false).
-    pub(crate) safe static liella_machine_cmp_long: core::sync::atomic::AtomicUsize;
+    /// The compare entries' AVX2 span word (machine/fold.S, D-4.66 option (c)): `hot::CMP_LONG` -
+    /// 32 while NULL folding and the AVX2 builds are both on, else 0; both entries send
+    /// `n - 33 < word` (33-2048) straight to their AVX2 classes, which have no NULL test. Written
+    /// only by `crate::dispatch::store_cmp_gates` (proof obligation: never nonzero while folding or
+    /// the AVX2 flag is off).
+    pub(crate) safe static liella_machine_cmp_avx_span: core::sync::atomic::AtomicUsize;
     /// The SSE2 compare and equality classes' fold word (machine/fold.S, D-4.62): `hot::CMP_LONG`
     /// while NULL folding is on without AVX2, else 0; sizes 65 to it have no NULL test. Written only
     /// by `crate::dispatch` (proof obligation: never nonzero while the fold limit is 0).

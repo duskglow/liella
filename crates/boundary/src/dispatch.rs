@@ -85,9 +85,9 @@ pub(crate) fn select_fma(fma: bool) {
 /// (module proof obligation).
 pub(crate) fn select(avx2: bool) {
     if !avx2 {
-        // The 65-128 and 129-2048 class words drop before the flag (never above 64 while the flag
+        // The 65-128 and AVX2 span words drop before the flag (never above 64 while the flag
         // is false).
-        CMP_LONG_WORD.store(0, Relaxed);
+        CMP_AVX_SPAN.store(0, Relaxed);
         CMP_MID.store(0, Relaxed);
         // Also gives the 129-256 copy word its SSE2 mark before the flag drops.
         store_cmp_gates(FOLD.load(Relaxed) != 0, false);
@@ -103,11 +103,14 @@ pub(crate) fn select(avx2: bool) {
 // with the AVX2 builds, else 0; `.Lcmp_sse_long` and `.Leq_huge` send an AVX2 build, after the
 // explicit NULL tests, to the assembly AVX2 long class (PARITY-MEMCMP-AVX2).
 use crate::ffi::liella_machine_cmp_mid as CMP_MID;
-// The compare entries' 65-2048 class word (machine/fold.S, MEMCMP-MID-4, PERF-MEMCMP-TAILS): one
-// `cmp`/`ja` against it sends larger sizes to the checked or SSE2 classes. Nonzero only with both
-// folding and AVX2 on, because those classes fold the NULL test into their first 32-byte load
-// (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048 bytes). Stored by [`store_cmp_gates`].
-use crate::ffi::liella_machine_cmp_long as CMP_LONG_WORD;
+// The compare entries' AVX2 span word (machine/fold.S, D-4.66 option (c), COMPARE-HEAD-H2-3): the
+// first test of both entries, `n - 33 < word` (unsigned), sends 33-2048 to the AVX2 classes with
+// one taken branch. Nonzero only with both folding and AVX2 on, because those classes fold the NULL
+// test into their first 32-byte load (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048
+// bytes). Stored by [`store_cmp_gates`].
+use crate::ffi::liella_machine_cmp_avx_span as CMP_AVX_SPAN;
+/// The span word with folding and AVX2 on: 33 + span = 2049, the first size the AVX2 test skips.
+const CMP_AVX_SPAN_ON: usize = crate::hot::CMP_LONG - 32;
 // The SSE2 65-2048 fold words (machine/fold.S, TIMING-COV-MEMCMP-NONAVX2-2, D-4.62, ruling #3592):
 // `CMP_SSE` is 2048 while folding is on without AVX2 (those sizes skip the NULL tests: the first
 // access is offset 0 of each region, page zero for a NULL), else 0; `CMP_SSE_NULL` is 0 exactly
@@ -151,10 +154,10 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
     if fold {
         FOLD_MOVE.store(move_word(true, avx2), Relaxed);
     }
-    // The 65-2048 word (reached only behind an equal head block): dropped first, raised last.
-    let long = if fold && avx2 { crate::hot::CMP_LONG } else { 0 };
-    if long == 0 {
-        CMP_LONG_WORD.store(0, Relaxed);
+    // The AVX2 span word (the entries' first test, D-4.66 option (c)): dropped first, raised last.
+    let span = if fold && avx2 { CMP_AVX_SPAN_ON } else { 0 };
+    if span == 0 {
+        CMP_AVX_SPAN.store(0, Relaxed);
     }
     // The SSE2 65-2048 fold words (D-4.62): down, the a bound rises before the size word drops;
     // up, the size word rises before the a bound drops (Release: the size word's store is
@@ -171,7 +174,7 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
     // order does not matter; both reach the off state before the fold limit drops.
     CMP_HEAD.store(if fold { CMP_HEAD_ON } else { usize::MAX }, Relaxed);
     CMP_SHORT.store(if fold { CMP_SHORT_ON } else { CMP_SHORT_OFF }, Relaxed);
-    CMP_LONG_WORD.store(long, Relaxed);
+    CMP_AVX_SPAN.store(span, Relaxed);
 }
 
 /// NULL folding (owner rulings 2026-10-08, D-4.22): the copy and fill entries take sizes
@@ -179,7 +182,7 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
 /// where a NULL faults on page zero (SIGSEGV, what glibc observably does: it has no NULL check of
 /// its own). Every other size, 65-128 included, keeps the explicit S6 checks in Rust (option B:
 /// no Rust code performs a deliberate NULL access); the compare and equality entries also fold
-/// 65-2048 in their AVX2 classes (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS; `CMP_LONG_WORD`). `0` (the start value, and the value whenever
+/// 65-2048 in their AVX2 classes (ruling #2517 (coordinator, 2026-11-04), PERF-MEMCMP-TAILS; `CMP_AVX_SPAN`). `0` (the start value, and the value whenever
 /// page zero could be mapped) keeps the explicit checks for every size.
 ///
 /// Proof obligation (every fold relies on it): `FOLD` is nonzero only while no access in
