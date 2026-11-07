@@ -159,3 +159,169 @@ fn quick_domain() {
         assert!(exp_quick_parts(x).is_some(), "quick exp refused {x:e} inside its domain");
     }
 }
+
+// exp2 and exp10 on the same kernel (LIBM-F64-EXP-FAMILY-QUICK, D-10.64), SSE2 build. Clauses:
+// §10.2 exp2/exp10, D-10.3 (an answer is the correctly rounded result).
+
+/// The correctly rounded `2^x` / `10^x`: today's tier, else the accurate path.
+fn cr2(x: f64) -> f64 {
+    super::super::exp2_nearest(x).unwrap_or_else(|| Real::exp2(x, Rounding::Nearest).0)
+}
+fn cr10(x: f64) -> f64 {
+    super::super::exp10_nearest(x).unwrap_or_else(|| Real::exp10(x, Rounding::Nearest).0)
+}
+
+type Parts = fn(f64) -> Option<(f64, f64, f64)>;
+type Quick = fn(f64) -> Option<f64>;
+/// `(name, parts, quick, correctly rounded, exact log of the base)`.
+type Member = (&'static str, Parts, Quick, fn(f64) -> f64, Mp);
+fn family() -> [Member; 2] {
+    [("exp2", exp2_quick_parts, exp2_quick, cr2, mp::ln2()), ("exp10", exp10_quick_parts, exp10_quick, cr10, mp::ln10())]
+}
+
+/// The exp2/exp10 constants the proof relies on, and their bounds recomputed from them (module
+/// doc, "exp2 and exp10"; terms in `f64` from their formulas, rounded up by `1 + 2^-40`).
+#[test]
+fn family_constants_and_bounds() {
+    for (h, l, exact, name) in [(LN2H, LN2L, mp::ln2(), "ln2"), (LN10H, LN10L, mp::ln10(), "ln10")] {
+        assert!(exact.sub(Mp::from_f64(h)).sub(Mp::from_f64(l)).cmp_abs(Mp::from_f64(h * two(-106))).is_le(), "{name} pair not within 2^-106");
+        assert!(dd::abs(l) < two(-52), "{name} low part above 2^-52");
+    }
+    let log10_2 = mp::ln2().div(mp::ln10());
+    let inv = Mp::from_f64(128.0).div(log10_2);
+    assert!(inv.sub(Mp::from_f64(INV10)).cmp_abs(Mp::from_f64(INV10 * two(-53))).is_le(), "INV10 is not RN(128/log10 2)");
+    let (e0, e1, e2) = (-NE0, -NE1, -NE2);
+    assert_eq!(e0.to_bits() & ((1 << 21) - 1), 0, "E0 has more than 32 bits");
+    assert_eq!(e1.to_bits() & ((1 << 17) - 1), 0, "E1 has more than 36 bits");
+    assert_eq!(e2.to_bits() & ((1 << 17) - 1), 0, "E2 has more than 36 bits");
+    let cw10 = log10_2.div(Mp::from_f64(128.0)).sub(Mp::from_f64(e0)).sub(Mp::from_f64(e1)).sub(Mp::from_f64(e2));
+    assert!(cw10.cmp_abs(Mp::from_f64(two(-121))).is_le(), "E0 + E1 + E2 not within 2^-121 of log10(2)/128");
+    assert!(130_537.0 * cw10.abs().to_f64() < two(-104), "exp10 reduction above 2^-104");
+    let up = 1.0 + two(-40);
+    let u = two(-53);
+    let rh = core::f64::consts::LN_2 / 256.0 * (1.0 + two(-34)) * up + two(-62);
+    let qmax = rh * rh * (0.5 + rh / 6.0 + rh * rh / 24.0 + rh * rh * rh / 120.0 + rh.powi(4) / 720.0) * (1.0 + 4.05 * u) * up;
+    let er = rh.exp();
+    let total = |rl: f64, red: f64, nlow: f64, prod: f64| {
+        let low = u * (qmax + rl) * up;
+        let rest = 4.05 * u * qmax + rl * (er - 1.0) * up + u * (qmax + two(-61)) * up + rh.powi(7) / 5040.0 * er * up;
+        (prod + nlow * low + rest + red + two(-105) * er + two(-104)) / ((-rh).exp() * (1.0 - two(-60)) / up)
+    };
+    let sh = 0.001_176;
+    assert!(Mp::from_f64(sh).cmp_abs(log10_2.div(Mp::from_f64(128.0)).mul(Mp::from_f64(0.5 + two(-35)))).is_gt(), "|sh| bound");
+    let rl2s = two(-8) * dd::abs(LN2L) * (1.0 + 2.0 * u);
+    let rl10s = (sh * dd::abs(LN10L) + two(-62) * 0.536 * LN10H) * (1.0 + 3.0 * u);
+    let (rl2f, rl10f) = (rl2s + two(-62), rl10s + two(-62));
+    let red2 = (two(-114) + 2.0 * u * rl2f + two(-120)) * er * up;
+    let red10 = (two(-104) * 2.31 + sh * two(-106) + two(-63) * dd::abs(LN10L) + 3.0 * u * rl10f) * er * up;
+    let prod = 2.0 * u * rh * er;
+    for (name, fma, sse2) in [("exp2", total(rl2f, red2, 3.0, 0.0), total(rl2s, red2, 4.0, prod)), ("exp10", total(rl10f, red10, 3.0, 0.0), total(rl10s, red10, 4.0, prod))] {
+        assert!(fma <= RHO_FAM_FMA, "{name} FMA bound {fma:e} above RHO_FAM_FMA");
+        assert!(sse2 <= RHO_FAM_SSE2, "{name} SSE2 bound {sse2:e} above RHO_FAM_SSE2");
+    }
+    let one_u = Mp::from_f64(1.0).add(Mp::from_f64(u));
+    for (c, rho) in [(C_FAM_SSE2, RHO_FAM_SSE2), (C_FAM_FMA, RHO_FAM_FMA)] {
+        let k = Mp::from_f64(1.0).sub(Mp::from_f64(rho * two(54)));
+        assert!(Mp::from_f64(c).mul(k).cmp_abs(one_u).is_gt(), "{c:e} below its bound");
+        assert!(Mp::from_f64(f64::from_bits(c.to_bits() - 1)).mul(k).cmp_abs(one_u).is_le(), "{c:e} not the least");
+    }
+}
+
+/// The SSE2 build's exp2/exp10 `(zh, zl)` within `RHO_FAM_SSE2·|zh|` of the exact value over the
+/// scale (exact in Mp); the largest relative error seen is printed.
+#[test]
+fn family_error_within_bound() {
+    for (name, parts, _, _, lnb) in family() {
+        let top = if name == "exp2" { 1021.0 } else { 307.0 };
+        let mut worst = 0.0f64;
+        let xs = uniform(20_000, 0x2545_f491_4f6c_dd1d, -top, top).chain(uniform(20_000, 7, -1.0, 1.0)).chain(uniform(4000, 11, -1e-9, 1e-9));
+        for x in xs {
+            let Some((zh, zl, sc)) = parts(x) else { continue };
+            let want = mp::exp(Mp::from_f64(x).mul(lnb)).mul(Mp::from_f64(1.0 / sc));
+            let err = want.sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
+            assert!(err.cmp_abs(Mp::from_f64(RHO_FAM_SSE2 * dd::abs(zh))).is_le(), "quick {name}({x:e}): error {:e} above the bound", err.to_f64() / zh);
+            worst = worst.max(dd::abs(err.to_f64() / zh));
+        }
+        eprintln!("quick {name} SSE2: largest relative error 2^{:.3} (bound 2^{:.3})", worst.log2(), RHO_FAM_SSE2.log2());
+        assert!(worst > 0.0);
+    }
+}
+
+/// 6·10^6 operands per function against the correctly rounded result: every answer bit for bit;
+/// the fallback rate on uniform [-10, 10] within the model (0.8%-1.6%, expected 1.14%).
+#[test]
+fn family_matches_correctly_rounded() {
+    for (name, _, quick, cr, _) in family() {
+        let top = if name == "exp2" { 1021.0 } else { 307.0 };
+        let sets: [(usize, u64, f64, f64); 3] = [(3_000_000, 1, -10.0, 10.0), (2_000_000, 2, -top, top), (1_000_000, 3, -0.01, 0.01)];
+        for (n, seed, lo, hi) in sets {
+            let mut miss = 0usize;
+            for x in uniform(n, seed, lo, hi) {
+                match quick(x) {
+                    Some(v) => {
+                        let e = cr(x);
+                        assert_eq!(v.to_bits(), e.to_bits(), "quick {name}({x:e} = {:#x}): {v:e}, correctly rounded {e:e}", x.to_bits());
+                    }
+                    None => miss += 1,
+                }
+            }
+            if seed == 1 {
+                assert!(miss * 1000 >= n * 8 && miss * 1000 <= n * 16, "{name} fallback rate {miss} of {n} outside 0.8%-1.6%");
+            }
+        }
+    }
+}
+
+/// Hard cases: operands of a seeded sample whose quick result rounded without the test is wrong
+/// (so the test cannot pass vacuously), small `|x|`, and the exact cases (integers for exp2,
+/// `1 ..= 23` for exp10), which the quick phase must decline.
+#[test]
+fn family_declines_or_rounds_right_on_hard_cases() {
+    for (name, parts, quick, cr, _) in family() {
+        let mut hard: Vec<f64> = Vec::new();
+        for k in 1..=48u32 {
+            let d = f64::from(k) * f64::EPSILON;
+            hard.extend([0.5 * d, -0.5 * d, -0.25 * d]);
+        }
+        let mut wrong = 0usize;
+        for x in uniform(400_000, 0x9e37_79b9_7f4a_7c15, -300.0, 300.0) {
+            if let Some((zh, zl, sc)) = parts(x) {
+                if (zh + zl) * sc != cr(x) {
+                    wrong += 1;
+                    hard.push(x);
+                }
+            }
+        }
+        assert!(wrong >= 20, "{name}: only {wrong} raw misroundings found: the hard set is too small");
+        for x in hard {
+            if let Some(v) = quick(x) {
+                let e = cr(x);
+                assert_eq!(v.to_bits(), e.to_bits(), "hard case {name}({x:e} = {:#x}): quick {v:e}, correctly rounded {e:e}", x.to_bits());
+            }
+        }
+    }
+    for n in -1020..=1020i32 {
+        assert!(exp2_quick(f64::from(n)).is_none(), "quick exp2 answered the exact case {n}");
+    }
+    for n in 1..=23i32 {
+        assert!(exp10_quick_parts(f64::from(n)).is_none(), "quick exp10 did not decline the exact case {n}");
+    }
+    for x in [24.0, 0.5, -1.0, -22.0, 22.5, 1.0 + f64::EPSILON] {
+        assert!(exp10_quick_parts(x).is_some(), "quick exp10 declined {x:e}, not an exact case");
+    }
+}
+
+/// Outside their domains the quick phases decline.
+#[test]
+fn family_domain() {
+    let tiny = two(-60);
+    for (name, parts, _, _, _) in family() {
+        let top: f64 = if name == "exp2" { 1021.0 } else { 307.0 };
+        for x in [0.0, -0.0, f64::from_bits(tiny.to_bits() - 1), top, -top, 1e300, f64::INFINITY, f64::NEG_INFINITY, f64::NAN, 5e-324] {
+            assert!(parts(x).is_none(), "quick {name} answered outside its domain at {x:e}");
+        }
+        for x in [tiny, -tiny, f64::from_bits(top.to_bits() - 1), -f64::from_bits(top.to_bits() - 1)] {
+            assert!(parts(x).is_some(), "quick {name} refused {x:e} inside its domain");
+        }
+    }
+}

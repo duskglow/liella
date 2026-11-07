@@ -50,6 +50,38 @@
 //! The `bounds` tests recompute every term from the constants. Expected fallback `≈ c − 1`: SSE2
 //! 0.565%, FMA 0.0076%.
 //!
+//! **exp2 and exp10** (LIBM-F64-EXP-FAMILY-QUICK, D-10.64): the same kernel (`T_j` on, above)
+//! fed by their own reductions, so `2^x` or `10^x` is `2^(k/128)·e^r` with `r = rh + rl`:
+//! * exp2, `2^-60 <= |x| < 1021`: `t = RN(x·128 + SHIFT)` (`x·128` exact, so `|x·128 − k| <=
+//!   1/2`), `s = x − kd/128` exact (`kd/128` exact; for `k != 0`, `|x| >= 2^-8` puts `x` and
+//!   `kd/128` on the grid of `ulp(x) >= 2^-60` and `|s| <= 2^-8`), `rh = RN(s·LN2H)`; FMA build
+//!   `rl = RN(s·LN2L + (s·LN2H − rh))` (the bracket exact by one FMA), SSE2 build `rl = s·LN2L`
+//!   and the dropped `|s·LN2H − rh| <= ulp(rh)/2 <= 2^-62` is an extra term `u·rh` (bound term
+//!   1's size). No `ln2` reduction constant: `|r| <= ln2/256` with no `2^-35` slack.
+//! * exp10, `2^-60 <= |x| < 307`: `t = RN(x·INV10 + SHIFT)`, `INV10 = RN(128/log10 2)`, so
+//!   `|x·128/log10 2 − k| <= 1/2 + 2^-35` (`|x·INV10| < 2^17`). With `L = log10(2)/128` split as
+//!   `E0 + E1 + E2` (`NE*` negated, within `2^-121.2`; Cody–Waite as above): `r0 = x − kd·E0` is exact (for
+//!   `k != 0`, `|x| > L/2 > 2^-10` puts both on the grid `2^-62`, and `|r0| < L/2 + 2^-28.7 <
+//!   2^-9`); `sh = RN(r0 − kd·E1)` with `sl = RN(((r0 − sh) − kd·E1) − kd·E2)`, the bracket exact
+//!   by Fast2Sum (`kd·E1`'s last place divides `2^-81`, which divides `r0`), so `|sh + sl − (x −
+//!   kL)| < |k|·2^-121.2 + 2^-116 < 2^-104`, `|sh| <= 0.001176`, `|sl| <= 2^-62.9`. Then `r =
+//!   (sh + sl)·ln10`: `rh = RN(sh·LN10H)`, FMA `rl = RN(sh·LN10L + RN(sl·LN10H + (sh·LN10H −
+//!   rh)))`, SSE2 the same without the bracket (dropped `<= 2^-62`, the term `u·rh`). `|r| =
+//!   |x·128/log10 2 − k|·ln2/128`: exp's `R` holds.
+//! * Bound: terms 2, 3, 5 and the table are exp's with `|rl| <= 2^-62 + |s|·|LN2L|` (exp2) or
+//!   `2^-62 + |sh|·|LN10L| + 2^-62.9·LN10H < 2^-60.5` (exp10) in place of `2^-62` (the SSE2
+//!   builds drop the `2^-62`); term 4 grows to `|rl|·(e^R − 1)`; term 6 becomes the reduction's
+//!   `2^-113` (exp2) and `2.31·2^-104 + 2^-112` (exp10); the SSE2 builds add `u·rh·e^R` for the
+//!   dropped product. Totals over `0.99729`: exp2 FMA `2^-67.64`, SSE2 `2^-60.51`; exp10 FMA
+//!   `2^-67.30`, SSE2 `2^-60.51`; stated for both `RHO_FAM_FMA = 1.6875·2^-68` (`2^-67.25`) and
+//!   `RHO_FAM_SSE2 = 1.4375·2^-61` (`2^-60.48`). Expected fallback: FMA 0.010%, SSE2 1.14% (a
+//!   Dekker product would halve the SSE2 rate for about six more operations on every call; at
+//!   tier 2's cost the 0.57% it saves is worth about one instruction per call).
+//! * Exact results: `2^x` for an integer `x` gives `s = rh = rl = q = 0`, `j = 0`, so `zl = 0`
+//!   exactly and the test declines without raising inexact (tier 2 then answers it exactly);
+//!   `10^x` for the integers `1 ..= 23` (a double or, at 23, a midpoint) is declined before the
+//!   kernel. Every other `2^x`, `10^x` for a double `x` is irrational or not dyadic.
+//!
 //! **Design targets** (D-10.51): instructions per call with the fallback included FMA <= 80,
 //! SSE2 <= 95; FP operations 31 (FMA) and 39 (SSE2) including the two compares; critical path
 //! 16 dependent FP operations plus the compare (FMA: `t, kd, r1, rh, r2, pc, inner, q, rl + q, w,
@@ -89,6 +121,39 @@ pub const RHO_FMA: f64 = f64::from_bits(0x3bb4_0000_0000_0000);
 pub(crate) const C_SSE2: f64 = f64::from_bits(0x3ff0_1721_3fcb_b4d5);
 pub(crate) const C_FMA: f64 = f64::from_bits(0x3ff0_0050_0190_07d1);
 
+// exp2 and exp10 on the same kernel (LIBM-F64-EXP-FAMILY-QUICK, D-10.64): their own reductions
+// feed `kernel` a `(rh, rl)` with the bound of the exp2/exp10 section of the module doc.
+/// `ln2 = LN2H + LN2L` and `ln10 = LN10H + LN10L` (`|LN2L|`, `|LN10L| < 2^-52`, each pair within
+/// `2^-106` relative of exact; `mp::ln2`, `mp::ln10`).
+const LN2H: f64 = f64::from_bits(t::LN2[0]);
+const LN2L: f64 = f64::from_bits(t::LN2[1]);
+const LN10H: f64 = f64::from_bits(t::LN10[0]);
+const LN10L: f64 = f64::from_bits(t::LN10[1]);
+/// `RN(128/log10 2)`: twice `SCALES[1] = RN(64/log10 2)` (doubling is exact).
+const INV10: f64 = 2.0 * f64::from_bits(t::SCALES[1]);
+/// `−log10(2)/128` in three parts: `LOG10_2_64_CW` halved (exact), negated; `E0` has 32
+/// significant bits (lowest `2^-40`), `E1` 36 (lowest `2^-81`), `E2` 36, so `k·E0`, `k·E1`, `k·E2`
+/// are exact for `|k| < 2^17`, and the parts are within `2^-121.2` of `log10(2)/128`.
+const NE0: f64 = -0.5 * f64::from_bits(t::LOG10_2_64_CW[0]);
+const NE1: f64 = -0.5 * f64::from_bits(t::LOG10_2_64_CW[1]);
+const NE2: f64 = -0.5 * f64::from_bits(t::LOG10_2_64_CW[2]);
+/// `bits(1021) − bits(2^-60)` and `bits(307) − bits(2^-60)`: the exp2 and exp10 domains.
+const SPAN2: u64 = 0x408f_e800_0000_0000 - LO_BITS;
+const SPAN10: u64 = 0x4073_3000_0000_0000 - LO_BITS;
+/// `bits(1)` and `bits(23) − bits(1)`: exp10's exact cases `1 <= x <= 23` (integers) are left
+/// to the entry's exact path, which raises no inexact.
+const ONE_BITS: u64 = 0x3ff0_0000_0000_0000;
+const SPAN_EXACT10: u64 = 0x4037_0000_0000_0000 - ONE_BITS;
+
+/// exp2's and exp10's stated bounds (module doc, "exp2 and exp10") and their [`super::near`]
+/// multipliers (checked exactly by the `bounds` tests).
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_FAM_SSE2: f64 = f64::from_bits(0x3c27_0000_0000_0000);
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_FAM_FMA: f64 = f64::from_bits(0x3bbb_0000_0000_0000);
+pub(crate) const C_FAM_SSE2: f64 = f64::from_bits(0x3ff0_2e85_c089_8b72);
+pub(crate) const C_FAM_FMA: f64 = f64::from_bits(0x3ff0_006c_02d9_133a);
+
 /// `a·b + c` in two roundings (the SSE2 build).
 #[inline(always)]
 fn ma(a: f64, b: f64, c: f64) -> f64 {
@@ -104,7 +169,7 @@ fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64 {
 // The kernel in two builds (D-10.25, D-10.50): `$ma` is `a·b + c` (two roundings, or one FMA),
 // `$lo` the low part of `th·rh` (0, or exact by one FMA), `$c` the rounding test's multiplier.
 macro_rules! quick {
-    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $c:expr) => {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $c:expr; $cf:expr) => {
 /// `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 $(#[$a])*
 $(#[$i])*
@@ -119,6 +184,58 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let r1 = $ma(kd, NL1, x);
     let rh = $ma(kd, NL2, r1);
     let rl = $ma(kd, NL2, r1 - rh);
+    Some(kernel(kb, rh, rl))
+}
+
+/// `2^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 1021`, else `None`
+/// (module doc, "exp2 and exp10"). An integer `x` gives `zl = 0` exactly, which the rounding test
+/// declines (the entry's exact path answers it).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn exp2_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+    if (x.to_bits() & ABS).wrapping_sub(LO_BITS) >= SPAN2 {
+        return None;
+    }
+    let tt = $ma(x, 128.0, SHIFT);
+    let kd = tt - SHIFT;
+    let kb = tt.to_bits().wrapping_sub(KBIAS);
+    let s = $ma(kd, -1.0 / 128.0, x);
+    let rh = s * LN2H;
+    let rl = $ma(s, LN2L, $lo(s, LN2H, rh));
+    Some(kernel(kb, rh, rl))
+}
+
+/// `10^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 307` other than the
+/// integers `1 ..= 23`, else `None` (module doc, "exp2 and exp10").
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn exp10_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+    let b = x.to_bits();
+    if (b & ABS).wrapping_sub(LO_BITS) >= SPAN10 {
+        return None;
+    }
+    if b.wrapping_sub(ONE_BITS) <= SPAN_EXACT10 && (x + SHIFT) - SHIFT == x {
+        return None;
+    }
+    let tt = $ma(x, INV10, SHIFT);
+    let kd = tt - SHIFT;
+    let kb = tt.to_bits().wrapping_sub(KBIAS);
+    let r0 = $ma(kd, NE0, x);
+    let e1 = kd * NE1;
+    let sh = r0 + e1;
+    let sl = $ma(kd, NE2, (r0 - sh) + e1);
+    let rh = sh * LN10H;
+    let rl = $ma(sh, LN10L, $ma(sl, LN10H, $lo(sh, LN10H, rh)));
+    Some(kernel(kb, rh, rl))
+}
+
+/// The kernel shared by exp, exp2 and exp10: `2^(k/128)·e^(rh + rl)` as `(zh, zl, 2^m)` from
+/// `kb = k + 1023·128` (module doc, from `T_j` on).
+$(#[$a])*
+$(#[$i])*
+fn kernel(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let r2 = rh * rh;
     let pa = $ma(rh, C3, 0.5);
     let pb = $ma(rh, C5, C4);
@@ -134,7 +251,7 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let yl = (e1 + $lo(th, rh, u)) + w;
     let zh = yh + yl;
     let zl = (yh - zh) + yl;
-    Some((zh, zl, f64::from_bits((kb >> 7) << 52)))
+    (zh, zl, f64::from_bits((kb >> 7) << 52))
 }
 
 /// The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else
@@ -163,7 +280,72 @@ pub fn exp_tiered(x: f64) -> Option<f64> {
     }
     tier2(x)
 }
+
+/// The correctly rounded `2^x` (round to nearest) when the quick phase's test decides it, else
+/// `None`.
+$(#[$a])*
+$(#[$i])*
+pub fn exp2_quick(x: f64) -> Option<f64> {
+    let (zh, zl, sc) = exp2_quick_parts(x)?;
+    let v = zh * sc;
+    let w = zl * $cf;
+    if zh + w == zh && w != 0.0 { Some(v) } else { None }
+}
+
+/// `exp2`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2
+/// (`fast64::exp2_nearest` in the same build, out of line; it answers integers exactly).
+$(#[$a])*
+$(#[$i])*
+pub fn exp2_tiered(x: f64) -> Option<f64> {
+    let Some((zh, zl, sc)) = exp2_quick_parts(x) else { return tier2_exp2(x) };
+    let v = zh * sc;
+    let w = zl * $cf;
+    if zh + w == zh && w != 0.0 {
+        return Some(v);
+    }
+    tier2_exp2(x)
+}
+
+/// The correctly rounded `10^x` (round to nearest) when the quick phase's test decides it, else
+/// `None`.
+$(#[$a])*
+$(#[$i])*
+pub fn exp10_quick(x: f64) -> Option<f64> {
+    let (zh, zl, sc) = exp10_quick_parts(x)?;
+    let v = zh * sc;
+    let w = zl * $cf;
+    if zh + w == zh && w != 0.0 { Some(v) } else { None }
+}
+
+/// `exp10`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss tier 2
+/// (`fast64::exp10_nearest` in the same build, out of line).
+$(#[$a])*
+$(#[$i])*
+pub fn exp10_tiered(x: f64) -> Option<f64> {
+    let Some((zh, zl, sc)) = exp10_quick_parts(x) else { return tier2_exp10(x) };
+    let v = zh * sc;
+    let w = zl * $cf;
+    if zh + w == zh && w != 0.0 {
+        return Some(v);
+    }
+    tier2_exp10(x)
+}
     };
+}
+
+/// Tier 2 of [`exp2_tiered`] (and its answer outside the quick domain: NaN, infinities, integers),
+/// out of line and cold.
+#[cold]
+#[inline(never)]
+fn tier2_exp2(x: f64) -> Option<f64> {
+    super::exp2_nearest(x)
+}
+
+/// Tier 2 of [`exp10_tiered`] (as [`tier2_exp2`]).
+#[cold]
+#[inline(never)]
+fn tier2_exp10(x: f64) -> Option<f64> {
+    super::exp10_nearest(x)
 }
 
 /// Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so
@@ -174,14 +356,17 @@ fn tier2(x: f64) -> Option<f64> {
     super::exp_nearest(x)
 }
 
-quick!(; #[inline(always)]; ma; no_lo; C_SSE2);
+quick!(; #[inline(always)]; ma; no_lo; C_SSE2; C_FAM_SSE2);
 
 /// The quick phase's FMA build (D-10.25, D-10.50): callable only on a CPU with FMA whose AVX state
 /// the OS saves; the boundary chooses it once at startup (`dispatch::fma`).
 // ARCH(x86_64): the run-time FMA build; FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{t, ABS, C3, C4, C5, C6, C_FMA, INV, KBIAS, LO_BITS, NL1, NL2, SHIFT, SPAN};
+    use super::{
+        t, ABS, C3, C4, C5, C6, C_FAM_FMA, C_FMA, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, NE0, NE1, NE2, NL1, NL2, ONE_BITS, SHIFT, SPAN,
+        SPAN10, SPAN2, SPAN_EXACT10,
+    };
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
 
@@ -208,12 +393,30 @@ pub mod fused {
         crate::fast64::fused::exp_nearest(x)
     }
 
+    /// Tier 2 of [`exp2_tiered`] in the FMA build (`fast64::fused::exp2_nearest`), out of line
+    /// and cold.
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_exp2(x: f64) -> Option<f64> {
+        crate::fast64::fused::exp2_nearest(x)
+    }
+
+    /// Tier 2 of [`exp10_tiered`] in the FMA build (`fast64::fused::exp10_nearest`), out of
+    /// line and cold.
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_exp10(x: f64) -> Option<f64> {
+        crate::fast64::fused::exp10_nearest(x)
+    }
+
     quick!(
         #[doc = ""]
         #[doc = "# Safety"]
         #[doc = ""]
         #[doc = "The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract)."]
-        #[target_feature(enable = "fma")]; #[inline]; ma; lo; C_FMA
+        #[target_feature(enable = "fma")]; #[inline]; ma; lo; C_FMA; C_FAM_FMA
     );
 }
 

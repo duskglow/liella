@@ -11,7 +11,7 @@
 
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
-use liella_math::fast64::quick::{RHO_FMA, RHO_SSE2};
+use liella_math::fast64::quick::{RHO_FAM_FMA, RHO_FAM_SSE2, RHO_FMA, RHO_SSE2};
 use liella_math::mp::{self, Mp};
 use liella_math::real::Real;
 use liella_math::status::Rounding;
@@ -284,4 +284,71 @@ fn exp_quick_count_loop() {
     }
     core::hint::black_box(acc);
     eprintln!("count loop: build {build}, {calls} calls, {miss} fallbacks");
+}
+
+// exp2 and exp10 on the quick kernel (LIBM-F64-EXP-FAMILY-QUICK, D-10.64), both builds through the
+// boundary. s10_0_f_0 (§10.2 exp2/exp10, D-10.3): every answer is the correctly rounded result,
+// within the build's stated bound (`RHO_FAM_FMA`, `RHO_FAM_SSE2`), and the entries agree.
+type FamQuick = fn(f64) -> Option<f64>;
+type FamParts = fn(f64) -> Option<(f64, f64, f64)>;
+type FamMember = (&'static str, FamQuick, FamParts, fn(f64) -> f64, Mp, f64);
+
+fn family() -> [FamMember; 2] {
+    let cr2 = |x: f64| liella_math::fast64::exp2_nearest(x).unwrap_or_else(|| Real::exp2(x, Rounding::Nearest).0);
+    let cr10 = |x: f64| liella_math::fast64::exp10_nearest(x).unwrap_or_else(|| Real::exp10(x, Rounding::Nearest).0);
+    [
+        ("exp2", selftest::exp2_quick, selftest::exp2_quick_parts, cr2, mp::ln2(), 1021.0),
+        ("exp10", selftest::exp10_quick, selftest::exp10_quick_parts, cr10, mp::ln10(), 307.0),
+    ]
+}
+
+/// Every answer of the selected build against the correctly rounded result, every `(zh, zl)`
+/// within `rho`, and the entry (`m::exp2`, `m::exp10`) equal to the correctly rounded result;
+/// returns the declines.
+fn check_family(build: &str, rho: f64) -> usize {
+    let mut miss = 0usize;
+    for (name, quick, parts, cr, lnb, top) in family() {
+        for (i, x) in uniform(400_000, 0x1234_5678_9abc_def1, -10.0, 10.0).chain(uniform(200_000, 5, -top, top)).enumerate() {
+            let e = cr(x);
+            match quick(x) {
+                Some(v) => assert_eq!(v.to_bits(), e.to_bits(), "{build} quick {name}({x:e} = {:#x}): {v:e}, correctly rounded {e:e}", x.to_bits()),
+                None => miss += 1,
+            }
+            let got = if name == "exp2" { m::exp2(x) } else { m::exp10(x) };
+            assert_eq!(got.to_bits(), e.to_bits(), "{build} entry {name}({x:e}): {got:e}, correctly rounded {e:e}");
+            if i % 64 == 0 {
+                if let Some((zh, zl, sc)) = parts(x) {
+                    let want = mp::exp(Mp::from_f64(x).mul(lnb)).mul(Mp::from_f64(1.0 / sc));
+                    let err = want.sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
+                    assert!(err.cmp_abs(Mp::from_f64(rho * zh.abs())).is_le(), "{build} quick {name}({x:e}): error {:e} above the bound", err.to_f64() / zh);
+                }
+            }
+        }
+        for n in 1..=22i32 {
+            let x = f64::from(n);
+            assert_eq!(m::exp10(x), 10f64.powi(n), "{build} exp10({n}) not exact");
+        }
+        assert_eq!(m::exp2(-3.0), 0.125, "{build} exp2(-3) not exact");
+    }
+    miss
+}
+
+// s10_0_f_0: exp2/exp10 in the FMA build: correctly rounded, within RHO_FAM_FMA, under 0.05%
+// declines (expected 0.010%).
+#[test]
+fn exp2_exp10_quick_fma_build() {
+    let Some(miss) = with_fma(|| check_family("FMA", RHO_FAM_FMA)) else { return };
+    assert!(miss * 2000 <= 2 * 600_000, "FMA exp2/exp10 declined {miss} of 1200000 (above 0.05%)");
+}
+
+// s10_0_f_0: exp2/exp10 in the SSE2 build through the entries: correctly rounded, within
+// RHO_FAM_SSE2.
+#[test]
+fn exp2_exp10_quick_sse2_build() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(selftest::set_math_fma(false));
+    assert!(!selftest::math_fma(), "set_math_fma(false) did not select the SSE2 build");
+    let miss = check_family("SSE2", RHO_FAM_SSE2);
+    assert!(selftest::set_math_fma(true));
+    assert!(miss > 0, "the SSE2 build never declined: the rounding test is not in force");
 }
