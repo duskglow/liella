@@ -54,6 +54,9 @@ impl Arch for OtherTable {
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = 1;
     const INTERP: &'static str = "ld-test-other-table.so";
+    fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
+        liella_rt::cpu::Features::default()
+    }
     fn classify(r_type: u32) -> RelocKind {
         if r_type == 1 { RelocKind::Relative } else { RelocKind::Unsupported(r_type) }
     }

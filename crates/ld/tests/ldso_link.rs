@@ -190,25 +190,3 @@ fn ldso_product_runs_at_random_bases() {
         assert!(o.stdout.is_empty() && !o.stderr.is_empty(), "{args:?}: {o:?}");
     }
 }
-
-/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
-#[test]
-fn ldso_product_refuses_as_interpreter() {
-    let Some(p) = product() else { return };
-    if !cc_ok() {
-        eprintln!("SKIP: no cc");
-        return;
-    }
-    // A program naming this interpreter in PT_INTERP: the kernel starts ld.so for it (AT_ENTRY is the
-    // program's), and DL-5 refuses with 127 before reaching the program's entry.
-    let d = dir();
-    let c = d.join("interp.c");
-    std::fs::write(&c, "void _start(void) { for (;;) {} }\n").unwrap();
-    let exe = d.join("interp");
-    let o = Command::new("cc").args(["-nostdlib", "-fPIE", "-pie", "-O1"]).arg(format!("-Wl,--dynamic-linker={}", p.display())).arg(&c).arg("-o").arg(&exe).output().unwrap();
-    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    // Hang guard only (a regression would spin in _start): `timeout` kills it, and the status says so.
-    let o = Command::new("timeout").arg("60").arg(&exe).output().unwrap();
-    assert_eq!(o.status.code(), Some(program::FAILURE), "{o:?}");
-    assert_eq!(o.stderr, program::AS_INTERPRETER);
-}

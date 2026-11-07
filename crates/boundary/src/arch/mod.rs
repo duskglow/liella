@@ -13,6 +13,19 @@ pub(crate) fn set_thread_pointer(tb: usize) -> liella_kernel::errno::KResult<()>
     crate::raw::set_fs(tb)
 }
 
+/// Hand the process to the program entry point `entry` with the initial stack `sp` (design §0a
+/// "Machine primitives", program entry transfer). The caller has mapped and relocated the program
+/// and laid out argc, argv, envp and the auxiliary vector from `sp` as the kernel does.
+pub(crate) fn enter(sp: usize, entry: usize) -> ! {
+    // UNSAFE(extern): the program entry primitive.
+    #[allow(unsafe_code)]
+    // SAFETY: `entry` is the entry point of a program the loader mapped and relocated (or the
+    // kernel mapped), and `sp` the initial stack laid out for it; control never comes back.
+    unsafe {
+        liella_machine_ld_enter(sp, entry)
+    }
+}
+
 // UNSAFE(extern): the loader's machine primitives (R14-8), one declaration each.
 #[allow(unsafe_code)]
 unsafe extern "C" {
@@ -21,4 +34,8 @@ unsafe extern "C" {
     /// Never called from Rust: its address is compared with `AT_ENTRY` (run as a program or not).
     // ARCH(x86_64): the primitive's register convention is x86-64's (entry.S); aarch64 has its own (A-4).
     pub(crate) safe fn liella_machine_ld_entry();
+    /// `csys/src/machine/entry.S` assembled with `-DLIELLA_LD`: hand the process to a program's
+    /// entry point `entry` with the initial stack `sp` (argc at it). Never returns.
+    // ARCH(x86_64): x86-64 psABI process entry (%rsp, %rdx = 0); aarch64 has its own (A-4).
+    pub(crate) fn liella_machine_ld_enter(sp: usize, entry: usize) -> !;
 }
