@@ -10,7 +10,7 @@ done
 for v in before after after before; do
   for b in cbench_memref cbench_hot; do
     echo "=== round $v $b"
-    (cd $W/$v && ./xtask-bin bench --no-build --staged --compare $b)
+    (cd $W/$v && ./xtask-bin bench --no-build --compare $b)
   done
 done
 uptime

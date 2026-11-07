@@ -38,7 +38,7 @@ CBENCH_COUNTERS=1 and =mite, pinned to one CPU.
 ## Pending jobs (read before deciding)
 * keke `machine-jcc-pad-gate` (clippy, static, affected --base origin/next) and `machine-jcc-pad-plants`
   (handoff/machine-jcc-pad.plants, 10 plants: flags, file list, build.rs, checker logic), queued at hand-back.
-* kotori `machine-jcc-pad-ivb`, nozomi `machine-jcc-pad-n100`: `~/work/machine-jcc-pad/time.sh`: before/after
+* kotori `machine-jcc-pad-ivb-2`, nozomi `machine-jcc-pad-n100-2` (the first `-ivb`/`-n100` runs failed at once: `--staged` is not accepted with `--compare`): `~/work/machine-jcc-pad/time.sh`: before/after
   `--compare` of cbench_memref and cbench_hot, rounds b a a b. Read the Liella/glibc ratio per row per round.
 
 ## Next step
