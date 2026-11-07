@@ -1811,6 +1811,7 @@ const MACHINE_EXPORTS: &[(&str, &str, &[&str])] = &[
     ("scan.S", "index", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strchrnul", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strncmp", &["machine_scanners", "s04_strings_symbols"]),
+    ("scan.S", "strstr", &["strstr_find", "s04_strings_symbols"]),
     ("scan.S", "__rawmemchr", &["s04_strings_symbols"]),
     ("scan.S", "memrchr", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strcpy", &["machine_scanners", "s04_strings_symbols"]),

@@ -7183,7 +7183,9 @@ strncmp:
  * Groups of four blocks (128 bytes, one page) run a one-stream filter (c1 at q, or c0 at q - off
  * after a dense run of c1 in a group free of c0) or the pair test, each with the 0 test of q.
  * Units past the terminator are read only inside the terminator's page and are masked off
- * (the bits from the first 0 unit on). Rust verifies the needle at every candidate. */
+ * (the bits from the first 0 unit on). Rust verifies the needle at every candidate.
+ * Registers (TIMING-COV-STRSTR-PAIR): strpair uses no stack and writes no rdi, rsi or rcx and no
+ * xmm13-xmm15; liella_machine_strstr keeps its values there across the call. */
 	.section .text.liella_machine_strpair,"ax",@progbits
 	.globl liella_machine_strpair
 	.type liella_machine_strpair, @function
@@ -7635,6 +7637,127 @@ liella_machine_strpair:
 	subq $64, %rax
 	jmp .Lliella_machine_strpair_sse_loop
 	.size liella_machine_strpair, .-liella_machine_strpair
+
+/* char *liella_machine_strstr(const char *h, const char *n) (TIMING-COV-STRSTR-PAIR): strstr's
+ * direct entry. In the products `strstr` is this code, with no Rust frame before the scan; the
+ * Rust twin (posix::strstr) calls it too, so the strstr tests run it. It settles a needle of at
+ * most 15 bytes whose first candidate decides the call, and hands every other call to Rust:
+ *   - when h - 1 and n - 1 each have a page offset below 4080 (h and n have offsets 1..4080, so
+ *     16 bytes from each lie in its page; a NULL, offset 4095 after the - 1, never passes),
+ *     one 16-byte load of n gives its length m when a NUL is among them (m <= 15); m == 0
+ *     returns h. Else `liella_hot_strstr_slow(h, n)`, the measuring path (strz::find_str_n).
+ *   - one 16-byte load of h: a NUL at an index below last = m - 1 means the haystack is shorter
+ *     than the needle's first m - 1 bytes: NULL. Else bytes [0, last) of h are text, the
+ *     contract of liella_machine_strpair(h + last, last, n[0], n[last]).
+ *   - its answer 2k (candidate at h + k): when h + k has a page offset <= 4080, one 16-byte load
+ *     there is compared with the needle (kept in xmm15) over bits [0, m); equal returns h + k.
+ *     Answer 2k + 1 (a NUL at h + last + k): that byte read again is 0: NULL.
+ *     Anything else (a failed candidate, a candidate at a page end, a NUL that a writer
+ *     changed) goes to `liella_hot_strstr_next(h, n, m, r)` with the answer r, which continues
+ *     as strz::find_known does after its first scan (strz::find_str_after).
+ * Registers: strpair writes no rdi, rsi or rcx and no xmm13-xmm15 (its header): rdi = h + last
+ * and rsi = last survive the call, the needle's 16 bytes stay in xmm15; n is pushed (one push
+ * keeps the call 16-byte aligned).
+ * SAFETY: every load lies in the page of a byte the contract makes readable (h[0], n[0], the
+ * candidate's first byte, which the scan saw as text) or is strpair's own; bytes loaded past a
+ * NUL are masked off (the length) or ignored (bits from m on). */
+	.section .text.liella_machine_strstr,"ax",@progbits
+	.hidden liella_hot_strstr_slow  /* crates/boundary/src/posix/s04_strings.rs */
+	.hidden liella_hot_strstr_next  /* crates/boundary/src/posix/s04_strings.rs */
+	.globl liella_machine_strstr
+	.type liella_machine_strstr, @function
+	/* 64-byte aligned like every exported entry (D-4.33). */
+	.p2align 6
+liella_machine_strstr:
+#ifdef LIELLA_EXPORT
+	.globl strstr
+	.type strstr, @function
+strstr:
+#endif
+	leal -1(%rdi), %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	jae .Lsstr_slow
+	leal -1(%rsi), %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	jae .Lsstr_slow
+	movdqu (%rsi), %xmm15
+	pxor %xmm0, %xmm0
+	pcmpeqb %xmm15, %xmm0
+	pmovmskb %xmm0, %eax
+	bsfl %eax, %eax
+	jz .Lsstr_slow
+	/* eax = m; m == 0 (CF after the subtraction): h. Else eax = last. */
+	subl $1, %eax
+	jc .Lsstr_empty
+	movdqu (%rdi), %xmm1
+	pxor %xmm2, %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pmovmskb %xmm2, %edx
+	orl $0x10000, %edx
+	bsfl %edx, %edx
+	cmpl %eax, %edx
+	jb .Lsstr_null
+	pushq %rsi
+	movzbl (%rsi), %edx
+	movzbl (%rsi,%rax), %ecx
+	addq %rax, %rdi
+	movq %rax, %rsi
+	call liella_machine_strpair
+	popq %r8
+	testb $1, %al
+	jnz .Lsstr_nul
+	/* Candidate h + k, k = r / 2; rdx = h. */
+	movq %rdi, %rdx
+	subq %rsi, %rdx
+	shrq %rax
+	addq %rdx, %rax
+	movl %eax, %r9d
+	andl $4095, %r9d
+	cmpl $4080, %r9d
+	ja .Lsstr_fail
+	movdqu (%rax), %xmm0
+	pcmpeqb %xmm15, %xmm0
+	pmovmskb %xmm0, %r10d
+	/* Bits from m on set: all ones exactly when bytes [0, m) are equal. */
+	leal 1(%rsi), %ecx
+	movl $-1, %r9d
+	shll %cl, %r9d
+	orl %r9d, %r10d
+	incl %r10d
+	jnz .Lsstr_fail
+	ret
+.Lsstr_fail:
+	/* r = 2 * (candidate - h). */
+	subq %rdx, %rax
+	leaq (%rax,%rax), %rcx
+	jmp .Lsstr_next
+.Lsstr_nul:
+	movq %rax, %rdx
+	shrq %rdx
+	cmpb $0, (%rdi,%rdx)
+	jne .Lsstr_changed
+.Lsstr_null:
+	xorl %eax, %eax
+	ret
+.Lsstr_changed:
+	movq %rax, %rcx
+.Lsstr_next:
+	/* (h, n, m, r) for the Rust continuation. */
+	leaq 1(%rsi), %rdx
+	subq %rsi, %rdi
+	movq %r8, %rsi
+	jmp liella_hot_strstr_next
+.Lsstr_empty:
+	movq %rdi, %rax
+	ret
+.Lsstr_slow:
+	jmp liella_hot_strstr_slow
+	.size liella_machine_strstr, .-liella_machine_strstr
+#ifdef LIELLA_EXPORT
+	.size strstr, .-strstr
+#endif
 	.section .text.liella_machine_wcspair,"ax",@progbits
 
 	.globl liella_machine_wcspair
