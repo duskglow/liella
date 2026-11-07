@@ -1,8 +1,25 @@
 # DL-BOOT-RELOC (phase 14 DL-4): self-relocator, first used by libc.a's static-PIE start
 
-**State:** branch `task/dl-boot-reloc-6` (continues dl-boot-reloc-5; base origin/next, merge-base 71ffff12), code
-head `cc686672`. Role shiki:~/w/sh1. Verdict: ready to land once the gate and plants named in
-handoff/reports/DL-BOOT-RELOC-6.json are green (the RPC race of -5 is RPC-STUB-HEAP-CHECK-ISOLATE's, ruling #3693).
+**State:** branch `task/dl-boot-reloc-7` (continues dl-boot-reloc-6; origin/next 66b8d3ba merged in at 4d5c2738),
+code head `4c1313d4`. Role kanon:~/w/kn1. Verdict: ready to land once the FULL gate and plants named in
+handoff/reports/DL-BOOT-RELOC-7.json are green.
+
+## DL-BOOT-RELOC-7: CI conflict with origin/next
+* Conflict (CI merge_next rc 3): next added `#[cfg_attr(not(feature = "runtime"), allow(dead_code))]` to
+  classed::start and nscache::start (RPC-STUB-HEAP-CHECK-ISOLATE) where -6 added `#[inline(always)]`. Resolved by
+  keeping both attributes (merge commit 4d5c2738). Next's other edits in runtime.rs (compat_from_start call removed),
+  sys.rs and ffi.rs merged cleanly; thread::init_initial and heap::perturb_from_start keep `#[inline(always)]`.
+* Counters, one Broadwell host (kanon, E5-2699 v4), `cargo xtask bench --counters --only cbench_startup`, user-mode
+  instructions per process (startup_instr_c / printf / setloc / wctype):
+  - origin/next 66b8d3ba: **2152** / 71909 / 68115 / 69165 (job `dl-boot-reloc-7-bench-next`)
+  - merged branch 4d5c2738: **2148** / 71897 / 68103 / 69153 (job `dl-boot-reloc-7-bench-branch`): every row below
+    origin/next, startup_instr_c at the 2148 target. No row moved against expectations, so no trace was needed.
+  - Note: origin/next itself measures 2152 here (above CI's 2150 Zen 1 limit if Zen 1 tracks it); this branch is 4 under.
+* Plants: handoff/DL-BOOT-RELOC-7-plants.txt = -6's six `equivalent:` plants, with the classed::start and
+  nscache::start patterns updated to skip next's cfg_attr line (the old patterns no longer matched). Job
+  `dl-boot-reloc-7-plants` rc 0: 6 EQUIVALENT, 0 SURVIVED, no WARN lines.
+* clippy (`--all-features`, and `cargo xtask clippy`) and `cargo xtask static` clean on the inherited head (job
+  `-lint0`) and on the merged head (job `-lint1`).
 
 ## DL-BOOT-RELOC-6: the instruction regression (CI train 510: startup_instr_c 2200 > 2150)
 * Measured on one Haswell host (shiki, E5-2697 v3), `cargo xtask bench --counters --only cbench_startup`,
@@ -32,11 +49,11 @@ handoff/reports/DL-BOOT-RELOC-6.json are green (the RPC race of -5 is RPC-STUB-H
   (handoff/DL-BOOT-RELOC-plants.txt). -2/-1: the relocator (crates/ld/src/boot.rs), PC-relative anchor.
 
 ## Open / next
-1. Land after the gate and plants are green (merge origin/next first only if CI reports a conflict).
-2. The merge-base already sits at 2148 against the 2150 limit (2 instructions of headroom on startup_instr_c); this
-   branch now runs 5 fewer. Any other branch adding a few start-up instructions will trip the limit.
-3. Optional tidy: `#[cfg_attr(not(feature = "runtime"), allow(dead_code))]` on classed::start, nscache::start,
-   sys::set_sysinfo_ehdr (dead-code warnings in non-runtime test builds; pre-existing, not from this branch).
+1. Land after the FULL gate (`kanon:dl-boot-reloc-7-gate`) and plants are green (merge origin/next again only if
+   CI reports another conflict; keep both sides' attributes on the start-up helpers).
+2. startup_instr_c headroom is thin: origin/next measures 2152 on Broadwell (Haswell merge-base of -6: 2148) against
+   the 2150 Zen 1 limit; this branch runs 4 fewer. Any branch adding a few start-up instructions will trip it.
+3. (Done on next by RPC-STUB-HEAP-CHECK-ISOLATE: the cfg_attr dead_code tidy.)
 4. Optional: a conformance check that RELRO is read-only in a static PIE. PT_PHDR load offset: STATIC-PIE-LOAD-OFFSET.
 
 Decisions: D-27.10, ruling #3670 (zero added instructions on the non-PIE start). Plan rows: design §0a (item 9), §1;
