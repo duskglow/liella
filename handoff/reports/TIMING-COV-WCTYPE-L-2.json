@@ -1,0 +1,18 @@
+{"task": "TIMING-COV-WCTYPE-L-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: _l handle test added (plants 6/6 caught), gate green; IVB iswctype -5%, iswalpha_l -3%, N100 +-1%; strcasecmp_*_256 rows +11-13% from a bench page-crossing layout artifact (ruling needed)",
+ "branch": "task/timing-cov-wctype-l-2", "head": "9633a833 (code head every job ran on; the handoff/report commit on top changes handoff/ only)",
+ "gate": {"affected": "7157 passed / 0 failed", "peak": "14G"},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "strcasecmp_{c,en,utf8}_256 measure +35 instructions and +11-13% time on head: the bench's static case_a/case_b[257] moved with Liella's data size and a different operand crosses a 4 KiB page on each side (base case_a at page offset 0xf60, head case_b at 0xf00); strcasecmp's code is identical apart from one field offset", "recommendation": "small bench story: _Alignas(512) on case_a/case_b in bench/c/cbench_locale.c, re-time base vs head; then land this branch"},
+  {"item": "iswctype / _l entries: several tweak stories with small gains (this one IVB -5%/-3%, N100 +-1%), still 1.3-2x glibc", "recommendation": "next story on this family is a RETHINK (RUT RULE), not another tweak"}
+ ],
+ "informational": [
+  "Previous run's keke job tcwl-gate2 (head 25dd7198) was still in its counts step at 05:00Z; left alone, its counts are superseded by shiki tcwl2-gate",
+  "Process slips this run: one empty heredoc (no-op) and two python one-liners rewriting files (the alias column of locale_ctype_l.rs, the msg regexes of the plants file) where the Edit tool was required; both diffs were checked"
+ ],
+ "refused": [],
+ "jobs": ["shiki:tcwl2-t1", "shiki:tcwl2-gate", "shiki:tcwl2-plants", "shiki:tcwl2-base", "kotori:tcwl2-ivb", "nozomi:tcwl2-n100"],
+ "improvement": "cbench rows that read static strings should align them (or place them in page-aligned buffers) so a row cannot change with the library's data size",
+ "next_step": "rule on the strcasecmp bench artifact (align the bench strings, re-time), then land; a RETHINK story for iswctype/_l",
+ "report_file": "handoff/TIMING-COV-WCTYPE-L.md"}
