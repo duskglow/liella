@@ -87,14 +87,8 @@ enum Link {
     StaticPie,
 }
 
-/// `conformance/c/<name>.c` built statically against the products (as `conformance/run.sh`
+/// `conformance/c/<name>.c` built against the products as `link` says (as `conformance/run.sh`
 /// builds it) and run, once per test binary.
-fn c_run(cell: &'static OnceLock<CRun>, name: &str) -> &'static CRun {
-    c_run_linked(cell, name, Link::Static)
-}
-
-/// `conformance/c/<name>.c` built against the products as `link` says and run, once per test
-/// binary.
 fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link) -> &'static CRun {
     cell.get_or_init(|| {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
