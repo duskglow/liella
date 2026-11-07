@@ -1,54 +1,56 @@
-# LIBM-F64-EXP-QUICK: binary64 exp quick phase (kernel, proof, tests; not wired)
+# LIBM-F64-EXP-QUICK (-2): binary64 exp quick phase (kernel, proof, tests; not wired)
 
-State: branch `task/libm-f64-exp-quick`, head after this file's commit (code head f4e08c24f). INCOMPLETE: context
-checkpoint (134k of the ~150k limit) at 44 of 80 calls. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK.md`
-(same text as `handoff/libm-rethink/LIBM-F64-EXP-QUICK.md`).
+State: branch `task/libm-f64-exp-quick-2`, code head 67b7caa22 (handoff/report commits on top). COMPLETE once the
+gate and plants jobs below are green. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK.md` (same as
+`handoff/libm-rethink/LIBM-F64-EXP-QUICK.md`). Decisions in force: D-10.51 (two-phase design), D-10.54 (this kernel's
+constants, bounds and measured accuracy), D-10.25/D-10.50 (two builds via `kernels!`/`fused`), D-10.3 (CR contract).
 
-## Done (verified on mei:~/w/s4)
+## What is in
 
-* `crates/math/src/fast64/quick.rs`: `exp_quick` / `exp_quick_parts`, SSE2 build plus `quick::fused` (FMA), one `quick!`
-  macro; the step-by-step bound in the module doc. Bounds: SSE2 2^-61.503 (stated `RHO_SSE2` = 1.4375·2^-62 = 2^-61.476,
-  `C_SSE2` 0x3ff017213fcbb4d5, expected fallback 0.565%); FMA 2^-67.727 (stated `RHO_FMA` = 1.25·2^-68 = 2^-67.678,
-  `C_FMA` 0x3ff00050019007d1, fallback 0.0076%). Term list as the brief's, but redone for Estrin: evaluation 2^-69.04,
-  low sum 4·2^-71.06 (SSE2) / 3·2^-71.06 (FMA), rl·rh 2^-70.53, tl·q 2^-71.06, truncation 2^-72.00, reduction 2^-78.41.
-  The r1 = x − kd·L1 exactness uses a grid argument (multiples of 2^-61, |r1| < 2^-8), not Sterbenz (|k| = 1 is a
-  boundary case for Sterbenz).
-* Tables from `cargo xtask tables` (`crates/mathtools/src/tables.rs`): `EXP2_J128`, `LN2_128_CW`, `SCALE_128` in
-  `coeffs/exp_log.rs`; `crates/math/KERNELS.md` refreshed by the same command.
-* `quick/tests.rs` (SSE2 build, §10.2 exp, D-10.3): constants plus the bound recomputed from them (`quick_constants_and_bounds`),
-  error against `Mp` (measured max **2^-61.583**, bound 2^-61.476), **10^7 operands, 0 mismatches**, fallback within
-  0.4-0.8% on uniform [-10, 10], hard cases (the 144 e^(k·2^-53) plus every raw misrounding in a 4·10^5 sample; at
-  least 20 needed), domain. Job `mei:libm-f64-exp-quick-unit`: 5 passed (before the Safety-doc commit, no code change since).
-* D-10.54 (constants and bounds, under D-10.51) in `plan/07-decisions/s10-mathematics.md`.
-* Lint: `libm-f64-exp-quick-lint` (static ok; clippy red: missing `# Safety`), fixed; `libm-f64-exp-quick-lint2` clippy clean.
+* `crates/math/src/fast64/quick.rs`: `exp_quick` / `exp_quick_parts`, SSE2 build and `quick::fused` (FMA); the
+  step-by-step bound in the module doc (SSE2 2^-61.503, stated 2^-61.476; FMA 2^-67.727, stated 2^-67.678).
+  `exp_quick_parts`, `RHO_SSE2`, `RHO_FMA` are `pub` + `#[doc(hidden)]` for the boundary's tests only.
+* Boundary access (unsafe stays in liella-boundary): `hot::exp_quick` / `exp_quick_parts` (`#[cfg(feature =
+  "selftest")]`, dispatch on `dispatch::fma()`), `selftest::exp_quick` / `exp_quick_parts`.
+* Tests (clause s10_0_f_0, §10.2 exp, D-10.3): SSE2 in `fast64/quick/tests.rs` (constants and bounds recomputed,
+  error vs `Mp`, 10^7 operands, fallback 0.4-0.8%, hard cases, domain); FMA in `crates/boundary/tests/exp_quick.rs`
+  (10^7 operands CR, FMA fallback < 0.05%, FMA/SSE2 bit identity on 2·10^5, FMA error vs `Mp` under `RHO_FMA`), plus
+  two `#[ignore]` harnesses: `exp_quick_accuracy_job` (`EXP_QUICK_N`, default 10^8 per distribution and build) and
+  `exp_quick_count_loop` (counts). The new test file is selected by the direct tier (it ran in the gate).
+* Plants `handoff/LIBM-F64-EXP-QUICK-2-plants.txt`: C4 +1 ulp, C_SSE2 for rho = 2^-64, Estrin term on rh, table index
+  +1, rl dropped, KBIAS 1022: 6 CAUGHT, 0 SURVIVED, 0 WARN (shiki `libm-f64-exp-quick-2-plants`, same quick.rs as the
+  final head; rerun on the final head as `-plants3`, queued behind the gate; `-plants2` was refused by the copy check because it copied the role while the gate wrote conformance/build/: never start plants in a role while a gate runs there).
 
-## Next step (exact)
+## Results (shiki, Haswell-EP, glibc 2.39)
 
-1. Boundary access for the FMA build (unsafe stays in liella-boundary): in `crates/boundary/src/hot/exp_log.rs` add
-   `#[cfg(feature = "selftest")] pub(crate) fn exp_quick` and `exp_quick_parts` dispatching on `dispatch::fma()` like
-   `exp_nearest` (`// UNSAFE(hot-kernel) SAFETY: ...`); `exp_quick_parts` in `quick!` is `pub(crate)`: make it `pub` with
-   `#[doc(hidden)]`; export `RHO_FMA`/`RHO_SSE2` the same way; `selftest::exp_quick`, `selftest::exp_quick_parts` next to
-   `set_math_fma` (selftest.rs ~line 700).
-2. `crates/boundary/tests/exp_quick.rs` (clause s10_0_f_0 / §10.2 exp, D-10.3): FMA vs SSE2 bit-identity, each answer CR
-   (`liella_math::fast64::exp_nearest`, else `Real::exp`), >= 10^7 FMA operands; FMA fallback < 0.05% on uniform [-10, 10];
-   FMA max relative error against `liella_math::mp` below `RHO_FMA` (print it); `#[ignore]` accuracy test with
-   `EXP_QUICK_N` (default 10^8) over uniform [-10, 10], uniform bits over [2^-60, 708) with both signs, uniform
-   [-745.2, 709.8], both builds (use `std::thread::scope`), 0 mismatches; `#[ignore]` count loop (4096 operands in
-   [-10, 10], `EXP_QUICK_CALLS`) for a `perf stat -e instructions:u` difference N vs 0 calls, both builds; glibc side: a
-   C loop over the same operands with and without `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA` (pattern
-   `handoff/libm-rethink/proto/proto_percall.c`). Add the test to `math_set` in `xtask/src/affected.rs` if not selected.
-3. Plants file `handoff/LIBM-F64-EXP-QUICK-plants.txt` (`docs/plants.md` format, `msg:` each), run with
-   `cargo xtask plants`: C4 bits ...5555 -> ...5556 (msg `C4 is not RN`); the SSE2 invocation's `C_SSE2` -> the c of
-   rho = 2^-64 (`1.0009775171065494`, msg `hard case|correctly rounded`); `pc = $ma(r2, C6, pb)` -> `$ma(rh, C6, pb)`;
-   `EXP2_J128[j][0]` -> `[(j + 1) & 127][0]`; `$ma(th, rl + q,` -> `$ma(th, q,` (needs the FMA tests: cmd runs
-   liella-math quick tests and the boundary exp_quick test); `1023 * 128` -> `1022 * 128`.
-4. Jobs: direct-tier gate, plants, the 10^8 accuracy job, the count job. Timing: none possible before wiring;
-   LIBM-F64-EXP-QUICK-WIRE books Ivy Bridge and the N100.
+* Accuracy job (`libm-f64-exp-quick-2-accuracy2`): 6·10^8 operands, **0 mismatches**. Fallback: uniform [-10, 10]
+  SSE2 0.562%, FMA 0.0079%; uniform bits over [2^-60, 708) SSE2 0.526%, FMA 0.0072%; uniform [-745.2, 709.8] SSE2
+  3.22%, FMA 2.68% (2.68% is the share outside the quick domain |x| >= 708). Max rel error: SSE2 2^-61.583 (bound
+  2^-61.476); FMA printed by `exp_quick_fma_error_within_bound` (`--nocapture`), asserted under 2^-67.678.
+* Counts (`libm-f64-exp-quick-2-counts2`), instructions per call incl. fallback, 4096 operands uniform [-10, 10]:
+  **Liella quick FMA 72.0, SSE2 86.3** (targets 80 / 95: met) against glibc exp 61 (FMA) / 71
+  (`GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`). Liella's figure includes an out-of-line call to the `selftest` wrapper
+  (cross-crate, not inlined, `Option<f64>` return) and the dispatch load; the wired entry will not have that wrapper,
+  so WIRE must re-count. Not a timing claim: no timing is possible before wiring.
+* Superseded: `-counts` (the loop compared its mode string every iteration, skewing the subtraction: FMA read 45),
+  `-gate` (killed: head changed), `-unit`, `-accuracy`, `-lint0` (static red: stale KERNELS.md, fixed), `-lint1`, `-kidx`.
 
-Design targets (module doc): FMA <= 80 and SSE2 <= 95 instructions per call with fallback (NOT MEASURED yet); FP
-operations 31 (FMA) / 39 (SSE2) including two compares; critical path 16 (FMA) / 21 (SSE2) dependent FP operations
-plus the compare.
+## Count recipe for an unwired kernel (proposed for rules/developer-flow)
 
-## Informational
+1. An `#[ignore]` test with a loop: operands precomputed in a Vec, `black_box` per operand, the mode (kernel / none)
+   decided ONCE before the loop, N from an env var; fallback to the real entry so the rate is included.
+2. `cargo test --no-run --message-format=json` gives the binary; `perf stat -x, -o f -e instructions:u <bin> --ignored
+   --exact <test> --test-threads=1` at N = 0 and N = 10^7, for the kernel and for `none`, min of 3 runs each.
+3. Per call = ((I(N) − I(0)) − (Inone(N) − Inone(0))) / N. Reference: a C loop over the same operands at -O2
+   -fno-builtin with the same subtraction, with and without `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`.
+   Script: `~/work/LIBM-F64-EXP-QUICK-2/count.sh` + `glibc_exp_loop.c` on shiki (copies in the report).
 
-* `KERNELS.md` changed by 147 lines from `cargo xtask tables` (kernel-index); generated, committed as written.
+## Next step
+
+LIBM-F64-EXP-QUICK-WIRE: call `exp_quick` in front of `exp_nearest` in the C entry (both builds), re-count with
+`cargo xtask bench --compare --counters` (cbench_libm exp), and book Ivy Bridge and the N100 for timing.
+
+## Not to redo
+
+The bound proof and tables (D-10.54); the 10^8 accuracy run; the plants. `KERNELS.md` holds line numbers of
+quick.rs: any edit to quick.rs needs `cargo xtask kernel-index` or static's tables-fresh goes red.

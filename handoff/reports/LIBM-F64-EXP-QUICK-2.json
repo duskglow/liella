@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-EXP-QUICK-2", "model": "opus", "tokens": null,
+ "result": "exp quick-phase kernel (not wired): 72.0 FMA / 86.3 SSE2 instructions per call with fallback (glibc 61 / 71), 0 mismatches over 6x10^8; plants 6/6 caught",
+ "branch": "task/libm-f64-exp-quick-2", "head": "67b7caa22",
+ "gate": {"affected": "pending: shiki:libm-f64-exp-quick-2-gate2 (all suites ok so far)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Unwired kernel counts include the selftest wrapper call (cross-crate, Option<f64> return); WIRE must re-count in the C entry", "Inherited head had static red (stale crates/math/KERNELS.md, line numbers of quick.rs); regenerated"],
+ "refused": [],
+ "improvement": "Count recipe for unwired kernels (perf stat on an #[ignore] test loop, N minus 0 calls minus an empty loop, mode decided outside the loop) written in handoff/LIBM-F64-EXP-QUICK.md for rules/developer-flow",
+ "next_step": "LIBM-F64-EXP-QUICK-WIRE: put exp_quick in front of exp_nearest in the C entry, re-count with cargo xtask bench, time on Ivy Bridge and the N100",
+ "report_file": "handoff/LIBM-F64-EXP-QUICK.md",
+ "jobs": ["shiki:libm-f64-exp-quick-2-lint2", "shiki:libm-f64-exp-quick-2-gate2", "shiki:libm-f64-exp-quick-2-plants3", "shiki:libm-f64-exp-quick-2-accuracy2", "shiki:libm-f64-exp-quick-2-counts2"]}
