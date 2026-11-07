@@ -4,11 +4,12 @@
 
 This is the second public pre-release: the `next` branch promoted to `main` around 2026-11-07. Like
 the first, it is a public work in progress, not an alpha or a release candidate, and it should not
-be used in production. There is no version tag.
+be used in production. It is tagged `snapshot-2026-11-07`: a snapshot of the development tree, not a
+version.
 
 Every figure below says where it comes from and when it was measured. "The measured tree" is `next`
-at commit `9643c81b0` (2026-11-07). Work that landed after that commit is not described here; work
-still on its way is named "in progress", without figures. Ratios are Liella/glibc 2.39 on the same
+at commit `136b5246` (2026-11-07), the tree of this pre-release; timing figures name the tree they were
+measured on. Work still on its way is named "in progress", without figures. Ratios are Liella/glibc 2.39 on the same
 machine: below 1.00 means Liella takes less, above 1.00 more. A timing verdict is "faster" below
 0.95, "slower" above 1.05 and "parity" between.
 
@@ -25,10 +26,28 @@ machine: below 1.00 means Liella takes less, above 1.00 more. A timing verdict i
   classes of processor timed.
 - **Symbols**: 557 of the 4,305 names of the glibc 2.39 ABI are not defined yet (716 on 2026-10-24).
 
+### Landed late in this run
+
+These landed on `next` on 2026-11-07, after the timing sweeps below were measured:
+
+- **`expf`, `exp2f`**: a one-pass `float` path had left a dependency between consecutive calls
+  (a conversion into a register it did not clear first). Fixed: booked timing on the N100, `expf`
+  3.11 to 1.66 and `exp2f` 3.13 to 1.67 (Liella/glibc, before/after the fix); on Ivy Bridge `expf`
+  2.51 to 1.24.
+- **Quick first phases** for `exp2`, `exp10`, `log2`, `log10`, `log1p`, `sin`, `cos`, `tan` and
+  `pow`. In progress: `expm1`, the inverse hyperbolic functions. No sweep figures for these yet.
+- **Wide-character classification** in the built-in `C` and `C.UTF-8` locales reads one two-stage
+  table of class words, and `towctrans` recognises the `toupper`/`tolower` descriptors directly.
+- **Start-up page faults**: a statically linked coreutils `printf` (`printf '%s %d %x\n' a 1 1`,
+  address randomisation off, one warm-up and five identical runs) takes 61 page faults on the
+  measured tree and 62 on the 2026-10-24 tree, on the same host as the test figures below. Run-time
+  start-up functions are kept in the hot text group again, and a build check now fails when a hot-text
+  key matches no function.
+
 ### Tests and symbols on the measured tree
 
-**Tests** (`cargo xtask status` on the measured tree, 2026-11-07, AMD EPYC 7551 (Zen 1), Linux 6.8):
-5,467 tests are specified and 577 of them are still pending (stubs for behaviour not yet
+**Tests** (`cargo xtask status` on the measured tree, 2026-11-07, Intel Xeon Platinum 8151 (Skylake-SP),
+Linux 6.8): 5,484 tests are specified and 577 of them are still pending (stubs for behaviour not yet
 implemented): 85 belong to phase 14, 316 to phase 15, 173 to the mathematics track and 3 are
 listed deferrals.
 
@@ -205,7 +224,8 @@ This is a soft release: the current tree, published in a fresh repository. It is
 in progress, not an alpha or a release candidate, and it should not be used in production.
 
 Released 2026-10-24 as the first commit of this repository, cut from the development tree; that
-commit's message names the development commit it was cut from. There is no version tag. Every
+commit's message names the development commit it was cut from. It had no tag when it was published;
+on 2026-11-07 it was tagged `snapshot-2026-10-24`. Every
 figure below says where it comes from and when it was measured.
 
 ### What Liella is

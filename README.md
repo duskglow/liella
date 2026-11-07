@@ -26,7 +26,7 @@ here should be used in production. In particular:
 
 What changed in this pre-release (2026-11-07), with every figure measured on the tree and its
 source named, is in [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md). In short: on `next` at
-`9643c81b0`, 5,467 tests are specified and 577 of them are still pending, and 557 of the 4,305
+`136b5246` (tagged `snapshot-2026-11-07`), 5,484 tests are specified and 577 of them are still pending, and 557 of the 4,305
 names of the glibc 2.39 ABI are not defined yet, 110 of them for phase 14 and 161 for phase 15
 (the rest are internal to glibc's own libraries). Static PIE programs are supported, and `libm`'s
 `exp`, `log` and x87 `sinl`/`cosl` got faster; most `libm` rows remain slower than glibc's.
