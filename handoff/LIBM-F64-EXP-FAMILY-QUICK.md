@@ -2,7 +2,7 @@
 
 State: branch `task/libm-f64-exp-family-quick` (stacks on LIBM-F64-EXP-QUICK-WIRE-2, base 799313e1e); code commit
 531d0df92, plants file and handoff commits on top. Role keke:~/w/n2. Brief:
-`/home/claude/state/briefs/LIBM-F64-EXP-FAMILY-QUICK.md`. Decisions in force: D-10.51, D-10.54, D-10.64 (new, this
+`~/state/briefs/LIBM-F64-EXP-FAMILY-QUICK.md`. Decisions in force: D-10.51, D-10.54, D-10.64 (new, this
 story), D-10.25/D-10.50 (two builds), D-10.3 (CR).
 
 ## What is in
