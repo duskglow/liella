@@ -153,15 +153,35 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast64/quick_log.rs (f64 quick_log)
 
-- `fast64/quick_log.rs:85` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in two roundings (the SSE2 build).
-- `fast64/quick_log.rs:114` `pub fn log_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `ln x = zh + zl` within `RHO·|zh|` for positive normal finite `x`, else `None` (module doc).
-- `fast64/quick_log.rs:148` `pub fn log_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `ln x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::log_nearest`]).
-- `fast64/quick_log.rs:158` `pub fn log_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `log`'s in-place fast path (D-10.51): the quick phase, then on a miss or outside its domain tier 2 (`fast64::log_nearest` in the same build, out of line).
-- `fast64/quick_log.rs:173` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log_tiered`] (the SSE2 build of [`super::log_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.1% of calls reach it.
-- `fast64/quick_log.rs:177` `quick!(; #[inline(always)]; ma; reduce; half_square);`
-- `fast64/quick_log.rs:191` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
-- `fast64/quick_log.rs:219` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log_tiered`] in the FMA build (`fast64::fused::log_nearest`), out of line and cold.
-- `fast64/quick_log.rs:223` `quick!` entries: 
+- `fast64/quick_log.rs:169` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in two roundings (the SSE2 build).
+- `fast64/quick_log.rs:192` `fn scale(zh: f64, zl: f64, k: &[f64; 4]) -> (f64, f64)` — bound: undocumented — doc: `zh·k + zl·k` as a pair within `2^-74·|p|` (SSE2 build; module doc, `log2`, `log10`).
+- `fast64/quick_log.rs:209` `fn split(iy: u64) -> (f64, f64, f64, u64)` — bound: undocumented — doc: `(r, th, tl, bits(c_j·2^-e))` of positive normal finite `y` (bits `iy`): `ln y = th + tl + log1p(r)` (module doc); the last is `log1p`'s correction scale.
+- `fast64/quick_log.rs:225` `fn series(r: f64) -> (f64, f64, f64, f64)` — bound: undocumented — doc: `(vh, vl, r³, q)` with `log1p(r) ≈ (vh + vl) + r³·q` (module doc).
+- `fast64/quick_log.rs:241` `fn join<const X: bool>(r: f64, th: f64, tl: f64, extra: f64) -> (f64, f64)` — bound: undocumented — doc: `ln y = zh + zl` from [`split`]'s parts; with `X`, `extra` (`log1p`'s correction) joins the low sum.
+- `fast64/quick_log.rs:257` `pub fn log_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `ln x = zh + zl` within `RHO·|zh|` for positive normal finite `x`, else `None` (module doc).
+- `fast64/quick_log.rs:271` `pub fn log_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `ln x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::log_nearest`]).
+- `fast64/quick_log.rs:282` `pub fn log_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `log`'s in-place fast path (D-10.51): the quick phase, then on a miss or outside its domain tier 2 (`fast64::log_nearest` in the same build, out of line).
+- `fast64/quick_log.rs:297` `pub fn log2_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `log2 x = zh + zl` within `RHO·|zh|` for positive normal finite `x`, else `None` (module doc, `log2`).
+- `fast64/quick_log.rs:306` `pub fn log2_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `log2 x` when the quick phase's test decides it, else `None`.
+- `fast64/quick_log.rs:316` `pub fn log2_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `log2`'s in-place fast path (D-10.66): the quick phase, then tier 2 (`fast64::log2_nearest` in the same build, out of line); `None` when tier 2 declines too.
+- `fast64/quick_log.rs:337` `pub fn log10_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `log10 x = zh + zl` within `RHO·|zh|` for positive normal finite `x`, else `None` (module doc, `log10`).
+- `fast64/quick_log.rs:346` `pub fn log10_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `log10 x` when the quick phase's test decides it, else `None`.
+- `fast64/quick_log.rs:356` `pub fn log10_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `log10`'s in-place fast path (D-10.66): the quick phase, then tier 2 (`fast64::log10_nearest` in the same build, out of line); `None` when tier 2 declines too.
+- `fast64/quick_log.rs:380` `pub fn log1p_quick_parts(x: f64) -> Option<(f64, f64)>` — bound: undocumented — doc: `ln(1 + x) = zh + zl` within `RHO·|zh|` for `2^-60 <= |x|`, `−1 < x < 2^960`, else `None` (module doc, `log1p`).
+- `fast64/quick_log.rs:407` `pub fn log1p_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `log1p x` when the quick phase's test decides it, else `None`.
+- `fast64/quick_log.rs:417` `pub fn log1p_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `log1p`'s in-place fast path (D-10.66): the quick phase, then tier 2 (`fast64::log1p_nearest` in the same build, out of line); `None` when tier 2 declines too.
+- `fast64/quick_log.rs:432` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log_tiered`] (the SSE2 build of [`super::log_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.1% of calls reach it.
+- `fast64/quick_log.rs:439` `fn tier2_log2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log2_tiered`] (SSE2 build), out of line and cold.
+- `fast64/quick_log.rs:446` `fn tier2_log10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log10_tiered`] (SSE2 build), out of line and cold.
+- `fast64/quick_log.rs:453` `fn tier2_log1p(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log1p_tiered`] (SSE2 build), out of line and cold.
+- `fast64/quick_log.rs:457` `quick!(; ; #[inline(always)]; ma; reduce; half_square; scale);`
+- `fast64/quick_log.rs:471` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
+- `fast64/quick_log.rs:499` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log_tiered`] in the FMA build (`fast64::fused::log_nearest`), out of line and cold.
+- `fast64/quick_log.rs:506` `fn scale(zh: f64, zl: f64, k: &[f64; 4]) -> (f64, f64)` — bound: undocumented — doc: `zh·k + zl·k` as a pair within `2^-100·|p|` (module doc, `log2`, `log10`): 2MultFMA.
+- `fast64/quick_log.rs:518` `fn tier2_log2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log2_tiered`] in the FMA build, out of line and cold.
+- `fast64/quick_log.rs:526` `fn tier2_log10(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log10_tiered`] in the FMA build, out of line and cold.
+- `fast64/quick_log.rs:534` `fn tier2_log1p(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`log1p_tiered`] in the FMA build, out of line and cold.
+- `fast64/quick_log.rs:538` `quick!` entries: 
 
 ## fast64/quick_pow.rs (f64 quick_pow)
 

@@ -808,6 +808,23 @@ pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
     crate::hot::log_quick_parts(x)
 }
 
+/// The quick phase of `log2`, `log10` or `log1p` (`f` names it; D-10.66) in the build
+/// [`set_math_fma`] chose: its unrounded `(zh, zl)` (within `liella_math::fast64::quick_log::RHO·|zh|`)
+/// and its rounded answer (`None` when the rounding test does not decide).
+pub fn log_family_quick(f: &str, x: f64) -> (Option<(f64, f64)>, Option<f64>) {
+    crate::hot::log_family_quick(f, x)
+}
+
+/// The in-place tiers of `log2`, `log10` or `log1p` (`f` names it; D-10.51, D-10.66) in the build
+/// [`set_math_fma`] chose, as their entries call them.
+pub fn log_family_tiered(f: &str, x: f64) -> Option<f64> {
+    match f {
+        "log2" => crate::hot::log2_nearest(x),
+        "log10" => crate::hot::log10_nearest(x),
+        _ => crate::hot::log1p_nearest(x),
+    }
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it
