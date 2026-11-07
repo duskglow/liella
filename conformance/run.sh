@@ -209,7 +209,8 @@ for name in "$@"; do
     if [ -z "$dyn" ]; then
         rhash=$({ env | LC_ALL=C sort; ulimit -a; umask; grep -E '^(Sig(Blk|Ign)|Uid|Gid|Groups):' /proc/$$/status; ls /proc/$$/fd; pwd; } 2>&1 | sha256sum | cut -d' ' -f1)
         stamp="$(sha256sum < "$exe" | cut -d' ' -f1) $rhash $key"
-        if [ -f "$exe.pass" ] && [ "$(cat "$exe.pass")" = "$stamp" ]; then
+        # LIELLA_CONFORMANCE_RERUN=1 runs every program regardless (a repeat count, a timing).
+        if [ -z "${LIELLA_CONFORMANCE_RERUN:-}" ] && [ -f "$exe.pass" ] && [ "$(cat "$exe.pass")" = "$stamp" ]; then
             pass=$((pass + 1)); cached=$((cached + 1))
             continue
         fi

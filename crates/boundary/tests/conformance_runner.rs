@@ -66,6 +66,8 @@ fn an_exact_repeat_of_a_passing_program_is_not_rerun() {
     // The test runner's own per-test variables are not passed on, so they do not make a repeat differ.
     let (ok, out) = run(&dir, &["t_pass"], &[("NEXTEST_RUN_ID", "another-run"), ("CARGO_PKG_NAME", "another-package")]);
     assert!(ok && out.contains(NOT_RERUN), "a runner bookkeeping variable made the program rerun: {out}");
+    let (ok, out) = run(&dir, &["t_pass"], &[("LIELLA_CONFORMANCE_RERUN", "1")]);
+    assert!(ok && !out.contains("not rerun"), "LIELLA_CONFORMANCE_RERUN=1 did not rerun the program: {out}");
     fs::remove_dir_all(&dir).unwrap();
 }
 
