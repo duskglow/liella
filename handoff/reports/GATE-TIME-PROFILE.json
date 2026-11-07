@@ -1,0 +1,12 @@
+{"task": "GATE-TIME-PROFILE", "model": "opus", "tokens": null,
+ "result": "COMPLETE: plan written. 40 green FULL CI gates profiled (job wall p50 2517 s); the serial remez --check of 22 fits costs ~770 s per train (measured 772 s, was ~100 s on 11-05); 2 code briefs (remez cache+parallel ~-12.5 min/train; nextest priority refresh -1..-3 min), 1 ruling (pass-2 math product reruns ~-5..-6 min)",
+ "branch": "task/gate-time-profile", "head": "bba49bba",
+ "gate": {"affected": "not run (planning story, handoff/ only)", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["gtp-mathgen-time"],
+ "rulings": [{"item": "Pass 2 (exports interposed) re-runs the five math product sweeps (complex_ld_cr, complex_f128, special_ld, special_f128, complex_products: ~9000 of 12414 test-s); adding them to nextest::PASS0_ONLY changes what pass 2 tests", "recommendation": "Owner decides; if the export pass exists to exercise the harness on Liella's malloc/memcpy, keep one small shard of each in pass 2 and move the rest to pass 1 only (est. -5 to -6 min/train, NOT VERIFIED)"}],
+ "informational": ["jobs.tsv cpu_s for ci-gate rows counts only the jobrun wrapper (the gate runs in its own systemd scope), so the gate's CPU use is not recorded", "pass walls vary 1.5x (p90/p50) with the same tests; cause not verified", "cargo xtask test prints no per-step times; phases were dated from target/ mtimes"],
+ "refused": [],
+ "improvement": "Have xtask test print one '<step> <seconds>' line per step and jobrun read the gate scope's cpu.stat: the remez check grew by 13 min/train over two days unseen because no log shows step times",
+ "next_step": "Queue GATE-REMEZ-CHECK-CACHE (handoff/gate-time-profile/GATE-REMEZ-CHECK-CACHE.md) first, then GATE-NEXTEST-PRIORITY-REFRESH; take the pass-2 ruling to the owner",
+ "report_file": "handoff/gate-time-profile.md"}

@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-COMPARE-HEAD-SSE2", "model": "opus", "tokens": null,
+ "result": "step 1 re-time done (next <= base everywhere, SSE2 rows still above 1.05); step 2: SSE2 bcmp/__memcmpeq above 64 skip the AVX2 flag test: -11% to -18% on every SSE2 equality row 65+ (Ivy Bridge and N100 forced SSE2), AVX2 rows unchanged; step 3 (strncmp_diff8) not done",
+ "branch": "task/timing-cov-compare-head-sse2", "head": "2ea1f4dd",
+ "gate": {"affected": "pending: mei:timing-cov-compare-head-sse2-gate2 (clippy, static, direct tier)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "remaining SSE2 head_128 gap (1.23-1.31x on Ivy Bridge, 3 taken branches before the SSE2 class)", "recommendation": "next lever needs either the classed-page swap (D-4.53, off by default #3434) or accepting one taken branch on the AVX2 65-2048 path; recommend a ruling before building it"}],
+ "informational": ["bench --counters with GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2 in a staged tree measured the AVX2 class (numbers equal the default run): SSE2 instruction counts NOT MEASURED, -2 per call by code reading", "plants-1 WARN-NO-MSG (eq-over-avx2-skips-null caught by the correctness sweep, not the NULL test); msg fixed, plants2 0 WARN", "N100 default: two rows 4.60 -> 4.61 ns (one timer step, spread 0) on unmoved code", "AVX2 equality above cmp_long (no cbench row) runs +2 instructions"],
+ "refused": [],
+ "jobs": ["mei:timing-cov-compare-head-sse2-gate2", "mei:timing-cov-compare-head-sse2-plants2", "mei:timing-cov-compare-head-sse2-counts", "kotori:timing-cov-compare-head-sse2-ivb", "nozomi:timing-cov-compare-head-sse2-n100", "kotori:timing-cov-compare-head-sse2-ivb2", "nozomi:timing-cov-compare-head-sse2-n100-2"],
+ "improvement": "xtask bench --counters needs a documented way to force the SSE2 class (the tunable in the environment did not reach the measured run); one flag would have saved a counts job",
+ "next_step": "measure SSE2 counts; then strncmp_diff8 (1.42x Ivy Bridge) and memcmp_diff8 (1.25x) per the handoff",
+ "report_file": "handoff/timing-cov-compare-head-sse2.md"}

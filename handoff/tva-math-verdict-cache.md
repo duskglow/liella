@@ -8,7 +8,7 @@ Owner ruling #3820 ("agree, do it").
 input key equals the key recorded by its last green run. Otherwise it removes its record, runs as before, and
 `pass()` records the key after the last assertion, but only if the key read again at that point is unchanged.
 Records are kept in `target/test-verdicts/<name>` (written to a temporary file, then renamed; per tree and host).
-Key (D-10.51):
+Key (D-10.57):
 - test binary bytes (`/proc/self/exe`)
 - `/proc/cpuinfo` flags line
 - kernel release
@@ -80,4 +80,4 @@ sets the variable.
 
 ## Next step
 Coordinator: land through the normal train and schedule the nightly `LIELLA_NO_VERDICT_CACHE=1 cargo xtask test`.
-Plan rows: D-10.51, D-10.3.
+Plan rows: D-10.57, D-10.3.

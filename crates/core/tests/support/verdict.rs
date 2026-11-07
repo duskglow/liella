@@ -1,4 +1,4 @@
-//! Verdict cache of the math accuracy sweeps (TVA-MATH-VERDICT-CACHE, D-10.51): a shard whose
+//! Verdict cache of the math accuracy sweeps (TVA-MATH-VERDICT-CACHE, D-10.57): a shard whose
 //! complete input key equals the key of its last green run prints `verdict cached: <name> <key>`
 //! and returns without checking; any other shard runs as it always did and records its key only
 //! after it passed. A cached verdict is therefore only ever a green one for identical inputs.

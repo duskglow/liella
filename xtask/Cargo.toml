@@ -7,4 +7,8 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# Tooling runs on the host with std and deliberately has no dependencies.
+# Tooling runs on the host with std and deliberately has no third-party dependencies. liella-ld
+# (workspace, no dependencies outside it) gives the ld.so link check (L14-1, D-27.13) its ELF
+# reader and `RelocKind`.
+[dependencies]
+liella-ld = { workspace = true }

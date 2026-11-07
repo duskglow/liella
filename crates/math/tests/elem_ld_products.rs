@@ -85,7 +85,7 @@ fn long_double_elementary_functions_against_the_reference() {
     let (host, ours) = (dir.join("elem_ld_diff_host"), dir.join("elem_ld_diff_liella"));
     assert!(build(&host, false), "elem_ld_diff.c does not build against the host C library");
     assert!(build(&ours, true), "elem_ld_diff.c does not link against the products");
-    // Runs only when an input changed since this shard last passed (D-10.51).
+    // Runs only when an input changed since this shard last passed (D-10.57).
     let Some(verdict) = verdict::Key::new(env!("CARGO_CRATE_NAME")).shard(0, 1).file(&host).file(&ours).loaded_by(&host).begin() else {
         return;
     };

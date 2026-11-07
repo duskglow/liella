@@ -162,7 +162,7 @@ fn long_double_special_functions(k: usize) {
     let (host, ours) = (dir.join("special_ld_diff_host"), dir.join("special_ld_diff_liella"));
     assert!(build(&host, false), "special_ld_diff.c does not build against the host C library");
     assert!(build(&ours, true), "special_ld_diff.c does not link against the products");
-    // Runs only when an input changed since this shard last passed (D-10.51).
+    // Runs only when an input changed since this shard last passed (D-10.57).
     let Some(verdict) = verdict::Key::new(&format!("{}.s{k}", env!("CARGO_CRATE_NAME"))).shard(k, shard::SHARDS).file(&host).file(&ours).loaded_by(&host).begin() else {
         return;
     };

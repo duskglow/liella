@@ -1,0 +1,11 @@
+{"task": "TIMING-COV-WCTYPE-L", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: Table3 word reads + int tail-call wide entries (iswctype/isw*_l); clippy+static green; direct tier, plants, counts running; no timing",
+ "branch": "task/timing-cov-wctype-l", "head": "see git (handoff commit on 25dd7198)",
+ "gate": {"affected": "running (keke:tcwl-gate2)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [{"item": "D-NEW in s05 (no id reserved)", "recommendation": "reserve the next D-5.n and assign it"}],
+ "informational": ["brief hypothesis (out-of-line wclasses on the en_US path) did not hold: wclasses is only the built-in locales' arm", "first gate red: clippy incompatible-msrv (as_chunks needs 1.88, MSRV 1.85)", "one heredoc used for a local python edit early in the run (rule slip, no effect on results)"],
+ "refused": [],
+ "improvement": "xtask clippy's MSRV check could run in a seconds-long local pre-sync step; a std API newer than the MSRV cost a gate cycle",
+ "next_step": "read tcwl-gate2/tcwl-plants2, count base vs head on keke (no cbench_locale row slower, check collation), then time IVB + N100",
+ "report_file": "handoff/TIMING-COV-WCTYPE-L.md",
+ "jobs": ["keke:tcwl-gate2", "keke:tcwl-plants2"]}

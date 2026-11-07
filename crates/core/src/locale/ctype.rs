@@ -242,10 +242,10 @@ impl CtypeFile {
         let table = |base: usize, k: usize| base.checked_add(k).and_then(|i| Table3::parse(self.cat.item(i)));
         Wide {
             class: {
-                let mut by_bit = [None; 16];
+                let mut by_bit = [Table3::EMPTY; 16];
                 for (k, m) in crate::ctype::STANDARD_MASKS.iter().enumerate() {
                     if let Some(slot) = by_bit.get_mut(usize::try_from(m.trailing_zeros()).unwrap_or(16)) {
-                        *slot = table(co, k);
+                        *slot = table(co, k).unwrap_or(Table3::EMPTY);
                     }
                 }
                 by_bit
@@ -307,9 +307,11 @@ fn width_of(t: Option<Table3>, wc: u32) -> i32 {
 /// a class test, case map or width is one table walk, as the file-reading methods give.
 #[derive(Clone, Copy, Debug)]
 pub struct Wide {
-    /// The standard classes by the bit number of their `Class` mask (`None`: the bit of no
-    /// standard class, or no valid table), so that a one-class test indexes it directly.
-    class: [Option<Table3>; 16],
+    /// The standard classes by the bit number of their `Class` mask ([`Table3::EMPTY`]: the
+    /// bit of no standard class, or no valid table), so that a one-class test indexes it
+    /// directly. Not an `Option`: the empty table answers "not a member" with no extra test
+    /// (TIMING-COV-WCTYPE-L).
+    class: [Table3; 16],
     /// `toupper`, `tolower`.
     map: [Option<Table3>; 2],
     width: Option<Table3>,
@@ -326,7 +328,7 @@ impl Wide {
     /// for a bit of no standard class.
     #[inline]
     pub fn in_class_bit(&self, bit: u32, wc: u32) -> bool {
-        self.class.get(usize::try_from(bit & 15).unwrap_or(0)).copied().flatten().is_some_and(|t| t.bit(wc))
+        self.class.get(usize::try_from(bit & 15).unwrap_or(0)).is_some_and(|t| t.bit(wc))
     }
 
     /// [`CtypeFile::map`] for map `m` (`Map::Upper` is map 0, `Map::Lower` map 1).

@@ -1,5 +1,5 @@
 //! The verdict cache of the math accuracy sweeps (`crates/core/tests/support/verdict.rs`,
-//! D-10.51): every input of the key changes the key when it changes, the host libraries a
+//! D-10.57): every input of the key changes the key when it changes, the host libraries a
 //! reference program loads are in it, a shard records its verdict only after it passed and only
 //! for the inputs it checked, and `LIELLA_NO_VERDICT_CACHE` runs a cached shard.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
@@ -53,7 +53,7 @@ impl Drop for Bench {
 
 #[test]
 fn each_input_of_the_key_changes_the_key() {
-    // no spec clause: the verdict cache (D-10.51) reruns a shard when any input changes.
+    // no spec clause: the verdict cache (D-10.57) reruns a shard when any input changes.
     let b = Bench::new("inputs");
     let base = b.key();
     assert!(base.complete(), "{}", base.text());
@@ -83,7 +83,7 @@ fn each_input_of_the_key_changes_the_key() {
 
 #[test]
 fn the_running_test_binary_and_the_host_are_in_the_key() {
-    // no spec clause: the verdict cache (D-10.51) keys on this process's image, CPU flags and kernel.
+    // no spec clause: the verdict cache (D-10.57) keys on this process's image, CPU flags and kernel.
     let k = Key::new("verdict_cache.self");
     let text = k.text();
     assert!(k.complete(), "{text}");
@@ -98,7 +98,7 @@ fn the_running_test_binary_and_the_host_are_in_the_key() {
 
 #[test]
 fn the_libraries_the_reference_program_loads_are_in_the_key() {
-    // no spec clause: the verdict cache (D-10.51) keys on the host libm and libc the reference loads.
+    // no spec clause: the verdict cache (D-10.57) keys on the host libm and libc the reference loads.
     if skip_note::missing("cc") {
         skip_note::skipped("skipped: no C compiler");
         return;
@@ -127,7 +127,7 @@ fn the_libraries_the_reference_program_loads_are_in_the_key() {
 
 #[test]
 fn only_a_shard_that_passed_is_recorded_and_then_cached() {
-    // no spec clause: a cached verdict (D-10.51) is only ever a green one for an identical key.
+    // no spec clause: a cached verdict (D-10.57) is only ever a green one for an identical key.
     let b = Bench::new("record");
     // A shard that fails records nothing.
     let run = b.key().begin_with(false).expect("nothing recorded yet: the shard runs");
@@ -155,7 +155,7 @@ fn only_a_shard_that_passed_is_recorded_and_then_cached() {
 
 #[test]
 fn an_input_that_changes_during_the_run_is_not_recorded() {
-    // no spec clause: the verdict cache (D-10.51) records the inputs the shard checked, not later ones.
+    // no spec clause: the verdict cache (D-10.57) records the inputs the shard checked, not later ones.
     let b = Bench::new("during");
     let run = b.key().begin_with(false).unwrap();
     std::fs::write(b.dir.join("program"), b"rebuilt while the shard ran").unwrap();

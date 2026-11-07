@@ -70,7 +70,7 @@ every build command are in [docs/toolchain.md](docs/toolchain.md).
 cargo xtask stubs     # regenerate test stubs and spec/clauses.tsv from the spec
 cargo xtask so        # build libc.a, libc.so.6, liella-crt1.o into target/liella/
 cargo xtask test      # the full test gate (long); math sweep shards with unchanged inputs print
-                      # `verdict cached` and skip (D-10.51); LIELLA_NO_VERDICT_CACHE=1 runs them all
+                      # `verdict cached` and skip (D-10.57); LIELLA_NO_VERDICT_CACHE=1 runs them all
 cargo xtask affected --list   # only the tests your change can reach (--tier direct, the default)
 cargo xtask affected --run    # run them (--list or --run is required: without either, exit 2)
 cargo xtask clippy            # must be clean (workspace, all targets, -D warnings)

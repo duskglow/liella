@@ -36,7 +36,7 @@ pub mod fast_gamma;
 pub mod fast_bessel;
 #[cfg(test)]
 pub(crate) mod oracle32;
-/// The verdict cache of the slow sweeps among the unit tests (D-10.51).
+/// The verdict cache of the slow sweeps among the unit tests (D-10.57).
 #[cfg(test)]
 #[path = "../../core/tests/support/verdict.rs"]
 pub(crate) mod verdict;

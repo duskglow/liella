@@ -8,7 +8,7 @@
 # `exclude = ["."]` does not work: cargo then excludes the two members as well.
 [workspace]
 resolver = "3"
-members = ["libc-so", "libm-so"]
+members = ["libc-so", "libm-so", "ld-so"]
 exclude = ["abi", "boundary", "core", "kernel", "ld", "legacy", "math", "mathtools", "mem", "native", "rt", "spectest", "thread-db"]
 
 [profile.dev]

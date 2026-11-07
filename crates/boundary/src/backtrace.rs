@@ -62,7 +62,7 @@ impl Executable {
         let get = |k: u64| process::auxval(k).and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
         let (phdr, phnum) = (get(AT_PHDR), get(AT_PHNUM));
         let words = conv::program_headers(phdr, phnum.saturating_mul(PHDR_WORDS));
-        Executable { phdr, words, phnum, bias: liella_rt::start::program(words, phnum, phdr).bias }
+        Executable { phdr, words, phnum, bias: process::exe_bias(words, phnum, phdr) }
     }
 
     /// The executable as an object to unwind through.

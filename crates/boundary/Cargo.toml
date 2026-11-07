@@ -29,6 +29,9 @@ selftest = ["liella/selftest", "liella-legacy/selftest"]
 # Test-only (A-8): run the portable Rust scanners (`strz::portable`) in place of machine/scan.S's
 # on x86_64, so the kernel suites test both paths. Never enabled by a product.
 portable-scan = []
+# The ld.so product (`crates/ld-so`, phase 14 DL-5): its start (`ld`), the self-relocator and the
+# loader's arch seam (`arch/`). Never with `runtime`/`export` in a product.
+ld = []
 
 [dependencies]
 liella-kernel = { workspace = true }
