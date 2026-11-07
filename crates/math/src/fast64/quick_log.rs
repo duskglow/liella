@@ -67,6 +67,12 @@
 //!   `n`; then `|zh + zl − n| <= RHO·|n|` and `zh = RN(zh + zl)` give `zh = n` whatever the test
 //!   says, and at `x = 1` every term is `+0`. Elsewhere `log_b x` is transcendental, so neither a
 //!   double nor a midpoint, and the rounding test's proof holds.
+//! * Flags: an answer of the in-place fast path must be inexact (the boundary's `elem_fast`
+//!   leaves MXCSR as the arithmetic left it), but at `x = b^n`, `n != 0`, the product raises
+//!   inexact for an exact result. So `log2_tiered` answers `x = 2^e` with `e` and
+//!   `log10_tiered` answers `x = 10^n` with `n` (a 71-entry table by binade) before any
+//!   arithmetic (the conversion `i32 → f64` and the stored `n` raise nothing). `x = 1` stays on the quick phase
+//!   (every term `+0`, no flag). The value-only `log2_quick`, `log10_quick` keep the rule above.
 //!
 //! **`log1p`** (D-10.66): the reduction must keep the low bits of `x`, which `RN(1 + x)` loses.
 //! * `2^-60 <= |x| < 2^-8`: `log1p(x)` by the series above with `r = x` exactly, `th = tl = 0`
@@ -132,6 +138,25 @@ const L1P_TINY: u64 = 0x3c30_0000_0000_0000;
 const L1P_SMALL: u64 = 0x3f70_0000_0000_0000;
 const L1P_MAX: f64 = f64::from_bits(0x7bf0_0000_0000_0000);
 const SIGN: u64 = 1 << 63;
+/// `log10`'s exact results (module doc, `log2`/`log10` flags): entry `i` is `(bits(10^n), n)` for
+/// the power of ten `10^n` (`1 <= n <= 22`, exact doubles) whose biased exponent is `1026 + i`,
+/// else `(0, 0)`; a binade holds at most one power of ten (`10 > 2^3`). `10^1` has biased
+/// exponent 1026 and `10^22` 1096, hence 71 entries.
+const POW10_BY_BINADE: [(u64, f64); 71] = {
+    let mut v = [(0u64, 0.0f64); 71];
+    let (mut i, mut e, mut p, mut n) = (0usize, 1026u64, 10.0f64, 1.0f64);
+    while i < 71 {
+        // `p = 10^n` exactly while `n <= 22` (`5^22 < 2^53`); the guard drops 10^23.
+        if n <= 22.0 && p.to_bits() >> 52 == e {
+            v[i] = (p.to_bits(), n);
+            p *= 10.0;
+            n += 1.0;
+        }
+        i += 1;
+        e += 1;
+    }
+    v
+};
 
 /// The stated bound (module doc) and its rounding-test multiplier: the least double with
 /// `C·(1 − 2^54·RHO) > 1 + 2^-53` (checked exactly by the `bounds` test).
@@ -289,6 +314,12 @@ $(#[$d])*
 $(#[$tf])*
 $(#[$i])*
 pub fn log2_tiered(x: f64) -> Option<f64> {
+    let ix = x.to_bits();
+    // x = 2^e (positive normal, fraction 0): `e` exactly and no flag, before any arithmetic
+    // (the quick phase would raise inexact; module doc).
+    if ix << 12 == 0 && ix.wrapping_sub(MIN_NORMAL) < SPAN {
+        return Some(f64::from(i32::try_from(ix >> 52).unwrap_or(0) - 1023));
+    }
     if let Some((zh, zl)) = log2_quick_parts(x) {
         if zh + zl * C == zh {
             return Some(zh);
@@ -323,6 +354,15 @@ $(#[$d])*
 $(#[$tf])*
 $(#[$i])*
 pub fn log10_tiered(x: f64) -> Option<f64> {
+    let ix = x.to_bits();
+    // x = 10^n, 1 <= n <= 22: `n` exactly and no flag, before any arithmetic (module doc).
+    let i = (ix >> 52).wrapping_sub(1026);
+    if i < 71 {
+        let (b, n) = POW10_BY_BINADE[usize::try_from(i).unwrap_or(0)];
+        if b == ix {
+            return Some(n);
+        }
+    }
     if let Some((zh, zl)) = log10_quick_parts(x) {
         if zh + zl * C == zh {
             return Some(zh);
@@ -421,7 +461,7 @@ quick!(; ; #[inline(always)]; ma; reduce; half_square; scale);
 // ARCH(x86_64): the run-time FMA build; FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{t, C, C3, C4, C5, C6, C7, C8, C9, INV_LN10, INV_LN2, KH, KL, L1P_MAX, L1P_SMALL, L1P_TINY, MIN_NORMAL, OFF, SIGN, SPAN};
+    use super::{t, C, C3, C4, C5, C6, C7, C8, C9, INV_LN10, INV_LN2, KH, KL, L1P_MAX, L1P_SMALL, L1P_TINY, MIN_NORMAL, OFF, POW10_BY_BINADE, SIGN, SPAN};
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
 

@@ -273,7 +273,24 @@ fn log_family_exact_and_hard_cases() {
     let mut p = 1.0f64;
     for n in 0..=22 {
         assert_eq!(log10_quick(p).map(f64::to_bits), Some(f64::from(n).to_bits()), "log10(1e{n}) not answered exactly");
+        assert_eq!(log10_tiered(p).map(f64::to_bits), Some(f64::from(n).to_bits()), "tiered log10(1e{n}) not exact");
         p *= 10.0;
+    }
+    // The tiers' exact paths (flags: module doc): every power of two, and the table holds exactly
+    // the 22 powers 10^1..10^22, each in its binade.
+    for k in -1022..=1023 {
+        assert_eq!(log2_tiered(two(k)).map(f64::to_bits), Some(f64::from(k).to_bits()), "tiered log2(2^{k}) not exact");
+    }
+    let held: Vec<f64> = POW10_BY_BINADE.iter().filter(|e| e.0 != 0).map(|e| e.1).collect();
+    assert_eq!(held, (1..=22).map(f64::from).collect::<Vec<_>>(), "POW10_BY_BINADE does not hold 10^1..10^22");
+    for (i, &(b, n)) in POW10_BY_BINADE.iter().enumerate() {
+        if b != 0 {
+            assert_eq!((b >> 52, f64::from_bits(b)), (1026 + u64::try_from(i).unwrap_or(0), format!("1e{n}").parse::<f64>().unwrap_or(0.0)), "POW10_BY_BINADE[{i}]");
+        }
+    }
+    for x in [-2.0, -0.5, 0.0, -0.0, f64::INFINITY, two(-1074), -10.0, -100.0, 1e23] {
+        assert_eq!(log2_tiered(x).map(f64::to_bits), super::super::log2_nearest(x).map(f64::to_bits), "tiered log2({x:e}) must take the tiers");
+        assert_eq!(log10_tiered(x).map(f64::to_bits), super::super::log10_nearest(x).map(f64::to_bits), "tiered log10({x:e}) must take the tiers");
     }
     for x in [0.0, -0.0, -1.0, -2.0, two(-61), -two(-61), 5e-324, f64::INFINITY, f64::NAN, two(960)] {
         assert_eq!(log1p_quick_parts(x), None, "quick log1p must decline {x:e}");
