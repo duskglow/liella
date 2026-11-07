@@ -721,6 +721,14 @@ pub fn exp_quick(x: f64) -> Option<f64> {
     crate::hot::exp_quick(x)
 }
 
+/// `exp`'s in-place tiers (D-10.51: the quick phase, tier 2 on a miss) in the build
+/// [`set_math_fma`] chose, as the `exp` entry calls them: `None` sends the entry to the accurate
+/// path. Lets a test see which tier answered, which the entry's result cannot show (every path
+/// returns the correctly rounded `e^x`).
+pub fn exp_tiered(x: f64) -> Option<f64> {
+    crate::hot::exp_nearest(x)
+}
+
 /// The quick phase's unrounded `(zh, zl, scale)` in the chosen build: `e^x = (zh + zl)·scale`
 /// within the build's bound (`RHO_FMA` or `RHO_SSE2` in `liella_math::fast64::quick`).
 pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
