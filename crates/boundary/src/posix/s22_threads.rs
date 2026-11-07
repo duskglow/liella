@@ -362,7 +362,7 @@ pub extern "C" fn __pthread_cleanup_routine(frame: *mut [usize; 3]) {
 /// "are threads in use" test is one) then find all of them, never `__pthread_key_create`
 /// without `pthread_once`. The kept address makes `liella_machine_once` an undefined symbol of
 /// this object, so `libc.a`'s member that defines it is pulled; nothing reads it. A static named
-/// `LIELLA_LINK_EDGE_*` is a link edge only (D-NEW): `cargo xtask so` marks its section
+/// `LIELLA_LINK_EDGE_*` is a link edge only (D-22.16): `cargo xtask so` marks its section
 /// `SHF_EXCLUDE` in the archive, so the linker puts the word (and its relocation) in no program
 /// and not in `libc.so.6`, while the undefined symbol still pulls the member.
 #[used]

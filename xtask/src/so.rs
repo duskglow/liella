@@ -784,7 +784,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"))?;
     println!("so: {hot} function sections grouped as hot text");
     let edges = exclude_link_edges(&archive)?;
-    println!("so: {edges} link-edge words excluded from every link output (D-NEW)");
+    println!("so: {edges} link-edge words excluded from every link output (D-22.16)");
     check_archive_elf(&archive)?;
     let staged = tmp_name(out);
     let weak = weaken_archive(&archive, &product.join("weaken"), &staged)?;
@@ -794,7 +794,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     Ok((archive, weak, copies))
 }
 
-/// The name every link-edge static carries (D-NEW): a `#[used]` Rust static whose only job is
+/// The name every link-edge static carries (D-22.16): a `#[used]` Rust static whose only job is
 /// an undefined symbol in its object, so that a static link taking the object also takes the
 /// archive member defining that symbol (`LIELLA_LINK_EDGE_PTHREAD_ONCE`: the keys pull
 /// machine/once.S). Its 8-byte word is never read.
@@ -827,12 +827,12 @@ fn exclude_link_edges(archive: &Path) -> Result<usize, String> {
         found += 1;
     }
     if found == 0 {
-        return Err(format!("{}: no {LINK_EDGE}* section (renamed static? D-NEW)", archive.display()));
+        return Err(format!("{}: no {LINK_EDGE}* section (renamed static? D-22.16)", archive.display()));
     }
     Ok(found)
 }
 
-/// `so` carries no link-edge word (D-NEW): no symbol named `LIELLA_LINK_EDGE_*`.
+/// `so` carries no link-edge word (D-22.16): no symbol named `LIELLA_LINK_EDGE_*`.
 fn check_no_link_edge(so: &Path) -> Result<(), String> {
     let out = Command::new("nm").arg(so).output().map_err(|e| format!("nm: {e}"))?;
     match String::from_utf8_lossy(&out.stdout).lines().find(|l| l.contains(LINK_EDGE)) {
