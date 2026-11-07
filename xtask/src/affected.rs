@@ -1448,6 +1448,9 @@ fn classify(path: &str) -> Option<Class> {
     if let Some(tests) = validation_self_tests(path) {
         return Some(Class::ValidationScript(tests));
     }
+    if let Some((_, why)) = VALIDATION_UNCOVERED.iter().find(|(s, _)| *s == path) {
+        return Some(Class::Nothing(why));
+    }
     let full = |why: &'static str| Some(Class::Full(why));
     if path == "xtask/src/affected.rs" {
         return Some(Class::XtaskOwn);
