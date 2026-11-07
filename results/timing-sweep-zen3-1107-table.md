@@ -12,7 +12,7 @@ distribution build as the other timing hosts). This is the first sweep on this c
 table, so `sweep compare` (which compares one class across two sweeps) does not apply, and this file gives absolute
 ratios only.
 
-Measurement conditions (details in handoff/timing-sweep-natsumi.md):
+Measurement conditions (details in the sweep's handoff note, named in the analyzer's header):
 - governor performance on all 12 CPUs, scaling max frequency 3.6 GHz (the base clock; the CPU's boost has no
   switch under its frequency driver, and the cap keeps it from boosting); swap device present but 0 bytes used;
   the periodic system timers were not masked. The run was booked and held every slot of the host's timing queue.
@@ -27,7 +27,7 @@ Columns: `instr` / `cycles` = Liella/glibc instructions / cycles per call (count
 ratios; verdict faster (< 0.95), parity, slower (> 1.05), as the sweep tool judges them. The `wordexp` rows are timed,
 not judged (owner deferral, as in the earlier sweeps). The sweep tool requires the selected `ratio_host` rows (309
 non-libm, 166 libm) to be measured; the tables hold every row the bench printed. Analyzer:
-handoff/timing-sweep-natsumi/analyze.py.
+handoff/timing-sweep-zen3-1107-analyze.py.
 
 The orientation block at the end of the summaries copies the 1106E counts for Ivy Bridge and N100 from
 results/timing-sweep-1106e-table.md: different CPU classes, a different commit (next 34c98f61) and a different row

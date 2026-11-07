@@ -1,8 +1,19 @@
 # TIMING-SWEEP-NATSUMI (table written; first Zen 3 sweep)
 
-State: branch task/timing-sweep-natsumi, base origin/next 66b8d3ba (products built from it). No product code
-change; one analyzer script. Result: results/timing-sweep-zen3-1107-table.md (summaries, slowest 20 per set,
-1106E counts for orientation, full tables).
+State: branch task/timing-sweep-natsumi-2 (continuation of task/timing-sweep-natsumi), base origin/next 66b8d3ba
+(products built from it). No product code change; one analyzer script. Result: results/timing-sweep-zen3-1107-table.md
+(summaries, slowest 20 per set, 1106E counts for orientation, full tables).
+
+## TIMING-SWEEP-NATSUMI-2 (fixed the CI precheck red)
+- CI precheck on 7d52b306 failed `xtask static: lab-names`: results/timing-sweep-zen3-1107-table.md lines 15 and 30
+  cited handoff paths that contain the host name (the story is named after the host). Reproduced on mei s4 (static
+  rc 1, the same 2 hits; clippy rc 0).
+- Fix (no ALLOW entry, no LAB-ONLY marker: the results doc must not name hosts): analyzer moved to
+  handoff/timing-sweep-zen3-1107-analyze.py (the timing-sweep-1105-analyze.py convention, named like the results
+  table); the table now says "details in the sweep's handoff note, named in the analyzer's header", and that header
+  (handoff/, may name hosts) names this file. No data changed.
+- Lesson for briefs: a story named after a lab host puts that name in every handoff path a results doc might cite;
+  name results-facing files by CPU class from the start.
 
 ## Runs (products of next 66b8d3ba, staged once on mei s3)
 - Stage: mei:timing-sweep-natsumi-stage, rc 0 (196 s), ~/work/TIMING-SWEEP-NATSUMI/stage.tar on mei, sha256
@@ -18,7 +29,7 @@ change; one analyzer script. Result: results/timing-sweep-zen3-1107-table.md (su
 - Command: ~/work/TIMING-SWEEP-NATSUMI/run.sh nonlibm|libm on natsumi = `./xtask-bin sweep run --out <R>/out` and
   `./xtask-bin sweep run --out <R>/out-libm --only cbench_libm` in the unpacked stage. Raw data stays on natsumi
   (~/work/TIMING-SWEEP-NATSUMI/out{,-libm}/, until the host leaves); the sweep.tsv files are reproduced in the
-  results tables. Analyzer: `python3 -I handoff/timing-sweep-natsumi/analyze.py <out>/sweep.tsv
+  results tables. Analyzer: `python3 -I handoff/timing-sweep-zen3-1107-analyze.py <out>/sweep.tsv
   <out-libm>/sweep.tsv results/timing-sweep-1106e-table.md`.
 
 ## Host setup (what a future Zen 3 timing host needs)
@@ -47,6 +58,9 @@ change; one analyzer script. Result: results/timing-sweep-zen3-1107-table.md (su
 - Orientation only (other classes, commit 34c98f61, 407 rows): 1106E Ivy Bridge 252/99/56, N100 313/74/20.
 
 ## Next step
+Ruling #3776 (applied): the sweep is accepted at spread 0.008 despite NOT TIMING-READY; natsumi is out of dispatch
+after the sweep (owner needs it back). For a future Zen 3 host the owner runs timing_host_setup.sh --apply and the
+script learns the amd-pstate-epp boost cap (scaling_max_freq = base). Nothing left to run on this branch: land it.
 Coordinator: if a Zen 3 class comes back, add its host_limits.tsv entry and set this table beside TIMING-SWEEP-LIBM-1107
 (Ivy Bridge / N100 libm, running now). Zen 3 time-only rows (instr < 1, time > 1.05: strcmp_late_256, memrchr_64,
 strlen_64*, strnlen_4k, rawmemchr_64_mix) are candidates for a Zen 3 reopen list.

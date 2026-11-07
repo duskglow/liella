@@ -8,6 +8,8 @@ set (non-libm, libm): faster / parity / slower counts (the sweep tool's threshol
 rows naming wordexp timed but not judged), the spread distribution, the flagged rows, the slowest 20 rows and the
 full table. Percentiles use the sweep tool's rule (sorted[int(n * p)], capped at the last element).
 The older table's summary counts are copied for orientation only (other CPU classes, other commit).
+Produced results/timing-sweep-zen3-1107-table.md; the runs, host setup and measurement conditions are recorded in
+handoff/timing-sweep-natsumi.md.
 """
 import re
 import statistics
