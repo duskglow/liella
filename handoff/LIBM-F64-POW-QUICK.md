@@ -1,7 +1,7 @@
 # LIBM-F64-POW-QUICK(-2): binary64 pow quick phase (tier 1), wired, plants/counts/timing done
 
 State: branch `task/libm-f64-pow-quick-2` (= `task/libm-f64-pow-quick` + this run; stacks on LIBM-F64-LOG-QUICK-2 at
-615d6a4f9). Role keke:~/w/r1. Briefs `/home/claude/state/briefs/LIBM-F64-POW-QUICK.md` (spec) and `-2.md`.
+615d6a4f9). Role keke:~/w/r1. Briefs `~/state/briefs/LIBM-F64-POW-QUICK.md` (spec) and `-2.md`.
 Decisions in force: D-10.51, D-10.54, D-10.60, D-10.62 (this kernel; measurements added this run), D-10.3,
 D-10.25/D-10.50.
 
