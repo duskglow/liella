@@ -1,7 +1,7 @@
 {"task": "LIBM-F64-EXP-QUICK-2", "model": "opus", "tokens": null,
  "result": "exp quick-phase kernel (not wired): 72.0 FMA / 86.3 SSE2 instructions per call with fallback (glibc 61 / 71), 0 mismatches over 6x10^8; plants 6/6 caught",
  "branch": "task/libm-f64-exp-quick-2", "head": "67b7caa22",
- "gate": {"affected": "pending: shiki:libm-f64-exp-quick-2-gate2 (all suites ok so far)", "peak": null}, "accepted_first_attempt": null,
+ "gate": {"affected": "affected: ok (shiki:libm-f64-exp-quick-2-gate2, rc 0); plants3 6 CAUGHT / 0 SURVIVED", "peak": "9.9G"}, "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["Unwired kernel counts include the selftest wrapper call (cross-crate, Option<f64> return); WIRE must re-count in the C entry", "Inherited head had static red (stale crates/math/KERNELS.md, line numbers of quick.rs); regenerated"],
  "refused": [],
