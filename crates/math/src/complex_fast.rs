@@ -76,26 +76,67 @@ const WIDEN: f64 = f64::from_bits(0x3ff0_0000_0000_0010);
 const RHO: f64 = f64::from_bits(0x3c10_0000_0000_0000);
 const C_PART: f64 = f64::from_bits(0x3ff0_1040_0000_0000);
 
+// The parts and the in-place entry in two builds (D-10.25, as `fast64` and `trig`): `$prod` is
+// Dekker's `two_prod` or one FMA, `$exp` and `$trig` the kernels' matching builds. Every product
+// is exact in both (the operands are normal and far from the subnormal range: `|E.hi| >= 2^-1`,
+// the trig values `>= 2^-31`), so both builds compute the same values and take the same
+// branches: the bounds above hold for either, and the results agree bit for bit.
+// `#[inline(always)]` cannot be combined with `#[target_feature]`, hence `$i`.
+macro_rules! cexp_kernels {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path; $exp:path; $trig:path) => {
 /// The two parts unscaled with their bounds, `[(e^x·cos y, eps), (e^x·sin y, eps)]`, and the
 /// scale `m`, or `None` outside the tier's range.
-#[inline(always)]
+$(#[$a])*
+$(#[$i])*
 fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
+    use $exp as ek;
+    use $trig as tk;
     if !(X_MIN..=X_MAX).contains(&dd::abs(x)) || !(Y_MIN..Y_MAX).contains(&dd::abs(y)) {
         return None;
     }
     let kf = dd::nearest_int(x * f64::from_bits(t::SCALES[0]));
-    let (e, m, tail) = fast64::exp_kernel(fast64::reduce_exp(x, kf), dd::to_i32(kf))?;
+    let (e, m, tail) = ek::exp_kernel(fast64::reduce_exp(x, kf), dd::to_i32(kf))?;
     let ee = fast64::exp_eps(e, tail);
-    let (n, r) = kernel::reduce(y);
-    let p = kernel::poly(r);
-    let (s, ss) = kernel::assemble(n, p);
-    let (c, cs) = kernel::assemble(n + 32, p);
+    let (n, r) = tk::reduce(y);
+    let p = tk::poly(r);
+    let (s, ss) = tk::assemble(n, p);
+    let (c, cs) = tk::assemble(n + 32, p);
     let a = dd::abs(e.hi);
+    // `Dd::mul` with `$prod`: the product of the heads exact, the cross products added.
     let part = |v: Dd, et: f64| {
         let b = dd::abs(v.hi);
-        (e.mul(v), (ee * b + a * et + PROD * a * b) * WIDEN)
+        let q = $prod(e.hi, v.hi);
+        (dd::fast_two_sum(q.hi, q.lo + (e.hi * v.lo + e.lo * v.hi)), (ee * b + a * et + PROD * a * b) * WIDEN)
     };
     Some(([part(c, trig::eps(cs, c)), part(s, trig::eps(ss, s))], m))
+}
+
+/// `cexp(x + iy)` to nearest for the boundary's in-place entry (see the module comment).
+///
+/// # Safety
+///
+/// In the FMA build the CPU must support FMA and the OS must save the AVX state (the
+/// `#[target_feature]` contract); the baseline build is safe.
+$(#[$a])*
+$(#[$i])*
+pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
+    let ([(re, er), (im, ei)], m) = parts(x, y)?;
+    Some((round(re, er, m, Rounding::Nearest)?, round(im, ei, m, Rounding::Nearest)?))
+}
+    };
+}
+
+cexp_kernels!(; #[inline(always)]; dd::two_prod; fast64; kernel);
+
+/// [`cexp_nearest`], FMA build: the same results bit for bit. Callable only on a CPU with FMA and
+/// the OS-enabled AVX state; the boundary selects it once at startup (`dispatch::fma`).
+// ARCH(x86_64): the run-time FMA build (D-10.25); FMA is base ISA on aarch64, so one build there
+#[cfg(target_arch = "x86_64")]
+pub mod fused {
+    use super::{fast64, round, t, trig, Dd, Rounding, PROD, WIDEN, X_MAX, X_MIN, Y_MAX, Y_MIN};
+    use crate::dd;
+
+    cexp_kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma; fast64::fused; trig::kernel_fma);
 }
 
 /// `v·2^m` when it is a normal `double` of biased exponent `2..=2046` (see the module comment).
@@ -125,13 +166,6 @@ fn round(p: Dd, eps: f64, m: i32, mode: Rounding) -> Option<f64> {
 pub fn cexp(x: f64, y: f64, mode: Rounding) -> Option<((f64, f64), Status)> {
     let ([(re, er), (im, ei)], m) = parts(x, y)?;
     Some(((round(re, er, m, mode)?, round(im, ei, m, mode)?), Status::flags(Flags::INEXACT)))
-}
-
-/// `cexp(x + iy)` to nearest for the boundary's in-place entry (see the module comment).
-#[inline(always)]
-pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    let ([(re, er), (im, ei)], m) = parts(x, y)?;
-    Some((round(re, er, m, Rounding::Nearest)?, round(im, ei, m, Rounding::Nearest)?))
 }
 
 /// The quick tier for any format: `float` and `double` operands, `None` for the others.

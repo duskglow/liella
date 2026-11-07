@@ -159,3 +159,42 @@ fn cexp_quick_tier_sweep() {
     }
     std::println!("cexp quick tier sweep: 10^7 operands per type, double answers per regime (nearest) {total:?} of 2000000 each");
 }
+
+/// cbench_libm's 256 complex operands (its xorshift, seed and `[-3, 3]^2`): the tier declines one
+/// only when it must, that is when a part's exact value (384 bits) lies within twice its bound of
+/// a rounding boundary to nearest; any other decline sends the bench row to the route.
+#[test]
+fn cexp_quick_tier_declines_the_bench_box_only_when_forced() {
+    // no spec clause (performance regression guard: the tier's answer rate on the measured operands).
+    let mut r = 88_172_645_463_325_252u64;
+    let mut next = || {
+        r ^= r << 13;
+        r ^= r >> 7;
+        r ^= r << 17;
+        (r >> 11) as f64 / 9_007_199_254_740_992.0
+    };
+    let mut declined = 0;
+    for _ in 0..256 {
+        let (x, y) = (-3.0 + 6.0 * next(), -3.0 + 6.0 * next());
+        if cexp_nearest(x, y).is_some() {
+            continue;
+        }
+        declined += 1;
+        let p = parts(x, y);
+        assert!(p.is_some(), "({x:e}, {y:e}) is inside the tier's range");
+        let Some((pp, m)) = p else { continue };
+        let (s, c) = mp::sin_cos_f64(y);
+        let e = mp::exp(Mp::from_f64(x)).ldexp(-i64::from(m));
+        // Distance of each exact part from the nearest midpoint of the `double` grid around it.
+        let forced = pp.into_iter().zip([c, s]).any(|((_, eps), t)| {
+            let v = e.mul(t);
+            let r = v.to_f64();
+            let half = (f64::from_bits(r.to_bits() + 1) - r).abs() / 2.0;
+            // The midpoints `r ± half` are not `double`s: formed in 384 bits.
+            let d = [-half, half].map(|h| v.sub(Mp::from_f64(r).add(Mp::from_f64(h))).to_f64().abs());
+            d[0].min(d[1]) <= 2.0 * eps
+        });
+        assert!(forced, "the tier declined ({x:e}, {y:e}) although no part is within its bound of a rounding boundary");
+    }
+    std::println!("cexp quick tier: {declined} of 256 bench operands declined, each a hard case");
+}
