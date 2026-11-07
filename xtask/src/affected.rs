@@ -2686,8 +2686,13 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                 if sel.libs.contains_key(*c) {
                     cmd.arg("--lib");
                 }
-                for t in ts {
+                for t in &ts {
                     cmd.args(["--test", t]);
+                }
+                // The heavy products sweeps run shard 0 only with the exports interposed
+                // (`nextest::PASS1_SHARD0`, D-X.35); `cargo test` has no filter for it and runs all.
+                if pass == 1 && nextest {
+                    cmd.args(crate::nextest::pass1_shard_filter(c, &ts).unwrap_or_default());
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
                 match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {

@@ -273,7 +273,8 @@ fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[St
     }
     let mut args = vec!["--workspace".to_string()];
     args.extend(feat.iter().cloned());
-    // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889).
+    // The exports-interposed pass leaves out the pure-Rust sweeps (`nextest::PASS0_ONLY`, #889)
+    // and runs shard 0 only of the heavy math products sweeps (`nextest::PASS1_SHARD0`, D-X.35).
     // Binaries without liella-boundary code are the same in both passes and run once (CI-GATE-DIET).
     if features.is_some() {
         let once = if nextest::pass1_filter(extra, &[]).is_some() { nextest::unchanged_binaries(cargo, root, &feat) } else { Vec::new() };
