@@ -2,7 +2,7 @@
 
 State: branch `task/hottext-startup-complete` (from origin/next e6f60a3ff), commits 7de835e09 (code; its subject
 says "WIP:" though the code is complete: no rebase allowed to reword it), 118c2812b (regenerated list), 6d1cfa3cf (D-X.47
-and the test fix), then this report. Decision in force: **D-X.47** (extends D-X.20, D-X.32). Plan:
+and the test fix), the report, 45c23adde (the test matches start::<false> itself). Gate hsc-gate-2 pending. Decision in force: **D-X.47** (extends D-X.20, D-X.32). Plan:
 `handoff/layout-contracts-plan.md` finding 1 and section 2c C1.
 
 ## What changed
@@ -36,7 +36,7 @@ sections and nearest symbols (scratch script pfaddr.py; job labels hsc-measure-2
 
 ## Plants (`handoff/HOTTEXT-STARTUP-COMPLETE-plants.txt`, job hsc-plants-1)
 start-key-removed (caught by the grouped test, see deviation), startup-key-renamed (`so` with the new message),
-guard-inverted and guard-any-profile (hottext unit tests). Results: see the hand-back / job log.
+guard-inverted and guard-any-profile (hottext unit tests). Job hsc-plants-2 on head 45c23adde (pending at hand-back). hsc-plants-1 (superseded): start-key-removed SURVIVED because the test matched a grouped Option::map_or closure that names start::<false>; 45c23adde makes the test match the instantiation itself. startup-key-renamed CAUGHT there with the new message.
 
 ## Deviation from the brief (INFORMATIONAL)
 Brief step 5 asked that removing the `start::<false>` key fail `so` with the new message. With the key gone no
