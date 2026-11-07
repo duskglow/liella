@@ -356,4 +356,4 @@ run-varenv	glibc: 12 diff lines	liella: clean
 tests: 86; identical output: 79; different: 7
 clean (no diff) under glibc: 76/86; under liella: 76/86
 == libm references (nm -u, programs using a libm.a symbol)
-/home/claude/validation-v5/build/liella/findutils/findutils-4.11.0/find/find: 993 libm symbols linked
+~/validation-v5/build/liella/findutils/findutils-4.11.0/find/find: 993 libm symbols linked
