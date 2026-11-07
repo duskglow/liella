@@ -14,6 +14,11 @@ mod skip_note;
 #[path = "../../core/tests/support/oracle.rs"]
 mod oracle;
 
+#[path = "../../core/tests/support/verdict.rs"]
+mod verdict;
+#[path = "../../core/tests/support/verdict_programs.rs"]
+mod verdict_programs;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -95,6 +100,10 @@ fn special_functions_on_special_operands() {
     let (host, ours) = (dir.join("special_diff_host"), dir.join("special_diff_liella"));
     assert!(build(&host, false), "special_diff.c does not build against the host C library");
     assert!(build(&ours, true), "special_diff.c does not link against the products");
+    // Runs only when an input changed since this shard last passed (D-10.57).
+    let Some(verdict) = verdict::Key::new(env!("CARGO_CRATE_NAME")).shard(0, 1).file(&host).file(&ours).loaded_by(&host).begin() else {
+        return;
+    };
     let run = |exe: &Path| String::from_utf8(Command::new(exe).env_clear().output().unwrap().stdout).unwrap();
     let (want, got) = (run(&host), run(&ours));
     let (want, got): (Vec<&str>, Vec<&str>) = (want.lines().collect(), got.lines().collect());
@@ -149,4 +158,5 @@ fn special_functions_on_special_operands() {
     std::fs::write(dir.join("special_problems.txt"), errors.join("
 ")).unwrap();
     assert!(errors.is_empty(), "{} problems:\n{}", errors.len(), errors.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+    verdict.pass();
 }

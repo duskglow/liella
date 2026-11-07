@@ -32,6 +32,7 @@ dependencies = [
  "liella-abi",
  "liella-boundary",
  "liella-kernel",
+ "liella-ld",
  "liella-legacy",
  "liella-math",
  "liella-rt",
@@ -119,3 +120,6 @@ version = "0.0.0"
 [[package]]
 name = "xtask"
 version = "0.0.0"
+dependencies = [
+ "liella-ld",
+]

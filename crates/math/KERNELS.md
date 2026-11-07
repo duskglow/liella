@@ -31,14 +31,15 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 - `fast32/exp_log.rs:23` `pub(super) fn exp_core(x: f32, lo: f64, hi: f64, c: f64) -> Option<f64>` — bound: undocumented — doc: e^x, 2^x or 10^x as a `double` y with |y/f - 1| ≤ 2^-45.16, for x in (`lo`, `hi`) and `c` = 128·log2(base) rounded (128 exactly for exp2).
 - `fast32/exp_log.rs:34` `pub(super) fn exp_z(z: f64) -> f64` — bound: undocumented — doc: 2^(z/128) for |z| < 2^14.24: the reduction and polynomial of [`exp_core`] (whose proof covers every z in that range, the rounding of z itself aside).
-- `fast32/exp_log.rs:62` `pub(super) fn log_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
-- `fast32/exp_log.rs:69` `pub(super) fn log_core_from(x: f32, lo: u32) -> Option<f64>` — bound: undocumented — doc: [`log_core`] for `float`s whose bits are at least `lo` (1: every positive finite one; 0x0080_0000: the normal ones, whose conversion to `double` raises nothing)…
-- `fast32/exp_log.rs:102` `pub(super) fn log1p_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1 with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the roun…
-- `fast32/exp_log.rs:137` `pub(super) fn expm1_core(x: f32) -> Option<f64>` — bound: undocumented — doc: e^x - 1 as a `double` y with |y/f - 1| ≤ 9.1·2^-53, for a `float` x in (-18, 89) with |x| ≥ 2^-45 (below that the rounding test refuses every operand: y is with…
-- `fast32/exp_log.rs:165` `pub(super) fn cbrt_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ∛x as a `double` y with |y/∛x - 1| ≤ 5.4·2^-53, for a finite nonzero `float` x.
-- `fast32/exp_log.rs:212` `pub(super) fn pow_core(ax: f64, yd: f64) -> Option<f64>` — bound: undocumented — doc: |x|^y as a `double` with |result/|x|^y - 1| ≤ 89·2^-53 (MATH-M6-F32-POWF), for a finite nonzero `float` x, a finite nonzero `float` y and t = y·ln|x| in (-104, …
-- `fast32/exp_log.rs:249` `pub fn eval_pow(x: f32, y: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `powf`'s fast path: x, y finite and nonzero, x > 0 or y an integer (the sign from its parity).
-- `fast32/exp_log.rs:283` `pub fn pow(x: f32, y: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `powf`: the fast path, else the accurate path.
+- `fast32/exp_log.rs:75` `pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32>` — bound: undocumented — doc: e^x (`c` = [`INV_L`], `amax` = the bits of 87.33) or 2^x (`c` = 128, `amax` = the bits of 126) rounded in the caller's rounding direction by one evaluation in `…
+- `fast32/exp_log.rs:104` `pub(super) fn log_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
+- `fast32/exp_log.rs:111` `pub(super) fn log_core_from(x: f32, lo: u32) -> Option<f64>` — bound: undocumented — doc: [`log_core`] for `float`s whose bits are at least `lo` (1: every positive finite one; 0x0080_0000: the normal ones, whose conversion to `double` raises nothing)…
+- `fast32/exp_log.rs:144` `pub(super) fn log1p_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ln(1 + x) as a `double` y with |y/ln(1 + x) - 1| ≤ 6.8·2^-53, for a finite `float` x > -1 with |x| ≥ 2^-26 (below that the result is x - x²/2 to within the roun…
+- `fast32/exp_log.rs:179` `pub(super) fn expm1_core(x: f32) -> Option<f64>` — bound: undocumented — doc: e^x - 1 as a `double` y with |y/f - 1| ≤ 9.1·2^-53, for a `float` x in (-18, 89) with |x| ≥ 2^-45 (below that the rounding test refuses every operand: y is with…
+- `fast32/exp_log.rs:207` `pub(super) fn cbrt_core(x: f32) -> Option<f64>` — bound: undocumented — doc: ∛x as a `double` y with |y/∛x - 1| ≤ 5.4·2^-53, for a finite nonzero `float` x.
+- `fast32/exp_log.rs:254` `pub(super) fn pow_core(ax: f64, yd: f64) -> Option<f64>` — bound: undocumented — doc: |x|^y as a `double` with |result/|x|^y - 1| ≤ 89·2^-53 (MATH-M6-F32-POWF), for a finite nonzero `float` x, a finite nonzero `float` y and t = y·ln|x| in (-104, …
+- `fast32/exp_log.rs:291` `pub fn eval_pow(x: f32, y: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `powf`'s fast path: x, y finite and nonzero, x > 0 or y an integer (the sign from its parity).
+- `fast32/exp_log.rs:325` `pub fn pow(x: f32, y: f32, mode: Rounding) -> (f32, Status)` — bound: undocumented — doc: `powf`: the fast path, else the accurate path.
 
 ## fast32/gamma.rs (f32 gamma)
 
@@ -82,13 +83,15 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 
 ## fast32.rs (f32 core)
 
-- `fast32.rs:338` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
-- `fast32.rs:381` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
-- `fast32.rs:391` `include!("fast32_tables.rs");`
-- `fast32.rs:405` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
-- `fast32.rs:432` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
-- `fast32.rs:483-497` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
-- `fast32.rs:513-535` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
+- `fast32.rs:341` `pub fn eval(f: Fast, x: f32, mode: Rounding) -> Option<(f32, Status)>` — bound: undocumented — doc: `f(x)` for `float` `x` by the fast path, or `None` when the operand is outside its domain or the rounding test fails (the caller then runs the accurate path).
+- `fast32.rs:384` `fn finish(x: f32, y: f64, delta: u64, mode: Rounding, name: &'static str) -> Option<(f32, Status)>` — bound: undocumented — doc: The rounding test on y, the statistics under `name` and the hardware flags (see [`eval`]).
+- `fast32.rs:394` `include!("fast32_tables.rs");`
+- `fast32.rs:408` `fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32>` — bound: undocumented — doc: The rounding test and the final rounding of y = f·(1 + θ), |y - f| < `delta` ulp(y).
+- `fast32.rs:435` `pub fn eval_nearest(f: Fast, x: f32) -> Option<f32>` — bound: undocumented — doc: `f(x)` rounded to nearest by the fast path, for the in-place entry of a caller in the default MXCSR (MATH-M6-ENVELOPE-COST prototype), or `None`.
+- `fast32.rs:486-500` `nearest_fn!` entries: exp_nearest, exp2_nearest, exp10_nearest, log_nearest, log2_nearest, log10_nearest, sin_nearest, cos_nearest, tan_nearest, sinh_nearest, cosh_nearest, tanh_nearest, asinh_nearest, acosh_nearest, atanh_nearest
+- `fast32.rs:506` `pub fn exp_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double` evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None…
+- `fast32.rs:512` `pub fn exp2_onepass_any(x: f32) -> Option<f32>` — bound: undocumented — doc: `exp2f` as [`exp_onepass_any`].
+- `fast32.rs:530-552` `fast_fn!` entries: exp, exp2, exp10, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, expm1, cbrt, sinh, cosh, tanh, asinh, acosh, atanh, erf, erfc
 
 ## fast32_tables.rs (fast32_tables)
 
@@ -122,10 +125,13 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64/quick.rs:100` `fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64` — bound: undocumented — doc: The low part of `th·rh` the SSE2 build drops (bound term 1).
 - `fast64/quick.rs:112` `pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 - `fast64/quick.rs:144` `pub fn exp_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::exp_nearest`]).
-- `fast64/quick.rs:153` `quick!(; #[inline(always)]; ma; no_lo; C_SSE2);`
-- `fast64/quick.rs:167` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
-- `fast64/quick.rs:174` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
-- `fast64/quick.rs:178` `quick!` entries: 
+- `fast64/quick.rs:157` `pub fn exp_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2 (`fast64::exp_nearest` in the same build, out of line).
+- `fast64/quick.rs:173` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.5% of calls reach it.
+- `fast64/quick.rs:177` `quick!(; #[inline(always)]; ma; no_lo; C_SSE2);`
+- `fast64/quick.rs:191` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
+- `fast64/quick.rs:198` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
+- `fast64/quick.rs:207` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] in the FMA build (`fast64::fused::exp_nearest`), out of line and cold: under 0.01% of calls reach it.
+- `fast64/quick.rs:211` `quick!` entries: 
 
 ## fast64/tier_tests.rs (f64 tier_tests)
 

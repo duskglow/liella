@@ -910,6 +910,36 @@ pub fn elem32_fast<const HW: u8>(
     elem_fast::<HW, f32, f32>(x, fast, f)
 }
 
+/// An envelope `float` function whose fast path runs in the caller's environment without reading
+/// MXCSR (LIBM-F32-ONEPASS, D-10.63): `fast` evaluates once in `double` and converts in the
+/// caller's rounding direction. `fast` must answer only where its result is right in every
+/// direction and under FTZ and DAZ, and where the arithmetic raises inexact and nothing else
+/// (inexact only for an inexact result); it must refuse before any floating-point operation an
+/// operand whose conversion could raise a flag (NaN, subnormal). A refusal may therefore leave
+/// inexact raised only when the result is inexact, and the fallback [`elem`] then reads MXCSR as
+/// usual. A NaN operand returns `x + x` (quiet; invalid for a signalling NaN) before the envelope.
+#[inline(always)]
+pub fn elem32_onepass(
+    x: f32,
+    fast: impl FnOnce(f32) -> Option<f32>,
+    f: impl FnOnce(f32, Rounding) -> (f32, Status),
+) -> f32 {
+    match fast(x) {
+        Some(v) => v,
+        None => elem32_onepass_cold(x, f),
+    }
+}
+
+/// [`elem32_onepass`]'s refusals, out of line and cold: a NaN, or the full envelope.
+#[cold]
+#[inline(never)]
+fn elem32_onepass_cold(x: f32, f: impl FnOnce(f32, Rounding) -> (f32, Status)) -> f32 {
+    if x.is_nan() {
+        return x + x;
+    }
+    elem(x, Unit::Sse, f)
+}
+
 /// [`elem32_fast`] for any argument and a `float` or `double` result: the `double` exp, exp2,
 /// log, log2, log10 and pow entries use it with the `*_nearest` functions of
 /// `liella_math::fast64` (MATH-M6-F64-FAST-ENTRY), under the same contract (including `HW`).

@@ -1,0 +1,15 @@
+{"task": "LIBM-F64-EXP-QUICK-WIRE", "model": "opus", "tokens": null,
+ "result": "exp quick phase wired as tier 1 with exp_near as tier 2 (both builds); 3 of 4 plants caught, tier2-skipped survived (count margin too loose); counts and timing not done",
+ "branch": "task/libm-f64-exp-quick-wire", "head": "5f398bb36",
+ "gate": {"affected": "running at hand-back (keke libm-f64-exp-quick-wire-gate; liella, liella-boundary, liella-legacy, liella-math ok so far)", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["keke:libm-f64-exp-quick-wire-lint", "keke:libm-f64-exp-quick-wire-gate", "keke:libm-f64-exp-quick-wire-plants", "keke:libm-f64-exp-quick-wire-counts"],
+ "rulings": [
+  {"item": "inline stmxcsr in fpu::peek (out-of-line liella_machine_mxcsr_get, 3 of the 21 envelope instructions plus call/ret): inline asm is allowed only at the tb-field site", "recommendation": "a new UNSAFE category for one stmxcsr into a local in one named file, or extend hot-kernel"},
+  {"item": "register-only barrier instead of core::hint::black_box(x) in mret::elem_fast (a store and a load on the critical path): needs asm!(\"\", inout(xmm_reg) x)", "recommendation": "same category as the stmxcsr ruling"}
+ ],
+ "informational": ["Base profile, one call on the Zen 1 host (wl_trace, job libm-f64-exp-quick-wire-trace0): FMA build 125 instructions (envelope 21, kernel 104), SSE2 build 179 (envelope 21, kernel 158).", "exp's accurate path starts with the same exp_near kernel, so skipping tier 2 adds only the cold envelope: a count test needs a tight margin (diagnostic job libm-f64-exp-quick-wire-plants-diag prints both counts)."],
+ "refused": [],
+ "improvement": "jobwait has no per-label timeout flag: a forgotten Bash timeout turned one wait into a 10-minute background task; a wait-for-label wrapper in ~/bin would let dependent jobs queue without hand-written loops",
+ "next_step": "set TIER2_MARGIN from the plants-diag log (miss with tier 2 vs miss without), rerun the plants, read the counts, then book Ivy Bridge and the N100 for the cbench_libm exp rows",
+ "report_file": "handoff/LIBM-F64-EXP-QUICK-WIRE.md"}

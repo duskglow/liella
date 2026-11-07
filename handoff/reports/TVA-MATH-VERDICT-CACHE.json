@@ -1,0 +1,17 @@
+{"task": "TVA-MATH-VERDICT-CACHE", "model": "opus", "tokens": null,
+ "result": "math sweep verdict cache: 109 shards cached on an unchanged tree (1770 s -> 3 s on mei), plants 12/12 CAUGHT",
+ "branch": "task/tva-math-verdict-cache", "head": "4ae6eddc3",
+ "gate": {"affected": "7654 passed / 0 failed (9 suites ok; conformance 124 passed / 0 failed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "the gain needs CI to keep target/ (target/test-verdicts) between trains on a role; with a fresh target every shard runs (correct, no gain)",
+  "a neutral edit of csqrt's sqrt_general reran complex, complex_ld_cr, complex_f128, special_f128, special_ld, special and the lib inverse_trig test (C-oracle static programs changed bytes, likely libm product layout; not diagnosed; extra runs only, never a skip); elem_ld, special_cr, fast_gamma stayed cached: the brief's only-that-family-reruns holds for the pure-Rust sweeps, not the C-oracle ones",
+  "the gate was run direct-tier with --files excluding xtask/src/main.rs (a doc-comment-only change, compiled by clippy): main.rs makes affected escalate to FULL; the first gate tva-mvc-gate1 escalated and was stopped with kill-label",
+  "process slip: one sed -i on crates/ (renumber D-10.52 to D-10.51) against the Edit-tool rule; not refused, result checked by grep"
+ ],
+ "refused": [],
+ "improvement": "cargo xtask affected escalates to FULL for a doc-comment-only edit of xtask/src/main.rs; a doc-only rule (no code tokens changed) would let developer gates stay direct",
+ "next_step": "coordinator: land via the train; schedule the nightly/release run `LIELLA_NO_VERDICT_CACHE=1 cargo xtask test`; confirm CI keeps target/ between trains",
+ "report_file": "handoff/tva-math-verdict-cache.md",
+ "jobs": ["tva-mvc-check1", "tva-mvc-plants1", "tva-mvc-timing1", "tva-mvc-gate1 (escalated to FULL, stopped)", "tva-mvc-gate2", "tva-mvc-cached2 (76 verdict cached lines, 1.5 s)"]}

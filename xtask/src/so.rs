@@ -1024,6 +1024,8 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
     crate::classed::check_file(&release.join("libc.a"))?;
     crate::classed::check_file(&release.join("libc.so.6"))?;
+    // The hot kernels' jumps stay off 32-byte boundaries in the archive the programs link (D-4.67).
+    crate::jcc::check_archive(root, &release.join("libc.a"))?;
     crate::remap::check(root)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));

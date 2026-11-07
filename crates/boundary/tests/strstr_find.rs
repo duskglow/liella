@@ -259,6 +259,44 @@ fn strstr_and_strcasestr_never_read_past_the_terminator() {
 }
 
 #[test]
+fn strstr_needle_ending_on_the_last_mapped_byte_is_measured_inside_its_page() {
+    // Clauses: s4_6_c_0 (D-4.28). The needle's NUL is the last mapped byte, so every needle
+    // offset from 4095 down to 4074 meets the direct entry's 16-byte needle load (TIMING-COV-STRSTR-PAIR).
+    let _g = level();
+    set_ctype(b"C\0");
+    let r = CSys.mmap(0, 2 * PAGE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, None, 0).unwrap();
+    let (lo, mut hi) = r.split_at(PAGE).ok().unwrap();
+    CSys.mprotect(&mut hi, PROT_NONE).unwrap();
+    let base = lo.addr();
+    let mut hbuf = [0u8; 200];
+    for avx2 in paths() {
+        assert!(selftest::set_scan_avx2(avx2));
+        for m in 0..=21usize {
+            let nd = needle(m, false, false);
+            let at = (base + PAGE - m - 1) as *mut u8;
+            let mut img = nd.clone();
+            img.push(0);
+            s::memcpy(at.cast::<c_void>(), img.as_ptr().cast::<c_void>(), img.len());
+            for n in [0usize, 1, 15, 16, 40, 64, 100] {
+                for (k, pos) in positions(n, m).into_iter().enumerate() {
+                    let h = haystack(n, &nd, pos, m + n + k, false);
+                    let want = if m == 0 { Some(0) } else { naive(&h, &nd, false) };
+                    hbuf[..n].copy_from_slice(&h);
+                    hbuf[n] = 0;
+                    let got = s::strstr(hbuf.as_ptr().cast::<c_char>(), at.cast::<c_char>());
+                    let got = if got.is_null() { None } else { Some(got as usize - hbuf.as_ptr() as usize) };
+                    assert_eq!(got, want, "needle at page end avx2={avx2} m={m} n={n} pos={pos:?}");
+                }
+            }
+        }
+    }
+    selftest::set_scan_avx2(false);
+    liella_boundary::cpu::init();
+    CSys.munmap(hi).unwrap();
+    CSys.munmap(lo).unwrap();
+}
+
+#[test]
 fn strstr_and_strcasestr_with_many_failed_candidates_stay_correct() {
     // Clauses: s4_6_c_0 (D-4.28). Needle `aB..Ba` in `a^n`: every position is a candidate that
     // fails at the end, the linear bound switches to the two-way search.

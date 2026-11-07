@@ -1,21 +1,23 @@
 //! The `double` exp/log family's boundary wrappers (build chosen at startup).
 
-/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.25):
-/// both builds return the same results bit for bit; the FMA one is shorter.
+/// The `double` `exp` fast path in its build chosen at startup (MATH-F64-FMA-PATH, D-10.25): the
+/// quick phase with `fast64::exp_nearest` as tier 2 on a miss (D-10.51,
+/// LIBM-F64-EXP-QUICK-WIRE); both builds return the same results bit for bit, the FMA one is
+/// shorter.
 #[inline(always)]
 pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: a call to the FMA build; the flag is set only on a CPU with
         // FMA whose AVX state the OS saves (`dispatch::select_fma`'s callers).
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::exp_nearest(x) };
+        return unsafe { liella_math::fast64::quick::fused::exp_tiered(x) };
     }
-    liella_math::fast64::exp_nearest(x)
+    liella_math::fast64::quick::exp_tiered(x)
 }
 
-/// The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51; not wired into `exp` yet) in its
-/// build chosen at startup (as [`exp_nearest`]): the correctly rounded result, or `None` when the
-/// rounding test fails. Test-only until the wiring story.
+/// The `double` `exp` quick phase alone (LIBM-F64-EXP-QUICK, D-10.51) in its build chosen at
+/// startup (as [`exp_nearest`]): the correctly rounded result, or `None` when the rounding test
+/// fails (bound and count tests).
 #[cfg(feature = "selftest")]
 pub(crate) fn exp_quick(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {

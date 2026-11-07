@@ -13,6 +13,9 @@
 //!   never fails the run. `sweep.tsv`'s `selected` column is `yes` for the selected `ratio_host` rows and `no` for
 //!   counted rows outside the selection (the libm bench's calibration rows). With libm rows selected it also writes
 //!   and prints the per-family table of the libm time ratios (`<dir>/libm-families.md`).
+//!   It also writes and prints the distribution of the selected rows' time ratios (`<dir>/distribution.md`,
+//!   SWEEP-DISTRIBUTION): rows per bucket (<= 1.05, 1.05-2, 2-10, 10-100, > 100), the five slowest rows, and the
+//!   median per family (libm: family and precision; other benches: the bench), `RETHINK?` above 10x.
 //! - not finished (nonzero): the bench died on a signal, a table is missing (the tables of an earlier run are
 //!   deleted before the bench starts, so they never count), a selected row has no median, or the bench reported a
 //!   failure that is not a limit flag (a stage refused, a row not measured, a counted value missing). No
@@ -20,7 +23,7 @@
 //!
 //! `sweep compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... | --old-table <results.md>)
 //! [--label <name>]` compares the new per-host tables (one per CPU class) with the previous sweep's and prints the
-//! report sections to stdout: verdict counts per class, (a) regressions, (b) reopen, (c) improved, rows new or no
+//! report sections to stdout: verdict counts per class, the time-ratio distribution and family medians per class, (a) regressions, (b) reopen, (c) improved, rows new or no
 //! longer measured, run-to-run spread, the median change of the time ratio and the libm per-family table. It judges
 //! only the rows whose `selected` column is `yes`; a table without the column (written before
 //! SWEEP-COMPARE-SELECTED) has every row judged, as before, and the report says so. `--old-table` reads the combined
@@ -107,7 +110,7 @@ fn run_sweep(root: &Path, bench: &[OsString], args: &[String]) -> Result<(), Str
     fs::create_dir_all(&out).map_err(|e| format!("sweep run: {}: {e}", out.display()))?;
     let bench_dir = crate::bench::out_dir(root)?;
     // Tables of an earlier run (here or in the bench's directory) must never pass for this run's.
-    let stale = OUT_TABLES.iter().map(|t| bench_dir.join(t)).chain(["sweep.tsv", "summary.txt", "libm-families.md"].iter().map(|t| out.join(t)));
+    let stale = OUT_TABLES.iter().map(|t| bench_dir.join(t)).chain(["sweep.tsv", "summary.txt", "libm-families.md", "distribution.md"].iter().map(|t| out.join(t)));
     for p in stale {
         match fs::remove_file(&p) {
             Ok(()) => {}
@@ -150,6 +153,12 @@ fn run_sweep(root: &Path, bench: &[OsString], args: &[String]) -> Result<(), Str
             if let Some(f) = libm_families(&judged) {
                 let p = out.join("libm-families.md");
                 let text = format!("# libm median time ratio per family and precision (cpu {})\n\n{f}", s.cpu);
+                fs::write(&p, &text).map_err(|e| format!("sweep run: {}: {e}", p.display()))?;
+                print!("{text}");
+            }
+            if let Some(d) = distribution(&judged) {
+                let p = out.join("distribution.md");
+                let text = format!("# Time ratio distribution and family medians (cpu {})\n\n{d}", s.cpu);
                 fs::write(&p, &text).map_err(|e| format!("sweep run: {}: {e}", p.display()))?;
                 print!("{text}");
             }
@@ -486,6 +495,64 @@ fn libm_families(rows: &ClassRows) -> Option<String> {
     Some(s)
 }
 
+/// Upper edges of the time-ratio buckets (SWEEP-DISTRIBUTION); a ratio on an edge is in the lower bucket.
+const BUCKET_EDGES: [f64; 4] = [SLOWER, 2.0, 10.0, 100.0];
+const BUCKET_NAMES: [&str; 5] = ["<= 1.05", "1.05-2", "2-10", "10-100", "> 100"];
+/// The magnitude trigger of the RUT rule: a family whose median time ratio is above this is marked `RETHINK?`.
+const RETHINK_ABOVE: f64 = 10.0;
+/// How many of the slowest rows the distribution names.
+const SLOWEST: usize = 5;
+
+/// The bucket of a time ratio (an index into `BUCKET_NAMES`).
+fn bucket(t: f64) -> usize {
+    BUCKET_EDGES.iter().position(|e| t <= *e).unwrap_or(BUCKET_EDGES.len())
+}
+
+/// The family of a judged row: a `cbench_libm` row by its family and precision (the cells of the libm table),
+/// every other row by its bench.
+fn family(key: &str) -> String {
+    match key.strip_prefix("cbench_libm/") {
+        Some(n) => match libm_class(n) {
+            (f, "-") => format!("cbench_libm {f}"),
+            (f, p) => format!("cbench_libm {f} {p}"),
+        },
+        None => key.split('/').next().unwrap_or(key).to_string(),
+    }
+}
+
+/// The distribution of the time ratios of the judged timed rows in fixed buckets, the slowest rows, and the
+/// median per family with the families above the magnitude trigger marked `RETHINK?` (`None`: no timed row).
+fn distribution(rows: &ClassRows) -> Option<String> {
+    let timed: Vec<(&str, f64)> = rows.iter().filter(|(k, _)| !deferred(k)).filter_map(|(k, r)| r.time.map(|t| (k.as_str(), t))).collect();
+    if timed.is_empty() {
+        return None;
+    }
+    let mut n = [0usize; BUCKET_NAMES.len()];
+    for (_, t) in &timed {
+        n[bucket(*t)] += 1;
+    }
+    let mut s = String::from("| time ratio | rows |\n|---|---:|\n");
+    for (name, c) in BUCKET_NAMES.iter().zip(n) {
+        let _ = writeln!(s, "| {name} | {c} |");
+    }
+    let mut slow = timed.clone();
+    slow.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(b.0)));
+    let slow: Vec<String> = slow.iter().take(SLOWEST).map(|(k, t)| format!("{k} {t:.2}")).collect();
+    let _ = write!(s, "\nSlowest {}: {}\n\n", slow.len(), slow.join(", "));
+    let mut fam: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for (k, t) in &timed {
+        fam.entry(family(k)).or_default().push(*t);
+    }
+    let meds: Vec<(String, usize, f64)> = fam.into_iter().map(|(f, v)| (f, v.len(), crate::bench::stats(&v).0)).collect();
+    let marked: Vec<String> = meds.iter().filter(|m| m.2 > RETHINK_ABOVE).map(|(f, n, m)| format!("{f} {m:.2} ({n})")).collect();
+    let marked = if marked.is_empty() { String::from("none") } else { format!("{}: {}", marked.len(), marked.join(", ")) };
+    let _ = write!(s, "RETHINK? (family median time ratio above {RETHINK_ABOVE}x, the magnitude trigger): {marked}\n\n| family | rows | median | |\n|---|---:|---:|---|\n");
+    for (f, n, m) in &meds {
+        let _ = writeln!(s, "| {f} | {n} | {m:.2} |{} |", if *m > RETHINK_ABOVE { " RETHINK?" } else { "" });
+    }
+    Some(s)
+}
+
 /// The combined markdown table of a results file (rows after `## Table`; class from `time <CLASS>` columns).
 fn load_legacy(name: &str, text: &str) -> Result<BTreeMap<String, ClassRows>, String> {
     let mut out: BTreeMap<String, ClassRows> = BTreeMap::new();
@@ -585,6 +652,7 @@ fn report(new: &[(String, SweepTable)], old: &BTreeMap<String, ClassRows>, label
     let empty = ClassRows::new();
     let keys: BTreeSet<&String> = new.iter().flat_map(|(_, t)| t.rows.keys()).collect();
     let mut families = String::new();
+    let mut dists = String::new();
     let mut lists: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     let mut counts = String::new();
     let mut spread = String::new();
@@ -593,6 +661,9 @@ fn report(new: &[(String, SweepTable)], old: &BTreeMap<String, ClassRows>, label
         let o = old.get(class).unwrap_or(&empty);
         if let Some(f) = libm_families(rows) {
             let _ = write!(families, "## libm median time ratio per family and precision: {class}\n\n{f}\n");
+        }
+        if let Some(d) = distribution(rows) {
+            let _ = write!(dists, "## Time ratio distribution and family medians: {class}\n\n{d}\n");
         }
         for k in &t.outside {
             lists.entry("outside").or_default().push(format!("- {k} | {class}"));
@@ -650,6 +721,7 @@ fn report(new: &[(String, SweepTable)], old: &BTreeMap<String, ClassRows>, label
         let _ = writeln!(s, "{n}\n");
     }
     let _ = write!(s, "## Counts\n\n| class | faster | parity | slower | judged | {label} faster | {label} parity | {label} slower | {label} judged (rows measured now) |\n|---|---|---|---|---|---|---|---|---|\n{counts}\n");
+    s.push_str(&dists);
     let _ = write!(s, "## Run-to-run spread and change\n\nspread = (max - min) / median of the round ratios; change = time now / time in {label}.\n\n| class | spread n | spread median | spread p90 | spread max | change n | change median | change p10 | change p90 |\n|---|---|---|---|---|---|---|---|---|\n{spread}\n{families}");
     let titles = [
         ("a", format!("(a) Regressions: slower now, parity or faster in {label}")),
@@ -795,6 +867,10 @@ mod tests {
         assert!(fs::read_to_string(out.join("sweep.tsv")).unwrap().contains("cbench_x\tb\t-\t-\t1.300\t0.000\t1\tslower\t1.100\tFAIL\tyes\tyes"));
         let fam = fs::read_to_string(out.join("libm-families.md")).unwrap();
         assert!(fam.contains("| exp/log/pow | 1 | 2.50 | 2.50 (1) | - | - | - |\n| all | 1 | 2.50 |"), "{fam}");
+        // SWEEP-DISTRIBUTION: the selected rows' distribution and family medians.
+        let dist = fs::read_to_string(out.join("distribution.md")).unwrap();
+        assert!(dist.contains("| <= 1.05 | 1 |\n| 1.05-2 | 1 |\n| 2-10 | 1 |\n"), "{dist}");
+        assert!(dist.contains("| cbench_libm exp/log/pow f32 | 1 | 2.50 | |\n| cbench_x | 2 | 1.11 | |\n"), "{dist}");
         assert!(fs::read_to_string(out.join("summary.txt")).unwrap().starts_with("sweep: COMPLETE:"));
         assert!(out.join("ratio_host.tsv").is_file());
         let _ = fs::remove_dir_all(&d);
@@ -912,6 +988,56 @@ mod tests {
                     | all | 6 | 7.00 | 2.00 (1) | 5.00 (3) | 10.00 (2) | - |\n";
         assert_eq!(libm_families(&rows).as_deref(), Some(want));
         assert_eq!(libm_families(&ClassRows::new()), None);
+    }
+
+    #[test]
+    fn time_ratio_buckets_have_exact_edges() {
+        // SWEEP-DISTRIBUTION (no spec clause; developer tooling): a ratio on an edge is in the lower bucket.
+        for (t, want) in [(0.5, 0), (1.05, 0), (1.051, 1), (2.0, 1), (2.001, 2), (10.0, 2), (10.001, 3), (100.0, 3), (100.001, 4), (800.0, 4)] {
+            assert_eq!(bucket(t), want, "{t}");
+        }
+        // The edges as `sweep.tsv` writes them (three decimals) land in the same buckets.
+        for (t, want) in [("1.050", 0), ("2.000", 1), ("10.000", 2), ("100.000", 3)] {
+            assert_eq!(bucket(num(Some(t)).unwrap()), want, "{t}");
+        }
+    }
+
+    fn timed(rows: &[(&str, f64)]) -> ClassRows {
+        rows.iter().map(|(k, t)| (k.to_string(), Rec { time: Some(*t), ..Rec::default() })).collect()
+    }
+
+    #[test]
+    fn distribution_counts_buckets_names_the_slowest_and_marks_families_above_10x() {
+        // SWEEP-DISTRIBUTION (no spec clause): the magnitude trigger of the RUT rule (family median above 10x).
+        let rows = timed(&[
+            ("cbench_x/a", 0.9),
+            ("cbench_x/b", 1.05),
+            ("cbench_x/c", 2.0),
+            ("cbench_x/wordexp_1", 900.0),
+            ("cbench_y/a", 10.0),
+            ("cbench_y/b", 10.0),
+            ("cbench_y/c", 10.0),
+            ("cbench_z/a", 100.0),
+            ("cbench_z/b", 10.5),
+            ("cbench_libm/sinl", 120.0),
+            ("cbench_libm/cosl", 50.0),
+            ("cbench_libm/sinf", 1.0),
+            ("cbench_libm/add_baseline", 3.0),
+        ]);
+        let d = distribution(&rows).unwrap();
+        assert!(d.starts_with("| time ratio | rows |\n|---|---:|\n| <= 1.05 | 3 |\n| 1.05-2 | 1 |\n| 2-10 | 4 |\n| 10-100 | 3 |\n| > 100 | 1 |\n"), "{d}");
+        assert!(d.contains("\nSlowest 5: cbench_libm/sinl 120.00, cbench_z/a 100.00, cbench_libm/cosl 50.00, cbench_z/b 10.50, cbench_y/a 10.00\n"), "{d}");
+        // A median of exactly 10 is not above the trigger; 55.25 and 85 are.
+        assert!(d.contains("RETHINK? (family median time ratio above 10x, the magnitude trigger): 2: cbench_libm trig long double 85.00 (2), cbench_z 55.25 (2)\n"), "{d}");
+        assert!(d.contains("| cbench_libm other | 1 | 3.00 | |\n| cbench_libm trig f32 | 1 | 1.00 | |\n| cbench_libm trig long double | 2 | 85.00 | RETHINK? |\n| cbench_x | 3 | 1.05 | |\n| cbench_y | 3 | 10.00 | |\n| cbench_z | 2 | 55.25 | RETHINK? |\n"), "{d}");
+        assert!(!d.contains("wordexp"), "{d}");
+        let quiet = distribution(&timed(&[("cbench_x/a", 1.0)])).unwrap();
+        assert!(quiet.contains("magnitude trigger): none\n"), "{quiet}");
+        assert_eq!(distribution(&ClassRows::new()), None);
+        // `sweep compare` prints it per class.
+        let r = report(&[("ivb".to_string(), SweepTable { rows, ..SweepTable::default() })], &BTreeMap::new(), "old", &[]);
+        assert!(r.contains("## Time ratio distribution and family medians: ivb\n\n| time ratio | rows |\n"), "{r}");
+        assert!(r.contains("| cbench_z | 2 | 55.25 | RETHINK? |\n"), "{r}");
     }
 
     #[test]

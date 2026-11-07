@@ -1,0 +1,16 @@
+{"task": "TIMING-COV-STRSTR-PAIR", "model": "opus", "tokens": null,
+ "result": "strstr asm direct entry (short needles settled in registers): hit_64 125.5 -> 100.5 instr (glibc Intel 99.4), miss_64 128.5 -> 88.5, hit_4k 651.3 -> 626.1, miss_4k 911.2 -> 872.0 (AVX2 level, Zen 1 build host); other rows within noise",
+ "branch": "task/timing-cov-strstr-pair", "head": "9e5ac7f6",
+ "gate": {"affected": "PENDING: keke timing-cov-strstr-pair-gate3 (clippy, static, affected --run --base origin/next)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2 left Liella's counts unchanged under xtask bench on the Zen 1 build host: the SSE2-level (Ivy Bridge class) count was not taken; the saving carries over by construction (the entry is SSE2 only), confirm on an Intel host with -AVX2",
+   "Booked timing (Ivy Bridge, N100) not run for budget",
+   "Superseded on keke: counts-after (rc 1, the entry's 64-byte alignment check), plants and plants2 (killed: older heads), gate (rc 1 clippy useless_vec), gate2 (rc 1 static machine-exports), plants3 and counts-final (killed: older head)"
+ ],
+ "refused": [],
+ "jobs": ["keke:timing-cov-strstr-pair-counts-before", "keke:timing-cov-strstr-pair-gate3", "keke:timing-cov-strstr-pair-plants4", "keke:timing-cov-strstr-pair-counts-final2"],
+ "improvement": "Run cargo xtask static (machine-exports) and clippy locally on the role before the first gate: two gate cycles went to a lint and an export map that a 1-minute pre-check finds",
+ "next_step": "Collect gate3/plants4/counts-final2 on keke; count -AVX2 on an Intel build host; booked strstr_* timing both classes",
+ "report_file": "handoff/timing-cov-strstr-pair.md"}

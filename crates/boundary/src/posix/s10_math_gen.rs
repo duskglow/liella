@@ -1807,7 +1807,7 @@ pub extern "C" fn exp2(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp2f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp2_nearest, math::real::Real::exp2)
+    mret::elem32_onepass(x, math::fast32::exp2_onepass_any, math::real::Real::exp2)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1817,7 +1817,7 @@ pub extern "C" fn liella_exp2f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp2f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp2_nearest, math::real::Real::exp2)
+    mret::elem32_onepass(x, math::fast32::exp2_onepass_any, math::real::Real::exp2)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -1842,7 +1842,7 @@ pub extern "C" fn liella_exp2l_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp_nearest, math::real::Real::exp)
+    mret::elem32_onepass(x, math::fast32::exp_onepass_any, math::real::Real::exp)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1852,7 +1852,7 @@ pub extern "C" fn liella_expf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn expf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp_nearest, math::real::Real::exp)
+    mret::elem32_onepass(x, math::fast32::exp_onepass_any, math::real::Real::exp)
 }}
 
 export! { libm "GLIBC_2.27";
