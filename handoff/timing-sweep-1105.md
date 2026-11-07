@@ -15,7 +15,7 @@ Stage on each host: stage.tar from shiki (tree = target/liella, bench/, xtask/Ca
 The bench's own `sudo -n true` probe prints "sudo: a password is required" (xtask/src/bench.rs:1019); it is the tool's probe, harmless.
 
 ## Exact next step (a continuation, ~6 calls)
-1. Wait: `ssh claude@10.0.100.112 'grep rc= ~/work/TIMING-SWEEP-1105/out/bench.log'` and the same on .118 until both show rc=0.
+1. Wait: `ssh claude@nico 'grep rc= ~/work/TIMING-SWEEP-1105/out/bench.log'` and the same on nozomi until both show rc=0.
 2. `scp` out/counters.tsv and out/rounds.tsv from each host into <dir>/nico and <dir>/nozomi; run
    `python3 -I handoff/timing-sweep-1105-analyze.py <dir>` (in this branch): writes table.md (per-row instr ratio, time
    ratio = median of per-round ratios, spread = (max-min)/median of rounds, verdict faster <0.95 / parity / slower >1.05) and

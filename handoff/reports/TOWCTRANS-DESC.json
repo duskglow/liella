@@ -1,0 +1,12 @@
+{"task": "TOWCTRANS-DESC", "model": "opus", "tokens": null,
+ "result": "towctrans recognises toupper/tolower descriptors in O(1) via the view (D-5.8): en_US.UTF-8 cjk 445 -> 47 instructions/call (towupper 44, glibc 19); exhaustive test, 7/7 plants caught",
+ "branch": "task/towctrans-desc", "head": "20f282401",
+ "gate": {"affected": "7174 passed / 0 failed", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["First version (one arm with runtime direction) measured 84 in en_US cjk; superseded by constant-direction arms (towctrans-desc-gate, towctrans-desc-plants, towctrans-desc-counts superseded; counts killed mid-cbench to free the role)", "Timing on Ivy Bridge and N100 PENDING: timing hosts down"],
+ "refused": [],
+ "jobs": ["mei:towctrans-desc-gate2", "mei:towctrans-desc-plants2", "mei:towctrans-desc-counts2"],
+ "improvement": "count.sh that waits on the gate label before building lets counts queue safely in the same role; a shared towctrans/wcprobe count job script in liella-ops would save each wctype story writing one",
+ "next_step": "WCTYPE-TRIE-BUILTIN (rethink section 8 item 1); timing of towctrans rows when the timing hosts return",
+ "report_file": "handoff/TOWCTRANS-DESC.md"}

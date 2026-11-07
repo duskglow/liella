@@ -33,6 +33,7 @@ use crate::status::{Flags, Rounding, Status};
 mod exp_log;
 mod hyperbolic;
 pub mod quick;
+pub mod quick_log;
 #[cfg(test)]
 mod tier_tests;
 pub use exp_log::{cbrt_nearest, expm1_nearest, log1p_nearest};
@@ -369,7 +370,7 @@ fn ln2_prod(r: f64) -> Dd {
 
 /// [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
 #[inline(always)]
-fn exp_eps(y: Dd, tail: f64) -> f64 {
+pub(crate) fn exp_eps(y: Dd, tail: f64) -> f64 {
     dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN)
 }
 
@@ -732,8 +733,9 @@ const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
 /// The round-to-nearest result `y.hi·2^m` when `w = RN(y.lo·c)` leaves `y.hi + w` rounding to
 /// `y.hi` (`w != 0`), else `None` (one multiply, one add, one compare: de Dinechin, Lauter and
 /// Muller, "Fast and correct rounding of the logarithm in double precision", 2007; the CRlibm
-/// report). The caller gives `|f − (y.hi + y.lo)| <= eps <= rho·|y.hi|` with `c·(1 − 2^54·rho) >
-/// 1 + u` (`u = 2^-53`), `f` not a `double` nor a midpoint, and `y.hi·2^m` normal (scaling exact).
+/// report). The caller gives `|f − (y.hi + y.lo)| <= eps <= rho·|y.hi|` with `rho < 2^-55` and
+/// `c·(1 − 2^54·rho) > 1 + u` (`u = 2^-53`), `f` not a `double` nor a midpoint, and `y.hi·2^m`
+/// normal (scaling exact).
 ///
 /// Proof. Let `H` be the distance from `y.hi` to the midpoint on `w`'s side: `ulp(y.hi)/2`, or
 /// `ulp/4` when `y.hi` is a power of two and `w` points toward zero; `H` is a power of two and
@@ -741,12 +743,14 @@ const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
 /// rounds away from `y.hi`; at it, ties to even may keep `y.hi`). The successor of `H` is
 /// `H·(1 + 2u)`, so `|w| <= H` gives `|y.lo|·c <= H·(1 + u)` and `|y.lo| <= H·(1 + u)/c <
 /// H·(1 − 2^54·rho)`. Then on `w`'s side `|y.lo| + eps < H − 2^54·rho·H + rho·|y.hi| <= H`, and on
-/// the other side `eps < 2^-15·H` is below that side's distance (at least `H/2`): every value
+/// the other side `eps <= rho·2^54·H < H/2` (`rho < 2^-55`) is below that side's distance (at
+/// least `H/2`; `2^-15·H` for the `rho <= 2^-69` bounds above, about `2^-7·H` for the quick
+/// phases' `2^-61`): every value
 /// within `eps` of `y.hi + y.lo`, `f` among them, rounds to `y.hi`. No normalization of `y` is
 /// needed. With `y.lo` uniform over half an ulp the test misses with probability about `c − 1`;
 /// then the exact test decides ([`finish`]).
 #[inline(always)]
-fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
+pub(crate) fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
     let w = y.lo * c;
     if y.hi + w == y.hi && w != 0.0 { Some(y.hi * dd::pow2(m)) } else { None }
 }

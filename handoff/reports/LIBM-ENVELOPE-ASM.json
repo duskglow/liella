@@ -1,0 +1,12 @@
+{"task": "LIBM-ENVELOPE-ASM", "model": "opus", "tokens": null,
+ "result": "machine-register unsafe category (D-X.44): inline stmxcsr + register-only xmm barrier in elem_fast/sincos_fast; -4..-6 instr/call on exp, log, log2, log10, exp2, logf, sin, cos, tan, sinf; none slower",
+ "branch": "task/libm-envelope-asm", "head": "87e08968d",
+ "gate": {"affected": "running at hand-back (mei:libm-envelope-asm-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "barrier-dropped plant survives: with the MXCSR read inline the compiler keeps the fast path behind the branch without the barrier", "recommendation": "keep the barrier (no instruction, forbids a legal hoist); plant recorded EQUIVALENT"}],
+ "informational": ["brief's asm!(\"\", inout(xmm_reg) x) does not compile (rustc: argument never used); template is the assembler comment /* {x} */, no instruction", "timing on Ivy Bridge and N100 PENDING (timing hosts down)", "a heredoc was used once for a local python edit (developer-flow forbids heredocs); later edits used script files"],
+ "refused": [],
+ "jobs": ["mei:libm-envelope-asm-gate", "mei:libm-envelope-asm-plants-2", "mei:libm-envelope-asm-counts"],
+ "improvement": "plants on a `cargo xtask static` command rebuild the products (minutes) although static reads source only; the tool could treat `cargo xtask static` as products-free",
+ "next_step": "read gate and plants-2 on mei; timing on nico/kotori and N100 when back; optionally the inline read in sqrt/hypotf",
+ "report_file": "handoff/LIBM-ENVELOPE-ASM.md"}

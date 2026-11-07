@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-LOG-QUICK-2", "model": "opus", "tokens": null,
+ "result": "log quick phase wired (tier 1, both builds): red gate/plants fixed at the cause; log 97 vs 66 instructions per call (was 190); time IVB 1.94x (was 5.18), N100 2.11x (was 5.88); target 1.6x not reached",
+ "branch": "task/libm-f64-log-quick-2", "head": "3d8ca0c6a (code; handoff commit on top)",
+ "gate": {"affected": "pending: gate4 running at hand-back (lint, static, new tests, boundary, legacy, math ok)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [{"item": "log envelope (21 of 87 instructions per call: entry 18 + mxcsr_get 3), the remaining gap to 1.6x", "recommendation": "decide #3938/#3939 (inline stmxcsr, register-only black_box) and prototype them on log and exp together"}],
+ "informational": ["log2/log10/log1p unchanged (4.55/3.61/3.67x IVB time); they need the same table with scaled constants (separate -WIRE stories)", "step-1 latency/throughput pair not run; wl_trace --list kept only the last 16 instructions of the call"],
+ "refused": [],
+ "improvement": "run full clippy and xtask static as one short lint job before starting gate/plants/counts: three gate rounds here each stopped at a lint the next round's lint step would have shown together",
+ "next_step": "envelope rulings #3938/#3939 for log and exp, then log2/log10/log1p on the quick_log table",
+ "report_file": "handoff/LIBM-F64-LOG-QUICK.md",
+ "jobs": ["libm-f64-log-quick-2-gate4", "libm-f64-log-quick-2-plants4", "libm-f64-log-quick-2-counts4", "libm-f64-log-quick-2-stage4", "kotori:libm-f64-log-quick-2-ivb", "nozomi:libm-f64-log-quick-2-n100"]}

@@ -53,6 +53,7 @@ mod wide_dd;
 mod wide_int;
 pub mod real;
 pub mod complex;
+pub mod complex_fast;
 pub mod ulp;
 pub mod stats;
 mod coeffs;

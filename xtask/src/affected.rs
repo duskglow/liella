@@ -920,6 +920,8 @@ pub struct Selection {
     pub products: bool,
     /// GATE-TIER: the DIRECT tier (`Tier::Direct`, see `narrow_direct`); false = the wide rules.
     pub direct: bool,
+    /// GATE-VALIDATION-SH-TESTS: `validation/` self-tests to run (`bash <path>` from the root) -> reason.
+    pub scripts: BTreeMap<String, String>,
 }
 
 /// GATE-TIER (coordinator ruling 10-11, owner intent "only run the tests that are impacted by a fix for gate runs and
@@ -1298,6 +1300,36 @@ enum Class {
     MathFit,
     /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
     MathTables,
+    /// D-X.39: another `crates/mathtools/src/` source that a generator is built from (`mathtools_feeds`): its own
+    /// mapping plus the check of each generated set it feeds.
+    MathToolFeed(Feeds),
+    /// GATE-VALIDATION-SH-TESTS: a `validation/` script with self-tests (`VALIDATION_COVERED`): those self-tests run.
+    ValidationScript(&'static [&'static str]),
+}
+
+/// D-X.39: which generated sets a liella-mathtools source feeds. `remez`: the fitted coefficient files
+/// (`cargo xtask remez --check <every fit>`); `tables`: the constant tables and `crates/math/KERNELS.md`
+/// (`cargo xtask tables --check`, `kernel-index --check`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Feeds {
+    pub remez: bool,
+    pub tables: bool,
+}
+
+/// D-X.39: the generator inputs under `crates/mathtools/src/` (the fitting code reached CI without `remez --check`
+/// before this map). The remez binary is built from `remez.rs` and `mp/`; the tables binary from `tables.rs`, the
+/// `*_tables.rs` modules and `mp/`; `lib.rs` declares both. `cmp.rs`, `cplx.rs` and `bin/mathcmp.rs` feed no
+/// generated file (the comparison tool): `None`, the ordinary mapping only. `tables.rs` keeps its own class.
+fn mathtools_feeds(path: &str) -> Option<Feeds> {
+    let f = path.strip_prefix("crates/mathtools/src/")?;
+    let (remez, tables) = match f {
+        "remez.rs" | "bin/remez.rs" => (true, false),
+        "bessel_tables.rs" | "gamma_tables.rs" | "special_tables.rs" | "bin/tables.rs" => (false, true),
+        "lib.rs" => (true, true),
+        _ if f.starts_with("mp/") && f.ends_with(".rs") => (true, true),
+        _ => return None,
+    };
+    Some(Feeds { remez, tables })
 }
 
 const MATH_EXPORTS_CRATE: &str = "liella-boundary";
@@ -1335,7 +1367,7 @@ fn math_class(path: &str) -> Option<Class> {
     if path == MATH_TABLES_GEN {
         return Some(Class::MathTables);
     }
-    None
+    mathtools_feeds(path).map(Class::MathToolFeed)
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1354,8 +1386,71 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
+/// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
+/// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
+/// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
+/// host: 0.05 s, 0.2 s and 15 s).
+const VALIDATION_RUN_TEST: &str = "validation/wl_run_test.sh";
+const VALIDATION_STATS_TEST: &str = "validation/wl_stats_test.sh";
+const VALIDATION_MTMEM_TEST: &str = "validation/wl_mtmem_test.sh";
+pub(crate) const VALIDATION_SELF_TESTS: &[&str] = &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST];
+
+/// GATE-VALIDATION-SH-TESTS: a `validation/` script -> the self-tests that exercise it (each self-test also covers
+/// itself). A change to a script here selects those self-tests in every tier. `wl_run.sh` and `wl_count_run.sh` are
+/// covered only where the self-tests read them (that they source the shared classifier and pass the thread flag).
+const VALIDATION_COVERED: &[(&str, &[&str])] = &[
+    // The syscall verdict: sourced by wl_run_test.sh, and by wl_stats.sh (which the other two source).
+    ("validation/wl_syscls.sh", &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_stats.sh", &[VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_run.sh", &[VALIDATION_RUN_TEST]),
+    ("validation/wl_count_run.sh", &[VALIDATION_STATS_TEST]),
+    (VALIDATION_RUN_TEST, &[VALIDATION_RUN_TEST]),
+    (VALIDATION_STATS_TEST, &[VALIDATION_STATS_TEST]),
+    (VALIDATION_MTMEM_TEST, &[VALIDATION_MTMEM_TEST]),
+];
+
+/// GATE-VALIDATION-SH-TESTS: the `validation/wl_*.sh` scripts with no self-test the gate can run, each with why. The
+/// unit test `every_validation_wl_script_is_mapped` fails for a `wl_*.sh` script in neither table, so a new script
+/// needs a decision (a self-test, or a row here) before it lands.
+const VALIDATION_UNCOVERED: &[(&str, &str)] = &[
+    ("validation/wl_alloctrace.sh", "lab driver (runs a workload under gdb on a build host); no self-test"),
+    ("validation/wl_alloctrace_run.sh", "host side of wl_alloctrace.sh; no self-test"),
+    ("validation/wl_attr.sh", "workload gate attribution step on a timing host; no self-test"),
+    ("validation/wl_base.sh", "BASE checkout helper of the lab tools; no self-test"),
+    ("validation/wl_count.sh", "lab driver of wl_count_run.sh (ssh, queueing); no self-test"),
+    ("validation/wl_entries.sh", "lab driver of wl_entries_run.sh; no self-test"),
+    ("validation/wl_entries_run.sh", "host side of the entry-point counts (needs the built kits); no self-test"),
+    ("validation/wl_fallback.sh", "lab queueing fallback; no self-test"),
+    ("validation/wl_gate.sh", "the workload gate driver (lab hosts); no self-test"),
+    ("validation/wl_install.sh", "installs the lab tools on a host; no self-test"),
+    ("validation/wl_launch.sh", "detached lab launcher; no self-test"),
+    ("validation/wl_local.sh", "role-directory variant of the lab drivers; no self-test"),
+    ("validation/wl_lock.sh", "build lock of the lab hosts; no self-test"),
+    ("validation/wl_percall.sh", "its check wl_percall_tunables_test.sh is a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_percall_run.sh", "host side of wl_percall.sh (built products); no self-test"),
+    ("validation/wl_percall_tunables_test.sh", "a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_prep.sh", "workload gate step 1 (products, kits) on a lab host; no self-test"),
+    ("validation/wl_prime_base.sh", "puts a BASE source on a lab host; no self-test"),
+    ("validation/wl_shapes.sh", "lab driver of wl_shapes_run.sh; no self-test"),
+    ("validation/wl_shapes_run.sh", "host side of the argument-shape counts (needs the built kits); no self-test"),
+    ("validation/wl_stakes.sh", "lab pipeline over wl_shapes and wl_percall; no self-test"),
+    ("validation/wl_stats_plants.sh", "the plants runner of the covered self-tests (it mutates copies and expects them to fail)"),
+    ("validation/wl_trace.sh", "per-function trace of one call (built products, perf); no self-test"),
+    ("validation/wl_workloads.sh", "the workload definitions (data read by the lab drivers); no self-test"),
+];
+
+fn validation_self_tests(path: &str) -> Option<&'static [&'static str]> {
+    VALIDATION_COVERED.iter().find(|(s, _)| *s == path).map(|(_, t)| *t)
+}
+
 fn classify(path: &str) -> Option<Class> {
     let file = path.rsplit('/').next().unwrap_or(path);
+    if let Some(tests) = validation_self_tests(path) {
+        return Some(Class::ValidationScript(tests));
+    }
+    if let Some((_, why)) = VALIDATION_UNCOVERED.iter().find(|(s, _)| *s == path) {
+        return Some(Class::Nothing(why));
+    }
     let full = |why: &'static str| Some(Class::Full(why));
     if path == "xtask/src/affected.rs" {
         return Some(Class::XtaskOwn);
@@ -1542,6 +1637,12 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
             }
             Some(Class::Docs) => docs_readers(repo, f, &mut sel),
             Some(Class::Nothing(why)) => sel.notes.push(format!("{f}: {why}")),
+            Some(Class::ValidationScript(tests)) => {
+                for t in tests {
+                    add(&mut sel.scripts, t.to_string(), &format!("{f} changed"));
+                }
+                sel.notes.push(format!("{f}: a validation script with self-tests ({}; not FULL)", tests.join(", ")));
+            }
             Some(Class::AllConf) => sel.all_conf(repo, &format!("{f}: every conformance program")),
             Some(Class::XtaskData) => {
                 sel.xtask_tests = true;
@@ -1580,6 +1681,28 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.math_coeffs(repo, f);
                 sel.xtask_cmds.insert("kernel-index --check".to_string());
                 sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
+            }
+            Some(Class::MathToolFeed(feeds)) => {
+                // A generator input: its own mapping (liella-mathtools' unit tests) and the checks that prove the
+                // generated files still follow from it. The checks pass only when the output is unchanged, so the
+                // math suites are not selected here (a changed output is a changed coefficient file, its own row).
+                ordinary_mapping(repo, f, &mut sel);
+                let mut what = Vec::new();
+                if feeds.remez {
+                    if repo.fits.is_empty() {
+                        sel.full.push(format!("{f}: feeds `cargo xtask remez`, but the tree has no fit file to check"));
+                    } else {
+                        let fits: Vec<&str> = repo.fits.iter().map(String::as_str).collect();
+                        sel.xtask_cmds.insert(format!("remez --check {}", fits.join(" ")));
+                        what.push("`cargo xtask remez --check` (every fit)");
+                    }
+                }
+                if feeds.tables {
+                    sel.xtask_cmds.insert("tables --check".to_string());
+                    sel.xtask_cmds.insert("kernel-index --check".to_string());
+                    what.push("`cargo xtask tables --check` and `kernel-index --check`");
+                }
+                sel.notes.push(format!("{f}: a generator input (its own mapping, {}, not FULL)", what.join(", ")));
             }
             None => ordinary_mapping(repo, f, &mut sel),
         }
@@ -2325,7 +2448,10 @@ fn print_selection(repo: &Repo, files: &[String], sel: &Selection) {
     for (n, why) in &sel.conf {
         println!("conformance: {n}  [{why}]");
     }
-    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len());
+    for (s, why) in &sel.scripts {
+        println!("script: bash {s}  [{why}]");
+    }
+    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs, {} of {} validation self-tests", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len(), sel.scripts.len(), VALIDATION_SELF_TESTS.len());
 }
 
 /// How one step ended. `Skipped` is only for a test step that failed solely because no test matched.
@@ -2779,6 +2905,10 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
         ok &= times.time("clippy-workspace", || step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log"));
         let from = fs::metadata(&log).map_or(0, |m| m.len());
         ok &= step(root, &log, "cargo xtask test", Command::new(&cargo).args(["xtask", "test"]));
+        // GATE-VALIDATION-SH-TESTS: everything includes the validation self-tests (`cargo xtask test` does not run them).
+        for s in VALIDATION_SELF_TESTS {
+            ok &= times.time(s, || step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s)));
+        }
         let bytes = fs::read(&log).unwrap_or_default();
         for (name, secs) in String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).lines().filter_map(crate::steptime::parse) {
             // The remez binary's per-fit lines are parts of the `remez-check` step: shown, not summed again.
@@ -2889,6 +3019,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
         for c in &sel.xtask_cmds {
             // A command may carry its flags (`math-gen --check`).
             ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
+        }
+        for s in sel.scripts.keys() {
+            ok &= step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s));
         }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
@@ -3520,6 +3653,42 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         let m = select_tier(repo(), &["crates/math/src/coeffs.rs".to_string()], Tier::Direct);
         for k in m.tests.keys() {
             assert!(c.tests.contains_key(k), "coeffs/trig.rs misses {k:?}, which a change of coeffs.rs selects");
+        }
+    }
+
+    // D-X.39, no spec clause: each generator input under crates/mathtools/src/ selects its own mapping and the
+    // check of every generated set it feeds (remez: all fits in one `remez --check`; tables: `tables --check` and
+    // `kernel-index --check`); the comparison tool's sources select neither. Not FULL, in the direct and wide tiers.
+    #[test]
+    fn mathtools_generator_inputs_select_their_checks() {
+        let all_fits = format!("remez --check {}", repo().fits.iter().map(String::as_str).collect::<Vec<_>>().join(" "));
+        assert!(repo().fits.len() > 1, "the fit files of the tree: {:?}", repo().fits);
+        let both: &[&str] = &[&all_fits, "tables --check", "kernel-index --check"];
+        let remez: &[&str] = &[&all_fits];
+        let tables: &[&str] = &["tables --check", "kernel-index --check"];
+        let cases: &[(&str, &[&str])] = &[
+            ("crates/mathtools/src/remez.rs", remez),
+            ("crates/mathtools/src/bin/remez.rs", remez),
+            ("crates/mathtools/src/bessel_tables.rs", tables),
+            ("crates/mathtools/src/gamma_tables.rs", tables),
+            ("crates/mathtools/src/special_tables.rs", tables),
+            ("crates/mathtools/src/bin/tables.rs", tables),
+            ("crates/mathtools/src/lib.rs", both),
+            ("crates/mathtools/src/mp/func.rs", both),
+            ("crates/mathtools/src/mp/nat.rs", both),
+            ("crates/mathtools/src/cmp.rs", &[]),
+            ("crates/mathtools/src/cplx.rs", &[]),
+            ("crates/mathtools/src/bin/mathcmp.rs", &[]),
+        ];
+        for tier in [Tier::Direct, Tier::Wide] {
+            for (f, want) in cases {
+                assert!(root().join(f).is_file(), "{f} is not in the tree");
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.libs.contains_key("liella-mathtools"), "{f} ({tier:?}): its own unit tests {:?}", s.libs.keys());
+                let checks: BTreeSet<&str> = s.xtask_cmds.iter().map(String::as_str).filter(|c| c.starts_with("remez") || c.starts_with("tables") || c.starts_with("kernel-index")).collect();
+                assert_eq!(checks, want.iter().copied().collect::<BTreeSet<_>>(), "{f} ({tier:?})");
+            }
         }
     }
 
@@ -4301,5 +4470,59 @@ fn plain() {}", &aliases);
         assert!(s.contains("error: unused variable: `x` [crates/core/src/a.rs:3:9]\n"), "{s}");
         assert!(s.contains("error[E0308]: mismatched types [crates/core/src/b.rs:7:1]\n"), "{s}");
         assert!(s.contains("error: could not compile `liella`\n") && !s.contains("c.rs") && !s.contains("d.rs"), "{s}");
+    }
+
+    // GATE-VALIDATION-SH-TESTS (no spec clause: gate tooling): every `validation/wl_*.sh` script is either covered by a
+    // self-test the gate runs or listed with a reason; every path the tables name exists; every self-test a row names
+    // is one the FULL tier runs, and covers itself.
+    #[test]
+    fn every_validation_wl_script_is_mapped() {
+        let root = root();
+        let mut problems = Vec::new();
+        for p in sorted_dir(&root.join("validation")) {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if !(name.starts_with("wl_") && name.ends_with(".sh")) {
+                continue;
+            }
+            let rel = format!("validation/{name}");
+            let covered = validation_self_tests(&rel).is_some();
+            let listed = VALIDATION_UNCOVERED.iter().any(|(s, _)| *s == rel);
+            if covered == listed {
+                problems.push(format!("{rel}: {}", if covered { "in both VALIDATION_COVERED and VALIDATION_UNCOVERED" } else { "no covering self-test and no VALIDATION_UNCOVERED row" }));
+            }
+        }
+        let named = VALIDATION_COVERED.iter().flat_map(|(s, ts)| std::iter::once(*s).chain(ts.iter().copied())).chain(VALIDATION_UNCOVERED.iter().map(|(s, _)| *s)).chain(VALIDATION_SELF_TESTS.iter().copied());
+        for s in named {
+            if !root.join(s).is_file() {
+                problems.push(format!("{s}: named in the validation tables but missing"));
+            }
+        }
+        for (s, ts) in VALIDATION_COVERED {
+            for t in ts.iter().filter(|t| !VALIDATION_SELF_TESTS.contains(t)) {
+                problems.push(format!("{s}: self-test {t} is not in VALIDATION_SELF_TESTS"));
+            }
+        }
+        for t in VALIDATION_SELF_TESTS {
+            if !validation_self_tests(t).is_some_and(|ts| ts.contains(t)) {
+                problems.push(format!("{t}: a self-test that does not select itself"));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    // GATE-VALIDATION-SH-TESTS red-before-green: a change to the workload syscall verdict selected nothing (a
+    // `Nothing` note); it now selects its three self-tests, in the direct tier, without escalating to FULL. An
+    // uncovered validation script and a Rust source select no self-test.
+    #[test]
+    fn validation_script_changes_select_their_self_tests() {
+        let d = tier(&["validation/wl_syscls.sh"], Tier::Direct);
+        assert!(d.full.is_empty(), "{:?}", d.full);
+        assert_eq!(d.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_MTMEM_TEST, VALIDATION_RUN_TEST, VALIDATION_STATS_TEST]);
+        assert!(d.tests.is_empty() && d.conf.is_empty() && !d.xtask_tests, "only the self-tests: {d:?}");
+        let r = tier(&["validation/wl_run.sh"], Tier::Direct);
+        assert_eq!(r.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_RUN_TEST]);
+        for unrelated in ["validation/wl_gate.sh", "validation/README.md", "crates/core/src/lib.rs"] {
+            assert!(tier(&[unrelated], Tier::Direct).scripts.is_empty(), "{unrelated} must select no validation self-test");
+        }
     }
 }

@@ -984,12 +984,12 @@ pub extern "C" fn liella_ceill_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cexp(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::cexp_nearest, math::complex::cexp)
 }}
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn cexpf(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::cexpf_nearest, math::complex::cexp)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -999,17 +999,17 @@ pub extern "C" fn liella_cexpf128_bits(x: mret::Complex<F128Bits>) -> mret::Comp
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cexpf32(x: mret::Complex<f32>) -> mret::Complex<f32> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+    mret::cplx_fast(x, mret::Unit::Sse, math::fast32::cexpf_nearest, math::complex::cexp)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cexpf32x(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::cexp_nearest, math::complex::cexp)
 }}
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn cexpf64(x: mret::Complex<f64>) -> mret::Complex<f64> {
-    mret::cplx(x, mret::Unit::Sse, math::complex::cexp)
+    mret::cplx_fast(x, mret::Unit::Sse, crate::hot::cexp_nearest, math::complex::cexp)
 }}
 
 export! { libm "LIELLA_PRIVATE";

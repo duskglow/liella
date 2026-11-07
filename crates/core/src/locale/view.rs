@@ -165,6 +165,10 @@ pub struct LocaleView {
     /// A built-in `LC_CTYPE`'s class-word table (D-5.9), which answers every wide class test
     /// when `wide` is `None`; a compiled one keeps the `"C"` table here, unread.
     classes: &'static ClassStage1,
+    /// The `wctrans_t` of `toupper` and `tolower` in a compiled `LC_CTYPE`
+    /// ([`super::ctype::CtypeFile::case_desc`]), worked out once so that `towctrans` compares instead of
+    /// deriving every map's descriptor per call (D-5.8); unused (0) for the built-in ones.
+    case_descs: [usize; 2],
     /// The slot in [`LATIN`] holding the answers of `wide` for U+0000..U+00FF (ASCII and
     /// Latin-1 text is most of what wide-character calls see, WCTYPE-LOCALE): 0 until the first
     /// Latin-1 call takes one, `usize::MAX` when none was left (every call then walks `wide`).
@@ -380,7 +384,7 @@ impl LocaleView {
     /// The view of `"C"` (handle 0).
     #[allow(clippy::indexing_slicing)] // a const fn (no `get`): `Cat::Time.index()` is 2, below the 12 tables
     pub const fn c() -> LocaleView {
-        LocaleView { locale: Locale::C, handle: 0, wide: None, classes: &class_words::C_STAGE1, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
+        LocaleView { locale: Locale::C, handle: 0, wide: None, classes: &class_words::C_STAGE1, case_descs: [0; 2], latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
     }
 
     /// The words of this locale's `struct lconv`: `fill` works them out on the first call, later
@@ -448,12 +452,12 @@ impl LocaleView {
         }
         let cats = by_number(locale.tables.map_or([Tab::EMPTY; 12], |t| t.0));
         let names = TimeNames::of(cats.get(2).copied().unwrap_or(Tab::EMPTY)); // LC_TIME is C category 2
-        let (wide, classes) = match locale.ctype() {
-            Ctype::File(f) => (Some((f.wide(), f.ascii_case())), &class_words::C_STAGE1),
-            Ctype::C => (None, &class_words::C_STAGE1),
-            Ctype::CUtf8 => (None, &class_words::C_UTF8_STAGE1),
+        let (wide, classes, case_descs) = match locale.ctype() {
+            Ctype::File(f) => (Some((f.wide(), f.ascii_case())), &class_words::C_STAGE1, [f.case_desc(true), f.case_desc(false)]),
+            Ctype::C => (None, &class_words::C_STAGE1, [0; 2]),
+            Ctype::CUtf8 => (None, &class_words::C_UTF8_STAGE1, [0; 2]),
         };
-        Ok(LocaleView { locale, handle, wide, classes, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
+        Ok(LocaleView { locale, handle, wide, classes, case_descs, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
     }
 
     /// The address of this view's [`Answers`] (Acquire: a built table is seen whole): the
@@ -555,6 +559,14 @@ impl LocaleView {
     #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
         self.isw_int(c, mask) != 0
+    }
+
+    /// The `wctrans_t` of `toupper` and `tolower` (in that order) of a compiled `LC_CTYPE`,
+    /// stored when the view was built; `None` for the built-in locales, whose descriptors are
+    /// the built-in tables' addresses (D-5.8).
+    #[inline(always)]
+    pub fn case_descs(&self) -> Option<[usize; 2]> {
+        self.wide.as_ref().map(|_| self.case_descs)
     }
 
     /// Whether the view has a compiled locale's checked wide tables (the built-in locales do

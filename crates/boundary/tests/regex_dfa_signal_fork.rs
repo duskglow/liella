@@ -24,6 +24,10 @@ use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{Itimerval, SigSet, Timeval};
 use liella_legacy::signal_compat::CSigaction;
 
+#[path = "../../core/tests/support/single_thread.rs"]
+mod single_thread;
+use single_thread::{single_threaded, sole_thread};
+
 const SIGALRM: i32 = 14;
 const SIG_BLOCK: i32 = 0;
 const SIG_UNBLOCK: i32 = 1;
@@ -132,7 +136,9 @@ fn signal_body() -> bool {
     let (hits, inner_bad, mid) = (HITS.load(Ordering::SeqCst), INNER_BAD.load(Ordering::SeqCst), MID.load(Ordering::SeqCst));
     eprintln!("runs {runs} in {:?}, handler calls {hits}, mid-search {mid}, outer wrong {outer_bad}, inner wrong {inner_bad}", start.elapsed());
     // At least 20 handler calls must have landed inside an outer search, or the test proves nothing.
-    mid >= 20 && hits >= 50 && outer_bad == 0 && inner_bad == 0
+    // SIGALRM goes to the whole process: only as the sole thread (D-X.42) is every handler run
+    // counted here one that interrupted this thread, not one that ran beside it.
+    sole_thread() && mid >= 20 && hits >= 50 && outer_bad == 0 && inner_bad == 0
 }
 
 fn subjects() -> Vec<std::ffi::CString> {
@@ -210,7 +216,7 @@ fn in_child(name: &str, body: fn() -> bool) {
 #[test]
 fn a_signal_handler_inside_the_dfa_keeps_both_answers() {
     // Clauses: no spec clause (D-14.12 busy word, D-14.13 store; plan row RX-T2-1).
-    in_child("a_signal_handler_inside_the_dfa_keeps_both_answers", signal_body);
+    in_child("a_signal_handler_inside_the_dfa_keeps_both_answers", || single_threaded(signal_body));
 }
 
 #[test]

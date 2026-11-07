@@ -50,7 +50,8 @@ else
     new=$(git rev-parse "$target") || exit 2
     repo=.
 fi
-keke="ssh -o BatchMode=yes claude@10.0.100.53"
+. "$here/lab_host.sh"
+keke="ssh -o BatchMode=yes claude@$(lab_addr keke)"
 t0=$(date +%s)
 $keke "mkdir -p ~/wl/bin ~/wl/src ~/logs" || exit 1
 . "$here/wl_install.sh"; wl_install_scripts || exit 1   # B = ~/wl/bin/v-<hash>, never overwritten
