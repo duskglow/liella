@@ -396,12 +396,19 @@ fn init_cold_startup_functions_are_grouped() {
     // HOTTEXT-STARTUP-COMPLETE: the first Rust function of start-up (generic since the run-path
     // change: `start::<false>`, 5.1 KiB) and the IRELATIVE pass. Outside the group, `start` sat in
     // cold `.text` and crossed a 64 KiB window when code before it grew (one more start-up fault).
-    // Generic instantiations carry the type after the name, so these match anywhere in the name.
-    for f in ["15liella_boundary7runtime5startKb0_", "15liella_boundary7runtime15apply_irelative"] {
-        assert!(
-            grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name.contains(f))),
-            "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
-        );
+    // The generic instantiation carries its type after the name, so `start` matches anywhere in the
+    // name. The release profile inlines `apply_irelative` into `start`: every section of it present
+    // must be grouped (the name's end: its closures are other functions).
+    let f = "15liella_boundary7runtime5startKb0_";
+    assert!(
+        grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name.contains(f))),
+        "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
+    );
+    for l in sections.lines().filter_map(|l| l.split_once("] ").map(|(_, a)| a)) {
+        let s = l.split_whitespace().next().unwrap_or("");
+        if s.starts_with(".text.") && s.ends_with("15liella_boundary7runtime15apply_irelative") {
+            assert!(s.starts_with(".text.sorted.h"), "{s}: apply_irelative is not in the hot group of libc.a (run tools/hottext/regen.sh)");
+        }
     }
     // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
     // group the second lookup of a process took 4 more text faults. Which of them keep a section of
