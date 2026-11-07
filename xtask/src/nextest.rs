@@ -256,7 +256,7 @@ struct Tally {
 }
 
 /// A status nextest reports for a test that did not pass: FAIL, TIMEOUT, ABORT, SIGSEGV, ...
-fn failing_status(s: &str) -> bool {
+pub(crate) fn failing_status(s: &str) -> bool {
     matches!(s, "FAIL" | "TIMEOUT" | "ABORT" | "LEAK-FAIL" | "EXECFAIL") || (s.starts_with("SIG") && s.len() > 3 && s[3..].bytes().all(|b| b.is_ascii_uppercase()))
 }
 
