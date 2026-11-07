@@ -1,43 +1,54 @@
 # LIBM-CPLX-EXP-TIER handoff: cexp/cexpf quick tier in front of the 384-bit route
 
-State: branch task/libm-cplx-exp-tier (cut from origin/next bb7f6ae1c), HEAD in handoff/reports/LIBM-CPLX-EXP-TIER.json.
-Role mei:~/w/s2. Decisions in force: D-10.53 (design), D-10.54 (this story's local details, new), D-10.13, D-10.25.
-Run 1 stopped at the context checkpoint (~155k of 200k) with the code written and lint/unit green; the
-jobs below were started on the final code and not yet read.
+State: branch task/libm-cplx-exp-tier-2 (stacks on task/libm-cplx-exp-tier; cut from origin/next bb7f6ae1c), HEAD in
+handoff/reports/LIBM-CPLX-EXP-TIER-2.json. Role mei:~/w/s2. Decisions in force: D-10.53 (design), D-10.55 (this
+work's local details; renumbered from D-10.54 on the coordinator's instruction), D-10.13, D-10.25.
 
-## What is done
+## Done (runs 1 and 2)
 
-* `crates/math/src/complex_fast.rs` (new): `double` tier. e^x from `fast64::exp_kernel` (+ `exp_eps`), sin/cos y
-  from `trig::kernel::{reduce, poly, assemble}` + `trig::eps` (one reduction for both), each part a `Dd::mul`
-  with bound `(Ee·B + A·Et + 2^-99·A·B)(1 + 2^-48)` (proof in the module comment), rounding test `fast64::near`
-  (rho 2^-62, `C_PART = 1 + 2^-8 + 2^-14`) then `fast64::settle` (all modes), scale by exponent add only into
-  biased exponent 2..2046 (near overflow/underflow: fallback). `cexp` (any mode), `cexp_nearest` (in place),
-  `cexp_any<F>` (f32/f64 dispatch). Ranges: `2^-60 <= |x| <= 746`, `2^-30 <= |y| < 2^20`.
-* `crates/math/src/fast32/cexp.rs` (new): `float` tier, `exp_core × trig_core` in double, margin 512 ulp,
-  `fast32::round` (online test, normal float results only).
-* `complex.rs`: `cexp` = quick tier then `cexp_route` (the old ziv ladder, unchanged, `#[doc(hidden)] pub`).
-* Visibility only: `trig::eps`, `trig::kernel::{reduce,poly,assemble}` pub(crate); `fast64::{near, exp_eps}` pub(crate).
-* Boundary: `mret::cplx_fast` (in place in the default MXCSR, cold fallback restores MXCSR then `cplx`);
-  s10_math.tsv `cexp` split f / d (cplx_fast) / lq (cplx); math-gen + kernel-index regenerated (committed).
-* Tests (`complex_fast_tests.rs`): route comparison in 4 modes × f32/f64 × 5 regimes (general, y near π/2+kπ,
-  |y| up to 1e7, x near ±overflow/underflow) with answer-rate asserts; bound test vs 384-bit `mp` values;
-  float decline-near-boundary test; `#[ignore]` 10^7-per-type sweep (8 threads).
-* Plants: handoff/LIBM-CPLX-EXP-TIER-plants.txt (eps_trig dropped, sin/cos swapped, scale twice, float no test).
+* Run 1: `crates/math/src/complex_fast.rs` (double tier: fast64 exp kernel x trig kernels, Dd product, proved part
+  bound, `near` then `settle`, exponent-add scaling), `fast32/cexp.rs` (float tier), boundary `mret::cplx_fast`,
+  tests, plants. Its jobs all ended rc 0 on mei: gate (11276 passed, conformance 125), plants 4/4 CAUGHT, 10^7 sweep
+  (double answers per regime [1999414, 1699251, 209374, 396337, 258297] of 2·10^6), counts.
+* Run 2 (profile first): one traced call (validation/wl_trace.sh, case cexp of the new probe
+  validation/percall/cplx_exp.c) = 619 instructions, 26 in the export, the rest one inlined body built around nine
+  Dekker products. Fix: the parts and the in-place entry come from one macro in two builds (baseline, FMA via
+  `fast64::fused` and `trig::kernel_fma`), chosen at startup by `crate::hot::cexp_nearest` (boundary hot/trig.rs);
+  bit-identical, tested in `math_fma_paths::cexp_fma_build_matches_baseline_bit_for_bit` (also vs the route).
+* Bench gap explained: cbench_libm's 256 operands contain one genuine hard case, (-1.609657171678382,
+  -1.9221928333335072), where a part lies within twice its bound (~2^-66 relative) of a rounding boundary. The
+  route (~115k instructions) then runs, adding ~450 per call averaged over the set. New unit test
+  `cexp_quick_tier_declines_the_bench_box_only_when_forced` checks every decline in that set is forced (384-bit
+  distance to the midpoint <= 2·eps).
 
-## Jobs (mei, chain ~/work/libm-cplx-exp-tier/chain.sh, sequential)
+## Counts (instructions per call, wl_percall, Zen 1 host; glibc dynamic)
 
-libm-cplx-exp-tier-check5 (rc 0: math-gen, kernel-index, xtask clippy, xtask static, unit tests 3 pass),
-then libm-cplx-exp-tier-gate (direct tier, --base origin/next), -plants (dir /mnt/zram/claude/libm-cplx-exp-tier/plants-1),
--sweep (10^7 per type, release), -counts (cbench_libm --compare --counters; cexp rows grepped into the log,
-full output ~/work/libm-cplx-exp-tier/counts.txt). Superseded: check1-4 (lint fixes, test regime fix).
+| case | glibc | run 1 | run 2 (final) | target |
+|---|---|---|---|---|
+| cexp (32 typical operands) | 250.8 | 636.1 | 397.0 | <= 300 |
+| cexp_bench (cbench_libm's 256) | 249.8 | 1085.1 | 846.1 | <= 300 |
+| cexpf | 172.6 | 182.0 | 182.0 | <= 120 |
+| cexpf_bench | 170.5 | 179.0 | 179.0 | <= 120 |
 
-## Not done / next step
+Run 1's cbench_libm --counters agreed (cexp 1083.2 vs 248.2; cexpf 175.5 vs 166.9).
 
-1. Read the four jobs (`~/bin/jobwait libm-cplx-exp-tier-gate libm-cplx-exp-tier-plants libm-cplx-exp-tier-sweep
-   libm-cplx-exp-tier-counts` on mei); fix a red, run only the failing suite.
-2. Compare the cexp/cexpf counts with the targets (<= 300 / <= 120; glibc 239 / 162).
-3. Timing (brief): book kotori or nico (Ivy Bridge, the less busy) and nozomi (N100) with `ops timing-book`.
-4. Follow-ups: FMA build of the double tier (both kernels have one); `|y| < 2^-30` and `|x| < 2^-60` in the
-   tier; csqrt/clog per D-10.53.
+## Jobs (mei, chain ~/work/libm-cplx-exp-tier-2/chain.sh, sequential, final head)
 
-Do not redo: the bound derivation, the visibility changes, the boundary form.
+libm-cplx-exp-tier-2-percall (rc 0, numbers above), then -gate (direct tier, --base origin/next), -plants
+(handoff/LIBM-CPLX-EXP-TIER-2-plants.txt, 6 plants incl. the FMA dispatch and a spurious-decline plant; dir
+/mnt/zram/claude/libm-cplx-exp-tier-2/plants-1), -counts (cbench_libm --compare --counters). Superseded:
+check1-check6 (lint/test iterations), prof1-prof3 (profiling). check7 = lint + static + tests green on the final code.
+
+## Next steps (in order)
+
+1. Read gate/plants/counts (`~/bin/jobwait libm-cplx-exp-tier-2-gate libm-cplx-exp-tier-2-plants libm-cplx-exp-tier-2-counts`).
+2. Timing (coordinator: Ivy Bridge and N100, booked before 19:30 UTC 11-07, hosts drain at 20:00): not booked in run 2
+   (call budget). FMA changes the instruction mix, so it needs timing: kotori or nico (less busy) and nozomi.
+3. cexp to <= 300: the remaining ~150 over glibc are in the double-double assembly (two trig assemblies, two Dd
+   products, two eps evaluations). Next profile with `wl_trace --list` (its list output came out nearly empty in
+   run 2; check the tool) before designing. A cheaper second tier for hard cases (only the undecided part, at ~2^-100,
+   instead of the 384-bit route) would close most of the bench-set gap.
+4. cexpf to <= 120: not touched yet; profile its 182 (export 29 + body) first.
+5. Follow-ups from run 1: `|y| < 2^-30` and `|x| < 2^-60` in the tier; csqrt/clog per D-10.53.
+
+Do not redo: the bound derivation, the visibility changes, the boundary form, the FMA macro.
