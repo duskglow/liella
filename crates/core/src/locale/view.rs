@@ -585,7 +585,7 @@ impl LocaleView {
             } else if mask.0.is_power_of_two() {
                 return i32::from(w.in_class_bit(mask.0.trailing_zeros(), c));
             }
-            return self.isw_wide(c, mask);
+            return LocaleView::isw_wide(c, mask, self);
         }
         // A built-in locale: one two-stage table lookup and the mask test (D-5.9).
         i32::from(unicode::class_word(self.classes, c) & mask.0 != 0)
@@ -611,11 +611,16 @@ impl LocaleView {
     }
 
     /// The out-of-line part of [`LocaleView::isw_int`], with its `int` answer.
+    ///
+    /// The character comes first and the view last (WCTYPE-TRIE-BUILTIN-2): an export receives
+    /// `c` in the first argument register, so this order lets the tail jump keep it there. With
+    /// the view first, every export moved `c` to the second register on entry, on its inline
+    /// paths too: +1 instruction per `isw*` call in a compiled locale.
     #[inline(never)]
-    fn isw_wide(&self, c: u32, mask: Class) -> i32 {
-        let Some((w, _)) = &self.wide else { return i32::from(ctype::wclasses(c, &self.locale).intersects(mask)) };
+    fn isw_wide(c: u32, mask: Class, v: &LocaleView) -> i32 {
+        let Some((w, _)) = &v.wide else { return i32::from(ctype::wclasses(c, &v.locale).intersects(mask)) };
         if let Ok(b) = u8::try_from(c)
-            && let Some(l) = self.latin()
+            && let Some(l) = v.latin()
         {
             return i32::from(l.class(b, w) & u32::from(mask.0) != 0);
         }

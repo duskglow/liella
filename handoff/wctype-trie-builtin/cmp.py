@@ -12,9 +12,14 @@ def load(p):
         if len(f) < 8 or f[1] == 'base-gross':
             continue
         try:
-            d.setdefault((f[0], f[1], f[3]), []).append((float(f[4]), float(f[7])))
+            ins = float(f[4])
         except ValueError:
-            pass
+            continue
+        try:
+            loads = float(f[7])
+        except ValueError:  # the reference rows carry '-' in the load columns
+            loads = float('nan')
+        d.setdefault((f[0], f[1], f[3]), []).append((ins, loads))
     return d
 
 
