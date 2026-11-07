@@ -4,7 +4,7 @@ profile job perf-gettext-steady-2-prof (keke, both rc 0). Steady 712.8/452.6 = 1
 Not done: the aligned fused LANGUAGE compare (unsafe in liella-boundary, ~40 of 110 instructions), clock-free recheck.
 Next step: decide the unsafe category for an aligned NUL-safe read of the environment value, then implement with a plant that
 skips the in-place-rewrite check (must be CAUGHT) and a short-value-at-page-end test.
-Budget note: ~30 of 45 calls spent on reading, two jobs and a failed first ssh (host names do not resolve; use 10.0.100.53).
+Budget note: ~30 of 45 calls spent on reading, two jobs and a failed first ssh (host names do not resolve; use keke).
 
 ## PERF-GETTEXT-STEADY-3 (branch task/perf-gettext-steady-3, keke role n2)
 Done: fixed the CI lab-names failure (register row named the host; now "Zen 1 host"). `cargo xtask static` on keke: job

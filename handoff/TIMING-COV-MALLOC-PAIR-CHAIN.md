@@ -55,5 +55,5 @@ None on this row from the index computation. The chain's other parts (the forwar
 the remaining levers, and the latest-block path that skipped them was refused twice (#2826, #3210).
 Plan rows: D-3.16, D-3.17, D-3.18; register docs/saturation/04-allocator.md rows "cycles on Ivy Bridge" and the two NEGATIVE rows.
 
-Files outside the repo: /home/claude/w/.scratch/TIMING-COV-MALLOC-PAIR-CHAIN/ (rc.sh, summ.py, rc.log); shiki
+Files outside the repo: ~/w/.scratch/TIMING-COV-MALLOC-PAIR-CHAIN/ (rc.sh, summ.py, rc.log); shiki
 ~/work/TIMING-COV-MALLOC-PAIR-CHAIN/ (base and new stages); keke ~/work/TIMING-COV-MALLOC-PAIR-CHAIN/ (base.tar, new.tar).

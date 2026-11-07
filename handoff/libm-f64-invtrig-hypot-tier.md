@@ -41,4 +41,4 @@ math-gen and so parts were ok), -probe (evidence, rc 0).
   probe of run -4; the ERANGE probe of run -5.
 
 ## Plan rows to read
-D-10.13, D-10.14, D-10.22, D-10.25; original brief /home/claude/state/briefs/LIBM-F64-INVTRIG-HYPOT-TIER.md.
+D-10.13, D-10.14, D-10.22, D-10.25; original brief ~/state/briefs/LIBM-F64-INVTRIG-HYPOT-TIER.md.

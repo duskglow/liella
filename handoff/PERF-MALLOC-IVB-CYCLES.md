@@ -48,5 +48,5 @@ and the shared case gets no faster. Measure on Ivy Bridge and Skylake-SP, plus w
 
 ## Files outside the repo
 
-Probe sources and logs: /home/claude/w/.scratch/PERF-MALLOC-IVB-CYCLES/ (pair.c, pstat.sh, ab.sh, prec.sh,
+Probe sources and logs: ~/w/.scratch/PERF-MALLOC-IVB-CYCLES/ (pair.c, pstat.sh, ab.sh, prec.sh,
 annot.sh, annot-liella.txt, ab1.txt, pstat64.txt); copies on nico and shiki in ~/work/PERF-MALLOC-IVB-CYCLES/.

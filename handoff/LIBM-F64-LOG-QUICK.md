@@ -1,7 +1,7 @@
 # LIBM-F64-LOG-QUICK(-2): binary64 log quick phase (tier 1), wired, gated
 
 State: branch `task/libm-f64-log-quick-2` (stacks on `task/libm-f64-log-quick`, cut from origin/next at 799313e1e),
-code head 3d8ca0c6a; handoff commits on top. Role mei:~/w/s3. Brief `/home/claude/state/briefs/LIBM-F64-LOG-QUICK.md`
+code head 3d8ca0c6a; handoff commits on top. Role mei:~/w/s3. Brief `~/state/briefs/LIBM-F64-LOG-QUICK.md`
 ("## The change"), continuation LIBM-F64-LOG-QUICK-2. Decisions in force: D-10.51 (two-phase double), D-10.60 (this
 kernel: method, table, bound, measured numbers; coordinator ruling #3970 accepted degree 9), D-10.25/D-10.50 (two
 builds), D-10.3 (correct rounding).

@@ -33,16 +33,11 @@ hosts=${HOSTS:-"nozomi nico"}
 here=$(cd "$(dirname "$0")" && pwd)
 ns=${new:0:9}
 bs=${base:0:9}
-keke="ssh -o BatchMode=yes claude@10.0.100.53"
-hip() { # host -> address: the ONE host map (add new timing hosts here only)
+. "$here/lab_host.sh"
+keke="ssh -o BatchMode=yes claude@$(lab_addr keke)"
+hip() { # host -> address (validation/lab_host.sh; addresses live on the operator's machine, never in the repo)
     case $1 in
-        keke) echo 10.0.100.53 ;;
-        shiki) echo 10.0.100.66 ;;
-        nico) echo 10.0.100.112 ;;
-        kotori) echo 10.0.100.115 ;;
-        nozomi) echo 10.0.100.118 ;;
-        kanon) echo 10.0.100.81 ;;
-        natsumi) echo 10.0.0.36 ;; # loaned Ryzen 5 5500 (Zen 3), other subnet, until the 10-25 spin-down
+        keke|shiki|nico|kotori|nozomi|kanon|natsumi) lab_addr "$1" ;;
         *) echo "wl_gate: unknown host $1" >&2; exit 2 ;;
     esac
 }

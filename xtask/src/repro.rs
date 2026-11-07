@@ -421,10 +421,10 @@ mod tests {
 
     #[test]
     fn a_path_in_rodata_differs() {
-        let a = obj(b"\x90\xc3", b"/home/claude/w/a/crates/core", b"\0x\0");
-        let b = obj(b"\x90\xc3", b"/home/claude/w/second/tree-b/crates/core", b"\0x\0");
+        let a = obj(b"\x90\xc3", b"/srv/build/w/a/crates/core", b"\0x\0");
+        let b = obj(b"\x90\xc3", b"/srv/build/w/second/tree-b/crates/core", b"\0x\0");
         assert_eq!(compare(&a, &b), Outcome::Differs("section .rodata (header)".into()));
-        let c = obj(b"\x90\xc3", b"/home/claude/w/b/crates/core", b"\0x\0");
+        let c = obj(b"\x90\xc3", b"/srv/build/w/b/crates/core", b"\0x\0");
         assert_eq!(compare(&a, &c), Outcome::Differs("section .rodata (contents)".into()));
     }
 

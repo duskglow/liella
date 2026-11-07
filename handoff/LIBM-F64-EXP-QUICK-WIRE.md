@@ -1,7 +1,7 @@
 # LIBM-F64-EXP-QUICK-WIRE(-2): exp quick phase wired as tier 1, tier 2 on a miss (both builds)
 
 State: branch `task/libm-f64-exp-quick-wire-2` (stacks on `task/libm-f64-exp-quick-wire`, LIBM-F64-EXP-QUICK-2);
-code head 39b2271d0, handoff commits on top. Role mei:~/w/s3. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK-WIRE.md`
+code head 39b2271d0, handoff commits on top. Role mei:~/w/s3. Brief: `~/state/briefs/LIBM-F64-EXP-QUICK-WIRE.md`
 ("## The change"); continuation brief LIBM-F64-EXP-QUICK-WIRE-2. Decisions in force: D-10.51 (two-phase double
 functions), D-10.54 (quick kernel constants and bounds), D-10.25/D-10.50 (two builds), D-10.3 (CR).
 
