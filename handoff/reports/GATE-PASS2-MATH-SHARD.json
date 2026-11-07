@@ -1,5 +1,5 @@
 {"task": "GATE-PASS2-MATH-SHARD", "model": "opus", "tokens": null,
- "result": "pass 2 runs shard 0 only of the five heavy liella-math products sweeps (PASS1_SHARD0, D-X.35); pass-2 list 6074 -> 6027 (exactly the 47 later shards), pass 1 unchanged; plants 5/5 caught; timing and gate pending",
+ "result": "pass 2 runs shard 0 only of the five heavy liella-math products sweeps (PASS1_SHARD0, D-X.36); pass-2 list 6074 -> 6027 (exactly the 47 later shards), pass 1 unchanged; plants 5/5 caught; timing and gate pending",
  "branch": "task/gate-pass2-math-shard", "head": "9840ce8b",
  "gate": {"affected": "pending: keke:gp2ms-gate (starts after keke:gp2ms-timing)", "peak": null},
  "accepted_first_attempt": null,

@@ -29,7 +29,7 @@ pub fn pass0_only(krate: &str, target: &str) -> bool {
 }
 
 /// Sharded products targets `(crate, target)` that run every shard in the first pass and only
-/// shard 0 with the exports interposed (GATE-PASS2-MATH-SHARD, owner ruling #3794, D-X.35). They
+/// shard 0 with the exports interposed (GATE-PASS2-MATH-SHARD, owner ruling #3794, D-X.36). They
 /// build and run C programs against the products, so they are not `PASS0_ONLY`; but their cost is
 /// the oracle's multiple-precision check of each output line, which pass 1 already made. Every
 /// shard does the same harness work (build and run the programs, read and split their whole

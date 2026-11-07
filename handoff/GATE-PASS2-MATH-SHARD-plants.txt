@@ -1,4 +1,4 @@
-# GATE-PASS2-MATH-SHARD plants: the interposed pass's shard-0 filter (D-X.35, xtask/src/nextest.rs). Run: cargo xtask plants handoff/GATE-PASS2-MATH-SHARD-plants.txt --dir <dir>
+# GATE-PASS2-MATH-SHARD plants: the interposed pass's shard-0 filter (D-X.36, xtask/src/nextest.rs). Run: cargo xtask plants handoff/GATE-PASS2-MATH-SHARD-plants.txt --dir <dir>
 # Not planted: the call in affected.rs (`if pass == 1 && nextest`), which no unit test reaches; the gate's affected run shows its filter in the pass-2 command.
 regex-keeps-no-shard | xtask/src/nextest.rs | lit:const LATER_SHARDS: &str = "test(/_s[1-9][0-9]*$/)"; ==> const LATER_SHARDS: &str = "test(/_s[0-9]+$/)"; | cargo test -p xtask --bin xtask -- nextest:: | msg:pass0_only_targets_are_pure_rust
 full-filter-no-shard-terms | xtask/src/nextest.rs | lit:    ids.extend(later_shard_terms(|c, t| !once.iter().any(|b| *b == format!("{c}::{t}")))); ==>     // planted | cargo test -p xtask --bin xtask -- nextest:: | msg:pass0_only_targets_are_pure_rust

@@ -5,7 +5,7 @@
   the commit after it adds only this handoff and handoff/reports/GATE-PASS2-MATH-SHARD.json.
 - Role keke:~/w/n3, synced at 9840ce8b.
 
-## What changed (D-X.35, owner ruling #3794)
+## What changed (D-X.36, owner ruling #3794)
 - `xtask/src/nextest.rs`: `PASS1_SHARD0` = liella-math `complex_ld_cr_products`, `complex_f128_products`,
   `special_ld_products`, `special_f128_products`, `complex_products`. The pass-2 filter (`pass1_filter`, used by
   `cargo xtask test`) adds `(binary_id(liella-math::<t>) & test(/_s[1-9][0-9]*$/))` per target (not for a run-once
@@ -19,7 +19,7 @@
   Only the number of checked lines differs, and shard 0's lines are spread over every function and rounding mode.
   Non-shard tests in those binaries (`the_shards_check_every_line_exactly_once`, `pool_matches_the_nextest_config`)
   still run in both passes.
-- Rule documented in `docs/architecture.md` (Interposed run row) and D-X.35: a suite runs in pass 2 only to the extent
+- Rule documented in `docs/architecture.md` (Interposed run row) and D-X.36: a suite runs in pass 2 only to the extent
   that it exercises the interposed functions.
 - Tests: `nextest::tests::pass2_runs_shard_0_of_the_heavy_products_targets` (new: each target has `_s0`, is sharded,
   no other fn name ends in `_s<digits>`; `pass1_shard_filter` per crate/target), `pass0_only_targets_are_pure_rust`
@@ -45,4 +45,4 @@
 
 ## Open / next
 - Collect gp2ms-timing (TIMING lines) and gp2ms-gate. A red gate outside xtask/liella-math pass 2 is not this change.
-- Do not redo: the list diff above. Plan rows: D-X.35 (plan/07-decisions/x-implementation-decisions.md).
+- Do not redo: the list diff above. Plan rows: D-X.36 (plan/07-decisions/x-implementation-decisions.md).

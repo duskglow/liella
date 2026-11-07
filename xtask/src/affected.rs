@@ -2690,7 +2690,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["--test", t]);
                 }
                 // The heavy products sweeps run shard 0 only with the exports interposed
-                // (`nextest::PASS1_SHARD0`, D-X.35); `cargo test` has no filter for it and runs all.
+                // (`nextest::PASS1_SHARD0`, D-X.36); `cargo test` has no filter for it and runs all.
                 if pass == 1 && nextest {
                     cmd.args(crate::nextest::pass1_shard_filter(c, &ts).unwrap_or_default());
                 }
