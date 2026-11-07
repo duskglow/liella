@@ -160,7 +160,7 @@ fn main() -> ExitCode {
                 print!("{}", o.out);
                 eprint!("{}", o.err);
                 ok &= o.ok;
-                emitted += 1;
+                emitted = emitted.saturating_add(1);
             }
         }
         // A worker that died early leaves fits unreported: that is a failure, never a pass.
