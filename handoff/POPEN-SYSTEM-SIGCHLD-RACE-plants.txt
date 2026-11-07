@@ -1,0 +1,4 @@
+# POPEN-SYSTEM-SIGCHLD-RACE plants: system_signal_state_during_and_after (D-X.40) must still catch a system that does not restore the caller's mask or SIGINT/SIGQUIT dispositions.
+# Run: cargo xtask plants handoff/POPEN-SYSTEM-SIGCHLD-RACE-plants.txt --dir <new RAM dir> --timeout 600
+mask-not-restored | crates/boundary/src/spawn.rs | perl:s/(Ok\(\(pid, _\)\) => wait_shell\(pid\),.*?)let _ = CSys\.sigprocmask\(SIG_SETMASK, Some\(&old\)\);/$1/s | cargo test -p liella --test popen_system_eintr system_signal_state_during_and_after | msg:system_signal_state_during_and_after.*(FAILED|panicked)
+dispositions-not-restored | crates/boundary/src/spawn.rs | lit:if SHELL_USERS.fetch_sub(1, Relaxed) == 1 { ==> if SHELL_USERS.fetch_sub(1, Relaxed) == 0 { | cargo test -p liella --test popen_system_eintr system_signal_state_during_and_after | msg:system_signal_state_during_and_after.*(FAILED|panicked)
