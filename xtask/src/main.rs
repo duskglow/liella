@@ -251,7 +251,8 @@ fn test_steps(root: &Path, extra: &[String], t: &mut steptime::Steps) -> Result<
     t.time("compat-gen-check", || compat::run(root, true))?;
     t.time("math-gen-check", || math::run(root, true))?;
     // The generated coefficients still follow from their fit files (D-10.12). The remez binary prints a
-    // `step: remez/<fit>` line per fit; this step's time less theirs is the build of the tool.
+    // `step: remez/<fit>` line per fit. The fits run in parallel and replay unchanged verdicts (D-10.58), so their
+    // times overlap: they name the slow fit, they do not add up to this step's time.
     let mut fits: Vec<String> = std::fs::read_dir(root.join("crates/math/fits")).map_err(|e| e.to_string())?.flatten().map(|e| e.path().display().to_string()).filter(|p| p.ends_with(".fit")).collect();
     fits.sort();
     fits.insert(0, "--check".into());
