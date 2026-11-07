@@ -56,6 +56,23 @@ fn log_quick_constants_and_bounds() {
     let ln2 = mp::ln2();
     assert_eq!((KH * grid).fract(), 0.0, "KH not a multiple of 2^-42");
     assert!(ln2.sub(Mp::from_f64(KH)).sub(Mp::from_f64(KL)).cmp_abs(Mp::from_f64(two(-96))).is_le(), "KH + KL not within 2^-96 of ln 2");
+    let (case_a, b_worst, case_c) = case_bounds();
+    eprintln!("log quick bound: A 2^{:.3}, B 2^{:.3}, C 2^{:.3}", case_a.log2(), b_worst.log2(), case_c.log2());
+    for (v, n) in [(case_a, "A"), (b_worst, "B"), (case_c, "C")] {
+        assert!(v <= RHO, "case {n} bound {v:e} above RHO");
+    }
+    // The multiplier is the least double with C·(1 − 2^54·RHO) > 1 + 2^-53 (exact in Mp).
+    let u = two(-53);
+    let one_u = Mp::from_f64(1.0).add(Mp::from_f64(u));
+    let k = Mp::from_f64(1.0).sub(Mp::from_f64(RHO * two(54)));
+    assert!(Mp::from_f64(C).mul(k).cmp_abs(one_u).is_gt(), "C below its bound");
+    assert!(Mp::from_f64(f64::from_bits(C.to_bits() - 1)).mul(k).cmp_abs(one_u).is_le(), "C not the least");
+}
+
+/// `log`'s case bounds A, B, C (module doc), each term from its formula in `f64` rounded up by
+/// `1 + 2^-40`, after checking the table rows they rely on.
+fn case_bounds() -> (f64, f64, f64) {
+    let grid = two(42);
     let up = 1.0 + two(-40);
     let u = two(-53);
     let mut b_worst = 0.0f64;
@@ -86,15 +103,214 @@ fn log_quick_constants_and_bounds() {
     let r = two(-7);
     let case_a = (r.powi(9) / 10.0 + 2.3 * u * r * r + 0.34 * u * r * r + two(-87)) / (1.0 - two(-8)) * up;
     let case_c = ((a_max.powi(10) / 10.0 / (1.0 - a_max) + 2.3 * u * a_max.powi(3) + u * two(-20)) / 0.341 + two(-94)) * up;
-    eprintln!("log quick bound: A 2^{:.3}, B 2^{:.3}, C 2^{:.3}", case_a.log2(), b_worst.log2(), case_c.log2());
-    for (v, n) in [(case_a, "A"), (b_worst, "B"), (case_c, "C")] {
-        assert!(v <= RHO, "case {n} bound {v:e} above RHO");
+    (case_a, b_worst, case_c)
+}
+
+/// `log2`, `log10` and `log1p` (D-10.66, module doc): the constants of the final product and the
+/// bounds built on `log`'s cases.
+#[test]
+fn log_family_constants_and_bounds() {
+    for (k, lnb, name) in [(INV_LN2, mp::ln2(), "1/ln 2"), (INV_LN10, mp::ln10(), "1/ln 10")] {
+        let [k0, k1, k26, k26l] = k;
+        let one = Mp::from_f64(1.0);
+        // (k0 + k1)·ln b within 2^-105 of 1, and k26 + k26l within 2^-78·k of k.
+        assert!(Mp::from_f64(k0).add(Mp::from_f64(k1)).mul(lnb).sub(one).cmp_abs(Mp::from_f64(two(-105))).is_le(), "{name}: k0 + k1 off");
+        assert!(Mp::from_f64(k26).add(Mp::from_f64(k26l)).mul(lnb).sub(one).cmp_abs(Mp::from_f64(two(-78))).is_le(), "{name}: k26 + k26l off");
+        assert_eq!(k26.to_bits(), k0.to_bits() & !LOW27, "{name}: k26 is not k0 cut to 26 bits");
+        assert!(dd::abs(k26l) <= two(-25) * k0 && dd::abs(k1) <= two(-53) * k0, "{name}: low parts too large");
     }
-    // The multiplier is the least double with C·(1 − 2^54·RHO) > 1 + 2^-53 (exact in Mp).
-    let one_u = Mp::from_f64(1.0).add(Mp::from_f64(u));
-    let k = Mp::from_f64(1.0).sub(Mp::from_f64(RHO * two(54)));
-    assert!(Mp::from_f64(C).mul(k).cmp_abs(one_u).is_gt(), "C below its bound");
-    assert!(Mp::from_f64(f64::from_bits(C.to_bits() - 1)).mul(k).cmp_abs(one_u).is_le(), "C not the least");
+    let (a, b, c) = case_bounds();
+    let log_worst = a.max(b).max(c);
+    let up = 1.0 + two(-40);
+    // log2, log10: log's bound plus the SSE2 product's 2^-74 (the FMA build's is smaller).
+    let logb = (log_worst * (1.0 + two(-74)) + two(-74)) * up;
+    // log1p, small |x|: case A with |r| < 2^-8.
+    let r = two(-8);
+    let u = two(-53);
+    let small = (r.powi(9) / 10.0 + 2.3 * u * r * r + 0.34 * u * r * r + two(-87)) / (1.0 - two(-8)) * up;
+    // log1p, |x| >= 2^-8: log's cases (relative to ln yh, within 2^-44 of ln(1 + x)) plus the
+    // correction's truncation, square and roundings over |ln(1 + x)| >= ln(1 + 2^-8).
+    let d = u * (1.0 + two(-7));
+    let corr = (d * two(-21) / (1.0 - two(-7)) + two(-106) + two(-104)) / (two(-8).ln_1p()) * up;
+    let general = (log_worst * (1.0 + two(-44)) + corr) * up;
+    eprintln!("log2/log10 bound 2^{:.3}; log1p small 2^{:.3}, general 2^{:.3}", logb.log2(), small.log2(), general.log2());
+    for (v, n) in [(logb, "log2/log10"), (small, "log1p small"), (general, "log1p general")] {
+        assert!(v <= RHO, "{n} bound {v:e} above RHO");
+    }
+}
+
+/// One function of the family: its quick parts, quick answer, tiers and correctly rounded
+/// reference, and `ln b` to compare parts in Mp (`ln x = (zh + zl)·ln b`; 0 for `log1p`).
+struct Fam {
+    name: &'static str,
+    parts: fn(f64) -> Option<(f64, f64)>,
+    quick: fn(f64) -> Option<f64>,
+    tiered: fn(f64) -> Option<f64>,
+    cr: fn(f64) -> f64,
+    lnb: f64,
+}
+
+const FAMS: [Fam; 3] = [
+    Fam { name: "log2", parts: log2_quick_parts, quick: log2_quick, tiered: log2_tiered, cr: cr2, lnb: core::f64::consts::LN_2 },
+    Fam { name: "log10", parts: log10_quick_parts, quick: log10_quick, tiered: log10_tiered, cr: cr10, lnb: core::f64::consts::LN_10 },
+    Fam { name: "log1p", parts: log1p_quick_parts, quick: log1p_quick, tiered: log1p_tiered, cr: cr1p, lnb: 0.0 },
+];
+
+fn cr2(x: f64) -> f64 {
+    super::super::log2_nearest(x).unwrap_or_else(|| Real::log2(x, Rounding::Nearest).0)
+}
+fn cr10(x: f64) -> f64 {
+    super::super::log10_nearest(x).unwrap_or_else(|| Real::log10(x, Rounding::Nearest).0)
+}
+fn cr1p(x: f64) -> f64 {
+    super::super::log1p_nearest(x).unwrap_or_else(|| Real::log1p(x, Rounding::Nearest).0)
+}
+
+/// `true` where the family member's quick phase must answer (module doc).
+fn in_domain(f: &Fam, x: f64) -> bool {
+    if f.lnb == 0.0 {
+        dd::abs(x) >= two(-60) && x > -1.0 && x < two(960)
+    } else {
+        x >= f64::MIN_POSITIVE && x < f64::INFINITY
+    }
+}
+
+/// `|f(x) − (zh + zl)|` in Mp, scaled to `ln` for log2/log10, and the matching bound.
+fn residual(f: &Fam, x: f64, zh: f64, zl: f64) -> (Mp, Mp) {
+    let z = Mp::from_f64(zh).add(Mp::from_f64(zl));
+    if f.lnb == 0.0 {
+        (mp::ln1p(Mp::from_f64(x)).sub(z), Mp::from_f64(RHO * dd::abs(zh)))
+    } else {
+        let lnb = if f.name == "log2" { mp::ln2() } else { mp::ln10() };
+        (mp::ln(Mp::from_f64(x)).sub(z.mul(lnb)), Mp::from_f64(RHO * dd::abs(zh) * f.lnb * (1.0 - two(-50))))
+    }
+}
+
+/// Doubles in `(−1, 0)` with uniformly random bits (every binade alike).
+fn spread_neg(n: usize, seed: u64) -> impl Iterator<Item = f64> {
+    bits(n, seed).map(|b| -f64::from_bits((b >> 1) % 0x3ff0_0000_0000_0000))
+}
+
+/// The operands of the family's tests: `log`'s for log2/log10 (`scale` each); for log1p, both
+/// sides of `2^-8`, `(−1, 1)`, `[1e-3, 1e3)`, every binade of each sign. The last `2·scale` are
+/// the fallback-rate sample.
+fn fam_operands(f: &Fam, scale: usize) -> Vec<f64> {
+    if f.lnb != 0.0 {
+        return operands(scale).collect();
+    }
+    uniform(scale, 0x2545_f491_4f6c_dd1d, -two(-8), two(-8))
+        .chain(uniform(scale, 3, -two(-6), two(-6)))
+        .chain(spread_neg(scale / 2, 21).chain(spread(scale / 2, 23)))
+        .chain(uniform(scale, 5, -0.99, 1.0))
+        .chain(uniform(scale, 7, 1e-3, 1e3))
+        .collect()
+}
+
+/// Each member's `(zh, zl)` within `RHO·|zh|` of the exact value (Mp) over `5·6·10^4` operands,
+/// declining exactly outside its domain; the largest relative error is printed.
+#[test]
+fn log_family_quick_error_within_bound() {
+    for f in &FAMS {
+        let mut worst = 0.0f64;
+        for x in fam_operands(f, 60_000) {
+            let parts = (f.parts)(x);
+            assert_eq!(parts.is_some(), in_domain(f, x), "{} quick parts({x:e}) answered outside, or declined inside, its domain", f.name);
+            let Some((zh, zl)) = parts else { continue };
+            let (err, bound) = residual(f, x, zh, zl);
+            assert!(err.cmp_abs(bound).is_le(), "{} quick parts({x:e}): error above the bound", f.name);
+            worst = worst.max(dd::abs(err.to_f64()) / bound.to_f64());
+        }
+        eprintln!("quick {} SSE2: largest error {:.4} of the bound RHO", f.name, worst);
+        assert!(worst > 0.0);
+    }
+}
+
+/// Operands per member of the rounding test: `LIELLA_QUICK_LOG_N` (the 10^7 accuracy run), else
+/// 10^6.
+fn fam_count() -> usize {
+    std::env::var("LIELLA_QUICK_LOG_N").ok().and_then(|s| s.parse::<usize>().ok()).filter(|&k| k >= 10).unwrap_or(1_000_000)
+}
+
+/// Every answer of each member's quick phase and tiers against the correctly rounded result, bit
+/// for bit, and the fallback rate on the last two groups within the model (`C − 1 = 0.098%`,
+/// up to twice that by where the result sits in its binade: asserted 0.03%-0.3%).
+#[test]
+fn log_family_quick_matches_correctly_rounded() {
+    let n = fam_count() / 5;
+    for f in &FAMS {
+        let xs = fam_operands(f, n);
+        let (mut miss, mut answered) = (0usize, 0usize);
+        let rate_from = xs.len() - 2 * n;
+        for (i, &x) in xs.iter().enumerate() {
+            let want = (f.cr)(x);
+            match (f.quick)(x) {
+                Some(v) => {
+                    assert_eq!(v.to_bits(), want.to_bits(), "quick {}({x:e} = {:#x}): {v:e}, correctly rounded {want:e}", f.name, x.to_bits());
+                    answered += 1;
+                }
+                None if i >= rate_from => miss += 1,
+                None => {}
+            }
+            if let Some(v) = (f.tiered)(x) {
+                assert_eq!(v.to_bits(), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
+            }
+        }
+        let m = 2 * n;
+        eprintln!("quick {} SSE2: {answered} answered of {}, fallback {miss} of {m}", f.name, xs.len());
+        assert!(miss * 10_000 >= m * 3 && miss * 1000 <= m * 3, "{} fallback rate {miss} of {m} outside 0.03%-0.3%", f.name);
+    }
+}
+
+/// Exact results stay exact and are answered (`log2 2^k = k`, `log10 10^n = n`, `+0` at 1); the
+/// hard cases (`10^-n`, `1 ± k·2^-53`, log1p's tiny and boundary operands, and a seeded sample's
+/// operands whose unchecked `zh` is wrong, so the test cannot pass vacuously) are declined or
+/// answered right, and the tiers answer them right.
+#[test]
+fn log_family_exact_and_hard_cases() {
+    for k in -1022..=1023 {
+        assert_eq!(log2_quick(two(k)).map(f64::to_bits), Some(f64::from(k).to_bits()), "log2(2^{k}) not answered exactly");
+    }
+    let mut p = 1.0f64;
+    for n in 0..=22 {
+        assert_eq!(log10_quick(p).map(f64::to_bits), Some(f64::from(n).to_bits()), "log10(1e{n}) not answered exactly");
+        p *= 10.0;
+    }
+    for x in [0.0, -0.0, -1.0, -2.0, two(-61), -two(-61), 5e-324, f64::INFINITY, f64::NAN, two(960)] {
+        assert_eq!(log1p_quick_parts(x), None, "quick log1p must decline {x:e}");
+    }
+    for f in &FAMS {
+        let mut hard: Vec<f64> = Vec::new();
+        for k in 1..=64u32 {
+            let d = f64::from(k) * f64::EPSILON;
+            if f.lnb == 0.0 {
+                let s = two(-i32::try_from(k).unwrap_or(0));
+                hard.extend([d, -d, s, -s, two(-8) + d * two(-8), -two(-8) - d * two(-8), -1.0 + d, two(i32::try_from(k).unwrap_or(0) * 14)]);
+            } else {
+                hard.extend([1.0 + d, 1.0 - 0.5 * d, 0.1f64.powi(i32::try_from(k % 23).unwrap_or(0))]);
+            }
+        }
+        // Misroundings of the unchecked zh lie where the rounding test declines; look near 1
+        // (log2, log10) or below 2^-7 (log1p), where the error is closest to the bound, and
+        // over [0.5, 2) and every binade.
+        let near = if f.lnb == 0.0 { uniform(1_000_000, 0x2545_f491_4f6c_dd1d, -two(-7), two(-7)) } else { uniform(1_000_000, 0x2545_f491_4f6c_dd1d, 1.0 - two(-8), 1.0 + two(-7)) };
+        let mut wrong = 0usize;
+        for x in near.chain(uniform(500_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0)).chain(spread(500_000, 13)) {
+            if let Some((zh, zl)) = (f.parts)(x) {
+                if zh + zl * C != zh && zh != (f.cr)(x) {
+                    wrong += 1;
+                    hard.push(x);
+                }
+            }
+        }
+        assert!(wrong > 0, "{}: no misrounded unchecked quick result in the sample: the hard-case test is vacuous", f.name);
+        for x in hard {
+            let want = (f.cr)(x);
+            if let Some(v) = (f.quick)(x) {
+                assert_eq!(v.to_bits(), want.to_bits(), "quick {}({x:e}) misrounded", f.name);
+            }
+            assert_eq!((f.tiered)(x).map(f64::to_bits).unwrap_or(want.to_bits()), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
+        }
+    }
 }
 
 /// The operands of the error and rounding tests: near 1 (cases A, B), [0.5, 2), [1e-3, 1e3) and
