@@ -145,6 +145,9 @@ fn read_all<S: Sys>(sys: &S, fd: Fd, hint: usize) -> Result<Option<TryVec<u8>>> 
 /// [`ZONEINFO`]).
 fn zone_path(value: &[u8], tzdir: Option<&[u8]>) -> Result<TryVec<u8>> {
     let mut path = TryVec::new();
+    // The exact length up front: one allocation, not a growth through two sizes.
+    let dir = if value.starts_with(b"/") { 0 } else { tzdir.unwrap_or(ZONEINFO).len().saturating_add(1) };
+    path.reserve_exact(dir.saturating_add(value.len()).saturating_add(1))?;
     if !value.starts_with(b"/") {
         path.extend_from_slice(tzdir.unwrap_or(ZONEINFO))?;
         path.push(b'/')?;

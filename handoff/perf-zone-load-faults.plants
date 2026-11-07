@@ -1,0 +1,5 @@
+# PERF-ZONE-LOAD-FAULTS: plants on the zone load's sizing and the TZif header bound (cargo xtask plants, docs/plants.md).
+names-grown | crates/core/src/time/zone.rs | lit:z.names.reserve_exact( ==> z.names.reserve_exact(0 * | cargo test -p liella --test zone_load_alloc | msg:more than one allocation each
+path-grown | crates/core/src/time.rs | lit:path.reserve_exact(dir.saturating_add( ==> path.reserve_exact(0 * dir.saturating_add( | cargo test -p liella --test zone_load_alloc | msg:took more than five allocations
+no-header-bound | crates/core/src/time/tzif.rs | lit:    if block_len(c, wide).is_none_or( ==>     if false && block_len(c, wide).is_none_or( | cargo test -p liella --test zone_load_alloc | msg:not rejected as malformed|a table sized from the header
+type-offset-endian | crates/core/src/time/tzif.rs | lit:map_or(0, |w| i64::from(i32::from_be_bytes(w))) ==> map_or(0, |w| i64::from(i32::from_le_bytes(w))) | cargo test -p liella --lib time::zone | msg:panicked|FAILED

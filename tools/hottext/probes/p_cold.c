@@ -1,5 +1,5 @@
 /* Hot-text probe (HOT-ORDER): the first calls of cbench_opt's cold sequence after setlocale -
- * strcoll, iconv, localtime_r/strftime/mktime, regcomp/regexec, fnmatch, wordexp, bindtextdomain +
+ * strcoll, iconv, localtime_r/mktime/strftime, regcomp/regexec, fnmatch, wordexp, bindtextdomain +
  * dgettext - so their first-call text sits in the hot group (after the startup, stdio, string,
  * setlocale and printf probes in regen.sh's order) instead of wherever object order leaves it. */
 #include <fnmatch.h>
@@ -72,8 +72,10 @@ int main(void)
     time_t when = 1759579200;
     struct tm r;
     if (localtime_r(&when, &r) != NULL) {
-        ok += strftime(buf, sizeof buf, "%c", &r) > 0;
+        /* PERF-ZONE-LOAD-FAULTS-2: mktime before strftime, so the first-mktime path sits in the
+         * hot group right behind the zone load (its text window), not behind strftime's. */
         ok += mktime(&r) != (time_t)-1;
+        ok += strftime(buf, sizeof buf, "%c", &r) > 0;
     }
     regex_t re;
     regmatch_t m[3];
