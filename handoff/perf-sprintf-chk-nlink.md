@@ -8,7 +8,7 @@ Next: sync, cargo xtask clippy + static, test pair_s_pieces, gate, plants (pair_
 Not done: kept-plan (stream) path does not use render_pair_s.
 
 ## Run 3 (budget hit early; the two brief files cost ~35k context)
-Added 17 ineligible look-alikes to pair_s_pieces_are_what_render_simple_writes (not list). Synced to keke:~/w/n3. NOT RUN: clippy, static, test, gate, plants (rerun, all 4 must be CAUGHT, esp. gate-kinds), counts. Plants script from run 2: ~/logs/perf-sprintf-chk-nlink-2-plants.log on keke (ssh 10.0.100.53, hostnames do not resolve from the agent shell).
+Added 17 ineligible look-alikes to pair_s_pieces_are_what_render_simple_writes (not list). Synced to keke:~/w/n3. NOT RUN: clippy, static, test, gate, plants (rerun, all 4 must be CAUGHT, esp. gate-kinds), counts. Plants script from run 2: ~/logs/perf-sprintf-chk-nlink-2-plants.log on keke (ssh keke, hostnames do not resolve from the agent shell).
 Next: clippy+static on n3, run core test, gate, plants in /dev/shm/claude/PERF-SPRINTF-CHK-NLINK-3/plants-1, percall chk_ls.
 
 ## Run 4 (keke, role n3)

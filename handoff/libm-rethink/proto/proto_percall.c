@@ -5,7 +5,11 @@
  * no spec clause (measurement probe). */
 #define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
 #include "percall.h"
-#include "/home/claude/work/libm-rethink/proto/proto_exp.c"
+#ifdef PROTO_EXP /* -DPROTO_EXP='"<dir>/proto_exp.c"' on the host */
+#include PROTO_EXP
+#else
+#include "proto_exp.c"
+#endif
 
 static volatile double ex[4096];
 

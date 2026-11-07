@@ -128,8 +128,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("liella-remap-test-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("libc.so.6"), b"clean /liella/x.rs").unwrap();
-        fs::write(dir.join("libm.so.6"), b"dirty /home/claude/w/r3/crates/x.rs").unwrap();
-        let n = vec!["/home/claude/w/r3".to_string()];
+        fs::write(dir.join("libm.so.6"), b"dirty /srv/build/w/r3/crates/x.rs").unwrap();
+        let n = vec!["/srv/build/w/r3".to_string()];
         let err = check_dir(&dir, &n).unwrap_err();
         let _ = fs::remove_dir_all(&dir);
         assert!(err.contains("libm.so.6 has") && !err.contains("libc.so.6 has"), "{err}");
