@@ -1,0 +1,7 @@
+# LIBM-F32-ONEPASS plants (cargo xtask plants; docs/plants.md). D-10.63: one-pass expf/exp2f.
+# The brief's "exception table entry dropped" maps to dropping the rounding test (no table: the
+# mode-independent test replaces it); the sinf and powf plants wait for those conversions.
+rn-conversion | crates/math/src/fast32/exp_log.rs | lit:Some(y as f32) ==> Some({ let v = y as f32; let w = if f64::from(v) > y { v.next_down() } else { v.next_up() }; if (f64::from(w) - y).abs() < (f64::from(v) - y).abs() { w } else { v } }) | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD expf|BAD exp2f|differs from the envelope)
+no-rounding-test | crates/math/src/fast32/exp_log.rs | lit:if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA { ==> if false { | LIELLA_SWEEP_STRIDE=4 cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture --test-threads=1 math_expf_onepass_sweep | msg:(BAD expf|expf differs from the envelope)
+nan-unquieted | crates/boundary/src/mathret.rs | lit:return x + x; ==> return x; | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD expf|BAD exp2f|differs from the envelope)
+range-to-overflow | crates/math/src/fast32.rs | lit:0x42ae_a8f6 ==> 0x42b4_0000 | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD expf|expf differs from the envelope)
