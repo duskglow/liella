@@ -1,0 +1,27 @@
+{
+ "task": "WL-PIPE-READS-ADVISORY",
+ "model": "opus",
+ "tokens": null,
+ "result": "pipe read/write calls of multi-process workloads leave the gating syscall total (advisory piperw field); D-X.46",
+ "branch": "task/wl-pipe-reads-advisory",
+ "head": null,
+ "gate": {
+  "affected": "0 passed / 0 failed (0 targets selected; clippy ok, static ok; local shell self-tests 38+24 passed)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "cargo xtask affected selects no test for validation/*.sh changes; the wl_* shell self-tests are not part of any gate tier",
+  "a pipe call is recognised by its first fd only (splice/sendfile into a pipe stays deciding)",
+  "one sed -i used on validation/wl_run_test.sh against the Edit-only rule"
+ ],
+ "refused": [],
+ "jobs": [
+  "mei:wlpipe-gate-1",
+  "mei:WL-PIPE-READS-ADVISORY-plants"
+ ],
+ "improvement": "affected should map validation/*.sh to their *_test.sh self-tests so script stories get a real gate",
+ "next_step": "collect mei:WL-PIPE-READS-ADVISORY-plants (14 plants, 2 CAUGHT so far); then wl_count pipe-mix/tar-gz twice to confirm a stable gating number",
+ "report_file": "handoff/wl-pipe-reads-advisory.md"
+}
