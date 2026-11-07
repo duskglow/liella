@@ -1,0 +1,18 @@
+{"task": "LIBM-RETHINK-2", "model": "opus", "tokens": null,
+ "result": "Plan complete: exp quick-phase prototype timed (Ivy Bridge 40.8 -> 19.2 ns per call, glibc 13.8; N100 27.0 -> 16.0, glibc 8.0), current code compared per call, 3 D-NEW rows, 4 code briefs",
+ "branch": "task/libm-rethink-2", "head": "21d76e3f",
+ "gate": {"affected": "planning story (no gate): clippy + static on the inherited head rc 0 (libm-rethink-2-lint-inherited) and on the final head (libm-rethink-2-lint-final)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Three D-NEW rows appended to plan/07-decisions/s10-mathematics.md need three s10 ids (assign_placeholder.sh replaces one placeholder with one id)", "recommendation": "reserve three s10 ids and assign them by row title: two-phase double functions (s10.2), integer fixed-point quick tier for x87 and _Float128 (s10.3), complex from the real quick phases (s10.5)"}],
+ "informational": [
+  "Ivy Bridge runs the SSE2 builds: under glibc.cpu.hwcaps=-FMA (both libraries) exp 189.0/80.0, log 225.6/81.0, pow 494.4/193.0, sin 232.0/126.9, atan 216.1/111.1 instructions per call; the Zen 1 counts (FMA builds) undercount Ivy Bridge's work by up to 40%",
+  "Liella's log overlaps consecutive calls far less than glibc's (throughput/latency 0.84 Ivy Bridge, 0.73 N100; glibc 0.44, 0.34): a serialising step on its path, to find before a log redesign",
+  "N100 throughput of the CR exp quick phase is 2.0x glibc (FP-operation bound); the kernel brief targets the FP-operation count; a ulp-bound question only if the wired tier stays above 2x",
+  "The N100 timing job started at 03:50:24 while booking 105 was still settling (active 03:54:23); host idle (load 0.00), numbers kept; both bookings cancelled",
+  "Smoke timings on the shiki build host (shared) are advisory only; the verdicts come from the booked hosts"],
+ "refused": [],
+ "improvement": "A validation tool that builds a C timing spec (throughput and latency modes, interleaved rounds) on the build host and runs it under ~/bin/timing would give libm stories a timing verdict in under a minute per host; wl_percall should count libm rows in both dispatch builds, since Ivy Bridge runs the SSE2 builds the Zen 1 counts never see",
+ "next_step": "Coordinator: reserve three s10 ids for the D-NEW rows, then cut LIBM-F64-EXP-QUICK (handoff/libm-rethink/LIBM-F64-EXP-QUICK.md) and its -WIRE brief; LIBM-CPLX-EXP-TIER and LIBM-LD-TRIG-INT can run in parallel",
+ "report_file": "handoff/libm-rethink.md",
+ "jobs": ["shiki:libm-rethink-2-lint-final", "shiki:libm-rethink-2-percall-sse2", "shiki:libm-rethink-2-time-build2", "kotori:libm-rethink-2-time-ivb", "nozomi:libm-rethink-2-time-n100"],
+ "superseded": ["shiki:libm-rethink-2-lint-inherited (step 0 on the inherited head 71a958d7, rc 0)", "shiki:libm-rethink-2-time-build (rc 0; binaries rebuilt with the latency variants by time-build2)"]}
