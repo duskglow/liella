@@ -8,17 +8,11 @@
 //! viewed through a callback: the header is read first, through a short view that is dropped,
 //! and then the whole object, so the two views never overlap in time.
 
-use core::sync::atomic::Ordering::Relaxed;
-
 use liella::error::Errno;
-use liella::mem::TryVec;
 use liella::net::{addr, copy_z, ether, iface, ip6opt};
 use liella_kernel::errno::KResult;
-use liella_kernel::fd::Fd;
-use liella_kernel::sys::Sys;
-use liella_kernel::uapi::{AF_INET, AF_INET6, Stat};
+use liella_kernel::uapi::{AF_INET, AF_INET6};
 use liella_legacy::inet_compat as ic;
-use liella::names::Ip;
 use liella_legacy::nss::{self, Ctx};
 use liella_legacy::result_slots::Buf;
 use liella_legacy::net_compat;
@@ -26,7 +20,6 @@ use liella_rt::thread::{SLOT_ETHER_ATON, SLOT_ETHER_NTOA, SLOT_INET_NTOA};
 
 use crate::caller_alloc;
 use crate::conv;
-use crate::stdio;
 use crate::sys::CSys;
 use crate::thread;
 
