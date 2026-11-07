@@ -100,11 +100,21 @@ static int (*volatile iswctype_fn)(wint_t, wctype_t) = iswctype;
 static char *(*volatile nl_langinfo_l_fn)(nl_item, locale_t) = nl_langinfo_l;
 static const struct tm tm_fixed = { .tm_mday = 5, .tm_mon = 3, .tm_wday = 2, .tm_year = 120 };
 
-/* Case-insensitive pairs (PJ-23): equal apart from case, so every byte is folded. */
-static char case_a[257], case_b[257];
+/* Case-insensitive pairs (PJ-23): equal apart from case, so every byte is folded.
+ * BENCH-CASECMP-ALIGN: the operands sit at fixed page offsets in a page-aligned block, so a change in
+ * the data size around them cannot move one across a 4 KiB page boundary (an unaligned 257-byte array
+ * drifted to page offset 0xf00/0xf60 and changed the strcasecmp_*_256 rows with no code change).
+ * case_a is at offset 0 of page 0, case_b at offset 0x800 of page 0: neither crosses a page.
+ * case_x holds case_b's bytes at offset 0xf00 of page 1, so its terminator lies on page 2: the
+ * strcasecmp_c_256_xpage row measures a page-crossing operand on purpose. */
+static _Alignas(4096) char case_pages[3][4096];
+#define case_a (case_pages[0])
+#define case_b (case_pages[0] + 0x800)
+#define case_x (case_pages[1] + 0xf00)
 
-static char text[4096];
-static char out[16384];
+/* Page-aligned for the same reason: the iconv rows always touch exactly 1 and 4 whole pages. */
+static _Alignas(4096) char text[4096];
+static _Alignas(4096) char out[16384];
 
 /* One whole conversion of `text` (4 KiB) through `cd`. */
 static long convert(iconv_t cd)
@@ -132,12 +142,14 @@ int main(void)
         case_a[i] = (char)("abcdefghijklmnopqrstuvwxyz0123456789 .-_"[i % 40]);
         case_b[i] = (i & 1) && case_a[i] >= 'a' && case_a[i] <= 'z' ? (char)(case_a[i] - 32) : case_a[i];
     }
+    memcpy(case_x, case_b, 257);
 
     setlocale(LC_ALL, "C");
     MEASURE("isalpha_c", 10000000L, isalpha_fn((int)(i & 127)));
     MEASURE("toupper_c", 10000000L, toupper_fn((int)(i & 127)));
     MEASURE("strcasecmp_c_16", 10000000L, strcasecmp_fn("Hello World 1234", "hELLO wORLD 1234"));
     MEASURE("strcasecmp_c_256", 1000000L, strcasecmp_fn(case_a, case_b));
+    MEASURE("strcasecmp_c_256_xpage", 1000000L, strcasecmp_fn(case_a, case_x));
     MEASURE("strncasecmp_c_64", 10000000L, strncasecmp_fn(case_a, case_b, 64));
     MEASURE("strtod_c", 1000000L, strtod_fn("3.14159", NULL) > 3.0);
 
