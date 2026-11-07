@@ -65,7 +65,7 @@ id | path | pattern | cmd
   - On a `.S` file, the pattern must name its function's label, for example
     `perl:s/(liella_machine_strchr:.*?)<pattern>/$1<replacement>/s`. An unanchored pattern mutates the first match in the
     file, which is often another function.
-- `cmd`: the direct tests of the planted file, for example `cargo test -p liella-core --test stdio_short_io`. For code
+- `cmd`: the direct tests of the planted file, for example `cargo test -p liella --test stdio_short_io` (crates/core is package `liella`). For code
   reached only from C programs: `cargo xtask affected --only conformance:<prog> --with-exports --run`; a failed program's
   status and the last 40 lines of its stdout and stderr are on the console (D-X.27), so `msg:` can name the program's own
   failure message. A `cmd` may contain ` | `, but a job's output should not be piped.
@@ -104,7 +104,7 @@ List every WARN line in your hand-back. Exit codes: 0 all caught or equivalent; 
 
 ```
 # STDIO-SHORT-IO plants
-retry | crates/core/src/stdio/stream.rs | lit:while done < len { ==> if done < len { | cargo test -p liella-core --test stdio_short_io | msg:short_write.*(FAILED|panicked)
+retry | crates/core/src/stdio/stream.rs | lit:while done < len { ==> if done < len { | cargo test -p liella --test stdio_short_io | msg:short_write.*(FAILED|panicked)
 memchr-tail | csys/src/machine/memchr.S | perl:s/(liella_machine_memchr:.*?)jb\s+\.Ltail/$1jmp .Ltail/s | cargo test -p liella-boundary --test small_copy | msg:memchr
 ```
 
