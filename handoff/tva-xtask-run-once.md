@@ -54,5 +54,5 @@ Report: `handoff/reports/TVA-XTASK-RUN-ONCE.json`; results below.
   (`a_binary_holding_boundary_code_is_never_run_once`), so pass 2 is at least -241; whether the other 51 were
   already freed by the byte rule is NOT VERIFIED (no before-listing was taken). Time saved per train: NOT VERIFIED.
 - Gate (`tva-xtask-run-once-gate`, direct tier `--base origin/next`, with `xtask clippy` and `xtask static` first):
-  started after the listing job; result in the hand-back.
+  started after the listing job; `affected` escalated it to FULL (xtask change), clippy ok, `xtask test` still running at hand-back.
 - Leftover: none running of mine apart from the gate job named above.

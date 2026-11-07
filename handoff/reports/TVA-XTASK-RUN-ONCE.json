@@ -4,15 +4,16 @@
  "tokens": null,
  "result": "xtask and 5 other dependency-free packages' binaries run once in the exports pass (cargo metadata resolve graph, byte rule kept, fail-safe); pass 2 lists 0 of the 292 tests of graph-freed binaries (>= -241: xtask), plants 4/4 CAUGHT",
  "branch": "task/tva-xtask-run-once",
- "head": null,
+ "head": "61815c568 (code); report commits after",
  "gate": {
-  "affected": "pending: job tva-xtask-run-once-gate (keke n4)",
+  "affected": "pending: keke:tva-xtask-run-once-gate (affected --run --base origin/next escalated itself to FULL for an xtask change; clippy ok)",
   "peak": null
  },
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
-  "Whether the 51 non-xtask graph-freed tests were already run-once by the byte rule is not verified (no before-listing); time saved per train not measured."
+  "Whether the 51 non-xtask graph-freed tests were already run-once by the byte rule is not verified (no before-listing); time saved per train not measured.",
+  "The direct-tier gate escalated to FULL on its own (affected treats an xtask/src/nextest.rs change as FULL); left running, it also exercises the new pass-2 rule for real."
  ],
  "refused": [],
  "improvement": "A `cargo xtask test --list-passes` (list, don't run) would replace the scratch fake-cargo wrapper used to show pass-2 listings.",
