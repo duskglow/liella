@@ -1,16 +1,20 @@
 /* Spec §2.7 (D-2.7, D-27.12): backtrace, backtrace_symbols and backtrace_symbols_fd in a static
  * PIE started from liella-rcrt1.o, which the kernel loads at a non-zero load bias. The same source
- * built as a fixed-address static program (no -fPIE: bias 0) must pass the same checks; the
- * clause tests in crates/core/tests/s02_diagnostics_clauses.rs build it both ways, and
- * conformance/run.sh builds it as the static PIE its directive names. Self-checking: each clause
- * ends with `end <clause>` on standard error, each failed check prints `FAIL <clause>: line N:
- * <check>`.
+ * built as a fixed-address static program (bias 0) must pass the same checks; the clause tests in
+ * crates/core/tests/s02_diagnostics_clauses.rs build it both ways, and conformance/run.sh builds
+ * it as the static PIE its directive names. The builder names the link kind in the first
+ * argument, `pie` or `fixed` (the preprocessor cannot tell: a compiler that builds -fPIE by
+ * default defines __PIE__ in a fixed-address link too); the program checks that the file is of
+ * that kind (ET_DYN or ET_EXEC) and that the load bias is non-zero or zero. Self-checking: each
+ * clause ends with `end <clause>` on standard error, each failed check prints `FAIL <clause>:
+ * line N: <check>`.
  *
  * The bias is found independently of the library: AT_ENTRY minus the e_entry of the file
  * /proc/self/exe. The image's runtime extent is its PT_LOAD segments (read from the same file)
  * moved by that bias. The program's own functions sit in sections the linker lays out in name
  * order (`.text.sorted.*`), so a return address is named by the function containing it. */
 /* LINK-STATIC-PIE: relr */
+/* RUN-ARGS: pie */
 #define _GNU_SOURCE
 #include <elf.h>
 #include <execinfo.h>
@@ -54,8 +58,8 @@ static const char *name_of(uintptr_t x)
     return "~";
 }
 
-/* The image's link-time extent [lo, hi) and entry point, from the file. 0 on success. */
-static int image(uintptr_t *lo, uintptr_t *hi, uintptr_t *entry)
+/* The image's link-time extent [lo, hi), entry point and ELF type, from the file. 0 on success. */
+static int image(uintptr_t *lo, uintptr_t *hi, uintptr_t *entry, unsigned *type)
 {
     int fd = open("/proc/self/exe", O_RDONLY);
     if (fd < 0)
@@ -66,6 +70,7 @@ static int image(uintptr_t *lo, uintptr_t *hi, uintptr_t *entry)
         *lo = UINTPTR_MAX;
         *hi = 0;
         *entry = eh.e_entry;
+        *type = eh.e_type;
         for (unsigned i = 0; i < eh.e_phnum; i++) {
             Elf64_Phdr ph;
             if (pread(fd, &ph, sizeof ph, (off_t)(eh.e_phoff + i * sizeof ph)) != (ssize_t)sizeof ph)
@@ -92,9 +97,14 @@ static uintptr_t offset_in(const char *text)
 
 int main(int argc, char **argv)
 {
-    (void)argc;
+    int pie = argc > 1 && strcmp(argv[1], "pie") == 0;
+    if (argc != 2 || (!pie && strcmp(argv[1], "fixed") != 0)) {
+        fprintf(stderr, "the link kind (pie or fixed) is not the only argument: the checks cannot run\n");
+        return 1;
+    }
     uintptr_t lo, hi, link_entry;
-    if (image(&lo, &hi, &link_entry) != 0) {
+    unsigned type;
+    if (image(&lo, &hi, &link_entry, &type) != 0) {
         fprintf(stderr, "/proc/self/exe cannot be read: the checks cannot run\n");
         return 1;
     }
@@ -110,11 +120,13 @@ int main(int argc, char **argv)
     fprintf(stderr, "bias %#lx, image [%#lx, %#lx)\n", (unsigned long)bias, (unsigned long)start, (unsigned long)stop);
 
     begin("s2_7_c_1");
-#ifdef __PIE__
-    CHECK(bias != 0); /* the kernel loads a static PIE at a non-zero bias */
-#else
-    CHECK(bias == 0);
-#endif
+    if (pie) {
+        CHECK(type == ET_DYN);
+        CHECK(bias != 0); /* the kernel loads a static PIE at a non-zero bias */
+    } else {
+        CHECK(type == ET_EXEC);
+        CHECK(bias == 0);
+    }
     CHECK((uintptr_t)driver >= start && (uintptr_t)driver < stop);
     driver();
     int full = count;

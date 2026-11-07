@@ -88,8 +88,8 @@ enum Link {
 }
 
 /// `conformance/c/<name>.c` built against the products as `link` says (as `conformance/run.sh`
-/// builds it) and run, once per test binary.
-fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link) -> &'static CRun {
+/// builds it) and run with `args`, once per test binary.
+fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link, args: &[&str]) -> &'static CRun {
     cell.get_or_init(|| {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let start = if link == Link::StaticPie { "target/liella/liella-rcrt1.o" } else { "target/liella/liella-crt1.o" };
@@ -113,7 +113,7 @@ fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link) -> &'stat
             .output()
             .unwrap();
         assert!(b.status.success(), "{name}.c does not build: {}", String::from_utf8_lossy(&b.stderr));
-        let r = std::process::Command::new(&exe).current_dir(&dir).stdin(std::process::Stdio::null()).output().unwrap();
+        let r = std::process::Command::new(&exe).args(args).current_dir(&dir).stdin(std::process::Stdio::null()).output().unwrap();
         let _ = std::fs::remove_file(&exe);
         CRun { status: r.status.code(), stderr: String::from_utf8_lossy(&r.stderr).into_owned() }
     })
@@ -121,12 +121,20 @@ fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link) -> &'stat
 
 /// The checks of `clause` in the C program `name` ran to their end and passed.
 fn c_clause(cell: &'static OnceLock<CRun>, name: &str, clause: &str) {
-    c_clause_linked(cell, name, clause, Link::Static);
+    clause_passed(c_run_linked(cell, name, Link::Static, &[]), name, clause);
 }
 
 /// The checks of `clause` in the C program `name`, linked as `link`, ran to their end and passed.
+/// The program is told the link kind (`pie` or `fixed`, its first argument), so it checks the
+/// load bias that kind must have (a compiler that builds `-fPIE` by default defines `__PIE__`
+/// in the fixed-address build too, so the program cannot tell from the preprocessor).
 fn c_clause_linked(cell: &'static OnceLock<CRun>, name: &str, clause: &str, link: Link) {
-    let r = c_run_linked(cell, name, link);
+    let kind = if link == Link::StaticPie { "pie" } else { "fixed" };
+    clause_passed(c_run_linked(cell, name, link, &[kind]), name, clause);
+}
+
+/// The run `r` of the C program `name` reached the end of `clause` with no failed check.
+fn clause_passed(r: &CRun, name: &str, clause: &str) {
     let failed = r.stderr.lines().any(|l| l.starts_with(&format!("FAIL {clause}:")));
     let ended = r.stderr.lines().any(|l| l == format!("end {clause}"));
     assert!(ended && !failed, "{name}.c, {clause} (exit status {:?}):\n{}", r.status, r.stderr);
