@@ -735,6 +735,19 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     crate::hot::exp_quick_parts(x)
 }
 
+/// The `double` sin (`which` 0), cos (1) or tan (2) quick phase alone (D-10.51, D-10.61; their
+/// tier 1) in the build [`set_math_fma`] chose: the correctly rounded result, or `None` when its
+/// rounding test does not decide.
+pub fn trig_quick(which: u8, x: f64) -> Option<f64> {
+    crate::hot::trig_quick(which, x)
+}
+
+/// The `double` `sincos` quick phase alone in the build [`set_math_fma`] chose: both correctly
+/// rounded results, or `None`.
+pub fn sincos_quick(x: f64) -> Option<(f64, f64)> {
+    crate::hot::sincos_quick(x)
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it
