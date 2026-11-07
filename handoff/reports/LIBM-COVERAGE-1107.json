@@ -1,0 +1,30 @@
+{
+ "task": "LIBM-COVERAGE-1107",
+ "model": "opus",
+ "tokens": null,
+ "result": "163 slower libm rows mapped (9 covered by open stories, 9 re-time, 145 NONE in 16 ranked groups); 6 group briefs + exp regression brief written",
+ "branch": "task/libm-coverage-1107",
+ "head": null,
+ "gate": {
+  "affected": "n/a (planning, no code)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "ops not on PATH locally: open stories taken from ~/state/briefs and handoff/libm-rethink",
+  "bench/ has no libm-heavy workload; commonness judged from general program use",
+  "percall MISMATCH lines are last-place CR-vs-glibc differences (recorded accuracy difference)",
+  "trace job rc 1 only because the sqrt case is inlined by gcc (no library call); 19 of 20 traces done",
+  "f64 hot kernels are inlined into the exported symbol: wl_trace cannot split them by function"
+ ],
+ "refused": [],
+ "jobs": [
+  "keke:libm-coverage-1107-percall",
+  "keke:libm-coverage-1107-percall-sse2",
+  "keke:libm-coverage-1107-trace"
+ ],
+ "improvement": "add a libm-heavy real workload to bench/ so libm ranking uses measured call frequency instead of judgment",
+ "next_step": "dispatch LIBM-F64-EXP-IVB-REGRESS beside LIBM-F64-EXP-QUICK-WIRE, then LIBM-F64-LOG-QUICK",
+ "report_file": "handoff/libm-coverage-1107.md"
+}
