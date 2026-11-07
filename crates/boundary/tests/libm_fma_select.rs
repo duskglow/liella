@@ -203,9 +203,11 @@ int main(void) {
 }
 "#;
 
-/// A quick-phase miss costs tier 2, not the accurate path: per call, the miss set may cost at
-/// most `TIER2_MARGIN` instructions more than the hit set. Tier 2's SSE2 build is about 160
-/// instructions (one call traced on the Zen 1 host); the accurate path is several times that.
+/// A quick-phase miss through the product stays in the double-double kernels: per call, the miss
+/// set may cost at most `TIER2_MARGIN` instructions more than the hit set (tier 2's SSE2 build is
+/// about 160 instructions, one call traced on the Zen 1 host). The accurate path also starts with
+/// that kernel, so this bound cannot tell tier 2 from the cold envelope plus the accurate path;
+/// `exp_quick.rs::exp_quick_misses_are_answered_by_tier_two` checks which tier answers.
 const TIER2_MARGIN: u64 = 400;
 
 #[test]
