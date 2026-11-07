@@ -1386,7 +1386,7 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
-/// GATE-VALIDATION-SH-TESTS (D-NEW): the self-tests of the workload scripts under `validation/`. Each runs as
+/// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
 /// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
 /// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
 /// host: 0.05 s, 0.2 s and 15 s).
