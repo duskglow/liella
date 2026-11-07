@@ -99,6 +99,9 @@ fn both(name: &str, f32f: Unary<f32>, f64f: Unary<f64>, xs: &[f64]) {
 #[test]
 fn erf_and_erfc_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.15).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".erf_and_erfc_are_correctly_rounded")).begin() else {
+        return;
+    };
     let xs = operands(1, 400, &[(-1.0, 1.0), (-6.0, 6.0), (-30.0, 30.0), (-1e-5, 1e-5), (9.5, 10.5)]);
     let mut xs = xs;
     xs.extend([1e-310, -3e-320, 5.9, 11.9, 12.1, 26.5, 27.2, 27.3, 27.9, -11.5]);
@@ -107,20 +110,28 @@ fn erf_and_erfc_are_correctly_rounded() {
     let tiny: Vec<f64> = [-199, -197, -190, -181, -179].iter().map(|&k| p2(k) * 1.25).collect();
     check::<f64>("j1", special::j1::<f64>, Fmt::F64, &tiny);
     both("erfc", special::erfc::<f32>, special::erfc::<f64>, &xs);
+    verdict.pass();
 }
 
 #[test]
 fn lgamma_and_tgamma_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.15).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".lgamma_and_tgamma_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut xs = operands(2, 300, &[(0.0, 3.0), (-5.0, 5.0), (-180.0, 180.0), (1e-8, 1e-3), (0.99, 1.01), (1.99, 2.01), (-3.0, -2.0)]);
     xs.extend([1.0e300, 3.0e305, 2.6e305, 0.5, -0.5, 1e-300, -1e-310, 5.0, 23.0, 24.0, 30.0, 171.6, 171.7, -171.5, -180.5, -2.457_024_738_220_8, 1.461_632_144_968_362_3]);
     both("lgamma", lgamma_value::<f32>, lgamma_value::<f64>, &xs);
     both("tgamma", special::tgamma::<f32>, special::tgamma::<f64>, &xs);
+    verdict.pass();
 }
 
 #[test]
 fn bessel_functions_of_orders_0_and_1_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.15).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".bessel_functions_of_orders_0_and_1_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut xs = operands(3, 240, &[(0.0, 5.0), (0.0, 100.0), (99.0, 101.0), (100.0, 1e4), (-50.0, 50.0), (1e-10, 1e-3)]);
     xs.extend([1e-300, 2.404_825_557_695_773, 3.831_705_970_207_512, 0.893_576_966_279_167_5, 1e10, 1e22, 1.7e308, 5e-310]);
     both("j0", special::j0::<f32>, special::j0::<f64>, &xs);
@@ -128,12 +139,16 @@ fn bessel_functions_of_orders_0_and_1_are_correctly_rounded() {
     let pos: Vec<f64> = xs.iter().map(|x| x.abs()).collect();
     both("y0", special::y0::<f32>, special::y0::<f64>, &pos);
     both("y1", special::y1::<f32>, special::y1::<f64>, &pos);
+    verdict.pass();
 }
 
 /// `jn` and `yn` against the oracle at orders up to 200 (both formats, every mode).
 #[test]
 fn bessel_functions_of_integer_order_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.15).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".bessel_functions_of_integer_order_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut r = Rng(4);
     let mut bad = Vec::new();
     for i in 0..200 {
@@ -161,6 +176,7 @@ fn bessel_functions_of_integer_order_are_correctly_rounded() {
         }
     }
     assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
+    verdict.pass();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -264,11 +280,15 @@ fn zeros_on_grid(f: Unary<F80>, lo: f64, hi: f64, steps: usize) -> Vec<u128> {
 #[test]
 fn long_double_erf_and_erfc_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_erf_and_erfc_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut xs = ld_operands(11, 150, &[(-1.0, 1.0), (-6.0, 6.0), (-30.0, 30.0), (-1e-5, 1e-5), (9.5, 10.5), (25.0, 110.0)]);
     xs.extend([LD_TINY, LD_TINY | LD_SIGN, LD_MIN_NORMAL, ld_bits(p2(-100)), ld_bits(-(1.0 + f64::EPSILON) * p2(-101)), ld_bits(11.9), ld_bits(12.1), ld_bits(-11.99)]);
     xs.extend([ld_bits(106.5), ld_bits(106.75), ld_bits(106.76), ld_bits(106.8), ld_bits(107.0), ld_bits(-107.0), LD_MAX]);
     check_ld("erf", special::erf::<F80>, &xs);
     check_ld("erfc", special::erfc::<F80>, &xs);
+    verdict.pass();
 }
 
 fn lgamma_ld(x: F80, m: Rounding) -> (F80, Status) {
@@ -278,6 +298,9 @@ fn lgamma_ld(x: F80, m: Rounding) -> (F80, Status) {
 #[test]
 fn long_double_lgamma_and_tgamma_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_lgamma_and_tgamma_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut xs = ld_operands(12, 150, &[(0.0, 3.0), (-5.0, 5.0), (-180.0, 180.0), (1e-8, 1e-3), (0.99, 1.01), (1.99, 2.01), (-3.0, -2.0), (1700.0, 1760.0), (-1760.0, -1700.0)]);
     xs.extend([ld_bits(0.5), ld_bits(-0.5), ld_bits(1e-300), ld_bits(-1e-300), LD_TINY, LD_TINY | LD_SIGN, LD_MIN_NORMAL, LD_MAX, ld_bits(1e300)]);
     xs.extend([ld_bits(p2(-190)), ld_bits(p2(-201)), ld_bits(-p2(-260)), ld_bits(1755.5), ld_bits(-1754.5), ld_bits(-1766.5), ld_bits(-(2.0 - f64::EPSILON) * p2(61)) | 0x3ff]);
@@ -302,6 +325,7 @@ fn long_double_lgamma_and_tgamma_are_correctly_rounded() {
     xs.retain(|&b| b != LD_MIN_NORMAL);
     xs.extend((1..=100u32).chain((1700..=1760).step_by(3)).map(|n| liella_math::float::convert::<f64, F80>(f64::from(n), Rounding::Nearest).0.to_bits()));
     check_ld("tgamma", special::tgamma::<F80>, &xs);
+    verdict.pass();
 }
 
 /// GATE-SPEED: one test per function (the operands are the same for each), so the four run side by
@@ -321,7 +345,11 @@ macro_rules! bessel_shards {
         #[test]
         fn $name() {
             // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+            let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".", stringify!($name))).begin() else {
+                return;
+            };
             long_double_bessel_function($which, $k, BESSEL_SHARDS);
+            verdict.pass();
         }
     )*
         /// The (function, shard) pairs listed below, checked at compile time by `bessel_list_is_exact`.
@@ -391,6 +419,9 @@ const _: () = assert!(bessel_list_is_exact(BESSEL_LISTED), "the bessel_shards! l
 #[test]
 fn the_bessel_shards_take_every_operand_exactly_once() {
     // no spec clause: the sharding of the sweep (CI-GATE-DIET) covers the unsharded operand list.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".the_bessel_shards_take_every_operand_exactly_once")).begin() else {
+        return;
+    };
     for len in [0usize, 1, 16, 17, 18, 1_000, 1_337] {
         let mut seen = vec![0u8; len];
         for k in 0..BESSEL_SHARDS {
@@ -400,6 +431,7 @@ fn the_bessel_shards_take_every_operand_exactly_once() {
         }
         assert!(seen.iter().all(|&n| n == 1), "{len} operands");
     }
+    verdict.pass();
 }
 
 fn long_double_bessel_function(which: usize, shard: usize, shards: usize) {
@@ -431,115 +463,190 @@ fn long_double_bessel_function(which: usize, shard: usize, shards: usize) {
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s0() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s0")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 0, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s1() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s1")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 1, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s2() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s2")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 2, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s3() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s3")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 3, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s4() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s4")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 4, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s5() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s5")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 5, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s6() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s6")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 6, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j0_s7() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j0_s7")).begin() else {
+        return;
+    };
     long_double_bessel_function(0, 7, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s0() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s0")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 0, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s1() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s1")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 1, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s2() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s2")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 2, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s3() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s3")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 3, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s4() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s4")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 4, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s5() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s5")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 5, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s6() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s6")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 6, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_j1_s7() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_j1_s7")).begin() else {
+        return;
+    };
     long_double_bessel_function(1, 7, BESSEL_SHARDS);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_y0() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_y0")).begin() else {
+        return;
+    };
     long_double_bessel_function(2, 0, 1);
+    verdict.pass();
 }
 
 #[test]
 fn long_double_bessel_functions_are_correctly_rounded_y1() {
     // no spec clause: a shard of the long-double Bessel correct-rounding sweep.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_are_correctly_rounded_y1")).begin() else {
+        return;
+    };
     long_double_bessel_function(3, 0, 1);
+    verdict.pass();
 }
 
 /// `jnl` and `ynl` against the oracle at orders up to 200 (every mode).
 #[test]
 fn long_double_bessel_functions_of_integer_order_are_correctly_rounded() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".long_double_bessel_functions_of_integer_order_are_correctly_rounded")).begin() else {
+        return;
+    };
     let mut r = Rng(14);
     let mut bad = Vec::new();
     for i in 0..80 {
@@ -572,6 +679,7 @@ fn long_double_bessel_functions_of_integer_order_are_correctly_rounded() {
         }
     }
     assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n"));
+    verdict.pass();
 }
 
 /// 2^k (exact).
@@ -584,6 +692,9 @@ fn p2(k: i32) -> f64 {
 #[test]
 fn bessel_jn_beside_its_dyadic_leading_term() {
     // Clauses: s10_3_c_0, s10_0_g_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".bessel_jn_beside_its_dyadic_leading_term")).begin() else {
+        return;
+    };
     let mut bad = Vec::new();
     for (n, odd, e) in [(2i32, 1.0f64, -200), (2, 1.0, -300), (-2, 3.0, -190), (3, 3.0, -201), (-3, 3.0, -201), (3, 1.0, -200), (4, 3.0, -250), (5, 15.0, -220), (6, 45.0, -199), (2, 1.0, -1000)] {
         for neg in [false, true] {
@@ -604,6 +715,7 @@ fn bessel_jn_beside_its_dyadic_leading_term() {
         }
     }
     assert!(bad.is_empty(), "{} problems:\n{}", bad.len(), bad.join("\n"));
+    verdict.pass();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -614,6 +726,9 @@ fn bessel_jn_beside_its_dyadic_leading_term() {
 // ---------------------------------------------------------------------------------------------
 
 use liella_math::F128;
+
+#[path = "../../core/tests/support/verdict.rs"]
+mod verdict;
 
 type BesselQ = fn(F128, Rounding) -> (F128, Status);
 
@@ -685,31 +800,51 @@ fn float128_bessel_next_to_zeros(which: usize) {
 #[test]
 fn float128_bessel_functions_are_correctly_rounded_next_to_zeros_j0() {
     // Clauses: s10_3_c_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".float128_bessel_functions_are_correctly_rounded_next_to_zeros_j0")).begin() else {
+        return;
+    };
     float128_bessel_next_to_zeros(0);
+    verdict.pass();
 }
 
 #[test]
 fn float128_bessel_functions_are_correctly_rounded_next_to_zeros_j1() {
     // Clauses: s10_3_c_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".float128_bessel_functions_are_correctly_rounded_next_to_zeros_j1")).begin() else {
+        return;
+    };
     float128_bessel_next_to_zeros(1);
+    verdict.pass();
 }
 
 #[test]
 fn float128_bessel_functions_are_correctly_rounded_next_to_zeros_y0() {
     // Clauses: s10_3_c_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".float128_bessel_functions_are_correctly_rounded_next_to_zeros_y0")).begin() else {
+        return;
+    };
     float128_bessel_next_to_zeros(2);
+    verdict.pass();
 }
 
 #[test]
 fn float128_bessel_functions_are_correctly_rounded_next_to_zeros_y1() {
     // Clauses: s10_3_c_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".float128_bessel_functions_are_correctly_rounded_next_to_zeros_y1")).begin() else {
+        return;
+    };
     float128_bessel_next_to_zeros(3);
+    verdict.pass();
 }
 
 #[test]
 fn float128_bessel_functions_of_integer_order_are_correctly_rounded_next_to_zeros() {
     // Clauses: s10_3_c_0 (D-10.20).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".float128_bessel_functions_of_integer_order_are_correctly_rounded_next_to_zeros")).begin() else {
+        return;
+    };
     for which in 4..8 {
         float128_bessel_next_to_zeros(which);
     }
+    verdict.pass();
 }
