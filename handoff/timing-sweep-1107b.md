@@ -15,7 +15,7 @@ results/timing-sweep-1107b-table.md (summary, per-row tables, per-family medians
   (`sweep run --only cbench_hot`, out `~/work/TIMING-SWEEP-1107B/out-hot`). They hold the strncmp rows.
   Re-attach: `ssh <host> '~/bin/jobwait tsw1107b-ivb-hot'` (and `tsw1107b-n100-hot`). If either still runs at 19:50
   UTC: `~/bin/kill-label <label> --kill`. Then `ops timing-cancel 134` and `ops timing-cancel 135`.
-- Scratch (tables, script): /home/claude/w/.scratch/TIMING-SWEEP-1107B (`analyze.py <dir>` makes the per-row tables
+- Scratch (tables, script): ~/w/.scratch/TIMING-SWEEP-1107B (`analyze.py <dir>` makes the per-row tables
   from rounds.tsv; put `out-hot` into `new/<ivb|n100>/hot` and rerun it to add the strncmp rows).
 
 ## Findings (details in the results file)
