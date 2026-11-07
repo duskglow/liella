@@ -116,10 +116,13 @@ Each line: `file:line`, signature, the doc comment's tagged lines (`bound:`, `do
 - `fast64/quick.rs:100` `fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64` — bound: undocumented — doc: The low part of `th·rh` the SSE2 build drops (bound term 1).
 - `fast64/quick.rs:112` `pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)>` — bound: undocumented — doc: `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 - `fast64/quick.rs:144` `pub fn exp_quick(x: f64) -> Option<f64>` — bound: undocumented — doc: The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else `None` (the caller runs [`super::exp_nearest`]).
-- `fast64/quick.rs:153` `quick!(; #[inline(always)]; ma; no_lo; C_SSE2);`
-- `fast64/quick.rs:167` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
-- `fast64/quick.rs:174` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
-- `fast64/quick.rs:178` `quick!` entries: 
+- `fast64/quick.rs:157` `pub fn exp_tiered(x: f64) -> Option<f64>` — bound: undocumented — doc: `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2 (`fast64::exp_nearest` in the same build, out of line).
+- `fast64/quick.rs:173` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so the quick phase keeps its registers: about 0.5% of calls reach it.
+- `fast64/quick.rs:177` `quick!(; #[inline(always)]; ma; no_lo; C_SSE2);`
+- `fast64/quick.rs:191` `fn ma(a: f64, b: f64, c: f64) -> f64` — bound: undocumented — doc: `a·b + c` in one rounding.
+- `fast64/quick.rs:198` `fn lo(th: f64, rh: f64, u: f64) -> f64` — bound: undocumented — doc: `th·rh − u` exactly for `u = RN(th·rh)` (2MultFMA; the product is far from underflow).
+- `fast64/quick.rs:207` `fn tier2(x: f64) -> Option<f64>` — bound: undocumented — doc: Tier 2 of [`exp_tiered`] in the FMA build (`fast64::fused::exp_nearest`), out of line and cold: under 0.01% of calls reach it.
+- `fast64/quick.rs:211` `quick!` entries: 
 
 ## fast64/tier_tests.rs (f64 tier_tests)
 
