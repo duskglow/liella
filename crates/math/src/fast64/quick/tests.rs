@@ -3,6 +3,7 @@
 //! (`crates/boundary/tests/exp_quick.rs`), which may call it.
 
 use super::*;
+use crate::dd;
 use crate::mp::{self, Mp};
 use crate::real::Real;
 use crate::status::Rounding;
@@ -32,7 +33,7 @@ fn two(e: i32) -> f64 {
 /// 1-6; each term computed in `f64` from its formula, rounded up by the factor `1 + 2^-40`).
 #[test]
 fn quick_constants_and_bounds() {
-    for (c, n, name) in [(C3, 6.0, "C3"), (C4, 24.0, "C4"), (C5, 120.0, "C5"), (C6, 720.0, "C6")] {
+    for (c, n, name) in [(C3, 6.0f64, "C3"), (C4, 24.0, "C4"), (C5, 120.0, "C5"), (C6, 720.0, "C6")] {
         assert_eq!(c.to_bits(), (1.0 / n).to_bits(), "{name} is not RN(1/{n})");
     }
     let l = mp::ln2().div(Mp::from_f64(128.0));
