@@ -205,15 +205,28 @@ pub(crate) fn log_family_quick(f: &str, x: f64) -> (Option<(f64, f64)>, Option<f
 }
 
 /// The `double` `pow` fast path in its build chosen at startup (as [`exp_nearest`]); takes the
-/// pair the generated entry passes.
+/// pair the generated entry passes. Tier 1 is the quick phase (D-10.62), tier 2 today's
+/// `fast64::pow_nearest` on a miss.
 #[inline(always)]
 pub(crate) fn pow_nearest((x, y): (f64, f64)) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::pow_nearest(x, y) };
+        return unsafe { liella_math::fast64::quick_pow::fused::pow_tiered(x, y) };
     }
-    liella_math::fast64::pow_nearest(x, y)
+    liella_math::fast64::quick_pow::pow_tiered(x, y)
+}
+
+/// The `double` `pow` quick phase alone (D-10.62) in its build chosen at startup (as
+/// [`exp_nearest`]): the correctly rounded result, or `None` when the phase declines.
+#[cfg(feature = "selftest")]
+pub(crate) fn pow_quick(x: f64, y: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_pow::fused::pow_quick(x, y) };
+    }
+    liella_math::fast64::quick_pow::pow_quick(x, y)
 }
 
 /// The `double` `expm1` fast path (LIBM-F64-EXPM1-HYPER-CBRT-TIER) in its build chosen at

@@ -117,22 +117,22 @@
 use crate::coeffs::tables as t;
 
 /// `1.5·2^52`: `x·INV + SHIFT` lies in `[2^52, 2^53)`, where every double is an integer.
-const SHIFT: f64 = 6_755_399_441_055_744.0;
+pub(super) const SHIFT: f64 = 6_755_399_441_055_744.0;
 /// `bits(SHIFT) − 1023·128`: `bits(t)` minus this is `k + 1023·128 >= 0`; shifted right by 7, the
 /// biased exponent of `2^m`.
-const KBIAS: u64 = 0x4338_0000_0000_0000 - 1023 * 128;
-const INV: f64 = f64::from_bits(t::SCALE_128[0]);
-const NL1: f64 = -f64::from_bits(t::LN2_128_CW[0]);
-const NL2: f64 = -f64::from_bits(t::LN2_128_CW[1]);
+pub(super) const KBIAS: u64 = 0x4338_0000_0000_0000 - 1023 * 128;
+pub(super) const INV: f64 = f64::from_bits(t::SCALE_128[0]);
+pub(super) const NL1: f64 = -f64::from_bits(t::LN2_128_CW[0]);
+pub(super) const NL2: f64 = -f64::from_bits(t::LN2_128_CW[1]);
 /// `RN(1/3!)` .. `RN(1/6!)` (checked by the `bounds` tests).
-const C3: f64 = f64::from_bits(0x3fc5_5555_5555_5555);
-const C4: f64 = f64::from_bits(0x3fa5_5555_5555_5555);
-const C5: f64 = f64::from_bits(0x3f81_1111_1111_1111);
-const C6: f64 = f64::from_bits(0x3f56_c16c_16c1_6c17);
+pub(super) const C3: f64 = f64::from_bits(0x3fc5_5555_5555_5555);
+pub(super) const C4: f64 = f64::from_bits(0x3fa5_5555_5555_5555);
+pub(super) const C5: f64 = f64::from_bits(0x3f81_1111_1111_1111);
+pub(super) const C6: f64 = f64::from_bits(0x3f56_c16c_16c1_6c17);
 /// `bits(2^-60)` and `bits(708) − bits(2^-60)`: the domain as one unsigned compare on `|x|`'s bits.
-const LO_BITS: u64 = 0x3c30_0000_0000_0000;
-const SPAN: u64 = 0x4086_2000_0000_0000 - LO_BITS;
-const ABS: u64 = 0x7fff_ffff_ffff_ffff;
+pub(super) const LO_BITS: u64 = 0x3c30_0000_0000_0000;
+pub(super) const SPAN: u64 = 0x4086_2000_0000_0000 - LO_BITS;
+pub(super) const ABS: u64 = 0x7fff_ffff_ffff_ffff;
 
 /// The stated bounds (module doc) and their [`super::near`] multipliers: the least doubles with
 /// `c·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests).
