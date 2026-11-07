@@ -66,7 +66,7 @@ fn scan(path: &str, text: &str) -> Vec<String> {
 
 pub fn check(root: &Path) -> Result<(), String> {
     let mut found = Vec::new();
-    for path in crate::labnames::tracked(root)? {
+    for path in crate::labnames::tracked_with(root, true)? {
         if let Ok(bytes) = std::fs::read(root.join(&path)) {
             found.extend(scan(&path, &String::from_utf8_lossy(&bytes)));
         }

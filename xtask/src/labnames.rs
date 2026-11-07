@@ -82,16 +82,17 @@ fn scan(path: &str, text: &str) -> Vec<String> {
     text.lines().enumerate().filter(|(_, l)| !l.contains("LAB-ONLY")).filter_map(|(n, l)| hit(l).map(|w| format!("{path}:{}: {w}", n + 1))).collect()
 }
 
-fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+fn walk(root: &Path, dir: &Path, handoff: bool, out: &mut Vec<String>) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     for e in rd.flatten() {
         let p = e.path();
         let rel = p.strip_prefix(root).map(|r| r.to_string_lossy().into_owned()).unwrap_or_default();
-        if rel == "target" || rel == ".git" || rel.starts_with("handoff") || rel == ".synced" || rel == ".changed" {
+        // Sync bookkeeping (`.synced*`, `.changed*`, e.g. `.changed.xtask`) and build output are not part of the tree.
+        if rel == "target" || rel == "fuzz/target" || rel == ".git" || (!handoff && rel.starts_with("handoff")) || rel.starts_with(".synced") || rel.starts_with(".changed") {
             continue;
         }
         if p.is_dir() {
-            walk(root, &p, out);
+            walk(root, &p, handoff, out);
         } else if p.is_file() {
             out.push(rel);
         }
@@ -100,11 +101,16 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
 
 /// The files to scan: `git ls-files`; in a synced role tree without git metadata, every file outside `target/`.
 pub(crate) fn tracked(root: &Path) -> Result<Vec<String>, String> {
+    tracked_with(root, false)
+}
+
+/// [`tracked`], with `handoff/` walked too when `handoff` is set (only matters without git metadata).
+pub(crate) fn tracked_with(root: &Path, handoff: bool) -> Result<Vec<String>, String> {
     match Command::new("git").current_dir(root).args(["ls-files", "-z"]).output() {
         Ok(o) if o.status.success() => Ok(o.stdout.split(|&b| b == 0).filter(|n| !n.is_empty()).map(|n| String::from_utf8_lossy(n).into_owned()).collect()),
         _ => {
             let mut v = Vec::new();
-            walk(root, root, &mut v);
+            walk(root, root, handoff, &mut v);
             Ok(v)
         }
     }
