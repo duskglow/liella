@@ -1,5 +1,7 @@
-# PERF-ZONE-LOAD-FAULTS-3: plants on the hot-text pin of the first-mktime path after the merge of next (cargo xtask plants, docs/plants.md).
-# mktime-block-behind-strftime moves the whole mktime block (mktime + 9 entries since next added tsc_probe, prctl, rdtsc,
-# Resolution::matches and TscGate::fresh to it) back behind strftime's functions, the layout whose gate went red in run 1.
-mktime-block-behind-strftime | crates/libc-so/hot-text.list | perl:s/(5civil18civil_from_seconds\n)(mktime\n(?:[^\n]*\n){9})(strftime\n(?:[^\n]*\n)*?[^\n]*6TmRead4zone\n)/$1$3$2/ | cargo test -p liella --test hot_text_products init_first_ | msg:first mktime after localtime_r: [1-9][0-9]* page faults
-rule-years-grown | crates/core/src/time/zone.rs | lit:const RULE_YEARS: i64 = 300; ==> const RULE_YEARS: i64 = 1200; | cargo test -p liella --test hot_text_products init_first_ | msg:first localtime_r \+ first mktime: [0-9]+ page faults >
+# PERF-ZONE-LOAD-FAULTS-3: plants on the merged hot-text pin of the first-mktime path and the tightened fault bounds (cargo xtask plants, docs/plants.md).
+# mktime-block-dropped removes the whole mktime block (mktime + 9 entries since next added tsc_probe, prctl, rdtsc,
+# Resolution::matches and TscGate::fresh to it) from the list, as a merge or regen that loses the pin would
+# (Zen 1 host: 21 / 2 / 23 faults). Moving the block back behind strftime's functions (run 2's plant) now costs one
+# fault (localtime 19, mktime 0), inside the 2-fault layout margin of the bounds: not a plant, see the handoff.
+mktime-block-dropped | crates/libc-so/hot-text.list | perl:s/(5civil18civil_from_seconds\n)mktime\n(?:[^\n]*\n){9}/$1/ | cargo test -p liella --test hot_text_products init_first_ | msg:first mktime after localtime_r: [1-9][0-9]* page faults
+rule-years-grown | crates/core/src/time/zone.rs | lit:const RULE_YEARS: i64 = 300; ==> const RULE_YEARS: i64 = 1200; | cargo test -p liella --test hot_text_products init_first_ | msg:first localtime_r( \+ first mktime)?: [0-9]+ page faults >

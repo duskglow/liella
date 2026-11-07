@@ -239,7 +239,13 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
 /// table's `TryVec::resize`, `rule::when_of`, `Zone::kind_period`) and the first-mktime path now
 /// sit in the localtime block of `hot-text.list`: Skylake-SP host role, every run identical,
 /// 22 -> 20 (and the first mktime 1 -> 0). LOCALTIME_BOUND 24 -> 22 (20 plus 2).
-const LOCALTIME_BOUND: u64 = 22;
+/// PERF-ZONE-LOAD-FAULTS-3: after the merge of next, whose list added `tsc_probe`, `liella_sys_prctl`,
+/// `liella_machine_rdtsc`, `Resolution::matches` and `TscGate::fresh` to the mktime block, that block
+/// sits behind the localtime block with them and the first `localtime_r` finds its `tsc_probe` call in
+/// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
+/// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
+/// (18 plus 2).
+const LOCALTIME_BOUND: u64 = 20;
 
 /// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
 /// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
@@ -248,7 +254,9 @@ const LOCALTIME_BOUND: u64 = 22;
 /// Skylake-SP host role, every run identical: 20 after the hot-text pin (before it the per-call
 /// modes read 22 + 1; this mode did not exist yet).
 /// Bound = 20 plus 2, as for LOCALTIME_BOUND.
-const LOCALTIME_MKTIME_BOUND: u64 = 22;
+/// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
+/// identical, 18. Bound 22 -> 20 (18 plus 2).
+const LOCALTIME_MKTIME_BOUND: u64 = 20;
 
 #[test]
 fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
