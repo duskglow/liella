@@ -20,8 +20,50 @@ use std::process::{Command, Stdio};
 /// no C-family function and build or run no C program, so the interposed exports change nothing
 /// they check, while the second run doubled the longest part of the gate. A target that calls
 /// C-family code or runs a C program against the products stays in both passes
-/// (`pass0_only_targets_are_pure_rust` guards the list).
+/// (`pass0_only_targets_are_pure_rust` guards the list with `pass0_violations`).
 pub const PASS0_ONLY: &[(&str, &str)] = &[("liella-math", "special_cr"), ("liella-math", "mp_kernels")];
+
+/// The `#[path]` includes a `PASS0_ONLY` target may have (paths as written, relative to the
+/// target's directory): support modules that run no program and touch no C code. An include is
+/// opaque to a scan of the target alone, so [`pass0_violations`] scans each listed file with the
+/// same rules and refuses any other include. `verdict.rs` is the sweep verdict cache (D-10.57);
+/// its program inputs are in `verdict_programs.rs`, which is deliberately not listed.
+#[cfg(test)]
+pub const PASS0_INCLUDES: &[&str] = &["../../core/tests/support/verdict.rs"];
+
+/// What a `PASS0_ONLY` target and its includes may not use: each builds or runs a C program or
+/// reaches C-family code, which the interposed exports would change.
+#[cfg(test)]
+const PASS0_BANNED: &[&str] = &["Command", "extern \"C\"", "liella_boundary", "oracle.rs", "dlsym", "libc::"];
+
+/// Why the source `src` of a `PASS0_ONLY` target cannot run in the first pass only (empty: it
+/// can): every banned use in the target or in a file it includes, every `#[path]` include not in
+/// [`PASS0_INCLUDES`], a listed include that `read` cannot read, and an include in an included
+/// file. `read` gets the include's path as written.
+#[cfg(test)]
+pub fn pass0_violations(src: &str, read: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+    fn banned(text: &str, what: &str, why: &mut Vec<String>) {
+        why.extend(PASS0_BANNED.iter().filter(|b| text.contains(*b)).map(|b| format!("{what} uses `{b}`")));
+    }
+    fn includes(text: &str) -> impl Iterator<Item = &str> {
+        text.lines().map(str::trim_start).filter(|l| l.starts_with("#[path")).map(|l| l.split('"').nth(1).unwrap_or(l))
+    }
+    let mut why = Vec::new();
+    banned(src, "the target", &mut why);
+    for inc in includes(src) {
+        if !PASS0_INCLUDES.contains(&inc) {
+            why.push(format!("the target includes `{inc}`, which is not in PASS0_INCLUDES"));
+            continue;
+        }
+        let Some(text) = read(inc) else {
+            why.push(format!("the include `{inc}` cannot be read"));
+            continue;
+        };
+        banned(&text, inc, &mut why);
+        why.extend(includes(&text).map(|i| format!("the include `{inc}` includes `{i}`")));
+    }
+    why
+}
 
 /// Whether `(krate, target)` is in `PASS0_ONLY`.
 pub fn pass0_only(krate: &str, target: &str) -> bool {
@@ -398,10 +440,10 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(std::path::Path::to_path_buf).unwrap_or_default();
         for (c, t) in PASS0_ONLY {
             let dir = c.strip_prefix("liella-").unwrap_or(c);
-            let src = std::fs::read_to_string(root.join(format!("crates/{dir}/tests/{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
-            for bad in ["Command", "extern \"C\"", "liella_boundary", "#[path", "oracle.rs", "dlsym", "libc::"] {
-                assert!(!src.contains(bad), "{c}::{t} uses `{bad}`: a target that touches C code or a C program runs in both passes");
-            }
+            let tests = root.join(format!("crates/{dir}/tests"));
+            let src = std::fs::read_to_string(tests.join(format!("{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
+            let why = pass0_violations(&src, &|inc| std::fs::read_to_string(tests.join(inc)).ok());
+            assert!(why.is_empty(), "{c}::{t}: {why:?}: a target that touches C code or a C program runs in both passes");
         }
         assert!(pass0_only("liella-math", "special_cr") && !pass0_only("liella-math", "special_ld_products"));
         let later = "(binary_id(liella-math::complex_ld_cr_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_ld_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_products) & test(/_s[1-9][0-9]*$/))";
@@ -412,6 +454,28 @@ mod tests {
         // A run-once products target is left out whole; its later-shard term would be redundant.
         let once = ["liella-math::complex_products".to_string()];
         assert!(!pass1_filter(&[], &once).unwrap_or_default()[1].contains("(binary_id(liella-math::complex_products) &"));
+    }
+
+    #[test]
+    fn pass0_only_includes_are_listed_and_scanned() {
+        // no spec clause: gate tooling (#889, TVA-MATH-VERDICT-CACHE-2, D-10.57), not libc behaviour.
+        let listed = PASS0_INCLUDES[0];
+        let target = format!("use x::y;\n#[path = \"{listed}\"]\nmod verdict;\n");
+        let with = |text: &'static str| move |inc: &str| (inc == listed).then(|| text.to_string());
+        let pure = "//! Included with `#[path]` by the sweeps.\nuse std::fs;\n";
+        assert_eq!(pass0_violations(&target, &with(pure)), Vec::<String>::new(), "a listed include of pure Rust");
+        assert_eq!(pass0_violations("fn f() {}\n", &|_: &str| None), Vec::<String>::new(), "no include at all");
+        let why = pass0_violations(&target, &with("use std::process::Command;\n"));
+        assert!(why.iter().any(|w| w.contains(listed) && w.contains("`Command`")), "an include that runs a program: {why:?}");
+        let why = pass0_violations(&target, &with("#[path = \"other.rs\"]\nmod other;\n"));
+        assert!(why.iter().any(|w| w.contains("includes `other.rs`")), "an include's own include: {why:?}");
+        let why = pass0_violations(&target, &|_: &str| None);
+        assert!(why.iter().any(|w| w.contains("cannot be read")), "an unreadable include: {why:?}");
+        let other = "#[path = \"../../core/tests/support/verdict_programs.rs\"]\nmod verdict_programs;\n";
+        let why = pass0_violations(other, &with(pure));
+        assert!(why.iter().any(|w| w.contains("verdict_programs.rs") && w.contains("not in PASS0_INCLUDES")), "an unlisted include: {why:?}");
+        let why = pass0_violations("unsafe extern \"C\" { fn f(); }\n", &with(pure));
+        assert!(why.iter().any(|w| w.starts_with("the target uses `extern \"C\"`")), "a banned use in the target: {why:?}");
     }
 
     #[test]

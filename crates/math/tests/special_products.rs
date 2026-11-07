@@ -16,6 +16,8 @@ mod oracle;
 
 #[path = "../../core/tests/support/verdict.rs"]
 mod verdict;
+#[path = "../../core/tests/support/verdict_programs.rs"]
+mod verdict_programs;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

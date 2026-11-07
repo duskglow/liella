@@ -34,6 +34,8 @@ mod oracle;
 
 #[path = "../../core/tests/support/verdict.rs"]
 mod verdict;
+#[path = "../../core/tests/support/verdict_programs.rs"]
+mod verdict_programs;
 
 #[path = "support/shard.rs"]
 mod shard;

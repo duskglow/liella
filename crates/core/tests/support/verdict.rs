@@ -11,7 +11,7 @@
 //! - the C-oracle sweeps add the shard index and count, the bytes of both built programs (the
 //!   static Liella program holds every Liella byte it runs) and of every shared object the
 //!   reference program loads (resolved by the dynamic loader itself, `LD_TRACE_LOADED_OBJECTS`:
-//!   the host's libm.so.6, libc.so.6 and the loader);
+//!   the host's libm.so.6, libc.so.6 and the loader; `Key::loaded_by` in `verdict_programs.rs`);
 //! - a sweep whose size an environment variable sets adds that variable ([`Key::env`]).
 //!
 //! An input that cannot be read makes the key incomplete: such a shard always runs and records
@@ -22,13 +22,19 @@
 //! so a failing shard leaves none.
 //!
 //! Use: `let Some(v) = key.begin() else { return };` before the check, `v.pass();` after its
-//! last assertion. Included with `#[path]` by the sweep tests.
+//! last assertion. Included with `#[path]` by the sweep tests. This module runs no program and
+//! touches no C code, so a pure-Rust sweep that includes it stays pure Rust (xtask
+//! `nextest::PASS0_INCLUDES` scans it); what starts a program is in `verdict_programs.rs`,
+//! which only the C-oracle sweeps include.
 #![allow(dead_code)]
 
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
+
+/// Lists the files that make up an input (for example the shared objects a program loads);
+/// `None` when they cannot be resolved.
+pub(crate) type Resolve = fn(&Path) -> Option<Vec<PathBuf>>;
 
 /// The environment variable that runs every shard, cached or not.
 pub(crate) const NO_CACHE: &str = "LIELLA_NO_VERDICT_CACHE";
@@ -56,7 +62,8 @@ impl Sources {
 enum Input {
     Shard(usize, usize),
     File(PathBuf),
-    LoadedBy(PathBuf),
+    /// The files `resolve` lists for `path`, under `label`.
+    Resolved(&'static str, PathBuf, Resolve),
     Env(String),
 }
 
@@ -107,36 +114,6 @@ pub(crate) fn cpu_flags(cpuinfo: &str) -> Option<&str> {
     cpuinfo.lines().find(|l| l.starts_with("flags")).map(str::trim_end)
 }
 
-/// The shared objects program `prog` loads, as the dynamic loader resolves them
-/// (`LD_TRACE_LOADED_OBJECTS=1`, ld.so(8): it lists the dependencies instead of running the
-/// program); `None` if the program cannot be started, the loader reports a missing object, or
-/// lists none.
-pub(crate) fn loaded_objects(prog: &Path) -> Option<Vec<PathBuf>> {
-    let out = Command::new(prog).env_clear().env("LD_TRACE_LOADED_OBJECTS", "1").output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let text = String::from_utf8(out.stdout).ok()?;
-    let mut objs = Vec::new();
-    for l in text.lines().map(str::trim) {
-        if l.contains("not found") {
-            return None;
-        }
-        // `libm.so.6 => /usr/lib/.../libm.so.6 (0x...)`, or the loader: `/lib64/ld-linux-x86-64.so.2 (0x...)`.
-        let path = match l.split_once("=> ") {
-            Some((_, rest)) => rest,
-            None => l,
-        };
-        let path = path.split(" (").next().unwrap_or("");
-        if path.starts_with('/') {
-            objs.push(PathBuf::from(path));
-        }
-    }
-    objs.sort();
-    objs.dedup();
-    (!objs.is_empty()).then_some(objs)
-}
-
 impl Key {
     /// The key of shard `name` (unique per test binary and shard) from the host's inputs.
     pub(crate) fn new(name: &str) -> Self {
@@ -168,9 +145,9 @@ impl Key {
         match &i {
             Input::Shard(k, n) => self.lines.push(format!("shard\t{k}/{n}")),
             Input::File(path) => self.add_file(path),
-            Input::LoadedBy(prog) => match loaded_objects(prog) {
+            Input::Resolved(label, path, resolve) => match resolve(path) {
                 Some(objs) => {
-                    self.lines.push(format!("loaded by\t{}", prog.display()));
+                    self.lines.push(format!("{label}\t{}", path.display()));
                     for p in &objs {
                         self.add_file(p);
                     }
@@ -208,11 +185,11 @@ impl Key {
         self.add(Input::File(path.to_path_buf()))
     }
 
-    /// Adds the bytes of every shared object the dynamic program `prog` loads
-    /// ([`loaded_objects`]); the key is incomplete if they cannot be resolved.
+    /// Adds `label` and `path`, then the bytes of every file `resolve` lists for `path` (read
+    /// again by [`Key::reread`]); the key is incomplete if they cannot be resolved.
     #[must_use]
-    pub(crate) fn loaded_by(self, prog: &Path) -> Self {
-        self.add(Input::LoadedBy(prog.to_path_buf()))
+    pub(crate) fn resolved(self, label: &'static str, path: &Path, resolve: Resolve) -> Self {
+        self.add(Input::Resolved(label, path.to_path_buf(), resolve))
     }
 
     /// Adds the value of environment variable `var` (unset is a value of its own).

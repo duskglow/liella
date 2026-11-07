@@ -11,6 +11,8 @@ mod oracle;
 
 #[path = "../../core/tests/support/verdict.rs"]
 mod verdict;
+#[path = "../../core/tests/support/verdict_programs.rs"]
+mod verdict_programs;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -108,7 +110,7 @@ fn the_libraries_the_reference_program_loads_are_in_the_key() {
     let mut cmd = Command::new("cc");
     cmd.args(["-std=gnu17", "-O1", "-fno-builtin"]).arg(root.join("crates/math/tests/oracle/verdict_probe.c")).arg("-lm");
     assert!(oracle::build(cmd, &prog), "verdict_probe.c does not build against the host C library");
-    let objs = verdict::loaded_objects(&prog).expect("the loader lists the program's objects");
+    let objs = verdict_programs::loaded_objects(&prog).expect("the loader lists the program's objects");
     for lib in ["libm.so.6", "libc.so.6"] {
         assert!(objs.iter().any(|p| p.file_name().is_some_and(|n| n == lib)), "{lib} is not among {objs:?}");
     }
