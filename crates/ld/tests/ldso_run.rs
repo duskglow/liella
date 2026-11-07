@@ -147,6 +147,7 @@ fn setarch_ok() -> bool {
     ok
 }
 
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_malformed_auxv_refused() {
     let v = |w: &[u64]| start::program(&Auxv::from_words(w));
@@ -165,6 +166,7 @@ fn ldso_run_malformed_auxv_refused() {
     assert!(start::secure(&Auxv::from_words(&[23, 1])));
 }
 
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_aux_rewrite_and_env() {
     let mut w = [3, 1, 4, 99, 5, 2, 7, 0, 9, 3, 6, 4096, 0, 0, 9, 7];
@@ -184,10 +186,12 @@ fn ldso_run_aux_rewrite_and_env() {
 /// The CPU-feature seam (design §0a item 5): outside `liella_ld::arch`, no loader source executes
 /// CPUID or reads `AT_HWCAP*`/`AT_PLATFORM`, and the loader's start takes features from
 /// `Native::features`.
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_features_only_from_arch() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files: Vec<PathBuf> = std::fs::read_dir(root.join("src")).unwrap().map(|e| e.unwrap().path()).filter(|p| !p.ends_with("arch.rs")).collect();
+    files.sort(); // FS-ORDER: every file is checked; sorted for a stable first failure
     let ld = root.join("../boundary/src/ld.rs");
     files.push(ld.clone());
     for f in &files {
@@ -199,6 +203,7 @@ fn ldso_run_features_only_from_arch() {
     assert!(std::fs::read_to_string(&ld).unwrap().contains("Native::features("), "ld.rs takes no features from the seam");
 }
 
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_by_interp_at_random_bases() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
@@ -215,6 +220,7 @@ fn ldso_run_by_interp_at_random_bases() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_as_program_at_random_bases() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
@@ -242,6 +248,7 @@ fn ldso_run_as_program_at_random_bases() {
 
 /// A non-secure start reads `LD_PRELOAD` (the diagnostic for each name) and parses the tunables;
 /// the program still runs.
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_reads_ld_settings() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
@@ -259,6 +266,7 @@ fn ldso_run_reads_ld_settings() {
 /// R14-18: a set-group-ID program (the kernel sets AT_SECURE; a supplementary group of the user, no
 /// root) started through `ld.so` sees none of the UNSECURE names, keeps everything else (near
 /// misses included), and the loader read no `LD_*` name before clearing (no LD_PRELOAD diagnostic).
+/// (no spec clause: ld.so's start, plan/ph14/design.md §1 steps 3-5, D-27.14.)
 #[test]
 fn ldso_run_secure_child_sees_unsecure_cleared() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
