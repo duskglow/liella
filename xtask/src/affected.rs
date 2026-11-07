@@ -3483,8 +3483,8 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
                 let s = select_tier(repo(), &[f.to_string()], tier);
                 assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
                 assert!(s.libs.contains_key("liella-mathtools"), "{f} ({tier:?}): its own unit tests {:?}", s.libs.keys());
-                let gen: BTreeSet<&str> = s.xtask_cmds.iter().map(String::as_str).filter(|c| c.starts_with("remez") || c.starts_with("tables") || c.starts_with("kernel-index")).collect();
-                assert_eq!(gen, want.iter().copied().collect::<BTreeSet<_>>(), "{f} ({tier:?})");
+                let checks: BTreeSet<&str> = s.xtask_cmds.iter().map(String::as_str).filter(|c| c.starts_with("remez") || c.starts_with("tables") || c.starts_with("kernel-index")).collect();
+                assert_eq!(checks, want.iter().copied().collect::<BTreeSet<_>>(), "{f} ({tier:?})");
             }
         }
     }
