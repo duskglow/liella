@@ -26,8 +26,8 @@ double functions), D-10.25/D-10.50 (two builds), D-10.3 (CR), **D-10.61 (this st
 * `libm-f64-trig-quick-3-gate` rc 0: direct tier, 9 suites ok, 7288 passed, 0 failed, conformance 6/6, peak 13G, oom_kill 0.
 * `libm-f64-trig-quick-3-stage` rc 0 (stage.tar sha256 b6ec74e2...), `-counts` rc 0, `-stage-base` rc 0 (merge base
   799313e1 from `git archive` in /mnt/zram, for the timing base).
-* `libm-f64-trig-quick-3-accuracy`: 10^8 operands per function x distribution x build, nearest; running at hand-back
-  (rc 0 = 0 mismatches).
+* `libm-f64-trig-quick-3-accuracy` rc 0: 10^8 operands per function (sin, cos, tan) x distribution (uniform
+  [-10,10], [-2^20,2^20], bit patterns over [2^-30, 2^1024)) x build, nearest: 0 mismatches; FMA fallback 0.81-1.97%.
 * Timing (bookings 130 kotori, 131 nozomi, both cancelled after): `kotori:libm-f64-trig-quick-3-ivb`, `-ivb-base`,
   `nozomi:libm-f64-trig-quick-3-n100`, `-n100-base`, all rc 0 (`./xtask-bin sweep run --only cbench_libm`, ~2 min
   each). The nozomi head run started 3 min inside the booking's settle window (host idle, 0 jobs); its spreads are
@@ -53,9 +53,7 @@ path, covered by the entry sweeps). Brief target sin <= 110 instr (FMA) not reac
 
 ## Next step
 
-1. Read `~/bin/jobwait libm-f64-trig-quick-3-accuracy` on mei (rc 0 = 0 mismatches). A red: the log names function,
-   distribution, build and an operand; fix the quick phase, not the test.
-2. Optional follow-up toward sin <= 110: profile one FMA call (validation/wl_trace.sh) against glibc's 100 and aim
+1. None required: the story is done. Optional follow-up toward sin <= 110: profile one FMA call (validation/wl_trace.sh) against glibc's 100 and aim
    at the phase holding the surplus (the envelope was ~21 instructions for exp, LIBM-F64-EXP-QUICK-WIRE.md).
 
 ## Not to redo
