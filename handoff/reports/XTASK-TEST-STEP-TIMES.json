@@ -1,0 +1,27 @@
+{
+ "task": "XTASK-TEST-STEP-TIMES",
+ "model": "opus",
+ "tokens": null,
+ "result": "cargo xtask test (and affected --run escalated to FULL) prints `step: <name> <s>s` per step, per remez fit, and a slowest-first summary; unit tests + 4/4 plants caught",
+ "branch": "task/xtask-test-step-times",
+ "head": null,
+ "gate": {
+  "affected": "PENDING: kanon:xtst-gate (escalated FULL) still running at hand-back; clippy+static rc 0 (kanon:xtst-lint)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Changing xtask/src/main.rs always escalates the affected gate to FULL, so even a small xtask story pays for a full gate"
+ ],
+ "refused": [],
+ "jobs": [
+  "kanon:xtst-unit",
+  "kanon:xtst-lint",
+  "kanon:xtst-plants",
+  "kanon:xtst-gate"
+ ],
+ "improvement": "ops/ci.py can now trend step: lines from the gate log; alert on test/remez-check or any remez/<fit> line growing more than 2x run over run",
+ "next_step": "Read kanon:xtst-gate (~/bin/jobwait xtst-gate); green = ready; check the log ends with step-summary lines",
+ "report_file": "handoff/XTASK-TEST-STEP-TIMES.md"
+}
