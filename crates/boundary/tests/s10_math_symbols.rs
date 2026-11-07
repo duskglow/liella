@@ -232,6 +232,60 @@ fn math_double_fast_entry_stays_out_of_place_in_a_non_default_mode() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+#[test]
+fn math_double_fast_entry_stays_out_of_place_under_an_unmasked_trap() {
+    // Clauses: s10_0_f_0.
+    // A caller's word with one exception unmasked is not the default control word either, so the
+    // fast entries switch to the default one before any arithmetic (D-10.13; the MXCSR read and
+    // the operand barrier are D-X.44's inline forms). One test per mask the arguments' results
+    // never raise: denormal operand, divide-by-zero, overflow, underflow (invalid and inexact
+    // would trap on the entry's own legitimate raise). In place, a subnormal argument's domain
+    // comparison would trap on the unmasked denormal-operand bit, or leave that bit in the
+    // caller's word; out of place the result is liella-math's and MXCSR is the caller's word
+    // with exactly the reference flags added, in every rounding direction.
+    use liella_math::Rounding;
+    use liella_math::real::Real;
+    let args: [(f64, f64); 6] = [(0.75, 2.5), (1.5, 0.3), (3.7, -1.7), (10.5, 7.25), (1e-310, 0.3), (5e-320, -0.3)];
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    let (mut checked, mut bad) = (0usize, Vec::new());
+    for (name, f, _) in double_fast_entries().into_iter().chain(double_trig_entries()) {
+        let trig = double_trig_entries().iter().any(|e| e.0 == name);
+        for &(x, y) in &args {
+            if trig && x.is_subnormal() {
+                continue; // sin x and tan x are about x: a subnormal result raises underflow
+            }
+            for (rc, &mode) in (0u32..).zip(modes.iter()) {
+                let (want, st) = match name {
+                    "sin" => Real::sin(x, mode),
+                    "cos" => Real::cos(x, mode),
+                    "tan" => Real::tan(x, mode),
+                    "sincos.sin" => (Real::sincos(x, mode).0 .0, Real::sincos(x, mode).1),
+                    "sincos.cos" => (Real::sincos(x, mode).0 .1, Real::sincos(x, mode).1),
+                    "exp" => Real::exp(x, mode),
+                    "exp2" => Real::exp2(x, mode),
+                    "log" => Real::log(x, mode),
+                    "log2" => Real::log2(x, mode),
+                    "log10" => Real::log10(x, mode),
+                    "exp10" => Real::exp10(x, mode),
+                    _ => Real::pow(x, y, mode),
+                };
+                for unmask in [0x100u32, 0x200, 0x400, 0x800] {
+                    let word = (0x1f80 & !unmask) | (rc << 13);
+                    let got = around(word, || f(x, y).to_bits());
+                    let need = (want.to_bits(), word | u32::from(st.flags.0));
+                    if got != need {
+                        bad.push(format!("{name}({x:e}, {y:e}) word {word:x}: {got:x?} vs {need:x?}"));
+                    }
+                    checked = checked.saturating_add(1);
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{} mismatches:\n{}", bad.len(), bad.join("\n"));
+    assert!(checked > 500, "{checked}");
+    fpu::clear(&CSys, Flags::ALL);
+}
+
 /// Every argument of `args` through each double fast entry ([`math_double_fast_entry_matches_the_envelope_in_every_mode`]):
 /// the number checked and one line per mismatch.
 fn double_fast_entry_mismatches(args: &[(f64, f64)]) -> (usize, Vec<String>) {
