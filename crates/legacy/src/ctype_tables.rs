@@ -195,21 +195,31 @@ pub fn iswctype(wc: u32, desc: u64, loc: &Locale) -> bool {
 }
 
 /// [`iswctype`] in the locale of view `v` (D-7.13): a standard class reads the view's checked
-/// wide tables, as `iswalpha` does; a locale-defined class takes the general path.
+/// wide tables, as `iswalpha` does; a locale-defined class takes the general path. The C
+/// `int` answer (1 or 0), so that every out-of-line part is a tail call ([`LocaleView::isw_int`]).
 #[inline]
-pub fn iswctype_view(wc: u32, desc: u64, v: &LocaleView) -> bool {
+pub fn iswctype_view(wc: u32, desc: u64, v: &LocaleView) -> i32 {
     match u16::try_from(desc) {
-        Ok(m) => v.isw(wc, Class(m)),
+        // A built-in locale's arm is a tail call too: inline, its call kept the descriptor
+        // in a saved register on every path.
+        Ok(m) if v.has_wide() => v.isw_int(wc, Class(m)),
+        Ok(m) => iswctype_builtin(wc, Class(m), v),
         Err(_) => iswctype_defined(wc, desc, v),
     }
+}
+
+/// [`iswctype_view`] for a view without wide tables (the built-in locales).
+#[inline(never)]
+fn iswctype_builtin(wc: u32, m: Class, v: &LocaleView) -> i32 {
+    v.isw_int(wc, m)
 }
 
 /// [`iswctype_view`] for a descriptor that is not a standard class's mask: a locale-defined
 /// class (the general path), or a value that names no class.
 #[cold]
 #[inline(never)]
-fn iswctype_defined(wc: u32, desc: u64, v: &LocaleView) -> bool {
-    desc >= DEFINED && iswctype(wc, desc, v.locale())
+fn iswctype_defined(wc: u32, desc: u64, v: &LocaleView) -> i32 {
+    i32::from(desc >= DEFINED && iswctype(wc, desc, v.locale()))
 }
 
 /// A marker whose address names the built-in `C.UTF-8` `totitle` mapping.

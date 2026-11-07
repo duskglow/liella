@@ -1,0 +1,22 @@
+# Product crate for the program interpreter (ld-linux-x86-64.so.2 on x86_64: the name is
+# `liella_ld::arch::Arch::INTERP`), phase 14 DL-5 (plan/ph14/design.md §0, R14-2: a separate small
+# ld.so with no imports). In the product workspace (crates/Cargo.toml) like libc-so; built and
+# link-checked (L14-1) by `cargo xtask so`.
+[package]
+name = "liella-ld-so"
+description = "Product crate: links the loader's boundary start (feature `ld`) into ld.so"
+version = "0.0.0"
+edition = "2024"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[lib]
+name = "ld_so"
+crate-type = ["staticlib"]
+test = false
+doctest = false
+
+[dependencies]
+liella-boundary = { path = "../boundary", features = ["ld"] }
+
+# Profiles: crates/Cargo.toml (the product workspace).

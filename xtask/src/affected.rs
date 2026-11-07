@@ -95,7 +95,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Crates whose changes are narrowed through the module graph.
 const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-math"];
@@ -2662,9 +2662,23 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     let mut skipped: Vec<String> = Vec::new();
     if !sel.full.is_empty() {
         println!("escalated to FULL: running the workspace clippy and `cargo xtask test`");
-        ok &= step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"]));
-        ok &= step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log");
+        // Step times (XTASK-TEST-STEP-TIMES): a `step:` line per step on the console, those `cargo xtask test` wrote
+        // to the log among them, and the summary of all of them, slowest first.
+        let mut times = crate::steptime::Steps::default();
+        ok &= times.time("stubs", || step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"])));
+        ok &= times.time("clippy-workspace", || step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log"));
+        let from = fs::metadata(&log).map_or(0, |m| m.len());
         ok &= step(root, &log, "cargo xtask test", Command::new(&cargo).args(["xtask", "test"]));
+        let bytes = fs::read(&log).unwrap_or_default();
+        for (name, secs) in String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).lines().filter_map(crate::steptime::parse) {
+            // The remez binary's per-fit lines are parts of the `remez-check` step: shown, not summed again.
+            if name.contains('/') {
+                println!("{}", crate::steptime::line(name, Duration::from_secs_f64(secs)));
+            } else {
+                times.add(&format!("test/{name}"), Duration::from_secs_f64(secs));
+            }
+        }
+        times.print_summary();
     } else {
         if sel.only {
             println!("ONLY mode: the named binaries, no stubs, policy checks or clippy. NOT A GATE.");
@@ -2741,8 +2755,13 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                 if sel.libs.contains_key(*c) {
                     cmd.arg("--lib");
                 }
-                for t in ts {
+                for t in &ts {
                     cmd.args(["--test", t]);
+                }
+                // The heavy products sweeps run shard 0 only with the exports interposed
+                // (`nextest::PASS1_SHARD0`, D-X.36); `cargo test` has no filter for it and runs all.
+                if pass == 1 && nextest {
+                    cmd.args(crate::nextest::pass1_shard_filter(c, &ts).unwrap_or_default());
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
                 match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {

@@ -1,0 +1,12 @@
+{"task": "GATE-PASS2-MATH-SHARD", "model": "opus", "tokens": null,
+ "result": "pass 2 runs shard 0 only of the five heavy liella-math products sweeps (PASS1_SHARD0, D-X.36); pass-2 list 6074 -> 6027 (exactly the 47 later shards), pass 1 unchanged; plants 5/5 caught; timing and gate pending",
+ "branch": "task/gate-pass2-math-shard", "head": "9840ce8b",
+ "gate": {"affected": "pending: keke:gp2ms-gate (starts after keke:gp2ms-timing)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["affected's interposed-pass call (affected.rs) is not reached by a unit test, so it is not planted; the cargo test fallback runs every shard", "pass-2 timing is measured on keke (Zen 1), not the CI host; the CI gate's next pass-2 Summary line gives the CI-host figure"],
+ "refused": [],
+ "jobs": ["keke:gp2ms-check", "keke:gp2ms-plants", "keke:gp2ms-timing", "keke:gp2ms-gate"],
+ "improvement": "a `cargo xtask nextest --pass2-list` (print the exact pass-2 filter and test list) would make pass-membership changes reviewable without hand-built filters",
+ "next_step": "collect TIMING lines of keke:gp2ms-timing and the result of keke:gp2ms-gate",
+ "report_file": "handoff/gate-pass2-math-shard.md"}

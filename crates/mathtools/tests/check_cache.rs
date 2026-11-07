@@ -1,4 +1,4 @@
-//! The `remez --check` verdict cache and parallel driver (D-10.54): the hash against FIPS 180-4
+//! The `remez --check` verdict cache and parallel driver (D-10.58): the hash against FIPS 180-4
 //! test vectors, the key against each of its inputs, and the binary's exit status, order and
 //! cache behaviour on small fits.
 
@@ -12,7 +12,7 @@ use liella_mathtools::check_cache::{CACHE_DIR_ENV, KeyInputs, NO_CACHE_ENV, Sha2
 
 #[test]
 fn sha256_fips_vectors() {
-    // no spec clause: test tooling of the math oracle (D-10.54); vectors from FIPS 180-4's examples.
+    // no spec clause: test tooling of the math oracle (D-10.58); vectors from FIPS 180-4's examples.
     assert_eq!(hex(&sha256(b"")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     assert_eq!(hex(&sha256(b"abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     let two_blocks = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
@@ -29,7 +29,7 @@ fn sha256_fips_vectors() {
 
 #[test]
 fn key_changes_with_every_input() {
-    // no spec clause: test tooling of the math oracle (D-10.54).
+    // no spec clause: test tooling of the math oracle (D-10.58).
     let image = vec![("/x/remez".to_string(), [1u8; 32]), ("/lib/libm.so.6".to_string(), [2u8; 32])];
     let image_exe = vec![("/x/remez".to_string(), [3u8; 32]), ("/lib/libm.so.6".to_string(), [2u8; 32])];
     let image_lib = vec![("/x/remez".to_string(), [1u8; 32]), ("/lib/libm.so.6".to_string(), [4u8; 32])];
@@ -112,13 +112,39 @@ fn verdicts(o: &Output) -> Vec<String> {
     text(&o.stdout).lines().filter(|l| l.contains(": up to date")).map(|l| l.trim().to_string()).collect()
 }
 
+/// The fit names of a run's `step: remez/<fit> <seconds>s` lines, in order (the format xtask/src/steptime.rs
+/// reads); a malformed step line panics.
+fn steps(o: &Output) -> Vec<String> {
+    let out = text(&o.stdout);
+    out.lines()
+        .filter_map(|l| l.strip_prefix("step: remez/"))
+        .map(|rest| {
+            let (name, secs) = rest.split_once(' ').unwrap_or_else(|| panic!("step line without a time: {rest}"));
+            // `<seconds>` has one decimal, then `s`.
+            let num = secs.strip_suffix('s').unwrap_or_else(|| panic!("step time without `s`: {rest}"));
+            let one_decimal = num.split_once('.').is_some_and(|(_, d)| d.len() == 1);
+            assert!(one_decimal && num.parse::<f64>().is_ok_and(|n| n >= 0.0), "step time: {rest}");
+            name.to_string()
+        })
+        .collect()
+}
+
+/// Each fit's `up to date` line is followed by its own step line (output and step line stay together).
+fn verdict_then_step(o: &Output, names: &[&str]) {
+    let lines: Vec<String> = text(&o.stdout).lines().map(str::to_string).collect();
+    for name in names {
+        let v = lines.iter().position(|l| l.contains(&format!("{name}.rs: up to date"))).unwrap_or_else(|| panic!("no verdict for {name}: {lines:?}"));
+        assert!(lines.get(v + 1).is_some_and(|l| l.starts_with(&format!("step: remez/{name} "))), "step line of {name} does not follow its output: {lines:?}");
+    }
+}
+
 fn stamps(dir: &Path) -> usize {
     std::fs::read_dir(dir).map(|r| r.count()).unwrap_or(0)
 }
 
 #[test]
 fn parallel_check_order_failure_and_cache() {
-    // no spec clause: test tooling of the math oracle (D-10.54).
+    // no spec clause: test tooling of the math oracle (D-10.58).
     let d = scratch("parallel");
     let cache = d.join("cache");
     let fits: Vec<(PathBuf, PathBuf)> = ["fa", "fb", "fc"].iter().map(|n| small_fit(&d, n)).collect();
@@ -139,6 +165,10 @@ fn parallel_check_order_failure_and_cache() {
         assert!(!line.contains("cached"), "cold run replayed a verdict: {line}");
     }
     assert_eq!(stamps(&cache), 3);
+    // One step line per fit (XTASK-TEST-STEP-TIMES), in command-line order, right after that fit's output.
+    let names = ["fa", "fb", "fc"];
+    assert_eq!(steps(&cold), names, "cold step lines");
+    verdict_then_step(&cold, &names);
 
     // Warm: the same verdicts, replayed, with the same reports.
     let warm = remez(&fit_paths, true, &cache, false);
@@ -148,7 +178,11 @@ fn parallel_check_order_failure_and_cache() {
     for (line, (_, out)) in w.iter().zip(&fits) {
         assert!(line.starts_with(&format!("{}: up to date (cached ", out.display())), "warm: {w:?}");
     }
-    let strip = |o: &Output| text(&o.stdout).lines().filter(|l| !l.contains(": up to date")).collect::<Vec<_>>().join("\n");
+    // A replayed verdict still prints its step line.
+    assert_eq!(steps(&warm), names, "warm step lines");
+    verdict_then_step(&warm, &names);
+    // The reports, without the verdict and step lines (the step times differ between runs).
+    let strip = |o: &Output| text(&o.stdout).lines().filter(|l| !l.contains(": up to date") && !l.starts_with("step: ")).collect::<Vec<_>>().join("\n");
     assert_eq!(strip(&cold), strip(&warm), "the replayed reports differ from the computed ones");
 
     // The cache off gives the cold result.
@@ -167,6 +201,8 @@ fn parallel_check_order_failure_and_cache() {
     let err = text(&bad.stderr);
     assert!(err.contains(&format!("{}: out of date", last_out.display())), "stderr: {err}");
     assert_eq!(verdicts(&bad).len(), 2, "{:?}", verdicts(&bad));
+    // A failing fit is timed and named too.
+    assert_eq!(steps(&bad), names, "step lines with a failing fit");
     assert_eq!(stamps(&cache), 3, "a failing fit wrote a stamp");
 
     // Failure of the first fit with the last one passing: still a failure.

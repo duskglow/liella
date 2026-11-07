@@ -8,7 +8,7 @@
 //!
 //! The fit files are handled concurrently, at most `available_parallelism()` at once (the
 //! affinity mask), each fit's output buffered and printed in command-line order; the exit status
-//! is the failure of any fit (D-10.54). With `--check`, a verdict whose inputs are unchanged since
+//! is the failure of any fit (D-10.58). With `--check`, a verdict whose inputs are unchanged since
 //! it last checked up to date is replayed from the verdict cache
 //! (`liella_mathtools::check_cache`) without fitting; `LIELLA_REMEZ_NO_CACHE=1` turns that off.
 
@@ -37,12 +37,24 @@ fn display_path(fit: &Path, root: &Path) -> String {
     rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/")
 }
 
-/// One fit's result: its buffered standard output and error, and whether it passed.
+/// One fit's result: its buffered standard output and error, whether it passed, and how long the
+/// worker spent on it (seconds).
 #[derive(Default)]
 struct Outcome {
     out: String,
     err: String,
     ok: bool,
+    secs: f64,
+}
+
+/// The fit's `step: remez/<fit> <seconds>s` line, the gate's step-time format (xtask/src/steptime.rs), so a fit
+/// whose check grows is named in the gate log (XTASK-TEST-STEP-TIMES). The time is the fit's own, measured in its
+/// worker (a cached verdict shows ~0.0s); fits run concurrently, so these times overlap and do not add up to the
+/// wall time of the whole check.
+fn step_line(path: &str, secs: f64) -> String {
+    let stem = Path::new(path).file_stem().map_or_else(|| path.to_string(), |s| s.to_string_lossy().into_owned());
+    let name = stem.split_whitespace().collect::<Vec<_>>().join("-");
+    format!("step: remez/{name} {secs:.1}s")
 }
 
 fn run(path: &str, check: bool, root: &Path, cache: Option<&Cache>, o: &mut Outcome) -> Result<bool, String> {
@@ -99,6 +111,7 @@ fn run(path: &str, check: bool, root: &Path, cache: Option<&Cache>, o: &mut Outc
 }
 
 fn run_one(path: &str, check: bool, root: &Path, cache: Option<&Cache>) -> Outcome {
+    let started = std::time::Instant::now();
     let mut o = Outcome::default();
     match run(path, check, root, cache, &mut o) {
         Ok(good) => o.ok = good,
@@ -107,6 +120,7 @@ fn run_one(path: &str, check: bool, root: &Path, cache: Option<&Cache>) -> Outco
             o.ok = false;
         }
     }
+    o.secs = started.elapsed().as_secs_f64();
     o
 }
 
@@ -150,7 +164,7 @@ fn main() -> ExitCode {
             });
         }
         drop(tx);
-        // Print each fit's output in command-line order as soon as every earlier fit is done.
+        // Print each fit's output, then its step line, in command-line order as soon as every earlier fit is done.
         let mut pending: BTreeMap<usize, Outcome> = BTreeMap::new();
         let mut emitted = 0;
         let mut ok = true;
@@ -159,6 +173,9 @@ fn main() -> ExitCode {
             while let Some(o) = pending.remove(&emitted) {
                 print!("{}", o.out);
                 eprint!("{}", o.err);
+                if let Some(f) = files.get(emitted) {
+                    println!("{}", step_line(f, o.secs));
+                }
                 ok &= o.ok;
                 emitted = emitted.saturating_add(1);
             }

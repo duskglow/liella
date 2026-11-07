@@ -4,7 +4,7 @@
 //!   reference every accuracy measurement and test of `liella-math` is checked against.
 //! * [`remez`] and the `remez` binary: minimax (Remez exchange) fitting of the polynomial
 //!   coefficients that `liella-math` uses, with each derivation recorded in the generated file.
-//! * [`check_cache`]: the verdict cache of `remez --check` (D-10.54).
+//! * [`check_cache`]: the verdict cache of `remez --check` (D-10.58).
 //! * [`cmp`] and the `mathcmp` binary: the glibc comparison and accuracy measurement.
 //! * [`cplx`]: the complex functions' oracle (both parts, from the real oracles).
 //!

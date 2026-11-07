@@ -1,4 +1,4 @@
-//! The verdict cache of `remez --check` (D-10.54).
+//! The verdict cache of `remez --check` (D-10.58).
 //!
 //! A check verdict is a pure function of the bytes the check reads: the `remez` executable and
 //! every file mapped into its process (the shared objects it runs on), the fit file, the
