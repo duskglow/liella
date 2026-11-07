@@ -1,0 +1,29 @@
+{
+ "task": "MACHINE-JCC-PAD",
+ "model": "opus",
+ "tokens": null,
+ "result": "fold.S/scan.S jumps kept off 32-byte boundaries + cargo xtask jcc-check; MITE uops -84% on Skylake-SP (175 rows); getenv _2000 rows +9% instructions (NOPs in a loop); timing on Ivy Bridge/N100 pending",
+ "branch": "task/machine-jcc-pad",
+ "head": null,
+ "gate": {
+  "affected": "pending (keke machine-jcc-pad-gate queued)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "c_malloc dead-code warning in a bench build (not this change)",
+  "cycles on the loaded Skylake-SP host rose on memchr_16/strlen_16/__memcmpeq_eq_16 while MITE fell to ~0: unexplained, advisory (load 28-35)"
+ ],
+ "refused": [],
+ "improvement": "role dirs are not git checkouts, so bench --stage --base cannot build a before tree there; a role-side before/after stage option (patch file applied in a copy) would save a hand-made swap",
+ "next_step": "read gate/plants and the ivb/n100 timing logs; if getenv _2000 or short rows are slower, align the scanner loop so it needs no NOP padding, then re-measure",
+ "report_file": "handoff/machine-jcc-pad.md",
+ "jobs": [
+  "keke:machine-jcc-pad-gate",
+  "keke:machine-jcc-pad-plants",
+  "mei:machine-jcc-pad-count",
+  "kotori:machine-jcc-pad-ivb-2",
+  "nozomi:machine-jcc-pad-n100-2"
+ ]
+}
