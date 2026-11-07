@@ -1,42 +1,63 @@
-# BENCH-CASECMP-ALIGN (INCOMPLETE: not layout alone; do not land as is)
+# BENCH-CASECMP-ALIGN (-2): strcasecmp placement sensitivity fixed in the kernels; bench pinned
 
-State: branch task/bench-casecmp-align, code commit c90ece4dc on origin/next 5872ad47e (handoff commit on top).
-Role mei:~/w/s1 (Skylake-SP, Xeon Platinum 8151).
+State: branch task/bench-casecmp-align-2 (stacks on task/bench-casecmp-align), role keke:~/w/n3 (Zen 1, EPYC 7551).
+Code commits: 105e122c1 (AVX2 kernel), 61842017f (SSE2 back-up), c73c5d06f (bench rows), e574c147c (plants),
+922616e50 (byte loop to page end). Plants file: handoff/plants/BENCH-CASECMP-ALIGN-2.plants.
 
-## What was done
-- bench/c/cbench_locale.c: case_a/case_b moved into a page-aligned block `case_pages[3][4096]`
-  (case_a = page 0 offset 0, case_b = page 0 offset 0x800, neither crosses a page); iconv buffers text/out
-  `_Alignas(4096)`. New row `strcasecmp_c_256_xpage`: strcasecmp(case_a, case_x), case_x = copy of case_b at
-  page 1 offset 0xf00 (terminator on page 2). bench/budgets.tsv row added for it.
-- Other static operand arrays in bench/c/ whose address can drift, NOT changed (out of this bench's before/after):
-  cbench_patterns line[1025], aaaa[4097] (regexec operands); cbench_hot rbuf/wbuf[8192] (stdio buffers, the
-  position cycles through the whole buffer), line[10001]; cbench_netdb text[64], addr4/addr6, query/msg[512],
-  expanded; cbench_aio buf[16][4096], block[64K]; cbench_fstree path buffers; cbench_libm af..bq (scalar inputs).
+## Cause (profiled from the kernel and an offset sweep)
+`liella_machine_casecmp_ord_avx2` (csys/src/machine/scan.S):
+1. Its head page test looks at the byte BEFORE each start (folds the NULL test in), so a page-aligned start failed it
+   and took the generic loop: +12 (256 bytes) / +36 (strncasecmp 64). The previous run pinned case_a at offset 0,
+   which is exactly that case: the 262 / 103 it measured.
+2. A 32-byte block that would cross a page fell to byte steps (about 30 instructions each, up to 31 bytes) whenever
+   the larger page offset was above 4064: 554-1949 instructions where glibc stays at 211-270.
 
-## Counters (mei, `cargo xtask bench --compare --counters cbench_locale`, instructions per call, Liella / glibc)
-| row | before (next 5872ad47e, unaligned) | after (c90ece4dc, offsets 0 / 0x800) |
-|---|---|---|
-| strcasecmp_c_16 | 53.0 / 45.0 | 53.1 / 45.1 |
-| strcasecmp_c_256 (= utf8_256, en_256) | 250.2 / 202.1 | 262.4 / 197.3 |
-| strcasecmp_c_256_xpage (b at 0xf00) | - | 297.4 / 199.3 |
-| strncasecmp_c_64 | 70.0 / 60.0 | 103.1 / 60.1 |
-| iconv_* 4k (3 rows) | within 0.1% | within 0.1% |
-Jobs: mei:casecmp-align-cnt-before, mei:casecmp-align-cnt-after (both rc 0).
+## Fix
+- Head: after the NULL tests an exact test (offset <= 4032 for both) sends page-aligned starts back to the head.
+- `.Lcord_back`: the block backs both strings up by k = maxoff - 4064 so it ends at the page end (when rax >= k the
+  k bytes are already passed). At a start in the last 31 bytes (rax < k) the block starts before the strings, and
+  its lanes before the starts are cleared, if the other string's page offset is >= k. Otherwise the kernel takes byte
+  steps in a tight loop to the nearer page end (no page tests per byte). SSE2 kernel: the rax >= k back-up and the
+  tight byte loop; its start-near-page-end case still byte-steps (next step).
+- Test: casecmp_avx2.rs `casecmp_reads_neither_neighbour_page_nor_the_bytes_before_the_strings_at_any_start_offset`
+  (pages fenced on both sides; NUL before a, '#' before b).
 
-## Verdict
-Pinning the operands did NOT bring the rows back to the pre-WCTYPE-L-2 level (about 250 - 35 = 215 by the
-+35 in #3856). With neither operand crossing a page, Liella's strcasecmp_c_256 costs 262.4 and strncasecmp_c_64
-costs 103.1 (+33). glibc stays flat (197-202, 60). So Liella's case-compare cost depends heavily on operand
-addresses even when no page is crossed. Mutually aligned operands (same offset modulo 2048) are the slow case
-here. That is a defect in the code (placement sensitivity), not a flake and not only page crossing. The page-
-crossing case costs +35 over the aligned case (297.4 vs 262.4).
-Not done: gate (clippy/static/affected), plants (bench-only change), Ivy Bridge timing (PENDING; booked timing not
-started, budget).
+## Sweep (instructions per call, keke, validation/wl_percall.sh, spec in ~/work/BENCH-CASECMP-ALIGN-2/casecmp_sweep.c
+on keke; copy in the hand-back). glibc / before (sweep0, 49457b455) / after (sweep2, 922616e50)
+| case (a off, b off, len) | glibc | before | after |
+|---|---|---|---|
+| s256 0x000/0x800 (= strcasecmp_c_256) | 233 | 266 | 262 |
+| s256 0x000/0xf00 (= _xpage) | 235 | 301 | 297 |
+| s256 ordinary (0x001/0x013, 0x010/0x013, 0x040/0x840 ...) | 233-241 | 254 | 254 |
+| s256 0x013/0xfc8 | 231 | 1129 | 318 |
+| s256 0x013/0xfe9 | 232 | 1058 | 298 |
+| s256 0xfd0/0xfe8 | 258 | 1949 | 329 |
+| s256 0xff0/0x013 | 211 | 802 | 289 |
+| s256 0xff0/0x005 (byte fallback) | 211 | 802 | 537 |
+| s256 0xffc/0xff1 | 256 | 766 | 512 |
+| s256 0x013/0xff7 | 233 | 554 | 427 |
+| s16 0x000/0x800 | 53 | 91 | 65 |
+| s16 0xff8/0x013 | 161 | 386 | 273 |
+| n64 0x000/0x800 (= strncasecmp_c_64) | 71 | 107 | 82 |
+| n64 0x013/0xfe0 | 166 | 111 | 119 (+8: the exact head test when it fails) |
+| n64 0xffa/0x013 | 164 | 294 | 219 |
+Jobs: keke:bench-casecmp-align-2-sweep0 (before), -sweep1 (intermediate, superseded), -sweep2 (final).
 
-## Next step
-1. Black-box sweep: Liella vs glibc instruction count for strcasecmp/strncasecmp over (offset a, offset b) in a page
-   (e.g. a, b in {0, 1, 7, 8, 15, 16, 31, 32, 63} x page-end offsets 0xfc0..0xfff), with validation/wl_percall.sh
-   or a small probe. Find which placements take the slow path and profile it (casecmp_ord_avx2 / its prologue).
-2. Fix the code so the cost is flat across placements. Then pick representative bench offsets (e.g. a=0x0, b=0x13)
-   so the rows are not on a best or worst case by accident, and keep the _xpage row. Then gate and time.
-Plan rows: D-5.5, D-5.6 (casefold design); ruling #3856.
+## Bench
+cbench_locale: operands stay pinned (case_a 0, case_b 0x800, xpage at 0xf00); new rows strcasecmp_c_256_odd
+(0x13 / 0x421) and strcasecmp_c_256_pageend (start at 0xff0); every operand's page offset printed to stderr.
+
+## Gate / plants
+keke:bench-casecmp-align-2-gate2 (clippy, static, affected --base origin/next) and keke:bench-casecmp-align-2-plants2
+(9 plants, 1 declared equivalent) on 922616e50: see the report json for results. Superseded: -lint0, -t1 (green,
+older head), -gate and -plants (killed: head changed).
+
+## Open / next step
+1. Remaining gap at the start-near-page-end byte fallback (one string in the last 31 bytes of a page and the other
+   within k bytes of its page start): 427-537 vs glibc 211-233. Design: realign the backed-up block of the page-end
+   string through a 64-byte stack buffer (store, reload at +k), valid lanes < 32 - k; no byte steps at all.
+2. The SSE2 kernel's start in the last 31 bytes still byte-steps (tight loop); port the AVX2 back_start masking.
+3. Ordinary placements are still 254 vs glibc 233 (+9%): the per-64-byte step cost, not placement.
+4. `cargo xtask bench --compare --counters cbench_locale` on this head for the two new rows, and Ivy Bridge timing:
+   NOT RUN (budget) -> PENDING.
+Plan rows: D-5.5, D-5.6; rulings #3856, #3902.
