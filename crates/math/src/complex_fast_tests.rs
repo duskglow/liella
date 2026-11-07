@@ -147,7 +147,9 @@ fn cexp_quick_tier_sweep() {
     let threads: Vec<_> = (0..8u64).map(|i| std::thread::spawn(move || compare(250_000, 0x9e37_79b9_7f4a_7c15 ^ (i + 1).wrapping_mul(0xd1b5_4a32_d192_ed03)))).collect();
     let mut total = [0usize; 5];
     for h in threads {
-        let r = h.join().expect("sweep thread");
+        let r = h.join();
+        assert!(r.is_ok(), "a sweep thread failed (its panic message is above)");
+        let r = r.unwrap_or_default();
         for (t, v) in total.iter_mut().zip(r) {
             *t += v;
         }
