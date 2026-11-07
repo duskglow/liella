@@ -5301,6 +5301,7 @@ liella_machine_casecmp_ord_avx2:
 	andl $4095, %r9d
 	cmpl $4031, %r9d
 	ja .Lcord_head_exact
+.Lcord_head:
 	vmovdqu (%rdi), %ymm1
 	vmovdqu (%rsi), %ymm2
 	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
@@ -5331,11 +5332,22 @@ liella_machine_casecmp_ord_avx2:
 	movl %r8d, %eax
 	jmp .Lcord_found_idx
 .Lcord_head_exact:
-	/* A start near a page end, page-aligned or NULL: the NULL tests, then the loop from 0. */
+	/* A start near a page end, page-aligned or NULL: the NULL tests, then the exact page test
+	 * (BENCH-CASECMP-ALIGN-2): a start at page offset 4032 or below has its 64 head bytes in its
+	 * page, so a page-aligned start (which fails the test from one byte before) takes the head
+	 * too, 9 instructions later, instead of the loop from 0. The others take the loop from 0. */
 	testq %rdi, %rdi
 	jz .Lcord_open
 	testq %rsi, %rsi
 	jz .Lcord_open
+	movl %edi, %r8d
+	andl $4095, %r8d
+	cmpl $4032, %r8d
+	ja .Lcord_generic
+	movl %esi, %r9d
+	andl $4095, %r9d
+	cmpl $4032, %r9d
+	jbe .Lcord_head
 	jmp .Lcord_generic
 .Lcord_head_next:
 	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
@@ -5392,7 +5404,8 @@ liella_machine_casecmp_ord_avx2:
 	cmpl %r8d, %r9d
 	cmova %r9d, %r8d
 	cmpl $4064, %r8d
-	ja .Lcord_byte
+	ja .Lcord_back
+.Lcord_load32:
 	vmovdqu (%rdi,%rax), %ymm1
 	vmovdqu (%rsi,%rax), %ymm2
 	vpaddb %ymm5, %ymm1, %ymm3
@@ -5494,6 +5507,57 @@ liella_machine_casecmp_ord_avx2:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
+.Lcord_back:
+	/* A 32-byte block at rax would cross a page (BENCH-CASECMP-ALIGN-2): r8d, the larger page
+	 * offset, is 4065-4095. Both strings back up by k = r8d - 4064 (1-31): the string at r8d
+	 * then ends its block at its page end, the other's block ends no later in its own page.
+	 * With rax >= k the block starts at or after both strings' starts (readable, and its first
+	 * k bytes already passed: no stop there), so the plain 32-byte step runs from rax - k. */
+	subl $4064, %r8d
+	cmpq %r8, %rax
+	jb .Lcord_back_start
+	subq %r8, %rax
+	jmp .Lcord_load32
+.Lcord_back_start:
+	/* rax < k (a start in the last 31 bytes of a page): the block starts k - rax bytes before
+	 * the strings. It stays in the page of a + rax and of b + rax when the smaller page offset
+	 * is at least k (lanes before the starts are cleared from the stop mask); otherwise one
+	 * string starts in the first k bytes of a page and the other in the last 31 bytes of one:
+	 * a byte step. */
+	leal (%rdi,%rax), %r9d
+	leal (%rsi,%rax), %r10d
+	andl $4095, %r9d
+	andl $4095, %r10d
+	cmpl %r9d, %r10d
+	cmovb %r10d, %r9d
+	cmpl %r8d, %r9d
+	jb .Lcord_byte
+	subq %r8, %rax
+	movq %rax, %r11
+	negq %r11
+	vmovdqu (%rdi,%rax), %ymm1
+	vmovdqu (%rsi,%rax), %ymm2
+	vpaddb %ymm5, %ymm1, %ymm3
+	vpaddb %ymm5, %ymm2, %ymm4
+	vpcmpgtb %ymm3, %ymm6, %ymm3
+	vpcmpgtb %ymm4, %ymm6, %ymm4
+	vpand %ymm7, %ymm3, %ymm3
+	vpand %ymm7, %ymm4, %ymm4
+	vpor %ymm3, %ymm1, %ymm1
+	vpor %ymm4, %ymm2, %ymm2
+	vpcmpeqb %ymm1, %ymm2, %ymm3
+	vpminub %ymm1, %ymm3, %ymm3
+	vpcmpeqb %ymm0, %ymm3, %ymm3
+	vpmovmskb %ymm3, %r8d
+	/* Clear the r11 (1-31) lanes before the starts; rcx (loc) is kept in r10 for the shift. */
+	movq %rcx, %r10
+	movl %r11d, %ecx
+	shrl %cl, %r8d
+	shll %cl, %r8d
+	movq %r10, %rcx
+	testl %r8d, %r8d
+	jnz .Lcord_found
+	jmp .Lcord_after32
 .Lcord_same:
 	/* Equal after folding: both NUL (the answer is 0), or a writer changed the text since the
 	 * vector step (open: the rest entry measures it again). */
