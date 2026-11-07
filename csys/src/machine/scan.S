@@ -6073,8 +6073,8 @@ strchrnul:
 	jz .Lschrnul_s16
 	leaq (%rdi,%rdx), %rax
 	ret
-	/* TIMING-COV-STRSCAN-SHORT-IVB (D-NEW): blocks 1 to 3 fall through on a miss and leave on a
-	 * hit to their own out-of-line tail, as strchr's (.Lschr_t16). */
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-NEW): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschrnul_t32), as strchr's (.Lschr_t32). */
 .Lschrnul_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6083,7 +6083,10 @@ strchrnul:
 	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
-	jnz .Lschrnul_t16
+	jz .Lschrnul_s32
+	leaq 16(%rdi,%rdx), %rax
+	ret
+.Lschrnul_s32:
 	movdqu 32(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6099,20 +6102,17 @@ strchrnul:
 	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
-	jnz .Lschrnul_t48
+	jz .Lschrnul_s64
+	leaq 48(%rdi,%rdx), %rax
+	ret
+.Lschrnul_s64:
 	leaq 64(%rdi), %rax
 	andq $-16, %rax
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
-.Lschrnul_t16:
-	leaq 16(%rdi,%rdx), %rax
-	ret
 .Lschrnul_t32:
 	leaq 32(%rdi,%rdx), %rax
-	ret
-.Lschrnul_t48:
-	leaq 48(%rdi,%rdx), %rax
 	ret
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
 	.section .text.liella_machine_strchr,"ax",@progbits
@@ -6219,10 +6219,10 @@ index:
 .Lschr_snull:
 	xorl %eax, %eax
 	ret
-	/* TIMING-COV-STRSCAN-SHORT-IVB (D-NEW): blocks 1 to 3 fall through on a miss and leave on a
-	 * hit to their own out-of-line tail (.Lschr_t16/t32/t48), so a call deciding in the last
-	 * block takes one taken branch in blocks 1 to 3 instead of one per missed block. Same
-	 * instructions on every path. Block 0's hit stays inline (the 16-byte rows). */
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-NEW): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschr_t32); blocks 0, 1 and 3 keep their hit
+	 * inline. Taken branches per call by deciding block 0/1/2/3/beyond: 0/1/3/2/3 (one per
+	 * missed block before: 0/1/2/3/4), plus the NULL return's. Same instructions on every path. */
 .Lschr_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6231,7 +6231,13 @@ index:
 	por %xmm2, %xmm1
 	pmovmskb %xmm1, %ecx
 	bsfl %ecx, %ecx
-	jnz .Lschr_t16
+	jz .Lschr_s32
+	pmovmskb %xmm2, %edx
+	btl %ecx, %edx
+	jnc .Lschr_snull
+	leaq 16(%rdi,%rcx), %rax
+	ret
+.Lschr_s32:
 	movdqu 32(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6247,29 +6253,23 @@ index:
 	por %xmm2, %xmm1
 	pmovmskb %xmm1, %ecx
 	bsfl %ecx, %ecx
-	jnz .Lschr_t48
+	jz .Lschr_s64
+	pmovmskb %xmm2, %edx
+	btl %ecx, %edx
+	jnc .Lschr_snull
+	leaq 48(%rdi,%rcx), %rax
+	ret
+.Lschr_s64:
 	leaq 64(%rdi), %rax
 	andq $-16, %rax
 	subq $16, %rax
 	movl $1, %r11d
 	jmp .Lschr_next
-.Lschr_t16:
-	pmovmskb %xmm2, %edx
-	btl %ecx, %edx
-	jnc .Lschr_snull
-	leaq 16(%rdi,%rcx), %rax
-	ret
 .Lschr_t32:
 	pmovmskb %xmm2, %edx
 	btl %ecx, %edx
 	jnc .Lschr_snull
 	leaq 32(%rdi,%rcx), %rax
-	ret
-.Lschr_t48:
-	pmovmskb %xmm2, %edx
-	btl %ecx, %edx
-	jnc .Lschr_snull
-	leaq 48(%rdi,%rcx), %rax
 	ret
 .Lschr_pre1:
 	movl $1, %r11d
