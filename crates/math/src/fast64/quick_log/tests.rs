@@ -293,29 +293,29 @@ fn log_family_exact_and_hard_cases() {
         // (log2, log10) or below 2^-7 (log1p), where the error is closest to the bound, and
         // over [0.5, 2) and every binade.
         let near = if f.lnb == 0.0 { uniform(1_000_000, 0x2545_f491_4f6c_dd1d, -two(-7), two(-7)) } else { uniform(1_000_000, 0x2545_f491_4f6c_dd1d, 1.0 - two(-8), 1.0 + two(-7)) };
-        let mut wrong = 0usize;
+        let (mut wrong, mut misses, mut tier2) = (0usize, 0usize, 0usize);
         for x in near.chain(uniform(500_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0)).chain(spread(500_000, 13)) {
             if let Some((zh, zl)) = (f.parts)(x) {
-                if zh + zl * C != zh && zh != (f.cr)(x) {
-                    wrong += 1;
-                    hard.push(x);
+                if zh + zl * C != zh {
+                    // A quick miss: the tiers must reach tier 2, which answers most of them.
+                    tier2 += usize::from((f.tiered)(x).is_some());
+                    misses += 1;
+                    if zh != (f.cr)(x) {
+                        wrong += 1;
+                        hard.push(x);
+                    }
                 }
             }
         }
         assert!(wrong > 0, "{}: no misrounded unchecked quick result in the sample: the hard-case test is vacuous", f.name);
-        let mut tier2 = 0usize;
+        assert!(tier2 * 2 > misses, "{}: tier 2 never answered a quick miss ({tier2} of {misses})", f.name);
         for x in hard {
             let want = (f.cr)(x);
-            let quick = (f.quick)(x);
-            if let Some(v) = quick {
+            if let Some(v) = (f.quick)(x) {
                 assert_eq!(v.to_bits(), want.to_bits(), "quick {}({x:e}) misrounded", f.name);
             }
-            let tiered = (f.tiered)(x);
-            tier2 += usize::from(quick.is_none() && tiered.is_some());
-            assert_eq!(tiered.map(f64::to_bits).unwrap_or(want.to_bits()), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
+            assert_eq!((f.tiered)(x).map(f64::to_bits).unwrap_or(want.to_bits()), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
         }
-        // Each misrounded sample operand is a quick miss: tier 2 must have answered some of them.
-        assert!(tier2 > 0, "{}: tier 2 never answered a quick miss", f.name);
     }
 }
 
