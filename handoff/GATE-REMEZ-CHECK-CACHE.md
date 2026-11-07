@@ -43,6 +43,8 @@ RESULTS (code tree 2426f3b2a, keke 7-CPU slots, load 15-20):
   list came from `ls` (locale sort puts fast32_erf elsewhere) while the command's glob is byte order; the step lines
   matched the glob order and the binary's verdict order exactly (checked by hand). time2.sh takes the reference
   from the same glob; job gate-remez-check-cache-2-time2 reruns cold/warm with a new cache dir.
+- gate-remez-check-cache-2-time2 rc 0: cold 7:27.75 (448 s, 293% CPU), 22 up to date, 0 cached; warm 0.19 s,
+  22/22 cached; cold == warm reports; step lines in command-line order cold and warm.
 
 ## Earlier measurements (run 1, keke 7-CPU slot, load 22-35; before the merge)
 serial 1261 s -> parallel cold 488 s (293-297% CPU) -> uncached 444 s -> warm 0.19 s; `tables --check` 5.7 s (not
