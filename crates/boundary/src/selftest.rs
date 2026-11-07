@@ -735,6 +735,19 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     crate::hot::exp_quick_parts(x)
 }
 
+/// The `double` sin (`which` 0), cos (1) or tan (2) quick phase alone (D-10.51, D-10.61; their
+/// tier 1) in the build [`set_math_fma`] chose: the correctly rounded result, or `None` when its
+/// rounding test does not decide.
+pub fn trig_quick(which: u8, x: f64) -> Option<f64> {
+    crate::hot::trig_quick(which, x)
+}
+
+/// The `double` `sincos` quick phase alone in the build [`set_math_fma`] chose: both correctly
+/// rounded results, or `None`.
+pub fn sincos_quick(x: f64) -> Option<(f64, f64)> {
+    crate::hot::sincos_quick(x)
+}
+
 /// The `double` `log` quick phase alone (D-10.60; `log`'s tier 1) in the build [`set_math_fma`]
 /// chose: the correctly rounded `ln x`, or `None` when its rounding test does not decide.
 pub fn log_quick(x: f64) -> Option<f64> {
