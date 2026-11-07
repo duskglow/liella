@@ -184,11 +184,13 @@ fn exp_quick_count_loop() {
         "sse2" => assert!(selftest::set_math_fma(false)),
         _ => {}
     }
+    // Decided once, outside the loop, so every mode's loop costs the same apart from the call.
+    let none = build == "none";
     let mut acc = 0.0f64;
     let mut miss = 0usize;
     for i in 0..calls {
         let x = core::hint::black_box(xs[i & 4095]);
-        acc += if build == "none" {
+        acc += if none {
             x
         } else {
             selftest::exp_quick(x).unwrap_or_else(|| {
