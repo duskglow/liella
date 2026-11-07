@@ -1,0 +1,5 @@
+# LIBM-F64-EXP-FAMILY-QUICK-2 plants (docs/plants.md): expm1 on the exp quick kernel, series below 2^-5, tier 2 on a miss (both builds).
+expm1-small-boundary-moved | crates/math/src/fast64/quick.rs | lit:if a < SMALL_M1 { ==> if a < SMALL_M1 + (1 << 52) { | cargo test --release -p liella-math --lib fast64::quick::tests::expm1_error_within_bound | msg:quick expm1\(.*above the bound
+expm1-x-low-bits-lost | crates/math/src/fast64/quick.rs | lit:let xl = x - xh; ==> let xl = 0.0 * (x - xh); | cargo test --release -p liella-math --lib fast64::quick::tests::expm1_error_within_bound | msg:quick expm1\(.*above the bound
+expm1-sse2-low-part-dropped | crates/math/src/fast64/quick.rs | lit:ma; no_lo; dekker_lo; ==> ma; no_lo; no_lo; | cargo test --release -p liella-math --lib fast64::quick::tests::expm1_error_within_bound | msg:quick expm1\(.*above the bound
+expm1-near-always-true | crates/math/src/fast64/quick.rs | perl:s/(pub fn expm1_tiered.*?)if zh \+ w == zh && w != 0\.0 \{/$1if true {/s | cargo test --release -p liella-boundary --features selftest --test exp_quick expm1_quick_sse2_build | msg:SSE2 entry expm1\(.*correctly rounded
