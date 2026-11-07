@@ -374,9 +374,11 @@ Measure a lower dispatch level (BENCH-TUNABLES): `--tunables <value>` sets `GLIB
 Liella and the glibc side, in `cargo xtask bench` and in `--compare`, and the output prints a `tunables:` line
 so a reader sees which level ran, for example
 `cargo xtask bench --compare --counters --runs 1 --tunables glibc.cpu.hwcaps=-AVX2 cbench_opt`. The benchmark
-environment is fixed (BENCH-FIXED-ENV), so a `GLIBC_TUNABLES=... cargo xtask bench` in the caller's environment is
-dropped and measures the full-width paths on both sides; use the option. Compare the instruction counts with and
-without the option to confirm the level changed.
+environment is otherwise fixed (BENCH-FIXED-ENV); a non-empty `GLIBC_TUNABLES=... cargo xtask bench` in the
+caller's environment is taken as the `--tunables` value (D-X.39), and an option and a caller value that differ are an
+error. The value reaches every route: the plain run, the private-`/dev/shm` route of the name-service benches (as an
+argument of its script, since `sudo` resets the environment) and the Rust benches. Compare the instruction counts with
+and without the value to confirm the level changed.
 
 Where a row's limit lives: [`bench/host_limits.tsv`](../bench/host_limits.tsv) is keyed by the
 exact `model name` string from `/proc/cpuinfo`. A CPU with no entry is measured but not
