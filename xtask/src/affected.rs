@@ -101,7 +101,7 @@ use std::time::Instant;
 const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-math"];
 /// xtask sources that name csys symbols only to check the csys source or products, from `cargo xtask static` and
 /// `cargo xtask so` (D-X.34): a reference from one of them is no user of the symbol.
-const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs"];
+const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs", "xtask/src/jcc.rs"];
 
 // ---------------------------------------------------------------------------------------------
 // The repository model
