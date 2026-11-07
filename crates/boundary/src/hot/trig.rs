@@ -31,14 +31,15 @@ trig_nearest! {
 pub(crate) fn trig_quick(which: u8, x: f64) -> Option<f64> {
     use liella_math::trig::quick::{fused, plain};
     if crate::dispatch::fma() {
-        let f: unsafe fn(f64) -> Option<f64> = match which {
-            0 => fused::sin_quick,
-            1 => fused::cos_quick,
-            _ => fused::tan_quick,
-        };
-        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { f(x) };
+        return match which {
+            // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+            0 => unsafe { fused::sin_quick(x) },
+            // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+            1 => unsafe { fused::cos_quick(x) },
+            // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+            _ => unsafe { fused::tan_quick(x) },
+        };
     }
     match which {
         0 => plain::sin_quick(x),
