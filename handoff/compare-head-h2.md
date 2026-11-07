@@ -1,53 +1,53 @@
-# COMPARE-HEAD-H2 / -H2-2: head-first compare entry (memcmp / bcmp / __memcmpeq), checkpoint 2
+# COMPARE-HEAD-H2 / -H2-2 / -H2-3: head-first compare entry (memcmp / bcmp / __memcmpeq), checkpoint 3
 
-State: branch `task/compare-head-h2-2` (base origin/next 5872ad47e). Commits: 09459dd58 H2 entries (D-4.66),
-954b52553 plants file, b737c441d "let 0-15 byte calls fall through the entry" (S1, this run), then this handoff.
-Role mei:~/w/s1. **Verdict: INCOMPLETE, must not land as it stands: AVX2 equal rows 64-128 B are slower in TIME
-than next on the N100 (ruling #3899 condition), so option (c) has to be built first (design below).**
+State: branch `task/compare-head-h2-3` (base origin/next 5872ad47e). Commits: 09459dd58 H2 entries (D-4.66),
+954b52553 plants, b737c441d S1 (0-15 fall through), **0577844f4 option (c) (this run)**, then handoff/plan commits.
+Role mei:~/w/s1. **Verdict: INCOMPLETE, must not land as it stands: option (c) fixes the AVX2 equal rows on the N100
+but makes 8-16 byte rows and mix16 slower than next on both timing hosts. Three entry-order tweaks in a row have
+each traded one set of rows for another: recommend a step-back / rethink, not a fourth tweak (RULING NEEDED below).**
 
-## What the code does now (fold.S, dispatch.rs)
-* Entry: `cmpq cmp_head(%rip), %rdx` then `jae .Lcmp_head` (memcmp, n >= 16) / `ja .Leq_head` (bcmp/__memcmpeq,
-  n > 16); below that the code FALLS THROUGH (S1): n < 8 -> `.L*_lt8` (explicit NULL tests), 8 <= n < `cmp_short`
-  (17 folded, 8 off) -> 8-byte words at 0 and n - 8, else the checked Rust entry. Head path as in H2 (16-byte block
-  at 0, 17-32 block at n - 16, > 32: `cmp_long` test -> AVX2 classes, else SSE2 33-64 / `.L*_sse_65`).
-* Why S1: Ivy Bridge timing of H2 showed n = 8 / 16 and mix16 12-25% slower than next for bcmp/__memcmpeq (memcmp
-  6-11%): a taken branch + one more compare in front of every n < 16, and the n = 16 block compared twice.
+## What the code does now (fold.S, dispatch.rs; D-4.66 amended)
+* Entry of both functions: `leaq -33(%rdx),%rax; cmpq cmp_avx_span(%rip),%rax; jb .L*_wide` (span word 2016 with
+  folding + AVX2, else 0; it replaced `liella_machine_cmp_long`, whose test behind the head block is gone), then
+  S1: `cmp cmp_head; jae/ja .L*_head`, fall-through 8-15/16 words, 0-7 `.L*_lt8`. Head path as in H2 (SSE2 33+
+  and AVX2 > 2048 only now).
 
-## Evidence (rethink harness, 7 interleaved process rounds, medians; ratio = H2 or S1 / next, same host)
-| row (native mode) | Ivy H2 | N100 H2 | N100 S1 |
+## Evidence (this run)
+* lint on inherited head `compare-head-h2-3-lint0` rc 0; on 0577844f4 `compare-head-h2-3-lint1` (xtask clippy +
+  static) rc 0. Gate `compare-head-h2-3-gate` (direct tier, mei): read its row in jobs.tsv (it was still running
+  at the last check; every suite shown was ok).
+* Plants `compare-head-h2-3-plants` (handoff/COMPARE-HEAD-H2-plants.txt, 15 plants incl. 6 new for the span
+  test): 14 CAUGHT, 1 EQUIVALENT (span one high: 2049 takes the exact AVX2 big classes), 0 SURVIVED, 0 WARN.
+* Harness correctness sweep `compare-head-h2-3-sweep-2` (Skylake-SP): 4,250,610 checks, 0 failures for glibc /
+  next / (c) in the native and forced-SSE2 modes.
+* Counts (`compare-head-h2-3-percall`, memcmp_bands, Skylake-SP, (c) - next per call): AVX2 eq_32 -2, eq_48/64
+  -1, eq_96..256 -3; eq_8/16 +2 (bcmp, __memcmpeq), memcmp eq_16 +1. SSE2: eq_8/16 +2, eq_32 -2, 48..256 -4..+2.
+* Timing (rethink harness, 7 interleaved rounds, medians; ratio (c)/next; one quantum ~0.42 ns N100, ~0.40 Ivy):
+| row | N100 (AVX2) | N100 forced SSE2 | Ivy Bridge (SSE2) |
 |---|---|---|---|
-| bcmp/__memcmpeq eq_8 / eq_16 | 1.19-1.25 / 1.125 | 1.00 / 1.00 | 1.00 (bcmp eq_8 1.17 = next's own spread) / 1.00 |
-| bcmp/__memcmpeq mix16 | 1.12-1.13 | 1.14 | 1.00 |
-| eq_32 (all three) | 0.75-0.82 | 0.875 | 0.875-0.94 |
-| **eq_64** bcmp,__memcmpeq / memcmp | 0.857 / 0.80 | **1.25 / 1.125** | **1.375 / 1.25** |
-| **eq_96, eq_128** | 0.83 / 1.05 | **1.083** | **1.167** |
-| mix64 | 0.82-0.90 | 1.03-1.13 | 1.04-1.13 |
-| head_96..4096 | 0.43-0.63 | (not read) | 0.78-0.79 |
-Spread (max/min of 7 rounds) of next and H2 on those rows <= 1.01 except where noted; the proto control row moves
-by one timer quantum (0.86-1.0), so one quantum (~0.4 ns) is noise, 1.083+ on several sizes is not.
-Ivy S1 job `kotori:compare-head-h2-2-kotori-s1` was queued behind another story's timing job: read it with
-`python3 -I ~/work/COMPARE-HEAD-H2-2/t2/analyze.py ~/logs/compare-head-h2-2-kotori-s1.log` on kotori.
-Counts (wl_percall memcmp_bands, Skylake-SP, `compare-head-h2-2-percall-2`, delta S1 - next in-function):
-AVX2 eq_8..16 -1..-3, eq_32 -5..-9, **eq_48/64 +7/+8, eq_96..256 +6**, head_128 -6..-8, head_8..64 +0..+2;
-SSE2 eq rows -1..-9 (memcmp eq_128 +1), head rows +0..+2 at 8-64, -7/-8 at 128.
-Correctness: harness check (4,250,610 checks, guard pages, all positions) 0 failures for glibc / next / H2 / S1 in
-the native and forced-SSE2 modes (Skylake-SP), and H2 on the N100 and Ivy Bridge.
+| eq_32 / eq_64 | 0.875 / 0.875-1.0 | - / 1.11 | 1.0 / 1.07 |
+| eq_96, eq_128 / eq_256 | **0.917 / 0.93-0.95** | - | memcmp 1.10 / 1.05 |
+| eq_8 / eq_16 | 1.00 / 1.00 | 1.0 | memcmp 1.11 / **1.22**; bcmp, meq eq_16 1.125 |
+| head_8..64 (bcmp, meq) | **1.14-1.17** (1 quantum) | 1.17 | head_32/64 1.20 (already in S1) |
+| memcmp head_64 | **1.29** (2 quanta) | - | 1.09 |
+| mix16 | **1.08-1.16** | 1.135 | 1.02-1.05 |
+| diff8/head 96-4096 | 0.80-0.89 (bcmp, meq) | - | 0.60 (as S1) |
+Logs: `nozomi:compare-head-h2-3-nozomi`, `kotori:compare-head-h2-3-kotori`; analyse with
+`python3 -I ~/work/COMPARE-HEAD-H2-3/t3/analyze.py ~/logs/<label>.log` on that host.
 
-## Next step (in order)
-1. Option (c), proposed shape (not built): a new fold word `cmp_avx_span` = 2016 when AVX2 classes and folding are
-   on, else 0; at the very top of both entries `leaq -33(%rdx), %rax; cmpq cmp_avx_span(%rip), %rax; jb .L*_wide`
-   (AVX2 33..2048 reach the AVX2 classes with ONE taken branch, like next's ladder; `.L*_wide` keeps its
-   `cmp $64; ja .L*_big_load`), then S1's head test. The `cmp_long` test after the head block then only serves SSE2
-   / > 2048 (keep it or fold into the >64 path). Cost: +3 not-taken instructions on every other row; must be timed
-   on Ivy Bridge (small rows, mix16) and the N100 (AVX2 eq_64/128 must reach next within one quantum).
-   H2 put 2 taken branches + the head block in front of the AVX2 bodies, S1 3 taken branches: N100 time tracks the
-   taken-branch count on these rows more than the instruction count.
-2. Plants: add one for the new word (AVX2 span test dropped -> AVX2 rows via SSE2 path is equivalent by result;
-   use a span-off-by-one plant at 2048/2049 instead) and re-run `handoff/COMPARE-HEAD-H2-plants.txt`.
-3. Re-time with `~/work/COMPARE-HEAD-H2-2/build.sh <base> <head>` on mei (links h_glibc / h_next / h_h2 from
-   ~/wl/products, runs the sweep, packs timing.tgz) and `run.sh` under `~/bin/timing` on nozomi + kotori/nico.
-4. D-4.66 row: add the S1 entry order and the (c) result; fold.S header prose below D-4.66 still predates it.
+## Reading
+* The 3 not-taken instructions of the span test cost a quantum on the 8-16 rows on both cores (Ivy: span 0, pure
+  overhead); on the N100 the 8-64 "head" rows (early difference) lose the early exit's gain. memcmp head_64 on the
+  N100 now pays the 32-byte block path where next had an 8-byte head probe.
+* Ivy head_32/64 1.20 (bcmp, meq) already came with H2's head block (S1 run); it was not flagged before.
+* No entry order with one shared body serves both: every runtime ISA test in front costs the small rows, and the
+  head block in front costs the AVX2 mid rows.
+
+## Next step (recommendation)
+1. Step-back / RETHINK (rut rule): per-ISA entries chosen once at startup (the classed slot swap, D-4.53, which ruling
+   #3841 kept off for this family) would drop the runtime span test: the SSE2 body = S1 entry, the AVX2 body = next's
+   ladder for 33-2048 plus the head block only where it wins. Needs a ruling on #3841.
+2. If (c) is kept instead: reverting 0577844f4 restores S1 (Ivy small rows at next, N100 AVX2 eq_64-128 1.17-1.375).
 
 ## Not to redo
-H2-alone and S1-alone are measured (above). The memcmp head/diff8 win on Ivy Bridge (0.5-0.63 of next) and the
-small-row parity both hold with S1; only the AVX2 > 32 routing is open.
+H2, S1 and (c) are all timed on both hosts (tables here and in the -H2-2 report). Plants file covers all three.
