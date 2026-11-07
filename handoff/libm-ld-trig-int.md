@@ -15,8 +15,16 @@ and plants file (a3abee27b) and the D-row, saturation section 25 and this handof
   131 048 calls, 65 524 undecided by design (one of sin/cos per operand), worst 2^-117.32, closest |f| 2^-75.
 * Plants `handoff/LIBM-LD-TRIG-INT-plants.txt`: 4 CAUGHT (table bit, quadrant, bound halved, carry), no WARN.
 * Profile (wl_trace, call 11 of sinl, 560 instructions): kernel 371 (66%), `wide::sin` 86, wrapper+symbols 103.
-* Cycles per call (perf stat -r 5, (C(N) - C(0))/N, 3 interleaved rounds, booked idle hosts): CYCLES-HANDOFF
-* Final-head jobs: see the report json (`jobs`).
+* Cycles per call (perf stat -r 5, (C(N) - C(0))/N, N = 200 000, 3 interleaved rounds, medians, booked idle hosts,
+  binaries of a3abee27b = the final head's code): Ivy Bridge (nico, E3-1220L v2) sinl 264.9 (glibc 547.6, 0.48x),
+  cosl 263.6 (551.3), 1e10 ~277 (~551, 0.50x), 1e300 ~276 (~551, 0.50x), sincosl 466.8 (630.2, 0.74x). N100
+  (nozomi) sinl 312.2 (glibc 565.0, 0.55x), cosl 313.4 (563.2, 0.56x), sinl_1e10 322.0 (566.0), cosl_1e10 323.6
+  (565.5), sinl_1e300 324.0 (571.9), cosl_1e300 324.3 (573.0) (0.57x), sincosl 580.1 (715.8, 0.81x). The N100
+  table is not in saturation section 25 (it finished after that commit): move it there in the next story.
+* Final head 87dc43940 (code = 628a2ce84's; -2 added docs, spec, plants): mei:libm-ld-trig-int-2-lint-final,
+  -sweep-final, -plants-final, -percall-final3 rc 0; -gate (direct tier, --base origin/next) see the hand-back.
+  Superseded: -percall-final (rc 2: role synced dirty by the untracked report json), -percall-final2 (its --rev
+  named a mistyped sha; same figures). Bookings 117/118 cancelled.
 
 **Decisions in force.** D-10.52 (the tier), D-10.56 (method and measurements; id reserved by the coordinator),
 D-10.19 (correct rounding), D-10.25 (dispatch pattern; plain `mul` only).
