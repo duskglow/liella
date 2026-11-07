@@ -127,14 +127,26 @@ pub(crate) fn log10_nearest(x: f64) -> Option<f64> {
 pub(crate) fn log_family_quick(f: &str, x: f64) -> (Option<(f64, f64)>, Option<f64>) {
     use liella_math::fast64::quick_log as q;
     if crate::dispatch::fma() {
-        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe {
-            match f {
-                "log2" => (q::fused::log2_quick_parts(x), q::fused::log2_quick(x)),
-                "log10" => (q::fused::log10_quick_parts(x), q::fused::log10_quick(x)),
-                _ => (q::fused::log1p_quick_parts(x), q::fused::log1p_quick(x)),
-            }
+        return match f {
+            "log2" => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log2_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log2_quick(x) },
+            ),
+            "log10" => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log10_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log10_quick(x) },
+            ),
+            _ => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log1p_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log1p_quick(x) },
+            ),
         };
     }
     match f {

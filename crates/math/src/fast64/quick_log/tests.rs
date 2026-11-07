@@ -303,13 +303,19 @@ fn log_family_exact_and_hard_cases() {
             }
         }
         assert!(wrong > 0, "{}: no misrounded unchecked quick result in the sample: the hard-case test is vacuous", f.name);
+        let mut tier2 = 0usize;
         for x in hard {
             let want = (f.cr)(x);
-            if let Some(v) = (f.quick)(x) {
+            let quick = (f.quick)(x);
+            if let Some(v) = quick {
                 assert_eq!(v.to_bits(), want.to_bits(), "quick {}({x:e}) misrounded", f.name);
             }
-            assert_eq!((f.tiered)(x).map(f64::to_bits).unwrap_or(want.to_bits()), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
+            let tiered = (f.tiered)(x);
+            tier2 += usize::from(quick.is_none() && tiered.is_some());
+            assert_eq!(tiered.map(f64::to_bits).unwrap_or(want.to_bits()), want.to_bits(), "tiered {}({x:e}) misrounded", f.name);
         }
+        // Each misrounded sample operand is a quick miss: tier 2 must have answered some of them.
+        assert!(tier2 > 0, "{}: tier 2 never answered a quick miss", f.name);
     }
 }
 
