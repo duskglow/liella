@@ -15,7 +15,7 @@ re-time first (7 rounds), then the group named in the re-time note.
 
 Spec: cov.c (scratch, copied to keke:~/work/LIBM-COVERAGE-1107/cov.c), 64 operands in the cbench ranges.
 
-| case | glibc | Liella | ratio | tier that runs (code + counts; trace job keke:libm-coverage-1107-trace) |
+| case | glibc | Liella | ratio | tier that runs (code, counts and the trace below) |
 |---|---:|---:|---:|---|
 | log / log2 / log10 / log1p | 66 / 66 / 106 / 85 | 190 / 195 / 204 / 243 | 2.87 / 2.95 / 1.93 / 2.86 | fast64 accurate phase (~2^-70) on every call; time 4-5x on IVB (serialising step, DESIGN 5.4) |
 | sin / cos / tan | 105 / 107 / 112 | 152 / 156 / 181 | 1.45 / 1.45 / 1.62 | fast64 trig tier (dd) on every call |
@@ -38,7 +38,25 @@ Spec: cov.c (scratch, copied to keke:~/work/LIBM-COVERAGE-1107/cov.c), 64 operan
 
 MISMATCH lines in the log (atanl, csin, clogf, yn, sinhl, jn, jnf, log_upward) are glibc's results differing from
 Liella's correctly rounded ones in the last place (the accuracy difference recorded in docs/differences-from-glibc.md).
-SSE2 builds (what Ivy Bridge runs): job keke:libm-coverage-1107-percall-sse2 (`GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`).
+SSE2 builds (what Ivy Bridge runs; job keke:libm-coverage-1107-percall-sse2, `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`
+for both libraries), glibc / Liella / ratio: log 81 / 225.6 / 2.79, log2 86 / 248.6 / 2.89, log10 121.2 / 260 / 2.14,
+log1p 104 / 281 / 2.70, pow 193 / 494.4 / 2.56, sin 126.9 / 232 / 1.83, cos 128.7 / 234.6 / 1.82, tan 128.8 / 358.5 /
+2.78, exp2 54 / 203 / 3.76, exp10 59 / 226.9 / 3.85, expm1 106.8 / 253 / 2.37, asin 81.7 / 330.5 / 4.05, acos 85.7 /
+283.9 / 3.31, cosh 97.4 / 404 / 4.15, acosh 101.4 / 983.5 / 9.70, asinh 117.6 / 1039.3 / 8.84, atanh 133.5 / 1054.4 /
+7.90 (f32 unchanged: no FMA builds). The SSE2 builds add 40-180 instructions per f64 call: the Ivy Bridge gap is
+larger than the Zen 1 counts suggest, so every f64 brief counts both builds.
+
+Trace (job keke:libm-coverage-1107-trace, one call, Liella only, Zen 1): acosh 972 instructions, `exp_log::log_dd` 640
++ `dd::sqrt` 89 + `elem::finish` 83 (the dd tier on every call, confirmed); jn 155 525 and jnf 156 431, `mp::pack`
+alone 51 709 / 52 095 (the 384-bit route, f32 = f64 cost, confirmed); tanl 82 341, asinhl 93 708, clog 79 826, all
+`mp::*` (confirmed); logl 1144 in `wide_dd::eval` + the generic `float::round::<F80>` 165; log_upward 356 of which
+`elem_switched` 52 + `fpu::raise` 45 (envelope, confirmed); expf_upward 189 (`elem_switched` 46 + `fpu::raise` 45);
+powf 232 (`fast32::exp_log::pow_core` 98 + `pow` 80 + `mathret::elem` 49); asinf 162 (`fast32::asin` 112 + entry 45);
+lgammaf 255 (`special::lgamma::<f32>` 196). The f64 hot kernels (log, tan, exp2, asin, pow) are inlined into the
+exported symbol, so their split shows only "<fn>f64 18 + liella_machine_mxcsr_get 3" and unnamed addresses: a brief
+needs `--list` or the kernel as a separate symbol to split them. The job ends rc 1 only because its `sqrt` case makes
+no library call (gcc -O2 inlines `sqrtsd`; the same probe artifact as LIBM-RETHINK's `sqrtl`); the 19 other traces
+completed.
 
 ## Re-time note
 coshf, log10f, tanf -> LIBM-F32-ONEPASS if confirmed; j0f, j1f, y0f, y1f -> LIBM-F32-REST; y0, y1 ->
