@@ -6830,7 +6830,7 @@ strncmp:
 	/* The entry's taken branch lands on a 32-byte boundary (padding after the jmp above). */
 	.p2align 5
 .Lsnc_pt:
-	/* TIMING-COV-STRNCMP-DIFF8 (D-NEW): the SSE2 head. eax = ((a - 1) | (b - 1)) & 4095 from the
+	/* TIMING-COV-STRNCMP-DIFF8 (D-4.69): the SSE2 head. eax = ((a - 1) | (b - 1)) & 4095 from the
 	 * entry, at least either offset after the - 1: below 4032, [a, a + 64) and [b, b + 64) lie in
 	 * their pages and neither is NULL (NULL - 1 has offset 4095), so up to four 16-byte blocks
 	 * run with no NULL test, no per-step page test and no index register. The AVX2 level reaches

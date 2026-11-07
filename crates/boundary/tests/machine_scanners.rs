@@ -1691,7 +1691,7 @@ fn strncmp_kernel_never_reads_past_the_bound_at_a_page_end() {
 
 #[test]
 fn strncmp_kernel_stays_in_the_terminators_page_from_every_offset_near_its_end() {
-    // Clauses: s4_3_c_1 (SHORT-1, D-4.35; TIMING-COV-STRNCMP-DIFF8, D-NEW). Terminated texts that
+    // Clauses: s4_3_c_1 (SHORT-1, D-4.35; TIMING-COV-STRNCMP-DIFF8, D-4.69). Terminated texts that
     // end at the last byte before an unmapped page, starting at each of the last 81 offsets (every
     // position of a 16-byte block on both sides of the 64-byte head's limit), with an unbounded
     // n: a load past the terminator's page faults. One side near its page end, the other near
