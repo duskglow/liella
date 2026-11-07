@@ -78,8 +78,8 @@ fn pow_quick_fma_matches_correctly_rounded_pow() {
 }
 
 /// The `pow` entry (both builds; quick phase, tier 2, accurate path) against the correctly rounded
-/// `pow`, bit for bit, over `4·LIELLA_POW_SWEEP` operands per build; and exact cases keep their
-/// exact results. Clause: s10_0_f_0.
+/// `pow`, bit for bit, over `4·LIELLA_POW_SWEEP` operands per build; exact cases keep their
+/// exact results, and subnormal `x` is rounded correctly. Clause: s10_0_f_0.
 #[test]
 fn pow_entry_tiers_round_correctly() {
     let n = std::env::var("LIELLA_POW_SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(50_000usize);
@@ -90,6 +90,12 @@ fn pow_entry_tiers_round_correctly() {
         }
         for (x, y, want) in [(4.0, 0.5, 2.0), (4.0, 1.5, 8.0), (16.0, 0.25, 2.0), (3.0, 2.0, 9.0), (1.0 + f64::EPSILON, 2.0, 1.0 + 2.0 * f64::EPSILON)] {
             assert_eq!(m::pow(x, y).to_bits(), f64::to_bits(want), "{build} pow({x:e}, {y:e}) exact case");
+        }
+        // Subnormal x: outside the quick log's normal-x reduction, so the domain check must
+        // route them past the quick phase.
+        for (x, y) in [(5e-324, 0.3), (2.0e-310, 0.75), (2.0e-310, -0.01)] {
+            let e = Real::pow(x, y, Rounding::Nearest).0;
+            assert_eq!(m::pow(x, y).to_bits(), e.to_bits(), "{build} pow({x:e}, {y:e}) subnormal x misrounded");
         }
     };
     {
