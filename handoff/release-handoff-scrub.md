@@ -30,10 +30,10 @@ Decision in force: **D-X.45** (plan/07-decisions/x-implementation-decisions.md).
 3. Plants: handoff/release-handoff-scrub.plants. All 4 were CAUGHT, each by the test it names.
 
 ## Jobs (keke, role n4)
-- rhs-static-3: clippy, `cargo test -p xtask --bin xtask -- privpaths labnames` (8 passed) and `cargo xtask static`.
+- rhs-static-4 (final tree): clippy, `cargo test -p xtask --bin xtask -- privpaths labnames` (8 passed) and `cargo xtask static`.
   All green, rc 0.
 - rhs-plants: 4 CAUGHT, 0 SURVIVED, 0 WARN. The log is `~/logs/rhs-plants.log`.
-- Superseded runs: rhs-static (array length compile error), rhs-static-2 (the walk read sync files).
+- Superseded runs: rhs-static (array length compile error), rhs-static-2 (the walk read sync files), rhs-static-3 (green, before the note and test strings dropped personal names).
 
 ## Open / next
 - The coordinator lands the branch on next before the snapshot. No ruling is needed (D-X.45 is a local tooling decision).
