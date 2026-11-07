@@ -40,11 +40,12 @@ lint `libm-f64-exp-family-quick-lint4` (kernel-index, xtask clippy, static, the 
 SUPERSEDED: doc-list lint, type-complexity lint, a wrong bit count in my own test). Plants
 `libm-f64-exp-family-quick-plants`: 4 of 4 CAUGHT, no WARN (exp2 j/k split off by one, exp10 ln10 low part dropped,
 exp10 near always true, exp10 exact case not declined; file `handoff/LIBM-F64-EXP-FAMILY-QUICK-plants.txt`).
-Gate `libm-f64-exp-family-quick-gate` (direct tier, base origin/next): see the report json / hand-back.
+Gate `libm-f64-exp-family-quick-gate` (direct tier, base origin/next): `affected: ok`, rc 0, peak 11G, oom_kill 0.
 Counts `libm-f64-exp-family-quick-counts` (cbench_libm `--compare --counters`, FMA build only): see below.
 
 Counts before (brief, keke libm-coverage-1107-percall, FMA): exp2 133 vs glibc 54, exp10 150 vs 59, expm1 194 vs 89.
-Counts after: COUNTS_AFTER.
+Counts after: PENDING (job queued behind another story's counts slot at hand-back; it starts after the gate; summary at
+keke:~/work/LIBM-F64-EXP-FAMILY-QUICK/counts.log).
 
 ## Not done / next step
 
