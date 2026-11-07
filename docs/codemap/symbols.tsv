@@ -311,7 +311,7 @@ __pthread_mutex_unlock	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:538
 __pthread_mutexattr_destroy	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:588	
 __pthread_mutexattr_init	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:576	
 __pthread_mutexattr_settype	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:600	
-__pthread_once	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:992	sync::call_once
+__pthread_once	GLIBC_2.2.5	csys/src/machine/once.S:85	liella_once_begin
 __pthread_register_cancel	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:297	cancel::register
 __pthread_register_cancel_defer	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:309	cancel::register_defer
 __pthread_rwlock_destroy	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs:784	
@@ -660,7 +660,7 @@ cacoshf	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:473	mret::cplx
 cacoshf32	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:478	mret::cplx
 cacoshf32x	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:483	mret::cplx
 cacoshf64	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:488	mret::cplx
-call_once	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:998	sync::call_once
+call_once	GLIBC_2.34	csys/src/machine/once.S:93	liella_once_begin
 calloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:49	
 canonicalize	(math-gen)	crates/boundary/src/posix/s10_math.tsv:61	math::manip::canonicalize
 canonicalize	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:493	mret::canonical
@@ -2498,7 +2498,7 @@ pthread_mutexattr_setpshared	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs
 pthread_mutexattr_setrobust	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:660	
 pthread_mutexattr_setrobust_np	GLIBC_2.4	crates/boundary/src/posix/s22_threads.rs:666	
 pthread_mutexattr_settype	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:594	
-pthread_once	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:986	
+pthread_once	GLIBC_2.34	csys/src/machine/once.S:77	liella_once_begin
 pthread_rwlock_clockrdlock	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:856	
 pthread_rwlock_clockwrlock	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:868	
 pthread_rwlock_destroy	GLIBC_2.34	crates/boundary/src/posix/s22_threads.rs:778	
