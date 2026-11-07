@@ -85,6 +85,18 @@ id | path | pattern | cmd
 | `EQUIVALENT` | the command passed, and the plant is declared `equivalent:` | 0 |
 | `SURVIVED` | the command passed on the mutant | 1 |
 
+Every plant whose command failed (CAUGHT, WARN-NO-MSG, WARN-RC-ONLY) gets a second line,
+`plants: <id>: caught by <test binary> <test name>`: the first failing test of its log (`cargo test`'s
+`test <name> ... FAILED` under the binary of the last `Running` line, or nextest's `FAIL [..] <crate>::<target> <name>`).
+Without a failing test line it names a panic's thread, a panic outside a named test with its binary, the binary cargo
+asks to rerun, `the build (the mutant does not compile)`, or `no test the log names`; a timeout is `caught by timeout`.
+EQUIVALENT and SURVIVED lines are unchanged (XTASK-PLANTS-CATCHER).
+
+At the end the tool writes `<dir>/results.txt`: the plants file with a `# cargo xtask plants results (...)` comment
+block, one line per plant (`# <id>: CAUGHT, caught by <binary> <test>`). Commit that file as
+`handoff/<STORY>-plants.txt`, so which test caught each plant stays on record after the logs are gone; a later run from
+it replaces the block.
+
 List every WARN line in your hand-back. Exit codes: 0 all caught or equivalent; 1 a plant SURVIVED or a step failed;
 2 the products or a baseline command failed; 3 refused input.
 
