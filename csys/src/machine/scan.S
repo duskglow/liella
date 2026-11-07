@@ -7479,7 +7479,8 @@ liella_machine_strpair:
 	.hidden liella_hot_strstr_next  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strstr
 	.type liella_machine_strstr, @function
-	.p2align 4
+	/* 64-byte aligned like every exported entry (D-4.33). */
+	.p2align 6
 liella_machine_strstr:
 #ifdef LIELLA_EXPORT
 	.globl strstr
