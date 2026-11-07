@@ -76,10 +76,15 @@ def functions(exe):
     out = {}
     for line in r.stdout.splitlines():
         p = line.split()
+        # Assembly entries without `.size` (scan.S aliases such as strcmp) print no size: count
+        # their entry byte, so the window they start in is still seen.
         if len(p) == 4 and p[2] in "tTwWiI":
             start, size = int(p[0], 16), int(p[1], 16)
-            if size:
-                out.setdefault(keys.key(p[3]), []).append((start, start + size, p[3]))
+        elif len(p) == 3 and p[1] in "tTwWiI":
+            start, size, p = int(p[0], 16), 0, [p[0], "0", p[1], p[2]]
+        else:
+            continue
+        out.setdefault(keys.key(p[3]), []).append((start, start + max(size, 1), p[3]))
     return out
 
 
