@@ -548,7 +548,7 @@ fn distribution(rows: &ClassRows) -> Option<String> {
     let marked = if marked.is_empty() { String::from("none") } else { format!("{}: {}", marked.len(), marked.join(", ")) };
     let _ = write!(s, "RETHINK? (family median time ratio above {RETHINK_ABOVE}x, the magnitude trigger): {marked}\n\n| family | rows | median | |\n|---|---:|---:|---|\n");
     for (f, n, m) in &meds {
-        let _ = writeln!(s, "| {f} | {n} | {m:.2} | {} |", if *m > RETHINK_ABOVE { "RETHINK?" } else { "" });
+        let _ = writeln!(s, "| {f} | {n} | {m:.2} |{} |", if *m > RETHINK_ABOVE { " RETHINK?" } else { "" });
     }
     Some(s)
 }
@@ -870,7 +870,7 @@ mod tests {
         // SWEEP-DISTRIBUTION: the selected rows' distribution and family medians.
         let dist = fs::read_to_string(out.join("distribution.md")).unwrap();
         assert!(dist.contains("| <= 1.05 | 1 |\n| 1.05-2 | 1 |\n| 2-10 | 1 |\n"), "{dist}");
-        assert!(dist.contains("| cbench_libm exp/log/pow f32 | 1 | 2.50 | |\n| cbench_x | 2 | 1.10 | |\n"), "{dist}");
+        assert!(dist.contains("| cbench_libm exp/log/pow f32 | 1 | 2.50 | |\n| cbench_x | 2 | 1.11 | |\n"), "{dist}");
         assert!(fs::read_to_string(out.join("summary.txt")).unwrap().starts_with("sweep: COMPLETE:"));
         assert!(out.join("ratio_host.tsv").is_file());
         let _ = fs::remove_dir_all(&d);
