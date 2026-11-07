@@ -1,12 +1,12 @@
 # LIBM-F64-LOG-FAMILY-WIRE: log2, log10, log1p on the log quick phase (tier 1)
 
-State: branch `task/libm-f64-log-family-wire` (on LIBM-F64-LOG-QUICK-2's head 615d6a4f9), code head 1b72cd30c,
-handoff commit on top. Role mei:~/w/s2. Decisions in force: D-10.66 (this story, reserved id), D-10.60 (log quick
+State: branch `task/libm-f64-log-family-wire-2` (continuation -2 on `task/libm-f64-log-family-wire`), head: see the
+report json. Role keke:~/w/n2 (Zen 1). Decisions in force: D-10.66 (this story, reserved id), D-10.60 (log quick
 phase), D-10.51 (tiers), D-10.25/D-10.50 (two builds), D-10.3 (correct rounding).
 
 ## What is in
 
-* `crates/math/src/fast64/quick_log.rs`: the macro now has shared helpers `split` (reduction), `series`, `join`
+* `crates/math/src/fast64/quick_log.rs`: the macro has shared helpers `split` (reduction), `series`, `join`
   (log's evaluation unchanged in order) and per function `*_quick_parts`, `*_quick`, `*_tiered` for log2, log10,
   log1p in both builds; tier 2 = today's `fast64::{,fused::}log{2,10,1p}_nearest`, out of line and cold.
   * log2/log10: log's `(zh, zl)` times `1/ln b` as one double-double product, then Fast2Sum (FMA: 2MultFMA; SSE2:
@@ -15,47 +15,66 @@ phase), D-10.51 (tiers), D-10.25/D-10.50 (two builds), D-10.3 (correct rounding)
   * log1p: `2^-60 <= |x| < 2^-8` log's series with `r = x` exactly; `|x| >= 2^-8`: `1 + x = yh + yl` by Fast2Sum,
     log's reduction of `yh`, correction `d·(1 + r² − r)`, `d = yl·c·2^-e` from the bits (no division), into the
     low sum. Tiny `|x|`, `±0`, `x <= −1`, `x >= 2^960` go to tier 2.
+  * **Exact results and flags (run -2):** the fast entry (`mathret::elem_fast`) returns a fast-path answer with
+    MXCSR as the arithmetic left it, so an answer must be inexact. At `x = 2^e` (log2) and `x = 10^n`, `1 <= n <=
+    22` (log10), the quick product gave the exact value but raised inexact (the gate's
+    `math_double_fast_entry_matches_the_envelope_in_every_mode`: 136 mismatches, flags `0x1fa0` vs `0x1fc0`).
+    `log2_tiered` now answers `2^e` with `e` (fraction bits 0, one shift and test on the common path) and
+    `log10_tiered` answers `10^n` from `POW10_BY_BINADE` (71 entries by biased exponent, built by a const loop),
+    both before any arithmetic. `x = 1` stays on the quick phase (all `+0`, no flag). log1p has no exact result
+    in its quick domain.
 * Wired: `crates/boundary/src/hot/exp_log.rs` (`log2_nearest`, `log10_nearest`, `log1p_nearest` call the tiered
   functions); selftest hooks `log_family_quick`, `log_family_tiered`.
-* Tests (clause s10_0_f_0): `quick_log/tests.rs` (SSE2: `log_family_constants_and_bounds`, `..._error_within_bound`,
-  `..._matches_correctly_rounded` (env `LIELLA_QUICK_LOG_N` sets the count, default 10^6 per function),
-  `log_family_exact_and_hard_cases`); `crates/boundary/tests/log_quick.rs` (FMA bound + exactness, both builds
-  through the entries, same env var).
+* Tests (clause s10_0_f_0): `quick_log/tests.rs` (`log_family_constants_and_bounds`, `..._error_within_bound`,
+  `..._matches_correctly_rounded` (env `LIELLA_QUICK_LOG_N`, default 10^6 per function),
+  `log_family_exact_and_hard_cases`, now also the tiered exact paths and the table's shape);
+  `crates/boundary/tests/log_quick.rs` (FMA bound + exactness, both builds through the entries). Flags of the exact
+  cases: the existing envelope test in `s10_math_symbols.rs` (edges 2, 0.5, 4, 2^-60, 2^-1022, 10, 100, 1e22).
 
-## Proof numbers (job t4 on 1b72cd30c's code, Skylake-SP host)
+## Proof numbers (inherited run, Skylake-SP host; values unchanged by run -2's exact paths)
 
-* Bounds recomputed by the test: log2/log10 `2^-64.908`, log1p small `2^-67.587`, general `2^-64.346`; RHO `2^-64`.
+* Bounds: log2/log10 `2^-64.908`, log1p small `2^-67.587`, general `2^-64.346`; RHO `2^-64`.
 * Largest error / bound: SSE2 log2 0.296, log10 0.296, log1p 0.389; FMA 0.264, 0.264, 0.305.
-* Fallback (uniform groups): SSE2 log2 374, log10 384, log1p 376 of 400000 (0.094%; model 0.098%); through the
-  entries both builds 31-43 of 40000 per function.
-* Exact: `log2(2^k)` = k for every k in [−1022, 1023], `log10(10^n)` = n for n in 0..22, answered by the quick
-  phase in both builds. Hard cases (1 ± k·2^-53, 10^-n, log1p tiny/±2^-8/near −1, misrounded unchecked samples)
-  declined or right; tier 2 answers more than half of the quick misses.
-* 10^7 operands per function in both builds: in the gate job (`LIELLA_QUICK_LOG_N=10000000`), NOT VERIFIED at
-  hand-back.
+* 10^7 per function, SSE2 unit test (run -2's first gate on keke, before the fix): log2 9990240 answered, fallback
+  3884 of 4·10^6; log10 9990409, 3859; log1p 8547994, 4007 (0.1%, model 0.098%).
 
-## Jobs (mei)
+## Run -2 (this run)
 
-* `libm-f64-log-family-wire-gate`: full clippy, xtask clippy, static, the 10^7 accuracy runs (SSE2 unit test; both
-  builds through the boundary), `affected --base origin/next --run`; writes `~/work/LIBM-F64-LOG-FAMILY-WIRE/gate.done`.
-* `libm-f64-log-family-wire-plants`: 11 plants (`handoff/LIBM-F64-LOG-FAMILY-WIRE-plants.txt`): per function miss
-  returned, tier 2 skipped, `1/ln b` one ulp off (log2, log10), log1p correction cut to one term, log1p `yl`
-  dropped, FMA product's `p'` dropped.
-* `libm-f64-log-family-wire-counts`: waits for gate.done, then `cargo xtask bench --compare --counters cbench_libm`
-  into `~/work/LIBM-F64-LOG-FAMILY-WIRE/counters.txt` (the host has FMA, so this is the FMA build; SSE2 build count
-  NOT VERIFIED). Before (LOG-QUICK-2 wl_percall, FMA): log2 195.2, log10 205.4, log1p 245.0; glibc 66.0 / 105.9 / 86.0.
-* Superseded: `-t1` (clippy: one unsafe block with 6 calls), `-t2` (clippy: manual range contains), `-t3` (log1p
-  tier-2 check on the misrounded subset only, which tier 2 also declined), `-t4` (green; test-only run).
+1. Static findings fixed: `// UNSAFE(hot-kernel) SAFETY:` directly above the `#[allow(unsafe_code)]` of
+   `log_family_quick`'s FMA arm; KERNELS.md regenerated. LOG-QUICK's `near-dropped` plant anchored to `log_quick`.
+2. Inherited plants job (mei) had 2 SURVIVED: `log{2,10}-scale-one-ulp` moved `k0`, which only the FMA build's
+   product uses (the SSE2 build multiplies terms below `2^-25` by it); they now run the FMA test (CAUGHT on keke),
+   new `log{2,10}-k26-one-ulp` cover the SSE2 high product; log1p plants' msg regex fixed (WARN-NO-MSG before).
+3. The gate found the exact-result flag defect above; fixed; plants `log2-exact-path-dropped`,
+   `log10-exact-path-dropped`, `pow10-table-short` added.
 
-## Not done / next
+## Jobs (keke, code head 72cce56e6; later commits touch handoff/ only)
 
-1. Timing (Ivy Bridge, N100) not run: context budget, and the timing hosts go down from 20:00 UTC 11-07. Next run:
-   `cargo xtask bench --stage` on the role, then booked `sweep run --only cbench_libm` as LOG-QUICK-2 did.
-2. SSE2-build instruction counts (force the SSE2 build in the bench), and a `wl_percall` split of one call.
-3. The old `handoff/LIBM-F64-LOG-QUICK-plants.txt` `near-dropped` plant's literal now matches four sites (log2/log10/
-   log1p reuse the text): the plants tool will refuse that file if rerun; anchor it to `log_quick` with `perl:`.
+* `libm-f64-log-family-wire-2-gate2`: full clippy, xtask clippy, static, the 10^7 accuracy runs (SSE2 unit test;
+  both builds through the boundary), `affected --base origin/next --run`; writes
+  `~/work/LIBM-F64-LOG-FAMILY-WIRE-2/gate.done`. rc 0: `affected: ok`, peak 11G, envelope test green.
+* `libm-f64-log-family-wire-2-plants2`: rc 0, 16 plants, 14 CAUGHT, 0 SURVIVED, 2 WARN-NO-MSG
+  (`log{2,10}-tier2-skipped`: caught rc 101 by the new tiered-path assertion before the old message; the plants
+  file's regex now names both messages).
+* `libm-f64-log-family-wire-2-counts2`: waits for gate.done, then `bench --compare --counters --runs 1
+  cbench_libm` (FMA build), the same with `--tunables glibc.cpu.hwcaps=-FMA` (SSE2 build, both sides), then
+  `bench --stage ~/work/LIBM-F64-LOG-FAMILY-WIRE-2/libm-stage.tar --only cbench_libm` (the timing tarball).
+  Numbers NOT READ by run -2. Before (LOG-QUICK-2 wl_percall, FMA): log2 195.2, log10 205.4, log1p 245.0; glibc
+  66.0 / 105.9 / 86.0. The exact paths add a shift and test (log2) or shift, subtract, compare (log10) per call.
+* Superseded: `-kidx` (rc 128: a trailing `git status` in a role without .git; KERNELS.md was written), `-gate`,
+  `-plants`, `-counts`, `-stage` (killed: the gate found the flag defect; `-stage` also used a wrong `--stage`
+  syntax), `-t1`/`-t2` (compile error; stale KERNELS.md), `-t3` (green quick check), `-kidx2`.
+* Timing bookings 132 (kotori) and 133 (nozomi) cancelled: the tarball comes after gate and counts, past the budget.
+
+## Next
+
+1. Read counts2 on keke (`grep -E "log(2|10|1p)" ~/logs/libm-f64-log-family-wire-2-counts2.log`) into this file
+   and D-10.66; check no row is slower than before.
+2. Timing, Ivy Bridge (kotori or nico) and N100 (nozomi): copy `~/work/LIBM-F64-LOG-FAMILY-WIRE-2/libm-stage.tar`
+   from keke, unpack whole, `./xtask-bin sweep run --only cbench_libm` under `~/bin/timing`, as LOG-QUICK-2 did.
+   Timing hosts are down from 20:00 UTC 11-07 until about midweek.
 
 ## Not to redo
 
 The product-by-1/ln b design and its bounds; log1p's correction (one term `d·(1 − r)` is not enough: `2^-59.9`
-relative near `|ln| = 2^-8`); the domain splits.
+relative near `|ln| = 2^-8`); the domain splits; the k0 plants on the SSE2 test (equivalent there by design).
