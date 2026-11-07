@@ -31,6 +31,7 @@ trig_nearest! {
 pub(crate) fn trig_quick(which: u8, x: f64) -> Option<f64> {
     use liella_math::trig::quick::{fused, plain};
     if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: each arm below calls one FMA build kernel, as in `exp_nearest`.
         #[allow(unsafe_code)]
         return match which {
             // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.

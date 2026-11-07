@@ -41,6 +41,8 @@ fn uniform_bits(n: usize, seed: u64) -> impl Iterator<Item = f64> {
 const NAMES: [&str; 3] = ["sin", "cos", "tan"];
 
 /// The correctly rounded result (today's tier, else the accurate path).
+// opaque-ok: `liella_math::trig::{sin,cos,tan}(x, Rounding)` are mangled two-argument Rust
+// functions, not the C names, so LLVM cannot fold them as its `sin`/`cos`/`tan` builtins.
 fn cr(which: u8, x: f64) -> f64 {
     match which {
         0 => liella_math::trig::sin(x, Rounding::Nearest).0,
