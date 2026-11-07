@@ -34,7 +34,16 @@ mei is another CPU class, so a difference there needs an origin/next run on mei 
 FULL (xtask changed). Results: see the report json and the hand-back.
 
 ## Open / next step
-1. If any job above is red: fix the cause, rerun only that job.
+1. **Plant survivor (fix first):** `link-reloc-symbols` (removing the relocation-named symbol count in
+   `link::check`) SURVIVED: `ldso_link_undefined_symbol_refused` links an object whose undefined symbol is
+   inside the hash table's count anyway. Add a corpus object whose undefined symbol is named only by a
+   relocation and lies outside the GNU hash count (or remove the code if no linker output can have one), then
+   rerun plants (`cargo xtask plants handoff/DL-LDSO-PRODUCT-2-plants.txt --dir <new RAM dir>`). Also
+   `ld-skip-relocation` printed WARN-NO-MSG: with the relocator call removed, `cargo xtask so` now refuses
+   the product (`liella_ld_start does not call relocate_image`) before the product tests run; change its
+   msg to that text and its cmd to `cargo xtask so`.
+   Plants run 2 at the stop: 6 CAUGHT, 1 SURVIVED, 1 WARN-NO-MSG, the rest not yet run (stopped for budget).
+   Gate (FULL, escalated) and counts were stopped unfinished: run them on the next head.
 2. RULING NEEDED: the unsafe-audit file lists now include `src/ld.rs` and `src/arch/` (a trust-boundary list);
    recommend accept (same categories as the libc start's `runtime.rs`/`bootstrap.rs`).
 3. INFORMATIONAL: ld.so's code keeps ~62 GOT-indirect calls (rustc's foreign-function calls are not relaxed in
