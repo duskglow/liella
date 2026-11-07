@@ -38,6 +38,11 @@ the plants commit, then this handoff. Decision in force: **D-X.35** (plan/07-dec
   is part of the gate, and was STILL RUNNING at hand-back. To re-attach on kanon: `~/bin/jobwait xtst-gate`. Its log
   (`~/logs/xtst-gate.log`) is also the first real sample of the new lines.
 
+## First sample (xtst-gate, in progress)
+The per-fit lines already name the slow fits in the remez check: `remez/fast32_lgamma 166.2s`, `fast32_erfcx4 19.1s`,
+`fast32_j1 17.7s`, `fast32_j0 17.3s`, `fast32_erfcx5 14.5s`, and the rest at about 1 s or less (fits run so far). If the
+remez check needs to get shorter, start with fast32_lgamma (this story does not change it).
+
 ## Open / next step
 - Read the xtst-gate result. If it is green, the story is ready. Check that the log ends with the `step-summary:` block.
 - Not done: a separate timing for the remez tool's build. It can be inferred as `remez-check` minus the sum of the

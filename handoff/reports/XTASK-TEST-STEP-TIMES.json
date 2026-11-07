@@ -12,7 +12,8 @@
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
-  "Changing xtask/src/main.rs always escalates the affected gate to FULL, so even a small xtask story pays for a full gate"
+  "Changing xtask/src/main.rs always escalates the affected gate to FULL, so even a small xtask story pays for a full gate",
+  "First sample: remez/fast32_lgamma 166.2s is the slowest fit in the remez gate check so far (others <= 19.1s)"
  ],
  "refused": [],
  "jobs": [
