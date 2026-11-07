@@ -131,13 +131,13 @@ fn cxx_exceptions_cross_the_library() {
 
 /// The thread functions a compiler runtime reaches through weak references (libgcc's unwinder
 /// takes threads to be in use when `__pthread_key_create` is linked, and then calls
-/// `pthread_once`): a static link that defines `__pthread_key_create` must define all of them
+/// `pthread_once`): a static link that defines `__pthread_key_create` must resolve every reference to them
 /// (STATIC-CXX-THROW-PTHREAD-ONCE).
 const GTHR: [&str; 7] = ["pthread_once", "__pthread_key_create", "pthread_getspecific", "pthread_setspecific", "pthread_key_delete", "pthread_mutex_lock", "pthread_mutex_unlock"];
 
 /// Links `src` (C++ with `g++`, else C with `cc` and Liella's headers) statically against the
 /// products, with `extra` flags; runs it and returns its standard output, after checking that
-/// it exited 0 and that the program defines every name of [`GTHR`] when it defines
+/// it exited 0 and that the program resolves every reference to a name of [`GTHR`] when it defines
 /// `__pthread_key_create`.
 fn link_and_run(src: &str, compiler: &str, extra: &[&str]) -> String {
     let r = root();
@@ -160,9 +160,11 @@ fn link_and_run(src: &str, compiler: &str, extra: &[&str]) -> String {
     let nm = Command::new("nm").arg(&exe).output().unwrap();
     let table = String::from_utf8_lossy(&nm.stdout);
     assert!(nm.status.success(), "nm {}", exe.display());
-    // A defined symbol's line has three fields (value, type, name); an undefined one's two.
-    let defined: Vec<&str> = GTHR.iter().copied().filter(|s| table.lines().any(|l| l.split_whitespace().nth(2) == Some(*s))).collect();
-    assert!(!defined.contains(&"__pthread_key_create") || defined.len() == GTHR.len(), "{src} {extra:?}: the link defines {defined:?} of {GTHR:?}");
+    // A defined symbol's line has three fields (value, type, name); an undefined one's (a weak
+    // reference the link left unresolved, `w`) two: type and name.
+    let key_create = table.lines().any(|l| l.split_whitespace().nth(2) == Some("__pthread_key_create"));
+    let unresolved: Vec<&str> = GTHR.iter().copied().filter(|s| table.lines().any(|l| { let f: Vec<&str> = l.split_whitespace().collect(); f.len() == 2 && f[1] == *s })).collect();
+    assert!(!key_create || unresolved.is_empty(), "{src} {extra:?}: the link defines __pthread_key_create and leaves {unresolved:?} unresolved");
     let out = Command::new("timeout").arg(timeout::secs(60)).arg(&exe).output().unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(out.status.success(), "{src} {extra:?}: status {:?}, stdout {:?}", out.status, String::from_utf8_lossy(&out.stdout));
