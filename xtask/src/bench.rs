@@ -371,7 +371,7 @@ fn stress_command_in(dir: &Path, name: &str, exe: &Path, stress: &[String], tuna
     let mut c = if let Some(b) = &binds {
         namespace_command(b, exe)
     } else if shm {
-        private_shm(exe)
+        private_shm(exe, tunables)
     } else if on("fds") {
         let mut c = Command::new("bash");
         let script = format!("ulimit -n 16384 || exit 97; for ((i = 3; i < {}; i++)); do eval \"exec $i</dev/null\" || exit 98; done; exec env -u PWD -u OLDPWD -u SHLVL -u _ \"$@\"", STRESS_FDS + 3);
@@ -385,8 +385,8 @@ fn stress_command_in(dir: &Path, name: &str, exe: &Path, stress: &[String], tuna
     // The same command runs the Liella and the host (glibc) side, so the comparison stays fair.
     c.env_clear();
     c.envs(BENCH_ENV);
-    // BENCH-TUNABLES: the one caller setting that is passed on, and only through `--tunables <value>`
-    // (never from the caller's own GLIBC_TUNABLES): both sides read it, so a forced dispatch level is the same.
+    // BENCH-TUNABLES: the one caller setting that is passed on (`--tunables <value>`, or the caller's own
+    // GLIBC_TUNABLES, `resolve_tunables`, D-X.39): both sides read it, so a forced dispatch level is the same.
     if let Some(t) = tunables {
         c.env("GLIBC_TUNABLES", t);
     }
@@ -421,6 +421,38 @@ fn stress_command_in(dir: &Path, name: &str, exe: &Path, stress: &[String], tuna
 
 /// `--tunables <value>` (BENCH-TUNABLES): the `GLIBC_TUNABLES` value both sides of the comparison run with.
 static TUNABLES: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// D-X.39 (XTASK-BENCH-TUNABLES-AND-MATHTOOLS): the `GLIBC_TUNABLES` value a bench run uses: `--tunables <value>`,
+/// else the caller's own non-empty `GLIBC_TUNABLES` (a `GLIBC_TUNABLES=... cargo xtask bench` measured the default
+/// level on both sides while it looked like a forced one). Both given and different, or a caller value that is not
+/// UTF-8: an error, never a silent choice.
+fn resolve_tunables(option: Option<String>, caller: Option<std::ffi::OsString>) -> Result<Option<String>, String> {
+    let caller = match caller.filter(|v| !v.is_empty()) {
+        Some(v) => Some(v.into_string().map_err(|v| format!("bench: the caller's GLIBC_TUNABLES={v:?} is not UTF-8; pass the value with --tunables"))?),
+        None => None,
+    };
+    match (option, caller) {
+        (Some(o), Some(c)) if o != c => Err(format!("bench: --tunables {o} and the caller's GLIBC_TUNABLES={c} differ; give one value (both sides run with it)")),
+        (Some(o), _) => Ok(Some(o)),
+        (None, c) => Ok(c),
+    }
+}
+
+/// Sets `TUNABLES` from `--tunables` and the caller's environment (`resolve_tunables`).
+fn set_tunables(option: Option<String>) -> Result<(), String> {
+    if let Some(v) = resolve_tunables(option, std::env::var_os("GLIBC_TUNABLES"))? {
+        let _ = TUNABLES.set(v);
+    }
+    Ok(())
+}
+
+/// `c` with the resolved `GLIBC_TUNABLES` value set, when there is one.
+fn with_tunables(mut c: Command) -> Command {
+    if let Some(t) = TUNABLES.get() {
+        c.env("GLIBC_TUNABLES", t);
+    }
+    c
+}
 
 /// Per C benchmark, the `CBENCH_ROWS` list of a targeted bench (absent: the binary runs every row).
 static ROW_ENV: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
@@ -751,9 +783,7 @@ fn listed_rows(name: &str, exe: &Path) -> Result<Vec<String>, String> {
 
 pub fn compare(root: &Path, args: &[String]) -> Result<(), String> {
     let CompareArgs { runs, names, v3, sorted, counters, build_only, no_build, tunables, rows: row_items } = parse_compare_args(args)?;
-    if let Some(v) = tunables {
-        let _ = TUNABLES.set(v);
-    }
+    set_tunables(tunables)?;
     let dir = root.join("bench/c");
     check_bench_names(&names, &c_bench_names(&dir), &dir)?;
     // XTASK-BENCH-COMPARE-STAGED: like the plain `--no-build` run, a staged tree's products are checked by hash first.
@@ -1265,14 +1295,14 @@ fn decide_cycles(key: (&str, &str), ns: (f64, f64), ns_lim: Option<&Limit>, cell
     }
 }
 
-fn private_shm(exe: &Path) -> Command {
+fn private_shm(exe: &Path, tunables: Option<&str>) -> Command {
     let id = |flag: &str| Command::new("id").arg(flag).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
     let sudo = Command::new("sudo").args(["-n", "true"]).status().is_ok_and(|s| s.success());
     let setpriv = Command::new("setpriv").arg("--version").output().is_ok_and(|o| o.status.success());
     match (sudo && setpriv, id("-u"), id("-g")) {
         (true, Some(u), Some(g)) => {
             let mut c = Command::new("sudo");
-            c.args(["-n", "unshare", "-m", "sh", "-c", "u=$1; g=$2; P=$3; H=$4; shift 4; mount -t tmpfs -o mode=1777 tmpfs /dev/shm && exec setpriv --reuid=\"$u\" --regid=\"$g\" --init-groups env -i PATH=\"$P\" HOME=\"$H\" ${GLIBC_TUNABLES:+GLIBC_TUNABLES=\"$GLIBC_TUNABLES\"} ${CBENCH_ROWS:+CBENCH_ROWS=\"$CBENCH_ROWS\"} ${CBENCH_COUNTERS:+CBENCH_COUNTERS=\"$CBENCH_COUNTERS\"} \"$@\"", "sh"]).arg(u).arg(g).arg(BENCH_ENV[0].1).arg(BENCH_ENV[1].1).arg(exe);
+            c.args(["-n", "unshare", "-m", "sh", "-c", "u=$1; g=$2; P=$3; H=$4; T=$5; shift 5; mount -t tmpfs -o mode=1777 tmpfs /dev/shm && exec setpriv --reuid=\"$u\" --regid=\"$g\" --init-groups env -i PATH=\"$P\" HOME=\"$H\" ${T:+GLIBC_TUNABLES=\"$T\"} ${CBENCH_ROWS:+CBENCH_ROWS=\"$CBENCH_ROWS\"} ${CBENCH_COUNTERS:+CBENCH_COUNTERS=\"$CBENCH_COUNTERS\"} \"$@\"", "sh"]).arg(u).arg(g).arg(BENCH_ENV[0].1).arg(BENCH_ENV[1].1).arg(tunables.unwrap_or("")).arg(exe);
             c
         }
         _ => Command::new(exe),
@@ -1466,6 +1496,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut stage_out: Option<std::path::PathBuf> = None;
     let mut staged_flag = false;
     let mut base_ref: Option<String> = None;
+    let mut tunables_opt: Option<String> = None;
     let (mut counters, mut counters_only) = (false, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -1525,11 +1556,12 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             "--affected" => affected = Some(it.next().ok_or("--affected needs a base ref (ignored in a tree without git: the .changed list)")?.clone()),
             "--tunables" => {
                 let v = it.next().ok_or("--tunables needs a GLIBC_TUNABLES value (for example glibc.cpu.hwcaps=-AVX2)")?;
-                let _ = TUNABLES.set(v.clone());
+                tunables_opt = Some(v.clone());
             }
             other => return Err(format!("bench: unknown argument `{other}`")),
         }
     }
+    set_tunables(tunables_opt)?;
     if base_ref.is_some() && stage_out.is_none() {
         return Err("bench: --base <ref> stages a second tree and needs --stage <out.tar>".into());
     }
@@ -1733,8 +1765,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             }
             let out = match &liella_exe {
                 Some(e) => c_command(b, e).output().map_err(|e| format!("{b}: {e}"))?,
-                None if mode == Mode::NoBuild => Command::new(root.join(format!("target/release/examples/{b}"))).current_dir(root).output().map_err(|e| format!("{b}: {e}"))?,
-                None => Command::new(&cargo)
+                // A Rust bench inherits the caller's environment; `--tunables` reaches it too (D-X.39).
+                None if mode == Mode::NoBuild => with_tunables(Command::new(root.join(format!("target/release/examples/{b}")))).current_dir(root).output().map_err(|e| format!("{b}: {e}"))?,
+                None => with_tunables(Command::new(&cargo))
                     .current_dir(root)
                     .args(["run", "-q", "--release", "-p", "liella-boundary", "--example", b])
                     .output()
@@ -1939,6 +1972,39 @@ mod tests {
         let env_of = |c: &std::process::Command| c.get_envs().find(|(k, _)| *k == "GLIBC_TUNABLES").and_then(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()));
         let c = super::stress_command("cbench_opt", std::path::Path::new("/bin/true"), &[], Some("glibc.cpu.hwcaps=-AVX2"));
         assert_eq!(env_of(&c).as_deref(), Some("glibc.cpu.hwcaps=-AVX2"));
+    }
+
+    // D-X.39: no spec clause (developer tooling). The caller's own GLIBC_TUNABLES is the bench's value when
+    // `--tunables` is absent (it used to be dropped, so a forced level silently measured the default one); the
+    // option wins only when it agrees; empty means unset; a conflict or a non-UTF-8 value is an error.
+    #[test]
+    fn caller_glibc_tunables_is_honoured_or_refused() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        let v = "glibc.cpu.hwcaps=-AVX2".to_string();
+        assert_eq!(super::resolve_tunables(None, Some(OsString::from(&v))), Ok(Some(v.clone())));
+        assert_eq!(super::resolve_tunables(Some(v.clone()), None), Ok(Some(v.clone())));
+        assert_eq!(super::resolve_tunables(Some(v.clone()), Some(OsString::from(&v))), Ok(Some(v.clone())));
+        assert_eq!(super::resolve_tunables(None, Some(OsString::new())), Ok(None));
+        assert_eq!(super::resolve_tunables(None, None), Ok(None));
+        let e = super::resolve_tunables(Some(v.clone()), Some(OsString::from("glibc.cpu.hwcaps=-FMA"))).unwrap_err();
+        assert!(e.contains("differ") && e.contains("-FMA") && e.contains("-AVX2"), "{e}");
+        assert!(super::resolve_tunables(None, Some(OsString::from_vec(vec![0xff]))).unwrap_err().contains("UTF-8"));
+    }
+
+    // D-X.39: no spec clause (developer tooling). The name-service benches' private-/dev/shm route (sudo, which
+    // resets the environment) carries the value as an argument of its script, so it reaches the benchmark there too.
+    #[test]
+    fn private_shm_route_carries_the_tunables_value() {
+        let c = super::private_shm(std::path::Path::new("/bin/true"), Some("glibc.cpu.hwcaps=-AVX2"));
+        let args: Vec<String> = c.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        if c.get_program() == "sudo" {
+            let script = args.iter().find(|a| a.contains("setpriv")).expect("the sh -c script");
+            assert!(script.contains("T=$5") && script.contains("${T:+GLIBC_TUNABLES=\"$T\"}"), "{script}");
+            assert_eq!(args.iter().rev().nth(1).map(String::as_str), Some("glibc.cpu.hwcaps=-AVX2"), "{args:?}");
+        } else {
+            println!("SKIP private_shm script: sudo -n or setpriv absent here, the plain route inherits the env set by stress_command_in");
+        }
     }
 
     use super::*;

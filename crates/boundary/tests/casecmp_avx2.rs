@@ -268,6 +268,64 @@ fn casecmp_never_reads_past_the_pages_holding_the_strings_or_the_bound() {
     selftest::set_scan_avx2(false);
 }
 
+/// One read-write page between two unmapped ones. Returns the three regions and the page's base.
+fn fenced() -> [liella_kernel::mem::Region; 3] {
+    let r = CSys.mmap(0, 3 * PAGE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, None, 0).unwrap();
+    let (mut lo, rest) = r.split_at(PAGE).ok().unwrap();
+    let (mid, mut hi) = rest.split_at(PAGE).ok().unwrap();
+    CSys.mprotect(&mut lo, PROT_NONE).unwrap();
+    CSys.mprotect(&mut hi, PROT_NONE).unwrap();
+    [lo, mid, hi]
+}
+
+#[test]
+fn casecmp_reads_neither_neighbour_page_nor_the_bytes_before_the_strings_at_any_start_offset() {
+    // Clauses: s4_3_c_1 (BENCH-CASECMP-ALIGN-2). Each string lies in one page whose neighbours on both
+    // sides are unmapped, starting at page offsets near the page start (page-aligned included) and
+    // near the page end, every pair: the block that ends at a page end and starts before the strings
+    // stays in their pages, and what lies before the strings (NUL before a, a non-letter before b)
+    // never decides the answer. Equal-up-to-case text, a difference in the middle and at the end,
+    // and bounds inside the text.
+    let _g = level();
+    let offsets = [0usize, 1, 2, 7, 15, 16, 31, 32, 33, 63, 4031, 4032, 4033, 4040, 4060, 4063, 4064, 4065, 4066, 4070, 4080, 4090, 4094];
+    for kernel in paths() {
+        assert!(selftest::set_casecmp_kernel(kernel));
+        let ra = fenced();
+        let rb = fenced();
+        let (base, base2) = (ra[1].addr(), rb[1].addr());
+        for &oa in &offsets {
+            for &ob in &offsets {
+                let len = (PAGE - 1 - oa).min(PAGE - 1 - ob).min(80);
+                for d in [None, Some(len / 2), Some(len.saturating_sub(1))] {
+                    let mut ma = vec![0u8; PAGE];
+                    let mut mb = vec![b'#'; PAGE];
+                    for i in 0..len {
+                        ma[oa + i] = b'a' + (i % 26) as u8;
+                        mb[ob + i] = b'A' + (i % 26) as u8;
+                    }
+                    ma[oa + len] = 0;
+                    mb[ob + len] = 0;
+                    if let Some(d) = d.filter(|_| len > 0) {
+                        mb[ob + d] = b'{';
+                    }
+                    put(base, &ma);
+                    put(base2, &mb);
+                    let w = || format!("offsets {oa}/{ob}, length {len}, diff {d:?}, kernel {kernel}");
+                    check(base + oa, &ma[oa..], base2 + ob, &mb[ob..], None, &w);
+                    check(base2 + ob, &mb[ob..], base + oa, &ma[oa..], None, &|| format!("swapped, {}", w()));
+                    for n in [1, len / 2 + 1, len + 1] {
+                        check(base + oa, &ma[oa..], base2 + ob, &mb[ob..], Some(n), &|| format!("{}, n {n}", w()));
+                    }
+                }
+            }
+        }
+        for r in ra.into_iter().chain(rb) {
+            CSys.munmap(r).unwrap();
+        }
+    }
+    selftest::set_scan_avx2(false);
+}
+
 #[test]
 fn casecmp_is_right_on_long_text_across_a_page_boundary_inside_the_strings() {
     // Clauses: s4_3_c_1 (CASECMP-K1). The 64-byte steps and the 32-byte and byte steps next to a

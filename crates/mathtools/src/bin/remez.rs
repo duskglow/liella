@@ -5,10 +5,21 @@
 //! Usage: `cargo run --release -p liella-mathtools --bin remez -- [--check] <fit files...>`.
 //! With `--check`, nothing is written: each output is regenerated in memory and compared with
 //! the file on disk, and the exit status is 1 if any differs.
+//!
+//! The fit files are handled concurrently, at most `available_parallelism()` at once (the
+//! affinity mask), each fit's output buffered and printed in command-line order; the exit status
+//! is the failure of any fit (D-10.58). With `--check`, a verdict whose inputs are unchanged since
+//! it last checked up to date is replayed from the verdict cache
+//! (`liella_mathtools::check_cache`) without fitting; `LIELLA_REMEZ_NO_CACHE=1` turns that off.
 
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 
+use liella_mathtools::check_cache::{self, Cache, KeyInputs};
 use liella_mathtools::remez::{generate, parse_fit};
 
 /// The workspace root (this crate lives in `crates/mathtools`).
@@ -26,27 +37,91 @@ fn display_path(fit: &Path, root: &Path) -> String {
     rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/")
 }
 
-fn run(path: &str, check: bool, root: &Path) -> Result<bool, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let spec = parse_fit(&text).map_err(|e| format!("{path}: {e}"))?;
-    let g = generate(&spec, &display_path(Path::new(path), root)).map_err(|e| format!("{path}: {e}"))?;
-    print!("{}", g.report);
-    let out = root.join(&g.output);
-    if check {
-        let on_disk = std::fs::read_to_string(&out).unwrap_or_default();
-        if on_disk != g.source {
-            eprintln!("{}: out of date (regenerate with `cargo run --release -p liella-mathtools --bin remez -- {path}`)", g.output);
-            return Ok(false);
-        }
-        println!("  {}: up to date", g.output);
-    } else {
+/// One fit's result: its buffered standard output and error, whether it passed, and how long the
+/// worker spent on it (seconds).
+#[derive(Default)]
+struct Outcome {
+    out: String,
+    err: String,
+    ok: bool,
+    secs: f64,
+}
+
+/// The fit's `step: remez/<fit> <seconds>s` line, the gate's step-time format (xtask/src/steptime.rs), so a fit
+/// whose check grows is named in the gate log (XTASK-TEST-STEP-TIMES). The time is the fit's own, measured in its
+/// worker (a cached verdict shows ~0.0s); fits run concurrently, so these times overlap and do not add up to the
+/// wall time of the whole check.
+fn step_line(path: &str, secs: f64) -> String {
+    let stem = Path::new(path).file_stem().map_or_else(|| path.to_string(), |s| s.to_string_lossy().into_owned());
+    let name = stem.split_whitespace().collect::<Vec<_>>().join("-");
+    format!("step: remez/{name} {secs:.1}s")
+}
+
+fn run(path: &str, check: bool, root: &Path, cache: Option<&Cache>, o: &mut Outcome) -> Result<bool, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let text = std::str::from_utf8(&bytes).map_err(|e| format!("{path}: {e}"))?;
+    let spec = parse_fit(text).map_err(|e| format!("{path}: {e}"))?;
+    let display = display_path(Path::new(path), root);
+    let out = root.join(&spec.output);
+    if !check {
+        let g = generate(&spec, &display).map_err(|e| format!("{path}: {e}"))?;
+        o.out.push_str(&g.report);
+        let out = root.join(&g.output);
         if let Some(dir) = out.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
         std::fs::write(&out, g.source.as_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
-        println!("  wrote {}", g.output);
+        let _ = writeln!(o.out, "  wrote {}", g.output);
+        return Ok(true);
+    }
+    // The coefficient file is read once: the same bytes make the key and the comparison.
+    let on_disk = std::fs::read(&out).ok();
+    let key = cache.map(|c| {
+        check_cache::check_key(&KeyInputs {
+            image: &c.image,
+            mode: "--check",
+            fit_arg: path,
+            fit_display: &display,
+            fit: &bytes,
+            coeff_path: &spec.output,
+            coeff: on_disk.as_deref(),
+        })
+    });
+    if let (Some(c), Some(k)) = (cache, key.as_deref()) {
+        if let Some(report) = c.lookup(k) {
+            o.out.push_str(&report);
+            let _ = writeln!(o.out, "  {}: up to date (cached {k})", spec.output);
+            return Ok(true);
+        }
+    }
+    let g = generate(&spec, &display).map_err(|e| format!("{path}: {e}"))?;
+    o.out.push_str(&g.report);
+    let on_disk = on_disk.and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
+    if g.output != spec.output || on_disk != g.source {
+        let _ = writeln!(o.err, "{}: out of date (regenerate with `cargo run --release -p liella-mathtools --bin remez -- {path}`)", g.output);
+        return Ok(false);
+    }
+    let _ = writeln!(o.out, "  {}: up to date", g.output);
+    if let (Some(c), Some(k)) = (cache, key.as_deref()) {
+        if let Err(e) = c.store(k, &g.report) {
+            let _ = writeln!(o.err, "remez: verdict not cached: {e}");
+        }
     }
     Ok(true)
+}
+
+fn run_one(path: &str, check: bool, root: &Path, cache: Option<&Cache>) -> Outcome {
+    let started = std::time::Instant::now();
+    let mut o = Outcome::default();
+    match run(path, check, root, cache, &mut o) {
+        Ok(good) => o.ok = good,
+        Err(e) => {
+            let _ = writeln!(o.err, "error: {e}");
+            o.ok = false;
+        }
+    }
+    o.secs = started.elapsed().as_secs_f64();
+    o
 }
 
 fn main() -> ExitCode {
@@ -58,15 +133,55 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     let root = workspace_root();
-    let mut ok = true;
-    for f in files {
-        match run(f, check, &root) {
-            Ok(good) => ok &= good,
+    // The generating mode never reads the cache.
+    let cache = if check && !check_cache::disabled() {
+        match Cache::open() {
+            Ok(c) => Some(c),
             Err(e) => {
-                eprintln!("error: {e}");
-                ok = false;
+                eprintln!("remez: verdict cache off: {e}");
+                None
             }
         }
-    }
+    } else {
+        None
+    };
+    let n = files.len();
+    let workers = std::thread::available_parallelism().map_or(1, |p| p.get()).clamp(1, n);
+    let next = AtomicUsize::new(0);
+    let (tx, rx) = mpsc::channel::<(usize, Outcome)>();
+    let ok = std::thread::scope(|s| {
+        for _ in 0..workers {
+            let tx = tx.clone();
+            let (next, files, root, cache) = (&next, &files, &root, cache.as_ref());
+            s.spawn(move || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(f) = files.get(i) else { break };
+                    if tx.send((i, run_one(f, check, root, cache))).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(tx);
+        // Print each fit's output, then its step line, in command-line order as soon as every earlier fit is done.
+        let mut pending: BTreeMap<usize, Outcome> = BTreeMap::new();
+        let mut emitted = 0;
+        let mut ok = true;
+        for (i, o) in rx {
+            pending.insert(i, o);
+            while let Some(o) = pending.remove(&emitted) {
+                print!("{}", o.out);
+                eprint!("{}", o.err);
+                if let Some(f) = files.get(emitted) {
+                    println!("{}", step_line(f, o.secs));
+                }
+                ok &= o.ok;
+                emitted = emitted.saturating_add(1);
+            }
+        }
+        // A worker that died early leaves fits unreported: that is a failure, never a pass.
+        ok && emitted == n
+    });
     if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }

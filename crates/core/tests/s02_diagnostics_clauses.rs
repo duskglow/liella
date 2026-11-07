@@ -74,18 +74,37 @@ struct CRun {
 static REPORT: OnceLock<CRun> = OnceLock::new();
 static BACKTRACE: OnceLock<CRun> = OnceLock::new();
 
-/// `conformance/c/<name>.c` built statically against the products (as `conformance/run.sh`
-/// builds it) and run, once per test binary.
-fn c_run(cell: &'static OnceLock<CRun>, name: &str) -> &'static CRun {
+static BACKTRACE_PIE: OnceLock<CRun> = OnceLock::new();
+static BACKTRACE_FIXED: OnceLock<CRun> = OnceLock::new();
+
+/// How a C conformance program is linked.
+#[derive(Clone, Copy, PartialEq)]
+enum Link {
+    /// A fixed-address static program, from `liella-crt1.o` (load bias 0).
+    Static,
+    /// A static PIE (`-static-pie -fPIE`, packed relative relocations), from `liella-rcrt1.o`,
+    /// as `conformance/run.sh` links `LINK-STATIC-PIE: relr` (D-27.10).
+    StaticPie,
+}
+
+/// `conformance/c/<name>.c` built against the products as `link` says (as `conformance/run.sh`
+/// builds it) and run with `args`, once per test binary.
+fn c_run_linked(cell: &'static OnceLock<CRun>, name: &str, link: Link, args: &[&str]) -> &'static CRun {
     cell.get_or_init(|| {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let (crt, libc) = (root.join("target/liella/liella-crt1.o"), root.join("target/liella/libc.a"));
+        let start = if link == Link::StaticPie { "target/liella/liella-rcrt1.o" } else { "target/liella/liella-crt1.o" };
+        let (crt, libc) = (root.join(start), root.join("target/liella/libc.a"));
         assert!(crt.exists() && libc.exists(), "the products are missing: run `cargo xtask so` (`cargo xtask test` does)");
         let dir = root.join("target/test-oracles");
         std::fs::create_dir_all(&dir).unwrap();
-        let exe = dir.join(format!("{name}-{}", std::process::id()));
+        let exe = dir.join(format!("{name}-{}-{}", if link == Link::StaticPie { "pie" } else { "fixed" }, std::process::id()));
+        let mode: &[&str] = match link {
+            Link::Static => &["-static"],
+            Link::StaticPie => &["-static-pie", "-fPIE", "-Wl,-z,pack-relative-relocs"],
+        };
         let b = std::process::Command::new("cc")
-            .args(["-std=c17", "-O1", "-static", "-nostdlib", "-fno-builtin", "-fstack-protector-strong"])
+            .args(["-std=c17", "-O1", "-nostdlib", "-fno-builtin", "-fstack-protector-strong"])
+            .args(mode)
             .arg(&crt)
             .arg(root.join(format!("conformance/c/{name}.c")))
             .arg(&libc)
@@ -94,7 +113,7 @@ fn c_run(cell: &'static OnceLock<CRun>, name: &str) -> &'static CRun {
             .output()
             .unwrap();
         assert!(b.status.success(), "{name}.c does not build: {}", String::from_utf8_lossy(&b.stderr));
-        let r = std::process::Command::new(&exe).current_dir(&dir).stdin(std::process::Stdio::null()).output().unwrap();
+        let r = std::process::Command::new(&exe).args(args).current_dir(&dir).stdin(std::process::Stdio::null()).output().unwrap();
         let _ = std::fs::remove_file(&exe);
         CRun { status: r.status.code(), stderr: String::from_utf8_lossy(&r.stderr).into_owned() }
     })
@@ -102,7 +121,20 @@ fn c_run(cell: &'static OnceLock<CRun>, name: &str) -> &'static CRun {
 
 /// The checks of `clause` in the C program `name` ran to their end and passed.
 fn c_clause(cell: &'static OnceLock<CRun>, name: &str, clause: &str) {
-    let r = c_run(cell, name);
+    clause_passed(c_run_linked(cell, name, Link::Static, &[]), name, clause);
+}
+
+/// The checks of `clause` in the C program `name`, linked as `link`, ran to their end and passed.
+/// The program is told the link kind (`pie` or `fixed`, its first argument), so it checks the
+/// load bias that kind must have (a compiler that builds `-fPIE` by default defines `__PIE__`
+/// in the fixed-address build too, so the program cannot tell from the preprocessor).
+fn c_clause_linked(cell: &'static OnceLock<CRun>, name: &str, clause: &str, link: Link) {
+    let kind = if link == Link::StaticPie { "pie" } else { "fixed" };
+    clause_passed(c_run_linked(cell, name, link, &[kind]), name, clause);
+}
+
+/// The run `r` of the C program `name` reached the end of `clause` with no failed check.
+fn clause_passed(r: &CRun, name: &str, clause: &str) {
     let failed = r.stderr.lines().any(|l| l.starts_with(&format!("FAIL {clause}:")));
     let ended = r.stderr.lines().any(|l| l == format!("end {clause}"));
     assert!(ended && !failed, "{name}.c, {clause} (exit status {:?}):\n{}", r.status, r.stderr);
@@ -668,6 +700,47 @@ fn s2_7_f_2() {
 #[test]
 fn s2_7_f_3() {
     c_clause(&BACKTRACE, "s02_backtrace", "s2_7_f_3");
+}
+
+/// §2.7 (D-27.12): in a static PIE (`liella-rcrt1.o`, loaded at a non-zero bias), `backtrace`
+/// returns addresses inside the loaded image (its `PT_LOAD` extent moved by the bias found from
+/// `AT_ENTRY` and the file's `e_entry`), the innermost naming the program's own functions
+/// (`conformance/c/s02_backtrace_static_pie.c`).
+#[test]
+fn s2_7_c_1_static_pie() {
+    c_clause_linked(&BACKTRACE_PIE, "s02_backtrace_static_pie", "s2_7_c_1", Link::StaticPie);
+}
+
+/// §2.7 (D-27.12): in a static PIE, `backtrace_symbols` gives `program(+offset) [address]` with
+/// the offset from the load bias, which names the known function at its link address.
+#[test]
+fn s2_7_c_2_static_pie() {
+    c_clause_linked(&BACKTRACE_PIE, "s02_backtrace_static_pie", "s2_7_c_2", Link::StaticPie);
+}
+
+/// §2.7 (D-27.12): in a static PIE, `backtrace_symbols_fd` writes the same texts, offsets from
+/// the load bias.
+#[test]
+fn s2_7_c_3_static_pie() {
+    c_clause_linked(&BACKTRACE_PIE, "s02_backtrace_static_pie", "s2_7_c_3", Link::StaticPie);
+}
+
+/// §2.7: the static-PIE program's checks, built as a fixed-address static program (bias 0).
+#[test]
+fn s2_7_c_1_fixed_address() {
+    c_clause_linked(&BACKTRACE_FIXED, "s02_backtrace_static_pie", "s2_7_c_1", Link::Static);
+}
+
+/// §2.7: `backtrace_symbols` in the fixed-address build of the static-PIE program (bias 0).
+#[test]
+fn s2_7_c_2_fixed_address() {
+    c_clause_linked(&BACKTRACE_FIXED, "s02_backtrace_static_pie", "s2_7_c_2", Link::Static);
+}
+
+/// §2.7: `backtrace_symbols_fd` in the fixed-address build of the static-PIE program (bias 0).
+#[test]
+fn s2_7_c_3_fixed_address() {
+    c_clause_linked(&BACKTRACE_FIXED, "s02_backtrace_static_pie", "s2_7_c_3", Link::Static);
 }
 
 /// The child's exit status, stdout and stderr (the last 60 lines of each) for a failure message.

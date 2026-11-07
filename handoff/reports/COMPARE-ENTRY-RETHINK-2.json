@@ -1,0 +1,11 @@
+{"task": "COMPARE-ENTRY-RETHINK-2", "model": "opus", "tokens": null,
+ "result": "Plan written: per-ISA compare entries prototyped and timed (Ivy Bridge memcmp SSE2 entry median 0.576 of next, no row slower; pointer binding +1 quantum; AVX2 hosts need the classed swap: owner ruling)",
+ "branch": "task/compare-entry-rethink-2", "head": "33b3ce5ab",
+ "gate": {"affected": "n/a (planning story, no product code)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "Turn the classed swap on by default on AVX2 hosts for memcmp/bcmp/__memcmpeq: +29.3 us per static start on the N100 against 0.4-1.2 ns per 33-128-byte call (break-even about 25k-75k calls per process)", "recommendation": "On only with the user-space guard scan and a wl_count check of start-up-heavy rows; otherwise keep next and do not land the SSE2 entry alone"}],
+ "informational": ["Bound pointer (static IFUNC/.iplt or RELRO) measured one quantum per call on both hosts (P/S 1.07-1.33): rejected for static, free for dynamic IFUNC", "SSE2 entry on the N100 (swap off) 1.25-1.73 of next on 33-128 eq/tail rows", "Prototype small paths and long loop are not proposed: next's are kept (N100 head_8-16 1.08-1.17, tail_1k/4k)"],
+ "refused": [],
+ "improvement": "The 220k context budget was 75% spent on reading inputs before the prototype; briefs for rethinks could link a one-page digest of prior timing tables instead of whole handoffs and decision rows",
+ "next_step": "Owner ruling on the classed swap; then COMPARE-ENTRY-PAGES (page 0 = SSE2 entry, page 1 = AVX2 order B, next's small paths and long classes)",
+ "report_file": "handoff/compare-entry-rethink-2.md",
+ "jobs": ["mei:compare-entry-rethink-2-build2", "kotori:compare-entry-rethink-2-kotori", "nozomi:compare-entry-rethink-2-nozomi"]}

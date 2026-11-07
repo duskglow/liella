@@ -50,15 +50,39 @@ pub(crate) fn exp10_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::exp10_nearest(x)
 }
 
-/// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]).
+/// The `double` `log` fast path in its build chosen at startup (as [`exp_nearest`]): the quick
+/// phase with `fast64::log_nearest` as tier 2 on a miss (D-10.51, D-10.60, LIBM-F64-LOG-QUICK).
 #[inline(always)]
 pub(crate) fn log_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::log_nearest(x) };
+        return unsafe { liella_math::fast64::quick_log::fused::log_tiered(x) };
     }
-    liella_math::fast64::log_nearest(x)
+    liella_math::fast64::quick_log::log_tiered(x)
+}
+
+/// The `double` `log` quick phase alone (D-10.60) in its build chosen at startup (as
+/// [`exp_nearest`]): the correctly rounded result, or `None` when the rounding test fails.
+#[cfg(feature = "selftest")]
+pub(crate) fn log_quick(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_log::fused::log_quick(x) };
+    }
+    liella_math::fast64::quick_log::log_quick(x)
+}
+
+/// [`log_quick`]'s unrounded `(zh, zl)` in the build chosen at startup (bound tests).
+#[cfg(feature = "selftest")]
+pub(crate) fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_log::fused::log_quick_parts(x) };
+    }
+    liella_math::fast64::quick_log::log_quick_parts(x)
 }
 
 /// The `double` `exp2` fast path in its build chosen at startup (as [`exp_nearest`];

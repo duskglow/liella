@@ -51,6 +51,53 @@ fn approx(a: mp::Approx) -> Big {
     a.value
 }
 
+/// `v` rounded to the nearest multiple of `2^-42` (an `f64` of at most 42 significant bits when
+/// `|v| < 1`): `e * part + hi` is then exact for `|e| < 2^11` and `|hi| < 1`.
+fn on_grid42(v: &Big) -> f64 {
+    let s = 4_398_046_511_104.0; // 2^42
+    (f64_of(v) * s).round() / s
+}
+
+/// The quick `log` phase's table and constant (D-10.60; Tang, ACM TOMS 16(4), 1990, with the
+/// reciprocals of few bits that make the reduction exact, Gal & Bachelis, ACM TOMS 17(1), 1991).
+/// `m` in `[45/64, 90/64)`, 128 intervals `[F_j, F_j + w_j)`: `F_j = (180 + j)/256`, `w_j = 2^-8`
+/// for `j < 76`, `F_j = 1 + (j − 76)/128`, `w_j = 2^-7` for `j >= 76`. Row `j`: `c_j` (8
+/// significant bits, the one of the two nearest `2/(2F_j + w_j)` with the smaller `max |c·m − 1|`
+/// over the interval; `c_j = 1` for the two intervals next to 1), `b_j = c_j·F_j − 1` (exact),
+/// `-ln c_j = hi + lo` with `hi` a multiple of `2^-42` and `lo` the nearest `f64` to the rest.
+fn log_quick(o: &mut Out, ln2: &Big) {
+    let p = WORK;
+    let mut rows = Vec::new();
+    for j in 0..128i32 {
+        let (f, w) = if j < 76 { (f64::from(180 + j) / 256.0, 1.0 / 256.0) } else { (1.0 + f64::from(j - 76) / 128.0, 1.0 / 128.0) };
+        let c = if j == 75 || j == 76 {
+            1.0
+        } else {
+            let ideal = 2.0 / (2.0 * f + w);
+            let g = if ideal < 1.0 { 1.0 / 256.0 } else { 1.0 / 128.0 };
+            let lo = (ideal / g).floor() * g;
+            let worst = |c: f64| f64::max((c * f - 1.0).abs(), (c * (f + w) - 1.0).abs());
+            if worst(lo) <= worst(lo + g) { lo } else { lo + g }
+        };
+        assert!((c * f - 1.0).abs() < 1.0 / 128.0 && (c * (f + w) - 1.0).abs() <= 1.0 / 128.0, "LOG_Q128[{j}]: |r| reaches 2^-7");
+        let l = approx(mp::log(&Big::from_f64(c), p)).neg();
+        let hi = on_grid42(&l);
+        let lo = f64_of(&l.sub(&Big::from_f64(hi)));
+        rows.push([c.to_bits(), (c * f - 1.0).to_bits(), hi.to_bits(), lo.to_bits()]);
+    }
+    let _ = writeln!(
+        o.src,
+        "\n/// The quick `log` phase's rows `[c_j, b_j = c_j·F_j − 1, hi, lo]` with `-ln c_j = hi + lo`, `hi` a multiple of 2^-42 (D-10.60;\n/// intervals `[F_j, F_j + w_j)` of `m` in `[45/64, 90/64)`, `c_j` of 8 significant bits; derivation at `tables.rs::log_quick`).\npub(crate) static LOG_Q128: [[u64; 4]; 128] = ["
+    );
+    for r in &rows {
+        let _ = writeln!(o.src, "    [{:#018x}, {:#018x}, {:#018x}, {:#018x}], // c = {}", r[0], r[1], r[2], r[3], f64::from_bits(r[0]));
+    }
+    o.src.push_str("];\n");
+    let hi = on_grid42(ln2);
+    let lo = f64_of(&ln2.sub(&Big::from_f64(hi)));
+    o.f64_table("LN2_Q", "`ln 2` for the quick `log` phase: a multiple of 2^-42 (`e * part` exact for |e| < 2^11) and the nearest `f64` to the rest.", &[hi, lo]);
+}
+
 struct Out {
     src: String,
     files: Vec<(&'static str, String)>,
@@ -171,6 +218,7 @@ pub fn generate() -> Vec<(&'static str, String)> {
     let l10: Vec<Big> = l.iter().map(|v| v.div(&ln10, p, Round::Nearest)).collect();
     o.dd_table("LOG10_L", "`-log10(c_i)` = `-ln(c_i)/ln 10` for the `c_i` of `LOG_C` (`-log10(c_0)` = 0).", &l10);
     o.f64_table("LOG10_2_E", "`log10(2)` split for a logarithm's exponent: 42 significant bits (`e * part` exact for |e| < 2^11) and the nearest `f64` to the rest.", &split(&log10_2, 42, 2));
+    log_quick(&mut o, &ln2);
     o.close("exp_log.rs", "Tables and constants of the exponentials and logarithms");
 
     // Trigonometric: sin(kπ/64), k = 0..127, and π/64 splits.

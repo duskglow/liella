@@ -1,0 +1,16 @@
+{"task": "SIGNAL-TEST-THREAD-AUDIT-2", "model": "opus", "tokens": null,
+ "result": "D-X.42 written; s18_4_g_2 and the two regex SIGALRM re-entry cases moved to the single-threaded fork helper; audit completed; before/after loop 0/2000 both (old waits masked the race); 9/9 plants caught",
+ "branch": "task/signal-test-thread-audit-2", "head": "bf6dc5bb8",
+ "gate": {"affected": "affected: ok (clippy -D warnings, static, affected --base origin/next --run), rc 0", "peak": "3.6G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "BEFORE loop did not reproduce a failure (0/2000 per case at load 24-72 on 48 threads): the old cases waited 1 s (wait_hits) or slept 200 ms+, hiding the race; the fix removes the wall-clock wait and the wrong-thread pass, proven by plants",
+   "regex_reentry / regex_dfa_signal_fork: SIGALRM handled on libtest's thread could count as mid-search, so the case could pass with no re-entry; no before/after loop run for these two (budget), plants only",
+   "s20_2_c_1_5 still a 100 ms sleep negative check (cannot fail from thread choice; better: fork + waitpid(WUNTRACED))",
+   "docs/plants.md examples named package liella-core (does not exist; crates/core is liella): fixed; that error killed the previous run's loop job",
+   "loop s18_4_g_2 runs create a scratch FIFO dir under the role's target/tmp (CARGO_TARGET_TMPDIR, compile-time): metadata only, no data blocks"],
+ "refused": [],
+ "improvement": "plants.md examples are copied verbatim: a static check that every `-p <pkg>` in docs/ names a workspace package would have saved the previous run",
+ "next_step": "land after POPEN-SYSTEM-SIGCHLD-RACE; optional: move D-X.40's fork helper onto single_thread.rs, fix s20_2_c_1_5 with fork + waitpid(WUNTRACED)",
+ "report_file": "handoff/SIGNAL-TEST-THREAD-AUDIT.md",
+ "jobs": ["mei:signal-test-thread-audit-2-gate", "mei:signal-test-thread-audit-2-plants", "mei:signal-test-thread-audit-2-plants2", "mei:signal-test-thread-audit-2-loop2", "mei:signal-test-thread-audit-2-lint2"]}

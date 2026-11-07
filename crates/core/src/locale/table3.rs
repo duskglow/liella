@@ -3,59 +3,61 @@
 //! leaves the table reads as "absent".
 #![allow(clippy::arithmetic_side_effects)] // offsets are u32 file values or slice lengths: sums of a few stay far below usize::MAX
 
-use super::file::{i32_at, u32_at};
+use super::file::u32_at;
 
 /// A three-level table over a byte region.
 #[derive(Clone, Copy, Debug)]
 pub struct Table3 {
     data: &'static [u8],
+    /// The `bound` level-1 entries: one slice test covers both `i1 >= bound` and the read.
+    level1: &'static [u8],
     shift1: u32,
-    bound: u32,
     shift2: u32,
     mask2: u32,
     mask3: u32,
 }
 
 impl Table3 {
+    /// A table with no entries: every code point is absent (not a member, value 0).
+    pub const EMPTY: Table3 = Table3 { data: &[], level1: &[], shift1: 0, shift2: 0, mask2: 0, mask3: 0 };
+
     /// Read the header; `None` if it does not fit or its shifts are out of range.
     pub fn parse(data: &'static [u8]) -> Option<Table3> {
+        let bound = usize::try_from(u32_at(data, 4)?).ok()?;
         let t = Table3 {
             data,
+            level1: data.get(20..)?.get(..bound.checked_mul(4)?)?,
             shift1: u32_at(data, 0)?,
-            bound: u32_at(data, 4)?,
             shift2: u32_at(data, 8)?,
             mask2: u32_at(data, 12)?,
             mask3: u32_at(data, 16)?,
         };
-        let level1_end = usize::try_from(t.bound).ok()?.checked_mul(4)?.checked_add(20)?;
-        (t.shift1 < 32 && t.shift2 < 32 && level1_end <= data.len()).then_some(t)
+        (t.shift1 < 32 && t.shift2 < 32).then_some(t)
     }
 
-    /// The level-3 block for `wc` and the level-2 index, if present.
+    /// The byte offset of the level-3 block for `wc`, if present.
+    ///
+    /// Each level is one checked slice read of a whole word (TIMING-COV-WCTYPE-L, D-5.7): the
+    /// level-1 slice's length is `bound`, and a block offset names word `offset / 4` (a
+    /// well-formed file's offsets are multiples of 4; any other offset reads the word it falls
+    /// in, never outside the table).
     #[inline(always)]
-    fn block(&self, wc: u32) -> Option<usize> {
+    fn block(&self, wc: u32) -> Option<u32> {
         // Both shifts are below 32 ([`Table3::parse`]): a plain shift (masked to 5 bits, so it
         // equals the checked one) leaves out a test per level (STRXFRM-3).
-        let i1 = wc >> (self.shift1 & 31);
-        if i1 >= self.bound {
-            return None;
-        }
-        let l2 = u32_at(self.data, 20 + 4 * usize::try_from(i1).ok()?)?;
+        let l2 = word(self.level1, u64::from(wc >> (self.shift1 & 31)))?;
         if l2 == 0 {
             return None;
         }
-        let i2 = (wc >> (self.shift2 & 31)) & self.mask2;
-        let at = usize::try_from(l2).ok()?.checked_add(4 * usize::try_from(i2).ok()?)?;
-        let l3 = u32_at(self.data, at)?;
-        if l3 == 0 { None } else { usize::try_from(l3).ok() }
+        let l3 = word(self.data, u64::from(l2 >> 2) + u64::from((wc >> (self.shift2 & 31)) & self.mask2))?;
+        if l3 == 0 { None } else { Some(l3) }
     }
 
     /// A bit table's membership of `wc`.
     #[inline]
     pub fn bit(&self, wc: u32) -> bool {
         let Some(l3) = self.block(wc) else { return false };
-        let word = usize::try_from((wc >> 5) & self.mask3).unwrap_or(0);
-        let Some(w) = l3.checked_add(4 * word).and_then(|at| u32_at(self.data, at)) else { return false };
+        let Some(w) = word(self.data, u64::from(l3 >> 2) + u64::from((wc >> 5) & self.mask3)) else { return false };
         (w >> (wc & 31)) & 1 != 0
     }
 
@@ -63,8 +65,7 @@ impl Table3 {
     #[inline]
     pub fn value_i32(&self, wc: u32) -> i32 {
         let Some(l3) = self.block(wc) else { return 0 };
-        let i = usize::try_from(wc & self.mask3).unwrap_or(0);
-        l3.checked_add(4 * i).and_then(|at| i32_at(self.data, at)).unwrap_or(0)
+        word(self.data, u64::from(l3 >> 2) + u64::from(wc & self.mask3)).map_or(0, |v| i32::from_le_bytes(v.to_le_bytes()))
     }
 
     /// Whether [`Table3::value_i32`] of every `wc` below `expected.len() / 4` is the
@@ -84,7 +85,8 @@ impl Table3 {
         while wc < n {
             let len = (n - wc).min(run - wc % run).min(step2 - wc % step2);
             let Ok(w) = u32::try_from(wc) else { return false };
-            let Some(l3) = self.block(w) else { return false };
+            // The block's word as `value_i32` reads it (an offset rounded down to a word).
+            let Some(l3) = self.block(w).and_then(|b| usize::try_from(b & !3).ok()) else { return false };
             let at = l3.saturating_add(4 * (wc & (run - 1)));
             let (Some(have), Some(want)) = (self.data.get(at..at.saturating_add(4 * len)), expected.get(4 * wc..4 * (wc + len))) else { return false };
             if have != want {
@@ -98,15 +100,21 @@ impl Table3 {
     /// A value table's `u32` entry for `wc` (`None` when its block is absent).
     pub fn value_u32(&self, wc: u32) -> Option<u32> {
         let l3 = self.block(wc)?;
-        let i = usize::try_from(wc & self.mask3).ok()?;
-        l3.checked_add(4 * i).and_then(|at| u32_at(self.data, at))
+        word(self.data, u64::from(l3 >> 2) + u64::from(wc & self.mask3))
     }
 
     /// A value table's byte entry for `wc` (`None` when absent).
     #[inline]
     pub fn value_u8(&self, wc: u32) -> Option<u8> {
-        let l3 = self.block(wc)?;
+        let l3 = usize::try_from(self.block(wc)?).ok()?;
         let i = usize::try_from(wc & self.mask3).ok()?;
         self.data.get(l3.checked_add(i)?).copied()
     }
+}
+
+/// Little-endian word `i` of `b` (bytes `4 * i` on; a `u64` index: the sum of a shifted
+/// offset and an in-block index cannot overflow it, nor can four times it); `None` past the end.
+#[inline(always)]
+fn word(b: &[u8], i: u64) -> Option<u32> {
+    u32_at(b, usize::try_from(i.checked_mul(4)?).ok()?)
 }

@@ -33,17 +33,17 @@ pub extern "C" fn isalnum_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswalnum(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::ALNUM))
+    locale::view().isw_int(wc, Class::ALNUM)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswalnum_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::ALNUM))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::ALNUM)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswalnum_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::ALNUM))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::ALNUM)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -63,17 +63,17 @@ pub extern "C" fn isalpha_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswalpha(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::ALPHA))
+    locale::view().isw_int(wc, Class::ALPHA)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswalpha_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::ALPHA))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::ALPHA)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswalpha_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::ALPHA))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::ALPHA)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -93,17 +93,17 @@ pub extern "C" fn isblank_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswblank(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::BLANK))
+    locale::view().isw_int(wc, Class::BLANK)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswblank_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::BLANK))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::BLANK)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswblank_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::BLANK))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::BLANK)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -123,17 +123,17 @@ pub extern "C" fn iscntrl_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswcntrl(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::CNTRL))
+    locale::view().isw_int(wc, Class::CNTRL)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswcntrl_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::CNTRL))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::CNTRL)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswcntrl_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::CNTRL))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::CNTRL)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -153,17 +153,17 @@ pub extern "C" fn isdigit_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswdigit(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::DIGIT))
+    locale::view().isw_int(wc, Class::DIGIT)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswdigit_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::DIGIT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::DIGIT)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswdigit_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::DIGIT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::DIGIT)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -183,17 +183,17 @@ pub extern "C" fn isgraph_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswgraph(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::GRAPH))
+    locale::view().isw_int(wc, Class::GRAPH)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswgraph_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::GRAPH))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::GRAPH)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswgraph_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::GRAPH))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::GRAPH)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -213,17 +213,17 @@ pub extern "C" fn islower_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswlower(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::LOWER))
+    locale::view().isw_int(wc, Class::LOWER)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswlower_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::LOWER))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::LOWER)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswlower_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::LOWER))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::LOWER)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -243,17 +243,17 @@ pub extern "C" fn isprint_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswprint(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::PRINT))
+    locale::view().isw_int(wc, Class::PRINT)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswprint_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::PRINT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::PRINT)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswprint_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::PRINT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::PRINT)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -273,17 +273,17 @@ pub extern "C" fn ispunct_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswpunct(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::PUNCT))
+    locale::view().isw_int(wc, Class::PUNCT)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswpunct_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::PUNCT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::PUNCT)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswpunct_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::PUNCT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::PUNCT)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -303,17 +303,17 @@ pub extern "C" fn isspace_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswspace(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::SPACE))
+    locale::view().isw_int(wc, Class::SPACE)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswspace_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::SPACE))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::SPACE)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswspace_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::SPACE))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::SPACE)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -333,17 +333,17 @@ pub extern "C" fn isupper_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswupper(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::UPPER))
+    locale::view().isw_int(wc, Class::UPPER)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswupper_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::UPPER))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::UPPER)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswupper_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::UPPER))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::UPPER)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -363,17 +363,17 @@ pub extern "C" fn isxdigit_l(c: c_int, loc: locale_t) -> c_int {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswxdigit(wc: wint_t) -> c_int {
-    ret::truth(locale::view().isw(wc, Class::XDIGIT))
+    locale::view().isw_int(wc, Class::XDIGIT)
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswxdigit_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::XDIGIT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::XDIGIT)
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswxdigit_l(wc: wint_t, loc: locale_t) -> c_int {
-    ret::truth(locale::view_of(conv::addr(loc)).isw(wc, Class::XDIGIT))
+    locale::view_of(conv::addr(loc)).isw_int(wc, Class::XDIGIT)
 }}
 
 export! { "GLIBC_2.2.5";
@@ -534,22 +534,22 @@ pub extern "C" fn __wctype_l(name: *const c_char, loc: locale_t) -> wctype_t {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn iswctype(wc: wint_t, desc: wctype_t) -> c_int {
-    ret::truth(ctype_tables::iswctype_view(wc, desc, locale::view()))
+    ctype_tables::iswctype_view(wc, desc, locale::view())
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswctype(wc: wint_t, desc: wctype_t) -> c_int {
-    ret::truth(ctype_tables::iswctype_view(wc, desc, locale::view()))
+    ctype_tables::iswctype_view(wc, desc, locale::view())
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn iswctype_l(wc: wint_t, desc: wctype_t, loc: locale_t) -> c_int {
-    ret::truth(ctype_tables::iswctype_view(wc, desc, locale::view_of(conv::addr(loc))))
+    ctype_tables::iswctype_view(wc, desc, locale::view_of(conv::addr(loc)))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __iswctype_l(wc: wint_t, desc: wctype_t, loc: locale_t) -> c_int {
-    ret::truth(ctype_tables::iswctype_view(wc, desc, locale::view_of(conv::addr(loc))))
+    ctype_tables::iswctype_view(wc, desc, locale::view_of(conv::addr(loc)))
 }}
 
 export! { "GLIBC_2.3";

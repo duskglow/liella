@@ -41,6 +41,48 @@ pub(super) fn exp_z(z: f64) -> f64 {
     f64::from_bits(s) * p
 }
 
+/// The smallest |x| the one-pass entries take: 2^-26, a normal `float` (below it y is within the
+/// margin of 1 and the test would refuse anyway).
+const ONEPASS_AMIN: u32 = 0x3280_0000;
+
+/// e^x (`c` = [`INV_L`], `amax` = the bits of 87.33) or 2^x (`c` = 128, `amax` = the bits of 126)
+/// rounded in the caller's rounding direction by one evaluation in `double` and one `cvtsd2ss`
+/// (LIBM-F32-ONEPASS, D-10.63), or `None` for the caller's envelope.
+///
+/// It runs in the caller's MXCSR without reading it, so the proof holds in every rounding
+/// direction and under FTZ and DAZ:
+/// * Operands: 2^-26 ≤ |x| < `amax`, tested on the bits before any floating-point operation, so a
+///   NaN, an infinity, a zero or a subnormal (whose conversion DAZ would read as 0 and which
+///   raises denormal-operand) never reaches the arithmetic. f = base^x then lies in
+///   [2^-125.99, 2^125.99] (87.33 < 126·ln 2): normal, far from overflow and underflow.
+/// * Every intermediate is a normal `double` (z = x·c with |z| < 2^13.98, S = T·2^(k>>7) with
+///   k>>7 in [-127, 126], p near 1), so the arithmetic raises inexact and nothing else, and FTZ
+///   and DAZ change nothing. It raises inexact only for an inexact result: e^x is exact only at
+///   x = 0 (refused above) and 2^x at the integers, where z = 128·x, r = 0, p = 1 and y = S are
+///   all exact.
+/// * Bound in any direction (each operation's error ≤ 2^-52 relative, RN's 2^-53 doubled): z's
+///   error ≤ (2^-53 + 2^-52)|z| ≤ 2^-37.43 (0 for exp2), ≤ 2^-44.96 relative in f; k is the integer
+///   z + SHIFT rounds to, so |r| < 1 (1/2 in RN) and r's own rounding is ≤ 2^-53 absolute
+///   (2^-60.5 in f); |u| = |r|·ln 2/128 ≤ 2^-7.53, Taylor remainder ≤ |u|^5/120·1.01 ≤ 2^-44.54;
+///   the evaluation ≤ 2·1.006·2^-52 + 2^-59 ≤ 2^-50.97 (the two sums near 1; every other term is
+///   below 2^-15); T 2^-53, the product S·p 2^-52. Total ε ≤ 2.446·2^-45 = 2^-43.71: |y - f| <
+///   ε·2^53/(1 - ε) < 627 ulp(y) ([`EXP_ONEPASS_DELTA`] = 1024 ≥ 1.5·627 + 1).
+/// * Rounding: when y's low 28 significand bits are more than `delta` from 0 and from 2^28, no
+///   `float` and no midpoint lies between y and f (as in [`super::round`]), so `cvtsd2ss` of y in
+///   the caller's direction is f correctly rounded in that direction; y is not a `float`, so the
+///   conversion raises inexact, and the result is normal: no overflow, no underflow, no errno.
+#[inline(always)]
+pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
+    if (x.to_bits() & 0x7fff_ffff).wrapping_sub(ONEPASS_AMIN) >= amax - ONEPASS_AMIN {
+        return None;
+    }
+    let y = exp_z(f64::from(x) * c);
+    if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA {
+        return None;
+    }
+    Some(y as f32)
+}
+
 /// ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
 ///
 /// x = 2^e·m with m in [0.75, 1.5) (as a `double` every `float`, subnormals included, is normal).

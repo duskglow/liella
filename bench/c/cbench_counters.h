@@ -23,6 +23,11 @@
 
 /* uops: Intel's uops_issued.any (event 0x0E, umask 0x01; Haswell and later) as a raw event, only on a
  * GenuineIntel CPU (the same raw code means something else on AMD); -1 where the PMU lacks it (VMs). */
+/* CBENCH_COUNTERS=mite (MACHINE-JCC-PAD, D-4.67): event 5 counts IDQ.MITE_UOPS instead (event 0x79, umask 0x04: uops
+ * delivered by the legacy decoders rather than the decoded-uop cache; Intel's event tables list it for Sandy Bridge
+ * through the Skylake family, where the JCC-erratum microcode drops 32-byte windows from the uop cache). Read it
+ * only on those cores; the column is still named uops in the ctr line. Run the bench program directly (the xtask
+ * --counters run sets CBENCH_COUNTERS=1). */
 /* Events 0 (instructions), 1 (cycles) and 5 (uops) form ONE pinned group: they are always counted together over the
  * whole row. Without it, 6 events on a CPU with 3-4 programmable counters were multiplexed and the scaled values of
  * short rows were wrong (Ivy Bridge host A, Ivy Bridge: memcmp_16 showed 0.4 cycles/op). The other three events may multiplex. */
@@ -33,7 +38,7 @@ static int ctr_on = -1;
 static void ctr_open(void)
 {
     const char *v = getenv("CBENCH_COUNTERS");
-    ctr_on = v && v[0] == '1';
+    ctr_on = v && (v[0] == '1' || strcmp(v, "mite") == 0);
     if (!ctr_on)
         return;
     static const struct {
@@ -47,7 +52,7 @@ static void ctr_open(void)
         {PERF_TYPE_HW_CACHE,
          PERF_COUNT_HW_CACHE_L1D | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16), 0},
         {PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS, 1},
-        {PERF_TYPE_RAW, 0x010E, 0},
+        {PERF_TYPE_RAW, 0x010E, 0}, /* 0x0479 with CBENCH_COUNTERS=mite */
     };
     unsigned ea = 0, eb = 0, ec = 0, ed = 0;
     int intel = __get_cpuid(0, &ea, &eb, &ec, &ed) && eb == 0x756e6547u && ed == 0x49656e69u && ec == 0x6c65746eu;
@@ -58,7 +63,7 @@ static void ctr_open(void)
         memset(&a, 0, sizeof a);
         a.size = sizeof a;
         a.type = ev[i].type;
-        a.config = ev[i].config;
+        a.config = i == 5 && v[0] == 'm' ? 0x0479 : ev[i].config;
         a.disabled = 1;
         a.pinned = i == 0; /* instructions + cycles + uops: one pinned group, never multiplexed out */
         a.exclude_hv = 1;

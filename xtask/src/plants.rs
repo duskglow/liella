@@ -105,6 +105,8 @@ impl Verdict {
 /// plants' commands use the products (given the copy; [`plants_use_products`]).
 pub struct Config {
     pub src: PathBuf,
+    /// The plants file as read: `<dir>/results.txt` is this text with the results appended.
+    pub text: String,
     pub plants: Vec<Plant>,
     pub dir: PathBuf,
     pub prepare: Vec<String>,
@@ -217,7 +219,7 @@ fn parse_args(root: &Path, args: &[String]) -> Result<Config, String> {
     let text = fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
     let dir = if dir.is_absolute() { dir } else { std::env::current_dir().map_err(|e| e.to_string())?.join(dir) };
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout, uses_products: plants_use_products })
+    Ok(Config { src: root.to_path_buf(), plants: parse_plants(&text)?, text, dir, prepare: vec![cargo, "xtask".into(), "so".into()], timeout, uses_products: plants_use_products })
 }
 
 /// Parse a plants file (see the module comment). Every line is checked; the errors are joined.
@@ -417,6 +419,96 @@ fn log_matches(log: &Path, re: &str) -> bool {
     Command::new("grep").args(["-q", "-E", "-e", re]).arg(log).stdin(Stdio::null()).status().is_ok_and(|s| s.success())
 }
 
+/// XTASK-PLANTS-CATCHER: what caught a plant, read from its command's log: `<test binary> <test name>` of the
+/// first failing test the log names, so a run's record says which test is the evidence for the plant.
+///
+/// It reads a `cargo test` log (`Running <src> (<path>/<target>-<hash>)` names the binary, `test <name> ... FAILED`
+/// the test, `Doc-tests <crate>` the doctests) and a nextest one (`FAIL [ 0.1s] (1/9) <crate>::<target> <name>`, or
+/// any other failing status). Without a failing test line: the first panic of a thread named after a test, then a
+/// panic outside a named test (`thread 'main'`, `'<unnamed>'`) with the binary it happened in, then the binary
+/// cargo asks to rerun, then a build that does not compile.
+pub fn catcher(log: &str) -> String {
+    let mut binary: Option<String> = None;
+    let mut panic: Option<(Option<String>, String)> = None;
+    let mut rerun: Option<String> = None;
+    let mut compile = false;
+    let named = |binary: &Option<String>, test: &str| match binary {
+        Some(b) => format!("{b} {test}"),
+        None => format!("{test} (the test binary is not named in the log)"),
+    };
+    for line in log.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("Running ") {
+            // `Running \`target/debug/xtask ...\`` is cargo running a program, not a test binary.
+            if !rest.starts_with('`') {
+                let path = rest.rsplit_once('(').map_or(rest, |(_, p)| p.trim_end_matches(')'));
+                let file = path.rsplit('/').next().unwrap_or(path);
+                let target = file.rsplit_once('-').filter(|(_, h)| !h.is_empty() && h.bytes().all(|b| b.is_ascii_hexdigit())).map_or(file, |(s, _)| s);
+                binary = Some(target.to_string());
+            }
+        } else if let Some(krate) = t.strip_prefix("Doc-tests ") {
+            binary = Some(format!("doctests::{}", krate.trim()));
+        } else if let Some(test) = t.strip_prefix("test ").and_then(|r| r.strip_suffix(" ... FAILED")) {
+            return named(&binary, test);
+        } else if let Some(id) = nextest_failure(t) {
+            return id;
+        } else if let Some((thread, after)) = t.strip_prefix("thread '").and_then(|r| r.split_once('\'')) {
+            if panic.is_none() && after.contains("panicked at") {
+                panic = Some((binary.clone(), thread.to_string()));
+            }
+        } else if let Some(args) = t.strip_prefix("error: test failed, to rerun pass `") {
+            rerun = rerun.or_else(|| Some(args.split('`').next().unwrap_or("").to_string()));
+        } else if t.starts_with("error: could not compile") {
+            compile = true;
+        }
+    }
+    let binary = binary.or(rerun.map(|args| format!("`{args}`")));
+    match panic {
+        Some((b, thread)) if thread != "main" && thread != "<unnamed>" => named(&b, &thread),
+        Some((b, thread)) => format!("{} (a panic outside a named test, thread '{thread}')", b.or(binary).unwrap_or_else(|| "a binary the log does not name".into())),
+        None => match binary {
+            Some(b) => format!("{b} (the log names no failing test)"),
+            None if compile => "the build (the mutant does not compile)".into(),
+            None => "no test the log names".into(),
+        },
+    }
+}
+
+/// A nextest line reporting a test that did not pass: `<STATUS> [ <secs>s] [(<n>/<m>)] <binary> <test>`.
+fn nextest_failure(t: &str) -> Option<String> {
+    let (status, rest) = t.split_once(' ')?;
+    if !crate::nextest::failing_status(status) {
+        return None;
+    }
+    let (_, mut rest) = rest.trim_start().strip_prefix('[')?.split_once(']')?;
+    rest = rest.trim_start();
+    if rest.starts_with('(') {
+        rest = rest.split_once(')')?.1.trim_start();
+    }
+    let id = rest.trim_end();
+    (!id.is_empty()).then(|| id.to_string())
+}
+
+/// The first line of the results block `results.txt` appends to the plants file.
+const RESULTS_HEADER: &str = "# cargo xtask plants results";
+
+/// The plants file with the run's results appended as comments (the parser skips them), replacing the block an
+/// earlier run left in it.
+fn with_results(text: &str, summary: &str, results: &[String]) -> String {
+    let kept = text.find(&format!("\n{RESULTS_HEADER}")).map_or(text, |i| &text[..=i]);
+    let kept = if kept.starts_with(RESULTS_HEADER) { "" } else { kept };
+    let mut out = kept.to_string();
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&format!("{RESULTS_HEADER} ({summary}):\n"));
+    for r in results {
+        out.push_str(r);
+        out.push('\n');
+    }
+    out
+}
+
 /// Write a file anew (a fresh mtime, so cargo rebuilds what depends on it).
 fn write_fresh(path: &Path, text: &str) -> Result<(), String> {
     fs::write(path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
@@ -545,6 +637,7 @@ pub fn run(cfg: &Config) -> Outcome {
     let uses = (cfg.uses_products)(&copy, &cfg.plants);
     let mut products_hold_mutant = false;
     let mut verdicts = Vec::new();
+    let mut results: Vec<String> = Vec::new();
     let mut failed = false;
     for (p, &products) in cfg.plants.iter().zip(&uses) {
         let mut build = "the baseline products, not rebuilt".to_string();
@@ -567,6 +660,7 @@ pub fn run(cfg: &Config) -> Outcome {
             Ok(s) => s,
             Err(e) => {
                 println!("plants: {}: ERROR: cannot read {}: {e}", p.id, p.path);
+                results.push(format!("# {}: ERROR: cannot read {}: {e}", p.id, p.path));
                 failed = true;
                 continue;
             }
@@ -575,12 +669,14 @@ pub fn run(cfg: &Config) -> Outcome {
             Ok(m) => m,
             Err(e) => {
                 println!("plants: {}: ERROR: {e}", p.id);
+                results.push(format!("# {}: ERROR: {e}", p.id));
                 failed = true;
                 continue;
             }
         };
         if let Err(e) = write_fresh(&file, &mutant) {
             println!("plants: {}: ERROR: {e}", p.id);
+            results.push(format!("# {}: ERROR: {e}", p.id));
             failed = true;
             continue;
         }
@@ -608,6 +704,7 @@ pub fn run(cfg: &Config) -> Outcome {
             Ok(rc) => rc,
             Err(e) => {
                 println!("plants: {}: ERROR: {e}", p.id);
+                results.push(format!("# {}: ERROR: {e}", p.id));
                 failed = true;
                 continue;
             }
@@ -622,12 +719,20 @@ pub fn run(cfg: &Config) -> Outcome {
             (Expect::RcOnly, rc) => (Verdict::WarnRcOnly, format!("rc {rc}, no msg: given")),
         };
         println!("plants: {}: {} ({}; log {}; build: {build})", p.id, verdict.label(), detail, log.display());
+        // XTASK-PLANTS-CATCHER: a failed command names what failed, kept beside the plants in results.txt.
+        if rc == 0 {
+            results.push(format!("# {}: {}", p.id, verdict.label()));
+        } else {
+            let by = if rc == TIMED_OUT { format!("timeout ({}s)", cfg.timeout) } else { catcher(&String::from_utf8_lossy(&fs::read(&log).unwrap_or_default())) };
+            println!("plants: {}: caught by {by}", p.id);
+            results.push(format!("# {}: {}, caught by {by}", p.id, verdict.label()));
+        }
         verdicts.push((p.id.clone(), verdict));
     }
     let count = |v: Verdict| verdicts.iter().filter(|(_, x)| *x == v).count();
     let survived = count(Verdict::Survived);
-    println!(
-        "plants: {} plants: {} CAUGHT, {} SURVIVED, {} EQUIVALENT, {} WARN-RC-ONLY, {} WARN-NO-MSG{}",
+    let summary = format!(
+        "{} plants: {} CAUGHT, {} SURVIVED, {} EQUIVALENT, {} WARN-RC-ONLY, {} WARN-NO-MSG{}",
         cfg.plants.len(),
         count(Verdict::Caught),
         survived,
@@ -636,6 +741,14 @@ pub fn run(cfg: &Config) -> Outcome {
         count(Verdict::WarnNoMsg),
         if failed { ", and errors (see above)" } else { "" }
     );
+    println!("plants: {summary}");
+    let record = cfg.dir.join("results.txt");
+    if let Err(e) = write_fresh(&record, &with_results(&cfg.text, &summary, &results)) {
+        println!("plants: ERROR: cannot write {}: {e}", record.display());
+        failed = true;
+    } else {
+        println!("plants: the plants file with these results: {} (commit it as handoff/<STORY>-plants.txt)", record.display());
+    }
     let code = if survived > 0 || failed { EXIT_SURVIVED } else { EXIT_OK };
     Outcome { code, verdicts }
 }
@@ -660,7 +773,7 @@ mod tests {
     const CHECK: &str = "grep -q answer=42 src/value.txt || { echo WRONG-ANSWER; exit 1; }";
 
     fn config(src: &Path, dir: &Path, plants: &str) -> Config {
-        Config { src: src.to_path_buf(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60, uses_products: |_, ps| vec![false; ps.len()] }
+        Config { src: src.to_path_buf(), text: plants.to_string(), plants: parse_plants(plants).unwrap(), dir: dir.to_path_buf(), prepare: sh("true"), timeout: 60, uses_products: |_, ps| vec![false; ps.len()] }
     }
 
     /// The toy's products: `product.txt`, a copy of `src/value.txt`; every build appends a line to `builds.txt`.
@@ -744,7 +857,54 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join("src/src/value.txt")).unwrap(), "answer=42\nother=7\nother=7\n");
         assert!(!dir.join("src/target").exists(), "target/ must not be copied");
         assert!(dir.join("logs/p1.log").is_file());
+        let results = fs::read_to_string(dir.join("results.txt")).unwrap();
+        assert!(results.starts_with(&plants), "results.txt keeps the plants file: {results}");
+        assert!(results.contains("\n# p1: CAUGHT, caught by no test the log names\n# p2: WARN-RC-ONLY, caught by "), "{results}");
         let _ = fs::remove_dir_all(src.parent().unwrap());
+    }
+
+    // no spec clause (XTASK-PLANTS-CATCHER): one failing test in a recorded `cargo test` log names its binary and test
+    #[test]
+    fn catcher_names_the_failing_test_of_a_cargo_test_log() {
+        let log = "   Compiling liella-ld v0.1.0\n     Running `target/debug/xtask affected --run`\n     Running unittests src/lib.rs (target/debug/deps/liella_ld-0f3a9c2b1d4e5f60)\n\nrunning 3 tests\ntest elf::ok ... ok\n\n     Running tests/elf_tables.rs (target/debug/deps/elf_tables-a1b2c3d4e5f60718)\n\nrunning 2 tests\ntest tables_read_back ... ok\ntest sysv_chain_loop ... FAILED\n\nfailures:\n\n---- sysv_chain_loop stdout ----\nthread 'sysv_chain_loop' panicked at crates/ld/tests/elf_tables.rs:9:5:\nloop not found\n\nerror: test failed, to rerun pass `-p liella-ld --test elf_tables`\n";
+        assert_eq!(catcher(log), "elf_tables sysv_chain_loop");
+        assert_eq!(catcher("     Running unittests src/lib.rs (target/debug/deps/liella_ld-0f3a9c2b1d4e5f60)\ntest elf::tests::bad ... FAILED\n"), "liella_ld elf::tests::bad");
+        assert_eq!(catcher("   Doc-tests liella_ld\ntest crates/ld/src/elf.rs - Elf (line 3) ... FAILED\n"), "doctests::liella_ld crates/ld/src/elf.rs - Elf (line 3)");
+    }
+
+    // no spec clause (XTASK-PLANTS-CATCHER): with several failing tests the first one in the log is the catcher
+    #[test]
+    fn catcher_names_the_first_of_several_failing_tests() {
+        let cargo = "     Running tests/stdio.rs (target/debug/deps/stdio-00112233aabbccdd)\ntest b_second ... ok\ntest c_third ... FAILED\ntest a_first ... FAILED\n";
+        assert_eq!(catcher(cargo), "stdio c_third");
+        let nextest = "    Starting 9 tests across 2 binaries\n        PASS [   0.010s] (1/9) liella-core::stdio ok_one\n        FAIL [   0.004s] (2/9) liella-core::stdio short_write\n     SIGSEGV [   0.020s] (3/9) liella-core::stdio crash\n------------\n     Summary [   0.100s] 9 tests run: 7 passed, 2 failed\n        FAIL [   0.004s] (2/9) liella-core::stdio short_write\n";
+        assert_eq!(catcher(nextest), "liella-core::stdio short_write");
+        assert_eq!(catcher("     SIGABRT [   0.020s] liella-core crash_test\n        FAIL [   0.004s] liella-core other\n"), "liella-core crash_test");
+    }
+
+    // no spec clause (XTASK-PLANTS-CATCHER): a panic with no test name, a binary that aborted, a build that fails, nothing
+    #[test]
+    fn catcher_without_a_failing_test_line() {
+        let main = "     Running tests/posixipc_run.rs (target/debug/deps/posixipc_run-0123456789abcdef)\nthread 'main' panicked at crates/core/tests/posixipc_run.rs:40:9:\nphase nodev failed\nerror: test failed, to rerun pass `-p liella-core --test posixipc_run`\n";
+        assert_eq!(catcher(main), "posixipc_run (a panic outside a named test, thread 'main')");
+        assert_eq!(catcher("thread '<unnamed>' panicked at src/x.rs:1:1:\nboom\n"), "a binary the log does not name (a panic outside a named test, thread '<unnamed>')");
+        let named = "     Running tests/t.rs (target/debug/deps/t-0123456789abcdef)\nthread 'mmap_guard' panicked at tests/t.rs:3:3:\nbad\n";
+        assert_eq!(catcher(named), "t mmap_guard");
+        let aborted = "     Running tests/t.rs (target/debug/deps/t-0123456789abcdef)\nrunning 1 test\nerror: test failed, to rerun pass `--test t`\n\nCaused by:\n  process didn't exit successfully (signal: 6, SIGABRT)\n";
+        assert_eq!(catcher(aborted), "t (the log names no failing test)");
+        assert_eq!(catcher("error: test failed, to rerun pass `--test t`\n"), "`--test t` (the log names no failing test)");
+        assert_eq!(catcher("error[E0308]: mismatched types\nerror: could not compile `liella-ld` (lib) due to 1 previous error\n"), "the build (the mutant does not compile)");
+        assert_eq!(catcher("WRONG-ANSWER\n"), "no test the log names");
+    }
+
+    // no spec clause (XTASK-PLANTS-CATCHER): results.txt replaces the block an earlier run appended
+    #[test]
+    fn results_replace_an_earlier_block() {
+        let first = with_results("# story\np | a | lit:x ==> y | true\n", "1 plants: 1 CAUGHT", &["# p: CAUGHT, caught by t x".into()]);
+        assert_eq!(first, "# story\np | a | lit:x ==> y | true\n# cargo xtask plants results (1 plants: 1 CAUGHT):\n# p: CAUGHT, caught by t x\n");
+        assert_eq!(with_results(&first, "1 plants: 1 SURVIVED", &["# p: SURVIVED".into()]), "# story\np | a | lit:x ==> y | true\n# cargo xtask plants results (1 plants: 1 SURVIVED):\n# p: SURVIVED\n");
+        assert_eq!(parse_plants(&first).unwrap().len(), 1);
+        assert_eq!(with_results("p | a | lit:x ==> y | true", "s", &[]), "p | a | lit:x ==> y | true\n# cargo xtask plants results (s):\n");
     }
 
     // no spec clause: a surviving plant exits non-zero; a wrong msg is WARN-NO-MSG; an equivalent one is EQUIVALENT

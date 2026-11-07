@@ -1,0 +1,15 @@
+{"task": "WCTYPE-RETHINK", "model": "opus", "tokens": null,
+ "result": "COMPLETE: plan written; design A (one two-stage class-word table per LC_CTYPE, wctype_t = class bit) prototyped and verified (0 mismatches over every code point x 12 classes x 3 locales): 0.83-1.26 ns/call on Ivy Bridge and N100 for every entry/range/locale vs glibc 0.87-7.2 ns and Liella today 2.1-10.1 ns; towctrans en_US.UTF-8 measured ~20x glibc (445 vs 19 instr)",
+ "branch": "task/wctype-rethink", "head": "804632796",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Adopt design A for isw*/isw*_l/iswctype(_l): generated two-stage class-word tables (C, C.UTF-8) in rodata, lazily resolved per-locale stage 1 for file-backed LC_CTYPE sharing built-in leaves (D-NEW-1, D-NEW-2)", "recommendation": "adopt; prototype 0.12-0.50x glibc time (parity on Ivy Bridge ASCII), Liella today 0.68-7.2x"},
+  {"item": "Rodata size of the built-in C.UTF-8 class table: 84 KB two-stage u16 (2 loads) vs 46.8 KB 8-bit palette or 40.2 KB three-stage (one more dependent load each)", "recommendation": "84 KB two-stage; pages are shared and touched on demand"},
+  {"item": "Thread block holds the active LC_CTYPE class-table pointer, kept current where D-5.5 keeps the byte-table words (D-NEW-3)", "recommendation": "approve; it removes the view resolution from every non-_l entry"},
+  {"item": "towctrans decode is a linear re-derivation of every map descriptor (~445 instr, ~20x glibc: MAGNITUDE trigger)", "recommendation": "brief TOWCTRANS-DESC (S) now, before the trie work (D-NEW-4)"}],
+ "informational": ["D-5.7, named by the brief, does not exist on origin/next", "en_US.UTF-8 and C.UTF-8 class data are identical for every code point and all 12 classes on the reference system; only 13 distinct class words exist", "C.UTF-8 entries cost 55-67 instr and 14 loads on every range including ASCII (glibc 5 on ASCII): the built-in view derives classes from Unicode properties per call", "Not measured: wcwidth, locale-defined classes (only C, C.utf8, en_US.utf8 installed), Rust-side resolution cost of design A, first-touch cost of lazily resolved blocks"],
+ "refused": [],
+ "improvement": "A single black-box probe that counts every entry x class x range x locale and carries the candidate designs (tables built from the library's own answers) gave designs, counters, verification and two-CPU timing in 3 jobs; reuse handoff/wctype-rethink/wcprobe.c's pattern for other RETHINK stories",
+ "next_step": "Rule on D-NEW-1..4; then brief TOWCTRANS-DESC (S), WCTYPE-TRIE-BUILTIN (M), WCTYPE-TRIE-FILE (M/L) per handoff/wctype-rethink.md section 8",
+ "report_file": "handoff/wctype-rethink.md",
+ "jobs": ["mei:wctype-rethink-measure", "nico:wctype-rethink-ivb", "nozomi:wctype-rethink-n100"]}
