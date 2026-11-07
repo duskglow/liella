@@ -520,8 +520,10 @@ liella_classed_id_avx2:
  * only ISA test (`n <= liella_machine_cmp_long`, 2048 with AVX2) picks the AVX2 classes (33-64
  * .Lcmp_wide, 65-2048 .Lcmp_big_load) or the SSE2 ones (33-64 the blocks at 16, n - 32, n - 16;
  * 65-2048 .Lcmp_sse_65 past its own head probe; above, .Lcmp_sse_over as before). n < 16, and
- * every n with folding off, take .Lcmp_lo: 8-15 the words at 0 and n - 8 while
- * `liella_machine_cmp_short` is 16 (folding on), else the checked entry; 0-7 as described below.
+ * every n with folding off, fall through the entry's first test (no taken branch; COMPARE-HEAD-H2-2:
+ * a taken branch there cost 1-2 cycles on 8-16 byte calls on Ivy Bridge): 8-15 the words at 0 and
+ * n - 8 while `liella_machine_cmp_short` is 17 (folding on), else the checked entry; 0-7 .Lcmp_lt8
+ * as described below. The equality entry takes the head block for n > 16 and 8-16 as two words.
  * The rest of this comment predates D-4.66 for the class selection; the class bodies hold. */
 /* int liella_machine_compare(const void *a, const void *b, size_t n): the direct compare entry
  * (MEMCMP-FOLD, D-4.23 amendment; owner ruling 2026-10-10 extending the S6 NULL-folding exception to
@@ -596,7 +598,22 @@ liella_machine_compare:
 memcmp:
 #endif
 	cmpq liella_machine_cmp_head(%rip), %rdx
-	jb .Lcmp_lo
+	jae .Lcmp_head
+	cmpq $8, %rdx
+	jb .Lcmp_lt8
+	cmpq liella_machine_cmp_short(%rip), %rdx
+	jae liella_hot_compare_rest
+	movq (%rdi), %rax
+	movq (%rsi), %rcx
+	cmpq %rcx, %rax
+	jne .Lcmp_order
+	movq -8(%rdi,%rdx), %rax
+	movq -8(%rsi,%rdx), %rcx
+	cmpq %rcx, %rax
+	jne .Lcmp_order
+	xorl %eax, %eax
+	ret
+.Lcmp_head:
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
@@ -691,21 +708,6 @@ memcmp:
 	cmpq %rcx, %rax
 	sbbl %eax, %eax
 	orl $1, %eax
-	ret
-.Lcmp_lo:
-	cmpq $8, %rdx
-	jb .Lcmp_lt8
-	cmpq liella_machine_cmp_short(%rip), %rdx
-	jae liella_hot_compare_rest
-	movq (%rdi), %rax
-	movq (%rsi), %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_order
-	movq -8(%rdi,%rdx), %rax
-	movq -8(%rsi,%rdx), %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_order
-	xorl %eax, %eax
 	ret
 .Lcmp_lt8:
 	testq %rdi, %rdi
@@ -1327,7 +1329,20 @@ bcmp:
 __memcmpeq:
 #endif
 	cmpq liella_machine_cmp_head(%rip), %rdx
-	jb .Leq_lo
+	ja .Leq_head
+	cmpq $8, %rdx
+	jb .Leq_lt8
+	cmpq liella_machine_cmp_short(%rip), %rdx
+	jae liella_hot_equal_rest
+	movq (%rdi), %rax
+	cmpq (%rsi), %rax
+	jne .Leq_one
+	movq -8(%rdi,%rdx), %rcx
+	xorl %eax, %eax
+	cmpq -8(%rsi,%rdx), %rcx
+	setne %al
+	ret
+.Leq_head:
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
@@ -1342,19 +1357,6 @@ __memcmpeq:
 	pmovmskb %xmm0, %eax
 	subl $0xffff, %eax
 	shrl $31, %eax
-	ret
-.Leq_lo:
-	cmpq $8, %rdx
-	jb .Leq_lt8
-	cmpq liella_machine_cmp_short(%rip), %rdx
-	jae liella_hot_equal_rest
-	movq (%rdi), %rax
-	cmpq (%rsi), %rax
-	jne .Leq_one
-	movq -8(%rdi,%rdx), %rcx
-	xorl %eax, %eax
-	cmpq -8(%rsi,%rdx), %rcx
-	setne %al
 	ret
 .Leq_h65:
 	cmpq liella_machine_cmp_sse(%rip), %rdx
@@ -1655,9 +1657,10 @@ liella_machine_avx2:
 	.size liella_machine_avx2, 1
 /* The compare entries' fold words (COMPARE-HEAD-H2, D-4.66; `ffi::liella_machine_cmp_head` /
  * `cmp_short`, stored by `crate::dispatch::store_cmp_gates`). `cmp_head`: 16 while NULL folding is
- * on, else SIZE_MAX; `n < cmp_head` leaves the head block, so with folding off or undecided every
- * size takes the small classes and the checked entries. `cmp_short`: 16 while folding is on, else 8;
- * 8 <= n < cmp_short take the folded 8-15 words, so 8 and more with folding off (also a call that
+ * on, else SIZE_MAX; memcmp takes the head block for `n >= cmp_head`, the equality entry for
+ * `n > cmp_head`, so with folding off or undecided every size takes the small classes and the
+ * checked entries. `cmp_short`: 17 while folding is on, else 8; 8 <= n < cmp_short take the folded
+ * words at 0 and n - 8 (memcmp 8-15, equality 8-16), so 8 and more with folding off (also a call that
  * saw the head word of the off state) take the checked entry. Both start in the off state. */
 	.data
 	.p2align 3
