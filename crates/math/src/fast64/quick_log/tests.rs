@@ -145,7 +145,7 @@ fn log_quick_matches_correctly_rounded_log() {
 
 /// Outside the domain the quick phase declines; at 1 it returns +0; the tiers answer every
 /// positive double as the correctly rounded log; and hard cases (`1 ± k·2^-53`, powers of two,
-/// and the operands of a seeded sample whose quick result rounded without the test is wrong, so
+/// and the operands of a seeded sample whose unchecked quick result `zh` is wrong, so
 /// the test cannot pass vacuously) are declined or answered right.
 #[test]
 fn log_quick_declines_or_rounds_right_on_hard_cases() {
@@ -159,9 +159,11 @@ fn log_quick_declines_or_rounds_right_on_hard_cases() {
         hard.extend([1.0 + d, 1.0 - 0.5 * d, two(i32::try_from(k).unwrap_or(0) * 16 - 520)]);
     }
     let mut wrong = 0usize;
-    for x in uniform(400_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0).chain(spread(400_000, 13)) {
+    // Misroundings of the unchecked `zh` lie where `zl` is next to half an ulp, which is where
+    // the rounding test declines: look there (about 0.1% of the sample).
+    for x in uniform(1_000_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0).chain(spread(1_000_000, 13)) {
         if let Some((zh, zl)) = log_quick_parts(x) {
-            if zh + zl != cr(x) {
+            if zh + zl * C != zh && zh != cr(x) {
                 wrong += 1;
                 hard.push(x);
             }
