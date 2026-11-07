@@ -103,7 +103,7 @@ mod tests {
     fn planted_home_path_is_caught() {
         // Built at run time so this file passes its own check.
         let (h, u) = (["", "home", ""].join("/"), ["Users", ""].join("/"));
-        for l in [format!("see {h}claude/w/x"), format!("{h}rmill"), format!("cd C:/{u}someone"), format!(r"C:\{}\x", &u[..5]), format!("d:/{}x", u.to_lowercase()), format!("HOME={h}jdoe2")] {
+        for l in [format!("see {h}someone/w/x"), format!("{h}jdoe"), format!("cd C:/{u}someone"), format!(r"C:\{}\x", &u[..5]), format!("d:/{}x", u.to_lowercase()), format!("HOME={h}jdoe2")] {
             assert_eq!(scan("handoff/x.md", &l).len(), 1, "{l}");
         }
     }

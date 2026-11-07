@@ -9,9 +9,9 @@ Decision in force: **D-X.45** (plan/07-decisions/x-implementation-decisions.md).
    - handoff/: 20 files, 24 replacements. Home paths became `~/...`. Addresses became host names (keke, shiki, nico, nozomi).
      lab-names-clean.md now names the 10/8 test fixtures without full addresses (2). proto_percall.c now includes
      `proto_exp.c` relative to its own directory, or through `-DPROTO_EXP=...` (1).
-   - validation/corpus/printf.corpus: 78 `/home/claude` became `~`. The harvested user name `rmiller` (4) became `someone`,
+   - validation/corpus/printf.corpus: 78 home paths of the harvesting account became `~`. A harvested 7-letter user name (4) became `someone`,
      which has the same length. No line was added or removed, so the line numbers in printf.known still hold.
-   - validation/results/: 6 files, 21 replacements (`/home/claude` became `~`; no measurement changed).
+   - validation/results/: 6 files, 21 replacements (home paths became `~`; no measurement changed).
    - xtask/src/remap.rs (2), repro.rs (3): the test paths became `/srv/build/w/...`. The relative lengths are kept, so each
      assertion keeps its meaning.
    - The tool scripts validation/wl_gate.sh, run_remote.sh, wl_alloctrace.sh, wl_fallback.sh, wl_install.sh and
