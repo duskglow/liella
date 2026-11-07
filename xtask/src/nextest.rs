@@ -28,7 +28,42 @@ pub fn pass0_only(krate: &str, target: &str) -> bool {
     PASS0_ONLY.iter().any(|&(c, t)| c == krate && t == target)
 }
 
-/// The nextest filter of the exports-interposed pass: every test but those of `PASS0_ONLY`.
+/// Sharded products targets `(crate, target)` that run every shard in the first pass and only
+/// shard 0 with the exports interposed (GATE-PASS2-MATH-SHARD, owner ruling #3794, D-X.36). They
+/// build and run C programs against the products, so they are not `PASS0_ONLY`; but their cost is
+/// the oracle's multiple-precision check of each output line, which pass 1 already made. Every
+/// shard does the same harness work (build and run the programs, read and split their whole
+/// output, then check the lines `i % SHARDS == k`), so shard 0 calls the interposed allocator
+/// and string functions on the same paths; the other shards only add lines to the same checks.
+/// A suite runs in pass 2 only to the extent that it exercises the interposed functions.
+pub const PASS1_SHARD0: &[(&str, &str)] = &[
+    ("liella-math", "complex_ld_cr_products"),
+    ("liella-math", "complex_f128_products"),
+    ("liella-math", "special_ld_products"),
+    ("liella-math", "special_f128_products"),
+    ("liella-math", "complex_products"),
+];
+
+/// The shard tests other than shard 0 (`<name>_s<k>`, `k >= 1`, the `shards!` macro's names in
+/// `crates/math/tests/support/shard.rs` users); a target's unsharded tests keep running.
+const LATER_SHARDS: &str = "test(/_s[1-9][0-9]*$/)";
+
+/// The filterset terms that leave out the `PASS1_SHARD0` targets' later shards, for the targets
+/// `keep` accepts.
+fn later_shard_terms(keep: impl Fn(&str, &str) -> bool) -> Vec<String> {
+    PASS1_SHARD0.iter().filter(|(c, t)| keep(c, t)).map(|(c, t)| format!("(binary_id({c}::{t}) & {LATER_SHARDS})")).collect()
+}
+
+/// The nextest filter of the exports-interposed pass of `affected`, which runs the targets `ts` of
+/// crate `krate`: leave out the later shards of the `PASS1_SHARD0` targets among them. `None` when
+/// none is among them.
+pub fn pass1_shard_filter(krate: &str, ts: &[&str]) -> Option<Vec<String>> {
+    let terms = later_shard_terms(|c, t| c == krate && ts.contains(&t));
+    (!terms.is_empty()).then(|| vec!["-E".to_string(), format!("not ({})", terms.join(" | "))])
+}
+
+/// The nextest filter of the exports-interposed pass: every test but those of `PASS0_ONLY` and
+/// the later shards of `PASS1_SHARD0`.
 /// `None` when `extra` brings its own filter expression (nextest ORs several `-E`s, so adding one
 /// would widen the caller's selection): the pass then runs as the caller asked.
 /// `once` adds the binary ids `unchanged_binaries` found (CI-GATE-DIET).
@@ -38,6 +73,7 @@ pub fn pass1_filter(extra: &[String], once: &[String]) -> Option<Vec<String>> {
     }
     let mut ids: Vec<String> = PASS0_ONLY.iter().map(|(c, t)| format!("binary_id({c}::{t})")).collect();
     ids.extend(once.iter().filter(|b| !PASS0_ONLY.iter().any(|(c, t)| **b == format!("{c}::{t}"))).map(|b| format!("binary_id({b})")));
+    ids.extend(later_shard_terms(|c, t| !once.iter().any(|b| *b == format!("{c}::{t}"))));
     Some(vec!["-E".to_string(), format!("not ({})", ids.join(" | "))])
 }
 
@@ -291,10 +327,38 @@ mod tests {
             }
         }
         assert!(pass0_only("liella-math", "special_cr") && !pass0_only("liella-math", "special_ld_products"));
-        assert_eq!(pass1_filter(&[], &[]).unwrap_or_default(), ["-E", "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels))"]);
+        let later = "(binary_id(liella-math::complex_ld_cr_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_ld_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_products) & test(/_s[1-9][0-9]*$/))";
+        assert_eq!(pass1_filter(&[], &[]).unwrap_or_default(), ["-E".to_string(), format!("not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | {later})")]);
         assert_eq!(pass1_filter(&["-E".to_string(), "test(x)".to_string()], &[]), None);
         let once = ["liella-math::special_cr".to_string(), "liella-math::fast64".to_string()];
-        assert_eq!(pass1_filter(&[], &once).unwrap_or_default()[1], "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | binary_id(liella-math::fast64))");
+        assert_eq!(pass1_filter(&[], &once).unwrap_or_default()[1], format!("not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | binary_id(liella-math::fast64) | {later})"));
+        // A run-once products target is left out whole; its later-shard term would be redundant.
+        let once = ["liella-math::complex_products".to_string()];
+        assert!(!pass1_filter(&[], &once).unwrap_or_default()[1].contains("(binary_id(liella-math::complex_products) &"));
+    }
+
+    #[test]
+    fn pass2_runs_shard_0_of_the_heavy_products_targets() {
+        // no spec clause: gate tooling (GATE-PASS2-MATH-SHARD, owner ruling #3794), not libc behaviour.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+        for (c, t) in PASS1_SHARD0 {
+            assert!(!pass0_only(c, t), "{c}::{t} is in both lists");
+            let dir = c.strip_prefix("liella-").unwrap_or(c);
+            let src = std::fs::read_to_string(root.join(format!("crates/{dir}/tests/{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
+            // The shards are `<name>_s<k> = <k>;` lines of `shards!`; shard 0 must exist, and no
+            // other test name may end in `_s<digits>` (the filter would drop it from pass 2).
+            let shard_lines: Vec<&str> = src.lines().map(str::trim).filter(|l| l.contains("_s") && l.ends_with(';') && l.contains(" = ")).collect();
+            assert!(shard_lines.iter().any(|l| l.contains("_s0 = 0;")), "{c}::{t} has no shard 0");
+            assert!(shard_lines.len() >= 2, "{c}::{t} is not sharded");
+            for l in src.lines().map(str::trim).filter(|l| l.starts_with("fn ") || l.starts_with("pub fn ")) {
+                let name = l.split_once("fn ").map_or("", |(_, r)| r).split(['(', '<']).next().unwrap_or_default();
+                let tail = name.rsplit_once("_s").map_or("", |(_, d)| d);
+                assert!(tail.is_empty() || !tail.bytes().all(|b| b.is_ascii_digit()), "{c}::{t}: `{name}` looks like a shard test");
+            }
+        }
+        assert_eq!(pass1_shard_filter("liella-math", &["fast64"]), None);
+        assert_eq!(pass1_shard_filter("liella", &["complex_products"]), None);
+        assert_eq!(pass1_shard_filter("liella-math", &["fast64", "special_ld_products"]).unwrap_or_default(), ["-E", "not ((binary_id(liella-math::special_ld_products) & test(/_s[1-9][0-9]*$/)))"]);
     }
 
     #[test]
