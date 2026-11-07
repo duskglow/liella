@@ -28,7 +28,7 @@
 //! | `env-audit`    | Reject an in-process `setenv`/`putenv`/`unsetenv`/`clearenv` in a test binary that also starts processes, unless it runs in `in_child`/`alone` or carries `// env-ok: <why>` (FL-1: the library's `environ` is the process's). |
 //! | `opaque-audit` | Reject a direct call to an exported allocator-family name (`malloc`, `free`, ...) in a test file unless it goes through `selftest::opaque` or the file says `// opaque-ok: <why>` (GATE-SPEED-5: LLVM folds those names at opt-level >= 1); and a test file linking `liella_boundary` that calls any LLVM-builtin libc name (`labs`, `strlen`, `fabs`, ...) directly unless it is `#![no_builtins]` (OPAQUE-AUDIT). |
 //! | `crash-audit`  | Reject a test that expects a core-dumping signal (`.signal(), Some(6)`, `Signaled(SIGABRT)`, `EXPECT-SIGNAL: 6`, `WTERMSIG(st) == SIGSEGV`) without as many `expect_crash` helper calls (`selftest::expect_crash`/`in_child_quiet`, `conformance/c/expect_crash.h`) unless the file says `dump-ok: <why>` (CORE-STORM: no core handler per deliberate crash). |
-//! | `test`         | policy checks, the workspace tests (internal + translation suites; under cargo-nextest when installed, `LIELLA_NO_NEXTEST=1` for `cargo test`, see `nextest.rs`), then the C conformance suite, `native` and `rust-dylib`. |
+//! | `test`         | policy checks, the workspace tests (internal + translation suites; under cargo-nextest when installed, `LIELLA_NO_NEXTEST=1` for `cargo test`, see `nextest.rs`), then the C conformance suite, `native` and `rust-dylib`. Each step prints `step: <name> <seconds>s` as it ends and the run ends with `step-summary:` lines, slowest first, and `step-total:` (`steptime.rs`; `affected --run` does the same when it escalates to FULL). |
 //! | `ctest`        | Only the C conformance suite (`conformance/run.sh`). |
 //! | `nextest`      | `cargo nextest run <args>` with the summary lines of a `cargo test` log added (`nextest.rs`); `affected --run` runs its tests through it. |
 //! | `affected`     | Run only the tests a change can affect (conservative selection; see `affected.rs`): `--list` prints the selection with a reason per item, `--run` runs it and prints a summary; one of the two is required (without either: the one-line usage, exit 2; XTASK-AFFECTED-EXPLICIT); `--base <ref>` (default `origin/main`), `--files <path>...` instead of the git query. Escalates to the full gate for `csys/`, `crates/abi`, build and generated files. The full gate still runs once at merge. |
@@ -77,6 +77,7 @@ mod schedule;
 mod so;
 mod spec;
 mod status;
+mod steptime;
 mod symcov;
 mod symgap;
 mod sweep;
@@ -219,57 +220,68 @@ fn clippy_gate(root: &Path) -> Result<(), String> {
     run(Command::new(&cargo).current_dir(root).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]))
 }
 
+/// `cargo xtask test`, the full gate. Every step prints `step: <name> <seconds>s` when it ends and the run ends with
+/// the summary, slowest first, also when a step failed (`steptime.rs`, XTASK-TEST-STEP-TIMES).
 fn test_all(root: &Path, extra: &[String]) -> Result<(), String> {
-    policy::purity(root)?;
-    policy::unsafe_audit(root)?;
-    policy::csys_audit(root)?;
-    policy::env_audit(root)?;
-    policy::opaque_audit(root)?;
-    policy::crash_audit(root)?;
-    policy::reexec_audit(root)?;
-    trace::run(root)?;
+    let mut t = steptime::Steps::default();
+    let r = test_steps(root, extra, &mut t);
+    t.print_summary();
+    r
+}
+
+fn test_steps(root: &Path, extra: &[String], t: &mut steptime::Steps) -> Result<(), String> {
+    t.time("purity", || policy::purity(root))?;
+    t.time("unsafe-audit", || policy::unsafe_audit(root))?;
+    t.time("csys-audit", || policy::csys_audit(root))?;
+    t.time("env-audit", || policy::env_audit(root))?;
+    t.time("opaque-audit", || policy::opaque_audit(root))?;
+    t.time("crash-audit", || policy::crash_audit(root))?;
+    t.time("reexec-audit", || policy::reexec_audit(root))?;
+    t.time("trace", || trace::run(root))?;
     // The fuzz harnesses still compile against the libraries (HYGIENE-1).
-    fuzz::check(root)?;
-    csys::run(root, true)?;
-    abi::run(root, true)?;
-    unicode::run(root, true)?;
-    langinfo::run(root, true)?;
-    native::run(root, true)?;
-    compat::run(root, true)?;
-    math::run(root, true)?;
-    // The generated coefficients still follow from their fit files (D-10.12).
+    t.time("fuzz-check", || fuzz::check(root))?;
+    t.time("csys-gen-check", || csys::run(root, true))?;
+    t.time("abi-gen-check", || abi::run(root, true))?;
+    t.time("unicode-gen-check", || unicode::run(root, true))?;
+    t.time("locale-gen-check", || langinfo::run(root, true))?;
+    t.time("native-gen-check", || native::run(root, true))?;
+    t.time("compat-gen-check", || compat::run(root, true))?;
+    t.time("math-gen-check", || math::run(root, true))?;
+    // The generated coefficients still follow from their fit files (D-10.12). The remez binary prints a
+    // `step: remez/<fit>` line per fit; this step's time less theirs is the build of the tool.
     let mut fits: Vec<String> = std::fs::read_dir(root.join("crates/math/fits")).map_err(|e| e.to_string())?.flatten().map(|e| e.path().display().to_string()).filter(|p| p.ends_with(".fit")).collect();
     fits.sort();
     fits.insert(0, "--check".into());
-    math::run_remez(root, &fits)?;
-    math::run_tables(root, &["--check".to_string()])?;
+    t.time("remez-check", || math::run_remez(root, &fits))?;
+    t.time("tables-check", || math::run_tables(root, &["--check".to_string()]))?;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     // The products first: tests of what only a process Liella started can show run C
     // conformance programs against them.
-    so::run_so(root)?;
-    workspace_tests(root, &cargo, None, extra)?;
+    t.time("products", || so::run_so(root))?;
+    workspace_tests(root, &cargo, None, extra, t, "tests")?;
     // Again with the exports interposed on the test processes (D-4.13): the harness then runs
     // on Liella's own `malloc` and `memcpy`, so a recursion in their paths crashes the run. Not
     // with `runtime`: a test process must keep the host C library's start and exit.
-    workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra)?;
-    ctest(root)?;
+    workspace_tests(root, &cargo, Some("liella-boundary/export,liella-boundary/selftest"), extra, t, "tests-interposed")?;
+    t.time("conformance", || ctest(root))?;
     // The native Rust interface's examples, on the products built above (D-X.10).
-    native_examples::run_native(root)?;
+    t.time("native-examples", || native_examples::run_native(root))?;
     // The Rust dylib of the current Rust ABI version and its program (D-X.10).
-    rust_dylib::run_rust_dylib(root, None)?;
-    symgap::run(root)?;
+    t.time("rust-dylib", || rust_dylib::run_rust_dylib(root, None))?;
+    t.time("symgap", || symgap::run(root))?;
     // The status table and the schedule report: a report only, not failing the gate, until the
     // owners of the flagged work are settled (implementation-plan.md §4.3).
-    status::run(root, false)
+    t.time("status", || status::run(root, false))
 }
 
 /// The workspace's tests: under nextest when it is available (`nextest.rs`; the doctests then
 /// with `cargo test --doc`, which nextest does not run), else one `cargo test --workspace`.
 /// `extra` goes to whichever runs the tests.
-fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[String]) -> Result<(), String> {
+/// `name` is the steps' name: `<name>-nextest` and `<name>-doc` (`<name>-cargo-test` without nextest).
+fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[String], t: &mut steptime::Steps, name: &str) -> Result<(), String> {
     let feat: Vec<String> = features.map(|f| vec!["--features".to_string(), f.to_string()]).unwrap_or_default();
     if !nextest::available(cargo) {
-        return run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace"]).args(&feat).args(extra));
+        return t.time(&format!("{name}-cargo-test"), || run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace"]).args(&feat).args(extra)));
     }
     let mut args = vec!["--workspace".to_string()];
     args.extend(feat.iter().cloned());
@@ -277,13 +289,13 @@ fn workspace_tests(root: &Path, cargo: &str, features: Option<&str>, extra: &[St
     // and runs shard 0 only of the heavy math products sweeps (`nextest::PASS1_SHARD0`, D-X.36).
     // Binaries without liella-boundary code are the same in both passes and run once (CI-GATE-DIET).
     if features.is_some() {
-        let once = if nextest::pass1_filter(extra, &[]).is_some() { nextest::unchanged_binaries(cargo, root, &feat) } else { Vec::new() };
+        let once = if nextest::pass1_filter(extra, &[]).is_some() { t.time(&format!("{name}-unchanged-scan"), || nextest::unchanged_binaries(cargo, root, &feat)) } else { Vec::new() };
         args.extend(nextest::pass1_filter(extra, &once).unwrap_or_default());
     }
     args.extend(extra.iter().cloned());
     // Every failure of both steps is reported before the gate stops.
-    let tests = nextest::run(cargo, root, &args);
-    let docs = run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace", "--doc"]).args(&feat));
+    let tests = t.time(&format!("{name}-nextest"), || nextest::run(cargo, root, &args));
+    let docs = t.time(&format!("{name}-doc"), || run(nextest::poison(&mut Command::new(cargo)).current_dir(root).args(["test", "--workspace", "--doc"]).args(&feat)));
     tests.and(docs)
 }
 

@@ -1,0 +1,5 @@
+# XTASK-TEST-STEP-TIMES plants: the step-time line format, its parser and the summary order (xtask/src/steptime.rs).
+xtst-sort-order | xtask/src/steptime.rs | lit:v.sort_by_key(|a| std::cmp::Reverse(a.1)); ==> v.sort_by_key(|a| a.1); | cargo test -p xtask --bin xtask steptime | msg:summary_is_slowest_first_with_total \.\.\. FAILED
+xtst-no-clean | xtask/src/steptime.rs | lit:format!("step: {} {:.1}s", clean(name), d.as_secs_f64()) ==> format!("step: {} {:.1}s", name, d.as_secs_f64()) | cargo test -p xtask --bin xtask steptime | msg:line_format_is_fixed_and_round_trips \.\.\. FAILED
+xtst-negative | xtask/src/steptime.rs | lit:|| !secs.is_finite() || secs < 0.0 ==> || !secs.is_finite() | cargo test -p xtask --bin xtask steptime | msg:line_format_is_fixed_and_round_trips \.\.\. FAILED
+xtst-no-total | xtask/src/steptime.rs | lit:        out.push(format!("step-total: ==>         let _ = (format!("step-total: | cargo test -p xtask --bin xtask steptime | msg:summary_is_slowest_first_with_total \.\.\. FAILED
