@@ -380,8 +380,8 @@ fn ascii_lane_orders_every_pair_as_the_keys_do() {
 
 #[test]
 fn ascii_fill_writes_one_page() {
-    // No spec clause (D-NEW, TIMING-COV-COLD-STRCOLL: the first strcoll's fill dirties one page
-    // of the pool slot, not two; the write is a copy-on-write fault per page).
+    // Trace: no spec clause (pool slot layout: the first strcoll's fill dirties one page, not
+    // two; each first write is a copy-on-write fault); D-NEW (TIMING-COV-COLD-STRCOLL).
     let name = "en_US.UTF-8";
     let Some(dir) = locale(name) else { return skip("no localedef") };
     let c = rules(&dir, name);
