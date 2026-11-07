@@ -24,7 +24,7 @@ mod pad {
 }
 pub use pad::{JCC_PAD_FILES, JCC_PAD_FLAGS};
 
-const BOUNDARY: u64 = 32;
+pub(crate) const BOUNDARY: u64 = 32;
 /// The files that must stay padded (the string and memory kernels measured in D-4.67).
 const REQUIRED: &[&str] = &["fold.S", "scan.S"];
 

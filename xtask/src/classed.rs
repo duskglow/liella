@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::process::Command;
 
-const PAGE: i64 = 4096;
+pub(crate) const PAGE: i64 = 4096;
 /// The symbol at the start of page 0 (`csys/src/machine/fold.S`).
 const PAGE0: &str = "liella_classed_page0";
 

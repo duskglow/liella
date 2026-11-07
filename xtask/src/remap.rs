@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 
 /// The files of `target/liella` that go public (libraries, archives, the start object).
-const PRODUCTS: &[&str] = &["libc.so.6", "libm.so.6", "libc.a", "libm.a", "liella-crt1.o", "liella-gcrt1.o", "libresolv.a"];
+pub(crate) const PRODUCTS: &[&str] = &["libc.so.6", "libm.so.6", "libc.a", "libm.a", "liella-crt1.o", "liella-gcrt1.o", "libresolv.a"];
 
 /// The path strings that must not appear in a product: the workspace root (as given and
 /// canonical), `$CARGO_HOME` and `$HOME`'s `.cargo` and `.rustup`. Never shorter than 4 bytes
@@ -63,16 +63,6 @@ pub fn check_dir(dir: &Path, needles: &[String]) -> Result<usize, String> {
     Err(format!("remap: build paths in the products (is --remap-path-prefix in the product build? PRODUCT-PATH-REMAP): {}", bad.join("; ")))
 }
 
-/// Run at the end of `cargo xtask so`, after every product is built.
-pub fn check(root: &Path) -> Result<(), String> {
-    let dir = root.join("target/liella");
-    let scanned = check_dir(&dir, &needles(root))?;
-    if scanned == 0 {
-        return Err(format!("remap: no products found in {}", dir.display()));
-    }
-    println!("remap: {scanned} products in {} carry no build path (workspace root, CARGO_HOME, ~/.cargo, ~/.rustup)", dir.display());
-    Ok(())
-}
 
 /// What the product build configuration carries, judged from `flags` (the encoded rustflags of a
 /// product build for `root`) and `so_src` (the source of `xtask/src/so.rs`): the root is

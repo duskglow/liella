@@ -134,3 +134,12 @@ Other crates: abi, boundary, core, kernel, ld, legacy, libc-so, libm-so, math, m
    `cargo xtask clippy` before vm_affected.
 7. Data the asm reads and Rust writes: declare it in ffi.rs with an atomic type of the same layout (AtomicUsize), never a
    plain static.
+
+## Layout contracts (LAYOUT-MANIFEST, D-X.48)
+
+Every deliberate code or data layout of the products (64-byte entries, the classed pages, JCC padding, `.lbss`,
+the start-up names window, the gettext slots page, the memchr/rawmemchr `.org` pins, path remapping) is a row of
+[`layout/contracts.tsv`](../../layout/contracts.tsv): `grep -P '^MEMCHR-SSE2-PIN\t' layout/contracts.tsv`. `cargo xtask so`
+checks every row on the products it built (`cargo xtask layout-check [<products dir>]` by hand); `cargo xtask static`
+checks the rows against `plan/07-decisions/` and the `LAYOUT(<ID>)` tags at the source directives. Changing a
+row changes a decision: see D-X.48 in `plan/07-decisions/x-implementation-decisions.md`.
