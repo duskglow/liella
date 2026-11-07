@@ -204,6 +204,8 @@ struct Row {
     limit: String,
     status: String,
     flagged: bool,
+    /// A `ratio_host` row of the selected groups (false: a counted row outside the selection, e.g. a calibration row).
+    selected: bool,
 }
 
 /// A finished sweep on one host.
@@ -290,6 +292,7 @@ fn assess(selected: &[(String, String)], code: Option<i32>, log: &str, t: &Table
     let rows = keys
         .into_iter()
         .map(|k| {
+            let is_selected = selected.contains(&k);
             let rr = ratios.get(&k).map(Vec::as_slice).unwrap_or(&[]);
             let (h_med, limit, mut status) = host.get(&k).cloned().unwrap_or((None, "-".into(), "-".into()));
             let time = if rr.is_empty() { h_med } else { Some(crate::bench::stats(rr).0) };
@@ -313,6 +316,7 @@ fn assess(selected: &[(String, String)], code: Option<i32>, log: &str, t: &Table
                 limit,
                 status,
                 flagged: flagged.contains(&key),
+                selected: is_selected,
                 bench: k.0,
                 row: k.1,
             }
@@ -357,11 +361,16 @@ fn render(s: &Sweep) -> String {
     out
 }
 
+/// The verdict counts cover the selected rows only (TIMING-SWEEP-LIBM-1107: the libm bench also counts
+/// `add_baseline` and two `mxcsr_*` rows, which are in `sweep.tsv` but are not `ratio_host` rows); the
+/// other counted rows are named after them.
 fn summary_line(s: &Sweep) -> String {
-    let judged: Vec<&str> = s.rows.iter().filter(|r| !deferred(&r.row)).map(|r| verdict(r.time)).filter(|v| *v != "-").collect();
+    let judged: Vec<&str> = s.rows.iter().filter(|r| r.selected && !deferred(&r.row)).map(|r| verdict(r.time)).filter(|v| *v != "-").collect();
     let n = |v: &str| judged.iter().filter(|x| **x == v).count();
     let flags = if s.flagged.is_empty() { String::from("0 rows flagged by the limit check") } else { format!("{} rows flagged by the limit check (in the table, not a run failure): {}", s.flagged.len(), s.flagged.join(", ")) };
-    format!("sweep: COMPLETE: cpu {}; all {} selected ratio_host rows measured ({} faster, {} parity, {} slower); bench rc {}; {flags};", s.cpu, s.measured, n("faster"), n("parity"), n("slower"), s.rc)
+    let other: Vec<String> = s.rows.iter().filter(|r| !r.selected).map(|r| format!("{}/{}", r.bench, r.row)).collect();
+    let other = if other.is_empty() { String::new() } else { format!(" {} counted rows outside the selection (in the table, not in the counts): {};", other.len(), other.join(", ")) };
+    format!("sweep: COMPLETE: cpu {}; all {} selected ratio_host rows measured ({} faster, {} parity, {} slower); bench rc {}; {flags};{other}", s.cpu, s.measured, n("faster"), n("parity"), n("slower"), s.rc)
 }
 
 fn deferred(row: &str) -> bool {
@@ -614,6 +623,15 @@ mod tests {
         let line = summary_line(&s);
         assert!(line.starts_with("sweep: COMPLETE: cpu CPU X; all 2 selected ratio_host rows measured (1 faster, 0 parity, 1 slower); bench rc 1; 1 rows flagged"), "{line}");
         assert!(line.contains("cbench_x/b"), "{line}");
+        // TIMING-SWEEP-LIBM-1107 (no spec clause; the libm bench's add_baseline/mxcsr_* rows): a counted row outside
+        // the selection stays in the table but not in the selected rows' verdict counts, and the line names it.
+        let rounds_z = format!("{ROUNDS}cbench_x\tz\t1\t20\t10\n");
+        let cnt_z = format!("{CNT}cbench_x\tz\t2.000\t2.000\t-\t2.000\n");
+        let z = assess(&sel(), Some(1), LOG_FLAG, &tables(Some(RH), Some(&rounds_z), Some(&cnt_z), None)).unwrap();
+        assert_eq!(render(&z).lines().filter(|l| l.starts_with("cbench_x\tz\t")).count(), 1, "{}", render(&z));
+        let line = summary_line(&z);
+        assert!(line.contains("all 2 selected ratio_host rows measured (1 faster, 0 parity, 1 slower)"), "{line}");
+        assert!(line.ends_with("1 counted rows outside the selection (in the table, not in the counts): cbench_x/z;"), "{line}");
         // The cycles CPU's verdict comes from decision.tsv.
         let c = assess(&sel(), Some(1), LOG_CYC, &tables(Some(RH_CYC), Some(ROUNDS), Some(CNT), Some(DEC))).unwrap();
         assert_eq!(c.rows.iter().map(|r| r.status.as_str()).collect::<Vec<_>>(), ["ok", "FAIL"]);
