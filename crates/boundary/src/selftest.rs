@@ -759,6 +759,18 @@ pub fn exp10_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     crate::hot::exp10_quick_parts(x)
 }
 
+/// The `double` `expm1` quick phase alone (D-10.64) in the build [`set_math_fma`] chose: the
+/// correctly rounded `e^x − 1`, or `None` when its rounding test does not decide.
+pub fn expm1_quick(x: f64) -> Option<f64> {
+    crate::hot::expm1_quick(x)
+}
+
+/// [`expm1_quick`]'s unrounded `(zh, zl)` in the chosen build: `e^x − 1 = zh + zl` within
+/// `RHO_M1·|zh|` (`liella_math::fast64::quick`).
+pub fn expm1_quick_parts(x: f64) -> Option<(f64, f64)> {
+    crate::hot::expm1_quick_parts(x)
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it

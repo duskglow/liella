@@ -82,6 +82,28 @@
 //!   `10^x` for the integers `1 ..= 23` (a double or, at 23, a midpoint) is declined before the
 //!   kernel. Every other `2^x`, `10^x` for a double `x` is irrational or not dyadic.
 //!
+//! **expm1** (LIBM-F64-EXP-FAMILY-QUICK-2, D-10.64; Tang, "Table-driven implementation of the expm1
+//! function in IEEE floating-point arithmetic", ACM TOMS 18(2), 1992: a table region and a
+//! polynomial region), `2^-60 <= |x| < 708`, `x > −37` (one compare more on the bits):
+//! * `|x| >= 2^-5`: exp's reduction and kernel, with `th·rh`'s low part kept in both builds (the
+//!   FMA's, or Dekker's product in the SSE2 build: the `−1` magnifies the kernel's error by up to
+//!   `e^x/|e^x − 1| <= 32.503` here, and term 1 would dominate). `vh = zh·2^m`; `vh − 1 = s + e`
+//!   exactly (2Sum, Knuth TAOCP 2, 4.2.2); `lo = RN(e + zl·2^m)`, then Fast2Sum `(s, lo)`. Kernel
+//!   bound (exp's terms 2-6, 4 low-sum roundings in SSE2, 3 with FMA): `2^-67.59` (SSE2),
+//!   `RHO_FMA` (FMA); times 32.503, plus `lo`'s rounding (`< 2^-100`): `2^-62.57` / `2^-62.66`.
+//! * `|x| < 2^-5`: `e^x − 1 = x + x²/2 + x³·P(x)`, `P` Taylor's `1/3! ..= 1/9!` in Estrin's
+//!   order (truncation `X^9/10!·1.003 = 2^-66.79` relative, `X = 2^-5`). The head keeps every bit
+//!   of `x`: `xh` = `x` with its low 27 significand bits cleared (one AND), `xl = x − xh` exact,
+//!   `x²/2 = xh²/2 + xl·(x + xh)/2` with the first product exact (26-bit `xh`) and the second
+//!   below `2^-25·x²` (its two roundings `< 2^-82·|x|`). `h0 + e = x + xh²/2` exactly (Fast2Sum,
+//!   `|x| >= xh²/2`); `t = (x·s)·P` with `s = RN(x²)` within `9.01u·X²·pmax·|x|` (three
+//!   roundings, Estrin's `P` within `3u`, counted twice for margin; `pmax = 0.16797`); `lo = e +
+//!   (hl + t)` two roundings `2^-64.57`; Fast2Sum `(h0, lo)`. Over `|e^x − 1| >= 0.98455·|x|`:
+//!   `2^-62.04` (SSE2), `2^-62.09` (FMA).
+//! * Stated for both builds and regions `RHO_M1 = 1.5·2^-62` (`2^-61.415`); expected fallback
+//!   about 0.6%. `e^x − 1` is irrational for every double `x != 0` (Lindemann–Weierstrass), so
+//!   no exact case; `zh` is normal and needs no scaling.
+//!
 //! **Design targets** (D-10.51): instructions per call with the fallback included FMA <= 80,
 //! SSE2 <= 95; FP operations 31 (FMA) and 39 (SSE2) including the two compares; critical path
 //! 16 dependent FP operations plus the compare (FMA: `t, kd, r1, rh, r2, pc, inner, q, rl + q, w,
@@ -154,6 +176,24 @@ pub const RHO_FAM_FMA: f64 = f64::from_bits(0x3bbb_0000_0000_0000);
 pub(crate) const C_FAM_SSE2: f64 = f64::from_bits(0x3ff0_2e85_c089_8b72);
 pub(crate) const C_FAM_FMA: f64 = f64::from_bits(0x3ff0_006c_02d9_133a);
 
+// expm1 (D-10.64, module doc "expm1"): exp's reduction and kernel for `|x| >= 2^-5`, a series
+// with an exact head below.
+/// `RN(1/7!)`, `RN(1/8!)`, `RN(1/9!)`: the small region's series beyond exp's `C3 ..= C6`.
+const C7: f64 = 1.0 / 5040.0;
+const C8: f64 = 1.0 / 40320.0;
+const C9: f64 = 1.0 / 362_880.0;
+/// Clears the low 27 significand bits: `xh` keeps 26 significant bits, so `xh·xh` is exact.
+const MASK27: u64 = !((1 << 27) - 1);
+/// `bits(2^-5)`: below it (on `|x|`'s bits) the series region.
+const SMALL_M1: u64 = 0x3fa0_0000_0000_0000;
+/// `bits(−37)`: a negative `x` with bits at or above it is `x <= −37` (tier 2's limit).
+const NEG37_BITS: u64 = 0xc042_8000_0000_0000;
+/// expm1's stated bound (both builds, both regions; module doc "expm1") and its [`super::near`]
+/// multiplier (checked exactly by the `bounds` tests).
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_M1: f64 = f64::from_bits(0x3c18_0000_0000_0000);
+pub(crate) const C_M1: f64 = f64::from_bits(0x3ff0_1824_3651_7a38);
+
 /// `a·b + c` in two roundings (the SSE2 build).
 #[inline(always)]
 fn ma(a: f64, b: f64, c: f64) -> f64 {
@@ -166,10 +206,27 @@ fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64 {
     0.0
 }
 
+/// `a·b − p` exactly for `p = RN(a·b)` without FMA (Dekker's product, Veltkamp's splitting at 27
+/// bits; Dekker 1971): expm1's SSE2 build keeps `th·rh`'s low part, which its `−1` would otherwise
+/// magnify (module doc "expm1"). `|a| < 2`, `|b| < 2^-8`: no overflow, and the parts' products
+/// stay normal or 0 for the `rh` that reach it.
+#[inline(always)]
+fn dekker_lo(a: f64, b: f64, p: f64) -> f64 {
+    const SPLIT: f64 = 134_217_729.0;
+    let ca = a * SPLIT;
+    let ah = ca - (ca - a);
+    let al = a - ah;
+    let cb = b * SPLIT;
+    let bh = cb - (cb - b);
+    let bl = b - bh;
+    (((ah * bh - p) + ah * bl) + al * bh) + al * bl
+}
+
 // The kernel in two builds (D-10.25, D-10.50): `$ma` is `a·b + c` (two roundings, or one FMA),
-// `$lo` the low part of `th·rh` (0, or exact by one FMA), `$c` the rounding test's multiplier.
+// `$lo` the low part of `th·rh` (0, or exact by one FMA), `$lox` that low part exactly (Dekker's
+// product, or the FMA) for expm1, `$c` the rounding test's multiplier.
 macro_rules! quick {
-    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $c:expr; $cf:expr) => {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $ma:path; $lo:path; $lox:path; $c:expr; $cf:expr) => {
 /// `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 $(#[$a])*
 $(#[$i])*
@@ -184,7 +241,7 @@ pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let r1 = $ma(kd, NL1, x);
     let rh = $ma(kd, NL2, r1);
     let rl = $ma(kd, NL2, r1 - rh);
-    Some(kernel(kb, rh, rl))
+    Some(kernel::<false>(kb, rh, rl))
 }
 
 /// `2^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 1021`, else `None`
@@ -203,7 +260,7 @@ pub fn exp2_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let s = $ma(kd, -1.0 / 128.0, x);
     let rh = s * LN2H;
     let rl = $ma(s, LN2L, $lo(s, LN2H, rh));
-    Some(kernel(kb, rh, rl))
+    Some(kernel::<false>(kb, rh, rl))
 }
 
 /// `10^x = (zh + zl)·sc` within `RHO_FAM_*·|zh|·sc` for `2^-60 <= |x| < 307` other than the
@@ -228,14 +285,14 @@ pub fn exp10_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     let sl = $ma(kd, NE2, (r0 - sh) + e1);
     let rh = sh * LN10H;
     let rl = $ma(sh, LN10L, $ma(sl, LN10H, $lo(sh, LN10H, rh)));
-    Some(kernel(kb, rh, rl))
+    Some(kernel::<false>(kb, rh, rl))
 }
 
 /// The kernel shared by exp, exp2 and exp10: `2^(k/128)·e^(rh + rl)` as `(zh, zl, 2^m)` from
 /// `kb = k + 1023·128` (module doc, from `T_j` on).
 $(#[$a])*
 $(#[$i])*
-fn kernel(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
+fn kernel<const X: bool>(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let r2 = rh * rh;
     let pa = $ma(rh, C3, 0.5);
     let pb = $ma(rh, C5, C4);
@@ -248,7 +305,7 @@ fn kernel(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let yh = th + u;
     let e1 = (th - yh) + u;
     let w = $ma(th, rl + q, tl * (1.0 + rh));
-    let yl = (e1 + $lo(th, rh, u)) + w;
+    let yl = (e1 + if X { $lox(th, rh, u) } else { $lo(th, rh, u) }) + w;
     let zh = yh + yl;
     let zl = (yh - zh) + yl;
     (zh, zl, f64::from_bits((kb >> 7) << 52))
@@ -330,7 +387,80 @@ pub fn exp10_tiered(x: f64) -> Option<f64> {
     }
     tier2_exp10(x)
 }
+
+/// `e^x − 1 = zh + zl` within `RHO_M1·|zh|` for `2^-60 <= |x| < 708`, `x > −37`, else `None`
+/// (module doc, "expm1"): the series with an exact head below `2^-5`, else exp's kernel with the
+/// `−1` folded in before rounding.
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn expm1_quick_parts(x: f64) -> Option<(f64, f64)> {
+    let b = x.to_bits();
+    let a = b & ABS;
+    if a.wrapping_sub(LO_BITS) >= SPAN || b >= NEG37_BITS {
+        return None;
+    }
+    if a < SMALL_M1 {
+        let xh = f64::from_bits(b & MASK27);
+        let xl = x - xh;
+        let hh = 0.5 * (xh * xh);
+        let hl = (0.5 * xl) * (x + xh);
+        let s = x * x;
+        let p01 = $ma(x, C4, C3);
+        let p23 = $ma(x, C6, C5);
+        let p4 = $ma(s, C9, $ma(x, C8, C7));
+        let p = $ma(s, $ma(s, p4, p23), p01);
+        let tl = (x * s) * p;
+        let h0 = x + hh;
+        let lo = ((x - h0) + hh) + (hl + tl);
+        let zh = h0 + lo;
+        return Some((zh, (h0 - zh) + lo));
+    }
+    let tt = $ma(x, INV, SHIFT);
+    let kd = tt - SHIFT;
+    let kb = tt.to_bits().wrapping_sub(KBIAS);
+    let r1 = $ma(kd, NL1, x);
+    let rh = $ma(kd, NL2, r1);
+    let rl = $ma(kd, NL2, r1 - rh);
+    let (zh, zl, sc) = kernel::<true>(kb, rh, rl);
+    let vh = zh * sc;
+    let s = vh - 1.0;
+    let bb = s - vh;
+    let lo = ((vh - (s - bb)) + (-1.0 - bb)) + zl * sc;
+    let h = s + lo;
+    Some((h, (s - h) + lo))
+}
+
+/// The correctly rounded `e^x − 1` (round to nearest) when the quick phase's test decides it,
+/// else `None`.
+$(#[$a])*
+$(#[$i])*
+pub fn expm1_quick(x: f64) -> Option<f64> {
+    let (zh, zl) = expm1_quick_parts(x)?;
+    let w = zl * C_M1;
+    if zh + w == zh && w != 0.0 { Some(zh) } else { None }
+}
+
+/// `expm1`'s in-place fast path (as [`exp_tiered`]): the quick phase, then on a miss or outside
+/// its domain tier 2 (`fast64::expm1_nearest` in the same build, out of line).
+$(#[$a])*
+$(#[$i])*
+pub fn expm1_tiered(x: f64) -> Option<f64> {
+    let Some((zh, zl)) = expm1_quick_parts(x) else { return tier2_expm1(x) };
+    let w = zl * C_M1;
+    if zh + w == zh && w != 0.0 {
+        return Some(zh);
+    }
+    tier2_expm1(x)
+}
     };
+}
+
+/// Tier 2 of [`expm1_tiered`] (and its answer outside the quick domain), out of line and cold.
+#[cold]
+#[inline(never)]
+fn tier2_expm1(x: f64) -> Option<f64> {
+    super::expm1_nearest(x)
 }
 
 /// Tier 2 of [`exp2_tiered`] (and its answer outside the quick domain: NaN, infinities, integers),
@@ -356,7 +486,7 @@ fn tier2(x: f64) -> Option<f64> {
     super::exp_nearest(x)
 }
 
-quick!(; #[inline(always)]; ma; no_lo; C_SSE2; C_FAM_SSE2);
+quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2);
 
 /// The quick phase's FMA build (D-10.25, D-10.50): callable only on a CPU with FMA whose AVX state
 /// the OS saves; the boundary chooses it once at startup (`dispatch::fma`).
@@ -364,8 +494,8 @@ quick!(; #[inline(always)]; ma; no_lo; C_SSE2; C_FAM_SSE2);
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{
-        t, ABS, C3, C4, C5, C6, C_FAM_FMA, C_FMA, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, NE0, NE1, NE2, NL1, NL2, ONE_BITS, SHIFT, SPAN,
-        SPAN10, SPAN2, SPAN_EXACT10,
+        t, ABS, C3, C4, C5, C6, C7, C8, C9, C_FAM_FMA, C_FMA, C_M1, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, MASK27, NE0, NE1, NE2,
+        NEG37_BITS, NL1, NL2, ONE_BITS, SHIFT, SMALL_M1, SPAN, SPAN10, SPAN2, SPAN_EXACT10,
     };
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
@@ -411,12 +541,21 @@ pub mod fused {
         crate::fast64::fused::exp10_nearest(x)
     }
 
+    /// Tier 2 of [`expm1_tiered`] in the FMA build (`fast64::fused::expm1_nearest`), out of
+    /// line and cold.
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_expm1(x: f64) -> Option<f64> {
+        crate::fast64::fused::expm1_nearest(x)
+    }
+
     quick!(
         #[doc = ""]
         #[doc = "# Safety"]
         #[doc = ""]
         #[doc = "The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract)."]
-        #[target_feature(enable = "fma")]; #[inline]; ma; lo; C_FMA; C_FAM_FMA
+        #[target_feature(enable = "fma")]; #[inline]; ma; lo; lo; C_FMA; C_FAM_FMA
     );
 }
 

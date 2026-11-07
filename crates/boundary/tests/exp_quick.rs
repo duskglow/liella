@@ -11,7 +11,7 @@
 
 use liella_boundary::posix::s10_math_gen as m;
 use liella_boundary::selftest;
-use liella_math::fast64::quick::{RHO_FAM_FMA, RHO_FAM_SSE2, RHO_FMA, RHO_SSE2};
+use liella_math::fast64::quick::{RHO_FAM_FMA, RHO_FAM_SSE2, RHO_FMA, RHO_M1, RHO_SSE2};
 use liella_math::mp::{self, Mp};
 use liella_math::real::Real;
 use liella_math::status::Rounding;
@@ -350,5 +350,45 @@ fn exp2_exp10_quick_sse2_build() {
     assert!(!selftest::math_fma(), "set_math_fma(false) did not select the SSE2 build");
     let miss = check_family("SSE2", RHO_FAM_SSE2);
     assert!(selftest::set_math_fma(true));
+    assert!(miss > 0, "the SSE2 build never declined: the rounding test is not in force");
+}
+
+/// expm1's quick phase in the selected build: every answer and the entry `m::expm1` equal to the
+/// correctly rounded result, every 16th `(zh, zl)` within `RHO_M1` (both regions); the declines.
+fn check_expm1(build: &str) -> usize {
+    let crm1 = |x: f64| liella_math::fast64::expm1_nearest(x).unwrap_or_else(|| Real::expm1(x, Rounding::Nearest).0);
+    let mut miss = 0usize;
+    for (i, x) in uniform(300_000, 0x1234_5678_9abc_def1, -1.0, 1.0).chain(uniform(200_000, 6, -0.04, 0.04)).chain(uniform(100_000, 8, -37.0, 708.0)).enumerate() {
+        let e = crm1(x);
+        match selftest::expm1_quick(x) {
+            Some(v) => assert_eq!(v.to_bits(), e.to_bits(), "{build} quick expm1({x:e} = {:#x}): {v:e}, correctly rounded {e:e}", x.to_bits()),
+            None => miss += 1,
+        }
+        let got = m::expm1(x);
+        assert_eq!(got.to_bits(), e.to_bits(), "{build} entry expm1({x:e}): {got:e}, correctly rounded {e:e}");
+        if i % 16 == 0 {
+            if let Some((zh, zl)) = selftest::expm1_quick_parts(x) {
+                let err = mp::exp(Mp::from_f64(x)).sub(Mp::from_f64(1.0)).sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
+                assert!(err.cmp_abs(Mp::from_f64(RHO_M1 * zh.abs())).is_le(), "{build} quick expm1({x:e}): error {:e} above the bound", err.to_f64() / zh);
+            }
+        }
+    }
+    miss
+}
+
+// s10_0_f_0: expm1 in the FMA build: correctly rounded, within RHO_M1, declines under 1.2%.
+#[test]
+fn expm1_quick_fma_build() {
+    let Some(miss) = with_fma(|| check_expm1("FMA")) else { return };
+    assert!(miss * 1000 <= 12 * 600_000, "FMA expm1 declined {miss} of 600000 (above 1.2%)");
+}
+
+// s10_0_f_0: expm1 in the SSE2 build through the entry: correctly rounded, within RHO_M1.
+#[test]
+fn expm1_quick_sse2_build() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(selftest::set_math_fma(false));
+    let miss = check_expm1("SSE2");
+    assert!(selftest::set_math_fma(true) || selftest::set_math_fma(false));
     assert!(miss > 0, "the SSE2 build never declined: the rounding test is not in force");
 }

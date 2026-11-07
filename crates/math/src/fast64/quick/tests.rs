@@ -325,3 +325,91 @@ fn family_domain() {
         }
     }
 }
+
+// expm1 (D-10.64, module doc "expm1"), SSE2 build; the FMA build through the boundary.
+
+/// The correctly rounded `e^x − 1`: today's tier, else the accurate path.
+fn crm1(x: f64) -> f64 {
+    super::super::expm1_nearest(x).unwrap_or_else(|| Real::expm1(x, Rounding::Nearest).0)
+}
+
+/// The constants and both regions' bounds recomputed (module doc "expm1"; each term in `f64`,
+/// rounded up by `1 + 2^-40`), and `C_M1` the least multiplier for `RHO_M1`.
+#[test]
+fn expm1_constants_and_bounds() {
+    for (c, n) in [(C7, 5040.0f64), (C8, 40320.0), (C9, 362_880.0)] {
+        assert_eq!(c.to_bits(), (1.0 / n).to_bits(), "C{n} is not RN(1/n!)");
+    }
+    assert_eq!(f64::from_bits(SMALL_M1), two(-5));
+    assert_eq!(f64::from_bits(NEG37_BITS), -37.0);
+    let up = 1.0 + two(-40);
+    let u = two(-53);
+    // Region A: exp's kernel (terms 2-6, as quick_constants_and_bounds) with the low part kept.
+    let r = core::f64::consts::LN_2 / 256.0 * (1.0 + two(-34)) * up;
+    let rh = r + two(-62);
+    let qmax = rh * rh * (0.5 + rh / 6.0 + rh * rh / 24.0 + rh * rh * rh / 120.0 + rh.powi(4) / 720.0) * (1.0 + 4.05 * u) * up;
+    let low = u * (qmax + two(-62)) * up;
+    let rest = 4.05 * u * qmax + (two(-62) + two(-79)) * (rh.exp() - 1.0) * up + u * (qmax + two(-61)) * up + rh.powi(7) / 5040.0 * rh.exp() * up + 2f64.powf(-78.41) * up + two(-105) * rh.exp() + two(-104);
+    let zmin = (-rh).exp() * (1.0 - two(-60)) / up;
+    let x0 = two(-5);
+    let amp = (1.0 / (1.0 - (-x0).exp())).max(1.0 / (x0.exp() - 1.0)) * up;
+    for (name, k) in [("SSE2", (rest + 4.0 * low) / zmin), ("FMA", RHO_FMA)] {
+        let a = (k * amp * (1.0 + k) + u * u * (1.0 + 1.01 * amp) * amp * up) * (1.0 + two(-51));
+        assert!(a <= RHO_M1, "{name} table-region bound 2^{:.3} above RHO_M1", a.log2());
+    }
+    // Region B: the series.
+    let pmax = (1.0 / 6.0 + x0 / 24.0 + x0 * x0 / 120.0 + x0.powi(3) / 720.0 + x0.powi(4) / 5040.0 + x0.powi(5) / 40320.0 + x0.powi(6) / 362_880.0) * up;
+    let tail = 9.01 * u * x0 * x0 * pmax * up;
+    let head = 2.01 * u * two(-25) * x0 * up;
+    let trunc = x0.powi(9) / 3_628_800.0 * (1.0 + x0 / 11.0 * 1.01) * up;
+    let sums = (u * (two(-25) * x0 + x0 * x0 * pmax) + u * (u * (1.0 + x0 / 2.0) + two(-25) * x0 + x0 * x0 * pmax)) * (1.0 + 2.0 * u) * up;
+    let b = (tail + head + trunc + sums) / ((1.0 - (-x0).exp()) / x0) * (1.0 + two(-50));
+    assert!(b <= RHO_M1, "series-region bound 2^{:.3} above RHO_M1", b.log2());
+    let one_u = Mp::from_f64(1.0).add(Mp::from_f64(u));
+    let k = Mp::from_f64(1.0).sub(Mp::from_f64(RHO_M1 * two(54)));
+    assert!(Mp::from_f64(C_M1).mul(k).cmp_abs(one_u).is_gt(), "C_M1 below its bound");
+    assert!(Mp::from_f64(f64::from_bits(C_M1.to_bits() - 1)).mul(k).cmp_abs(one_u).is_le(), "C_M1 not the least");
+}
+
+/// The SSE2 build's `(zh, zl)` within `RHO_M1·|zh|` of `e^x − 1` (exact in Mp) in both regions,
+/// with operands on both sides of `2^-5`; the largest relative error printed.
+#[test]
+fn expm1_error_within_bound() {
+    let edge = (0..4000u64).flat_map(|i| [f64::from_bits(SMALL_M1 - 2000 + i), -f64::from_bits(SMALL_M1 - 2000 + i)]);
+    let xs = uniform(20_000, 0x2545_f491_4f6c_dd1d, -37.0, 708.0).chain(uniform(20_000, 7, -1.0, 1.0)).chain(uniform(20_000, 9, -0.04, 0.04)).chain(uniform(4000, 11, -1e-9, 1e-9)).chain(edge);
+    let mut worst = 0.0f64;
+    for x in xs {
+        let Some((zh, zl)) = expm1_quick_parts(x) else { continue };
+        let want = mp::exp(Mp::from_f64(x)).sub(Mp::from_f64(1.0));
+        let err = want.sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
+        assert!(err.cmp_abs(Mp::from_f64(RHO_M1 * dd::abs(zh))).is_le(), "quick expm1({x:e}): error {:e} above the bound", err.to_f64() / zh);
+        worst = worst.max(dd::abs(err.to_f64() / zh));
+    }
+    eprintln!("quick expm1 SSE2: largest relative error 2^{:.3} (bound 2^{:.3})", worst.log2(), RHO_M1.log2());
+    assert!(worst > 0.0);
+}
+
+/// 4·10^6 operands against the correctly rounded `expm1`, every answer bit for bit (the low bits
+/// of a small `x` included), the domain's edges refused, and the fallback rate on [-1, 1] within
+/// the model (0.1%-1.2%).
+#[test]
+fn expm1_matches_correctly_rounded() {
+    let sets: [(usize, u64, f64, f64); 4] = [(1_500_000, 1, -1.0, 1.0), (1_000_000, 2, -0.04, 0.04), (1_000_000, 3, -37.0, 708.0), (500_000, 4, -1e-6, 1e-6)];
+    for (n, seed, lo, hi) in sets {
+        let mut miss = 0usize;
+        for x in uniform(n, seed, lo, hi) {
+            match expm1_quick(x) {
+                Some(v) => assert_eq!(v.to_bits(), crm1(x).to_bits(), "quick expm1({x:e} = {:#x}): {v:e}", x.to_bits()),
+                None => miss += 1,
+            }
+        }
+        eprintln!("quick expm1 SSE2 [{lo}, {hi}]: fallback {miss} of {n}");
+        if seed == 1 {
+            assert!(miss * 1000 >= n && miss * 1000 <= n * 12, "fallback rate {miss} of {n} outside 0.1%-1.2%");
+        }
+    }
+    for x in [-37.0, -40.0, 708.0, two(-61), -two(-61), f64::NAN, f64::INFINITY] {
+        assert!(expm1_quick_parts(x).is_none(), "quick expm1 took {x:e} outside its domain");
+    }
+    assert!(expm1_quick_parts(-f64::from_bits(NEG37_BITS - 1).abs()).is_some());
+}

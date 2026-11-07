@@ -160,9 +160,31 @@ pub(crate) fn expm1_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::expm1_nearest(x) };
+        return unsafe { liella_math::fast64::quick::fused::expm1_tiered(x) };
     }
-    liella_math::fast64::expm1_nearest(x)
+    liella_math::fast64::quick::expm1_tiered(x)
+}
+
+/// The `double` `expm1` quick phase alone (D-10.64) in the build chosen at startup (tests).
+#[cfg(feature = "selftest")]
+pub(crate) fn expm1_quick(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::expm1_quick(x) };
+    }
+    liella_math::fast64::quick::expm1_quick(x)
+}
+
+/// [`expm1_quick`]'s unrounded `(zh, zl)` in the build chosen at startup (bound tests).
+#[cfg(feature = "selftest")]
+pub(crate) fn expm1_quick_parts(x: f64) -> Option<(f64, f64)> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::expm1_quick_parts(x) };
+    }
+    liella_math::fast64::quick::expm1_quick_parts(x)
 }
 
 /// The `double` `log1p` fast path in its build chosen at startup (as [`exp_nearest`]).
