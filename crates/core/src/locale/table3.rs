@@ -9,11 +9,8 @@ use super::file::u32_at;
 #[derive(Clone, Copy, Debug)]
 pub struct Table3 {
     data: &'static [u8],
-    /// `data` as whole little-endian words (a partial last word left out): the level-2 and
-    /// level-3 blocks are `u32` arrays at byte offsets (D.1.2), read as word `offset / 4`.
-    words: &'static [[u8; 4]],
     /// The `bound` level-1 entries: one slice test covers both `i1 >= bound` and the read.
-    level1: &'static [[u8; 4]],
+    level1: &'static [u8],
     shift1: u32,
     shift2: u32,
     mask2: u32,
@@ -22,16 +19,14 @@ pub struct Table3 {
 
 impl Table3 {
     /// A table with no entries: every code point is absent (not a member, value 0).
-    pub const EMPTY: Table3 = Table3 { data: &[], words: &[], level1: &[], shift1: 0, shift2: 0, mask2: 0, mask3: 0 };
+    pub const EMPTY: Table3 = Table3 { data: &[], level1: &[], shift1: 0, shift2: 0, mask2: 0, mask3: 0 };
 
     /// Read the header; `None` if it does not fit or its shifts are out of range.
     pub fn parse(data: &'static [u8]) -> Option<Table3> {
-        let words = data.as_chunks::<4>().0;
         let bound = usize::try_from(u32_at(data, 4)?).ok()?;
         let t = Table3 {
             data,
-            words,
-            level1: words.get(5..)?.get(..bound)?,
+            level1: data.get(20..)?.get(..bound.checked_mul(4)?)?,
             shift1: u32_at(data, 0)?,
             shift2: u32_at(data, 8)?,
             mask2: u32_at(data, 12)?,
@@ -54,7 +49,7 @@ impl Table3 {
         if l2 == 0 {
             return None;
         }
-        let l3 = word(self.words, u64::from(l2 >> 2) + u64::from((wc >> (self.shift2 & 31)) & self.mask2))?;
+        let l3 = word(self.data, u64::from(l2 >> 2) + u64::from((wc >> (self.shift2 & 31)) & self.mask2))?;
         if l3 == 0 { None } else { Some(l3) }
     }
 
@@ -62,7 +57,7 @@ impl Table3 {
     #[inline]
     pub fn bit(&self, wc: u32) -> bool {
         let Some(l3) = self.block(wc) else { return false };
-        let Some(w) = word(self.words, u64::from(l3 >> 2) + u64::from((wc >> 5) & self.mask3)) else { return false };
+        let Some(w) = word(self.data, u64::from(l3 >> 2) + u64::from((wc >> 5) & self.mask3)) else { return false };
         (w >> (wc & 31)) & 1 != 0
     }
 
@@ -70,7 +65,7 @@ impl Table3 {
     #[inline]
     pub fn value_i32(&self, wc: u32) -> i32 {
         let Some(l3) = self.block(wc) else { return 0 };
-        word(self.words, u64::from(l3 >> 2) + u64::from(wc & self.mask3)).map_or(0, |v| i32::from_le_bytes(v.to_le_bytes()))
+        word(self.data, u64::from(l3 >> 2) + u64::from(wc & self.mask3)).map_or(0, |v| i32::from_le_bytes(v.to_le_bytes()))
     }
 
     /// Whether [`Table3::value_i32`] of every `wc` below `expected.len() / 4` is the
@@ -105,7 +100,7 @@ impl Table3 {
     /// A value table's `u32` entry for `wc` (`None` when its block is absent).
     pub fn value_u32(&self, wc: u32) -> Option<u32> {
         let l3 = self.block(wc)?;
-        word(self.words, u64::from(l3 >> 2) + u64::from(wc & self.mask3))
+        word(self.data, u64::from(l3 >> 2) + u64::from(wc & self.mask3))
     }
 
     /// A value table's byte entry for `wc` (`None` when absent).
@@ -117,9 +112,9 @@ impl Table3 {
     }
 }
 
-/// Word `i` of `w` (a `u64` index: the sum of a shifted offset and an in-block index cannot
-/// overflow it); `None` past the end.
+/// Little-endian word `i` of `b` (bytes `4 * i` on; a `u64` index: the sum of a shifted
+/// offset and an in-block index cannot overflow it, nor can four times it); `None` past the end.
 #[inline(always)]
-fn word(w: &[[u8; 4]], i: u64) -> Option<u32> {
-    w.get(usize::try_from(i).ok()?).map(|b| u32::from_le_bytes(*b))
+fn word(b: &[u8], i: u64) -> Option<u32> {
+    u32_at(b, usize::try_from(i.checked_mul(4)?).ok()?)
 }
