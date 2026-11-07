@@ -6073,6 +6073,8 @@ strchrnul:
 	jz .Lschrnul_s16
 	leaq (%rdi,%rdx), %rax
 	ret
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-4.68): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschrnul_t32), as strchr's (.Lschr_t32). */
 .Lschrnul_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6092,10 +6094,7 @@ strchrnul:
 	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
-	jz .Lschrnul_s48
-	leaq 32(%rdi,%rdx), %rax
-	ret
-.Lschrnul_s48:
+	jnz .Lschrnul_t32
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6112,6 +6111,9 @@ strchrnul:
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
+.Lschrnul_t32:
+	leaq 32(%rdi,%rdx), %rax
+	ret
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
 	.section .text.liella_machine_strchr,"ax",@progbits
 
@@ -6214,6 +6216,13 @@ index:
 	jnc .Lschr_snull
 	leaq (%rdi,%rcx), %rax
 	ret
+.Lschr_snull:
+	xorl %eax, %eax
+	ret
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-4.68): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschr_t32); blocks 0, 1 and 3 keep their hit
+	 * inline. Taken branches per call by deciding block 0/1/2/3/beyond: 0/1/3/2/3 (one per
+	 * missed block before: 0/1/2/3/4), plus the NULL return's. Same instructions on every path. */
 .Lschr_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6236,13 +6245,7 @@ index:
 	por %xmm2, %xmm1
 	pmovmskb %xmm1, %ecx
 	bsfl %ecx, %ecx
-	jz .Lschr_s48
-	pmovmskb %xmm2, %edx
-	btl %ecx, %edx
-	jnc .Lschr_snull
-	leaq 32(%rdi,%rcx), %rax
-	ret
-.Lschr_s48:
+	jnz .Lschr_t32
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6256,15 +6259,18 @@ index:
 	jnc .Lschr_snull
 	leaq 48(%rdi,%rcx), %rax
 	ret
-.Lschr_snull:
-	xorl %eax, %eax
-	ret
 .Lschr_s64:
 	leaq 64(%rdi), %rax
 	andq $-16, %rax
 	subq $16, %rax
 	movl $1, %r11d
 	jmp .Lschr_next
+.Lschr_t32:
+	pmovmskb %xmm2, %edx
+	btl %ecx, %edx
+	jnc .Lschr_snull
+	leaq 32(%rdi,%rcx), %rax
+	ret
 .Lschr_pre1:
 	movl $1, %r11d
 .Lschr_body:
