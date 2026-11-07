@@ -93,7 +93,71 @@ fn words(line: &str) -> impl Iterator<Item = &str> {
 
 /// The files where the `allocator` category (`unsafe impl GlobalAlloc` and its host calls) may appear.
 const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs", "src/ld.rs"];
-const CATEGORIES: [&str; 6] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel"];
+const CATEGORIES: [&str; 7] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel", "machine-register"];
+
+/// Category *machine-register* (owner ruling 2026-11-07, D-X.44): the libm envelope's inline
+/// MXCSR read and empty `xmm` barrier, in this one file of liella-boundary and nowhere else.
+const MACHINE_REGISTER_FILE: &str = "crates/boundary/src/hot/fpregs.rs";
+/// The only instruction template *machine-register* permits besides the barrier's: the MXCSR
+/// store into the entry's local, exactly once in [`MACHINE_REGISTER_FILE`].
+const MXCSR_TEMPLATE: &str = "stmxcsr dword ptr [{p}]";
+/// The barrier's template: an assembler comment naming its one operand, no instruction (rustc
+/// refuses a template that does not use an operand, so a truly empty one cannot name the register).
+const BARRIER_TEMPLATE: &str = "/* {x} */";
+
+/// The *machine-register* file's inline-assembly templates (`src` unstripped): every string
+/// literal of every invocation outside a comment must be [`BARRIER_TEMPLATE`] or
+/// [`MXCSR_TEMPLATE`], the MXCSR store must occur exactly once, and a barrier must be
+/// `pure, nomem` (no memory effect). One message per violation.
+fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
+    let mut errors = Vec::new();
+    let mut stores = 0usize;
+    let code: Vec<&str> = src.lines().map(|l| l.split_once("//").map_or(l, |(c, _)| c)).collect();
+    let mut n = 0;
+    while n < code.len() {
+        if !code[n].contains("asm!(") {
+            n += 1;
+            continue;
+        }
+        // The invocation: from `asm!(` to its closing parenthesis (templates hold none).
+        let start = n;
+        let mut text = String::new();
+        let mut depth = 0i32;
+        'inv: for (k, l) in code.iter().enumerate().skip(start) {
+            let from = if k == start { l.find("asm!(").map_or(0, |i| i + 4) } else { 0 };
+            for c in l[from..].chars() {
+                text.push(c);
+                depth += match c { '(' => 1, ')' => -1, _ => 0 };
+                if depth == 0 {
+                    n = k + 1;
+                    break 'inv;
+                }
+            }
+            text.push('\n');
+            n = k + 1;
+        }
+        // U+0022 is the quote: a quote character literal would read as a string to `strip`.
+        let literals: Vec<&str> = text.split('\u{22}').skip(1).step_by(2).collect();
+        if text.contains('\\') || literals.is_empty() {
+            errors.push(format!("{rel}:{}: machine-register template not a plain string literal", start + 1));
+        }
+        for t in &literals {
+            if *t == MXCSR_TEMPLATE {
+                stores += 1;
+            } else if *t == BARRIER_TEMPLATE {
+                if !(text.contains("pure") && text.contains("nomem")) {
+                    errors.push(format!("{rel}:{}: machine-register barrier must be `pure, nomem`", start + 1));
+                }
+            } else {
+                errors.push(format!("{rel}:{}: instruction `{t}` outside the machine-register list (D-X.44: `{MXCSR_TEMPLATE}` once, and the barrier `{BARRIER_TEMPLATE}`)", start + 1));
+            }
+        }
+    }
+    if stores != 1 {
+        errors.push(format!("{rel}: {stores} MXCSR stores: category machine-register permits exactly one (D-X.44)"));
+    }
+    errors
+}
 
 /// Whether the (stripped) `unsafe {` block at `lines[n]` is an inline-assembly block: the
 /// invocation on that line or within the next two.
@@ -316,6 +380,9 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     // ALLOC-FAIL-INJECT-4 (#2101): the test-only `FailAlloc` (`selftest` feature, never
                     // in a product) lives outside every product-compiled file.
                     ("allocator", ALLOCATOR_FILES)
+                } else if l.contains("unsafe {") && is_asm_block(&code_lines, n) && rel == "src/hot/fpregs.rs" {
+                    // Owner ruling 2026-11-07 (D-X.44): the libm envelope's MXCSR read and xmm barrier.
+                    ("machine-register", &["src/hot/fpregs.rs"])
                 } else if l.contains("unsafe {") && is_asm_block(&code_lines, n) {
                     // Owner ruling 2026-10-06 (plan S2): the one `%fs`-relative field load.
                     ("tb-field", &["src/tb.rs"])
@@ -329,6 +396,9 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     errors.push(format!("{}:{}: `unsafe` form not in any permitted category", f.display(), n + 1));
                     continue;
                 };
+                if rel == "src/hot/fpregs.rs" && cat != "machine-register" {
+                    errors.push(format!("{}:{}: only category `machine-register` is permitted in {rel} (D-X.44)", f.display(), n + 1));
+                }
                 let once_helper = cat == "export" && rel == ONCE_HELPER_FILE && next_fn_name(&code_lines, n).is_some_and(|f| ONCE_HELPERS.contains(&f));
                 if !once_helper && !allowed_in.iter().any(|a| rel.starts_with(a)) {
                     errors.push(format!("{}:{}: category `{cat}` is not permitted in {rel}", f.display(), n + 1));
@@ -381,20 +451,27 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
         rust_files(dir, &mut files);
         for f in &files {
             let rel = f.strip_prefix(root).map(|p| p.to_string_lossy().replace('\\', "/")).unwrap_or_default();
-            let code = strip(&fs::read_to_string(f).map_err(|e| e.to_string())?);
-            // Inline assembly (plan S2/S3): only the one *tb-field* block in boundary/src/tb.rs;
-            // everything else that needs the machine is in csys/.
+            let raw = fs::read_to_string(f).map_err(|e| e.to_string())?;
+            let code = strip(&raw);
+            // Inline assembly (plan S2/S3): only the one *tb-field* block in boundary/src/tb.rs and
+            // the *machine-register* blocks of boundary/src/hot/fpregs.rs (D-X.44, their templates
+            // checked below); everything else that needs the machine is in csys/.
             let lines: Vec<&str> = code.lines().collect();
             for (n, line) in lines.iter().enumerate() {
                 if !line.contains("asm!") {
                     continue;
                 }
-                let site = rel == "crates/boundary/src/tb.rs" && (n.saturating_sub(2)..=n).any(|k| lines[k].contains("unsafe {"));
-                if site {
+                let in_unsafe = (n.saturating_sub(2)..=n).any(|k| lines[k].contains("unsafe {"));
+                if rel == "crates/boundary/src/tb.rs" && in_unsafe {
                     asm_sites += 1;
+                } else if rel == MACHINE_REGISTER_FILE && in_unsafe {
+                    // Counted by the category audit above; the templates are checked below.
                 } else {
-                    errors.push(format!("{rel}:{}: inline assembly outside the tb-field site (plan S2/S3: machine code belongs in csys/)", n + 1));
+                    errors.push(format!("{rel}:{}: inline assembly outside the tb-field and machine-register sites (plan S2/S3, D-X.44: machine code belongs in csys/)", n + 1));
                 }
+            }
+            if rel == MACHINE_REGISTER_FILE {
+                errors.extend(machine_register_templates(&rel, &raw));
             }
             if SEALED_OK.iter().any(|ok| rel.starts_with(ok)) {
                 continue;
