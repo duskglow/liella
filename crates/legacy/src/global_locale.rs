@@ -187,6 +187,16 @@ pub fn intern<S: Sys>(sys: &S, objs: &impl Objects, l: Locale) -> KResult<usize>
     intern_locked(objs, l)
 }
 
+/// Names interned without an allocation (TIMING-COV-COLD-SETLOCALE): the fixed paths a first
+/// load opens, each followed by its NUL. Allocated, the archive's path was the first
+/// `setlocale`'s only block of its size class: one more slab page and slab record touched.
+const STATIC_NAMES: [&[u8]; 2] = [locale::ARCHIVE_Z, locale::ALIAS_FILE_Z];
+
+/// The static copy of `name`, followed by its NUL, when it is one of [`STATIC_NAMES`].
+fn static_name(name: &[u8]) -> Option<&'static [u8]> {
+    STATIC_NAMES.into_iter().find(|z| z.split_last().is_some_and(|(_, s)| *s == *name))
+}
+
 /// The interned copy of `name` (deduplicated), `'static` and followed by a NUL, and its slot.
 /// The caller holds [`LOCK`].
 fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'static [u8])> {
@@ -199,10 +209,15 @@ fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'sta
     }
     let e = SLOTS.get(n).ok_or(Errno::ENOMEM)?;
     let (addr, len) = (&e.name_addr, &e.name_len);
-    let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
-    v.extend_from_slice(name)?;
-    v.push(0)?;
-    let leaked: &'static [u8] = v.leak();
+    let leaked: &'static [u8] = match static_name(name) {
+        Some(z) => z,
+        None => {
+            let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
+            v.extend_from_slice(name)?;
+            v.push(0)?;
+            v.leak()
+        }
+    };
     addr.store(addr_of(leaked), Release);
     len.store(name.len(), Release);
     NAME_COUNT.store(n.saturating_add(1), Release);
@@ -638,14 +653,22 @@ pub fn setlocale<S: Sys, M: Mapper>(sys: &S, m: &M, cat: Option<Cat>, req: Reque
     let (slot, s) = match cat {
         // Interned for its NUL: built-in names are plain literals.
         Some(c) => intern_name_locked(m, next.name(c)).ok()?,
-        None => {
-            let mut buf = [0u8; 12 * (name::MAX_NAME + 20)];
-            let len = name::composite(next.names(), &mut buf)?;
-            intern_name_locked(m, buf.get(..len)?).ok()?
-        }
+        // One name for every category (the common `LC_ALL` call): that name, interned already.
+        None if next.names().iter().all(|&x| x == next.name(Cat::Ctype)) => intern_name_locked(m, next.name(Cat::Ctype)).ok()?,
+        None => composite_name_locked(m, next.names())?,
     };
     query_record(GLOBAL.load(Acquire), cat, slot);
     Some(s)
+}
+
+/// The composite name of `names`, interned, and its slot. Out of line (TIMING-COV-COLD-SETLOCALE):
+/// its 3.3 KB buffer in `setlocale`'s own frame put one more stack page under every first call.
+/// The caller holds [`LOCK`].
+#[inline(never)]
+fn composite_name_locked(m: &impl Objects, names: &[&[u8]; 12]) -> Option<(usize, &'static [u8])> {
+    let mut buf = [0u8; 12 * (name::MAX_NAME + 20)];
+    let len = name::composite(names, &mut buf)?;
+    intern_name_locked(m, buf.get(..len)?).ok()
 }
 
 /// `liella_locale_invalidate` (D-X.13): advance the generation, then load the global locale
