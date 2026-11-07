@@ -1,0 +1,13 @@
+{"task": "RELEASE-HANDOFF-SCRUB", "model": "opus", "tokens": null,
+ "result": "Lab addresses and personal home paths scrubbed tree-wide (handoff 20 files/24, printf.corpus 82, validation/results 6 files/21, xtask tests 5, 6 scripts now resolve addresses at run time via validation/lab_host.sh); new static check private-paths (D-X.45); static green, plants 4/4 CAUGHT",
+ "branch": "task/release-handoff-scrub", "head": null,
+ "gate": {"affected": "static + clippy + xtask privpaths/labnames tests (8 passed / 0 failed), keke:rhs-static-3 rc 0", "peak": null},
+ "jobs": ["keke:rhs-static-3", "keke:rhs-plants"],
+ "superseded": ["keke:rhs-static", "keke:rhs-static-2"],
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Off this workstation the lab scripts need LIELLA_HOST_<NAME> or ~/.config/liella/lab-hosts (lab_addr falls back to the ops checkout here)", "lab-names failed in git-less role trees on the sync file .changed.xtask; the walk now skips .changed*/.synced*/fuzz/target"],
+ "refused": [],
+ "improvement": "Run cargo xtask static on a git-less role tree in the sync tool's self-test: sync bookkeeping files (.changed.xtask) had silently broken lab-names there",
+ "next_step": "Coordinator lands task/release-handoff-scrub on next before the snapshot-2026-11-07 fast-forward",
+ "report_file": "handoff/release-handoff-scrub.md"}
