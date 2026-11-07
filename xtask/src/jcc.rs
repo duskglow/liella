@@ -25,6 +25,8 @@ mod pad {
 pub use pad::{JCC_PAD_FILES, JCC_PAD_FLAGS};
 
 const BOUNDARY: u64 = 32;
+/// The files that must stay padded (the string and memory kernels measured in D-4.67).
+const REQUIRED: &[&str] = &["fold.S", "scan.S"];
 
 /// One decoded instruction.
 #[derive(Debug, Clone)]
@@ -235,6 +237,10 @@ pub fn check_archive(root: &Path, lib: &Path) -> Result<(), String> {
 
 /// `cargo xtask static`: assemble each padded file as crates/boundary/build.rs does and check every code section.
 pub fn static_check(root: &Path) -> Result<(), String> {
+    // The check reads its file list from jcc_pad.rs, so a file dropped there would drop out of the check too.
+    if let Some(f) = REQUIRED.iter().find(|f| !JCC_PAD_FILES.contains(f)) {
+        return Err(format!("jcc-check: crates/boundary/jcc_pad.rs no longer pads csys/src/machine/{f} (D-4.67)"));
+    }
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".into());
     let dir = std::env::temp_dir().join(format!("liella-jcc-check-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("jcc-check: {}: {e}", dir.display()))?;
