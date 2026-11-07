@@ -268,7 +268,7 @@ fn strstr_needle_ending_on_the_last_mapped_byte_is_measured_inside_its_page() {
     let (lo, mut hi) = r.split_at(PAGE).ok().unwrap();
     CSys.mprotect(&mut hi, PROT_NONE).unwrap();
     let base = lo.addr();
-    let mut hbuf = vec![0u8; 200];
+    let mut hbuf = [0u8; 200];
     for avx2 in paths() {
         assert!(selftest::set_scan_avx2(avx2));
         for m in 0..=21usize {
