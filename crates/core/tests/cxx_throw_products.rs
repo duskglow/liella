@@ -151,10 +151,31 @@ fn link_and_run(src: &str, compiler: &str, extra: &[&str]) -> String {
     }
     let built = c.arg(lib.join("libc.a")).arg("-lgcc").output().unwrap();
     assert!(built.status.success(), "{src} {extra:?} does not link against the products:\n{}", String::from_utf8_lossy(&built.stderr));
+    // D-NEW: the link edge pulls once.S's member, but its word reaches no program.
+    assert_eq!(link_edge_symbols(&exe), Vec::<String>::new(), "{src} {extra:?}: the program carries a link-edge word");
     let out = Command::new("timeout").arg(timeout::secs(60)).arg(&exe).output().unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(out.status.success(), "{src} {extra:?}: status {:?}, stdout {:?}", out.status, String::from_utf8_lossy(&out.stdout));
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// The symbols of `file` named `LIELLA_LINK_EDGE_*` (D-NEW: link-edge statics, kept out of
+/// every link output by `cargo xtask so`).
+fn link_edge_symbols(file: &std::path::Path) -> Vec<String> {
+    let out = Command::new("nm").arg(file).output().unwrap();
+    assert!(out.status.success(), "nm {}: {}", file.display(), String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).lines().filter(|l| l.contains("LIELLA_LINK_EDGE_")).map(str::to_string).collect()
+}
+
+/// no spec clause (D-NEW): `libc.so.6` carries no link-edge word, so no relocation of one is
+/// processed at program start; `libc.a` still has the edge (its undefined symbol), which the
+/// static tests below rely on.
+#[test]
+fn shared_library_carries_no_link_edge_word() {
+    let lib = root().join("target/liella");
+    assert!(lib.join("libc.so.6").exists(), "the products are missing: run `cargo xtask so`");
+    assert_eq!(link_edge_symbols(&lib.join("libc.so.6")), Vec::<String>::new());
+    assert!(!link_edge_symbols(&lib.join("libc.a")).is_empty(), "libc.a lost its link-edge static (renamed?)");
 }
 
 fn have_gxx() -> bool {

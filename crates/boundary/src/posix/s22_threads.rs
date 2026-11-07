@@ -361,10 +361,12 @@ pub extern "C" fn __pthread_cleanup_routine(frame: *mut [usize; 3]) {
 /// `liella_machine_once`). A program's weak references to these names (a compiler runtime's
 /// "are threads in use" test is one) then find all of them, never `__pthread_key_create`
 /// without `pthread_once`. The kept address makes `liella_machine_once` an undefined symbol of
-/// this object, so `libc.a`'s member that defines it is pulled; nothing reads it, and
-/// `--gc-sections` drops it.
+/// this object, so `libc.a`'s member that defines it is pulled; nothing reads it. A static named
+/// `LIELLA_LINK_EDGE_*` is a link edge only (D-NEW): `cargo xtask so` marks its section
+/// `SHF_EXCLUDE` in the archive, so the linker puts the word (and its relocation) in no program
+/// and not in `libc.so.6`, while the undefined symbol still pulls the member.
 #[used]
-static LINK_PTHREAD_ONCE: extern "C" fn(usize, usize) -> i32 = crate::ffi::liella_machine_once;
+static LIELLA_LINK_EDGE_PTHREAD_ONCE: extern "C" fn(usize, usize) -> i32 = crate::ffi::liella_machine_once;
 
 export! { "GLIBC_2.34";
 pub extern "C" fn pthread_key_create(key: Option<&mut pthread_key_t>, destructor: usize) -> c_int {

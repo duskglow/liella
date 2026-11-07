@@ -783,6 +783,8 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"))?;
     println!("so: {hot} function sections grouped as hot text");
+    let edges = exclude_link_edges(&archive)?;
+    println!("so: {edges} link-edge words excluded from every link output (D-NEW)");
     check_archive_elf(&archive)?;
     let staged = tmp_name(out);
     let weak = weaken_archive(&archive, &product.join("weaken"), &staged)?;
@@ -790,6 +792,53 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     check_archive_elf(&staged)?;
     publish(&staged, out)?;
     Ok((archive, weak, copies))
+}
+
+/// The name every link-edge static carries (D-NEW): a `#[used]` Rust static whose only job is
+/// an undefined symbol in its object, so that a static link taking the object also takes the
+/// archive member defining that symbol (`LIELLA_LINK_EDGE_PTHREAD_ONCE`: the keys pull
+/// machine/once.S). Its 8-byte word is never read.
+const LINK_EDGE: &str = "LIELLA_LINK_EDGE_";
+
+/// Marks each link-edge static's section (`.data.rel.ro.<mangled name>`) `SHF_EXCLUDE` in
+/// `archive`: the linker then puts neither the word nor its relocation in any program or in
+/// `libc.so.6` (`#[used]` makes the section `SHF_GNU_RETAIN`, so `--gc-sections` alone keeps it,
+/// and in `libc.so.6` it would cost a `R_X86_64_RELATIVE` relocation at every start), while the
+/// object's undefined symbol still pulls the member. Returns the number of such sections; an
+/// archive with none, or one the flag did not reach, is an error.
+fn exclude_link_edges(archive: &Path) -> Result<usize, String> {
+    let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
+    let pattern = format!(".data.rel.ro.*{LINK_EDGE}*");
+    run(Command::new(&objcopy).arg(format!("--set-section-flags={pattern}=contents,exclude")).arg(archive))?;
+    run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(archive))?;
+    let out = Command::new("readelf").args(["-SW"]).arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut found = 0;
+    for l in text.lines().filter(|l| l.contains(LINK_EDGE)) {
+        // `[Nr] Name Type Address Off Size ES Flg Lk Inf Al`: after the bracketed index, the
+        // name is the first field and the flags the seventh (its `.rela` section is not checked).
+        let fields: Vec<&str> = l.split(']').nth(1).unwrap_or("").split_whitespace().collect();
+        if !fields.first().is_some_and(|n| n.starts_with(".data.rel.ro.")) {
+            continue;
+        }
+        if !fields.get(6).is_some_and(|f| f.contains('E') && !f.contains('A')) {
+            return Err(format!("{}: link-edge section not excluded: {}", archive.display(), l.trim()));
+        }
+        found += 1;
+    }
+    if found == 0 {
+        return Err(format!("{}: no {LINK_EDGE}* section (renamed static? D-NEW)", archive.display()));
+    }
+    Ok(found)
+}
+
+/// `so` carries no link-edge word (D-NEW): no symbol named `LIELLA_LINK_EDGE_*`.
+fn check_no_link_edge(so: &Path) -> Result<(), String> {
+    let out = Command::new("nm").arg(so).output().map_err(|e| format!("nm: {e}"))?;
+    match String::from_utf8_lossy(&out.stdout).lines().find(|l| l.contains(LINK_EDGE)) {
+        Some(l) => Err(format!("{} carries a link-edge word: {l}", so.display())),
+        None => Ok(()),
+    }
 }
 
 pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
@@ -844,6 +893,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
         .arg("-lgcc")
         .arg("-o")
         .arg(&so))?;
+    check_no_link_edge(&so)?;
     let native = check_native_exports(root, &so)?;
     let compat_count = check_compat_exports(root, &so, "libc.so.6", &compat)?;
     let objects = crate::compat_objects::check(root, &so)?;

@@ -1,6 +1,10 @@
-# STATIC-CXX-THROW-PTHREAD-ONCE plants. Run: cargo xtask plants handoff/STATIC-CXX-THROW-PTHREAD-ONCE-plants.txt --dir <new RAM dir> --timeout 600
+# STATIC-CXX-THROW-PTHREAD-ONCE(-2) plants. Run: cargo xtask plants handoff/STATIC-CXX-THROW-PTHREAD-ONCE-plants.txt --dir <new RAM dir> --timeout 600
 # The link edge from the Rust member (which defines __pthread_key_create) to machine/once.S's member (pthread_once).
 # Edge pointed at a function the Rust member defines itself: no pull, pthread_once missing from a static C++ throw.
 edge-retarget | crates/boundary/src/posix/s22_threads.rs | lit:= crate::ffi::liella_machine_once; ==> = { extern "C" fn own(_: usize, _: usize) -> i32 { 0 } own }; | cargo test -p liella --test cxx_throw_products static_ | msg:cxx_throw_plain.cc.*unix_wait_status\(11\)
 # Edge removed (the static no longer kept).
 edge-unused | crates/boundary/src/posix/s22_threads.rs | lit:#[used] ==> #[allow(dead_code)] | cargo test -p liella --test cxx_throw_products static_ | msg:cxx_throw_plain.cc.*unix_wait_status\(11\)
+# -2 (D-NEW): the link-edge word must reach no output. The exclude step skipped: libc.so.6 carries the word.
+exclude-skipped | xtask/src/so.rs | lit:let edges = exclude_link_edges(&archive)?; ==> let edges = 0usize; | cargo test -p liella --test cxx_throw_products link_edge | msg:carries a link-edge word
+# The section kept allocated: the build's own check refuses it.
+exclude-flag | xtask/src/so.rs | lit:=contents,exclude") ==> =alloc,contents,data") | cargo test -p liella --test cxx_throw_products link_edge | msg:link-edge section not excluded
