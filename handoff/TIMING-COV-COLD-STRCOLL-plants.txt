@@ -1,3 +1,3 @@
-# TIMING-COV-COLD-STRCOLL plants (D-NEW): the pool slot's fill-written fields lie in one page
+# TIMING-COV-COLD-STRCOLL plants (D-NEW, REJECTED and reverted): for the record only, do not run (the code is not on the branch)
 slot-compiler-order | crates/core/src/locale/collate.rs | lit:#[repr(C, align(4096))] ==> #[repr(align(4096))] | cargo test -p liella --test locale_data ascii_fill_writes_one_page | msg:crosses a page
 ready-after-leads | crates/core/src/locale/collate.rs | perl:s/(    ready: AtomicBool,\n)(.*?    lead: \[LeadIndex; LEAD_SLOTS\],\n)/$2$1/s | cargo test -p liella --test locale_data ascii_fill_writes_one_page | msg:crosses a page

@@ -45,10 +45,10 @@ const ASCII_SLOTS: usize = 8;
 static ASCII_KEYS: [AtomicUsize; ASCII_SLOTS] = [const { AtomicUsize::new(0) }; ASCII_SLOTS];
 static ASCII_POOL: [AsciiSlot; ASCII_SLOTS] = [const {
     AsciiSlot {
-        unit: [const { AtomicU32::new(UNIT_SLOW) }; 256],
-        rank: [const { AtomicU16::new(0) }; 256],
         lane: [const { AtomicU32::new(ASCII_SLOW) }; 128],
+        unit: [const { AtomicU32::new(UNIT_SLOW) }; 256],
         ascii_fast: AtomicBool::new(false),
+        rank: [const { AtomicU16::new(0) }; 256],
         ready: AtomicBool::new(false),
         lead_map: [const { AtomicU8::new(0) }; 256],
         lead_next: AtomicUsize::new(0),
@@ -77,17 +77,11 @@ struct LeadIndex {
 }
 
 /// One catalog's precomputed tables (STRCOLL-1 D-4.30, STRCOLL-CTEXT D-4.37).
-///
-/// Laid out so that [`Collate::fill`] writes one page (D-NEW, TIMING-COV-COLD-STRCOLL): the
-/// fields it writes (`unit`, `rank`, `lane`, `ascii_fast`, `ready`, 2,050 bytes) come first, in
-/// declaration order (`repr(C)`), and each slot starts a page (`align(4096)`). The pool is
-/// file-backed private data, so the first write to each of its pages is a copy-on-write fault
-/// in the first `strcoll` of a process; with the fields in compiler order the written fields
-/// spanned two pages of slot 0 (one fault more). The lead indexes (written only for non-ASCII
-/// lead bytes) follow.
 #[derive(Debug)]
-#[repr(C, align(4096))]
 pub struct AsciiSlot {
+    /// Per ASCII byte: `start << 8 | count` of its first-level weights in `weightmb`, or
+    /// [`ASCII_SLOW`].
+    lane: [AtomicU32; 128],
     /// Per byte, for [`compare_stream`]: its element's first-level units, at most three,
     /// left-aligned in bits 8..32 with their count in bits 0..8 (1..=3); or [`UNIT_IGNORE`] (no
     /// first-level unit), [`UNIT_END`] (the terminator) or [`UNIT_SLOW`] (the general path: more
@@ -95,17 +89,14 @@ pub struct AsciiSlot {
     /// [`UNIT_LOOK`] marks a byte whose contractions all continue with a non-ASCII byte
     /// (STRCOLL-2, D-4.37): its units hold when the next byte is ASCII.
     unit: [AtomicU32; 256],
+    /// No ASCII byte's `unit` is [`UNIT_SLOW`] (set once the table is filled): a shared prefix
+    /// then needs the general path only if it holds a non-ASCII byte.
+    ascii_fast: AtomicBool,
     /// Per byte, for [`decide_first_flag`] (STRCOLL-4, D-4.37): `0x100 | u` where the byte's
     /// `unit` entry is plain (one to [`UNIT_MAX`] units, no flag) with first unit `u` and
     /// `ascii_fast` holds; 0 (no decision at this byte) otherwise. Written after `ascii_fast`,
     /// so a reader meets 0 or the final value: both correct.
     rank: [AtomicU16; 256],
-    /// Per ASCII byte: `start << 8 | count` of its first-level weights in `weightmb`, or
-    /// [`ASCII_SLOW`].
-    lane: [AtomicU32; 128],
-    /// No ASCII byte's `unit` is [`UNIT_SLOW`] (set once the table is filled): a shared prefix
-    /// then needs the general path only if it holds a non-ASCII byte.
-    ascii_fast: AtomicBool,
     /// The tables above are filled (STRCOLL-START, D-4.37): they are filled at the first
     /// comparison that needs them ([`Collate::warm`]), not when the catalog is loaded, so a
     /// process that never collates (`setlocale(LC_ALL, "")` at every program start) pays
@@ -206,14 +197,6 @@ impl Collate {
     pub fn ascii_lane_bytes(&self) -> usize {
         self.warm();
         self.ascii1.map_or(0, |t| t.lane.iter().filter(|u| u.load(Ordering::Relaxed) != ASCII_SLOW).count())
-    }
-
-    /// The addresses `[start, end)` of the bytes [`Self::fill`] writes in this catalog's pool
-    /// slot (its first field to its `ready` flag), `None` without a slot (D-NEW; for tests:
-    /// the range must lie in one page).
-    #[doc(hidden)]
-    pub fn ascii_fill_span(&self) -> Option<(usize, usize)> {
-        self.ascii1.map(|t| (core::ptr::from_ref(t).addr(), core::ptr::from_ref(&t.ready).addr().wrapping_add(1)))
     }
 
     /// The pool slot of this catalog's ASCII table, claimed at load and filled at the first
