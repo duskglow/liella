@@ -1,0 +1,9 @@
+# BENCH-CASECMP-ALIGN-2: the page-end back-up and the exact head test of the casecmp ordering kernels.
+avx2-mask-kept | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)movl %r11d, %ecx/$1xorl %ecx, %ecx/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+avx2-min-check-dropped | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)jb \.Lcord_byte\n/$1nop\n/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+avx2-back-one-short | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)subl \$4064, %r8d/$1subl \$4065, %r8d/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+avx2-head-exact-loose | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)cmpl \$4032, %r9d/$1cmpl \$4064, %r9d/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+avx2-back-not-moved | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)subq %r8, %rax\n\tjmp \.Lcord_load32/$1nop\n\tjmp .Lcord_load32/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+avx2-start-test-dropped | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)jb \.Lcord_back_start/$1nop/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+sse2-back-one-short | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_sse2:.*?)subl \$4064, %r8d/$1subl \$4065, %r8d/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
+sse2-back-not-moved | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_sse2:.*?)subq %r8, %rax\n\tjmp \.Lcord2_load32/$1nop\n\tjmp .Lcord2_load32/s | cargo test -p liella-boundary --test casecmp_avx2 | msg:panicked|SIGSEGV|FAILED
