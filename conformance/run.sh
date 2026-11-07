@@ -82,7 +82,11 @@ else
     printf '%s\n%s\n' "$pstat" "$phash" > "$pcache.$$" && mv -f "$pcache.$$" "$pcache"
 fi
 ihash=$(cd "$root" && find include -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -d' ' -f1)
-pass=0; fail=0
+# The test runner's bookkeeping variables (NEXTEST_*, CARGO_*: per test, per run, per package) are not
+# passed to the programs, so that the environment a program sees, and its pass key below, is the
+# same for every test that runs it (TVA-CONFORMANCE-ONCE). CARGO_TARGET_DIR was read above.
+for v in $(env | sed -n 's/^\(_*\(NEXTEST\|CARGO\)[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done
+pass=0; fail=0; cached=0
 # A set-group-ID copy (RUN-SECURE) is removed even if the runner stops in the middle of a test.
 trap '[ -z "${secure:-}" ] || rm -f "$secure"' EXIT
 # Test names (file names without .c) never contain blanks; the repository path may.
@@ -196,6 +200,21 @@ for name in "$@"; do
             continue
         fi
     fi
+    # A pass is recorded per program ($exe.pass) and a later call that would run exactly the same
+    # thing skips it: the same built bytes, the same link key (products, libm, headers, source with
+    # its directives, compiler, flags) and the same inherited process state - the environment,
+    # rlimits, umask, blocked and ignored signals, open descriptors, credentials and directory.
+    # A failed run records nothing; a reference-only (LINK-HELPERS) run is never recorded.
+    stamp=""
+    if [ -z "$dyn" ]; then
+        rhash=$({ env | LC_ALL=C sort; ulimit -a; umask; grep -E '^(Sig(Blk|Ign)|Uid|Gid|Groups):' /proc/$$/status; ls /proc/$$/fd; pwd; } 2>&1 | sha256sum | cut -d' ' -f1)
+        stamp="$(sha256sum < "$exe" | cut -d' ' -f1) $rhash $key"
+        if [ -f "$exe.pass" ] && [ "$(cat "$exe.pass")" = "$stamp" ]; then
+            pass=$((pass + 1)); cached=$((cached + 1))
+            continue
+        fi
+        rm -f "$exe.pass"
+    fi
     want_exit=$(directive EXPECT-EXIT "$src"); want_exit=${want_exit:-0}
     want_sig=$(directive EXPECT-SIGNAL "$src")
     if [ -n "$(directive RUN-SECURE "$src")" ]; then
@@ -239,10 +258,12 @@ for name in "$@"; do
         pass=$((pass + 1))
     elif [ "$ok" -eq 1 ]; then
         pass=$((pass + 1))
+        { printf '%s\n' "$stamp" > "$exe.pass.$$" && mv -f "$exe.pass.$$" "$exe.pass"; } || rm -f "$exe.pass.$$"
     else
         echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)"
         fail=$((fail + 1))
     fi
 done
+[ "$cached" -eq 0 ] || echo "conformance: $cached not rerun (passed before: same program, products and environment)"
 echo "conformance: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -4,6 +4,13 @@
 program, linked statically against Liella's `libc.a` and started by Liella's runtime. The directives
 (one `/* NAME: value */` comment line each) are documented at the top of `run.sh`.
 
+A program that passed is not run again for the same thing (D-X.38): `conformance/build/<name>.pass` records
+the hash of the built program, of the process state it inherits (environment, rlimits, umask, blocked and
+ignored signals, descriptors, credentials, directory) and its link key (the products' hash among them). A
+later call with the same stamp counts it as passed and prints `conformance: N not rerun (...)`; a failed
+run records nothing. Remove the `.pass` files (or the whole `build/`) to force a rerun. The runner does not
+pass the test runner's `NEXTEST_*` and `CARGO_*` variables to the programs.
+
 ## Dynamic-link mode: `LINK-HELPERS`
 
 A test that needs shared objects (the §27 dlfcn tests) declares them:
