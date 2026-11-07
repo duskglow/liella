@@ -5607,7 +5607,8 @@ liella_machine_casecmp_ord_avx2:
  * as two 16-byte blocks (the fold of liella_machine_casecmp_sse2: xmm12 = 0x25, xmm13 = 0x65,
  * xmm14 = 0x20, xmm15 = 0); the first step is 32 bytes, not 16 then 64, so a string under 32
  * bytes takes two blocks. Same page rule (the larger page offset <= 4064 reads 32 bytes, <= 4032
- * reads 64, otherwise one byte), same stop: the two deciding bytes read again and ordered here.
+ * reads 64, otherwise a 32-byte block backed up to end at the page end, see .Lcord2_back), same
+ * stop: the two deciding bytes read again and ordered here.
  * Scratch: rax, r8-r10, xmm1-xmm15; rcx (loc) is kept for the rest entry. */
 	.section .text.liella_machine_casecmp_ord_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_sse2
@@ -5629,9 +5630,10 @@ liella_machine_casecmp_ord_sse2:
 	cmpl %r8d, %r9d
 	cmova %r9d, %r8d
 	cmpl $4064, %r8d
-	ja .Lcord2_byte
+	ja .Lcord2_back
 	/* The loop's 9-instruction fold (see .Lcord2_loop64) on two blocks: result in xmm5/xmm6, zero iff
 	 * the A-Z-folded bytes are equal; a stop is a lane where the result is non-zero or a is NUL. */
+.Lcord2_load32:
 	movdqu (%rdi,%rax), %xmm1
 	movdqu (%rsi,%rax), %xmm5
 	movdqa %xmm1, %xmm9
@@ -5803,6 +5805,16 @@ liella_machine_casecmp_ord_sse2:
 	testl %r8d, %r8d
 	jnz .Lcord2_open
 	ret
+.Lcord2_back:
+	/* A 32-byte block at rax would cross a page (BENCH-CASECMP-ALIGN-2): as the AVX2 entry's
+	 * .Lcord_back, both strings back up by k = r8d - 4064 (1-31) when rax >= k (the block then
+	 * ends at the nearer page end and starts inside the text already passed); a start in the last
+	 * k bytes of a page (rax < k) takes byte steps. */
+	subl $4064, %r8d
+	cmpq %r8, %rax
+	jb .Lcord2_byte
+	subq %r8, %rax
+	jmp .Lcord2_load32
 .Lcord2_byte:
 	movzbl (%rdi,%rax), %r8d
 	movzbl (%rsi,%rax), %r9d
