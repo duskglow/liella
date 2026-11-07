@@ -30,7 +30,8 @@ const UNSECURE: [&str; 34] = [
     "MALLOC_TRIM_THRESHOLD_", "NIS_PATH", "NLSPATH", "RESOLV_HOST_CONF", "RES_OPTIONS", "TMPDIR", "TZDIR",
 ];
 
-/// The test program: prints `secure:<AT_SECURE>`, `reloc:ok` through a pointer the loader relocates,
+/// The test program: prints `auxv:ok|bad` (the words after the environment's terminator are an auxiliary
+/// vector: every type below 64), `secure:<AT_SECURE>`, `reloc:ok` through a pointer the loader relocates,
 /// `entry:ok|bad` (AT_ENTRY is its own `_start`), `phdr:ok|bad` (AT_PHDR inside its image), then one
 /// line per argument and environment entry; exits 0. No libc, no dependencies.
 const PROGRAM: &str = r#"
@@ -48,12 +49,14 @@ void start_c(long *sp) {
     char **argv = (char **)(sp + 1), **envp = argv + argc + 1, **e = envp;
     while (*e) e++;
     long *aux = (long *)(e + 1);
-    long secure = -1, entry = 0, phdr = 0;
+    long secure = -1, entry = 0, phdr = 0, keys = 1;
     for (; aux[0]; aux += 2) {
+        if ((unsigned long)aux[0] >= 64) keys = 0; /* not an AT_* type: not the vector */
         if (aux[0] == 23) secure = aux[1];
         if (aux[0] == 9) entry = aux[1];
         if (aux[0] == 3) phdr = aux[1];
     }
+    put("auxv:", keys ? "ok" : "bad");
     put("secure:", secure == 1 ? "1" : secure == 0 ? "0" : "missing");
     put("reloc:", ok);
     put("entry:", entry == (long)_start ? "ok" : "bad");
@@ -123,7 +126,7 @@ fn lines(o: &Output) -> Vec<String> {
 fn assert_ran(o: &Output, what: &str) -> Vec<String> {
     assert_eq!(o.status.code(), Some(0), "{what}: {o:?}");
     let l = lines(o);
-    for want in ["reloc:ok", "entry:ok", "phdr:ok"] {
+    for want in ["auxv:ok", "reloc:ok", "entry:ok", "phdr:ok"] {
         assert!(l.iter().any(|x| x == want), "{what}: no {want}: {l:?}");
     }
     l

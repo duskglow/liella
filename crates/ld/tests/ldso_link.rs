@@ -1,6 +1,6 @@
 //! The interpreter's link invariant (L14-1, `liella_ld::link`) over objects this test links with the
 //! system compiler: a clean shared object (RELATIVE as RELA, and packed as RELR), and one object for
-//! each violation: an undefined symbol, a `DT_NEEDED`, a non-relative relocation, a text relocation.
+//! each violation: an undefined symbol (also one a relocation names past the GNU hash count), a `DT_NEEDED`, a non-relative relocation, a text relocation.
 //! Then the built `ld.so` product itself (`cargo xtask so`): the check holds, and it runs as a
 //! program (`--version`, `--help`, refusals) 100 times, half with address randomisation off
 //! (`setarch -R`): an ET_DYN image is mapped at a non-zero base either way, so a start that read
@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use liella_ld::arch::{Arch, Native, RelocKind};
+use liella_ld::elf::{dt, Elf};
 use liella_ld::link::{check, LinkReport};
 use liella_ld::program::{self, Action};
 
@@ -75,6 +76,32 @@ fn ldso_link_undefined_symbol_refused() {
     assert_eq!(r.undefined, 1, "one undefined symbol: {r:?}");
     assert_eq!(r.first_undefined, Some(&b"liella_missing"[..]));
     assert!(!r.holds());
+}
+
+/// An object whose GNU hash table hashes nothing (its count is `symoffset`, a lower bound), with
+/// `symoffset` set to 1 so the undefined symbol a relocation names lies past the count: the check
+/// examines that symbol or refuses the object, never passes it unexamined.
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
+#[test]
+fn ldso_link_relocation_symbol_past_hash_count() {
+    if !cc_ok() {
+        eprintln!("SKIP: no cc");
+        return;
+    }
+    let src = "extern int liella_missing(void);\n__attribute__((visibility(\"hidden\"))) int get(void) { return liella_missing(); }\n";
+    let mut bytes = link(&dir(), "unhashed", src, &["-Wl,--hash-style=gnu"]);
+    let at = {
+        let elf = Elf::parse::<Native>(&bytes).unwrap();
+        let d = elf.dynamic().unwrap().expect("a dynamic section");
+        let g = d.gnu_hash().unwrap().expect("a GNU hash table");
+        assert_eq!(d.symbol_count().unwrap(), Some(g.symoffset()), "the object hashes no symbol");
+        elf.bytes_from(d.get(dt::GNU_HASH).unwrap()).unwrap().as_ptr().addr() - bytes.as_ptr().addr()
+    };
+    bytes[at + 4..at + 8].copy_from_slice(&1u32.to_le_bytes());
+    match check::<Native>(&bytes) {
+        Err(e) => eprintln!("refused: {e:?}"),
+        Ok(r) => assert_eq!(r.undefined, 1, "the relocation's symbol was not examined: {r:?}"),
+    }
 }
 
 /// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
