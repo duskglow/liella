@@ -1526,9 +1526,11 @@ fn docs_readers(repo: &Repo, f: &str, sel: &mut Selection) {
 
 /// Whether `text` names `path` as a path in code: on a line that is not a comment, right after a quote or a `/`
 /// (`"spec/behaviour/x.txt"`, `"/../../spec/behaviour/x.txt"`, `root.join("docs/x.tsv")`). A path cited in a comment
-/// or a doc comment is a reference for the reader, not a read.
+/// or a doc comment is a reference for the reader, not a read. A top-level file (`README.md`) has no directory to tell
+/// a path from a bare file name (`"README.md"` in a list of names to skip), so it needs a `/` before it or `join("`.
 fn names_path(text: &str, path: &str) -> bool {
-    text.lines().filter(|l| !matches!(l.trim_start().get(..2), Some("//" | "/*" | "* "))).any(|l| l.match_indices(path).any(|(i, _)| matches!(l[..i].chars().last(), Some('"' | '/'))))
+    let at = |pre: &str| pre.ends_with('/') || (pre.ends_with('"') && (path.contains('/') || pre.ends_with("join(\"")));
+    text.lines().filter(|l| !matches!(l.trim_start().get(..2), Some("//" | "/*" | "* "))).any(|l| l.match_indices(path).any(|(i, _)| at(&l[..i])))
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -3543,6 +3545,9 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         for no in ["//! see spec/behaviour/a.txt", "    /// \"spec/behaviour/a.txt\"", " * \"spec/behaviour/a.txt\"", "let p = \"xspec/behaviour/a.txt\";"] {
             assert!(!names_path(no, "spec/behaviour/a.txt"), "{no}");
         }
+        // A top-level file: a bare name in a list is no path; a joined or `/`-prefixed one is.
+        assert!(!names_path("const SKIP: &[&str] = &[\"Makefile\", \"README.md\"];", "README.md"));
+        assert!(names_path("root.join(\"README.md\")", "README.md") && names_path("\"../../README.md\"", "README.md"));
     }
 
     #[test]
