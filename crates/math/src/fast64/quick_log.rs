@@ -42,6 +42,7 @@
 //! * B, `e = 0`, `c_j != 1` (`|ln x| >= 2^-8`, `|r| <= 2^-7.48`): the same absolute terms plus
 //!   `Ll`'s and `tl`'s roundings (`< 2^-95`), at worst on row 74: `2^-67.64`.
 //! * C, `e != 0` (`|ln x| >= 0.341·|e|`): `2^-72.4` plus `|e|·2^-95` for `Kl`.
+//!
 //! Stated `RHO = 2^-64` for both builds (the FMA build has fewer roundings). Expected fallback
 //! `≈ C − 1 = 0.098%` of uniformly spread significands; the fallback test measures it.
 //!
@@ -116,7 +117,7 @@ pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
         return None;
     }
     let tmp = ix.wrapping_sub(OFF);
-    let e = tmp.cast_signed() >> 52;
+    let e = i64::from_ne_bytes(tmp.to_ne_bytes()) >> 52;
     let mb = ix.wrapping_sub(tmp & (0xfff << 52));
     let row = &t::LOG_Q128[usize::try_from((tmp >> 45) & 127).unwrap_or(0)];
     let r = $red(f64::from_bits(mb), mb, f64::from_bits(row[0]), f64::from_bits(row[1]));

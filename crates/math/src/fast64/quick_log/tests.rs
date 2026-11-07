@@ -160,8 +160,11 @@ fn log_quick_declines_or_rounds_right_on_hard_cases() {
     }
     let mut wrong = 0usize;
     // Misroundings of the unchecked `zh` lie where `zl` is next to half an ulp, which is where
-    // the rounding test declines: look there (about 0.1% of the sample).
-    for x in uniform(1_000_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0).chain(spread(1_000_000, 13)) {
+    // the rounding test declines: look there (about 0.1% of the sample). Away from 1 the error is
+    // far below RHO and a misrounded `zh` is rare (none in 2·10^6 operands on one run), so the
+    // sample also covers `c_j = 1` next to 1 (case A), where the error is closest to the bound.
+    let near_one = uniform(1_000_000, 0x2545_f491_4f6c_dd1d, 1.0 - two(-8), 1.0 + two(-7));
+    for x in uniform(1_000_000, 0x9e37_79b9_7f4a_7c15, 0.5, 2.0).chain(spread(1_000_000, 13)).chain(near_one) {
         if let Some((zh, zl)) = log_quick_parts(x) {
             if zh + zl * C != zh && zh != cr(x) {
                 wrong += 1;
