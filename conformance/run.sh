@@ -205,16 +205,17 @@ for name in "$@"; do
     # its directives, compiler, flags) and the same inherited process state - the environment,
     # rlimits, umask, blocked and ignored signals, open descriptors, credentials and directory.
     # A failed run records nothing; a reference-only (LINK-HELPERS) run is never recorded.
-    stamp=""
+    # (The pass file is named here: RUN-SECURE below points $exe at the set-group-ID copy.)
+    stamp=""; pfile="$exe.pass"
     if [ -z "$dyn" ]; then
         rhash=$({ env | LC_ALL=C sort; ulimit -a; umask; grep -E '^(Sig(Blk|Ign)|Uid|Gid|Groups):' /proc/$$/status; ls /proc/$$/fd; pwd; } 2>&1 | sha256sum | cut -d' ' -f1)
         stamp="$(sha256sum < "$exe" | cut -d' ' -f1) $rhash $key"
         # LIELLA_CONFORMANCE_RERUN=1 runs every program regardless (a repeat count, a timing).
-        if [ -z "${LIELLA_CONFORMANCE_RERUN:-}" ] && [ -f "$exe.pass" ] && [ "$(cat "$exe.pass")" = "$stamp" ]; then
+        if [ -z "${LIELLA_CONFORMANCE_RERUN:-}" ] && [ -f "$pfile" ] && [ "$(cat "$pfile")" = "$stamp" ]; then
             pass=$((pass + 1)); cached=$((cached + 1))
             continue
         fi
-        rm -f "$exe.pass"
+        rm -f "$pfile"
     fi
     want_exit=$(directive EXPECT-EXIT "$src"); want_exit=${want_exit:-0}
     want_sig=$(directive EXPECT-SIGNAL "$src")
@@ -259,7 +260,7 @@ for name in "$@"; do
         pass=$((pass + 1))
     elif [ "$ok" -eq 1 ]; then
         pass=$((pass + 1))
-        { printf '%s\n' "$stamp" > "$exe.pass.$$" && mv -f "$exe.pass.$$" "$exe.pass"; } || rm -f "$exe.pass.$$"
+        { printf '%s\n' "$stamp" > "$pfile.$$" && mv -f "$pfile.$$" "$pfile"; } || rm -f "$pfile.$$"
     else
         echo "conformance: FAIL $name (stderr: conformance/build/$name.log.stderr)"
         fail=$((fail + 1))
