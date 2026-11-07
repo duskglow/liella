@@ -67,7 +67,7 @@ fn operands(scale: usize) -> impl Iterator<Item = f64> {
         .chain(spread(scale, 9))
 }
 
-/// The FMA build's `(zh, zl)` within `RHO·|zh|` of `ln x` (exact in Mp).
+/// The FMA build's `(zh, zl)` within `RHO·|zh|` of `ln x` (exact in Mp). Clause: s10_0_f_0.
 #[test]
 fn log_quick_fma_error_within_bound() {
     let worst = with_fma(|| {
@@ -106,7 +106,8 @@ fn check(build: &str, xs: impl Iterator<Item = f64>) -> usize {
 }
 
 /// Both builds through the entry: every answer correctly rounded; the FMA build's fallback rate
-/// on 2·10^5 operands spread over the binades is below 0.3% (model `C − 1 = 0.098%`).
+/// on 2·10^5 operands spread over the binades is below 0.3% (model `C − 1 = 0.098%`). Clause:
+/// s10_0_f_0.
 #[test]
 fn log_quick_both_builds_round_correctly() {
     {
