@@ -176,18 +176,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "rpc_call"
-path = "fuzz_targets/rpc_call.rs"
-test = false
-doc = false
-
-[[bin]]
-name = "rpc_stream"
-path = "fuzz_targets/rpc_stream.rs"
-test = false
-doc = false
-
-[[bin]]
 name = "fnmatch"
 path = "fuzz_targets/fnmatch.rs"
 test = false

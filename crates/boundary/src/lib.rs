@@ -79,6 +79,7 @@ pub mod spawn;
 pub mod timer;
 pub mod zone;
 pub mod netaddr;
+pub mod rpc_text;
 pub mod users;
 pub mod mntent;
 pub mod terminal;

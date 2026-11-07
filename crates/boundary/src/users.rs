@@ -84,8 +84,7 @@ pub(crate) const L64A: usize = 18;
 pub(crate) const TMPNAM: usize = 19;
 /// `inet_nsap_ntoa(.., NULL)`.
 pub(crate) const NSAP_NTOA: usize = 20;
-/// `rcmd`'s canonical host name.
-pub(crate) const RCMD_HOST: usize = 21;
+// 21: free (was `rcmd`'s canonical host name; the rcmd family is a set of stubs, D-15.7).
 /// `ttyname`.
 pub(crate) const TTYNAME: usize = 22;
 /// `ptsname`.
