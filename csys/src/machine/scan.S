@@ -5566,21 +5566,30 @@ liella_machine_casecmp_ord_avx2:
 	jnz .Lcord_open
 	ret
 .Lcord_byte:
+	/* From .Lcord_back_start, r8 = k: the nearer page end is 32 - k bytes on. Byte steps up to
+	 * it (or to n), with no page test per byte, then the loop. */
+	leaq 32(%rax), %r11
+	subq %r8, %r11
+	cmpq %rdx, %r11
+	cmova %rdx, %r11
+.Lcord_byte_loop:
 	movzbl (%rdi,%rax), %r8d
 	movzbl (%rsi,%rax), %r9d
 	leal -65(%r8), %r10d
-	leal 32(%r8), %r11d
 	cmpl $25, %r10d
-	cmovbe %r11d, %r8d
+	leal 32(%r8), %r10d
+	cmovbe %r10d, %r8d
 	leal -65(%r9), %r10d
-	leal 32(%r9), %r11d
 	cmpl $25, %r10d
-	cmovbe %r11d, %r9d
+	leal 32(%r9), %r10d
+	cmovbe %r10d, %r9d
 	cmpl %r9d, %r8d
 	jne .Lcord_byte_differ
 	testl %r8d, %r8d
 	jz .Lcord_zero
 	incq %rax
+	cmpq %r11, %rax
+	jb .Lcord_byte_loop
 	jmp .Lcord_top64
 .Lcord_byte_differ:
 	vzeroupper
@@ -5816,6 +5825,12 @@ liella_machine_casecmp_ord_sse2:
 	subq %r8, %rax
 	jmp .Lcord2_load32
 .Lcord2_byte:
+	/* r8 = k: byte steps up to the nearer page end, 32 - k bytes on (or to n), then the loop. */
+	leaq 32(%rax), %r11
+	subq %r8, %r11
+	cmpq %rdx, %r11
+	cmova %rdx, %r11
+.Lcord2_byte_loop:
 	movzbl (%rdi,%rax), %r8d
 	movzbl (%rsi,%rax), %r9d
 	leal -65(%r8), %r10d
@@ -5831,6 +5846,8 @@ liella_machine_casecmp_ord_sse2:
 	testl %r8d, %r8d
 	jz .Lcord2_zero
 	incq %rax
+	cmpq %r11, %rax
+	jb .Lcord2_byte_loop
 	jmp .Lcord2_top64
 .Lcord2_byte_differ:
 	movl %r8d, %r10d
