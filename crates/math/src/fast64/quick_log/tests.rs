@@ -171,7 +171,7 @@ fn in_domain(f: &Fam, x: f64) -> bool {
     if f.lnb == 0.0 {
         dd::abs(x) >= two(-60) && x > -1.0 && x < two(960)
     } else {
-        x >= f64::MIN_POSITIVE && x < f64::INFINITY
+        (f64::MIN_POSITIVE..f64::INFINITY).contains(&x)
     }
 }
 
