@@ -38,8 +38,37 @@ sets the variable.
 
   Key plants (each caught by a unit test): drop libm from the key, drop the test binary, CPU flags, kernel release,
   program bytes, shard; record at start; override ignored; re-read ignored.
-- Gate `tva-mvc-gate1` (direct tier, `--base origin/next`): GATE_RESULT
-- Timing `tva-mvc-timing1` (RAM copy on mei, `~/work/TVA-MATH-VERDICT-CACHE/timing.sh`): TIMING_RESULT
+- Gate `tva-mvc-gate2` (mei s1, HEAD 4ae6eddc3; clippy, static, then
+  `cargo xtask affected --run --base origin/next --files <every changed file except xtask/src/main.rs>`): green.
+  9 suites ok; 7654 tests passed, 0 failed, 680 ignored; conformance 124 passed, 0 failed. Why main.rs was left out:
+  its change is a doc comment only (clippy compiled it), and `affected` escalates any main.rs change to FULL.
+  `tva-mvc-gate1` (without `--files`) escalated to FULL and was stopped with `kill-label`.
+- Timing `tva-mvc-timing1` (RAM copy on mei, 48 CPUs at load 26-52, `~/work/TVA-MATH-VERDICT-CACHE/timing.sh`; wall
+  times from cargo test). The 109 wired shards ran cold in 1672 s, plus 98 s for the lib inverse_trig test. Run
+  again on the unchanged tree, they took 3 s and 0 s, with every binary under 0.8 s:
+
+  | Test binary | Cold | Unchanged tree |
+  |---|---|---|
+  | special_f128 | 414 s | 0.40 s |
+  | special_ld | 381 s | 0.36 s |
+  | complex_ld_cr | 307 s | 0.78 s |
+  | special_cr | 269 s | 0.03 s |
+  | fast_gamma | 153 s | 0.00 s |
+  | complex_f128 | 119 s | 0.37 s |
+
+  `LIELLA_NO_VERDICT_CACHE=1` reran special and elem_ld (20 s). A neutral byte edit of csqrt's
+  `sqrt_general` (`.ldexp(0)`), followed by `cargo xtask so`, gave a 1326 s run:
+  - stayed cached (unchanged test binaries): elem_ld (0.29 s), special_cr and fast_gamma
+  - reran: complex_ld_cr (413 s), complex_f128, complex, special_f128 (465 s), special_ld (289 s), special (6 s) and
+    the lib test (92 s)
+
+  So a libm edit reruns most C-oracle families, not only the edited one. Their static programs' bytes changed, most
+  likely because the libm product's layout moves; I did not diagnose this. It costs extra runs only, never a skip.
+  The brief's "only that family reruns" holds for the pure-Rust sweeps, not for the C-oracle ones.
+  Measured gain: about 28 min of sweep wall per train that changes no math input on this host and load. Trains that
+  touch libm get little.
+- `tva-mvc-cached2`: the role tree's sweeps run again after the gate. The log shows the `verdict cached:` lines
+  (written straight to stderr; the first version used `eprintln!`, which libtest hid).
 
 ## Open / informational
 - The gain depends on CI keeping `target/` between trains on a role. If the gate tree's target is fresh for every
