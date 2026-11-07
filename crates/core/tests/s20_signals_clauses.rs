@@ -90,16 +90,9 @@ extern "C" fn three(_sig: i32, info: Option<&SigInfo>, ctx: *mut core::ffi::c_vo
     CTX_SEEN.store(u32::from(!ctx.is_null()), Ordering::SeqCst);
 }
 
-/// Waits (up to a second) for `n` handler runs: a process-directed signal may be handled by
-/// another thread, after the send returned.
-fn wait_hits(n: u32) {
-    for _ in 0..1000 {
-        if HITS.load(Ordering::SeqCst) >= n {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-}
+#[path = "support/single_thread.rs"]
+mod single_thread;
+use single_thread::{single_threaded, sole_thread};
 
 fn h(f: extern "C" fn(i32)) -> usize {
     f as usize
@@ -488,32 +481,30 @@ fn s20_3_g_0() {
 
 #[test]
 fn s20_4_c_1() {
-    alone("s20_4_c_1", || {
-        // A group of its own: the group signals must not reach the test harness. A
-        // process-directed signal may be handled by any thread of the child.
+    alone("s20_4_c_1", || single_threaded(|| {
+        // A group of its own: the group signals must not reach the test harness. The fork
+        // child's only thread takes each process-directed signal before kill returns.
         let _ = CSys.setpgid(0, 0);
         x::signal(SIGUSR1, h(count));
-        let me = std::process::id() as i32;
+        let me = CSys.getpid();
         let exists = x::kill(me, 0) == 0;
         let to_me = x::kill(me, SIGUSR1) == 0;
-        wait_hits(1);
+        let after_me = HITS.load(Ordering::SeqCst);
         let group = x::kill(0, SIGUSR1) == 0;
-        wait_hits(2);
+        let after_group = HITS.load(Ordering::SeqCst);
         let neg = x::kill(-CSys.getpgid(0).unwrap(), SIGUSR1) == 0;
-        wait_hits(3);
-        exists && to_me && group && neg && HITS.load(Ordering::SeqCst) == 3
-    });
+        exists && to_me && group && neg && sole_thread() && (after_me, after_group, HITS.load(Ordering::SeqCst)) == (1, 2, 3)
+    }));
 }
 
 #[test]
 fn s20_4_c_2() {
-    alone("s20_4_c_2", || {
+    alone("s20_4_c_2", || single_threaded(|| {
         let _ = CSys.setpgid(0, 0);
         x::signal(SIGUSR2, h(count));
         let ok = x::killpg(CSys.getpgid(0).unwrap(), SIGUSR2) == 0;
-        wait_hits(1);
-        ok && HITS.load(Ordering::SeqCst) == 1
-    });
+        ok && sole_thread() && HITS.load(Ordering::SeqCst) == 1
+    }));
 }
 
 #[test]
@@ -540,13 +531,12 @@ fn s20_4_c_3() {
 
 #[test]
 fn s20_4_c_4() {
-    alone("s20_4_c_4", || {
+    alone("s20_4_c_4", || single_threaded(|| {
         static VALUES: [AtomicI32; 2] = [const { AtomicI32::new(0) }; 2];
         static CODES: [AtomicI32; 2] = [const { AtomicI32::new(0) }; 2];
         static ENTERED: AtomicU32 = AtomicU32::new(0);
-        // The signal is process-directed, so the two handlers may run at once on two threads
-        // (libtest's and the main one): each claims its slot with ENTERED and counts in HITS
-        // only after its store, so `wait_hits(2)` never reads a slot still being written.
+        // The fork child's only thread takes each queued signal before sigqueue returns; each
+        // handler run claims its slot with ENTERED and counts in HITS after its store.
         extern "C" fn val(_sig: i32, info: Option<&SigInfo>, _ctx: *mut core::ffi::c_void) {
             let i = ENTERED.fetch_add(1, Ordering::SeqCst) as usize;
             if let (Some(info), Some(slot)) = (info, VALUES.get(i)) {
@@ -559,13 +549,12 @@ fn s20_4_c_4() {
         let me = std::process::id() as i32;
         let ra = (x::sigqueue(me, 40, 1), errno::get());
         let rb = (x::sigqueue(me, 40, 2), errno::get());
-        wait_hits(2);
         let (entered, stored) = (ENTERED.load(Ordering::SeqCst), HITS.load(Ordering::SeqCst));
         let seen = [VALUES[0].load(Ordering::SeqCst), VALUES[1].load(Ordering::SeqCst)];
         let codes = [CODES[0].load(Ordering::SeqCst), CODES[1].load(Ordering::SeqCst)];
         let mut got = seen;
         got.sort_unstable();
-        let ok = ra.0 == 0 && rb.0 == 0 && got == [1, 2];
+        let ok = ra.0 == 0 && rb.0 == 0 && got == [1, 2] && stored == 2 && sole_thread();
         if !ok {
             // Straight to fd 2: libtest's capture of `eprintln!` is lost when the child exits.
             use std::io::Write as _;
@@ -576,7 +565,7 @@ fn s20_4_c_4() {
             );
         }
         ok
-    });
+    }));
 }
 
 /// §20.4: `pthread_kill` and `pthread_sigqueue` target one thread of this process. Threads
