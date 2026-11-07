@@ -16,6 +16,7 @@ use liella_math::{MathError, Rounding, Status, F128, F80};
 use liella_rt::fpu;
 
 use crate::conv;
+use crate::hot::fpregs::{self, Pin};
 use crate::errno;
 use crate::ret;
 use crate::sys::CSys;
@@ -940,22 +941,31 @@ fn elem32_onepass_cold(x: f32, f: impl FnOnce(f32, Rounding) -> (f32, Status)) -
     elem(x, Unit::Sse, f)
 }
 
+/// [`fpu::peek`] with the inline MXCSR read ([`fpregs::mxcsr`], D-X.44): the fast entries'
+/// one read of the caller's word and whether it is the default control word.
+#[inline(always)]
+fn peek() -> (u32, bool) {
+    let saved = fpregs::mxcsr();
+    (saved, fpu::is_default_control(saved))
+}
+
 /// [`elem32_fast`] for any argument and a `float` or `double` result: the `double` exp, exp2,
 /// log, log2, log10 and pow entries use it with the `*_nearest` functions of
 /// `liella_math::fast64` (MATH-M6-F64-FAST-ENTRY), under the same contract (including `HW`).
 #[inline(always)]
-pub fn elem_fast<const HW: u8, A: Denorm, R: CVal<C = R> + Denorm>(
+pub fn elem_fast<const HW: u8, A: Denorm + Pin, R: CVal<C = R> + Denorm>(
     x: A,
     fast: impl FnOnce(A) -> Option<R>,
     f: impl FnOnce(A, Rounding) -> (R, Status),
 ) -> R {
-    let (saved, in_place) = fpu::peek(&CSys);
+    let (saved, in_place) = peek();
     if !in_place {
         return elem_switched(x, saved, f);
     }
     // The barrier keeps the fast path's arithmetic after the read and behind the branch: a
-    // caller with an unmasked trap must never see it run before the switch.
-    let x = core::hint::black_box(x);
+    // caller with an unmasked trap must never see it run before the switch. Register-only
+    // (D-X.44): the operand stays in its `xmm` register, no store and reload.
+    let x = x.pin();
     if let Some(v) = fast(x) {
         return v;
     }
@@ -1175,7 +1185,7 @@ pub fn sincos<A: CVal + Denorm>(x: A, unit: Unit, f: impl FnOnce(A, Rounding) ->
 /// `fast` answers both results in place, or the cold fallback runs `f` (in place, or in the full
 /// envelope of [`sincos`]). `HW` as in [`elem32_fast`].
 #[inline(always)]
-pub fn sincos_fast<const HW: u8, A: CVal<C = A> + Denorm>(
+pub fn sincos_fast<const HW: u8, A: CVal<C = A> + Denorm + Pin>(
     x: A,
     fast: impl FnOnce(A) -> Option<(A, A)>,
     f: impl FnOnce(A, Rounding) -> ((A, A), Status),
@@ -1183,10 +1193,10 @@ pub fn sincos_fast<const HW: u8, A: CVal<C = A> + Denorm>(
     c: Option<&mut A>,
 ) {
     let (s, c) = (ret::must(conv::req(s)), ret::must(conv::req(c)));
-    let (saved, in_place) = fpu::peek(&CSys);
+    let (saved, in_place) = peek();
     let x = if in_place {
         // The barrier as in `elem_fast`.
-        let x = core::hint::black_box(x);
+        let x = x.pin();
         if let Some((sv, cv)) = fast(x) {
             *s = sv;
             *c = cv;
