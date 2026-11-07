@@ -6751,8 +6751,8 @@ liella_machine_memrchr:
  * NUL, so the caller's contract makes them readable; a vector never leaves their page.
  * DIRECT ENTRY (STR-CHR-CMP-SHORT): `strncmp` in the products is this kernel, with no Rust
  * wrapper: n == 0 returns 0 before any read; the head's page test takes (a - 1) | (b - 1) & 4095
- * below liella_machine_rshort_mask, which a NULL a or b never passes; .Lsnc_pt tests both for
- * NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
+ * below liella_machine_rshort_mask, which a NULL a or b never passes; the SSE2 head's test below
+ * 4032 does not pass either, and .Lsnc_slow tests both for NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
 	.section .text.liella_machine_strncmp,"ax",@progbits
 	.hidden liella_hot_strncmp_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncmp
@@ -6836,8 +6836,96 @@ strncmp:
 	/* The entry's taken branch lands on a 32-byte boundary (padding after the jmp above). */
 	.p2align 5
 .Lsnc_pt:
-	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected (or the SSE2
-	 * level: limit 0). */
+	/* TIMING-COV-STRNCMP-DIFF8 (D-4.69): the SSE2 head. eax = ((a - 1) | (b - 1)) & 4095 from the
+	 * entry, at least either offset after the - 1: below 4032, [a, a + 64) and [b, b + 64) lie in
+	 * their pages and neither is NULL (NULL - 1 has offset 4095), so up to four 16-byte blocks
+	 * run with no NULL test, no per-step page test and no index register. The AVX2 level reaches
+	 * here only with eax >= 4032 (its mask), so this compare sends it to the slow path. A hit
+	 * (bytes differ or a's is NUL) at i < n is decided by re-reading both bytes (D-4.21); a block
+	 * with no hit gives 0 when n ends inside it; n > 64 with no hit resumes the steps at 64. */
+	cmpl $4032, %eax
+	jae .Lsnc_slow
+	movdqu (%rdi), %xmm1
+	movdqu (%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s16
+	cmpq %rdx, %rax
+	jae .Lsnc_zero
+.Lsnc_sdec:
+	/* The deciding bytes at i = rax < n: different falls through to the order (no taken branch). */
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
+	je .Lsnc_seq
+	sbbl %eax, %eax
+	orl $1, %eax
+	ret
+.Lsnc_seq:
+	/* Equal and NUL: 0. Equal and not NUL (a writer changed them after the scan): the byte step
+	 * resumes after them, with the zero vector its steps compare against. */
+	testl %ecx, %ecx
+	jnz .Lsnc_swriter
+	xorl %eax, %eax
+	ret
+.Lsnc_swriter:
+	pxor %xmm3, %xmm3
+	movq %rax, %rcx
+	jmp .Lsnc_byte
+.Lsnc_s16:
+	cmpq $16, %rdx
+	jbe .Lsnc_zero
+	movdqu 16(%rdi), %xmm1
+	movdqu 16(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s32
+	addl $16, %eax
+.Lsnc_shit:
+	cmpq %rdx, %rax
+	jb .Lsnc_sdec
+	xorl %eax, %eax
+	ret
+.Lsnc_s32:
+	cmpq $32, %rdx
+	jbe .Lsnc_zero
+	movdqu 32(%rdi), %xmm1
+	movdqu 32(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s48
+	addl $32, %eax
+	jmp .Lsnc_shit
+.Lsnc_s48:
+	cmpq $48, %rdx
+	jbe .Lsnc_zero
+	movdqu 48(%rdi), %xmm1
+	movdqu 48(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s64
+	addl $48, %eax
+	jmp .Lsnc_shit
+.Lsnc_s64:
+	cmpq $64, %rdx
+	jbe .Lsnc_zero
+	pxor %xmm3, %xmm3
+	movl $64, %ecx
+	jmp .Lsnc_step
+.Lsnc_slow:
+	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected. */
 	testq %rdi, %rdi
 	jz liella_hot_strncmp_null
 	testq %rsi, %rsi
