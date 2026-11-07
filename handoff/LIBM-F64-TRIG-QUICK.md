@@ -1,64 +1,64 @@
-# LIBM-F64-TRIG-QUICK(-2): binary64 sin/cos/tan quick phase with a shared reduction
+# LIBM-F64-TRIG-QUICK(-2, -3): binary64 sin/cos/tan quick phase with a shared reduction
 
-State: branch `task/libm-f64-trig-quick-2` (continues `task/libm-f64-trig-quick`, stacks on LIBM-F64-EXP-QUICK-WIRE),
-role keke:~/w/r5. Briefs: `/home/claude/state/briefs/LIBM-F64-TRIG-QUICK.md` (spec), `-2.md`. Decisions in force:
-D-10.51 (two-phase double functions), D-10.25/D-10.50 (two builds), D-10.3 (CR), **D-10.61 (this story; row written
-in plan/07-decisions/s10-mathematics.md, includes the accepted one-step `π/64` reasoning)**.
+State: branch `task/libm-f64-trig-quick-3` (continues `-2` and the first run; merge base 799313e1 =
+LIBM-F64-EXP-QUICK-WIRE-2), role mei:~/w/s1. Code head 3e2d8ba81 (this run's only code change). Briefs:
+`/home/claude/state/briefs/LIBM-F64-TRIG-QUICK.md` (spec), `-2.md`, `-3.md`. Decisions in force: D-10.51 (two-phase
+double functions), D-10.25/D-10.50 (two builds), D-10.3 (CR), **D-10.61 (this story; now with counts and timing)**.
 
 ## What is in
 
-* `crates/math/src/trig/quick.rs` (run 1): quick phase for sin, cos, tan, sincos, `plain` (SSE2) and `fused` (FMA)
-  builds, one reduction (Cody-Waite `π/64` below 2^20, integer Payne-Hanek with 3 u64 products above), today's
-  `SIN_K_PI64` table, Taylor + Estrin, Ziv test; `*_tiered` = quick, then today's kernel cold. Bound and method: module
-  doc and D-10.61. Wired in `crates/boundary/src/hot/trig.rs`.
-* Run 2: selftest hooks `selftest::trig_quick(which, x)` / `sincos_quick` (`hot::trig_quick`, cfg selftest) and
-  `crates/boundary/tests/trig_quick.rs`: FMA build bit-equal to the CR result on [-10,10], [-1e6,1e6] and uniform bit
-  patterns over [2^-30, 2^1024) (Payne-Hanek path), sincos == (sin, cos), both builds bit-identical where both answer,
-  and the ignored 10^8 accuracy job (`TRIG_QUICK_N`). FMA fallback on uniform [-10,10]: sin 0.83%, cos 0.81%, tan 1.62%.
-* Plants file `handoff/LIBM-F64-TRIG-QUICK-2-plants.txt` (6 plants: the brief's four on the SSE2 tests, quadrant and
-  rounding-constant again on the FMA boundary test).
+* `crates/math/src/trig/quick.rs`: quick phase for sin, cos, tan, sincos, `plain` (SSE2) and `fused` (FMA) builds,
+  one reduction (Cody-Waite `π/64` below 2^20, integer Payne-Hanek with 3 u64 products above), `SIN_K_PI64` table,
+  Taylor + Estrin, Ziv test; `*_tiered` = quick, then the previous kernel cold. Wired in `crates/boundary/src/hot/trig.rs`.
+* Selftest hooks `selftest::trig_quick` / `sincos_quick`, `crates/boundary/tests/trig_quick.rs` (FMA build bit-equal
+  to CR, builds agree, sincos == (sin, cos), ignored 10^8 accuracy job `TRIG_QUICK_N`).
+* Run 3 (3e2d8ba81): fixed the two static findings that turned `-2`'s lint red: the selftest hook's
+  `#[allow(unsafe_code)]` on the three-arm match now carries its own `UNSAFE(hot-kernel)` comment (existing category);
+  the test's `liella_math::trig::{sin,cos,tan}(x, Rounding)` calls are marked `// opaque-ok:` (mangled two-argument
+  Rust functions, not the C names, so LLVM cannot fold them as builtins).
 
-## Jobs (keke unless named)
+## Jobs (mei unless named), all on 3e2d8ba81
 
-* `libm-f64-trig-quick-2-t1` rc 101 (lint: one unsafe block held three calls; fixed), `-t2` rc 0 (clippy -p
-  liella-boundary, trig_quick 2/2). Superseded by the gate.
-* Step 0 on the inherited head (foreground): `cargo xtask clippy` 0, `cargo xtask kernel-index` up to date, `cargo
-  xtask static` 0.
-* `libm-f64-trig-quick-2-plants` rc 0: 6 CAUGHT, 0 SURVIVED, 0 WARN-RC-ONLY/NO-MSG (WARN-DEV-SHM only: no test here
-  mounts /dev/shm).
-* `libm-f64-trig-quick-2-gate` rc 1 on 2d543fd81: every suite ok (9 suites, 7288 passed, 0 failed, conformance 6/6,
-  peak 11G, oom_kill 0) but `STEP FAILED: unsafe-audit: 1 violations`: the selftest hook's `unsafe fn` pointer line in
-  src/hot/ had no UNSAFE comment (I ran static on the inherited head only, before adding it). Fixed in 757f653e9 (one
-  commented unsafe block per call). `-counts` (first driver) was killed while queued (stale tree); never ran.
-* Final head: driver `~/work/LIBM-F64-TRIG-QUICK-2/driver2.sh`, started detached at hand-back, runs in order (one
-  build at a time in r5): `-lint` (full clippy --all-features, xtask clippy, static), `-stage2` (`bench --stage
-  ~/work/LIBM-F64-TRIG-QUICK-2/stage.tar`), `-counts2` (cbench_libm `--compare --counters`, default build then
-  `--tunables glibc.cpu.hwcaps=-FMA`; the -FMA tunable may not reach the bench programs, see
-  LIBM-F64-EXP-QUICK-WIRE.md: compare the sin rows of the two runs), `-gate2` (direct tier), `-accuracy2` (10^8
-  operands per function, distribution and build; 0 mismatches = rc 0), `-plants2` (the same 6 plants on the final
-  head, dir /dev/shm/claude/LIBM-F64-TRIG-QUICK-2/plants-2; the first `-plants` ran before the hook fix). keke's slots were full at hand-back (a
-  queued foreground clippy waited 10+ min and was stopped), hence the detached driver.
-* Timing bookings 128 (kotori) and 129 (nozomi) cancelled unused: the stage tarball could not be built in budget.
+* Step 0 on the inherited head 33cb84ef0: `cargo xtask static` rc 1 (the two findings above, the cause of `-2-lint`
+  rc 1). After the fix: static 0, `cargo xtask clippy` 0 (foreground).
+* `libm-f64-trig-quick-3-lint` rc 0 (full clippy --all-features -D warnings, xtask clippy, static).
+* `libm-f64-trig-quick-3-plants` rc 0: 6 CAUGHT, 0 SURVIVED, 0 WARN (plants file `handoff/LIBM-F64-TRIG-QUICK-2-plants.txt`).
+* `libm-f64-trig-quick-3-gate` rc 0: direct tier, 9 suites ok, 7288 passed, 0 failed, conformance 6/6, peak 13G, oom_kill 0.
+* `libm-f64-trig-quick-3-stage` rc 0 (stage.tar sha256 b6ec74e2...), `-counts` rc 0, `-stage-base` rc 0 (merge base
+  799313e1 from `git archive` in /mnt/zram, for the timing base).
+* `libm-f64-trig-quick-3-accuracy`: 10^8 operands per function x distribution x build, nearest; running at hand-back
+  (rc 0 = 0 mismatches).
+* Timing (bookings 130 kotori, 131 nozomi, both cancelled after): `kotori:libm-f64-trig-quick-3-ivb`, `-ivb-base`,
+  `nozomi:libm-f64-trig-quick-3-n100`, `-n100-base`, all rc 0 (`./xtask-bin sweep run --only cbench_libm`, ~2 min
+  each). The nozomi head run started 3 min inside the booking's settle window (host idle, 0 jobs); its spreads are
+  0.006-0.025.
+
+## Results
+
+Counts (cbench_libm instr/op, Skylake-SP; base = `libm-f64-exp-quick-wire-2-counts` on mei, which is exactly the
+merge base): FMA sin 158.6 -> 131.7 (glibc 100.2), cos 156.4 -> 123.7 (104.7), tan 176.1 -> 157.9 (107.6), sin_huge
+1345.1 -> 239.6 (365.8), sin_upward 490.4 -> 490.1. SSE2 (the `-FMA` tunable did reach the bench this time; counts
+differ from the FMA run): sin 173.1 (122.3), cos 169.0 (126.1), tan 239.3 (124.2), sin_huge 291.7 (379.3); no same-tool
+SSE2 base (the base job ran without the tunable). Every other row within 1% (mxcsr_pair 3.0 -> 3.1 is the harness row).
+Timing, time ratio vs glibc before -> after: Ivy Bridge sin 2.22 -> 1.71, cos 2.13 -> 1.60, tan 2.83 -> 2.33,
+sin_huge 4.56 -> 0.71; N100 sin 2.13 -> 1.67, cos 1.83 -> 1.53, tan 2.64 -> 2.01, sin_huge 5.95 -> 0.87. Rows whose
+time moved > 5% without an instruction or cycle change (kotori exp_small, exp_tiny, sinh; nozomi logf, sqrt): the
+cycle ratios are unchanged (e.g. exp_tiny cycles 3.516 -> 3.520); the base run's time column disagreed with its own
+cycles (spread 0.48-0.56), so this is timing noise, not a regression.
 
 ## Not covered (say so, do not imply)
 
-The brief's accuracy job asks for "four modes": the quick phase runs only in round-to-nearest (the shared `elem_fast`
-envelope picks the accurate path otherwise, unchanged by this story and covered by the existing entry sweeps); the new
-job checks nearest only.
+Accuracy job checks round-to-nearest only (the quick phase runs only there; other modes take the unchanged accurate
+path, covered by the entry sweeps). Brief target sin <= 110 instr (FMA) not reached: 131.7.
 
 ## Next step
 
-1. Read the driver's five jobs (`~/bin/jobwait libm-f64-trig-quick-2-{lint,stage2,counts2,gate2,accuracy2}` on keke).
-   A red: fix and rerun only that job. Counts: sin/cos/tan/sin_huge rows of `-counts2` against the base (brief:
-   FMA sin 152 vs glibc 105, cos 156/107, tan 181/112, SSE2 sin 232/127; target sin <= 110 FMA); if any measured row
-   is slower than its base, profile one call (wl_trace) before landing. Add the counts to D-10.61.
-2. Timing (owner exception: the change alters the instruction mix, a division in tan): copy
-   keke:~/work/LIBM-F64-TRIG-QUICK-2/stage.tar to an Ivy Bridge host (kotori or nico, less busy) and nozomi (N100),
-   unpack whole into a new dir, `ops timing-book`, then `~/bin/timing <label> ./xtask-bin bench --no-build --compare
-   cbench_libm` (try the command once briefly first); report sin, cos, tan, sin_huge ratios; the first hand-back line
-   wants `IVB <x>x / N100 <y>x`.
+1. Read `~/bin/jobwait libm-f64-trig-quick-3-accuracy` on mei (rc 0 = 0 mismatches). A red: the log names function,
+   distribution, build and an operand; fix the quick phase, not the test.
+2. Optional follow-up toward sin <= 110: profile one FMA call (validation/wl_trace.sh) against glibc's 100 and aim
+   at the phase holding the surplus (the envelope was ~21 instructions for exp, LIBM-F64-EXP-QUICK-WIRE.md).
 
 ## Not to redo
 
-Base profile (run 1: FMA sin 142, cos 176, tan 169, sin_huge 1395; SSE2 sin 222, cos 257, tan 346, sin_huge 1398, one
-call, Zen 1). The `π/64` one-step choice (D-10.61). The plants above.
+Base profile (run 1, Zen 1). The `π/64` one-step choice (D-10.61). The 6 plants. The base timing above (same hosts,
+same stage method).
