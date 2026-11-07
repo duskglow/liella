@@ -14,8 +14,8 @@ each traded one set of rows for another: recommend a step-back / rethink, not a 
 
 ## Evidence (this run)
 * lint on inherited head `compare-head-h2-3-lint0` rc 0; on 0577844f4 `compare-head-h2-3-lint1` (xtask clippy +
-  static) rc 0. Gate `compare-head-h2-3-gate` (direct tier, mei): read its row in jobs.tsv (it was still running
-  at the last check; every suite shown was ok).
+  static) rc 0. Gate `compare-head-h2-3-gate` (direct tier, mei) rc 0, peak 14G; static on the final head
+  `compare-head-h2-3-static` rc 0.
 * Plants `compare-head-h2-3-plants` (handoff/COMPARE-HEAD-H2-plants.txt, 15 plants incl. 6 new for the span
   test): 14 CAUGHT, 1 EQUIVALENT (span one high: 2049 takes the exact AVX2 big classes), 0 SURVIVED, 0 WARN.
 * Harness correctness sweep `compare-head-h2-3-sweep-2` (Skylake-SP): 4,250,610 checks, 0 failures for glibc /
