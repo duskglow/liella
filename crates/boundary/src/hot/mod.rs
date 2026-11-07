@@ -5,6 +5,8 @@
 //!   `memset`, `memcmp`, `bcmp` and `__memcmpeq`, and their AVX2 builds (`avx2`); the KERNEL
 //!   CONTRACT is at the top of that file.
 //! * `delim`: the `getdelim` fused scan and copy.
+//! * `fpregs`: the libm envelope's machine-register intrinsics (category *machine-register*,
+//!   D-X.44): the inline MXCSR read and the empty `xmm` barrier, the only inline assembly here.
 //! * one file per libm family (`exp_log`, `trig`, `invtrig`, `hyperbolic`, `erf`, `gamma`,
 //!   `bessel`, and `f32_<family>` for the `float` ones): the build-dispatching wrappers of that
 //!   family's fast paths.
@@ -24,6 +26,7 @@ mod f32_gamma;
 mod f32_hyperbolic;
 mod f32_invtrig;
 mod f32_trig;
+pub mod fpregs;
 mod gamma;
 mod hyperbolic;
 mod invtrig;

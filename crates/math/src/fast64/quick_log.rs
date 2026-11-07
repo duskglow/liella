@@ -74,25 +74,25 @@ use crate::coeffs::tables as t;
 
 /// `bits(2^-1022)` and `bits(+inf) − bits(2^-1022)`: positive normal finite `x` as one unsigned
 /// compare on its bits.
-const MIN_NORMAL: u64 = 0x0010_0000_0000_0000;
-const SPAN: u64 = 0x7ff0_0000_0000_0000 - MIN_NORMAL;
+pub(super) const MIN_NORMAL: u64 = 0x0010_0000_0000_0000;
+pub(super) const SPAN: u64 = 0x7ff0_0000_0000_0000 - MIN_NORMAL;
 /// `bits(45/64)`: the low end of `m`'s range; its 45 low fraction bits are 0, so the intervals
 /// line up with `F_j`.
-const OFF: u64 = 0x3fe6_8000_0000_0000;
+pub(super) const OFF: u64 = 0x3fe6_8000_0000_0000;
 /// The 45 fraction bits below the interval index.
-const LOW45: u64 = (1 << 45) - 1;
-const KH: f64 = f64::from_bits(t::LN2_Q[0]);
-const KL: f64 = f64::from_bits(t::LN2_Q[1]);
+pub(super) const LOW45: u64 = (1 << 45) - 1;
+pub(super) const KH: f64 = f64::from_bits(t::LN2_Q[0]);
+pub(super) const KL: f64 = f64::from_bits(t::LN2_Q[1]);
 /// `1.5·2^19`: `RN(r + SPLIT) − SPLIT` is `r` rounded to a multiple of `2^-33` for `|r| < 2^18`.
-const SPLIT: f64 = 786_432.0;
+pub(super) const SPLIT: f64 = 786_432.0;
 /// `RN(±1/n)`, n = 3..9 (checked by the `bounds` test).
-const C3: f64 = 1.0 / 3.0;
-const C4: f64 = -0.25;
-const C5: f64 = 1.0 / 5.0;
-const C6: f64 = -1.0 / 6.0;
-const C7: f64 = 1.0 / 7.0;
-const C8: f64 = -0.125;
-const C9: f64 = 1.0 / 9.0;
+pub(super) const C3: f64 = 1.0 / 3.0;
+pub(super) const C4: f64 = -0.25;
+pub(super) const C5: f64 = 1.0 / 5.0;
+pub(super) const C6: f64 = -1.0 / 6.0;
+pub(super) const C7: f64 = 1.0 / 7.0;
+pub(super) const C8: f64 = -0.125;
+pub(super) const C9: f64 = 1.0 / 9.0;
 
 /// The stated bound (module doc) and its rounding-test multiplier: the least double with
 /// `C·(1 − 2^54·RHO) > 1 + 2^-53` (checked exactly by the `bounds` test).
@@ -108,13 +108,13 @@ fn ma(a: f64, b: f64, c: f64) -> f64 {
 
 /// `r = c·m − 1` exactly (SSE2: `c·(m − F) + b`, each step exact; module doc).
 #[inline(always)]
-fn reduce(m: f64, mb: u64, c: f64, b: f64) -> f64 {
+pub(in crate::fast64) fn reduce(m: f64, mb: u64, c: f64, b: f64) -> f64 {
     c * (m - f64::from_bits(mb & !LOW45)) + b
 }
 
 /// `(vh, vl, RN(r²))` with `vh + vl = r − r²/2` within `2^-87·|r|` (SSE2: the split of `r`).
 #[inline(always)]
-fn half_square(r: f64) -> (f64, f64, f64) {
+pub(in crate::fast64) fn half_square(r: f64) -> (f64, f64, f64) {
     let rh = (r + SPLIT) - SPLIT;
     let rl = r - rh;
     let hh = (-0.5 * rh) * rh;
@@ -286,7 +286,7 @@ pub mod fused {
     /// `r = c·m − 1`: exact (module doc), so one FMA.
     #[target_feature(enable = "fma")]
     #[inline]
-    fn reduce(m: f64, _mb: u64, c: f64, _b: f64) -> f64 {
+    pub(in crate::fast64) fn reduce(m: f64, _mb: u64, c: f64, _b: f64) -> f64 {
         _mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(m), _mm_set_sd(c), _mm_set_sd(1.0)))
     }
 
@@ -294,7 +294,7 @@ pub mod fused {
     /// within `u²·|r|`.
     #[target_feature(enable = "fma")]
     #[inline]
-    fn half_square(r: f64) -> (f64, f64, f64) {
+    pub(in crate::fast64) fn half_square(r: f64) -> (f64, f64, f64) {
         let s = r * r;
         let s1 = _mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(r), _mm_set_sd(r), _mm_set_sd(s)));
         let hh = -0.5 * s;

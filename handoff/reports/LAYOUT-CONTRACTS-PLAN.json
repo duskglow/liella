@@ -1,0 +1,36 @@
+{
+ "task": "LAYOUT-CONTRACTS-PLAN",
+ "model": "opus",
+ "tokens": null,
+ "result": "Plan written (inventory of 17 layout assumptions, manifest/check/isolation designs with options, rule, 5 D-NEW rows, 6 briefs); prototype startup-window check holds on origin/next (9 windows) and fires on LIBM-F64-LOG-FAMILY-WIRE-2 (10, naming runtime::start::<false> straddling 0x6f0000); cause found: runtime::start::<false> and apply_irelative are outside the hot group on next (stale hot-text key)",
+ "branch": "task/layout-contracts-plan",
+ "head": "2885e5902 (plan; this report commit follows)",
+ "gate": {
+  "affected": "planning story, docs only under handoff/: cargo xtask static rc 0 (lcp-static); prototype check lcp-proto-check-2 rc 0 (holds on next, fires on WIRE-2)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "Rule d: a layout contract changed without a decision-row change fails cargo xtask static (vs review only)",
+   "recommendation": "static failure; tightening a budget needs only a one-line row, loosening or removing needs a maintainer ruling"
+  }
+ ],
+ "informational": [
+  "origin/next: liella_boundary::runtime::start::<false> and runtime::apply_irelative are not in the hot group (hot-text.list key of the non-generic runtime::start matches nothing; unmatched keys are dropped silently); brief HOTTEXT-STARTUP-COMPLETE fixes it",
+  "WIRE-2 head also reads +3 faults in setlocale and tool modes (59->62, 61->64 on the Skylake-SP role); not analysed",
+  "lld handling of .text.sorted/.text.hot/.lbss not verified"
+ ],
+ "refused": [],
+ "improvement": "Fault-bound raises for 'layout-only deltas' were diagnosed by hand with perf each time; a build-time layout check that names the moved symbol (prototype on task/layout-contracts-plan-proto) replaces that, and a stale-key guard in hottext::group would have prevented this failure outright",
+ "next_step": "Run brief HOTTEXT-STARTUP-COMPLETE first (live defect, small), then LAYOUT-MANIFEST and LAYOUT-STARTUP-WINDOWS",
+ "report_file": "handoff/layout-contracts-plan.md",
+ "jobs": [
+  "mei:lcp-wire2-so",
+  "mei:lcp-wire2-measure",
+  "mei:lcp-next-so",
+  "mei:lcp-trace",
+  "mei:lcp-proto-check-2",
+  "mei:lcp-static"
+ ]
+}
