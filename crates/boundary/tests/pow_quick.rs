@@ -53,6 +53,7 @@ fn with_fma<T>(f: impl FnOnce() -> T) -> Option<T> {
 
 /// The FMA build's quick answers against the correctly rounded `pow` (the accurate path), bit for
 /// bit, and its fallback on the cbench box (model `c − 1 ≈ 0.008%`, asserted at most 0.1%).
+/// Clause: s10_0_f_0.
 #[test]
 fn pow_quick_fma_matches_correctly_rounded_pow() {
     let n = 50_000usize;
@@ -78,7 +79,7 @@ fn pow_quick_fma_matches_correctly_rounded_pow() {
 
 /// The `pow` entry (both builds; quick phase, tier 2, accurate path) against the correctly rounded
 /// `pow`, bit for bit, over `4·LIELLA_POW_SWEEP` operands per build; and exact cases keep their
-/// exact results.
+/// exact results. Clause: s10_0_f_0.
 #[test]
 fn pow_entry_tiers_round_correctly() {
     let n = std::env::var("LIELLA_POW_SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(50_000usize);
