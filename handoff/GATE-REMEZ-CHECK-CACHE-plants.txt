@@ -1,0 +1,7 @@
+# GATE-REMEZ-CHECK-CACHE plants (D-10.54). The baseline run of each command stamps the verdict cache in the
+# copy's own target/remez-check, so plants a-c run against a WARM cache (the `ls` shows the stamps in each log).
+a-coeff-digit | crates/math/src/coeffs/fast32_y0_reg.rs | lit:0xbfb2e4d699cbd017 ==> 0xbfb2e4d699cbd018 | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date
+b-fit-number | crates/math/fits/fast32_y0_reg.fit | lit:powers = even 0..16 ==> powers = even 0..14 | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date
+c-remez-iteration | crates/mathtools/src/remez.rs | lit:iterations += 1; ==> iterations += 2; | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date|error: .*fast32_y0_reg\.fit
+d-key-no-coeff | crates/mathtools/src/check_cache.rs | lit:Some(c) => field(&mut s, b'C', c), ==> Some(_) => field(&mut s, b'C', b""), | cargo test -p liella-mathtools --test check_cache | msg:changing the coefficient bytes must change the key
+e-drop-last-rc | crates/mathtools/src/bin/remez.rs | lit:ok &= o.ok; ==> if emitted + 1 < n { ok &= o.ok; } | cargo test -p liella-mathtools --test check_cache | msg:a failing last fit passed

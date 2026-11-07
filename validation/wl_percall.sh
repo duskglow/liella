@@ -35,7 +35,9 @@
 # glibc and Liella (ok), differs (MISMATCH: that glibc number is no reference; details below the table) or is absent (-).
 # --event E: count the perf event E (e.g. cycles:u, branch-misses:u) instead of instructions:u; same table, the
 #   header names the event. Rows are cached per event. Only instructions:u is deterministic: other events on the keke
-#   VM are advisory (read sd_new / sd_glibc). Unknown flags exit 2. Tracing one call instruction by instruction: validation/wl_trace.sh.
+#   VM are advisory (read sd_new / sd_glibc). --event mite = r0479:u, IDQ.MITE_UOPS (uops from the legacy decoders,
+#   not the uop cache; D-4.67): only on Intel Sandy Bridge to Skylake-family hosts, where the raw code has that meaning
+#   (the JCC-erratum loss shows there and not in instructions). Unknown flags exit 2. Tracing one call instruction by instruction: validation/wl_trace.sh.
 # Clean room: glibc is only ever measured as a black box (totals).
 set -u
 base=
@@ -64,6 +66,7 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 1 ] || { sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 2; }
 target=$1
+[ "$event" = mite ] && event=r0479:u
 case "$event" in *[!A-Za-z0-9_:.-]*|"") echo "wl_percall: bad event name $event" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/wl_local.sh"

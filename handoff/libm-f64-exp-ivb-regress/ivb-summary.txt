@@ -1,0 +1,8 @@
+pass 1 exp: 66b8d3ba 83.43ns sp0.22 x2.95 | a6fc34c2 82.90ns sp0.02 x2.93 | host-dynamic 28.25ns sp0.01 x1.00 | host-static 28.06ns sp0.01 x0.99
+pass 1 exp_small: 66b8d3ba 83.45ns sp0.51 x2.95 | a6fc34c2 82.72ns sp0.52 x2.92 | host-dynamic 28.31ns sp0.01 x1.00 | host-static 27.51ns sp0.01 x0.97
+pass 2 exp: 66b8d3ba 83.65ns sp0.19 x2.96 | a6fc34c2 82.78ns sp0.01 x2.93 | host-dynamic 28.26ns sp0.01 x1.00 | host-static 28.04ns sp0.01 x0.99
+pass 2 exp_small: 66b8d3ba 83.57ns sp0.19 x2.95 | a6fc34c2 82.82ns sp0.01 x2.93 | host-dynamic 28.31ns sp0.02 x1.00 | host-static 27.44ns sp0.02 x0.97
+pass all exp: 66b8d3ba 83.43ns sp0.22 x2.95 | a6fc34c2 82.81ns sp0.02 x2.93 | host-dynamic 28.26ns sp0.01 x1.00 | host-static 28.05ns sp0.02 x0.99
+pass all exp_small: 66b8d3ba 83.56ns sp0.51 x2.95 | a6fc34c2 82.79ns sp0.52 x2.92 | host-dynamic 28.31ns sp0.02 x1.00 | host-static 27.46ns sp0.02 x0.97
+host nico cpu:  Intel(R) Xeon(R) CPU E3-1220L V2 @ 2.30GHz load: 0.04 0.01 0.00
+load at end: 0.12 0.03 0.01

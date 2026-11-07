@@ -19,7 +19,7 @@ only commits. Build role keke:~/w/n1 (synced, tree 72fc81a7-clean).
   cycles,dTLB-load-misses,dTLB-store-misses,iTLB-load-misses (out/perf{A,B}-<side>-<n>.csv).
 
 ## Collect
-`ssh claude@10.0.100.112 'tail -40 ~/logs/timing-cov-spawn-heap256m-ivb-repro-ivb.log; ls ~/work/TIMING-COV-SPAWN-HEAP256M-IVB/out'`
+`ssh claude@nico 'tail -40 ~/logs/timing-cov-spawn-heap256m-ivb-repro-ivb.log; ls ~/work/TIMING-COV-SPAWN-HEAP256M-IVB/out'`
 then cancel booking 74 (`ops timing-cancel 74`) if it is still open.
 
 ## Decision rule (from the brief)

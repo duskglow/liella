@@ -1,0 +1,16 @@
+{"task": "TIMING-COV-STRSTR-PAIR-2", "model": "opus", "tokens": null,
+ "result": "gate3's popen_system_eintr red is a pre-existing test race (failed the same way at its own landing, 2026-10-24); gate, plants (8/8 CAUGHT) and counts green on the unchanged strstr entry; hit_64 100.4 vs glibc 99.4 instr on Skylake-SP",
+ "branch": "task/timing-cov-strstr-pair-2", "head": null,
+ "gate": {"affected": "10639 passed / 0 failed (13 suites, conformance 124/124)", "peak": "15G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "liella::popen_system_eintr system_signal_state_during_and_after reads HITS once after system returns; the SIGCHLD handler can run on libtest's main thread (SIGCHLD unblocked there) and still be in flight -> hits=0 under load. Failed in gate3 (keke) and in the CI gate of its own landing (2026-10-24). Fix in its own story: wait for HITS under an iteration budget.",
+  "GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2 left both Liella and glibc counts unchanged under xtask bench on Skylake-SP (as on Zen 1): the SSE2 level of the entry is not confirmed by a count.",
+  "hit_64 time on an unbooked Skylake-SP host at load ~20: glibc 7.95 ns / Liella 10.01 ns (1.26); decides nothing, left to the periodic sweep."
+ ],
+ "refused": [],
+ "improvement": "affected.log lives in the role's target/ and is overwritten by the next run; gate failures should keep the failing test's captured output in the job log (~/logs/<label>.log) so a continuation can read it.",
+ "next_step": "Own story for the popen_system_eintr race; timing of strstr_* from the periodic sweep.",
+ "report_file": "handoff/timing-cov-strstr-pair.md",
+ "jobs": ["mei:timing-cov-strstr-pair-2-gate", "mei:timing-cov-strstr-pair-2-plants", "mei:timing-cov-strstr-pair-2-counts"]}

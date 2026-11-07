@@ -34,3 +34,15 @@ pub(crate) fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
     }
     liella_math::trig::kernel::sincos_nearest(x)
 }
+
+/// The `double` `cexp` quick tier (LIBM-CPLX-EXP-TIER, D-10.53) in its build chosen at startup (as
+/// [`exp_nearest`](super::exp_nearest); the two builds agree bit for bit): both parts or `None`.
+#[inline(always)]
+pub(crate) fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::complex_fast::fused::cexp_nearest(x, y) };
+    }
+    liella_math::complex_fast::cexp_nearest(x, y)
+}

@@ -54,6 +54,7 @@ priority = 100
 # gate does not end on one of them running alone while the other threads are idle (they used to
 # start among the last ~100 of ~4800). Priority changes only the order, never what runs. A new
 # test of more than a minute belongs here (the gate log's longest PASS lines show them).
+# GATE-NEXTEST-PRIORITY-REFRESH (2026-11-07): refreshed from the 10 latest green FULL CI gates.
 [[profile.default.overrides]]
 filter = """
 test(/^pattern::regex::plain_tests::required_strings_are_in_every_match_/)
@@ -65,6 +66,18 @@ test(/^pattern::regex::plain_tests::required_strings_are_in_every_match_/)
 | (binary(=complex_ld_cr_products) & test(/^complex_long_double_functions_against_the_reference_and_the_oracle_s/))
 | (binary(=casecmp_avx2) & test(=casecmp_equals_the_path_of_before_at_every_alignment_pair_length_and_difference))
 | test(=affected::tests::csys_assembly_selects_the_users_of_its_symbols)
+| test(=affected::tests::csys_falls_back_to_full_when_unsure)
+| test(=bench::tests::counters_files_hold_only_their_own_runs_rows)
+| test(=fast32::tests::inverse_trig_cores_are_within_their_bounds)
+| (binary(=fast_gamma) & test(/^double_gamma_(kernels_stay_within_their_bounds_and_rarely_fall_back|fast_tier_rounds_correctly)/))
+| (binary(=complex_f128_products) & test(/^complex_f128_functions_against_the_reference_and_the_oracle_s/))
+| (binary(=complex_products) & test(/^complex_functions_against_the_reference_and_the_oracle_s/))
+| (binary(=special_ld_products) & test(/^long_double_special_functions_against_the_reference_s/))
+| (binary(=special_f128_products) & test(/^float128_special_functions_against_the_reference_s/))
+| (binary(=special_products) & test(=special_functions_on_special_operands))
+| (binary(=regex_subpatterns) & test(=back_references_over_unary_strings_finish))
+| (binary(=heap_threads) & test(=statistics_never_read_below_the_blocks_live_throughout))
+| (binary(=core_contracts) & test(=mutex_stress_mixed_entry_points_lose_no_update))
 """
 priority = 90
 

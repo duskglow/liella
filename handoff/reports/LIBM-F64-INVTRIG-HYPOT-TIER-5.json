@@ -16,7 +16,7 @@
   "saturation section 21 was taken on next by LIBM-WIDE-DD-TIER; this story's section is now 22"
  ],
  "refused": [],
- "improvement": "sync_role.sh/vm_ssh.sh accept a host name but fail with 'invalid variable name' on an address (10.0.100.66); the error could say 'use the host name'",
+ "improvement": "sync_role.sh/vm_ssh.sh accept a host name but fail with 'invalid variable name' on an address (shiki); the error could say 'use the host name'",
  "next_step": "cut settle (37 instructions, now atan's largest phase), then the single-double-quotient + j/256 table design in saturation section 22",
  "report_file": "handoff/libm-f64-invtrig-hypot-tier.md",
  "jobs": [

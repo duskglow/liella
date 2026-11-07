@@ -910,6 +910,36 @@ pub fn elem32_fast<const HW: u8>(
     elem_fast::<HW, f32, f32>(x, fast, f)
 }
 
+/// An envelope `float` function whose fast path runs in the caller's environment without reading
+/// MXCSR (LIBM-F32-ONEPASS, D-10.63): `fast` evaluates once in `double` and converts in the
+/// caller's rounding direction. `fast` must answer only where its result is right in every
+/// direction and under FTZ and DAZ, and where the arithmetic raises inexact and nothing else
+/// (inexact only for an inexact result); it must refuse before any floating-point operation an
+/// operand whose conversion could raise a flag (NaN, subnormal). A refusal may therefore leave
+/// inexact raised only when the result is inexact, and the fallback [`elem`] then reads MXCSR as
+/// usual. A NaN operand returns `x + x` (quiet; invalid for a signalling NaN) before the envelope.
+#[inline(always)]
+pub fn elem32_onepass(
+    x: f32,
+    fast: impl FnOnce(f32) -> Option<f32>,
+    f: impl FnOnce(f32, Rounding) -> (f32, Status),
+) -> f32 {
+    match fast(x) {
+        Some(v) => v,
+        None => elem32_onepass_cold(x, f),
+    }
+}
+
+/// [`elem32_onepass`]'s refusals, out of line and cold: a NaN, or the full envelope.
+#[cold]
+#[inline(never)]
+fn elem32_onepass_cold(x: f32, f: impl FnOnce(f32, Rounding) -> (f32, Status)) -> f32 {
+    if x.is_nan() {
+        return x + x;
+    }
+    elem(x, Unit::Sse, f)
+}
+
 /// [`elem32_fast`] for any argument and a `float` or `double` result: the `double` exp, exp2,
 /// log, log2, log10 and pow entries use it with the `*_nearest` functions of
 /// `liella_math::fast64` (MATH-M6-F64-FAST-ENTRY), under the same contract (including `HW`).
@@ -1107,6 +1137,38 @@ pub fn cplx<C: CPart>(z: Complex<C>, unit: Unit, f: impl FnOnce(C::V, C::V, Roun
     }
     exit(e, st);
     r
+}
+
+/// [`cplx`] with an in-place attempt (LIBM-CPLX-EXP-TIER, as [`elem_fast`]): in the default
+/// environment `fast` runs first and its parts are the result (it raises inexact in hardware and
+/// nothing else where it answers); otherwise, and in every other mode, [`cplx`] runs, after the
+/// flags the attempt may have raised are dropped again (cold, out of line).
+#[inline(always)]
+pub fn cplx_fast<C: CPart>(
+    z: Complex<C>,
+    unit: Unit,
+    fast: impl FnOnce(C::V, C::V) -> Option<(C::V, C::V)>,
+    f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status),
+) -> Complex<C> {
+    let (saved, in_place) = fpu::peek(&CSys);
+    if in_place {
+        // The barrier as in `elem_fast`.
+        let z = core::hint::black_box(z);
+        if let Some((re, im)) = fast(z.re.v(), z.im.v()) {
+            return Complex { re: C::of_v(re), im: C::of_v(im) };
+        }
+        return cplx_fast_cold(z, saved, unit, f);
+    }
+    cplx(z, unit, f)
+}
+
+/// [`cplx_fast`]'s fallback after an attempt: MXCSR back to `saved` (the attempt's inexact or
+/// denormal-operand bits dropped unless the caller had them), then [`cplx`].
+#[cold]
+#[inline(never)]
+fn cplx_fast_cold<C: CPart>(z: Complex<C>, saved: u32, unit: Unit, f: impl FnOnce(C::V, C::V, Rounding) -> ((C::V, C::V), Status)) -> Complex<C> {
+    fpu::settle(&CSys, saved, fpu::Flags(0), FAST_ATTEMPT_HW);
+    cplx(z, unit, f)
 }
 
 /// `cpow`: a complex function of two complex arguments.

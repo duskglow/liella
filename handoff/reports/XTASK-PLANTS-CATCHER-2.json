@@ -1,0 +1,6 @@
+{"task": "XTASK-PLANTS-CATCHER-2", "model": "opus", "tokens": null, "result": "cargo xtask plants names the test that caught each plant and writes results.txt; built and tested on run 2 (17 unit tests, 7/7 plants caught), decision row D-NEW", "branch": "task/xtask-plants-catcher-2", "head": null,
+ "gate": {"affected": "escalated to FULL (xtask changed); mei:xtask-plants-catcher-2-gate1 running at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [], "informational": ["D-NEW placeholder in plan/07-decisions/x-implementation-decisions.md: no id was reserved in the brief", "any xtask change escalates affected to the FULL tier, so this tooling story's gate is a full gate"], "refused": [],
+ "jobs": ["mei:xtask-plants-catcher-2-gate1", "mei:xtask-plants-catcher-2-plants1"],
+ "improvement": "the run prompt naming the build role fixed run 1's no-host stall; a plants-only xtask change could gate on the xtask unit tests instead of escalating to FULL",
+ "next_step": "coordinator: replace D-NEW with a reserved id; nothing else for the story", "report_file": "handoff/xtask-plants-catcher.md"}

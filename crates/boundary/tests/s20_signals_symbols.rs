@@ -72,16 +72,9 @@ extern "C" fn with_info(sig: i32, info: Option<&SigInfo>, _ctx: *mut core::ffi::
     }
 }
 
-/// Waits (up to a second) for the handler to have run `n` times: a process-directed signal
-/// may be handled by another thread, after the send returned.
-fn wait_hits(n: u32) {
-    for _ in 0..1000 {
-        if HITS.load(Ordering::SeqCst) >= n {
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-}
+#[path = "../../core/tests/support/single_thread.rs"]
+mod single_thread;
+use single_thread::{single_threaded, sole_thread};
 
 fn handler() -> usize {
     count as extern "C" fn(i32) as usize
@@ -197,15 +190,15 @@ fn sym_gsignal() {
 
 #[test]
 fn sym_kill() {
-    alone("sym_kill", || {
+    // A process-directed signal: the only thread of a fork child takes it before kill returns.
+    alone("sym_kill", || single_threaded(|| {
         s::signal(SIGUSR1, handler());
-        let me = std::process::id() as i32;
+        let me = CSys.getpid();
         let sent = s::kill(me, SIGUSR1) == 0;
         let probe = s::kill(me, 0) == 0;
-        wait_hits(1);
         errno::set_raw(0);
-        sent && probe && HITS.load(Ordering::SeqCst) == 1 && fails(s::kill(i32::MAX - 1, 0) as isize, ESRCH) && fails(s::kill(me, 99) as isize, EINVAL)
-    });
+        sent && probe && sole_thread() && HITS.load(Ordering::SeqCst) == 1 && fails(s::kill(i32::MAX - 1, 0) as isize, ESRCH) && fails(s::kill(me, 99) as isize, EINVAL)
+    }));
 }
 
 #[test]
@@ -627,13 +620,12 @@ fn sym_sigprocmask() {
 
 #[test]
 fn sym_sigqueue() {
-    alone("sym_sigqueue", || {
+    alone("sym_sigqueue", || single_threaded(|| {
         let a = action(with_info as extern "C" fn(i32, Option<&SigInfo>, *mut core::ffi::c_void) as usize, SA_SIGINFO);
         s::sigaction(40, Some(&a), None);
-        let ok = s::sigqueue(std::process::id() as i32, 40, 1234) == 0;
-        wait_hits(1);
-        ok && HITS.load(Ordering::SeqCst) == 1 && INFO_VALUE.load(Ordering::SeqCst) == 1234 && LAST.load(Ordering::SeqCst) == 40
-    });
+        let ok = s::sigqueue(CSys.getpid(), 40, 1234) == 0;
+        ok && sole_thread() && HITS.load(Ordering::SeqCst) == 1 && INFO_VALUE.load(Ordering::SeqCst) == 1234 && LAST.load(Ordering::SeqCst) == 40
+    }));
 }
 
 #[test]

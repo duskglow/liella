@@ -27,6 +27,7 @@ use crate::mp::{self, Mp};
 use crate::status::{Rounding, Status};
 use crate::trig::elem_round_below;
 use crate::wide_dd;
+use crate::wide_int;
 
 /// The value of a finite or zero operand.
 pub(crate) fn value(n: &Num) -> Mp {
@@ -552,6 +553,9 @@ pub fn sin<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if cubic_tiny::<F>(&n) {
         return near_x(&n, false, mode); // x − x³/6
     }
+    if let Some(r) = wide_int::sin_cos::<F>(&n, false, mode) {
+        return r;
+    }
     approx(sin_cos_of(&n).0, mode)
 }
 
@@ -563,6 +567,9 @@ pub fn cos<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     };
     if cubic_tiny::<F>(&n) {
         return near_one(false, false, mode); // 1 − x²/2
+    }
+    if let Some(r) = wide_int::sin_cos::<F>(&n, true, mode) {
+        return r;
     }
     approx(sin_cos_of(&n).1, mode)
 }

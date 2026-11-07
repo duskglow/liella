@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-STRNCMP-DIFF8", "model": "opus", "tokens": null,
+ "result": "strncmp SSE2 head reuses the entry's OR page test: SSE2-class instructions diff8 56->36 (glibc 39), eq16 67->48 (66), names64 89->68 (83); AVX2 class unchanged; booked timing pending",
+ "branch": "task/timing-cov-strncmp-diff8", "head": null,
+ "gate": {"affected": "timing-cov-strncmp-diff8-gate rc 0 (clippy, static, affected --base origin/next)", "peak": "9.1 GB"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-NEW placeholder in plan/07-decisions/s04 and the test comment (brief reserved no id)", "recommendation": "reserve a D-4.n and assign_placeholder before landing"}],
+ "informational": ["timing on Ivy Bridge and N100 not run: budget; staged tarball from job timing-cov-strncmp-diff8-stage-2, script handoff/TIMING-COV-STRNCMP-DIFF8-timing.sh"],
+ "refused": [],
+ "improvement": "xtask bench --stage with no path fails in 0.25 s after a 50-min counts job in the same chain; developer-flow's recipe should show the tarball argument",
+ "next_step": "time cbench_hot strncmp rows on nico (default) and nozomi (--tunables glibc.cpu.hwcaps=-AVX2) from the staged tarball",
+ "report_file": "handoff/TIMING-COV-STRNCMP-DIFF8.md",
+ "jobs": ["shiki:timing-cov-strncmp-diff8-gate", "shiki:timing-cov-strncmp-diff8-plants-2", "shiki:timing-cov-strncmp-diff8-counts-before", "shiki:timing-cov-strncmp-diff8-counts-after", "shiki:timing-cov-strncmp-diff8-stage-2"]}

@@ -32,7 +32,7 @@ only commit adds the NEGATIVE update with the comparison-count table to `docs/sa
   (static against ~/wl/products/ff125cce.../libc.a, output liella.txt), rc 0: all 70 cells equal the model's, every
   sort sorted and stable.
 * gate: pqc-gate (clippy, static, `cargo xtask affected` direct tier on the docs-only commit), started detached at
-  hand-back; re-attach `ssh claude@10.0.100.53 '~/bin/jobwait pqc-gate'`.
+  hand-back; re-attach `ssh claude@keke '~/bin/jobwait pqc-gate'`.
 * Plants: none. No library or test code changed, so there is nothing to plant.
 
 ## Open questions / rulings

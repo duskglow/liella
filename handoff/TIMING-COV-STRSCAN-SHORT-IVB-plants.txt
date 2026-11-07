@@ -1,0 +1,21 @@
+# TIMING-COV-STRSCAN-SHORT-IVB plants: the strchr / strchrnul SSE2 head blocks 1-3 (block 2 falls through into
+# block 3 on a miss, block 2's hit tail out of line) in csys/src/machine/scan.S. machine_scanners runs each kernel on
+# both scan levels (SSE2, and AVX2 on the build host); spec §4.5 (strchr/strchrnul).
+# strchr: block 1's inline tail returns one block early (offset 0 instead of 16).
+strchr-b1-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_s16:.*?)leaq 16\(%rdi,%rcx\), %rax/$1leaq (%rdi,%rcx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: block 2's branch inverted (a hit falls into block 3, a miss takes block 2's tail).
+strchr-b2-branch | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?)jnz \.Lschr_t32/$1jz .Lschr_t32/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: block 2's out-of-line tail off by one.
+strchr-t32-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_t32:.*?)leaq 32\(%rdi,%rcx\), %rax/$1leaq 31(%rdi,%rcx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: block 2's tail swaps c and NUL (NULL for a found c, a pointer for the terminator).
+strchr-t32-null | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_t32:.*?)jnc \.Lschr_snull/$1jc .Lschr_snull/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchr: block 3's inline tail returns block 2's position.
+strchr-b3-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchr:.*?\.Lschr_s32:.*?)leaq 48\(%rdi,%rcx\), %rax/$1leaq 32(%rdi,%rcx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchrnul: block 1's inline tail one block early.
+strchrnul-b1-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_s16:.*?)leaq 16\(%rdi,%rdx\), %rax/$1leaq (%rdi,%rdx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchrnul: block 2's branch inverted.
+strchrnul-b2-branch | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?)jnz \.Lschrnul_t32/$1jz .Lschrnul_t32/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchrnul: block 2's tail off by one.
+strchrnul-t32-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_t32:.*?)leaq 32\(%rdi,%rdx\), %rax/$1leaq 33(%rdi,%rdx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
+# strchrnul: block 3's inline tail returns block 2's position.
+strchrnul-b3-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strchrnul:.*?\.Lschrnul_s32:.*?)leaq 48\(%rdi,%rdx\), %rax/$1leaq 32(%rdi,%rdx), %rax/s | cargo test -p liella-boundary --test machine_scanners | msg:string scanner postcondition failed|strchr.*(FAILED|panicked)
