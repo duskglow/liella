@@ -1,0 +1,16 @@
+{"task": "LEGACY-RPC-LIBNSL-PLACEHOLDER", "model": "opus", "tokens": null,
+ "result": "libnsl.so.1 built as a placeholder of 121 failing NIS/YP/NIS+ stubs from one failure table (D-29.6); s29_2_c_0 specified; 6/6 plants caught",
+ "branch": "task/legacy-rpc-libnsl-placeholder", "head": "16522abb",
+ "gate": {"affected": "keke:legacy-rpc-libnsl-placeholder-gate (see hand-back; prep5 clippy+static rc 0, s29_2_c_0 passed in prep3)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Old programs cannot load libnsl.so.1 at run time before Liella's ld.so (DL-14): link-time binding and readelf checks stand in (NOT VERIFIED at run time).",
+   "docs/spec-symbol-gaps.tsv/.md are stale (DL-1 placeholders, D-29.5's 17 RPC names, these 121 names): regenerate with cargo xtask symcov --tsv in lane step 4 (docs).",
+   "Values from black-box probes of the reference with no NIS configured; nis_dir_cmp uses NOT_SEQUENTIAL (3) because BAD_NAME's number was not probe-confirmed.",
+   "plants: WARN-DEV-SHM printed for the /dev/shm plants dir (as developer-flow prescribes for this host class)."],
+ "refused": [],
+ "jobs": ["keke:legacy-rpc-libnsl-placeholder-gate", "keke:legacy-rpc-libnsl-placeholder-plants", "keke:legacy-rpc-libnsl-placeholder-prep5"],
+ "improvement": "A placeholder plant that removes a product survives on stale artefacts in the plants copy; cargo xtask plants could clear target/liella before each mutant build",
+ "next_step": "Lane step 3: remove the dead legacy crate code (sunrpc_clnt/svc, des, rcmd) after moving the printer texts and resv_ports into boundary",
+ "report_file": "handoff/legacy-rpc-nis.md"}

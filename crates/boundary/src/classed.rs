@@ -197,6 +197,7 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
 
 /// The start-up step (static step 4, right after `cpu::init_with`): `avx2` is the class that
 /// `init_with` decided (`cpu::avx2_in` of its state), so the step reads no CPU features itself.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
     let _ = install_with(&Kernel, page0_addr(), avx2, swap_disabled(t.no_classed_swap));
 }

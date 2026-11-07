@@ -4,18 +4,25 @@
 //! caller's buffers (socket numbers, results, addresses) as they were, open no file descriptor and
 //! keep no memory; `clnt_spcreateerror` must then print the stub's error.
 //! One test only: the heap check reads process-wide counters, which another test thread would move.
+//! With `export` the test harness allocates from Liella's heap too (libtest's main thread may
+//! allocate while the test runs), so there the checks run in a child forked from the test's thread:
+//! the child's only thread, so nothing else moves the counters and the equality stays exact
+//! (RPC-STUB-HEAP-CHECK-ISOLATE).
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::indexing_slicing, unreachable_pub)]
 
 use core::ffi::{c_char, c_int, c_ulong, c_void};
 use core::ptr::{null, null_mut};
 use std::collections::BTreeSet;
 use std::ffi::OsString;
+use std::io::Write;
 
 use liella_boundary::errno;
 use liella_boundary::posix::s03_memory as m;
 use liella_boundary::posix::s29_rpc_auth::EOPNOTSUPP;
 use liella_boundary::posix::s29_rpc_clnt::{self as c, Timeval};
 use liella_boundary::posix::s29_rpc_svc as s;
+use liella_boundary::sys::CSys;
+use liella_kernel::sys::Sys;
 
 const CANARY: u8 = 0xA5;
 const RPC_SYSTEMERROR: i64 = 12;
@@ -113,6 +120,36 @@ fn run(f: &dyn Fn(*mut c_char) -> i64) -> (i64, i32, [u8; 64]) {
 #[test]
 fn every_rpc_client_and_server_stub_fails_cleanly() {
     // Trace: no spec clause (§29.1 RPC client/server stubs; D-29.5 failure table, owner rulings R13 and 2026-10-27).
+    // Without `export` the harness's allocations come from the host allocator and never move
+    // Liella's counters: the checks run here.
+    if cfg!(feature = "export") {
+        in_forked_child(check_every_stub);
+    } else {
+        check_every_stub();
+    }
+}
+
+/// Runs `body` in a child forked from this thread (the child's only thread) and fails unless
+/// it returned. A failing child writes its panic message to the shared stderr, past the capture.
+fn in_forked_child(body: fn()) {
+    let pid = liella_boundary::fork::fork().unwrap();
+    if pid == 0 {
+        let code = match std::panic::catch_unwind(body) {
+            Ok(()) => 0,
+            Err(e) => {
+                let text = e.downcast_ref::<String>().map(String::as_str).or_else(|| e.downcast_ref::<&str>().copied()).unwrap_or("(no message)");
+                let _ = std::io::stderr().write_all(format!("forked child: {text}\n").as_bytes());
+                1
+            }
+        };
+        CSys.exit_group(code);
+    }
+    let (got, status) = CSys.wait4(pid, 0, None).unwrap();
+    assert_eq!((got, status), (pid, 0), "the forked child failed (its message is on stderr)");
+}
+
+/// Every stub's failure value, errno, buffers, descriptors, heap and `rpc_createerr`.
+fn check_every_stub() {
     let table = table();
     let want_text: &[u8] = b"stub: RPC: Remote system error - Operation not supported\n";
     // First round: the per-thread rpc_createerr and printer blocks are made here (freed at thread exit).

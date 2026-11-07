@@ -16,8 +16,9 @@
 //!
 //! The bodies: a `__<lib>_version_placeholder` returns (it only carries the version nodes; no
 //! header declares it). Any other export takes its body from `crates/libc-so/placeholders/<lib>.c`
-//! (`liella_ph_<name>`); an export without one is an error, so a new table row never becomes a
-//! silent no-op.
+//! (`liella_ph_<name>`), or, for a library with a failure table `crates/libc-so/placeholders/<lib>.tsv`
+//! (`libnsl.so.1`, D-29.6), from the C [`stub_bodies`] generates out of it, one stub per row; an
+//! export without a body is an error, so a new table row never becomes a silent no-op.
 //!
 //! **The check** ([`product_errors`]) reads the built object back with `readelf` and compares it
 //! with the table independently of the generator: soname, `DT_NEEDED libc.so.6`, the version
@@ -32,7 +33,7 @@ use std::process::Command;
 
 /// The placeholder libraries (design §16). Which libraries are placeholders is the design's
 /// choice; what each exports and which version nodes it has come from versions.tsv.
-pub const LIBRARIES: [&str; 6] = ["libpthread.so.0", "libdl.so.2", "librt.so.1", "libutil.so.1", "libanl.so.1", "libc_malloc_debug.so.0"];
+pub const LIBRARIES: [&str; 7] = ["libpthread.so.0", "libdl.so.2", "librt.so.1", "libutil.so.1", "libanl.so.1", "libc_malloc_debug.so.0", "libnsl.so.1"];
 
 /// The libraries whose empty static archive lets `-static -l<x>` resolve (their symbols are in
 /// `libc.a`); `libpthread.a` is one of them.
@@ -154,6 +155,120 @@ pub fn c_source(plan: &Plan, body_file: Option<(&Path, &str)>) -> Result<String,
         }
     }
     Ok(s)
+}
+
+/// The size of the NIS+ result object a `result` stub returns: the status (first member, the
+/// only one a stub sets), then the object list, the cookie and the four tick counts, all zero.
+/// The reference's result object is the same 56 bytes (probe, D-29.6).
+pub const NIS_RESULT_SIZE: usize = 56;
+
+/// One row of a failure table (`crates/libc-so/placeholders/<lib>.tsv`, D-29.6): what the stub of
+/// `name` does. The kinds are documented in the table's header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stub {
+    /// Return the number, `errno` untouched.
+    Int(i32),
+    /// Return `NULL` with `errno` `EOPNOTSUPP`.
+    Null,
+    /// Return a new result object with this status (freed by the `free` stub).
+    Result(i32),
+    /// No effect.
+    Void,
+    /// Free the pointer given.
+    Free,
+    /// Return the constant text.
+    Text(String),
+    /// Copy the text into the caller's buffer `(status, label, buf, len)` and return the buffer.
+    TextBuf(String),
+    /// Print `<label>: <text>` to stderr `(status, label)`.
+    Perror(String),
+}
+
+/// The rows of a failure table: `(name, stub)` in table order. Lines starting with `#` and the
+/// `symbol` header line are skipped; anything malformed is an error naming the line.
+pub fn stub_table(text: &str) -> Result<Vec<(String, Stub)>, String> {
+    let mut out: Vec<(String, Stub)> = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.starts_with('#') || line.starts_with("symbol\t") || line.is_empty() {
+            continue;
+        }
+        let bad = |why: &str| format!("failure table line {}: {why}: {line:?}", i + 1);
+        let [name, kind, value] = line.split('\t').collect::<Vec<_>>()[..] else { return Err(bad("not `symbol<TAB>kind<TAB>value`")) };
+        if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err(bad("the symbol is not a C name"));
+        }
+        let num = || value.parse::<i32>().map_err(|_| bad("the value is not a number"));
+        let text = || {
+            if value.is_empty() || value.bytes().any(|b| !(b' '..=b'~').contains(&b) || b == b'"' || b == b'\\' || b == b'%') {
+                Err(bad("the text is empty or has a character other than printable ASCII without `\"`, `\\` and `%`"))
+            } else {
+                Ok(value.to_string())
+            }
+        };
+        let stub = match kind {
+            "int" => Stub::Int(num()?),
+            "result" => Stub::Result(num()?),
+            "null" | "void" | "free" if value != "-" => return Err(bad("the value of this kind is `-`")),
+            "null" => Stub::Null,
+            "void" => Stub::Void,
+            "free" => Stub::Free,
+            "text" => Stub::Text(text()?),
+            "textbuf" => Stub::TextBuf(text()?),
+            "perror" => Stub::Perror(text()?),
+            _ => return Err(bad("unknown kind")),
+        };
+        if out.iter().any(|(n, _)| n == name) {
+            return Err(bad("the symbol has a row already"));
+        }
+        out.push((name.to_string(), stub));
+    }
+    Ok(out)
+}
+
+/// The C bodies of `plan`'s exports from its failure table `table` (`stub_table` text): one
+/// `liella_ph_<name>` per row. Every export must have exactly one row and every row an export,
+/// so the table, versions.tsv and the product never drift apart.
+pub fn stub_bodies(plan: &Plan, table: &str) -> Result<String, String> {
+    let rows = stub_table(table)?;
+    let exports: BTreeSet<&str> = plan.exports.iter().map(|e| e.name.as_str()).filter(|n| !is_version_placeholder(n)).collect();
+    let named: BTreeSet<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
+    let mut errors = Vec::new();
+    for n in exports.difference(&named) {
+        errors.push(format!("{}: export {n} has no row in its failure table", plan.soname));
+    }
+    for n in named.difference(&exports) {
+        errors.push(format!("{}: failure table row {n} is not an export of versions.tsv", plan.soname));
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+    let mut s = format!("/* @generated by `cargo xtask so` from the failure table of {} (D-29.6). */\n", plan.soname);
+    s.push_str("#include <errno.h>\n#include <stddef.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
+    if rows.iter().any(|(_, k)| matches!(k, Stub::Result(_))) {
+        s.push_str(&format!("/* A result object: status first, everything after it zero; freed by the `free` stub. */\nstatic void *liella_ph_result(int status) {{\n    int *r = calloc(1, {NIS_RESULT_SIZE});\n    if (r != NULL)\n        *r = status;\n    return r;\n}}\n\n"));
+    }
+    for (name, stub) in &rows {
+        let f = format!("liella_ph_{name}");
+        let (proto, body) = match stub {
+            Stub::Int(v) => (format!("int {f}(void)"), format!("    return {v};\n")),
+            Stub::Null => (format!("void *{f}(void)"), "    errno = EOPNOTSUPP;\n    return NULL;\n".to_string()),
+            Stub::Result(v) => (format!("void *{f}(void)"), format!("    return liella_ph_result({v});\n")),
+            Stub::Void => (format!("void {f}(void)"), String::new()),
+            Stub::Free => (format!("void {f}(void *p)"), "    free(p);\n".to_string()),
+            Stub::Text(t) => (format!("const char *{f}(void)"), format!("    return \"{t}\";\n")),
+            Stub::TextBuf(t) => (format!("char *{f}(int status, const char *label, char *buf, size_t len)"), format!(
+                "    (void)status;\n    (void)label;\n    if (buf == NULL || len == 0)\n        return NULL;\n    size_t n = sizeof \"{t}\" - 1 < len - 1 ? sizeof \"{t}\" - 1 : len - 1;\n    memcpy(buf, \"{t}\", n);\n    buf[n] = '\\0';\n    return buf;\n")),
+            Stub::Perror(t) => (format!("void {f}(int status, const char *label)"), format!(
+                "    (void)status;\n    if (label != NULL && *label != '\\0')\n        fprintf(stderr, \"%s: {t}\\n\", label);\n    else\n        fputs(\"{t}\\n\", stderr);\n")),
+        };
+        s.push_str(&format!("{proto};\n{proto} {{\n{body}}}\n"));
+    }
+    Ok(s)
+}
+
+/// The failure table of library `soname`, if it has one (D-29.6).
+fn stub_table_path(root: &Path, soname: &str) -> std::path::PathBuf {
+    body_path(root, soname).with_extension("tsv")
 }
 
 /// The hand-written bodies of library `soname`, if it has any.
@@ -309,8 +424,20 @@ pub fn build(root: &Path, release: &Path, work: &Path, cc: &str, ar: &str) -> Re
     let mut summary = Vec::new();
     for soname in LIBRARIES {
         let plan = plan(&table, soname)?;
-        let bodies = body_path(root, soname);
-        let body_text = fs::read_to_string(&bodies).ok();
+        // A failure table (D-29.6) gives the bodies; otherwise the hand-written file, if any.
+        let (bodies, body_text) = match fs::read_to_string(stub_table_path(root, soname)) {
+            Ok(table) => {
+                let text = stub_bodies(&plan, &table)?;
+                let p = work.join(format!("{soname}.bodies.c"));
+                fs::write(&p, &text).map_err(|e| e.to_string())?;
+                (p, Some(text))
+            }
+            Err(_) => {
+                let p = body_path(root, soname);
+                let text = fs::read_to_string(&p).ok();
+                (p, text)
+            }
+        };
         let src = c_source(&plan, body_text.as_deref().map(|t| (bodies.as_path(), t)))?;
         let c = work.join(format!("{soname}.c"));
         let map = work.join(format!("{soname}.map"));
@@ -409,6 +536,25 @@ mod tests {
         assert!(c_source(&p, None).unwrap_err().contains("quux has no body"));
         let body = "void *liella_ph_quux(void) { return 0; }\n";
         assert!(c_source(&p, Some((Path::new("b.c"), body))).unwrap().contains("#include \"b.c\""));
+    }
+
+    #[test]
+    fn a_failure_table_gives_one_body_per_export() {
+        // no spec clause: the failure table of a placeholder (D-29.6).
+        let table = format!("{TABLE}libfoo.so.1\tquux\tV_1.2\tcompat\tFUNC\tGLOBAL\t\nlibfoo.so.1\tcorge\tV_1.2\tcompat\tFUNC\tGLOBAL\t\n");
+        let p = plan(&table, "libfoo.so.1").unwrap();
+        let rows = "# comment\nsymbol\tkind\tvalue\nquux\tresult\t41\ncorge\tnull\t-\n";
+        let c = stub_bodies(&p, rows).unwrap();
+        assert!(c.contains("void *liella_ph_quux(void) {\n    return liella_ph_result(41);\n}"), "{c}");
+        assert!(c.contains("void *liella_ph_corge(void) {\n    errno = EOPNOTSUPP;\n    return NULL;\n}"), "{c}");
+        assert!(c.contains(&format!("calloc(1, {NIS_RESULT_SIZE})")), "{c}");
+        assert!(c_source(&p, Some((Path::new("b.c"), &c))).is_ok());
+        assert!(stub_bodies(&p, "quux\tint\t6\n").unwrap_err().contains("export corge has no row"));
+        assert!(stub_bodies(&p, "quux\tint\t6\ncorge\tvoid\t-\nbar\tvoid\t-\n").unwrap_err().contains("row bar is not an export"));
+        assert!(stub_table("quux\tint\tsix\n").unwrap_err().contains("not a number"));
+        assert!(stub_table("quux\tnull\t0\n").unwrap_err().contains("value of this kind is `-`"));
+        assert!(stub_table("quux\ttext\t100%\n").unwrap_err().contains("printable ASCII"));
+        assert!(stub_table("quux\tint\t1\nquux\tint\t2\n").unwrap_err().contains("has a row already"));
     }
 
     #[test]
