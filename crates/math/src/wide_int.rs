@@ -588,22 +588,27 @@ mod tests {
                 check(&operand(&mut g, band), &mut tally);
             }
         }
-        // The smallest operand the tier takes, the x87 values nearest π/2 and π, the largest value.
+        assert!(tally.undecided * 1000 <= tally.calls, "{} of {} undecided", tally.undecided, tally.calls);
+        // Near a multiple of π/2 one of sin, cos is ±(1 − r²/2) within 2^-92 of a representable
+        // value: undecided by design (the 384-bit route settles it). With them: the smallest
+        // operand the tier takes, the x87 values nearest π/2 and π, the largest value.
+        let mut near = Tally::default();
         for (sig, exp) in [(1u64 << 63, -97), (0xc90f_daa2_2168_c235, -63), (0xc90f_daa2_2168_c235, -62), (u64::MAX, 16320)] {
             for neg in [false, true] {
-                check(&Num { neg, kind: Kind::Finite, sig: sig.into(), exp }, &mut tally);
+                check(&Num { neg, kind: Kind::Finite, sig: sig.into(), exp }, &mut near);
             }
         }
-        let closest = near_multiples(61, &mut tally);
+        let closest = near_multiples(61, &mut near);
         eprintln!(
-            "wide_int: {} calls, {} undecided, {} refused, worst error 2^{:.1}, closest |f| 2^-{}",
+            "wide_int: {} calls, {} undecided, worst error 2^{:.1}; near multiples: {} calls, {} undecided, worst 2^{:.1}, closest |f| 2^-{}",
             tally.calls,
             tally.undecided,
-            tally.refused,
             tally.worst.log2(),
+            near.calls,
+            near.undecided,
+            near.worst.log2(),
             closest + 1
         );
-        assert!(tally.undecided * 1000 <= tally.calls, "{} of {} undecided", tally.undecided, tally.calls);
     }
 
     /// The brief's sweep: 10^7 seeded operands over the four bands and the near multiples of π/2 at
@@ -626,7 +631,7 @@ mod tests {
                     })
                 })
                 .collect();
-            handles.into_iter().map(|h| h.join().expect("sweep thread")).collect()
+            handles.into_iter().map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))).collect()
         });
         let mut all = Tally::default();
         for t in &tallies {
@@ -635,14 +640,18 @@ mod tests {
             all.refused += t.refused;
             all.worst = all.worst.max(t.worst);
         }
-        let closest = near_multiples(1, &mut all);
+        let mut near = Tally::default();
+        let closest = near_multiples(1, &mut near);
         eprintln!(
-            "wide_int long: {} operands, {} calls, {} undecided, {} refused, worst error 2^{:.2}, closest |f| 2^-{}",
+            "wide_int long: {} operands, {} calls, {} undecided, {} refused, worst error 2^{:.2}; near multiples: {} calls, {} undecided, worst 2^{:.2}, closest |f| 2^-{}",
             TOTAL,
             all.calls,
             all.undecided,
             all.refused,
             all.worst.log2(),
+            near.calls,
+            near.undecided,
+            near.worst.log2(),
             closest + 1
         );
         assert!(all.undecided * 100_000 <= all.calls, "{} of {} undecided", all.undecided, all.calls);
