@@ -1,0 +1,12 @@
+{"task": "DL-LDSO-PRODUCT", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: ld.so product, ld entry, provisional TB, L14-1 check and tests written; ld.so links and passes L14-1 but segfaults at start (GOT call before relocation)",
+ "branch": "task/dl-ldso-product", "head": null,
+ "gate": {"affected": "not run", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "ld.so --version/--help text is Liella's own (names Liella, the 2.39 ABI and Arch::INTERP), not glibc's", "recommendation": "keep; no differences row unless the owner wants the text treated as ABI"}],
+ "informational": ["origin/next startup counters on shiki: startup_instr_c 2149, printf 71852, setloc 68058, wctype 69108", "L14-3 already holds: csys is built -fno-stack-protector", "product-only boundary build warns about 4 dead functions"],
+ "refused": [],
+ "jobs": ["shiki:dl-ldso-product-bench-next"],
+ "superseded": ["shiki:dl-ldso-product-check1 (attribute typo)", "shiki:dl-ldso-product-check2 (anchor not built under ld; GLOB_DAT)", "shiki:dl-ldso-product-check3 (crash, before pie flag)", "shiki:dl-ldso-product-check4 (crash: GOT call before relocation)"],
+ "improvement": "a pre-relocation GOT-call check (objdump of the entry path) in xtask would have caught the crash at link time, like boot_anchor_pc_relative does for libc",
+ "next_step": "pass __ehdr_start from liella_machine_ld_entry (leaq, PC-relative) so no C call precedes relocation; then check.sh, gate, plants, branch counters",
+ "report_file": "handoff/DL-LDSO-PRODUCT.md"}

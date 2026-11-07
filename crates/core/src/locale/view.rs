@@ -549,6 +549,24 @@ impl LocaleView {
     /// `iswalpha` in C.UTF-8 went from 68 to 76 instructions.
     #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
+        self.isw_int(c, mask) != 0
+    }
+
+    /// Whether the view has a compiled locale's checked wide tables (the built-in locales do
+    /// not): the arm [`LocaleView::isw_int`] answers inline.
+    #[inline(always)]
+    pub fn has_wide(&self) -> bool {
+        self.wide.is_some()
+    }
+
+    /// [`LocaleView::isw`] as the C `int` the exports return (1 or 0). Always inlined.
+    ///
+    /// The file-backed arm's out-of-line part returns this `int` itself, so an export reaches
+    /// it with a tail jump and keeps no frame on its inline paths (TIMING-COV-WCTYPE-L: the
+    /// `bool` it returned before needed a conversion after the call, so `__iswalpha_l` and
+    /// `__iswctype` saved a register on every call).
+    #[inline(always)]
+    pub fn isw_int(&self, c: u32, mask: Class) -> i32 {
         if let Some((w, _)) = &self.wide {
             // The two common answers are inline and call-free (PERF-WCTYPE-ENUS): a filled
             // Latin-1 entry, and one class's table walk above U+00FF (`iswalpha` passes a
@@ -557,14 +575,14 @@ impl LocaleView {
             // instructions of 101. A fill, a view without a slot and a mixed mask stay out of line.
             if let Ok(b) = u8::try_from(c) {
                 if let Some(v) = self.latin_class_hit(b) {
-                    return v & u32::from(mask.0) != 0;
+                    return i32::from(v & u32::from(mask.0) != 0);
                 }
             } else if mask.0.is_power_of_two() {
-                return w.in_class_bit(mask.0.trailing_zeros(), c);
+                return i32::from(w.in_class_bit(mask.0.trailing_zeros(), c));
             }
             return self.isw_wide(c, mask);
         }
-        ctype::wclasses(c, &self.locale).intersects(mask)
+        i32::from(ctype::wclasses(c, &self.locale).intersects(mask))
     }
 
     /// The filled [`LATIN`] class entry of `b` for this view; `None` when the view has no slot
@@ -586,17 +604,18 @@ impl LocaleView {
         (v != 0).then(|| v.wrapping_sub(1))
     }
 
+    /// The out-of-line part of [`LocaleView::isw_int`], with its `int` answer.
     #[inline(never)]
-    fn isw_wide(&self, c: u32, mask: Class) -> bool {
-        let Some((w, _)) = &self.wide else { return ctype::wclasses(c, &self.locale).intersects(mask) };
+    fn isw_wide(&self, c: u32, mask: Class) -> i32 {
+        let Some((w, _)) = &self.wide else { return i32::from(ctype::wclasses(c, &self.locale).intersects(mask)) };
         if let Ok(b) = u8::try_from(c)
             && let Some(l) = self.latin()
         {
-            return l.class(b, w) & u32::from(mask.0) != 0;
+            return i32::from(l.class(b, w) & u32::from(mask.0) != 0);
         }
         // One table walk, inlined here: as a call it cost a second frame on every character
         // above Latin-1 (PERF-REGRESS-1023-1105-2).
-        ctype::is_w_file(c, mask, w)
+        i32::from(ctype::is_w_file(c, mask, w))
     }
 
     /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`]. Always inlined, as

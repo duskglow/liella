@@ -9,6 +9,8 @@ extern crate alloc;
 
 pub mod arch;
 pub mod boot;
+pub mod link;
+pub mod program;
 pub mod elf;
 pub mod map;
 pub mod search;

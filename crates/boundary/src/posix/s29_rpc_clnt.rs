@@ -22,7 +22,7 @@ use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use liella_abi::ctypes::{c_char, c_int, c_uint, c_ulong, c_ushort, c_void};
 use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{GRND_NONBLOCK, Timespec};
-use liella_legacy::sunrpc_clnt::{self as rules, Text};
+use crate::rpc_text::{self as rules, Text};
 
 use super::s11_lowio::write;
 use super::s15_sockets::bind;

@@ -1,7 +1,7 @@
 # XTASK-TEST-STEP-TIMES: the gate prints each step's wall seconds
 
-State: branch `task/xtask-test-step-times`, cut from origin/next (e0c6b146). Commits: 25eeb144 (code, docs, D-X.35),
-the plants commit, then this handoff. Decision in force: **D-X.35** (plan/07-decisions/x-implementation-decisions.md).
+State: branch `task/xtask-test-step-times`, cut from origin/next (e0c6b146). Commits: 25eeb144 (code, docs, D-X.37),
+the plants commit, then this handoff. Decision in force: **D-X.37** (plan/07-decisions/x-implementation-decisions.md).
 
 ## What changed
 - `xtask/src/steptime.rs` (new): `Steps::time(name, f)` prints `step: <name> <seconds>s` when the step ends, whether

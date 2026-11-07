@@ -236,6 +236,7 @@ fn drop_move_word() {
 }
 
 /// Whether NULL folding is on (the explicit S6 checks are off for the kernel sizes).
+#[cfg(feature = "selftest")] // read only by `selftest::null_fold`
 #[inline(always)]
 pub(crate) fn null_folded() -> bool {
     FOLD.load(Relaxed) != 0
@@ -327,6 +328,7 @@ pub(crate) fn unresolve_null_fold() {
 }
 
 /// Whether the folding decision has been taken.
+#[cfg(feature = "selftest")] // read only by `selftest::null_fold_resolved`
 pub(crate) fn fold_resolved() -> bool {
     FOLD_RESOLVED.load(Relaxed)
 }

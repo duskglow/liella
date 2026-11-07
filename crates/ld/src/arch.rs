@@ -32,6 +32,10 @@ pub trait Arch {
     /// The `EI_DATA` (byte order) of this architecture's objects; the reader decodes every field in
     /// this byte order.
     const EI_DATA: u8;
+    /// The interpreter's file name (design §0a "Loader name, paths, strings"): the soname of the
+    /// `ld.so` product, the name `cargo xtask so` gives it, and the last component of a program's
+    /// `PT_INTERP` path. The directory part comes from the compile-time prefix (R14-3 (a), DL-8).
+    const INTERP: &'static str;
     /// The kind of relocation type `r_type` (design §0a "Relocation types"). Every value maps to a
     /// kind: a type this table does not know is [`RelocKind::Unsupported`], never an error or a panic.
     fn classify(r_type: u32) -> RelocKind;
@@ -88,6 +92,8 @@ impl Arch for X86_64 {
     const E_MACHINE: u16 = 62;
     const EI_CLASS: u8 = ELFCLASS64;
     const EI_DATA: u8 = ELFDATA2LSB;
+    /// The x86-64 psABI's program interpreter name (§5.2.1, "Program Interpreter").
+    const INTERP: &'static str = "ld-linux-x86-64.so.2";
 
     /// The `R_X86_64_*` numbers of the x86-64 psABI (§4.4.1, table "Relocation Types") the loader
     /// handles (design §6); every other number, the x32-only ones included, is `Unsupported`.

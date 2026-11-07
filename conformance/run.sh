@@ -141,6 +141,11 @@ for name in "$@"; do
         relr) flags="$(printf '%s' "$flags" | sed 's/ -static / -static-pie -fPIE /') -Wl,-z,pack-relative-relocs"; start=$rcrt ;;
         *) echo "conformance: FAIL $name (LINK-STATIC-PIE: rela or relr)"; fail=$((fail + 1)); continue ;;
     esac
+    # A C++ static PIE takes the compiler's position-independent begin/end objects, as the
+    # compiler's own -static-pie link does (crtbeginT.o is for a fixed-address static program).
+    if [ "$start" = "$rcrt" ] && [ -n "$cxxbegin" ]; then
+        cxxbegin=$("$comp" -print-file-name=crtbeginS.o); cxxend=$("$comp" -print-file-name=crtendS.o)
+    fi
     # LINK-HELPERS: dynamic-link mode, reference C library only (Liella has no loader yet).
     dyn=""; helpers=$(directive LINK-HELPERS "$src")
     if [ -n "$helpers" ]; then

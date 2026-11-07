@@ -427,16 +427,6 @@ product_data!(
     h_nerr: AtomicI32 = AtomicI32::new(5)
 );
 
-/// Whether `ruserok` consults `~/.rhosts` (`__check_rhosts_file`).
-pub fn check_rhosts() -> bool {
-    __check_rhosts_file.load(core::sync::atomic::Ordering::Relaxed) != 0
-}
-
-/// Point `__rcmd_errstr` at `m` (a static, terminated message).
-pub fn set_rcmd_errstr(m: &'static [u8]) {
-    __rcmd_errstr.store(m.as_ptr().cast_mut(), core::sync::atomic::Ordering::Relaxed);
-}
-
 // ------------------------------------------------------------------------------ §16.4 objects
 //
 // `_res`: the initial thread's resolver state (`struct __res_state`, 568 bytes; the compat

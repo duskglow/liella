@@ -1,0 +1,12 @@
+{"task": "LEGACY-RPC-CRATE-REMOVAL", "model": "opus", "tokens": null,
+ "result": "Removed liella_legacy::{sunrpc_clnt, sunrpc_svc, des, rcmd}, the uncalled rcmd wrappers in boundary::netaddr and the rpc_call/rpc_stream fuzz targets; printer texts and resv_ports moved unchanged to boundary::rpc_text; no export change",
+ "branch": "task/legacy-rpc-crate-removal", "head": "3a5f66f1",
+ "gate": {"affected": "PENDING: shiki:legacy-rpc-crate-removal-gate (affected --base origin/next escalated itself to FULL); prep2 rc 0 (clippy, static, compat-gen --check, rpc_text unit tests 2 passed)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plants shiki:legacy-rpc-crate-removal-plants: 3 plants, 3 CAUGHT, 0 WARN", "xtask affected --base origin/next escalated to FULL for this change set (crate lib.rs / fuzz Cargo.toml / deleted files); left running for the dispatcher", "docs/codemap/README.md row /etc/hosts.equiv points at the removed rcmd.rs: codemap.py (coordinator tool) needs a rerun", "superseded: shiki:legacy-rpc-crate-removal-prep (unused imports in netaddr.rs)"],
+ "refused": [],
+ "jobs": ["shiki:legacy-rpc-crate-removal-prep2", "shiki:legacy-rpc-crate-removal-plants", "shiki:legacy-rpc-crate-removal-gate"],
+ "improvement": "xtask affected escalates a pure deletion to FULL; a deletion-only change set (removed modules with no remaining users) could stay direct-tier by selecting the users of the removed files' former importers",
+ "next_step": "Lane step 4 (docs): the page list in handoff/legacy-rpc-nis.md",
+ "report_file": "handoff/legacy-rpc-nis.md"}

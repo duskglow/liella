@@ -2,14 +2,17 @@
 //!
 //! `sweep run --out <dir> [--only <bench>,...]`, in a staged tree (`bench --stage`) on the timing host, runs
 //! `bench --no-build --staged --counters --only <groups>` with its output in `<dir>/bench.log`. The default groups
-//! are every `cbench_*` group of `bench/budgets.tsv` except `cbench_libm`. It then decides from the tables the
+//! are every `cbench_*` group of `bench/budgets.tsv`, `cbench_libm` included (SWEEP-COMPARE-SELECTED: the libm bench
+//! takes about two minutes per host). It then decides from the tables the
 //! bench wrote, not from its exit status alone, whether the MEASUREMENT finished:
 //! - finished (exit 0): every selected `ratio_host` row has a median in a `ratio_host.tsv` written by this run,
 //!   `rounds.tsv` and a non-empty `counters.tsv` were written, and a nonzero bench exit is explained entirely by
 //!   limit flags (every line of the bench's `budget regressions` report says that a row exceeds a limit). It
 //!   writes the per-host table `<dir>/sweep.tsv`, copies the bench's tables into `<dir>`, and prints one summary
 //!   line (also in `<dir>/summary.txt`) naming the flagged rows. A flagged row is what a sweep looks for, so it
-//!   never fails the run.
+//!   never fails the run. `sweep.tsv`'s `selected` column is `yes` for the selected `ratio_host` rows and `no` for
+//!   counted rows outside the selection (the libm bench's calibration rows). With libm rows selected it also writes
+//!   and prints the per-family table of the libm time ratios (`<dir>/libm-families.md`).
 //! - not finished (nonzero): the bench died on a signal, a table is missing (the tables of an earlier run are
 //!   deleted before the bench starts, so they never count), a selected row has no median, or the bench reported a
 //!   failure that is not a limit flag (a stage refused, a row not measured, a counted value missing). No
@@ -18,7 +21,9 @@
 //! `sweep compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... | --old-table <results.md>)
 //! [--label <name>]` compares the new per-host tables (one per CPU class) with the previous sweep's and prints the
 //! report sections to stdout: verdict counts per class, (a) regressions, (b) reopen, (c) improved, rows new or no
-//! longer measured, run-to-run spread and the median change of the time ratio. `--old-table` reads the combined
+//! longer measured, run-to-run spread, the median change of the time ratio and the libm per-family table. It judges
+//! only the rows whose `selected` column is `yes`; a table without the column (written before
+//! SWEEP-COMPARE-SELECTED) has every row judged, as before, and the report says so. `--old-table` reads the combined
 //! markdown table of a results file written before this tool (the rows after `## Table`, columns `instr <CLASS>`,
 //! `time <CLASS>`, `spread <CLASS>`). The output depends only on the input tables (rows sorted by name).
 
@@ -38,7 +43,7 @@ const FASTER: f64 = 0.95;
 const SLOWER: f64 = 1.05;
 const USAGE: &str = "usage: xtask sweep run --out <dir> [--only <bench>,...]\n       xtask sweep compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... | --old-table <results.md>) [--label <name>]";
 /// The columns of `sweep.tsv`.
-const SWEEP_HEADER: &str = "bench\trow\tinstr\tcycles\ttime\tspread\trounds\tverdict\tlimit\tstatus\tflagged\n";
+const SWEEP_HEADER: &str = "bench\trow\tinstr\tcycles\ttime\tspread\trounds\tverdict\tlimit\tstatus\tflagged\tselected\n";
 
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
@@ -72,13 +77,13 @@ fn last<'a>(m: &BTreeMap<&str, Vec<&'a str>>, flag: &str) -> Option<&'a str> {
 /// The selected groups and their `ratio_host` rows `(bench, row)`, in `bench/budgets.tsv` order.
 type Selection = (Vec<String>, Vec<(String, String)>);
 
-/// The groups of `--only` (default: every `cbench_*` group but `cbench_libm`) and their `ratio_host` rows.
+/// The groups of `--only` (default: every `cbench_*` group, `cbench_libm` included) and their `ratio_host` rows.
 fn selection(budgets: &str, only: Option<&str>) -> Result<Selection, String> {
     let rows: Vec<Vec<&str>> = budgets.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).map(|l| l.split('\t').collect()).collect();
     let known: BTreeSet<&str> = rows.iter().filter_map(|r| r.first().copied()).collect();
     let groups: Vec<String> = match only {
         Some(o) => o.split(',').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect(),
-        None => known.iter().filter(|b| b.starts_with("cbench_") && **b != "cbench_libm").map(|b| b.to_string()).collect(),
+        None => known.iter().filter(|b| b.starts_with("cbench_")).map(|b| b.to_string()).collect(),
     };
     if groups.is_empty() {
         return Err("sweep run: no bench group selected".into());
@@ -102,7 +107,7 @@ fn run_sweep(root: &Path, bench: &[OsString], args: &[String]) -> Result<(), Str
     fs::create_dir_all(&out).map_err(|e| format!("sweep run: {}: {e}", out.display()))?;
     let bench_dir = crate::bench::out_dir(root)?;
     // Tables of an earlier run (here or in the bench's directory) must never pass for this run's.
-    let stale = OUT_TABLES.iter().map(|t| bench_dir.join(t)).chain(["sweep.tsv", "summary.txt"].iter().map(|t| out.join(t)));
+    let stale = OUT_TABLES.iter().map(|t| bench_dir.join(t)).chain(["sweep.tsv", "summary.txt", "libm-families.md"].iter().map(|t| out.join(t)));
     for p in stale {
         match fs::remove_file(&p) {
             Ok(()) => {}
@@ -141,6 +146,13 @@ fn run_sweep(root: &Path, bench: &[OsString], args: &[String]) -> Result<(), Str
             let line = format!("{} table {}", summary_line(&s), table.display());
             fs::write(&summary, format!("{line}\n")).map_err(|e| format!("sweep run: {}: {e}", summary.display()))?;
             println!("{line}");
+            let judged: ClassRows = s.rows.iter().filter(|r| r.selected).map(|r| (format!("{}/{}", r.bench, r.row), Rec { instr: r.instr, time: r.time, spread: r.spread })).collect();
+            if let Some(f) = libm_families(&judged) {
+                let p = out.join("libm-families.md");
+                let text = format!("# libm median time ratio per family and precision (cpu {})\n\n{f}", s.cpu);
+                fs::write(&p, &text).map_err(|e| format!("sweep run: {}: {e}", p.display()))?;
+                print!("{text}");
+            }
             Ok(())
         }
         Err(e) => {
@@ -204,6 +216,8 @@ struct Row {
     limit: String,
     status: String,
     flagged: bool,
+    /// A `ratio_host` row of the selected groups (false: a counted row outside the selection, e.g. a calibration row).
+    selected: bool,
 }
 
 /// A finished sweep on one host.
@@ -290,6 +304,7 @@ fn assess(selected: &[(String, String)], code: Option<i32>, log: &str, t: &Table
     let rows = keys
         .into_iter()
         .map(|k| {
+            let is_selected = selected.contains(&k);
             let rr = ratios.get(&k).map(Vec::as_slice).unwrap_or(&[]);
             let (h_med, limit, mut status) = host.get(&k).cloned().unwrap_or((None, "-".into(), "-".into()));
             let time = if rr.is_empty() { h_med } else { Some(crate::bench::stats(rr).0) };
@@ -313,6 +328,7 @@ fn assess(selected: &[(String, String)], code: Option<i32>, log: &str, t: &Table
                 limit,
                 status,
                 flagged: flagged.contains(&key),
+                selected: is_selected,
                 bench: k.0,
                 row: k.1,
             }
@@ -340,7 +356,7 @@ fn render(s: &Sweep) -> String {
     for r in &s.rows {
         let _ = writeln!(
             out,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             r.bench,
             r.row,
             f3(r.instr),
@@ -351,17 +367,23 @@ fn render(s: &Sweep) -> String {
             verdict(r.time),
             r.limit,
             r.status,
-            if r.flagged { "yes" } else { "no" }
+            if r.flagged { "yes" } else { "no" },
+            if r.selected { "yes" } else { "no" }
         );
     }
     out
 }
 
+/// The verdict counts cover the selected rows only (TIMING-SWEEP-LIBM-1107: the libm bench also counts
+/// `add_baseline` and two `mxcsr_*` rows, which are in `sweep.tsv` but are not `ratio_host` rows); the
+/// other counted rows are named after them.
 fn summary_line(s: &Sweep) -> String {
-    let judged: Vec<&str> = s.rows.iter().filter(|r| !deferred(&r.row)).map(|r| verdict(r.time)).filter(|v| *v != "-").collect();
+    let judged: Vec<&str> = s.rows.iter().filter(|r| r.selected && !deferred(&r.row)).map(|r| verdict(r.time)).filter(|v| *v != "-").collect();
     let n = |v: &str| judged.iter().filter(|x| **x == v).count();
     let flags = if s.flagged.is_empty() { String::from("0 rows flagged by the limit check") } else { format!("{} rows flagged by the limit check (in the table, not a run failure): {}", s.flagged.len(), s.flagged.join(", ")) };
-    format!("sweep: COMPLETE: cpu {}; all {} selected ratio_host rows measured ({} faster, {} parity, {} slower); bench rc {}; {flags};", s.cpu, s.measured, n("faster"), n("parity"), n("slower"), s.rc)
+    let other: Vec<String> = s.rows.iter().filter(|r| !r.selected).map(|r| format!("{}/{}", r.bench, r.row)).collect();
+    let other = if other.is_empty() { String::new() } else { format!(" {} counted rows outside the selection (in the table, not in the counts): {};", other.len(), other.join(", ")) };
+    format!("sweep: COMPLETE: cpu {}; all {} selected ratio_host rows measured ({} faster, {} parity, {} slower); bench rc {}; {flags};{other}", s.cpu, s.measured, n("faster"), n("parity"), n("slower"), s.rc)
 }
 
 fn deferred(row: &str) -> bool {
@@ -378,9 +400,90 @@ struct Rec {
 
 type ClassRows = BTreeMap<String, Rec>;
 
-fn load_sweep(name: &str, text: &str) -> Result<ClassRows, String> {
+/// A `sweep.tsv` as `sweep compare` reads it: the judged rows, the rows outside the selection (`selected` is not
+/// `yes`), and whether the table has the `selected` column (without it every row is judged).
+#[derive(Debug, Default)]
+struct SweepTable {
+    rows: ClassRows,
+    outside: BTreeSet<String>,
+    has_selected: bool,
+}
+
+fn load_sweep(name: &str, text: &str) -> Result<SweepTable, String> {
     let t = Tsv::parse(name, text, &["bench", "row", "instr", "time", "spread"])?;
-    Ok(t.rows.iter().map(|r| (format!("{}/{}", t.get(r, "bench").unwrap_or(""), t.get(r, "row").unwrap_or("")), Rec { instr: num(t.get(r, "instr")), time: num(t.get(r, "time")), spread: num(t.get(r, "spread")) })).collect())
+    let mut out = SweepTable { has_selected: t.cols.contains(&"selected"), ..SweepTable::default() };
+    for r in &t.rows {
+        let k = format!("{}/{}", t.get(r, "bench").unwrap_or(""), t.get(r, "row").unwrap_or(""));
+        if out.has_selected && t.get(r, "selected") != Some("yes") {
+            out.outside.insert(k);
+        } else {
+            out.rows.insert(k, Rec { instr: num(t.get(r, "instr")), time: num(t.get(r, "time")), spread: num(t.get(r, "spread")) });
+        }
+    }
+    Ok(out)
+}
+
+/// The libm families of the per-family table (the grouping of TIMING-SWEEP-LIBM-1107); a row named
+/// `<function>_<case>` (an input or rounding-mode case) is in `special`.
+const LIBM_FAMILIES: [(&str, &[&str]); 8] = [
+    ("exp/log/pow", &["exp", "exp2", "exp10", "expm1", "log", "log2", "log10", "log1p", "pow"]),
+    ("trig", &["sin", "cos", "tan", "asin", "acos", "atan", "atan2"]),
+    ("hyperbolic", &["sinh", "cosh", "tanh", "asinh", "acosh", "atanh"]),
+    ("gamma", &["tgamma", "lgamma"]),
+    ("bessel", &["j0", "j1", "y0", "y1", "jn", "yn"]),
+    ("erf", &["erf", "erfc"]),
+    ("roots/hypot", &["cbrt", "sqrt", "hypot"]),
+    ("complex", &["cexp", "clog", "csin", "csqrt", "cpow"]),
+];
+/// Function-name suffix and precision, in the table's column order.
+const LIBM_PRECISIONS: [(&str, &str); 4] = [("f", "f32"), ("", "f64"), ("l", "long double"), ("f128", "f128")];
+
+/// The family and precision of a `cbench_libm` row (`other`, `-` for a name outside the families).
+fn libm_class(row: &str) -> (&'static str, &'static str) {
+    let head = row.split('_').next().unwrap_or(row);
+    for (family, bases) in LIBM_FAMILIES {
+        for b in bases {
+            let Some(suffix) = head.strip_prefix(b) else { continue };
+            if let Some((_, p)) = LIBM_PRECISIONS.iter().find(|(s, _)| *s == suffix) {
+                return (if head.len() < row.len() { "special" } else { family }, p);
+            }
+        }
+    }
+    ("other", "-")
+}
+
+/// The median time ratio per libm family and precision over the timed `cbench_libm` rows (`None`: no such row).
+fn libm_families(rows: &ClassRows) -> Option<String> {
+    let timed: Vec<(&str, &str, f64)> = rows
+        .iter()
+        .filter_map(|(k, r)| k.strip_prefix("cbench_libm/").filter(|n| !deferred(n)).zip(r.time))
+        .map(|(n, t)| {
+            let (f, p) = libm_class(n);
+            (f, p, t)
+        })
+        .collect();
+    if timed.is_empty() {
+        return None;
+    }
+    let med = |v: &[f64]| format!("{:.2}", crate::bench::stats(v).0);
+    let mut s = String::from("| family | rows | median | f32 | f64 | long double | f128 |\n|---|---:|---:|---:|---:|---:|---:|\n");
+    let families = LIBM_FAMILIES.iter().map(|(f, _)| *f).chain(["special", "other", "all"]);
+    for family in families {
+        let of: Vec<&(&str, &str, f64)> = timed.iter().filter(|r| family == "all" || r.0 == family).collect();
+        if of.is_empty() {
+            continue;
+        }
+        let all: Vec<f64> = of.iter().map(|r| r.2).collect();
+        let cells: Vec<String> = LIBM_PRECISIONS
+            .iter()
+            .map(|(_, p)| {
+                let v: Vec<f64> = of.iter().filter(|r| r.1 == *p).map(|r| r.2).collect();
+                if v.is_empty() { "-".into() } else { format!("{} ({})", med(&v), v.len()) }
+            })
+            .collect();
+        let _ = writeln!(s, "| {family} | {} | {} | {} |", of.len(), med(&all), cells.join(" | "));
+    }
+    Some(s)
 }
 
 /// The combined markdown table of a results file (rows after `## Table`; class from `time <CLASS>` columns).
@@ -427,7 +530,7 @@ fn compare(args: &[String]) -> Result<String, String> {
     let a = parse_args(args, &["--new", "--old", "--old-table", "--label"])?;
     let label = last(&a, "--label").unwrap_or("previous");
     let read = |p: &str| fs::read_to_string(p).map_err(|e| format!("sweep compare: {p}: {e}"));
-    let pairs = |flag: &str| -> Result<Vec<(String, ClassRows)>, String> {
+    let pairs = |flag: &str| -> Result<Vec<(String, SweepTable)>, String> {
         a.get(flag)
             .map(Vec::as_slice)
             .unwrap_or(&[])
@@ -442,7 +545,16 @@ fn compare(args: &[String]) -> Result<String, String> {
     if new.is_empty() {
         return Err(format!("sweep compare: no --new table\n{USAGE}"));
     }
-    let mut old: BTreeMap<String, ClassRows> = pairs("--old")?.into_iter().collect();
+    let old_tables = pairs("--old")?;
+    // A table written before the `selected` column judges every row, the calibration rows included.
+    let notes: Vec<String> = new
+        .iter()
+        .map(|(c, t)| ("new", c, t))
+        .chain(old_tables.iter().map(|(c, t)| ("old", c, t)))
+        .filter(|(_, _, t)| !t.has_selected)
+        .map(|(w, c, _)| format!("The {w} `{c}` table has no `selected` column (written before SWEEP-COMPARE-SELECTED): all its rows are judged, calibration rows included."))
+        .collect();
+    let mut old: BTreeMap<String, ClassRows> = old_tables.into_iter().map(|(c, t)| (c, t.rows)).collect();
     if let Some(p) = last(&a, "--old-table") {
         for (c, rows) in load_legacy(p, &read(p)?)? {
             old.entry(c).or_insert(rows);
@@ -452,7 +564,7 @@ fn compare(args: &[String]) -> Result<String, String> {
         let have: Vec<&str> = old.keys().map(String::as_str).collect();
         return Err(format!("sweep compare: no previous table for class `{c}` (previous classes: {})", have.join(", ")));
     }
-    Ok(report(&new, &old, label))
+    Ok(report(&new, &old, label, &notes))
 }
 
 /// The value at fraction `p` of a sorted list (the 1106 analyzers' index rule).
@@ -468,14 +580,23 @@ fn dist(v: &mut [f64], lo: f64, hi: f64) -> String {
     format!("{} | {:.3} | {:.3} | {:.3}", v.len(), crate::bench::stats(v).0, pct(v, lo), pct(v, hi))
 }
 
-fn report(new: &[(String, ClassRows)], old: &BTreeMap<String, ClassRows>, label: &str) -> String {
+/// `notes`: one line per table read without the `selected` column.
+fn report(new: &[(String, SweepTable)], old: &BTreeMap<String, ClassRows>, label: &str, notes: &[String]) -> String {
     let empty = ClassRows::new();
-    let keys: BTreeSet<&String> = new.iter().flat_map(|(_, r)| r.keys()).collect();
+    let keys: BTreeSet<&String> = new.iter().flat_map(|(_, t)| t.rows.keys()).collect();
+    let mut families = String::new();
     let mut lists: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     let mut counts = String::new();
     let mut spread = String::new();
-    for (class, rows) in new {
+    for (class, t) in new {
+        let rows = &t.rows;
         let o = old.get(class).unwrap_or(&empty);
+        if let Some(f) = libm_families(rows) {
+            let _ = write!(families, "## libm median time ratio per family and precision: {class}\n\n{f}\n");
+        }
+        for k in &t.outside {
+            lists.entry("outside").or_default().push(format!("- {k} | {class}"));
+        }
         let (mut now_v, mut old_v, mut sp, mut drift) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (k, r) in rows {
             sp.extend(r.spread);
@@ -492,14 +613,14 @@ fn report(new: &[(String, ClassRows)], old: &BTreeMap<String, ClassRows>, label:
         let _ = writeln!(counts, "| {class} | {} | {} | {} | {} | {} | {} | {} | {} |", n(&now_v, "faster"), n(&now_v, "parity"), n(&now_v, "slower"), now_v.len(), n(&old_v, "faster"), n(&old_v, "parity"), n(&old_v, "slower"), old_v.len());
         let _ = writeln!(spread, "| {class} | {} | {} |", dist(&mut sp, 0.9, 1.0), dist(&mut drift, 0.1, 0.9));
         for (k, r) in o {
-            if r.time.is_some() && !rows.contains_key(k) {
+            if r.time.is_some() && !rows.contains_key(k) && !t.outside.contains(k) {
                 lists.entry("gone").or_default().push(format!("- {k} | {class} | {label} time {}", f3(r.time)));
             }
         }
     }
     for k in &keys {
         for (class, rows) in new {
-            let Some(r) = rows.get(*k) else { continue };
+            let Some(r) = rows.rows.get(*k) else { continue };
             let o = old.get(class).and_then(|c| c.get(*k)).copied().unwrap_or_default();
             let desc = format!("- {k} | {class} | instr {} ({label} {}) | time {} ({label} {}) | spread {}", f3(r.instr), f3(o.instr), f3(r.time), f3(o.time), f3(r.spread));
             if deferred(k) {
@@ -525,8 +646,11 @@ fn report(new: &[(String, ClassRows)], old: &BTreeMap<String, ClassRows>, label:
     let classes: Vec<&str> = new.iter().map(|(c, _)| c.as_str()).collect();
     let mut s = format!("# Sweep comparison: {} against {label}\n\n", classes.join(", "));
     let _ = write!(s, "Verdicts on the median Liella/glibc time ratio: faster < {FASTER}, slower > {SLOWER}, parity between; rows named {} are timed, not judged.\n\n", DEFERRED.join(", "));
+    for n in notes {
+        let _ = writeln!(s, "{n}\n");
+    }
     let _ = write!(s, "## Counts\n\n| class | faster | parity | slower | judged | {label} faster | {label} parity | {label} slower | {label} judged (rows measured now) |\n|---|---|---|---|---|---|---|---|---|\n{counts}\n");
-    let _ = write!(s, "## Run-to-run spread and change\n\nspread = (max - min) / median of the round ratios; change = time now / time in {label}.\n\n| class | spread n | spread median | spread p90 | spread max | change n | change median | change p10 | change p90 |\n|---|---|---|---|---|---|---|---|---|\n{spread}\n");
+    let _ = write!(s, "## Run-to-run spread and change\n\nspread = (max - min) / median of the round ratios; change = time now / time in {label}.\n\n| class | spread n | spread median | spread p90 | spread max | change n | change median | change p10 | change p90 |\n|---|---|---|---|---|---|---|---|---|\n{spread}\n{families}");
     let titles = [
         ("a", format!("(a) Regressions: slower now, parity or faster in {label}")),
         ("b", format!("(b) Reopen: instr <= {SLOWER}, time > {SLOWER}")),
@@ -534,6 +658,7 @@ fn report(new: &[(String, ClassRows)], old: &BTreeMap<String, ClassRows>, label:
         ("new", format!("Rows not in {label}")),
         ("gone", format!("Rows in {label} not measured now")),
         ("deferred", String::from("Deferred rows (timed, not judged)")),
+        ("outside", String::from("Rows outside the selection (in sweep.tsv, not judged)")),
     ];
     for (tag, title) in titles {
         let l = lists.get(tag).map(Vec::as_slice).unwrap_or(&[]);
@@ -609,22 +734,31 @@ mod tests {
     fn the_per_host_table_holds_ratios_spread_counters_and_flags() {
         let s = assess(&sel(), Some(1), LOG_FLAG, &tables(Some(RH), Some(ROUNDS), Some(CNT), None)).unwrap();
         // a: round ratios 0.90 and 0.95, median 0.925, spread 0.05 / 0.925; b: one round, no counted row.
-        let want = format!("{SWEEP_HEADER}cbench_x\ta\t0.950\t0.880\t0.925\t0.054\t2\tfaster\t1.100\tok\tno\ncbench_x\tb\t-\t-\t1.300\t0.000\t1\tslower\t1.100\tFAIL\tyes\n");
+        let want = format!("{SWEEP_HEADER}cbench_x\ta\t0.950\t0.880\t0.925\t0.054\t2\tfaster\t1.100\tok\tno\tyes\ncbench_x\tb\t-\t-\t1.300\t0.000\t1\tslower\t1.100\tFAIL\tyes\tyes\n");
         assert_eq!(render(&s), want);
         let line = summary_line(&s);
         assert!(line.starts_with("sweep: COMPLETE: cpu CPU X; all 2 selected ratio_host rows measured (1 faster, 0 parity, 1 slower); bench rc 1; 1 rows flagged"), "{line}");
         assert!(line.contains("cbench_x/b"), "{line}");
+        // TIMING-SWEEP-LIBM-1107 (no spec clause; the libm bench's add_baseline/mxcsr_* rows): a counted row outside
+        // the selection stays in the table but not in the selected rows' verdict counts, and the line names it.
+        let rounds_z = format!("{ROUNDS}cbench_x\tz\t1\t20\t10\n");
+        let cnt_z = format!("{CNT}cbench_x\tz\t2.000\t2.000\t-\t2.000\n");
+        let z = assess(&sel(), Some(1), LOG_FLAG, &tables(Some(RH), Some(&rounds_z), Some(&cnt_z), None)).unwrap();
+        assert_eq!(render(&z).lines().filter(|l| l.starts_with("cbench_x\tz\t") && l.ends_with("\tno")).count(), 1, "{}", render(&z));
+        let line = summary_line(&z);
+        assert!(line.contains("all 2 selected ratio_host rows measured (1 faster, 0 parity, 1 slower)"), "{line}");
+        assert!(line.ends_with("1 counted rows outside the selection (in the table, not in the counts): cbench_x/z;"), "{line}");
         // The cycles CPU's verdict comes from decision.tsv.
         let c = assess(&sel(), Some(1), LOG_CYC, &tables(Some(RH_CYC), Some(ROUNDS), Some(CNT), Some(DEC))).unwrap();
         assert_eq!(c.rows.iter().map(|r| r.status.as_str()).collect::<Vec<_>>(), ["ok", "FAIL"]);
     }
 
     #[test]
-    fn selection_defaults_to_the_c_groups_without_libm() {
+    fn selection_defaults_to_every_c_group_with_libm() {
         let budgets = "# comment\ncbench_x\ta\tratio_host\t1.0\twhy\ncbench_x\tm\tmax_ns\t10\twhy\ncbench_libm\tz\tratio_host\t1.0\twhy\nbench_mem\tq\tmax_ns\t5\twhy\ncbench_y\tc\tratio_host\t1.0\twhy\n";
         let (g, s) = selection(budgets, None).unwrap();
-        assert_eq!(g, ["cbench_x", "cbench_y"]);
-        assert_eq!(s, [("cbench_x".to_string(), "a".to_string()), ("cbench_y".to_string(), "c".to_string())]);
+        assert_eq!(g, ["cbench_libm", "cbench_x", "cbench_y"]);
+        assert_eq!(s, [("cbench_x".to_string(), "a".to_string()), ("cbench_libm".to_string(), "z".to_string()), ("cbench_y".to_string(), "c".to_string())]);
         assert_eq!(selection(budgets, Some("cbench_libm")).unwrap().1.len(), 1);
         assert!(selection(budgets, Some("cbench_nope")).unwrap_err().contains("no rows"));
         assert!(selection(budgets, Some("bench_mem")).unwrap_err().contains("no ratio_host row"));
@@ -635,9 +769,10 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(d.join("bench")).unwrap();
         fs::write(d.join(crate::benchstage::MANIFEST), "commit x\n").unwrap();
-        fs::write(d.join("bench/budgets.tsv"), "cbench_x\ta\tratio_host\t1.0\twhy\ncbench_x\tb\tratio_host\t1.0\twhy\ncbench_libm\tz\tratio_host\t1.0\twhy\n").unwrap();
+        fs::write(d.join("bench/budgets.tsv"), "cbench_x\ta\tratio_host\t1.0\twhy\ncbench_x\tb\tratio_host\t1.0\twhy\ncbench_libm\texpf\tratio_host\t1.0\twhy\n").unwrap();
         fs::create_dir_all(d.join("fix")).unwrap();
-        for (n, t) in [("ratio_host.tsv", RH), ("rounds.tsv", ROUNDS), ("counters.tsv", CNT)] {
+        let rh = format!("{RH}CPU X\tcbench_libm\texpf\t10.00\t25.00\t2.500\t2.600\t1.000\tok\n");
+        for (n, t) in [("ratio_host.tsv", rh.as_str()), ("rounds.tsv", ROUNDS), ("counters.tsv", CNT)] {
             fs::write(d.join("fix").join(n), t).unwrap();
         }
         d
@@ -656,8 +791,10 @@ mod tests {
         let script = "echo \"args: $*\"\ncp fix/*.tsv bench-out/\necho 'xtask bench: bench: budget regressions:' >&2\necho '  cbench_x/b: median ratio 1.300 exceeds the limit 1.100 (w)' >&2\nexit 1\n";
         run_sweep(&d, &fake(&d, script), &["--out".into(), out.to_string_lossy().into_owned()]).unwrap();
         let log = fs::read_to_string(out.join("bench.log")).unwrap();
-        assert!(log.contains("args: bench --no-build --staged --counters --only cbench_x\n"), "{log}");
-        assert!(fs::read_to_string(out.join("sweep.tsv")).unwrap().contains("cbench_x\tb\t-\t-\t1.300\t0.000\t1\tslower\t1.100\tFAIL\tyes"));
+        assert!(log.contains("args: bench --no-build --staged --counters --only cbench_libm,cbench_x\n"), "{log}");
+        assert!(fs::read_to_string(out.join("sweep.tsv")).unwrap().contains("cbench_x\tb\t-\t-\t1.300\t0.000\t1\tslower\t1.100\tFAIL\tyes\tyes"));
+        let fam = fs::read_to_string(out.join("libm-families.md")).unwrap();
+        assert!(fam.contains("| exp/log/pow | 1 | 2.50 | 2.50 (1) | - | - | - |\n| all | 1 | 2.50 |"), "{fam}");
         assert!(fs::read_to_string(out.join("summary.txt")).unwrap().starts_with("sweep: COMPLETE:"));
         assert!(out.join("ratio_host.tsv").is_file());
         let _ = fs::remove_dir_all(&d);
@@ -688,9 +825,9 @@ mod tests {
     #[test]
     fn compare_prints_counts_lists_spread_and_change() {
         let mut old = BTreeMap::new();
-        old.insert("ivb".to_string(), load_sweep("old", OLD).unwrap());
+        old.insert("ivb".to_string(), load_sweep("old", OLD).unwrap().rows);
         let new = vec![("ivb".to_string(), load_sweep("new", NEW).unwrap())];
-        let r = report(&new, &old, "1106e");
+        let r = report(&new, &old, "1106e", &[]);
         // now: d faster, b c parity, a slower (wordexp deferred); 1106e over the rows measured now: a, b, c.
         assert!(r.contains("| ivb | 1 | 2 | 1 | 4 | 1 | 1 | 1 | 3 |\n"), "{r}");
         // spread over all 5 rows (sorted 0.01 0.02 0.03 0.04 0.05); change a 1.222, b 0.833, c 1.020.
@@ -705,7 +842,76 @@ mod tests {
         ] {
             assert!(r.contains(want), "{want}\n---\n{r}");
         }
-        assert_eq!(r, report(&new, &old, "1106e"));
+        assert_eq!(r, report(&new, &old, "1106e", &[]));
+    }
+
+    /// NEW with a `selected` column (every row `yes`) and a calibration row outside the selection.
+    fn new_selected() -> String {
+        let mut t: String = NEW.lines().map(|l| format!("{l}\t{}\n", if l.starts_with("bench\t") { "selected" } else { "yes" })).collect();
+        t.push_str("cbench_libm\tadd_baseline\t2.000\t-\t3.000\t0.900\t5\tslower\t-\t-\tno\tno\n");
+        t
+    }
+
+    #[test]
+    fn compare_judges_only_the_selected_rows() {
+        // SWEEP-COMPARE-SELECTED (no spec clause; developer tooling): the libm bench's calibration rows are in
+        // sweep.tsv with `selected` no; counts, spread and the new-row list cover the selected rows only.
+        let d = std::env::temp_dir().join(format!("xtask-sweep-cmp-{}", std::process::id()));
+        fs::create_dir_all(&d).unwrap();
+        let (new_p, old_p, legacy_p) = (d.join("new.tsv"), d.join("old.tsv"), d.join("legacy.tsv"));
+        fs::write(&new_p, new_selected()).unwrap();
+        // The old table times the calibration row too: outside the selection now, so it is not "not measured now".
+        fs::write(&old_p, format!("{OLD}cbench_libm\tadd_baseline\t2.000\t-\t3.000\t0.900\t5\tslower\t-\t-\tno\n")).unwrap();
+        fs::write(&legacy_p, format!("{NEW}cbench_libm\tadd_baseline\t2.000\t-\t3.000\t0.900\t5\tslower\t-\t-\tno\n")).unwrap();
+        let run = |new: &Path| compare(&["--new".into(), format!("ivb={}", new.display()), "--old".into(), format!("ivb={}", old_p.display()), "--label".into(), "1106e".into()]).unwrap();
+        let r = run(&new_p);
+        assert!(r.contains("| ivb | 1 | 2 | 1 | 4 | 1 | 1 | 1 | 3 |\n"), "{r}");
+        assert!(r.contains("| ivb | 5 | 0.030 | 0.050 | 0.050 | 3 |"), "{r}");
+        assert!(r.contains("## Rows outside the selection (in sweep.tsv, not judged): 1\n\n- cbench_libm/add_baseline | ivb\n"), "{r}");
+        assert!(r.contains("## Rows not in 1106e: 1\n"), "{r}");
+        assert!(r.contains("## Rows in 1106e not measured now: 1\n\n- cbench_x/gone |"), "{r}");
+        assert!(!r.contains("libm median time ratio"), "{r}");
+        // The old table has no `selected` column: judged as before, and the report says so.
+        assert!(r.contains("The old `ivb` table has no `selected` column"), "{r}");
+        assert!(!r.contains("The new `ivb` table"), "{r}");
+        // A new table without the column judges the calibration row too (today's behaviour, said in the report).
+        let l = run(&legacy_p);
+        assert!(l.contains("| ivb | 1 | 2 | 2 | 5 |"), "{l}");
+        assert!(l.contains("| ivb | 6 | 0.035 | 0.900 | 0.900 |"), "{l}");
+        assert!(l.contains("The new `ivb` table has no `selected` column"), "{l}");
+        assert!(l.contains("libm median time ratio per family and precision: ivb\n\n"), "{l}");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn libm_rows_are_grouped_by_family_and_precision() {
+        // SWEEP-COMPARE-SELECTED (no spec clause): the per-family table of the libm sweep (TIMING-SWEEP-LIBM-1107).
+        for (row, want) in [
+            ("expf", ("exp/log/pow", "f32")),
+            ("exp10l", ("exp/log/pow", "long double")),
+            ("erf", ("erf", "f64")),
+            ("erfcf", ("erf", "f32")),
+            ("coshf128", ("hyperbolic", "f128")),
+            ("atan2", ("trig", "f64")),
+            ("cexpl", ("complex", "long double")),
+            ("expf_upward", ("special", "f32")),
+            ("exp_overflow_errno", ("special", "f64")),
+            ("add_baseline", ("other", "-")),
+        ] {
+            assert_eq!(libm_class(row), want, "{row}");
+        }
+        let rows: ClassRows = [("expf", 2.0), ("exp", 4.0), ("expl", 9.0), ("logl", 11.0), ("cexp", 300.0), ("sin_huge", 5.0), ("wordexp", 1.0)]
+            .iter()
+            .map(|(n, t)| (format!("cbench_libm/{n}"), Rec { time: Some(*t), ..Rec::default() }))
+            .chain([("cbench_x/a".to_string(), Rec { time: Some(1.0), ..Rec::default() })])
+            .collect();
+        let want = "| family | rows | median | f32 | f64 | long double | f128 |\n|---|---:|---:|---:|---:|---:|---:|\n\
+                    | exp/log/pow | 4 | 6.50 | 2.00 (1) | 4.00 (1) | 10.00 (2) | - |\n\
+                    | complex | 1 | 300.00 | - | 300.00 (1) | - | - |\n\
+                    | special | 1 | 5.00 | - | 5.00 (1) | - | - |\n\
+                    | all | 6 | 7.00 | 2.00 (1) | 5.00 (3) | 10.00 (2) | - |\n";
+        assert_eq!(libm_families(&rows).as_deref(), Some(want));
+        assert_eq!(libm_families(&ClassRows::new()), None);
     }
 
     #[test]

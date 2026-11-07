@@ -79,6 +79,7 @@ pub mod spawn;
 pub mod timer;
 pub mod zone;
 pub mod netaddr;
+pub mod rpc_text;
 pub mod users;
 pub mod mntent;
 pub mod terminal;
@@ -92,8 +93,12 @@ pub mod aio;
 mod stacks;
 #[cfg(feature = "runtime")]
 pub mod runtime;
-#[cfg(feature = "runtime")]
+#[cfg(any(feature = "runtime", feature = "ld"))]
 mod bootstrap;
+#[cfg(feature = "ld")]
+mod arch;
+#[cfg(feature = "ld")]
+pub mod ld;
 pub mod export;
 pub mod data;
 pub mod caller_alloc;
