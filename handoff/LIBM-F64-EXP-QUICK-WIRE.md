@@ -1,70 +1,65 @@
-# LIBM-F64-EXP-QUICK-WIRE: exp quick phase wired as tier 1 (timing not done)
+# LIBM-F64-EXP-QUICK-WIRE(-2): exp quick phase wired as tier 1, tier 2 on a miss (both builds)
 
-State: branch `task/libm-f64-exp-quick-wire` (stacks on LIBM-F64-EXP-QUICK-2), code head 5f398bb36 (handoff commits
-on top). Role keke:~/w/n4. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK-WIRE.md`. Decisions in force: D-10.51
-(two-phase double functions), D-10.54 (quick kernel constants and bounds), D-10.25/D-10.50 (two builds), D-10.3 (CR).
+State: branch `task/libm-f64-exp-quick-wire-2` (stacks on `task/libm-f64-exp-quick-wire`, LIBM-F64-EXP-QUICK-2);
+code head 39b2271d0, handoff commits on top. Role mei:~/w/s3. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK-WIRE.md`
+("## The change"); continuation brief LIBM-F64-EXP-QUICK-WIRE-2. Decisions in force: D-10.51 (two-phase double
+functions), D-10.54 (quick kernel constants and bounds), D-10.25/D-10.50 (two builds), D-10.3 (CR).
 
 ## What is in
 
-* `crates/math/src/fast64/quick.rs`: `exp_tiered` in both builds (inside the `quick!` macro): quick phase; on a
-  miss `tier2(x)`, a `#[cold] #[inline(never)]` function per build (SSE2: `fast64::exp_nearest`; FMA:
-  `#[target_feature(enable = "fma")]` calling `fast64::fused::exp_nearest`). Outside `2^-60 <= |x| < 708` (tier 2's
-  own domain) it returns `None` at once, so the accurate path runs without a useless tier-2 attempt.
-* `crates/boundary/src/hot/exp_log.rs` `exp_nearest` (the name the generated exp entries use, so `s10_math_gen.rs`
-  is unchanged) now calls `quick::exp_tiered` / `quick::fused::exp_tiered` behind `dispatch::fma()`: one dispatch
-  load and branch per call, as before. `mret::elem_fast`'s contract holds: the quick result is inexact by its test
-  (`w != 0`), and a refused attempt's inexact/denormal bits are in `FAST_ATTEMPT_HW`.
-* Tests: `exp_quick.rs::exp_entry_rounds_quick_misroundings_right` (m::exp, SSE2 build, on the >= 20 raw quick
-  misroundings of a seeded 4·10^5 sample; a `BUILD` mutex now serialises the build switch with `with_fma`);
-  `libm_fma_select.rs::libm_product_exp_quick_misses_take_tier_two` (product, `-FMA`: 64 quick misses that tier 2
-  decides cost at most hits + 400 instructions per call, and return the CR bits). Existing entry suites unchanged:
-  `s10_math_symbols.rs` (exp in all four modes, flags, errno), `math_fma_paths.rs` (both builds bit-identical).
-* Plants `handoff/LIBM-F64-EXP-QUICK-WIRE-plants.txt`: tier-1 value on a miss, tier 2 skipped, MXCSR default test
-  inverted, FMA build chosen despite the tunable.
+* `crates/math/src/fast64/quick.rs`: `exp_tiered` in both builds: quick phase, on a miss `tier2(x)` (`#[cold]
+  #[inline(never)]`; SSE2 `fast64::exp_nearest`, FMA `fast64::fused::exp_nearest`); outside `2^-60 <= |x| < 708`
+  `None` at once. `crates/boundary/src/hot/exp_log.rs` `exp_nearest` calls it behind `dispatch::fma()`.
+* `selftest::exp_tiered` (-2): the tiers as the entry calls them, in the build `set_math_fma` chose.
+* Tests: `exp_quick.rs::exp_quick_misses_are_answered_by_tier_two` (-2; s10_0_f_0, D-10.51): 2·10^6 operands on
+  [-10, 10]. SSE2: every quick answer is the tiers' answer, and the misses tier 2 answers are exactly the misses the
+  tiers answer (11368 of 11386; the 18 others are declined by tier 2 too). FMA: 139 of 157 misses answered, the SSE2
+  tier 2 also answers 139 of them (bound: >= 90%, since the two tier-2 builds may decline different operands next
+  to a rounding boundary). `exp_entry_rounds_quick_misroundings_right`, `libm_fma_select.rs::libm_product_exp_quick_
+  misses_take_tier_two` (count: misses 252, hits 106 instructions per call through the product, SSE2, mei; its doc
+  now says it cannot tell tier 2 from the accurate path).
+* Why the first run's tier2-skipped plant survived: the accurate path (`elem_fast_cold` -> `Real::exp` ->
+  `fast("exp", .., fast64::exp)`) starts with the same double-double kernel, so a skipped tier 2 returns the same
+  bits for little more than the cold envelope. The tier hook makes the tier observable; no count margin needed.
 
-## Profile (before, one call, Zen 1 host, `validation/wl_trace.sh`, job keke:libm-f64-exp-quick-wire-trace0)
+## Jobs (mei, final code head 39b2271d0)
 
-Case `exp` over 64 operands in [-10, 10] (spec `~/work/LIBM-F64-EXP-QUICK-WIRE/exp_case.c` on keke, = the
-parity_libm1105 `F1` macro). FMA build: 125 instructions = `exp` entry/envelope 18 + `liella_machine_mxcsr_get` 3
-(21) + kernel 104. SSE2 build (`GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`): 179 = 21 + 158. The surplus is the kernel
-(tier 2's double-double evaluation on every call); the quick phase replaces it (LIBM-F64-EXP-QUICK-2 counted 72 / 86
-for the kernel through a selftest wrapper).
+lint0 `libm-f64-exp-quick-wire-2-lint0` (inherited head 88026568c: clippy + static rc 0), diag
+`-diag` (rc 101: the first FMA bound, 99%, was wrong; evidence) and `-diag2` (rc 0, the numbers above), lint
+`-lint` (full clippy, xtask clippy, static: rc 0), plants `-plants` (5 of 5 CAUGHT: tier1-on-miss,
+tier2-skipped, tier2-skipped-fma, mxcsr-inverted, fma-without-tunable; file
+`handoff/LIBM-F64-EXP-QUICK-WIRE-2-plants.txt`), gate `-gate`, counts `-counts` (cbench_libm `--compare --counters`,
+plain then `-FMA`; tables in mei:~/work/LIBM-F64-EXP-QUICK-WIRE-2/counters-{fma,sse2}.tsv), stage `-stage`.
 
-## Envelope items of DESIGN.md §5.1 (not changed: RULING NEEDED)
+Results: lint rc 0; plants rc 0 (5/5 CAUGHT, no WARN); gate rc 0 (`affected: ok`, peak 12G, oom_kill 0); counts
+rc 0. Counts (Skylake-SP, cbench_libm, instructions per call Liella / glibc): exp 94.2 / 67.1 (1.40), exp2 125.3 /
+51.1, exp10 141.5 / 56.1 (exp2/exp10 unchanged by this story). The `-FMA` run printed the same exp count (94.2):
+the tunable most likely does not reach the bench programs (xtask sets the bench environment), so the SSE2 build's
+cbench count is NOT VERIFIED (its product count, through the test above, is 106 per hit). No cbench count of the
+base exists (the first run's counts job never started), so "no row slower" rests on the timing below.
 
-* Inline `stmxcsr` in `fpu::peek`: inline assembly is allowed only at the `tb-field` site (docs/architecture.md
-  S2); no category fits. Saves the call, `ret` and a reload: about 2-3 of the 21 envelope instructions.
-  Recommend a new category (one `stmxcsr` into a local, one named file) or extending hot-kernel.
-* Register-only barrier in place of `core::hint::black_box(x)`: needs `asm!("", inout(xmm_reg) x)`, same rule.
-  Saves a store and a load (2 instructions) and a store-forwarding delay on the critical path (latency).
-* `dispatch::fma()`: kept (one load and branch). Removing it needs the whole entry duplicated under
-  `#[target_feature]` or an indirect call chosen at startup; not tried.
+Timing (staged at 39b2271d0, tar sha256 14ac23c5..., `./xtask-bin sweep run --only cbench_libm`, bookings 122/123
+cancelled after): Ivy Bridge (kotori, E3-1265L v2) exp time ratio 1.889 (cycles 1.649, instr 1.339; spread 0.675,
+5 rounds; ns median Liella 31.76 vs glibc 13.59), against 2.90 in the 11-07 sweep. N100 (nozomi) exp time 2.174
+(spread 0.006; ns 17.39 vs 8.00). Target (~1.4x on Ivy Bridge, DESIGN.md §4.1) not reached: the remaining gap is
+the 21-instruction envelope plus the kernel; profile one call again before the next design.
 
-## Jobs (keke)
+## Envelope rulings (owner's call, #3938/#3939; not changed, no inline asm added)
 
-lint `libm-f64-exp-quick-wire-lint` (kernel-index, clippy, static: rc 0 on 8bb365c11 + regenerated KERNELS.md),
-gate `libm-f64-exp-quick-wire-gate` (running at hand-back: liella, liella-boundary incl. interposed, liella-legacy,
-liella-math ok so far), plants `libm-f64-exp-quick-wire-plants` (rc 1: tier1-on-miss, mxcsr-inverted,
-fma-without-tunable CAUGHT; **tier2-skipped SURVIVED**), counts `libm-f64-exp-quick-wire-counts` (queued behind the
-gate: cbench_libm `--compare --counters`, plain then `-FMA`), diagnostic `libm-f64-exp-quick-wire-plants-diag` (the
-tier2-skipped plant alone with `--nocapture`: its baseline log and mutant log print "exp instructions per call, SSE2
-builds: quick-phase misses M, hits H"; evidence, not a verification job).
-
-Why tier2-skipped survived: exp's accurate path (`elem_fast_cold` -> `Real::exp`) itself starts with the same
-`exp_near` kernel, so a skipped tier 2 costs only the cold envelope on top, well under the test's 400-instruction
-margin. The test logic is right; `TIER2_MARGIN` must sit between (M with tier 2 − H) and (M without − H) from the
-diag logs (`/dev/shm/claude/libm-f64-exp-quick-wire/plants-diag-1/logs/` on keke). If the gap is under ~20
-instructions, a count test cannot separate them robustly: then mark the plant `equivalent:` with that reason and
-the numbers (the cost is the envelope only), or have the test count a directed-mode call as the reference.
+From the base trace (Zen 1, one call: entry/envelope 18 + `liella_machine_mxcsr_get` 3 = 21 of 125 FMA / 179 SSE2),
+estimated from the code, NOT measured (measuring needs the inline asm the coordinator held back):
+* Inline `stmxcsr` in `fpu::peek`: removes `call` + `ret` (2 instructions per call, ~1.6% FMA / 1.1% SSE2); the
+  memory round trip of `stmxcsr` stays (it has only a memory form).
+* Register-only barrier for `black_box(x)`: removes one store and one load (2 instructions) and the
+  store-to-load forwarding delay on `x`, which is on the critical path of every call (about 4-5 cycles on these
+  cores, so likely more in time than in instructions).
 
 ## Next step
 
-1. Counts: `cargo xtask bench --compare --counters cbench_libm`, plain and with `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`
-   (exp rows; base 125 / 179 per traced call). 2. Timing (required, instruction mix changes): `ops timing-book`
-   kotori or nico (shorter queue) and nozomi, `cargo xtask bench --stage`, run cbench_libm exp rows with
-   `CBENCH_ROWS`; expected Ivy Bridge about 1.4x glibc (DESIGN.md §4.1). 3. exp2/exp10 on the same table (same
-   kernel shape, own constants). 4. The two envelope rulings above.
+1. Timing verdict (above) and the decision on landing. 2. exp2/exp10 on the same table (same kernel shape, own
+constants). 3. The two envelope rulings with the measured numbers once the owner allows a prototype.
 
 ## Not to redo
 
-The kernel, its bound and tables (D-10.54); the base profile above. Any quick.rs edit needs `cargo xtask kernel-index`.
+The kernel, its bound and tables (D-10.54); the base profile; the tier test (do not go back to a count margin for
+"tier 2 skipped"). Any quick.rs edit needs `cargo xtask kernel-index`.
