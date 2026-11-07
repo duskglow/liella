@@ -19,7 +19,8 @@
 //!
 //! 1. ESCALATE TO FULL (everything: the workspace clippy and `cargo xtask test`): `csys/` (but
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
-//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
+//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7, and xtask test code: `xtask/tests/`
+//!    or a source whose base diff stays inside its trailing `#[cfg(test)]` module, D-X.41), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
 //!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
@@ -110,6 +111,9 @@ struct Crate {
     name: String,
     dir: String,
     deps: BTreeSet<String>,
+    /// The package has a library target (`src/lib.rs` or a `[lib]` section). A bin-only package (xtask) has no
+    /// `--lib`: its unit tests are those of its bin targets (XTASK-AFFECTED-XTASK-TESTS).
+    lib: bool,
 }
 
 struct Node {
@@ -207,6 +211,10 @@ pub struct Repo {
     /// XTASK-AFFECTED-DOCS-PATHS: the xtask sources (path, text) that may read a documentation file; this command's own
     /// unit tests are left out (they name made-up paths, not files they read).
     xtask_texts: Vec<(String, String)>,
+    /// XTASK-AFFECTED-XTASK-TESTS (D-X.41): `git diff -U0` of `xtask/` against the base (from git, else the file
+    /// `.changed.xtask` a sync may write). `None`: no diff, so a changed xtask source cannot be shown to touch only
+    /// its test module (FULL, as before).
+    xtask_diff: Option<String>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -687,9 +695,11 @@ impl Repo {
         }
         let mut crates = Vec::new();
         for dir in &members {
-            let (name, deps) = parse_manifest(&read(&root.join(dir).join("Cargo.toml")));
+            let manifest = read(&root.join(dir).join("Cargo.toml"));
+            let (name, deps) = parse_manifest(&manifest);
             if !name.is_empty() {
-                crates.push(Crate { name, dir: dir.clone(), deps });
+                let lib = root.join(dir).join("src/lib.rs").is_file() || manifest.lines().any(|l| l.trim() == "[lib]");
+                crates.push(Crate { name, dir: dir.clone(), deps, lib });
             }
         }
         let names: BTreeSet<String> = crates.iter().map(|c| c.name.clone()).collect();
@@ -854,7 +864,7 @@ impl Repo {
                 (rel(p), text)
             })
             .collect();
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts }
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts, xtask_diff: fs::read_to_string(root.join(".changed.xtask")).ok() }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -1277,6 +1287,9 @@ enum Class {
     /// bench/ and benchmarks/: data the xtask unit tests read (limits, rows, sentinels), so `-p xtask` runs.
     XtaskData,
     XtaskAudit(&'static [&'static str]),
+    /// XTASK-AFFECTED-XTASK-TESTS: xtask test code only (`xtask/tests/`, or a source whose diff stays inside its
+    /// trailing `#[cfg(test)]` module): the xtask unit tests, clippy and `cargo xtask static`, not FULL.
+    XtaskTestCode,
     /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
     MathWiring,
     /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
@@ -1353,6 +1366,11 @@ fn classify(path: &str) -> Option<Class> {
     if let Some(c) = math_class(path) {
         return Some(c);
     }
+    // XTASK-AFFECTED-XTASK-TESTS (D-X.41): xtask's integration tests run only under `cargo test -p xtask`; no gate
+    // step executes them.
+    if path.starts_with("xtask/tests/") {
+        return Some(Class::XtaskTestCode);
+    }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
     }
@@ -1400,6 +1418,77 @@ fn classify(path: &str) -> Option<Class> {
     None
 }
 
+/// XTASK-AFFECTED-XTASK-TESTS (D-X.41): does the change to xtask source `f` stay inside its test module? Needs the
+/// base diff (`Repo::xtask_diff`) and the file's current text; anything missing is "no" (FULL).
+fn xtask_test_only(repo: &Repo, f: &str) -> bool {
+    if !(f.starts_with("xtask/src/") && f.ends_with(".rs")) {
+        return false;
+    }
+    let Some(diff) = repo.xtask_diff.as_deref() else { return false };
+    let Some((_, text)) = repo.xtask_texts.iter().find(|(p, _)| p == f) else { return false };
+    test_module_change(diff, f, text)
+}
+
+/// The 1-based line range strictly inside the file's test module: a column-0 `#[cfg(test)]` line, then a column-0
+/// `mod <name> {` line, up to the first column-0 `}` line, after which only blank lines may follow (the module ends
+/// the file, so a lookalike inside a string literal of the code above is never taken for it). `None`: no such module.
+fn test_module_interior(text: &str) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = text.lines().collect();
+    for i in (0..lines.len()).filter(|&i| lines[i] == "#[cfg(test)]") {
+        if !lines.get(i + 1).is_some_and(|m| m.starts_with("mod ") && m.ends_with(" {")) {
+            continue;
+        }
+        let close = (i + 2..lines.len()).find(|&j| lines[j] == "}")?;
+        if lines[close + 1..].iter().all(|l| l.trim().is_empty()) {
+            // 0-based i is the attribute and i+1 the `mod` line: the body is 1-based i+3 ..= close.
+            return Some((i + 3, close));
+        }
+    }
+    None
+}
+
+/// Whether `diff` (`git diff -U0`) changes `file` (current text `text`) only inside its test module: the file has one
+/// plain modification section (no new, deleted, renamed or binary file), every hunk's new lines (for a pure deletion,
+/// the lines on both sides of it) lie strictly inside the module, and no added or removed line starts at column 0
+/// (which could open, close or move the module or an item around it). Anything else is "no": FULL, as before.
+fn test_module_change(diff: &str, file: &str, text: &str) -> bool {
+    let Some((lo, hi)) = test_module_interior(text) else { return false };
+    let inside = |n: usize| (lo..=hi).contains(&n);
+    let header = format!("diff --git a/{file} b/{file}");
+    let mut sections = diff.split("\ndiff --git ").enumerate().map(|(k, s)| if k == 0 { s.to_string() } else { format!("diff --git {s}") });
+    let Some(sec) = sections.find(|s| s.lines().next() == Some(header.as_str())) else { return false };
+    if sections.any(|s| s.lines().next() == Some(header.as_str())) {
+        return false;
+    }
+    let mut hunks = 0;
+    for l in sec.lines().skip(1) {
+        if l.starts_with("new file") || l.starts_with("deleted file") || l.starts_with("rename ") || l.starts_with("copy ") || l.starts_with("Binary ") || l.starts_with("old mode") || l.starts_with("similarity") {
+            return false;
+        }
+        // Header lines come before the first hunk only (after it, `--- x` is a removed line `-- x`).
+        if (hunks == 0 && (l.starts_with("--- ") || l.starts_with("+++ ") || l.starts_with("index "))) || l.starts_with('\\') {
+            continue;
+        }
+        if let Some(h) = l.strip_prefix("@@ ") {
+            let Some(new) = h.split_whitespace().find_map(|w| w.strip_prefix('+')) else { return false };
+            let (start, count) = new.split_once(',').map_or((new, "1"), |(s, c)| (s, c));
+            let (Ok(start), Ok(count)) = (start.parse::<usize>(), count.parse::<usize>()) else { return false };
+            let ok = if count == 0 { inside(start) && inside(start + 1) } else { inside(start) && inside(start + count - 1) };
+            if !ok {
+                return false;
+            }
+            hunks += 1;
+        } else if let Some(body) = l.strip_prefix('+').or_else(|| l.strip_prefix('-')) {
+            if body.chars().next().is_some_and(|c| !c.is_whitespace()) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    hunks > 0
+}
+
 /// The selection for a set of changed files (paths relative to the repository root, `/`).
 #[cfg(test)]
 pub fn select(repo: &Repo, files: &[String]) -> Selection {
@@ -1434,7 +1523,17 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
         if f.starts_with("csys/include/") && f.ends_with(".h") && header_map(repo, f, &mut sel) {
             continue;
         }
-        match classify(f) {
+        let class = match classify(f) {
+            Some(Class::Full(_)) if xtask_test_only(repo, f) => Some(Class::XtaskTestCode),
+            c => c,
+        };
+        match class {
+            Some(Class::XtaskTestCode) => {
+                sel.xtask_tests = true;
+                add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
+                sel.xtask_cmds.insert("static".to_string());
+                sel.notes.push(format!("{f}: xtask test code only (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
+            }
             Some(Class::Full(why)) => {
                 if f.starts_with("xtask/") {
                     sel.xtask_tests = true;
@@ -2147,6 +2246,16 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// D-X.41: `git diff -U0` of `xtask/` (the working tree against the merge base with `base`, as `changed_files`).
+/// `None` without git history or base (a VM tree: the caller keeps the sync's `.changed.xtask`, if any). An untracked
+/// file is not in it, so it is never shown to be test-only.
+fn git_xtask_diff(root: &Path, base: &str) -> Option<String> {
+    git(root, &["rev-parse", "--verify", "--quiet", "HEAD"]).ok()?;
+    let base = if git(root, &["rev-parse", "--verify", "--quiet", base]).is_ok() { base } else if base == "origin/main" { "main" } else { return None };
+    let mb = git(root, &["merge-base", "HEAD", base]).ok()?;
+    git(root, &["diff", "-U0", "--no-color", "--no-ext-diff", mb.trim(), "--", "xtask/"]).ok()
+}
+
 /// Changed file names: the working tree against the merge base with `base`, plus untracked.
 /// Without git history (a VM role tree has an empty repository), the `.changed` list the sync wrote.
 pub(crate) fn changed_files(root: &Path, base: &str) -> Result<Vec<String>, String> {
@@ -2753,7 +2862,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["--features", "liella-boundary/export,liella-boundary/selftest"]);
                 }
                 if sel.libs.contains_key(*c) {
-                    cmd.arg("--lib");
+                    cmd.arg(unit_tests_flag(repo, c));
                 }
                 for t in &ts {
                     cmd.args(["--test", t]);
@@ -2795,6 +2904,14 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
+}
+
+/// The cargo target flag that runs a package's unit tests: `--lib`, or `--bins` for a bin-only package (xtask, which
+/// a change to a crate it depends on reaches through `wide`), where `--lib` stops the build at once ("no library
+/// targets found in package") and the gate went red without running a test (XTASK-AFFECTED-XTASK-TESTS, D-X.41).
+/// An unknown package keeps `--lib`.
+fn unit_tests_flag(repo: &Repo, krate: &str) -> &'static str {
+    if repo.crates.iter().any(|c| c.name == krate && !c.lib) { "--bins" } else { "--lib" }
 }
 
 /// Is a failed test (`crate::target name`, `crate name` for unit tests, `xtask::bin/xtask name`) in the selection?
@@ -2982,7 +3099,9 @@ fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result
         Some(f) => f.clone(),
         None => changed_files(root, &o.base)?,
     };
-    let repo = Repo::load(root);
+    let mut repo = Repo::load(root);
+    // D-X.41: the xtask diff describes the base comparison only; a `--files` list is not one (no diff: FULL as before).
+    repo.xtask_diff = if o.files.is_some() { None } else { git_xtask_diff(root, &o.base).or(repo.xtask_diff) };
     let sel = select_tier(&repo, &files, tier);
     println!("tier: {tier:?} (per-fix gates: direct; the landing gate runs everything)");
     print_selection(&repo, &files, &sel);
@@ -3257,7 +3376,7 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
     fn repo() -> &'static Repo {
         static REPO: std::sync::OnceLock<Repo> = std::sync::OnceLock::new();
         // The sync's `.changed.hdr` (present in a VM tree) must not decide the unit tests: no header diff here.
-        REPO.get_or_init(|| Repo { hdr_diff: None, ..Repo::load(&root()) })
+        REPO.get_or_init(|| Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) })
     }
 
     // TOOLS-7 (3): only one-line `liella_*` declarations are mappable; anything structural is not.
@@ -3760,7 +3879,7 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
     /// The live repository with the listed machine files' exports replaced by `FIXTURE_EXPORTS` (their `liella_`
     /// symbols, which tie the files to their Rust users and to each other, stay live).
     fn machine_fixture(extra: &[&str]) -> Repo {
-        let mut r = Repo { hdr_diff: None, ..Repo::load(&root()) };
+        let mut r = Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) };
         for (file, exports) in FIXTURE_EXPORTS {
             let c = r.csys.get_mut(&format!("csys/src/machine/{file}")).expect("listed machine file");
             let mut syms: Vec<String> = c.symbols.take().expect("readable").into_iter().filter(|s| s.starts_with("liella_")).collect();
@@ -3814,6 +3933,79 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         for f in ["xtask/src/so.rs", "xtask/src/spec.rs", "xtask/src/csys.rs", "xtask/src/main.rs"] {
             assert!(!sel(&[f]).1.full.is_empty(), "{f} must escalate to full");
         }
+    }
+
+    #[test]
+    fn a_bin_only_package_runs_its_unit_tests_through_its_bins() {
+        // no spec clause: XTASK-AFFECTED-XTASK-TESTS (D-X.41). xtask has no library target, so `--lib` fails the build;
+        // a library crate keeps `--lib`. xtask is reached through `wide` of a crate it depends on (liella-ld).
+        let r = repo();
+        assert_eq!(unit_tests_flag(r, "xtask"), "--bins");
+        assert_eq!(unit_tests_flag(r, "liella"), "--lib");
+        assert_eq!(unit_tests_flag(r, "liella-ld"), "--lib");
+        let mut s = Selection::default();
+        s.wide(r, "liella-ld", "probe");
+        assert!(s.libs.contains_key("xtask"), "xtask depends on liella-ld: {:?}", s.libs.keys());
+    }
+
+    const MODULE: &str = "fn run() {\n    work();\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn t() {\n        run();\n    }\n}\n";
+
+    fn diff_of(file: &str, hunks: &str) -> String {
+        format!("diff --git a/{file} b/{file}\nindex 1111111..2222222 100644\n--- a/{file}\n+++ b/{file}\n{hunks}")
+    }
+
+    #[test]
+    fn a_change_inside_the_test_module_is_test_code() {
+        // no spec clause: D-X.41. MODULE's test body is lines 7..=12; changed lines there (or a deletion between two of
+        // them) touch test code only.
+        let f = "xtask/src/x.rs";
+        assert_eq!(test_module_interior(MODULE), Some((7, 12)));
+        assert!(test_module_change(&diff_of(f, "@@ -10,0 +11 @@ fn t() {\n+        run();\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -9,2 +9,2 @@\n-    #[test]\n-    fn u() {\n+    #[test]\n+    fn t() {\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -11 +10,0 @@\n-        gone();\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -6,0 +7 @@\n+    use std::fs;\n"), f, MODULE));
+    }
+
+    #[test]
+    fn a_change_outside_the_test_module_stays_full() {
+        // no spec clause: D-X.41. Executed code, the module's boundaries, a column-0 line, a new or renamed file, a
+        // second section, no diff for the file, or a file without a trailing test module: not test-only.
+        let f = "xtask/src/x.rs";
+        let no = |d: &str, text: &str| assert!(!test_module_change(d, f, text), "{d}");
+        no(&diff_of(f, "@@ -2 +2 @@\n-    work();\n+    other();\n"), MODULE);
+        no(&diff_of(f, "@@ -2 +2 @@\n-    work();\n+    other();\n@@ -11 +11 @@\n-        run();\n+        run2();\n"), MODULE);
+        no(&diff_of(f, "@@ -5 +5 @@\n-#[cfg(not(test))]\n+#[cfg(test)]\n"), MODULE);
+        no(&diff_of(f, "@@ -13 +13 @@\n-}\n+}\n"), MODULE);
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+}\n"), MODULE);
+        // A removed column-0 line `--- x` inside a hunk is a body line, not a header to skip.
+        no(&diff_of(f, "@@ -11 +10,0 @@\n---- x\n"), MODULE);
+        no(&format!("diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n@@ -0,0 +11 @@\n+        run();\n"), MODULE);
+        no(&diff_of("xtask/src/y.rs", "@@ -10,0 +11 @@\n+        run();\n"), MODULE);
+        no(&format!("{}\n{}", diff_of(f, "@@ -10,0 +11 @@\n+        run();"), diff_of(f, "@@ -2 +2 @@\n-    a();\n+    b();\n")), MODULE);
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+        run();\n"), &format!("{MODULE}fn after() {{}}\n"));
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+        run();\n"), "fn run() {}\n");
+        no(&diff_of(f, ""), MODULE);
+    }
+
+    #[test]
+    fn xtask_test_code_selects_the_xtask_tests_and_static_not_full() {
+        // no spec clause: D-X.41. xtask/tests/ always; a source only with a diff confined to its test module (the
+        // real file and its own text); without a diff, or for executed code, FULL as before. --tier full stays FULL.
+        let (_, s) = sel(&["xtask/tests/affected_mode.rs"]);
+        assert!(s.full.is_empty() && s.xtask_tests && s.xtask_cmds.contains("static") && s.clippy.contains_key("xtask") && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty(), "{s:?}");
+        assert!(!select_tier(repo(), &["xtask/tests/affected_mode.rs".to_string()], Tier::Full).full.is_empty());
+        let f = "xtask/src/so.rs";
+        let text = &repo().xtask_texts.iter().find(|(p, _)| p == f).expect("so.rs").1;
+        let (lo, hi) = test_module_interior(text).expect("so.rs ends with its test module");
+        let mut r = Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) };
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Direct).full.is_empty(), "no diff: FULL");
+        r.xtask_diff = Some(diff_of(f, &format!("@@ -{lo},0 +{} @@\n+        let _ = 1;\n", lo + 1)));
+        let s = select_tier(&r, &[f.to_string()], Tier::Direct);
+        assert!(s.full.is_empty() && s.xtask_tests && s.xtask_cmds.contains("static"), "{s:?}");
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Full).full.is_empty(), "--tier full stays FULL");
+        r.xtask_diff = Some(diff_of(f, &format!("@@ -{},0 +{} @@\n+        let _ = 1;\n", lo - 3, lo - 2)));
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Direct).full.is_empty(), "executed code: FULL");
+        assert!(hi > lo);
     }
 
     #[test]
