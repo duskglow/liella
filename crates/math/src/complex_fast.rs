@@ -50,7 +50,7 @@
 //! additions of `P.lo ± eps`, the `float` conversion of a part that is not a `float`), and no
 //! other flag can arise. The directed modes run through the envelope and [`cexp`] here.
 
-#![allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)] // exponent fields and format conversions of checked range
+#![allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)] // table indices mod 128, exponent fields and format conversions of checked range
 
 use crate::coeffs::tables as t;
 use crate::dd::{self, Dd};
