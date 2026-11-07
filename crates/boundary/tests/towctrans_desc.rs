@@ -7,7 +7,7 @@
 #![no_builtins]
 #![allow(clippy::arithmetic_side_effects, clippy::unwrap_used, clippy::indexing_slicing, clippy::as_conversions, missing_docs)]
 
-use core::ptr::null_mut;
+use core::ptr::{null, null_mut};
 
 #[path = "../../core/tests/support/skip_note.rs"]
 mod skip_note;
@@ -36,6 +36,11 @@ fn points() -> impl Iterator<Item = wint_t> {
     (0..=0x10_ffffu32).chain([0x11_0000, 0x7fff_ffff, 0x8000_0000, WEOF])
 }
 
+/// The first code point whose answer differs, with both answers.
+fn first_mismatch(got: &[wint_t], want: &[wint_t]) -> Option<(wint_t, wint_t, wint_t)> {
+    points().zip(got.iter().zip(want)).find(|(_, (g, w))| g != w).map(|(c, (g, w))| (c, *g, *w))
+}
+
 fn wctrans(n: &str) -> wctrans_t {
     s::wctrans(name(n).as_ptr().cast())
 }
@@ -52,10 +57,7 @@ fn agree(label: &str, obj: locale_t, other: locale_t) {
     for (form, f) in [("towctrans", s::towctrans as extern "C" fn(wint_t, wctrans_t) -> wint_t), ("__towctrans", s::__towctrans)] {
         for (map, d, want) in [("toupper", up, &want_up), ("tolower", low, &want_low)] {
             let got: Vec<wint_t> = points().map(|c| f(c, d)).collect();
-            if let Some(i) = got.iter().zip(want.iter()).position(|(g, w)| g != w) {
-                let c = points().nth(i).unwrap();
-                panic!("{label}: {form}({c:#x}, {map}) = {:#x}, want {:#x}", got[i], want[i]);
-            }
+            assert_eq!(first_mismatch(&got, want), None, "{label}: {form}(c, {map}): (c, got, want)");
         }
     }
     l7::uselocale(other);
@@ -64,14 +66,15 @@ fn agree(label: &str, obj: locale_t, other: locale_t) {
     for (form, f) in [("towctrans_l", s::towctrans_l as extern "C" fn(wint_t, wctrans_t, locale_t) -> wint_t), ("__towctrans_l", s::__towctrans_l)] {
         for (map, d, want) in [("toupper", up_l, &want_up), ("tolower", low_l, &want_low)] {
             let got: Vec<wint_t> = points().map(|c| f(c, d, obj)).collect();
-            if let Some(i) = got.iter().zip(want.iter()).position(|(g, w)| g != w) {
-                let c = points().nth(i).unwrap();
-                panic!("{label}: {form}({c:#x}, {map}) = {:#x}, want {:#x}", got[i], want[i]);
-            }
+            assert_eq!(first_mismatch(&got, want), None, "{label}: {form}(c, {map}): (c, got, want)");
             // The `_l` answers are towupper_l/towlower_l's too.
             let u = if map == "toupper" { s::towupper_l(0xe9, obj) } else { s::towlower_l(0xc9, obj) };
             assert_eq!(f(if map == "toupper" { 0xe9 } else { 0xc9 }, d, obj), u, "{label}: {form} vs to*_l");
         }
+    }
+    // A null descriptor names no map: every entry maps the character to itself.
+    for c in [0x61, 0xe9, 0x3b1] {
+        assert_eq!((s::towctrans(c, null()), s::towctrans_l(c, null(), obj)), (c, c), "{label}: null descriptor");
     }
     l7::uselocale(prev);
 }
