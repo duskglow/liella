@@ -46,6 +46,7 @@ pub mod mpy;
 pub mod special;
 pub mod wide;
 mod wide_dd;
+mod wide_int;
 pub mod real;
 pub mod complex;
 pub mod ulp;
