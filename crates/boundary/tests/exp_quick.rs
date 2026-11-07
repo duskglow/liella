@@ -1,4 +1,4 @@
-//! The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51, D-10.54; not wired into `exp` yet)
+//! The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51, D-10.54; `exp`'s tier 1 since LIBM-F64-EXP-QUICK-WIRE)
 //! in both builds through the boundary (the FMA build needs the startup dispatch, so its tests live
 //! here; the SSE2 build's own tests are in `liella-math`'s `fast64/quick/tests.rs`). Clause:
 //! s10_0_f_0 (§10.2 exp, D-10.3): every value the quick phase returns is the correctly rounded
@@ -46,8 +46,36 @@ fn cr(x: f64) -> f64 {
     liella_math::fast64::exp_nearest(x).unwrap_or_else(|| Real::exp(x, Rounding::Nearest).0)
 }
 
+/// Held while a test needs one build to stay selected (the choice is process-wide).
+static BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The wired entry (LIBM-F64-EXP-QUICK-WIRE, D-10.51) in the SSE2 build: `m::exp` on the operands
+/// of a seeded sample whose quick result, rounded without the test, is wrong (found here, so the
+/// test cannot pass vacuously) must return the correctly rounded `e^x` (tier 2 or the accurate
+/// path decides them).
+// s10_0_f_0: exp through its entry is correctly rounded where the quick phase would misround.
+#[test]
+fn exp_entry_rounds_quick_misroundings_right() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let had = selftest::math_fma();
+    assert!(selftest::set_math_fma(false));
+    let mut wrong = 0usize;
+    for x in uniform(400_000, 0x9e37_79b9_7f4a_7c15, -708.0, 708.0) {
+        let Some((zh, zl, sc)) = selftest::exp_quick_parts(x) else { continue };
+        let e = cr(x);
+        if (zh + zl) * sc != e {
+            wrong += 1;
+            let v = m::exp(x);
+            assert_eq!(v.to_bits(), e.to_bits(), "hard case exp({x:e} = {:#x}) through the entry: {v:e}, correctly rounded {e:e}", x.to_bits());
+        }
+    }
+    assert!(selftest::set_math_fma(had));
+    assert!(wrong >= 20, "only {wrong} raw misroundings found: the hard set is too small");
+}
+
 /// Run `f` with the FMA build forced, then restore the startup decision; `None` without FMA.
 fn with_fma<T>(f: impl FnOnce() -> T) -> Option<T> {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if !selftest::set_math_fma(true) {
         eprintln!("SKIP: this CPU (or its OS) has no FMA; only the SSE2 build exists here");
         return None;
@@ -103,6 +131,61 @@ fn exp_quick_fma_build_rounds_correctly() {
     }
     assert!(selftest::set_math_fma(true));
     assert!(both > 190_000, "only {both} operands answered by both builds");
+}
+
+/// The tiers of the selected build on a seeded sample: a quick-phase answer is the tiers'
+/// answer, and a quick-phase miss inside tier 2's domain is answered by tier 2 (`Some`, the
+/// correctly rounded `e^x`), not left to the accurate path. The entry's result cannot show which
+/// tier answered (every path is correctly rounded); this does. Returns (misses, misses tier 2
+/// answered).
+fn check_tiers(build: &str, xs: impl Iterator<Item = f64>) -> (usize, usize) {
+    let (mut miss, mut answered) = (0usize, 0usize);
+    for x in xs {
+        let t = selftest::exp_tiered(x);
+        match selftest::exp_quick(x) {
+            Some(v) => assert_eq!(t.map(f64::to_bits), Some(v.to_bits()), "{build} exp tiers at {x:e} ({:#x}): {t:?}, the quick phase answered {v:e}", x.to_bits()),
+            None => {
+                miss += 1;
+                if let Some(v) = t {
+                    answered += 1;
+                    let e = cr(x);
+                    assert_eq!(v.to_bits(), e.to_bits(), "{build} exp tier 2 at {x:e} ({:#x}): {v:e}, correctly rounded {e:e}", x.to_bits());
+                }
+            }
+        }
+    }
+    (miss, answered)
+}
+
+// s10_0_f_0: D-10.51, exp's two in-place tiers in both builds. SSE2: on every quick-phase miss the
+// tiers return exactly tier 2's (`fast64::exp_nearest`) answer. FMA (tier 2 is not callable from
+// here): at least 90% as many of its misses answered as the SSE2 tier 2 answers on them (the two
+// tier-2 builds round the same and may decline a few different operands next to a rounding
+// boundary; on this sample 139 of 157 misses, the SSE2 tier 2 also 139).
+#[test]
+fn exp_quick_misses_are_answered_by_tier_two() {
+    let xs: Vec<f64> = uniform(2_000_000, 7, -10.0, 10.0).collect();
+    {
+        let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let had = selftest::math_fma();
+        assert!(selftest::set_math_fma(false));
+        let (miss, answered) = check_tiers("SSE2", xs.iter().copied());
+        let tier2 = xs.iter().filter(|&&x| selftest::exp_quick(x).is_none() && liella_math::fast64::exp_nearest(x).is_some()).count();
+        assert!(selftest::set_math_fma(had));
+        eprintln!("exp tiers SSE2: {miss} quick misses, {answered} answered by tier 2 ({tier2} expected)");
+        assert!(miss >= 1000, "only {miss} quick-phase misses in the sample: the check is too weak");
+        assert_eq!(answered, tier2, "SSE2 exp tiers: {answered} of {miss} quick-phase misses answered, tier 2 answers {tier2}: a miss did not reach tier 2");
+    }
+    let Some(((miss, answered), fma_misses)) = with_fma(|| {
+        let r = check_tiers("FMA", xs.iter().copied());
+        (r, xs.iter().copied().filter(|&x| selftest::exp_quick(x).is_none()).collect::<Vec<f64>>())
+    }) else {
+        return;
+    };
+    let tier2 = fma_misses.iter().filter(|&&x| liella_math::fast64::exp_nearest(x).is_some()).count();
+    eprintln!("exp tiers FMA: {miss} quick misses, {answered} answered by tier 2 (SSE2 tier 2 answers {tier2})");
+    assert!(tier2 >= 100, "only {tier2} FMA quick-phase misses that tier 2 answers: the check is too weak");
+    assert!(answered * 10 >= tier2 * 9, "FMA exp tiers: {answered} of {miss} quick-phase misses answered, SSE2 tier 2 answers {tier2}: a miss did not reach tier 2");
 }
 
 // s10_0_f_0: the FMA build's unrounded result is within its stated bound RHO_FMA (D-10.54).

@@ -147,7 +147,31 @@ pub fn exp_quick(x: f64) -> Option<f64> {
     let w = zl * $c;
     if zh + w == zh && w != 0.0 { Some(v) } else { None }
 }
+
+/// `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2
+/// (`fast64::exp_nearest` in the same build, out of line). `None` outside `2^-60 <= |x| < 708`
+/// (tier 2's own domain, so it is not tried) or when tier 2 declines too: the caller then runs
+/// the accurate path.
+$(#[$a])*
+$(#[$i])*
+pub fn exp_tiered(x: f64) -> Option<f64> {
+    let (zh, zl, sc) = exp_quick_parts(x)?;
+    let v = zh * sc;
+    let w = zl * $c;
+    if zh + w == zh && w != 0.0 {
+        return Some(v);
+    }
+    tier2(x)
+}
     };
+}
+
+/// Tier 2 of [`exp_tiered`] (the SSE2 build of [`super::exp_nearest`]), out of line and cold so
+/// the quick phase keeps its registers: about 0.5% of calls reach it.
+#[cold]
+#[inline(never)]
+fn tier2(x: f64) -> Option<f64> {
+    super::exp_nearest(x)
 }
 
 quick!(; #[inline(always)]; ma; no_lo; C_SSE2);
@@ -173,6 +197,15 @@ pub mod fused {
     #[inline]
     fn lo(th: f64, rh: f64, u: f64) -> f64 {
         _mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(th), _mm_set_sd(rh), _mm_set_sd(u)))
+    }
+
+    /// Tier 2 of [`exp_tiered`] in the FMA build (`fast64::fused::exp_nearest`), out of line and
+    /// cold: under 0.01% of calls reach it.
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2(x: f64) -> Option<f64> {
+        crate::fast64::fused::exp_nearest(x)
     }
 
     quick!(
