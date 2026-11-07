@@ -1,0 +1,12 @@
+{"task": "TIMING-COV-COLD-SETLOCALE", "model": "opus", "tokens": null,
+ "result": "DO NOT LAND: evidence only; first setlocale gap is mostly the heap's first use (14 of 32 faults + 7 syscalls); locale-side change measures -120 user instr, faults by layout only",
+ "branch": "task/timing-cov-cold-setlocale", "head": null,
+ "gate": {"affected": "affected: ok (direct tier, --base origin/next, rc 0)", "peak": "2.4G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "next step for the first setlocale row lies in the heap's first allocation (one region, one mmap, no vdso lookup) and in ruling #3347's boundary arena", "recommendation": "open a heap first-use story measured with this probe before more locale-side work"}],
+ "informational": ["static path names in intern_name_locked move a slab's first touch to the next allocation of that class (G +1 fault): reverted", "the earlier static-name commit's count run (tcs-counts-after) is superseded"],
+ "refused": [],
+ "improvement": "a cold-row story should start from a fault trace symbolized per phase (sym.sh): it showed in 3 calls that the locale code cannot close the gap",
+ "next_step": "heap first-use story: put the first cache, the shard data and the first slab records in one region, measured with the probe in kanon:~/work/TIMING-COV-COLD-SETLOCALE",
+ "report_file": "handoff/timing-cov-cold-setlocale.md",
+ "jobs": ["kanon:tcs-counts-base", "kanon:tcs-counts-after2", "kanon:tcs-gate", "kanon:tcs-plants"]}
