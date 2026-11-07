@@ -235,18 +235,22 @@ def key(name):
 
 def main():
     args = sys.argv[1:]
-    ordered = bool(args) and args[0] == "--ordered"
+    # --tagged <tier>=<names file>...: `<key>\t<tier>` in first-touch order, each key with the tier
+    # of the first file that names it (HOTTEXT-STARTUP-COMPLETE).
+    tagged = bool(args) and args[0] == "--tagged"
+    ordered = tagged or (bool(args) and args[0] == "--ordered")
     if ordered:
         args = args[1:]
     keys = {}
-    for path in args:
+    for arg in args:
+        tier, path = arg.split("=", 1) if tagged else (None, arg)
         with open(path) as f:
             for line in f:
                 line = line.strip()
                 if line and line != "main":
-                    keys.setdefault(key(line), None)
+                    keys.setdefault(key(line), tier)
     for k in (keys if ordered else sorted(keys)):
-        print(k)
+        print(f"{k}\t{keys[k]}" if tagged else k)
 
 
 if __name__ == "__main__":

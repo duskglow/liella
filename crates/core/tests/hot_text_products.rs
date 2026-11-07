@@ -393,6 +393,16 @@ fn init_cold_startup_functions_are_grouped() {
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
         );
     }
+    // HOTTEXT-STARTUP-COMPLETE: the first Rust function of start-up (generic since the run-path
+    // change: `start::<false>`, 5.1 KiB) and the IRELATIVE pass. Outside the group, `start` sat in
+    // cold `.text` and crossed a 64 KiB window when code before it grew (one more start-up fault).
+    // Generic instantiations carry the type after the name, so these match anywhere in the name.
+    for f in ["15liella_boundary7runtime5startKb0_", "15liella_boundary7runtime14apply_irelative"] {
+        assert!(
+            grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name.contains(f))),
+            "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
+        );
+    }
     // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
     // group the second lookup of a process took 4 more text faults. Which of them keep a section of
     // their own depends on the profile (the release build inlines region_path, stamp_files and
