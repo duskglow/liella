@@ -850,7 +850,10 @@ pub fn drained() -> &'static Ctx<'static, CSys, KernelPages> {
 }
 
 /// `M_PERTURB` from the environment at start (`MALLOC_PERTURB_`, which the tunable
-/// `glibc.malloc.perturb` overrides; both removed in a secure process).
+/// `glibc.malloc.perturb` overrides; both removed in a secure process). Inlined into both
+/// instances of `runtime::start` (D-27.10: the non-PIE start costs what it did before the
+/// static-PIE one).
+#[inline(always)]
 pub fn perturb_from_start(tunable: Option<u8>) {
     let env = crate::process::getenv(crate::startup_names::MALLOC_PERTURB).map(crate::strz::env_value).and_then(malloc_debug::perturb_value);
     if let Some(v) = tunable.or(env) {

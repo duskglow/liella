@@ -161,13 +161,16 @@ impl SwapOps for Kernel {
 
 /// The swap at start-up: `want` is the AVX2 class (`cpu::avx2_wanted`, as decided by
 /// `cpu::init_with`) and `disabled` the COMPAT-20 tunable.
-/// Records and returns the outcome.
+/// Records and returns the outcome. Inlined, with [`decide`], into both instances of
+/// `runtime::start` (D-27.10: the non-PIE start costs what it did before the static-PIE one).
+#[inline(always)]
 pub fn install_with(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outcome {
     let o = decide(ops, page0, want, disabled);
     OUTCOME.store(o.code(), Relaxed);
     o
 }
 
+#[inline(always)]
 fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outcome {
     if !want {
         return Outcome::Sse2Class;
@@ -197,6 +200,9 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
 
 /// The start-up step (static step 4, right after `cpu::init_with`): `avx2` is the class that
 /// `init_with` decided (`cpu::avx2_in` of its state), so the step reads no CPU features itself.
+/// Inlined into both instances of `runtime::start` (D-27.10: the non-PIE start costs what it
+/// did before the static-PIE one).
+#[inline(always)]
 pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
     let _ = install_with(&Kernel, page0_addr(), avx2, swap_disabled(t.no_classed_swap));
 }

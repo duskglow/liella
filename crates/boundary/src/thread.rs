@@ -147,8 +147,10 @@ pub(crate) fn default_stack() -> usize {
 }
 
 /// The initial thread of a process Liella started: its descriptor, the thread list, the
-/// robust list and the rseq area (the products' startup).
+/// robust list and the rseq area (the products' startup). Inlined into both instances of
+/// `runtime::start` (D-27.10: the non-PIE start costs what it did before the static-PIE one).
 #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+#[inline(always)]
 pub(crate) fn init_initial(static_program: bool) {
     let d = if static_program {
         // The area startup mapped holds the descriptor and keys after the block (zeroed).
