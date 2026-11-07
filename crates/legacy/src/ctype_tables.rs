@@ -275,9 +275,14 @@ pub fn towctrans_view(wc: u32, desc: usize, v: &LocaleView) -> u32 {
         Some(d) => d,
         None => [C_TOUPPER.as_ptr().wrapping_add(ZERO).expose_provenance(), C_TOLOWER.as_ptr().wrapping_add(ZERO).expose_provenance()],
     };
-    let upper = desc == up;
-    if upper || desc == low {
-        return v.wtrans(wc, upper);
+    // Two arms with a constant direction each: one arm with `upper` as a value kept both case
+    // tables live through the walk above U+00FF (six saved registers, ~84 instructions per call
+    // in en_US.UTF-8 against `towupper`'s ~44).
+    if desc == up {
+        return v.wtrans(wc, true);
+    }
+    if desc == low {
+        return v.wtrans(wc, false);
     }
     towctrans_other(wc, desc, v.locale())
 }
