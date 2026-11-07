@@ -1,0 +1,2 @@
+all-equal-inverted | crates/legacy/src/global_locale.rs | perl:s/None if next\.names\(\)\.iter\(\)\.all/None if !next.names().iter().all/ | cargo test -p liella-boundary --test s07_locale_symbols | msg:sym_setlocale.*FAILED|panicked
+composite-truncated | crates/legacy/src/global_locale.rs | perl:s/buf\.get\(\.\.len\)\?\)\.ok\(\)/buf.get(..len.min(20))?).ok()/ | cargo test -p liella-boundary --test s07_locale_symbols | msg:sym_setlocale.*FAILED|panicked

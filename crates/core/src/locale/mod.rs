@@ -531,22 +531,10 @@ pub trait Source {
 
 /// The default directory of compiled locales and the archive.
 pub const LOCALE_DIR: &[u8] = b"/usr/lib/locale";
-/// The locale archive, followed by a NUL (a name interned without an allocation).
-pub const ARCHIVE_Z: &[u8] = b"/usr/lib/locale/locale-archive\0";
 /// The locale archive.
-pub const ARCHIVE: &[u8] = without_nul(ARCHIVE_Z);
-/// The locale alias file, followed by a NUL.
-pub const ALIAS_FILE_Z: &[u8] = b"/usr/share/locale/locale.alias\0";
+pub const ARCHIVE: &[u8] = b"/usr/lib/locale/locale-archive";
 /// The locale alias file.
-pub const ALIAS_FILE: &[u8] = without_nul(ALIAS_FILE_Z);
-
-/// `z` without its last byte (the NUL of the `_Z` names).
-const fn without_nul(z: &'static [u8]) -> &'static [u8] {
-    match z.split_last() {
-        Some((_, s)) => s,
-        None => z,
-    }
-}
+pub const ALIAS_FILE: &[u8] = b"/usr/share/locale/locale.alias";
 
 /// The built-in locale named `name` and the name it reports, if it is one.
 pub fn builtin(name: &'static [u8]) -> Option<(Data, &'static [u8])> {

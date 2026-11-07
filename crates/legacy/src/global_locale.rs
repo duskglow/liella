@@ -187,16 +187,6 @@ pub fn intern<S: Sys>(sys: &S, objs: &impl Objects, l: Locale) -> KResult<usize>
     intern_locked(objs, l)
 }
 
-/// Names interned without an allocation (TIMING-COV-COLD-SETLOCALE): the fixed paths a first
-/// load opens, each followed by its NUL. Allocated, the archive's path was the first
-/// `setlocale`'s only block of its size class: one more slab page and slab record touched.
-const STATIC_NAMES: [&[u8]; 2] = [locale::ARCHIVE_Z, locale::ALIAS_FILE_Z];
-
-/// The static copy of `name`, followed by its NUL, when it is one of [`STATIC_NAMES`].
-fn static_name(name: &[u8]) -> Option<&'static [u8]> {
-    STATIC_NAMES.into_iter().find(|z| z.split_last().is_some_and(|(_, s)| *s == *name))
-}
-
 /// The interned copy of `name` (deduplicated), `'static` and followed by a NUL, and its slot.
 /// The caller holds [`LOCK`].
 fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'static [u8])> {
@@ -209,15 +199,10 @@ fn intern_name_locked(objs: &impl Objects, name: &[u8]) -> KResult<(usize, &'sta
     }
     let e = SLOTS.get(n).ok_or(Errno::ENOMEM)?;
     let (addr, len) = (&e.name_addr, &e.name_len);
-    let leaked: &'static [u8] = match static_name(name) {
-        Some(z) => z,
-        None => {
-            let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
-            v.extend_from_slice(name)?;
-            v.push(0)?;
-            v.leak()
-        }
-    };
+    let mut v = TryVec::with_capacity(name.len().saturating_add(1))?;
+    v.extend_from_slice(name)?;
+    v.push(0)?;
+    let leaked: &'static [u8] = v.leak();
     addr.store(addr_of(leaked), Release);
     len.store(name.len(), Release);
     NAME_COUNT.store(n.saturating_add(1), Release);
