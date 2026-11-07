@@ -5,7 +5,7 @@
 //! `-lm` counts its own user-mode instructions over a fixed loop of `exp` and `log` calls
 //! (`perf_event_open`, self-monitoring), once with the tunable and once without. Instruction
 //! counts of a fixed loop are deterministic; no wall clock is involved.
-#![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used, clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -155,5 +155,111 @@ fn libm_product_trig_fma_builds_return_the_baseline_bits() {
     // Columns: index, sin, cos, tan, sincos sine, sincos cosine.
     for (f, p) in fused.lines().zip(plain.lines()) {
         assert_eq!(f, p, "trig FMA build (left) differs from the baseline (right)");
+    }
+}
+
+/// `exp`'s tiers through the product (D-10.51, LIBM-F64-EXP-QUICK-WIRE): `@MISS@` holds operands
+/// whose SSE2 quick phase declines and whose tier 2 decides, `@HIT@` operands the quick phase
+/// decides. The program counts its user-mode instructions over 32 passes of each set (2048
+/// calls) and prints both counts, then the bits of `exp` on each miss operand.
+const TIER_PROGRAM: &str = r#"
+#include <errno.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+long syscall(long, ...);
+static const uint64_t miss[64] = {@MISS@};
+static const uint64_t hit[64] = {@HIT@};
+static double d(uint64_t u) { double v; memcpy(&v, &u, sizeof v); return v; }
+static uint64_t b(double v) { uint64_t u; memcpy(&u, &v, sizeof u); return u; }
+static long fd;
+static uint64_t run(const uint64_t *xs) {
+    volatile double sink = 0;
+    ioctl(fd, 0x2403, 0);
+    ioctl(fd, 0x2400, 0);
+    for (int p = 0; p < 32; p++)
+        for (int i = 0; i < 64; i++) sink += exp(d(xs[i]));
+    ioctl(fd, 0x2401, 0);
+    uint64_t n = 0;
+    if (read(fd, &n, sizeof n) != sizeof n) return 0;
+    return n;
+}
+int main(void) {
+    uint64_t attr[16] = {0};
+    attr[0] = (uint64_t)64 << 32;
+    attr[1] = 1;
+    attr[5] = 1 | 1 << 5 | 1 << 6;
+    volatile double warm = exp(0.75);
+    (void)warm;
+    fd = syscall(298, attr, 0, -1, -1, 0);
+    if (fd < 0) { printf("noperf %d\n", errno); return 0; }
+    uint64_t m = run(miss), h = run(hit);
+    printf("%llu %llu\n", (unsigned long long)m, (unsigned long long)h);
+    for (int i = 0; i < 64; i++) printf("%016llx\n", (unsigned long long)b(exp(d(miss[i]))));
+    return 0;
+}
+"#;
+
+/// A quick-phase miss costs tier 2, not the accurate path: per call, the miss set may cost at
+/// most `TIER2_MARGIN` instructions more than the hit set. Tier 2's SSE2 build is about 160
+/// instructions (one call traced on the Zen 1 host); the accurate path is several times that.
+const TIER2_MARGIN: u64 = 400;
+
+#[test]
+fn libm_product_exp_quick_misses_take_tier_two() {
+    // Trace: s10_0_f_0 (§10.2 exp correctly rounded, D-10.3); D-10.51 (the two-phase exp: a quick
+    // phase miss goes to tier 2, whose answer is the correctly rounded e^x).
+    let products = std::env::var_os("LIELLA_PRODUCTS").map_or_else(|| root().join("target/liella"), PathBuf::from);
+    assert!(products.join("libc.a").exists() && products.join("libm.a").exists(), "the products are missing: run `cargo xtask so`");
+    // Operands from a fixed xorshift sample over [-10, 10] (the bench's range), SSE2 builds.
+    let (mut miss, mut hit) = (Vec::new(), Vec::new());
+    let mut st: u64 = 0x2545_f491_4f6c_dd1d;
+    while miss.len() < 64 || hit.len() < 64 {
+        st ^= st << 13;
+        st ^= st >> 7;
+        st ^= st << 17;
+        let x = -10.0 + 20.0 * (f64::from_bits(0x3ff0_0000_0000_0000 | (st >> 12)) - 1.0);
+        match (liella_math::fast64::quick::exp_quick(x), liella_math::fast64::exp_nearest(x)) {
+            (None, Some(v)) if miss.len() < 64 => miss.push((x, v)),
+            (Some(_), _) if hit.len() < 64 => hit.push(x),
+            _ => {}
+        }
+    }
+    let list = |v: &mut dyn Iterator<Item = f64>| v.map(|x| format!("0x{:016x}ull", x.to_bits())).collect::<Vec<_>>().join(",");
+    let src = TIER_PROGRAM
+        .replace("@MISS@", &list(&mut miss.iter().map(|m| m.0)))
+        .replace("@HIT@", &list(&mut hit.iter().copied()));
+    let dir = root().join("target/test-scratch/libm_fma_select").join(format!("tier-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("t.c"), src).unwrap();
+    let out = Command::new(root().join("scripts/liella-cc"))
+        .env("LIELLA_PRODUCTS", &products)
+        .env_remove("LIELLA_CC_NO_LIBM")
+        .env_remove("LIELLA_CC_EXTRA")
+        .current_dir(&dir)
+        .args(["-O1", "-fno-builtin", "-o", "t", "t.c", "-lm"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "liella-cc failed: {}", String::from_utf8_lossy(&out.stderr));
+    let out = Command::new(dir.join("t")).env("GLIBC_TUNABLES", "glibc.cpu.hwcaps=-FMA").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut lines = text.lines();
+    let head = lines.next().unwrap_or_default();
+    let bits: Vec<&str> = lines.collect();
+    if !head.starts_with("noperf") {
+        let n: Vec<u64> = head.split(' ').map(|s| s.parse().unwrap_or_else(|_| panic!("unexpected output {head:?}"))).collect();
+        let (m, h) = (n[0] / 2048, n[1] / 2048);
+        println!("exp instructions per call, SSE2 builds: quick-phase misses {m}, hits {h}");
+        assert!(m <= h + TIER2_MARGIN, "exp quick-phase misses cost {m} instructions per call against {h} for hits: a miss did not stop at tier 2");
+    } else {
+        println!("SKIP (count only): no user-mode instruction counter for this process ({head}): perf_event_open refused");
+    }
+    assert_eq!(bits.len(), 64, "unexpected output {text:?}");
+    for ((x, v), got) in miss.iter().zip(bits) {
+        assert_eq!(got, format!("{:016x}", v.to_bits()), "exp({x:e}) after a quick-phase miss: not the correctly rounded result");
     }
 }

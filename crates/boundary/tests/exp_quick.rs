@@ -1,4 +1,4 @@
-//! The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51, D-10.54; not wired into `exp` yet)
+//! The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51, D-10.54; `exp`'s tier 1 since LIBM-F64-EXP-QUICK-WIRE)
 //! in both builds through the boundary (the FMA build needs the startup dispatch, so its tests live
 //! here; the SSE2 build's own tests are in `liella-math`'s `fast64/quick/tests.rs`). Clause:
 //! s10_0_f_0 (§10.2 exp, D-10.3): every value the quick phase returns is the correctly rounded
@@ -46,8 +46,36 @@ fn cr(x: f64) -> f64 {
     liella_math::fast64::exp_nearest(x).unwrap_or_else(|| Real::exp(x, Rounding::Nearest).0)
 }
 
+/// Held while a test needs one build to stay selected (the choice is process-wide).
+static BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The wired entry (LIBM-F64-EXP-QUICK-WIRE, D-10.51) in the SSE2 build: `m::exp` on the operands
+/// of a seeded sample whose quick result, rounded without the test, is wrong (found here, so the
+/// test cannot pass vacuously) must return the correctly rounded `e^x` (tier 2 or the accurate
+/// path decides them).
+// s10_0_f_0: exp through its entry is correctly rounded where the quick phase would misround.
+#[test]
+fn exp_entry_rounds_quick_misroundings_right() {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let had = selftest::math_fma();
+    assert!(selftest::set_math_fma(false));
+    let mut wrong = 0usize;
+    for x in uniform(400_000, 0x9e37_79b9_7f4a_7c15, -708.0, 708.0) {
+        let Some((zh, zl, sc)) = selftest::exp_quick_parts(x) else { continue };
+        let e = cr(x);
+        if (zh + zl) * sc != e {
+            wrong += 1;
+            let v = m::exp(x);
+            assert_eq!(v.to_bits(), e.to_bits(), "hard case exp({x:e} = {:#x}) through the entry: {v:e}, correctly rounded {e:e}", x.to_bits());
+        }
+    }
+    assert!(selftest::set_math_fma(had));
+    assert!(wrong >= 20, "only {wrong} raw misroundings found: the hard set is too small");
+}
+
 /// Run `f` with the FMA build forced, then restore the startup decision; `None` without FMA.
 fn with_fma<T>(f: impl FnOnce() -> T) -> Option<T> {
+    let _held = BUILD.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if !selftest::set_math_fma(true) {
         eprintln!("SKIP: this CPU (or its OS) has no FMA; only the SSE2 build exists here");
         return None;

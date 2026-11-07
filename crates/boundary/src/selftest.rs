@@ -715,7 +715,7 @@ pub fn math_fma() -> bool {
     crate::dispatch::fma()
 }
 
-/// The `double` `exp` quick phase (D-10.51, not wired yet) in the build [`set_math_fma`] chose:
+/// The `double` `exp` quick phase alone (D-10.51; `exp`'s tier 1) in the build [`set_math_fma`] chose:
 /// the correctly rounded `e^x`, or `None` when its rounding test does not decide.
 pub fn exp_quick(x: f64) -> Option<f64> {
     crate::hot::exp_quick(x)
