@@ -33,7 +33,16 @@ LIBM-F64-EXP-QUICK-2), on top of D-10.12 / D-10.3.
 - lint0 (clippy+static on the inherited head, step 0 of the brief) waited 45 min in keke's queue and was cancelled
   (kill-label); the same checks run first in the gate job on the merged head, which contains the inherited head.
 
-RESULTS: pending at time of writing (see report json).
+RESULTS (code tree 2426f3b2a, keke 7-CPU slots, load 15-20):
+- gate-remez-check-cache-2-gate rc 0: clippy, full-features clippy, static clean; direct tier 32 suites ok, 11121
+  passed, 0 failed, 1245 ignored; conformance 125 passed; peak 13G, oom_kill=0.
+- gate-remez-check-cache-2-plants rc 0: 8 plants, 8 CAUGHT, 0 SURVIVED, 0 WARN-RC-ONLY, 0 WARN-NO-MSG (WARN-DEV-SHM only).
+- gate-remez-check-cache-2-time (rc 1, SUPERSEDED): cold 7:26 wall (446 s, 294% CPU), 22 up to date, 0 cached;
+  warm 0.19 s, 22/22 cached; 22 step lines each; cold == warm reports. Slowest steps cold: fast32_tgamma 412.6s,
+  fast32_lgamma 277.5s, fast32_erfcx2 133.1s; warm all 0.0s. Its rc 1 was the script's own order check: the expected
+  list came from `ls` (locale sort puts fast32_erf elsewhere) while the command's glob is byte order; the step lines
+  matched the glob order and the binary's verdict order exactly (checked by hand). time2.sh takes the reference
+  from the same glob; job gate-remez-check-cache-2-time2 reruns cold/warm with a new cache dir.
 
 ## Earlier measurements (run 1, keke 7-CPU slot, load 22-35; before the merge)
 serial 1261 s -> parallel cold 488 s (293-297% CPU) -> uncached 444 s -> warm 0.19 s; `tables --check` 5.7 s (not

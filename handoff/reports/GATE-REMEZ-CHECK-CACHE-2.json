@@ -1,17 +1,19 @@
 {"task": "GATE-REMEZ-CHECK-CACHE-2", "model": "opus", "tokens": null,
- "result": "origin/next merged; parallel remez --check keeps the per-fit step lines (timed in the worker, printed after each fit's output in command-line order, cached fits ~0.0s); decision row renumbered D-10.54 -> D-10.58; gate, plants (8) and cold/warm timing queued on the merged head",
+ "result": "origin/next merged; parallel remez --check keeps the per-fit step lines (timed in the worker, printed after each fit's output in command-line order, cached fits 0.0s); row renumbered D-10.54 -> D-10.58; gate green, 8/8 plants caught; remez --check cold 446 s (294% CPU), warm 0.19 s",
  "branch": "task/gate-remez-check-cache-2", "head": null,
- "gate": {"affected": "pending (keke:gate-remez-check-cache-2-gate)", "peak": null},
+ "gate": {"affected": "32 suites ok; 11121 passed / 0 failed (1245 ignored); conformance 125 passed", "peak": "13G, oom_kill=0"},
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
    "cargo xtask affected does not select remez --check for changes under crates/mathtools/src/ (recommend a follow-up mapping; carried from run 1)",
    "per-fit step: remez/<fit> times now overlap (parallel fits); summing them over-counts the remez step, whose own step line is the wall time",
-   "keke queue: lint0 waited 45 min unstarted and was cancelled; its checks run first in the gate job on the merged head",
+   "keke queue: lint0 waited 45 min unstarted and was cancelled; its checks ran first in the gate job on the merged head (green)",
+   "time job rc 1 came from the measuring script's ls-sorted reference list, not the binary; time2 reruns with the glob order",
    "one Python heredoc was used locally to drop a conflict hunk (brief: no heredocs); Edit used afterwards"
  ],
  "refused": [],
  "improvement": "a lint-only job (clippy+static, minutes) waited 45+ min behind 1-h gates in the same 7-core slot queue; a small-job lane for lint would let step 0 of continuation briefs run without costing a queue round",
- "next_step": "read keke jobs gate-remez-check-cache-2-{gate,plants,time}; all rc 0 -> CI; report cold/warm wall times from the time log",
+ "next_step": "none for the story once keke:gate-remez-check-cache-2-time2 is rc 0; follow-up: map crates/mathtools/src changes to remez --check in xtask affected",
  "report_file": "handoff/GATE-REMEZ-CHECK-CACHE.md",
- "jobs": ["keke:gate-remez-check-cache-2-gate", "keke:gate-remez-check-cache-2-plants", "keke:gate-remez-check-cache-2-time"]}
+ "jobs": ["keke:gate-remez-check-cache-2-gate", "keke:gate-remez-check-cache-2-plants", "keke:gate-remez-check-cache-2-time2"],
+ "superseded": ["keke:gate-remez-check-cache-2-lint0 (inherited head; cancelled while queued, checks run in the gate job)", "keke:gate-remez-check-cache-2-time (rc 1 from the script's ls-order reference, not the code)"]}
