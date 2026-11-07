@@ -1,0 +1,21 @@
+{"task": "TEST-VALUE-AUDIT", "model": "opus", "tokens": null,
+ "result": "plan written: 43 suites >= 30 test-s classified (KEEP / MOVE / CONSOLIDATE, no CUT, no SHRINK yet); 3 briefs; setup measured at 1-4% of the math sweep shards",
+ "branch": "task/test-value-audit", "head": null,
+ "gate": {"affected": "not run (planning story, no code change)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "MOVE: math accuracy sweeps in pass 1 (complex_ld_cr, complex_f128, special_ld, special_f128, complex, elem_ld, special products; special_cr, fast_gamma, slow liella-math lib sweeps; ~9,000 test-s) run only when a complete input key (program bytes, host libm/libc, test binary, CPU flags) differs from a green verdict; brief TVA-MATH-VERDICT-CACHE", "recommendation": "approve: est. -4 to -6 min per train that changes no math input (NOT VERIFIED); 0 CI failures in 328 gates, dev failures only in their own stories; LIELLA_NO_VERDICT_CACHE=1 for nightly/release"}
+ ],
+ "informational": [
+  "CONSOLIDATE, no ruling needed: TVA-XTASK-RUN-ONCE (pass 2 re-runs 236 xtask tests, 454 test-s, because xtask's source holds the marker string; est. -0.5 to -1.3 min)",
+  "CONSOLIDATE, no ruling needed: TVA-CONFORMANCE-ONCE (symbol tests re-run the same conformance programs, e.g. s22_symbols 102x per pass; est. <= -0.6 min, measure first)",
+  "10,337 of 11,148 test runs take < 1 s and cost 1,206 test-s together; merging small tests saves ~0.1-0.2 min: not proposed",
+  "math sweep setup (build + program runs) is 1.0-2.8 s of 22-78 s per shard; sharing setup saves ~0.2 min: rejected",
+  "strstr_find 3x and wcsstr_find 5x slower in pass 2; aio_products ~46 s per test; s10_math_symbols ~0.58 s per test: causes NOT VERIFIED",
+  "per-plant logs naming the catching test survive for 40 of ~1,700 plants: a one-line 'caught by <binary> <test>' in the plants summary would make the next audit exact"
+ ],
+ "refused": [],
+ "jobs": ["keke:tva-setup (stopped by me with kill-label: my output filter cut its output; no result used)", "keke:tva-setup2"],
+ "improvement": "cargo xtask plants should print the catching binary/test per plant in its summary line, since per-plant logs in RAM dirs vanish and test-value questions need them",
+ "next_step": "owner rules on TVA-MATH-VERDICT-CACHE; coordinator may queue TVA-XTASK-RUN-ONCE and TVA-CONFORMANCE-ONCE now",
+ "report_file": "handoff/test-value-audit.md"}
