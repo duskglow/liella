@@ -30,7 +30,7 @@ rethink's D-NEW-1, scoped to the built-in locales). Design and evidence: handoff
   **6 CAUGHT, 0 SURVIVED, 0 WARN**.
 * Lint on `5a6969c1d`: mei:`wctype-trie-builtin-2-lint2` rc 0 (workspace clippy -D warnings, xtask clippy, static).
 * Gate (`affected --run --base origin/next`; it escalates to FULL because the generator `xtask/src/unicode.rs` changed)
-  on `5a6969c1d`: mei:`wctype-trie-builtin-2-gate`: running at commit time (FULL tier).
+  on `5a6969c1d`: mei:`wctype-trie-builtin-2-gate`: rc 0: 32 suites ok, 11207 passed, 0 failed, 1254 ignored; conformance 126 passed; peak 16G (page cache), oom_kill 0; 3 SKIPPED lines (capability absent).
   (Run 1's keke:`wctype-trie-builtin-gate` rc 0 proved `b7aea11b3`; superseded by the code change.)
 
 ## Counts (instructions per call, wcprobe `count`, median over the 12 classes; before / after / glibc)
