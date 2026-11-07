@@ -116,11 +116,16 @@ use crate::ffi::liella_machine_cmp_long as CMP_LONG_WORD;
 use crate::ffi::liella_machine_cmp_sse as CMP_SSE;
 use crate::ffi::liella_machine_cmp_sse_null as CMP_SSE_NULL;
 
-// The compare entries' class words (machine/fold.S, MEMCMP-EQ64 + SEQ-REGRESS): the entries add
-// them in turn to `n - 65`; a carry from WIDE sends 33-64 to the folded AVX2 blocks, a carry from
-// LOW the other folded sizes to the head probe.
-use crate::ffi::liella_machine_cmp_low as CMP_LOW;
-use crate::ffi::liella_machine_cmp_wide as CMP_WIDE;
+// The compare entries' fold words (machine/fold.S, COMPARE-HEAD-H2, D-4.66): with folding on,
+// `n >= CMP_HEAD` (16) compare the 16-byte block at offset 0 first and `8 <= n < CMP_SHORT` (16)
+// take the 8-byte words; with folding off CMP_HEAD is `usize::MAX` and CMP_SHORT 8, so no size
+// folds a NULL.
+use crate::ffi::liella_machine_cmp_head as CMP_HEAD;
+use crate::ffi::liella_machine_cmp_short as CMP_SHORT;
+/// Both fold words' value with folding on: the head block's width, fixed by the assembly.
+const CMP_HEAD_ON: usize = 16;
+/// The 8-15 word with folding off: every size from 8 takes the checked entry.
+const CMP_SHORT_OFF: usize = 8;
 
 /// Recompute the compare entries' class words from the fold limit and the AVX2 flag. Called after
 /// every write of either; before either is switched off, [`store_cmp_gates`] first stores the words
@@ -131,11 +136,8 @@ fn update_cmp_gates() {
     store_cmp_gates(FOLD.load(Relaxed) != 0, AVX2.load(Relaxed));
 }
 
-/// Store the class words for `fold` / `avx2`: WIDE 32 only with both (33-64 carry), LOW 25 with
-/// both (8-32 carry), 57 with folding alone (8-64), 0 with folding off. Their sum never exceeds
-/// 57, so `n - 65 + WIDE + LOW` carries only for `8..=64`, also between the two stores (a racing
-/// call may see one old word): a smaller WIDE is stored before LOW grows, LOW shrinks before WIDE
-/// grows. With folding on it also stores the 129-256 copy word ([`move_word`]): every caller runs
+/// Store the class words for `fold` / `avx2`: HEAD and SHORT 16 with folding on, `usize::MAX` and
+/// 8 with it off (D-4.66), and the 65-2048 and SSE2 words below. With folding on it also stores the 129-256 copy word ([`move_word`]): every caller runs
 /// before the AVX2 flag goes off and after folding and the flag are set (the same points as the
 /// compare words), so that word never names the AVX2 body while the flag is off, also between the
 /// stores; it is independent of the compare words. With folding off the word is already 0
@@ -146,9 +148,7 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
     if fold {
         FOLD_MOVE.store(move_word(true, avx2), Relaxed);
     }
-    let wide = if fold && avx2 { 32 } else { 0 };
-    let low = if !fold { 0 } else if avx2 { 25 } else { 57 };
-    // The 65-2048 word (sizes above 64 only, independent of WIDE and LOW): dropped first, raised last.
+    // The 65-2048 word (reached only behind an equal head block): dropped first, raised last.
     let long = if fold && avx2 { crate::hot::CMP_LONG } else { 0 };
     if long == 0 {
         CMP_LONG_WORD.store(0, Relaxed);
@@ -163,13 +163,11 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
         CMP_SSE_NULL.store(usize::MAX, Relaxed);
         CMP_SSE.store(0, Release);
     }
-    if wide < CMP_WIDE.load(Relaxed) {
-        CMP_WIDE.store(wide, Relaxed);
-        CMP_LOW.store(low, Relaxed);
-    } else {
-        CMP_LOW.store(low, Relaxed);
-        CMP_WIDE.store(wide, Relaxed);
-    }
+    // The head and 8-15 words (D-4.66): each alone keeps every unfolded size on the checked
+    // entries (an 8-15 call that saw the off head word still meets the 8-15 word), so their
+    // order does not matter; both reach the off state before the fold limit drops.
+    CMP_HEAD.store(if fold { CMP_HEAD_ON } else { usize::MAX }, Relaxed);
+    CMP_SHORT.store(if fold { CMP_HEAD_ON } else { CMP_SHORT_OFF }, Relaxed);
     CMP_LONG_WORD.store(long, Relaxed);
 }
 

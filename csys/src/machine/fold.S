@@ -512,6 +512,17 @@ liella_classed_id_avx2:
 	.size liella_classed_id_avx2, .-liella_classed_id_avx2
 	.org liella_classed_page1 + LIELLA_CLASSED_PAGE
 
+/* COMPARE-HEAD-H2 (D-4.66, ruling #3839), the entry order of this and the equality entry; it
+ * replaces the class-word ladder described below (`cmp_wide`/`cmp_low` are gone): with folding on
+ * (`liella_machine_cmp_head` 16, else SIZE_MAX), n >= 16 compares the 16-byte block at offset 0 of
+ * a, then b, before any size or ISA test (SSE2, valid on every x86-64; a NULL faults on page zero
+ * at every size); a difference is ordered at once. Then 16-32 the block at n - 16; above 32 the
+ * only ISA test (`n <= liella_machine_cmp_long`, 2048 with AVX2) picks the AVX2 classes (33-64
+ * .Lcmp_wide, 65-2048 .Lcmp_big_load) or the SSE2 ones (33-64 the blocks at 16, n - 32, n - 16;
+ * 65-2048 .Lcmp_sse_65 past its own head probe; above, .Lcmp_sse_over as before). n < 16, and
+ * every n with folding off, take .Lcmp_lo: 8-15 the words at 0 and n - 8 while
+ * `liella_machine_cmp_short` is 16 (folding on), else the checked entry; 0-7 as described below.
+ * The rest of this comment predates D-4.66 for the class selection; the class bodies hold. */
 /* int liella_machine_compare(const void *a, const void *b, size_t n): the direct compare entry
  * (MEMCMP-FOLD, D-4.23 amendment; owner ruling 2026-10-10 extending the S6 NULL-folding exception to
  * the compares for 8 <= n <= 64; `memcmp` in the products). With folding on (limit 64), 8 to 64
@@ -584,51 +595,36 @@ liella_machine_compare:
 	.type memcmp, @function
 memcmp:
 #endif
-	leaq -65(%rdx), %rax
-	addq liella_machine_cmp_wide(%rip), %rax
-	jc .Lcmp_wide
-	addq liella_machine_cmp_low(%rip), %rax
-	jnc .Lcmp_other
-	movq (%rdi), %rax
-	movq (%rsi), %rcx
-	bswapq %rax
-	bswapq %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_sign
-	cmpq $16, %rdx
-	ja .Lcmp_17
-	movq -8(%rdi,%rdx), %rax
-	movq -8(%rsi,%rdx), %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_order
-	xorl %eax, %eax
-	ret
-.Lcmp_17:
-	cmpq $32, %rdx
-	ja .Lcmp_33
+	cmpq liella_machine_cmp_head(%rip), %rdx
+	jb .Lcmp_lo
 	movdqu (%rdi), %xmm0
 	movdqu (%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
-	movdqu -16(%rdi,%rdx), %xmm1
-	movdqu -16(%rsi,%rdx), %xmm2
-	pcmpeqb %xmm2, %xmm1
-	pand %xmm0, %xmm1
-	pmovmskb %xmm1, %eax
-	subl $0xffff, %eax
-	jne .Lcmp_diff16
-	ret
-.Lcmp_diff16:
 	pmovmskb %xmm0, %ecx
-	xorl $0xffff, %ecx
+	subl $0xffff, %ecx
 	jnz .Lcmp_first
+	cmpq $32, %rdx
+	ja .Lcmp_h33
+	movdqu -16(%rdi,%rdx), %xmm0
+	movdqu -16(%rsi,%rdx), %xmm1
+	pcmpeqb %xmm1, %xmm0
+	pmovmskb %xmm0, %eax
+	subl $0xffff, %eax
+	jnz .Lcmp_last16
+	ret
+.Lcmp_last16:
 	bsfl %eax, %ecx
 	leaq -16(%rdx,%rcx), %rcx
 	jmp .Lcmp_byte
-.Lcmp_33:
-	movq 8(%rdi), %rax
-	movq 8(%rsi), %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_order
+.Lcmp_h65:
+	cmpq liella_machine_cmp_sse(%rip), %rdx
+	ja .Lcmp_sse_over
+	jmp .Lcmp_sse_65
+.Lcmp_h33:
+	cmpq liella_machine_cmp_long(%rip), %rdx
+	jbe .Lcmp_wide
+	cmpq $64, %rdx
+	ja .Lcmp_h65
 	movdqu 16(%rdi), %xmm0
 	movdqu 16(%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
@@ -660,10 +656,8 @@ memcmp:
 	addq %r8, %rcx
 	jmp .Lcmp_byte
 .Lcmp_wide:
-	movq (%rdi), %rax
-	movq (%rsi), %rcx
-	cmpq %rcx, %rax
-	jne .Lcmp_order
+	cmpq $64, %rdx
+	ja .Lcmp_big_load
 	vmovdqu (%rdi), %ymm0
 	vmovdqu -32(%rdi,%rdx), %ymm1
 	vpcmpeqb (%rsi), %ymm0, %ymm0
@@ -698,8 +692,22 @@ memcmp:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
-.Lcmp_other:
-	jns .Lcmp_big
+.Lcmp_lo:
+	cmpq $8, %rdx
+	jb .Lcmp_lt8
+	cmpq liella_machine_cmp_short(%rip), %rdx
+	jae liella_hot_compare_rest
+	movq (%rdi), %rax
+	movq (%rsi), %rcx
+	cmpq %rcx, %rax
+	jne .Lcmp_order
+	movq -8(%rdi,%rdx), %rax
+	movq -8(%rsi,%rdx), %rcx
+	cmpq %rcx, %rax
+	jne .Lcmp_order
+	xorl %eax, %eax
+	ret
+.Lcmp_lt8:
 	testq %rdi, %rdi
 	je liella_hot_compare_rest
 	testq %rsi, %rsi
@@ -717,8 +725,6 @@ memcmp:
 	xorl %eax, %eax
 	ret
 .Lcmp_4:
-	cmpq $8, %rdx
-	jae liella_hot_compare_rest
 	movl (%rdi), %eax
 	cmpl (%rsi), %eax
 	jne .Lcmp_h4
@@ -773,9 +779,6 @@ memcmp:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
-.Lcmp_big:
-	cmpq liella_machine_cmp_long(%rip), %rdx
-	ja .Lcmp_sse_mid
 .Lcmp_big_load:
 	vmovdqu (%rdi), %ymm0
 	vpcmpeqb (%rsi), %ymm0, %ymm0
@@ -1121,6 +1124,7 @@ memcmp:
 	pmovmskb %xmm0, %ecx
 	xorl $0xffff, %ecx
 	jnz .Lcmp_first
+.Lcmp_sse_65:
 	cmpq $128, %rdx
 	ja .Lcmp_sse_long
 	movdqu 16(%rdi), %xmm0
@@ -1322,27 +1326,16 @@ bcmp:
 	.type __memcmpeq, @function
 __memcmpeq:
 #endif
-	leaq -65(%rdx), %rax
-	addq liella_machine_cmp_wide(%rip), %rax
-	jc .Leq_wide
-	addq liella_machine_cmp_low(%rip), %rax
-	jnc .Leq_other
-	movq (%rdi), %rax
-	cmpq (%rsi), %rax
-	jne .Leq_one
-	cmpq $16, %rdx
-	ja .Leq_17
-	movq -8(%rdi,%rdx), %rcx
-	xorl %eax, %eax
-	cmpq -8(%rsi,%rdx), %rcx
-	setne %al
-	ret
-.Leq_17:
+	cmpq liella_machine_cmp_head(%rip), %rdx
+	jb .Leq_lo
+	movdqu (%rdi), %xmm0
+	movdqu (%rsi), %xmm1
+	pcmpeqb %xmm1, %xmm0
+	pmovmskb %xmm0, %eax
+	subl $0xffff, %eax
+	jnz .Leq_one
 	cmpq $32, %rdx
-	ja .Leq_33
-	movq 8(%rdi), %rax
-	cmpq 8(%rsi), %rax
-	jne .Leq_one
+	ja .Leq_h33
 	movdqu -16(%rdi,%rdx), %xmm0
 	movdqu -16(%rsi,%rdx), %xmm1
 	pcmpeqb %xmm1, %xmm0
@@ -1350,10 +1343,28 @@ __memcmpeq:
 	subl $0xffff, %eax
 	shrl $31, %eax
 	ret
-.Leq_33:
-	movq 8(%rdi), %rax
-	cmpq 8(%rsi), %rax
+.Leq_lo:
+	cmpq $8, %rdx
+	jb .Leq_lt8
+	cmpq liella_machine_cmp_short(%rip), %rdx
+	jae liella_hot_equal_rest
+	movq (%rdi), %rax
+	cmpq (%rsi), %rax
 	jne .Leq_one
+	movq -8(%rdi,%rdx), %rcx
+	xorl %eax, %eax
+	cmpq -8(%rsi,%rdx), %rcx
+	setne %al
+	ret
+.Leq_h65:
+	cmpq liella_machine_cmp_sse(%rip), %rdx
+	ja .Leq_huge
+	jmp .Leq_sse_65
+.Leq_h33:
+	cmpq liella_machine_cmp_long(%rip), %rdx
+	jbe .Leq_wide
+	cmpq $64, %rdx
+	ja .Leq_h65
 	movdqu 16(%rdi), %xmm0
 	movdqu 16(%rsi), %xmm1
 	pcmpeqb %xmm1, %xmm0
@@ -1370,9 +1381,8 @@ __memcmpeq:
 	shrl $31, %eax
 	ret
 .Leq_wide:
-	movq (%rdi), %rax
-	cmpq (%rsi), %rax
-	jne .Leq_one
+	cmpq $64, %rdx
+	ja .Leq_big_load
 	vmovdqu (%rdi), %ymm0
 	vmovdqu -32(%rdi,%rdx), %ymm1
 	vpcmpeqb (%rsi), %ymm0, %ymm0
@@ -1387,8 +1397,7 @@ __memcmpeq:
 .Leq_one:
 	movl $1, %eax
 	ret
-.Leq_other:
-	jns .Leq_big
+.Leq_lt8:
 	testq %rdi, %rdi
 	je liella_hot_equal_rest
 	testq %rsi, %rsi
@@ -1406,8 +1415,6 @@ __memcmpeq:
 	setne %al
 	ret
 .Leq_4:
-	cmpq $8, %rdx
-	jae liella_hot_equal_rest
 	movl (%rdi), %ecx
 	movl -4(%rdi,%rdx), %r8d
 	xorl (%rsi), %ecx
@@ -1425,9 +1432,6 @@ __memcmpeq:
 	setne %al
 .Leq_none:
 	ret
-.Leq_big:
-	cmpq liella_machine_cmp_long(%rip), %rdx
-	ja .Leq_huge
 .Leq_big_load:
 	vmovdqu (%rdi), %ymm0
 	vpcmpeqb (%rsi), %ymm0, %ymm0
@@ -1529,6 +1533,7 @@ __memcmpeq:
 	movq 8(%rdi), %rax
 	cmpq 8(%rsi), %rax
 	jne .Leq_one
+.Leq_sse_65:
 	cmpq $128, %rdx
 	ja .Leq_sse_long
 	movdqu 16(%rdi), %xmm0
@@ -1630,9 +1635,8 @@ __memcmpeq:
 /* The fold limit: 64 while NULL folding is on, 0 otherwise (crates/boundary/src/dispatch.rs,
  * through `ffi::liella_machine_fold_limit`), and the AVX2 flag byte of the kernels (D-4.25: 1 only
  * when the CPU has AVX2 and the OS saves the YMM state; `ffi::liella_machine_avx2`), and the
- * compare entries' class words (SEQ-REGRESS; `ffi::liella_machine_cmp_wide`/`cmp_low`: wide 32 only
- * while both are on, low 25 with both, 57 with folding alone, 0 with folding off; their sum never
- * exceeds 57, so `n - 65` plus both carries only for 8-64). They share one 64-byte line
+ * compare entries' head and 8-15 words (D-4.66), which start nonzero and so sit in .data, read
+ * on every call like these. They share one 64-byte line
  * with nothing else: all are read by the calls and written only by the startup decisions, so no
  * often-written neighbour may share it (64 bytes per process). */
 	.bss
@@ -1649,18 +1653,27 @@ liella_machine_fold_limit:
 liella_machine_avx2:
 	.zero 8
 	.size liella_machine_avx2, 1
-	.globl liella_machine_cmp_wide
-	.hidden liella_machine_cmp_wide
-	.type liella_machine_cmp_wide, @object
-liella_machine_cmp_wide:
-	.zero 8
-	.size liella_machine_cmp_wide, 8
-	.globl liella_machine_cmp_low
-	.hidden liella_machine_cmp_low
-	.type liella_machine_cmp_low, @object
-liella_machine_cmp_low:
-	.zero 8
-	.size liella_machine_cmp_low, 8
+/* The compare entries' fold words (COMPARE-HEAD-H2, D-4.66; `ffi::liella_machine_cmp_head` /
+ * `cmp_short`, stored by `crate::dispatch::store_cmp_gates`). `cmp_head`: 16 while NULL folding is
+ * on, else SIZE_MAX; `n < cmp_head` leaves the head block, so with folding off or undecided every
+ * size takes the small classes and the checked entries. `cmp_short`: 16 while folding is on, else 8;
+ * 8 <= n < cmp_short take the folded 8-15 words, so 8 and more with folding off (also a call that
+ * saw the head word of the off state) take the checked entry. Both start in the off state. */
+	.data
+	.p2align 3
+	.globl liella_machine_cmp_head
+	.hidden liella_machine_cmp_head
+	.type liella_machine_cmp_head, @object
+liella_machine_cmp_head:
+	.quad -1
+	.size liella_machine_cmp_head, 8
+	.globl liella_machine_cmp_short
+	.hidden liella_machine_cmp_short
+	.type liella_machine_cmp_short, @object
+liella_machine_cmp_short:
+	.quad 8
+	.size liella_machine_cmp_short, 8
+	.bss
 /* The memchr entry's gate (MEMCHR-FOLD, D-4.48 amendment; machine/scan.S): isize::MAX while NULL
  * folding is on, 0 otherwise; written with the fold limit by the same startup decision. The eight
  * words (fold limit, avx2, cmp wide, cmp low, chr limit, cmp mid, cmp long, move long) share one
