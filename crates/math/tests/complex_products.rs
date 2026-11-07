@@ -28,6 +28,9 @@ mod skip_note;
 #[path = "../../core/tests/support/oracle.rs"]
 mod oracle;
 
+#[path = "../../core/tests/support/verdict.rs"]
+mod verdict;
+
 #[path = "support/shard.rs"]
 mod shard;
 use shard::Tally;
@@ -176,6 +179,10 @@ fn complex_functions(k: usize) {
     let (host, ours) = (dir.join("complex_diff_host"), dir.join("complex_diff_liella"));
     assert!(build(&host, false), "complex_diff.c does not build against the host C library");
     assert!(build(&ours, true), "complex_diff.c does not link against the products");
+    // Runs only when an input changed since this shard last passed (D-10.51).
+    let Some(verdict) = verdict::Key::new(&format!("{}.s{k}", env!("CARGO_CRATE_NAME"))).shard(k, shard::SHARDS).file(&host).file(&ours).loaded_by(&host).begin() else {
+        return;
+    };
     let run = |exe: &Path| String::from_utf8(Command::new(exe).env_clear().output().unwrap().stdout).unwrap();
     let (want_text, got_text) = (run(&host), run(&ours));
     let t_oracle = t0.elapsed();
@@ -314,6 +321,7 @@ fn complex_functions(k: usize) {
         shard::write_table(&dir.join("complex_accuracy.tsv"), &table);
     }
     assert!(errors.is_empty(), "{} problems:\n{}", errors.len(), errors.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+    verdict.pass();
 }
 
 fn accuracy_table(tally: &BTreeMap<String, Tally>) -> String {

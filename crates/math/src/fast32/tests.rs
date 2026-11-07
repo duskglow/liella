@@ -329,6 +329,9 @@ fn atan2_dd(y: crate::dd::Dd, x: crate::dd::Dd) -> crate::dd::Dd {
 /// the `double`: it misrounds only next to a `float` boundary. (No spec clause.)
 #[test]
 fn inverse_trig_cores_are_within_their_bounds() {
+    let Some(verdict) = crate::verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".fast32.inverse_trig_cores_are_within_their_bounds")).begin() else {
+        return;
+    };
     use crate::dd::{two_sum, Dd};
     let ulp = |y: f64| f64::from_bits(y.to_bits() & 0x7ff0_0000_0000_0000) / 4_503_599_627_370_496.0;
     let check = |y: Option<f64>, f: Dd, b: f64, what: &str, x: f32| {
@@ -371,6 +374,7 @@ fn inverse_trig_cores_are_within_their_bounds() {
         }
     }
     assert!(seen > 1_000_000, "{seen}");
+    verdict.pass();
 }
 
 /// atan2f's fast path against the accurate path in every mode: pairs across the range with
