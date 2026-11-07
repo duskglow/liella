@@ -586,6 +586,8 @@ pub fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
     };
 }
 
+pub mod quick;
+
 /// The fast kernels and the in-place round-to-nearest entries, baseline build (Dekker products).
 pub mod kernel {
     use super::{dd, fast, nearest, small, small_cos, t, tan_eps, Dd, Rounding, C4, C6, C8, C_SIN, C_TAN, LIMIT_BITS, P1, P2, P3, R25, S3, S5, S7, S9, SCALE_PI, T3, TINY_BITS};
