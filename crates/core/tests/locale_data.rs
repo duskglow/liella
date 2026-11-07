@@ -378,6 +378,18 @@ fn ascii_lane_orders_every_pair_as_the_keys_do() {
     }
 }
 
+#[test]
+fn ascii_fill_writes_one_page() {
+    // No spec clause (D-NEW, TIMING-COV-COLD-STRCOLL: the first strcoll's fill dirties one page
+    // of the pool slot, not two; the write is a copy-on-write fault per page).
+    let name = "en_US.UTF-8";
+    let Some(dir) = locale(name) else { return skip("no localedef") };
+    let c = rules(&dir, name);
+    let (start, end) = c.ascii_fill_span().expect("en_US.UTF-8: a pool slot");
+    assert!(end > start + 2048, "{name}: fill span {start:#x}..{end:#x} lacks the tables");
+    assert_eq!(start / 4096, (end - 1) / 4096, "{name}: fill span {start:#x}..{end:#x} crosses a page");
+}
+
 /// The bytes of `s` one per call, then 0 for ever (a C string's cursor).
 fn stream(s: &[u8]) -> impl FnMut() -> u8 + '_ {
     let mut i = 0;
