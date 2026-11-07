@@ -1,8 +1,8 @@
 //! `ld.so` run as a program (plan/ph14/design.md §19, ld.so(8)): what its arguments ask for, and the
 //! text of `--version` and `--help` (phase 14 DL-5, D-27.13). Pure logic; the boundary writes the text.
 //!
-//! DL-5 runs `--version` and `--help` only. Loading a program (`ld.so PROGRAM`, or the kernel naming
-//! the interpreter in `PT_INTERP`) comes with DL-6 and is refused here with status 127.
+//! DL-5 added `--version` and `--help`; DL-6 (D-27.14) runs `ld.so PROGRAM [ARGS]`: a position-independent
+//! program without dependencies (the boundary maps and enters it, [`crate::start`], [`crate::map`]).
 
 use crate::arch::Arch;
 
@@ -54,7 +54,7 @@ pub fn help<A: Arch>() -> [&'static str; 3] {
          \x20 --help     print this help and exit\n\
          \x20 --version  print version information and exit\n\
          \n\
-         Running a program through this interpreter is not available in this build.\n",
+         This build runs position-independent programs that need no shared objects.\n",
     ]
 }
 
@@ -62,10 +62,8 @@ pub fn help<A: Arch>() -> [&'static str; 3] {
 pub fn refusal<'a>(action: Action<'a>) -> [&'a [u8]; 3] {
     match action {
         Action::Unknown(arg) => [b"ld.so: unrecognized option '", arg, b"'\nTry 'ld.so --help' for more information.\n"],
-        Action::Program(_) => [b"ld.so: loading a program is not available in this build\n", b"", b""],
+        Action::Program(name) => [b"ld.so: cannot run '", name, b"'\n"],
         Action::Missing | Action::Version | Action::Help => [b"ld.so: missing program name\nTry 'ld.so --help' for more information.\n", b"", b""],
     }
 }
 
-/// The message when the kernel started this interpreter for a program (`PT_INTERP`): DL-6 loads it.
-pub const AS_INTERPRETER: &[u8] = b"ld.so: loading a program is not available in this build\n";
