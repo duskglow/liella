@@ -643,7 +643,7 @@ mod tests {
         let loosened = [row("A", "align=2048"), b.clone()];
         assert!(rule_d(&m, Some(&base), &base).is_empty(), "unchanged rows");
         assert_eq!(rule_d(&m, Some(&base), &loosened).len(), 1, "a changed rule without a decision change");
-        assert_eq!(rule_d(&m, Some(&base), &[a.clone()]).len(), 1, "a removed row without a decision change");
+        assert_eq!(rule_d(&m, Some(&base), std::slice::from_ref(&a)).len(), 1, "a removed row without a decision change");
         assert!(rule_d(&md, Some(&base), &loosened).is_empty(), "with a decision change");
         assert!(rule_d(&other, Some(&base), &loosened).is_empty(), "the manifest did not change");
         assert!(rule_d(&m, Some(&base), &[a.clone(), b.clone(), row("C", "align=8")]).is_empty(), "an added row");
