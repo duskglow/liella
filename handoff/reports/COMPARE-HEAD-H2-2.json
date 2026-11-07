@@ -1,0 +1,13 @@
+{"task": "COMPARE-HEAD-H2-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: H2 timed (Ivy Bridge, N100); small-size regression found and fixed (S1, b737c441d); AVX2 eq_64-128 slower than next on N100 in time (H2 1.08-1.25, S1 1.17-1.375), so option (c) is required and not built yet",
+ "branch": "task/compare-head-h2-2", "head": "see git log (handoff commit after b737c441d)",
+ "gate": {"affected": "see mei:compare-head-h2-2-gate", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "#3899 outcome: AVX2 eq_64/eq_128 slower in time than next beyond noise on N100", "recommendation": "build option (c) as a one-taken-branch AVX2 span test at the top of both entries (design in handoff/compare-head-h2.md), keep S1's small fall-through"}],
+ "informational": ["kotori had another story's timing job (machine-jcc-pad-ivb-2) running inside this story's booking; the S1 Ivy job queued behind it",
+                   "the harness timer resolves ~0.4 ns (one quantum = 8-16% on 3-5 ns rows); the proto control row moves by one quantum"],
+ "refused": [],
+ "improvement": "time the small rows (n=8, 16, mix16) with any entry-order change before counts: the H2 static analysis looked only at n>=16 rows and missed a 12-25% small-size regression that counts showed as +0..+2",
+ "next_step": "implement option (c) (cmp_avx_span word, lea/cmp/jb at entry top), plants, sweep, re-time on N100 + Ivy Bridge",
+ "report_file": "handoff/compare-head-h2.md",
+ "jobs": ["mei:compare-head-h2-2-gate", "mei:compare-head-h2-2-plants-2", "mei:compare-head-h2-2-percall-2", "nozomi:compare-head-h2-2-nozomi-s1", "kotori:compare-head-h2-2-kotori-s1"]}
