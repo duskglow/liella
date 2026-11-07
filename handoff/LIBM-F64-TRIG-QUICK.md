@@ -2,7 +2,7 @@
 
 State: branch `task/libm-f64-trig-quick-3` (continues `-2` and the first run; merge base 799313e1 =
 LIBM-F64-EXP-QUICK-WIRE-2), role mei:~/w/s1. Code head 3e2d8ba81 (this run's only code change). Briefs:
-`/home/claude/state/briefs/LIBM-F64-TRIG-QUICK.md` (spec), `-2.md`, `-3.md`. Decisions in force: D-10.51 (two-phase
+`~/state/briefs/LIBM-F64-TRIG-QUICK.md` (spec), `-2.md`, `-3.md`. Decisions in force: D-10.51 (two-phase
 double functions), D-10.25/D-10.50 (two builds), D-10.3 (CR), **D-10.61 (this story; now with counts and timing)**.
 
 ## What is in
