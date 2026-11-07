@@ -82,10 +82,10 @@ const ABS: u64 = 0x7fff_ffff_ffff_ffff;
 
 /// The stated bounds (module doc) and their [`super::near`] multipliers: the least doubles with
 /// `c·(1 − 2^54·rho) > 1 + 2^-53` (checked exactly by the `bounds` tests).
-#[allow(dead_code)] // the stated bound; C_SSE2 is derived from it (bounds tests)
-pub(crate) const RHO_SSE2: f64 = f64::from_bits(0x3c17_0000_0000_0000);
-#[allow(dead_code)] // the stated bound; C_FMA is derived from it (bounds tests)
-pub(crate) const RHO_FMA: f64 = f64::from_bits(0x3bb4_0000_0000_0000);
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_SSE2: f64 = f64::from_bits(0x3c17_0000_0000_0000);
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub const RHO_FMA: f64 = f64::from_bits(0x3bb4_0000_0000_0000);
 pub(crate) const C_SSE2: f64 = f64::from_bits(0x3ff0_1721_3fcb_b4d5);
 pub(crate) const C_FMA: f64 = f64::from_bits(0x3ff0_0050_0190_07d1);
 
@@ -108,7 +108,8 @@ macro_rules! quick {
 /// `e^x = (zh + zl)·sc` within `rho·|zh|·sc` for `2^-60 <= |x| < 708`, else `None` (module doc).
 $(#[$a])*
 $(#[$i])*
-pub(crate) fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
     if (x.to_bits() & ABS).wrapping_sub(LO_BITS) >= SPAN {
         return None;
     }
