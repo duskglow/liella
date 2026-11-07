@@ -32,9 +32,8 @@ use liella_boundary::posix::s11_lowio as io;
 use liella_boundary::posix::s12_stdio as sio;
 use liella_boundary::posix::s15_sockets as x;
 use liella_kernel::uapi::{PollFd, SockAddrBuf};
-use liella_legacy::interim_db::{self, Ip};
+use liella_legacy::interim_db;
 use liella_legacy::net_compat;
-use liella_legacy::rcmd::{self, TrustFiles};
 
 /// Build and run C conformance programs against the products (`conformance/run.sh`).
 fn conformance(names: &[&str]) {
@@ -959,15 +958,6 @@ fn s15_7_c_0() {
     }
 }
 
-/// The user running the tests: (name, home), from /etc/passwd.
-fn me() -> Option<(String, String)> {
-    let uid = liella_boundary::posix::s17_users::geteuid();
-    std::fs::read_to_string("/etc/passwd").ok()?.lines().find_map(|l| {
-        let f: Vec<&str> = l.split(':').collect();
-        (f.len() >= 7 && f[2].parse::<u32>().ok()? == uid).then(|| (f[0].to_string(), f[5].to_string()))
-    })
-}
-
 #[test]
 fn s15_8_c_1() {
     // Trace: s15_8_c_1 (rcmd is a failing stub: D-15.7, owner ruling R10 2026-11-04).
@@ -1048,59 +1038,7 @@ fn s15_8_c_3() {
     assert_eq!(x::iruserok(lo, 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
     assert_eq!(x::iruserok_af((&raw const lo).cast(), 0, c"alice".as_ptr(), c"alice".as_ptr(), AF_INET as u16), -1);
     assert_eq!(errno::get(), ERRNO_SENTINEL, "the trust checks leave errno alone");
-    // The files' checks (rcmd(3)), on fixture files in a private directory (owned by an
-    // unprivileged user, so that the system-wide file's owner check fails).
-    if liella_boundary::posix::s17_users::geteuid() == 0 {
-        skip_note::skipped("the file checks: run unprivileged");
-        return;
-    }
-    let Some((luser, _)) = me() else {
-        skip_note::skipped("the file checks: the user is not in /etc/passwd");
-        return;
-    };
-    let dir = scratch::Scratch::dir("c15-trust");
-    let equiv = dir.join("hosts.equiv");
-    let rhosts = dir.join(".rhosts");
-    let eq = equiv.to_str().unwrap().as_bytes().to_vec();
-    let home = dir.to_str().unwrap().as_bytes().to_vec();
-    let files = TrustFiles { equiv: &eq, home: Some(&home), check_rhosts: true };
-    let k = &liella_boundary::sys::CSys;
-    let ok = |files: TrustFiles<'_>, superuser: bool, ruser: &str| -> (bool, Option<&'static [u8]>) {
-        let mut why = None;
-        let r = rcmd::iruserok(k, files, Ip::V4(LO), superuser, ruser.as_bytes(), luser.as_bytes(), &mut why);
-        (r, why)
-    };
-    use std::os::unix::fs::PermissionsExt;
-    let mode = |p: &std::path::Path, m: u32| std::fs::set_permissions(p, std::fs::Permissions::from_mode(m)).unwrap();
-    assert_eq!(ok(files, false, "alice"), (false, Some(rcmd::errstr::LSTAT)), "neither file exists");
-    std::fs::write(&equiv, "+ +\n").unwrap();
-    mode(&equiv, 0o644);
-    assert_eq!(ok(files, false, "alice"), (false, Some(rcmd::errstr::LSTAT)), "hosts.equiv not owned by the superuser is ignored, then .rhosts is missing");
-    let no_rhosts = TrustFiles { check_rhosts: false, ..files };
-    assert_eq!(ok(no_rhosts, false, "alice"), (false, Some(rcmd::errstr::OWNER)), "bad owner");
-    assert_eq!(ok(no_rhosts, true, "alice"), (false, None), "superuser: hosts.equiv is not read");
-    std::fs::write(&rhosts, "127.0.0.1 alice\n").unwrap();
-    mode(&rhosts, 0o600);
-    assert!(ok(files, false, "alice").0, ".rhosts owned by the user admits alice");
-    assert!(ok(files, true, "alice").0, "also for a superuser");
-    assert!(!ok(files, false, "bob").0);
-    mode(&rhosts, 0o640);
-    assert!(ok(files, false, "alice").0, "readable by the group: allowed");
-    mode(&rhosts, 0o664);
-    assert_eq!(ok(files, true, "alice"), (false, Some(rcmd::errstr::WRITABLE)));
-    mode(&rhosts, 0o600);
-    let second = dir.join("second");
-    std::fs::hard_link(&rhosts, &second).unwrap();
-    assert_eq!(ok(files, true, "alice"), (false, Some(rcmd::errstr::LINKED)));
-    std::fs::remove_file(&second).unwrap();
-    let real = dir.join("real");
-    std::fs::rename(&rhosts, &real).unwrap();
-    std::os::unix::fs::symlink(&real, &rhosts).unwrap();
-    assert_eq!(ok(files, true, "alice"), (false, Some(rcmd::errstr::NOT_REGULAR)), "a symbolic link");
-    std::fs::remove_file(&rhosts).unwrap();
-    std::fs::create_dir(&rhosts).unwrap();
-    assert_eq!(ok(files, true, "alice"), (false, Some(rcmd::errstr::NOT_REGULAR)), "a directory");
-    // Through the exports: a host the files lookup does not know is refused.
+    // A host the files lookup does not know is refused too.
     assert_eq!(x::ruserok(c"nosuchhost.invalid".as_ptr(), 0, c"alice".as_ptr(), c"alice".as_ptr()), -1);
 }
 

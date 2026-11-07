@@ -1,32 +1,25 @@
 //! The C conventions of spec §15.3–15.8 (phase 10): result encodings, the library-owned
 //! results (per-thread slots, D-H3; process-wide buffers where the contract names one), the
-//! caller-owned blocks of `getifaddrs` and `if_nameindex`, and the process-wide trust state of
-//! the `rcmd` family. The logic is in `liella::net` and `liella_legacy::{inet_compat, rcmd,
-//! net_compat, nss}`; the exports in `posix::s15_sockets` convert the C arguments.
+//! caller-owned blocks of `getifaddrs` and `if_nameindex`. The logic is in `liella::net` and
+//! `liella_legacy::{inet_compat, net_compat, nss}`; the exports in `posix::s15_sockets` convert
+//! the C arguments. (The `rcmd` family is a set of stubs, D-15.7.)
 //!
 //! Buffers whose size a C caller does not pass (a routing header, an ancillary-data object) are
 //! viewed through a callback: the header is read first, through a short view that is dropped,
 //! and then the whole object, so the two views never overlap in time.
 
-use core::sync::atomic::Ordering::Relaxed;
-
 use liella::error::Errno;
-use liella::mem::TryVec;
 use liella::net::{addr, copy_z, ether, iface, ip6opt};
 use liella_kernel::errno::KResult;
-use liella_kernel::fd::Fd;
-use liella_kernel::sys::Sys;
-use liella_kernel::uapi::{AF_INET, AF_INET6, Stat};
+use liella_kernel::uapi::{AF_INET, AF_INET6};
 use liella_legacy::inet_compat as ic;
-use liella::names::Ip;
 use liella_legacy::nss::{self, Ctx};
 use liella_legacy::result_slots::Buf;
-use liella_legacy::{net_compat, rcmd};
+use liella_legacy::net_compat;
 use liella_rt::thread::{SLOT_ETHER_ATON, SLOT_ETHER_NTOA, SLOT_INET_NTOA};
 
 use crate::caller_alloc;
 use crate::conv;
-use crate::stdio;
 use crate::sys::CSys;
 use crate::thread;
 
@@ -655,191 +648,6 @@ pub fn ether_ntohost<'a>(host: impl FnOnce(usize) -> KResult<&'a mut [u8]>, a: O
 
 // ------------------------------------------------------------------------------ §15.8
 
-/// `rresvport_af(&port, af)`.
-pub fn rresvport(port: Option<&mut i32>, af: i32) -> KResult<Fd> {
-    rcmd::rresvport(&CSys, port.ok_or(Errno::EFAULT)?, af)
-}
-
-/// Store the canonical host name in the calling thread's buffer and `*ahost`; without the
-/// buffer `*ahost` keeps the caller's name (D-C0.2: never a buffer shared with other threads).
-fn set_host(ahost: &mut usize, name: &[u8]) {
-    let n = name.len().min(1024);
-    let mut z = [0u8; 1026];
-    if let (Some(d), Some(s)) = (z.get_mut(..n), name.get(..n)) {
-        d.copy_from_slice(s);
-    }
-    if let Ok(buf) = crate::users::result_buf::<1026>(crate::users::RCMD_HOST) {
-        buf.store(z.get(..=n).unwrap_or(&[0]));
-        *ahost = buf.addr();
-    }
-}
-
-/// The result of `rcmd`/`rexec`: the descriptor, or -1 with `errno` when the failure has one.
-pub fn session(r: Result<rcmd::Session, rcmd::Failed>, fd2p: Option<&mut i32>) -> i32 {
-    match r {
-        Ok(s) => {
-            if let (Some(p), Some(f)) = (fd2p, s.fd2) {
-                *p = f.raw();
-            }
-            s.fd.raw()
-        }
-        Err(e) => {
-            if let Some(e) = e {
-                crate::errno::set_raw(e.get());
-            }
-            -1
-        }
-    }
-}
-
-/// A private copy of the host text `*ahost` names: `*ahost` may point at the buffer
-/// [`set_host`] rewrites.
-fn host_copy(text: KResult<&[u8]>) -> Result<TryVec<u8>, rcmd::Failed> {
-    TryVec::from_slice(text.map_err(Some)?).map_err(Some)
-}
-
-/// `rcmd_af(&ahost, rport, locuser, remuser, cmd, fd2p, af)`.
-#[allow(clippy::too_many_arguments)] // the C call's seven and the reader of `*ahost`
-pub fn rcmd_af(ahost: Option<&mut usize>, host: impl FnOnce(usize) -> KResult<&'static [u8]>, rport: u16, locuser: KResult<&[u8]>, remuser: KResult<&[u8]>, cmd: KResult<&[u8]>, fd2p: Option<&mut i32>, af: u16) -> i32 {
-    let Some(ahost) = ahost else { return session(Err(Some(Errno::EFAULT)), None) };
-    let r = (|| {
-        let h = host_copy(host(*ahost))?;
-        let names = [locuser.map_err(Some)?, remuser.map_err(Some)?];
-        let req = rcmd::Request { host: &h, port: rport, names, cmd: cmd.map_err(Some)?, want_fd2: fd2p.is_some(), af: i32::from(af) };
-        rcmd::rcmd(&CSys, req, |canonical| set_host(ahost, canonical))
-    })();
-    session(r, fd2p)
-}
-
-/// The program's short name, for `ruserpass`'s messages.
-fn progname() -> &'static [u8] {
-    conv::process_text(crate::ffi::program_invocation_short_name.load(Relaxed))
-}
-
-/// The `.netrc` lookup of `ruserpass` and `rexec`: `$HOME/.netrc` for `host`, with the name and
-/// password already known. No `HOME` or no file: nothing is learned.
-fn netrc(host: &[u8], name: Option<&[u8]>, pass: Option<&[u8]>) -> Result<rcmd::Netrc, rcmd::Refused> {
-    let given = || -> Result<rcmd::Netrc, rcmd::Refused> {
-        let copy = |v: Option<&[u8]>| v.map(TryVec::from_slice).transpose().map_err(|_| rcmd::Refused::Memory);
-        Ok(rcmd::Netrc { name: copy(name)?, pass: copy(pass)? })
-    };
-    let Some(home) = crate::process::getenv(b"HOME").map(crate::strz::env_value) else { return given() };
-    let path = (|| -> KResult<liella_kernel::path::KPathBuf> {
-        let mut v = TryVec::new();
-        v.extend_from_slice(home)?;
-        v.extend_from_slice(b"/.netrc")?;
-        liella_kernel::path::KPathBuf::new(&v)
-    })();
-    let Ok(path) = path else { return given() };
-    let Ok(fd) = CSys.openat(Fd::CWD, path.as_kstr(), liella_kernel::uapi::O_RDONLY | liella_kernel::uapi::O_CLOEXEC, 0) else { return given() };
-    let read = (|| -> KResult<(TryVec<u8>, Stat)> {
-        let st = CSys.fstat(fd)?;
-        let mut text = TryVec::new();
-        let mut chunk = [0u8; 4096];
-        loop {
-            let k = CSys.read(fd, &mut chunk)?;
-            if k == 0 {
-                return Ok((text, st));
-            }
-            text.extend_from_slice(chunk.get(..k).unwrap_or(&[]))?;
-        }
-    })();
-    let _ = CSys.close(fd);
-    let Ok((text, st)) = read else { return given() };
-    rcmd::ruserpass(&text, st.mode, host, name, pass, |parts| {
-        let mut line: liella::net::Text<512> = liella::net::Text::new();
-        line.push_all(progname());
-        line.push_all(b": ");
-        for p in parts {
-            line.push_all(p);
-        }
-        let _ = CSys.write(Fd::STDERR, line.as_bytes());
-    })
-}
-
-/// `ruserpass(host, &aname, &apass)` over `$HOME/.netrc`: 0, or -1 when a password sits in a
-/// file others may read. What was learned is stored as caller-owned copies (kept for the
-/// process, as the reference's static results), the login name also on that refusal.
-pub fn ruserpass<'a>(host: KResult<&[u8]>, aname: Option<&mut usize>, apass: Option<&mut usize>, text_at: impl Fn(usize) -> KResult<&'a [u8]>) -> i32 {
-    let (Ok(host), Some(aname), Some(apass)) = (host, aname, apass) else { return -1 };
-    let given = |a: usize| if a == 0 { Ok(None) } else { text_at(a).map(Some) };
-    let (Ok(name), Ok(pass)) = (given(*aname), given(*apass)) else { return -1 };
-    let (found, status) = match netrc(host, name, pass) {
-        Ok(found) => (found, 0),
-        Err(rcmd::Refused::Exposed(found)) => (found, -1),
-        Err(rcmd::Refused::Memory) => return -1,
-    };
-    // Only what the file supplied is replaced; a caller's own text stays where it is.
-    for (cell, v, had) in [(aname, found.name, name.is_some()), (apass, found.pass, pass.is_some())] {
-        if let (Some(v), false) = (v, had) {
-            if let Ok(a) = caller_alloc::dup_z(&v) {
-                *cell = a;
-            }
-        }
-    }
-    status
-}
-
-/// `rexec_af(&ahost, rport, name, pass, cmd, fd2p, af)`: a missing name or password comes from
-/// `$HOME/.netrc` (as `ruserpass`); still missing, the call fails (the reference would prompt
-/// on the terminal, which needs `getpass`, phase 11).
-#[allow(clippy::too_many_arguments)] // the C call's seven and the reader of `*ahost`
-pub fn rexec_af(ahost: Option<&mut usize>, host: impl FnOnce(usize) -> KResult<&'static [u8]>, rport: i32, name: KResult<Option<&[u8]>>, pass: KResult<Option<&[u8]>>, cmd: KResult<&[u8]>, fd2p: Option<&mut i32>, af: u16) -> i32 {
-    let Some(ahost) = ahost else { return session(Err(Some(Errno::EFAULT)), None) };
-    let r = (|| {
-        let h = host_copy(host(*ahost))?;
-        let (n, p) = (name.map_err(Some)?, pass.map_err(Some)?);
-        let found = match (n, p) {
-            (Some(_), Some(_)) => rcmd::Netrc::default(),
-            _ => netrc(&h, n, p).map_err(|_| None)?,
-        };
-        let (Some(n), Some(p)) = (n.or(found.name.as_deref()), p.or(found.pass.as_deref())) else { return Err(None) };
-        let port = u16::try_from(rport & 0xffff).unwrap_or(0);
-        let req = rcmd::Request { host: &h, port, names: [n, p], cmd: cmd.map_err(Some)?, want_fd2: fd2p.is_some(), af: i32::from(af) };
-        rcmd::rexec(&CSys, req, |canonical| set_host(ahost, canonical))
-    })();
-    session(r, fd2p)
-}
-
-/// Record `why` in `__rcmd_errstr`.
-fn note(why: Option<&'static [u8]>) {
-    if let Some(m) = why {
-        crate::data::set_rcmd_errstr(m);
-    }
-}
-
-/// `ruserok_af(rhost, superuser, ruser, luser, af)`: 0 or -1.
-pub fn ruserok(rhost: KResult<&[u8]>, superuser: i32, ruser: KResult<&[u8]>, luser: KResult<&[u8]>, af: u16) -> i32 {
-    let (Ok(h), Ok(r), Ok(l)) = (rhost, ruser, luser) else { return -1 };
-    let mut why = None;
-    let ok = rcmd::ruserok(&CSys, rcmd::TrustFiles::system(crate::data::check_rhosts()), h, superuser != 0, r, l, i32::from(af), &mut why);
-    note(why);
-    if ok { 0 } else { -1 }
-}
-
-/// `iruserok_af(raddr, superuser, ruser, luser, af)`: 0 or -1. `raddr` gives the address bytes
-/// (4 or 16, by family).
-pub fn iruserok<'a>(raddr: impl FnOnce(usize) -> KResult<&'a [u8]>, superuser: i32, ruser: KResult<&[u8]>, luser: KResult<&[u8]>, af: u16) -> i32 {
-    let n = match u32::from(af) {
-        AF_INET => 4,
-        AF_INET6 => 16,
-        _ => return -1,
-    };
-    let (Ok(a), Ok(r), Ok(l)) = (raddr(n), ruser, luser) else { return -1 };
-    let Some(ip) = rcmd::ip_of(i32::from(af), a) else { return -1 };
-    let mut why = None;
-    let ok = rcmd::iruserok(&CSys, rcmd::TrustFiles::system(crate::data::check_rhosts()), ip, superuser != 0, r, l, &mut why);
-    note(why);
-    if ok { 0 } else { -1 }
-}
-
-/// `iruserok(raddr, superuser, ruser, luser)`: [`iruserok`] for an IPv4 address (network
-/// order).
-pub fn iruserok_v4(raddr: u32, superuser: i32, ruser: KResult<&[u8]>, luser: KResult<&[u8]>) -> i32 {
-    let b = raddr.to_ne_bytes();
-    iruserok(|_| Ok(&b[..]), superuser, ruser, luser, 2)
-}
-
 /// `inet6_rth_segments(bp)`.
 pub fn rth_segments(head: KResult<[u8; 8]>) -> i32 {
     head.ok().and_then(|h| ip6opt::rth_segments(&h)).unwrap_or(-1)
@@ -859,18 +667,6 @@ pub fn rth_init(bp: KResult<&mut [u8]>, ty: i32, segments: i32) -> usize {
         }
         Err(_) => 0,
     }
-}
-
-/// `__ivaliduser(hostf, raddr, luser, ruser)`: 0 if the stream's lines admit `ruser`, else -1.
-pub fn ivaliduser(fp: usize, raddr: u32, luser: KResult<&[u8]>, ruser: KResult<&[u8]>) -> i32 {
-    let (Ok(l), Ok(r)) = (luser, ruser) else { return -1 };
-    let mut text = liella::mem::TryVec::new();
-    while let Ok(Some(c)) = stdio::getc(fp, stdio::Locking::Locked) {
-        if text.push(c).is_err() {
-            return -1;
-        }
-    }
-    if rcmd::validate(&CSys, &text, Ip::V4(raddr.to_ne_bytes()), l, r) { 0 } else { -1 }
 }
 
 // ------------------------------------------------------------------------------ §24.5
