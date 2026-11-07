@@ -2,7 +2,7 @@
 
 State: branch `task/libm-f64-invhyp-quick` (stacks on LIBM-F64-LOG-QUICK(-2), cut from origin/next), role mei:~/w/s4.
 Code commit 2250341f6, kernel index 16a511270, test fix 0cb8a104b; handoff commits on top. Brief
-`/home/claude/state/briefs/LIBM-F64-INVHYP-QUICK.md`. Decisions in force: D-10.51 (two-phase double), D-10.60 (the
+`~/state/briefs/LIBM-F64-INVHYP-QUICK.md`. Decisions in force: D-10.51 (two-phase double), D-10.60 (the
 quick log kernel), D-10.65 (this story: method, ranges, bound), D-10.25/D-10.50 (two builds), D-10.3 (correct rounding).
 
 ## What is in
