@@ -1,0 +1,10 @@
+# HOTTEXT-STARTUP-COMPLETE plants (cargo xtask plants; format docs/plants.md).
+# 1: the start::<false> key dropped from the list: no key is left to be unmatched, so the guard in `so` cannot name it;
+#    the grouped-functions test does (the brief asked for `so` with the new message: see the handoff report).
+start-key-removed | crates/libc-so/hot-text.list | perl:s/^_RINvNtC15liella_boundary7runtime5startKb0_[^\n]*\n//m | cargo xtask so && cargo test -p liella --test hot_text_products init_cold_startup_functions_are_grouped | msg:7runtime5startKb0_: not in the hot group
+# 2: a startup-tier key renamed to one that matches no section: `so` fails naming it.
+startup-key-renamed | crates/libc-so/hot-text.list | perl:s/^__libc_start_main\t/__liella_renamed_start_main\t/m | cargo xtask so | msg:__liella_renamed_start_main \(startup.*|renamed, now generic or inlined: run tools/hottext/regen.sh
+# 3: the guard's comparison inverted (matched keys reported, unmatched ones passed).
+guard-inverted | xtask/src/hottext.rs | lit:.filter(|e| !matched.contains(&e.key)) ==> .filter(|e| matched.contains(&e.key)) | cargo test -p xtask --bin xtask hottext | msg:unmatched_startup_and_fork_keys_of_the_built_profile_fail.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 4: the profile filter dropped (every startup key guarded, whatever profile traced it).
+guard-any-profile | xtask/src/hottext.rs | lit:let traced = profile.is_some_and(|p| e.profiles.iter().any(|x| x == p)); ==> let traced = true; | cargo test -p xtask --bin xtask hottext | msg:unmatched_startup_and_fork_keys_of_the_built_profile_fail.*(FAILED|panicked)|panicked at xtask/src/hottext.rs

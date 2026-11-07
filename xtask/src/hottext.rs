@@ -363,15 +363,90 @@ fn strip_legacy_hash(s: &str) -> String {
     out
 }
 
-/// The keys of `list` (one per line; `#` comments and blank lines skipped) -> their position (the
-/// first, if a key repeats). A missing list is empty.
-fn read_list(list: &Path) -> BTreeMap<String, usize> {
+/// The tiers of `hot-text.list` (HOTTEXT-STARTUP-COMPLETE), in first-touch order: the probe that
+/// touched a key first (tools/hottext/regen.sh). Keep in step with tools/hottext/merge.py.
+const TIERS: [&str; 7] = ["startup", "fork", "stdio", "strings", "locale", "tool", "extra"];
+/// The tiers whose keys must match a function section of the profile they were traced in: a
+/// start-up or fork-child function outside the group sits in cold `.text` and moves with any
+/// growth before it (LIBM-F64-LOG-FAMILY-WIRE-2: `runtime::start::<false>` crossed a 64 KiB
+/// window, one more start-up fault).
+const GUARDED_TIERS: [&str; 2] = ["startup", "fork"];
+
+/// One key of the list: its tier and the profiles whose trace hit it (empty: none recorded).
+#[derive(Debug, PartialEq)]
+struct Entry {
+    key: String,
+    tier: &'static str,
+    profiles: Vec<String>,
+}
+
+/// The lines of `hot-text.list`: `<key>\t<tier>\t<profiles>` (profiles comma-separated, `-` for
+/// none); `#` comments and blank lines skipped. A line with the key alone (the list before tiers)
+/// has tier `extra` and no profile. Errors name the line.
+fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
+    let mut out = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = l.split('\t').collect();
+        let bad = || format!("hot-text.list line {}: {l:?}: want <key>\\t<tier>\\t<profiles>", n + 1);
+        let entry = match parts[..] {
+            [k] => Entry { key: k.trim().to_string(), tier: "extra", profiles: Vec::new() },
+            [k, t, p] => {
+                let tier = TIERS.iter().find(|x| **x == t).ok_or_else(bad)?;
+                let profiles: Vec<String> = if p == "-" { Vec::new() } else { p.split(',').map(str::to_string).collect() };
+                if profiles.iter().any(|p| p != "fast" && p != "release") {
+                    return Err(bad());
+                }
+                Entry { key: k.to_string(), tier, profiles }
+            }
+            _ => return Err(bad()),
+        };
+        out.push(entry);
+    }
+    Ok(out)
+}
+
+/// The keys of `entries` -> their position (the first, if a key repeats).
+fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     let mut keys = BTreeMap::new();
-    let lines = fs::read_to_string(list).unwrap_or_default();
-    for (i, l) in lines.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).enumerate() {
-        keys.entry(l.to_string()).or_insert(i);
+    for (i, e) in entries.iter().enumerate() {
+        keys.entry(e.key.clone()).or_insert(i);
     }
     keys
+}
+
+/// The guard (HOTTEXT-STARTUP-COMPLETE): the keys of a [`GUARDED_TIERS`] tier traced in
+/// `profile` that are not in `matched` (the keys of the archive's function sections), and the
+/// count of the other unmatched keys. `profile` `None` (an archive built with other flags, e.g.
+/// the bench's x86-64-v3 copy, whose inlining differs): nothing is guarded, every unmatched key
+/// is counted.
+fn unmatched<'a>(entries: &'a [Entry], matched: &BTreeSet<String>, profile: Option<&str>) -> (Vec<&'a Entry>, usize) {
+    let mut guarded = Vec::new();
+    let mut others = 0;
+    for e in entries.iter().filter(|e| !matched.contains(&e.key)) {
+        let traced = profile.is_some_and(|p| e.profiles.iter().any(|x| x == p));
+        if traced && GUARDED_TIERS.contains(&e.tier) {
+            guarded.push(e);
+        } else {
+            others += 1;
+        }
+    }
+    (guarded, others)
+}
+
+/// The error for guarded keys that match no function section (empty: none).
+fn unmatched_error(guarded: &[&Entry], profile: &str) -> Option<String> {
+    if guarded.is_empty() {
+        return None;
+    }
+    let mut msg = format!("hot-text.list: {} {profile}-profile start-up/fork key(s) match no function section of libc.a", guarded.len());
+    for e in guarded {
+        msg.push_str(&format!("\n  {} ({}, traced in {})", e.key, e.tier, e.profiles.join(",")));
+    }
+    msg.push_str("\nrenamed, now generic or inlined: run tools/hottext/regen.sh (both profiles)");
+    Some(msg)
 }
 
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
@@ -429,10 +504,15 @@ fn is_startup_names(section: &str) -> bool {
 /// Rename the function sections of `archive` whose keys are in `list` to
 /// `.text.sorted.h<position>.<f>`, in place, and any hot section whose key is not listed (or whose
 /// position changed) back to `.text.<f>` (or its new position): cargo may hand back an archive this
-/// already ran on, with another list. `work` is a scratch directory. Returns (hot
-/// sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usize, usize), String> {
-    let keys = read_list(list);
+/// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
+/// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
+/// a start-up or fork key traced in `profile` matches no function section; prints the count of the
+/// other unmatched keys. Returns (hot sections in the result, keys in the list).
+pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
+    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+    let entries = parse_list(&text)?;
+    let keys = positions(&entries);
+    let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
     let archive = fs::canonicalize(archive).map_err(|e| e.to_string())?;
@@ -460,6 +540,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usiz
                 continue;
             }
             let Some(f) = function_of(name) else { continue };
+            matched.insert(key(f));
             let want = rename_for(name, f, &keys);
             if want.starts_with(".text.sorted.") {
                 hot += 1;
@@ -482,13 +563,18 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usiz
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
+    let (guarded, others) = unmatched(&entries, &matched, profile);
+    if let Some(e) = unmatched_error(&guarded, profile.unwrap_or("")) {
+        return Err(e);
+    }
+    println!("so: {others} hot-text keys match no function section (other tiers or profiles; not guarded)");
     Ok((hot, keys.len()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{function_of, is_startup_names, key, rename_for, section_for};
-    use std::collections::BTreeMap;
+    use super::{function_of, is_startup_names, key, parse_list, positions, rename_for, section_for, unmatched, unmatched_error};
+    use std::collections::{BTreeMap, BTreeSet};
 
     #[test]
     fn keys_drop_build_hashes() {
@@ -518,6 +604,48 @@ mod tests {
         assert_eq!(key("_RINvMs1_NtCsx_9liella_rt4heapNtB6_4Heap10alloc_slowKb1_EB8_"), "_RINvMs1_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10alloc_slowKb1_EC9liella_rt");
         // A name the walker cannot parse keeps the plain strip.
         assert_eq!(key("_RNvCsabc_3foo3barZZ"), "_RNvC3foo3barZZ");
+    }
+
+    #[test]
+    fn list_lines_carry_tier_and_profiles() {
+        // HOTTEXT-STARTUP-COMPLETE: `<key>\t<tier>\t<profiles>`; a bare key (the list before tiers) is
+        // an unguarded `extra` key; comments and blank lines are skipped; positions keep list order.
+        let text = "# c\n__libc_start_main\tstartup\tfast,release\n\nk2\tfork\trelease\nold\nk4\ttool\t-\n";
+        let e = parse_list(text).unwrap();
+        assert_eq!(e.len(), 4);
+        assert_eq!((e[0].key.as_str(), e[0].tier, e[0].profiles.clone()), ("__libc_start_main", "startup", vec!["fast".to_string(), "release".to_string()]));
+        assert_eq!((e[1].tier, e[1].profiles.clone()), ("fork", vec!["release".to_string()]));
+        assert_eq!((e[2].key.as_str(), e[2].tier, e[2].profiles.len()), ("old", "extra", 0));
+        assert_eq!((e[3].tier, e[3].profiles.len()), ("tool", 0));
+        assert_eq!(positions(&e).get("k2"), Some(&1));
+        assert_eq!(positions(&e).get("k4"), Some(&3));
+        // Unknown tiers, unknown profiles and two-field lines are errors naming the line.
+        assert!(parse_list("k\tboot\tfast\n").unwrap_err().contains("line 1"));
+        assert!(parse_list("# c\nk\tstartup\tdebug\n").unwrap_err().contains("line 2"));
+        assert!(parse_list("k\tstartup\n").is_err());
+    }
+
+    #[test]
+    fn unmatched_startup_and_fork_keys_of_the_built_profile_fail() {
+        // HOTTEXT-STARTUP-COMPLETE: a start-up or fork key traced in the profile being built that
+        // matches no function section fails `so`, naming the key; other tiers, other profiles and
+        // archives built with other flags (`None`) are only counted.
+        let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\n").unwrap();
+        let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare"].iter().map(|s| s.to_string()).collect();
+        let (g, o) = unmatched(&e, &all, Some("fast"));
+        assert_eq!((g.len(), o), (0, 0));
+        assert_eq!(unmatched_error(&g, "fast"), None);
+        let none = BTreeSet::new();
+        let (g, o) = unmatched(&e, &none, Some("fast"));
+        assert_eq!(g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk"]);
+        assert_eq!(o, 3);
+        let msg = unmatched_error(&g, "fast").unwrap();
+        assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("fk (fork, traced in fast)"));
+        assert!(msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
+        let (g, o) = unmatched(&e, &none, Some("release"));
+        assert_eq!((g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), o), (vec!["start", "rel"], 3));
+        let (g, o) = unmatched(&e, &none, None);
+        assert_eq!((g.len(), o), (0, 5));
     }
 
     #[test]
