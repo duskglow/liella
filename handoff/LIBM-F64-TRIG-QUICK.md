@@ -26,11 +26,19 @@ in plan/07-decisions/s10-mathematics.md, includes the accepted one-step `π/64` 
   xtask static` 0.
 * `libm-f64-trig-quick-2-plants` rc 0: 6 CAUGHT, 0 SURVIVED, 0 WARN-RC-ONLY/NO-MSG (WARN-DEV-SHM only: no test here
   mounts /dev/shm).
-* `libm-f64-trig-quick-2-gate`: direct tier (see the report section below for the result).
-* Driver `~/work/LIBM-F64-TRIG-QUICK-2/driver.sh` (after the gate, in order): `-counts` (cbench_libm `--compare
-  --counters`, default then `--tunables glibc.cpu.hwcaps=-FMA`), `-stage` (`bench --stage
-  ~/work/LIBM-F64-TRIG-QUICK-2/stage.tar`), `-accuracy` (10^8 per function, distribution and build).
-* Timing bookings 128 (kotori, Ivy Bridge) and 129 (nozomi, N100), 90 min.
+* `libm-f64-trig-quick-2-gate` rc 1 on 2d543fd81: every suite ok (9 suites, 7288 passed, 0 failed, conformance 6/6,
+  peak 11G, oom_kill 0) but `STEP FAILED: unsafe-audit: 1 violations`: the selftest hook's `unsafe fn` pointer line in
+  src/hot/ had no UNSAFE comment (I ran static on the inherited head only, before adding it). Fixed in 757f653e9 (one
+  commented unsafe block per call). `-counts` (first driver) was killed while queued (stale tree); never ran.
+* Final head: driver `~/work/LIBM-F64-TRIG-QUICK-2/driver2.sh`, started detached at hand-back, runs in order (one
+  build at a time in r5): `-lint` (full clippy --all-features, xtask clippy, static), `-stage2` (`bench --stage
+  ~/work/LIBM-F64-TRIG-QUICK-2/stage.tar`), `-counts2` (cbench_libm `--compare --counters`, default build then
+  `--tunables glibc.cpu.hwcaps=-FMA`; the -FMA tunable may not reach the bench programs, see
+  LIBM-F64-EXP-QUICK-WIRE.md: compare the sin rows of the two runs), `-gate2` (direct tier), `-accuracy2` (10^8
+  operands per function, distribution and build; 0 mismatches = rc 0), `-plants2` (the same 6 plants on the final
+  head, dir /dev/shm/claude/LIBM-F64-TRIG-QUICK-2/plants-2; the first `-plants` ran before the hook fix). keke's slots were full at hand-back (a
+  queued foreground clippy waited 10+ min and was stopped), hence the detached driver.
+* Timing bookings 128 (kotori) and 129 (nozomi) cancelled unused: the stage tarball could not be built in budget.
 
 ## Not covered (say so, do not imply)
 
@@ -40,7 +48,15 @@ job checks nearest only.
 
 ## Next step
 
-See the report section (filled at hand-back).
+1. Read the driver's five jobs (`~/bin/jobwait libm-f64-trig-quick-2-{lint,stage2,counts2,gate2,accuracy2}` on keke).
+   A red: fix and rerun only that job. Counts: sin/cos/tan/sin_huge rows of `-counts2` against the base (brief:
+   FMA sin 152 vs glibc 105, cos 156/107, tan 181/112, SSE2 sin 232/127; target sin <= 110 FMA); if any measured row
+   is slower than its base, profile one call (wl_trace) before landing. Add the counts to D-10.61.
+2. Timing (owner exception: the change alters the instruction mix, a division in tan): copy
+   keke:~/work/LIBM-F64-TRIG-QUICK-2/stage.tar to an Ivy Bridge host (kotori or nico, less busy) and nozomi (N100),
+   unpack whole into a new dir, `ops timing-book`, then `~/bin/timing <label> ./xtask-bin bench --no-build --compare
+   cbench_libm` (try the command once briefly first); report sin, cos, tan, sin_huge ratios; the first hand-back line
+   wants `IVB <x>x / N100 <y>x`.
 
 ## Not to redo
 
