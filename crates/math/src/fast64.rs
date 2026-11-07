@@ -370,7 +370,7 @@ fn ln2_prod(r: f64) -> Dd {
 
 /// [`exp_kernel`]'s bound `|y|·(2^-49·|tail| + 2^-70)` (proof there).
 #[inline(always)]
-fn exp_eps(y: Dd, tail: f64) -> f64 {
+pub(crate) fn exp_eps(y: Dd, tail: f64) -> f64 {
     dd::abs(y.hi) * (TAIL * dd::abs(tail) + MARGIN)
 }
 
@@ -747,7 +747,7 @@ const C_LOG: f64 = f64::from_bits(0x3ff0_0020_0040_0081);
 /// needed. With `y.lo` uniform over half an ulp the test misses with probability about `c − 1`;
 /// then the exact test decides ([`finish`]).
 #[inline(always)]
-fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
+pub(crate) fn near(y: Dd, c: f64, m: i32) -> Option<f64> {
     let w = y.lo * c;
     if y.hi + w == y.hi && w != 0.0 { Some(y.hi * dd::pow2(m)) } else { None }
 }

@@ -168,9 +168,23 @@ macro_rules! ziv_fns {
     )*};
 }
 
+/// `cexp`: the quick tier of `float` and `double` ([`crate::complex_fast`], D-10.53) when it
+/// can prove both parts, else the 384-bit route and its ladder.
+pub fn cexp<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    if let Some(r) = crate::complex_fast::cexp_any(x, y, mode) {
+        return r;
+    }
+    cexp_route(x, y, mode)
+}
+
+/// `cexp` by the 384-bit route and its ladder alone (the quick tier's fallback, and its
+/// reference in the tests); not part of the ABI.
+#[doc(hidden)]
+pub fn cexp_route<F: Real>(x: F, y: F, mode: Rounding) -> Res<F> {
+    ziv(|| n::cexp(x, y, mode), || w::cexp(x, y, mode), || wx::cexp(x, y, mode), || wy::cexp(x, y, mode))
+}
+
 ziv_fns! {
-    /// `cexp`.
-    cexp;
     /// `clog`.
     clog;
     /// `clog10`.
