@@ -174,7 +174,13 @@ pub mod fused {
         _mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(th), _mm_set_sd(rh), _mm_set_sd(u)))
     }
 
-    quick!(#[target_feature(enable = "fma")]; #[inline]; ma; lo; C_FMA);
+    quick!(
+        #[doc = ""]
+        #[doc = "# Safety"]
+        #[doc = ""]
+        #[doc = "The CPU must support FMA and the OS must save the AVX state (the `#[target_feature]` contract)."]
+        #[target_feature(enable = "fma")]; #[inline]; ma; lo; C_FMA
+    );
 }
 
 #[cfg(test)]
