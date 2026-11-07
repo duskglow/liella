@@ -1,7 +1,7 @@
 # LIBM-F64-EXP-QUICK (-2): binary64 exp quick phase (kernel, proof, tests; not wired)
 
 State: branch `task/libm-f64-exp-quick-2`, code head 67b7caa22 (handoff/report commits on top). COMPLETE once the
-gate and plants jobs below are green. Brief: `/home/claude/state/briefs/LIBM-F64-EXP-QUICK.md` (same as
+gate and plants jobs below are green. Brief: `~/state/briefs/LIBM-F64-EXP-QUICK.md` (same as
 `handoff/libm-rethink/LIBM-F64-EXP-QUICK.md`). Decisions in force: D-10.51 (two-phase design), D-10.54 (this kernel's
 constants, bounds and measured accuracy), D-10.25/D-10.50 (two builds via `kernels!`/`fused`), D-10.3 (CR contract).
 

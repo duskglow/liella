@@ -1016,6 +1016,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
     println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
     run_libm(root, &cargo, &cc, &ar, profile)?;
+    run_ld(root, &cargo, &cc, profile)?;
     check_placement(root, &release)?;
     // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
     crate::placeholders::check_no_private(&release)?;
@@ -1023,12 +1024,169 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
     crate::classed::check_file(&release.join("libc.a"))?;
     crate::classed::check_file(&release.join("libc.so.6"))?;
+    // The hot kernels' jumps stay off 32-byte boundaries in the archive the programs link (D-4.67).
+    crate::jcc::check_archive(root, &release.join("libc.a"))?;
     crate::remap::check(root)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
     fs::write(&marker, format!("{}
 ", profile.name())).map_err(|e| e.to_string())?;
     publish(&marker, &release.join(".profile"))
+}
+
+/// The interpreter product (phase 14 DL-5, R14-2, D-27.13): `crates/ld-so` as a static archive,
+/// linked with the `ld` variant of `machine/entry.S` into `target/liella/<Arch::INTERP>`, a shared
+/// object whose entry point is `liella_machine_ld_entry` and whose every symbol is local (no
+/// exports before the loader has any, R14-12), then checked: [`check_interp`] (L14-1) and [`check_interp_prerelocation`] (design §1).
+/// The interpreter's Rust code runs before its image is relocated (design §0a item 9): with the
+/// `pie` model every symbol is local to the image, so calls and data references are PC-relative,
+/// never through a GOT slot that still holds a link-time address (rustc's default no-PLT calls
+/// load the callee from the GOT; the first, `liella_link_image_header`, crashed ld.so). Every
+/// symbol is local in the linked object (version script), so the model's assumption holds.
+const LD_RUSTFLAGS: &str = "-Crelocation-model=pie";
+
+fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), String> {
+    use liella_ld::arch::Arch as _;
+    let name = liella_ld::arch::Native::INTERP;
+    let manifest = root.join("crates/ld-so/Cargo.toml");
+    let product = root.join("target/product");
+    let release = root.join("target/liella");
+    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))))?;
+    let archive = product.join(profile.name()).join("libld_so.a");
+    let entry = product.join("ld-entry.o");
+    run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
+    let map = product.join("ld.map");
+    fs::write(&map, "{\n  local: *;\n};\n").map_err(|e| e.to_string())?;
+    let out = release.join(name);
+    let staged = tmp_name(&out);
+    run(Command::new(cc)
+        .args(["-shared", "-nostdlib", "-Wl,--gc-sections", "-Wl,-z,now", "-Wl,-z,relro", "-Wl,--hash-style=gnu", "-Wl,-z,pack-relative-relocs", "-Wl,-e,liella_machine_ld_entry", "-Wl,-Bsymbolic"])
+        .arg(format!("-Wl,--version-script={}", map.display()))
+        .arg(format!("-Wl,-soname,{name}"))
+        .arg(&entry)
+        .arg(&archive)
+        .arg("-lgcc")
+        .arg("-o")
+        .arg(&staged))?;
+    check_interp(&staged)?;
+    check_interp_prerelocation(&staged)?;
+    publish(&staged, &out)?;
+    println!("so: target/liella/{name} (the interpreter; L14-1 link check and pre-relocation check passed)");
+    Ok(())
+}
+
+/// L14-1 over a linked interpreter: no undefined symbol, no `DT_NEEDED`, relocations only
+/// `RelocKind::Relative` and RELR, no text relocations (`liella_ld::link`, design §1).
+pub(crate) fn check_interp(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r = liella_ld::link::check::<liella_ld::arch::Native>(&bytes).map_err(|e| format!("{}: {e:?}", path.display()))?;
+    if r.holds() {
+        return Ok(());
+    }
+    let first = r.first_undefined.map(|n| String::from_utf8_lossy(n).into_owned()).unwrap_or_default();
+    Err(format!(
+        "{}: the interpreter's link invariant (L14-1) does not hold: dynamic {}, {} undefined symbols (first {first:?}), {} DT_NEEDED, {} relocations other than RELATIVE/RELR (first {:?}), text relocations {}",
+        path.display(), r.dynamic, r.undefined, r.needed, r.other, r.first_other, r.textrel
+    ))
+}
+
+/// The entry primitive of `ld.so` (`machine/entry.S` with `-DLIELLA_LD`).
+const LD_ENTRY: &str = "liella_machine_ld_entry";
+/// The Rust start it calls; only its part up to the call of [`LD_RELOCATOR`] runs unrelocated.
+const LD_START: &str = "liella_ld_start";
+/// The relocation loop's function (`bootstrap::relocate_image`, a mangled Rust name).
+const LD_RELOCATOR: &str = "relocate_image";
+
+/// Design §1 over the linked `ld.so` (D-27.13): no instruction that runs before the relocation loop
+/// has finished reads a word a dynamic relocation writes (a GOT slot, a pointer in `.data.rel.ro`):
+/// it would still hold its link-time address. Static, over `objdump -d`: the code reached by direct
+/// calls and jumps from [`LD_ENTRY`], with [`LD_START`] cut after its call of [`LD_RELOCATOR`].
+fn check_interp_prerelocation(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut words = BTreeSet::new();
+    liella_ld::link::relocated_words::<liella_ld::arch::Native>(&bytes, |w| {
+        words.insert(w);
+    })
+    .map_err(|e| format!("{}: {e:?}", path.display()))?;
+    let out = Command::new("objdump").args(["-d", "--no-show-raw-insn"]).arg(path).output().map_err(|e| format!("objdump: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("objdump -d {} failed", path.display()));
+    }
+    prerelocation_errors(&String::from_utf8_lossy(&out.stdout), &words).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// One function of an `objdump -d` listing: its name, start address and `(address, text)` lines.
+struct Func<'a> {
+    name: &'a str,
+    start: u64,
+    insns: Vec<(u64, &'a str)>,
+}
+
+/// The functions of an `objdump -d --no-show-raw-insn` listing, in address order.
+fn listing(dis: &str) -> Vec<Func<'_>> {
+    let mut funcs: Vec<Func<'_>> = Vec::new();
+    for line in dis.lines() {
+        // A function header starts in column 0 (`0000000000001000 <name>:`); instructions are indented.
+        if !line.starts_with(char::is_whitespace) {
+            if let Some((Ok(start), Some(name))) = line.split_once(" <").map(|(a, rest)| (u64::from_str_radix(a, 16), rest.strip_suffix(">:"))) {
+                funcs.push(Func { name, start, insns: Vec::new() });
+            }
+            continue;
+        }
+        let Some((addr, text)) = line.trim_start().split_once(":\t") else { continue };
+        if let (Ok(addr), Some(f)) = (u64::from_str_radix(addr, 16), funcs.last_mut()) {
+            f.insns.push((addr, text.trim()));
+        }
+    }
+    funcs.sort_by_key(|f| f.start);
+    funcs
+}
+
+/// The check of [`check_interp_prerelocation`] on a listing and the set of relocated words.
+// ARCH(x86_64): the operand syntax read here is objdump's AT&T x86-64 form: `call 1234 <f>`,
+// `jcc 1234 <f+0x10>`, `op 0x10(%rip),%reg   # 1234 <sym>`, `call *%reg`; aarch64 needs its own reader.
+pub fn prerelocation_errors(dis: &str, relocated: &BTreeSet<u64>) -> Result<(), String> {
+    let funcs = listing(dis);
+    let find = |name: &str| funcs.iter().position(|f| f.name == name).ok_or_else(|| format!("no function {name} in the listing"));
+    let containing = |addr: u64| funcs.iter().rposition(|f| f.start <= addr).filter(|&i| funcs.get(i).is_some_and(|f| f.insns.last().is_some_and(|l| addr <= l.0)));
+    let mut todo = vec![find(LD_ENTRY)?];
+    let mut seen = BTreeSet::new();
+    let mut errors = Vec::new();
+    while let Some(i) = todo.pop() {
+        let Some(f) = funcs.get(i).filter(|_| seen.insert(i)) else { continue };
+        let mut insns = f.insns.as_slice();
+        if f.name == LD_START {
+            let cut = insns.iter().position(|(_, t)| t.starts_with("call") && t.contains(LD_RELOCATOR));
+            let cut = cut.ok_or_else(|| format!("{LD_START} does not call {LD_RELOCATOR} (keep it out of line)"))?;
+            insns = insns.get(..=cut).unwrap_or(insns);
+        }
+        for &(addr, text) in insns {
+            let (code, comment) = text.split_once('#').unwrap_or((text, ""));
+            // Prefixes objdump prints before the mnemonic (`addr32 call`: a call the linker relaxed).
+            let mut words = code.split_whitespace().skip_while(|w| ["addr32", "notrack", "bnd", "data16", "cs", "ds"].contains(w));
+            let op = words.next().unwrap_or("");
+            let operands = words.next().unwrap_or("");
+            let branch = op.starts_with("call") || op.starts_with('j');
+            if operands.contains("(%rip)") && !op.starts_with("lea") && !op.starts_with("nop") {
+                let target = comment.split_whitespace().next().and_then(|t| u64::from_str_radix(t, 16).ok());
+                if target.is_none_or(|t| relocated.range(t.saturating_sub(7)..=t).next().is_some()) {
+                    errors.push(format!("{} {addr:x}: `{text}` reads a relocated word before relocation", f.name));
+                }
+            } else if branch && operands.starts_with('*') {
+                // A register-indirect `jmp` is a jump table inside the function (PC-relative
+                // entries); a register-indirect call reaches code this check cannot name.
+                if op.starts_with("call") {
+                    errors.push(format!("{} {addr:x}: `{text}` calls an address the check cannot follow", f.name));
+                }
+            } else if branch {
+                match u64::from_str_radix(operands, 16).ok().map(containing) {
+                    Some(Some(j)) => todo.push(j),
+                    _ => errors.push(format!("{} {addr:x}: `{text}` branches outside the listed code", f.name)),
+                }
+            }
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(format!("ld.so reads its data before its relocation loop (design §1, D-27.13):\n{}", errors.join("\n"))) }
 }
 
 /// The names `spec/abi/versions.tsv` gives `libm.so.6` only that glibc 2.39's `libc.a` defines all
@@ -1541,5 +1699,37 @@ mod tests {
         let builtins = "compiler_builtins-1.compiler_builtins.2-cgu.000.rcgu.o:\n0000000000000000 T core::core_arch::x86::xsave::_xgetbv\n";
         assert!(exported_rust_std(builtins).is_empty());
         assert_eq!(exported_rust_std(&format!("{builtins}c-1.o:\n0000000000000000 T core::panicking::panic\n")), ["core::panicking::panic"]);
+    }
+
+    /// Design §1 / D-27.13 (no spec clause: loader start-up internals): over an `objdump -d`
+    /// listing shaped like ld.so's, the pre-relocation check passes when nothing before the end of
+    /// the relocation loop reads a relocated word (a later GOT call and taking a slot's address
+    /// are fine), and fails for a read in a callee reached by a tail jump (unaligned inside the
+    /// word), a read in the start before the relocator's call, an unfollowable call, and a start
+    /// whose relocator call is gone (inlined).
+    #[test]
+    fn interp_prerelocation_reads_are_refused() {
+        let clean = "\n\
+            0000000000001000 <liella_machine_ld_entry>:\n    1000:\txor    %ebp,%ebp\n    1002:\tmov    %rsp,%rdi\n\
+            \x20   1005:\tlea    -0x100c(%rip),%rsi        # 0 <__ehdr_start>\n    100c:\tcall   1100 <liella_ld_start>\n    1011:\thlt\n\n\
+            0000000000001100 <liella_ld_start>:\n    1100:\tpush   %rbp\n    1101:\tlea    0x2f00(%rip),%rsi        # 4008 <ptr>\n\
+            \x20   1108:\tcall   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>\n\
+            \x20   110d:\tcall   *0x2eed(%rip)        # 4000 <_GLOBAL_OFFSET_TABLE_+0x18>\n    1113:\tret\n\n\
+            0000000000001200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>:\n\
+            \x20   1200:\tcmpb   $0x0,0x2ef9(%rip)        # 4100 <flag>\n\
+            \x20   1207:\tje     1210 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image+0x10>\n\
+            \x20   1209:\tnotrack jmp *%rax\n    120b:\taddr32 call 1300 <helper>\n    1210:\tret\n\n\
+            0000000000001300 <helper>:\n    1300:\tjmp    1400 <tail>\n\n\
+            0000000000001400 <tail>:\n    1400:\tret\n";
+        let words: BTreeSet<u64> = [0x4000, 0x4008].into();
+        assert_eq!(prerelocation_errors(clean, &words), Ok(()));
+        let tail_read = clean.replace("1400:\tret", "1400:\tmov    0x2bfa(%rip),%rax        # 4004 <x>");
+        assert!(prerelocation_errors(&tail_read, &words).is_err_and(|e| e.contains("tail 1400") && e.contains("reads a relocated word")));
+        let start_read = clean.replace("1100:\tpush   %rbp", "1100:\tcall   *0x2efa(%rip)        # 4000 <_GLOBAL_OFFSET_TABLE_+0x18>");
+        assert!(prerelocation_errors(&start_read, &words).is_err_and(|e| e.contains("liella_ld_start 1100")));
+        let unfollowable = clean.replace("1300:\tjmp    1400 <tail>", "1300:\tcall   *%rax");
+        assert!(prerelocation_errors(&unfollowable, &words).is_err_and(|e| e.contains("cannot follow")));
+        let inlined = clean.replace("call   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>", "nop");
+        assert!(prerelocation_errors(&inlined, &words).is_err_and(|e| e.contains("does not call relocate_image")));
     }
 }

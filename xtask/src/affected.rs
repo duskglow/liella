@@ -19,13 +19,17 @@
 //!
 //! 1. ESCALATE TO FULL (everything: the workspace clippy and `cargo xtask test`): `csys/` (but
 //!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
-//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
+//!    toolchain file, `xtask/` (but this module and the audit modules, rule 7, and xtask test code: `xtask/tests/`
+//!    or a source whose base diff stays inside its trailing `#[cfg(test)]` module, D-X.41), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
 //!    `include/`; but the math wiring, coefficients, fits and tables generator, rule 8), the product crates, linker and export lists,
 //!    any non-Rust file under a crate's `src/`, and any path this table does not know.
-//! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `*.md`, `spec/behaviour`, `spec/schedule.tsv`, and the
-//!    operator tools under the top-level `tools/`, e.g. the probe service, which no test reaches):
-//!    `stubs` (which runs `trace`) and the policy checks, no tests.
+//! 2. DOCS ONLY (`docs/`, `plan/`, `handoff/`, `results/`, top-level `*.md`, `spec/**/*.md`, `spec/behaviour`,
+//!    `spec/schedule.tsv`, and the operator tools under the top-level `tools/`, e.g. the probe service, which no test
+//!    reaches): `stubs` (which runs `trace`), the policy checks and `cargo xtask static`, no tests; but a file that code
+//!    names as a path (a quoted path on a non-comment line, e.g. a test's `spec/behaviour/*.glibc.txt` record or
+//!    `docs/codemap/symbols.tsv`, which this command reads) selects its readers: that test target, the crate's unit
+//!    tests, or the xtask unit tests (XTASK-AFFECTED-DOCS-PATHS, D-X.35).
 //! 3. A conformance program (`conformance/c/*.c`): that program, and the tests that name it.
 //!    A header `conformance/c/*.h`: the programs that `#include` it (none: every program) and
 //!    the tests that name it. `conformance/run.sh` and `conformance/tools`: every conformance program.
@@ -92,13 +96,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Crates whose changes are narrowed through the module graph.
 const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-math"];
 /// xtask sources that name csys symbols only to check the csys source or products, from `cargo xtask static` and
 /// `cargo xtask so` (D-X.34): a reference from one of them is no user of the symbol.
-const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs"];
+const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs", "xtask/src/jcc.rs"];
 
 // ---------------------------------------------------------------------------------------------
 // The repository model
@@ -107,6 +111,9 @@ struct Crate {
     name: String,
     dir: String,
     deps: BTreeSet<String>,
+    /// The package has a library target (`src/lib.rs` or a `[lib]` section). A bin-only package (xtask) has no
+    /// `--lib`: its unit tests are those of its bin targets (XTASK-AFFECTED-XTASK-TESTS).
+    lib: bool,
 }
 
 struct Node {
@@ -201,6 +208,13 @@ pub struct Repo {
     /// XTASK-AFFECTED-MATH-2: the fit files in the tree (`crates/math/fits/<name>.fit`). A changed fit that is not
     /// here was removed, and `cargo xtask remez --check` cannot check it: FULL.
     fits: BTreeSet<String>,
+    /// XTASK-AFFECTED-DOCS-PATHS: the xtask sources (path, text) that may read a documentation file; this command's own
+    /// unit tests are left out (they name made-up paths, not files they read).
+    xtask_texts: Vec<(String, String)>,
+    /// XTASK-AFFECTED-XTASK-TESTS (D-X.41): `git diff -U0` of `xtask/` against the base (from git, else the file
+    /// `.changed.xtask` a sync may write). `None`: no diff, so a changed xtask source cannot be shown to touch only
+    /// its test module (FULL, as before).
+    xtask_diff: Option<String>,
 }
 
 /// The symbols an assembly source of csys defines: the `.globl`/`.global`/`.weak` names and every
@@ -681,9 +695,11 @@ impl Repo {
         }
         let mut crates = Vec::new();
         for dir in &members {
-            let (name, deps) = parse_manifest(&read(&root.join(dir).join("Cargo.toml")));
+            let manifest = read(&root.join(dir).join("Cargo.toml"));
+            let (name, deps) = parse_manifest(&manifest);
             if !name.is_empty() {
-                crates.push(Crate { name, dir: dir.clone(), deps });
+                let lib = root.join(dir).join("src/lib.rs").is_file() || manifest.lines().any(|l| l.trim() == "[lib]");
+                crates.push(Crate { name, dir: dir.clone(), deps, lib });
             }
         }
         let names: BTreeSet<String> = crates.iter().map(|c| c.name.clone()).collect();
@@ -838,7 +854,17 @@ impl Repo {
         let names = |x: &Node, y: &Node| x.refs.contains(&(Some(y.krate.clone()), y.name.clone())) || (x.krate == y.krate && x.refs.contains(&(None, y.name.clone())));
         let hubs = (0..nodes.len()).filter(|&y| nodes.iter().filter(|x| names(x, &nodes[y])).count() * 6 >= nodes.len()).collect();
         let test_only = test_only_modules(&nodes);
-        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root) }
+        let mut xs = Vec::new();
+        files_under(&root.join("xtask/src"), &["rs"], &mut xs);
+        let xtask_texts = xs
+            .iter()
+            .map(|p| {
+                let text = read(p);
+                let text = if p.ends_with("xtask/src/affected.rs") { text.split("\n#[cfg(test)]\nmod tests {").next().unwrap_or_default().to_string() } else { text };
+                (rel(p), text)
+            })
+            .collect();
+        Repo { crates, support_texts, closure, nodes, targets, conf, hubs, test_only, csys, entries, entry_hubs, csys_refs, hdr_diff: fs::read_to_string(root.join(".changed.hdr")).ok(), fits: fit_files(root), xtask_texts, xtask_diff: fs::read_to_string(root.join(".changed.xtask")).ok() }
     }
 
     /// The module of the graph a source path belongs to, `(crate, module)`, as `classify_path` names it.
@@ -894,6 +920,8 @@ pub struct Selection {
     pub products: bool,
     /// GATE-TIER: the DIRECT tier (`Tier::Direct`, see `narrow_direct`); false = the wide rules.
     pub direct: bool,
+    /// GATE-VALIDATION-SH-TESTS: `validation/` self-tests to run (`bash <path>` from the root) -> reason.
+    pub scripts: BTreeMap<String, String>,
 }
 
 /// GATE-TIER (coordinator ruling 10-11, owner intent "only run the tests that are impacted by a fix for gate runs and
@@ -1261,6 +1289,9 @@ enum Class {
     /// bench/ and benchmarks/: data the xtask unit tests read (limits, rows, sentinels), so `-p xtask` runs.
     XtaskData,
     XtaskAudit(&'static [&'static str]),
+    /// XTASK-AFFECTED-XTASK-TESTS: xtask test code only (`xtask/tests/`, or a source whose diff stays inside its
+    /// trailing `#[cfg(test)]` module): the xtask unit tests, clippy and `cargo xtask static`, not FULL.
+    XtaskTestCode,
     /// XTASK-AFFECTED-MATH: the math export wiring (`s10_math.tsv`, `s10_math_gen.rs`, `csys/src/adapter/math_*.c`).
     MathWiring,
     /// XTASK-AFFECTED-MATH: a generated coefficient file `crates/math/src/coeffs/<family>.rs`.
@@ -1269,6 +1300,36 @@ enum Class {
     MathFit,
     /// XTASK-AFFECTED-MATH-2: the tables generator `crates/mathtools/src/tables.rs` (`cargo xtask tables`).
     MathTables,
+    /// D-X.39: another `crates/mathtools/src/` source that a generator is built from (`mathtools_feeds`): its own
+    /// mapping plus the check of each generated set it feeds.
+    MathToolFeed(Feeds),
+    /// GATE-VALIDATION-SH-TESTS: a `validation/` script with self-tests (`VALIDATION_COVERED`): those self-tests run.
+    ValidationScript(&'static [&'static str]),
+}
+
+/// D-X.39: which generated sets a liella-mathtools source feeds. `remez`: the fitted coefficient files
+/// (`cargo xtask remez --check <every fit>`); `tables`: the constant tables and `crates/math/KERNELS.md`
+/// (`cargo xtask tables --check`, `kernel-index --check`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Feeds {
+    pub remez: bool,
+    pub tables: bool,
+}
+
+/// D-X.39: the generator inputs under `crates/mathtools/src/` (the fitting code reached CI without `remez --check`
+/// before this map). The remez binary is built from `remez.rs` and `mp/`; the tables binary from `tables.rs`, the
+/// `*_tables.rs` modules and `mp/`; `lib.rs` declares both. `cmp.rs`, `cplx.rs` and `bin/mathcmp.rs` feed no
+/// generated file (the comparison tool): `None`, the ordinary mapping only. `tables.rs` keeps its own class.
+fn mathtools_feeds(path: &str) -> Option<Feeds> {
+    let f = path.strip_prefix("crates/mathtools/src/")?;
+    let (remez, tables) = match f {
+        "remez.rs" | "bin/remez.rs" => (true, false),
+        "bessel_tables.rs" | "gamma_tables.rs" | "special_tables.rs" | "bin/tables.rs" => (false, true),
+        "lib.rs" => (true, true),
+        _ if f.starts_with("mp/") && f.ends_with(".rs") => (true, true),
+        _ => return None,
+    };
+    Some(Feeds { remez, tables })
 }
 
 const MATH_EXPORTS_CRATE: &str = "liella-boundary";
@@ -1306,7 +1367,7 @@ fn math_class(path: &str) -> Option<Class> {
     if path == MATH_TABLES_GEN {
         return Some(Class::MathTables);
     }
-    None
+    mathtools_feeds(path).map(Class::MathToolFeed)
 }
 
 /// xtask modules that only implement report or audit commands: (module, the xtask commands to
@@ -1325,8 +1386,71 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
+/// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
+/// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
+/// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
+/// host: 0.05 s, 0.2 s and 15 s).
+const VALIDATION_RUN_TEST: &str = "validation/wl_run_test.sh";
+const VALIDATION_STATS_TEST: &str = "validation/wl_stats_test.sh";
+const VALIDATION_MTMEM_TEST: &str = "validation/wl_mtmem_test.sh";
+pub(crate) const VALIDATION_SELF_TESTS: &[&str] = &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST];
+
+/// GATE-VALIDATION-SH-TESTS: a `validation/` script -> the self-tests that exercise it (each self-test also covers
+/// itself). A change to a script here selects those self-tests in every tier. `wl_run.sh` and `wl_count_run.sh` are
+/// covered only where the self-tests read them (that they source the shared classifier and pass the thread flag).
+const VALIDATION_COVERED: &[(&str, &[&str])] = &[
+    // The syscall verdict: sourced by wl_run_test.sh, and by wl_stats.sh (which the other two source).
+    ("validation/wl_syscls.sh", &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_stats.sh", &[VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_run.sh", &[VALIDATION_RUN_TEST]),
+    ("validation/wl_count_run.sh", &[VALIDATION_STATS_TEST]),
+    (VALIDATION_RUN_TEST, &[VALIDATION_RUN_TEST]),
+    (VALIDATION_STATS_TEST, &[VALIDATION_STATS_TEST]),
+    (VALIDATION_MTMEM_TEST, &[VALIDATION_MTMEM_TEST]),
+];
+
+/// GATE-VALIDATION-SH-TESTS: the `validation/wl_*.sh` scripts with no self-test the gate can run, each with why. The
+/// unit test `every_validation_wl_script_is_mapped` fails for a `wl_*.sh` script in neither table, so a new script
+/// needs a decision (a self-test, or a row here) before it lands.
+const VALIDATION_UNCOVERED: &[(&str, &str)] = &[
+    ("validation/wl_alloctrace.sh", "lab driver (runs a workload under gdb on a build host); no self-test"),
+    ("validation/wl_alloctrace_run.sh", "host side of wl_alloctrace.sh; no self-test"),
+    ("validation/wl_attr.sh", "workload gate attribution step on a timing host; no self-test"),
+    ("validation/wl_base.sh", "BASE checkout helper of the lab tools; no self-test"),
+    ("validation/wl_count.sh", "lab driver of wl_count_run.sh (ssh, queueing); no self-test"),
+    ("validation/wl_entries.sh", "lab driver of wl_entries_run.sh; no self-test"),
+    ("validation/wl_entries_run.sh", "host side of the entry-point counts (needs the built kits); no self-test"),
+    ("validation/wl_fallback.sh", "lab queueing fallback; no self-test"),
+    ("validation/wl_gate.sh", "the workload gate driver (lab hosts); no self-test"),
+    ("validation/wl_install.sh", "installs the lab tools on a host; no self-test"),
+    ("validation/wl_launch.sh", "detached lab launcher; no self-test"),
+    ("validation/wl_local.sh", "role-directory variant of the lab drivers; no self-test"),
+    ("validation/wl_lock.sh", "build lock of the lab hosts; no self-test"),
+    ("validation/wl_percall.sh", "its check wl_percall_tunables_test.sh is a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_percall_run.sh", "host side of wl_percall.sh (built products); no self-test"),
+    ("validation/wl_percall_tunables_test.sh", "a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_prep.sh", "workload gate step 1 (products, kits) on a lab host; no self-test"),
+    ("validation/wl_prime_base.sh", "puts a BASE source on a lab host; no self-test"),
+    ("validation/wl_shapes.sh", "lab driver of wl_shapes_run.sh; no self-test"),
+    ("validation/wl_shapes_run.sh", "host side of the argument-shape counts (needs the built kits); no self-test"),
+    ("validation/wl_stakes.sh", "lab pipeline over wl_shapes and wl_percall; no self-test"),
+    ("validation/wl_stats_plants.sh", "the plants runner of the covered self-tests (it mutates copies and expects them to fail)"),
+    ("validation/wl_trace.sh", "per-function trace of one call (built products, perf); no self-test"),
+    ("validation/wl_workloads.sh", "the workload definitions (data read by the lab drivers); no self-test"),
+];
+
+fn validation_self_tests(path: &str) -> Option<&'static [&'static str]> {
+    VALIDATION_COVERED.iter().find(|(s, _)| *s == path).map(|(_, t)| *t)
+}
+
 fn classify(path: &str) -> Option<Class> {
     let file = path.rsplit('/').next().unwrap_or(path);
+    if let Some(tests) = validation_self_tests(path) {
+        return Some(Class::ValidationScript(tests));
+    }
+    if let Some((_, why)) = VALIDATION_UNCOVERED.iter().find(|(s, _)| *s == path) {
+        return Some(Class::Nothing(why));
+    }
     let full = |why: &'static str| Some(Class::Full(why));
     if path == "xtask/src/affected.rs" {
         return Some(Class::XtaskOwn);
@@ -1336,6 +1460,11 @@ fn classify(path: &str) -> Option<Class> {
     }
     if let Some(c) = math_class(path) {
         return Some(c);
+    }
+    // XTASK-AFFECTED-XTASK-TESTS (D-X.41): xtask's integration tests run only under `cargo test -p xtask`; no gate
+    // step executes them.
+    if path.starts_with("xtask/tests/") {
+        return Some(Class::XtaskTestCode);
     }
     if path.starts_with("xtask/") {
         return full("xtask (its commands are part of the gate)");
@@ -1370,7 +1499,9 @@ fn classify(path: &str) -> Option<Class> {
     if path == "conformance/run.sh" || path.starts_with("conformance/tools/") {
         return Some(Class::AllConf);
     }
-    if path.starts_with("docs/") || path.starts_with("plan/") || path.starts_with("handoff/") || path.starts_with("spec/behaviour/") || path == "spec/schedule.tsv" || path.starts_with("spec/tools/") || path == "spec/ERRATA.md" || path.starts_with("tools/") || (!path.contains('/') && path.ends_with(".md")) || file.starts_with("LICENSE") || file == ".gitignore" {
+    // XTASK-AFFECTED-DOCS-PATHS: `results/` (timing and sweep tables) and the prose under `spec/` (`*.md`: the errata,
+    // `spec/security/`) join the docs; `docs_readers` then selects whatever names the file in code.
+    if path.starts_with("docs/") || path.starts_with("plan/") || path.starts_with("handoff/") || path.starts_with("results/") || path.starts_with("spec/behaviour/") || path == "spec/schedule.tsv" || path.starts_with("spec/tools/") || (path.starts_with("spec/") && path.ends_with(".md")) || path.starts_with("tools/") || (!path.contains('/') && path.ends_with(".md")) || file.starts_with("LICENSE") || file == ".gitignore" {
         return Some(Class::Docs);
     }
     if path.starts_with("bench/") || path.starts_with("benchmarks/") {
@@ -1380,6 +1511,77 @@ fn classify(path: &str) -> Option<Class> {
         return Some(Class::Nothing("not part of the test gate (bench, fuzz and validation have their own commands)"));
     }
     None
+}
+
+/// XTASK-AFFECTED-XTASK-TESTS (D-X.41): does the change to xtask source `f` stay inside its test module? Needs the
+/// base diff (`Repo::xtask_diff`) and the file's current text; anything missing is "no" (FULL).
+fn xtask_test_only(repo: &Repo, f: &str) -> bool {
+    if !(f.starts_with("xtask/src/") && f.ends_with(".rs")) {
+        return false;
+    }
+    let Some(diff) = repo.xtask_diff.as_deref() else { return false };
+    let Some((_, text)) = repo.xtask_texts.iter().find(|(p, _)| p == f) else { return false };
+    test_module_change(diff, f, text)
+}
+
+/// The 1-based line range strictly inside the file's test module: a column-0 `#[cfg(test)]` line, then a column-0
+/// `mod <name> {` line, up to the first column-0 `}` line, after which only blank lines may follow (the module ends
+/// the file, so a lookalike inside a string literal of the code above is never taken for it). `None`: no such module.
+fn test_module_interior(text: &str) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = text.lines().collect();
+    for i in (0..lines.len()).filter(|&i| lines[i] == "#[cfg(test)]") {
+        if !lines.get(i + 1).is_some_and(|m| m.starts_with("mod ") && m.ends_with(" {")) {
+            continue;
+        }
+        let close = (i + 2..lines.len()).find(|&j| lines[j] == "}")?;
+        if lines[close + 1..].iter().all(|l| l.trim().is_empty()) {
+            // 0-based i is the attribute and i+1 the `mod` line: the body is 1-based i+3 ..= close.
+            return Some((i + 3, close));
+        }
+    }
+    None
+}
+
+/// Whether `diff` (`git diff -U0`) changes `file` (current text `text`) only inside its test module: the file has one
+/// plain modification section (no new, deleted, renamed or binary file), every hunk's new lines (for a pure deletion,
+/// the lines on both sides of it) lie strictly inside the module, and no added or removed line starts at column 0
+/// (which could open, close or move the module or an item around it). Anything else is "no": FULL, as before.
+fn test_module_change(diff: &str, file: &str, text: &str) -> bool {
+    let Some((lo, hi)) = test_module_interior(text) else { return false };
+    let inside = |n: usize| (lo..=hi).contains(&n);
+    let header = format!("diff --git a/{file} b/{file}");
+    let mut sections = diff.split("\ndiff --git ").enumerate().map(|(k, s)| if k == 0 { s.to_string() } else { format!("diff --git {s}") });
+    let Some(sec) = sections.find(|s| s.lines().next() == Some(header.as_str())) else { return false };
+    if sections.any(|s| s.lines().next() == Some(header.as_str())) {
+        return false;
+    }
+    let mut hunks = 0;
+    for l in sec.lines().skip(1) {
+        if l.starts_with("new file") || l.starts_with("deleted file") || l.starts_with("rename ") || l.starts_with("copy ") || l.starts_with("Binary ") || l.starts_with("old mode") || l.starts_with("similarity") {
+            return false;
+        }
+        // Header lines come before the first hunk only (after it, `--- x` is a removed line `-- x`).
+        if (hunks == 0 && (l.starts_with("--- ") || l.starts_with("+++ ") || l.starts_with("index "))) || l.starts_with('\\') {
+            continue;
+        }
+        if let Some(h) = l.strip_prefix("@@ ") {
+            let Some(new) = h.split_whitespace().find_map(|w| w.strip_prefix('+')) else { return false };
+            let (start, count) = new.split_once(',').map_or((new, "1"), |(s, c)| (s, c));
+            let (Ok(start), Ok(count)) = (start.parse::<usize>(), count.parse::<usize>()) else { return false };
+            let ok = if count == 0 { inside(start) && inside(start + 1) } else { inside(start) && inside(start + count - 1) };
+            if !ok {
+                return false;
+            }
+            hunks += 1;
+        } else if let Some(body) = l.strip_prefix('+').or_else(|| l.strip_prefix('-')) {
+            if body.chars().next().is_some_and(|c| !c.is_whitespace()) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    hunks > 0
 }
 
 /// The selection for a set of changed files (paths relative to the repository root, `/`).
@@ -1416,15 +1618,31 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
         if f.starts_with("csys/include/") && f.ends_with(".h") && header_map(repo, f, &mut sel) {
             continue;
         }
-        match classify(f) {
+        let class = match classify(f) {
+            Some(Class::Full(_)) if xtask_test_only(repo, f) => Some(Class::XtaskTestCode),
+            c => c,
+        };
+        match class {
+            Some(Class::XtaskTestCode) => {
+                sel.xtask_tests = true;
+                add(&mut sel.clippy, "xtask".to_string(), &format!("{f} changed"));
+                sel.xtask_cmds.insert("static".to_string());
+                sel.notes.push(format!("{f}: xtask test code only (xtask unit tests, clippy, `cargo xtask static`; not FULL)"));
+            }
             Some(Class::Full(why)) => {
                 if f.starts_with("xtask/") {
                     sel.xtask_tests = true;
                 }
                 sel.full.push(format!("{f}: {why}"));
             }
-            Some(Class::Docs) => sel.notes.push(format!("{f}: docs only (stubs, trace, policy checks)")),
+            Some(Class::Docs) => docs_readers(repo, f, &mut sel),
             Some(Class::Nothing(why)) => sel.notes.push(format!("{f}: {why}")),
+            Some(Class::ValidationScript(tests)) => {
+                for t in tests {
+                    add(&mut sel.scripts, t.to_string(), &format!("{f} changed"));
+                }
+                sel.notes.push(format!("{f}: a validation script with self-tests ({}; not FULL)", tests.join(", ")));
+            }
             Some(Class::AllConf) => sel.all_conf(repo, &format!("{f}: every conformance program")),
             Some(Class::XtaskData) => {
                 sel.xtask_tests = true;
@@ -1464,6 +1682,28 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.xtask_cmds.insert("kernel-index --check".to_string());
                 sel.notes.push(format!("{f}: the tables generator (its own mapping, every math suite, `cargo xtask tables --check` and `kernel-index --check`, not FULL)"));
             }
+            Some(Class::MathToolFeed(feeds)) => {
+                // A generator input: its own mapping (liella-mathtools' unit tests) and the checks that prove the
+                // generated files still follow from it. The checks pass only when the output is unchanged, so the
+                // math suites are not selected here (a changed output is a changed coefficient file, its own row).
+                ordinary_mapping(repo, f, &mut sel);
+                let mut what = Vec::new();
+                if feeds.remez {
+                    if repo.fits.is_empty() {
+                        sel.full.push(format!("{f}: feeds `cargo xtask remez`, but the tree has no fit file to check"));
+                    } else {
+                        let fits: Vec<&str> = repo.fits.iter().map(String::as_str).collect();
+                        sel.xtask_cmds.insert(format!("remez --check {}", fits.join(" ")));
+                        what.push("`cargo xtask remez --check` (every fit)");
+                    }
+                }
+                if feeds.tables {
+                    sel.xtask_cmds.insert("tables --check".to_string());
+                    sel.xtask_cmds.insert("kernel-index --check".to_string());
+                    what.push("`cargo xtask tables --check` and `kernel-index --check`");
+                }
+                sel.notes.push(format!("{f}: a generator input (its own mapping, {}, not FULL)", what.join(", ")));
+            }
             None => ordinary_mapping(repo, f, &mut sel),
         }
     }
@@ -1476,6 +1716,43 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
 fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
     classify_path(repo, f, sel);
     sel.own_suite(repo, f);
+}
+
+/// XTASK-AFFECTED-DOCS-PATHS (D-X.35): a documentation file (rule 2) selects no tests by itself, only the always-run
+/// checks and `cargo xtask static` (lab names, decision and compat ids, the register, trace). A file that code names
+/// as a path (`names_path`) selects what reads it: the test target, the owning crate's unit tests (a crate source),
+/// or the xtask unit tests (an xtask source). Known limit: a path assembled at run time (`format!("docs/{x}")`) is
+/// not seen; the readers found that way today are static checks, which run anyway.
+fn docs_readers(repo: &Repo, f: &str, sel: &mut Selection) {
+    sel.xtask_cmds.insert("static".to_string());
+    let why = format!("{f}: the source names the file");
+    let mut readers = Vec::new();
+    for t in repo.targets.iter().filter(|t| names_path(&t.text, f)) {
+        add(&mut sel.tests, (t.krate.clone(), t.name.clone()), &why);
+        readers.push(format!("{}::{}", t.krate, t.name));
+    }
+    for n in repo.nodes.iter().filter(|n| names_path(&n.text, f)) {
+        add(&mut sel.libs, n.krate.clone(), &why);
+        readers.push(format!("lib:{}", n.krate));
+    }
+    if let Some((x, _)) = repo.xtask_texts.iter().find(|(_, t)| names_path(t, f)) {
+        sel.xtask_tests = true;
+        readers.push(format!("xtask ({x})"));
+    }
+    if readers.is_empty() {
+        sel.notes.push(format!("{f}: docs only (stubs, policy checks, `cargo xtask static`; no tests)"));
+    } else {
+        sel.notes.push(format!("{f}: docs read by code (stubs, policy checks, `cargo xtask static`, and its readers: {})", readers.join(", ")));
+    }
+}
+
+/// Whether `text` names `path` as a path in code: on a line that is not a comment, right after a quote or a `/`
+/// (`"spec/behaviour/x.txt"`, `"/../../spec/behaviour/x.txt"`, `root.join("docs/x.tsv")`). A path cited in a comment
+/// or a doc comment is a reference for the reader, not a read. A top-level file (`README.md`) has no directory to tell
+/// a path from a bare file name (`"README.md"` in a list of names to skip), so it needs a `/` before it or `join("`.
+fn names_path(text: &str, path: &str) -> bool {
+    let at = |pre: &str| pre.ends_with('/') || (pre.ends_with('"') && (path.contains('/') || pre.ends_with("join(\"")));
+    text.lines().filter(|l| !matches!(l.trim_start().get(..2), Some("//" | "/*" | "* "))).any(|l| l.match_indices(path).any(|(i, _)| at(&l[..i])))
 }
 
 /// `--only a,b,...`: the named binaries for a red/green run, NOT a gate. A name is a test
@@ -1756,6 +2033,7 @@ const MACHINE_EXPORTS: &[(&str, &str, &[&str])] = &[
     ("scan.S", "index", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strchrnul", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strncmp", &["machine_scanners", "s04_strings_symbols"]),
+    ("scan.S", "strstr", &["strstr_find", "s04_strings_symbols"]),
     ("scan.S", "__rawmemchr", &["s04_strings_symbols"]),
     ("scan.S", "memrchr", &["machine_scanners", "s04_strings_symbols"]),
     ("scan.S", "strcpy", &["machine_scanners", "s04_strings_symbols"]),
@@ -2092,6 +2370,16 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// D-X.41: `git diff -U0` of `xtask/` (the working tree against the merge base with `base`, as `changed_files`).
+/// `None` without git history or base (a VM tree: the caller keeps the sync's `.changed.xtask`, if any). An untracked
+/// file is not in it, so it is never shown to be test-only.
+fn git_xtask_diff(root: &Path, base: &str) -> Option<String> {
+    git(root, &["rev-parse", "--verify", "--quiet", "HEAD"]).ok()?;
+    let base = if git(root, &["rev-parse", "--verify", "--quiet", base]).is_ok() { base } else if base == "origin/main" { "main" } else { return None };
+    let mb = git(root, &["merge-base", "HEAD", base]).ok()?;
+    git(root, &["diff", "-U0", "--no-color", "--no-ext-diff", mb.trim(), "--", "xtask/"]).ok()
+}
+
 /// Changed file names: the working tree against the merge base with `base`, plus untracked.
 /// Without git history (a VM role tree has an empty repository), the `.changed` list the sync wrote.
 pub(crate) fn changed_files(root: &Path, base: &str) -> Result<Vec<String>, String> {
@@ -2160,7 +2448,10 @@ fn print_selection(repo: &Repo, files: &[String], sel: &Selection) {
     for (n, why) in &sel.conf {
         println!("conformance: {n}  [{why}]");
     }
-    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len());
+    for (s, why) in &sel.scripts {
+        println!("script: bash {s}  [{why}]");
+    }
+    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs, {} of {} validation self-tests", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len(), sel.scripts.len(), VALIDATION_SELF_TESTS.len());
 }
 
 /// How one step ended. `Skipped` is only for a test step that failed solely because no test matched.
@@ -2607,9 +2898,27 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     let mut skipped: Vec<String> = Vec::new();
     if !sel.full.is_empty() {
         println!("escalated to FULL: running the workspace clippy and `cargo xtask test`");
-        ok &= step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"]));
-        ok &= step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log");
+        // Step times (XTASK-TEST-STEP-TIMES): a `step:` line per step on the console, those `cargo xtask test` wrote
+        // to the log among them, and the summary of all of them, slowest first.
+        let mut times = crate::steptime::Steps::default();
+        ok &= times.time("stubs", || step(root, &log, "stubs", Command::new(&cargo).args(["xtask", "stubs"])));
+        ok &= times.time("clippy-workspace", || step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log"));
+        let from = fs::metadata(&log).map_or(0, |m| m.len());
         ok &= step(root, &log, "cargo xtask test", Command::new(&cargo).args(["xtask", "test"]));
+        // GATE-VALIDATION-SH-TESTS: everything includes the validation self-tests (`cargo xtask test` does not run them).
+        for s in VALIDATION_SELF_TESTS {
+            ok &= times.time(s, || step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s)));
+        }
+        let bytes = fs::read(&log).unwrap_or_default();
+        for (name, secs) in String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).lines().filter_map(crate::steptime::parse) {
+            // The remez binary's per-fit lines are parts of the `remez-check` step: shown, not summed again.
+            if name.contains('/') {
+                println!("{}", crate::steptime::line(name, Duration::from_secs_f64(secs)));
+            } else {
+                times.add(&format!("test/{name}"), Duration::from_secs_f64(secs));
+            }
+        }
+        times.print_summary();
     } else {
         if sel.only {
             println!("ONLY mode: the named binaries, no stubs, policy checks or clippy. NOT A GATE.");
@@ -2684,10 +2993,15 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
                     cmd.args(["--features", "liella-boundary/export,liella-boundary/selftest"]);
                 }
                 if sel.libs.contains_key(*c) {
-                    cmd.arg("--lib");
+                    cmd.arg(unit_tests_flag(repo, c));
                 }
-                for t in ts {
+                for t in &ts {
                     cmd.args(["--test", t]);
+                }
+                // The heavy products sweeps run shard 0 only with the exports interposed
+                // (`nextest::PASS1_SHARD0`, D-X.36); `cargo test` has no filter for it and runs all.
+                if pass == 1 && nextest {
+                    cmd.args(crate::nextest::pass1_shard_filter(c, &ts).unwrap_or_default());
                 }
                 let label = format!("test -p {c}{}", if pass == 1 { " (exports interposed)" } else { "" });
                 match step_out(root, &log, &label, &mut cmd, Some(c), &mut std::io::stdout()) {
@@ -2706,6 +3020,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             // A command may carry its flags (`math-gen --check`).
             ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
         }
+        for s in sel.scripts.keys() {
+            ok &= step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s));
+        }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
     let text = read(&log);
@@ -2721,6 +3038,14 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
+}
+
+/// The cargo target flag that runs a package's unit tests: `--lib`, or `--bins` for a bin-only package (xtask, which
+/// a change to a crate it depends on reaches through `wide`), where `--lib` stops the build at once ("no library
+/// targets found in package") and the gate went red without running a test (XTASK-AFFECTED-XTASK-TESTS, D-X.41).
+/// An unknown package keeps `--lib`.
+fn unit_tests_flag(repo: &Repo, krate: &str) -> &'static str {
+    if repo.crates.iter().any(|c| c.name == krate && !c.lib) { "--bins" } else { "--lib" }
 }
 
 /// Is a failed test (`crate::target name`, `crate name` for unit tests, `xtask::bin/xtask name`) in the selection?
@@ -2908,7 +3233,9 @@ fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result
         Some(f) => f.clone(),
         None => changed_files(root, &o.base)?,
     };
-    let repo = Repo::load(root);
+    let mut repo = Repo::load(root);
+    // D-X.41: the xtask diff describes the base comparison only; a `--files` list is not one (no diff: FULL as before).
+    repo.xtask_diff = if o.files.is_some() { None } else { git_xtask_diff(root, &o.base).or(repo.xtask_diff) };
     let sel = select_tier(&repo, &files, tier);
     println!("tier: {tier:?} (per-fix gates: direct; the landing gate runs everything)");
     print_selection(&repo, &files, &sel);
@@ -3183,7 +3510,7 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
     fn repo() -> &'static Repo {
         static REPO: std::sync::OnceLock<Repo> = std::sync::OnceLock::new();
         // The sync's `.changed.hdr` (present in a VM tree) must not decide the unit tests: no header diff here.
-        REPO.get_or_init(|| Repo { hdr_diff: None, ..Repo::load(&root()) })
+        REPO.get_or_init(|| Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) })
     }
 
     // TOOLS-7 (3): only one-line `liella_*` declarations are mappable; anything structural is not.
@@ -3329,6 +3656,42 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         }
     }
 
+    // D-X.39, no spec clause: each generator input under crates/mathtools/src/ selects its own mapping and the
+    // check of every generated set it feeds (remez: all fits in one `remez --check`; tables: `tables --check` and
+    // `kernel-index --check`); the comparison tool's sources select neither. Not FULL, in the direct and wide tiers.
+    #[test]
+    fn mathtools_generator_inputs_select_their_checks() {
+        let all_fits = format!("remez --check {}", repo().fits.iter().map(String::as_str).collect::<Vec<_>>().join(" "));
+        assert!(repo().fits.len() > 1, "the fit files of the tree: {:?}", repo().fits);
+        let both: &[&str] = &[&all_fits, "tables --check", "kernel-index --check"];
+        let remez: &[&str] = &[&all_fits];
+        let tables: &[&str] = &["tables --check", "kernel-index --check"];
+        let cases: &[(&str, &[&str])] = &[
+            ("crates/mathtools/src/remez.rs", remez),
+            ("crates/mathtools/src/bin/remez.rs", remez),
+            ("crates/mathtools/src/bessel_tables.rs", tables),
+            ("crates/mathtools/src/gamma_tables.rs", tables),
+            ("crates/mathtools/src/special_tables.rs", tables),
+            ("crates/mathtools/src/bin/tables.rs", tables),
+            ("crates/mathtools/src/lib.rs", both),
+            ("crates/mathtools/src/mp/func.rs", both),
+            ("crates/mathtools/src/mp/nat.rs", both),
+            ("crates/mathtools/src/cmp.rs", &[]),
+            ("crates/mathtools/src/cplx.rs", &[]),
+            ("crates/mathtools/src/bin/mathcmp.rs", &[]),
+        ];
+        for tier in [Tier::Direct, Tier::Wide] {
+            for (f, want) in cases {
+                assert!(root().join(f).is_file(), "{f} is not in the tree");
+                let s = select_tier(repo(), &[f.to_string()], tier);
+                assert!(s.full.is_empty(), "{f} ({tier:?}) must not escalate: {:?}", s.full);
+                assert!(s.libs.contains_key("liella-mathtools"), "{f} ({tier:?}): its own unit tests {:?}", s.libs.keys());
+                let checks: BTreeSet<&str> = s.xtask_cmds.iter().map(String::as_str).filter(|c| c.starts_with("remez") || c.starts_with("tables") || c.starts_with("kernel-index")).collect();
+                assert_eq!(checks, want.iter().copied().collect::<BTreeSet<_>>(), "{f} ({tier:?})");
+            }
+        }
+    }
+
     // XTASK-AFFECTED-MATH-2 (ruling #3204), no spec clause: a fit file selects its family's math set (everything its
     // generated coefficient file selects) plus `remez --check <fit>`; the tables generator selects its own mapping as a
     // liella-mathtools source, the whole math set, `tables --check` and `kernel-index --check`. Not FULL, in the direct
@@ -3432,6 +3795,67 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
             let (_, s) = sel(&[f]);
             assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty() && s.clippy.is_empty(), "{f}: {s:?}");
         }
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS (D-X.35); no spec clause. A results table alone: `cargo xtask static`, no tests, in
+    // every tier but full (it used to escalate: "not a path the selection knows"). Paths are built at run time so this
+    // test's own text does not name them.
+    #[test]
+    fn docs_paths_select_static_only() {
+        let made_up = ["results", "spec/security", "spec"].map(|d| format!("{d}/{}.md", "docs-paths-made-up"));
+        for f in made_up.iter().map(String::as_str).chain(["results/timing-sweep-1105.md", "spec/ERRATA.md", "docs/benchmarks.md"]) {
+            for t in [Tier::Direct, Tier::Wide] {
+                let s = tier(&[f], t);
+                assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty() && s.clippy.is_empty() && !s.xtask_tests, "{f} ({t:?}): {s:?}");
+                assert_eq!(s.xtask_cmds, BTreeSet::from(["static".to_string()]), "{f} ({t:?})");
+            }
+        }
+        // A path cited only in comments (the tests that cite the threat model) is no read.
+        let s = tier(&["spec/security/threat-model.md"], Tier::Direct);
+        assert!(s.tests.is_empty() && s.libs.is_empty() && !s.xtask_tests, "{s:?}");
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS; no spec clause. A docs file that code reads selects its readers and nothing wider.
+    #[test]
+    fn docs_read_by_code_select_their_readers() {
+        let has = |s: &Selection, k: &str, n: &str| s.tests.contains_key(&(k.to_string(), n.to_string()));
+        for t in [Tier::Direct, Tier::Wide] {
+            let s = tier(&["spec/behaviour/aio.glibc.txt"], t);
+            assert!(s.full.is_empty() && has(&s, "liella", "aio_products") && s.xtask_cmds.contains("static"), "{t:?}: {s:?}");
+            assert!(!has(&s, "liella", "syslog_products"), "only the readers: {s:?}");
+            // Read by a test target and by a crate's unit-test module (`pattern::regex_oracle_diff`).
+            let s = tier(&["spec/behaviour/patterns.glibc.txt.gz"], t);
+            assert!(has(&s, "liella", "regex_record") && has(&s, "liella", "patterns_products") && s.libs.contains_key("liella"), "{t:?}: {s:?}");
+            // Read by this command (`Repo::load`), so by the xtask unit tests.
+            let s = tier(&["docs/codemap/symbols.tsv"], t);
+            assert!(s.full.is_empty() && s.xtask_tests, "{t:?}: {s:?}");
+        }
+    }
+
+    // XTASK-AFFECTED-DOCS-PATHS; no spec clause. Mixed with code: the code's selection as before, plus `static`.
+    #[test]
+    fn docs_mixed_with_code_select_as_before() {
+        let doc = format!("results/{}.md", "docs-paths-made-up");
+        assert!(!tier(&[doc.as_str(), "crates/abi/src/lib.rs"], Tier::Direct).full.is_empty(), "code still escalates");
+        for code in ["crates/kernel/src/lib.rs", "crates/core/tests/aio_products.rs", "conformance/c/fpu_control_own.c"] {
+            for t in [Tier::Direct, Tier::Wide] {
+                let (a, b) = (tier(&[code], t), tier(&[code, doc.as_str()], t));
+                assert!(a.full == b.full && a.tests.keys().eq(b.tests.keys()) && a.conf.keys().eq(b.conf.keys()) && a.libs.keys().eq(b.libs.keys()) && a.xtask_tests == b.xtask_tests, "{code} ({t:?})");
+                assert!(b.xtask_cmds.contains("static"), "{code} ({t:?})");
+            }
+        }
+    }
+
+    #[test]
+    fn names_path_needs_a_quoted_path_outside_comments() {
+        assert!(names_path("let p = root.join(\"spec/behaviour/a.txt\");", "spec/behaviour/a.txt"));
+        assert!(names_path("include_bytes!(\"../../spec/behaviour/a.txt\")", "spec/behaviour/a.txt"));
+        for no in ["//! see spec/behaviour/a.txt", "    /// \"spec/behaviour/a.txt\"", " * \"spec/behaviour/a.txt\"", "let p = \"xspec/behaviour/a.txt\";"] {
+            assert!(!names_path(no, "spec/behaviour/a.txt"), "{no}");
+        }
+        // A top-level file: a bare name in a list is no path; a joined or `/`-prefixed one is.
+        assert!(!names_path("const SKIP: &[&str] = &[\"Makefile\", \"README.md\"];", "README.md"));
+        assert!(names_path("root.join(\"README.md\")", "README.md") && names_path("\"../../README.md\"", "README.md"));
     }
 
     #[test]
@@ -3625,7 +4049,7 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
     /// The live repository with the listed machine files' exports replaced by `FIXTURE_EXPORTS` (their `liella_`
     /// symbols, which tie the files to their Rust users and to each other, stay live).
     fn machine_fixture(extra: &[&str]) -> Repo {
-        let mut r = Repo { hdr_diff: None, ..Repo::load(&root()) };
+        let mut r = Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) };
         for (file, exports) in FIXTURE_EXPORTS {
             let c = r.csys.get_mut(&format!("csys/src/machine/{file}")).expect("listed machine file");
             let mut syms: Vec<String> = c.symbols.take().expect("readable").into_iter().filter(|s| s.starts_with("liella_")).collect();
@@ -3679,6 +4103,79 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         for f in ["xtask/src/so.rs", "xtask/src/spec.rs", "xtask/src/csys.rs", "xtask/src/main.rs"] {
             assert!(!sel(&[f]).1.full.is_empty(), "{f} must escalate to full");
         }
+    }
+
+    #[test]
+    fn a_bin_only_package_runs_its_unit_tests_through_its_bins() {
+        // no spec clause: XTASK-AFFECTED-XTASK-TESTS (D-X.41). xtask has no library target, so `--lib` fails the build;
+        // a library crate keeps `--lib`. xtask is reached through `wide` of a crate it depends on (liella-ld).
+        let r = repo();
+        assert_eq!(unit_tests_flag(r, "xtask"), "--bins");
+        assert_eq!(unit_tests_flag(r, "liella"), "--lib");
+        assert_eq!(unit_tests_flag(r, "liella-ld"), "--lib");
+        let mut s = Selection::default();
+        s.wide(r, "liella-ld", "probe");
+        assert!(s.libs.contains_key("xtask"), "xtask depends on liella-ld: {:?}", s.libs.keys());
+    }
+
+    const MODULE: &str = "fn run() {\n    work();\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn t() {\n        run();\n    }\n}\n";
+
+    fn diff_of(file: &str, hunks: &str) -> String {
+        format!("diff --git a/{file} b/{file}\nindex 1111111..2222222 100644\n--- a/{file}\n+++ b/{file}\n{hunks}")
+    }
+
+    #[test]
+    fn a_change_inside_the_test_module_is_test_code() {
+        // no spec clause: D-X.41. MODULE's test body is lines 7..=12; changed lines there (or a deletion between two of
+        // them) touch test code only.
+        let f = "xtask/src/x.rs";
+        assert_eq!(test_module_interior(MODULE), Some((7, 12)));
+        assert!(test_module_change(&diff_of(f, "@@ -10,0 +11 @@ fn t() {\n+        run();\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -9,2 +9,2 @@\n-    #[test]\n-    fn u() {\n+    #[test]\n+    fn t() {\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -11 +10,0 @@\n-        gone();\n"), f, MODULE));
+        assert!(test_module_change(&diff_of(f, "@@ -6,0 +7 @@\n+    use std::fs;\n"), f, MODULE));
+    }
+
+    #[test]
+    fn a_change_outside_the_test_module_stays_full() {
+        // no spec clause: D-X.41. Executed code, the module's boundaries, a column-0 line, a new or renamed file, a
+        // second section, no diff for the file, or a file without a trailing test module: not test-only.
+        let f = "xtask/src/x.rs";
+        let no = |d: &str, text: &str| assert!(!test_module_change(d, f, text), "{d}");
+        no(&diff_of(f, "@@ -2 +2 @@\n-    work();\n+    other();\n"), MODULE);
+        no(&diff_of(f, "@@ -2 +2 @@\n-    work();\n+    other();\n@@ -11 +11 @@\n-        run();\n+        run2();\n"), MODULE);
+        no(&diff_of(f, "@@ -5 +5 @@\n-#[cfg(not(test))]\n+#[cfg(test)]\n"), MODULE);
+        no(&diff_of(f, "@@ -13 +13 @@\n-}\n+}\n"), MODULE);
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+}\n"), MODULE);
+        // A removed column-0 line `--- x` inside a hunk is a body line, not a header to skip.
+        no(&diff_of(f, "@@ -11 +10,0 @@\n---- x\n"), MODULE);
+        no(&format!("diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n@@ -0,0 +11 @@\n+        run();\n"), MODULE);
+        no(&diff_of("xtask/src/y.rs", "@@ -10,0 +11 @@\n+        run();\n"), MODULE);
+        no(&format!("{}\n{}", diff_of(f, "@@ -10,0 +11 @@\n+        run();"), diff_of(f, "@@ -2 +2 @@\n-    a();\n+    b();\n")), MODULE);
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+        run();\n"), &format!("{MODULE}fn after() {{}}\n"));
+        no(&diff_of(f, "@@ -10,0 +11 @@\n+        run();\n"), "fn run() {}\n");
+        no(&diff_of(f, ""), MODULE);
+    }
+
+    #[test]
+    fn xtask_test_code_selects_the_xtask_tests_and_static_not_full() {
+        // no spec clause: D-X.41. xtask/tests/ always; a source only with a diff confined to its test module (the
+        // real file and its own text); without a diff, or for executed code, FULL as before. --tier full stays FULL.
+        let (_, s) = sel(&["xtask/tests/affected_mode.rs"]);
+        assert!(s.full.is_empty() && s.xtask_tests && s.xtask_cmds.contains("static") && s.clippy.contains_key("xtask") && s.tests.is_empty() && s.conf.is_empty() && s.libs.is_empty(), "{s:?}");
+        assert!(!select_tier(repo(), &["xtask/tests/affected_mode.rs".to_string()], Tier::Full).full.is_empty());
+        let f = "xtask/src/so.rs";
+        let text = &repo().xtask_texts.iter().find(|(p, _)| p == f).expect("so.rs").1;
+        let (lo, hi) = test_module_interior(text).expect("so.rs ends with its test module");
+        let mut r = Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(&root()) };
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Direct).full.is_empty(), "no diff: FULL");
+        r.xtask_diff = Some(diff_of(f, &format!("@@ -{lo},0 +{} @@\n+        let _ = 1;\n", lo + 1)));
+        let s = select_tier(&r, &[f.to_string()], Tier::Direct);
+        assert!(s.full.is_empty() && s.xtask_tests && s.xtask_cmds.contains("static"), "{s:?}");
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Full).full.is_empty(), "--tier full stays FULL");
+        r.xtask_diff = Some(diff_of(f, &format!("@@ -{},0 +{} @@\n+        let _ = 1;\n", lo - 3, lo - 2)));
+        assert!(!select_tier(&r, &[f.to_string()], Tier::Direct).full.is_empty(), "executed code: FULL");
+        assert!(hi > lo);
     }
 
     #[test]
@@ -3973,5 +4470,59 @@ fn plain() {}", &aliases);
         assert!(s.contains("error: unused variable: `x` [crates/core/src/a.rs:3:9]\n"), "{s}");
         assert!(s.contains("error[E0308]: mismatched types [crates/core/src/b.rs:7:1]\n"), "{s}");
         assert!(s.contains("error: could not compile `liella`\n") && !s.contains("c.rs") && !s.contains("d.rs"), "{s}");
+    }
+
+    // GATE-VALIDATION-SH-TESTS (no spec clause: gate tooling): every `validation/wl_*.sh` script is either covered by a
+    // self-test the gate runs or listed with a reason; every path the tables name exists; every self-test a row names
+    // is one the FULL tier runs, and covers itself.
+    #[test]
+    fn every_validation_wl_script_is_mapped() {
+        let root = root();
+        let mut problems = Vec::new();
+        for p in sorted_dir(&root.join("validation")) {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if !(name.starts_with("wl_") && name.ends_with(".sh")) {
+                continue;
+            }
+            let rel = format!("validation/{name}");
+            let covered = validation_self_tests(&rel).is_some();
+            let listed = VALIDATION_UNCOVERED.iter().any(|(s, _)| *s == rel);
+            if covered == listed {
+                problems.push(format!("{rel}: {}", if covered { "in both VALIDATION_COVERED and VALIDATION_UNCOVERED" } else { "no covering self-test and no VALIDATION_UNCOVERED row" }));
+            }
+        }
+        let named = VALIDATION_COVERED.iter().flat_map(|(s, ts)| std::iter::once(*s).chain(ts.iter().copied())).chain(VALIDATION_UNCOVERED.iter().map(|(s, _)| *s)).chain(VALIDATION_SELF_TESTS.iter().copied());
+        for s in named {
+            if !root.join(s).is_file() {
+                problems.push(format!("{s}: named in the validation tables but missing"));
+            }
+        }
+        for (s, ts) in VALIDATION_COVERED {
+            for t in ts.iter().filter(|t| !VALIDATION_SELF_TESTS.contains(t)) {
+                problems.push(format!("{s}: self-test {t} is not in VALIDATION_SELF_TESTS"));
+            }
+        }
+        for t in VALIDATION_SELF_TESTS {
+            if !validation_self_tests(t).is_some_and(|ts| ts.contains(t)) {
+                problems.push(format!("{t}: a self-test that does not select itself"));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    // GATE-VALIDATION-SH-TESTS red-before-green: a change to the workload syscall verdict selected nothing (a
+    // `Nothing` note); it now selects its three self-tests, in the direct tier, without escalating to FULL. An
+    // uncovered validation script and a Rust source select no self-test.
+    #[test]
+    fn validation_script_changes_select_their_self_tests() {
+        let d = tier(&["validation/wl_syscls.sh"], Tier::Direct);
+        assert!(d.full.is_empty(), "{:?}", d.full);
+        assert_eq!(d.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_MTMEM_TEST, VALIDATION_RUN_TEST, VALIDATION_STATS_TEST]);
+        assert!(d.tests.is_empty() && d.conf.is_empty() && !d.xtask_tests, "only the self-tests: {d:?}");
+        let r = tier(&["validation/wl_run.sh"], Tier::Direct);
+        assert_eq!(r.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_RUN_TEST]);
+        for unrelated in ["validation/wl_gate.sh", "validation/README.md", "crates/core/src/lib.rs"] {
+            assert!(tier(&[unrelated], Tier::Direct).scripts.is_empty(), "{unrelated} must select no validation self-test");
+        }
     }
 }

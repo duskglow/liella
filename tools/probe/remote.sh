@@ -7,9 +7,10 @@
 # `remote.sh --install` copies tools/probe/probe to keke as ~/bin/probe.
 # Other probe modes need no file: `remote.sh --find word...`, `--show HASH`, `--record HASH`, `--selftest`.
 set -eu
-KEKE=claude@10.0.100.53
-SSH="ssh -o BatchMode=yes $KEKE"
 here=$(cd "$(dirname "$0")" && pwd)
+. "$here/../../validation/lab_host.sh"
+KEKE=claude@$(lab_addr keke)
+SSH="ssh -o BatchMode=yes $KEKE"
 if [ "${1:-}" = "--install" ]; then
     scp -o BatchMode=yes "$here/probe" "$KEKE:bin/probe.new" >/dev/null
     $SSH 'chmod 755 ~/bin/probe.new && mv ~/bin/probe.new ~/bin/probe && mkdir -p ~/probe-in && echo installed ~/bin/probe'

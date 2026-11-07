@@ -15,7 +15,7 @@ timing-reopen-1105-prof: perf stat (7 named-event sets x 3 runs, user mode) + cy
 (nscache Liella only). timing-reopen-1105-prof2 and -prof3: memref region counters (CBENCH_COUNTERS=1) good; the
 sampled-event half wrote empty files both times (prof2: perf script without ip gives no dso/sym; prof3 still empty,
 cause not found) - memref stall attribution NOT VERIFIED, the memref brief's step 1 redoes it.
-Raw data and scripts: /home/claude/w/.scratch/TIMING-REOPEN-1105/ (prof.sh, prof2.sh, cmp.py, out/, out2/, cmp1.txt,
+Raw data and scripts: ~/w/.scratch/TIMING-REOPEN-1105/ (prof.sh, prof2.sh, cmp.py, out/, out2/, cmp1.txt,
 strchr.dis) and nico ~/work/TIMING-REOPEN-1105/.
 
 ## Findings (short; detail in the briefs)

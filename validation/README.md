@@ -541,7 +541,7 @@ measured and printed in the advisory `time` column and is never a verdict.
 
 ### wl_count.sh: counters of a branch in one call (WL-COUNT, 2026-10-10)
 
-`validation/wl_count.sh [--base REV] [--rev REV] <dir|rev> <workload>...` (see "Running the wl_ tools through jobrun" below) prints, per workload, instructions:u, instructions:k, page faults and syscalls (the gating number excludes futex and, for a workload that creates threads, its mmap/munmap/brk/mprotect/madvise calls: each on its own advisory row, WLCOUNT-FUTEX, WLCOUNT-MTMEM-2; wl_run.sh uses the same classifier, validation/wl_syscls.sh) for NEW,
+`validation/wl_count.sh [--base REV] [--rev REV] <dir|rev> <workload>...` (see "Running the wl_ tools through jobrun" below) prints, per workload, instructions:u, instructions:k, page faults and syscalls (the gating number excludes futex and, for a workload that creates threads, its mmap/munmap/brk/mprotect/madvise calls, and for a workload that creates another process, such as a pipeline, its read/write calls on pipes: each on its own advisory row, WLCOUNT-FUTEX, WLCOUNT-MTMEM-2, D-X.46; wl_run.sh uses the same classifier, validation/wl_syscls.sh) for NEW,
 BASE (default origin/main) and the host glibc, with new/glibc and new/base ratios and SAME/DIFF output. It builds only
 the programs the workloads use (`WL_PROGS` in wl_prep.sh), all on the host it is started on; products, kits and per-variant rows are cached
 under ~/wl/{products,kit,count}/<sha>, so a later call only measures the new sha (~4 min wall incl. a library build,

@@ -161,6 +161,10 @@ pub struct LocaleView {
     /// The wide tables of a compiled `LC_CTYPE`, and its ASCII case flag; `None` for the
     /// built-in ones.
     wide: Option<(Wide, bool)>,
+    /// The `wctrans_t` of `toupper` and `tolower` in a compiled `LC_CTYPE`
+    /// ([`super::ctype::CtypeFile::case_desc`]), worked out once so that `towctrans` compares instead of
+    /// deriving every map's descriptor per call (D-5.8); unused (0) for the built-in ones.
+    case_descs: [usize; 2],
     /// The slot in [`LATIN`] holding the answers of `wide` for U+0000..U+00FF (ASCII and
     /// Latin-1 text is most of what wide-character calls see, WCTYPE-LOCALE): 0 until the first
     /// Latin-1 call takes one, `usize::MAX` when none was left (every call then walks `wide`).
@@ -376,7 +380,7 @@ impl LocaleView {
     /// The view of `"C"` (handle 0).
     #[allow(clippy::indexing_slicing)] // a const fn (no `get`): `Cat::Time.index()` is 2, below the 12 tables
     pub const fn c() -> LocaleView {
-        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
+        LocaleView { locale: Locale::C, handle: 0, wide: None, case_descs: [0; 2], latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
     }
 
     /// The words of this locale's `struct lconv`: `fill` works them out on the first call, later
@@ -444,11 +448,11 @@ impl LocaleView {
         }
         let cats = by_number(locale.tables.map_or([Tab::EMPTY; 12], |t| t.0));
         let names = TimeNames::of(cats.get(2).copied().unwrap_or(Tab::EMPTY)); // LC_TIME is C category 2
-        let wide = match locale.ctype() {
-            Ctype::File(f) => Some((f.wide(), f.ascii_case())),
-            Ctype::C | Ctype::CUtf8 => None,
+        let (wide, case_descs) = match locale.ctype() {
+            Ctype::File(f) => (Some((f.wide(), f.ascii_case())), [f.case_desc(true), f.case_desc(false)]),
+            Ctype::C | Ctype::CUtf8 => (None, [0; 2]),
         };
-        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
+        Ok(LocaleView { locale, handle, wide, case_descs, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
     }
 
     /// The address of this view's [`Answers`] (Acquire: a built table is seen whole): the
@@ -549,6 +553,32 @@ impl LocaleView {
     /// `iswalpha` in C.UTF-8 went from 68 to 76 instructions.
     #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
+        self.isw_int(c, mask) != 0
+    }
+
+    /// The `wctrans_t` of `toupper` and `tolower` (in that order) of a compiled `LC_CTYPE`,
+    /// stored when the view was built; `None` for the built-in locales, whose descriptors are
+    /// the built-in tables' addresses (D-5.8).
+    #[inline(always)]
+    pub fn case_descs(&self) -> Option<[usize; 2]> {
+        self.wide.as_ref().map(|_| self.case_descs)
+    }
+
+    /// Whether the view has a compiled locale's checked wide tables (the built-in locales do
+    /// not): the arm [`LocaleView::isw_int`] answers inline.
+    #[inline(always)]
+    pub fn has_wide(&self) -> bool {
+        self.wide.is_some()
+    }
+
+    /// [`LocaleView::isw`] as the C `int` the exports return (1 or 0). Always inlined.
+    ///
+    /// The file-backed arm's out-of-line part returns this `int` itself, so an export reaches
+    /// it with a tail jump and keeps no frame on its inline paths (TIMING-COV-WCTYPE-L: the
+    /// `bool` it returned before needed a conversion after the call, so `__iswalpha_l` and
+    /// `__iswctype` saved a register on every call).
+    #[inline(always)]
+    pub fn isw_int(&self, c: u32, mask: Class) -> i32 {
         if let Some((w, _)) = &self.wide {
             // The two common answers are inline and call-free (PERF-WCTYPE-ENUS): a filled
             // Latin-1 entry, and one class's table walk above U+00FF (`iswalpha` passes a
@@ -557,14 +587,14 @@ impl LocaleView {
             // instructions of 101. A fill, a view without a slot and a mixed mask stay out of line.
             if let Ok(b) = u8::try_from(c) {
                 if let Some(v) = self.latin_class_hit(b) {
-                    return v & u32::from(mask.0) != 0;
+                    return i32::from(v & u32::from(mask.0) != 0);
                 }
             } else if mask.0.is_power_of_two() {
-                return w.in_class_bit(mask.0.trailing_zeros(), c);
+                return i32::from(w.in_class_bit(mask.0.trailing_zeros(), c));
             }
             return self.isw_wide(c, mask);
         }
-        ctype::wclasses(c, &self.locale).intersects(mask)
+        i32::from(ctype::wclasses(c, &self.locale).intersects(mask))
     }
 
     /// The filled [`LATIN`] class entry of `b` for this view; `None` when the view has no slot
@@ -586,17 +616,18 @@ impl LocaleView {
         (v != 0).then(|| v.wrapping_sub(1))
     }
 
+    /// The out-of-line part of [`LocaleView::isw_int`], with its `int` answer.
     #[inline(never)]
-    fn isw_wide(&self, c: u32, mask: Class) -> bool {
-        let Some((w, _)) = &self.wide else { return ctype::wclasses(c, &self.locale).intersects(mask) };
+    fn isw_wide(&self, c: u32, mask: Class) -> i32 {
+        let Some((w, _)) = &self.wide else { return i32::from(ctype::wclasses(c, &self.locale).intersects(mask)) };
         if let Ok(b) = u8::try_from(c)
             && let Some(l) = self.latin()
         {
-            return l.class(b, w) & u32::from(mask.0) != 0;
+            return i32::from(l.class(b, w) & u32::from(mask.0) != 0);
         }
         // One table walk, inlined here: as a call it cost a second frame on every character
         // above Latin-1 (PERF-REGRESS-1023-1105-2).
-        ctype::is_w_file(c, mask, w)
+        i32::from(ctype::is_w_file(c, mask, w))
     }
 
     /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`]. Always inlined, as

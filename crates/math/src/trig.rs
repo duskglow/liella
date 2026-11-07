@@ -407,7 +407,7 @@ const LIMIT_BITS: u64 = 0x4130_0000_0000_0000;
 
 /// The error bound of an assembly `y` from the table sine `sh` ([`fast`]).
 #[inline(always)]
-fn eps(sh: f64, y: Dd) -> f64 {
+pub(crate) fn eps(sh: f64, y: Dd) -> f64 {
     if sh == 0.0 { A_RED + B_REL * dd::abs(y.hi) } else { E_ABS }
 }
 
@@ -455,7 +455,7 @@ macro_rules! trig_kernels {
 /// `x = k·π/64 + r`: `(k mod 128, r)` for `|x| < 2^20` ([`super::fast`]).
 $(#[$a])*
 $(#[$i])*
-pub(super) fn reduce(x: f64) -> (i32, Dd) {
+pub(crate) fn reduce(x: f64) -> (i32, Dd) {
     let kf = dd::nearest_int(x * SCALE_PI);
     let t1 = x - kf * P1;
     let s = dd::two_sum(t1, -(kf * P2));
@@ -467,7 +467,7 @@ pub(super) fn reduce(x: f64) -> (i32, Dd) {
 /// ([`super::fast`]), shared by the sine and the cosine assemblies.
 $(#[$a])*
 $(#[$i])*
-pub(super) fn poly(r: Dd) -> [f64; 4] {
+pub(crate) fn poly(r: Dd) -> [f64; 4] {
     let (rh, rl) = (r.hi, r.lo);
     let zz = $prod(rh, rh);
     let z = zz.hi;
@@ -480,7 +480,7 @@ pub(super) fn poly(r: Dd) -> [f64; 4] {
 /// `sin(nπ/64 + r)` from [`poly`]'s terms, with the table sine `S` (for [`super::eps`]).
 $(#[$a])*
 $(#[$i])*
-pub(super) fn assemble(n: i32, [rh, crh, crl, sr]: [f64; 4]) -> (Dd, f64) {
+pub(crate) fn assemble(n: i32, [rh, crh, crl, sr]: [f64; 4]) -> (Dd, f64) {
     let at = |i: i32| {
         let e = t::SIN_K_PI64[usize::try_from(i & 127).unwrap_or(0)];
         (f64::from_bits(e[0]), f64::from_bits(e[1]))
@@ -585,6 +585,8 @@ pub fn sincos_nearest(x: f64) -> Option<(f64, f64)> {
 }
     };
 }
+
+pub mod quick;
 
 /// The fast kernels and the in-place round-to-nearest entries, baseline build (Dekker products).
 pub mod kernel {

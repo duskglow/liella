@@ -3,10 +3,11 @@
 # (TOOLS-SYNC 2, 2026-10-10). Every checkout used to overwrite ~/wl/bin; a run from a tree without the build lock replaced
 # the locked wl_prep.sh and two builders of one sha ran at once. Now each content has its own dir, so nothing is replaced
 # under a running job. Sets B (remote path, e.g. ~/wl/bin/v-<hash>). Needs $here and $keke.
+command -v lab_addr >/dev/null 2>&1 || . "$(dirname "${BASH_SOURCE[0]}")/lab_host.sh"   # lab_addr: host name -> ssh destination
 wl_install_scripts() {
     local h inc
     h=$(cat "$here"/wl_* | md5sum | cut -c1-12); B="~/wl/bin/v-$h"
     $keke "mkdir -p ~/wl/bin && find ~/wl/bin -maxdepth 1 -name 'v-*' -mtime +2 -exec rm -rf {} + ; test -d $B" && return 0
-    inc=.in.$$; $keke "rm -rf ~/wl/bin/$inc; mkdir -p ~/wl/bin/$inc" && scp -q -o BatchMode=yes "$here"/wl_* claude@10.0.100.53:wl/bin/$inc/ \
+    inc=.in.$$; $keke "rm -rf ~/wl/bin/$inc; mkdir -p ~/wl/bin/$inc" && scp -q -o BatchMode=yes "$here"/wl_* claude@"$(lab_addr keke)":wl/bin/$inc/ \
         && $keke "mv -T ~/wl/bin/$inc $B 2>/dev/null || rm -rf ~/wl/bin/$inc; test -d $B"
 }

@@ -20,15 +20,92 @@ use std::process::{Command, Stdio};
 /// no C-family function and build or run no C program, so the interposed exports change nothing
 /// they check, while the second run doubled the longest part of the gate. A target that calls
 /// C-family code or runs a C program against the products stays in both passes
-/// (`pass0_only_targets_are_pure_rust` guards the list).
+/// (`pass0_only_targets_are_pure_rust` guards the list with `pass0_violations`).
 pub const PASS0_ONLY: &[(&str, &str)] = &[("liella-math", "special_cr"), ("liella-math", "mp_kernels")];
+
+/// The `#[path]` includes a `PASS0_ONLY` target may have (paths as written, relative to the
+/// target's directory): support modules that run no program and touch no C code. An include is
+/// opaque to a scan of the target alone, so [`pass0_violations`] scans each listed file with the
+/// same rules and refuses any other include. `verdict.rs` is the sweep verdict cache (D-10.57);
+/// its program inputs are in `verdict_programs.rs`, which is deliberately not listed.
+#[cfg(test)]
+pub const PASS0_INCLUDES: &[&str] = &["../../core/tests/support/verdict.rs"];
+
+/// What a `PASS0_ONLY` target and its includes may not use: each builds or runs a C program or
+/// reaches C-family code, which the interposed exports would change.
+#[cfg(test)]
+const PASS0_BANNED: &[&str] = &["Command", "extern \"C\"", "liella_boundary", "oracle.rs", "dlsym", "libc::"];
+
+/// Why the source `src` of a `PASS0_ONLY` target cannot run in the first pass only (empty: it
+/// can): every banned use in the target or in a file it includes, every `#[path]` include not in
+/// [`PASS0_INCLUDES`], a listed include that `read` cannot read, and an include in an included
+/// file. `read` gets the include's path as written.
+#[cfg(test)]
+pub fn pass0_violations(src: &str, read: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+    fn banned(text: &str, what: &str, why: &mut Vec<String>) {
+        why.extend(PASS0_BANNED.iter().filter(|b| text.contains(*b)).map(|b| format!("{what} uses `{b}`")));
+    }
+    fn includes(text: &str) -> impl Iterator<Item = &str> {
+        text.lines().map(str::trim_start).filter(|l| l.starts_with("#[path")).map(|l| l.split('"').nth(1).unwrap_or(l))
+    }
+    let mut why = Vec::new();
+    banned(src, "the target", &mut why);
+    for inc in includes(src) {
+        if !PASS0_INCLUDES.contains(&inc) {
+            why.push(format!("the target includes `{inc}`, which is not in PASS0_INCLUDES"));
+            continue;
+        }
+        let Some(text) = read(inc) else {
+            why.push(format!("the include `{inc}` cannot be read"));
+            continue;
+        };
+        banned(&text, inc, &mut why);
+        why.extend(includes(&text).map(|i| format!("the include `{inc}` includes `{i}`")));
+    }
+    why
+}
 
 /// Whether `(krate, target)` is in `PASS0_ONLY`.
 pub fn pass0_only(krate: &str, target: &str) -> bool {
     PASS0_ONLY.iter().any(|&(c, t)| c == krate && t == target)
 }
 
-/// The nextest filter of the exports-interposed pass: every test but those of `PASS0_ONLY`.
+/// Sharded products targets `(crate, target)` that run every shard in the first pass and only
+/// shard 0 with the exports interposed (GATE-PASS2-MATH-SHARD, owner ruling #3794, D-X.36). They
+/// build and run C programs against the products, so they are not `PASS0_ONLY`; but their cost is
+/// the oracle's multiple-precision check of each output line, which pass 1 already made. Every
+/// shard does the same harness work (build and run the programs, read and split their whole
+/// output, then check the lines `i % SHARDS == k`), so shard 0 calls the interposed allocator
+/// and string functions on the same paths; the other shards only add lines to the same checks.
+/// A suite runs in pass 2 only to the extent that it exercises the interposed functions.
+pub const PASS1_SHARD0: &[(&str, &str)] = &[
+    ("liella-math", "complex_ld_cr_products"),
+    ("liella-math", "complex_f128_products"),
+    ("liella-math", "special_ld_products"),
+    ("liella-math", "special_f128_products"),
+    ("liella-math", "complex_products"),
+];
+
+/// The shard tests other than shard 0 (`<name>_s<k>`, `k >= 1`, the `shards!` macro's names in
+/// `crates/math/tests/support/shard.rs` users); a target's unsharded tests keep running.
+const LATER_SHARDS: &str = "test(/_s[1-9][0-9]*$/)";
+
+/// The filterset terms that leave out the `PASS1_SHARD0` targets' later shards, for the targets
+/// `keep` accepts.
+fn later_shard_terms(keep: impl Fn(&str, &str) -> bool) -> Vec<String> {
+    PASS1_SHARD0.iter().filter(|(c, t)| keep(c, t)).map(|(c, t)| format!("(binary_id({c}::{t}) & {LATER_SHARDS})")).collect()
+}
+
+/// The nextest filter of the exports-interposed pass of `affected`, which runs the targets `ts` of
+/// crate `krate`: leave out the later shards of the `PASS1_SHARD0` targets among them. `None` when
+/// none is among them.
+pub fn pass1_shard_filter(krate: &str, ts: &[&str]) -> Option<Vec<String>> {
+    let terms = later_shard_terms(|c, t| c == krate && ts.contains(&t));
+    (!terms.is_empty()).then(|| vec!["-E".to_string(), format!("not ({})", terms.join(" | "))])
+}
+
+/// The nextest filter of the exports-interposed pass: every test but those of `PASS0_ONLY` and
+/// the later shards of `PASS1_SHARD0`.
 /// `None` when `extra` brings its own filter expression (nextest ORs several `-E`s, so adding one
 /// would widen the caller's selection): the pass then runs as the caller asked.
 /// `once` adds the binary ids `unchanged_binaries` found (CI-GATE-DIET).
@@ -38,6 +115,7 @@ pub fn pass1_filter(extra: &[String], once: &[String]) -> Option<Vec<String>> {
     }
     let mut ids: Vec<String> = PASS0_ONLY.iter().map(|(c, t)| format!("binary_id({c}::{t})")).collect();
     ids.extend(once.iter().filter(|b| !PASS0_ONLY.iter().any(|(c, t)| **b == format!("{c}::{t}"))).map(|b| format!("binary_id({b})")));
+    ids.extend(later_shard_terms(|c, t| !once.iter().any(|b| *b == format!("{c}::{t}"))));
     Some(vec!["-E".to_string(), format!("not ({})", ids.join(" | "))])
 }
 
@@ -56,14 +134,90 @@ pub fn may_hold_boundary_code(bytes: Option<&[u8]>) -> bool {
     }
 }
 
-/// `(binary id, binary path)` of every test binary in `cargo nextest list --list-type
-/// binaries-only --message-format json` output.
-fn listed_binaries(json: &str) -> Vec<(String, String)> {
+/// `(binary id, binary path, package id)` of every test binary in `cargo nextest list
+/// --list-type binaries-only --message-format json` output (package id empty when absent).
+fn listed_binaries(json: &str) -> Vec<(String, String, String)> {
     let field = |chunk: &str, key: &str| chunk.split_once(key).and_then(|(_, r)| r.split_once('"')).map(|(v, _)| v.to_string());
-    json.split("\"binary-id\":\"").skip(1).filter_map(|c| Some((c.split_once('"')?.0.to_string(), field(c, "\"binary-path\":\"")?))).collect()
+    json.split("\"binary-id\":\"").skip(1).filter_map(|c| Some((c.split_once('"')?.0.to_string(), field(c, "\"binary-path\":\"")?, field(c, "\"package-id\":\"").unwrap_or_default()))).collect()
 }
 
-/// The test binaries of the exports-interposed build (`features`) that hold no liella-boundary
+/// The package graph of `cargo metadata --format-version 1` (its `resolve` section), every kind
+/// of dependency (normal, build and dev: a test binary links its package's dev-dependencies).
+#[derive(Debug, Default)]
+struct PackageGraph {
+    /// package id -> the ids of the packages it depends on.
+    deps: std::collections::BTreeMap<String, Vec<String>>,
+    /// liella-boundary's package id.
+    boundary: String,
+}
+
+impl PackageGraph {
+    /// The graph of a `cargo metadata --format-version 1` output; `None` when it has no resolve
+    /// graph or no liella-boundary package (then nothing is proven independent).
+    fn parse(json: &str) -> Option<PackageGraph> {
+        let (packages, resolve) = json.split_once("\"resolve\":{")?;
+        // A package object opens with its name and version, then its id (a dependency entry
+        // names the package but carries no version); the id itself names the package.
+        let after = packages.split_once("{\"name\":\"liella-boundary\",\"version\":\"")?.1;
+        let boundary = after.split_once("\"id\":\"")?.1.split_once('"')?.0.to_string();
+        if !boundary.contains("liella-boundary") {
+            return None;
+        }
+        let mut deps = std::collections::BTreeMap::new();
+        for node in resolve.split("{\"id\":\"").skip(1) {
+            let (id, rest) = node.split_once('"')?;
+            let list = rest.split_once("\"dependencies\":[")?.1.split_once(']')?.0;
+            deps.insert(id.to_string(), list.split(',').map(|d| d.trim().trim_matches('"').to_string()).filter(|d| !d.is_empty()).collect());
+        }
+        (deps.contains_key(&boundary)).then_some(PackageGraph { deps, boundary })
+    }
+
+    /// Whether `pkg` is liella-boundary or depends on it, directly or through other packages.
+    /// A package the graph does not hold may depend on it.
+    fn reaches_boundary(&self, pkg: &str) -> bool {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut todo = vec![pkg.to_string()];
+        while let Some(p) = todo.pop() {
+            if p == self.boundary {
+                return true;
+            }
+            let Some(ds) = self.deps.get(&p) else { return true };
+            if seen.insert(p) {
+                todo.extend(ds.iter().cloned());
+            }
+        }
+        false
+    }
+}
+
+/// Why a test binary runs in the first pass only, or `None` when it runs in both. A binary whose
+/// package does not depend on liella-boundary cannot link it (TVA-XTASK-RUN-ONCE); else the
+/// binary itself must not hold the marker (CI-GATE-DIET). No graph = the byte rule alone.
+fn run_once_reason(package: &str, graph: Option<&PackageGraph>, bytes: impl FnOnce() -> Option<Vec<u8>>) -> Option<&'static str> {
+    let independent = match graph {
+        Some(g) => !package.is_empty() && !g.reaches_boundary(package),
+        None => false,
+    };
+    if independent {
+        Some("no dependency on liella-boundary")
+    } else if !may_hold_boundary_code(bytes().as_deref()) {
+        Some("no `liella_boundary` in the binary")
+    } else {
+        None
+    }
+}
+
+/// The package graph of the workspace with `features`, or `None` (printed) when cargo cannot give it.
+fn package_graph(cargo: &str, root: &std::path::Path, features: &[String]) -> Option<PackageGraph> {
+    let out = poison(&mut Command::new(cargo)).current_dir(root).args(["metadata", "--format-version", "1", "--offline"]).args(features).stderr(Stdio::inherit()).output();
+    let graph = out.ok().filter(|o| o.status.success()).and_then(|o| PackageGraph::parse(&String::from_utf8_lossy(&o.stdout)));
+    if graph.is_none() {
+        eprintln!("export pass: no package graph from `cargo metadata`; only the binaries' bytes decide");
+    }
+    graph
+}
+
+/// The test binaries of the exports-interposed build (`features`) that cannot hold liella-boundary
 /// code, printed with the reason. Any failure to list = none (every binary runs in both passes).
 pub fn unchanged_binaries(cargo: &str, root: &std::path::Path, features: &[String]) -> Vec<String> {
     let out = poison(&mut Command::new(cargo)).current_dir(root).args(["nextest", "list", "--workspace"]).args(features).args(["--list-type", "binaries-only", "--message-format", "json"]).stderr(Stdio::inherit()).output();
@@ -72,13 +226,14 @@ pub fn unchanged_binaries(cargo: &str, root: &std::path::Path, features: &[Strin
         eprintln!("export pass: listing the binaries failed ({}); all run", out.status);
         return Vec::new();
     }
-    let mut once: Vec<String> = listed_binaries(&String::from_utf8_lossy(&out.stdout)).into_iter().filter(|(_, p)| !may_hold_boundary_code(std::fs::read(p).ok().as_deref())).map(|(id, _)| id).collect();
+    let graph = package_graph(cargo, root, features);
+    let mut once: Vec<(String, &str)> = listed_binaries(&String::from_utf8_lossy(&out.stdout)).into_iter().filter_map(|(id, path, pkg)| Some((id, run_once_reason(&pkg, graph.as_ref(), || std::fs::read(&path).ok())?))).collect();
     once.sort();
-    eprintln!("export pass: {} test binaries hold no liella-boundary code (no `{}` in the binary), so the export features cannot change them; they ran in the first pass and do not run again:", once.len(), String::from_utf8_lossy(BOUNDARY_MARK));
-    for b in &once {
-        eprintln!("  once: {b}");
+    eprintln!("export pass: {} test binaries hold no liella-boundary code, so the export features cannot change them; they ran in the first pass and do not run again:", once.len());
+    for (b, why) in &once {
+        eprintln!("  once: {b} ({why})");
     }
-    once
+    once.into_iter().map(|(b, _)| b).collect()
 }
 
 /// Whether the workspace tests run under nextest: installed, and not switched off.
@@ -101,7 +256,7 @@ struct Tally {
 }
 
 /// A status nextest reports for a test that did not pass: FAIL, TIMEOUT, ABORT, SIGSEGV, ...
-fn failing_status(s: &str) -> bool {
+pub(crate) fn failing_status(s: &str) -> bool {
     matches!(s, "FAIL" | "TIMEOUT" | "ABORT" | "LEAK-FAIL" | "EXECFAIL") || (s.starts_with("SIG") && s.len() > 3 && s[3..].bytes().all(|b| b.is_ascii_uppercase()))
 }
 
@@ -285,16 +440,66 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(std::path::Path::to_path_buf).unwrap_or_default();
         for (c, t) in PASS0_ONLY {
             let dir = c.strip_prefix("liella-").unwrap_or(c);
-            let src = std::fs::read_to_string(root.join(format!("crates/{dir}/tests/{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
-            for bad in ["Command", "extern \"C\"", "liella_boundary", "#[path", "oracle.rs", "dlsym", "libc::"] {
-                assert!(!src.contains(bad), "{c}::{t} uses `{bad}`: a target that touches C code or a C program runs in both passes");
-            }
+            let tests = root.join(format!("crates/{dir}/tests"));
+            let src = std::fs::read_to_string(tests.join(format!("{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
+            let why = pass0_violations(&src, &|inc| std::fs::read_to_string(tests.join(inc)).ok());
+            assert!(why.is_empty(), "{c}::{t}: {why:?}: a target that touches C code or a C program runs in both passes");
         }
         assert!(pass0_only("liella-math", "special_cr") && !pass0_only("liella-math", "special_ld_products"));
-        assert_eq!(pass1_filter(&[], &[]).unwrap_or_default(), ["-E", "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels))"]);
+        let later = "(binary_id(liella-math::complex_ld_cr_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_ld_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::special_f128_products) & test(/_s[1-9][0-9]*$/)) | (binary_id(liella-math::complex_products) & test(/_s[1-9][0-9]*$/))";
+        assert_eq!(pass1_filter(&[], &[]).unwrap_or_default(), ["-E".to_string(), format!("not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | {later})")]);
         assert_eq!(pass1_filter(&["-E".to_string(), "test(x)".to_string()], &[]), None);
         let once = ["liella-math::special_cr".to_string(), "liella-math::fast64".to_string()];
-        assert_eq!(pass1_filter(&[], &once).unwrap_or_default()[1], "not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | binary_id(liella-math::fast64))");
+        assert_eq!(pass1_filter(&[], &once).unwrap_or_default()[1], format!("not (binary_id(liella-math::special_cr) | binary_id(liella-math::mp_kernels) | binary_id(liella-math::fast64) | {later})"));
+        // A run-once products target is left out whole; its later-shard term would be redundant.
+        let once = ["liella-math::complex_products".to_string()];
+        assert!(!pass1_filter(&[], &once).unwrap_or_default()[1].contains("(binary_id(liella-math::complex_products) &"));
+    }
+
+    #[test]
+    fn pass0_only_includes_are_listed_and_scanned() {
+        // no spec clause: gate tooling (#889, TVA-MATH-VERDICT-CACHE-2, D-10.57), not libc behaviour.
+        let listed = PASS0_INCLUDES[0];
+        let target = format!("use x::y;\n#[path = \"{listed}\"]\nmod verdict;\n");
+        let with = |text: &'static str| move |inc: &str| (inc == listed).then(|| text.to_string());
+        let pure = "//! Included with `#[path]` by the sweeps.\nuse std::fs;\n";
+        assert_eq!(pass0_violations(&target, &with(pure)), Vec::<String>::new(), "a listed include of pure Rust");
+        assert_eq!(pass0_violations("fn f() {}\n", &|_: &str| None), Vec::<String>::new(), "no include at all");
+        let why = pass0_violations(&target, &with("use std::process::Command;\n"));
+        assert!(why.iter().any(|w| w.contains(listed) && w.contains("`Command`")), "an include that runs a program: {why:?}");
+        let why = pass0_violations(&target, &with("#[path = \"other.rs\"]\nmod other;\n"));
+        assert!(why.iter().any(|w| w.contains("includes `other.rs`")), "an include's own include: {why:?}");
+        let why = pass0_violations(&target, &|_: &str| None);
+        assert!(why.iter().any(|w| w.contains("cannot be read")), "an unreadable include: {why:?}");
+        let other = "#[path = \"../../core/tests/support/verdict_programs.rs\"]\nmod verdict_programs;\n";
+        let why = pass0_violations(other, &with(pure));
+        assert!(why.iter().any(|w| w.contains("verdict_programs.rs") && w.contains("not in PASS0_INCLUDES")), "an unlisted include: {why:?}");
+        let why = pass0_violations("unsafe extern \"C\" { fn f(); }\n", &with(pure));
+        assert!(why.iter().any(|w| w.starts_with("the target uses `extern \"C\"`")), "a banned use in the target: {why:?}");
+    }
+
+    #[test]
+    fn pass2_runs_shard_0_of_the_heavy_products_targets() {
+        // no spec clause: gate tooling (GATE-PASS2-MATH-SHARD, owner ruling #3794), not libc behaviour.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+        for (c, t) in PASS1_SHARD0 {
+            assert!(!pass0_only(c, t), "{c}::{t} is in both lists");
+            let dir = c.strip_prefix("liella-").unwrap_or(c);
+            let src = std::fs::read_to_string(root.join(format!("crates/{dir}/tests/{t}.rs"))).unwrap_or_else(|e| panic!("{c}::{t}: {e}"));
+            // The shards are `<name>_s<k> = <k>;` lines of `shards!`; shard 0 must exist, and no
+            // other test name may end in `_s<digits>` (the filter would drop it from pass 2).
+            let shard_lines: Vec<&str> = src.lines().map(str::trim).filter(|l| l.contains("_s") && l.ends_with(';') && l.contains(" = ")).collect();
+            assert!(shard_lines.iter().any(|l| l.contains("_s0 = 0;")), "{c}::{t} has no shard 0");
+            assert!(shard_lines.len() >= 2, "{c}::{t} is not sharded");
+            for l in src.lines().map(str::trim).filter(|l| l.starts_with("fn ") || l.starts_with("pub fn ")) {
+                let name = l.split_once("fn ").map_or("", |(_, r)| r).split(['(', '<']).next().unwrap_or_default();
+                let tail = name.rsplit_once("_s").map_or("", |(_, d)| d);
+                assert!(tail.is_empty() || !tail.bytes().all(|b| b.is_ascii_digit()), "{c}::{t}: `{name}` looks like a shard test");
+            }
+        }
+        assert_eq!(pass1_shard_filter("liella-math", &["fast64"]), None);
+        assert_eq!(pass1_shard_filter("liella", &["complex_products"]), None);
+        assert_eq!(pass1_shard_filter("liella-math", &["fast64", "special_ld_products"]).unwrap_or_default(), ["-E", "not ((binary_id(liella-math::special_ld_products) & test(/_s[1-9][0-9]*$/)))"]);
     }
 
     #[test]
@@ -308,8 +513,44 @@ mod tests {
         // This test binary is xtask's: it names the marker in its literals, so it is never skipped.
         assert!(may_hold_boundary_code(std::fs::read(std::env::current_exe().unwrap_or_default()).ok().as_deref()));
         let json = r#"{"rust-build-meta":{},"rust-binaries":{"liella-math::fast64":{"binary-id":"liella-math::fast64","binary-name":"fast64","package-id":"p","kind":"test","binary-path":"/t/fast64-ab","build-platform":"target"},"liella":{"binary-id":"liella","binary-name":"liella","package-id":"q","kind":"lib","binary-path":"/t/liella-cd","build-platform":"target"}}}"#;
-        assert_eq!(listed_binaries(json), [("liella-math::fast64".to_string(), "/t/fast64-ab".to_string()), ("liella".to_string(), "/t/liella-cd".to_string())]);
+        let b = |a: &str, p: &str, k: &str| (a.to_string(), p.to_string(), k.to_string());
+        assert_eq!(listed_binaries(json), [b("liella-math::fast64", "/t/fast64-ab", "p"), b("liella", "/t/liella-cd", "q")]);
         assert!(listed_binaries("not json").is_empty());
+    }
+
+    /// A `cargo metadata` output in cargo's layout: `a` reaches liella-boundary through `b`, `t`
+    /// (a tool) depends on nothing, liella-boundary depends on itself as a dev-dependency.
+    const METADATA: &str = r#"{"packages":[{"name":"a","version":"0.0.0","id":"path+file:///w/a#0.0.0","dependencies":[{"name":"b","source":null,"req":"*"}]},{"name":"b","version":"0.0.0","id":"path+file:///w/b#0.0.0","dependencies":[{"name":"liella-boundary","source":null,"req":"*"}]},{"name":"liella-boundary","version":"0.0.0","id":"path+file:///w/crates/boundary#liella-boundary@0.0.0","dependencies":[]},{"name":"t","version":"0.0.0","id":"path+file:///w/t#0.0.0","dependencies":[]}],"workspace_members":[],"resolve":{"nodes":[{"id":"path+file:///w/a#0.0.0","dependencies":["path+file:///w/b#0.0.0"],"deps":[{"name":"b","pkg":"path+file:///w/b#0.0.0","dep_kinds":[{"kind":"dev","target":null}]}],"features":[]},{"id":"path+file:///w/b#0.0.0","dependencies":["path+file:///w/crates/boundary#liella-boundary@0.0.0"],"deps":[],"features":[]},{"id":"path+file:///w/crates/boundary#liella-boundary@0.0.0","dependencies":["path+file:///w/crates/boundary#liella-boundary@0.0.0"],"deps":[],"features":[]},{"id":"path+file:///w/t#0.0.0","dependencies":[],"deps":[],"features":[]}],"root":null},"target_directory":"/w/target","version":1}"#;
+
+    #[test]
+    fn a_package_reaching_boundary_through_another_is_not_independent() {
+        // no spec clause: gate tooling (TVA-XTASK-RUN-ONCE), not libc behaviour.
+        let g = PackageGraph::parse(METADATA).expect("graph");
+        assert_eq!(g.boundary, "path+file:///w/crates/boundary#liella-boundary@0.0.0");
+        assert!(g.reaches_boundary("path+file:///w/a#0.0.0"), "a -> b -> liella-boundary");
+        assert!(g.reaches_boundary("path+file:///w/b#0.0.0"));
+        assert!(g.reaches_boundary(&g.boundary.clone()));
+        assert!(g.reaches_boundary("path+file:///w/unknown#0.0.0"), "a package outside the graph may depend on it");
+        assert!(!g.reaches_boundary("path+file:///w/t#0.0.0"));
+        // Through the decision, with the marker in both binaries: only the graph frees `t`.
+        let marked = || Some(b"_ZN15liella_boundary3foo".to_vec());
+        assert_eq!(run_once_reason("path+file:///w/a#0.0.0", Some(&g), marked), None);
+        assert_eq!(run_once_reason("path+file:///w/t#0.0.0", Some(&g), marked), Some("no dependency on liella-boundary"));
+        assert_eq!(run_once_reason("", Some(&g), marked), None, "a binary without a package id is not proven independent");
+        assert!(PackageGraph::parse("not json").is_none());
+        assert!(PackageGraph::parse(&METADATA.replace("\"name\":\"liella-boundary\",", "\"name\":\"other\",")).is_none(), "no liella-boundary package = no graph");
+    }
+
+    #[test]
+    fn without_a_package_graph_only_the_bytes_decide() {
+        // no spec clause: gate tooling (TVA-XTASK-RUN-ONCE), not libc behaviour.
+        let marked = || Some(b"_ZN15liella_boundary3foo".to_vec());
+        let clean = || Some(b"_ZN11liella_math3foo".to_vec());
+        assert_eq!(run_once_reason("path+file:///w/t#0.0.0", None, marked), None, "metadata unreadable: a marked binary runs in both passes");
+        assert_eq!(run_once_reason("path+file:///w/t#0.0.0", None, || None), None, "metadata unreadable, binary unreadable: both passes");
+        assert_eq!(run_once_reason("path+file:///w/t#0.0.0", None, clean), Some("no `liella_boundary` in the binary"));
+        let g = PackageGraph::parse(METADATA).expect("graph");
+        assert_eq!(run_once_reason("path+file:///w/a#0.0.0", Some(&g), clean), Some("no `liella_boundary` in the binary"), "a dependent package's binary without the marker keeps the byte rule");
     }
 
     #[test]

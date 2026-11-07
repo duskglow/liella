@@ -1,0 +1,11 @@
+# GATE-REMEZ-CHECK-CACHE-2 plants (D-10.58). a-e as in GATE-REMEZ-CHECK-CACHE (re-run on the merged head); f-h cover
+# the per-fit step lines (XTASK-TEST-STEP-TIMES) kept by the parallel driver. The baseline run of each command stamps
+# the verdict cache in the copy's own target/remez-check, so plants a-c run against a WARM cache (the `ls` shows it).
+a-coeff-digit | crates/math/src/coeffs/fast32_y0_reg.rs | lit:0xbfb2e4d699cbd017 ==> 0xbfb2e4d699cbd018 | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date
+b-fit-number | crates/math/fits/fast32_y0_reg.fit | lit:powers = even 0..16 ==> powers = even 0..14 | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date
+c-remez-iteration | crates/mathtools/src/remez.rs | lit:iterations += 1; ==> iterations += 2; | ls target/remez-check; cargo xtask remez --check crates/math/fits/fast32_y0_reg.fit | msg:fast32_y0_reg\.rs: out of date|error: .*fast32_y0_reg\.fit
+d-key-no-coeff | crates/mathtools/src/check_cache.rs | lit:Some(c) => field(&mut s, b'C', c), ==> Some(_) => field(&mut s, b'C', b""), | cargo test -p liella-mathtools --test check_cache | msg:changing the coefficient bytes must change the key
+e-drop-last-rc | crates/mathtools/src/bin/remez.rs | lit:ok &= o.ok; ==> if emitted + 1 < n { ok &= o.ok; } | cargo test -p liella-mathtools --test check_cache | msg:a failing last fit passed
+f-cached-no-step | crates/mathtools/src/bin/remez.rs | lit:println!("{}", step_line(f, o.secs)); ==> if !o.out.contains("(cached ") { println!("{}", step_line(f, o.secs)); } | cargo test -p liella-mathtools --test check_cache | msg:warm step lines
+g-failed-no-step | crates/mathtools/src/bin/remez.rs | lit:if let Some(f) = files.get(emitted) { ==> if let (Some(f), true) = (files.get(emitted), o.ok) { | cargo test -p liella-mathtools --test check_cache | msg:step lines with a failing fit
+h-step-format | crates/mathtools/src/bin/remez.rs | lit:format!("step: remez/{name} {secs:.1}s") ==> format!("step: remez/{name} {secs:.3}s") | cargo test -p liella-mathtools --test check_cache | msg:step time:

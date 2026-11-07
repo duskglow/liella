@@ -1,0 +1,5 @@
+# LIBM-CPLX-EXP-TIER: the cexp/cexpf quick tier (crates/math/src/complex_fast.rs, fast32/cexp.rs)
+cplx-eps-trig | crates/math/src/complex_fast.rs | perl:s/\(ee \* b \+ a \* et \+ PROD/(ee * b + 0.0 * et + PROD/ | cargo test -p liella-math --lib complex_fast | msg:cexp_quick_tier_bound_covers_the_error.*(FAILED|panicked)|above the bound
+cplx-swap | crates/math/src/complex_fast.rs | perl:s/\[part\(c, trig::eps\(cs, c\)\), part\(s, trig::eps\(ss, s\)\)\]/[part(s, trig::eps(ss, s)), part(c, trig::eps(cs, c))]/ | cargo test -p liella-math --lib complex_fast | msg:cexp quick tier differs|above the bound
+cplx-scale-twice | crates/math/src/complex_fast.rs | perl:s/scale\(fast64::settle\(p, eps, 0, mode\)\?\.0, m\)/scale(fast64::settle(p, eps, 0, mode)?.0, m).and_then(|v| scale(v, m))/ | cargo test -p liella-math --lib complex_fast | msg:cexp quick tier differs
+cplx-f32-no-test | crates/math/src/fast32/cexp.rs | perl:s/Some\(\(\(round\(re, CEXP_DELTA, mode\)\?, round\(im, CEXP_DELTA, mode\)\?\)/Some(((re as f32, im as f32)/ | cargo test -p liella-math --lib complex_fast | msg:the tier answered next to a boundary|cexpf quick tier differs

@@ -1,0 +1,12 @@
+{"task": "LIBM-LD-TRIG-INT", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE (checkpoint): x87 sinl/cosl integer fixed-point tier written, proved (< 2^-94) and wired; unit tests green (0/9600 undecided on random operands, all equal to the 384-bit route); gate started; plants, percall, 10^7 sweep and timing not run",
+ "branch": "task/libm-ld-trig-int", "head": "628a2ce84",
+ "gate": {"affected": "kanon:libm-ld-trig-int-gate started detached (result not read)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "D-row for the method details (uniform Payne-Hanek over the existing TWO_OVER_PI table, f-unit polynomials, bound 2^-94); the brief reserved no id", "recommendation": "reserve one s10 id or append the details to D-10.52"}],
+ "informational": ["The brief's separate 2/pi table is not needed: the generated t::TWO_OVER_PI (312 words) already covers x87 and binary128; a new test pins it independently (pi by Machin x table = 2).", "Near multiples of pi/2 give by-design fallbacks (one of sin/cos within 2^-92 of +-1); a later step can settle them with near_one-style logic."],
+ "refused": [],
+ "jobs": ["kanon:libm-ld-trig-int-unit4", "kanon:libm-ld-trig-int-gate"],
+ "improvement": "Context, not calls, bound this L story (217k at 57 calls): split L libm stories into kernel+proof and count+timing briefs up front.",
+ "next_step": "Read kanon:libm-ld-trig-int-gate; run the 10^7 sweep (--release --ignored), the 4 plants (handoff list), the percall spec, then book Ivy Bridge + N100 timing.",
+ "report_file": "handoff/libm-ld-trig-int.md"}

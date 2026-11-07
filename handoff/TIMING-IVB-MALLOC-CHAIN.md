@@ -18,7 +18,7 @@ change against the base: docs/saturation/04-allocator.md, handoff/ only.
 - Cause: the first run started its timing scripts with `~/bin/timing` directly, not through `~/bin/jobrun`, so nico and
   nozomi have no jobs.tsv row and no ~/logs/<label>.log for timing-ivb-malloc-chain-nico, -nico-wl10 or -nozomi.
   The raw output is still on the hosts (nico: ~/work/TIMING-IVB-MALLOC-CHAIN/ship/out/{probe,wl,wl10}.tsv; nozomi:
-  {probe,wl}.tsv) and the scripts are in /home/claude/w/.scratch/TIMING-IVB-MALLOC-CHAIN/ (run.sh, summ.py).
+  {probe,wl}.tsv) and the scripts are in ~/w/.scratch/TIMING-IVB-MALLOC-CHAIN/ (run.sh, summ.py).
 - Not rerun: the owner has ruled, and the code is reverted, so there is no head left to time. A future timing run
   should wrap the command as `~/bin/jobrun <label> timing -- ~/bin/timing ...` so verify finds it.
 

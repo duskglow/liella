@@ -1,0 +1,17 @@
+{"task": "LIBM-LD-TRIG-INT-2", "model": "opus", "tokens": null,
+ "result": "COMPLETE: sinl/cosl integer quick tier: 582 instructions (glibc 1127; base 82 228), Ivy Bridge 265 cycles (glibc 548, 0.48x), N100 312 cycles (glibc 565, 0.55x); target 300 instructions not reached",
+ "branch": "task/libm-ld-trig-int-2", "head": "87dc43940",
+ "gate": {"affected": "mei:libm-ld-trig-int-2-gate rc 0: 9 suites ok, 7654 passed, 0 failed, 681 ignored; conformance 125 passed", "peak": "14G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "N100 cycles per call (idle booked host, medians of 3 interleaved rounds; not in saturation section 25, the run finished after that commit): sinl 312.2 (glibc 565.0), cosl 313.4 (563.2), sinl_1e10 322.0 (566.0), cosl_1e10 323.6 (565.5), sinl_1e300 324.0 (571.9), cosl_1e300 324.3 (573.0), sincosl 580.1 (715.8).",
+  "The timing binaries are a3abee27b's percall binaries; the final head 87dc43940 has the same code (-2 changed docs, the percall spec and the plants file only).",
+  "10^7 sweep on the final head: 8x10^7 calls, 0 undecided, 0 refused, all equal to the 384-bit route, worst error 2^-95.68 (bound 2^-94); near multiples of pi/2: 65 524 of 131 048 calls undecided by design, closest |f| 2^-75.",
+  "Superseded: percall-final rc 2 (role synced dirty by the then-untracked report json) and percall-final2 (its --rev named a mistyped sha; same figures), both replaced by percall-final3."
+ ],
+ "refused": [],
+ "jobs": ["mei:libm-ld-trig-int-2-lint-final", "mei:libm-ld-trig-int-2-sweep-final", "mei:libm-ld-trig-int-2-plants-final", "mei:libm-ld-trig-int-2-percall-final3", "mei:libm-ld-trig-int-2-gate", "nico:libm-ld-trig-int-2-ivb", "nozomi:libm-ld-trig-int-2-n100"],
+ "improvement": "Waiting for a timing booking to leave 'settling' cost about 12 polling calls of a 120-call budget: a blocking `ops timing-wait <id>` would make it one call; and wl_percall could name the untracked file when it refuses a dirty role (here only an untracked handoff/ report).",
+ "next_step": "sincosl with one shared reduction and table step (1081 -> ~650 instructions), then the shared x87 entry (189 of 560 instructions) and the kernel's variable 128-bit shifts toward the 300-instruction target; move the N100 table into saturation section 25",
+ "report_file": "handoff/libm-ld-trig-int.md"}

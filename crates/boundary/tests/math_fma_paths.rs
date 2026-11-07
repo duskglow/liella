@@ -290,3 +290,43 @@ fn expm1_log1p_hyperbolic_cbrt_fma_build_matches_baseline_bit_for_bit() {
     assert!(selftest::set_math_fma(true));
 }
 
+/// `cexp` through its export, as one pair of bits.
+fn cexp_bits((x, y): (f64, f64)) -> (u64, u64) {
+    let r = m::cexp(liella_boundary::mathret::Complex { re: x, im: y });
+    (r.re.to_bits(), r.im.to_bits())
+}
+
+// s10_0_f_0, s10_0_g_0: cexp's in-place quick tier (LIBM-CPLX-EXP-TIER, D-10.53) gives the same
+// pair in both builds, and that pair is the 384-bit route's (correctly rounded) one. Regimes:
+// general, y next to π/2 + kπ (cos y tiny, the bound stays relative), x near the overflow and
+// underflow thresholds (the scaling's range checks), and |y| up to 2^20 (the reduction's range).
+#[test]
+fn cexp_fma_build_matches_baseline_bit_for_bit() {
+    if !selftest::set_math_fma(true) {
+        eprintln!("SKIP: this CPU (or its OS) has no FMA; only the baseline build exists here");
+        return;
+    }
+    let mut s = 0x6a09_e667_f3bc_c908u64;
+    let mut u = |lo: f64, hi: f64| lo + (next(&mut s) >> 11) as f64 * 2f64.powi(-53) * (hi - lo);
+    let zs: Vec<(f64, f64)> = (0..24_000)
+        .map(|i| match i % 5 {
+            0 => (u(-30.0, 30.0), u(-12.0, 12.0)),
+            1 => (u(-5.0, 5.0), (u(-64.0, 64.0).round() + 0.5) * core::f64::consts::PI + u(-1e-9, 1e-9)),
+            2 => (u(700.0, 746.0), u(-4.0, 4.0)),
+            3 => (u(-746.0, -700.0), u(-4.0, 4.0)),
+            _ => (u(-2.0, 2.0), u(-1.1e6, 1.1e6)),
+        })
+        .collect();
+    let fused: Vec<(u64, u64)> = zs.iter().map(|&z| cexp_bits(z)).collect();
+    assert!(selftest::set_math_fma(false));
+    for (i, &z) in zs.iter().enumerate() {
+        let plain = cexp_bits(z);
+        assert_eq!(fused[i], plain, "cexp({z:?}): FMA build {:x?}, baseline {plain:x?}", fused[i]);
+        if i % 16 == 0 {
+            let ((re, im), _) = liella_math::complex::cexp_route(z.0, z.1, Rounding::Nearest);
+            assert_eq!(plain, (re.to_bits(), im.to_bits()), "cexp({z:?}): not the 384-bit route's pair");
+        }
+    }
+    assert!(selftest::set_math_fma(true));
+}
+
