@@ -45,6 +45,10 @@ impl Arch for BigOther {
     const E_MACHINE: u16 = 183;
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = ELFDATA2MSB;
+    const INTERP: &'static str = "ld-test-big-endian.so";
+    fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
+        liella_rt::cpu::Features::default()
+    }
     fn classify(r_type: u32) -> RelocKind {
         RelocKind::Unsupported(r_type)
     }
@@ -268,6 +272,10 @@ fn s27_1_f_0_wrong_class() {
         const E_MACHINE: u16 = 62;
         const EI_CLASS: u8 = 1;
         const EI_DATA: u8 = 1;
+        const INTERP: &'static str = "ld-test-class32.so";
+        fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
+            liella_rt::cpu::Features::default()
+        }
         fn classify(r_type: u32) -> RelocKind {
             RelocKind::Unsupported(r_type)
         }

@@ -32,3 +32,4 @@ and every row id (first cell of a `Row` table) to be unique across files.
 - [22. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, Broadwell host)](saturation/22-f64-invtrig-hypot-fast-tier.md): section 22
 - [24. f64 expm1/log1p/sinh/cosh/tanh/cbrt fast tier: counts and the residual over glibc (LIBM-F64-EXPM1-HYPER-CBRT-TIER-2/-3, 2026-11-05, Zen 1 host)](saturation/24-f64-expm1-log1p-hyperbolic-cbrt-fast-tier.md): section 24
 - [23. float j0f/j1f/y0f/y1f fast path: counts (LIBM-F32-BESSEL-4, 2026-11-05, Broadwell host)](saturation/23-f32-bessel-fast-path.md): section 23
+- [25. x87 long double sin/cos: the integer fixed-point first tier (LIBM-LD-TRIG-INT-2, 2026-11-07, Skylake-SP counts, Ivy Bridge and N100 cycles)](saturation/25-x87-sin-cos-integer-tier.md): section 25

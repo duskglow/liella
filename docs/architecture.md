@@ -182,7 +182,7 @@ The policy is rules S1-S11 in [plan/02-design-rules.md](../plan/02-design-rules.
   declarations sit in one file under category *native*.
 * **S2.** `liella-boundary` is `#![deny(unsafe_code)]`, and each site carries
   `#[allow(unsafe_code)]` after a comment `// UNSAFE(<category>): <why>` plus clippy's
-  `SAFETY:` justification. There are six categories, each limited to named files
+  `SAFETY:` justification. There are seven categories, each limited to named files
   ([plan/03](../plan/03-architecture.md) §3.2):
 
 | Category | What it permits | Files |
@@ -191,8 +191,9 @@ The policy is rules S1-S11 in [plan/02-design-rules.md](../plan/02-design-rules.
 | export | `#[unsafe(no_mangle)]` on exports and data objects | `export.rs` (the `export!` macro), `data.rs` |
 | slice | converting a C pointer and length into a Rust slice or reference | `conv.rs`, `strz.rs`, `heap.rs`, `tb.rs`, `runtime.rs`, single conversions in `posix/*` and `native/*` |
 | allocator | `unsafe impl GlobalAlloc` | `heap.rs` |
-| tb-field | one `%fs`-relative load of a field of the current thread's own block, by a compile-time checked offset; the only inline assembly in Rust (owner ruling 2026-10-06) | `tb.rs` |
+| tb-field | one `%fs`-relative load of a field of the current thread's own block, by a compile-time checked offset; with *machine-register*, the only inline assembly in Rust (owner ruling 2026-10-06) | `tb.rs` |
 | hot-kernel | unaligned SSE2 loads and stores for small copies, fills and compares over ranges the entry has already validated (owner ruling 2026-10-08, D-4.22); calls to CPU-variant `#[target_feature]` builds behind a run-time dispatch flag set only when the CPU and OS provide the feature, each returning the baseline build's results (ruling #2261, 2026-11-04) | `hot.rs` |
+| machine-register | the libm envelope's two machine-register intrinsics, nothing else: one `stmxcsr` into a stack local (the fast entries' MXCSR read) and an empty `pure, nomem` barrier on an `xmm` value (template `/* {x} */`: an assembler comment, no instruction) (in place of `black_box` on the fast path); `cargo xtask static` refuses inline assembly outside this file and `tb.rs` and any other template here (owner ruling 2026-11-07, D-X.44) | `hot/fpregs.rs` |
 
 * **S3.** Everything else that needs the machine (system calls, process entry, the signal
   restorer, `setjmp`/`longjmp`, context switches, thread start, CPUID, the vDSO call) is in
@@ -453,7 +454,7 @@ written from the spec before the code, and every test is traceable.
 |---|---|---|
 | Spec traceability | `cargo xtask stubs` generates one pending test per spec clause and per exported symbol; a pending test is `#[ignore]`d and fails if forced to run, so it is never mistaken for a pass. `cargo xtask trace` requires every test to name its clause (or say why it has none), and every row of the differences document and every behaviour record to name one too. | `crates/spectest`, `spec/clauses.tsv`, `xtask/src/trace.rs` |
 | Unit and translation tests | The clean contract of core and math against `Faulty<CSys>`; each export's argument mapping, return convention and errno behaviour; each `Sys` method against the real kernel; every Appendix C layout and initializer | `crates/*/tests` |
-| Interposed run | The workspace tests run a second time with Liella's exports interposed on the test processes, so the harness itself runs on Liella's `malloc` and `memcpy` (D-4.13) | `cargo xtask test` |
+| Interposed run | The workspace tests run a second time with Liella's exports interposed on the test processes, so the harness itself runs on Liella's `malloc` and `memcpy` (D-4.13). A suite runs in this pass only to the extent that it exercises the interposed functions (D-X.36): binaries without Liella's boundary code and the pure-Rust sweeps (`nextest::PASS0_ONLY`) run in the first pass only, and the heavy sharded math products sweeps (`nextest::PASS1_SHARD0`) run all shards in the first pass and shard 0 here | `cargo xtask test` |
 | C conformance | Self-checking C programs compiled against the installed glibc 2.39 headers, statically linked to Liella's `libc.a`, started by Liella's own runtime: real headers, calling convention, data symbols, process start and exit | [conformance/c/](../conformance/c), [conformance/run.sh](../conformance/run.sh) |
 | Differential tests | `*_products.rs` tests build the same probe against the host glibc and statically against Liella, run both (some in private namespaces), and require identical output except recorded differences | `crates/core/tests/*_products.rs`, `crates/core/tests/oracle/` |
 | Oracle diffs | Engines with an independent oracle (regex, libm against the arbitrary-precision reference) are compared against it | `crates/core/src/pattern/regex_oracle*.rs`, `crates/mathtools` |
@@ -505,7 +506,7 @@ test inside Linux (or WSL); the library targets x86-64 Linux only.
 |---|---|
 | `cargo xtask stubs` | Regenerate the pending tests and `spec/clauses.tsv` from the spec |
 | `cargo xtask so` | Build the products into `target/liella/`: `libc.a`, `libc.so.6`, `liella-crt1.o`, the `libpthread` placeholders, the `libm` products |
-| `cargo xtask test` | The full gate: static checks, generated-file checks, the products, the workspace tests twice (plain and interposed), the C conformance suite, the native examples, the Rust dylib, the symbol-gap report, the status table |
+| `cargo xtask test` | The full gate: static checks, generated-file checks, the products, the workspace tests twice (plain and interposed), the C conformance suite, the native examples, the Rust dylib, the symbol-gap report, the status table. Each step prints `step: <name> <seconds>s` when it ends (the remez check also one `step: remez/<fit>` line per fit), and the run ends with `step-summary: <name> <seconds>s` lines, slowest first, and `step-total: <seconds>s`, also when a step failed; `cargo xtask affected --run` escalated to FULL prints the same for its own steps and those of `xtask test` (prefixed `test/`). Wall time is reported for trends, never asserted (`xtask/src/steptime.rs`) |
 | `cargo xtask affected --list \| --run` | Only the tests a change can reach: `--list` prints them, `--run` runs them (one is required; without either, exit 2) |
 | `cargo xtask bench` | Benchmarks against budgets and per-CPU limits (release profile only) |
 | `cargo xtask status [--schedule]` | Pending versus specified tests per section; with `--schedule`, pending work per owning phase |

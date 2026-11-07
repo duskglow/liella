@@ -1,0 +1,6 @@
+# RELEASE-HANDOFF-SCRUB plants: the private-paths static check (xtask/src/privpaths.rs, D-X.45).
+# Run: cargo xtask plants handoff/release-handoff-scrub.plants --dir <new RAM dir> --timeout 600
+pp-addr | xtask/src/privpaths.rs | lit:            if digit && (s == 0 || ==>             if false && digit && (s == 0 || | cargo test -p xtask --bin xtask privpaths | msg:planted_lab_address_is_caught_everywhere.*FAILED|panicked
+pp-home | xtask/src/privpaths.rs | lit:if e > s && !PLACEHOLDERS.contains(&name) { ==> if e > s && PLACEHOLDERS.is_empty() { | cargo test -p xtask --bin xtask privpaths | msg:planted_home_path_is_caught.*FAILED|panicked
+pp-placeholder | xtask/src/privpaths.rs | lit:if e > s && !PLACEHOLDERS.contains(&name) { ==> if e > s && !PLACEHOLDERS.contains(&&line[s..e]) { | cargo test -p xtask --bin xtask privpaths | msg:placeholders_and_non_paths_pass.*FAILED|panicked
+pp-windows | xtask/src/privpaths.rs | perl:s/lb\[s - 2\] == b':'/lb[s - 2] == b';'/ | cargo test -p xtask --bin xtask privpaths | msg:planted_home_path_is_caught.*FAILED|panicked

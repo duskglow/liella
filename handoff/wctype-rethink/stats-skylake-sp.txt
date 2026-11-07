@@ -1,0 +1,29 @@
+C words-from-iswctype_l 221.5 ms, tables 43.7 ms
+C distinct-class-words 11
+C leaf=32 distinct-leaves 5 two-stage-u16 69952 two-stage-palette8 70304 three-stage-u16 1376 (mids 2)
+C leaf=64 distinct-leaves 3 two-stage-u16 35200 two-stage-palette8 35520 three-stage-u16 1184 (mids 2)
+C leaf=128 distinct-leaves 2 two-stage-u16 17920 two-stage-palette8 18176 three-stage-u16 1184 (mids 2)
+C leaf=256 distinct-leaves 2 two-stage-u16 9728 two-stage-palette8 9728 three-stage-u16 1632 (mids 2)
+C leaf=512 distinct-leaves 2 two-stage-u16 6400 two-stage-palette8 5888 three-stage-u16 2624 (mids 2)
+C design-A bytes 9736 (leaf 256), design-B bytes 53568 (13 shared 512-bit leaves + 52224 per-class s1 + 512 Latin-1)
+C verify: prototype mismatches 0 (of 13369368 checks); isw* vs iswctype disagreements 0
+C.UTF-8 words-from-iswctype_l 273.4 ms, tables 44.9 ms
+C.UTF-8 distinct-class-words 13
+C.UTF-8 leaf=32 distinct-leaves 487 two-stage-u16 100800 two-stage-palette8 85728 three-stage-u16 40160 (mids 33)
+C.UTF-8 leaf=64 distinct-leaves 377 two-stage-u16 83072 two-stage-palette8 59456 three-stage-u16 53024 (mids 33)
+C.UTF-8 leaf=128 distinct-leaves 240 two-stage-u16 78848 two-stage-palette8 48640 three-stage-u16 64096 (mids 33)
+C.UTF-8 leaf=256 distinct-leaves 147 two-stage-u16 83968 two-stage-palette8 46848 three-stage-u16 76864 (mids 33)
+C.UTF-8 leaf=512 distinct-leaves 95 two-stage-u16 101632 two-stage-palette8 53504 three-stage-u16 98352 (mids 33)
+C vs C.UTF-8 differing code points per class: alnum=139005 alpha=139005 blank=13 cntrl=34 digit=0 graph=287171 lower=2522 print=287184 punct=148166 space=15 upper=1956 xdigit=0
+C.UTF-8 design-A bytes 83976 (leaf 256), design-B bytes 69760 (266 shared 512-bit leaves + 52224 per-class s1 + 512 Latin-1)
+C.UTF-8 verify: prototype mismatches 0 (of 13369368 checks); isw* vs iswctype disagreements 0
+en_US.UTF-8 words-from-iswctype_l 161.6 ms, tables 27.8 ms
+en_US.UTF-8 distinct-class-words 13
+en_US.UTF-8 leaf=32 distinct-leaves 487 two-stage-u16 100800 two-stage-palette8 85728 three-stage-u16 40160 (mids 33)
+en_US.UTF-8 leaf=64 distinct-leaves 377 two-stage-u16 83072 two-stage-palette8 59456 three-stage-u16 53024 (mids 33)
+en_US.UTF-8 leaf=128 distinct-leaves 240 two-stage-u16 78848 two-stage-palette8 48640 three-stage-u16 64096 (mids 33)
+en_US.UTF-8 leaf=256 distinct-leaves 147 two-stage-u16 83968 two-stage-palette8 46848 three-stage-u16 76864 (mids 33)
+en_US.UTF-8 leaf=512 distinct-leaves 95 two-stage-u16 101632 two-stage-palette8 53504 three-stage-u16 98352 (mids 33)
+C.UTF-8 vs en_US.UTF-8 differing code points per class: alnum=0 alpha=0 blank=0 cntrl=0 digit=0 graph=0 lower=0 print=0 punct=0 space=0 upper=0 xdigit=0
+en_US.UTF-8 design-A bytes 83976 (leaf 256), design-B bytes 69760 (266 shared 512-bit leaves + 52224 per-class s1 + 512 Latin-1)
+en_US.UTF-8 verify: prototype mismatches 0 (of 13369368 checks); isw* vs iswctype disagreements 0

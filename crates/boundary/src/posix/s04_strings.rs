@@ -493,12 +493,32 @@ pub extern "C" fn hot_strchr_null(s: *const c_char, c: c_int) -> *mut c_char {
     strz::null_abort()
 }}
 
-export! { "GLIBC_2.2.5";
+export! { asm "GLIBC_2.2.5";
 pub extern "C" fn strstr(h: *const c_char, n: *const c_char) -> *mut c_char {
+    // The direct entry (machine/scan.S, TIMING-COV-STRSTR-PAIR): a needle of up to 15 bytes that
+    // the first candidate decides, in registers; the rest and NULLs in `hot_strstr_slow` /
+    // `hot_strstr_next`. Proof obligation: this function's contract (§4.6).
+    crate::ffi::liella_machine_strstr(h.cast(), n.cast()).cast()
+}}
+
+export! { local "liella_hot_strstr_slow";
+/// `strstr`'s measuring path, reached by name from the direct entry before any scan: a NULL
+/// string, a string at a page offset of 0 or above 4080, or a needle of 16 bytes or more.
+pub extern "C" fn hot_strstr_slow(h: *const c_char, n: *const c_char) -> *mut c_char {
     // UNSAFE(slice) SAFETY: h and n are strings (§4.6). The needle is measured with the haystack
     // prefix (`strz::find_str_n`, STRSTR-SHORT-SETUP); the haystack is read by the fused candidate
     // and terminator scan (STRSTR-VEC).
     ret::found(h, unsafe { strz::find_str_n(h, n) })
+}}
+
+export! { local "liella_hot_strstr_next";
+/// `strstr` after the direct entry's first scan, reached by name from it: the needle at `n` has
+/// `m` (1..15) bytes, haystack bytes [0, m - 1) are text, and `r` is the scan's answer for the
+/// pair (0, m - 1) from byte m - 1, which the entry did not settle.
+pub extern "C" fn hot_strstr_next(h: *const c_char, n: *const c_char, m: size_t, r: size_t) -> *mut c_char {
+    // UNSAFE(slice) SAFETY: h and n are strings (§4.6) and the direct entry measured n as m bytes
+    // and saw h's first m - 1 bytes as text before its scan answered r (`strz::find_str_after`).
+    ret::found(h, unsafe { strz::find_str_after(h, n, m, r) })
 }}
 
 export! { "GLIBC_2.2.5";

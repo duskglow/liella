@@ -1,0 +1,12 @@
+{"task": "STATIC-PIE-BACKTRACE-BIAS-TEST-2", "model": "opus", "tokens": null,
+ "result": "static-PIE backtrace bias test fixed: link kind (pie/fixed) passed by the harness, ELF type checked; lint, gate, plants (3/3 CAUGHT) green; no library change",
+ "branch": "task/static-pie-backtrace-bias-test-2", "head": "see git log -1 (handoff commit on top of d7e3818e2)",
+ "gate": {"affected": "88 passed / 0 failed, conformance 1 passed", "peak": "1.2G"}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["lint2 failure was a test bug: the host compiler builds -fPIE by default, so __PIE__ is defined in the fixed-address -static build (bias 0)",
+                   "the previous run's gate2/plants2 (old head) were still running on keke and holding two slots; stopped with kill-label as superseded"],
+ "refused": [],
+ "improvement": "a continuation should find the predecessor's still-queued jobs listed (and stopped) by the dispatcher, not occupying slots; lint scripts belong in ~/work/<id>/ so a continuation can rerun the exact job",
+ "next_step": "none: land after CI",
+ "report_file": "handoff/STATIC-PIE-BACKTRACE-BIAS-TEST.md",
+ "jobs": ["keke:static-pie-backtrace-bias-test-2-lint", "keke:static-pie-backtrace-bias-test-2-gate", "keke:static-pie-backtrace-bias-test-2-plants"]}

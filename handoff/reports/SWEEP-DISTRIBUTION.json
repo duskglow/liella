@@ -1,0 +1,27 @@
+{
+ "task": "SWEEP-DISTRIBUTION",
+ "model": "opus",
+ "tokens": null,
+ "result": "sweep run/compare print per-host time-ratio buckets (<=1.05,1.05-2,2-10,10-100,>100), the five slowest rows and per-family medians with RETHINK? above 10x",
+ "branch": "task/sweep-distribution",
+ "head": "9d01eff39",
+ "gate": {
+  "affected": "PENDING: keke:sdist-gate (affected escalated to FULL because an xtask file changed); sweep tests 11/11 in the plants baseline; clippy+static clean in sdist-lint",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --base origin/next escalates any xtask/src change to FULL (xtask commands are part of the gate), so a developer gate on xtask-only stories is a full gate",
+  "plants: sdist-plants 7/8 CAUGHT, 0 SURVIVED; deferred-rows-counted was a non-compiling mutant (fixed in the plants file), rerun as keke:sdist-plants2, queued at hand-back"
+ ],
+ "refused": [],
+ "improvement": "plants tool could compile-check each mutant and flag a build failure as NOT-COMPILED instead of WARN-NO-MSG (my dropped '.' plant looked caught by rc)",
+ "next_step": "collect keke:sdist-gate (~/bin/jobwait sdist-gate; ~/bin/test-summary ~/logs/sdist-gate.log)",
+ "report_file": "handoff/sweep-distribution.md",
+ "jobs": [
+  "keke:sdist-gate",
+  "keke:sdist-plants",
+  "keke:sdist-plants2"
+ ]
+}

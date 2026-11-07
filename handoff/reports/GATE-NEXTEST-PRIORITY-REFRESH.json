@@ -1,0 +1,12 @@
+{"task": "GATE-NEXTEST-PRIORITY-REFRESH", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: priority = 90 list refreshed with the >60 s tests of the 10 latest green FULL CI gates; gate and before/after timing+list jobs queued on keke, not collected",
+ "branch": "task/gate-nextest-priority-refresh", "head": "211024e65",
+ "gate": {"affected": "queued (keke gate-nextest-priority-refresh-gate), not collected", "peak": null},
+ "jobs": ["gate-nextest-priority-refresh-gate", "gate-nextest-priority-refresh-timing"],
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["keke slot queue held both jobs >10 min at hand-back (4 shared jobs running); timing there is not a quiet slot"],
+ "refused": [],
+ "improvement": "Keep a per-test median table from the CI gate logs refreshed by a script (or let xtask static warn when a test over 60 s in the last gates is outside the priority filter) so this list never drifts again",
+ "next_step": "Collect the jobs: ssh keke '~/bin/jobwait gate-nextest-priority-refresh-gate gate-nextest-priority-refresh-timing'; check LIST identical lines and the before/after Summary lines",
+ "report_file": "handoff/gate-nextest-priority-refresh.md"}

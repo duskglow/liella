@@ -10,6 +10,9 @@ use liella_math::{fast_gamma, special, stats};
 use liella_mathtools::cmp;
 use liella_mathtools::mp::{self, Approx, Big, Fmt, Round};
 
+#[path = "../../core/tests/support/verdict.rs"]
+mod verdict;
+
 const MODES: [(Rounding, Round); 4] =
     [(Rounding::Nearest, Round::Nearest), (Rounding::Up, Round::Up), (Rounding::Down, Round::Down), (Rounding::Zero, Round::Zero)];
 
@@ -153,6 +156,9 @@ fn check_against_oracle(name: &str, fast: Fast, entry: Entry, ops: &[f64]) -> us
 #[test]
 fn double_gamma_fast_tier_rounds_correctly() {
     // Clauses: s10_3_c_0 (D-10.13).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".double_gamma_fast_tier_rounds_correctly")).begin() else {
+        return;
+    };
     let mut rng = Rng(0xbb67_ae85_84ca_a73b);
     let mut ops: Vec<f64> = (0..300).map(|_| rng.operand()).collect();
     ops.extend(hard_operands());
@@ -160,23 +166,31 @@ fn double_gamma_fast_tier_rounds_correctly() {
         let settled = check_against_oracle(name, fast, entry, &ops);
         assert!(settled * 100 >= ops.len() * 4 * 97, "{name}: the fast tier settled only {settled}");
     }
+    verdict.pass();
 }
 
 #[test]
 fn double_gamma_fast_tier_rounds_correctly_at_the_negative_zeros() {
     // Clauses: s10_3_c_0 (D-10.13). Cancellation in `L − ln|D|`: the fast tier must refuse what
     // its absolute bound cannot settle, never round wrongly; no settle-rate floor here.
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".double_gamma_fast_tier_rounds_correctly_at_the_negative_zeros")).begin() else {
+        return;
+    };
     let ops = zero_operands();
     assert_eq!(negative_zeros().len(), 28);
     for (name, fast, entry, _) in FUNCS {
         let settled = check_against_oracle(name, fast, entry, &ops);
         eprintln!("{name}: settled {settled} of {} at the negative zeros", ops.len() * 4);
     }
+    verdict.pass();
 }
 
 #[test]
 fn double_gamma_fast_tier_matches_the_accurate_path() {
     // Clauses: s10_3_c_0 (D-10.13).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".double_gamma_fast_tier_matches_the_accurate_path")).env("LIELLA_GAMMA_SWEEP").begin() else {
+        return;
+    };
     let n: u32 = std::env::var("LIELLA_GAMMA_SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(1500);
     for (name, fast, _, accurate) in FUNCS {
         let mut rng = Rng(0x3c6e_f372_fe94_f82b ^ name.len() as u64);
@@ -190,11 +204,15 @@ fn double_gamma_fast_tier_matches_the_accurate_path() {
             }
         }
     }
+    verdict.pass();
 }
 
 #[test]
 fn double_gamma_kernels_stay_within_their_bounds_and_rarely_fall_back() {
     // Clauses: s10_3_c_0 (D-10.13).
+    let Some(verdict) = verdict::Key::new(concat!(env!("CARGO_CRATE_NAME"), ".double_gamma_kernels_stay_within_their_bounds_and_rarely_fall_back")).begin() else {
+        return;
+    };
     let mut rng = Rng(0xa54f_f53a_5f1d_36f1);
     let mut worst = [0f64; 2];
     let mut ops: Vec<f64> = (0..3000).map(|_| rng.operand()).collect();
@@ -242,4 +260,5 @@ fn double_gamma_kernels_stay_within_their_bounds_and_rarely_fall_back() {
         }
         eprintln!("lgamma near the negative zeros, |x/z - 1| < 2^-{s}: refused {refused} of 2000");
     }
+    verdict.pass();
 }

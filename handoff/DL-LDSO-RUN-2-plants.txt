@@ -1,0 +1,7 @@
+# DL-LDSO-RUN-2: the two survivors left open, now with tests that catch them. auxv-not-moved (DL-6): the
+# test program checks that the words after the environment's terminator are an auxiliary vector (before,
+# the stale words between the shortened environment and the old vector happened to pair up so the walk
+# still reached the real vector). link-reloc-symbols (DL-5): an object whose relocation names a symbol
+# past the GNU hash table's count.
+auxv-not-moved | crates/boundary/src/ld.rs | lit:        auxv = envp.wrapping_add(kept.wrapping_add(1).wrapping_mul(8)); ==>         auxv = auxv.wrapping_add(kept.wrapping_mul(0)); | sh -c 'cargo xtask so && cargo test -p liella-ld --test ldso_run' | msg:ldso_run_secure_child_sees_unsecure_cleared.*(FAILED|panicked)
+link-reloc-symbols | crates/ld/src/link.rs | lit:count = count.max(rela.sym.saturating_add(1)); ==> | cargo test -p liella-ld --test ldso_link | msg:ldso_link_relocation_symbol_past_hash_count.*(FAILED|panicked)

@@ -32,7 +32,7 @@ Latency-bound carried chain; Ivy Bridge's smaller scheduler fills with the chain
 fewer instructions do not buy time. Shortening the chain is the lever, not the instruction count.
 
 ## The change
-1. Rebuild the PERF-MALLOC-IVB-CYCLES probe (its sources: /home/claude/w/.scratch/PERF-MALLOC-IVB-CYCLES/) on the
+1. Rebuild the PERF-MALLOC-IVB-CYCLES probe (its sources: ~/w/.scratch/PERF-MALLOC-IVB-CYCLES/) on the
    current next; add a realloc-in-place loop; confirm rs-full is still the gap.
 2. Shorten the carried chain. The recorded candidate: a "latest malloc" fast path in free (p equal to the block the
    cache's latest fast malloc returned: take word j and bit b from the cache, skipping the record load and the magic

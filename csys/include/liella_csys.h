@@ -92,6 +92,9 @@ int liella_machine_casecmp_ord_sse2(const char *a, const char *b, size_t n, cons
 size_t liella_machine_pairscan(const void *h, size_t count, size_t off, int b0, int b1);
 size_t liella_machine_pairscan_ci(const void *h, size_t count, size_t off, int b0, int b1, unsigned fl);
 size_t liella_machine_strpair(const char *p, size_t off, int c0, int c1);
+/* strstr's direct entry (TIMING-COV-STRSTR-PAIR): short needles settled by the first candidate;
+ * the rest through liella_hot_strstr_slow / liella_hot_strstr_next (Rust). */
+char *liella_machine_strstr(const char *h, const char *n);
 size_t liella_machine_wcspair(const int *p, size_t off, int c0, int c1);
 size_t liella_machine_env_find(const char *const *env, const char *name, size_t len);
 /* env_find's scan answering also its stop slot (ENVIRON-SMALL-CYCLE): rax = the entry (0: none),

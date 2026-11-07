@@ -1,0 +1,11 @@
+{"task": "DL-LDSO-RUN", "model": "opus", "tokens": null,
+ "result": "ld.so parses auxv/env, clears UNSECURE before any LD_* read, takes CPU features from Arch::features, and enters a dependency-free PIE by PT_INTERP and as ld.so PROG; tests green on mei, gate/plants/counts pending",
+ "branch": "task/dl-ldso-run", "head": "1662e1c25",
+ "gate": {"affected": "pending (mei:dl-ldso-run-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["origin/next cbench_startup counts on mei not run (role is not a git tree); libc start code unchanged", "DL-5 plant survivor link-reloc-symbols still open"],
+ "refused": [],
+ "jobs": ["mei:dl-ldso-run-gate", "mei:dl-ldso-run-plants", "mei:dl-ldso-run-counts"],
+ "improvement": "a documented way to run a before/after count of origin/next on the same host without a second role would save a hand-back cycle",
+ "next_step": "read the three jobs; run origin/next cbench_startup on mei for the comparison; then DL-7",
+ "report_file": "handoff/DL-LDSO-RUN.md"}

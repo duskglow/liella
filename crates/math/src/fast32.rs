@@ -28,6 +28,7 @@ use crate::stats;
 use crate::status::{Flags, Rounding, Status};
 
 mod bessel;
+mod cexp;
 mod erf;
 mod exp_log;
 mod gamma;
@@ -36,6 +37,9 @@ mod inv_trig;
 mod trig;
 
 use bessel::{bessel_core, bessel_finish};
+#[cfg(test)]
+pub(crate) use cexp::{cexp_core, CEXP_DELTA};
+pub use cexp::{cexpf, cexpf_nearest};
 use erf::{erf_core, erfc_core, ERFC_DELTA, ERF_DELTA};
 use exp_log::*;
 pub use gamma::{eval_lgamma, eval_tgamma};
@@ -119,6 +123,9 @@ pub enum Fast {
 /// 2·DELTA/2^28 < 4·10^-6 of the operands going to the accurate path.
 /// exp: ε ≤ 2^-45.16, so < 229 ulp.
 const EXP_DELTA: u64 = 512;
+/// The one-pass exp and exp2 in the caller's rounding direction (LIBM-F32-ONEPASS, D-10.63):
+/// ε ≤ 2^-43.71 in every direction, so < 627 ulp (proof at [`exp_onepass`]).
+const EXP_ONEPASS_DELTA: u64 = 1024;
 /// log: ε ≤ 2^-44.79 (case A dominates), so < 296 ulp; log2, log10 add the rounding of the
 /// constant and of the product: ε ≤ 2^-44.77, < 300 ulp.
 const LOG_DELTA: u64 = 640;
@@ -491,6 +498,20 @@ nearest_fn!(tanh_nearest, Fast::Tanh);
 nearest_fn!(asinh_nearest, Fast::Asinh);
 nearest_fn!(acosh_nearest, Fast::Acosh);
 nearest_fn!(atanh_nearest, Fast::Atanh);
+
+/// `expf` in the caller's rounding direction and MXCSR, which it does not read, by one `double`
+/// evaluation and one conversion (LIBM-F32-ONEPASS, D-10.63), or `None` for the envelope. Where
+/// it answers it raises exactly inexact (proof at [`exp_onepass`]).
+#[inline]
+pub fn exp_onepass_any(x: f32) -> Option<f32> {
+    exp_onepass(x, INV_L, 0x42ae_a8f6) // |x| < 87.33
+}
+
+/// `exp2f` as [`exp_onepass_any`].
+#[inline]
+pub fn exp2_onepass_any(x: f32) -> Option<f32> {
+    exp_onepass(x, 128.0, 0x42fc_0000) // |x| < 126
+}
 
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {

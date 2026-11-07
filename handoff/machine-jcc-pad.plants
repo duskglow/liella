@@ -1,0 +1,10 @@
+jcc-flags-no-ret | crates/boundary/jcc_pad.rs | lit:-Wa,-malign-branch=jcc+fused+jmp+call+ret+indirect ==> -Wa,-malign-branch=jcc+fused+jmp+call+indirect | cargo run -q -p xtask -- jcc-check | msg:ret at 0x[0-9a-f]+\.\.0x[0-9a-f]+ crosses or ends on a 32-byte boundary
+jcc-flags-no-boundary | crates/boundary/jcc_pad.rs | lit:    "-Wa,-malign-branch-boundary=32", ==> | cargo run -q -p xtask -- jcc-check | msg:jump\(s\) on 32-byte boundaries
+jcc-files-drop-scan | crates/boundary/jcc_pad.rs | lit:&["fold.S", "scan.S"]; ==> &["fold.S"]; | cargo run -q -p xtask -- jcc-check | msg:no longer pads csys/src/machine/scan.S
+jcc-build-no-flags | crates/boundary/build.rs | lit:cmd.args(if jcc_pad { JCC_PAD_FLAGS } else { &[] }); ==> cmd.args(if jcc_pad { &[] } else { JCC_PAD_FLAGS }); | cargo xtask so | msg:jump\(s\) on 32-byte boundaries in .*libc\.a
+jcc-check-end-on-boundary | xtask/src/jcc.rs | lit: || end % BOUNDARY == 0 { ==>  { | cargo test -p xtask --bin xtask jcc:: | msg:jump_crossing_or_ending_on_a_boundary_is_reported.*FAILED|panicked.*ends on the boundary
+jcc-check-crossing | xtask/src/jcc.rs | lit:if start / BOUNDARY != (end - 1) / BOUNDARY || ==> if | cargo test -p xtask --bin xtask jcc:: | msg:jump_crossing_or_ending_on_a_boundary_is_reported.*FAILED|panicked.*crosses it
+jcc-check-no-fusion | xtask/src/jcc.rs | lit:                start = p.addr; ==> | cargo test -p xtask --bin xtask jcc:: | msg:fused_pair_counts_from_the_compare.*FAILED|panicked
+jcc-check-fuse-rip | xtask/src/jcc.rs | lit:(first.ops.contains('$') && first.ops.contains('(')) ==> false | cargo test -p xtask --bin xtask jcc:: | msg:fused_pair_counts_from_the_compare.*FAILED|immediate \+ memory does not fuse
+jcc-check-align | xtask/src/jcc.rs | lit:Some(&a) if a >= BOUNDARY => {} ==> Some(_) => {} | cargo test -p xtask --bin xtask jcc:: | msg:objdump_text_is_read_per_member_and_section.*FAILED|2\*\*4 is below 32
+jcc-check-prefix | xtask/src/jcc.rs | lit:"cs", "ds", ==> | cargo test -p xtask --bin xtask jcc:: | msg:padding_prefixes_are_not_the_mnemonic.*FAILED|panicked

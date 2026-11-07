@@ -1,0 +1,12 @@
+{"task": "DL-LDSO-PRODUCT-2", "model": "opus", "tokens": null,
+ "result": "ld.so starts: the entry passes __ehdr_start PC-relatively; cargo xtask so refuses pre-relocation reads of relocated words (objdump check + test + plants); differences row for --version/--help; inherited clippy/static reds fixed",
+ "branch": "task/dl-ldso-product-2", "head": "9a9ab2e8 (code; handoff commit on top)",
+ "gate": {"affected": "not run to the end: the gate (escalated to FULL) was stopped for budget", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "unsafe-audit lists now admit src/ld.rs (export, slice, allocator) and src/arch/ (extern)", "recommendation": "accept: the ld start's sites mirror the libc start's runtime.rs/bootstrap.rs"}],
+ "informational": ["ld.so keeps ~62 GOT-indirect calls after relocation (rustc foreign calls not relaxed in the -shared link): correct, a possible later performance story", "on a failed self-relocation the error write goes through the GOT and may crash instead of printing (status non-zero either way)", "heap::c_malloc dead-code warning also appears in the libc and libm product builds: not ld-specific, left", "counts ran on mei (another CPU class than the shiki baseline); compare against an origin/next run on the same host before reading a move"],
+ "refused": [],
+ "jobs": ["mei:dl-ldso-product-2-step3b"], "superseded": ["mei:dl-ldso-product-2-plants (weak textrel plant, stopped)", "mei:dl-ldso-product-2-plants2 (link-reloc-symbols SURVIVED; stopped)", "mei:dl-ldso-product-2-gate (FULL, stopped)"],
+ "improvement": "affected --base origin/next escalates to FULL for any xtask change; a check-only xtask change (so.rs product checks) could map to the product tests instead of the whole suite",
+ "next_step": "add a corpus object for the link-reloc-symbols survivor, fix the ld-skip-relocation plant msg, rerun plants, gate, counts",
+ "report_file": "handoff/DL-LDSO-PRODUCT.md"}
