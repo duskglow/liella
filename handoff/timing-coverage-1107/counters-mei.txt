@@ -1,0 +1,50 @@
+# mei (Skylake-SP class, Xeon Platinum 8151), tree 66b8d3ba (origin/next), jobs timing-coverage-1107-prof / -prof2.
+# Region counters per call, mean of 2 reps, pinned to cpu 3. Build host: NOT a timing host; cycles are context, not verdicts.
+# group row instr liella/glibc cycles liella/glibc (memcmp/strncmp/strscan/memchr/malloc rows with GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX2)
+malloc                       malloc_free_16           instr   122.1 /   147.1 = 0.830   cycles   46.3 /   45.6 = 1.015
+malloc                       malloc_free_32           instr   122.1 /   147.1 = 0.830   cycles   46.5 /   45.7 = 1.018
+malloc                       malloc_free_128          instr   122.1 /   147.1 = 0.830   cycles   46.0 /   45.8 = 1.004
+malloc                       malloc_free_1024         instr   122.1 /   147.1 = 0.830   cycles   46.0 /   45.7 = 1.006
+malloc                       realloc_within_usable    instr   194.2 /   195.2 = 0.995   cycles   63.7 /   61.0 = 1.044
+malloc                       realloc_null_24          instr   149.1 /   174.1 = 0.856   cycles   50.5 /   50.9 = 0.994
+memcmp                       memcmp_256               instr   103.7 /   106.5 = 0.974   cycles   28.5 /   28.9 = 0.984
+memcmp                       __memcmpeq_eq_128        instr    59.3 /    64.3 = 0.922   cycles   19.5 /   20.6 = 0.947
+memcmp                       __memcmpeq_head_128      instr    25.4 /    21.3 = 1.195   cycles   14.0 /    8.4 = 1.657
+memcmp                       bcmp_head_128            instr    25.3 /    25.4 = 0.998   cycles   12.5 /    8.6 = 1.445
+memcmp                       memcmp_diff8_64          instr    33.3 /    25.5 = 1.305   cycles    9.5 /    9.9 = 0.954
+memcmp                       memcmp_diff8_127         instr    31.3 /    25.3 = 1.241   cycles   11.6 /    9.4 = 1.229
+strncmp                      strncmp_diff8            instr    56.0 /    39.0 = 1.436   cycles   17.1 /   12.2 = 1.400
+strscan                      strchr_16_hit            instr    32.0 /    32.0 = 1.000   cycles    8.2 /    8.1 = 1.003
+strscan                      strchr_64_miss           instr    56.0 /    56.0 = 1.000   cycles   15.3 /   13.7 = 1.112
+strscan                      strchrnul_64_hit         instr    53.0 /    53.0 = 1.000   cycles   14.9 /   13.2 = 1.133
+strscan                      memrchr_64_hit           instr    31.0 /    28.0 = 1.107   cycles   12.2 /    9.2 = 1.320
+memchr                       memchr_16                instr    29.7 /    29.4 = 1.009   cycles   11.2 /   10.7 = 1.045
+memchr                       memchr_64                instr    42.3 /    54.3 = 0.779   cycles   14.6 /   18.6 = 0.785
+memchr                       rawmemchr_4k             instr   938.1 /  1033.1 = 0.908   cycles  263.6 /  267.3 = 0.986
+wctype                       iswalpha_utf8            instr    66.0 /    49.0 = 1.347   cycles   17.2 /   17.7 = 0.975
+wctype                       nl_langinfo_en_us        instr    26.0 /    31.0 = 0.839   cycles    7.1 /   11.3 = 0.627
+wctype                       iswalpha_l_en_us         instr    70.1 /    47.0 = 1.490   cycles   22.7 /   13.4 = 1.697
+wctype                       towupper_l_en_us         instr    39.0 /    39.0 = 1.000   cycles   11.1 /   12.9 = 0.867
+wctype                       nl_langinfo_l_en_us      instr    35.0 /    28.0 = 1.250   cycles   11.2 /   10.2 = 1.101
+wctype                       iswctype_en_us           instr    76.0 /    43.0 = 1.767   cycles   20.6 /   11.5 = 1.792
+strstr tunables=none         strstr_hit_4k            instr   651.2 /  2244.0 = 0.290   cycles  203.2 /  557.3 = 0.365
+strstr tunables=none         strstr_miss_64           instr   128.4 /   173.6 = 0.740   cycles   41.6 /   49.5 = 0.841
+strstr tunables=none         strstr_hit_64            instr   125.4 /    99.3 = 1.263   cycles   36.5 /   28.1 = 1.297
+strstr tunables=glibc.cpu.hwcaps=-AVX2 strstr_hit_4k            instr  2218.2 /  2244.0 = 0.989   cycles  588.0 /  568.5 = 1.034
+strstr tunables=glibc.cpu.hwcaps=-AVX2 strstr_miss_64           instr   157.4 /   173.4 = 0.908   cycles   42.7 /   51.9 = 0.824
+strstr tunables=glibc.cpu.hwcaps=-AVX2 strstr_hit_64            instr   154.4 /    99.4 = 1.553   cycles   38.7 /   40.5 = 0.954
+# cold rows (ns, the bench's own medians of 31 children, rep 1 / rep 2), liella vs glibc dynamic:
+liella first_setlocale_en_US  109995.00 110159.00
+liella first_strcmp  106.00 93.00
+liella first_strcoll  11700.00 11742.00
+liella second_bindtextdomain_gettext  468.00 473.00
+liella second_mktime_new_york  387.00 395.00
+liella second_setlocale_en_US  175.00 186.00
+liella second_strcmp  62.00 62.00
+glibc first_setlocale_en_US  45725.00 45779.00
+glibc first_strcmp  59.00 60.00
+glibc first_strcoll  281.00 283.00
+glibc second_bindtextdomain_gettext  368.00 376.00
+glibc second_mktime_new_york  333.00 336.00
+glibc second_setlocale_en_US  150.00 151.00
+glibc second_strcmp  38.00 41.00
