@@ -10,6 +10,7 @@
 #include <iconv.h>
 #include <langinfo.h>
 #include <locale.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,11 +107,18 @@ static const struct tm tm_fixed = { .tm_mday = 5, .tm_mon = 3, .tm_wday = 2, .tm
  * drifted to page offset 0xf00/0xf60 and changed the strcasecmp_*_256 rows with no code change).
  * case_a is at offset 0 of page 0, case_b at offset 0x800 of page 0: neither crosses a page.
  * case_x holds case_b's bytes at offset 0xf00 of page 1, so its terminator lies on page 2: the
- * strcasecmp_c_256_xpage row measures a page-crossing operand on purpose. */
-static _Alignas(4096) char case_pages[3][4096];
+ * strcasecmp_c_256_xpage row measures a page-crossing operand on purpose.
+ * BENCH-CASECMP-ALIGN-2: case_a and case_b both start at a 2 KiB multiple, a best or worst case by
+ * accident; strcasecmp_c_256_odd compares copies at offsets 0x13 and 0x421 (neither a multiple of 16,
+ * mutual offset 0x40e), and strcasecmp_c_256_pageend a copy of case_a starting 16 bytes before a page
+ * end (0xff0 of page 2, running onto page 3) against case_b. main prints every operand's page offset. */
+static _Alignas(4096) char case_pages[4][4096];
 #define case_a (case_pages[0])
 #define case_b (case_pages[0] + 0x800)
 #define case_x (case_pages[1] + 0xf00)
+#define case_o (case_pages[3] + 0x413)
+#define case_p (case_pages[0] + 0x421)
+#define case_e (case_pages[2] + 0xff0)
 
 /* Page-aligned for the same reason: the iconv rows always touch exactly 1 and 4 whole pages. */
 static _Alignas(4096) char text[4096];
@@ -143,6 +151,13 @@ int main(void)
         case_b[i] = (i & 1) && case_a[i] >= 'a' && case_a[i] <= 'z' ? (char)(case_a[i] - 32) : case_a[i];
     }
     memcpy(case_x, case_b, 257);
+    memcpy(case_o, case_a, 257);
+    memcpy(case_p, case_b, 257);
+    memcpy(case_e, case_a, 257);
+    fprintf(stderr, "cbench_locale: operand page offsets: case_a %#lx case_b %#lx case_x %#lx case_o %#lx case_p %#lx case_e %#lx\n",
+            (unsigned long)((uintptr_t)case_a & 4095), (unsigned long)((uintptr_t)case_b & 4095),
+            (unsigned long)((uintptr_t)case_x & 4095), (unsigned long)((uintptr_t)case_o & 4095),
+            (unsigned long)((uintptr_t)case_p & 4095), (unsigned long)((uintptr_t)case_e & 4095));
 
     setlocale(LC_ALL, "C");
     MEASURE("isalpha_c", 10000000L, isalpha_fn((int)(i & 127)));
@@ -150,6 +165,8 @@ int main(void)
     MEASURE("strcasecmp_c_16", 10000000L, strcasecmp_fn("Hello World 1234", "hELLO wORLD 1234"));
     MEASURE("strcasecmp_c_256", 1000000L, strcasecmp_fn(case_a, case_b));
     MEASURE("strcasecmp_c_256_xpage", 1000000L, strcasecmp_fn(case_a, case_x));
+    MEASURE("strcasecmp_c_256_odd", 1000000L, strcasecmp_fn(case_o, case_p));
+    MEASURE("strcasecmp_c_256_pageend", 1000000L, strcasecmp_fn(case_e, case_b));
     MEASURE("strncasecmp_c_64", 10000000L, strncasecmp_fn(case_a, case_b, 64));
     MEASURE("strtod_c", 1000000L, strtod_fn("3.14159", NULL) > 3.0);
 
