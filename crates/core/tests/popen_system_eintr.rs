@@ -208,6 +208,17 @@ fn system_signal_state_during_and_after() {
         let r = x::system(cs(&script).as_ptr());
         let mut m = liella_abi::layout::sigset_t { __val: [0; 16] };
         sg::sigprocmask(0, None, Some(&mut m));
+        // libtest runs this body on a thread of its own, so the copy has a second thread (libtest's
+        // main thread) that does not block SIGCHLD: the kernel may deliver the process-directed
+        // SIGCHLD there, and that thread's handler can run after this thread's read on a loaded
+        // host (hits=0 seen once). Wait for the handler with an iteration budget (a hang guard, not
+        // a time limit); a lost signal still reads 0 when the budget runs out.
+        for _ in 0..1_000_000 {
+            if HITS.load(Ordering::SeqCst) != 0 {
+                break;
+            }
+            std::thread::yield_now();
+        }
         say(&format!("R:after {r} int={} quit={} chld={} blocked={} hits={}\n", disp(SIGINT), disp(SIGQUIT), disp(SIGCHLD), sg::sigismember(Some(&m), SIGCHLD), HITS.load(Ordering::SeqCst)));
         sg::signal(SIGINT, 1);
         let r = x::system(cs("exit 0").as_ptr());
