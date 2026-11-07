@@ -37,7 +37,7 @@ impl Table3 {
 
     /// The byte offset of the level-3 block for `wc`, if present.
     ///
-    /// Each level is one checked slice read of a whole word (TIMING-COV-WCTYPE-L, D-NEW): the
+    /// Each level is one checked slice read of a whole word (TIMING-COV-WCTYPE-L, D-5.7): the
     /// level-1 slice's length is `bound`, and a block offset names word `offset / 4` (a
     /// well-formed file's offsets are multiples of 4; any other offset reads the word it falls
     /// in, never outside the table).
