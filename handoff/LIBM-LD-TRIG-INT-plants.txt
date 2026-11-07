@@ -1,0 +1,13 @@
+# LIBM-LD-TRIG-INT(-2) plants: cargo xtask plants handoff/LIBM-LD-TRIG-INT-plants.txt --dir <new RAM dir>
+# The x87 sinl/cosl integer tier (crates/math/src/wide_int.rs, D-10.52, D-10.56).
+# A 2/π table bit flipped (word 3, bit 1). The tier and the 384-bit route read the same table, so their agreement
+# cannot see it: the independent pin (π by Machin's formula times the table = 2) must.
+int-table-bit | crates/math/src/coeffs/trig.rs | lit:0xfe5163abdebbc561 ==> 0xfe5163abdebbc563 | cargo test -p liella-math --lib wide_int | msg:two_over_pi_table_times_pi_is_two.*FAILED
+# The quadrant off by one (sin and cos swap roles, signs flip).
+int-quadrant | crates/math/src/wide_int.rs | lit:let q = (l3 >> 62) as u32; ==> let q = (l3 >> 62) as u32 + 1; | cargo test -p liella-math --lib wide_int | msg:tier_agrees_with_the_wide_route.*FAILED
+# The rounding test's bound halved (2^35 + 4 units in place of 2^36 + 4). The measured error is far below either
+# bound, so the agreement tests cannot see it: the pinned boundary cases must.
+int-bound-half | crates/math/src/wide_int.rs | lit:const ERR: u64 = (1 << (128 - B)) + 4; ==> const ERR: u64 = (1 << (127 - B)) + 4; | cargo test -p liella-math --lib wide_int | msg:rounding_test_refuses_near_a_boundary.*FAILED
+# One limb's carry dropped: the carry of the middle words into the top word of the reduction product (moves the
+# fraction by 2^-62 of a quarter turn about half the time).
+int-carry | crates/math/src/wide_int.rs | lit:let l3 = ((s2 >> 64) as u64).wrapping_add( ==> let l3 = 0u64.wrapping_add( | cargo test -p liella-math --lib wide_int | msg:tier_agrees_with_the_wide_route.*FAILED
