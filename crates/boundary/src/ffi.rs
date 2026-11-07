@@ -286,6 +286,14 @@ unsafe extern "C" {
     /// it. Proof obligation: the `off` bytes before `p` are string bytes before its NUL and `p` is
     /// at or before that NUL (`crate::strz::find_str`). Loads past the NUL stay in its page.
     pub(crate) safe fn liella_machine_strpair(p: *const u8, off: usize, c0: i32, c1: i32) -> usize;
+    /// `strstr`'s direct entry (TIMING-COV-STRSTR-PAIR): the address of the first occurrence of the
+    /// string at `n` in the string at `h`, `h` for an empty needle, or NULL. A needle of up to 15
+    /// bytes whose first candidate decides is settled in the kernel; every other call continues
+    /// in `liella_hot_strstr_slow` / `liella_hot_strstr_next` (`crate::strz::find_str_n`,
+    /// `crate::strz::find_str_after`). Proof obligation: each of `h` and `n` is NULL (the S6
+    /// abort, through the slow path) or a readable NUL-terminated string not written during the
+    /// call.
+    pub(crate) safe fn liella_machine_strstr(h: *const u8, n: *const u8) -> *mut u8;
     /// `liella_machine_strpair` over 4-byte units (`wcsstr`; `off` and the answer in units).
     /// Proof obligation: as `liella_machine_strpair` in units, and `p` 4-byte aligned
     /// (`crate::strz::find_wcs`).
