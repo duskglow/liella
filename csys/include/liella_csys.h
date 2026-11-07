@@ -181,6 +181,9 @@ void *liella_caller_realloc(void *p, size_t n);
 void liella_caller_free(void *p);
 /* The image's ELF header and a static executable's .eh_frame bounds (D-2.7), 0 where absent. */
 uintptr_t liella_link_ehdr(void);
+/* The run-time address of the image's ELF header, reached PC-relatively (`__ehdr_start`, hidden,
+ * not weak): right before a static PIE is relocated (D-27.10, adapter/image_anchor.c). */
+uintptr_t liella_link_image_header(void);
 uintptr_t liella_link_eh_frame_start(void);
 uintptr_t liella_link_eh_frame_end(void);
 

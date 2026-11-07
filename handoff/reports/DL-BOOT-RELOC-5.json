@@ -1,0 +1,32 @@
+{
+ "task": "DL-BOOT-RELOC-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "DO NOT LAND: CI red is s29_rpc_clnt_svc_stubs' own race (libtest main thread allocates in Liella's heap during the measured window in the export build); reproduced on origin/next alone 20/3900 vs next+branch 24/3900; branch unchanged",
+ "branch": "task/dl-boot-reloc-5",
+ "head": null,
+ "gate": {
+  "affected": "not run (brief case 3: stop); lint0 + lint1 (clippy, static) rc 0",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "s29_rpc_clnt_svc_stubs heap check is exposed to libtest's main-thread allocations when the test binary exports Liella's malloc (export feature); fails ~0.5% under load on origin/next",
+   "recommendation": "open a story on the RPC test: run the heap check in a process with no other thread (harness = false target or the re-exec helper) or count per-thread; do not loosen the equality; then re-queue this branch unchanged"
+  }
+ ],
+ "informational": [
+  "dead-code warnings classed::start, nscache::start, sys::set_sysinfo_ehdr predate this branch (same three in CI gates 34c98f61c, 435b9fc3a, 31ecf574c without it): their only caller runtime::start is cfg(feature = runtime); tidy fix is cfg_attr(not(feature = runtime), allow(dead_code)), not done here",
+  "evidence jobs (not on final head, rc 0 by design): shiki dl-boot-reloc-5-repro1 (next 20/3900, next+branch 24/3900), shiki dl-boot-reloc-5-repro2 (--test-threads=1: 15/3900, still on a spawned thread)",
+  "the next+branch composition was a no-commit merge in a scratch worktree, used only to build the failing test; aborted and removed, never pushed"
+ ],
+ "refused": [],
+ "improvement": "CI's red note could name the failing build's feature set and whether the test was green in the other build; a quick reproduce on next (one 2-minute loop) separates a test race from a branch regression before a continuation is cut",
+ "next_step": "coordinator opens the RPC test story; after it lands, re-queue task/dl-boot-reloc-5 for CI unchanged",
+ "report_file": "handoff/DL-BOOT-RELOC.md",
+ "jobs": [
+  "shiki:dl-boot-reloc-5-lint0",
+  "shiki:dl-boot-reloc-5-lint1"
+ ]
+}

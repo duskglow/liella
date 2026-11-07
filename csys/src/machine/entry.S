@@ -17,7 +17,14 @@
  *
  * _start lives in .text.startup (HOT-ORDER): GNU ld's default script places that section, with a
  * -O2 main, right before the hot text group, so every program's entry shares the 64 KiB
- * fault-around window of the startup functions instead of costing a page fault of its own. */
+ * fault-around window of the startup functions instead of costing a page fault of its own.
+ *
+ * Assembled with -DLIELLA_STATIC_PIE it is liella-rcrt1.o, the start object of a static PIE
+ * (D-27.10): the same _start, calling liella_start_main_static_pie (same arguments), which
+ * relocates the executable before anything reads an address from its data. The choice is made
+ * at link time, so the start of every other program tests nothing. A static PIE runs this code
+ * before its relocation: every reference here is PC-relative (no GOT slot, which would still
+ * hold a link-time address); `cargo xtask so` refuses a GOT-typed relocation in the object. */
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start
 	.hidden liella_eh_frame_start
@@ -38,8 +45,13 @@ _start:
 	pushq %rsp
 	xorl %r8d, %r8d
 	xorl %ecx, %ecx
+#ifdef LIELLA_STATIC_PIE
+	leaq main(%rip), %rdi
+	call liella_start_main_static_pie
+#else
 	movq main@GOTPCREL(%rip), %rdi
 	call *__libc_start_main@GOTPCREL(%rip)
+#endif
 	hlt
 	.cfi_endproc
 	.size _start, .-_start

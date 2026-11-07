@@ -92,6 +92,8 @@ pub mod aio;
 mod stacks;
 #[cfg(feature = "runtime")]
 pub mod runtime;
+#[cfg(feature = "runtime")]
+mod bootstrap;
 pub mod export;
 pub mod data;
 pub mod caller_alloc;

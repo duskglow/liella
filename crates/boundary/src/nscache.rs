@@ -45,7 +45,9 @@ impl nscache::Memory for Memory {
 }
 
 /// At process start (`crate::runtime`): `LIELLA_NSCACHE=0` disables the cache, except in
-/// secure-execution mode; the regions are in `/dev/shm/`.
+/// secure-execution mode; the regions are in `/dev/shm/`. Inlined into both instances of
+/// `runtime::start` (D-27.10: the non-PIE start costs what it did before the static-PIE one).
+#[inline(always)]
 #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn start(secure: bool) {
     let off = !secure && process::getenv(crate::startup_names::LIELLA_NSCACHE).map(strz::env_value) == Some(&b"0"[..]);

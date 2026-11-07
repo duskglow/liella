@@ -22,6 +22,7 @@ use liella_legacy::search_c::CWords;
 use liella_rt::fpu::X87_DEFAULT_CONTROL;
 use liella_rt::{fatal, start, tls};
 
+use crate::bootstrap;
 use crate::conv;
 use crate::cpu;
 use crate::ffi;
@@ -73,18 +74,38 @@ fn count_auxv(addr: usize) -> usize {
 
 /// A static program's initial thread: map its static TLS and thread block, copy the TLS image,
 /// set the guards from `AT_RANDOM`, and make it the thread pointer. Returns what the headers
-/// said (the TLS image and the RELRO pages), read once.
-fn initial_thread(aux: &Auxv<'_>) -> start::Program {
+/// said (the TLS image and the RELRO pages), read once. `PIE`: started by `liella-rcrt1.o`, the
+/// static-PIE start object (D-27.10), which relocates the executable first; the choice is made
+/// at link time, so `liella-crt1.o`'s start pays for no test of the executable's type.
+fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bootstrap::Relocated>) {
     let as_usize = |v: Option<u64>| v.and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
     let (phdr, phnum) = (as_usize(aux.get(AT_PHDR)), as_usize(aux.get(AT_PHNUM)));
     // UNSAFE(slice): the program headers the kernel mapped with the executable.
     #[allow(unsafe_code)]
     // SAFETY: `AT_PHDR`/`AT_PHNUM` describe the loaded headers (⚑ KERN), which stay mapped.
     let words = unsafe { conv::words_at(phdr, phnum.saturating_mul(start::PHDR_WORDS)) };
-    let prog = start::program(words, phnum, phdr);
-    if prog.bias != 0 {
-        // A static PIE must relocate itself before any address in static data is used.
-        die(b"static PIE executables are not supported (phase 14)");
+    let mut prog = start::program(words, phnum, phdr);
+    let mut pie = None;
+    if !PIE {
+        if prog.bias != 0 {
+            // A static PIE must relocate itself before any address in static data is used.
+            die(b"a static PIE starts from liella-rcrt1.o, not liella-crt1.o");
+        }
+    } else if let Some(ehdr) = bootstrap::static_pie_header() {
+        // A static PIE relocates itself before any address in its data is used (D-27.10). Until
+        // then no diagnostic path that reads relocated data may run: one write, then exit 127.
+        let Ok(r) = bootstrap::relocate_self(phdr, phnum, ehdr) else {
+            let _ = CSys.write(liella_kernel::fd::Fd::STDERR, b"liella: static PIE: cannot relocate the executable\n");
+            CSys.exit_group(127)
+        };
+        // Without PT_PHDR the headers gave no bias: move the TLS image and RELRO by the real one.
+        let delta = r.bias.wrapping_sub(prog.bias);
+        if let Some(t) = prog.tls.as_mut() {
+            t.addr = t.addr.wrapping_add(delta);
+        }
+        prog.relro = prog.relro.map(|(a, l)| (a.wrapping_add(delta), l));
+        prog.bias = r.bias;
+        pie = Some(r);
     }
     let Some(area) = tls::InitialArea::new(prog.tls.as_ref()) else { die(b"invalid PT_TLS segment") };
     let Ok(region) = CSys.mmap(0, area.len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, None, 0) else {
@@ -124,13 +145,13 @@ fn initial_thread(aux: &Auxv<'_>) -> start::Program {
     if raw::set_fs(tp).is_err() {
         die(b"cannot set the thread pointer");
     }
-    prog
+    (prog, pie)
 }
 
 /// A static program's RELRO segment becomes read-only (STATIC-RELRO, D-1.13): the start-up
-/// writes to it are done (static PIE is refused in `initial_thread`; the only relocations, the
-/// program's own `IRELATIVE` entries, were applied by `apply_irelative`, whose target words lie
-/// in `.got` inside RELRO), and nothing after it writes there.
+/// writes to it are done (a static PIE relocated itself in `initial_thread`, D-27.10; the
+/// program's own `IRELATIVE` entries were applied by `apply_irelative` or the relocator's pass 2,
+/// and their target words lie in `.got` inside RELRO), and nothing after it writes there.
 /// A dynamically linked program's segments are its loader's (phase 14). The range comes from
 /// the one header pass `initial_thread` made (STATIC-RELRO-2: no second walk of the headers or
 /// the auxiliary vector on the start-up path).
@@ -171,8 +192,8 @@ const R_X86_64_IRELATIVE: usize = 37;
 /// `__rela_iplt_start` and `__rela_iplt_end`; each word gets its resolver's result. The resolver
 /// is called with no defined arguments: probe-settled, glibc 2.39 on x86_64 passes none either
 /// (`%rdi` held a fixed 0x1d and `%rsi` varied across three CPUs; neither was `AT_HWCAP`). The
-/// executable is not position-independent (a static PIE is refused in `initial_thread`), so the
-/// offsets and resolver addresses are absolute. Runs after the CPU paths are chosen (a resolver
+/// executable is not position-independent (a static PIE's entries are in its dynamic tables and
+/// go through `bootstrap::irelative` instead), so the offsets and resolver addresses are absolute. Runs after the CPU paths are chosen (a resolver
 /// may call the library), before any constructor, and before the program's RELRO is protected
 /// (the target words lie in `.got`, which RELRO covers).
 fn apply_irelative() {
@@ -240,8 +261,9 @@ fn addr0(f: Fn0) -> usize {
     f as usize
 }
 
-/// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`.
-pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
+/// `__libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)`; with `PIE`, the
+/// static-PIE start `liella-rcrt1.o` calls (`liella_start_main_static_pie`, D-27.10).
+pub fn start<const PIE: bool>(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Option<Fn0>, fini: Option<Fn0>, rtld_fini: Option<Fn0>, stack_end: *mut c_void) -> ! {
     let n_args = usize::try_from(argc).unwrap_or(0);
     let argv_addr = argv.expose_provenance();
     let envp = argv_addr.wrapping_add(n_args.wrapping_add(1).wrapping_mul(8));
@@ -261,8 +283,10 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
     // ARCH(x86_64): static-or-dynamic test through ARCH_GET_FS; aarch64 reads TPIDR_EL0 (A-4)
     let static_program = CSys.arch_prctl_get(ArchGet::Fs).map_or(true, |fs| fs == 0);
     let mut relro = None;
+    let mut pie = None;
     if static_program {
-        let prog = initial_thread(&aux);
+        let (prog, relocated) = initial_thread::<PIE>(&aux);
+        pie = relocated;
         crate::thread::set_tls_image(prog.tls);
         relro = prog.relro;
     } else {
@@ -334,7 +358,14 @@ pub fn start(main: Option<Main>, argc: c_int, argv: *mut *mut c_char, init: Opti
     }
     // The program's own indirect functions, before any of its code runs (glibc's resolvers run
     // before `.preinit_array`, probe-settled) and before its RELRO is protected.
-    if static_program {
+    // A static PIE's indirect functions are in its dynamic relocation tables (pass 2 of the
+    // self-relocator, D-27.10).
+    // (`PIE` first: `liella-crt1.o`'s start compiles no test here.)
+    if let Some(r) = if PIE { pie.as_ref() } else { None } {
+        if bootstrap::irelative(r).is_err() {
+            die(b"static PIE: an IRELATIVE relocation is outside the writable segment");
+        }
+    } else if static_program {
         apply_irelative();
     }
     // The program's start-up x87 control word (D-10.5): a dynamic program that defines its own

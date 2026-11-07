@@ -1,0 +1,17 @@
+{"task": "DL-BOOT-RELOC-6", "model": "opus", "tokens": null,
+ "result": "startup_instr_c regression fixed: start::<PIE> generics stopped LLVM inlining five one-call-site start-up helpers into the non-PIE start; #[inline(always)] on them; Haswell: merge-base 2148, branch 2200 -> 2143, all four startup_instr rows at or below the merge-base",
+ "branch": "task/dl-boot-reloc-6", "head": "cc686672",
+ "gate": {"affected": "shiki:dl-boot-reloc-6-gate (escalated to FULL by xtask/src/so.rs; running at hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "origin/next merge-base already measures 2148 on startup_instr_c against the 2150 limit (Haswell, same count as CI's Zen 1 2200 for the branch): 2 instructions of headroom for any other branch",
+   "perf cannot sample instructions:u on shiki (Invalid event in per-thread mode); a ptrace single-step trace of the bench child gives exact per-function counts (scratch tool, shiki ~/work/DL-BOOT-RELOC-6/stepcount.c)",
+   "pre-existing warning: unused import AcqRel in crates/boundary/src/timer.rs:93 in a non-clippy build step of cargo xtask static/clippy (also on the inherited head; not from this branch)"
+ ],
+ "refused": [],
+ "jobs": ["shiki:dl-boot-reloc-6-gate", "shiki:dl-boot-reloc-6-plants", "shiki:dl-boot-reloc-6-lint1", "shiki:dl-boot-reloc-6-bench-fix2"],
+ "superseded": ["shiki:dl-boot-reloc-6-lint0 (inherited head)", "shiki:dl-boot-reloc-6-bench-branch, -bench-branch2 (old head, evidence)", "shiki:dl-boot-reloc-6-bench-base (merge-base, evidence)", "shiki:dl-boot-reloc-6-bench-fix1 (intermediate fix, 2158)"],
+ "improvement": "a ptrace single-step instruction tracer (exec to exit, RIP -> symbol) attributes start-up instruction deltas exactly in two calls where perf sampling is unavailable; worth adding to validation/ as a tool",
+ "next_step": "land after the FULL gate is green; CI's Zen 1 instr check confirms startup_instr_c <= 2150",
+ "report_file": "handoff/DL-BOOT-RELOC.md"}
