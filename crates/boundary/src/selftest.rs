@@ -753,6 +753,22 @@ pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
     crate::hot::log_quick_parts(x)
 }
 
+/// The `double` `asinh` quick phase alone (D-10.65) in the build [`set_math_fma`] chose: the
+/// correctly rounded result, or `None` (the entry then runs the accurate path).
+pub fn asinh_quick(x: f64) -> Option<f64> {
+    crate::hot::asinh_nearest(x)
+}
+
+/// [`asinh_quick`] for `acosh`.
+pub fn acosh_quick(x: f64) -> Option<f64> {
+    crate::hot::acosh_nearest(x)
+}
+
+/// [`asinh_quick`] for `atanh`.
+pub fn atanh_quick(x: f64) -> Option<f64> {
+    crate::hot::atanh_nearest(x)
+}
+
 /// Force NULL folding in the copy and fill entries (D-4.22) on or off: `true` takes sizes 1-128
 /// with no NULL test (a NULL faults on page zero), `false` keeps the explicit S6 checks. Returns
 /// `false` (and changes nothing) when folding is asked for but the startup guard would refuse it

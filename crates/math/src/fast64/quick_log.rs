@@ -47,6 +47,26 @@
 //! `≈ C − 1 = 0.098%` of uniformly spread significands; the fallback test measures it.
 //!
 //! Both builds are correctly rounded wherever they answer, so they return the same values.
+//!
+//! **Pair arguments** (LIBM-F64-INVHYP-QUICK, D-10.65): `log_pair_parts(xh, xl)` and
+//! `log1p_pair_parts(yh, yl)` take the argument as an unevaluated sum, for asinh/acosh/atanh
+//! ([`super::quick_invhyp`]). With `xh` reduced as above, `x = 2^e·(m + xl·2^-e)` and
+//! `c·m·(1 + δ) − 1 = r + d`, `d = RN(c·(xl·2^-e))` (`2^-e` exact, one rounding: `u·|d|`), and
+//! `log1p(r + d) = log1p(r) + d/(1 + r) − d²/(2(1 + r)²) + …`; the kernel adds
+//! `dt = d·(1 − r + r²)` into `lo`, leaving `|d|·|r|³/(1 − |r|) + d²/(1 − |r|)²` (the roundings
+//! forming `dt` act on `|d|·|r| < 2^-58`, below `2^-110`). `log1p_pair_parts` with `yh < 2^-7`
+//! passes `(r, d) = (yh, yl)` straight to case A (`c = 1`, `e = 0`, `th = tl = 0`, no reduction);
+//! otherwise `1 + yh = s + s'` by 2Sum and `(s, s' + yl)` goes to `log_pair_parts`.
+//! * Case A (`0 <= r < 2^-7`): the new relative terms are `E1 = |d|·r²/(1 − 2^-7)` and
+//!   `E2 = d²/(2|r|)`. Each caller keeps `E1 + E2 <= 2^-64.99` (`|d| <= 2^-51·|r|` gives
+//!   `E1 <= 2^-64.99`, `E2 <= 2^-103`; [`super::quick_invhyp`] states each caller's `d`); with
+//!   case A's `2^-64.92`: `2^-63.95`.
+//! * Cases B and C (`log_pair_parts`, only for `xh + xl >= 2.4`, so `|ln x| >= 0.87`):
+//!   `|d| <= 1.27·2^-51` absolute (`|xl| <= 1.25·2^-51·xh`), so the new terms are below
+//!   `2^-72.9` absolute; with B/C's `2^-67.64`: below `2^-67.4` relative.
+//!
+//! Stated `RHO_PAIR = 2^-63` (`C_PAIR − 1 = 0.196%`, the expected fallback); the callers add their
+//! own argument errors (below `2^-74`) in [`super::quick_invhyp`]'s bound.
 
 #![allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)] // bit arithmetic on bounded values (above), indices masked to 0..127
 
@@ -163,8 +183,79 @@ pub fn log_tiered(x: f64) -> Option<f64> {
     }
     tier2(x)
 }
+
+/// `log1p(r + d)` plus `th + tl` as `(zh, zl)`: the kernel above with the low part `d` of the
+/// reduced argument folded in as `d·(1 − r + r²)` (module doc, "Pair arguments").
+$(#[$a])*
+$(#[$i])*
+fn pair_tail(r: f64, d: f64, th: f64, tl: f64) -> (f64, f64) {
+    let (vh, vl, r2) = $sq(r);
+    let p01 = $ma(r, C4, C3);
+    let p23 = $ma(r, C6, C5);
+    let p45 = $ma(r, C8, C7);
+    let r4 = r2 * r2;
+    let qa = $ma(r2, p23, p01);
+    let qb = $ma(r2, C9, p45);
+    let q = $ma(r4, qb, qa);
+    let r3 = r2 * r;
+    let sh = th + vh;
+    let sl = (th - sh) + vh;
+    let dt = $ma(d, r2 - r, d);
+    let lo = $ma(r3, q, ((sl + vl) + tl) + dt);
+    let zh = sh + lo;
+    let zl = (sh - zh) + lo;
+    (zh, zl)
+}
+
+/// `ln(xh + xl) = zh + zl` within `RHO_PAIR·|zh|` for `xh` in `[2^-1000, 2^1001]` and
+/// `|xl| <= 2^-51·xh`, `xh + xl >= 2.4` (the inverse hyperbolic kernels' range; module doc).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the inverse hyperbolic kernels and the boundary's tests
+pub fn log_pair_parts(xh: f64, xl: f64) -> (f64, f64) {
+    let ix = xh.to_bits();
+    let tmp = ix.wrapping_sub(OFF);
+    let e = i64::from_ne_bytes(tmp.to_ne_bytes()) >> 52;
+    let mb = ix.wrapping_sub(tmp & (0xfff << 52));
+    let row = &t::LOG_Q128[usize::try_from((tmp >> 45) & 127).unwrap_or(0)];
+    let c = f64::from_bits(row[0]);
+    let r = $red(f64::from_bits(mb), mb, c, f64::from_bits(row[1]));
+    let ef = f64::from(i32::try_from(e).unwrap_or(0));
+    let th = $ma(ef, KH, f64::from_bits(row[2]));
+    let tl = $ma(ef, KL, f64::from_bits(row[3]));
+    // 2^-e, normal for e in [-1022, 1022].
+    let scale = f64::from_bits(u64::try_from(1023 - e).unwrap_or(0) << 52);
+    pair_tail(r, c * (xl * scale), th, tl)
+}
+
+/// `log1p(yh + yl) = zh + zl` within `RHO_PAIR·|zh|` for `yh` in `[2^-200, 2^1000]` and
+/// `|yl| <= 2^-51·yh` (module doc).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the inverse hyperbolic kernels and the boundary's tests
+pub fn log1p_pair_parts(yh: f64, yl: f64) -> (f64, f64) {
+    if yh < SMALL {
+        // 1 + y in [1, 1 + 2^-7): the interval with c = 1, e = 0, so r = y exactly.
+        return pair_tail(yh, yl, 0.0, 0.0);
+    }
+    // 2Sum (Knuth, TAOCP 2, 4.2.2): 1 + yh = s + s' exactly, in either order of magnitude.
+    let s = 1.0 + yh;
+    let bv = s - 1.0;
+    let sl = ((1.0 - (s - bv)) + (yh - bv)) + yl;
+    log_pair_parts(s, sl)
+}
     };
 }
+
+/// `2^-7`: below it `log1p`'s pair argument is the reduced argument itself.
+const SMALL: f64 = 0.0078125;
+
+/// The pair entries' stated bound (module doc, "Pair arguments") and its rounding-test
+/// multiplier: the least double with `C_PAIR·(1 − 2^54·RHO_PAIR) > 1 + 2^-53`.
+#[doc(hidden)] // public for the boundary's tests only
+pub const RHO_PAIR: f64 = f64::from_bits(0x3c00_0000_0000_0000);
+#[doc(hidden)] // public for the inverse hyperbolic kernels and the boundary's tests
+pub const C_PAIR: f64 = f64::from_bits(0x3ff0_0804_0201_0081);
 
 /// Tier 2 of [`log_tiered`] (the SSE2 build of [`super::log_nearest`]), out of line and cold so
 /// the quick phase keeps its registers: about 0.1% of calls reach it.
@@ -181,7 +272,7 @@ quick!(; #[inline(always)]; ma; reduce; half_square);
 // ARCH(x86_64): the run-time FMA build; FMA is base ISA on aarch64, so one build there
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
-    use super::{t, C, C3, C4, C5, C6, C7, C8, C9, KH, KL, MIN_NORMAL, OFF, SPAN};
+    use super::{t, C, C3, C4, C5, C6, C7, C8, C9, KH, KL, MIN_NORMAL, OFF, SMALL, SPAN};
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
 
