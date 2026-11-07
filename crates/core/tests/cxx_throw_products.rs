@@ -128,3 +128,85 @@ fn cxx_exceptions_cross_the_library() {
     assert_eq!(text, EXPECTED, "stderr:\n{}", String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "status {:?}", out.status);
 }
+
+/// The thread functions a compiler runtime reaches through weak references (libgcc's unwinder
+/// takes threads to be in use when `__pthread_key_create` is linked, and then calls
+/// `pthread_once`): a static link that defines `__pthread_key_create` must define all of them
+/// (STATIC-CXX-THROW-PTHREAD-ONCE).
+const GTHR: [&str; 7] = ["pthread_once", "__pthread_key_create", "pthread_getspecific", "pthread_setspecific", "pthread_key_delete", "pthread_mutex_lock", "pthread_mutex_unlock"];
+
+/// Links `src` (C++ with `g++`, else C with `cc` and Liella's headers) statically against the
+/// products, with `extra` flags; runs it and returns its standard output, after checking that
+/// it exited 0 and that the program defines every name of [`GTHR`] when it defines
+/// `__pthread_key_create`.
+fn link_and_run(src: &str, compiler: &str, extra: &[&str]) -> String {
+    let r = root();
+    let lib = r.join("target/liella");
+    assert!(lib.join("libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    // One directory per program: the tests run in parallel and each removes its own.
+    let tag = format!("{src}{}", extra.join("")).replace(['-', ',', '=', '.'], "");
+    let dir = r.join(format!("target/cxx_throw_plain-{}-{tag}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("prog");
+    let mut c = Command::new(compiler);
+    c.args(["-O1", "-static", "-nostdlib", "-fno-builtin"]).args(extra).arg("-o").arg(&exe).arg(lib.join("liella-crt1.o"));
+    if compiler == "g++" {
+        c.args(["-std=c++17"]).arg(r.join("crates/core/tests/oracle").join(src)).arg("-Wl,--eh-frame-hdr").args(["-lsupc++", "-lgcc_eh"]);
+    } else {
+        c.args(["-std=c17", "-I"]).arg(r.join("include")).arg(r.join("crates/core/tests/oracle").join(src));
+    }
+    let built = c.arg(lib.join("libc.a")).arg("-lgcc").output().unwrap();
+    assert!(built.status.success(), "{src} {extra:?} does not link against the products:\n{}", String::from_utf8_lossy(&built.stderr));
+    let nm = Command::new("nm").arg(&exe).output().unwrap();
+    let table = String::from_utf8_lossy(&nm.stdout);
+    assert!(nm.status.success(), "nm {}", exe.display());
+    // A defined symbol's line has three fields (value, type, name); an undefined one's two.
+    let defined: Vec<&str> = GTHR.iter().copied().filter(|s| table.lines().any(|l| l.split_whitespace().nth(2) == Some(*s))).collect();
+    assert!(!defined.contains(&"__pthread_key_create") || defined.len() == GTHR.len(), "{src} {extra:?}: the link defines {defined:?} of {GTHR:?}");
+    let out = Command::new("timeout").arg(timeout::secs(60)).arg(&exe).output().unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(out.status.success(), "{src} {extra:?}: status {:?}, stdout {:?}", out.status, String::from_utf8_lossy(&out.stdout));
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn have_gxx() -> bool {
+    if Command::new("g++").arg("--version").output().is_err() {
+        eprintln!("SKIPPED: no g++ on this machine (static C++ programs that throw are not tested)");
+        return false;
+    }
+    true
+}
+
+/// spec §22.5 `pthread_once` (s22_5_c_5), §22.6 keys (s22_6_c_1): a static C++ program that
+/// throws and catches, and names no thread function, links the thread functions its unwinder
+/// tests for consistently and runs (with and without `--gc-sections`).
+#[test]
+fn static_cxx_throw_without_threads_runs() {
+    if !have_gxx() {
+        return;
+    }
+    for extra in [&[][..], &["-Wl,--gc-sections"][..]] {
+        assert_eq!(link_and_run("cxx_throw_plain.cc", "g++", extra), "catches=1 dtors=4\n", "{extra:?}");
+    }
+}
+
+/// spec §22.5 (s22_5_c_5), §22.6 (s22_6_c_1): the same program with one more thread, which
+/// throws and catches too.
+#[test]
+fn static_cxx_throw_with_one_thread_runs() {
+    if !have_gxx() {
+        return;
+    }
+    for extra in [&["-DWITH_THREAD"][..], &["-DWITH_THREAD", "-Wl,--gc-sections"][..]] {
+        assert_eq!(link_and_run("cxx_throw_plain.cc", "g++", extra), "catches=2 dtors=8\n", "{extra:?}");
+    }
+}
+
+/// spec §22.5 `pthread_once` (s22_5_c_5): a static C program whose only thread function is
+/// `pthread_once` links against `libc.a` and runs the routine once.
+#[test]
+fn static_c_pthread_once_alone_runs() {
+    for extra in [&[][..], &["-Wl,--gc-sections"][..]] {
+        assert_eq!(link_and_run("once_alone.c", "cc", extra), "runs=1 rc=0,0\n", "{extra:?}");
+    }
+}

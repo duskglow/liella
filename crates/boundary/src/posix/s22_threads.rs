@@ -355,6 +355,17 @@ pub extern "C" fn __pthread_cleanup_routine(frame: *mut [usize; 3]) {
 
 // ------------------------------------------------------------------------------ keys (§22.6)
 
+/// STATIC-CXX-THROW-PTHREAD-ONCE: a static link that takes this object (and with it
+/// `__pthread_key_create`, `pthread_getspecific`, `pthread_mutex_lock`, ...) also takes
+/// `pthread_once`, which lives in the C layer's member (machine/once.S, with
+/// `liella_machine_once`). A program's weak references to these names (a compiler runtime's
+/// "are threads in use" test is one) then find all of them, never `__pthread_key_create`
+/// without `pthread_once`. The kept address makes `liella_machine_once` an undefined symbol of
+/// this object, so `libc.a`'s member that defines it is pulled; nothing reads it, and
+/// `--gc-sections` drops it.
+#[used]
+static LINK_PTHREAD_ONCE: extern "C" fn(usize, usize) -> i32 = crate::ffi::liella_machine_once;
+
 export! { "GLIBC_2.34";
 pub extern "C" fn pthread_key_create(key: Option<&mut pthread_key_t>, destructor: usize) -> c_int {
     ret::errnum_store(key, pthread::key_create(destructor))
