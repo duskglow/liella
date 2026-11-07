@@ -1,7 +1,7 @@
 {"task": "TEST-VALUE-AUDIT", "model": "opus", "tokens": null,
  "result": "plan written: 43 suites >= 30 test-s classified (KEEP / MOVE / CONSOLIDATE, no CUT, no SHRINK yet); 3 briefs; setup measured at 1-4% of the math sweep shards",
- "branch": "task/test-value-audit", "head": null,
- "gate": {"affected": "not run (planning story, no code change)", "peak": null},
+ "branch": "task/test-value-audit", "head": "f9edbd3a",
+ "gate": {"affected": "not run (planning story, no code change); cargo xtask static rc 0 on f9edbd3a", "peak": null},
  "accepted_first_attempt": null,
  "rulings": [
   {"item": "MOVE: math accuracy sweeps in pass 1 (complex_ld_cr, complex_f128, special_ld, special_f128, complex, elem_ld, special products; special_cr, fast_gamma, slow liella-math lib sweeps; ~9,000 test-s) run only when a complete input key (program bytes, host libm/libc, test binary, CPU flags) differs from a green verdict; brief TVA-MATH-VERDICT-CACHE", "recommendation": "approve: est. -4 to -6 min per train that changes no math input (NOT VERIFIED); 0 CI failures in 328 gates, dev failures only in their own stories; LIELLA_NO_VERDICT_CACHE=1 for nightly/release"}

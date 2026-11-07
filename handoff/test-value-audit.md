@@ -128,6 +128,10 @@ need libm mutation plants run against the full sweeps (recorded in TVA-MATH-VERD
   cleared). Keeping a one-line "caught by <binary> <test>" per plant in the plants summary would make the next
   audit exact.
 
+## Checks
+`cargo xtask static` rc 0 on f9edbd3a (keke r5, foreground). No gate: planning story, no code change.
+Jobs: keke:tva-setup2 rc 0 (the setup measurement); keke:tva-setup stopped by me (kill-label), no result used.
+
 ## Next step
 Owner: rule on TVA-MATH-VERDICT-CACHE. Coordinator: TVA-XTASK-RUN-ONCE and TVA-CONFORMANCE-ONCE may be queued
 without a ruling. Do not redo: the 40-train cost parse, the plant scan, the setup measurement (scripts in
