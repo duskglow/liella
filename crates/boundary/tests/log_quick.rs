@@ -73,7 +73,9 @@ fn log_quick_fma_error_within_bound() {
     let worst = with_fma(|| {
         let mut worst = 0.0f64;
         for x in operands(20_000) {
-            let (zh, zl) = selftest::log_quick_parts(x).unwrap_or_else(|| panic!("FMA quick log declined {x:e}"));
+            let parts = selftest::log_quick_parts(x);
+            assert!(parts.is_some(), "FMA quick log declined {x:e}");
+            let (zh, zl) = parts.unwrap_or_default();
             let err = mp::ln(Mp::from_f64(x)).sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
             assert!(err.cmp_abs(Mp::from_f64(RHO * zh.abs())).is_le(), "FMA quick log({x:e}): error {:e} above the bound", err.to_f64() / zh);
             worst = worst.max((err.to_f64() / zh).abs());
