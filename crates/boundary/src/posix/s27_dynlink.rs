@@ -3,7 +3,8 @@
 //! Implementation phase: 14 (implementation-plan.md §6). Not yet implemented.
 //!
 //! `dl_iterate_phdr` (D-27.4): a static program has two objects, as glibc reports them: the
-//! main program (name "", `AT_PHDR`/`AT_PHNUM`, bias from `PT_PHDR`) and the vDSO
+//! main program (name "", `AT_PHDR`/`AT_PHNUM`, bias from `PT_PHDR`, or in a static PIE the
+//! bias its start relocated it by, D-27.12) and the vDSO
 //! ("linux-vdso.so.1") when the kernel provided one. `dlpi_adds` is the number of objects,
 //! `dlpi_subs` 0; the main program's `dlpi_tls_modid` is 1 and `dlpi_tls_data` the calling
 //! thread's block when it has a `PT_TLS` segment. A non-zero callback result ends the walk and is
@@ -29,14 +30,14 @@ type Callback = Option<extern "C" fn(&struct_dl_phdr_info, usize, *mut c_void) -
 
 const PT_LOAD: u32 = 1;
 const PT_TLS: u32 = 7;
-const PT_PHDR: u32 = 6;
 const PT_GNU_EH_FRAME: u32 = 0x6474_e550;
 
 fn word(w: &[u64], i: usize) -> usize {
     w.get(i).map_or(0, |&v| usize::try_from(v).unwrap_or(0))
 }
 
-/// Bias and TLS segment (memsz, align) of the headers at `phdr`.
+/// Bias and TLS segment (memsz, align) of the headers at `phdr`: the executable's (`None`; its
+/// bias from the start, D-27.12) or the vDSO's (`Some(base)`, bias from its first `PT_LOAD`).
 fn scan(phdr: usize, phnum: usize, first_load_bias_from: Option<usize>) -> (usize, Option<(usize, usize)>) {
     // UNSAFE(slice): program headers the kernel mapped (⚑ KERN) and that stay mapped.
     #[allow(unsafe_code)]
@@ -46,7 +47,7 @@ fn scan(phdr: usize, phnum: usize, first_load_bias_from: Option<usize>) -> (usiz
     let ty = |h: &[u64]| u32::try_from(h.first().copied().unwrap_or(0) & 0xffff_ffff).unwrap_or(0);
     let bias = match first_load_bias_from {
         Some(base) => hs().find(|h| ty(h) == PT_LOAD).map_or(0, |h| base.wrapping_sub(word(h, 2))),
-        None => hs().find(|h| ty(h) == PT_PHDR).map_or(0, |h| phdr.wrapping_sub(word(h, 2))),
+        None => process::exe_bias(w, phnum, phdr),
     };
     let tls = hs().find(|h| ty(h) == PT_TLS).map(|h| (word(h, 5), word(h, 6)));
     (bias, tls)

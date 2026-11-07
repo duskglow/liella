@@ -105,6 +105,10 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
         }
         prog.relro = prog.relro.map(|(a, l)| (a.wrapping_add(delta), l));
         prog.bias = r.bias;
+        // The one source of the executable's bias for later lookups (D-27.12): `%n`,
+        // `dl_iterate_phdr`, `_dl_find_object` and the backtrace. Set only here, so the non-PIE
+        // start does no added work.
+        process::EXE_BIAS.store(r.bias, Release);
         pie = Some(r);
     }
     let Some(area) = tls::InitialArea::new(prog.tls.as_ref()) else { die(b"invalid PT_TLS segment") };

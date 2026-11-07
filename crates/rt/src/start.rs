@@ -89,12 +89,12 @@ fn relro_pages(vaddr: usize, memsz: usize, page: usize) -> Option<(usize, usize)
 }
 
 /// Whether `addr` lies in a loadable segment of the executable that is not writable (`%n` in a
-/// fortified `printf` format, D-12.4): the program headers `words` (`phnum` of them, at
-/// `phdr_addr`).
-pub fn read_only(words: &[u64], phnum: usize, phdr_addr: usize, addr: usize) -> bool {
+/// fortified `printf` format, D-12.4): the program headers `words` (`phnum` of them), loaded
+/// `bias` bytes from their link addresses. The caller supplies the bias (D-27.12): a static
+/// PIE has no `PT_PHDR` to take it from.
+pub fn read_only(words: &[u64], phnum: usize, bias: usize, addr: usize) -> bool {
     const PT_LOAD: u64 = 1;
     const PF_W: u64 = 2;
-    let bias = program(words, phnum, phdr_addr).bias;
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     words.chunks_exact(PHDR_WORDS).take(phnum).any(|h| {
         let w0 = h.first().copied().unwrap_or(0);
@@ -188,6 +188,23 @@ mod tests {
         assert_eq!(p.tls.unwrap().addr, 0x5555_2000);
         assert_eq!(program(&w, 1, 0).tls, None, "phnum limits the headers read");
         assert_eq!(program(&w[..10], 2, 0).tls, None, "a truncated header is ignored");
+    }
+
+    // Spec §12.6 (D-12.4, D-27.12): the `%n` check tests the segments where they were loaded,
+    // by the bias the caller gives, not by a `PT_PHDR` the headers may lack (a static PIE).
+    #[test]
+    fn read_only_tests_the_segments_moved_by_the_given_bias() {
+        let mut w = Vec::new();
+        w.extend(phdr(1, 0, 0x2000, 0x2000, 0x1000)); // PT_LOAD R (flags 4)
+        w.extend([1 | (6 << 32), 0, 0x3000, 0x3000, 0x1000, 0x1000, 0x1000]); // PT_LOAD RW
+        let bias = 0x7f00_0000_0000;
+        assert!(read_only(&w, 2, bias, bias + 0x10));
+        assert!(read_only(&w, 2, bias, bias + 0x1fff));
+        assert!(!read_only(&w, 2, bias, bias + 0x2000), "past the read-only segment");
+        assert!(!read_only(&w, 2, bias, bias + 0x3010), "the writable segment");
+        assert!(!read_only(&w, 2, bias, 0x10), "the link address is not where it was loaded");
+        assert!(read_only(&w, 2, 0, 0x10));
+        assert!(!read_only(&w, 1, bias, bias + 0x3010) && !read_only(&w, 0, bias, bias + 0x10), "phnum limits the headers read");
     }
 
     #[test]
