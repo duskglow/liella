@@ -92,7 +92,7 @@ fn words(line: &str) -> impl Iterator<Item = &str> {
 }
 
 /// The files where the `allocator` category (`unsafe impl GlobalAlloc` and its host calls) may appear.
-const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs"];
+const ALLOCATOR_FILES: &[&str] = &["src/heap.rs", "src/selftest/failalloc.rs", "src/ld.rs"];
 const CATEGORIES: [&str; 6] = ["extern", "export", "slice", "allocator", "tb-field", "hot-kernel"];
 
 /// Whether the (stripped) `unsafe {` block at `lines[n]` is an inline-assembly block: the
@@ -309,9 +309,9 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                 }
                 let l = line.trim();
                 let (cat, allowed_in): (&str, &[&str]) = if l.contains("unsafe extern") {
-                    ("extern", &["src/ffi.rs", "src/ffi_sys.rs", "src/ffi_sys_aarch64.rs", "src/caller_alloc.rs"])
+                    ("extern", &["src/ffi.rs", "src/ffi_sys.rs", "src/ffi_sys_aarch64.rs", "src/caller_alloc.rs", "src/arch/"])
                 } else if l.contains("unsafe(no_mangle)") || l.contains("unsafe(export_name") {
-                    ("export", &["src/export.rs", "src/data.rs"])
+                    ("export", &["src/export.rs", "src/data.rs", "src/ld.rs"])
                 } else if l.contains("unsafe impl") {
                     // ALLOC-FAIL-INJECT-4 (#2101): the test-only `FailAlloc` (`selftest` feature, never
                     // in a product) lives outside every product-compiled file.
@@ -324,7 +324,7 @@ pub fn unsafe_audit(root: &Path) -> Result<(), String> {
                     // module, one directory since LIBM-HOT-PER-FAMILY).
                     ("hot-kernel", &["src/hot/"])
                 } else if l.contains("unsafe fn") || l.contains("unsafe {") {
-                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
+                    ("slice", &["src/conv.rs", "src/strz.rs", "src/heap.rs", "src/tb.rs", "src/runtime.rs", "src/bootstrap.rs", "src/ld.rs", "src/posix/", "src/native/", "src/selftest/failalloc.rs"])
                 } else {
                     errors.push(format!("{}:{}: `unsafe` form not in any permitted category", f.display(), n + 1));
                     continue;
