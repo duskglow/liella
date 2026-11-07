@@ -127,6 +127,9 @@ fn invhyp_quick_both_builds_round_correctly() {
             let miss = check(build, f, &xs);
             eprintln!("{build} {}: {miss} misses of {}", f.name, xs.len());
             assert!(miss * 1000 <= xs.len() * 6, "{build} {} fallback {miss} of {} above 0.6%", f.name, xs.len());
+            // The test's window is `C_PAIR − 1` wide whatever the actual error, so a rate far
+            // below the model means the rounding test no longer decides (measured 0.12-0.21%).
+            assert!(miss * 2000 >= xs.len(), "{build} {}: fallback {miss} of {} below 0.05%: rounding test inactive", f.name, xs.len());
         }
     }
     assert!(selftest::set_math_fma(had));
