@@ -95,7 +95,7 @@ fn quick_error_within_bound() {
 #[test]
 fn quick_matches_correctly_rounded_trig() {
     for which in 0..3 {
-        for (set, xs) in [(0, uniform(1_000_000, 1 + which as u64, -10.0, 10.0).collect::<Vec<_>>()), (1, uniform(200_000, 5, -1e6, 1e6).collect()), (2, huge(200_000, 9).collect())] {
+        for (set, xs) in [(0, uniform(1_000_000, [1, 2, 3][which], -10.0, 10.0).collect::<Vec<_>>()), (1, uniform(200_000, 5, -1e6, 1e6).collect()), (2, huge(200_000, 9).collect())] {
             let mut miss = 0usize;
             for &x in &xs {
                 match quick(which, x) {
