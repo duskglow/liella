@@ -860,7 +860,8 @@ mod tests {
         fs::create_dir_all(&d).unwrap();
         let (new_p, old_p, legacy_p) = (d.join("new.tsv"), d.join("old.tsv"), d.join("legacy.tsv"));
         fs::write(&new_p, new_selected()).unwrap();
-        fs::write(&old_p, OLD).unwrap();
+        // The old table times the calibration row too: outside the selection now, so it is not "not measured now".
+        fs::write(&old_p, format!("{OLD}cbench_libm\tadd_baseline\t2.000\t-\t3.000\t0.900\t5\tslower\t-\t-\tno\n")).unwrap();
         fs::write(&legacy_p, format!("{NEW}cbench_libm\tadd_baseline\t2.000\t-\t3.000\t0.900\t5\tslower\t-\t-\tno\n")).unwrap();
         let run = |new: &Path| compare(&["--new".into(), format!("ivb={}", new.display()), "--old".into(), format!("ivb={}", old_p.display()), "--label".into(), "1106e".into()]).unwrap();
         let r = run(&new_p);
@@ -868,6 +869,7 @@ mod tests {
         assert!(r.contains("| ivb | 5 | 0.030 | 0.050 | 0.050 | 3 |"), "{r}");
         assert!(r.contains("## Rows outside the selection (in sweep.tsv, not judged): 1\n\n- cbench_libm/add_baseline | ivb\n"), "{r}");
         assert!(r.contains("## Rows not in 1106e: 1\n"), "{r}");
+        assert!(r.contains("## Rows in 1106e not measured now: 1\n\n- cbench_x/gone |"), "{r}");
         assert!(!r.contains("libm median time ratio"), "{r}");
         // The old table has no `selected` column: judged as before, and the report says so.
         assert!(r.contains("The old `ivb` table has no `selected` column"), "{r}");
