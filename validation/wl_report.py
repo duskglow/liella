@@ -81,7 +81,7 @@ def num(r, k):
         return None
 
 
-print("counters = Liella user instructions / page faults / syscalls, NEW vs BASE (the gate; syscalls = the deterministic ones: futex and, for a run that created threads, the mmap/munmap/brk/mprotect/madvise family are left out, WLRUN-FUTEX); futex = futex calls NEW vs BASE (advisory: waits depend on timing, never a verdict); time = CPU seconds, cycles = user+kernel cycles NEW vs BASE (cyc u / cyc k = the user-only and kernel-only part, WLRUN-CYCLES-UK; '-' on a run file without them), GHz = NEW/BASE clock (all three advisory, never a verdict)")
+print("counters = Liella user instructions / page faults / syscalls, NEW vs BASE (the gate; syscalls = the deterministic ones: futex and, for a run that created threads, the mmap/munmap/brk/mprotect/madvise family are left out, WLRUN-FUTEX, and for a run that created another process its read/write calls on pipes, sys_piperw, D-X.46); futex = futex calls NEW vs BASE (advisory: waits depend on timing, never a verdict); time = CPU seconds, cycles = user+kernel cycles NEW vs BASE (cyc u / cyc k = the user-only and kernel-only part, WLRUN-CYCLES-UK; '-' on a run file without them), GHz = NEW/BASE clock (all three advisory, never a verdict)")
 print(f"{'workload':<13}{'instr n/g':>10}{'instr':>8}{'pf':>8}{'syscalls':>9}{'futex':>8}{'time':>8}{'cycles':>8}{'cyc u':>8}{'cyc k':>8}{'GHz n/b':>11}  verdict")
 fails = []
 ratios = []
