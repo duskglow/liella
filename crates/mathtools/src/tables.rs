@@ -149,6 +149,11 @@ pub fn generate() -> Vec<(&'static str, String)> {
         f64_of(&ln10.div(&ln2, p, Round::Nearest).mul_pow2(6)),
         f64_of(&Big::from_i64(64).div(&pi, p, Round::Nearest)),
     ]);
+    // The quick exp phase (D-10.51; Tang's table with N = 128): 2^(j/128), ln2/128 in two parts, 128/ln2.
+    let t: Vec<Big> = (0..128).map(|j| approx(mp::exp2(&Big::from_i64(j).mul_pow2(-7), p))).collect();
+    o.dd_table("EXP2_J128", "`2^(j/128)` for j = 0..127 (mp::exp2): the quick `exp` phase's table (D-10.51).", &t);
+    o.f64_table("LN2_128_CW", "`ln 2 / 128` split for the quick `exp` phase: a part of 36 bits (`k * part` exact for |k| < 2^17) and the nearest `f64` to the rest.", &split(&ln2.mul_pow2(-7), 36, 2));
+    o.f64_table("SCALE_128", "`128 / ln 2` rounded to `f64` (only to choose the quick `exp` phase's reduction index).", &[f64_of(&Big::from_i64(128).div(&ln2, p, Round::Nearest))]);
 
     // log: c_i = 1/(1 + i/128) rounded to 12 bits (c_0 = 1), L_i = -log(c_i).
     let mut c = Vec::new();

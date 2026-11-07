@@ -32,6 +32,7 @@ use crate::status::{Flags, Rounding, Status};
 
 mod exp_log;
 mod hyperbolic;
+pub mod quick;
 #[cfg(test)]
 mod tier_tests;
 pub use exp_log::{cbrt_nearest, expm1_nearest, log1p_nearest};

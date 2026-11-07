@@ -13,6 +13,30 @@ pub(crate) fn exp_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::exp_nearest(x)
 }
 
+/// The `double` `exp` quick phase (LIBM-F64-EXP-QUICK, D-10.51; not wired into `exp` yet) in its
+/// build chosen at startup (as [`exp_nearest`]): the correctly rounded result, or `None` when the
+/// rounding test fails. Test-only until the wiring story.
+#[cfg(feature = "selftest")]
+pub(crate) fn exp_quick(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::exp_quick(x) };
+    }
+    liella_math::fast64::quick::exp_quick(x)
+}
+
+/// [`exp_quick`]'s unrounded `(zh, zl, scale)` in the build chosen at startup (bound tests).
+#[cfg(feature = "selftest")]
+pub(crate) fn exp_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::exp_quick_parts(x) };
+    }
+    liella_math::fast64::quick::exp_quick_parts(x)
+}
+
 /// The `double` `exp10` fast path in its build chosen at startup (as [`exp_nearest`]).
 #[inline(always)]
 pub(crate) fn exp10_nearest(x: f64) -> Option<f64> {
