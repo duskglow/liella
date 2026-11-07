@@ -113,7 +113,9 @@ fn operands(scale: usize) -> impl Iterator<Item = f64> {
 fn log_quick_error_within_bound() {
     let mut worst = 0.0f64;
     for x in operands(60_000) {
-        let Some((zh, zl)) = log_quick_parts(x) else { panic!("quick log declined {x:e} (positive normal)") };
+        let parts = log_quick_parts(x);
+        assert!(parts.is_some(), "quick log declined {x:e} (positive normal)");
+        let (zh, zl) = parts.unwrap_or_default();
         let err = mp::ln(Mp::from_f64(x)).sub(Mp::from_f64(zh)).sub(Mp::from_f64(zl));
         assert!(err.cmp_abs(Mp::from_f64(RHO * dd::abs(zh))).is_le(), "quick log({x:e}): error {:e} above the bound", err.to_f64() / zh);
         worst = worst.max(dd::abs(err.to_f64() / zh));
