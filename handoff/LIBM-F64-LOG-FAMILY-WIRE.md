@@ -51,9 +51,17 @@ startup 36 / 35 / 32, locale 60 / 60 / 56, tool 62 / 62 / 59. The bounds were no
 
 * `libm-f64-log-family-wire-3-lint0`: clippy + static on the inherited head: rc 0.
 * `-diag`, `-regen`: the diagnosis and regen above (scratch trees; evidence, not final-head jobs).
-* `-gate`: full clippy, xtask clippy, static, `cargo xtask so`, `cargo test -p liella --test hot_text_products`,
-  `affected --base origin/next --run`. `-plants`: `handoff/LIBM-F64-LOG-FAMILY-WIRE-plants.txt` on the final head.
-  Results: see the report json.
+* `-gate` (head b93420d57; superseded): full clippy, xtask clippy, static, `cargo xtask so`, `cargo test -p liella
+  --test hot_text_products` (12 passed: startup 19 / 23, locale 59 / 68, tool 62 / 71, fork 7 / 9), then `affected
+  --base origin/next --run`: rc 1, one failure, `popen_system_eintr system_signal_state_during_and_after` read
+  `hits=0`. Cause: libtest runs the body on its own thread, so libtest's main thread (SIGCHLD not blocked) can take
+  the process-directed SIGCHLD while `system` blocks it in the test thread, and its handler may run after the
+  test's read on a loaded host. Fixed in the test with an iteration-budget wait (0f5dc4988), plant
+  `sigchld-never-counted` (`handoff/LIBM-F64-LOG-FAMILY-WIRE-3-plants.txt`).
+* `-plants` (b93420d57; superseded by -plants2): 16 CAUGHT, 0 SURVIVED, no WARN-RC-ONLY / WARN-NO-MSG.
+* `-static`: static on an export of af5f983a9 (docs only on top of the gated tree): rc 0.
+* `-gate2`, `-plants2` (final code head 0f5dc4988; plants2 = the -3 file, then the 16 log-family plants): queued
+  at hand-back, results in jobs.tsv.
 
 ## Next
 
