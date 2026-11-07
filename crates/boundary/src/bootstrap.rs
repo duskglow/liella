@@ -14,6 +14,7 @@ use crate::ffi;
 
 /// What pass 2 needs: the bias, the writable segment and the two RELA tables (run-time addresses).
 #[derive(Clone, Copy)]
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) struct Relocated {
     /// Load address minus link address.
     pub bias: usize,
@@ -52,6 +53,7 @@ fn segment(bias: usize, (vaddr, memsz): (u64, u64)) -> Segment<'static> {
 /// The run-time address of the executable's ELF header when the executable is a static PIE
 /// (`ET_DYN`), else `None`. Taken PC-relatively (`adapter/image_anchor.c`), so it is right before
 /// the image is relocated.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn static_pie_header() -> Option<usize> {
     let ehdr = ffi::liella_link_image_header();
     // UNSAFE(slice): the executable's ELF header, mapped with its first segment.
@@ -86,8 +88,25 @@ pub(crate) fn relocate_self(phdr: usize, phnum: usize, ehdr: usize) -> Result<Re
     Ok(Relocated { bias, writable: img.writable, rela, jmprel })
 }
 
+/// `ld.so`'s pass 1 (DL-5): its own ELF header (run-time address `ehdr`, from
+/// `liella_link_image_header`) names its program headers. Its link check (L14-1) leaves it no
+/// IRELATIVE entry, so there is no pass 2.
+#[cfg(feature = "ld")]
+pub(crate) fn relocate_image(ehdr: usize) -> Result<Relocated, BootError> {
+    // UNSAFE(slice): the image's ELF header, mapped with its first segment.
+    #[allow(unsafe_code)]
+    // SAFETY: as in `static_pie_header`: the linker defines `__ehdr_start` only where the ELF
+    // header lies in a loaded segment, mapped readable for the process's lifetime.
+    let bytes = unsafe { conv::bytes_at(ehdr, liella_ld::elf::EHDR_SIZE) };
+    let (phoff, phnum) = boot::own_headers(bytes).ok_or(BootError::Segments)?;
+    // The headers lie in the first loaded segment, which maps file offset 0 (the shared-object
+    // layout of GNU ld and lld), so `ehdr + e_phoff` is their run-time address.
+    relocate_self(ehdr.wrapping_add(usize::try_from(phoff).unwrap_or(0)), phnum, ehdr)
+}
+
 /// Pass 2: each IRELATIVE entry's resolver (bias + addend) is called and its result stored. Runs
 /// after pass 1 and after the CPU paths are chosen, before the RELRO segment is protected.
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn irelative(r: &Relocated) -> Result<(), BootError> {
     for (addr, len) in [r.rela, r.jmprel] {
         // UNSAFE(slice): a relocation table of the image (as in `relocate_self`).

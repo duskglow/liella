@@ -75,6 +75,17 @@ pub fn position_independent(ehdr: &[u8]) -> bool {
     matches!(ehdr.get(16..18), Some(&[a, b]) if u16::from_ne_bytes([a, b]) == et::DYN)
 }
 
+/// Where an image's own program headers are, from its ELF header (`ehdr`, its first bytes as
+/// mapped): `(e_phoff, e_phnum)`. `ld.so` finds its headers this way (`AT_PHDR` names the
+/// program's when the kernel starts it as an interpreter). `None` unless `e_phentsize` is the
+/// 64-bit header size.
+pub fn own_headers(ehdr: &[u8]) -> Option<(u64, usize)> {
+    let phoff = u64::from_ne_bytes(ehdr.get(32..40)?.try_into().ok()?);
+    let entsize = u16::from_ne_bytes(ehdr.get(54..56)?.try_into().ok()?);
+    let phnum = u16::from_ne_bytes(ehdr.get(56..58)?.try_into().ok()?);
+    (usize::from(entsize) == crate::elf::PHDR_SIZE).then_some((phoff, usize::from(phnum)))
+}
+
 /// The image's program headers (`phnum` headers as words, as the kernel mapped them): where its
 /// ELF header is linked, its dynamic array and its one writable segment.
 pub fn image(words: &[u64], phnum: usize) -> Result<Image, BootError> {

@@ -1016,6 +1016,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
     println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
     run_libm(root, &cargo, &cc, &ar, profile)?;
+    run_ld(root, &cargo, &cc, profile)?;
     check_placement(root, &release)?;
     // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
     crate::placeholders::check_no_private(&release)?;
@@ -1029,6 +1030,61 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     fs::write(&marker, format!("{}
 ", profile.name())).map_err(|e| e.to_string())?;
     publish(&marker, &release.join(".profile"))
+}
+
+/// The interpreter product (phase 14 DL-5, R14-2, D-27.13): `crates/ld-so` as a static archive,
+/// linked with the `ld` variant of `machine/entry.S` into `target/liella/<Arch::INTERP>`, a shared
+/// object whose entry point is `liella_machine_ld_entry` and whose every symbol is local (no
+/// exports before the loader has any, R14-12), then checked: [`check_interp`] (L14-1).
+/// The interpreter's Rust code runs before its image is relocated (design §0a item 9): with the
+/// `pie` model every symbol is local to the image, so calls and data references are PC-relative,
+/// never through a GOT slot that still holds a link-time address (rustc's default no-PLT calls
+/// load the callee from the GOT; the first, `liella_link_image_header`, crashed ld.so). Every
+/// symbol is local in the linked object (version script), so the model's assumption holds.
+const LD_RUSTFLAGS: &str = "-Crelocation-model=pie";
+
+fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), String> {
+    use liella_ld::arch::Arch as _;
+    let name = liella_ld::arch::Native::INTERP;
+    let manifest = root.join("crates/ld-so/Cargo.toml");
+    let product = root.join("target/product");
+    let release = root.join("target/liella");
+    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))))?;
+    let archive = product.join(profile.name()).join("libld_so.a");
+    let entry = product.join("ld-entry.o");
+    run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
+    let map = product.join("ld.map");
+    fs::write(&map, "{\n  local: *;\n};\n").map_err(|e| e.to_string())?;
+    let out = release.join(name);
+    let staged = tmp_name(&out);
+    run(Command::new(cc)
+        .args(["-shared", "-nostdlib", "-Wl,--gc-sections", "-Wl,-z,now", "-Wl,-z,relro", "-Wl,--hash-style=gnu", "-Wl,-z,pack-relative-relocs", "-Wl,-e,liella_machine_ld_entry", "-Wl,-Bsymbolic"])
+        .arg(format!("-Wl,--version-script={}", map.display()))
+        .arg(format!("-Wl,-soname,{name}"))
+        .arg(&entry)
+        .arg(&archive)
+        .arg("-lgcc")
+        .arg("-o")
+        .arg(&staged))?;
+    check_interp(&staged)?;
+    publish(&staged, &out)?;
+    println!("so: target/liella/{name} (the interpreter; L14-1 link check passed)");
+    Ok(())
+}
+
+/// L14-1 over a linked interpreter: no undefined symbol, no `DT_NEEDED`, relocations only
+/// `RelocKind::Relative` and RELR, no text relocations (`liella_ld::link`, design §1).
+pub(crate) fn check_interp(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r = liella_ld::link::check::<liella_ld::arch::Native>(&bytes).map_err(|e| format!("{}: {e:?}", path.display()))?;
+    if r.holds() {
+        return Ok(());
+    }
+    let first = r.first_undefined.map(|n| String::from_utf8_lossy(n).into_owned()).unwrap_or_default();
+    Err(format!(
+        "{}: the interpreter's link invariant (L14-1) does not hold: dynamic {}, {} undefined symbols (first {first:?}), {} DT_NEEDED, {} relocations other than RELATIVE/RELR (first {:?}), text relocations {}",
+        path.display(), r.dynamic, r.undefined, r.needed, r.other, r.first_other, r.textrel
+    ))
 }
 
 /// The names `spec/abi/versions.tsv` gives `libm.so.6` only that glibc 2.39's `libc.a` defines all

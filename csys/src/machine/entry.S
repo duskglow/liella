@@ -25,6 +25,30 @@
  * at link time, so the start of every other program tests nothing. A static PIE runs this code
  * before its relocation: every reference here is PC-relative (no GOT slot, which would still
  * hold a link-time address); `cargo xtask so` refuses a GOT-typed relocation in the object. */
+#ifdef LIELLA_LD
+/* Assembled with -DLIELLA_LD it is the entry of ld.so (phase 14 DL-5, R14-8 "program entry", D-27.13),
+ * liella_machine_ld_entry, the product's ELF entry point. Register convention: the kernel enters
+ * with %rsp at argc (the initial stack as above); this clears %rbp (outermost frame), passes that
+ * stack pointer in %rdi, aligns %rsp to 16 bytes and calls liella_ld_start, which never returns.
+ * It runs before ld.so is relocated: the call is PC-relative to a hidden symbol (no GOT, no PLT;
+ * the product's version script makes every symbol local). Declared once in boundary/src/arch/. */
+	.section .text.liella_machine_ld_entry,"ax",@progbits
+	.globl liella_machine_ld_entry
+	.hidden liella_machine_ld_entry
+	.hidden liella_ld_start
+	.type liella_machine_ld_entry, @function
+	.p2align 4
+liella_machine_ld_entry:
+	.cfi_startproc
+	.cfi_undefined %rip
+	xorl %ebp, %ebp
+	movq %rsp, %rdi
+	andq $-16, %rsp
+	call liella_ld_start
+	hlt
+	.cfi_endproc
+	.size liella_machine_ld_entry, .-liella_machine_ld_entry
+#else
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start
 	.hidden liella_eh_frame_start
@@ -55,4 +79,5 @@ _start:
 	hlt
 	.cfi_endproc
 	.size _start, .-_start
+#endif
 	.section .note.GNU-stack,"",@progbits

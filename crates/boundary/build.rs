@@ -56,6 +56,8 @@ fn main() {
     let export = env::var_os("CARGO_FEATURE_EXPORT").is_some();
     // The products' runtime (`__libc_start_main`, `environ`, ...): LIELLA_RUNTIME.
     let runtime = env::var_os("CARGO_FEATURE_RUNTIME").is_some();
+    // The ld.so product (feature `ld`, D-27.13): LIELLA_LD (the image anchor, adapter/image_anchor.c).
+    let ld = env::var_os("CARGO_FEATURE_LD").is_some();
 
     // The libm product (`crates/libm-so`): LIELLA_LIBM names the math forwarders it owns.
     let libm = env::var_os("CARGO_FEATURE_LIBM").is_some();
@@ -86,6 +88,7 @@ fn main() {
             .arg(if linked { "-c" } else { "-fsyntax-only" })
             .args(export.then_some("-DLIELLA_EXPORT"))
             .args(runtime.then_some("-DLIELLA_RUNTIME"))
+            .args(ld.then_some("-DLIELLA_LD"))
             .args(libm.then_some("-DLIELLA_LIBM"))
             .arg("-I").arg(csys.join("include"))
             .arg(src);
