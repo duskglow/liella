@@ -20,12 +20,12 @@ use liella_boundary::sys::CSys;
 use liella_kernel::sys::Sys;
 
 /// The number of threads of this process (entries of `/proc/self/task`; 0 if unreadable).
-pub(crate) fnthreads() -> usize {
+pub(crate) fn threads() -> usize {
     std::fs::read_dir("/proc/self/task").map(|d| d.count()).unwrap_or(0)
 }
 
 /// Whether the caller is the only thread of its process (reported on standard error when not).
-pub(crate) fnsole_thread() -> bool {
+pub(crate) fn sole_thread() -> bool {
     let n = threads();
     if n != 1 {
         eprintln!("sole_thread: {n} threads where the case reads a handler's state (run it through single_threaded)");
@@ -35,7 +35,7 @@ pub(crate) fnsole_thread() -> bool {
 
 /// Run `body` in a child made by the library's `fork` (only the calling thread is copied) and
 /// wait for it: true when `body` returned true (false when it returned false or panicked).
-pub(crate) fnsingle_threaded(body: impl FnOnce() -> bool) -> bool {
+pub(crate) fn single_threaded(body: impl FnOnce() -> bool) -> bool {
     let pid = liella_boundary::fork::fork().unwrap();
     if pid == 0 {
         let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).unwrap_or(false);
