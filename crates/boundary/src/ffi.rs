@@ -132,6 +132,7 @@ unsafe extern "C" {
     /// has AVX2 and the OS saves its state (`crate::cpu`).
     pub(crate) safe fn liella_machine_set_scan_level(level: u32);
     /// The scanners' current path (0 = SSE2, 1 = AVX2), for the self-tests (SHORT-3). No obligation.
+    #[cfg(feature = "selftest")]
     pub(crate) safe fn liella_machine_scan_level_get() -> u32;
     /// Bytes before the first NUL at `s` (aligned vector reads, never across a page). Proof
     /// obligation: `s` is non-NULL and a NUL-terminated string (`crate::strz`).

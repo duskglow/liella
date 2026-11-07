@@ -19,5 +19,6 @@ unsafe extern "C" {
     /// `csys/src/machine/entry.S` assembled with `-DLIELLA_LD`: the entry point of `ld.so`. The
     /// kernel enters it with `%rsp` at `argc`; it passes that address to `ld::liella_ld_start`.
     /// Never called from Rust: its address is compared with `AT_ENTRY` (run as a program or not).
+    // ARCH(x86_64): the primitive's register convention is x86-64's (entry.S); aarch64 has its own (A-4).
     pub(crate) safe fn liella_machine_ld_entry();
 }

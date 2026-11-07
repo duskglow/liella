@@ -1,0 +1,16 @@
+# DL-LDSO-PRODUCT and -2 (phase 14 DL-5): one plant per L14-1 check (crates/ld/src/link.rs), the
+# invariant's conjunction, and the product start (crates/boundary/src/ld.rs).
+link-undefined | crates/ld/src/link.rs | lit:if sym.shndx == SHN_UNDEF { ==> if sym.shndx == SHN_UNDEF && false { | cargo test -p liella-ld --test ldso_link | msg:ldso_link_undefined_symbol_refused.*(FAILED|panicked)
+link-needed | crates/ld/src/link.rs | lit:r.needed = r.needed.saturating_add(1); ==> r.needed = 0; | cargo test -p liella-ld --test ldso_link | msg:ldso_link_needed_refused.*(FAILED|panicked)
+link-reloc-kind | crates/ld/src/link.rs | lit:if rela.kind == RelocKind::Relative { ==> if rela.kind == rela.kind { | cargo test -p liella-ld --test ldso_link | msg:ldso_link_non_relative_refused.*(FAILED|panicked)
+link-textrel | crates/ld/src/link.rs | lit:r.textrel = d.get(DT_TEXTREL) ==> r.textrel = false && d.get(DT_TEXTREL) | cargo test -p liella-ld --test ldso_link | msg:ldso_link_textrel_refused.*(FAILED|panicked)
+link-holds-needed | crates/ld/src/link.rs | lit: && self.needed == 0 ==> | cargo test -p liella-ld --test ldso_link | msg:ldso_link_needed_refused.*(FAILED|panicked)
+ld-entry-check | crates/boundary/src/ld.rs | lit:.and_then(|e| usize::try_from(e).ok()) != Some(own_entry) ==> .and_then(|e| usize::try_from(e).ok()) == Some(own_entry) | sh -c 'cargo xtask so && cargo test -p liella-ld --test ldso_link ldso_product' | msg:ldso_product_(runs_at_random_bases|refuses_as_interpreter).*(FAILED|panicked)
+ld-skip-relocation | crates/boundary/src/ld.rs | lit:if crate::bootstrap::relocate_image(ehdr).is_err() { ==> if false && crate::bootstrap::relocate_image(ehdr).is_err() { | sh -c 'cargo xtask so && cargo test -p liella-ld --test ldso_link ldso_product' | msg:ldso_product_runs_at_random_bases.*(FAILED|panicked)
+link-reloc-symbols | crates/ld/src/link.rs | lit:count = count.max(rela.sym.saturating_add(1)); ==> | cargo test -p liella-ld --test ldso_link | msg:ldso_link_undefined_symbol_refused.*(FAILED|panicked)
+# DL-LDSO-PRODUCT-2: the pre-relocation check (xtask/src/so.rs) and its use on the product.
+prereloc-word-range | xtask/src/so.rs | lit:relocated.range(t.saturating_sub(7)..=t) ==> relocated.range(t..=t) | cargo test -q -p xtask interp_prerelocation | msg:interp_prerelocation_reads_are_refused.*(FAILED|panicked)
+prereloc-follow | xtask/src/so.rs | lit:Some(Some(j)) => todo.push(j), ==> Some(Some(_)) => {} | cargo test -q -p xtask interp_prerelocation | msg:interp_prerelocation_reads_are_refused.*(FAILED|panicked)
+prereloc-cut | xtask/src/so.rs | lit:insns = insns.get(..=cut).unwrap_or(insns); ==> let _ = cut; | cargo test -q -p xtask interp_prerelocation | msg:interp_prerelocation_reads_are_refused.*(FAILED|panicked)
+prereloc-indirect-call | xtask/src/so.rs | lit:if op.starts_with("call") { ==> if false { | cargo test -q -p xtask interp_prerelocation | msg:interp_prerelocation_reads_are_refused.*(FAILED|panicked)
+ld-got-call-before-relocation | crates/boundary/src/ld.rs | lit:if crate::bootstrap::relocate_image(ehdr).is_err() { ==> if crate::ffi_sys::liella_sys_write(-1, core::ptr::null(), 0) == 0 || crate::bootstrap::relocate_image(ehdr).is_err() { | cargo xtask so | msg:liella_ld_start [0-9a-f]+: .*reads a relocated word before relocation

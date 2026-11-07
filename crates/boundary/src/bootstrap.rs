@@ -88,10 +88,11 @@ pub(crate) fn relocate_self(phdr: usize, phnum: usize, ehdr: usize) -> Result<Re
     Ok(Relocated { bias, writable: img.writable, rela, jmprel })
 }
 
-/// `ld.so`'s pass 1 (DL-5): its own ELF header (run-time address `ehdr`, from
-/// `liella_link_image_header`) names its program headers. Its link check (L14-1) leaves it no
+/// `ld.so`'s pass 1 (DL-5): its own ELF header (run-time address `ehdr` of `__ehdr_start`, taken
+/// PC-relatively by `liella_machine_ld_entry`) names its program headers. Its link check (L14-1) leaves it no
 /// IRELATIVE entry, so there is no pass 2.
 #[cfg(feature = "ld")]
+#[inline(never)] // `cargo xtask so` finds the end of the unrelocated code at its call (D-27.13).
 pub(crate) fn relocate_image(ehdr: usize) -> Result<Relocated, BootError> {
     // UNSAFE(slice): the image's ELF header, mapped with its first segment.
     #[allow(unsafe_code)]

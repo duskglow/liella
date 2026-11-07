@@ -106,3 +106,29 @@ pub fn check<A: Arch>(bytes: &[u8]) -> Result<LinkReport<'_>, ElfError> {
     r.textrel = d.get(DT_TEXTREL).is_some() || d.get(DT_FLAGS).is_some_and(|f| f & DF_TEXTREL != 0);
     Ok(r)
 }
+
+/// Calls `f` with the link-time address of every word the dynamic relocations of `bytes` write
+/// (RELA and JMPREL `r_offset`s, RELR addresses), in table order. Until `ld.so`'s relocation loop
+/// has run, each such word still holds its link-time value: `cargo xtask so` refuses an `ld.so`
+/// whose code before that point reads one (design §1, D-27.13).
+///
+/// # Errors
+///
+/// The reader's errors for a malformed file, as [`check`].
+pub fn relocated_words<A: Arch>(bytes: &[u8], mut f: impl FnMut(u64)) -> Result<(), ElfError> {
+    let elf = Elf::parse::<A>(bytes)?;
+    let Some(d) = elf.dynamic()? else {
+        return Ok(());
+    };
+    for table in [d.rela::<A>()?, d.jmprel::<A>()?].into_iter().flatten() {
+        for rela in table {
+            f(rela.offset);
+        }
+    }
+    if let Some(relr) = d.relr()? {
+        for addr in relr {
+            f(addr?);
+        }
+    }
+    Ok(())
+}

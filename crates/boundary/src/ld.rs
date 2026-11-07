@@ -12,7 +12,9 @@
 //! every reference is PC-relative (the product's version script makes every symbol local).
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::ffi::{c_int, c_void};
+#[cfg(not(feature = "export"))]
+use core::ffi::c_int;
+use core::ffi::c_void;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::Relaxed;
 
@@ -88,13 +90,15 @@ fn c_string(addr: usize) -> &'static [u8] {
     unsafe { conv::bytes_at(addr, len) }
 }
 
-/// The entry of `ld.so` (called by `liella_machine_ld_entry` with the initial stack pointer).
-#[unsafe(no_mangle)]
+/// The entry of `ld.so` (called by `liella_machine_ld_entry` with the initial stack pointer
+/// `sp` and the run-time address `ehdr` of the image's own ELF header, which the entry takes
+/// PC-relatively: no call and no GOT slot is needed to find the image before it is relocated).
 // UNSAFE(export): the Rust side of the ld entry primitive; local to `ld.so` (version script).
+#[unsafe(no_mangle)]
 #[allow(unsafe_code)]
-pub extern "C" fn liella_ld_start(sp: usize) -> ! {
+pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     // 1. The interpreter's own relocations; nothing before this reads a stored address.
-    if crate::bootstrap::relocate_image(crate::ffi::liella_link_image_header()).is_err() {
+    if crate::bootstrap::relocate_image(ehdr).is_err() {
         write_all(2, b"ld.so: cannot relocate the interpreter\n");
         exit(program::FAILURE);
     }
@@ -124,6 +128,7 @@ pub extern "C" fn liella_ld_start(sp: usize) -> ! {
     // SAFETY: `words` words from `auxv` were read one by one above; the kernel's vector stays mapped.
     let aux = Auxv::from_words(unsafe { conv::words_at(auxv, words) });
     // 4. Run as a program only when the kernel entered at our own entry point.
+    #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
     let own_entry = (crate::arch::liella_machine_ld_entry as *const ()).expose_provenance();
     if aux.get(AT_ENTRY).and_then(|e| usize::try_from(e).ok()) != Some(own_entry) {
         write_all(2, program::AS_INTERPRETER);
@@ -171,6 +176,7 @@ unsafe impl GlobalAlloc for NoHeap {
     unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
         core::ptr::null_mut()
     }
+    // UNSAFE(allocator): nothing to free (see the impl's SAFETY).
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
 }
 
@@ -180,8 +186,8 @@ unsafe impl GlobalAlloc for NoHeap {
 macro_rules! ld_mem {
     ($($name:ident($($arg:ident: $ty:ty),*) -> $ret:ty;)*) => {$(
         #[cfg(not(feature = "export"))]
-        #[unsafe(no_mangle)]
         // UNSAFE(export): a runtime symbol of the ld.so product (local, never exported).
+        #[unsafe(no_mangle)]
         #[allow(unsafe_code)]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         #[doc = concat!("`", stringify!($name), "` inside `ld.so` (local).")]

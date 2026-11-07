@@ -11,8 +11,7 @@
  */
 #include <stdint.h>
 
-/* The products with a self-relocating start: libc (LIELLA_RUNTIME) and ld.so (LIELLA_LD, D-27.13). */
-#if defined(LIELLA_RUNTIME) || defined(LIELLA_LD)
+#ifdef LIELLA_RUNTIME
 extern const char __ehdr_start[] __attribute__((visibility("hidden")));
 
 /* The run-time address of the ELF header of the image this object is linked into. */

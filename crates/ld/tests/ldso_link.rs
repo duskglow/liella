@@ -46,6 +46,7 @@ fn report(bytes: &[u8]) -> LinkReport<'_> {
 /// A local object and a pointer to it: RELATIVE only; hidden visibility keeps both local.
 const CLEAN: &str = "static int v = 1;\n__attribute__((visibility(\"hidden\"))) int *p = &v;\nint get(void) { return *p; }\n";
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_link_clean_object_holds() {
     if !cc_ok() {
@@ -62,6 +63,7 @@ fn ldso_link_clean_object_holds() {
     assert!(r.holds(), "clean RELR object: {r:?}");
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_link_undefined_symbol_refused() {
     if !cc_ok() {
@@ -75,6 +77,7 @@ fn ldso_link_undefined_symbol_refused() {
     assert!(!r.holds());
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_link_needed_refused() {
     if !cc_ok() {
@@ -90,6 +93,7 @@ fn ldso_link_needed_refused() {
     assert!(!r.holds());
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_link_non_relative_refused() {
     if !cc_ok() {
@@ -104,6 +108,7 @@ fn ldso_link_non_relative_refused() {
     assert!(!r.holds());
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_link_textrel_refused() {
     if !cc_ok() {
@@ -119,6 +124,7 @@ fn ldso_link_textrel_refused() {
     assert!(!r.holds());
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_program_arguments() {
     let a = |v: &[&'static [u8]]| program::action(v.iter().copied());
@@ -144,6 +150,7 @@ fn product() -> Option<PathBuf> {
     }
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_product_link_invariant_holds() {
     let Some(p) = product() else { return };
@@ -153,6 +160,7 @@ fn ldso_product_link_invariant_holds() {
     assert!(r.relative + r.relr_words > 0, "the interpreter has relocations to apply: {r:?}");
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_product_runs_at_random_bases() {
     let Some(p) = product() else { return };
@@ -183,6 +191,7 @@ fn ldso_product_runs_at_random_bases() {
     }
 }
 
+/// (no spec clause: the interpreter's link and start invariants (L14-1, design §1, D-27.13).)
 #[test]
 fn ldso_product_refuses_as_interpreter() {
     let Some(p) = product() else { return };
