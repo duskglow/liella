@@ -397,7 +397,7 @@ fn init_cold_startup_functions_are_grouped() {
     // change: `start::<false>`, 5.1 KiB) and the IRELATIVE pass. Outside the group, `start` sat in
     // cold `.text` and crossed a 64 KiB window when code before it grew (one more start-up fault).
     // Generic instantiations carry the type after the name, so these match anywhere in the name.
-    for f in ["15liella_boundary7runtime5startKb0_", "15liella_boundary7runtime14apply_irelative"] {
+    for f in ["15liella_boundary7runtime5startKb0_", "15liella_boundary7runtime15apply_irelative"] {
         assert!(
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name.contains(f))),
             "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
