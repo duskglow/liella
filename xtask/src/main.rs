@@ -211,7 +211,7 @@ fn arch_tools() -> arch::Tools {
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 25] =
+    let checks: [(&str, Check); 26] =
         [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()]))];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
