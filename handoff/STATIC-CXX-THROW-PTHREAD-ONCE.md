@@ -1,48 +1,47 @@
-# STATIC-CXX-THROW-PTHREAD-ONCE (handoff, also the full report)
+# STATIC-CXX-THROW-PTHREAD-ONCE (-2) (handoff, also the full report)
 
-State: branch `task/static-cxx-throw-pthread-once` (from origin/next 66b8d3ba), code head 2e2fe629, role kanon:~/w/kn1.
-Result: a static C++ program that throws without threads no longer jumps to address 0.
+State: branch `task/static-cxx-throw-pthread-once-2` (from origin/next 66b8d3ba), code head 127fa1dd (later commits:
+handoff/ only), role mei:~/w/s1. Result: a static C++ program that throws without threads runs (run 1), and the link edge
+that makes it work now puts no word in libc.so.6 or in any program (run 2, ruling #3741).
 
-## Probe (black-box; build host's g++ 13.3, reference static libc 2.39; `nm`, `ld -y`)
-* libgcc_eh's weak thread references: unwind-dw2.o `__pthread_key_create`, `pthread_once`; unwind-dw2-fde-dip.o
-  `__pthread_key_create`, `pthread_mutex_lock/unlock`, `pthread_cond_wait/broadcast`; emutls.o also
-  `pthread_getspecific/setspecific`, `pthread_key_create`.
-* Reference, throw/catch, no threads: links `pthread_once`/`__pthread_once` (pulled by a libc member's own strong reference to
-  `__pthread_once`) and the mutex functions; NOT `__pthread_key_create`. Runs (rc 0).
-* Reference, one thread (std::thread): `pthread_create.o` references `__pthread_key_create`; both it and `pthread_once` linked; runs.
-* Liella before: libc.a's one Rust member defines `__pthread_key_create`, getspecific, setspecific, key_delete, mutex
-  lock/unlock, pthread_create, ...; `pthread_once`/`__pthread_once`/`call_once` live in csys's machine/once.S member, which
-  references the Rust member but not the other way round. A static throw linked the keys without `pthread_once`: SIGSEGV
-  (rc 139). Not PIE-specific.
-* So both libraries end with "`__pthread_key_create` linked => `pthread_once` linked", the reference by keeping keys out unless
-  threads are used, Liella (one Rust member) by pulling once.S's member whenever the Rust member is pulled.
+## Decisions in force
+* D-NEW (plan/07-decisions/s22-threads.md, last row; no D-22 id was reserved in the brief: the coordinator assigns it with
+  tools/assign_placeholder.sh, which also covers xtask/src/so.rs, s22_threads.rs and cxx_throw_products.rs).
 
-## Fix (crates/boundary/src/posix/s22_threads.rs, keys section)
-`#[used] static LINK_PTHREAD_ONCE` holds `crate::ffi::liella_machine_once` (once.S): the Rust member gets
-`U __liella_libc_liella_machine_once` (checked with nm on the built libc.a), so the archive member with `pthread_once` comes
-along. No new unsafe (a safe extern fn's address). `--gc-sections` drops the word in a static link.
-Rejected: `global_asm!` `.reloc R_X86_64_NONE` (zero bytes, but `global_asm!` is `unsafe_code` and no UNSAFE category
-covers it: a policy ruling, not worth it here).
+## What was done
+* Run 1 (probe and fix): see D-NEW. libc.a's Rust member (`__pthread_key_create`, mutexes, ...) keeps
+  `liella_machine_once`'s address in a `#[used]` static, so it refers to once.S's member (`pthread_once`, `__pthread_once`,
+  `call_once`). A static link that takes the keys therefore also takes `pthread_once`.
+* Run 2 found (readelf): `#[used]` makes the section `SHF_GNU_RETAIN` (flags WAR), so `--gc-sections` never dropped it.
+  Run 1's "gc drops it" was wrong. libc.so.6 had the word plus one RELATIVE relocation (RELACOUNT 2221 vs 2220 on origin/next).
+  libc.a and libc.so.6 come from ONE rustc build (`crates/libc-so` staticlib; the .so is linked from that archive), so no
+  cfg or feature can separate them. A rustc probe showed that every `#[link_section]` name tried (.note.*, .comment.*,
+  .debug_*, custom, .llvm.offloading.*) is still SHF_ALLOC. `#[unsafe(link_section)]` is also in no permitted unsafe
+  category of liella-boundary.
+* Fix: the static is `LIELLA_LINK_EDGE_PTHREAD_ONCE`. In `build_archive_locked`, `exclude_link_edges` runs
+  `objcopy --set-section-flags=.data.rel.ro.*LIELLA_LINK_EDGE_*=contents,exclude` on the archive, so ld drops the word
+  and its relocation from every output. The undefined symbol still pulls the member. The build fails if there is no such
+  section or the flag did not take, and `check_no_link_edge` fails it if libc.so.6 has the symbol.
+* Codemap: `pthread_once`, `__pthread_once`, `call_once` now name csys/src/machine/once.S:77/85/93, first call
+  `liella_once_begin`. This was a hand edit: the file comes from the scratchpad's codemap.py, which my brief did not let
+  me open.
 
-## Tests (crates/core/tests/cxx_throw_products.rs; g++ absent => `SKIPPED:` line)
-`static_cxx_throw_without_threads_runs`, `static_cxx_throw_with_one_thread_runs` (oracle/cxx_throw_plain.cc, -DWITH_THREAD),
-`static_c_pthread_once_alone_runs` (oracle/once_alone.c), each with and without `--gc-sections`.
-A symbol-table assertion was tried and dropped: plants showed it never fired (no unresolved `w` entry is listed for the
-mutant), the run's signal 11 is what catches it.
+## Evidence (mei, Skylake-SP)
+* libc.so.6 from the branch is BYTE-IDENTICAL to origin/next's (`cmp`, RAM copies built the same way; RELACOUNT 2220
+  both), so startup_instr_c cannot move. The count jobs ran `cargo xtask bench --counters --runs 3 --rows
+  cbench_startup/startup_instr_c`, but this host has no instruction event (column `-`): the instruction number is
+  NOT MEASURED. The byte identity is the proof.
+* so2: cxx_throw_products 5 passed (g++ present, no SKIPPED).
+* plants2 `static-cxx-throw-pthread-once-2-plants2` rc 0: 4 CAUGHT, 0 SURVIVED, 0 WARN (run from a RAM copy of the
+  final tree).
+* gate `static-cxx-throw-pthread-once-2-gate` (all-features clippy, xtask clippy, static, affected --base origin/next).
+  It ESCALATED TO FULL by itself because xtask/src/so.rs changed, and was still running at hand-back. Run on tree 127fa1dd
+  (the code is the same as the final head; only handoff/ differs).
+* lint0 (inherited head: clippy, static, so) rc 0.
+* Superseded: so1 (my first readelf filter matched the .rela line), plants (edge plants WARN-NO-MSG: retarget's nested fn
+  carried the static's name, and the build guard caught edge-unused before the run), basebench (wrong bench argument).
 
-## Jobs (kanon)
-* gate3 `static-cxx-throw-pthread-once-gate3` rc 0 (clippy -D warnings, xtask static, affected --base origin/next: 6 suites ok, 612 passed, 0 failed; conformance 17/0) and plants3
-  `static-cxx-throw-pthread-once-plants3` rc 0: 2 CAUGHT, 0 SURVIVED, 0 WARN.
-* Superseded: gate (my test's first invariant too strict), plants (baseline red, same), gate2 (clippy indexing), plants2
-  (both plants failed with signal 11 but not the msg regex: WARN-NO-MSG).
-
-## INFORMATIONAL / RULING
-* No decision id was reserved in the brief, so no D-row was added; recommend a one-line §22 row for the link edge.
-* The kept word is also in libc.so.6 (`nm` shows LINK_PTHREAD_ONCE after `--gc-sections`): one 8-byte data word plus one
-  RELATIVE relocation at load. NOT measured. If that matters, a follow-up can keep it out of the .so (e.g. a feature for
-  the archive build).
-* docs/codemap/symbols.tsv names s22_threads.rs:986 for `pthread_once`; it lives in csys/src/machine/once.S (stale row).
-* No differences row: behaviour matches the reference (the throw runs).
-
-## Next step
-Read gate3/plants3 (`~/bin/jobwait static-cxx-throw-pthread-once-gate3 static-cxx-throw-pthread-once-plants3` on kanon).
+## Open / next step
+* Read the gate: `~/bin/jobwait static-cxx-throw-pthread-once-2-gate` on mei. If green, land.
+* INFORMATIONAL: codemap.py should map `export! { asm ...}` entries to their .S label (39 such sites; 3 fixed by hand here).
+* INFORMATIONAL: mei has no instruction event for `bench --counters`. Startup counts need a host that has one.
