@@ -34,6 +34,7 @@ mod exp_log;
 mod hyperbolic;
 pub mod quick;
 pub mod quick_log;
+pub mod quick_pow;
 #[cfg(test)]
 mod tier_tests;
 pub use exp_log::{cbrt_nearest, expm1_nearest, log1p_nearest};

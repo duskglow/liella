@@ -796,6 +796,12 @@ pub fn log_tiered(x: f64) -> Option<f64> {
     crate::hot::log_nearest(x)
 }
 
+/// The `double` `pow` quick phase alone (D-10.62; `pow`'s tier 1) in the build [`set_math_fma`]
+/// chose: the correctly rounded `x^y`, or `None` when the phase declines.
+pub fn pow_quick(x: f64, y: f64) -> Option<f64> {
+    crate::hot::pow_quick(x, y)
+}
+
 /// The `log` quick phase's unrounded `(zh, zl)` in the chosen build: `ln x = zh + zl` within
 /// `liella_math::fast64::quick_log::RHO·|zh|`.
 pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
