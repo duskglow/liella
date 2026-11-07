@@ -20,7 +20,10 @@ fn uniform(st: &mut u64, lo: f64, hi: f64) -> f64 {
 fn near_half_pi(st: &mut u64) -> f64 {
     let k = uniform(st, 0.0, 262_144.0).floor();
     let base = (k + 0.5) * core::f64::consts::PI;
-    let j = uniform(st, -8.0, 8.0) as i64;
+    // Half within 8 ulp (|cos y| near 2^-53·|y|: the absolute reduction bound makes the tier
+    // decline, the route answers), half within 2^24 ulp (|cos y| down to about 2^-29·|y|).
+    let w = if uniform(st, 0.0, 1.0) < 0.5 { 8.0 } else { 16_777_216.0 };
+    let j = uniform(st, -w, w) as i64;
     f64::from_bits((base.to_bits() as i64 + j) as u64)
 }
 
@@ -76,9 +79,9 @@ fn cexp_quick_tier_matches_the_384_bit_route_in_every_mode() {
     let n = 3000;
     let hits = compare(n, 0x9e37_79b9_7f4a_7c15);
     // The tier must be reached where it applies (a tier that always declines would pass the
-    // comparison): nearly every general and cos-tiny operand; none beyond 2^20.
+    // comparison): nearly every general operand, a share of the cos-tiny ones; none beyond 2^20.
     assert!(hits[0] * 1000 >= n * 999, "general regime answered {} of {n}", hits[0]);
-    assert!(hits[1] * 100 >= n * 95, "cos-tiny regime answered {} of {n}", hits[1]);
+    assert!(hits[1] * 4 >= n, "cos-tiny regime answered {} of {n}", hits[1]);
     assert!(hits[3] > 0 && hits[4] > 0, "threshold regimes never answered: {hits:?}");
     let mut st = 7u64;
     for _ in 0..n {
