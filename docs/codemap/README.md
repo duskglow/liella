@@ -67,7 +67,6 @@ Other crates: abi, boundary, core, kernel, ld, legacy, libc-so, libm-so, math, m
 | `/etc/host.conf` | crates/legacy/src/nss.rs:83 |
 | `/etc/hostid` | crates/legacy/src/sys_compat.rs:282 |
 | `/etc/hosts` | crates/legacy/src/nss.rs:85 |
-| `/etc/hosts.equiv` | crates/legacy/src/rcmd.rs:541 |
 | `/etc/localtime` | crates/core/src/time.rs:39 |
 | `/etc/netgroup` | crates/legacy/src/nss.rs:91 |
 | `/etc/networks` | crates/legacy/src/nss.rs:86 |
