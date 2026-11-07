@@ -1,0 +1,17 @@
+{"task": "PERF-FIRSTCALL-MKTIME-SNPRINTF-2", "model": "opus", "tokens": null,
+ "result": "Option A timed (booked Ivy Bridge + N100, A/B vs pre-A): first_mktime 5.05->0.86 / 4.9->0.98, first_snprintf 0.70 / 0.61, first_localtime_r +0.14 / +0.07 (smaller than the mktime gain): A stands; hot-text regen NEGATIVE (not kept); AcqRel warning fixed; D-23.6 amended",
+ "branch": "task/perf-firstcall-mktime-snprintf-2", "head": "43719b11",
+ "gate": {"affected": "7311 passed / 0 failed (8 suites ok, conformance 6/6)", "peak": "13G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "first_localtime_r_new_york costs +6.8 us on Ivy Bridge (+1.8 us N100) with the counter query at zone load; not attributed (prctl cost or a fault); profile before a follow-up",
+   "second_mktime_new_york 1.21 Ivy Bridge / 1.42 N100, unchanged by this branch (pre-A tree measures the same)",
+   "regenerating hot-text.list on current next moves the startup memcpy/malloc_debug group behind stdio_compat::load and costs first_snprintf about 3.5 us (Haswell-EP); any future regen needs that checked",
+   "results/timing-sweep-1106e-table.md is not on origin/next; 1106 values were used beside the 1106E figures quoted in the brief",
+   "ops timing bookings 97 (kotori) and 98 (nozomi) cancelled after the runs"],
+ "refused": [],
+ "improvement": "bench --stage --base needs a .git and role dirs have none, so a pre/post A/B needs a manual worktree sync; letting sync_role stage a second tree (or stage --base work from the local worktree) would save about 5 calls per A/B",
+ "next_step": "Land; optional follow-ups: attribute the +6.8 us Ivy Bridge first_localtime_r cost, and second_mktime 1.2-1.4",
+ "report_file": "handoff/perf-firstcall-mktime-snprintf.md",
+ "jobs": ["shiki:pfms2-gate", "shiki:pfms2-plants", "kotori:pfms2-time-kotori", "kotori:pfms2-ab-kotori", "nozomi:pfms2-time-nozomi", "nozomi:pfms2-ab-nozomi"]}

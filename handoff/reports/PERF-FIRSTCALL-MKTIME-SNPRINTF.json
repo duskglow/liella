@@ -1,0 +1,12 @@
+{"task": "PERF-FIRSTCALL-MKTIME-SNPRINTF", "model": "opus", "tokens": null,
+ "result": "Causes found and fixed on head (Haswell-EP, untimed host): first_mktime 6.13x -> 0.93x (zone TSC probe moved to the zone load), first_snprintf 1.48x -> 0.77x (24 KiB format_float frame split); first_localtime_r 1.78x -> 1.91x pending a ruling; booked timing not done",
+ "branch": "task/perf-firstcall-mktime-snprintf", "head": null,
+ "gate": {"affected": "4110 passed / 0 failed (601 ignored), conformance 4/4, clippy+static clean", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Where the zone's one-time PR_GET_TSC query runs: (A, on branch) at the zone file load, so first_mktime 4736 -> 702 ns but first_localtime_r +2.9 us and _r-only programs pay one prctl; (B) at the first gate use, so first_mktime stays at ~6x", "recommendation": "A, then put tsc_probe on the hot-text list to shrink the load-path cost; amend D-23.6 with one sentence"}],
+ "informational": ["Parent/child builds of a86c9677 and bf079683 not made (thread_common forbids old checkouts of others' work); causes shown on head by strace and page-fault records of the cold child", "The first_snprintf stack-frame cost exists on head; which landing exposed it (pages previously touched by startup or by inlining) is not attributed", "Static warning that predates this branch: unused AcqRel import in crates/boundary/src/timer.rs:93"],
+ "refused": [],
+ "jobs": ["shiki:pfms-gate", "shiki:pfms-plants-2", "shiki:pfms-count-head", "shiki:pfms-check"],
+ "improvement": "cbench_opt cold rows have no instruction or fault counters; a per-row minflt/syscall column in the cold child would have made step 1 one job instead of hand traces",
+ "next_step": "Ruling on A; then a booked timing run of the cbench_opt cold rows on an Ivy Bridge timing host and the N100 host, with the 1106E numbers beside them",
+ "report_file": "handoff/perf-firstcall-mktime-snprintf.md"}

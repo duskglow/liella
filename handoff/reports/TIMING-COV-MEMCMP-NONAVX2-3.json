@@ -1,0 +1,18 @@
+{"task": "TIMING-COV-MEMCMP-NONAVX2-3", "model": "opus", "tokens": null,
+ "result": "CI red fixed at its cause: hot-text.list regenerated (tools/hottext/regen.sh on the branch merged with next) so Resolution::same_texts / Mo::hinted / Mo::form follow set_plan; merged tree hot_text_products 8 passed, rebind 1 -> 0; no memcmp code changed",
+ "branch": "task/timing-cov-memcmp-nonavx2-3", "head": "91b851e1",
+ "gate": {"affected": "kanon:tcm-nonavx2-3-gate (affected escalated to FULL for crates/libc-so/hot-text.list; running at hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "Composition-only failure: branch alone passes (rebind 0); branch + origin/next 31ecf574 gives rebind 1 on kanon (Broadwell AVX2) as on the Skylake-SP CI host. perf minor-faults -d: the faulting fetch is Resolution::same_texts at 0x4802c0, pushed past the 0x480000 64 KiB boundary by this story's larger compare section.",
+  "The committed hot-text.list was older than its traces: p_cold first-touches the repeat-lookup functions right after set_plan, but the list had them after the fork/_Exit functions (h533-535). Today's regen (fast profile) also reorders ~35 other keys and drops one duplicate liella_machine_syscall_cancel line; counts on the merge: true 18->17, locale 59->57, tool 62->60, fork 8->7.",
+  "Branch not merged with origin/next (the brief allows no merge); the regen ran on a scratch detached merge and the list merges cleanly (next has not changed it). Release-profile regen not run.",
+  "No plants: no code changed (only the generated layout list); the CI red is the evidence that hot_text_products catches the old order on the composed tree.",
+  "Booked timing (handoff next step 1) still not run; memcmp code unchanged, so no re-count or re-time."
+ ],
+ "refused": [],
+ "jobs": ["kanon:tcm-nonavx2-3-gate"],
+ "improvement": "A cheap static check that hot-text.list's relative order of keys from one probe matches that probe's last trace would catch a stale list before layout growth turns it into a CI fault; and the affected tier escalates a generated layout list to FULL where hot_text_products + the fault tests would be the direct set.",
+ "next_step": "Booked timing of memcmp/bcmp/__memcmpeq rows (Ivy Bridge + N100 forced SSE2), then the separate SSE2 entry (handoff profile).",
+ "report_file": "handoff/timing-cov-memcmp-nonavx2.md"}

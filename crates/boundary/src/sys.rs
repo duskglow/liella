@@ -296,6 +296,7 @@ static VDSO_FNS: [AtomicUsize; 5] = [const { AtomicUsize::new(0) }; 5];
 /// Record the vDSO base from the process's auxiliary vector (the process entry,
 /// `runtime::start`). A process the entry did not start reads `/proc/self/auxv` on first use.
 /// Only the kernel's own value may be passed here: it becomes a slice (`conv::kernel_image`).
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn set_sysinfo_ehdr(base: usize) {
     SYSINFO_EHDR.store(base, Ordering::Release);
 }

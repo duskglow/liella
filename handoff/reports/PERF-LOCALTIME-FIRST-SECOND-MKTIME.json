@@ -1,0 +1,12 @@
+{"task": "PERF-LOCALTIME-FIRST-SECOND-MKTIME", "model": "opus", "tokens": null,
+ "result": "Measurements only, no code: option A adds no page fault, one prctl round trip (~500 kernel instructions, ~2.1 us on Ivy Bridge) that moves from first_mktime to first_localtime_r; the rest of the booked +6.8 us is not reproduced. first_localtime_r's real gap to glibc is 18 vs 4 faults (about 10 of them heap size-class first touches in the zone load). The cold second mktime repeats no work (886 vs 1236 user instructions); the probe gives 0.73-0.78x on Ivy Bridge and 1.08-1.11x on N100 (L1i footprint), so the bench's 1.2/1.4x is not reproduced",
+ "branch": "task/perf-localtime-first-second-mktime", "head": null,
+ "gate": {"affected": "not run: no code change (lint job clippy + static on final head)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "Option A (zone-load PR_GET_TSC query) costs ~2 us on first_localtime_r on Ivy Bridge; the only cure is undoing it, which moves the same cost back to first_mktime", "recommendation": "keep A"}],
+ "informational": ["The unattributed ~4.7 us of the booked +6.8 us: in-process A/B with one layout shows only ~2.1 us; likely bench-binary layout or median noise of the cross-tree A/B", "second_mktime 1.2/1.4x not reproduced by a probe of the bench's order; the bench's between-pass calls (wordexp, gettext, regcomp, ...) are the difference"],
+ "refused": [],
+ "improvement": "CBENCH_COUNTERS covers only steady rows; teaching it the cold first_/second_ rows (per-call counters in the fresh child) would answer cold-row stories without a hand-written probe",
+ "next_step": "Story: size TZif tables from the header counts with one allocation per zone (removes ~10 heap first-touch faults from first_localtime_r); then attribute second_mktime under the bench's exact cold sequence with counters",
+ "report_file": "handoff/perf-localtime-first-second-mktime.md",
+ "jobs": ["shiki:perf-localtime-first-second-mktime-lint", "kotori:perf-localtime-first-second-mktime-tp-kotori", "nozomi:perf-localtime-first-second-mktime-tp-nozomi"]}

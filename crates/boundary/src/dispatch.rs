@@ -13,7 +13,7 @@
 //! `true` only while the CPU has AVX2 and the OS saves the YMM state, which [`select`]'s callers
 //! establish (`cpu::init_with` from `liella_rt::cpu::Features`; `selftest` refuses otherwise).
 
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering::{Relaxed, Release}};
 
 use liella_kernel::fd::Fd;
 use liella_kernel::path::KStr;
@@ -108,6 +108,13 @@ use crate::ffi::liella_machine_cmp_mid as CMP_MID;
 // folding and AVX2 on, because those classes fold the NULL test into their first 32-byte load
 // (ruling #2517 (coordinator, 2026-11-04): NULL folding to 2048 bytes). Stored by [`store_cmp_gates`].
 use crate::ffi::liella_machine_cmp_long as CMP_LONG_WORD;
+// The SSE2 65-2048 fold words (machine/fold.S, TIMING-COV-MEMCMP-NONAVX2-2, D-4.62, ruling #3592):
+// `CMP_SSE` is 2048 while folding is on without AVX2 (those sizes skip the NULL tests: the first
+// access is offset 0 of each region, page zero for a NULL), else 0; `CMP_SSE_NULL` is 0 exactly
+// then, else `usize::MAX` (above the size word, an `a` at or below it takes the checked entry, so
+// with folding off every size above 64 does). Stored by [`store_cmp_gates`].
+use crate::ffi::liella_machine_cmp_sse as CMP_SSE;
+use crate::ffi::liella_machine_cmp_sse_null as CMP_SSE_NULL;
 
 // The compare entries' class words (machine/fold.S, MEMCMP-EQ64 + SEQ-REGRESS): the entries add
 // them in turn to `n - 65`; a carry from WIDE sends 33-64 to the folded AVX2 blocks, a carry from
@@ -145,6 +152,16 @@ fn store_cmp_gates(fold: bool, avx2: bool) {
     let long = if fold && avx2 { crate::hot::CMP_LONG } else { 0 };
     if long == 0 {
         CMP_LONG_WORD.store(0, Relaxed);
+    }
+    // The SSE2 65-2048 fold words (D-4.62): down, the a bound rises before the size word drops;
+    // up, the size word rises before the a bound drops (Release: the size word's store is
+    // visible first), so the bound is never 0 while the size word is 0.
+    if fold && !avx2 {
+        CMP_SSE.store(crate::hot::CMP_LONG, Relaxed);
+        CMP_SSE_NULL.store(0, Release);
+    } else {
+        CMP_SSE_NULL.store(usize::MAX, Relaxed);
+        CMP_SSE.store(0, Release);
     }
     if wide < CMP_WIDE.load(Relaxed) {
         CMP_WIDE.store(wide, Relaxed);

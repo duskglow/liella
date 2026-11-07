@@ -1,0 +1,13 @@
+{"task": "TIMING-COV-MEMCMP-NONAVX2-4", "model": "opus", "tokens": null,
+ "result": "CI conflict resolved: origin/next merged (fold.S keeps next's SSE2 alignment padding and comment plus this story's fold comment, .Lcmp_sse_mid body unchanged; s04 D-4.62 takes this branch's superset row); FULL gate green, hot_text_products rebind 0 on an AVX2 host, plants 4 CAUGHT / 0 SURVIVED",
+ "branch": "task/timing-cov-memcmp-nonavx2-4", "head": null,
+ "gate": {"affected": "FULL (escalated by hot-text.list): 11122 passed / 0 failed, conformance 122 / 0", "peak": "16G (page cache included), oom_kill 0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plants: 4 WARN-NO-MSG (cmp-sse-fold-gate-off, cmp-sse-over-a-null-dropped, eq-sse-fold-gate-off, eq-sse-over-a-null-dropped), the same as run -2: caught by the small_compare correctness sweep, not the NULL test the msg names",
+                   "booked timing (Ivy Bridge, N100 forced SSE2) still never run; no memcmp instruction changed in this run"],
+ "refused": [],
+ "improvement": "a hot-text.list change escalates every per-fix gate to FULL (61 min here); a direct tier that runs hot_text_products for list-only changes would have proved this merge in ~2 min",
+ "next_step": "booked timing of the memcmp/bcmp/__memcmpeq SSE2 rows (Ivy Bridge, N100 forced SSE2), then the separately dispatched SSE2 entry",
+ "report_file": "handoff/timing-cov-memcmp-nonavx2.md",
+ "jobs": ["shiki:tcm-nonavx2-4-check", "shiki:tcm-nonavx2-4-gate", "shiki:tcm-nonavx2-4-htp", "shiki:tcm-nonavx2-4-plants"]}

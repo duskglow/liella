@@ -203,6 +203,7 @@ fn decide(ops: &impl SwapOps, page0: usize, want: bool, disabled: bool) -> Outco
 /// Inlined into both instances of `runtime::start` (D-27.10: the non-PIE start costs what it
 /// did before the static-PIE one).
 #[inline(always)]
+#[cfg_attr(not(feature = "runtime"), allow(dead_code))]
 pub(crate) fn start(avx2: bool, t: &liella::config::Tunables) {
     let _ = install_with(&Kernel, page0_addr(), avx2, swap_disabled(t.no_classed_swap));
 }
