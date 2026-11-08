@@ -1,0 +1,19 @@
+# RECORDS-1 plants: the records validation (xtask/src/records/check.rs) and the stale-view check, caught by `cargo xtask static`.
+# Run: cargo xtask plants handoff/RECORDS-1-plants.txt --dir <new RAM dir>
+# A record whose file name differs from its id.
+stem-differs | records/decisions/D-1/D-1.2.toml | lit:id = "D-1.2" ==> id = "D-1.20" | cargo xtask static | msg:file name D-1\.2\.toml differs from its id D-1\.20
+# The same id in another series directory (a D-4 file taking D-3.1).
+dup-id-other-series | records/decisions/D-4/D-4.1.toml | lit:id = "D-4.1" ==> id = "D-3.1" | cargo xtask static | msg:duplicate id D-3\.1 \(also records/decisions/D-3/D-3\.1\.toml
+# A supersedes link to an id that has no record.
+supersedes-missing | records/decisions/D-X/D-X.55.toml | perl:s/status = "active"\n/status = "active"\nsupersedes = ["D-X.999"]\n/ | cargo xtask static | msg:supersedes D-X\.999, which has no record
+# A supersede cycle needs two records, which one plant cannot write: plant the cycle detection instead; the unit test
+# link_problems builds the two-record cycle and must see it reported.
+cycle-not-reported | xtask/src/records/check.rs | lit:bad.push(format!("supersedes/amends cycle: {} -> {n}", path[from..].join(" -> "))); ==> let _ = from; | cargo test -p xtask records::check | msg:link_problems.*(FAILED|panicked)
+# A non-canonical record: keys out of order.
+keys-out-of-order | records/decisions/D-X/D-X.55.toml | perl:s/story = "RECORDS-1"\ndate = "2026-11-08"\n/date = "2026-11-08"\nstory = "RECORDS-1"\n/ | cargo xtask static | msg:key `story` out of order
+# A hand-edited view, on the train (LIELLA_TRAIN=1 makes the stale-view check fatal).
+view-hand-edit | plan/07-decisions/s09-random-numbers.md | lit:keeps the 256-byte limit ==> keeps the 512-byte limit | LIELLA_TRAIN=1 cargo xtask static | msg:s09-random-numbers\.md is stale: run `cargo xtask records-gen`
+# A bare `|` in a table cell.
+bare-bar | records/decisions/D-X/D-X.55.toml | perl:s/one file per entry means/one file per entry\x7c means/ | cargo xtask static | msg:`body` \(a table cell\) has a bare
+# A new compat record (it has a date) that names no decision record.
+compat-no-decisions | records/compat/COMPAT-20.toml | perl:s/status = "implemented"\n/status = "implemented"\nstory = "S-1"\ndate = "2026-11-08"\n/ | cargo xtask static | msg:names the decision record
