@@ -1166,6 +1166,7 @@ pub(crate) fn abandoned_count() -> usize {
 /// A child of `fork`: no timer is inherited (the live timers' descriptors are closed) and
 /// there is no helper. Async-signal-safe (`_Fork`): no allocation, and the lock is reset rather
 /// than taken.
+#[inline(never)]
 pub(crate) fn after_fork_child() {
     // Only the words that change are written (D-18.8).
     LOCK.reset();
