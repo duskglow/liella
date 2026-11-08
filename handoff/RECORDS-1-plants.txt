@@ -17,3 +17,12 @@ view-hand-edit | plan/07-decisions/s09-random-numbers.md | lit:keeps the 256-byt
 bare-bar | records/decisions/D-X/D-X.55.toml | perl:s/one file per entry means/one file per entry\x7c means/ | cargo xtask static | msg:`body` \(a table cell\) has a bare
 # A new compat record (it has a date) that names no decision record.
 compat-no-decisions | records/compat/COMPAT-20.toml | perl:s/status = "implemented"\n/status = "implemented"\nstory = "S-1"\ndate = "2026-11-08"\n/ | cargo xtask static | msg:names the decision record
+# cargo xtask plants results (8 plants: 8 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# stem-differs: CAUGHT, caught by no test the log names
+# dup-id-other-series: CAUGHT, caught by no test the log names
+# supersedes-missing: CAUGHT, caught by no test the log names
+# cycle-not-reported: CAUGHT, caught by xtask records::check::tests::link_problems
+# keys-out-of-order: CAUGHT, caught by no test the log names
+# view-hand-edit: CAUGHT, caught by no test the log names
+# bare-bar: CAUGHT, caught by no test the log names
+# compat-no-decisions: CAUGHT, caught by no test the log names
