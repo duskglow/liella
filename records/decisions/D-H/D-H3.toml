@@ -1,0 +1,7 @@
+id = "D-H3"
+section = "h"
+pattern = "Static buffers and hidden cursors (≈70 entry points)"
+status = "active"
+body = '''
+**Internal:** results are owned values or writes into caller slices. Iteration state is a value the caller holds. **Boundary:** `legacy::result_slots` (per thread, P-scope) and `legacy::cursors` (per thread for the data-race-only cases, process-wide and locked for enumerators). `_r` forms are packers over the same call. Phase 8: the per-thread slots live after each thread's key area (`rt::thread::SLOT_AREA`, in every thread mapping, the initial area and adopted descriptors); `strerror` and `strsignal` use them, and fall back to the process-wide buffer only when no descriptor can be made. The `ecvt` family, `l64a` and `tmpnam(NULL)` stay process-wide (their contracts name a static buffer).
+'''

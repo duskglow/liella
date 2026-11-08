@@ -1,0 +1,13 @@
+id = "SR-39"
+section = "3"
+row = "`memcpy` non-AVX2, ERMS (Ivy Bridge, N100)"
+now = "policy table in the note; ratios in `handoff/memcpy-policy.md`"
+limit = "\"do not redo\": 2-4 KiB and d600 measurements; head-aligned `rep movsb` at 64-byte-aligned dst is 1-4% slower"
+reason_class = "hardware"
+basis = "M"
+source = "MEMCPY-POLICY, MEMCPY-NONAVX2-THRESHOLD (`-2`)"
+tried = "see left"
+flag = "**recheck** FSRM P-cores (Ice Lake+, Zen 3+) and 64 KiB to 1 MiB: listed as \"not measured\" in the note"
+status = "active"
+body = '''
+'''

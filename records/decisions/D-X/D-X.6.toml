@@ -1,0 +1,6 @@
+id = "D-X.6"
+section = "x"
+status = "active"
+body = '''
+Stable Rust. Variadic entry points and `va_arg` access are C adapters (OD-C1), so no nightly feature is needed.
+'''

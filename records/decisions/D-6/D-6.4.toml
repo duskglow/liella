@@ -1,0 +1,8 @@
+id = "D-6.4"
+section = "s06"
+spec = "§6.4"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** iconv is built in (no gconv module loading; F28). `IGNORE`/`TRANSLIT` report counts of dropped and approximated characters separately. **Boundary:** reproduces "-1/EILSEQ at end if anything was ignored", per the contract.
+'''

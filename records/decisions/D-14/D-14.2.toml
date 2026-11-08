@@ -1,0 +1,8 @@
+id = "D-14.2"
+section = "s14"
+spec = "§14.4"
+ann = "PATH"
+status = "active"
+body = '''
+**Internal:** a generic ordered set with a comparator closure. **Boundary:** the node layout, whose first member is the key pointer, is ABI (`abi::layout`). `twalk` visit names follow the contract.
+'''

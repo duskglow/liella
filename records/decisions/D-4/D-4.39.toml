@@ -1,0 +1,8 @@
+id = "D-4.39"
+section = "s04"
+spec = "§4.5, §4.8"
+ann = "PERF"
+status = "active"
+body = '''
+**No per-call CPU-path test in the scanning exports; 16-31 B strlen/strnlen on SSE2** (SHORT-3, 2026-10-09; amends D-4.26 and D-4.34). `strz::len`, `len_n`, `find` and `find_n` no longer test `cpu::is_ready()` (removed with the `*_cold` trampolines): the kernels are correct on their SSE2 default (scan level 0) before `cpu::init_with`, which startup step 4 runs before user code, so the test only bought speed before startup (-3 instr/call). Where the safety lives: `machine_scanners::the_startup_decision_sets_the_scanners_path` checks, through the selftest getter `cpu::scan_level` (`liella_machine_scan_level_get`), that every tunable combination sets the kernels' level to the decided path; planted bugs (level inverted, level never set) are red. strlen and strnlen prologues: a second unaligned SSE2 block [s + 16, s + 32), taken when [s, s + 32) lies in s's page (offset <= 4064, was 4080), so 16-31 B strings take no AVX state and no vzeroupper (Zen 1 cycles/op strlen_16 15.8 -> 9.3, glibc 11.7; strnlen_16 22.1 -> 13.8, glibc 11.7). Cost: 32 B and longer pay the second block (Zen 1 cycles strlen_64 15.8 -> 16.8, strnlen_64 24.9 -> 28.9); arghist weights 16-31 B far above >= 64 B for strlen; strnlen is rare. Planted bugs red: both page bounds 4064 -> 4080 (SIGSEGV), both second-block indices off by one.
+'''

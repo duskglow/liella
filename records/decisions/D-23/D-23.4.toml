@@ -1,0 +1,8 @@
+id = "D-23.4"
+section = "s23"
+spec = "§23.5"
+ann = "HIST"
+status = "active"
+body = '''
+Written under the clean-room rules of §1.4 in a fresh session, from the spec, RFC 8536, the POSIX `TZ` grammar, `spec/behaviour/zones.md` and black-box probes. **Internal:** `liella::time::civil`: `CivilTime{year: i64, month: 1..=12, day, hour, minute, second 0..=60, weekday, yearday}` and `Fields` (any values, normalised in 128-bit arithmetic over 400-year eras); `utc` and `timegm` give `EOVERFLOW` when the instant does not fit `time_t` or the year does not fit `tm_year`. **Boundary:** `abi::pack::{tm, fields, tm_bytes}` (the `tm_year - 1900` and 0-based month); `timegm` ignores `tm_isdst` and sets `tm_zone` "GMT"; on failure the caller's `struct tm` is left alone; NULL arguments are `EFAULT` (S6).
+'''

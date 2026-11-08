@@ -1,0 +1,13 @@
+id = "SR-41"
+section = "3"
+row = "`memcmp` 33-64 AVX2 head pre-check (fold.S `.Lcmp_wide`)"
+now = "sort-C (1,000,000-line `words.txt`, glibc kit, black-box counting shim): 17,799,354 of 18,674,556 memcmp calls are 33-64 bytes; 17,799,286 of those (99.9996%) differ in bytes 0-7, 68 in bytes 8-15, none equal; the rest are 17-32 bytes"
+limit = "keep the 8-byte scalar pre-check: for this size class it is the cheaper path whenever more than 4/13 (31%) of the calls differ in the head"
+reason_class = "workload shape"
+basis = "M"
+source = "MEMCMP-33-64-RECOVER (`handoff/memcmp-33-64-recover.md`)"
+tried = "bd02ee3a (pre-check dropped): +10.91% instructions:u on sort-C, reverted (RC-SORTC-BISECT). Static path counts, entry to ret (from the listing, not a counter run): with the pre-check a difference in bytes 0-7 retires 13 instructions, an equal call 17, a later difference 26-28; without it 22, 13 and 22-24. 17.8M head-difference calls x 9 = 160.2M, the measured rise. A vector-first path needs about 21 instructions for a head difference (mask test, vzeroupper, bsf, byte re-read, order), so no ordering of the two tests wins both shapes; the entry sees only n, so the choice cannot follow the data. Not tried: a per-call counter run of a vector-first variant (the static count already settles the direction)"
+flag = "none"
+status = "active"
+body = '''
+'''

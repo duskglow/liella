@@ -1,0 +1,13 @@
+id = "SR-61"
+section = "5"
+row = "`iswalpha`, `towupper`, `wcwidth` (UTF-8)"
+now = "t 0.89, 0.89, 0.77; i 1.5, 1.6, 1.3"
+limit = "faster in time, more instructions: IPC advantage"
+reason_class = "hardware"
+basis = "M"
+source = "LV-2"
+tried = "WCTYPE-LOCALE: no gain, outlined walk, CJK rows regressed until fixed"
+flag = "**measured 2026-10-23** (section 10) (10-07 table)"
+status = "active"
+body = '''
+'''

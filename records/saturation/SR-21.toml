@@ -1,0 +1,13 @@
+id = "SR-21"
+section = "3"
+row = "`memmove_144`, `memmove_256`, `memset_144`, `memset_256` (SSE2 129-256 B: six 16-byte blocks per end for 129-192, eight for 193-256) (TIMING-IVB-MEMREF-ENTRY-2, NEGATIVE)"
+now = "ns/call split / base, median of paired rounds (4 interleaved alternations x 5 rounds): Ivy Bridge memmove_144 0.829, memmove_256 1.000, memset_144 0.999, memset_256 1.117; Alder Lake-N at hwcaps=-AVX2 0.851, 1.000, 0.998, 1.089 (spread 0 on every row, glibc drift 1.000); Zen 1 host instr -AVX2 memmove 51.5 -> 45.5 / 51.5 -> 53.5, memset 39.5 -> 37.4 / 39.5 -> 41.4"
+limit = "not reached: the fill's 193-256 class pays for the size compare and taken branch to its last four stores, and 129-192 gains nothing in time from 4 fewer stores"
+reason_class = "design (store count is not the 129-192 fill's limit on either class; the copy gains)"
+basis = "M (bench --stage trees timed interleaved, base / split, whole cbench_memref)"
+source = "TIMING-IVB-MEMREF-ENTRY-2"
+tried = "the split in both kernels (handoff/TIMING-IVB-MEMREF-ENTRY-fold-split.patch, rebased on the folded gate)"
+flag = "the copy-only split was tried in SSE2-COPY-MID-SPLIT and rejected on memcpy_256 (next row, D-4.61)"
+status = "active"
+body = '''
+'''

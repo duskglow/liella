@@ -1,0 +1,13 @@
+id = "SR-55"
+section = "4"
+row = "`tar -c` page-layout shift (`du`, `ls -lR` +1 image page)"
+now = "+1 page"
+limit = "no buffer policy removes a layout shift"
+reason_class = "hardware (placement)"
+basis = "R"
+source = "TAR-HEAP (ledger)"
+tried = "recorded negative"
+flag = "none"
+status = "active"
+body = '''
+'''

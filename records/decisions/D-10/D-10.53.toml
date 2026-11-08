@@ -1,0 +1,8 @@
+id = "D-10.53"
+section = "s10"
+spec = "§10.5"
+ann = "—"
+status = "active"
+body = '''
+**Complex functions from the real quick phases with a per-part rounding test** (LIBM-RETHINK, LIBM-RETHINK-2). Today every finite complex operand off the axes runs the 384-bit route (`complex_body.rs`, generic over `Real`), so `cexpf` costs what `cexp` costs (116 554 and 116 569 instructions; glibc 162 and 239). The new tier 1 composes the real kernels' double-double results with their bounds: `cexp z = e^x (cos y + i sin y)` from one exp kernel and one shared sin/cos reduction, each part a product with relative bound ε_exp + ε_trig + the product's, one rounding test per part; `float` complex evaluated in `double` (bound about 2^-48). The formulas without cancellation stay those of the 384-bit route (clog near \|z\| = 1, csqrt from an accurate hypot, the inverse functions by Hull, Fairgrieve & Tang, ACM TOMS 23(3) 1997; branch cuts per Kahan 1987), as do the exactness detectors and special values; the 384-bit route stays the last tier. Estimates: cexp 180-250 instructions, cexpf 60-90, csqrt 60-90, clog 150-250.
+'''

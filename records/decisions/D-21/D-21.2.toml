@@ -1,0 +1,8 @@
+id = "D-21.2"
+section = "s21"
+spec = "§21.2"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** a safe `Fiber` coroutine API over `rt::context` and `machine/context.S`. **Boundary:** `makecontext`'s variadic `int` arguments go through a C variadic adapter (F11).
+'''

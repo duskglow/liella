@@ -1,0 +1,8 @@
+id = "D-12.5"
+section = "s12"
+spec = "§12.6"
+ann = "HIST"
+status = "active"
+body = '''
+The internal formatter returns `usize`. The boundary gives `EOVERFLOW` above `INT_MAX`, per the contract. **Owner ruling R3 (2026-10-05, validation T15):** a width or precision written in the format beyond `INT_MAX` fails every member of the family with `EOVERFLOW` before anything is output, as the reference does (it leaves the text before the conversion in a caller's buffer, Liella nothing: unspecified on failure); `*` counts are `int`s.
+'''

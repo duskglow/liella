@@ -1,0 +1,8 @@
+id = "D-22.7"
+section = "s22"
+spec = "§22.9"
+ann = "KERN"
+status = "active"
+body = '''
+The library owns the per-thread rseq registration and publishes `__rseq_*`.
+'''

@@ -1,0 +1,6 @@
+id = "D-X.5"
+section = "x"
+status = "active"
+body = '''
+Rust exports are gated behind feature `export` (`boundary::export`), and C adapters behind `LIELLA_EXPORT`, so test binaries never interpose on the host libc.
+'''

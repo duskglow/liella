@@ -1,0 +1,8 @@
+id = "D-10.12"
+section = "s10"
+spec = "§10.0"
+ann = "—"
+status = "active"
+body = '''
+**Oracle and tooling** (D-10.3): `crates/mathtools` (test and tool code; no product depends on it): arbitrary-precision arithmetic with correct rounding by Ziv's strategy, the Remez tool (`cargo xtask remez`, fit files in `crates/math/fits`, generated coefficients with their derivation in `crates/math/src/coeffs`, `--check` regenerates), and the measurement harness (`cargo xtask mathcmp FUNC FMT`: glibc and Liella built from one probe, bit-identical fraction, correct rounding and ulp error of each side against the oracle; exhaustive for `float`). The published bounds are `spec/abi/libm-ulps.tsv` (from the manual, `spec/tools/libm_ulps.py`).
+'''

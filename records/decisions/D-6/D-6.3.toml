@@ -1,0 +1,8 @@
+id = "D-6.3"
+section = "s06"
+spec = "§6.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** conversion into a caller slice returns `Converted{written, consumed, needed}`, or allocates an owned result. **Boundary:** the NULL-destination measuring mode is one conversion choice (`conv::opt_buf`).
+'''

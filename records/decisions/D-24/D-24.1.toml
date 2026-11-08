@@ -1,0 +1,8 @@
+id = "D-24.1"
+section = "s24"
+spec = "§24.4"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `sysconf(Query) -> Result<Option<i64>>`, where `None` means no limit. **Boundary:** -1 without errno, per the contract.
+'''

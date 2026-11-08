@@ -1,0 +1,8 @@
+id = "D-10.62"
+section = "s10"
+spec = "§10.2"
+ann = "—"
+status = "active"
+body = '''
+**`pow` quick phase: composition and run-time bound** (LIBM-F64-POW-QUICK, under D-10.51; wired as `pow`'s tier 1 behind `fast64::pow_domain`, which keeps every exact case out; tier 2 = `fast64::pow_nearest` unchanged, then the accurate path). `fast64::quick_pow`: D-10.60's log with one more Taylor term (degree 10) and its closing Fast2Sum, `ln x = lh + ll` within `KC·\|r\|³ + 2^-84·\|ln x\|`, `KC = 2.75u` (D-10.60's terms; `\|r\| <= 1.44·\|ln x\|` in every case); `y·lh` exact (2MultFMA, or Dekker's product with Veltkamp's split in SSE2: Dekker 1971), `tl = y·ll + e`; D-10.54's exp kernel on `th` with `tl` folded into the Cody-Waite step (`s = tl − kd·L2`, `rh + rl = r1 + s`), its bound recomputed for `\|rh\| <= (1 + 2^-32)·ln2/256` (stays within `RHO_FMA`, `RHO_SSE2`). Composed bound `rho = RHO_E + (KC'·\|y·r3\| + 2^-83·\|th\|)·(1 + 2^-38)`, and Ziv's test (Ziv 1991) with the one-sided test of de Dinechin, Lauter & Muller (2007) on a multiplier formed per call, `c = RN(\|y·r3\|·89/16 + C0)` (one FMA; `C0` from `RHO_E` with the `\|th\| < 708` part folded in), valid while `2^54·rho <= 2^-7`, which the domain `\|y·r3\| <= 2^-12`, `2^-60 <= \|th\| < 708` ensures. Module doc and `pow_quick_constants_and_bounds` (checked exactly at both ends of `\|y·r3\|`). Two builds, bit-identical where they answer. Measured (LIBM-F64-POW-QUICK-2, cbench_libm `pow`, Liella / glibc): instructions per call on the Zen 1 host 177.5 / 141.3 in the FMA build (before 319 / 143) and 247.7 / 191.5 with `--tunables glibc.cpu.hwcaps=-FMA` (before 494 / 193); time ratio 1.411 on Ivy Bridge (before 3.35) and 1.478 on the N100 (before 3.59), spread under 0.01, 5 rounds.
+'''

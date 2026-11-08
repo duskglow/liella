@@ -1,0 +1,8 @@
+id = "D-3.7"
+section = "s03"
+spec = "§3.7"
+ann = "HIST"
+status = "active"
+body = '''
+The allocator never uses `brk`: pages come from `mmap` only. So `brk`/`sbrk` (thin wrappers) cannot corrupt the heap (observable: no interaction with `malloc`).
+'''

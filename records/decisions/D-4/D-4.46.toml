@@ -1,0 +1,8 @@
+id = "D-4.46"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**Scalar 8-byte head probe in the ordered compare** (MEMCMP-HEAD) \| `memcmp`/`bcmp` from 8 bytes: after the NULL tests, inside each class's own branch (8-15, 16-32, 33-64 inline; 65-128 in `compare_upto128`, 129-2048 in `compare_mid`), the first 8 bytes are compared as one `u64` per side; unequal words are ordered at once from their byte-swapped values (`bswap` x2, `cmp`, `sbb`, `or`: -1 or 1), no index search, no byte re-read, no vector state (no `vzeroupper`). Equal heads run the class unchanged (it re-tests bytes 0-7: no load saved by skipping them, the block bounds stay as D-4.41). 8-15 with equal heads: the last word alone decides. Why: WL sort-C = 1M random words, ~18.7M memcmp calls, 97.6% of n > 32, first difference in bytes 0-2 (WL-HOT-SORT); the vector path cost 43-52 instr/op there (incl. bench loop) vs 28-30 now. Cost: equal and late-difference rows pay the probe (+3 to +4 instr: load, cmp-with-memory, jne); MEMCMP-ORDER-3 saw a vector block-0 probe cost bcmp_eq_64 a cycle on Haswell-EP - Haswell-EP time decides, FAVOUR THE COMMON CASE allows it within 1.5x glibc. Under a concurrent writer (D-4.21) the probe decides from one read of 8 bytes: an order the bytes held. NULL: option B unchanged (no new NULL site; the probe runs after the tests). Safety: `small_compare` (every size 0-256 x every difference position at three alignment pairs, byte pairs across 0x80, later bytes of the opposite order, PROT_NONE fences, both builds) and planted bugs (no byte swap, inverted order, 8-15 tail word one byte low, 33-64 class skipped after an equal head). \| MEMCMP-HEAD
+'''

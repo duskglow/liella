@@ -1,0 +1,13 @@
+id = "SR-27"
+section = "3"
+row = "`strncmp` equal-16, diff-8, names-64"
+now = "41.0 vs 43.0; 41.0 vs 34.0; 52.1 vs 43.0 (**ABOVE** on two)"
+limit = "gate only"
+reason_class = "n/a"
+basis = "C"
+source = "LIMITS-TIGHTEN"
+tried = "STRCMP-HEAD: 32-byte first block +5 cycles on short calls; VEX.128 blocks +9 instr from d128; cache-line splits +3 cycles at d100; alignment no change. STRCMP-FIXED: settle-from-masks +3 on differ, -3 on equal, net loss on names"
+flag = "**measured 2026-10-23** (section 10) `strncmp_diff8` and `names64`"
+status = "active"
+body = '''
+'''

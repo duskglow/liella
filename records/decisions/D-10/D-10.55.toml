@@ -1,0 +1,8 @@
+id = "D-10.55"
+section = "s10"
+spec = "§10.5"
+ann = "—"
+status = "active"
+body = '''
+**`cexp`/`cexpf` quick tier, local details** (LIBM-CPLX-EXP-TIER, under D-10.53): `crates/math/src/complex_fast.rs`, `fast32/cexp.rs`. `double` for `2^-60 <= \|x\| <= 746`, `2^-30 <= \|y\| < 2^20` (the in-place entry in two builds, baseline and FMA as D-10.25, chosen at startup by `hot::cexp_nearest`, bit-identical and tested so; the any-mode envelope path stays baseline); part bound `(Ee·B + A·Et + 2^-99·A·B)(1 + 2^-48)`; `near` with `rho = 2^-62` then `fast64::settle`; a part is rounded unscaled and scaled by an exponent add only into biased exponents 2..2046, else the 384-bit route. `float`: `exp_core` × `trig_core` in `double`, margin 512 ulp, `fast32::round`. In-place nearest entry `mret::cplx_fast` (cold fallback restores MXCSR, then `cplx`).
+'''

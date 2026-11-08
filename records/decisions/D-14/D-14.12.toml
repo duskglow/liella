@@ -1,0 +1,8 @@
+id = "D-14.12"
+section = "s14"
+spec = "§14.9"
+ann = "—"
+status = "active"
+body = '''
+**Lazy-DFA groundwork: byte classes, per-thread store and busy word, per-regcomp serial** (RX-T2-0, 2026-10-09; row added by RX-T2-1b, the code and tests cite it). (1) Program format `Lrx4`: a fixed trailing section of 66 words holds the byte-class map (two bytes share a class only when every `Byte` literal, `Set`, word-ness and newline-ness treat them alike; in a UTF-8 locale every byte >= 0x80 is one LEAVE class, where a DFA search restarts in the matcher), read by `ProgRef::class_of/nclasses/leave_class`. (2) `ScratchSource::dfa_store` (default `None`) hands out the thread's `REGEX_DFA` block (kind 40, 32 KiB = 8192 u32, calloc'ed on first need, freed at thread exit); a per-thread busy word (byte 8 of the thread's `SLOT_RECORDS` slot, `Buf::claim/release`, held by `ThreadScratch` for one `regexec`) denies the scratch and the store to a re-entrant call (a signal handler), which uses per-call storage. (3) The block head (24 bytes: locale handle, serial, required-string length, whole flag) carries a per-regcomp serial from a process-wide counter starting at 1, the DFA cache key. (4) `regexec` parses the block once. (5) `Accel::dfa`, on by default. Tests: `class_tests` (program.rs), `claim_denies_reentry_until_released`, `block_head_round_trips`, `regex_reentry.rs`; the DFA itself is D-14.13.
+'''

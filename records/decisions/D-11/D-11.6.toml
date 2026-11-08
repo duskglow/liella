@@ -1,0 +1,8 @@
+id = "D-11.6"
+section = "s11"
+spec = "§11.9"
+ann = "HIST"
+status = "active"
+body = '''
+`copy_file_range` has no emulation (contract). An internal `copy_all` falls back to `read`/`write`.
+'''

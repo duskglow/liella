@@ -1,0 +1,8 @@
+id = "D-18.2"
+section = "s18"
+spec = "§18.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `liella::process::search(name, PATH, exec, shell)`. A name containing `/` runs as given; an empty name is `ENOENT`. An unset `PATH` means `/bin:/usr/bin` (no cwd); an empty element means the cwd. `ENOENT`/`ENOTDIR` continue; `EACCES` continues and is reported last; any other error ends the search (exec(3)). Candidates are built on the stack; one over `PATH_MAX` is `ENAMETOOLONG` and stops. `ENOEXEC` runs `/bin/sh file argv[1..]` for the exec `p` forms; the spawn forms return it (GLIBC_2.15; the 2.2.5 compat versions wait for phase 15). The exec forms pass the caller's arrays to the kernel unchanged; the `l` forms collect their list through the C layer's va_list accessor (512 entries on the stack, the heap beyond). `fexecve` is `execveat(fd, "", AT_EMPTY_PATH)` with no `/proc` fallback (OD-5); a negative fd or NULL array is `EINVAL` (fexecve(3)).
+'''

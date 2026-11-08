@@ -1,0 +1,13 @@
+id = "SR-68"
+section = "5"
+row = "first `setlocale(LC_ALL, \"en_US.UTF-8\")`"
+now = "about 2.1x by probe deltas (N100, 730f416b); open"
+limit = "not at a limit: the first heap use (about 14 faults, 7 to 9 syscalls) and archive pages hold most of the gap"
+reason_class = "n/a"
+basis = "M"
+source = "COLDSTART-SETLOCALE-FIRST, -2 (`handoff/coldstart-setlocale-first.md`)"
+tried = "COLDSTART-SETLOCALE-FIRST-2: validate-only `codeset_matches` (the ASCII case flag derived once per selection, ruling #3348): -811 user instructions (-1.2%) on the probe, but +1 text page fault and +12k to +14k kernel instructions from code layout in three variants (separate function, one body with a flag outlined, inlined; Skylake-SP host, static probe), reverted"
+flag = "none"
+status = "active"
+body = '''
+'''

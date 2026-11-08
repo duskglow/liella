@@ -1,0 +1,8 @@
+id = "D-23.13"
+section = "s23"
+spec = "§23.6"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal, local decision (TZ-FRESH-3, 2026-10-09):** `mktime`'s common cases run in 64-bit arithmetic (`Zone::resolve_small`: zone without leap seconds, fields below 2^31 in magnitude; the zone that never changes, or a period holding the whole six-day window, with `isdst` not asking for the other kind); everything else goes to the full search, which stays the reference. Same answers (EOVERFLOW included): `resolve_shortcuts_change_nothing` compares `resolve` and `resolve_cached` with `resolve_by(.., fast=false)` over all sweep zones, including fields at 2^31. Planted bug (period check dropped) fails it. Cost: TZ-FRESH's per-call environment scan stays (its floor, TZ-FRESH-2); `mktime` is now faster than main on Haswell-EP (cbench_opt mktime_posix_rule 133.8 vs 142.5 ns).
+'''

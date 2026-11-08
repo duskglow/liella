@@ -1,0 +1,8 @@
+id = "D-27.12"
+section = "s26-29"
+spec = "§1.1, §12.6, §27, §27.1"
+ann = "—"
+status = "active"
+body = '''
+**The executable's load bias has one source (STATIC-PIE-LOAD-OFFSET).** A static PIE linked by GNU ld has no `PT_PHDR`, so the bias cannot come from the headers. The static-PIE start (`liella-rcrt1.o`, D-27.10) stores the bias its relocator took from `__ehdr_start` once, in `process::EXE_BIAS`, after the relocation pass; `process::exe_bias` returns it, or when it is 0 (non-PIE static, dynamically linked) the `PT_PHDR` bias as before. Its users: the fortified `%n` check (D-12.4; `start::read_only` now takes the bias), `dl_iterate_phdr`'s `dlpi_addr` (D-27.4), `_dl_find_object`'s ranges and `dlfo_eh_frame` (D-27.5) and the backtrace's executable. The non-PIE start (`liella-crt1.o`) does no added work: the store sits on the PIE branch, chosen at link time. Test: `conformance/c/s27_static_pie_load_offset.c` (100 starts at random bases, C++ throw/catch).
+'''

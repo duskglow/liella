@@ -1,0 +1,8 @@
+id = "D-4.65"
+section = "s04"
+spec = "§4.3, §4.4"
+ann = "PERF"
+status = "active"
+body = '''
+**REJECTED (measured: no gain on the target row, reverted in TIMING-COV-COLD-STRCOLL, 2026-11-07): the `AsciiSlot` layout of D-4.30/D-4.37 stays.** Tried: `AsciiSlot` as `repr(C, align(4096))` with the fields the first general-path compare's fill writes (`unit`, `rank`, `lane`, `ascii_fast`, `ready`; 2,050 bytes) first, so the fill writes one page of the pool slot instead of two. Profile that motivated it (page-fault addresses of the first call, static probe, setlocale en_US.UTF-8 then strcoll "zeta.h"/"alpha.h", Skylake-SP host): the first strcoll's three faults are one locale-archive read in the fill and two copy-on-write faults on the pool (file-backed `.data`), because the compiler placed `rank`, `ready` and `ascii_fast` about 10 KiB past `unit`, after the lead indexes. Counts with the change (probe, 100 runs, setlocale+strcoll minus setlocale): faults 3 to 2, kernel instructions about 30.8k to 21.1k, user 11,766 to 11,635. Timing (11 interleaved rounds, staged cbench_opt, branch / base, median of per-round ratios): `first_strcoll` N100 0.996 (12,810 vs 12,889 ns; glibc 514), Ivy Bridge 1.017 (24,184 vs 23,764 ns, slower in 11 of 11 rounds; glibc 824); N100 `cold_exec_once` 1.008 (11 of 11) and `first_setlocale_en_US` 1.017 (10 of 11); `second_strcoll` and `strcoll_en_us_*` within 0.97-1.01. So one fewer fault does not shorten the first call: its time is neither the fill's instructions (D-4.54) nor this fault. Cost of the layout: pool 84,352 to 98,304 bytes of `.data`.
+'''

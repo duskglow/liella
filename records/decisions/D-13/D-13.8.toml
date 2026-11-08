@@ -1,0 +1,8 @@
+id = "D-13.8"
+section = "s13"
+spec = "§13.10, §13.13"
+ann = "HIST"
+status = "active"
+body = '''
+`statvfs` flags come from `statfs.f_flags` (kernel ≥ 2.6.36, OD-5). There is no `/proc/mounts` scan fallback. Mount tables are parsed from `/proc/self/mountinfo` internally, and `getmntent` keeps its text format.
+'''

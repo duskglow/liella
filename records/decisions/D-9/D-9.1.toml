@@ -1,0 +1,8 @@
+id = "D-9.1"
+section = "s09"
+spec = "§9.1"
+ann = "ARB"
+status = "active"
+body = '''
+`getentropy` keeps the 256-byte limit with `EIO`, as the contract states for glibc (ABI behaviour). The internal `Csprng::fill` has no limit.
+'''

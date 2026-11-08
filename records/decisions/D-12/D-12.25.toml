@@ -1,0 +1,8 @@
+id = "D-12.25"
+section = "s12"
+spec = "§12.6, §12.7"
+ann = "ARB"
+status = "active"
+body = '''
+**va_list sources: values cross as bits; scanf pointers read on demand** (COLD-REWRITE2-W-far-10-REWRITE V1 and COLD-REWRITE2-cold-05, 2026-10-21; records `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-10-REWRITE.md`, `liella-historic:handoff/decisions/COLD-REWRITE2-cold-05.md`). (V1) `long` crosses as `u64`, `double` via `to_bits`, `long double` as the 16-byte x87 slot, low word first; no numeric conversion; `LongDouble` keeps `repr(C, align(16))`. *`legacy::scanf_va` `Pointers`:* slots are read on demand, in order, up to the index asked (reading past the real count would be undefined behaviour in the caller's frame); index 0 or past `ARG_MAX` reads nothing and gives `None`; an inline head of 8 slots then a `TryVec` (a typical call never allocates); one `reserve` for a jump's span before any slot is read; failure is `None` (the conversion fails as for a missing argument), never a panic; full 64-bit slots.
+'''

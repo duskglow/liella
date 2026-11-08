@@ -1,0 +1,8 @@
+id = "D-4.16"
+section = "s04"
+spec = "—"
+ann = "—"
+status = "active"
+body = '''
+**Products.** `cargo xtask so` builds `libc.a` from `crates/libc-so` (feature `runtime`, a global allocator and a panic handler), then links `libc.so.6` from that archive with a version script generated from Appendix C.3 (default versions of the symbols the archive defines) and assembles `liella-crt1.o`. The outputs go to `target/liella`, never to `target/release`, which Cargo puts on `LD_LIBRARY_PATH`. The C layer defines the `rust_eh_personality` symbol that precompiled `core` refers to; with `panic=abort` it is never called.
+'''

@@ -1,0 +1,8 @@
+id = "D-11.9"
+section = "s11"
+spec = "§11.13"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `FileLock{kind: Ofd \| Flock \| ProcessRecord}` with explicit ownership. **Boundary:** `lockf`/`fcntl`/`flock` keep their distinct kernel semantics (observable, so kept).
+'''

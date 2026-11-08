@@ -1,0 +1,9 @@
+id = "COMPAT-14"
+behaviour = "A `fopencookie` write hook that returns fewer bytes than asked (§12.3, §12.4; STDIO-SHORT-IO-2, differences row \"Short count from a cookie write hook\")"
+glibc = "The write stops at the short count: the flush fails with `ferror` set and the rest of the buffer is dropped"
+liella = "The rest is offered to the hook again until everything is written (as for a descriptor stream, where a short `write(2)` is normal); a hook that returns 0 or -1 still fails the write"
+restore = "A tunable read at startup making the drain loop in `Engine::drain_to`/`write` fail on the first short count; the loop already tests the count, so the default path gains no branch. `stream.rs` is in the getc/putc perf rows, so not before they land"
+cost = "none today (the flag does not exist)"
+status = "registered"
+body = '''
+'''

@@ -1,0 +1,8 @@
+id = "D-6.1"
+section = "s06"
+spec = "§6.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** explicit `Decoder`/`Encoder` state values per codec. **Boundary:** `mbstate_t` is an 8-byte serialisation of that state (`legacy::mb_state`), which suffices for all built-in codecs. Its kind, need and have bytes sit in the header's `__count` (offset 0), the value in `__value`; `mbsinit` is true exactly when `__count` is 0, whatever `__value` holds, as the reference answers for a state a program wrote itself (gnulib's replacement converters keep their own partial characters there and ask the C library's `mbsinit`; validation T18, 2026-10-05). A NULL `s` in `mbrtowc`, `mbrtoc32`, `mbrtoc16` and `mbrtoc8` stores nothing through the output pointer (C17 7.29.6.3.2, 7.28.1: the call is `mbrtowc(NULL, "", 1, ps)`; the reference agrees).
+'''

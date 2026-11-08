@@ -1,0 +1,13 @@
+id = "SR-70"
+section = "6"
+row = "`printf` `%02x` on a stream"
+now = "i 529.4 vs 612.1 (0.86x; 2026-10-20 spot check)"
+limit = "ahead of glibc"
+reason_class = "n/a"
+basis = "M"
+source = "PRINTF-LAYERS"
+tried = "PRINTF-PARSE: single-directive formats did not gain, dropped. PRINTF-FLOAT: `g6_sum` +2.1% (63 inline instr vs 22 for `u128` div), table +0.3 to 1.2%, reverted `79fb043d`"
+flag = "none"
+status = "active"
+body = '''
+'''

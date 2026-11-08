@@ -1,0 +1,8 @@
+id = "D-13.1"
+section = "s13"
+spec = "§13"
+ann = "PATH"
+status = "active"
+body = '''
+**Internal:** the file-system API is directory-relative only (`Dir` handle plus relative `KPath`). Path forms are translations passing `AT_FDCWD`.
+'''

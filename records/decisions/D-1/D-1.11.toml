@@ -1,0 +1,8 @@
+id = "D-1.11"
+section = "s01"
+spec = "§1.6, §1.6a"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**getopt core: caller-owned state, no latch, block-swap permutation** (COLD-REWRITE2-W-far-07-REWRITE, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-07-REWRITE.md`). (1) *State:* one caller-owned `State`; the core keeps no statics, `next(&mut State, ...)` returns an `Event` and never prints or allocates; the boundary maps `optind`/`optarg`/`opterr`/`optopt` onto a `State` under its lock; argp runs its own. A moved index forgets the cursor and the skipped operands (D-1.6). (2) *End of options:* not latched; each call works from the position (POSIX describes the result only in terms of `argv[optind]`): after `--` a further call parses what follows (probed). `State::ended` is informational. (3) *Permutation:* lazy, at the next element boundary (probed `optind` values); block swaps (Gries-Mills), O(k+m) per boundary, `argv` in order between calls (a program may stop calling early and read `argv`). `--` with operands pending is rotated in front of them. (4) *Option string:* a linear scan per call (the string may change between calls); the first occurrence of a letter wins (probed); `:` and `;` are never letters; `W;` is the long escape only with a table. (5) *Long options:* one pass, no allocation; an exact name returns at once; ambiguity when another prefix match differs from the first (any other match when strict); an empty name is a prefix of every entry. (6) *getsubopt:* a non-destructive reader returning offsets; the boundary writes (D-1.6a). PROOF-2: an element cut under the cursor is read again from its start at the same index (probed); a replaced pointer is read as it is now (difference, D-1.6, COMPAT-7).
+'''

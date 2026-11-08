@@ -1,0 +1,6 @@
+id = "D-X.2"
+section = "x"
+status = "active"
+body = '''
+`Error` = `Errno` plus the internal `Canceled` marker (X1, D-22.2).
+'''

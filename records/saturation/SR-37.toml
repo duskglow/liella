@@ -1,0 +1,13 @@
+id = "SR-37"
+section = "3"
+row = "`strstr` dense last byte: first-byte stream (STRSTR-SHORT-DENSE-PARITY-4)"
+now = "i (wl_percall, AVX2 path, pinned specs, glibc on the same host). Zen 1 host: `strstr_dense_4k` 947 to 706 (glibc 830: 1.14x to 0.85x), `ss_hit_1k` 333 to 328 (348, 0.94x), every other strstr row unchanged; every strstr row at or below 1.05x of glibc on the Zen 1 host. Haswell-EP host (glibc measured pinned by -3; Liella's AVX2 path runs the same instructions on either class): `strstr_hit_short` 126 vs 87 (1.45x) and `ss_hit_64` 138 vs 102 (1.35x) are above 1.05x, every other row below (`strstr_dense_4k` 706 vs 2253). `strstr_hit_4k`: the out-of-line `find_next` pass costs +4 on rows whose first candidate fails (ruling #2856, accepted as a code cost)"
+limit = "dense: the pair loop held 738 of 947 (32 groups x 23 instructions). A one-stream stop on c1 within 1024 bytes of the previous one now gets the pair test and, when that is clean, a test for c0 at q - off over the same group (the pair test's L ^ c0 vectors, 6 more instructions); with no c0 the call scans on c0 at q - off plus the 0 test (16 per 128 bytes, the one-stream cost): a candidate needs c0 at q - off. Only dense switches reach it; `ss_hit_1k` -5 (its switch group no longer goes through a jump and the mode store)"
+reason_class = "algorithm"
+basis = "M"
+source = "STRSTR-SHORT-DENSE-PARITY-4 (`handoff/strstr-short-dense-parity.md`)"
+tried = "none negative"
+flag = "open on Haswell-EP: the short rows (glibc 87 and 102 there) are below Liella's fixed cost (about 77 of `strstr_hit_short`'s 126 are Rust before and after the kernel, -3's trace of the same Rust); no bound proved"
+status = "active"
+body = '''
+'''
