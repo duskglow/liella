@@ -1,0 +1,110 @@
+verify: base origin/next; 38 views; rows equal as multisets: 470 decision, 20 compat, 85 saturation
+verify: (a) @generated first line: 38
+verify:   plan/07-decisions/00-overview-and-cross-cutting.md:1: @generated line added
+verify:   plan/07-decisions/c0-cross-cutting-conventions.md:1: @generated line added
+verify:   plan/07-decisions/s01-program-startup-termination-and-environment.md:1: @generated line added
+verify:   plan/07-decisions/s02-error-reporting-and-diagnostics.md:1: @generated line added
+verify:   plan/07-decisions/s03-memory-allocation.md:1: @generated line added
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:1: @generated line added
+verify:   plan/07-decisions/s05-character-classification.md:1: @generated line added
+verify:   plan/07-decisions/s06-multibyte-text-wide-characters-and.md:1: @generated line added
+verify:   plan/07-decisions/s07-locales-and-message-translation.md:1: @generated line added
+verify:   plan/07-decisions/s08-numeric-conversion-and-integer-arithmetic.md:1: @generated line added
+verify:   plan/07-decisions/s09-random-numbers.md:1: @generated line added
+verify:   plan/07-decisions/s10-mathematics.md:1: @generated line added
+verify:   plan/07-decisions/s11-low-level-i-o.md:1: @generated line added
+verify:   plan/07-decisions/s12-buffered-streams.md:1: @generated line added
+verify:   plan/07-decisions/s13-file-system.md:1: @generated line added
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md:1: @generated line added
+verify:   plan/07-decisions/s15-sockets-and-network-interfaces.md:1: @generated line added
+verify:   plan/07-decisions/s16-name-services.md:1: @generated line added
+verify:   plan/07-decisions/s17-users-groups-and-credentials.md:1: @generated line added
+verify:   plan/07-decisions/s18-processes.md:1: @generated line added
+verify:   plan/07-decisions/s19-terminals.md:1: @generated line added
+verify:   plan/07-decisions/s20-signals.md:1: @generated line added
+verify:   plan/07-decisions/s21-contexts.md:1: @generated line added
+verify:   plan/07-decisions/s22-threads.md:1: @generated line added
+verify:   plan/07-decisions/s23-time.md:1: @generated line added
+verify:   plan/07-decisions/s24-resources-and-system-information.md:1: @generated line added
+verify:   plan/07-decisions/s25-ipc.md:1: @generated line added
+verify:   plan/07-decisions/s26-29.md:1: @generated line added
+verify:   plan/07-decisions/x-implementation-decisions.md:1: @generated line added
+verify:   docs/compat-flags.md:1: @generated line added
+verify:   docs/saturation/01-kernel-shared-work.md:1: @generated line added
+verify:   docs/saturation/02-safety-bound-spec-or-abi.md:1: @generated line added
+verify:   docs/saturation/03-memory-and-string-kernels.md:1: @generated line added
+verify:   docs/saturation/04-allocator.md:1: @generated line added
+verify:   docs/saturation/05-locale-ctype-time-gettext.md:1: @generated line added
+verify:   docs/saturation/06-printf-regex-wordexp-iconv.md:1: @generated line added
+verify:   docs/saturation/07-rows-that-are-not-near-the.md:1: @generated line added
+verify:   docs/saturation-register.md:1: @generated line added
+verify: (b) rows reordered by id: 10
+verify:   plan/07-decisions/s01-program-startup-termination-and-environment.md: 1 rows moved into id order (lines in origin/next: 18)
+verify:   plan/07-decisions/s02-error-reporting-and-diagnostics.md: 1 rows moved into id order (lines in origin/next: 8)
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md: 16 rows moved into id order (lines in origin/next: 24, 25, 26, 27, 28, 29, 30, 31, 47, 48, 50, 67, 69, 71, 77, 79)
+verify:   plan/07-decisions/s07-locales-and-message-translation.md: 1 rows moved into id order (lines in origin/next: 13)
+verify:   plan/07-decisions/s10-mathematics.md: 7 rows moved into id order (lines in origin/next: 34, 39, 40, 41, 43, 44, 46)
+verify:   plan/07-decisions/s13-file-system.md: 3 rows moved into id order (lines in origin/next: 11, 12, 13)
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md: 1 rows moved into id order (lines in origin/next: 24)
+verify:   plan/07-decisions/s22-threads.md: 1 rows moved into id order (lines in origin/next: 20)
+verify:   plan/07-decisions/s26-29.md: 2 rows moved into id order (lines in origin/next: 16, 22)
+verify:   plan/07-decisions/x-implementation-decisions.md: 11 rows moved into id order (lines in origin/next: 23, 36, 37, 38, 39, 41, 42, 44, 45, 46, 51)
+verify: (c) stray lines inside a table dropped: 4
+verify:   plan/07-decisions/s10-mathematics.md:47: dropped line '' inside the table
+verify:   plan/07-decisions/s10-mathematics.md:49: dropped line '' inside the table
+verify:   plan/07-decisions/x-implementation-decisions.md:47: dropped line '' inside the table
+verify:   plan/07-decisions/x-implementation-decisions.md:48: dropped line '---' inside the table
+verify: (d) saturation index: 9
+verify:   docs/saturation-register.md:27: dropped stray line ''
+verify:   docs/saturation-register.md:33: section 24 moved into number order
+verify:   docs/saturation-register.md:29: section 19 title taken from its heading ('19. qsort at five element sizes and fts under a 2 KiB path (BENCH-UNMEASURED-WIDEN, 2026-11-04, Zen 1 host)' -> '19. qsort at five element sizes and fts under a 2 KiB path (BENCH-UNMEASURED-WIDEN, 2026-11-04)')
+verify:   docs/saturation-register.md:30: section 20 title taken from its heading ('20. The 384-bit mp core and the double-double rounder (LIBM-MP-CORE-SPEED, 2026-11-05, Zen 1 host)' -> '20. The 384-bit mp core and the double-double rounder (LIBM-MP-CORE-SPEED, 2026-11-05, counted)')
+verify:   docs/saturation-register.md:31: section 21 title taken from its heading ('21. x87 long double exp/log: the double-double first tier (LIBM-WIDE-DD-TIER, 2026-11-05, Broadwell-EP counts, Ivy Bridge cycles)' -> '21. x87 long double exp/log: the double-double first tier (LIBM-WIDE-DD-TIER, 2026-11-05, counted and timed)')
+verify:   docs/saturation-register.md:32: section 22 title taken from its heading ('22. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, Broadwell host)' -> '22. f64 atan/asin/acos/atan2/hypot fast tier: counts and the residual over glibc (LIBM-F64-INVTRIG-HYPOT-TIER-3, 2026-11-05, counted)')
+verify:   docs/saturation-register.md:34: section 23 title taken from its heading ('23. float j0f/j1f/y0f/y1f fast path: counts (LIBM-F32-BESSEL-4, 2026-11-05, Broadwell host)' -> '23. float j0f/j1f/y0f/y1f fast path: counts (LIBM-F32-BESSEL-4, 2026-11-05, counted)')
+verify:   docs/saturation-register.md:33: section 24 title taken from its heading ('24. f64 expm1/log1p/sinh/cosh/tanh/cbrt fast tier: counts and the residual over glibc (LIBM-F64-EXPM1-HYPER-CBRT-TIER-2/-3, 2026-11-05, Zen 1 host)' -> '24. f64 expm1/log1p/sinh/cosh/tanh/cbrt fast tier: counts and the residual over glibc (LIBM-F64-EXPM1-HYPER-CBRT-TIER-2/-3, 2026-11-05, counted)')
+verify:   docs/saturation-register.md:35: section 25 title taken from its heading ('25. x87 long double sin/cos: the integer fixed-point first tier (LIBM-LD-TRIG-INT-2, 2026-11-07, Skylake-SP counts, Ivy Bridge and N100 cycles)' -> '25. x87 long double sin/cos: the integer fixed-point first tier (LIBM-LD-TRIG-INT, -2, 2026-11-07, Skylake-SP counts, Ivy Bridge and N100 cycles)')
+verify: (e) bare `|` in a cell escaped: 35
+verify:   plan/07-decisions/s01-program-startup-termination-and-environment.md:14: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:44: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:47: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:48: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:54: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:56: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:58: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:59: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:60: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:61: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:62: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s04-byte-arrays-and-strings.md:70: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:8: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:19: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:23: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:25: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:26: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:29: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:30: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:40: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:44: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:46: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:48: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s10-mathematics.md:50: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s11-low-level-i-o.md:15: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s11-low-level-i-o.md:17: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md:10: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md:21: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md:22: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s14-searching-sorting-and-patterns.md:25: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s16-name-services.md:8: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s23-time.md:9: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/s26-29.md:21: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/x-implementation-decisions.md:26: bare `|` escaped as `\|` in column body
+verify:   plan/07-decisions/x-implementation-decisions.md:51: bare `|` escaped as `\|` in column body
+verify: (f) empty cell spelled `|  |`: 2
+verify:   docs/saturation/05-locale-ctype-time-gettext.md:14: empty cell `| |` written `|  |`
+verify:   docs/saturation/06-printf-regex-wordexp-iconv.md:7: empty cell `| |` written `|  |`
+verify: (g) control byte restored to `\N`: 1
+verify:   docs/compat-flags.md:24: control byte written as the back-reference `\N` it was in column liella
+verify: records added after the conversion: 1
+verify:   plan/07-decisions/x-implementation-decisions.md: row D-X.55 added after the conversion (a record with a story)
+verify: ok: heads, tails, headers and row multisets byte-identical; order = id order; nothing else differs
