@@ -12,7 +12,7 @@
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": [
-  "clog's atan2 window (min/max >= 2^-60) sends operands with very unequal parts to the route; s10_math_gen.rs regenerated on r5 but not yet committed",
+  "clog's atan2 window (min/max >= 2^-60) sends operands with very unequal parts to the route; s10_math_gen.rs regenerated and committed (3aa1ea532)",
   "step 0 (cexp/cexpf booked timing) not done"
  ],
  "refused": [],
