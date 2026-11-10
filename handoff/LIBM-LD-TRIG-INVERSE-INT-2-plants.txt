@@ -5,7 +5,7 @@ arc-table-index | crates/math/src/wide_int/arc.rs | lit:let tj = ATAN_J[j - 1]; 
 # The reduction's low part dropped: the quotient's residual correction (q0 alone, 2^-51).
 arc-div-low | crates/math/src/wide_int/arc.rs | lit:if e < 0 { q - c } else { q + c } ==> if e < 0 { q } else { q } | cargo test -p liella-math --lib wide_int::arc | msg:(quotient_and_root_meet_their_bounds|arc_tier_agrees_with_the_wide_route).*FAILED
 # tan's reduction low word dropped (the bits of d below the top 128 of the 256-bit fraction).
-arc-tan-low | crates/math/src/wide_int/arc.rs | lit:let d = (dh << kd) | (dl >> (128 - kd)); ==> let d = dh << kd; | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+arc-tan-low | crates/math/src/wide_int/arc.rs | lit:(dl >> (128 - kd)) ==> 0 | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
 # `near` always true: the rounding test never refuses (shared with sinl/cosl; the pinned boundary cases catch it).
 arc-near-true | crates/math/src/wide_int.rs | lit:if (lo & (u64::MAX >> 1)).wrapping_sub(ERR) > (1 << 63) - 2 * ERR { ==> if false { | cargo test -p liella-math --lib wide_int | msg:rounding_test_refuses_near_a_boundary.*FAILED
 # atan2l's quadrant correction dropped (x < 0 gives θ in place of π − θ).
