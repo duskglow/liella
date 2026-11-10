@@ -135,7 +135,6 @@ fn initial_thread<const PIE: bool>(aux: &Auxv<'_>) -> (start::Program, Option<bo
     b.tcb.store(tp, Relaxed);
     b.self_ptr.store(tp, Relaxed);
     b.flags.store(tls::FLAG_OWN, Relaxed);
-    crate::locale::own_block_made(b);
     if let Some(r) = aux.get(AT_RANDOM).and_then(|v| usize::try_from(v).ok()) {
         // UNSAFE(slice): the 16 random bytes the kernel put on the initial stack.
         #[allow(unsafe_code)]

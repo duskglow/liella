@@ -107,13 +107,6 @@ impl ClassTable {
         FILE_TABLES.get(k).unwrap_or(&WALK_TABLE)
     }
 
-    /// A table whose every test misses (`test` and `hit` answer `None`): the walking table,
-    /// whose stage 1 is never written. A thread block the runtime makes holds it in its
-    /// `wclass` word until a view is stored (D-5.11), so the class tests need no zero check.
-    pub fn missing() -> &'static ClassTable {
-        &WALK_TABLE
-    }
-
     /// A fresh compiled-locale table outside the slots (tests: `share` false sends every block
     /// to the pool).
     #[cfg(test)]

@@ -108,6 +108,11 @@ pub const H_ERRNO_OFFSET: usize = offset_of!(ThreadBlock, h_errno);
 pub const STACK_GUARD_OFFSET: usize = offset_of!(ThreadBlock, stack_guard);
 /// `flags` bit: the runtime set this block up (rather than glibc's `ld.so`).
 pub const FLAG_OWN: u32 = 1;
+/// `flags` bit, set only in a [`FLAG_OWN`] block: its `view` and `wclass` words hold a view and
+/// that view's class table, and every later locale change of the thread stores them (the block
+/// is listed in a process the runtime started). Set once, after the first store of both words;
+/// a block made fresh starts without it (D-5.11).
+pub const FLAG_VIEW: u32 = 2;
 
 const _: () = {
     assert!(offset_of!(ThreadBlock, tcb) == 0x00);

@@ -161,13 +161,12 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// block not resolved yet, take the view's path in a tail call.
 ///
 /// D-5.11 safety: the `wclass` word (0x180) lies where a block another `ld.so` made keeps its
-/// own data, so it is read only in a block the runtime made (`FLAG_OWN`, tested first); such a
-/// block holds a table from its creation ([`own_block_made`]: the always-missing table until a
-/// view is stored), so the word needs no zero check. Any other block takes the view path,
-/// whatever the word holds.
+/// own data, so it is read only in a block whose words are stored ([`views_stored`], tested
+/// first), and then without a zero check. Any other block takes the view path, whatever the
+/// word holds.
 #[inline(always)]
 pub fn isw(c: u32, mask: Class) -> i32 {
-    if own_block()
+    if views_stored()
         && let Some(r) = tb::class_table_at(tb::read::<tb::WClass>()).test(c, mask.0)
     {
         return r;
@@ -175,17 +174,39 @@ pub fn isw(c: u32, mask: Class) -> i32 {
     isw_view(c, mask)
 }
 
-/// Whether the calling thread's block is one the runtime made (`FLAG_OWN`): only such a block's
-/// words at 0x138-0x187 (`view`, `cache`, `wclass`) are Liella's to read and write (D-5.11).
+// ------------------------------------------------------------------------------ D-5.11 gates
+//
+// The words at 0x138-0x187 (`view`, `cache`, `wclass`) are Liella's only in a block the runtime
+// made: elsewhere another `ld.so` keeps its own data there. Every read and write of them is gated
+// by the flag word below, read in ONE place ([`block_flags`] for the calling thread,
+// [`block_flags_of`] for a block another thread stores into), so a different ownership test
+// replaces these two bodies only.
+
+/// The calling thread's Liella flags (`FLAG_OWN`, `FLAG_VIEW`), one `%fs` load.
 #[inline(always)]
-pub(crate) fn own_block() -> bool {
-    tb::read32::<tb::Flags>() & liella_rt::tls::FLAG_OWN != 0
+fn block_flags() -> u32 {
+    tb::read32::<tb::Flags>()
 }
 
-/// Fill the Liella-only words of a block the runtime just made and marked `FLAG_OWN`: its
-/// `wclass` word gets the always-missing table (D-5.11: [`isw`] reads it without a zero check).
-pub(crate) fn own_block_made(b: &liella_rt::tls::ThreadBlock) {
-    b.wclass.store(core::ptr::from_ref(liella::locale::classes::ClassTable::missing()).expose_provenance(), Relaxed);
+/// `b`'s Liella flags, as [`block_flags`].
+#[inline(always)]
+fn block_flags_of(b: &liella_rt::tls::ThreadBlock) -> u32 {
+    b.flags.load(Relaxed)
+}
+
+/// Whether the calling thread's block is one the runtime made (`FLAG_OWN`): only such a block's
+/// words at 0x138-0x187 are Liella's to read and write (D-5.11).
+#[inline(always)]
+pub(crate) fn own_block() -> bool {
+    block_flags() & liella_rt::tls::FLAG_OWN != 0
+}
+
+/// Whether the calling thread's `view` and `wclass` words hold its current view and that view's
+/// class table (`FLAG_VIEW`: set by [`store_view`] in a block the runtime made, after both words;
+/// D-5.11). Then neither word needs a zero check.
+#[inline(always)]
+fn views_stored() -> bool {
+    block_flags() & liella_rt::tls::FLAG_VIEW != 0
 }
 
 /// `iswctype(c, desc)` in the calling thread's current locale: a standard class's mask (or
@@ -211,17 +232,13 @@ fn isw_view(c: u32, mask: Class) -> i32 {
     view().isw_int(c, mask)
 }
 
-/// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load; a thread
-/// whose word is not stored (0) resolves its `uselocale` choice, else the global locale. The
-/// word is read only in a block the runtime made ([`own_block`], D-5.11); any other block
-/// resolves, whatever the word holds.
+/// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load, in a
+/// block whose words are stored ([`views_stored`], D-5.11); any other thread resolves its
+/// `uselocale` choice, else the global locale, whatever the word holds.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    if own_block() {
-        let w = tb::read::<tb::View>();
-        if w != 0 {
-            return tb::view_at(w);
-        }
+    if views_stored() {
+        return tb::view_at(tb::read::<tb::View>());
     }
     view_of(tb::read::<tb::Locale>())
 }
@@ -299,14 +316,21 @@ fn store_words(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
 }
 
 /// `b`'s `view` word and, with it, its `wclass` word (D-5.11: the class tests read the table
-/// without the view). Every writer of `view` stores both. A block the runtime did not make
-/// (`FLAG_OWN` clear) is never written there: those words are not Liella's (D-5.11).
+/// without the view). Every writer of `view` stores both; the first store then sets `FLAG_VIEW`,
+/// after both words, so a reader that sees the flag finds both stored (each word is replaced
+/// whole later: a reader takes the old or the new value of each, both valid). A block the
+/// runtime did not make (`FLAG_OWN` clear) is never written there, flag word included: those
+/// words are not Liella's (D-5.11).
 fn store_view(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
-    if b.flags.load(Relaxed) & liella_rt::tls::FLAG_OWN == 0 {
+    let flags = block_flags_of(b);
+    if flags & liella_rt::tls::FLAG_OWN == 0 {
         return;
     }
     b.wclass.store(core::ptr::from_ref(v.class_table()).expose_provenance(), Release);
     b.view.store(core::ptr::from_ref(v).expose_provenance(), Release);
+    if flags & liella_rt::tls::FLAG_VIEW == 0 {
+        b.flags.fetch_or(liella_rt::tls::FLAG_VIEW, Release);
+    }
 }
 
 /// After `newlocale` changed the object `loc` in place: the `view` word of every thread that
@@ -874,6 +898,7 @@ mod tests {
                 w
             };
             let saved = words();
+            let flags = b.flags.load(Relaxed);
             // Answers before the garbage (the view path: nothing stored for this thread).
             let probe = [0x41u32, 0x7a, 0x30, 0xe9, 0x3b1, 0x4e00, 0x1_0400, 0x11_0000];
             let classes = [Class::ALPHA, Class::DIGIT, Class::SPACE, Class::UPPER, Class::PRINT];
@@ -903,6 +928,7 @@ mod tests {
             assert!(v != garbage(0), "view() used the garbage view word");
             assert!(fresh, "with_period read the garbage cache words");
             assert_eq!(after, planted, "a word at 0x138-0x187 of a foreign block was written");
+            assert_eq!(b.flags.load(Relaxed), flags, "the flag word of a foreign block was written");
         })
         .join()
         .unwrap();

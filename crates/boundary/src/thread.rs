@@ -625,7 +625,6 @@ fn create_inner(a: &Attr, start: usize, arg: usize, c11: bool, kept: bool) -> KR
     b.pointer_guard.store(me.pointer_guard.load(Relaxed), Relaxed);
     b.multiple_threads.store(1, Relaxed);
     b.flags.store(FLAG_OWN, Relaxed);
-    crate::locale::own_block_made(b);
     b.tid.store(0, Relaxed);
     // A new thread uses the global locale, whatever its creator uses (D-5.5 probes); its ctype
     // words are stored when it is listed.
