@@ -399,16 +399,16 @@ pub const ABSENT_LIST: &str = "hot-text.absent";
 
 /// One key of the list: its tier and the profiles whose trace hit it (empty: none recorded).
 #[derive(Debug, PartialEq)]
-struct Entry {
-    key: String,
-    tier: &'static str,
+pub(crate) struct Entry {
+    pub(crate) key: String,
+    pub(crate) tier: &'static str,
     profiles: Vec<String>,
 }
 
 /// The lines of `hot-text.list`: `<key>\t<tier>\t<profiles>` (profiles comma-separated, `-` for
 /// none); `#` comments and blank lines skipped. A line with the key alone (the list before tiers)
 /// has tier `extra` and no profile. Errors name the line.
-fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
+pub(crate) fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
     let mut out = Vec::new();
     for (n, l) in text.lines().enumerate() {
         if l.trim().is_empty() || l.starts_with('#') {

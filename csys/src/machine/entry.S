@@ -74,6 +74,11 @@ liella_machine_ld_enter:
 	.cfi_endproc
 	.size liella_machine_ld_enter, .-liella_machine_ld_enter
 #else
+	/* The start-up read-only data group (D-X.62, xtask/src/startup_ro.rs): this object comes first in a
+	 * link, so its empty .rodata1 comes first in the output section and gives it its alignment; the
+	 * group, at most this many bytes, then sits in one 64 KiB fault-around window. */
+	.section .rodata1,"a",@progbits
+	.balign 65536
 	.section .eh_frame,"a",@unwind
 	.globl liella_eh_frame_start
 	.hidden liella_eh_frame_start
