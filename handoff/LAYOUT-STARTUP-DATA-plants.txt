@@ -1,0 +1,11 @@
+# LAYOUT-STARTUP-DATA (D-X.50): the STARTUP-DATA-WINDOWS contract (xtask/src/layout.rs kind startup-data-windows).
+# The budget plants check the products of origin/next 21ef00b34 + this branch built on keke (job lsd-measure-1), saved
+# in ~/work/LAYOUT-STARTUP-DATA/fast-products. lsd-rw-budget-minus-one is the NSCACHE plant in the form this story can
+# give: NSCACHE sits alone on its 4 KiB page on next (UTMP-Y2038-UNSIGNED-2), so one page less names it as the object alone.
+lsd-ro-budget-minus-one | layout/contracts.tsv | lit:ro-budget-fast=3; ==> ro-budget-fast=2; | cargo xtask layout-check ~/work/LAYOUT-STARTUP-DATA/fast-products | msg:STARTUP-DATA-WINDOWS BROKEN: 3 windows: start-up ro data spans 3 windows of 65536 bytes > ro-budget-fast 2
+lsd-rw-budget-minus-one | layout/contracts.tsv | lit:rw-budget-fast=20; ==> rw-budget-fast=19; | cargo xtask layout-check ~/work/LAYOUT-STARTUP-DATA/fast-products | msg:STARTUP-DATA-WINDOWS BROKEN: _RNvNtCs[A-Za-z0-9]+_13liella_legacy7nscache7NSCACHE: sits alone in the 4096-byte page
+lsd-head-only | xtask/src/layout.rs | lit:window_of(o.end.min(o.start + unit) - 1, unit) ==> window_of(o.end - 1, unit) | cargo test -p xtask --bin xtask -- layout::tests:: | msg:a large object counts the pages of its first 4 KiB
+lsd-tls-kept | xtask/src/layout.rs | lit:|| f[6].contains('T') { ==> { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:neither the non-allocated .comment nor TLS is read
+lsd-operands-off | xtask/src/layout.rs | lit:found.extend(operands); ==> found.extend(operands.iter().take(0)); | cargo test -p xtask --bin xtask -- layout::tests:: | msg:startup_function_operands_count_unnamed_and_unkeyed_objects
+lsd-lone-not-named | xtask/src/layout.rs | lit:if let [o] = objs.as_slice() { ==> if let [o, _] = objs.as_slice() { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:startup_data_holds_within_the_budget_and_names_the_lone_object_one_below
+lsd-budget-compare | xtask/src/layout.rs | lit:if n <= budget { ==> if n <= budget + 1 { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:startup_data_holds_within_the_budget_and_names_the_lone_object_one_below

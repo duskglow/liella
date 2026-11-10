@@ -797,7 +797,10 @@ family!(fam_cproj, "cproj", 8);
 family!(fam_creal, "creal", 8);
 family!(fam_csin, "csin", 8);
 family!(fam_csinh, "csinh", 8);
-family!(fam_csqrt, "csqrt", 8);
+#[test]
+fn fam_csqrt() {
+    assert_eq!(products::math_family("csqrt"), 8);
+}
 family!(fam_ctan, "ctan", 8);
 family!(fam_ctanh, "ctanh", 8);
 #[test]
@@ -1549,10 +1552,22 @@ symbol!(sym___sinh_finite, "__sinh_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhf128_finite, "__sinhf128_finite", "10", "2.26", r##""##);
 symbol!(sym___sinhf_finite, "__sinhf_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhl_finite, "__sinhl_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrt_finite, "__sqrt_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtf128_finite, "__sqrtf128_finite", "10", "2.26", r##""##);
-symbol!(sym___sqrtf_finite, "__sqrtf_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtl_finite, "__sqrtl_finite", "10", "2.15", r##""##);
+#[test]
+fn sym___sqrt_finite() {
+    products::math_compat("__sqrt_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtf128_finite() {
+    products::math_compat("__sqrtf128_finite", "GLIBC_2.26");
+}
+#[test]
+fn sym___sqrtf_finite() {
+    products::math_compat("__sqrtf_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtl_finite() {
+    products::math_compat("__sqrtl_finite", "GLIBC_2.15");
+}
 symbol!(sym___y0_finite, "__y0_finite", "10", "2.15", r##""##);
 symbol!(sym___y0f128_finite, "__y0f128_finite", "10", "2.26", r##""##);
 symbol!(sym___y0f_finite, "__y0f_finite", "10", "2.15", r##""##);
@@ -1920,6 +1935,48 @@ fn math_sqrt_hardware_matches_the_software_square_root() {
         }
     }
     fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
+    // Clauses: s10_0_f_0.
+    // D-10.22/D-10.71: the in-place `sqrtsd`/`sqrtss` runs only under a word whose exceptions are
+    // all masked. With the denormal-operand exception unmasked, a subnormal operand would trap in
+    // the instruction; the software path answers instead, with the reference bits, flags and
+    // errno, in every direction. The divide-by-zero, overflow and underflow masks (which a square
+    // root never raises) must give the same answers. Invalid and inexact stay masked: the
+    // harness's own arithmetic raises them.
+    use liella_math::{fused, MathError, Rounding};
+    let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    for unmask in [0x100_u32, 0x200, 0x400, 0x800] {
+        for (rc, &mode) in (0u32..).zip(modes.iter()) {
+            let mx = (0x1f80 & !unmask) | (rc << 13);
+            for x in [1e-310, 5e-324, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f64, f64>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+            for x in [1e-40f32, 1e-45, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f32, f32>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrtl_entry_tests_its_word_and_class_in_c() {
+    // Clauses: s10_0_f_0.
+    // D-10.71: `sqrtl`'s assembly entry (its own control-word and `fxam` tests) is reached only
+    // from C: the tests above call `liella_sqrtl_bits`. conformance/c/s10_sqrtl_entry.c calls the
+    // exported `sqrtl` statically linked: in place in two directions, a negative operand's EDOM,
+    // -0, and 53-bit precision control keeping the 64-bit root.
+    products::conformance(&["s10_sqrtl_entry"]);
 }
 
 /// `hypotf` in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward zero): the result's bits,

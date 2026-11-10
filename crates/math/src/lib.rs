@@ -51,6 +51,7 @@ pub mod special;
 pub mod wide;
 mod wide_dd;
 mod wide_int;
+mod wide_int_el;
 pub mod real;
 pub mod complex;
 pub mod complex_fast;

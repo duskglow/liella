@@ -18,7 +18,8 @@
 //! # Rules, in order of precedence
 //!
 //! 1. ESCALATE TO FULL (everything: the workspace clippy and `cargo xtask test`): `csys/` (but
-//!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock`, the
+//!    the assembly sources, rule 6), `crates/abi`, build scripts, `Cargo.toml`/`Cargo.lock` (but `fuzz/`'s own
+//!    workspace, which selects only `fuzz-check`), the
 //!    toolchain file, `xtask/` (but this module and the audit modules, rule 7, and xtask test code: `xtask/tests/`
 //!    or a source whose base diff stays inside its trailing `#[cfg(test)]` module, D-X.41), the generated tables and their inputs (`spec/clauses.tsv`, `symbols.tsv`,
 //!    `primitives.tsv`, `spec/abi`, `spec/unicode`, `*_gen.rs`, `tables.rs`, `builtin_items.rs`,
@@ -1505,6 +1506,11 @@ fn classify(path: &str) -> Option<Class> {
     if path.starts_with("crates/abi/") {
         return full("crates/abi (the ABI types every crate shares)");
     }
+    // Before the build configuration: `fuzz/` is a workspace of its own (excluded from the root one), so its
+    // `Cargo.toml`, `Cargo.lock` and toolchain file reach no gated crate; `fuzz-check` covers them (#4338).
+    if path.starts_with("fuzz/") {
+        return Some(Class::Nothing("not part of the test gate (bench, fuzz and validation have their own commands)"));
+    }
     if file == "build.rs" || file == "Cargo.toml" || file == "Cargo.lock" || file.starts_with("rust-toolchain") || file == "clippy.toml" || path.starts_with(".cargo/") {
         return full("build configuration");
     }
@@ -1534,7 +1540,7 @@ fn classify(path: &str) -> Option<Class> {
     if path.starts_with("bench/") || path.starts_with("benchmarks/") {
         return Some(Class::XtaskData);
     }
-    if path.starts_with("fuzz/") || path.starts_with("validation/") {
+    if path.starts_with("validation/") {
         return Some(Class::Nothing("not part of the test gate (bench, fuzz and validation have their own commands)"));
     }
     None
@@ -1636,7 +1642,7 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
         let f = f.as_str();
         // The fuzz harnesses (a workspace of their own, not in `cargo test`) must still compile when a library
         // crate or they themselves change (HYGIENE-1); seeds and scripts cannot break the build.
-        if (f.starts_with("crates/") && f.ends_with(".rs") && !f.contains("/tests/")) || (f.starts_with("fuzz/") && (f.ends_with(".rs") || f.ends_with("Cargo.toml"))) {
+        if (f.starts_with("crates/") && f.ends_with(".rs") && !f.contains("/tests/")) || (f.starts_with("fuzz/") && (f.ends_with(".rs") || f.ends_with("Cargo.toml") || f.ends_with("Cargo.lock") || f.ends_with("rust-toolchain.toml"))) {
             sel.xtask_cmds.insert("fuzz-check".to_string());
         }
         if f == "crates/boundary/src/ffi.rs" || f.starts_with("csys/include/") || f.starts_with("csys/src/machine/") {
@@ -4199,6 +4205,20 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         let (_, s) = sel(&["bench/instr_limits.tsv"]);
         assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty(), "bench data selects only the xtask tests: {s:?}");
         assert!(!sel(&["fuzz/seeds/x"]).1.xtask_tests, "fuzz stays unselected");
+    }
+
+    // #4338: no spec clause (test-harness tooling). The fuzz workspace's manifest, lock and toolchain file never
+    // escalate to FULL (the build-configuration rule must not win over `fuzz/`); they select only `fuzz-check`.
+    #[test]
+    fn fuzz_workspace_files_select_only_fuzz_check() {
+        for f in ["fuzz/Cargo.toml", "fuzz/Cargo.lock", "fuzz/rust-toolchain.toml", "fuzz/fuzz_targets/new_target.rs"] {
+            let (_, s) = sel(&[f]);
+            assert!(s.full.is_empty(), "{f} must not escalate to FULL: {s:?}");
+            assert!(s.tests.is_empty() && s.conf.is_empty() && !s.xtask_tests, "{f} selects no tests: {s:?}");
+            assert!(s.xtask_cmds.contains("fuzz-check"), "{f} must select fuzz-check: {s:?}");
+        }
+        assert!(!sel(&["Cargo.toml"]).1.full.is_empty(), "the root manifest still escalates");
+        assert!(!sel(&["validation/Cargo.toml"]).1.full.is_empty(), "only fuzz/ is a separate workspace");
     }
 
     // XTASK-AFFECTED-RECORDS (D-X.57): no spec clause. A record, a view input or the layout manifest selects its

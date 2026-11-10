@@ -209,7 +209,7 @@ pub extern "C" fn acosf64(x: f64) -> f64 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosf64x_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::acos)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -254,7 +254,7 @@ pub extern "C" fn liella_acoshl_bits(x: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_acosl_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::acos)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::acos_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -289,7 +289,7 @@ pub extern "C" fn asinf64(x: f64) -> f64 {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinf64x_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::asin)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";
@@ -334,7 +334,7 @@ pub extern "C" fn liella_asinhl_bits(x: LdBits) -> LdBits {
 
 export! { libm "LIELLA_PRIVATE";
 pub extern "C" fn liella_asinl_bits(x: LdBits) -> LdBits {
-    mret::elem(mret::f80(x), mret::Unit::X87, math::real::Real::asin)
+    mret::elem(mret::f80(x), mret::Unit::X87, |v, m| math::wide::asin_sqrt(v, m, crate::hot::sqrtsd))
 }}
 
 export! { libm "GLIBC_2.2.5";

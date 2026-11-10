@@ -60,6 +60,8 @@
     clippy::unreadable_literal
 )] // fixed-point words, exponents and table indices of bounded range (each noted where it is formed)
 
+pub(crate) mod arc;
+
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -71,7 +73,7 @@ const B: u32 = 92;
 const ERR: u64 = (1 << (128 - B)) + 4;
 /// `|d|` below `2^-92` (the top 128 bits of its 256-bit form below `2^36`) is refused.
 const MIN_D: u128 = 1 << 36;
-const M64: u128 = (1 << 64) - 1;
+pub(crate) const M64: u128 = (1 << 64) - 1;
 
 // The series of `sin(πd/2)/d` and `cos(πd/2)` in `u = d²` (step 3), each coefficient rounded to
 // nearest in the units noted.
@@ -192,20 +194,20 @@ fn reduce(m: u64, e: i32) -> (u32, bool, u128, u128) {
 
 /// `⌊a·b/2^128⌋` less at most 2 (the low product and two carries dropped).
 #[inline]
-fn mulhi(a: u128, b: u128) -> u128 {
+pub(crate) fn mulhi(a: u128, b: u128) -> u128 {
     let (ah, al, bh, bl) = (a >> 64, a & M64, b >> 64, b & M64);
     ah * bh + ((ah * bl) >> 64) + ((al * bh) >> 64)
 }
 
 /// `⌊a·b/2^64⌋` less at most 1.
 #[inline]
-fn mul_wide(a: u128, b: u64) -> u128 {
+pub(crate) fn mul_wide(a: u128, b: u64) -> u128 {
     let b = u128::from(b);
     (a >> 64) * b + (((a & M64) * b) >> 64)
 }
 
 #[inline]
-fn mulhi64(a: u64, b: u64) -> u64 {
+pub(crate) fn mulhi64(a: u64, b: u64) -> u64 {
     ((u128::from(a) * u128::from(b)) >> 64) as u64
 }
 
@@ -230,7 +232,7 @@ fn cos_poly(u: u128, u1: u64) -> u128 {
 
 /// Step 5: `±m·2^e` rounded into `F` (64-bit significand) in `mode`, or `None` when the bound
 /// does not decide it.
-fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
+pub(crate) fn round<F: Float>(neg: bool, m: u128, e: i32, mode: Rounding) -> Option<(F, Status)> {
     let lo = m as u64;
     // The distance above the last representable value or midpoint must lie in [ERR, 2^63 - ERR].
     if (lo & (u64::MAX >> 1)).wrapping_sub(ERR) > (1 << 63) - 2 * ERR {
@@ -540,7 +542,7 @@ mod tests {
     /// `frac(2^e·2/π)` gives (Muller, Elementary Functions, 3rd ed. 2016, ch. 11): the last
     /// convergent denominator below 2^62 (as far as the 127-bit expansion's convergents are the
     /// number's own).
-    fn near_multiple(e: i32) -> Option<Num> {
+    pub(super) fn near_multiple(e: i32) -> Option<Num> {
         let (mut num, mut den) = (alpha(e), 1u128 << 127);
         let (mut q2, mut q1) = (1u128, 0u128);
         let mut best = None;

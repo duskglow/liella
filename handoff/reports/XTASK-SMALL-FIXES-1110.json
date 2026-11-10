@@ -1,0 +1,36 @@
+{
+ "task": "XTASK-SMALL-FIXES-1110",
+ "model": "opus",
+ "tokens": null,
+ "result": "4 fixes committed (codemap macro labels, affected fuzz/ order, csqrt/__sqrt*_finite stubs specified, regen.sh 755); gate running, plants not yet run",
+ "branch": "task/xtask-small-fixes-1110",
+ "head": "894b8cfbf",
+ "gate": {
+  "affected": "pending (xsf1110-gate running on mei)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "168 other spectest pending stubs fail under --include-ignored",
+   "recommendation": "no gate runs --include-ignored over stub files, or pending() prints and returns"
+  }
+ ],
+ "informational": [
+  "regen.sh mode change landed inside the codemap commit d106e3213 (pre-staged index; pushed, not split)",
+  "sync_role needs no change: rsync -rlpD and the tar fallback keep modes"
+ ],
+ "refused": [
+  "cargo xtask plants refused the two .S plants (no liella_machine_ anchor); replaced in 90a54c9e7",
+  "sync_role BUSY while xsf1110-gate runs: 90a54c9e7 not synced"
+ ],
+ "jobs": [
+  "xsf1110-static",
+  "xsf1110-xtests",
+  "xsf1110-codemap",
+  "xsf1110-gate"
+ ],
+ "improvement": "xtask plants should accept any label anchor in .S files (compat_aliases.S has only liella_compat_ labels)",
+ "next_step": "after xsf1110-gate: sync 90a54c9e7, run the 8 plants and the s10_math_symbols fam_csqrt/sym___sqrt tests",
+ "report_file": "handoff/XTASK-SMALL-FIXES-1110.md"
+}
