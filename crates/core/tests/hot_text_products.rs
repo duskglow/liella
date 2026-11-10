@@ -678,7 +678,7 @@ fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
     let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
     let start = lines.iter().position(|l| l.split_whitespace().next() == Some(".text") && !l.starts_with(' ')).expect("no .text output section in the link map");
     let mut out = Vec::new();
-    for (i, l) in lines.iter().enumerate().skip(start + 1) {
+    for (i, l) in lines.iter().enumerate().skip(start.saturating_add(1)) {
         if !l.is_empty() && !l.starts_with(' ') {
             break;
         }
@@ -689,7 +689,7 @@ fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
         let mut w: Vec<&str> = t.split_whitespace().collect();
         let name = w.remove(0).to_string();
         if w.is_empty() {
-            w = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+            w = lines.get(i.saturating_add(1)).map(|n| n.split_whitespace().collect()).unwrap_or_default();
         }
         if let (Some(a), Some(s), Some(f)) = (w.first().and_then(|x| hex(x)), w.get(1).and_then(|x| hex(x)), w.get(2)) {
             out.push((name, a, s, (*f).to_string()));
@@ -756,7 +756,7 @@ fn cluster_ranges(map: &str) -> Vec<(String, u64, u64)> {
                 let p = n.strip_prefix(".text.sorted.h").and_then(|r| r.get(..5)).and_then(|d| d.parse::<usize>().ok());
                 if *s > 0 && p.is_some_and(|p| (first..=last).contains(&p)) {
                     lo = lo.min(*a);
-                    hi = hi.max(a + s);
+                    hi = hi.max(a.saturating_add(*s));
                 }
             }
             assert!(lo < hi, "cluster {name}: no section of positions {first}..={last} in the link");
@@ -775,8 +775,8 @@ fn init_zero_fault_clusters_sit_in_one_window() {
     let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
     let _ = std::fs::remove_dir_all(&dir);
     for (name, lo, hi) in cluster_ranges(&map) {
-        eprintln!("cluster {name}: {lo:#x}..{hi:#x} ({} bytes)", hi - lo);
-        assert_eq!(lo >> 16, (hi - 1) >> 16, "CLUSTER-WINDOW: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window (head alignment missing?)");
+        eprintln!("cluster {name}: {lo:#x}..{hi:#x} ({} bytes)", hi.saturating_sub(lo));
+        assert_eq!(lo >> 16, hi.saturating_sub(1) >> 16, "CLUSTER-WINDOW: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window (head alignment missing?)");
     }
 }
 
@@ -810,7 +810,7 @@ fn init_zero_fault_calls_hold_at_every_text_phase() {
             let crt1 = padded_crt1(&dir, region, pad);
             let map = link_map(&dir, &crt1);
             for (name, lo, hi) in cluster_ranges(&map) {
-                if lo >> 16 != (hi - 1) >> 16 {
+                if lo >> 16 != hi.saturating_sub(1) >> 16 {
                     bad.push(format!("{region} {pad:#x}: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window"));
                 }
             }

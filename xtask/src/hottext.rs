@@ -525,7 +525,10 @@ fn function_of(section: &str) -> Option<&str> {
     let f = section.strip_prefix(".text.")?;
     // LAYOUT-TEXT-PIN: `.text.startup.<f>` / `.text.exit.<f>` (GCC) and this tool's own
     // [`COLD_PREFIX`] carry the function name the same way.
-    for p in ["unlikely.", "startup.", "exit.", COLD_PREFIX] {
+    if let Some(name) = f.strip_prefix(COLD_PREFIX) {
+        return Some(name.strip_suffix(COLD_SUFFIX).unwrap_or(name));
+    }
+    for p in ["unlikely.", "startup.", "exit."] {
         if let Some(name) = f.strip_prefix(p) {
             return Some(name);
         }
@@ -549,10 +552,12 @@ fn section_for(f: &str, keys: &BTreeMap<String, usize>) -> String {
     }
 }
 
-/// LAYOUT-TEXT-PIN (D-X.63): the prefix (after `.text.`) of an unlisted function whose plain
-/// `.text.<f>` would itself match one of GNU ld's pre-group patterns (a function named `exit`
-/// gets `.text.exit`). [`function_of`] strips it, so a later listing still finds the key.
+/// LAYOUT-TEXT-PIN (D-X.63): the prefix (after `.text.`) and suffix of an unlisted function whose
+/// plain `.text.<f>` would itself match one of GNU ld's pre-group patterns (a function named `exit`
+/// gets `.text.exit`; the suffix breaks `.text.*_unlikely`). [`function_of`] strips both, so a
+/// later listing still finds the key.
 const COLD_PREFIX: &str = "liella_cold.";
+const COLD_SUFFIX: &str = ".liella_cold";
 
 /// Whether GNU ld's default script (2.42) places input section `name` ahead of the hot group:
 /// `*(.text.unlikely .text.*_unlikely .text.unlikely.*)`, `*(.text.exit .text.exit.*)`,
@@ -572,7 +577,7 @@ fn before_group(name: &str) -> bool {
 /// the group. Now nothing of the library precedes the group (TEXT-PREFIX).
 fn rename_for(_name: &str, f: &str, keys: &BTreeMap<String, usize>) -> String {
     let want = section_for(f, keys);
-    if before_group(&want) { format!(".text.{COLD_PREFIX}{f}") } else { want }
+    if before_group(&want) { format!(".text.{COLD_PREFIX}{f}{COLD_SUFFIX}") } else { want }
 }
 
 /// LAYOUT-TEXT-PIN (D-X.63): the 0-fault clusters of the hot group, next to the list:
@@ -638,18 +643,47 @@ fn cluster_align(bytes: u64, min: u64) -> u64 {
 const CLUSTER_MARK: u64 = 1024;
 const PLAIN_ALIGN: u64 = 64;
 
-/// `readelf -SW` of `obj`: (name, size, alignment) of every section.
+/// (name, size, alignment) of every section of the ELF64 little-endian object `obj`, read from
+/// its section headers. Not `readelf -SW`: it cuts names at 256 bytes, so a long mangled name
+/// would be renamed under a name no section has (LAYOUT-STARTUP-RODATA-3, #4354).
 fn section_table(obj: &Path) -> Result<Vec<(String, u64, u64)>, String> {
-    let out = Command::new("readelf").args(["-SW"]).arg(obj).output().map_err(|e| format!("readelf: {e}"))?;
-    let mut v = Vec::new();
-    for line in String::from_utf8_lossy(&out.stdout).lines() {
-        let Some((_, rest)) = line.trim_start().strip_prefix('[').and_then(|l| l.split_once(']')) else { continue };
-        let f: Vec<&str> = rest.split_whitespace().collect();
-        // Name Type Address Off Size ES [Flg] Lk Inf Al
-        let (Some(name), Some(size), Some(al)) = (f.first(), f.get(4).and_then(|s| u64::from_str_radix(s, 16).ok()), f.last().and_then(|s| s.parse().ok())) else { continue };
-        v.push((name.to_string(), size, al));
+    let b = fs::read(obj).map_err(|e| format!("{}: {e}", obj.display()))?;
+    elf_sections(&b).ok_or_else(|| format!("{}: not a well-formed ELF64 little-endian object", obj.display()))
+}
+
+/// [`section_table`] of the bytes `b`; `None` when they are not a well-formed ELF64 LE file.
+fn elf_sections(b: &[u8]) -> Option<Vec<(String, u64, u64)>> {
+    let u16_at = |o: usize| Some(u16::from_le_bytes(b.get(o..o.checked_add(2)?)?.try_into().ok()?));
+    let u32_at = |o: usize| Some(u32::from_le_bytes(b.get(o..o.checked_add(4)?)?.try_into().ok()?));
+    let u64_at = |o: usize| Some(u64::from_le_bytes(b.get(o..o.checked_add(8)?)?.try_into().ok()?));
+    if b.get(..6)? != b"\x7fELF\x02\x01" {
+        return None;
     }
-    Ok(v)
+    let shoff = usize::try_from(u64_at(0x28)?).ok()?;
+    let entsize = usize::from(u16_at(0x3a)?);
+    if entsize < 64 {
+        return None;
+    }
+    let hdr = |i: usize| i.checked_mul(entsize).and_then(|o| o.checked_add(shoff));
+    // Extended numbering: a count of 0 / an index of SHN_XINDEX live in section header 0.
+    let mut count = usize::from(u16_at(0x3c)?);
+    if count == 0 {
+        count = usize::try_from(u64_at(hdr(0)?.checked_add(32)?)?).ok()?;
+    }
+    let mut strndx = usize::from(u16_at(0x3e)?);
+    if strndx == 0xffff {
+        strndx = usize::try_from(u32_at(hdr(0)?.checked_add(40)?)?).ok()?;
+    }
+    let strtab = usize::try_from(u64_at(hdr(strndx)?.checked_add(24)?)?).ok()?;
+    let mut out = Vec::with_capacity(count);
+    for i in 0..count {
+        let h = hdr(i)?;
+        let name_at = strtab.checked_add(usize::try_from(u32_at(h)?).ok()?)?;
+        let rest = b.get(name_at..)?;
+        let name = rest.get(..rest.iter().position(|c| *c == 0)?)?;
+        out.push((String::from_utf8_lossy(name).into_owned(), u64_at(h.checked_add(32)?)?, u64_at(h.checked_add(48)?)?));
+    }
+    Some(out)
 }
 
 /// STARTUP-READ-CONSTANTS: the key suffix of `liella_boundary::startup_names::STARTUP_NAMES`, the
@@ -924,7 +958,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{before_group, cluster_align, cluster_bytes, dead_key_verdict, function_of, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{before_group, cluster_align, cluster_bytes, dead_key_verdict, elf_sections, function_of, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -1103,11 +1137,11 @@ mod tests {
             (".text.hot.f", ".text.f"),
             (".text.startup.main", ".text.main"),
             (".text.exit.g", ".text.g"),
-            (".text.unlikely", ".text.liella_cold.unlikely"),
-            (".text.startup", ".text.liella_cold.startup"),
-            (".text.hot", ".text.liella_cold.hot"),
-            (".text.read_unlikely", ".text.liella_cold.read_unlikely"),
-            (".text.liella_cold.hot", ".text.liella_cold.hot"),
+            (".text.unlikely", ".text.liella_cold.unlikely.liella_cold"),
+            (".text.startup", ".text.liella_cold.startup.liella_cold"),
+            (".text.hot", ".text.liella_cold.hot.liella_cold"),
+            (".text.read_unlikely", ".text.liella_cold.read_unlikely.liella_cold"),
+            (".text.liella_cold.hot.liella_cold", ".text.liella_cold.hot.liella_cold"),
             (".text.f", ".text.f"),
         ] {
             let f = function_of(from).unwrap();
@@ -1118,7 +1152,7 @@ mod tests {
         }
         // `exit` (a Rust function named exit gets `.text.exit`) is listed here: it joins the group.
         assert_eq!(rename_for(".text.exit", "exit", &cold), ".text.sorted.h00000.exit");
-        assert_eq!(rename_for(".text.liella_cold.exit", function_of(".text.liella_cold.exit").unwrap(), &cold), ".text.sorted.h00000.exit");
+        assert_eq!(rename_for(".text.liella_cold.exit.liella_cold", function_of(".text.liella_cold.exit.liella_cold").unwrap(), &cold), ".text.sorted.h00000.exit");
         assert!(before_group(".text.exit") && before_group(".text.unlikely.x") && before_group(".text.hot.x") && before_group(".text.a_unlikely"));
         assert!(!before_group(".text.exitx") && !before_group(".text.sorted.h00001.x") && !before_group(".text"));
     }
@@ -1141,6 +1175,11 @@ mod tests {
         assert_eq!(cluster_align(5, 16), 16);
         assert_eq!(cluster_align(0x8001, 16), 0x10000);
         assert_eq!(cluster_align(0x30000, 16), WINDOW);
+        assert_eq!(elf_sections(b"not elf"), None);
+        // The test binary itself: its section table reads back whole.
+        let me = std::fs::read(std::env::current_exe().unwrap()).unwrap();
+        let secs = elf_sections(&me).unwrap();
+        assert!(secs.iter().any(|s| s.0 == ".text" && s.1 > 0), "{:?}", &secs[..secs.len().min(8)]);
         for (start, size) in [(0x1234_u64, 0x7000_u64), (0x8000, 0x8000), (0xfff0, 0x10)] {
             let a = cluster_align(size, 16);
             let lo = start.next_multiple_of(a);
