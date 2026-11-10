@@ -1,60 +1,60 @@
-# DL-IMAGE-READER(-2): ld.so reads the kernel-started program from its memory image
+# DL-IMAGE-READER(-2, -3): ld.so reads the kernel-started program from its memory image
 
-**State:** branch `task/dl-image-reader-2` (continues `task/dl-image-reader`), role keke:~/w/n4. Decisions in force:
-D-27.18 (amends D-27.17; extended in -2 with the load bias), D-27.17, L14-6; rulings #4229 (no /proc/self/exe), #4323
-(TEXTREL programs run; aliasing removed at its source), #4341 (a dependency naming the program's own file loads
-separately: accepted for now), #4342 (no-/proc proof on a host with unprivileged user namespaces), #4371 (bias without
-PT_PHDR), #4372 (ld.rs plants run `cargo xtask so` in their command).
+**State:** branch `task/dl-image-reader-3` (continues `task/dl-image-reader-2`, merged with origin/next), role
+mei:~/w/s3. Decisions in force: D-27.18 (amends D-27.17; load bias in -2; span list in -3), D-27.17, D-27.15 (no
+PT_LOAD count bound, landed on next), L14-6; rulings #4229 (no /proc/self/exe), #4323 (TEXTREL programs run; aliasing
+removed at its source), #4341 (a dependency naming the program's own file loads separately: accepted for now), #4342
+(no-/proc proof on a host with unprivileged user namespaces), #4371 (bias without PT_PHDR), #4372 (ld.rs plants run
+`cargo xtask so` in their command).
 
-## Done (DL-IMAGE-READER)
+## Done (DL-IMAGE-READER, -2)
 * `liella_ld::elf` image mode (`Elf::from_image`, `Span`, `image_span_kind` Live/Copy/Unseen); `boundary/src/ld.rs`
   `image_view` builds the spans, copies before the first store, no `/proc/self/exe` and no program file opened.
-  Details: D-27.18.
+* -2: the no-/proc test uses `unshare -r --root` (no chroot(8)); `liella_ld::start::bias` finds the bias without
+  PT_PHDR from the ELF header in the page holding AT_PHDR (#4371); RELRO at that bias (`rt::start::relro_at`).
+  Tests `reloc_ldso_kernel_started_without_proc`, `reloc_ldso_program_without_pt_phdr`. Details: D-27.18.
 
-## Done (DL-IMAGE-READER-2)
-* CI red cause (mei, `reloc_ldso_kernel_started_without_proc`): `unshare: failed to execute chroot: No such file or
-  directory`. chroot(8) is in /usr/sbin, outside the CI job's PATH. The test now uses `unshare -r --root=<dir>` (no
-  chroot binary). Passes on keke (unprivileged user namespaces work there); the parked `proc-self-exe-read-back`
-  plant now runs.
-* #4371: `liella_ld::start::bias` (pure): PT_PHDR's p_vaddr when present; without it, the ELF header at the start of
-  the page holding AT_PHDR (magic, e_phoff == offset in that page, e_phentsize 56, e_phnum == AT_PHNUM) gives e_phoff,
-  and the PT_LOAD whose file-backed part holds the table gives its link-time address; otherwise refused (never bias 0).
-  ld.rs reads those 64 bytes with `read_image` (same page as the table). RELRO protection uses the same bias
-  (`rt::start::relro_at`; `relro` delegates, static start unchanged), for `ld.so PROGRAM` too (it used PT_PHDR before).
-* Test `reloc_ldso_program_without_pt_phdr` (s27_1_c_1): the corpus PIE with PT_PHDR patched to PT_NULL runs
-  kernel-started and as `ld.so PROGRAM` (copied by cp(1) so the executed file is never open for writing in the test
-  process: no ETXTBSY window).
+## Done (DL-IMAGE-READER-3)
+* CI conflict: merged origin/next (8eb22e081). start.rs: next had landed the same `relro_at` (same signature and
+  body) with another doc comment; the comment now names both uses. docs/codemap/README.md regenerated (1e6059eab).
+* Semantic conflict the merge exposed (the merged head did not compile): next removed `map::LOADS_MAX` (D-27.15: any
+  number of PT_LOADs; `map_proc_self_maps_of_loaded_programs` runs a 300-PT_LOAD PIE as `ld.so PROGRAM`). `image_view`
+  used a fixed `[Span; LOADS_MAX + 1]` and refused > 64 PT_LOADs. Now (c965b0c22) the span list lives in the scratch
+  mapping that already holds the copied header table, `e_phnum` spans (one per PT_LOAD plus the PT_DYNAMIC copy;
+  PT_DYNAMIC is a required non-PT_LOAD header), so no system call is added; `span_slots` writes every slot before
+  forming the slice (two `UNSAFE(slice)` blocks). D-27.18's text corrected to match.
 
-## Results (keke)
-* dl-image-reader-2-lint0 (inherited head 691af02af): clippy + static rc 0.
-* dl-image-reader-2-t2: static rc 0, reloc 12/12 (the without-/proc and no-PT_PHDR tests included).
-* Final head 837633ebe: dl-image-reader-2-t3 clippy + static rc 0, reloc 12/12. dl-image-reader-2-gate2 (affected
-  --base origin/next) and dl-image-reader-2-plants2 (all four plants, /dev/shm/claude/DL-IMAGE-READER-2/plants-2)
-  started detached at hand-back: their verdicts are the dispatcher's.
-* dl-image-reader-2-gate (head 83faf4a7d, test-only diff to the final head): rc 0; 1874 passed, 0 failed;
-  conformance 17/17; 0 SKIPPED lines.
-* dl-image-reader-2-plants (head 83faf4a7d): proc-self-exe-read-back, bias-header-check-inverted,
-  bias-zero-without-pt-phdr CAUGHT with their msg; relro-bias-from-pt-phdr SURVIVED: the corpus program has
-  dependencies, so `link()` protects its RELRO and `run()`'s `relro_at` step was never reached. 837633ebe adds a
-  dependency-free PIE without PT_PHDR to `reloc_ldso_program_without_pt_phdr`; plants2 reruns all four.
-* dl-image-reader-2-counts (cbench_startup --compare --counters, head 83faf4a7d), Liella instructions: c 2146,
-  setloc 68079, printf 71873, wctype 69109. These rows are static programs: they never enter ld.so, and nothing on
-  this branch changes code a static start runs (`rt::start::program` unchanged; `relro`/`relro_at` are reached only
-  from ld.so). Not moved by construction; no origin/next before-count was taken (NOT VERIFIED as a pair).
-* Superseded: dl-image-reader-2-t1 (static red: the UNSAFE tag fell out of the audit's window after the SAFETY
-  comment grew; codemap line refs stale; fixed in 83faf4a7d), dl-image-reader-2-plants (1 SURVIVED, above).
+## Results (mei)
+* dl-image-reader-3-lint0 (inherited head a6b589869): clippy + static rc 0.
+* dl-image-reader-3-t2 (head c965b0c22, product code identical to the final head): codemap, clippy, static rc 0;
+  `so`; map 5/5, reloc 12/12.
+* dl-image-reader-3-gate (head 1e6059eab): rc 0; 1884 passed, 0 failed; conformance 17/17; 0 SKIPPED lines.
+* dl-image-reader-3-plants (head 1e6059eab, killed after 5 verdicts): the four -2 plants CAUGHT with their msg;
+  span-list-capped-at-64 SURVIVED: map.rs's 300-PT_LOAD program is `-nostdlib`, so ld.so never runs `link()` for it.
+  Fixed by the new test `reloc_ldso_program_with_many_loads` (ec78516a2, c5fe52548): the corpus PIE (with
+  dependencies) rewritten to 300 PT_LOADs, run as `ld.so PROGRAM`. Kernel-started is impossible at that count: the
+  kernel refuses (ENOEXEC) a header table over one page (73 headers), seen in dl-image-reader-3-t4.
+* FINAL HEAD (c5fe52548 + this handoff), started detached at hand-back, verdicts are the dispatcher's:
+  dl-image-reader-3-gate2 (clippy, static, affected --base origin/next) and dl-image-reader-3-plants3 (all six plants,
+  /mnt/zram/claude/DL-IMAGE-READER-3/plants-3; the span-list plants target the new test). The new test itself has not
+  yet passed in a finished job (gate2 runs it): NOT VERIFIED until gate2 ends.
+* Counts: none run. cbench_startup rows are static programs that never enter ld.so; this run changes only ld.so's
+  `link` path (no system call added: the span list shares an existing mapping).
+* Superseded: dl-image-reader-3-codemap (rc 128: a `git status` step in the job; the role is not a git checkout),
+  dl-image-reader-3-codemap2 (rc 1: merged head did not compile, LOADS_MAX), dl-image-reader-3-t1 (rc 1: clippy
+  multiple_unsafe_ops_per_block; split into two blocks).
 
 ## Open / informational
-* `crates/boundary/src/process.rs:53` and `runtime.rs:87` (libc's own start for a dynamic program) still take the bias
-  from PT_PHDR via `rt::start::program` (0 without it): only matters for a dynamic PIE without PT_PHDR whose TLS/RELRO
-  libc reads; not reached by this story's tests. Candidate follow-up: pass ld.so's bias, or use `start::bias` there.
-* No startup row runs a dynamic program through Liella's ld.so (cbench_startup rows are static). A row for it would
-  let counters guard this path.
-* Miri: not practical (the access pattern crosses the process image and raw syscalls); the targeted reader test stands in.
+* `crates/boundary/src/process.rs` and `runtime.rs` (libc's own start for a dynamic program) still take the bias from
+  PT_PHDR via `rt::start::program` (0 without it): matters only for a dynamic PIE without PT_PHDR whose TLS/RELRO libc
+  reads. Candidate follow-up: pass ld.so's bias, or use `start::bias` there.
+* No startup row runs a dynamic program through Liella's ld.so (cbench_startup rows are static).
+* The 300-PT_LOAD test runs `ld.so PROGRAM` only; the kernel-started path shares `image_view`, untested at that count.
+* Miri: not practical (the access pattern crosses the process image and raw syscalls); the targeted tests stand in.
 
 ## Don't redo
 The linker refuses a TEXTREL against a library data symbol in a PIE (error 6): text-relocate program-local data. Do not
-call chroot(8) from tests: use `unshare --root`.
+call chroot(8) from tests: use `unshare --root`. Do not reintroduce a PT_LOAD cap in the image reader (D-27.15).
 
 ## Next step
 Land. Optional follow-ups: the libc-side bias without PT_PHDR (above) and a dynamic start-up count row.
