@@ -14,11 +14,12 @@ use std::process::{Command, Stdio};
 /// Upper bound on the lowest of [`RUNS`] counts: 7 bitmap pages for 14 classes plus headroom.
 const BOUND: u64 = 9;
 const RUNS: usize = 5;
-/// Upper bound on the lowest of [`RUNS`] counts of the process's first `malloc(16)` (D-3.19): one
-/// registry page, the first cache, the segment's head page and bitmap page, the block's slab
-/// page and the first `getcpu`'s vDSO page (6 measured). With the cache table, segment bases
-/// and segment hash in separate mappings it took 8.
-const FIRST_BOUND: u64 = 7;
+/// Upper bound on the lowest of [`RUNS`] counts of the process's first `malloc(16)` (D-3.19): 11
+/// measured (one registry page, the first cache, the segment's head and bitmap pages, the
+/// block's slab page, the first `getcpu`'s vDSO page, and the text and stack pages of the path),
+/// plus one; the registries in mappings of their own add two (plant
+/// `first-reservation-off-faults`).
+const FIRST_BOUND: u64 = 12;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
