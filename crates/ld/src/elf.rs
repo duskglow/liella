@@ -977,9 +977,31 @@ impl<'a> Dynamic<'a> {
                 return Err(ElfError::BadDynamicValue(dt::SYMENT));
             }
         }
-        let count = self.symbol_count()?;
+        let count = self.symtab_count()?;
         let b = self.elf.bytes_from(addr)?;
         Ok(Some(Symtab { rd: Rd { b, be: self.rd.be }, count }))
+    }
+
+    /// The count [`Dynamic::symtab`] checks an index against: [`Dynamic::symbol_count`], except when
+    /// that is only a lower bound (no SysV table and a GNU table whose buckets are all empty: the object
+    /// hashes no symbol, and its unhashed symbols need not end at `symoffset`, as linkers emit for a
+    /// program that exports nothing). Then it is raised to cover every symbol a RELA or `JMPREL` entry
+    /// names, the only indices read past the hashed ones. Objects that hash a symbol pay nothing.
+    fn symtab_count(&self) -> Result<Option<u32>, ElfError> {
+        let count = self.symbol_count()?;
+        let lower_bound = self.sysv_hash()?.is_none() && self.gnu_hash()?.is_some_and(|g| (0..g.nbuckets()).all(|i| g.bucket(i) == Some(0)));
+        let Some(mut count) = count.filter(|_| lower_bound) else { return Ok(count) };
+        for (addr, size) in [(dt::RELA, dt::RELASZ), (dt::JMPREL, dt::PLTRELSZ)] {
+            let Some((at, len)) = self.pair(addr, size)? else { continue };
+            let rd = Rd { b: self.elf.bytes_at(at, len)?, be: self.rd.be };
+            // r_info is the second word of each entry; its high half is the symbol index.
+            let mut off = 8usize;
+            while let Some(info) = rd.u64(off) {
+                count = count.max(u32::try_from(info >> 32).unwrap_or(u32::MAX).saturating_add(1));
+                off = off.saturating_add(RELA_SIZE);
+            }
+        }
+        Ok(Some(count))
     }
 
     /// The symbol version table (`DT_VERSYM`): one 16-bit entry per dynamic symbol. The table's length is

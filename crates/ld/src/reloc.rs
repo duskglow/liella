@@ -272,7 +272,7 @@ fn one<'a, A: Arch, I: Image>(set: &Objects<'_, 'a>, i: usize, r: &Rela, deferre
 /// Make the non-writable `PT_LOAD`s of a text-relocated object writable and not executable (`open`)
 /// or give them back their own protection.
 fn text_segments<I: Image>(o: &Obj<'_>, img: &mut I, page: u64, open: bool) -> Result<(), ()> {
-    for ph in o.elf.program_headers().filter(|p: &ProgramHeader| p.p_type == pt::LOAD && p.flags & PF_W == 0) {
+    for ph in o.elf.program_headers().filter(|p: &ProgramHeader| p.p_type == pt::LOAD && p.memsz != 0 && p.flags & PF_W == 0) {
         let (start, end) = pages(o.bias, ph.vaddr, ph.memsz, page);
         let prot = if open { PROT_READ | PROT_WRITE } else { prot_of(ph.flags) };
         img.protect(start, end.wrapping_sub(start), prot)?;

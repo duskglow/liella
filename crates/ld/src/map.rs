@@ -6,7 +6,7 @@
 //! addresses. The steps:
 //!
 //! 1. [`plan`] validates the headers before anything is mapped: at most [`LOADS_MAX`] `PT_LOAD`s,
-//!    each non-empty, with `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page,
+//!    an empty one (`p_memsz` 0, which linkers emit) skipped and never mapped, the others with `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page,
 //!    `p_align` 0, 1 or a power of two, its file bytes inside the file, never writable and
 //!    executable at once; the segments in address order without sharing a page; the span and the
 //!    alignment bounded; a `PT_GNU_RELRO` range inside the span.
@@ -253,7 +253,7 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     let (mut first, mut last, mut align, mut count) = (0u64, 0u64, page, 0usize);
     let mut phdr = elf.find(pt::PHDR).map(|p| p.vaddr);
     let phend = h.phoff.saturating_add(u64::from(h.phnum).saturating_mul(PHENT));
-    for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD) {
+    for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD && p.memsz != 0) {
         let s = segment(&ph, page)?;
         elf.segment_bytes(&ph).map_err(MapError::Elf)?;
         if count == 0 {
@@ -307,10 +307,14 @@ pub fn plan_file<A: Arch>(file: &[u8], page: u64) -> Result<Plan, MapError> {
     plan::<A>(&elf, page)
 }
 
-/// The `PT_LOAD` segments of `file` in page terms, in header order (after [`plan_file`] accepted it).
+/// The non-empty `PT_LOAD` segments of `file` in page terms, in header order (after [`plan_file`]
+/// accepted it).
 pub fn segments<'a, A: Arch>(file: &'a [u8], page: u64) -> impl Iterator<Item = Result<Segment, MapError>> + 'a {
     let elf = Elf::parse::<A>(file).ok();
-    elf.into_iter().flat_map(|e| (0..e.header().phnum).filter_map(move |i| e.program_header(i))).filter(|p| p.p_type == pt::LOAD).map(move |p| segment(&p, page))
+    elf.into_iter()
+        .flat_map(|e| (0..e.header().phnum).filter_map(move |i| e.program_header(i)))
+        .filter(|p| p.p_type == pt::LOAD && p.memsz != 0)
+        .map(move |p| segment(&p, page))
 }
 
 /// Map the object `file` (its whole contents; the [`Mapper`] maps from the same file) with pages of

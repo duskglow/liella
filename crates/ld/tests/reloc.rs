@@ -402,7 +402,9 @@ fn reloc_ldso_refuses_executable_stack() {
     let d = dir("xstack");
     let ok = "void _start(void) { __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(0)); }\n";
     let x = build(&d, "libx.so", "int x_fn(void) { return 1; }\n", &["-fPIC", "-shared", "-Wl,-z,execstack"]);
-    let p = build(&d, "px", ok, &["-fPIE", "-pie", x.to_str().unwrap()]);
+    // The program references nothing in libx.so: keep the DT_NEEDED entry where the toolchain links
+    // --as-needed by default.
+    let p = build(&d, "px", ok, &["-fPIE", "-pie", "-Wl,--no-as-needed", x.to_str().unwrap()]);
     let (code, sig, err) = run(Command::new(&ld).arg(&p));
     assert_eq!((code, sig), (Some(127), None), "library with an executable stack: {err}");
     assert!(err.contains("libx.so") && err.contains("executable stack"), "{err}");
