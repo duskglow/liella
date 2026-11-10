@@ -180,7 +180,18 @@ fn foreign_view() -> &'static LocaleView {
 /// one `%fs` load in a process the runtime started, the registry words elsewhere (D-X.58).
 #[inline(always)]
 fn ctype_word<F: tb::Field>(slot: usize) -> usize {
-    if crate::thread::owned() { tb::read::<F>() } else { foreign_ctype_word(slot) }
+    // 0 elsewhere: the caller's unstored path (one cold call site, so the hot path keeps no
+    // frame) reads the registry word through [`foreign_word_or_zero`].
+    let _ = slot;
+    if crate::thread::owned() { tb::read::<F>() } else { 0 }
+}
+
+/// The registry ctype word `slot` in a process the runtime did not start (D-X.58), 0 in one it
+/// started (the cold paths of [`byte_class`] and [`case_map`] ask it first: a word a program
+/// stored through `__ctype_*_loc` there is honoured as in a block of the runtime's).
+#[inline]
+fn foreign_word_or_zero(slot: usize) -> usize {
+    if crate::thread::owned() { 0 } else { foreign_ctype_word(slot) }
 }
 
 /// The word of [`foreign_ctype_slot`].
@@ -317,13 +328,20 @@ pub fn ctype_slot(slot: usize) -> usize {
     // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case
     // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
     // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
-    if !crate::thread::owned() {
-        return foreign_ctype_slot(slot);
+    // D-X.58: one cold call site for both slow cases (another library's block, words not yet
+    // stored), so the gate costs the hot path one `cmpb` and a branch, no frame.
+    if crate::thread::owned() && tb::read::<tb::CtypeB>() != 0 {
+        return ctype_off(slot);
     }
-    if tb::read::<tb::CtypeB>() == 0 {
-        return ctype_fill(slot);
-    }
-    ctype_off(slot)
+    ctype_slot_slow(slot)
+}
+
+/// [`ctype_slot`]'s slow cases: the registry words in a process the runtime did not start,
+/// else the words filled on first use.
+#[cold]
+#[inline(never)]
+fn ctype_slot_slow(slot: usize) -> usize {
+    if crate::thread::owned() { ctype_fill(slot) } else { foreign_ctype_slot(slot) }
 }
 
 /// The address of the calling thread's pointer `slot`, the words known to be stored.
@@ -367,13 +385,20 @@ fn entry_offset<const UNIT: usize>(c: i32) -> Option<usize> {
 #[cold]
 #[inline(never)]
 fn class_unstored(c: i32) -> Class {
-    ctype_tables::class(c, current())
+    match foreign_word_or_zero(0) {
+        0 => ctype_tables::class(c, current()),
+        w => class_in(w, c),
+    }
 }
 
 /// [`case_map`] for a thread whose ctype words are not stored: the locale's answer.
 #[cold]
 #[inline(never)]
 fn case_unstored(c: i32, upper: bool) -> i32 {
+    let w = foreign_word_or_zero(if upper { 2 } else { 1 });
+    if w != 0 {
+        return case_in(c, w);
+    }
     let l = current();
     if upper { ctype_tables::toupper(c, l) } else { ctype_tables::tolower(c, l) }
 }
@@ -386,6 +411,12 @@ pub fn byte_class(c: i32) -> Class {
     if w == 0 {
         return class_unstored(c);
     }
+    class_in(w, c)
+}
+
+/// The classes of `c` in the table at the class word `w` (non-zero).
+#[inline(always)]
+fn class_in(w: usize, c: i32) -> Class {
     // The entry's address is the word plus twice the (signed) character: one range test, no
     // rebasing of the word to the table's first entry.
     if entry_offset::<2>(c).is_none() {
@@ -402,6 +433,13 @@ fn case_map(c: i32, w: usize, upper: bool) -> i32 {
     if w == 0 {
         return case_unstored(c, upper);
     }
+    case_in(c, w)
+}
+
+/// `c` through the case table at the word `w` (non-zero); values outside -128...255 map to
+/// themselves.
+#[inline(always)]
+fn case_in(c: i32, w: usize) -> i32 {
     let Some(o) = entry_offset::<4>(c) else { return c };
     table_bytes::<4>(w).get(o..o.wrapping_add(4)).and_then(|b| <[u8; 4]>::try_from(b).ok()).map_or(c, i32::from_ne_bytes)
 }

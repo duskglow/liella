@@ -48,6 +48,11 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 /// Whether the runtime started this process: a byte the cancellation-point entries read too
 /// (machine/points.S, D-X.58).
 use crate::ffi::liella_machine_owned as OWNED;
+/// [`OWNED`] as Rust reads it ([`owned`]): a crate-private byte is one rip-relative `cmpb`, where
+/// the assembler's symbol costs a GOT load and a `movzbl` first (+4 instead of +2 on every
+/// gated path). Both are stored together in `init_initial`, the only writer, before any other
+/// thread exists; a fork child inherits both.
+static OWNED_HERE: AtomicBool = AtomicBool::new(false);
 /// MUTEX-2: [`alone`] in one byte for the mutex fast paths: set when the runtime takes the
 /// initial thread (so Liella creates every thread), cleared for good before the first thread is
 /// cloned (not set again in a fork child: sticky, as the probes show glibc's single-thread
@@ -175,6 +180,7 @@ pub(crate) fn init_initial(static_program: bool) {
     d.flags.fetch_or(DESC_CREATED, AcqRel);
     d.tp.store(tb::tp(), Relaxed);
     OWNED.store(true, Release);
+    OWNED_HERE.store(true, Release);
     LOCK_ALONE.store(SINGLE_THREADED.load(Acquire) != 0, Release);
     LIVE.store(1, Release);
     register_kernel_areas(d);
@@ -206,7 +212,7 @@ fn addr_of<T>(r: &T) -> usize {
 /// cleared by the first creation, the library's own service threads included). Locks that only
 /// serialise threads may then be skipped. In a process another C library started, never.
 pub(crate) fn alone() -> bool {
-    OWNED.load(Acquire) && SINGLE_THREADED.load(Acquire) != 0
+    owned() && SINGLE_THREADED.load(Acquire) != 0
 }
 
 /// [`alone`] as the mutex fast paths ask it (MUTEX-2): one load of a private byte, and once
@@ -227,8 +233,9 @@ pub(crate) fn leave_lock_alone() {
 
 /// Whether the runtime started this process (so every thread it runs library code in is
 /// listed: the initial thread at startup, every other at creation).
+#[inline(always)]
 pub(crate) fn owned() -> bool {
-    OWNED.load(Acquire)
+    OWNED_HERE.load(Acquire)
 }
 
 // ------------------------------------------------------------------------------ whose block (D-X.58)
@@ -619,7 +626,7 @@ pub(crate) fn after_fork_child() {
         fork::set_if_differs!(d.robust[0], addr_of(&d.robust));
         fork::set_if_differs!(d.robust[2], 0);
         let _ = raw::set_robust_list(addr_of(&d.robust), 24);
-        if OWNED.load(Acquire) || d.has(DESC_CREATED) {
+        if owned() || d.has(DESC_CREATED) {
             head = addr_of(d);
         }
     }
