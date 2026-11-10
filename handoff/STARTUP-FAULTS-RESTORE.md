@@ -28,7 +28,10 @@ allow-listed with a reason; start-up state words in `.data1`). Full report: this
   system, so `records check` runs only once merged; the handback check merges with next and runs static).
 * FORK_BOUND 9 -> 8 (count 7 on both host classes; D-X.53 rule).
 * Plant 4 fixed: it passed two test names to `cargo test` (rc 1 in the baseline, so run 1's plants never ran plant 4);
-  the names now follow `--`.
+  the names now follow `--`. With that fixed, plant 4 (state move a no-op) SURVIVED the fault bounds on mei
+  (plants2): each moved static is worth at most one fault, inside the +1 slack. New structural test
+  `init_startup_state_statics_are_in_data1` (objdump -t of libc.a: each listed static defined in `.data1`); plant 4 now
+  runs it (89744f282). Plants 1-3 CAUGHT in plants2.
 
 ## Measurements
 Kit printf `'%s %d %x\n' a 1 1`, setarch -R, warm-up + 5, every run identical (keke, Zen 1, run 1):
@@ -51,7 +54,9 @@ left 61: the freed pages got other first writers (`liella_machine_fill_erms_from
 ## Jobs (mei)
 startup-faults-restore-2-lint1 (clippy + static, inherited head + clippy fix) rc 0; -gate1 (clippy, static, affected
 --run --base origin/next, hot_text_products --nocapture) rc 0 on 53d549957; -wlc1 rc 0; -plants1 rc 2 (plant 4 baseline
-bug, superseded); final-head jobs: see handoff/reports/STARTUP-FAULTS-RESTORE-2.json.
+bug, superseded); -gate2 rc 0 and -plants2 rc 1 (plant 4 survived) on 5650511c4, superseded. Final head 89744f282
+(later commits: handoff/ only): -gate3 and -plants3, PENDING at hand-back. If plants3 shows plant 4 SURVIVED, check
+that `objdump -t` prints `.data1` as the section column for those statics.
 
 ## Open / next
 * Structural fix for the remaining .data/.bss start-up faults: generate the `.data1` placement from a trace of
