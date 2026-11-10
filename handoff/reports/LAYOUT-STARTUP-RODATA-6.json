@@ -1,0 +1,12 @@
+{"task": "LAYOUT-STARTUP-RODATA-6", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fork child fault bound red (8 > 7) on the merged head; merged origin/next per ruling #4469 (codemap views are next's, train-owned); merged head lint clean, startup_instr_c 2139 <= 2150 on the Zen 1 host (all four startup instr limits held), header-scan plants 5/5 CAUGHT; #4470: the extra R segment costs +1 PT_LOAD, +1 minor fault, about +9.2k kernel instructions (+4.7%) per start, -8 user",
+ "branch": "task/layout-startup-rodata-6", "head": "3edf7b47e",
+ "gate": {"affected": "layout-startup-rodata-6-gate (direct tier, shiki, merged head 3edf7b47e): 6356 passed / 1 failed (hot_text_products init_fork_child_stays_within_its_page_fault_bound: fork child 8 > bound 7, every run 8); plants 5/5 CAUGHT; lint rc 0; counts startup_instr_c 2139 <= 2150", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "fork child 8 > FORK_BOUND 7 on the merged head while next was 7 at the bound with 6-8 padding jitter", "recommendation": "measure next on the same host first; no bound change"}],
+ "informational": ["#4470 per-segment cost (keke, perf stat -r 200 x3, the true child, run 5's head vs next 0d0d82e5d with one link line): PT_LOAD 5 vs 4, user 2307 vs 2315, kernel 205.6k-206.5k vs 196.2k-197.5k, minor faults 14 vs 13; split between the fault and the mapping not measured apart", "run 5's gate layout-startup-rodata-5-gate escalated to FULL on the unmerged branch and left no jobs.tsv row on keke; superseded by run 6's direct-tier gate on the merged head"],
+ "refused": [],
+ "improvement": "The direct tier for a change to crates/rt/src/start.rs is effectively every product test (40+ min); a start-up-only tier (rt unit tests + hot_text_products + cbench_startup counts) would prove this class of change in minutes",
+ "next_step": "Measure next 8253a107c fork child on the same host (fast products): 8 -> LAYOUT-JITTER hold, 7 -> map the fork child faults branch vs next and fix the extra one; then land; then run 4's open items: the .data1 half (#4315) and tightening LOCALTIME_BOUND once fast localtime reaches 19; the owner's size-vs-faults decision weighs #4470's numbers",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["layout-startup-rodata-6-gate", "layout-startup-rodata-6-plants", "layout-startup-rodata-6-lint", "keke:layout-startup-rodata-6-counts"]}

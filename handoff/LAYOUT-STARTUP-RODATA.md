@@ -74,8 +74,18 @@ Fast is unchanged from run 3 (17/53/20, at the bounds 17/55/20). Bounds untouche
 one under next; tightening LOCALTIME_BOUND needs the fast profile at 19 too, not yet).
 
 ## Open / next step (run 6 jobs on shiki: layout-startup-rodata-6-lint, -gate, -plants; keke: -counts, -segcost)
-1. Land: the merged head is the branch to land (the train regenerates the codemap views). If the train reds, read the
-   failing test first; the fault bounds are in crates/core/tests/hot_text_products.rs (run in the direct-tier gate).
+1. **RED: direct-tier gate `layout-startup-rodata-6-gate` (shiki, merged head 3edf7b47e, fast products): 6356 passed,
+   1 failed: `hot_text_products::init_fork_child_stays_within_its_page_fault_bound`, fork child 8 > FORK_BOUND 7
+   (warm-up 8, runs [8, 8, 8, 8, 8]: deterministic).** Known: run 4's gate on the same host (7b0d311b7, unmerged, before
+   run 5's start.rs change) passed; next's fast baseline in handoff/layout-stability-rethink.md is fork 7 (at the bound)
+   and padding alone moves it 6-8. NOT known: next 8253a107c's own fork count on this host (CI logs capture test
+   output, so they do not print it). The branch touches start-up code, so ALWAYS FORWARD applies, not the jitter hold.
+   Next step, in order: (a) build origin/next 8253a107c on the role and run only
+   `cargo test -p liella --test hot_text_products init_fork_child -- --nocapture` (fast products, as the gate does);
+   (b) next 8 -> hand back `INCOMPLETE: LAYOUT-JITTER` with both numbers; next 7 -> map the fork child's faults on
+   branch vs next (the rethink's measure tool) and fix the extra one (likely a text window moved by the merge's
+   growth, or a fork-path page in the new R segment) without touching the bound.
+2. Then land: the train regenerates the codemap views.
    Run 4's lsr-reloc-not-followed printed WARN-NO-MSG (caught by the products build of the xtask mutant, before the unit
    test): its msg should also accept the build failure (not changed).
 2. The RW shift (64 KiB gap moves the RW segment; +1 `.data.rel.ro` fault in tool/locale paid back by grouped data). The
