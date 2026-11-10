@@ -1,6 +1,10 @@
-# LAYOUT-STARTUP-RODATA (D-X.62): the start-up read-only data grouped in .rodata1 (xtask/src/startup_ro.rs), its 64 KiB
-# start alignment (entry.S), the STARTUP-DATA-WINDOWS budgets tightened to 1 window, and the product test
+# LAYOUT-STARTUP-RODATA(-2,-3) (D-X.62): the hot read-only data grouped in .rodata1 (xtask/src/startup_ro.rs), its 64 KiB
+# start alignment (entry.S), the STARTUP-DATA-WINDOWS budgets of 1 window, and the product test
 # init_startup_rodata_stays_in_one_window_for_any_text_size (16 text paddings). Fast profile products.
-lsr-operands-left-out | xtask/src/startup_ro.rs | lit:chosen.extend(at); ==> let _ = at; | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:STARTUP-DATA-WINDOWS.*(sits alone|spans)
-lsr-placement-skipped | xtask/src/startup_ro.rs | lit:let moved = s.name == SECTION || ==> let moved = s.name == SECTION && | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:STARTUP-DATA-WINDOWS.*(sits alone|spans)
+# Run 3: whole section names from the objects (readelf cuts them at 256 bytes), relocation sections told apart by offset.
+lsr-reloc-not-followed | xtask/src/startup_ro.rs | lit:chosen.insert(at); ==> let _ = at; | cargo test -p xtask startup_ro | msg:startup_read_only_data_sections_follow_the_startup_functions_and_ro_keys.*FAILED
+lsr-cut-name-kept | xtask/src/startup_ro.rs | lit:Some(f) if f.starts_with(&s.name) => s.name.clone_from(f), ==> Some(f) if f.starts_with(&s.name) => {} | cargo test -p xtask startup_ro | msg:section_names_are_read_whole_from_the_archive.*FAILED
+lsr-rela-by-name-only | xtask/src/startup_ro.rs | lit:s.name == name && Some(s.off) == off ==> s.name == name && off.is_some() | cargo test -p xtask startup_ro | msg:relocation_sections_with_names_cut_alike_are_told_apart_by_offset.*FAILED
+lsr-ar-padding-ignored | xtask/src/startup_ro.rs | lit:at += 60 + size + size % 2; ==> at += 60 + size; | cargo test -p xtask startup_ro | msg:section_names_are_read_whole_from_the_archive.*FAILED
+lsr-placement-skipped | xtask/src/startup_ro.rs | lit:let moved = s.name == SECTION || ==> let moved = s.name == SECTION && | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:STARTUP-DATA-WINDOWS.*(sits alone|spans)|init_startup_rodata.*FAILED
 lsr-align-removed | csys/src/machine/entry.S | perl:s/(liella_machine_ld_enter:.*?)\.balign 65536/$1.balign 1/s | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:straddles a 64 KiB window|not 64 KiB aligned|STARTUP-DATA-WINDOWS.*(sits alone|spans)
