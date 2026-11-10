@@ -1,8 +1,9 @@
 # LIBM-F32-POWF: handoff (one-pass `powf`)
 
-State: branch `task/libm-f32-powf` (cut from origin/next 0d0d82e5d, no merge). Code 8e913f324, plants 33b3c36c6,
-record fix dc05891b6, this note on top. Role mei:~/w/s1. Decision: D-10.78 (extends D-10.63 under D-10.67).
-Plan rows to read: D-10.78, D-10.63, D-10.67, D-10.68.
+State: branch `task/libm-f32-powf-2` (LIBM-F32-POWF-2), which holds all of `task/libm-f32-powf` (code 8e913f324, plants
+33b3c36c6, record fix dc05891b6, handoff 67729b223) plus a merge of origin/next 8253a107c (99116e35d: the only conflict
+was the train-owned docs/codemap/symbols.tsv, taken from next; never commit it) and the two odd-y plants (21ec45efa).
+Role keke:~/w/n2. Decision: D-10.78 (extends D-10.63 under D-10.67). Plan rows to read: D-10.78, D-10.63, D-10.67, D-10.68.
 
 ## 1. Profile before the change (mei, Skylake-SP; wl_trace powf_typ, call 11; job mei:libm-f32-powf-trace2)
 | part | instructions | what |
@@ -32,24 +33,31 @@ serial log/double-double/exp chain with partial-write merges. Cycles on the book
 * Found by the new test before commit: the upper bound must be the largest float, not 2^128 (above it RN and RU give
   infinity); fixed, and the plant `overflow-threshold-ulp` holds it.
 
-## 3. Results (final code 33b3c36c6 = head minus record/handoff commits)
-* Counts (mei:libm-f32-powf-counts, wl_percall, instructions/call incl. loop): powf_typ 275.3 -> 155.9 (glibc
-  78.0, 2.00x), powf_int 328.2 -> 160.1 (glibc 73.1, 2.19x), expf_typ control 58.0 -> 58.0. One traced call: 138
-  straight-line instructions, no call (mei:libm-f32-powf-trace3). Target (<= 1.5x glibc time) NOT VERIFIED: no booked
-  timing run (Ivy Bridge, N100) in this story. Only the default (FMA) build counted, not the hwcaps=-FMA build.
-* Gate 1 (mei:libm-f32-powf-gate): 2408 passed, 0 failed, conformance 16/16, peak 3.9G, rc 1 from `xtask static`
-  (records: bare `|` in D-10.78's body; fixed in dc05891b6, static then clean). Gate 2 on the final head:
-  mei:libm-f32-powf-gate2 (pending at hand-back).
-* Plants (mei:libm-f32-powf-plants, handoff/LIBM-F32-POWF-plants.txt): 5 CAUGHT, 0 SURVIVED, 0 WARN.
-* Random pairs (mei:libm-f32-powf-pairs): 10^9 pairs x 4 directions + hard pairs x 16 modes, bits/errno/flags vs the
-  envelope (pending at hand-back; the test asserts 0 mismatches). The in-tier test (16 modes, hard pairs + 2^16
-  random pairs per mode) passes.
+## 3. Results (LIBM-F32-POWF-2, merged head 21ec45efa; jobs on keke unless named)
+* Counts (libm-f32-powf-2-counts, wl_percall math_f32.c, instructions/call incl. loop, base 8253a107c):
+  | case | glibc FMA build | glibc hwcaps=-FMA | base | new | new/glibc (FMA, -FMA) |
+  |---|---:|---:|---:|---:|---|
+  | powf_typ | 78.0 | 93.0 | 275.3 | 155.9 | 2.00, 1.68 |
+  | powf_int | 73.1 | 86.5 | 328.2 | 160.1 | 2.19, 1.85 |
+  | expf_typ (control) | 42.0 | 46.0 | 58.0 | 58.0 | 1.38, 1.26 |
+  Liella's count is the same in both builds (the one-pass path has no FMA dispatch: products and sums, no fused op).
+* Timing (cbench_libm powf row, staged 21ec45efa, `--compare --no-build --runs 5`, ns/op median):
+  Ivy Bridge (kotori:libm-f32-powf-2-ivb, booking 161): glibc 26.45, Liella 48.34, **1.83x** (11-07: 4.47x).
+  N100 (nozomi:libm-f32-powf-2-n100, booking 162; started in the booking's last settling minutes, host idle, load 0.00):
+  glibc 12.54, Liella 22.79, **1.82x**. Target <= 1.5x glibc time: NOT reached.
+* Gate (libm-f32-powf-2-gate, direct tier): 2435 passed, 0 failed, conformance 16/16, static ok, peak 2.0G, rc 0.
+  Lint on the merged head before any change (libm-f32-powf-2-lint): clippy + static rc 0, partial-write 12 findings,
+  all pre-existing ALLOW rows (logf, sinf, tanf ...), none in powf.
+* Plants (libm-f32-powf-2-plants, handoff/LIBM-F32-POWF-plants.txt): 7 CAUGHT, 0 SURVIVED, 0 WARN: the five of the
+  first run plus `onepass-odd-y-2p23` and `eval-pow-odd-y-2p23` (#4449: x < 0, odd y in [2^23, 2^24)).
+* Random pairs (first run, mei:libm-f32-powf-pairs, code unchanged since): 4·10^9 calls in 4 directions (2.88·10^9
+  answered by the one-pass path) + 62607 hard pairs x 16 modes: 0 mismatches. First run's gate2 (mei): 2408/0, rc 0.
 
 ## Open / next (in order)
-1. Read gate2 and pairs (both rc 0 expected). Then book Ivy Bridge (nico or kotori, less busy) and the N100 (nozomi)
-   for powf_typ/powf_int against base 0d0d82e5d.
-2. If time is still above 1.5x: the log is the long pole (128-entry LOG_INV/LOG_C, 8-term series, needed for the
-   2^-50 relative bound at |t| up to 88). A log2-domain table (t = y·log2 x with e exact) or a 2^-46 bound with a
-   wider margin would shorten it; y = 3, 4 and 0.5 still go to the envelope (exact candidates): cube/square
-   products or sqrt could take them on the bits.
-Not to redo: the profile above; the exact-case proof.
+1. Time is 1.82-1.83x glibc on both timing hosts (target 1.5x). The log is the long pole (128-entry LOG_INV/LOG_C,
+   8-term series, needed for the 2^-50 relative bound at |t| up to 88). A log2-domain table (t = y·log2 x with e
+   exact), or a 2^-46 bound with a wider margin, would shorten it; y = 3, 4 and 0.5 still go to the envelope (exact
+   candidates): cube/square products or sqrt could take them on the bits. Profile the 155.9 first (wl_trace with
+   --spec validation/percall/math_f32.c), then design.
+Not to redo: the profile in section 1; the exact-case proof; the SSE2 count; the 10^9-pair run (rerun only if the
+kernel changes).
