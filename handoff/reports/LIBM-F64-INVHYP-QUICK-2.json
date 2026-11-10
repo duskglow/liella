@@ -1,14 +1,29 @@
-{"task": "LIBM-F64-INVHYP-QUICK-2", "model": "opus", "tokens": null,
- "result": "origin/next merged into the invhyp quick-tier branch: pair log entries adapted to next's kernel macro (on split/join, same rounding, bound unchanged), D-10.65 moved into records/, KERNELS.md regenerated; lint/static/test green, plants 7/7 CAUGHT",
- "branch": "task/libm-f64-invhyp-quick-2", "head": null,
- "gate": {"affected": "libm-f64-invhyp-quick-2-gate (direct tier) started on the final code; see hand-back", "peak": null},
+{
+ "task": "LIBM-F64-INVHYP-QUICK-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "origin/next merged into the invhyp quick-tier branch: pair log entries adapted to next's kernel macro (on split/join, same rounding, bound unchanged), D-10.65 moved into records/, KERNELS.md regenerated; lint/static/test green, plants 7/7 CAUGHT; counts asinh 133.6/acosh 122.7/atanh 140.2 instr vs glibc 99.6/83.7/112.7 (all lower than before the merge)",
+ "branch": "task/libm-f64-invhyp-quick-2",
+ "head": null,
+ "gate": {
+  "affected": "libm-f64-invhyp-quick-2-gate (direct tier) started on the final code; see hand-back",
+  "peak": null
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["thread_common lists crates/math/KERNELS.md as a generated view never to commit, but static's tables-fresh check fails unless it is regenerated and committed; this branch follows static and the coordinator note (regenerated)",
-                   "rustfmt --check flags next's own quick_log.rs/tests.rs lines; formatting is not enforced, the merged code keeps next's style",
-                   "the GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA count pass does not reach cbench (log prints tunables unset): SSE2-build counts not verified"],
+ "informational": [
+  "thread_common lists crates/math/KERNELS.md as a generated view never to commit, but static's tables-fresh check fails unless it is regenerated and committed; this branch follows static and the coordinator note (regenerated)",
+  "rustfmt --check flags next's own quick_log.rs/tests.rs lines; formatting is not enforced, the merged code keeps next's style",
+  "the GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA count pass does not reach cbench (log prints tunables unset): SSE2-build counts not verified"
+ ],
  "refused": [],
  "improvement": "merge_next could flag records-era conflicts (old view row with no record file) and create the record from the branch's row automatically; this run did it by hand",
  "next_step": "land; then booked timing for asinh/acosh/atanh and part 2 (asin/acos/atan, cosh/sinh/tanh) as its own story",
  "report_file": "handoff/LIBM-F64-INVHYP-QUICK.md",
- "jobs": ["libm-f64-invhyp-quick-2-gate", "libm-f64-invhyp-quick-2-plants", "libm-f64-invhyp-quick-2-lint3", "libm-f64-invhyp-quick-2-counts2"]}
+ "jobs": [
+  "libm-f64-invhyp-quick-2-gate",
+  "libm-f64-invhyp-quick-2-plants",
+  "libm-f64-invhyp-quick-2-lint3",
+  "libm-f64-invhyp-quick-2-counts2"
+ ]
+}

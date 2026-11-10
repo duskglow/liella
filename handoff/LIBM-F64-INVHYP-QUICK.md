@@ -30,7 +30,10 @@ story; now `records/decisions/D-10/D-10.65.toml`), D-10.66 (log2/log10/log1p on 
   7 of 7 CAUGHT, no WARN (`handoff/LIBM-F64-INVHYP-QUICK-2-plants.txt`; `pair-low-part-dropped` follows the merged
   code, `pair-scale-dropped` is new for the `c·2^-e` scale).
 * `-gate` (direct tier, `cargo xtask affected --run`, final code) and `-counts2` (`bench --compare --counters
-  cbench_libm --rows asinh,acosh,atanh`, from a RAM copy): see the report json / hand-back for their state.
+  cbench_libm --rows asinh,acosh,atanh`, from a RAM copy). `-counts2` rc 0 (Zen 1, FMA build, instructions Liella
+  vs glibc): asinh 133.6 vs 99.6, acosh 122.7 vs 83.7, atanh 140.2 vs 112.7 (first run: 139.3, 131.5, 141.2, so the
+  `split`/`join` reuse saved 1-9 instructions per row, none slower); time ratios on that busy build host 1.34, 1.60,
+  1.33 (not a timing verdict). `-gate` was still running at hand-back (dispatcher reads it).
 * Superseded: `-lint1` (rustfmt check of next's code, not enforced; records: bare `|` in D-10.65, fixed),
   `-lint2` (static tables-fresh: KERNELS.md, fixed), `-counts` (bad argument order, rc 1), `-kidx` (generator only).
 * First run, for reference (Zen 1, FMA build, instructions Liella vs glibc): asinh 139.3 vs 99.5, acosh 131.5 vs 83.7,
