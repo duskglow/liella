@@ -1,0 +1,12 @@
+{"task": "HEAP-FIRST-USE-3", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: fixed the inherited red (first mktime fault: cold out-of-line topology decision) and #4170 (vDSO name compare no longer calls the exported bcmp); one direct test still red: the strings oracle's first memchr now takes memchr's checked path, whose text is outside the hot group (1 fault)",
+ "branch": "task/heap-first-use-3", "head": "b22a125c9",
+ "gate": {"affected": "not run (head red on hot_text_products init_first_string_calls_after_printf_take_no_text_fault); hfu3-verify2: rt 27 ok, heap_meta_products 3 ok, hot_text 11/12", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [{"item": "If regen cannot group memchr's checked path: where the NULL-folding decision is taken now that malloc no longer takes it", "recommendation": "keep it lazy; group the checked rest paths of memchr/compare/copy with the hot text; never loosen the 0-fault bound"}],
+ "informational": ["HEAP-FIRST-USE-2's code alone makes the strings fault test red on one-node hosts (no vDSO lookup on the first malloc there)", "tools/hottext/regen.sh (both profiles) did not add __liella_libc_liella_hot_memchr_rest", "used two heredocs by mistake (one empty python3 call, one commit message); no effect on the tree"],
+ "refused": [],
+ "improvement": "hot_text_products' 0-fault tests are 64 KiB-layout sensitive: a story that grows any hot function can turn an unrelated test red; xtask could print each hot block's distance to the next window boundary after `so`",
+ "next_step": "regen.sh with the strings oracle as an extra program (both profiles); if the key still is not grouped, RULING NEEDED; then gate, counts, Ivy Bridge/N100 timing",
+ "report_file": "handoff/HEAP-FIRST-USE-3.md",
+ "jobs": ["mei:hfu3-verify2", "mei:hfu3-plants"]}
