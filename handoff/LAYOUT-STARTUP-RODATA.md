@@ -1,10 +1,32 @@
 # LAYOUT-STARTUP-RODATA(-2..-5): hot read-only data in one 64 KiB-aligned .rodata1 (D-X.62, amends D-X.50)
 
-**State (2026-11-10, run -5):** branch `task/layout-startup-rodata-5` (stacks on -4..-1; base origin/next 2e33a3cb9, not
-merged). Build role keke:~/w/n1. Scratch on keke: ~/work/LAYOUT-STARTUP-RODATA-5/ (run.sh = link the cbench_startup child
-against a tree's products and single-step it under gdb, trace.py = the gdb tracer, cg.rs/cg.sh = the scan variants measured
-with perf stat, check.sh = so + trace + counters, next/ = next tip 0d0d82e5d built). Older: shiki ~/work/LAYOUT-STARTUP-RODATA-4/.
+**State (2026-11-10, run -6):** branch `task/layout-startup-rodata-6` (stacks on -5..-1), origin/next 8253a107c MERGED
+(merge 3edf7b47e, ruling #4469). Build role shiki:~/w/sh2. Scratch: shiki and keke ~/work/LAYOUT-STARTUP-RODATA-6/ (stage.tar
+= staged cbench_startup of the merged head; count.sh, segcost.sh); keke ~/work/LAYOUT-STARTUP-RODATA-5/ (run.sh = link the
+cbench_startup child against a tree's products and single-step it under gdb, trace.py, cg.rs/cg.sh, cb-final / cb-next =
+run 5's head and next 0d0d82e5d linked by the same line, next/ = that next tree built).
 Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded probes read; never raise a fault bound.
+
+## Run 6: merged next; codemap views are next's (ruling #4469)
+- Merged origin/next (CODEMAP-TRAIN-OWNED in it). docs/codemap/symbols.tsv and README.md are next's copies byte for
+  byte (README conflict was only in generated line-number cells); the train regenerates them. No code changed in run 6.
+- Merged head 3edf7b47e, shiki: workspace clippy (all targets/features), `cargo xtask clippy`, `cargo xtask static`
+  all clean (job layout-startup-rodata-6-lint); the stage build's layout check: all 12 contracts of layout/contracts.tsv hold.
+- **startup_instr_c 2139 <= 2150** on the Zen 1 host (keke, AMD EPYC 7551): `cargo xtask bench --stage --only
+  cbench_startup` on shiki, unpacked whole on keke, `./xtask-bin bench --no-build --staged --counters --only
+  cbench_startup` (job layout-startup-rodata-6-counts, rc 0; the `--counters` run applies bench/instr_limits.tsv, so all
+  four startup limits held: printf 71854 / 73600, setloc 68060 / 69800, wctype 69080 / 70900). CI's red was 2159.
+- **#4470, the extra R segment's cost per start** (input to the owner's size-vs-faults decision; design unchanged).
+  `perf stat -r 200` x3 of the `true` child, ASLR off, env PATH only, keke; run 5's head vs next 0d0d82e5d, both linked by
+  the same line (run.sh), so only the layout differs (job layout-startup-rodata-6-segcost):
+  | binary | PT_LOAD | user instr | kernel instr | minor faults |
+  |---|---|---|---|---|
+  | next | 4 | 2315 | 196.2k-197.5k | 13 |
+  | branch (64 KiB-aligned .rodata1 = own R segment) | 5 | 2307 | 205.6k-206.5k | 14 |
+  Per start: +1 PT_LOAD, +1 minor fault, about +9.2k kernel instructions (+4.7%), -8 user. Run 5's +13k was the
+  bench child's own counter (another harness); this pair has the same link line. Likely split (NOT measured apart): the
+  +1 fault is the group's first page in its own VMA, and the rest is the extra mapping's exec/exit work. The
+  merged head's staged bench binary (cargo xtask bench link): 5 PT_LOAD, user 2252, kernel ~186.6k, 12 faults.
 
 ## Run 5: CI red startup_instr_c 2159 > 2150 (fixed forward, limit untouched)
 - Cause (single-step trace of the `true` child, branch vs next tip, products of each): only `liella_rt::start::program`
@@ -21,12 +43,9 @@ Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded pro
   segment's exec/mmap work and the 64 KiB file-offset gap. Not from run 5's change; a layout cost of the group. The
   `.data1`/RW half or LAYOUT-DATA-CLUSTERS should weigh it (an R segment that starts 64 KiB-aligned without a split).
 
-## Run 5 hand-back status
-- Jobs (keke): lint rc 0 (clippy all-targets, xtask clippy, static on 440d1fd0e), plants 5/5 CAUGHT, counts rc 0 (2229 vs
-  next 2241), gate `layout-startup-rodata-5-gate` (direct tier) still running at hand-back (the rt change reaches a wide tier).
-- handback-check red on a contradiction: it calls docs/codemap/symbols.tsv train-owned (restored to the base copy in
-  a660692d6), while `static` on the head alone (the branch conflicts with next, so no merged run) says symbols.tsv is out
-  of date. Next step: the train's regen/merge settles it; or a ruling on which check wins for an unmerged branch.
+- Run 5's jobs (keke, head 440d1fd0e): lint, plants 5/5 CAUGHT, counts all rc 0. Its gate escalated to FULL (unmerged
+  branch) and left no jobs.tsv row; superseded by run 6's direct-tier gate on the merged head. The handback-check
+  contradiction (symbols.tsv) is settled by ruling #4469 and the merge (run 6).
 
 ## What the branch does
 - Run 1: `xtask/src/startup_ro.rs` renames start-up read-only sections to `.rodata1`; entry.S aligns `.rodata1` to 64 KiB;
@@ -54,12 +73,11 @@ Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded pro
 Fast is unchanged from run 3 (17/53/20, at the bounds 17/55/20). Bounds untouched (ALWAYS FORWARD: release localtime is now
 one under next; tightening LOCALTIME_BOUND needs the fast profile at 19 too, not yet).
 
-## Open / next step (from run 4; run 5 jobs: layout-startup-rodata-5-gate, -plants, -lint, -counts on keke)
-1. Jobs on this head: gate `layout-startup-rodata-4-gate` (direct tier), plants `layout-startup-rodata-4-plants`
-   (handoff/LAYOUT-STARTUP-RODATA-plants.txt, 7 plants incl. new lsr-probe-keys-dropped, release profile). See the report.
-   lsr-reloc-not-followed (run 3's) printed WARN-NO-MSG: the tool rebuilds the products with an xtask mutant and that
-   build already fails on it (logs/lsr-reloc-not-followed.so.log), before the unit test runs: caught by the build, not by
-   the named message. Its msg should also accept the build failure (not changed in this run).
+## Open / next step (run 6 jobs on shiki: layout-startup-rodata-6-lint, -gate, -plants; keke: -counts, -segcost)
+1. Land: the merged head is the branch to land (the train regenerates the codemap views). If the train reds, read the
+   failing test first; the fault bounds are in crates/core/tests/hot_text_products.rs (run in the direct-tier gate).
+   Run 4's lsr-reloc-not-followed printed WARN-NO-MSG (caught by the products build of the xtask mutant, before the unit
+   test): its msg should also accept the build failure (not changed).
 2. The RW shift (64 KiB gap moves the RW segment; +1 `.data.rel.ro` fault in tool/locale paid back by grouped data). The
    `.data1` half (#4315) would give tool 55 / locale 52: then tighten the bounds.
 3. Fast localtime 20 (= bound): if the fast trace's ro data is all in the group, the remaining faults are text/zone file.

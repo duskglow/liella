@@ -1,0 +1,13 @@
+# LAYOUT-STARTUP-RODATA-5 (D-X.62): the program-header scan of liella_rt::start::program (one walk over the
+# headers' slice, one compare passing over the types below PT_PHDR). Direct tests: the liella-rt unit tests.
+lsr5-filter-takes-phdr | crates/rt/src/start.rs | lit:if ty < PT_PHDR { ==> if ty <= PT_PHDR { | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
+lsr5-last-tls-wins | crates/rt/src/start.rs | lit:tls = tls.or(Some(&h[..])); ==> tls = Some(&h[..]); | cargo test -p liella-rt --lib start:: | msg:first header of a type counts|program_headers_give_the_tls_image_and_the_bias.*FAILED
+lsr5-phnum-ignored | crates/rt/src/start.rs | lit:let mut rest = words.get(..phnum.saturating_mul(PHDR_WORDS)).unwrap_or(words); ==> let mut rest = words; | cargo test -p liella-rt --lib start:: | msg:phnum limits the headers read|program_headers_give_the_tls_image_and_the_bias.*FAILED
+lsr5-flags-in-type | crates/rt/src/start.rs | lit:let ty = word & 0xffff_ffff; ==> let ty = word; | cargo test -p liella-rt --lib start:: | msg:program_headers_give_the_tls_image_and_the_bias.*FAILED|panicked
+lsr5-relro-dropped | crates/rt/src/start.rs | lit:relro = relro.or(Some(&h[..])); ==> | cargo test -p liella-rt --lib start:: | msg:the one-pass reader agrees|relro_is_the_segment.*FAILED
+# cargo xtask plants results (5 plants: 5 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# lsr5-filter-takes-phdr: CAUGHT, caught by liella_rt start::tests::relro_is_the_segment_from_its_first_page_to_its_last_whole_page
+# lsr5-last-tls-wins: CAUGHT, caught by liella_rt start::tests::program_headers_give_the_tls_image_and_the_bias
+# lsr5-phnum-ignored: CAUGHT, caught by liella_rt start::tests::program_headers_give_the_tls_image_and_the_bias
+# lsr5-flags-in-type: CAUGHT, caught by liella_rt start::tests::program_headers_give_the_tls_image_and_the_bias
+# lsr5-relro-dropped: CAUGHT, caught by liella_rt start::tests::relro_is_the_segment_from_its_first_page_to_its_last_whole_page
