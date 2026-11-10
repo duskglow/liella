@@ -1418,13 +1418,15 @@ mod tests {
         // label inside a function section (an assembly entry label, an alias) to the section's key,
         // leaving out the section's own name, data symbols and a name found in two sections; merge.py
         // --alias then brings the section of a start-up key traced at such a label to the head.
+        // The symbol names are fictional on purpose: a csys label named here would be an unknown
+        // consumer to `cargo xtask affected` and send every change of its .S file to the FULL tier.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let tmp = root.join(format!("target/xtask-merge-alias-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let syms = "\nlibc.a(m.o):     file format elf64-x86-64\n\nSYMBOL TABLE:\n\
-            0000000000000000 g     F .text.liella_machine_memset\t0000000000000040 liella_machine_memset\n\
-            0000000000000000 g     F .text.liella_machine_memset\t0000000000000040 .hidden memset\n\
-            0000000000000010 l       .text.liella_machine_memset\t0000000000000000 liella_machine_fill_avx2_entry\n\
+            0000000000000000 g     F .text.fixture_set\t0000000000000040 fixture_set\n\
+            0000000000000000 g     F .text.fixture_set\t0000000000000040 .hidden memset\n\
+            0000000000000010 l       .text.fixture_set\t0000000000000000 fixture_set_entry\n\
             0000000000000000 g     F .text.sorted.h12.strlen\t0000000000000020 strlen\n\
             0000000000000000 l       .text.a\t0000000000000000 twice\n\
             0000000000000000 l       .text.b\t0000000000000000 twice\n\
@@ -1439,11 +1441,11 @@ mod tests {
             .expect("python3 runs tools/hottext/keys.py");
         assert!(o.status.success(), "keys.py: {}", String::from_utf8_lossy(&o.stderr));
         let aliases = String::from_utf8(o.stdout).unwrap();
-        assert_eq!(aliases, "liella_machine_fill_avx2_entry\tliella_machine_memset\nmemset\tliella_machine_memset\n");
+        assert_eq!(aliases, "fixture_set_entry\tfixture_set\nmemset\tfixture_set\n");
         std::fs::write(tmp.join("alias"), &aliases).unwrap();
         std::fs::write(tmp.join("old"), "").unwrap();
-        std::fs::write(tmp.join("new"), "_start1\tstartup\nstrlen\tstrings\nliella_machine_memset\tstrings\nb\tstrings\n").unwrap();
-        std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nliella_machine_fill_avx2_entry\tstartup\tfast\n").unwrap();
+        std::fs::write(tmp.join("new"), "_start1\tstartup\nstrlen\tstrings\nfixture_set\tstrings\nb\tstrings\n").unwrap();
+        std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nfixture_set_entry\tstartup\tfast\n").unwrap();
         let run = |alias: bool| {
             let mut c = std::process::Command::new("python3");
             c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
@@ -1457,7 +1459,7 @@ mod tests {
         };
         let (plain, aliased) = (run(false), run(true));
         std::fs::remove_dir_all(&tmp).unwrap();
-        assert_eq!(plain, "_start1\tstartup\tfast\nstrlen\tstrings\tfast\nliella_machine_memset\tstrings\tfast\nb\tstrings\tfast\n");
-        assert_eq!(aliased, "_start1\tstartup\tfast\nliella_machine_memset\tstartup\tfast\nstrlen\tstrings\tfast\nb\tstrings\tfast\n");
+        assert_eq!(plain, "_start1\tstartup\tfast\nstrlen\tstrings\tfast\nfixture_set\tstrings\tfast\nb\tstrings\tfast\n");
+        assert_eq!(aliased, "_start1\tstartup\tfast\nfixture_set\tstartup\tfast\nstrlen\tstrings\tfast\nb\tstrings\tfast\n");
     }
 }
