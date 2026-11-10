@@ -310,10 +310,20 @@ fn fail_with(parts: &[&[u8]], status: i32) -> ! {
     exit(status)
 }
 
-/// Open and map read-only the file at the NUL-terminated path `path`: (descriptor, mapping, bytes).
-fn open_file(path: usize) -> Option<(i32, usize, &'static [u8])> {
+/// The identity of an open file, (`st_dev`, `st_ino`): one object reached by two paths (a symlink, a
+/// hard link) is the same object (L14-4).
+type FileId = (u64, u64);
+
+/// Open and map read-only the file at the NUL-terminated path `path`: (descriptor, mapping, bytes,
+/// identity).
+fn open_file(path: usize) -> Option<(i32, usize, &'static [u8], FileId)> {
     let fd = crate::ffi_sys::liella_sys_openat(AT_FDCWD, core::ptr::with_exposed_provenance(path), i64::from(O_RDONLY | O_CLOEXEC), 0);
     let fd32 = i32::try_from(fd).ok().filter(|&f| f >= 0)?;
+    let mut st = liella_kernel::uapi::Stat::default();
+    if crate::ffi_sys::liella_sys_fstat(fd, core::ptr::from_mut(&mut st).cast::<c_void>()) != 0 {
+        let _ = crate::ffi_sys::liella_sys_close(fd);
+        return None;
+    }
     let size = crate::ffi_sys::liella_sys_lseek(fd, 0, i64::from(SEEK_END));
     let Some(len) = usize::try_from(size).ok().filter(|&n| n >= liella_ld::elf::EHDR_SIZE) else {
         let _ = crate::ffi_sys::liella_sys_close(fd);
@@ -327,7 +337,7 @@ fn open_file(path: usize) -> Option<(i32, usize, &'static [u8])> {
     #[allow(unsafe_code)]
     // SAFETY: `len` bytes from `at` are a private read-only mapping of the file, unmapped only after
     // the last use of the slice (the end of `link`, or `load`).
-    Some((fd32, at, unsafe { conv::bytes_at(at, len) }))
+    Some((fd32, at, unsafe { conv::bytes_at(at, len) }, (st.dev, st.ino)))
 }
 
 /// Load the program's dependencies (by path; DL-8 adds the search), check their versions, relocate
@@ -341,10 +351,12 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
     use liella_ld::reloc::{self, Obj, Objects};
     const SELF_EXE: &[u8] = b"/proc/self/exe\0";
     let path = if path == 0 { SELF_EXE.as_ptr().expose_provenance() } else { path };
-    let Some((fd, at, file)) = open_file(path) else { fail_with(&[c_string(path), b": cannot read the program's file\n"], program::FAILURE) };
+    let Some((fd, at, file, id)) = open_file(path) else { fail_with(&[c_string(path), b": cannot read the program's file\n"], program::FAILURE) };
     let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
     maps[0] = (at, file.len());
+    let mut ids: [FileId; OBJECTS_MAX] = [(0, 0); OBJECTS_MAX];
+    ids[0] = id;
     let parse = |file: &'static [u8], name: &'static [u8], bias: u64| -> Obj<'static> {
         let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
         let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
@@ -369,11 +381,18 @@ fn link(prog: &start::Program, bias: usize, page: u64, path: usize) {
             }
             // The string table entry is NUL-terminated in the mapped file.
             let cpath = name.as_ptr().expose_provenance();
-            let Some((fd, at, file)) = open_file(cpath) else { fail_with(&[name, b": cannot open shared object file\n"], program::FAILURE) };
+            let Some((fd, at, file, id)) = open_file(cpath) else { fail_with(&[name, b": cannot open shared object file\n"], program::FAILURE) };
+            // Another path to an object already loaded (L14-4): the same object, loaded once.
+            if ids[..n].contains(&id) {
+                let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
+                let _ = raw::munmap(at, file.len());
+                continue;
+            }
             let loaded = map::load::<Native, _>(&mut SysMapper { fd }, file, page);
             let _ = crate::ffi_sys::liella_sys_close(i64::from(fd));
             let loaded = loaded.unwrap_or_else(|e| fail_with(&[name, b": ", e.message()], program::FAILURE));
             maps[n] = (at, file.len());
+            ids[n] = id;
             objs[n] = parse(file, name, loaded.bias);
             n += 1;
         }

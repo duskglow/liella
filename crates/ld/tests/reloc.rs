@@ -12,6 +12,7 @@
 //! that a text-relocated segment is never writable and executable; (3) the built `ld.so` running a
 //! `-nostdlib` program with several shared objects, a program needing a version against an unversioned
 //! stub (status 127 and a message), executable-stack objects, and a write into RELRO.
+// ARCH(x86_64): the corpus is built by the host toolchain with x86-64 inline assembly and relocation types.
 #![cfg(target_arch = "x86_64")]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::expect_used, clippy::panic)]
 
@@ -371,6 +372,37 @@ fn reloc_ldso_runs_multi_object_program() {
     let [.., p2] = corpus(&d, &[&interp]);
     let (code, sig, err) = run(&mut Command::new(&p2));
     assert_eq!((code, sig), (Some(0), None), "PT_INTERP: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// no spec clause (L14-4, ruling #4231): a library reached by two paths (its own and a symlink) is one
+/// object, loaded once: the program sees exactly one executable mapping of it.
+#[test]
+fn reloc_ldso_one_object_by_two_paths() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("ident");
+    let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared"]);
+    let alias = d.join("libalias.so");
+    std::os::unix::fs::symlink(&b, &alias).unwrap();
+    // Counts the r-xp lines of /proc/self/maps that end in "libb.so"; exits with that count.
+    let src = "extern int b_fn(void);
+static long sc(long n, long a, long b, long c) { long r; __asm__ volatile(\"syscall\" : \"=a\"(r) : \"a\"(n), \"D\"(a), \"S\"(b), \"d\"(c) : \"rcx\", \"r11\", \"memory\"); return r; }
+static char buf[1 << 16];
+void _start(void) {
+  long fd = sc(2, (long)\"/proc/self/maps\", 0, 0), n = 0, r, count = 0, line = 0;
+  while (fd >= 0 && (r = sc(0, fd, (long)buf + n, sizeof buf - 1 - n)) > 0) n += r;
+  for (long i = 0; i < n; i++) if (buf[i] == '\\n') {
+    if (i >= 8 && buf[line + 20] != 0 && buf[i-7] == 'l' && buf[i-6] == 'i' && buf[i-5] == 'b' && buf[i-4] == 'b' && buf[i-3] == '.') {
+      for (long j = line; j < i; j++) if (buf[j] == ' ') { if (buf[j+1] == 'r' && buf[j+3] == 'x') count++; break; }
+    }
+    line = i + 1;
+  }
+  sc(60, b_fn() == 5 ? count : 99, 0, 0);
+}
+";
+    let p = build(&d, "pid", src, &["-fPIE", "-pie", "-Wl,--no-as-needed", b.to_str().unwrap(), alias.to_str().unwrap()]);
+    let (code, sig, err) = run(Command::new(&ld).arg(&p));
+    assert_eq!((code, sig), (Some(1), None), "libb.so must be mapped executable exactly once (exit = mappings): {err}");
     std::fs::remove_dir_all(&d).ok();
 }
 
