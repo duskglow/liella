@@ -450,6 +450,14 @@ fn image_view<'s>(
     (head, &spans[..k])
 }
 
+/// A dependency's mapped `file` as the relocator sees it (load bias `bias`). Its `name` may come from
+/// the program's string table (an image span), so any lifetime.
+fn parse<'a>(file: &'static [u8], name: &'a [u8], bias: u64) -> liella_ld::reloc::Obj<'a> {
+    let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
+    let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
+    liella_ld::reloc::Obj { elf, dynm, bias, name }
+}
+
 /// Load the program's dependencies (by path; DL-8 adds the search), check their versions, relocate
 /// everything and protect the RELRO pages (DL-10, design §6, D-27.17). The program is read from its
 /// memory image ([`image_view`], ruling #4229, D-27.18), never from its file; `name` names it in
@@ -465,11 +473,6 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
     // The program's own file is not known (no file is read): (dev, ino) that no file has.
     let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
     let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
-    let parse = |file: &'static [u8], name: &'static [u8], bias: u64| -> Obj<'static> {
-        let elf = liella_ld::elf::Elf::parse::<Native>(file).unwrap_or_else(|_| fail_with(&[name, b": not a valid ELF file for this machine\n"], program::FAILURE));
-        let dynm = elf.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
-        Obj { elf, dynm, bias, name }
-    };
     let dynm = image.dynamic().ok().flatten().unwrap_or_else(|| fail_with(&[name, b": no valid dynamic section\n"], program::FAILURE));
     let first = Obj { elf: image, dynm, bias: u64::try_from(bias).unwrap_or(0), name };
     let mut objs = [first; OBJECTS_MAX];
