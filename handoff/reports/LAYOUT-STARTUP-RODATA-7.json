@@ -1,0 +1,13 @@
+{"task": "LAYOUT-STARTUP-RODATA-7", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: fork child next 7 / branch 8 at own layout (shiki, fast); next reaches 8 at pre and cold pads 0xe000/0xf000, where its RW segment sits at the branch's address and takes the same extra fault (a .data read of timer::EPOLL in fork::child_reset); no code or bound change (ruling #4483/#4347)",
+ "branch": "task/layout-startup-rodata-7", "head": null,
+ "gate": {"affected": "not rerun (run 6 gate: 6356 passed / 1 failed, the fork bound; held as LAYOUT-JITTER)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The branch's 64 KiB-aligned .rodata1 makes the RW segment start independent of text growth (branch cold pads 0..0x10000: fork 8 at all, RW at 0x43dd90 at all). The count is stable, but it sits at the phase where timer::EPOLL's page is not mapped by the parent's fault-around. LAYOUT-DATA-CLUSTERS should include timer::EPOLL (read by fork::child_reset) in its cluster.",
+                   "Lint on the inherited head clean: cargo xtask clippy + cargo xtask static rc 0 (layout-startup-rodata-7-lint0)."],
+ "refused": [],
+ "improvement": "The rethink's measure.py should split perf fault maps by pid: the fork mode's child faults are then readable directly (measure7.py does it), and this run's cause took one map instead of a regen loop.",
+ "next_step": "After LAYOUT-DATA-CLUSTERS lands: merge origin/next, rerun the direct-tier gate on shiki, check the fork child map with measure7.py, land.",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["layout-startup-rodata-7-lint0", "layout-startup-rodata-7-forkmeasure"]}

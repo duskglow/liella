@@ -1,7 +1,37 @@
 # LAYOUT-STARTUP-RODATA(-2..-5): hot read-only data in one 64 KiB-aligned .rodata1 (D-X.62, amends D-X.50)
 
-**State (2026-11-10, run -6):** branch `task/layout-startup-rodata-6` (stacks on -5..-1), origin/next 8253a107c MERGED
-(merge 3edf7b47e, ruling #4469). Build role shiki:~/w/sh2. Scratch: shiki and keke ~/work/LAYOUT-STARTUP-RODATA-6/ (stage.tar
+**State (2026-11-10, run -7): HELD, LAYOUT-JITTER (ruling #4483).** Branch `task/layout-startup-rodata-7` = run 6's
+head 358e36f98 + this handoff (no code change in run 7); origin/next 8253a107c merged (merge 3edf7b47e, ruling #4469).
+Build role shiki:~/w/sh2. Run 7 scratch: shiki ~/work/LAYOUT-STARTUP-RODATA-7/ (measure7.py = the rethink's measure.py
+cut to fork/true modes, fast products, orig + `pre`/`cold` pads, perf fault map split by pid; run1.sh; an1.py/an2.py;
+next/ = origin/next 8253a107c built fast), results /mnt/zram/claude/LAYOUT-STARTUP-RODATA-7/m1/results.jsonl.
+Run 6 scratch: shiki and keke ~/work/LAYOUT-STARTUP-RODATA-6/ (stage.tar
+
+## Run 7: the fork child's +1 is the RW data phase (LAYOUT-JITTER, ruling #4483)
+Same host as run 6's red gate (shiki, Haswell-EP), fast products, the test's own harness. Job
+`layout-startup-rodata-7-forkmeasure` (rc 0; the branch test inside it fails as expected, TEST-RC=101).
+- **At their own layout:** `cargo test -p liella --test hot_text_products init_fork_child`: next 8253a107c **7**
+  (warm-up 7, runs [7,7,7,7,7]); branch (merged head) **8** (runs [8,8,8,8,8]).
+- **Pads (measure7.py; fork child, min of 5 after warm-up):**
+  | pads | 0 | 0x30 | 0x800 | 0x1000 | 0x2000..0xb000 | 0xc000 | 0xd000 | 0xe000 | 0xf000 | 0x10000 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | next `pre` | 7 | 7 | 6 | 6 | 6 | 7 | 7 | **8** | **8** | 7 |
+  | branch `pre` | 8 | 8 | 7 | 7 | 7 | 8 | 8 | 8 | 8 | 8 |
+  | next `cold` | 7 | 7 | 7 | 7 | 7 | 7 | 7 | **8** | **8** | 7 |
+  | branch `cold` | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 | 8 |
+  `true` is identical for both at every pad (16-17). **Next reaches 8 at `pre` and `cold` 0xe000/0xf000**, so ruling
+  #4483's test calls it phase jitter: no bound change, no waiver; held until LAYOUT-DATA-CLUSTERS lands.
+- **Fault map (perf -e page-faults -d, second child):** the branch's extra fault is one `.data` read at
+  `liella_boundary::timer::EPOLL` (0x85ee2c, ip in `fork::child_reset`). A write would CoW-fault in both, so it is a read.
+  In next that page was already mapped in the parent by fault-around and fork copied the PTE; at the branch's RW phase it
+  is not. The branch's RW segment starts at 0x43dd90, next's at 0x42fd90 (+0xe000: the 64 KiB-aligned `.rodata1` R segment
+  shifts it by a non-multiple of 64 KiB). **next at `cold`/`pre` 0xe000 puts its RW segment at exactly 0x43dd90 and takes
+  the same EPOLL fault (8).** Everything else in the map (stack, syscall, fork, child_reset text, `.lbss` write, main) is
+  the same in both, shifted by 0xe000 in data.
+- The branch's anchor also stops the text pads from moving the data (branch `cold` is 8 at every pad, RW always 0x43dd90).
+  The count is stable, but it stays at the bad phase. LAYOUT-DATA-CLUSTERS (the written/read start-up data, `timer::EPOLL` among
+  it, in one aligned cluster) removes it. A local nudge of the RW phase (moving sections, padding) is exactly what
+  ruling #4347 forbids chasing, so nothing was changed.
 = staged cbench_startup of the merged head; count.sh, segcost.sh); keke ~/work/LAYOUT-STARTUP-RODATA-5/ (run.sh = link the
 cbench_startup child against a tree's products and single-step it under gdb, trace.py, cg.rs/cg.sh, cb-final / cb-next =
 run 5's head and next 0d0d82e5d linked by the same line, next/ = that next tree built).
@@ -73,18 +103,13 @@ Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded pro
 Fast is unchanged from run 3 (17/53/20, at the bounds 17/55/20). Bounds untouched (ALWAYS FORWARD: release localtime is now
 one under next; tightening LOCALTIME_BOUND needs the fast profile at 19 too, not yet).
 
-## Open / next step (run 6 jobs on shiki: layout-startup-rodata-6-lint, -gate, -plants; keke: -counts, -segcost)
-1. **RED: direct-tier gate `layout-startup-rodata-6-gate` (shiki, merged head 3edf7b47e, fast products): 6356 passed,
-   1 failed: `hot_text_products::init_fork_child_stays_within_its_page_fault_bound`, fork child 8 > FORK_BOUND 7
-   (warm-up 8, runs [8, 8, 8, 8, 8]: deterministic).** Known: run 4's gate on the same host (7b0d311b7, unmerged, before
-   run 5's start.rs change) passed; next's fast baseline in handoff/layout-stability-rethink.md is fork 7 (at the bound)
-   and padding alone moves it 6-8. NOT known: next 8253a107c's own fork count on this host (CI logs capture test
-   output, so they do not print it). The branch touches start-up code, so ALWAYS FORWARD applies, not the jitter hold.
-   Next step, in order: (a) build origin/next 8253a107c on the role and run only
-   `cargo test -p liella --test hot_text_products init_fork_child -- --nocapture` (fast products, as the gate does);
-   (b) next 8 -> hand back `INCOMPLETE: LAYOUT-JITTER` with both numbers; next 7 -> map the fork child's faults on
-   branch vs next (the rethink's measure tool) and fix the extra one (likely a text window moved by the merge's
-   growth, or a fork-path page in the new R segment) without touching the bound.
+## Open / next step (run 7 jobs on shiki: layout-startup-rodata-7-lint0, layout-startup-rodata-7-forkmeasure)
+1. **HELD (LAYOUT-JITTER, run 7 above):** run 6's red gate (`hot_text_products::init_fork_child...`, fork child 8 >
+   FORK_BOUND 7) is the RW data phase: the branch's RW segment lands where next itself counts 8 (`pre`/`cold` 0xe000).
+   Lint on the head is clean (run 7 lint0: `cargo xtask clippy` + `cargo xtask static`, rc 0). Next step once
+   LAYOUT-DATA-CLUSTERS lands: merge origin/next, rerun the direct-tier gate on shiki (fork child expected 7 or less with
+   `timer::EPOLL` in the data cluster; check it with measure7.py's fault map), then land. If DATA-CLUSTERS has not put
+   `timer::EPOLL` (read by `fork::child_reset`) in its cluster, that is the item to add there, not here.
 2. Then land: the train regenerates the codemap views.
    Run 4's lsr-reloc-not-followed printed WARN-NO-MSG (caught by the products build of the xtask mutant, before the unit
    test): its msg should also accept the build failure (not changed).
