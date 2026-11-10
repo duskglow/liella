@@ -1,0 +1,11 @@
+{"task": "LIBM-PARTIAL-WRITE-CHECK", "model": "opus", "tokens": null,
+ "result": "cargo xtask partial-write (D-10.68) in so and static; 12 findings on next allow-listed as a ratchet; no fix timed (budget)",
+ "branch": "task/libm-partial-write-check", "head": "a8de8c163",
+ "gate": {"affected": "pending: keke:libm-partial-write-check-gate", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["12 hot-path partial writes on next (exp10f, logf/log2f/log10f x2, sinf/cosf/tanf, acoshf, asinhf), listed in handoff/libm-partial-write-check.md for LIBM-F32-ONEPASS-REST"],
+ "refused": [],
+ "improvement": "a deterministic check now finds the false dependency that took 11 h of timing sweeps to see; an `xtask objdump-walk` shared CFG helper would let jcc/classed/partial-write share one parser",
+ "next_step": "LIBM-F32-ONEPASS-REST: fix the 12 allow-listed findings, time each on Ivy Bridge and N100, delete their ALLOW entries",
+ "report_file": "handoff/libm-partial-write-check.md",
+ "jobs": ["keke:libm-partial-write-check-lint2", "keke:libm-partial-write-check-gate", "keke:libm-partial-write-check-plants"]}
