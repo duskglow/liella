@@ -6,7 +6,7 @@
  "branch": "task/startup-faults-restore-3",
  "head": "bbd593199",
  "gate": {
-  "affected": "see shiki:startup-faults-restore-3-gate1",
+  "affected": "11349 passed / 0 failed (escalated to FULL, 32 suites; shiki:startup-faults-restore-3-gate1)",
   "peak": null
  },
  "accepted_first_attempt": null,
