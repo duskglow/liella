@@ -96,13 +96,17 @@ pub fn move_cold_bss(ar: &str, archive: &Path, work: &Path) -> Result<usize, Str
 /// `cpu::{COPY_MIN, FILL_MIN, ERMS_LARGE_FROM}`, fold.S's `cmp_sse` words and
 /// `global_locale::MAPS` gained nothing more (61: the freed pages got other first writers), so
 /// they stay where they were.
-const STATE_KEY_SUFFIXES: [&str; 6] = [
+/// STARTUP-FAULTS-RESTORE-3: `nscache::NSCACHE` (608 bytes, written by `nscache::start` in every
+/// process) joined: after a merge with next reordered `.data` it sat on a `.data` page of its own,
+/// startup only 17 -> 18 (Haswell-EP build host, perf page-fault map of both builds).
+const STATE_KEY_SUFFIXES: [&str; 7] = [
     "15liella_boundary7process10AUXV_WORDS",
     "15liella_boundary3sys12SYSINFO_EHDR",
     "15liella_boundary3cpu14AVX2_ERMS_FROM",
     "15liella_boundary3cpu12AVX2_ERMS_TO",
     "13liella_legacy13global_locale6GLOBAL",
     "13liella_legacy13global_locale4LOCK",
+    "13liella_legacy7nscache7NSCACHE",
 ];
 /// See [`STATE_KEY_SUFFIXES`].
 pub const STATE_SECTION: &str = ".data1";

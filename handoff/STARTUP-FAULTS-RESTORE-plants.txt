@@ -5,5 +5,7 @@ apply-irelative-key-dropped | crates/libc-so/hot-text.list | perl:s/^_RNvNtC15li
 stdio-key-stale | crates/libc-so/hot-text.list | perl:s/^_RNvNtC15liella_boundary6printf9vsnprintf\t/_RNvNtC15liella_boundary6printf8vsprintf\t/m | cargo xtask so | msg:_RNvNtC15liella_boundary6printf8vsprintf \(stdio, traced in fast\)
 # 3: the allow rule loosened to everything (no dead key can fail).
 allow-everything | xtask/src/hottext.rs | lit:if other_only || absent.contains(&(e.key.clone(), p.to_string())) { ==> if true { | cargo test -p xtask --bin xtask hottext | msg:unmatched_keys_of_the_built_profile_fail_unless_allowed.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
-# 4: the start-up state move made a no-op (sections keep their names): the page-fault bounds catch the extra .data/.bss pages.
+# 4: the start-up state move made a no-op (sections keep their names): the structural test catches it (the +1 bound slack does not).
 state-move-noop | xtask/src/coldbss.rs | lit:format!("{s}={STATE_SECTION}") ==> format!("{s}={s}") | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_state_statics_are_in_data1 | msg:start-up state: .* want \.data1
+# 5 (run 3): NSCACHE dropped from the start-up state (array shortened in the same match, so it builds): it stays in .data; the structural test names it.
+nscache-not-moved | xtask/src/coldbss.rs | perl:s/\[&str; 7\](.*?)\n    "13liella_legacy7nscache7NSCACHE",/[&str; 6]$1/s | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_state_statics_are_in_data1 | msg:start-up state: \*13liella_legacy7nscache7NSCACHE is in .* want \.data1

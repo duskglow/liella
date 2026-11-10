@@ -352,7 +352,10 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// 7. Bound = the highest count with the list, 7, plus 2 (the rule above); the old list on fast
 /// products (the gate's) reads 13. STARTUP-FAULTS-RESTORE-2 (D-X.53, count + 1): 7 on the Zen 1 host
 /// and on the Skylake-SP host (fast products, every run identical), so the bound is 8.
-const FORK_BOUND: u64 = 8;
+/// STARTUP-FAULTS-RESTORE-3: 6 after the merge with next (fork-tier functions `#[inline(never)]`,
+/// HOTTEXT-REGEN-UNBLOCK): Haswell-EP host, every run identical, and 6 on the Zen 1 host in that
+/// story's base column, so the bound is 7.
+const FORK_BOUND: u64 = 7;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
@@ -631,6 +634,7 @@ fn init_startup_state_statics_are_in_data1() {
         "15liella_boundary3cpu12AVX2_ERMS_TO",
         "13liella_legacy13global_locale6GLOBAL",
         "13liella_legacy13global_locale4LOCK",
+        "13liella_legacy7nscache7NSCACHE",
     ] {
         let sections: Vec<&str> = table
             .lines()
