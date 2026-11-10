@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "PENDING JOBS: search order, DSTs, pinned sonames, new-format cache reader with hwcaps, ld.so --list/LD_TRACE_LOADED_OBJECTS via the DL-7 mapper, ld_cache fuzz target; gate/plants/startup running",
  "branch": "task/dl-search-cache",
- "head": null,
+ "head": "3baf72862",
  "gate": {
   "affected": "pending (keke:dl-search-cache-gate)",
   "peak": null
