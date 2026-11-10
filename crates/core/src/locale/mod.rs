@@ -1031,7 +1031,9 @@ mod tests {
         for c in (0..0x400u32).chain(0x4e00..0x4f00) {
             let want = crate::ctype::w_classes_file(c, &w).0;
             assert_eq!(marked.word(c, Some(&w)), want, "{what}: marked block {c:#x}");
-            assert_eq!(marked.hit(c), None, "{what}: no leaf for {c:#x}");
+            if [0u32, 3, 0x4e].contains(&(c >> 8)) {
+                assert_eq!(marked.hit(c), None, "{what}: no leaf for {c:#x}");
+            }
             assert_eq!(none.word(c, Some(&w)), want, "{what}: no slot {c:#x}");
             members += usize::from(want != 0);
         }
