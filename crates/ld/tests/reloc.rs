@@ -660,6 +660,69 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
     assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
 }
 
+/// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs,
+/// kernel-started and as `ld.so PROGRAM`. `link` reads it through the image reader, whose span list
+/// holds one span per `PT_LOAD` (the `-nostdlib` 300-segment program of the map tests never links).
+#[test]
+fn reloc_ldso_program_with_many_loads() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("manyloads");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let [.., p] = corpus(&d, &[&interp]);
+    let file = with_loads(&std::fs::read(&p).unwrap(), 300);
+    // Written under another name and copied by cp(1), as in `without_pt_phdr` (no ETXTBSY window).
+    let (tmp, q) = (d.join("many.bytes"), d.join("many"));
+    std::fs::write(&tmp, &file).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    let (code, sig, err) = run(&mut Command::new(&q));
+    assert_eq!((code, sig), (Some(0), None), "kernel-started program with 300 PT_LOADs: check number {code:?} failed; stderr: {err}");
+    let (code, sig, err) = run(Command::new(&ld).arg(&q));
+    assert_eq!((code, sig), (Some(0), None), "ld.so PROGRAM with 300 PT_LOADs: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// `f` with its program header table moved to a new page at the end of the file, mapped by a new
+/// read-only `PT_LOAD` after the last segment, at the first `PT_LOAD`'s address-minus-offset (so the
+/// kernel's `AT_PHDR` agrees with the moved `PT_PHDR`); the other added `PT_LOAD`s map that page again,
+/// one page each, at ascending addresses, until there are `total`.
+fn with_loads(f: &[u8], total: usize) -> Vec<u8> {
+    const PAGE: u64 = 4096;
+    let rd = |o: usize| u64::from_le_bytes(f[o..o + 8].try_into().unwrap());
+    let (phoff, phnum) = (rd(32) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let hs: Vec<&[u8]> = (0..phnum).map(|i| &f[phoff + i * 56..phoff + i * 56 + 56]).collect();
+    let ty = |h: &[u8]| u32::from_le_bytes(h[..4].try_into().unwrap());
+    let word = |h: &[u8], i: usize| u64::from_le_bytes(h[8 * i..8 * i + 8].try_into().unwrap());
+    let loads: Vec<&[u8]> = hs.iter().copied().filter(|h| ty(h) == 1).collect();
+    let delta = word(loads[0], 2) - word(loads[0], 1);
+    let end = loads.iter().map(|h| word(h, 2) + word(h, 5)).max().unwrap();
+    let base = end.max(f.len() as u64 + delta).div_ceil(PAGE) * PAGE + PAGE;
+    let off = base - delta;
+    let added = total - loads.len();
+    let n = phnum + added;
+    let (size, tlen) = (56 * n as u64, (56 * n as u64).div_ceil(PAGE) * PAGE);
+    let ph = |t: u32, o: u64, v: u64, len: u64, align: u64| {
+        let mut h = [t.to_le_bytes(), 4u32.to_le_bytes()].concat();
+        for w in [o, v, v, len, len, align] {
+            h.extend(w.to_le_bytes());
+        }
+        h
+    };
+    let mut table: Vec<Vec<u8>> = hs.iter().filter(|h| ty(h) == 6).map(|_| ph(6, off, base, size, 8)).collect();
+    table.extend(hs.iter().filter(|h| ty(h) == 3).map(|h| h.to_vec()));
+    table.extend(loads.iter().map(|h| h.to_vec()));
+    table.push(ph(1, off, base, tlen, PAGE));
+    table.extend((1..added).map(|i| ph(1, off, base + tlen + PAGE * (i as u64 - 1), PAGE, PAGE)));
+    table.extend(hs.iter().filter(|h| ![1, 3, 6].contains(&ty(h))).map(|h| h.to_vec()));
+    assert_eq!(table.len(), n);
+    let mut v = f.to_vec();
+    v.resize((off + tlen) as usize, 0);
+    v[off as usize..(off + size) as usize].copy_from_slice(&table.concat());
+    v[32..40].copy_from_slice(&off.to_le_bytes());
+    v[56..58].copy_from_slice(&(n as u16).to_le_bytes());
+    v
+}
+
 /// s27_1_c_1, L14-6 (ruling #4323): a text-relocated program with a dependency runs, started by the
 /// kernel and as `ld.so PROGRAM`, and its text is `r-x` again before any of its code runs.
 #[test]
