@@ -177,10 +177,10 @@ pub(crate) fn exp_fix(neg: bool, m: u64, e: i32, c: u128, cs: i32, minus_one: bo
 }
 
 /// Step E3: `(R, K)` with `R·2^(K − 127) = 2^(k/128)·(1 ± P)`, `P` = `|e^r − 1|` in units
-/// `2^-136` (at most `2^127.5`), `rneg` the sign of `r`.
+/// `2^-135` (below `2^126.6`), `rneg` the sign of `r`.
 pub(crate) fn exp_table(k: i64, rneg: bool, p: u128) -> (u128, i32) {
     let t = EXP2T[(k & 127) as usize];
-    let tp = mulhi(t, p) >> 8; // units 2^-127
+    let tp = mulhi(t, p) >> 7; // units 2^-134 -> 2^-127
     (if rneg { t - tp } else { t + tp }, (k >> 7) as i32)
 }
 
@@ -201,7 +201,7 @@ fn exp_poly(a: u128, neg: bool) -> u128 {
     s128(1 << 127, mulhi(a, h) >> 9) // 1, units 2^-127
 }
 
-/// Steps L1-L4: `ln(t·2^q)`, `t > 0`.
+/// Steps L1-L4: `ln(t·2^q)`, `t > 0` and `t·2^q != 1` (the caller returns the exact `ln 1 = 0`).
 pub(crate) fn ln_fix(t: u128, q: i32) -> Fix {
     let top = 127 - t.leading_zeros() as i32;
     let t2 = if top <= 110 { t << (110 - top) } else { t >> (top - 110) }; // y'', units 2^-110
@@ -230,12 +230,12 @@ fn ln_core(y: u128, big_e: i32, l1: i128, exact: Option<(u128, i32)>) -> Fix {
         let l = p.leading_zeros();
         return (v1 < 0, p << l, ae + 1 - l as i32);
     }
-    let p = mulhi(w, h1) as i128; // |ln(1 + u2)|, units 2^-140
+    let p = mulhi(w, h1) as i128; // |ln(1 + u2)|, units 2^-139
     let p = if v2 < 0 { -p } else { p };
     let (s, units) = if big_e == 0 {
-        (l1 + (L2[ii] >> 6) + (p >> 13), -127)
+        (l1 + (L2[ii] >> 6) + (p >> 12), -127)
     } else {
-        (i128::from(big_e) * LN2_113 as i128 + (l1 >> 14) + (L2[ii] >> 20) + (p >> 27), -113)
+        (i128::from(big_e) * LN2_113 as i128 + (l1 >> 14) + (L2[ii] >> 20) + (p >> 26), -113)
     };
     let a = s.unsigned_abs();
     let l = a.leading_zeros();
@@ -737,22 +737,25 @@ mod tests {
     /// `|v|·2^units` rounded to the nearest integer (irrational or exactly representable values:
     /// no ties), with the sign of `v`.
     fn fixed(v: Mp, units: i64) -> i128 {
-        let neg = v.to_f64() < 0.0;
-        let w = v.abs().ldexp(units);
-        let top = (u128::from(w.m[mp::LIMBS - 1]) << 64) | u128::from(w.m[mp::LIMBS - 2]);
-        let sh = 128 - w.exp;
-        assert!((0..128).contains(&sh), "{sh}");
-        let r = if sh == 0 { top + u128::from(w.m[mp::LIMBS - 3] >> 63) } else { (top >> sh) + ((top >> (sh - 1)) & 1) };
-        let r = i128::try_from(r).unwrap_or(i128::MAX);
+        let neg = v.neg && !v.is_zero();
+        let r = i128::try_from(ufixed(v.abs(), units)).expect("pinned value fits i128");
         if neg { -r } else { r }
     }
 
+    /// `|v|·2^units` rounded to the nearest integer (no ties: see [`fixed`]).
     fn ufixed(v: Mp, units: i64) -> u128 {
-        let w = v.ldexp(units);
+        if v.is_zero() {
+            return 0;
+        }
+        let w = v.abs().ldexp(units);
         let top = (u128::from(w.m[mp::LIMBS - 1]) << 64) | u128::from(w.m[mp::LIMBS - 2]);
         let sh = 128 - w.exp;
-        assert!((0..128).contains(&sh), "{sh}");
-        if sh == 0 { top + u128::from(w.m[mp::LIMBS - 3] >> 63) } else { (top >> sh) + ((top >> (sh - 1)) & 1) }
+        assert!((0..=128).contains(&sh), "{sh}");
+        match sh {
+            0 => top + u128::from(w.m[mp::LIMBS - 3] >> 63),
+            128 => top >> 127,
+            _ => (top >> sh) + ((top >> (sh - 1)) & 1),
+        }
     }
 
     #[test]
@@ -842,10 +845,19 @@ mod tests {
     /// the tier takes, the band near the table's switch and the near-1 band of the logarithms.
     fn bands(k: Kernel) -> &'static [(i32, i32, Option<bool>)] {
         match k {
-            Kernel::Exp | Kernel::Exp2 | Kernel::Expm1 => &[(-67, -10), (-9, -7), (-6, 4), (5, 13)],
-            Kernel::Exp10 => &[(-68, -10), (-9, -7), (-6, 4), (5, 12)],
-            Kernel::Log | Kernel::Log2 | Kernel::Log10 => &[(-1, 0), (-16445, 16383), (-3, 3), (-1, 0)],
-            Kernel::Log1p => &[(-67, -8), (-7, -1), (-7, -1), (0, 16383)],
+            Kernel::Exp | Kernel::Exp2 | Kernel::Expm1 => {
+                &[(-67, -10, None), (-9, -7, None), (-6, 4, None), (5, 13, None)]
+            }
+            Kernel::Exp10 => &[(-68, -10, None), (-9, -7, None), (-6, 4, None), (5, 12, None)],
+            Kernel::Log | Kernel::Log2 | Kernel::Log10 => {
+                &[(-1, 0, None), (-16445, 16383, None), (-3, 3, None), (-1, 0, None)]
+            }
+            Kernel::Log1p => &[
+                (-67, -8, None),
+                (-7, -1, Some(false)),
+                (-7, -1, Some(true)),
+                (0, 16383, Some(false)),
+            ],
         }
     }
 
@@ -855,8 +867,11 @@ mod tests {
         let mut sig = g.next() | 1 << 63;
         let is_log = matches!(k, Kernel::Log | Kernel::Log2 | Kernel::Log10);
         if is_log && band == 3 {
-            // Within 2^-8 of 1 (top -1: below, top 0: above), down to 2^-63.
-            let d = g.next() >> (8 + g.next() % 56);
+            // Within 2^-8 of 1 (top -1: below, top 0: above), down to 2^-55, with at least 9
+            // random bits in the distance: `1 ± d·2^-63` for a tiny or power-of-two `d` puts
+            // `ln x` within about `2^-128` of a representable value (hairline by structure;
+            // `hard()` holds those), which is not the rate this band measures.
+            let d = (g.next() | 1 << 63) >> (8 + g.next() % 48);
             sig = if top == 0 { (1 << 63) + d } else { u64::MAX - d };
         }
         let neg = match sign {
@@ -871,6 +886,7 @@ mod tests {
         calls: u64,
         undecided: u64,
         refused: u64,
+        outside: u64,
         worst: f64,
     }
 
@@ -879,6 +895,7 @@ mod tests {
             self.calls += o.calls;
             self.undecided += o.undecided;
             self.refused += o.refused;
+            self.outside += o.outside;
             self.worst = self.worst.max(o.worst);
         }
     }
@@ -894,6 +911,21 @@ mod tests {
                 assert!(rel < (-92f64).exp2(), "{k:?} {n:?}: error 2^{:.2}", rel.log2());
                 tally.worst = tally.worst.max(rel);
             }
+        }
+        // Results outside the normal range (overflow, underflow, subnormal) belong to the later
+        // tiers: the tier must refuse them, and they are not counted as undecided.
+        // `wide::expm1` settles `x < −(64·0.7 + 6)` itself (−1 plus a tiny amount): never sent here.
+        let settled = k == Kernel::Expm1 && Mp::from_u128(n.neg, n.sig, i64::from(n.exp)).to_f64() < -50.8;
+        if settled {
+            tally.outside += 1;
+            return;
+        }
+        if !(-16381..=16384).contains(&want.exp) {
+            tally.outside += 1;
+            for mode in MODES {
+                assert!(eval::<F80>(k, n, mode).is_none(), "{k:?} {n:?} {mode:?}: result outside the normal range taken");
+            }
+            return;
         }
         for mode in MODES {
             tally.calls += 1;
@@ -920,8 +952,10 @@ mod tests {
                     v.push(num(false, u64::MAX << (64 - j).min(63), -64)); // 1 − 2^-j (and 1 − 2^-64·…)
                 }
                 for i in 0..128u64 {
-                    let s = (1 << 63) + (i << 56); // 1 + i/128 and the value below it
-                    v.push(num(false, s, -63));
+                    let s = (1 << 63) + (i << 56); // 1 + i/128 (not 1 itself) and the value below it
+                    if i != 0 {
+                        v.push(num(false, s, -63));
+                    }
                     v.push(num(false, s - 1, -63));
                 }
                 v.push(num(false, u64::MAX, 16320)); // largest
@@ -981,9 +1015,10 @@ mod tests {
             assert!(tally.undecided * 1000 <= tally.calls, "{k:?}: {} of {} undecided", tally.undecided, tally.calls);
             assert!(tally.refused == 0, "{k:?}: {} refused", tally.refused);
             eprintln!(
-                "wide_int_el {k:?}: {} calls, {} undecided, worst 2^{:.1}; hard: {} calls, {} undecided, {} refused, worst 2^{:.1}",
+                "wide_int_el {k:?}: {} calls, {} undecided, {} outside the normal range, worst 2^{:.1}; hard: {} calls, {} undecided, {} refused, worst 2^{:.1}",
                 tally.calls,
                 tally.undecided,
+                tally.outside,
                 tally.worst.log2(),
                 edge.calls,
                 edge.undecided,
