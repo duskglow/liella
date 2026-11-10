@@ -3,6 +3,7 @@
 
 usage: keys.py <names file>... > keys              sorted
        keys.py --ordered <names file>... > keys    first occurrence order (files in argument order)
+       keys.py --aliases <objdump -t output>       `<symbol key>\t<section key>` (see aliases())
 The same normalisation is in xtask/src/hottext.rs (`key`); keep the two in step:
   1. drop the library's own prefix `__liella_libc_` (D-X.14 renames; the section keeps the C name);
   2. drop ThinLTO promotion suffixes `.llvm.<digits>`;
@@ -233,8 +234,40 @@ def key(name):
     return name
 
 
+SECTION = re.compile(r"^\.text\.(?:sorted\.h[0-9]+\.|hot\.|unlikely\.)?(\S+)$")
+
+
+def aliases(path):
+    """--aliases <objdump -t of libc.a>: `<symbol key>\t<section key>` for every symbol that lies in a
+    function section of another key (an assembly entry label, an alias such as bcmp, an internal entry),
+    sorted. A symbol key found in two sections of different keys is left out (ambiguous).
+    LAYOUT-TEXT-PIN-6 (#4467): the traced start-up names include such labels, and merge.py
+    --startup-head resolves them to the section the list orders."""
+    seen = {}
+    with open(path) as f:
+        for line in f:
+            if "\t" not in line:
+                continue
+            left, right = line.rstrip("\n").split("\t", 1)
+            lf, rf = left.split(), right.split()
+            if len(lf) < 2 or len(rf) < 2:
+                continue
+            m = SECTION.match(lf[-1])
+            if m is None:
+                continue
+            sym, sec = key(rf[-1]), key(m.group(1))
+            if sym != sec and sym != "main":
+                seen.setdefault(sym, set()).add(sec)
+    for k in sorted(seen):
+        if len(seen[k]) == 1:
+            print(f"{k}\t{next(iter(seen[k]))}")
+
+
 def main():
     args = sys.argv[1:]
+    if args[:1] == ["--aliases"] and len(args) == 2:
+        aliases(args[1])
+        return
     # --tagged <tier>=<names file>...: `<key>\t<tier>` in first-touch order, each key with the tier
     # of the first file that names it (HOTTEXT-STARTUP-COMPLETE).
     tagged = bool(args) and args[0] == "--tagged"

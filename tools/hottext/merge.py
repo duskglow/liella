@@ -21,6 +21,9 @@ merged list holds takes tier `startup`, and the start-up tier moves to the head 
 parts keep their merged order). The start-up text is then contiguous: an aligned hot-text cluster
 can never sit between two start-up keys and push the rest into another 64 KiB window
 (STARTUP-TEXT-WINDOWS, D-X.49). Keys of that file the list lacks are not added (list order only).
+`--alias <file>` (`keys.py --aliases` lines, `<symbol key>\t<section key>`; LAYOUT-TEXT-PIN-6, #4467):
+a start-up key the list lacks that is a label inside a listed section (an assembly entry label, an
+alias) brings that section's key to the head instead.
 """
 import sys
 
@@ -64,7 +67,18 @@ def read_new(path):
 
 def main():
     args = sys.argv[1:]
-    head = None
+    head, alias = None, {}
+    if "--alias" in args:
+        i = args.index("--alias")
+        if i + 1 >= len(args):
+            sys.exit("merge.py: --alias needs a file")
+        with open(args[i + 1]) as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) != 2:
+                    sys.exit(f"merge.py: {args[i + 1]}: bad line {line!r} (want <symbol key>\\t<section key>)")
+                alias[parts[0]] = parts[1]
+        del args[i:i + 2]
     if "--startup-head" in args:
         i = args.index("--startup-head")
         if i + 1 >= len(args):
@@ -72,7 +86,7 @@ def main():
         head = {k for k, _, _ in read_old(args[i + 1])}
         del args[i:i + 2]
     if len(args) != 3:
-        sys.exit("usage: merge.py <old list lines> <new keys> <profile> [--startup-head <startup-text.keys>]")
+        sys.exit("usage: merge.py <old list lines> <new keys> <profile> [--startup-head <startup-text.keys>] [--alias <file>]")
     old_path, new_path, profile = args
     if profile not in PROFILES:
         sys.exit(f"merge.py: unknown profile {profile!r} (want one of {PROFILES})")
@@ -101,6 +115,7 @@ def main():
         profs[k] = others
         anchor = k
     if head is not None:
+        head |= {alias[k] for k in head if k not in pos and k in alias}
         for k in out:
             if k in head:
                 tier[k] = "startup"

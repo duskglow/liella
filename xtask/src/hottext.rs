@@ -1411,4 +1411,53 @@ mod tests {
         assert_eq!(late_startup_keys(&headed, skeys), (3, vec![]));
         assert_eq!(late_startup_keys(&plain, skeys), (1, vec!["vf".to_string()]));
     }
+
+    #[test]
+    fn a_startup_label_brings_its_section_to_the_head() {
+        // LAYOUT-TEXT-PIN-6, #4467 (no spec clause: build tooling, D-X.63): keys.py --aliases maps a
+        // label inside a function section (an assembly entry label, an alias) to the section's key,
+        // leaving out the section's own name, data symbols and a name found in two sections; merge.py
+        // --alias then brings the section of a start-up key traced at such a label to the head.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-merge-alias-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let syms = "\nlibc.a(m.o):     file format elf64-x86-64\n\nSYMBOL TABLE:\n\
+            0000000000000000 g     F .text.liella_machine_memset\t0000000000000040 liella_machine_memset\n\
+            0000000000000000 g     F .text.liella_machine_memset\t0000000000000040 .hidden memset\n\
+            0000000000000010 l       .text.liella_machine_memset\t0000000000000000 liella_machine_fill_avx2_entry\n\
+            0000000000000000 g     F .text.sorted.h12.strlen\t0000000000000020 strlen\n\
+            0000000000000000 l       .text.a\t0000000000000000 twice\n\
+            0000000000000000 l       .text.b\t0000000000000000 twice\n\
+            0000000000000000 g     O .rodata.t\t0000000000000008 t_alias\n";
+        std::fs::write(tmp.join("syms"), syms).unwrap();
+        let o = std::process::Command::new("python3")
+            .arg("-I")
+            .arg(root.join("tools/hottext/keys.py"))
+            .arg("--aliases")
+            .arg(tmp.join("syms"))
+            .output()
+            .expect("python3 runs tools/hottext/keys.py");
+        assert!(o.status.success(), "keys.py: {}", String::from_utf8_lossy(&o.stderr));
+        let aliases = String::from_utf8(o.stdout).unwrap();
+        assert_eq!(aliases, "liella_machine_fill_avx2_entry\tliella_machine_memset\nmemset\tliella_machine_memset\n");
+        std::fs::write(tmp.join("alias"), &aliases).unwrap();
+        std::fs::write(tmp.join("old"), "").unwrap();
+        std::fs::write(tmp.join("new"), "_start1\tstartup\nstrlen\tstrings\nliella_machine_memset\tstrings\nb\tstrings\n").unwrap();
+        std::fs::write(tmp.join("skeys"), "_start1\tstartup\tfast\nliella_machine_fill_avx2_entry\tstartup\tfast\n").unwrap();
+        let run = |alias: bool| {
+            let mut c = std::process::Command::new("python3");
+            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            c.arg("--startup-head").arg(tmp.join("skeys"));
+            if alias {
+                c.arg("--alias").arg(tmp.join("alias"));
+            }
+            let o = c.output().expect("python3 runs tools/hottext/merge.py");
+            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            String::from_utf8(o.stdout).unwrap()
+        };
+        let (plain, aliased) = (run(false), run(true));
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(plain, "_start1\tstartup\tfast\nstrlen\tstrings\tfast\nliella_machine_memset\tstrings\tfast\nb\tstrings\tfast\n");
+        assert_eq!(aliased, "_start1\tstartup\tfast\nliella_machine_memset\tstartup\tfast\nstrlen\tstrings\tfast\nb\tstrings\tfast\n");
+    }
 }
