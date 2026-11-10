@@ -1,41 +1,51 @@
 # LIBM-SQRT-ENTRY: sqrt/sqrtf/sqrtl entry cost (D-10.71)
 
-State: branch task/libm-sqrt-entry, code head f62017246 (cut from origin/next 2bc03ede6); role kanon:~/w/kn1
-(synced at fd0a631e0; f62017246 only adds a local asm label and is NOT synced: sync refused BUSY while gate2 ran).
-Scratch: kanon ~/work/LIBM-SQRT-ENTRY/ (plants.txt), local ~/w/.scratch/LIBM-SQRT-ENTRY/.
+State: branch task/libm-sqrt-entry-2 (continues task/libm-sqrt-entry), code head 0d64c7f00, cut from origin/next
+2bc03ede6. Role keke:~/w/n4 (Zen 1). Scratch: keke ~/work/LIBM-SQRT-ENTRY-2/ (cx.sh, mxb.c), local ~/w/.scratch/LIBM-SQRT-ENTRY-2/.
 
-## Done (D-10.71, plan/07-decisions/s10-mathematics.md)
-- sqrt/sqrtf (mathret.rs `Sqrt for f64/f32`): inline MXCSR read (`fpregs::mxcsr`, D-X.44), same mode test
-  (`fpu::is_sqrt_in_place`), operand pinned behind it, `hot::sqrtsd`/new `hot::sqrtss` inline (hot-kernel intrinsics,
-  upper lanes +0), EDOM in a cold `sqrt_domain()`. The out-of-line `liella_machine_sqrtss` and its declarations are
-  removed (no caller); `liella_machine_sqrtsd` stays (hypot uses it).
-- sqrtl/sqrtf64x: new csys/src/machine/sqrtl.S: fnstcw + default-but-RC test, fldt 8(%rsp), fxam, fsqrt only for a
-  positive normal; all else `jmp liella_slow_sqrtl` (the generated forwarder, now hidden; math-gen `ASM_ENTRY`,
-  `MATH_SLOW`), so D-10.20/D-10.22 rules are unchanged. Cause (reasoned, not yet measured): the old path rebuilt the
-  80-bit operand from two integer stores before each fldt (C forwarder LD(), Rust before liella_machine_fsqrt) and loaded
-  8 bytes spanning the caller's 10-byte fstpt: store-forwarding failures at equal instruction counts.
-- benchrows.rs forwarder scan also reads `MATH_SLOW(`.
-- Brief item 1: cbench_libm is built with `-fno-builtin` (xtask/src/bench.rs), so the sqrt rows make a real library call
-  for both libraries; no pointer change needed. The gcc-inline artifact was the separate percall/trace probes only.
+## Decisions in force
+- D-10.71 (records/decisions/D-10/D-10.71.toml; the s10 view is the train's): sqrt/sqrtf inline MXCSR read, the
+  mode test, inline root, cold EDOM; sqrtl/sqrtf64x in csys/src/machine/sqrtl.S (fnstcw test, fldt, fxam, fsqrt for a
+  positive normal only, all else `jmp liella_slow_sqrtl`). The handoff .txt copy is removed.
 
-## Results
-- kanon:libm-sqrt-entry-gate RED (clippy: liella_machine_sqrtss unused) -> fixed in fd0a631e0.
-- kanon:libm-sqrt-entry-gate2 (fd0a631e0): clippy ok, static ok, `s10_math_symbols sqrt` 8 passed / 5 ignored;
-  `affected --base origin/next --run` STILL RUNNING at hand-back (log ~/logs/libm-sqrt-entry-gate2.log).
-- Plants: plants (1) killed (broken tree), plants2 REFUSED (.S plant needs liella_machine_ label), plants3 REFUSED
-  (errno-dropped and mode-test-skipped `lit:` match 2 sites: f64 and f32). handoff/LIBM-SQRT-ENTRY-plants.txt has
-  the label anchors; the two `lit:` plants still need anchoring (e.g. perl:s/(impl Sqrt for f64.*?)sqrt_domain\(\);/$1let _ = 0;/s).
-- kanon:libm-sqrt-entry-counts2 (Zen counts, default + `--tunables glibc.cpu.hwcaps=-FMA`) and kanon:libm-sqrt-entry-exh
-  (mathcmp sqrt f --exhaustive, modes N U D Z) started on fd0a631e0; results NOT READ. Before (base): sqrt 33.1
-  instr/call (LIBM-ENVELOPE-ASM), sqrtl 13 vs glibc 13 (COVERAGE group 13).
-- Timing on Ivy Bridge / N100: NOT DONE (no booking taken; budget).
-- NOT VERIFIED: the 5 ignored tests (products-level fam_sqrt etc.) under the new sqrtl.S; fxam class of pseudo-denormals
-  (routed slow either way: only C2-only positive goes fast).
+## Done in -2
+- Record D-10.71 written (`records check` ok: 476 decisions, 0 pending).
+- New test `math_sqrt_stays_out_of_place_under_an_unmasked_trap` (s10_math_symbols): no test called sqrt/sqrtf with
+  an exception unmasked, so dropping the in-place mode test was invisible. Unmasked denormal-operand + subnormal
+  operand traps in place; ZE/OE/UE masks must give the same answers.
+- Profile of the after-build (Skylake-SP counts from -1: sqrt 9.29 ns vs glibc 4.17 = 2.2x at 27.1 vs 17.1 instr/op;
+  sqrtf 1.44x; sqrtl 0.52x): the disassembly showed `sqrtsd %xmm0,%xmm2`. x stays live for the EDOM test, so the
+  scalar root wrote another register and merged its upper lane, a dependency on that register's last writer (the
+  previous call's root in a call loop): one root latency per call. Fix 0d64c7f00: the root takes its own pinned copy
+  of x (`x.pin()`); the build now emits `xorps %xmm0,%xmm0; sqrtsd %xmm1,%xmm0` (zeroing idiom, no dependency).
+  Same for sqrtf. Ruled out first by a hardware microbench (mxb.c, Skylake-SP): `stmxcsr` next to independent
+  roots costs nothing (7.57 vs 7.63 ref-cycles per sqrtsd; 4.09 vs 4.14 sqrtss).
+- #4193: cbench_libm is built with -fno-builtin (xtask/src/bench.rs), so its sqrt rows make a real call for both
+  libraries; only the percall/trace probes inline. The verdict uses the cbench rows.
 
-## Next step
-1. Sync f62017246 when kn1 is idle; anchor the two lit: plants; run `cargo xtask plants` (all 5 must be CAUGHT).
-2. Read gate2, counts2, exh; run gate on f62017246 incl. `-- --include-ignored` after `cargo xtask so`.
-3. Book IVB + N100 timing for sqrt, sqrtf, sqrtl (targets 1.1x / 1.1x / 1.3x).
+## Jobs on 0d64c7f00 (keke)
+- libm-sqrt-entry-2-lint2: so + clippy + static rc 0.
+- libm-sqrt-entry-2-gate2 (affected --base origin/next), libm-sqrt-entry-2-plants2 (7 plants, plants file below),
+  libm-sqrt-entry-2-counts (cx.sh: cbench_libm sqrt,sqrtf,sqrtl default and `--tunables glibc.cpu.hwcaps=-FMA`, then
+  `mathcmp sqrt f --exhaustive` modes N U D Z), libm-sqrt-entry-2-plants3 (plants file installed as
+  ~/work/LIBM-SQRT-ENTRY-2/plants.txt, same as the handoff copy): all RUNNING at hand-back; read ~/logs/<label>.log.
+- plants2 BASELINE FAILED (rc 2, superseded): the filter `sqrt --include-ignored` also ran the ignored fam_csqrt and
+  sym___sqrt{,f,l,f128}_finite tests, which fail on the unmutated tree (cause not examined: outside this story);
+  plants3 adds `--skip fam_csqrt --skip _finite`.
+- Counts on Zen 1, 0d64c7f00 (time ns glibc / Liella, ratio, instr/op Liella vs glibc), default build, -FMA the same:
+  sqrt 6.11 / 12.77 = 2.09x, 33.1 vs 17.1; sqrtf 5.89 / 12.26 = 2.08x, 31.2 vs 17.1; sqrtl 15.88 / 15.04 = 0.95x,
+  24.2 vs 30.2. NO before on this host, so the register fix's effect on Zen 1 is unmeasured; sqrt/sqrtf stay ~2.1x:
+  target (1.1x) NOT reached, and the merge dependency is not the whole surplus here. Next profile: per-instruction
+  cost of the in-place path on Zen 1 (stmxcsr microbench on Zen 1 was queued, not run; prologue push/push/sub and
+  the extra NaN compares are the other candidates).
+- Superseded: libm-sqrt-entry-2-lint (static red on a home path here, fixed), -gate/-plants (killed: old head),
+  -mxb (probe evidence, not a proof job).
+- Plants file: handoff/LIBM-SQRT-ENTRY-plants.txt (each mathret.rs plant anchored to its impl).
 
-## Decision record
-D-10.71 text is in handoff/libm-sqrt-entry-D-10.71.txt: the row was removed from the train-owned plan file (handback-check); next run writes it with `cargo xtask records new decision D-10.71`.
+## Open / next step
+1. Read counts (Zen 1) for the after numbers; a "before" on the same host needs a base build (not done).
+2. Book timing on Ivy Bridge (nico or kotori, the less busy) and N100 for sqrt, sqrtf, sqrtl (targets 1.1x, 1.1x,
+   1.3x): not done in -1 or -2 (budget). The row verdict comes from that timing.
+3. INFORMATIONAL: `hot::sqrtsd` in the family kernels (invtrig, hyperbolic) may have the same merge dependency where
+   the operand stays live; check their disassembly.
+4. NOT VERIFIED: products-level tests under `--include-ignored` other than through the plants baseline.
