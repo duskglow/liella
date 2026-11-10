@@ -1,0 +1,12 @@
+{"task": "HEAP-FIRST-USE-4", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: #4243 cause found (p_str's memcpy takes the folding decision first); new probe p_strlazy groups liella_hot_memchr_rest (strings test green); lists regenerated (two keys inlined after the merge); release hot_text red by 1 fault on locale (56>55) and tool (59>58)",
+ "branch": "task/heap-first-use-4", "head": null,
+ "gate": {"affected": "hfu4-gate2 running at hand-back; release hot_text_products 12 passed / 2 failed (hfu4-head2)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["regen.sh output depends on the host: a keke trace drops keys other hosts reach (locale ctype/charset, fill_erms, gettext record_for), and merge.py treats one trace as the whole truth for a profile"],
+ "refused": [],
+ "jobs": ["hfu4-gate2", "hfu4-plants2", "hfu4-head2"],
+ "improvement": "regen.sh --build should run hot_text_products in each profile before it reports success; the dead-key check found the merged head's inlined keys only through a plants baseline",
+ "next_step": "release hot_text_products on origin/next on keke; if green, faultmap the locale program and restore the dropped locale keys by a reaching trace",
+ "report_file": "handoff/HEAP-FIRST-USE-4.md"}
