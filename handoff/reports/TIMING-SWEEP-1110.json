@@ -1,0 +1,18 @@
+{"task": "TIMING-SWEEP-1110", "model": "opus", "tokens": null,
+ "result": "COMPLETE: all 335 rows per class timed on next b14f639cc (Ivy Bridge, N100); exp on N100 now 1.73x glibc (was 2.17x); libm median 6.78->5.70 / 5.32->4.64; N100 strcasecmp_*_256 0.80->1.55",
+ "branch": "task/timing-sweep-1110", "head": "a90456e81",
+ "gate": {"affected": "n/a (results and handoff only, no code); 8 of 8 timing sweeps COMPLETE", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "exp on the N100 is below 2x glibc (1.728, 14.00 / 8.12 ns, spread 0.095): the ulp-bound question input for the coordinator",
+  "N100 strcasecmp_{c,en,utf8}_256 0.80 (1106e) -> 1.55, _pageend 1.94, _xpage 1.66 (instr 1.12-1.37); landing not identified",
+  "Ivy Bridge cbench_memref bench rc 1: limit flags on __memcmpeq_eq_128 (1.105) and __memcmpeq_tail_1k (1.001), as in 1107b",
+  "towctrans has no bench row on next; not timed",
+  "one scratch file (not in the repo) was edited with sed -i during the run, against the Edit-tool rule; no repo file was"
+ ],
+ "refused": [],
+ "jobs": ["kanon:timing-sweep-1110-stage", "kotori:timing-sweep-1110-ivb-libm", "kotori:timing-sweep-1110-ivb-hot", "kotori:timing-sweep-1110-ivb-locale", "kotori:timing-sweep-1110-ivb-memref", "nozomi:timing-sweep-1110-n100-libm", "nozomi:timing-sweep-1110-n100-hot", "nozomi:timing-sweep-1110-n100-locale", "nozomi:timing-sweep-1110-n100-memref"],
+ "improvement": "One staged tarball for all four groups plus ~/bin/timing jobs queued at once per host ran the whole sweep in 47 min with no idle booking time; a small in-repo analyzer for per-row before/after tables (the 1107b/1110 scripts live only in scratch) would save each sweep about ten calls.",
+ "next_step": "Story for the N100 strcasecmp 256-byte rows (bisect with bench --stage --base); reopen rows other than coshf stay open (log10f, y0, y1 1.6x on N100).",
+ "report_file": "handoff/timing-sweep-1110.md"}
