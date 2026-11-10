@@ -115,12 +115,12 @@ pub fn layout<A: Arch>(mods: &[Option<Module>], out: &mut [Option<Placed>], tail
             return Err(TlsError::Size(n));
         }
         max = max.max(align);
-        let r = m.vaddr % align;
+        let r = m.vaddr.checked_rem(align).ok_or(TlsError::Overflow)?;
         id = id.checked_add(1).ok_or(TlsError::Overflow)?;
         let at = match A::TLS_VARIANT {
             TlsVariant::II => {
                 // The block starts at TP - off with (TP - off) % align == r.
-                off = up(off.checked_add(m.memsz).and_then(|v| v.checked_add(r)).ok_or(TlsError::Overflow)?, align).ok_or(TlsError::Overflow)? - r;
+                off = up(off.checked_add(m.memsz).and_then(|v| v.checked_add(r)).ok_or(TlsError::Overflow)?, align).and_then(|v| v.checked_sub(r)).ok_or(TlsError::Overflow)?;
                 0i64.checked_sub_unsigned(off).ok_or(TlsError::Overflow)?
             }
             TlsVariant::I => {
