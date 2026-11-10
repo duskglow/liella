@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-POWF", "model": "opus", "tokens": null,
+ "result": "powf one-pass in the caller's environment (D-10.78): 275.3 -> 155.9 instructions/call (glibc 78.0), 5/5 plants caught; gate2 and 10^9-pair job pending; timing not run",
+ "branch": "task/libm-f32-powf", "head": null,
+ "gate": {"affected": "2408 passed / 0 failed (gate 1, rc 1 from static records, fixed); gate2 pending", "peak": "3.9G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["eval_pow treated every odd y in [2^23, 2^24) as even for x < 0 (positive result); fixed in this branch", "only the FMA build counted; hwcaps=-FMA build not counted"],
+ "refused": [],
+ "improvement": "wl_trace needs --spec for libm cases; its unknown-case error could list the spec files that define the case",
+ "next_step": "read gate2 and pairs, then book Ivy Bridge and N100 timing for powf_typ/powf_int against 0d0d82e5d",
+ "report_file": "handoff/libm-f32-powf.md",
+ "jobs": ["mei:libm-f32-powf-gate2", "mei:libm-f32-powf-plants", "mei:libm-f32-powf-counts", "mei:libm-f32-powf-pairs"]}
