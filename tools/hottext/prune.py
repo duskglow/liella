@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Drop the hot-text keys that no build matches (STARTUP-FAULTS-RESTORE).
 
-usage: prune.py <hot-text.list> <hot-text.matched>... > new list
+usage: prune.py <hot-text-<profile>.list> <hot-text.matched>... > new list
 
 Each <hot-text.matched> is the key file `cargo xtask so` writes next to a profile's processed
 archive (target/product/<profile>/hot-text.matched). A key of the list that is in none of them
 places nothing (renamed, made generic, inlined everywhere or removed): it is dropped. Comments and
-every other line are kept as they are, in order. Pass the files of BOTH profiles (fast, release):
-a key one profile inlines is still live in the other. Prints the dropped keys on stderr.
+every other line are kept as they are, in order. Each profile has its own list (HOTTEXT-REGEN-HOSTS-2,
+D-X.61): prune crates/libc-so/hot-text-<profile>.list with that profile's matched file. Prints the
+dropped keys on stderr.
 """
 import sys
 
