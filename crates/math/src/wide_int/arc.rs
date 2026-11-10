@@ -545,6 +545,9 @@ mod tests {
     /// The tier against the 384-bit route for one operand (pair) in the four modes, and the
     /// approximation's error against the proved bound.
     fn check(f: Fun, y: &Num, x: &Num, tally: &mut Tally) {
+        if f == Fun::Atan2 && !x.neg && y.top() - x.top() < -72 {
+            return; // wide::atan2's tiny-ratio path (x > 0, |y/x| < 2^-72) never reaches the tier
+        }
         let one = Mp::from_i64(1);
         let a = value(x);
         let (want, approx) = match f {
@@ -630,9 +633,6 @@ mod tests {
         let mut tally = Tally::default();
         for k in 0..total {
             let (y, x) = draw(f, k, &mut g);
-            if f == Fun::Atan2 && !x.neg && y.exp + 63 - (x.exp + 63) < -72 {
-                continue; // the caller's tiny-ratio path
-            }
             check(f, &y, &x, &mut tally);
         }
         tally
