@@ -1318,6 +1318,14 @@ enum Class {
     MathToolFeed(Feeds),
     /// GATE-VALIDATION-SH-TESTS: a `validation/` script with self-tests (`VALIDATION_COVERED`): those self-tests run.
     ValidationScript(&'static [&'static str]),
+    /// XTASK-AFFECTED-RECORDS (D-X.57): a file under `records/` (a decision, compat or saturation record, a view's
+    /// head or tail, `views.toml`). Its readers are all xtask: `records check`, `records-gen` (the views), `register`,
+    /// `compat-ids`, `trace` and `layout`'s decision rule, every one a step of `cargo xtask static`, and their unit
+    /// tests in `-p xtask`; plus any target or crate whose code names the path (`path_readers`).
+    Records,
+    /// XTASK-AFFECTED-RECORDS (D-X.57): the layout manifest `layout/contracts.tsv`: `cargo xtask layout-check` on fresh
+    /// products, `layout`'s static rules (`cargo xtask static`) and the xtask unit tests that read it.
+    LayoutManifest,
 }
 
 /// D-X.39: which generated sets a liella-mathtools source feeds. `remez`: the fitted coefficient files
@@ -1473,6 +1481,12 @@ fn classify(path: &str) -> Option<Class> {
     }
     if let Some(c) = math_class(path) {
         return Some(c);
+    }
+    if path.starts_with("records/") {
+        return Some(Class::Records);
+    }
+    if path == LAYOUT_CONSUMERS[0] {
+        return Some(Class::LayoutManifest);
     }
     // XTASK-AFFECTED-XTASK-TESTS (D-X.41): xtask's integration tests run only under `cargo test -p xtask`; no gate
     // step executes them.
@@ -1657,6 +1671,18 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
                 sel.notes.push(format!("{f}: a validation script with self-tests ({}; not FULL)", tests.join(", ")));
             }
             Some(Class::AllConf) => sel.all_conf(repo, &format!("{f}: every conformance program")),
+            Some(Class::Records) => {
+                sel.xtask_tests = true;
+                sel.xtask_cmds.insert("static".to_string());
+                let readers = path_readers(repo, f, &mut sel);
+                sel.notes.push(format!("{f}: a record or view input (the xtask unit tests and `cargo xtask static`: records, records-gen, register, compat-ids, trace, layout{}; not FULL)", readers.iter().map(|r| format!(", {r}")).collect::<String>()));
+            }
+            Some(Class::LayoutManifest) => {
+                sel.xtask_tests = true;
+                sel.xtask_cmds.insert("static".to_string());
+                sel.xtask_cmds.insert(LAYOUT_CHECK.to_string());
+                sel.notes.push(format!("{f}: the layout manifest (`cargo xtask {LAYOUT_CHECK}` on fresh products, `cargo xtask static`, the xtask unit tests; not FULL)"));
+            }
             Some(Class::XtaskData) => {
                 sel.xtask_tests = true;
                 sel.notes.push(format!("{f}: bench data (the xtask unit tests read it)"));
@@ -1738,6 +1764,17 @@ fn ordinary_mapping(repo: &Repo, f: &str, sel: &mut Selection) {
 /// not seen; the readers found that way today are static checks, which run anyway.
 fn docs_readers(repo: &Repo, f: &str, sel: &mut Selection) {
     sel.xtask_cmds.insert("static".to_string());
+    let readers = path_readers(repo, f, sel);
+    if readers.is_empty() {
+        sel.notes.push(format!("{f}: docs only (stubs, policy checks, `cargo xtask static`; no tests)"));
+    } else {
+        sel.notes.push(format!("{f}: docs read by code (stubs, policy checks, `cargo xtask static`, and its readers: {})", readers.join(", ")));
+    }
+}
+
+/// The code that names `f` as a path (`names_path`), selected: a test target, the owning crate's unit tests (a crate
+/// source), the xtask unit tests (an xtask source). Returns the readers' names for the note.
+fn path_readers(repo: &Repo, f: &str, sel: &mut Selection) -> Vec<String> {
     let why = format!("{f}: the source names the file");
     let mut readers = Vec::new();
     for t in repo.targets.iter().filter(|t| names_path(&t.text, f)) {
@@ -1752,11 +1789,7 @@ fn docs_readers(repo: &Repo, f: &str, sel: &mut Selection) {
         sel.xtask_tests = true;
         readers.push(format!("xtask ({x})"));
     }
-    if readers.is_empty() {
-        sel.notes.push(format!("{f}: docs only (stubs, policy checks, `cargo xtask static`; no tests)"));
-    } else {
-        sel.notes.push(format!("{f}: docs read by code (stubs, policy checks, `cargo xtask static`, and its readers: {})", readers.join(", ")));
-    }
+    readers
 }
 
 /// Whether `text` names `path` as a path in code: on a line that is not a comment, right after a quote or a `/`
@@ -4166,6 +4199,31 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         let (_, s) = sel(&["bench/instr_limits.tsv"]);
         assert!(s.full.is_empty() && s.tests.is_empty() && s.conf.is_empty(), "bench data selects only the xtask tests: {s:?}");
         assert!(!sel(&["fuzz/seeds/x"]).1.xtask_tests, "fuzz stays unselected");
+    }
+
+    // XTASK-AFFECTED-RECORDS (D-X.57): no spec clause. A record, a view input or the layout manifest selects its
+    // readers, never FULL and never nothing.
+    #[test]
+    fn records_select_the_xtask_tests_and_static_not_full() {
+        let files = ["records/decisions/D-X/D-X.57.toml", "records/compat/COMPAT-1.toml", "records/saturation/x.toml", "records/views/s01.head.md", "records/views/h.tail.md", "records/views.toml"];
+        for t in [Tier::Direct, Tier::Wide] {
+            for f in files {
+                let s = select_tier(repo(), &[f.to_string()], t);
+                assert!(s.full.is_empty(), "{f} ({t:?}) must not escalate: {s:?}");
+                assert!(s.xtask_tests && s.xtask_cmds.contains("static"), "{f} ({t:?}) must select the xtask unit tests and `cargo xtask static`: {s:?}");
+                assert!(!s.xtask_cmds.contains(LAYOUT_CHECK) && s.conf.is_empty() && !needs_products(repo(), &s), "{f} ({t:?}): no products for a record: {s:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_layout_manifest_selects_layout_check_not_full() {
+        for t in [Tier::Direct, Tier::Wide] {
+            let s = select_tier(repo(), &[LAYOUT_CONSUMERS[0].to_string()], t);
+            assert!(s.full.is_empty(), "{t:?}: must not escalate: {s:?}");
+            assert!(s.xtask_cmds.contains(LAYOUT_CHECK) && needs_products(repo(), &s), "{t:?}: must run `cargo xtask {LAYOUT_CHECK}` on fresh products: {s:?}");
+            assert!(s.xtask_tests && s.xtask_cmds.contains("static"), "{t:?}: must run the xtask unit tests and `cargo xtask static`: {s:?}");
+        }
     }
 
     #[test]
