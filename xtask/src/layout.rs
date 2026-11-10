@@ -24,7 +24,7 @@ const HEADER: [&str; 6] = ["id", "kind", "subjects", "rule", "reason", "decision
 /// Kinds whose contract is held by a directive in the source (alignment attribute, `.p2align`, `.org`): a row of one
 /// of them needs a `LAYOUT(<ID>)` tag at that directive.
 const SITE_KINDS: &[&str] = &["classed-xref", "object-window", "object-align", "section-offset", "label-align"];
-const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows"];
+const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows", "startup-data-windows"];
 const DIRECTIVES: &[&str] = &[".p2align", ".balign", ".align ", ".org ", "align("];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -404,6 +404,7 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
             Ok(format!("{n} products carry no build path"))
         }
         "startup-text-windows" => check_startup_windows(c, &p, pr),
+        "startup-data-windows" => check_startup_data(c, &p, pr),
         k => Err(one(format!("layout: {}: unknown kind `{k}` (known: {})", c.id, KINDS.join(", ")))),
     }
 }
@@ -645,8 +646,9 @@ fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grou
     Err(lines)
 }
 
-/// Link `page_faults.c` against the products as `hot_text_products.rs` does, with a link map; `(nm -S, map)` text.
-fn link_startup_probe(pr: &Products) -> Result<(String, String), String> {
+/// Link `page_faults.c` against the products as `hot_text_products.rs` does, with a link map; `(nm -S, map, readelf -SW)`
+/// text.
+fn link_startup_probe(pr: &Products) -> Result<(String, String, String), String> {
     let work = std::env::temp_dir().join(format!("liella-layout-startup-{}", std::process::id()));
     std::fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
     let (exe, map) = (work.join("page_faults"), work.join("page_faults.map"));
@@ -663,7 +665,8 @@ fn link_startup_probe(pr: &Products) -> Result<(String, String), String> {
         "cc page_faults.c (the start-up probe)",
     )
     .and_then(|_| tool(Command::new("nm").args(["-S", "--defined-only"]).arg(&exe), "nm -S page_faults"))
-    .and_then(|nm| std::fs::read_to_string(&map).map(|m| (nm, m)).map_err(|e| format!("{}: {e}", map.display())));
+    .and_then(|nm| std::fs::read_to_string(&map).map(|m| (nm, m)).map_err(|e| format!("{}: {e}", map.display())))
+    .and_then(|(nm, m)| tool(Command::new("readelf").arg("-SW").arg(&exe), "readelf -SW page_faults").map(|r| (nm, m, r)));
     let _ = std::fs::remove_dir_all(&work);
     linked
 }
@@ -688,12 +691,182 @@ fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Pr
     for f in &c.subjects {
         pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
     }
-    let (nm, map) = link_startup_probe(pr).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let (nm, map, _) = link_startup_probe(pr).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     let t = startup_text(&keys, &parse_nm(&nm), &parse_map(&map), window).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
     if t.missing.len() == keys.len() {
         return Err(one(c.broken("start-up keys", &format!("none of the {} keys of {path} names a function of the probe", keys.len()))));
     }
     startup_verdict(c, &t, window, budget, grouped_error, &profile).map(|s| format!("{s}; {} of {} start-up functions found", keys.len() - t.missing.len(), keys.len()))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// STARTUP-DATA-WINDOWS (D-X.50): the start-up data objects of the static probe in few windows and pages
+//
+// The read-only objects start-up reads sit in the file mapping: the first touch of each 64 KiB window costs one fault
+// (fault-around), as for text. The writable ones (.data, .bss, .lbss, ...) are private: every 4 KiB page start-up
+// touches costs its own fault. The objects (keys in the row's `keys=` file, written by `tools/hottext/startup_data.py`
+// from `perf record -e page-faults -d` and the start-up functions' RIP-relative operands) must occupy at most
+// `ro-budget-<profile>=` windows and `rw-budget-<profile>=` pages of `page_faults.c` linked as for STARTUP-TEXT-WINDOWS.
+// The kind is the section's in the link being checked, so an object moved between .rodata and .data is counted where
+// it now lies. Over a budget, the objects alone in a window or page are named: each costs a fault of its own.
+
+/// The page the written start-up objects are counted in (bytes). The row's `page=` must equal it.
+const STARTUP_PAGE: u64 = 1 << 12;
+
+/// An allocated section of the linked probe.
+#[derive(Clone, Debug, PartialEq)]
+struct ExeSection {
+    start: u64,
+    end: u64,
+    writable: bool,
+    /// TLS (`T`) or code (`X`): not where a data object is counted.
+    skip: bool,
+}
+
+/// `readelf -SW` of the linked probe -> its allocated sections.
+fn parse_exe_sections(text: &str) -> Vec<ExeSection> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some((_, rest)) = line.split_once(']') else { continue };
+        let f: Vec<&str> = rest.split_whitespace().collect();
+        // Name Type Address Off Size ES Flg Lk Inf Al: a section without flags has one field fewer.
+        if f.len() != 10 || !f[6].contains('A') {
+            continue;
+        }
+        let (Ok(start), Ok(size)) = (u64::from_str_radix(f[2], 16), u64::from_str_radix(f[4], 16)) else { continue };
+        out.push(ExeSection { start, end: start + size, writable: f[6].contains('W'), skip: f[6].contains('T') || f[6].contains('X') });
+    }
+    out
+}
+
+/// A data object of the linked probe: `[start, end)`, its linked name, and whether its section is writable.
+#[derive(Clone, Debug, PartialEq)]
+struct DataObj {
+    start: u64,
+    end: u64,
+    name: String,
+    rw: bool,
+}
+
+/// `nm -S --defined-only` -> the data objects by build-stable key, classed by the section they lie in (TLS and objects
+/// outside an allocated section are not counted).
+fn parse_nm_data(text: &str, secs: &[ExeSection]) -> BTreeMap<String, Vec<DataObj>> {
+    let mut out: BTreeMap<String, Vec<DataObj>> = BTreeMap::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let (addr, size, ty, name) = match f.as_slice() {
+            [a, s, t, n] => (*a, Some(*s), *t, *n),
+            [a, t, n] => (*a, None, *t, *n),
+            _ => continue,
+        };
+        if !matches!(ty, "d" | "D" | "b" | "B" | "r" | "R" | "v" | "V" | "g" | "G" | "s" | "S") {
+            continue;
+        }
+        let (Ok(start), Ok(size)) = (u64::from_str_radix(addr, 16), size.map_or(Ok(0), |s| u64::from_str_radix(s, 16))) else {
+            continue;
+        };
+        let Some(sec) = secs.iter().find(|s| (s.start..s.end).contains(&start)) else { continue };
+        if sec.skip {
+            continue;
+        }
+        out.entry(crate::hottext::key(name)).or_default().push(DataObj { start, end: start + size.max(1), name: name.to_string(), rw: sec.writable });
+    }
+    out
+}
+
+/// What the start-up data objects occupy in the linked probe.
+#[derive(Debug, Default, PartialEq)]
+struct StartupData {
+    /// Every 64 KiB window a read-only start-up object touches, with the objects in it.
+    windows: BTreeMap<u64, Vec<DataObj>>,
+    /// Every 4 KiB page a written start-up object touches, with the objects in it.
+    pages: BTreeMap<u64, Vec<DataObj>>,
+    /// Keys with no object in this link.
+    missing: Vec<String>,
+}
+
+fn startup_data(keys: &[String], objs: &BTreeMap<String, Vec<DataObj>>, window: u64, page: u64) -> StartupData {
+    let mut d = StartupData::default();
+    let mut seen = BTreeSet::new();
+    for k in keys {
+        let Some(list) = objs.get(k) else {
+            d.missing.push(k.clone());
+            continue;
+        };
+        for o in list {
+            if !seen.insert((o.start, o.name.clone())) {
+                continue;
+            }
+            let (map, unit) = if o.rw { (&mut d.pages, page) } else { (&mut d.windows, window) };
+            for u in window_of(o.start, unit)..=window_of(o.end - 1, unit) {
+                map.entry(u).or_default().push(o.clone());
+            }
+        }
+    }
+    d
+}
+
+/// The verdict on `d`: `Ok(summary)` or `Err(lines)` listing every window or page of an over-budget class and naming,
+/// as BROKEN, each object that sits alone in one.
+fn startup_data_verdict(c: &Contract, d: &StartupData, (window, page): (u64, u64), (ro_budget, rw_budget): (u64, u64), profile: &str) -> Result<String, Vec<String>> {
+    let (nro, nrw) = (d.windows.len() as u64, d.pages.len() as u64);
+    let mut summary = format!(
+        "{nro} read-only start-up data windows of {window} bytes (ro-budget-{profile} {ro_budget}), {nrw} written start-up data pages of {page} bytes (rw-budget-{profile} {rw_budget})"
+    );
+    if !d.missing.is_empty() {
+        summary += &format!("; not in this link: {}", d.missing.join(" "));
+    }
+    let mut lines = vec![format!("layout: {}: {summary}", c.id)];
+    let mut bad = Vec::new();
+    for (what, units, unit, n, budget, class) in
+        [("window", &d.windows, window, nro, ro_budget, "ro"), ("page", &d.pages, page, nrw, rw_budget, "rw")]
+    {
+        if n <= budget {
+            continue;
+        }
+        let alone = bad.len();
+        for (u, objs) in units {
+            let names: Vec<String> = objs.iter().map(|o| format!("{} 0x{:x}-0x{:x}", o.name, o.start, o.end)).collect();
+            lines.push(format!("layout: {}:   {what} 0x{:x}: {}", c.id, u * unit, names.join(", ")));
+            if let [o] = objs.as_slice() {
+                bad.push(c.broken(&o.name, &format!("sits alone in the {unit}-byte {what} 0x{:x}: {n} {what}s > {class}-budget-{profile} {budget}", u * unit)));
+            }
+        }
+        if bad.len() == alone {
+            bad.push(c.broken(&format!("{n} {what}s"), &format!("start-up {class} data spans {n} {what}s of {unit} bytes > {class}-budget-{profile} {budget}")));
+        }
+    }
+    if bad.is_empty() {
+        return Ok(summary);
+    }
+    lines.extend(bad);
+    Err(lines)
+}
+
+fn check_startup_data(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Products) -> Result<String, Vec<String>> {
+    let one = |e: String| vec![e];
+    let window = param_num(p, c, "window").map_err(one)?;
+    same(c, "window", window, STARTUP_WINDOW).map_err(one)?;
+    let page = param_num(p, c, "page").map_err(one)?;
+    same(c, "page", page, STARTUP_PAGE).map_err(one)?;
+    let profile = pr.profile.clone().ok_or_else(|| one(format!("layout: {}: the products' profile is unknown (no {}/.profile)", c.id, pr.dir.display())))?;
+    let ro_budget = param_num(p, c, &format!("ro-budget-{profile}")).map_err(one)?;
+    let rw_budget = param_num(p, c, &format!("rw-budget-{profile}")).map_err(one)?;
+    let path = param(p, c, "keys").map_err(one)?;
+    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    if keys.is_empty() {
+        return Err(one(format!("layout: {}: {path}: no start-up object traced in profile {profile} (run tools/hottext/startup_data.sh)", c.id)));
+    }
+    for f in &c.subjects {
+        pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
+    }
+    let (nm, _, readelf) = link_startup_probe(pr).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let d = startup_data(&keys, &parse_nm_data(&nm, &parse_exe_sections(&readelf)), window, page);
+    if d.missing.len() == keys.len() {
+        return Err(one(c.broken("start-up objects", &format!("none of the {} keys of {path} names an object of the probe", keys.len()))));
+    }
+    startup_data_verdict(c, &d, (window, page), (ro_budget, rw_budget), &profile).map(|s| format!("{s}; {} of {} start-up objects found", keys.len() - d.missing.len(), keys.len()))
 }
 
 /// The profile recorded in `<dir>/.profile` (written last by `cargo xtask so`).
@@ -1092,5 +1265,74 @@ mod tests {
         let t = startup_text(&keys(), &parse_nm(&nm), &parse_map(&map), STARTUP_WINDOW).unwrap();
         assert!(t.windows[&0x40].iter().any(|f| f.name == "foo") && t.windows[&0x41].iter().any(|f| f.name == "foo") && t.straddling.is_empty());
         assert!(startup_text(&keys(), &parse_nm(&nm), &[], STARTUP_WINDOW).is_err(), "no hot group: cannot check");
+    }
+
+    /// `readelf -SW` of a probe: text, read-only data, TLS, writable data and bss, and a non-allocated section.
+    const DATA_SECTIONS: &str = "  [Nr] Name              Type            Address          Off    Size   ES Flg Lk Inf Al
+  [ 1] .text             PROGBITS        0000000000401000 001000 0f0000 00  AX  0   0 64
+  [ 2] .rodata           PROGBITS        0000000000500000 100000 020000 00   A  0   0 64
+  [ 3] .rodata1          PROGBITS        0000000000520000 120000 000200 00   A  0   0 64
+  [ 4] .tbss             NOBITS          0000000000600000 200000 000100 00 WAT  0   0 64
+  [ 5] .data             PROGBITS        0000000000600000 200000 003000 00  WA  0   0 64
+  [ 6] .bss              NOBITS          0000000000603000 203000 002000 00  WA  0   0 64
+  [ 7] .comment          PROGBITS        0000000000000000 203000 000020 01  MS  0   0  1
+";
+
+    fn data_nm(nscache_at: u64) -> String {
+        [
+            "0000000000401000 0000000000000010 T _start".to_string(),
+            "0000000000500100 0000000000000040 r _ZN4core3fmt3FMT17h0123456789abcdefE".into(),
+            "0000000000520000 0000000000000200 R _ZN15liella_boundary13startup_names13STARTUP_NAMES17h0123456789abcdefE".into(),
+            "0000000000600000 0000000000000008 B TLS_WORD".into(),
+            "0000000000600040 0000000000000010 D AUXV".into(),
+            format!("{nscache_at:016x} 0000000000000200 d NSCACHE"),
+            "0000000000603100 0000000000000020 b HEAP".into(),
+        ]
+        .join("\n")
+    }
+
+    fn data_keys() -> Vec<String> {
+        ["_ZN4core3fmt3FMTE", "_ZN15liella_boundary13startup_names13STARTUP_NAMESE", "TLS_WORD", "AUXV", "NSCACHE", "HEAP", "_start", "gone"].map(String::from).to_vec()
+    }
+
+    fn data_row() -> Contract {
+        let rule = "keys=k; window=65536; page=4096; ro-budget-fast=2; rw-budget-fast=2";
+        Contract { kind: "startup-data-windows".into(), subjects: vec!["libc.a".into(), "liella-crt1.o".into()], decision: "D-X.50".into(), ..row("STARTUP-DATA-WINDOWS", rule) }
+    }
+
+    #[test]
+    fn startup_data_objects_are_classed_by_their_section() {
+        // no spec clause: tooling (D-X.50).
+        let secs = parse_exe_sections(DATA_SECTIONS);
+        assert_eq!(secs.len(), 6, "the non-allocated .comment is not read: {secs:?}");
+        assert!(secs[0].skip && !secs[1].writable && secs[3].skip && secs[4].writable && !secs[4].skip);
+        let o = parse_nm_data(&data_nm(0x601f00), &secs);
+        assert!(!o.contains_key("_start"), "text is not data");
+        assert!(!o.contains_key("TLS_WORD"), "a TLS object (its address overlaps .data) is in the TLS section first and skipped");
+        assert!(!o["_ZN4core3fmt3FMTE"][0].rw && o["NSCACHE"][0].rw && o["HEAP"][0].rw, "keys are hottext keys; .data and .bss are written");
+        let d = startup_data(&data_keys(), &o, STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(d.windows.keys().copied().collect::<Vec<_>>(), [0x50, 0x52]);
+        assert_eq!(d.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x601, 0x602, 0x603], "NSCACHE across a page boundary counts both");
+        assert_eq!(d.missing, ["TLS_WORD", "_start", "gone"]);
+    }
+
+    #[test]
+    fn startup_data_holds_within_the_budget_and_names_the_lone_object_one_below() {
+        // no spec clause: tooling (D-X.50); the UTMP-Y2038-UNSIGNED-2 case (a written object alone on a page).
+        let secs = parse_exe_sections(DATA_SECTIONS);
+        let c = data_row();
+        let packed = startup_data(&data_keys(), &parse_nm_data(&data_nm(0x600100), &secs), STARTUP_WINDOW, STARTUP_PAGE);
+        assert_eq!(packed.pages.keys().copied().collect::<Vec<_>>(), [0x600, 0x603]);
+        let ok = startup_data_verdict(&c, &packed, (STARTUP_WINDOW, STARTUP_PAGE), (2, 2), "fast").unwrap();
+        assert!(ok.contains("2 read-only start-up data windows") && ok.contains("2 written start-up data pages"), "{ok}");
+        let alone = startup_data(&data_keys(), &parse_nm_data(&data_nm(0x601800), &secs), STARTUP_WINDOW, STARTUP_PAGE);
+        let e = startup_data_verdict(&c, &alone, (STARTUP_WINDOW, STARTUP_PAGE), (2, 2), "fast").unwrap_err().join("\n");
+        assert!(e.contains("STARTUP-DATA-WINDOWS BROKEN: NSCACHE: sits alone in the 4096-byte page 0x601000: 3 pages > rw-budget-fast 2"), "{e}");
+        assert!(e.contains("BROKEN: HEAP: sits alone"), "{e}");
+        assert!(e.contains("BROKEN: AUXV: sits alone"), "every lone object of the over-budget class is named: {e}");
+        assert!(e.contains("page 0x601000: NSCACHE 0x601800-0x601a00"), "{e}");
+        let w = startup_data_verdict(&c, &packed, (STARTUP_WINDOW, STARTUP_PAGE), (1, 2), "fast").unwrap_err().join("\n");
+        assert!(w.contains("BROKEN: _ZN15liella_boundary13startup_names13STARTUP_NAMES17h0123456789abcdefE: sits alone in the 65536-byte window 0x520000: 2 windows > ro-budget-fast 1"), "{w}");
+        assert!(!w.contains("pages >"), "the rw class is within its budget: {w}");
     }
 }
