@@ -126,15 +126,26 @@ fn cache_numeric_compare_and_sorted_search() {
 #[test]
 fn cache_corrupt_corpus_refused() {
     let f = cache_file(&[(FLAGS, "liba.so.1", "/x/liba.so.1", Some(0)), (FLAGS, "liba.so.1", "/y/liba.so.1", None)], &["x86-64-v2"]);
+    // Appendix D.3.1: the string table follows the entries; every path returned lies inside it.
     let probe = |b: &[u8]| {
         if let Some(c) = Cache::parse(b) {
+            let nlibs = usize::try_from(u32::from_le_bytes(b[20..24].try_into().unwrap())).unwrap();
+            let table = 48 + 24 * nlibs..48 + 24 * nlibs + usize::try_from(u32::from_le_bytes(b[24..28].try_into().unwrap())).unwrap();
             for hw in [&[][..], V3] {
                 if let Some(p) = c.lookup(b"liba.so.1", FLAGS, hw) {
-                    assert!(p.starts_with(b"/"), "a path from inside the string table");
+                    let at = (p.as_ptr() as usize).wrapping_sub(b.as_ptr() as usize);
+                    assert!(p.starts_with(b"/") && table.contains(&at) && at + p.len() < table.end, "a path from inside the string table: {at} not in {table:?}");
                 }
             }
         }
     };
+    // A value offset into the entry table at bytes that read as an absolute path (entry 1's
+    // osversion word holds "/ev\0"): outside the string table, so the entry is inconsistent.
+    let mut inside = f.clone();
+    inside[48 + 24 + 12..48 + 24 + 16].copy_from_slice(b"/ev\0");
+    inside[48 + 24 + 8..48 + 24 + 12].copy_from_slice(&u32::try_from(48 + 24 + 12).unwrap().to_le_bytes());
+    probe(&inside);
+    assert_eq!(Cache::parse(&inside).and_then(|c| c.lookup(b"liba.so.1", FLAGS, &[])), None, "a path from inside the entry table");
     for cut in 0..f.len() {
         probe(&f[..cut]);
         if cut < 48 + 48 {
