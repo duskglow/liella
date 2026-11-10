@@ -1,0 +1,16 @@
+{"task": "DL-SEARCH-CACHE-4", "model": "opus", "tokens": null,
+ "result": "CI conflict resolved: merged origin/next (DL-RELOC-3), Arch seam keeps both stories' items, list-mode OBJECTS_MAX/open_file renamed to fix the semantic clash, codemap regenerated; direct gate green, 10/10 plants caught",
+ "branch": "task/dl-search-cache-4", "head": null,
+ "gate": {"affected": "15 suites ok / 0 failed (12101 tests passed, conformance 122 passed)", "peak": "16G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   {"item": "boundary ld.rs has two file openers (run path open_file, list mode open_whole)", "recommendation": "merge them when the run path adopts liella_ld::search; keep --list output for files shorter than an ELF header"},
+   {"item": "cargo xtask affected escalates fuzz/Cargo.toml to FULL", "recommendation": "xtask story: classify fuzz/Cargo.toml as fuzz-check only"},
+   {"item": "gaps (records only, D-27.16): DF_1_NODEFLIB, --library-path/--inhibit-cache, $PLATFORM beyond Haswell, ld_cache under libFuzzer", "recommendation": "follow-up stories"}
+ ],
+ "refused": [],
+ "jobs": ["dl-search-cache-4-gate", "dl-search-cache-4-plants"],
+ "improvement": "the CI merge check reported only the textual arch.rs conflict; a compile of the merged head would have shown the boundary ld.rs name clash in the same report",
+ "next_step": "wire liella_ld::search and the cache into the run path's DT_NEEDED loading (link), then unify the openers",
+ "report_file": "handoff/DL-SEARCH-CACHE-4-report.md"}

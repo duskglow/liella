@@ -1,0 +1,12 @@
+{"task": "DL-MAP-PROBE-3", "model": "opus", "tokens": null,
+ "result": "merged origin/next (map.rs conflict: kept next's exec-stack refusal and empty-PT_LOAD skip, kept the PT_LOAD bound removed per D-27.15), regenerated the stale codemap; gate and plants green on the merged head",
+ "branch": "task/dl-map-probe-3", "head": null,
+ "gate": {"affected": "1768 passed / 0 failed (92 ignored), conformance 17 passed", "peak": "1.5G"},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["run 2's gate4 was rc 1 at static's codemap check only (README stale after start::relro_at moved two path literals); its affected tests never ran", "ld.rs kernel-started path still takes the bias from PT_PHDR (0 without one); untested, for a later DL story"],
+ "refused": [],
+ "improvement": "the codemap README indexes path literals by line number, so any edit above one in an indexed file reds static; indexing by file (or symbol) would stop line shifts from breaking unrelated stories",
+ "next_step": "none: lands",
+ "report_file": "handoff/DL-MAP-PROBE.md",
+ "jobs": ["keke:dl-map-probe-3-gate", "keke:dl-map-probe-3-plants"]}

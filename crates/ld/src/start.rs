@@ -123,6 +123,11 @@ pub struct LdEnv<'a> {
     pub bind_now: bool,
     /// `GLIBC_TUNABLES` (D-1.8): parsed by the caller with the secure filter.
     pub tunables: Option<&'a [u8]>,
+    /// `LD_TRACE_LOADED_OBJECTS` is set, to any value (ld.so(8)); the loader ignores it in secure
+    /// mode (threat model rule 11, DL-8).
+    pub trace: bool,
+    /// `LD_ORIGIN_PATH` (ld.so(8)); the loader ignores it in secure mode (rule 2, DL-8).
+    pub origin_path: Option<&'a [u8]>,
 }
 
 /// The value of `name` in the environment entry `entry` (`NAME=value`), if it is that name's entry.
@@ -145,6 +150,8 @@ pub fn ld_env<'a>(env: impl IntoIterator<Item = &'a [u8]>) -> LdEnv<'a> {
         first(&mut out.library_path, b"LD_LIBRARY_PATH");
         first(&mut out.tunables, b"GLIBC_TUNABLES");
         first(&mut bind_now, b"LD_BIND_NOW");
+        first(&mut out.origin_path, b"LD_ORIGIN_PATH");
+        out.trace |= value_of(e, b"LD_TRACE_LOADED_OBJECTS").is_some();
     }
     out.bind_now = bind_now.is_some_and(|v| !v.is_empty());
     out

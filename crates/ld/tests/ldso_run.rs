@@ -298,6 +298,10 @@ fn ldso_run_secure_child_sees_unsecure_cleared() {
         return eprintln!("SKIP: the kernel did not set AT_SECURE (the file system ignores set-group-ID here)");
     }
     assert!(l.iter().any(|x| x == "secure:1"), "{l:?}");
+    // Threat model rule 11: a secure process ignores LD_TRACE_LOADED_OBJECTS and runs normally.
+    let traced = run(c.env("LD_TRACE_LOADED_OBJECTS", "1"));
+    let t = assert_ran(&traced, "secure, traced");
+    assert!(!t.iter().any(|x| x.contains(" => ") || x.contains("linux-vdso")), "secure: LD_TRACE_LOADED_OBJECTS listed: {t:?}");
     let env: Vec<&str> = l.iter().filter_map(|x| x.strip_prefix("env:")).collect();
     for n in UNSECURE {
         assert!(!env.iter().any(|e| e.split('=').next() == Some(n)), "{n} reached the secure program: {env:?}");

@@ -1,0 +1,21 @@
+{"task": "LAYOUT-STABILITY-RETHINK", "model": "opus", "tokens": null,
+ "result": "Jitter measured (mei, both profiles, 294 padded links, deterministic): libc's .text.unlikely (47-70 KiB) before the hot group and text-size-driven rodata/relro phases move locale/tool by up to +3/+4 and mktime 0->1; design = one pow2-aligned hot cluster per fault class + per-class fault-address contracts + per-profile regen; 3 code briefs",
+ "branch": "task/layout-stability-rethink", "head": "df2ccf677",
+ "gate": {"affected": "not run: planning story, no product code", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "Interim rule until briefs A/B land: a fault or window red on a change touching no start-up code is phase jitter when measure.py at origin/next reproduces the same count at some cold/pre pad", "recommendation": "accept"},
+  {"item": "Per-class bounds re-derived once after A/B (each may move by 1 once, totals may not rise), then ratchet", "recommendation": "accept"},
+  {"item": "Layout contracts measured from perf page-fault addresses (perf on build hosts; key-based check as fallback)", "recommendation": "accept"}
+ ],
+ "informational": [
+  "Fault-around on mei 6.8.0-149: 16 pages from the 64 KiB-aligned address or the mapping start if later; file offset irrelevant; write and anonymous faults one page",
+  "A 64 KiB anchor at the .rodata head made R/Dr phase-invariant but at R 3 / Dr 2 (tool 57-58 vs 55): anchors need grouping first; file +28-49 KiB",
+  "localtime 21 > 20 (#4246) and mktime 1 (#4319) reproduce by padding alone, no code change",
+  "layout-check disassembles all of libc.a each run (~2 min under load 30)"
+ ],
+ "refused": [],
+ "jobs": ["mei:lsr-jitter-2"],
+ "improvement": "layout-check spends ~2 min disassembling the unchanged libc.a on every call: cache the disassembly by libc.a hash so contract checks of probe-only or crt1-only changes take seconds",
+ "next_step": "Submit brief A (LAYOUT-TEXT-PIN) first; HEAP-FIRST-USE-6 waits for A, TB-FOREIGN-SAFETY-4 for LAYOUT-STARTUP-RODATA-2; then B and C",
+ "report_file": "handoff/layout-stability-rethink.md"}
