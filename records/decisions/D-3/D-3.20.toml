@@ -1,0 +1,12 @@
+id = "D-3.20"
+section = "s03"
+spec = "§3.1"
+ann = "—"
+status = "active"
+amends = ["D-3.12"]
+story = "HEAP-FIRST-USE-2"
+date = "2026-11-10"
+tests = ["crates/rt/tests/heap_and_sync.rs"]
+body = '''
+**The heap asks the allowed-node set once, on its first slow path** (HEAP-FIRST-USE-2, 2026-11-10; coordinator ruling on #4168; fixes #4169). Amends D-3.12's "`Heap::set_numa(true)` is called at startup": nothing is asked at startup and nothing per allocation. The first time the heap chooses a cache or a slab (`Heap::shard_of`, slow paths only) it asks `Pages::allowed_nodes` once: in the product one `get_mempolicy(MPOL_F_MEMS_ALLOWED)` with a 1024-bit mask (`EINVAL`, a machine with nodes beyond the mask, counts as several; `ENOSYS` or any other refusal as one). More than one allowed node: NUMA placement turns on (as `Heap::set_numa(true)`) and the thread's node is read on slow paths exactly as D-3.12 says. One allowed node: shard 0, the kernel's default placement (first touch, optimal there), and the node is never read, so the vDSO `getcpu` is never resolved. An explicit `Heap::set_numa` before the first slow path takes the decision instead. Out of scope: a process whose allowed set changes after the first slow path (`set_mempolicy`, a cpuset move) keeps the decision taken then. The rseq `node_id` branch of D-3.12 is not wired in the product (the node read on several nodes is the vDSO `getcpu`); unchanged by this record. Tests (rt, the `Pages` trait's simulated topology): `one_allowed_node_never_reads_the_node`, `several_allowed_nodes_place_each_threads_slabs_on_its_node`.
+'''

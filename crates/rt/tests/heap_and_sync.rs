@@ -40,6 +40,12 @@ struct FakePages {
     undumped: RefCell<Vec<(usize, usize)>>,
     /// The shard the "calling thread" is on.
     shard: Cell<usize>,
+    /// How often the heap read the calling thread's node (`Pages::shard`).
+    shard_reads: Cell<usize>,
+    /// The simulated machine's allowed NUMA nodes (several unless a test says otherwise, so
+    /// that `shard` chooses the shard), and how often the heap asked for them.
+    nodes: Cell<usize>,
+    node_asks: Cell<usize>,
     /// The "calling thread" (each has its own cache word).
     thread: Cell<usize>,
     slots: [AtomicUsize; 8],
@@ -92,6 +98,9 @@ impl FakePages {
             wiped: RefCell::new(Vec::new()),
             undumped: RefCell::new(Vec::new()),
             shard: Cell::new(0),
+            shard_reads: Cell::new(0),
+            nodes: Cell::new(2),
+            node_asks: Cell::new(0),
             thread: Cell::new(0),
             slots: Default::default(),
             limit: Cell::new(None),
@@ -159,7 +168,12 @@ impl Pages for FakePages {
         &all[off..off + n]
     }
     fn shard(&self) -> usize {
+        self.shard_reads.set(self.shard_reads.get() + 1);
         self.shard.get()
+    }
+    fn allowed_nodes(&self) -> usize {
+        self.node_asks.set(self.node_asks.get() + 1);
+        self.nodes.get()
     }
     fn cache_slot(&self) -> &AtomicUsize {
         &self.slots[self.thread.get()]
@@ -604,6 +618,56 @@ fn shards_place_their_memory_on_their_node() {
     pages.shard.set(11);
     heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
     assert_eq!(segment_nodes(&pages).values().filter(|n| n.is_none()).count(), 1, "without NUMA: the default policy");
+}
+
+#[test]
+fn one_allowed_node_never_reads_the_node() {
+    // Trace: no spec clause (NUMA placement of the heap's shards); D-3.12 as amended by D-3.20.
+    // One allowed node: the set is asked once, on the first slow path; the thread's node is never
+    // read, not on a cache's first choice and not on a slab refill; placement stays first touch.
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    pages.nodes.set(1);
+    pages.shard.set(5);
+    assert_eq!(pages.node_asks.get(), 0, "nothing asked before the first allocation");
+    let mut blocks = Vec::new();
+    // Enough 64-byte blocks to fill several slabs: each new slab is a refill (a slow path).
+    for _ in 0..20_000 {
+        blocks.push(heap.alloc(&CSys, &pages, 64, ALIGN).unwrap().addr);
+    }
+    pages.thread.set(1);
+    pages.shard.set(9);
+    blocks.push(heap.alloc(&CSys, &pages, 64, ALIGN).unwrap().addr);
+    assert_eq!(pages.node_asks.get(), 1, "the allowed-node set is asked exactly once");
+    assert_eq!(pages.shard_reads.get(), 0, "one node: the thread's node is never read");
+    let segs = segment_nodes(&pages);
+    assert_eq!(segs.len(), 1, "both threads use shard 0's one segment: {segs:?}");
+    assert!(segs.values().all(Option::is_none), "one node: the kernel's default placement");
+}
+
+#[test]
+fn several_allowed_nodes_place_each_threads_slabs_on_its_node() {
+    // Trace: no spec clause (NUMA placement of the heap's shards); D-3.12 as amended by D-3.20.
+    // Two allowed nodes and no `set_numa` call: the heap turns placement on itself, reads the
+    // node on slow paths only (never per allocation), and each thread's slabs sit on its node.
+    let heap = Heap::new();
+    let pages = FakePages::new();
+    pages.nodes.set(2);
+    pages.shard.set(0);
+    let a = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    let reads_after_first = pages.shard_reads.get();
+    assert!(reads_after_first >= 1, "the first slow path reads the node");
+    for _ in 0..100 {
+        heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    }
+    assert_eq!(pages.shard_reads.get(), reads_after_first, "no node read on the fast path");
+    pages.thread.set(1);
+    pages.shard.set(1);
+    let b = heap.alloc(&CSys, &pages, 100, ALIGN).unwrap();
+    assert_eq!(pages.node_asks.get(), 1, "the allowed-node set is asked exactly once");
+    let segs = segment_nodes(&pages);
+    assert_eq!(segs.get(&(a.addr / SEG * SEG)), Some(&Some(0)), "node 0's slab on node 0: {segs:?}");
+    assert_eq!(segs.get(&(b.addr / SEG * SEG)), Some(&Some(1)), "node 1's slab on node 1: {segs:?}");
 }
 
 #[test]

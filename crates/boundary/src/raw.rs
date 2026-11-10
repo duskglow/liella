@@ -321,6 +321,17 @@ pub(crate) fn mbind_preferred(addr: usize, len: usize, node: u32) -> KResult<()>
     Errno::decode(rc).map(|_| ())
 }
 
+/// How many NUMA nodes the calling process may allocate on (`get_mempolicy(MPOL_F_MEMS_ALLOWED)`,
+/// its cpuset's memory nodes). `EINVAL` when a node lies beyond the 1024-bit mask (more nodes than
+/// the mask holds); `ENOSYS` without `CONFIG_NUMA`.
+pub(crate) fn allowed_node_count() -> KResult<u32> {
+    let mut mask = [0u64; NODE_MASK_WORDS];
+    let maxnode = (NODE_MASK_WORDS * 64 + 1) as i64;
+    let flags = i64::from(liella_kernel::uapi::MPOL_F_MEMS_ALLOWED);
+    let rc = liella_sys_get_mempolicy(ptr::null_mut(), mask.as_mut_ptr().cast(), maxnode, 0, flags);
+    Errno::decode(rc).map(|_| mask.iter().map(|w| w.count_ones()).sum())
+}
+
 /// The NUMA node holding the page at `addr` (`get_mempolicy(MPOL_F_NODE | MPOL_F_ADDR)`); the
 /// page is faulted in if it was not. Contract: `addr` is mapped.
 pub(crate) fn node_of(addr: usize) -> KResult<u32> {

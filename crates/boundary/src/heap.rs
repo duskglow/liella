@@ -91,6 +91,15 @@ impl Pages for KernelPages {
     fn shard(&self) -> usize {
         node_hint()
     }
+    fn allowed_nodes(&self) -> usize {
+        // One system call, once per process (D-3.20). A mask too small for the machine's nodes
+        // means many; no NUMA support (or any other refusal) means one.
+        match raw::allowed_node_count() {
+            Ok(n) => usize::try_from(n).unwrap_or(usize::MAX),
+            Err(Errno::EINVAL) => usize::MAX,
+            Err(_) => 1,
+        }
+    }
     fn cache_slot(&self) -> &AtomicUsize {
         &crate::tb::current().heap_cache
     }
@@ -147,7 +156,7 @@ fn map_aligned_exactly(len: usize, align: usize, node: Option<u32>) -> Option<us
 }
 
 /// The calling thread's NUMA node (D-3.12), asked only when the heap chooses a cache or a
-/// slab: the vDSO `getcpu` (no system call), remembered in the thread block as node + 1 for
+/// slab and only when more than one node is allowed (D-3.20): the vDSO `getcpu` (no system call), remembered in the thread block as node + 1 for
 /// the next slow path. A thread that migrates is noticed at its next slow path.
 fn node_hint() -> usize {
     let tb = crate::tb::current();

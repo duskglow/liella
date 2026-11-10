@@ -254,6 +254,8 @@ pub const MPOL_PREFERRED: u32 = 1;
 pub const MPOL_F_NODE: u32 = 1;
 /// `MPOL_F_ADDR` (`get_mempolicy`): the policy or node of an address.
 pub const MPOL_F_ADDR: u32 = 2;
+/// `MPOL_F_MEMS_ALLOWED` (`get_mempolicy`): return the nodes the process may allocate on.
+pub const MPOL_F_MEMS_ALLOWED: u32 = 4;
 pub const MADV_FREE: u32 = 8;
 pub const MADV_NOHUGEPAGE: u32 = 15;
 pub const MADV_DONTDUMP: u32 = 16;

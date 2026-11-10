@@ -78,9 +78,15 @@ pub trait Pages {
     /// The metadata words at `addr` (inside a mapping the heap made and never hands out).
     fn words(&self, addr: usize, n: usize) -> &[AtomicU64];
     /// The shard serving the calling thread: its NUMA node when that is known cheaply (D-3.12).
-    /// Asked only on slow paths (a cache or a slab is being chosen).
+    /// Asked only on slow paths (a cache or a slab is being chosen), and only when
+    /// [`Pages::allowed_nodes`] reported more than one node (D-3.20).
     fn shard(&self) -> usize {
         0
+    }
+    /// How many NUMA nodes the process may allocate on (`get_mempolicy(MPOL_F_MEMS_ALLOWED)`);
+    /// 1 when that cannot be asked. Asked once per heap, on its first slow path (D-3.20).
+    fn allowed_nodes(&self) -> usize {
+        1
     }
     /// The calling thread's cache word (the address of its cache, 0 for none yet). Each
     /// thread has its own; the heap is the only writer.
@@ -457,6 +463,8 @@ pub struct Heap {
     shards: [Shard; SHARDS],
     /// Whether segments are placed on their shard's node (more than one node exists).
     numa: AtomicBool,
+    /// Whether the allowed-node set has been asked (or [`Heap::set_numa`] decided it; D-3.20).
+    topology: AtomicBool,
     /// Serialises segment and cache creation (the registries are read without it).
     grow: RawMutex,
     nsegs: AtomicUsize,
@@ -727,6 +735,7 @@ impl Heap {
         Heap {
             shards: [const { Shard::new() }; SHARDS],
             numa: AtomicBool::new(false),
+            topology: AtomicBool::new(false),
             grow: RawMutex::new(),
             nsegs: AtomicUsize::new(0),
             seg: SegRegistry {
@@ -778,10 +787,27 @@ impl Heap {
         }
     }
 
-    /// Place each shard's new memory on its own node (the runtime calls this when the machine
-    /// has more than one NUMA node).
+    /// Place each shard's new memory on its own node and choose shards by the calling thread's
+    /// node (`on`), or use shard 0 with the kernel's default placement without reading the node.
+    /// The heap decides this itself on its first slow path ([`Heap::shard_of`]); a call made
+    /// before that takes the decision instead.
     pub fn set_numa(&self, on: bool) {
         self.numa.store(on, Relaxed);
+        self.topology.store(true, Relaxed);
+    }
+
+    /// The shard for a cache or slab being chosen (slow paths only; D-3.12 as amended by
+    /// D-3.20). The first call asks [`Pages::allowed_nodes`] once: more than one allowed node
+    /// turns NUMA placement on and the thread's node ([`Pages::shard`]) is read from then on;
+    /// one node keeps shard 0 and never reads the node (first touch is optimal there). Racing
+    /// first calls ask the same set and store the same answer.
+    #[inline]
+    fn shard_of<P: Pages>(&self, pages: &P) -> usize {
+        if !self.topology.load(Relaxed) {
+            self.numa.store(pages.allowed_nodes() > 1, Relaxed);
+            self.topology.store(true, Relaxed);
+        }
+        if self.numa.load(Relaxed) { pages.shard() % SHARDS } else { 0 }
     }
 
     fn node_for(&self, shard: usize) -> Option<u32> {
@@ -1088,7 +1114,7 @@ impl Heap {
 
     #[cold]
     fn first_cache<'p, S: Sys, P: Pages>(&self, sys: &S, pages: &'p P) -> Option<Cache<'p>> {
-        let shard = pages.shard() % SHARDS;
+        let shard = self.shard_of(pages);
         let id = self
             .unpark(sys, pages, shard)
             .or_else(|| self.new_cache(sys, pages, shard))
@@ -1300,7 +1326,7 @@ impl Heap {
             self.make_current(pages, k, c, s);
             return Some(());
         }
-        let shard = pages.shard() % SHARDS;
+        let shard = self.shard_of(pages);
         let s = {
             let own = {
                 let _g = self.shards[shard].lock.lock(sys);
