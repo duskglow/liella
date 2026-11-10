@@ -1,0 +1,13 @@
+# HOTTEXT-REGEN-HOSTS-2 plants (1-4 from HOTTEXT-REGEN-HOSTS) (cargo xtask plants; docs/plants.md).
+# 1: merge.py takes one trace as the whole truth again: a missed key keeps no other host class's pair.
+one-trace-truth | tools/hottext/merge.py | lit:others = ps - {this} ==> others = set() | cargo test -p xtask --bin xtask hottext | msg:the Zen 1 trace dropped a key Skylake-SP reaches
+# 2: a missed key loses every pair of the trace's profile (the profile-only rule before host classes).
+profile-only-drop | tools/hottext/merge.py | lit:others = ps - {this} ==> others = {p for p in ps if not p.startswith(profile + "@")} | cargo test -p xtask --bin xtask hottext | msg:merge_keeps_a_key_another_host_class_reaches.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 3: a hit keeps the unrecorded `<profile>@?` pair (never resolved).
+unknown-kept-on-hit | tools/hottext/merge.py | lit:others = ps - {this, unknown} ==> others = ps - {this} | cargo test -p xtask --bin xtask hottext | msg:merge_keeps_a_key_another_host_class_reaches.*(FAILED|panicked)|fast@\?,fast@amd-23-1
+# 4: parse_list stops checking that the provenance names exactly the profiles column.
+provenance-unchecked | xtask/src/hottext.rs | lit:    seen == profiles.iter().map(String::as_str).collect() ==>     true | cargo test -p xtask --bin xtask hottext | msg:list_lines_carry_tier_and_profiles.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 5: a list line traced in another profile is accepted (one shared list again).
+own-profile-unchecked | xtask/src/hottext.rs | lit:e.profiles.iter().any(|p| p != profile) ==> e.profiles.iter().any(|p| p.is_empty()) | cargo test -p xtask --bin xtask hottext | msg:each_profile_reads_its_own_list.*(FAILED|panicked)|a fast line passed in the release list
+# 6: every profile reads the fast list.
+one-shared-list | xtask/src/hottext.rs | lit:format!("crates/libc-so/hot-text-{profile}.list") ==> format!("crates/libc-so/hot-text-{}.list", if profile.is_empty() { profile } else { "fast" }) | cargo test -p xtask --bin xtask hottext | msg:each_profile_reads_its_own_list.*(FAILED|panicked)|hot-text-release.list
