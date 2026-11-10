@@ -121,6 +121,9 @@ if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else gre
 } > "$skeys.tmp"
 mv "$skeys.tmp" "$skeys"
 echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
+# D-X.62: the functions of the other fault-bounded probe modes that no hot-text tier covers, into
+# crates/libc-so/probe-text.keys (the start-up read-only group takes their read-only data).
+if [ $replace = 1 ]; then bash "$here/probe_text.sh" "$T" --replace; else bash "$here/probe_text.sh" "$T"; fi
 # STARTUP-DATA-WINDOWS (D-X.50): the data objects the same probe touches, into crates/libc-so/startup-data.keys.
 if [ $replace = 1 ]; then bash "$here/startup_data.sh" "$T" --replace; else bash "$here/startup_data.sh" "$T"; fi
 # shellcheck disable=SC2046
