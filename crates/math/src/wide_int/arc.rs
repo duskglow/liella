@@ -28,12 +28,15 @@
 //! 2. Square root [`sqrt`] of `w` in `[2^126, 2^128)`: `s0 = ⌊hw(⌊w/2^74⌋)·2^37⌋`, `hw` any
 //!    `double` root within `2^-52` (the truncation of `w`, `2^-52`, and the conversion, `2^-52`, cost
 //!    `2^-53` each under the root, the product's truncation `2^-63`): `s0` is `√w` within `ε <
-//!    2^-51.0`, so `|w − s0²| < 2^78`; `V = 2^127/s0` from one `divsd`, within `2^-50.99` as in step
+//!    2^-51.0`, so `|w − s0²| < 2^78`; `V = 2^127/s0` from one `divsd` (kept as a `double` for step 3's index), within `2^-50.99` as in step
 //!    1; `S = s0·2^64 + (w − s0²)·V/2^64` (`w − s0²` exact). Newton's step leaves `(√w − s0)²/(2s0)`,
 //!    `ε²/2 < 2^-103` relative, `V`'s error reaches `ε·2^-50.99 < 2^-101.99`, two units more: `S` is
 //!    `√w·2^64` within `2^-101.4` (below `2^128` since `w <= 2^128 − 2^60`).
-//! 3. Kernel `A(y, x)`, `t = y/x <= 1`. `j = round(128t)` from a `double` estimate within `2^-50`
-//!    (any `j` it gives keeps `|t − j/128| <= 2^-8(1 + 2^-40)`), so `|r| <= 2^-8(1 + 2^-40)` and
+//! 3. Kernel `A(y, x)`, `t = y/x <= 1 + 2^-100`. `j = round(128t)` from a `double` estimate within
+//!    `2^-49`: `y`'s top 53 bits (`2^-52`) times `x`'s index scale `256/top53(x)` (one `divsd` and the
+//!    truncation, `2^-51`; for the root `s` of step 5 its seed's `2^127/s0` from step 2 scaled by a
+//!    power of two: `2^-50.99` and `s0`'s `2^-51`), the product rounded (`2^-52`). Any `j` it gives
+//!    keeps `|t − j/128| <= 2^-8(1 + 2^-40)` (`j <= 128` for `t` just above 1), so `|r| <= 2^-8(1 + 2^-40)` and
 //!    `u = r² <= 2^-16(1 + 2^-39)`. `j = 0`: `r = t` (exact when `x` is a power of two, else
 //!    step 1: `2^-101.8`). `j >= 1` (`t >= 2^-8(1 − 2^-40)`, so `y/x >= 2^-9` in exponents): `x`
 //!    and `y` truncated to `2^-120` of `x`, the numerator `y − cx` and denominator `x + cy` exact
@@ -51,7 +54,9 @@
 //!    π/2`, result `>= π/2`) add two units (`2^-124`) to `A`'s or `θ`'s relative error: every arc
 //!    result is within `2^-100.6`. `s` (step 2 on `1 − a²`, exact or `2^-127.6` for `|a| < 1/2`)
 //!    passes its `2^-101.4` into `t` and so (step 3) into the result: `asin`, `acos` within
-//!    `2^-100.1`.
+//!    `2^-100.1`. Which of `a`, `s` is the numerator comes from `a` alone (`a < s` exactly when
+//!    `a² < 1/2`, which never ties), so the index scale of `1/a` is ready before the root; at a
+//!    64-bit `a`, `|a − s| > 2^-128`, below the root's `2^-101.4`: `t <= 1 + 2^-100`.
 //! 6. `tan`: the parent's `sin|a|` and `cos|a|` (within `2^-94.8` and `2^-95.7` for `j >= 1`,
 //!    `2^-96.9` and `2^-96.2` for `j = 0`, its module documentation) and step 1: within `2^-94.1`.
 //!
@@ -74,6 +79,8 @@ const TWO115: f64 = (1u128 << 115) as f64;
 const TWO116: f64 = (1u128 << 116) as f64;
 const TWO37: f64 = (1u64 << 37) as f64;
 const TWO_M26: f64 = 1.0 / (1u64 << 26) as f64;
+const TWO_M108: f64 = 1.0 / (1u128 << 108) as f64;
+const ONE_IX: f64 = 1.0 / (1u64 << 44) as f64; // 256/top53(1) = 256/2^52
 
 const PIO2: u128 = 0x6487ed51_10b4611a_62633145_c06e0e69; // π/2, units 2^-126
 const PI: u128 = 0xc90fdaa2_2168c234_c4c6628b_80dc1cd1; // π, units 2^-126
@@ -165,20 +172,21 @@ pub(crate) fn soft_sqrt(v: f64) -> f64 {
     dbl(n.isqrt() as u64) * TWO_M26
 }
 
-/// `s0 ≈ √w` within `2^-51.19` and `2^127/s0` (step 2).
-fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, u64) {
+/// `s0 ≈ √w` within `2^-51.19` and `2^127/s0` as a `double` (step 2).
+fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, f64) {
     let r = hw((w >> 74) as i64 as f64); // √(w/2^74), in [2^26, 2^27]
     let s0 = (r * TWO37) as u64; // saturates at 2^64 − 1 when w is just below 2^128
-    (s0, (TWO116 / dbl(s0 >> 11)) as u64)
+    (s0, TWO116 / dbl(s0 >> 11))
 }
 
-/// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result).
-fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> u128 {
-    let (s0, v) = root_seed(w, hw);
+/// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result), and the
+/// seed's reciprocal `2^127/s0` (a `double` within `2^-50.99`; step 3 scales it into its index).
+fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> (u128, f64) {
+    let (s0, vd) = root_seed(w, hw);
     let r = w.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128; // w − s0², |r| < 2^78
-    let c = mul_wide(r.unsigned_abs(), v); // r·2^63/s0
+    let c = mul_wide(r.unsigned_abs(), vd as u64); // r·2^63/s0
     let s = u128::from(s0) << 64;
-    if r < 0 { s - c } else { s + c }
+    (if r < 0 { s - c } else { s + c }, vd)
 }
 
 /// Step 4: `P(u)` in units of `2^-127` (`u` = r² in units of `2^-142`, `u1` its top word).
@@ -198,19 +206,29 @@ fn atan_small(rm: u128, kr: i32) -> u128 {
     mulhi(rm, atan_poly(u, (u >> 64) as u64))
 }
 
-/// Step 3: `atan(y/x)` for `0 < y <= x` (the shared copy: atan2l, asinl, acosl).
-fn atan_le(y: Val, x: Val) -> Val {
-    atan_le_in(y, x)
+/// Step 3's index scale `256/x` from `x`'s top 53 bits (one `divsd`, within `2^-51`).
+fn inv_top(x: Val) -> f64 {
+    256.0 / dbl((x.m >> 75) as u64)
+}
+
+/// Step 3: `atan(y/x)` for `0 < y/x <= 1 + 2^-100` (the shared copy: atan2l, asinl, acosl).
+/// `ix` is `x`'s index scale ([`inv_top`] within `2^-49`) when the caller has it, else `None`.
+fn atan_le(y: Val, x: Val, ix: Option<f64>) -> Val {
+    atan_le_in(y, x, ix)
 }
 
 /// [`atan_le`]'s body, inlined into `atanl` so its constant `x = 1` (or `y = 1`) folds: the
-/// `x.m == 2^127` test, the table index's division by `x` and the call.
+/// `x.m == 2^127` test, the table index's scale and the call.
 #[inline(always)]
-fn atan_le_in(y: Val, x: Val) -> Val {
+fn atan_le_in(y: Val, x: Val, ix: Option<f64>) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
-        let h = (dbl((y.m >> 75) as u64) / dbl((x.m >> 75) as u64) * 256.0) as usize; // ⌊256·y.m/x.m⌋ within one
+        let ix = match ix {
+            Some(v) => v,
+            None => inv_top(x),
+        };
+        let h = (dbl((y.m >> 75) as u64) * ix) as usize; // ⌊256·y.m/x.m⌋ within one
         j = ((h >> k) + 1) >> 1;
     }
     if j == 0 {
@@ -246,12 +264,12 @@ fn atan_le_in(y: Val, x: Val) -> Val {
 
 /// `atan2(y, x)` for positive `y`, `x`: in `(0, π/2)`.
 fn atan2_pos(y: Val, x: Val) -> Val {
-    if (y.e, y.m) <= (x.e, x.m) { atan_le(y, x) } else { sub_from(PIO2, atan_le(x, y)) }
+    if (y.e, y.m) <= (x.e, x.m) { atan_le(y, x, None) } else { sub_from(PIO2, atan_le(x, y, None)) }
 }
 
 fn atan_approx(n: &Num) -> Option<(bool, Val)> {
     let y = val(n)?;
-    Some((n.neg, if (y.e, y.m) <= (ONE.e, ONE.m) { atan_le_in(y, ONE) } else { sub_from(PIO2, atan_le_in(ONE, y)) }))
+    Some((n.neg, if (y.e, y.m) <= (ONE.e, ONE.m) { atan_le_in(y, ONE, Some(ONE_IX)) } else { sub_from(PIO2, atan_le_in(ONE, y, None)) }))
 }
 
 fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
@@ -259,29 +277,40 @@ fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
     Some((b.neg, if a.neg { sub_from(PI, t) } else { t }))
 }
 
-/// `√(1 − a²)` for `0 < a < 1` (step 5).
-fn root_one_minus_sq(a: Val, hw: impl Fn(f64) -> f64) -> Option<Val> {
+/// `√(1 − a²)` for `0 < a < 1` (step 5), its index scale ([`inv_top`] from the root's own
+/// reciprocal: no `divsd` after the root) and whether `a < √(1 − a²)`.
+fn root_one_minus_sq(a: Val, hw: impl Fn(f64) -> f64) -> Option<(Val, f64, bool)> {
     if a.e > -128 {
         return None; // a >= 1
     }
     let m = a.m >> 64; // the 64-bit significand: a = m·2^(e + 64)
     let sh = (-2 * a.e - 256) as u32; // a² = m²·2^-(128 + sh)
     let v = (m * m).checked_shr(sh).unwrap_or(0).max(1 << 60); // a² in units 2^-128 (exact for a >= 1/2)
+    // a² < 1/2 (exact for a >= 1/2; a² = 1/2 has no solution): a < √(1 − a²).
+    let below = v < 1 << 127;
     let w = v.wrapping_neg(); // 1 − a²
     let lw = w.leading_zeros() & !1;
-    let s = sqrt(w << lw, hw); // √(1 − a²)·2^(128 + lw/2)
-    let l = s.leading_zeros();
-    Some(Val { m: s << l, e: -128 - (lw / 2) as i32 - l as i32 })
+    let (s, vd) = sqrt(w << lw, hw); // √(1 − a²)·2^(128 + lw/2)
+    let l = s.leading_zeros(); // 0 or 1
+    // top53(s << l) = s0·2^(l − 11) within 2^-51, so 256/top53 = vd·2^(−108 − l) (step 3).
+    let ix = vd * if l == 0 { TWO_M108 } else { TWO_M108 / 2.0 };
+    Some((Val { m: s << l, e: -128 - (lw / 2) as i32 - l as i32 }, ix, below))
 }
 
+/// `asin a = atan2(a, s)`: `A(a, s)` when `a < s`, else `π/2 − A(s, a)` (`1/a` needs no root).
 fn asin_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
-    Some((n.neg, atan2_pos(a, root_one_minus_sq(a, hw)?)))
+    let ia = inv_top(a);
+    let (s, is, below) = root_one_minus_sq(a, hw)?;
+    Some((n.neg, if below { atan_le(a, s, Some(is)) } else { sub_from(PIO2, atan_le(s, a, Some(ia))) }))
 }
 
+/// `acos a = atan2(s, |a|)` the same way, then `π −` that for `a < 0`.
 fn acos_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
-    let t = atan2_pos(root_one_minus_sq(a, hw)?, a);
+    let ia = inv_top(a);
+    let (s, is, below) = root_one_minus_sq(a, hw)?;
+    let t = if below { sub_from(PIO2, atan_le(a, s, Some(is))) } else { atan_le(s, a, Some(ia)) };
     Some((false, if n.neg { sub_from(PI, t) } else { t }))
 }
 
@@ -554,7 +583,7 @@ mod tests {
             let want = Mp::from_u128(false, w, 128).sqrt();
             // Step 2 allows any `double` root within 2^-52: the truncated soft root, the
             // correctly rounded one (`sqrtsd`'s) and the one rounded up.
-            for (k, got) in [sqrt(w, soft_sqrt), sqrt(w, f64::sqrt), sqrt(w, ceil_sqrt)].into_iter().enumerate() {
+            for (k, got) in [sqrt(w, soft_sqrt).0, sqrt(w, f64::sqrt).0, sqrt(w, ceil_sqrt).0].into_iter().enumerate() {
                 let rel = (Mp::from_u128(false, got, 0).sub(want).to_f64() / want.to_f64()).abs();
                 assert!(rel < 2f64.powf(-101.4), "sqrt {w:#x} root {k}: {rel:e}");
                 root_worst = root_worst.max(rel);
