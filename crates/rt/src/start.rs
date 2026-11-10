@@ -74,7 +74,6 @@ pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
 /// `[page_down(vaddr), vaddr + memsz)`), so in practice this is the whole segment. `None`
 /// without the segment, or when it covers no whole page. `page` is a power of two.
 pub fn relro(words: &[u64], phnum: usize, phdr_addr: usize, page: usize) -> Option<(usize, usize)> {
-    let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
     relro_at(words, phnum, program(words, phnum, phdr_addr).bias, page)
 }
 
