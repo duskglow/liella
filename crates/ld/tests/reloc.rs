@@ -248,7 +248,7 @@ fn reloc_model_corpus_one_object_per_type() {
             (lo, hi) = (lo.min(bias(i) + ph.vaddr), hi.max(bias(i) + ph.vaddr + ph.memsz));
         }
         m.spans.push((lo, hi));
-        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i] });
+        objs.push(Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: bias(i), name: &names[i], tls: None });
     }
     let syms: Vec<Object> = objs.iter().map(|o| Object::new(o.dynm).unwrap()).collect();
     let global: Vec<usize> = (0..objs.len()).collect();
@@ -345,7 +345,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
     let vname = v.to_str().unwrap().as_bytes();
     let obj = |f: &'static [u8], name: &'static [u8]| {
         let elf = Elf::parse::<Native>(f).unwrap();
-        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name }
+        Obj { elf, dynm: elf.dynamic().unwrap().unwrap(), bias: 0, name, tls: None }
     };
     let leak = |b: Vec<u8>| -> &'static [u8] { Box::leak(b.into_boxed_slice()) };
     let (pf, vf, stub, vname) = (leak(pf), leak(vf), leak(stub), leak(vname.to_vec()));

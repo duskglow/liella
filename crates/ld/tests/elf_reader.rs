@@ -42,6 +42,15 @@ const P_ALIGN: usize = 48;
 struct BigOther;
 impl Arch for BigOther {
     const NAME: &'static str = "test-big-endian";
+    const TLS_VARIANT: liella_ld::arch::TlsVariant = liella_ld::arch::TlsVariant::I;
+    const TCB_SIZE: u64 = 16;
+    const TCB_ALIGN: u64 = 16;
+    const SELF_SLOT: Option<u64> = None;
+    const DTV_SLOT: u64 = 0;
+    const STACK_GUARD_SLOT: Option<u64> = None;
+    const POINTER_GUARD_SLOT: Option<u64> = None;
+    const DTP_BIAS: u64 = 0;
+    const TP_BIAS: i64 = 0;
     const E_MACHINE: u16 = 183;
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = ELFDATA2MSB;
@@ -280,6 +289,15 @@ fn s27_1_f_0_wrong_class() {
     struct Class32;
     impl Arch for Class32 {
         const NAME: &'static str = "test-class32";
+        const TLS_VARIANT: liella_ld::arch::TlsVariant = liella_ld::arch::TlsVariant::I;
+        const TCB_SIZE: u64 = 16;
+        const TCB_ALIGN: u64 = 16;
+        const SELF_SLOT: Option<u64> = None;
+        const DTV_SLOT: u64 = 0;
+        const STACK_GUARD_SLOT: Option<u64> = None;
+        const POINTER_GUARD_SLOT: Option<u64> = None;
+        const DTP_BIAS: u64 = 0;
+        const TP_BIAS: i64 = 0;
         const E_MACHINE: u16 = 62;
         const EI_CLASS: u8 = 1;
         const EI_DATA: u8 = 1;
