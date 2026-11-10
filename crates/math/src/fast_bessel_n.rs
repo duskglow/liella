@@ -38,8 +38,9 @@ use super::{hankel_kernel, kernel, mirrored, E95, HANKEL};
 
 /// The largest order (and, for `n > x`, the largest number of steps) taken here.
 pub const MAX_STEPS: u64 = 4096;
-/// 2^-990 and 2^500: the operand range taken here.
+/// 2^-990: the least operand taken here.
 pub const XMIN: f64 = f64::from_bits(0x0210_0000_0000_0000);
+/// 2^500: the largest operand taken here.
 pub const XMAX: f64 = f64::from_bits(0x5f30_0000_0000_0000);
 /// 2^960: a forward recurrence declines beyond (Dekker's split stays below 2^996).
 const LIM: f64 = f64::from_bits(0x7bf0_0000_0000_0000);
@@ -69,8 +70,8 @@ fn expo(v: f64) -> i32 {
 }
 
 /// A forward recurrence at index `m`: the value, `S = Σδ`, `SJ = Σδ·Jb(anchor)` and `Jb(m)`.
-pub struct Fwd {
-    pub f: Dd,
+struct Fwd {
+    f: Dd,
     s: f64,
     sj: f64,
     jb: f64,
