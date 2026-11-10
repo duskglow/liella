@@ -621,17 +621,19 @@ fn symbols_of(obj: &Path) -> Result<Vec<SymRow>, String> {
     Ok(v)
 }
 
-/// `readelf -SW` of `obj`: section index to name.
+/// The section headers of `obj`: section index (decimal, as `readelf -sW` prints `Ndx`) to whole
+/// name. Read from the ELF headers, not `readelf -SW`, which cuts a name at 256 bytes: an alias
+/// added at a cut name would land in a section the object does not have (#4375).
 pub(crate) fn sections_of(obj: &Path) -> Result<BTreeMap<String, String>, String> {
-    let out = Command::new("readelf").args(["-SW"]).arg(obj).output().map_err(|e| format!("readelf: {e}"))?;
-    let mut m = BTreeMap::new();
-    for line in String::from_utf8_lossy(&out.stdout).lines() {
-        let Some((idx, rest)) = line.trim_start().strip_prefix('[').and_then(|l| l.split_once(']')) else { continue };
-        if let Some(name) = rest.split_whitespace().next() {
-            m.insert(idx.trim().to_string(), name.to_string());
-        }
-    }
-    Ok(m)
+    let b = fs::read(obj).map_err(|e| format!("{}: {e}", obj.display()))?;
+    let headers = crate::hottext::elf_headers(&b).ok_or_else(|| format!("{}: not a well-formed ELF64 little-endian object", obj.display()))?;
+    Ok(index_names(headers))
+}
+
+/// Section index (decimal) to name, for the headers in index order; the null section 0 is left
+/// out (no symbol is defined in it).
+fn index_names(headers: Vec<crate::hottext::Shdr>) -> BTreeMap<String, String> {
+    headers.into_iter().enumerate().skip(1).map(|(i, h)| (i.to_string(), h.name)).collect()
 }
 
 /// Whether a symbol is the library's C-visible name for something (not a mangled Rust name or
@@ -1735,5 +1737,20 @@ mod tests {
         assert!(prerelocation_errors(&unfollowable, &words).is_err_and(|e| e.contains("cannot follow")));
         let inlined = clean.replace("call   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>", "nop");
         assert!(prerelocation_errors(&inlined, &words).is_err_and(|e| e.contains("does not call relocate_image")));
+    }
+
+    #[test]
+    fn alias_sections_keep_whole_names_at_their_index() {
+        // D-X.14 (no spec clause: product build): the in-place aliases go into the section the
+        // renamed definition's `Ndx` names, by whole name (readelf -SW cut names at 256 bytes,
+        // #4375) and by header index (index 0, the null section, names nothing).
+        let sec = |name: &str| crate::hottext::Shdr { name: name.to_string(), kind: 1, size: 8, align: 16 };
+        let long = format!(".text.{}", "y".repeat(300));
+        let got = index_names(vec![sec(""), sec(".text.a"), sec(&long), sec(".text.b")]);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got.get("0"), None);
+        assert_eq!(got["1"], ".text.a");
+        assert_eq!(got["2"], long);
+        assert_eq!(got["3"], ".text.b");
     }
 }
