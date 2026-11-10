@@ -1,0 +1,33 @@
+{
+ "task": "LAYOUT-TEXT-PIN",
+ "model": "opus",
+ "tokens": null,
+ "result": "DO NOT LAND: TEXT-PREFIX achieved (no libc.a text ahead of the group, start-up text windows 5->4) but the 64 KiB cluster alignment raises .text's alignment, moving .text 0x401000->0x410000 and breaking STARTUP-DATA-WINDOWS fast (ro 4 > 3)",
+ "branch": "task/layout-text-pin",
+ "head": null,
+ "gate": {
+  "affected": "not run (stopped: so fails STARTUP-DATA-WINDOWS)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "cluster alignment > 4 KiB moves the .text output section start (rebind 64 KiB: +60 KiB) and rotates .rodata; STARTUP-DATA-WINDOWS ro budget fast 3 broken",
+   "recommendation": "land brief B's .rodata1 start-up cluster first or together; else split rebind into <=32 KiB clusters"
+  }
+ ],
+ "informational": [
+  "coldbss.rs reads section names via readelf -SW (256-byte truncation, #4354): reuse hottext::elf_sections",
+  "probe's 34-byte .text.startup is crt1 _start; 7-byte .text.exit is libc's exit (crate c)"
+ ],
+ "refused": [],
+ "improvement": "the rethink's pow2 cluster rule should state that input alignment raises the output section alignment (text start moves by up to A-4K); a 1-call map check before the full count build would have caught it",
+ "next_step": "owner ruling on the ro-window effect; then rerun counts.sh after, plants and the direct gate",
+ "report_file": "handoff/LAYOUT-TEXT-PIN.md",
+ "jobs": [
+  "mei:ltp-counts-before",
+  "mei:ltp-counts-after",
+  "mei:ltp-gate",
+  "mei:ltp-plants"
+ ]
+}
