@@ -1,0 +1,12 @@
+{"task": "LIBM-F64-INVHYP-QUICK", "model": "opus", "tokens": null,
+ "result": "double asinh/acosh/atanh quick phase (pair-input quick log, Ziv test, RHO_PAIR 2^-63) wired through elem_fast in both builds; part 2 (asin/acos/atan/cosh) not started; counts on gate2 pending, timing not run",
+ "branch": "task/libm-f64-invhyp-quick", "head": "25b2cb5d0",
+ "gate": {"affected": "gate2 pending at hand-back (clippy, unsafe/csys audit, liella, boundary both modes, legacy, liella-math 1448 s ok; conformance running)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["plants2: near-always-true now CAUGHT by the fallback-rate floor (first run survived: actual error far below RHO_PAIR)", "GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA reaching cbench for the SSE2 count is NOT VERIFIED", "brief's 10^8-operand accuracy job not run: the test takes LIELLA_INVHYP_N for it"],
+ "refused": [],
+ "improvement": "A plants run that needs only one test file still waits ~14 min (one release build per plant); sharing the baseline build across plants of one crate would cut it",
+ "next_step": "read counts2 (acosh/asinh/atanh instructions), book Ivy Bridge + N100 timing, then part 2 (asin/acos/atan quick, cosh/sinh/tanh on the exp quick kernel)",
+ "report_file": "handoff/LIBM-F64-INVHYP-QUICK.md",
+ "jobs": ["mei:libm-f64-invhyp-quick-gate2", "mei:libm-f64-invhyp-quick-plants2", "mei:libm-f64-invhyp-quick-counts2"]}
