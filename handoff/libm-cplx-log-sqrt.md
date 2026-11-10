@@ -1,78 +1,84 @@
 # LIBM-CPLX-LOG-SQRT handoff: clog/csqrt (and clogf, csqrtf) quick tiers
 
-State: branch task/libm-cplx-log-sqrt-2 (stacked on task/libm-cplx-log-sqrt, cut from origin/next 2bc03ede6), HEAD in
-handoff/reports/LIBM-CPLX-LOG-SQRT-2.json. Role shiki:~/w/sh2. Decisions in force: D-10.53 (design), D-10.74 (this
+State: branch task/libm-cplx-log-sqrt-3 (continues task/libm-cplx-log-sqrt-2, origin/next merged at run 3), HEAD in
+handoff/reports/LIBM-CPLX-LOG-SQRT-3.json. Role mei:~/w/s3. Decisions in force: D-10.53 (design), D-10.74 (this
 story's record, records/decisions/D-10/D-10.74.toml: windows, bounds, Kahan 1987, Dekker 1971, de Dinechin-Lauter-Muller
-2007), D-10.55, D-10.25.
+2007), D-10.55, D-10.25. Full run-2 results (counts, timing, sweep): handoff/reports/LIBM-CPLX-LOG-SQRT-2.json and
+the previous version of this note on task/libm-cplx-log-sqrt-2.
 
 ## Done
 
-* Run 1 (LIBM-CPLX-LOG-SQRT): code, proofs and tests for the four tiers (`crates/math/src/complex_fast.rs`,
-  `fast32/clog_csqrt.rs`, `complex_fast_ls_tests.rs`, boundary `hot::csqrt_nearest`/`csqrtf_nearest`, s10_math rows).
-* Run 2 (LIBM-CPLX-LOG-SQRT-2): clippy + static on the inherited head (green); D-10.74 record; plants; gate; counts;
-  the 10^7 sweep job; booked timing (cexp/cexpf step 0 and the four new rows).
+* Runs 1-2: code, proofs, tests, D-10.74, plants (6/6), gate, counts, booked timing, 10^7 sweep (green: every tier
+  answer equals the 384-bit route in four modes).
+* Run 3 (LIBM-CPLX-LOG-SQRT-3):
+  * Merged origin/next (ruling #4253). Conflict in crates/math/src/invtrig.rs: next gave `atan2_nearest` a quick
+    phase (`two_tier`), this branch had split out `atan2_abs` for clog. Resolved with one shared reduction
+    `atan2_reduce`: `atan2_nearest` takes next's two-tier answer unchanged; `atan2_abs` keeps the accurate
+    `atan_unit` sum that clog's bound (2^-65.5) assumes. The FMA build's `atan2_abs` copy is now unused
+    (`allow(dead_code)` with the reason).
+  * `cargo xtask codemap` (docs/codemap/symbols.tsv: line shifts from this branch's s10_math rows).
+  * BENCH COMMIT (separate, #4269): cbench_libm rows `clogf_axis clog_axis csqrtf_axis csqrt_axis` (x in [-3, 3],
+    y = +0 and -0 in turn) and `clogf_near1 clog_near1` (| |z| - 1 | log-uniform in [2^-52, 2^-1]); budget rows
+    ratio_host, not gated. Not yet timed or counted.
+  * #4270 route-entry count, test `bench_rows_reach_the_route_only_where_measured` (complex_fast_ls_tests.rs):
+    cbench_libm's own operand sets through each in-place tier and the mode tier behind it, as `cplx_fast`
+    dispatches them. [declined in place, reached the 384-bit route] of 256:
 
-## Results (run 2, head 1b7b2706b code; later commits are handoff/probe only)
+    | fn | plain square [-3,3]^2 | _axis | _near1 |
+    |---|---|---|---|
+    | cexp | 1, 1 | 256, 256 | 0, 0 |
+    | clog | 0, 0 | 256, 256 | 10, 10 |
+    | csqrt | 0, 0 | 256, 256 | 0, 0 |
+    | cexpf | 0, 0 | 256, 256 | 0, 0 |
+    | clogf | 0, 0 | 256, 256 | 0, 0 |
+    | csqrtf | 0, 0 | 256, 256 | 0, 0 |
 
-* Gate `libm-cplx-log-sqrt-2-gate2` (shiki): direct tier, 10 suites, 3690 passed, 0 failed; conformance 19/19. Run
-  with `--files` naming every changed file except `records/decisions/D-10/D-10.74.toml`: `affected` does not know
-  `records/` paths and escalates them to FULL (first attempt `-gate`, killed at the escalation). The record is
-  checked by `cargo xtask records check` + `static` (`libm-cplx-log-sqrt-2-static`, green).
-* Plants `libm-cplx-log-sqrt-2-plants`: 6 of 6 CAUGHT, no WARN (handoff/LIBM-CPLX-LOG-SQRT-2-plants.txt has
-  which test caught each).
-* Counts `libm-cplx-log-sqrt-2-percall2` (instructions:u per call, Zen 1 host, glibc dynamic; probe
-  validation/percall/cplx_log_sqrt.c, cbench_libm's own 256 operands):
+    VERDICT on the hypothesis: refuted for csqrt (no bench operand leaves the tier, so its 3.9x-by-time vs
+    2.1x-by-instructions gap is in the tier itself: latency of the dependent sqrt -> div -> sqrt -> div chain is
+    the remaining suspect). For cexp, exactly one operand of 256 reaches the route; whether that one call carries
+    the time gap is NOT VERIFIED (needs a per-operand count/time of that operand). Every exact-zero part goes to
+    the route in all six functions (cexp too: `cexp(x + 0i)` is a real exp passed as complex).
 
-  | case | glibc | base (route) | new | new/glibc |
-  |---|---|---|---|---|
-  | clog_bench | 417.7 | 74248.0 | 519.9 | 1.24 |
-  | clogf_bench | 274.4 | 73244.6 | 276.1 | 1.01 |
-  | csqrt_bench | 146.2 | 41205.5 | 307.2 | 2.10 |
-  | csqrtf_bench | 127.5 | 41306.7 | 106.0 | 0.83 |
-  | clog_axis (y = +0) | 199.6 | 663.0 | 745.0 | 3.73 |
-  | csqrt_axis (y = +0) | 58.0 | 3669.7 | 3759.7 | 64.82 |
+## Results (run 3)
 
-* #4206 (clog's atan2 window `min/max >= 2^-60`): the bench rows never hit it. Their operands are uniform in
-  [-3, 3]^2 from a 53-bit generator (resolution 6·2^-53 ≈ 2^-50.4), so no part is below 2^-50 unless it is exactly 0,
-  which this seed does not produce; every bench operand is in the tier's window. The bench is fair for the
-  tier, but it does not cover the axes: an exact-zero part (a real operand passed as complex, common in practice) is
-  outside the window and goes to the route, now paying the declined tier (+82 clog, +90 csqrt instructions, see
-  `_axis`). csqrt on the real axis is 65x glibc by instructions.
-* Timing (booked; staged head 1b7b2706b; `bench --no-build --compare cbench_libm --rows ...`, ns per op, Liella /
-  glibc dynamic; jobs `nozomi:libm-cplx-log-sqrt-2-n100b`, `nico:libm-cplx-log-sqrt-2-ivb`). Step 0 (cexp/cexpf) is
-  the first booked timing of LIBM-CPLX-EXP-TIER-2's tier:
+* Lint `libm-cplx-log-sqrt-3-check` (mei, head 74ac7a459 content): `cargo xtask clippy` + `static` green, the
+  route-count test passes, the bench compiles (`gcc -Wall -Wextra -fsyntax-only`).
+* BLOCKER, NOT FIXED: the merged tree's products do not build. `cargo xtask so` (fast profile) fails its hot-text
+  check: `hot-text.list: 2 key(s) match no function section of the fast-profile libc.a`:
+  `Features::detect<CSysImpl<false>>` (startup tier) and an intl catalog closure (extra tier). origin/next alone
+  builds clean (job `libm-cplx-log-sqrt-3-nextso`, scratch copy, rc 0), and this branch was green before the merge,
+  so the combination does it: this branch's extra boundary code (s10_math rows, hot csqrt entries) changes rustc's
+  inlining of those two generic functions. Gate `libm-cplx-log-sqrt-3-gate` (rc 1: 6 product suites fail with
+  "the products are missing") and plants `libm-cplx-log-sqrt-3-plants` (BASELINE FAILED at `so`, no plant applied)
+  both stop there.
+* Tried the tool's remedy, `tools/hottext/regen.sh . --build` then `LIELLA_FULL_PROFILE=1 ... --build` (job
+  `libm-cplx-log-sqrt-3-hottext`, rc 1): the fast regen rewrote the list (keys reordered, several stdio keys dropped:
+  `liella_internal_memcpy`, `internal_move`, `internal_large`, `liella_machine_copy_avx2`); the release regen then
+  failed `STARTUP-TEXT-WINDOWS BROKEN: start-up text spans 5 windows > budget-release 4` and flagged one stale
+  hot-text.absent release line. Nothing from it is committed (the role's hot-text.list is modified; the next sync
+  restores it).
 
-  | row | Ivy Bridge | N100 | instructions (Zen 1) |
-  |---|---|---|---|
-  | cexp | 539.2 / 100.8 = 5.35 | 186.6 / 32.7 = 5.70 | 397 / 251 = 1.6 (EXP-TIER-2) |
-  | cexpf | 128.2 / 114.5 = 1.12 | 57.7 / 57.9 = 1.00 | 182 / 173 |
-  | clog | 274.1 / 210.3 = 1.30 | 137.0 / 69.3 = 1.98 | 1.24 |
-  | clogf | 174.3 / 182.3 = 0.96 | 78.1 / 80.1 = 0.97 | 1.01 |
-  | csqrt | 294.4 / 75.0 = 3.93 | 112.1 / 28.6 = 3.92 | 2.10 |
-  | csqrtf | 129.2 / 103.3 = 1.25 | 60.9 / 57.7 = 1.06 | 0.83 |
-
-  Before the tiers these rows were 115-240x by time. Brief target <= 2x: clog met on both hosts, csqrt not (3.9x).
-  cexp and csqrt are 2-3.5x worse by time than by instructions. HYPOTHESIS, NOT VERIFIED: the row's average is
-  dominated by the few bench operands the tier declines (one 384-bit route call is ~41k-116k instructions at low IPC;
-  for cexp, run 1 of EXP-TIER-2 measured one such operand of 256 adding ~450 instructions to the average). If so,
-  the bench row is fair (random operands, the decline rate is what users meet), and the fix is a cheaper tier between
-  the quick tier and the 384-bit route (a double-double/triple-double accurate phase), not a faster quick tier.
-  First check: per-operand counts of the 256 bench operands (which ones decline, and why). For csqrt the sweep
-  (below) answered every operand in every regime, so declines do not explain its gap: the likely cause is latency,
-  one dependent chain sqrt -> div -> sqrt -> div (`sqrt_dd` twice, `div_b`) that instruction counts do not show.
-* Sweep `libm-cplx-log-sqrt-2-sweep` (10^7 operands, release, every tier answer compared with the 384-bit route in
-  four modes): green. Nearest answers per regime (general, |z| ~ 1, axes, wide) of 2.5M each: clog 2499106,
-  2295765, 2141293, 2499064; csqrt 2500000 in all four.
+Next run, step 0 (before anything else): make the merged products build. Options, in order of preference: (a) find
+why the two functions are inlined now (look for the caller that gained them; `#[inline(never)]` on
+`Features::detect` would make the key build-stable if the layout owner agrees: RULING NEEDED); (b) regen in both
+profiles, then fit start-up text into the release budget (ALWAYS FORWARD: never raise budget-release); (c) a
+hot-text.absent line only if the absence is by design. Then rerun the gate (`--files` as below) and the plants
+(handoff/LIBM-CPLX-LOG-SQRT-3-plants.txt, 4 plants, not yet run). Gate files: `git diff --name-only
+origin/next...HEAD` minus records/ and handoff/ (records/ escalates `affected` to FULL).
 
 ## Next steps (in order)
 
-1. csqrt/cexp time gap (LIBM-CPLX-DECLINES): count per bench operand which ones the tiers decline and what each
-   costs; if the declines carry the time, design an intermediate accurate tier (one shared design for the group).
-2. Axis fast paths (a new story, LIBM-CPLX-AXES): exact-zero parts answered in the tier, not the route:
-   `csqrt(x ± 0i)` = `(sqrt x, ±0)` for `x > 0`, `(+0, ±sqrt(-x))` for `x < 0`; `clog(x ± 0i)` = `(log|x|, ±0 or ±π)`;
-   the `x = ±0` axis likewise. Annex G signs; flags from the real function. Counts: `_axis` cases of the probe.
-3. csqrt (2.10x by instructions) is above the brief's 2x target: profile `csqrt_bench` per phase (two `sqrt_dd`,
-   `div_b`, two `round_root`, the hot entry's decline) before any change.
-4. Continuations: LIBM-CPLX-TRIG (csin/ccos), LIBM-CPLX-POW, then the long double variants.
+1. LIBM-CPLX-AXES (new story, now the biggest lever by the table above): exact-zero parts answered in the in-place
+   tier for cexp/clog/csqrt and the float variants: `csqrt(x ± 0i)` = `(sqrt x, ±0)` for `x > 0`,
+   `(+0, ±sqrt(-x))` for `x < 0`; `clog(x ± 0i)` = `(log|x|, ±0 or ±π)`; `cexp(x ± 0i)` = `(exp x, ±0)`; the
+   `x = ±0` axis likewise. Annex G signs; flags from the real function (exact cases raise no inexact). Measure with
+   the new `_axis` rows and the percall `_axis` cases.
+2. csqrt by time (3.9x): profile `csqrt_bench` per phase (two `sqrt_dd`, `div_b`, two `round_root`) and its
+   dependency chain; the route is not involved (table above).
+3. cexp: per-operand cost of the one routed bench operand (instructions and time) to settle whether it carries the
+   5.4x-by-time row; if so, an intermediate double-double tier for cexp's hard cases.
+4. clog `_near1`: 10 of 256 reach the route (|z| within ~2^-40 of 1 or a hard rounding); time the new rows.
+5. Continuations: LIBM-CPLX-TRIG (csin/ccos), LIBM-CPLX-POW, then the long double variants.
 
-Do not redo: the bound derivations in complex_fast.rs, the atan2_abs split, the float margins, the plants.
+Do not redo: the bound derivations in complex_fast.rs, the atan2_abs split / atan2_reduce merge, the float margins,
+the plants (handoff/LIBM-CPLX-LOG-SQRT-2-plants.txt, -3-plants.txt), the route-count table.
