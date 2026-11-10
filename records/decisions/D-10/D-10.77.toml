@@ -1,0 +1,10 @@
+id = "D-10.77"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-F64-QUICK-PROFILE"
+date = "2026-11-10"
+body = '''
+**`exp`'s quick rounding test has no `w != 0` guard** (LIBM-F64-QUICK-PROFILE; amends D-10.51's test for `exp` only). `exp_quick` and `exp_tiered` accept `zh` when `zh + zl·c == zh`, the one-sided test of de Dinechin, Lauter & Muller (RAIRO-ITA 41, 2007) with the unchanged `c` (`C_SSE2`, `C_FMA`). Bound: when the test passes with `zl = 0`, `|e^x − zh| <= rho·|zh| < 2^-61·|zh|` (`RHO_SSE2 = 2^-61.476`, `RHO_FMA = 2^-67.678`), below a quarter of `ulp(zh)` and so below half the gap on either side of `zh` (the narrower gap below a power of two included), and `e^x` is neither a double nor a midpoint for a double `x != 0` (Lindemann–Weierstrass): `zh` is `e^x` rounded to nearest. The guard is kept where exact results exist (`exp2` at integers, `exp10`'s declined integers, D-10.64) and in the hyperbolics and `expm1`. Measured (Zen 1, wl_percall, cbench_libm's `[-10, 10]` operands): FMA build 91 -> 88 instructions per call, SSE2 build 104.2 -> 102.2 (glibc 69 / 79); log, log2, log1p, pow, sin unchanged. Second, the kernel's `tl·(1 + rh)` term is evaluated as `tl·rh + tl` (`side`: one FMA in the FMA build, an add and a multiply less one; the SSE2 build keeps two operations): `|tl| <= 2^-53·th`, so either form's roundings stay below `2^-104·th` and every stated bound (exp, exp2, exp10, expm1, the hyperbolics) is unchanged. Plants: the test shortened to `c = 1` misrounds a hard case through `exp_quick` and through the entry (both caught).
+'''
