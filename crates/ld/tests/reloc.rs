@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use liella_ld::arch::{ApplyError, Arch, Field, Native, Operands, RelocKind};
-use liella_ld::elf::Elf;
+use liella_ld::elf::{Elf, Span, SpanKind};
 use liella_ld::map::{PROT_EXEC, PROT_WRITE};
 use liella_ld::reloc::{self, Image, Obj, Objects, RelocError, UniqueTable};
 use liella_ld::symbols::{Object, Request, Want};
@@ -494,5 +494,253 @@ void _start(void) {{ int **pp = r_pp(); int c = *pp == &r_x ? 0 : 3; if ({}) *pp
     let write = build(&d, "pwrite", &src(true), &["-fPIE", "-pie", r.to_str().unwrap()]);
     let (code, sig, _) = run(Command::new(&ld).arg(&write));
     assert_eq!((code, sig), (None, Some(11)), "writing RELRO data after relocation must fault");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+// ------------------------------------------------------------------ (4) the program's memory image
+
+/// A program (TEXTREL with `-Wl,-z,notext`) with one dependency that copies nothing: exits 0 when the
+/// text holding `_start` is mapped `r-x` (never writable) when its code first runs and its
+/// text-relocated word is right; 10 when the text is writable or not executable, 20 when no mapping
+/// holds it, 11 for a wrong word.
+const TEXT_PROG: &str = "extern int b_fn(void); int p_target = 9;
+__asm__(\".text\\n.globl p_word\\n.type p_word,@object\\np_word: .quad p_target\\n.size p_word, 8\\n\");
+extern long p_word;
+void _start(void);
+static long sc(long n, long a, long b, long c) { long r; __asm__ volatile(\"syscall\" : \"=a\"(r) : \"a\"(n), \"D\"(a), \"S\"(b), \"d\"(c) : \"rcx\", \"r11\", \"memory\"); return r; }
+static char buf[1 << 16];
+static unsigned long hex(const char **p) { unsigned long v = 0; for (;;) { char c = **p; int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; if (d < 0) return v; v = v * 16 + d; (*p)++; } }
+void _start(void) {
+  long fd = sc(2, (long)\"/proc/self/maps\", 0, 0), n = 0, r;
+  while (fd >= 0 && (r = sc(0, fd, (long)buf + n, sizeof buf - 1 - n)) > 0) n += r;
+  buf[n] = 0;
+  unsigned long me = (unsigned long)&_start; int code = 20;
+  for (const char *p = buf; *p;) {
+    unsigned long lo = hex(&p); p++; unsigned long hi = hex(&p); p++;
+    if (lo <= me && me < hi) code = (p[0] == 'r' && p[1] == '-' && p[2] == 'x') ? 0 : 10;
+    while (*p && *p != '\\n') p++;
+    if (*p) p++;
+  }
+  if (code == 0 && (p_word != (long)&p_target || b_fn() != 5)) code = 11;
+  sc(60, code, 0, 0);
+}
+";
+
+/// The file bytes laid out at their link-time addresses (what the kernel maps, before relocation).
+fn memory_of(file: &[u8], elf: &Elf<'_>) -> Vec<u8> {
+    let loads: Vec<_> = elf.program_headers().filter(|p| p.p_type == 1).collect();
+    let mut mem = vec![0u8; loads.iter().map(|p| (p.vaddr + p.memsz) as usize).max().unwrap()];
+    for p in &loads {
+        mem[p.vaddr as usize..(p.vaddr + p.filesz) as usize].copy_from_slice(&file[p.offset as usize..(p.offset + p.filesz) as usize]);
+    }
+    mem
+}
+
+/// Everything the relocator reads through the reader, as text (equal for two readers of one object).
+fn reader_view(elf: &Elf<'_>) -> String {
+    let d = elf.dynamic().unwrap().unwrap();
+    let needed: Vec<_> = d.needed().map(|n| n.map(<[u8]>::to_vec)).collect();
+    let count = d.symbol_count().unwrap().unwrap_or(0);
+    let tab = d.symtab().unwrap().unwrap();
+    let syms: Vec<_> = (0..count).map(|i| tab.get(i)).collect();
+    let rela = d.rela::<Native>().unwrap().map(Iterator::collect::<Vec<_>>);
+    let jmprel = d.jmprel::<Native>().unwrap().map(Iterator::collect::<Vec<_>>);
+    format!("{:?}\n{needed:?}\n{syms:?}\n{rela:?}\n{jmprel:?}", d.entries().collect::<Vec<_>>())
+}
+
+/// no spec clause (ruling #4229, #4323, D-27.18): the image-mode reader slices in place only `PT_LOAD`s
+/// whose bytes cannot change during loading (never a writable one, never any of a text-relocated
+/// program), copies the others that hold tables, and reads exactly what the file reader reads, for a
+/// program with a GOT and for a text-relocated one.
+#[test]
+fn reloc_image_reader_slices_only_unchanging_segments() {
+    if !cc_ok() {
+        return;
+    }
+    let d = dir("image");
+    let [b, .., p] = corpus(&d, &[]);
+    let t = build(&d, "ptext", TEXT_PROG, &["-fPIE", "-pie", "-Wl,-z,notext", b.to_str().unwrap()]);
+    for (prog, textrel) in [(p, false), (t, true)] {
+        let file = std::fs::read(&prog).unwrap();
+        let elf = Elf::parse::<Native>(&file).unwrap();
+        let dynph = elf.find(liella_ld::elf::pt::DYNAMIC).unwrap();
+        let dynamic = elf.segment_bytes(&dynph).unwrap().to_vec();
+        let mem = memory_of(&file, &elf);
+        let loads: Vec<_> = elf.program_headers().filter(|p| p.p_type == 1 && p.filesz != 0).collect();
+        let kinds: Vec<_> = loads.iter().map(|p| elf.image_span_kind(p, &dynamic)).collect();
+        for (p, k) in loads.iter().zip(&kinds) {
+            assert!(
+                !(*k == SpanKind::Live && (textrel || p.flags & 2 != 0)),
+                "{}: a segment the relocator may store into is never sliced in place (flags {:#x}): {kinds:?}",
+                prog.display(),
+                p.flags
+            );
+        }
+        assert_eq!(kinds.contains(&SpanKind::Copy), textrel, "{}: only the text-relocated program needs whole-segment copies: {kinds:?}", prog.display());
+        let range = |p: &liella_ld::elf::ProgramHeader| p.vaddr as usize..(p.vaddr + p.filesz) as usize;
+        let copies: Vec<(u64, Vec<u8>)> = loads.iter().zip(&kinds).filter(|(_, k)| **k == SpanKind::Copy).map(|(p, _)| (p.vaddr, mem[range(p)].to_vec())).collect();
+        let mut spans: Vec<Span<'_>> = copies.iter().map(|(v, b)| Span { vaddr: *v, bytes: b }).collect();
+        spans.push(Span { vaddr: dynph.vaddr, bytes: &dynamic });
+        spans.extend(loads.iter().zip(&kinds).filter(|(_, k)| **k == SpanKind::Live).map(|(p, _)| Span { vaddr: p.vaddr, bytes: &mem[range(p)] }));
+        let h = elf.header();
+        let phdrs = &file[h.phoff as usize..h.phoff as usize + usize::from(h.phnum) * 56];
+        let image = Elf::from_image::<Native>(phdrs, &spans).unwrap();
+        assert_eq!(reader_view(&image), reader_view(&elf), "{}: the image reader reads what the file reader reads", prog.display());
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_1 (ruling #4229): a program started by the kernel through `PT_INTERP` loads its
+/// dependencies with no `/proc` at all (a chroot holding only the loader, the objects and the program).
+#[test]
+fn reloc_ldso_kernel_started_without_proc() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    if !Command::new("unshare").args(["-r", "true"]).status().is_ok_and(|s| s.success()) {
+        eprintln!("SKIP: unshare -r (an unprivileged user namespace for chroot) is not available here");
+        return;
+    }
+    let d = std::fs::canonicalize(dir("noproc")).unwrap();
+    let ld = std::fs::canonicalize(ld).unwrap();
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let files = corpus(&d, &[&interp]);
+    let root = d.join("root");
+    let inside = |p: &Path| root.join(p.strip_prefix("/").unwrap());
+    for f in files.iter().chain([&ld]) {
+        std::fs::create_dir_all(inside(f).parent().unwrap()).unwrap();
+        std::fs::copy(f, inside(f)).unwrap();
+    }
+    assert!(!root.join("proc").exists());
+    // `unshare --root` changes the root itself: no chroot(8), which sits outside many PATHs.
+    let (code, sig, err) = run(Command::new("unshare").arg("-r").arg(format!("--root={}", root.display())).arg(&files[3]));
+    assert_eq!((code, sig), (Some(0), None), "kernel-started program without /proc: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_1 (ruling #4371, D-27.18): a position-independent program without `PT_PHDR` runs, started
+/// by the kernel and as `ld.so PROGRAM`: its load bias comes from its ELF header and the `PT_LOAD` that
+/// holds its program headers (never 0 for want of `PT_PHDR`). Two programs: one with dependencies
+/// (relocated and protected by `link`) and one without (RELATIVE relocations and its RELRO pages
+/// handled in `run`, which then protects the pages at that bias).
+#[test]
+fn reloc_ldso_program_without_pt_phdr() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("nophdr");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let [.., p] = corpus(&d, &[&interp]);
+    let alone = build(
+        &d,
+        "palone",
+        "int x = 1; int *const p = &x;
+void _start(void) { int *q = *(int *const volatile *)&p; int c = q == &x ? 0 : 3; __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); }\n",
+        &["-fPIE", "-pie", &interp],
+    );
+    for (i, p) in [p, alone].iter().enumerate() {
+        without_pt_phdr(&ld, &d, p, &format!("prog{i}-nophdr"));
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// Run `p` with its `PT_PHDR` made `PT_NULL` (written to `d/name`), kernel-started and as `ld.so PROGRAM`.
+fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
+    let mut file = std::fs::read(p).unwrap();
+    let elf = Elf::parse::<Native>(&file).unwrap();
+    let (phoff, phnum) = (elf.header().phoff as usize, usize::from(elf.header().phnum));
+    let at = (0..phnum).map(|i| phoff + i * 56).find(|&o| file[o..o + 4] == 6u32.to_le_bytes()).expect("the linker gave the program a PT_PHDR");
+    file[at..at + 4].copy_from_slice(&0u32.to_le_bytes()); // PT_PHDR -> PT_NULL
+    // Written under another name and copied by cp(1): the program run below is never open for
+    // writing in this process, so a fork by another test thread cannot make its exec fail (ETXTBSY).
+    let (tmp, q) = (d.join(format!("{name}.bytes")), d.join(name));
+    std::fs::write(&tmp, &file).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    assert!(Elf::parse::<Native>(&file).unwrap().find(liella_ld::elf::pt::PHDR).is_none());
+    let (code, sig, err) = run(&mut Command::new(&q));
+    assert_eq!((code, sig), (Some(0), None), "{name}: kernel-started program without PT_PHDR: check number {code:?} failed; stderr: {err}");
+    let (code, sig, err) = run(Command::new(ld).arg(&q));
+    assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
+}
+
+/// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs
+/// as `ld.so PROGRAM`. `link` reads it through the image reader, whose span list
+/// holds one span per `PT_LOAD` (the `-nostdlib` 300-segment program of the map tests never links).
+#[test]
+fn reloc_ldso_program_with_many_loads() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("manyloads");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let [.., p] = corpus(&d, &[&interp]);
+    let file = with_loads(&std::fs::read(&p).unwrap(), 300);
+    // Written under another name and copied by cp(1), as in `without_pt_phdr` (no ETXTBSY window).
+    let (tmp, q) = (d.join("many.bytes"), d.join("many"));
+    std::fs::write(&tmp, &file).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    // As `ld.so PROGRAM` only: the kernel refuses (ENOEXEC) a program header table larger than a page,
+    // so a kernel-started program has at most 73 headers; `link` and the reader are the same code.
+    let (code, sig, err) = run(Command::new(&ld).arg(&q));
+    assert_eq!((code, sig), (Some(0), None), "ld.so PROGRAM with 300 PT_LOADs: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// `f` with its program header table moved to a new page at the end of the file, mapped by a new
+/// read-only `PT_LOAD` after the last segment, at the first `PT_LOAD`'s address-minus-offset (so the
+/// kernel's `AT_PHDR` agrees with the moved `PT_PHDR`); the other added `PT_LOAD`s map that page again,
+/// one page each, at ascending addresses, until there are `total`.
+fn with_loads(f: &[u8], total: usize) -> Vec<u8> {
+    const PAGE: u64 = 4096;
+    let rd = |o: usize| u64::from_le_bytes(f[o..o + 8].try_into().unwrap());
+    let (phoff, phnum) = (rd(32) as usize, usize::from(u16::from_le_bytes([f[56], f[57]])));
+    let hs: Vec<&[u8]> = (0..phnum).map(|i| &f[phoff + i * 56..phoff + i * 56 + 56]).collect();
+    let ty = |h: &[u8]| u32::from_le_bytes(h[..4].try_into().unwrap());
+    let word = |h: &[u8], i: usize| u64::from_le_bytes(h[8 * i..8 * i + 8].try_into().unwrap());
+    let loads: Vec<&[u8]> = hs.iter().copied().filter(|h| ty(h) == 1).collect();
+    let delta = word(loads[0], 2) - word(loads[0], 1);
+    let end = loads.iter().map(|h| word(h, 2) + word(h, 5)).max().unwrap();
+    let base = end.max(f.len() as u64 + delta).div_ceil(PAGE) * PAGE + PAGE;
+    let off = base - delta;
+    let added = total - loads.len();
+    let n = phnum + added;
+    let (size, tlen) = (56 * n as u64, (56 * n as u64).div_ceil(PAGE) * PAGE);
+    let ph = |t: u32, o: u64, v: u64, len: u64, align: u64| {
+        let mut h = [t.to_le_bytes(), 4u32.to_le_bytes()].concat();
+        for w in [o, v, v, len, len, align] {
+            h.extend(w.to_le_bytes());
+        }
+        h
+    };
+    let mut table: Vec<Vec<u8>> = hs.iter().filter(|h| ty(h) == 6).map(|_| ph(6, off, base, size, 8)).collect();
+    table.extend(hs.iter().filter(|h| ty(h) == 3).map(|h| h.to_vec()));
+    table.extend(loads.iter().map(|h| h.to_vec()));
+    table.push(ph(1, off, base, tlen, PAGE));
+    table.extend((1..added).map(|i| ph(1, off, base + tlen + PAGE * (i as u64 - 1), PAGE, PAGE)));
+    table.extend(hs.iter().filter(|h| ![1, 3, 6].contains(&ty(h))).map(|h| h.to_vec()));
+    assert_eq!(table.len(), n);
+    let mut v = f.to_vec();
+    v.resize((off + tlen) as usize, 0);
+    v[off as usize..(off + size) as usize].copy_from_slice(&table.concat());
+    v[32..40].copy_from_slice(&off.to_le_bytes());
+    v[56..58].copy_from_slice(&(n as u16).to_le_bytes());
+    v
+}
+
+/// s27_1_c_1, L14-6 (ruling #4323): a text-relocated program with a dependency runs, started by the
+/// kernel and as `ld.so PROGRAM`, and its text is `r-x` again before any of its code runs.
+#[test]
+fn reloc_ldso_textrel_program_text_rx_before_it_runs() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("textprog");
+    let b = build(&d, "libb.so", LIBB, &["-fPIC", "-shared"]);
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let t = build(&d, "ptext", TEXT_PROG, &["-fPIE", "-pie", "-Wl,-z,notext", &interp, b.to_str().unwrap()]);
+    let elf_bytes = std::fs::read(&t).unwrap();
+    let elf = Elf::parse::<Native>(&elf_bytes).unwrap();
+    assert!(elf.dynamic().unwrap().unwrap().get(liella_ld::elf::dt::TEXTREL).is_some() || elf.dynamic().unwrap().unwrap().get(liella_ld::elf::dt::FLAGS).is_some_and(|f| f & 4 != 0), "the program is text-relocated");
+    for (how, mut cmd) in [("kernel-started", Command::new(&t)), ("ld.so PROGRAM", Command::new(&ld))] {
+        if how != "kernel-started" {
+            cmd.arg(&t);
+        }
+        let (code, sig, err) = run(&mut cmd);
+        assert_eq!((code, sig), (Some(0), None), "text-relocated program ({how}): 10 = text not r-x when it runs, 11 = wrong word; stderr: {err}");
+    }
     std::fs::remove_dir_all(&d).ok();
 }
