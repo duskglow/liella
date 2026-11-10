@@ -375,7 +375,7 @@ __ptsname_r_chk	GLIBC_2.4	crates/boundary/src/posix/s19_terminals.rs:163	ret::er
 __putlong	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:875	resolv::put_be
 __putshort	GLIBC_2.2.5	crates/boundary/src/posix/s16_nameservices.rs:880	resolv::put_be
 __pwrite64	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:210	ret::ssize
-__rawmemchr	GLIBC_2.2.5	csys/src/machine/scan.S:2047	liella_hot_rawmemchr_rest
+__rawmemchr	GLIBC_2.2.5	csys/src/machine/scan.S:2049	liella_hot_rawmemchr_rest
 __read	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:143	ret::ssize
 __read_chk	GLIBC_2.4	crates/boundary/src/posix/s11_lowio.rs:216	ret::raw_ssize
 __readlink_chk	GLIBC_2.4	crates/boundary/src/posix/s13_filesystem.rs:97	ret::ssize
@@ -427,16 +427,16 @@ __snprintf_chk		csys/src/adapter/variadic.c:174	liella_vsnprintf6
 __sprintf_chk		csys/src/adapter/variadic.c:173	liella_vsnprintf6
 __stack_chk_fail	GLIBC_2.4	crates/boundary/src/posix/s02_diagnostics.rs:46	process::stack_chk_fail
 __statfs	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:439	ret::store
-__stpcpy	GLIBC_2.2.5	csys/src/machine/scan.S:709	liella_machine_stpcpy_chk
-__stpcpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:720	liella_hot_stpcpy_rest
-__stpncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1291	liella_hot_stpncpy_rest
-__stpncpy_chk	GLIBC_2.4	csys/src/machine/scan.S:1436	liella_hot_stpncpy_chk_rest
+__stpcpy	GLIBC_2.2.5	csys/src/machine/scan.S:711	liella_machine_stpcpy_chk
+__stpcpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:722	liella_hot_stpcpy_rest
+__stpncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1293	liella_hot_stpncpy_rest
+__stpncpy_chk	GLIBC_2.4	csys/src/machine/scan.S:1438	liella_hot_stpncpy_chk_rest
 __strcasecmp	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:383	locale::view
 __strcasecmp_l	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:405	ret::order
 __strcasestr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:531	ret::found
 __strcat_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:784	ret::same
 __strcoll_l	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:353	locale::of
-__strcpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:917	liella_hot_strcpy_chk_rest
+__strcpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:919	liella_hot_strcpy_chk_rest
 __strcspn_c1	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:573	ret::must
 __strcspn_c2	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:579	ret::must
 __strcspn_c3	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:585	ret::must
@@ -448,7 +448,7 @@ __strlcat_chk	GLIBC_2.38	crates/boundary/src/posix/s04_strings.rs:820	ret::must
 __strlcpy_chk	GLIBC_2.38	crates/boundary/src/posix/s04_strings.rs:808	ret::must
 __strncasecmp_l	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:423	ret::order
 __strncat_chk	GLIBC_2.3.4	crates/boundary/src/posix/s04_strings.rs:796	ret::same
-__strncpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:1261	liella_hot_strncpy_chk_rest
+__strncpy_chk	GLIBC_2.3.4	csys/src/machine/scan.S:1263	liella_hot_strncpy_chk_rest
 __strndup	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:845	ret::null
 __strpbrk_c2	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:591	ret::found
 __strpbrk_c3	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:597	ret::found
@@ -1673,7 +1673,7 @@ ilogbf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3373	mret::Soft::
 ilogbf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:3379	mret::Soft::enter
 imaxabs	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1047	num_compat::abs64
 imaxdiv	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:1067	pack::imaxdiv
-index	GLIBC_2.2.5	csys/src/machine/scan.S:6223	liella_hot_strchr_null
+index	GLIBC_2.2.5	csys/src/machine/scan.S:6225	liella_hot_strchr_null
 inet6_opt_append	GLIBC_2.5	crates/boundary/src/posix/s15_sockets.rs:333	netaddr::opt_append
 inet6_opt_find	GLIBC_2.5	crates/boundary/src/posix/s15_sockets.rs:363	netaddr::opt_walk
 inet6_opt_finish	GLIBC_2.5	crates/boundary/src/posix/s15_sockets.rs:339	netaddr::opt_finish
@@ -2619,7 +2619,7 @@ mcheck_pedantic	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:218	heap::mc
 mcount		csys/src/machine/mcount.S:37	liella_mcount_save
 memalign	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:101	ret::null
 memccpy	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:161	ret::found
-memchr	GLIBC_2.2.5	csys/src/machine/scan.S:2577	liella_hot_memchr_rest
+memchr	GLIBC_2.2.5	csys/src/machine/scan.S:2579	liella_hot_memchr_rest
 memcmp	GLIBC_2.2.5	csys/src/machine/fold.S:585	liella_hot_compare_rescan
 memcpy	GLIBC_2.14	csys/src/machine/fold.S:50	liella_hot_move_rest
 memcpy	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:58	hot::move_bytes
@@ -2628,7 +2628,7 @@ memfrob	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:297	ret::same
 memmem	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:291	ret::found
 memmove	GLIBC_2.2.5	csys/src/machine/fold.S:47	liella_hot_move_rest
 mempcpy	GLIBC_2.2.5	csys/src/machine/fold.S:259	liella_machine_memmove
-memrchr	GLIBC_2.2.5	csys/src/machine/scan.S:6516	liella_hot_memrchr_rest
+memrchr	GLIBC_2.2.5	csys/src/machine/scan.S:6518	liella_hot_memrchr_rest
 memset	GLIBC_2.2.5	csys/src/machine/fold.S:482	
 mincore	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:605	ret::zero
 mkdir	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:151	ret::zero
@@ -3175,7 +3175,7 @@ rand	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:50	prng_global::rand
 rand_r	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:62	ret::must
 random	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:67	prng_global::random
 random_r	GLIBC_2.2.5	crates/boundary/src/posix/s09_random.rs:90	ret::zero
-rawmemchr	GLIBC_2.2.5	csys/src/machine/scan.S:2044	liella_hot_rawmemchr_rest
+rawmemchr	GLIBC_2.2.5	csys/src/machine/scan.S:2046	liella_hot_rawmemchr_rest
 rcmd	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:535	
 rcmd_af	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:541	
 re_comp	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:388	regex::re_comp
@@ -3577,18 +3577,18 @@ stdc_trailing_zeros_ull	GLIBC_2.39	crates/boundary/src/posix/s08_numeric.rs:1173
 stdc_trailing_zeros_us	GLIBC_2.39	crates/boundary/src/posix/s08_numeric.rs:1158	StdBit::trailing_zeros_
 step	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:35	
 stime	GLIBC_2.2.5	crates/boundary/src/posix/s23_time.rs:106	ret::zero
-stpcpy	GLIBC_2.2.5	csys/src/machine/scan.S:708	liella_machine_stpcpy_chk
-stpncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1288	liella_hot_stpncpy_rest
+stpcpy	GLIBC_2.2.5	csys/src/machine/scan.S:710	liella_machine_stpcpy_chk
+stpncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1290	liella_hot_stpncpy_rest
 strcasecmp	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:377	locale::view
 strcasecmp_l	GLIBC_2.3	crates/boundary/src/posix/s04_strings.rs:399	ret::order
 strcasestr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:525	ret::found
 strcat	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:778	ret::same
-strchr	GLIBC_2.2.5	csys/src/machine/scan.S:6220	liella_hot_strchr_null
-strchrnul	GLIBC_2.2.5	csys/src/machine/scan.S:6090	liella_hot_strchr_null
-strcmp	GLIBC_2.2.5	csys/src/machine/scan.S:3350	liella_hot_strcmp_null
+strchr	GLIBC_2.2.5	csys/src/machine/scan.S:6222	liella_hot_strchr_null
+strchrnul	GLIBC_2.2.5	csys/src/machine/scan.S:6092	liella_hot_strchr_null
+strcmp	GLIBC_2.2.5	csys/src/machine/scan.S:3352	liella_hot_strcmp_null
 strcoll	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:335	locale::current
 strcoll_l	GLIBC_2.3	crates/boundary/src/posix/s04_strings.rs:344	locale::of
-strcpy	GLIBC_2.2.5	csys/src/machine/scan.S:516	liella_hot_strcpy_rest
+strcpy	GLIBC_2.2.5	csys/src/machine/scan.S:518	liella_hot_strcpy_rest
 strcspn	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:543	ret::must
 strdup	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:826	ret::null
 strerror	GLIBC_2.2.5	crates/boundary/src/posix/s02_diagnostics.rs:58	ret::ptr
@@ -3612,8 +3612,8 @@ strlen	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:309	strz::len
 strncasecmp	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:411	locale::view
 strncasecmp_l	GLIBC_2.3	crates/boundary/src/posix/s04_strings.rs:417	ret::order
 strncat	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:790	ret::same
-strncmp	GLIBC_2.2.5	csys/src/machine/scan.S:6861	liella_hot_strncmp_null
-strncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1122	liella_hot_strncpy_rest
+strncmp	GLIBC_2.2.5	csys/src/machine/scan.S:6863	liella_hot_strncmp_null
+strncpy	GLIBC_2.2.5	csys/src/machine/scan.S:1124	liella_hot_strncpy_rest
 strndup	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:838	ret::null
 strnlen	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:315	strz::len_n
 strpbrk	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:549	ret::found
@@ -3623,7 +3623,7 @@ strrchr	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:471	ret::found
 strsep	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:882	ret::ptr
 strsignal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:285	ret::ptr
 strspn	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:537	ret::must
-strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7675	liella_machine_strpair
+strstr	GLIBC_2.2.5	csys/src/machine/scan.S:7677	liella_machine_strpair
 strtod	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:710	ret::with_errno
 strtod_l	GLIBC_2.3	crates/boundary/src/posix/s08_numeric.rs:728	ret::with_errno
 strtof	GLIBC_2.2.5	crates/boundary/src/posix/s08_numeric.rs:762	ret::with_errno

@@ -393,11 +393,9 @@ fn strip_legacy_hash(s: &str) -> String {
 /// The tiers of `hot-text.list` (HOTTEXT-STARTUP-COMPLETE), in first-touch order: the probe that
 /// touched a key first (tools/hottext/regen.sh). Keep in step with tools/hottext/merge.py.
 const TIERS: [&str; 7] = ["startup", "fork", "stdio", "strings", "locale", "tool", "extra"];
-/// The tiers whose keys must match a function section of the profile they were traced in: a
-/// start-up or fork-child function outside the group sits in cold `.text` and moves with any
-/// growth before it (LIBM-F64-LOG-FAMILY-WIRE-2: `runtime::start::<false>` crossed a 64 KiB
-/// window, one more start-up fault).
-const GUARDED_TIERS: [&str; 2] = ["startup", "fork"];
+/// The allow-list of keys that legitimately match no function section in one profile's archive,
+/// next to `hot-text.list` (STARTUP-FAULTS-RESTORE): `<key>\t<profile>\t<reason>`.
+pub const ABSENT_LIST: &str = "hot-text.absent";
 
 /// One key of the list: its tier and the profiles whose trace hit it (empty: none recorded).
 #[derive(Debug, PartialEq)]
@@ -444,36 +442,80 @@ fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     keys
 }
 
-/// The guard (HOTTEXT-STARTUP-COMPLETE): the keys of a [`GUARDED_TIERS`] tier traced in
-/// `profile` that are not in `matched` (the keys of the archive's function sections), and the
-/// count of the other unmatched keys. `profile` `None` (an archive built with other flags, e.g.
-/// the bench's x86-64-v3 copy, whose inlining differs): nothing is guarded, every unmatched key
-/// is counted.
-fn unmatched<'a>(entries: &'a [Entry], matched: &BTreeSet<String>, profile: Option<&str>) -> (Vec<&'a Entry>, usize) {
-    let mut guarded = Vec::new();
-    let mut others = 0;
-    for e in entries.iter().filter(|e| !matched.contains(&e.key)) {
-        let traced = profile.is_some_and(|p| e.profiles.iter().any(|x| x == p));
-        if traced && GUARDED_TIERS.contains(&e.tier) {
-            guarded.push(e);
-        } else {
-            others += 1;
+/// The lines of [`ABSENT_LIST`]: (key, profile) pairs. Every line needs a reason; `#` comments
+/// and blank lines are skipped. Errors name the line.
+fn parse_absent(text: &str) -> Result<BTreeSet<(String, String)>, String> {
+    let mut out = BTreeSet::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        match l.split('\t').collect::<Vec<_>>()[..] {
+            [k, p @ ("fast" | "release"), why] if !k.is_empty() && !why.trim().is_empty() => {
+                out.insert((k.to_string(), p.to_string()));
+            }
+            _ => return Err(format!("{ABSENT_LIST} line {}: {l:?}: want <key>\\t<fast|release>\\t<reason>", n + 1)),
         }
     }
-    (guarded, others)
+    Ok(out)
 }
 
-/// The error for guarded keys that match no function section (empty: none).
-fn unmatched_error(guarded: &[&Entry], profile: &str) -> Option<String> {
-    if guarded.is_empty() {
+/// The dead-key contract (STARTUP-FAULTS-RESTORE; HOTTEXT-STARTUP-COMPLETE guarded the start-up
+/// and fork tiers only). In an archive built with `profile`, every key must match a function
+/// section (`matched`) unless its trace names only the other profile (inlined or absent there)
+/// or [`ABSENT_LIST`] (`absent`) allows it for `profile`: a key that matches nothing places
+/// nothing, so a function renamed (made generic, inlined) silently leaves the group
+/// (DL-BOOT-RELOC-7: `runtime::start` became `start::<false>`, two more start-up faults).
+/// Returns the unmatched keys that break it, the allow-list lines that are stale (the key
+/// matches now, or is not listed), and the count of unmatched keys that are allowed. `profile`
+/// `None` (an archive built with other flags, e.g. the bench's x86-64-v3 copy, whose inlining
+/// differs): nothing is checked, every unmatched key is counted.
+fn unmatched<'a>(entries: &'a [Entry], matched: &BTreeSet<String>, absent: &BTreeSet<(String, String)>, profile: Option<&str>) -> (Vec<&'a Entry>, Vec<String>, usize) {
+    let (mut dead, mut stale, mut allowed) = (Vec::new(), Vec::new(), 0);
+    let Some(p) = profile else {
+        return (dead, stale, entries.iter().filter(|e| !matched.contains(&e.key)).count());
+    };
+    for e in entries.iter().filter(|e| !matched.contains(&e.key)) {
+        let other_only = !e.profiles.is_empty() && !e.profiles.iter().any(|x| x == p);
+        if other_only || absent.contains(&(e.key.clone(), p.to_string())) {
+            allowed += 1;
+        } else {
+            dead.push(e);
+        }
+    }
+    let listed: BTreeSet<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+    for (k, _) in absent.iter().filter(|(_, ap)| ap == p) {
+        if matched.contains(k) || !listed.contains(k.as_str()) {
+            stale.push(k.clone());
+        }
+    }
+    (dead, stale, allowed)
+}
+
+/// The error for keys that break the dead-key contract (`None`: none do).
+fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<String> {
+    if dead.is_empty() && stale.is_empty() {
         return None;
     }
-    let mut msg = format!("hot-text.list: {} {profile}-profile start-up/fork key(s) match no function section of libc.a", guarded.len());
-    for e in guarded {
-        msg.push_str(&format!("\n  {} ({}, traced in {})", e.key, e.tier, e.profiles.join(",")));
+    let mut msg = String::new();
+    if !dead.is_empty() {
+        msg.push_str(&format!("hot-text.list: {} key(s) match no function section of the {profile}-profile libc.a", dead.len()));
+        for e in dead {
+            let traced = if e.profiles.is_empty() { "no trace".to_string() } else { format!("traced in {}", e.profiles.join(",")) };
+            msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
+        }
+        msg.push_str(&format!(
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
+             tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
+        ));
     }
-    msg.push_str("\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile)");
-    Some(msg)
+    if !stale.is_empty() {
+        msg.push_str(&format!("\n{ABSENT_LIST}: {} stale {profile} line(s) (the key matches a function section now, or is not in hot-text.list): remove them", stale.len()));
+        for k in stale {
+            msg.push_str(&format!("\n  {k}"));
+        }
+    }
+    Some(msg.trim_start().to_string())
 }
 
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
@@ -590,11 +632,21 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
-    let (guarded, others) = unmatched(&entries, &matched, profile);
-    if let Some(e) = dead_key_verdict(unmatched_error(&guarded, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
+    let absent_path = list.with_file_name(ABSENT_LIST);
+    let absent = match fs::read_to_string(&absent_path) {
+        Ok(t) => parse_absent(&t)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
+        Err(e) => return Err(format!("{}: {e}", absent_path.display())),
+    };
+    // The archive's function keys, for tools/hottext/prune.py (a key no build matches is dropped).
+    let mut keys_out: String = matched.iter().map(|k| format!("{k}\n")).collect();
+    keys_out.insert_str(0, "# function keys of this archive (cargo xtask so; tools/hottext/prune.py reads it)\n");
+    fs::write(archive.with_file_name("hot-text.matched"), keys_out).map_err(|e| e.to_string())?;
+    let (dead, stale, allowed) = unmatched(&entries, &matched, &absent, profile);
+    if let Some(e) = dead_key_verdict(unmatched_error(&dead, &stale, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
         println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
     }
-    println!("so: {others} hot-text keys match no function section (other tiers or profiles; not guarded)");
+    println!("so: {allowed} hot-text keys match no function section (traced in the other profile only, or in {ABSENT_LIST})");
     Ok((hot, keys.len()))
 }
 
@@ -718,7 +770,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -816,26 +868,45 @@ mod tests {
     }
 
     #[test]
-    fn unmatched_startup_and_fork_keys_of_the_built_profile_fail() {
-        // HOTTEXT-STARTUP-COMPLETE: a start-up or fork key traced in the profile being built that
-        // matches no function section fails `so`, naming the key; other tiers, other profiles and
+    fn unmatched_keys_of_the_built_profile_fail_unless_allowed() {
+        // STARTUP-FAULTS-RESTORE (no spec clause; build contract): in a profile's archive every key
+        // must match a function section, whatever its tier, unless its trace names only the other
+        // profile or hot-text.absent allows it for this profile; a stale allow line fails too;
         // archives built with other flags (`None`) are only counted.
-        let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\n").unwrap();
-        let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare"].iter().map(|s| s.to_string()).collect();
-        let (g, o) = unmatched(&e, &all, Some("fast"));
-        assert_eq!((g.len(), o), (0, 0));
-        assert_eq!(unmatched_error(&g, "fast"), None);
+        let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\nold\textra\t-\n").unwrap();
+        let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare", "old"].iter().map(|s| s.to_string()).collect();
         let none = BTreeSet::new();
-        let (g, o) = unmatched(&e, &none, Some("fast"));
-        assert_eq!(g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk"]);
-        assert_eq!(o, 3);
-        let msg = unmatched_error(&g, "fast").unwrap();
-        assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("fk (fork, traced in fast)"));
-        assert!(msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
-        let (g, o) = unmatched(&e, &none, Some("release"));
-        assert_eq!((g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), o), (vec!["start", "rel"], 3));
-        let (g, o) = unmatched(&e, &none, None);
-        assert_eq!((g.len(), o), (0, 5));
+        let na: BTreeSet<(String, String)> = BTreeSet::new();
+        let (d, s, a) = unmatched(&e, &all, &na, Some("fast"));
+        assert_eq!((d.len(), s.len(), a), (0, 0, 0));
+        assert_eq!(unmatched_error(&d, &s, "fast"), None);
+        let (d, s, a) = unmatched(&e, &none, &na,Some("fast"));
+        assert_eq!(d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk", "io", "bare", "old"]);
+        assert_eq!((s.len(), a), (0, 1));
+        let msg = unmatched_error(&d, &s, "fast").unwrap();
+        assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("io (stdio, traced in fast)"));
+        assert!(msg.contains("old (extra, no trace)") && msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
+        let (d, _, a) = unmatched(&e, &none, &na,Some("release"));
+        assert_eq!((d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), a), (vec!["start", "rel", "bare", "old"], 2));
+        // Allowed for fast only: still an error in release; a stale fast line (the key matches, or
+        // is not in the list) is an error.
+        let absent = parse_absent("# why\nold\tfast\tonly in the release archive\n").unwrap();
+        let some: BTreeSet<String> = ["start", "fk", "rel", "io", "bare"].iter().map(|s| s.to_string()).collect();
+        let (d, s, a) = unmatched(&e, &some, &absent, Some("fast"));
+        assert_eq!((d.len(), s.len(), a), (0, 0, 1));
+        let (d, _, _) = unmatched(&e, &some, &absent, Some("release"));
+        assert_eq!(d.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["old"]);
+        let (d, s, _) = unmatched(&e, &all, &absent, Some("fast"));
+        assert_eq!((d.len(), s.clone()), (0, vec!["old".to_string()]));
+        assert!(unmatched_error(&d, &s, "fast").unwrap().contains("hot-text.absent: 1 stale fast line(s)"));
+        let gone = parse_absent("gone\tfast\tx\n").unwrap();
+        assert_eq!(unmatched(&e, &all, &gone, Some("fast")).1, ["gone"]);
+        let (d, s, a) = unmatched(&e, &none, &na,None);
+        assert_eq!((d.len(), s.len(), a), (0, 0, 6));
+        // Every allow line needs a profile and a reason.
+        assert!(parse_absent("k\tfast\t \n").unwrap_err().contains("line 1"));
+        assert!(parse_absent("k\tdebug\twhy\n").is_err());
+        assert!(parse_absent("k\tfast\n").is_err());
     }
 
     #[test]

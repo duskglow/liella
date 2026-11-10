@@ -14,7 +14,9 @@
 //! `--check` (run by `cargo xtask tables --check`, so by static's `tables-fresh`) fails when the
 //! file is missing or differs from what the sources give, but only on the CI train
 //! (`LIELLA_TRAIN=1`): the file is train-owned (RECORDS), so a story branch never commits it and
-//! gets one advisory line instead, the same rule as `records::fresh_check`.
+//! gets one advisory line instead, the same rule as `records::fresh_check`. Without `--check` it writes
+//! `target/records-views/crates/math/KERNELS.md` and leaves the tracked file alone, except on the train or with
+//! `--in-place` (`records::in_place`, D-X.59).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -24,10 +26,9 @@ const SRC: &str = "crates/math/src";
 const TAGS: [&str; 3] = ["bound:", "domain:", "declines:"];
 const SUMMARY_MAX: usize = 160;
 
-pub fn run(root: &Path, check: bool) -> Result<(), String> {
+pub fn run(root: &Path, check: bool, in_place: bool) -> Result<(), String> {
     let text = generate(root)?;
-    let out = root.join(OUT);
-    let old = std::fs::read_to_string(&out).ok();
+    let old = std::fs::read_to_string(root.join(OUT)).ok();
     if check && !on_train() {
         let pending = old.as_deref() != Some(text.as_str());
         println!("kernel-index: {OUT} {}", if pending { "pending regeneration by the train" } else { "up to date" });
@@ -43,11 +44,19 @@ pub fn run(root: &Path, check: bool) -> Result<(), String> {
             None => Err(format!("{OUT} is missing: run `cargo xtask kernel-index` (or `cargo xtask tables`)")),
         };
     }
-    if old.as_deref() != Some(text.as_str()) {
-        std::fs::write(&out, &text).map_err(|e| format!("{OUT}: {e}"))?;
-        println!("kernel-index: wrote {OUT}");
+    let out = crate::records::out_root(root, in_place).join(OUT);
+    let shown = if in_place { OUT.to_string() } else { format!("{}/{OUT}", crate::records::OUT_OF_TREE) };
+    if std::fs::read_to_string(&out).ok().as_deref() != Some(text.as_str()) {
+        if let Some(d) = out.parent() {
+            std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+        }
+        std::fs::write(&out, &text).map_err(|e| format!("{shown}: {e}"))?;
+        println!("kernel-index: wrote {shown}");
     } else {
-        println!("kernel-index: {OUT} unchanged");
+        println!("kernel-index: {shown} unchanged");
+    }
+    if !in_place {
+        println!("kernel-index: {OUT} is train-owned and untouched; read {shown} (in place: LIELLA_TRAIN=1 or --in-place)");
     }
     Ok(())
 }
@@ -260,4 +269,30 @@ fn index_file(rel: &str, text: &str) -> Vec<String> {
     }
     flush(&mut run, &mut out);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// D-X.59 (no spec clause): off the train the index goes to `target/records-views/crates/math/KERNELS.md` and the
+    /// tracked file stays byte-identical; in place rewrites the tracked file and nothing under target/.
+    #[test]
+    fn writes_out_of_tree_unless_in_place() {
+        let root = std::env::temp_dir().join(format!("xtask-kernel-index-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(SRC)).expect("mkdir");
+        std::fs::write(root.join(SRC).join("fast_x.rs"), "/// One kernel.\n/// bound: 1 ulp\npub fn k(x: f64) -> f64 {\n    x\n}\n").expect("src");
+        std::fs::write(root.join(OUT), "stale\n").expect("tracked");
+        let out_of_tree = root.join(crate::records::OUT_OF_TREE).join(OUT);
+        run(&root, false, false).expect("off the train");
+        assert_eq!(std::fs::read_to_string(root.join(OUT)).expect("tracked"), "stale\n", "tracked file untouched");
+        let text = std::fs::read_to_string(&out_of_tree).expect("written out of tree");
+        assert_eq!(text, generate(&root).expect("generate"));
+        std::fs::remove_dir_all(root.join("target")).expect("rm target");
+        run(&root, false, true).expect("in place");
+        assert_eq!(std::fs::read_to_string(root.join(OUT)).expect("tracked"), text, "in place rewrites the tracked file");
+        assert!(!out_of_tree.exists(), "in place writes nothing under target/");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
