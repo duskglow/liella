@@ -104,6 +104,50 @@
 //!   about 0.6%. `e^x − 1` is irrational for every double `x != 0` (Lindemann–Weierstrass), so
 //!   no exact case; `zh` is normal and needs no scaling.
 //!
+//! **cosh, sinh, tanh** (LIBM-F64-HYPERB-QUICK, D-10.70), `a = |x|`, in front of tier 2
+//! (`fast64::hyperbolic`, unchanged), all tested with `C_M1` (`RHO_M1 = 1.5·2^-62 = 2^-61.415`
+//! relative to the returned head `h`):
+//! * `e^a` and `e^-a` from ONE reduction (`exp_pm`, `a < 23`): exp's reduction gives `k`, `rh`,
+//!   `rl`; `e^-a = 2^(−k/128)·e^(−r)`, so the second exponential is the kernel's tail at
+//!   `(kb' = 2·1023·128 − kb, −rh, −rl)` with the same polynomial split into even and odd parts
+//!   `E = r2·(1/2 + r2·(C4 + r2·C6))`, `O = (r2·rh)·(C3 + r2·C5)`, `q± = E ± O` (the same degree-6
+//!   Taylor polynomial, so truncation term 5 holds; its evaluation: `E` within `3.01u·E`, `O`
+//!   within `4u·|O|` with `|O| <= R³/6·1.01 = 2^-28.17`, the sum `u·|q±|`, at most
+//!   `4.01u·E + 5u·|O| < 4.05u·qmax`: term 2 as stated). `e^-a`'s pair is scaled by `2^(m' − m)
+//!   >= 2^-67` into `e^a`'s units (exact: parts normal). Each side's bound is the kernel's,
+//!   relative to its own head: `RHO_SSE2` with `th·rh`'s low part dropped (`X = false`), and with
+//!   it kept (Dekker's product or the FMA, `X = true`) expm1's kernel bound `2^-67.59` (SSE2) or
+//!   `RHO_FMA = 2^-67.68`.
+//! * cosh, `2^-60 <= a < 23`: `X = false`; `h + l` = Fast2Sum of `zh + qh` (`zh >= qh`: `e^a >=
+//!   e^-a` and the kernels' errors are far below `e^(2a) − 1 >= 2^-59`, or both heads are `1`),
+//!   its error plus `zl + ql` (roundings on `2^-51`-sized parts: `< 2^-102·h`), a second
+//!   Fast2Sum. Error `RHO_SSE2·(zh + qh) + 2^-102·h`: `<= 2^-61.47·h`.
+//! * sinh, `2^-5 <= a < 23`: `X = true`, the same with `zh − qh`; the kernels' errors reach the
+//!   difference multiplied by `(e^a + e^-a)/(e^a − e^-a) = coth a <= coth 2^-5 = 32.0104`:
+//!   `2^-67.59·32.0104 = 2^-62.585`, plus the low sum's `2^-100` (`dh >= 0.06·zh`).
+//! * sinh, `2^-60 <= a < 2^-5`: `a + a³·P(a²)`, `P` Taylor's `1/3! ..= 1/9!` (omitted `a^10/11!·1.01
+//!   < 2^-75.2` relative); the tail `(a·s)·P` with `s = RN(a²)` within `4.01u` of itself and at
+//!   most `a²/6·1.002 <= 2^-12.58·a`: `2^-63.58·a`; Fast2Sum`(a, tail)` exact.
+//! * cosh and sinh, `23 <= a < 708`: `e^a/2·(1 ± e^-2a)`, exp's quick parts halved: `RHO_SSE2 +
+//!   e^-46 = 2^-61.43` (FMA: `2^-66.2`).
+//! * tanh, `2^-60 <= a <= 22`: `N/(N + 2)` with `N = nh + nl = e^(2a) − 1` from
+//!   `expm1_quick_parts` (relative error `ε <= 2^-62.04`, its proven figure). `D = 2 + N` by 2Sum
+//!   (exact) with `dl = RN(de + nl)` (`< 2^-105·D`). As `D` follows `N` exactly, `N/D`'s
+//!   relative error is `ε·2/(N + 2) <= ε` (no doubling). One division: `inv = RN(1/dh)`, `q1 =
+//!   RN(nh·inv)` (within `3u` of `N/D`, so `nh − RN(q1·dh)` is exact by Sterbenz), the residual
+//!   `res = N − q1·D` with `q1·dh` exact (`$lox`), `q2 = RN(res·inv)`: the remaining error below
+//!   `2^-100·q`. Total `<= 2^-62.03`.
+//! * Every bound above is below `RHO_M1`; the test needs the result neither a double nor a
+//!   midpoint, true for every double `a != 0` (Lindemann–Weierstrass: `e^a` is transcendental).
+//!   Results stay normal (`h >= 2^-61`) and finite (`sc <= 2^1020`). Outside these domains
+//!   (`a < 2^-60`, NaN, infinities, `a >= 708`, tanh above 22) tier 2 and then the accurate path
+//!   answer exactly as before, so the overflow thresholds and the saturation of tanh are theirs.
+//!   No spurious flag: every product of the small paths stays normal (`a >= 2^-60`).
+//! * Targets: FP operations per call (both exponentials, the sum, the test) cosh about 45 (FMA)
+//!   and 55 (SSE2), sinh 47 / 75 (Dekker's products), tanh about 40 / 55 plus one division;
+//!   critical path the exp kernel's 16 (FMA) plus the Fast2Sums and the test (about 22); the
+//!   two sides run in parallel.
+//!
 //! **Design targets** (D-10.51): instructions per call with the fallback included FMA <= 80,
 //! SSE2 <= 95; FP operations 31 (FMA) and 39 (SSE2) including the two compares; critical path
 //! 16 dependent FP operations plus the compare (FMA: `t, kd, r1, rh, r2, pc, inner, q, rl + q, w,
@@ -186,6 +230,12 @@ const C9: f64 = 1.0 / 362_880.0;
 const MASK27: u64 = !((1 << 27) - 1);
 /// `bits(2^-5)`: below it (on `|x|`'s bits) the series region.
 const SMALL_M1: u64 = 0x3fa0_0000_0000_0000;
+/// `bits(2^-5)`: sinh's series below it (module doc, "cosh, sinh, tanh").
+const SINH_POLY: u64 = 0x3fa0_0000_0000_0000;
+/// `bits(23)`: from it on, `cosh = sinh = e^a/2` within `e^-46 < 2^-66.3` relative.
+const HYP_BIG: u64 = 0x4037_0000_0000_0000;
+/// `bits(22) − bits(2^-60)`: tanh's quick domain `[2^-60, 22]` as one unsigned compare.
+const TANH_SPAN: u64 = 0x4036_0000_0000_0000 - LO_BITS;
 /// `bits(−37)`: a negative `x` with bits at or above it is `x <= −37` (tier 2's limit).
 const NEG37_BITS: u64 = 0xc042_8000_0000_0000;
 /// expm1's stated bound (both builds, both regions; module doc "expm1") and its [`super::near`]
@@ -209,7 +259,8 @@ fn no_lo(_th: f64, _rh: f64, _u: f64) -> f64 {
 /// `a·b − p` exactly for `p = RN(a·b)` without FMA (Dekker's product, Veltkamp's splitting at 27
 /// bits; Dekker 1971): expm1's SSE2 build keeps `th·rh`'s low part, which its `−1` would otherwise
 /// magnify (module doc "expm1"). `|a| < 2`, `|b| < 2^-8`: no overflow, and the parts' products
-/// stay normal or 0 for the `rh` that reach it.
+/// stay normal or 0 for the `rh` that reach it. tanh's residual uses it with `2^-61 <= a < 1`,
+/// `2 <= b < 2^64`: the split's `b·(2^27 + 1)` and every partial product stay finite and normal.
 #[inline(always)]
 fn dekker_lo(a: f64, b: f64, p: f64) -> f64 {
     const SPLIT: f64 = 134_217_729.0;
@@ -298,6 +349,15 @@ fn kernel<const X: bool>(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let pb = $ma(rh, C5, C4);
     let pc = $ma(r2, C6, pb);
     let q = r2 * $ma(r2, pc, pa);
+    let (zh, zl) = side::<X>(kb, rh, rl, q);
+    (zh, zl, f64::from_bits((kb >> 7) << 52))
+}
+
+/// The kernel from `T_j` on: `T_j·(1 + rh + rl + q)` as `(zh, zl)` for `j = kb mod 128` and
+/// `q ≈ e^rh − 1 − rh` (module doc, from `y = T·(1 + r + q)`).
+$(#[$a])*
+$(#[$i])*
+fn side<const X: bool>(kb: u64, rh: f64, rl: f64, q: f64) -> (f64, f64) {
     let j = usize::try_from(kb & 127).unwrap_or(0);
     let th = f64::from_bits(t::EXP2_J128[j][0]);
     let tl = f64::from_bits(t::EXP2_J128[j][1]);
@@ -307,8 +367,160 @@ fn kernel<const X: bool>(kb: u64, rh: f64, rl: f64) -> (f64, f64, f64) {
     let w = $ma(th, rl + q, tl * (1.0 + rh));
     let yl = (e1 + if X { $lox(th, rh, u) } else { $lo(th, rh, u) }) + w;
     let zh = yh + yl;
-    let zl = (yh - zh) + yl;
-    (zh, zl, f64::from_bits((kb >> 7) << 52))
+    (zh, (yh - zh) + yl)
+}
+
+/// `e^a` and `e^-a` from one reduction, for `2^-60 <= a < 23` (module doc, "cosh, sinh, tanh"):
+/// `(zh, zl, qh, ql, kb)` with `e^a = (zh + zl)·2^m` and `e^-a = (qh + ql)·2^m`, `kb = k +
+/// 1023·128` (so `m = (kb >> 7) − 1023`). `e^-a` is the kernel at `(−k, −r)`: the polynomial's
+/// even and odd parts `E`, `O` are shared (`q± = E ± O`), and its scaling by `2^(m' − m) >=
+/// 2^-67` is exact.
+$(#[$a])*
+$(#[$i])*
+fn exp_pm<const X: bool>(a: f64) -> (f64, f64, f64, f64, u64) {
+    let tt = $ma(a, INV, SHIFT);
+    let kd = tt - SHIFT;
+    let kb = tt.to_bits().wrapping_sub(KBIAS);
+    let r1 = $ma(kd, NL1, a);
+    let rh = $ma(kd, NL2, r1);
+    let rl = $ma(kd, NL2, r1 - rh);
+    let r2 = rh * rh;
+    let e = r2 * $ma(r2, $ma(r2, C6, C4), 0.5);
+    let o = (r2 * rh) * $ma(r2, C5, C3);
+    let (zh, zl) = side::<X>(kb, rh, rl, e + o);
+    let kn = 2 * 1023 * 128 - kb;
+    let (wh, wl) = side::<X>(kn, -rh, -rl, e - o);
+    let s = f64::from_bits(((kn >> 7) + 1023 - (kb >> 7)) << 52);
+    (zh, zl, wh * s, wl * s, kb)
+}
+
+/// `sinh|x| = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (module
+/// doc, "cosh, sinh, tanh"): the odd series below `2^-5`, `e^a/2` from `23` on, else
+/// `(e^a − e^-a)/2` from [`exp_pm`].
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn sinh_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+    let b = x.to_bits() & ABS;
+    if b.wrapping_sub(LO_BITS) >= SPAN {
+        return None;
+    }
+    let a = f64::from_bits(b);
+    if b < SINH_POLY {
+        let s = a * a;
+        let p = $ma(s, $ma(s, $ma(s, C9, C7), C5), C3);
+        let tl = (a * s) * p;
+        let h = a + tl;
+        return Some((h, (a - h) + tl, 1.0));
+    }
+    if b >= HYP_BIG {
+        let (zh, zl, sc) = exp_quick_parts(a)?;
+        return Some((zh, zl, 0.5 * sc));
+    }
+    let (zh, zl, qh, ql, kb) = exp_pm::<true>(a);
+    let dh = zh - qh;
+    let lo = (zl - ql) + ((zh - dh) - qh);
+    let h = dh + lo;
+    Some((h, (dh - h) + lo, f64::from_bits(((kb >> 7) - 1) << 52)))
+}
+
+/// `cosh x = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (as
+/// [`sinh_quick_parts`], with no series: `e^a + e^-a` does not cancel).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn cosh_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
+    let b = x.to_bits() & ABS;
+    if b.wrapping_sub(LO_BITS) >= SPAN {
+        return None;
+    }
+    let a = f64::from_bits(b);
+    if b >= HYP_BIG {
+        let (zh, zl, sc) = exp_quick_parts(a)?;
+        return Some((zh, zl, 0.5 * sc));
+    }
+    let (zh, zl, qh, ql, kb) = exp_pm::<false>(a);
+    let dh = zh + qh;
+    let lo = (zl + ql) + ((zh - dh) + qh);
+    let h = dh + lo;
+    Some((h, (dh - h) + lo, f64::from_bits(((kb >> 7) - 1) << 52)))
+}
+
+/// `tanh|x| = h + l` within `RHO_M1·|h|` for `2^-60 <= |x| <= 22`, else `None` (module doc,
+/// "cosh, sinh, tanh"): `N/(N + 2)` with `N = e^(2a) − 1` from [`expm1_quick_parts`], one
+/// division and one correction.
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn tanh_quick_parts(x: f64) -> Option<(f64, f64)> {
+    let b = x.to_bits() & ABS;
+    if b.wrapping_sub(LO_BITS) > TANH_SPAN {
+        return None;
+    }
+    let (nh, nl) = expm1_quick_parts(2.0 * f64::from_bits(b))?;
+    let dh = nh + 2.0;
+    let bb = dh - nh;
+    let dl = ((nh - (dh - bb)) + (2.0 - bb)) + nl;
+    let inv = 1.0 / dh;
+    let q1 = nh * inv;
+    let p = q1 * dh;
+    let res = (((nh - p) - $lox(q1, dh, p)) + nl) - q1 * dl;
+    let q2 = res * inv;
+    let h = q1 + q2;
+    Some((h, (q1 - h) + q2))
+}
+
+/// `sinh`'s in-place fast path (as [`expm1_tiered`]): the quick phase, then on a miss or outside
+/// its domain tier 2 (`fast64::sinh_nearest` in the same build, out of line).
+$(#[$a])*
+$(#[$i])*
+pub fn sinh_tiered(x: f64) -> Option<f64> {
+    let Some((h, l, sc)) = sinh_quick_parts(x) else { return tier2_sinh(x) };
+    let w = l * C_M1;
+    if h + w == h && w != 0.0 {
+        return Some(f64::from_bits((h * sc).to_bits() | (x.to_bits() & !ABS)));
+    }
+    tier2_sinh(x)
+}
+
+/// `cosh`'s in-place fast path (as [`sinh_tiered`]).
+$(#[$a])*
+$(#[$i])*
+pub fn cosh_tiered(x: f64) -> Option<f64> {
+    let Some((h, l, sc)) = cosh_quick_parts(x) else { return tier2_cosh(x) };
+    let w = l * C_M1;
+    if h + w == h && w != 0.0 {
+        return Some(h * sc);
+    }
+    tier2_cosh(x)
+}
+
+/// `tanh`'s in-place fast path (as [`sinh_tiered`]).
+$(#[$a])*
+$(#[$i])*
+pub fn tanh_tiered(x: f64) -> Option<f64> {
+    let Some((h, l)) = tanh_quick_parts(x) else { return tier2_tanh(x) };
+    let w = l * C_M1;
+    if h + w == h && w != 0.0 {
+        return Some(f64::from_bits(h.to_bits() | (x.to_bits() & !ABS)));
+    }
+    tier2_tanh(x)
+}
+
+/// The quick phase of `sinh`, `cosh` or `tanh` alone (`f` 0, 1, 2): the correctly rounded result,
+/// or `None` when the phase declines (tests only).
+$(#[$a])*
+$(#[$i])*
+#[doc(hidden)] // public for the boundary's FMA-build tests only
+pub fn hyp_quick(f: u8, x: f64) -> Option<f64> {
+    let sign = x.to_bits() & !ABS;
+    let (h, l, sc, sign) = match f {
+        0 => { let (h, l, sc) = sinh_quick_parts(x)?; (h, l, sc, sign) }
+        1 => { let (h, l, sc) = cosh_quick_parts(x)?; (h, l, sc, 0) }
+        _ => { let (h, l) = tanh_quick_parts(x)?; (h, l, 1.0, sign) }
+    };
+    let w = l * C_M1;
+    if h + w == h && w != 0.0 { Some(f64::from_bits((h * sc).to_bits() | sign)) } else { None }
 }
 
 /// The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else
@@ -463,6 +675,27 @@ fn tier2_expm1(x: f64) -> Option<f64> {
     super::expm1_nearest(x)
 }
 
+/// Tier 2 of [`sinh_tiered`] (and its answer outside the quick domain), out of line and cold.
+#[cold]
+#[inline(never)]
+fn tier2_sinh(x: f64) -> Option<f64> {
+    super::sinh_nearest(x)
+}
+
+/// Tier 2 of [`cosh_tiered`] (as [`tier2_sinh`]).
+#[cold]
+#[inline(never)]
+fn tier2_cosh(x: f64) -> Option<f64> {
+    super::cosh_nearest(x)
+}
+
+/// Tier 2 of [`tanh_tiered`] (as [`tier2_sinh`]).
+#[cold]
+#[inline(never)]
+fn tier2_tanh(x: f64) -> Option<f64> {
+    super::tanh_nearest(x)
+}
+
 /// Tier 2 of [`exp2_tiered`] (and its answer outside the quick domain: NaN, infinities, integers),
 /// out of line and cold.
 #[cold]
@@ -495,7 +728,8 @@ quick!(; #[inline(always)]; ma; no_lo; dekker_lo; C_SSE2; C_FAM_SSE2);
 pub mod fused {
     use super::{
         t, ABS, C3, C4, C5, C6, C7, C8, C9, C_FAM_FMA, C_FMA, C_M1, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, MASK27, NE0, NE1, NE2,
-        NEG37_BITS, NL1, NL2, ONE_BITS, SHIFT, SMALL_M1, SPAN, SPAN10, SPAN2, SPAN_EXACT10,
+        NEG37_BITS, NL1, NL2, ONE_BITS, SHIFT, SMALL_M1, SPAN, SPAN10, SPAN2, SPAN_EXACT10, SINH_POLY, HYP_BIG,
+        TANH_SPAN,
     };
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
@@ -548,6 +782,31 @@ pub mod fused {
     #[inline(never)]
     fn tier2_expm1(x: f64) -> Option<f64> {
         crate::fast64::fused::expm1_nearest(x)
+    }
+
+    /// Tier 2 of [`sinh_tiered`] in the FMA build (`fast64::fused::sinh_nearest`), out of line
+    /// and cold.
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_sinh(x: f64) -> Option<f64> {
+        crate::fast64::fused::sinh_nearest(x)
+    }
+
+    /// Tier 2 of [`cosh_tiered`] in the FMA build (as [`tier2_sinh`]).
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_cosh(x: f64) -> Option<f64> {
+        crate::fast64::fused::cosh_nearest(x)
+    }
+
+    /// Tier 2 of [`tanh_tiered`] in the FMA build (as [`tier2_sinh`]).
+    #[target_feature(enable = "fma")]
+    #[cold]
+    #[inline(never)]
+    fn tier2_tanh(x: f64) -> Option<f64> {
+        crate::fast64::fused::tanh_nearest(x)
     }
 
     quick!(
