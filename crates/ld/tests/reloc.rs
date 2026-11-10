@@ -660,8 +660,8 @@ fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
     assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
 }
 
-/// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs,
-/// kernel-started and as `ld.so PROGRAM`. `link` reads it through the image reader, whose span list
+/// s27_1_c_1, D-27.15, D-27.18: a program with dependencies and 300 `PT_LOAD`s (no count bound) runs
+/// as `ld.so PROGRAM`. `link` reads it through the image reader, whose span list
 /// holds one span per `PT_LOAD` (the `-nostdlib` 300-segment program of the map tests never links).
 #[test]
 fn reloc_ldso_program_with_many_loads() {
@@ -675,8 +675,8 @@ fn reloc_ldso_program_with_many_loads() {
     std::fs::write(&tmp, &file).unwrap();
     std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
-    let (code, sig, err) = run(&mut Command::new(&q));
-    assert_eq!((code, sig), (Some(0), None), "kernel-started program with 300 PT_LOADs: check number {code:?} failed; stderr: {err}");
+    // As `ld.so PROGRAM` only: the kernel refuses (ENOEXEC) a program header table larger than a page,
+    // so a kernel-started program has at most 73 headers; `link` and the reader are the same code.
     let (code, sig, err) = run(Command::new(&ld).arg(&q));
     assert_eq!((code, sig), (Some(0), None), "ld.so PROGRAM with 300 PT_LOADs: check number {code:?} failed; stderr: {err}");
     std::fs::remove_dir_all(&d).ok();
