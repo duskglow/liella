@@ -90,7 +90,7 @@ fn ask(fds: [i32; 2]) -> [usize; ASKED] {
         outside(lc::localeconv() as usize),
         netdb::h_errno() as usize,
         outside(ns::__h_errno_location() as usize),
-        th::pthread_self() as usize,
+        th::pthread_self().0 as usize,
         (wrote as usize) << 8 | read as usize,
         usize::from(byte[0]),
     ]
