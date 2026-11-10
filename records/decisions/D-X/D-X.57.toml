@@ -1,0 +1,8 @@
+id = "D-X.57"
+section = "x"
+status = "active"
+story = "XTASK-AFFECTED-RECORDS"
+date = "2026-11-10"
+body = '''
+**`cargo xtask affected` maps `records/**` and `layout/contracts.tsv` to their readers instead of FULL.** A file under `records/` (a decision, compat or saturation record, a view's head or tail, `records/views.toml`) selects the xtask unit tests (the records module's own tests and those of every other reader) and `cargo xtask static`, whose steps are every reader of the records: `records` (check), `records-gen` (the views), `register` (the saturation rows), `compat-ids` and `trace` (the id sets) and `layout` (rule d: a manifest change needs a decision change); plus any test target or crate whose code names the file as a path (the docs rule, `path_readers`). It needs no products. `layout/contracts.tsv` selects `cargo xtask layout-check` on fresh products, `cargo xtask static` and the xtask unit tests. Before this, either path was unknown and escalated the branch to FULL (escalations #4158, #4147, #4130). Unit tests `records_select_the_xtask_tests_and_static_not_full` and `the_layout_manifest_selects_layout_check_not_full`; plants in `handoff/XTASK-AFFECTED-RECORDS-plants.txt`.
+'''
