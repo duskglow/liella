@@ -17,6 +17,7 @@ pub mod map;
 pub mod search;
 pub mod cache;
 pub mod reloc;
+pub mod init;
 pub mod symbols;
 pub mod tls;
 pub mod namespaces;

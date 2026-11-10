@@ -128,6 +128,22 @@ pub mod dt {
     pub const RELR: u64 = 36;
     /// Size of one RELR entry.
     pub const RELRENT: u64 = 37;
+    /// Address of the initialisation function.
+    pub const INIT: u64 = 12;
+    /// Address of the termination function.
+    pub const FINI: u64 = 13;
+    /// Address of the array of initialisation functions.
+    pub const INIT_ARRAY: u64 = 25;
+    /// Address of the array of termination functions.
+    pub const FINI_ARRAY: u64 = 26;
+    /// Size in bytes of `DT_INIT_ARRAY`.
+    pub const INIT_ARRAYSZ: u64 = 27;
+    /// Size in bytes of `DT_FINI_ARRAY`.
+    pub const FINI_ARRAYSZ: u64 = 28;
+    /// Address of the array of pre-initialisation functions (the program's only).
+    pub const PREINIT_ARRAY: u64 = 32;
+    /// Size in bytes of `DT_PREINIT_ARRAY`.
+    pub const PREINIT_ARRAYSZ: u64 = 33;
     /// Address of the GNU hash table.
     pub const GNU_HASH: u64 = 0x6fff_fef5;
     /// Address of the symbol version table (`versym`).
