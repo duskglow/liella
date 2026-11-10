@@ -26,7 +26,9 @@
 //! Each of these is CHECKED (not forbidden): it is fine when its destination is "owned", i.e. written earlier on
 //! the same path (by anything: once the register holds a value this call made, the merge depends on this call only),
 //! an argument register of the export, or one of the instruction's own sources (`sqrtsd %xmm0,%xmm0`: the old value
-//! is a true input). The VEX forms (`vcvtss2sd a,b,c`, `vmovsd a,b,c`, `vpinsrd i,r,b,c`, ...) merge from their
+//! is a true input; `cvtss2sd %xmm3,%xmm3`, the boundary's in-place widening (D-10.79), passes even when `%xmm3` is not
+//! owned, since the merge then depends on the operand only, while `cvtss2sd %xmm3,%xmm4` into an unowned `%xmm4` is
+//! reported). The VEX forms (`vcvtss2sd a,b,c`, `vmovsd a,b,c`, `vpinsrd i,r,b,c`, ...) merge from their
 //! first source `b` instead of the destination; they are checked the same way on `b` (fine when `b` is owned, which
 //! the usual `vcvtss2sd %xmm0,%xmm0,%xmm1` is). Any other instruction that names an `xmm`/`ymm`/`zmm` register last
 //! (AT&T: the destination) makes that register owned; compares (`ucomis*`, `comis*`, `ptest`, `vtestp*`) write no
@@ -503,6 +505,16 @@ mod tests {
         let f = walk(&dis(&["movd   %xmm0,%eax", "cvtss2sd %xmm0,%xmm1", "mulsd  %xmm1,%xmm0", "ret"]), 0x1000, 1);
         assert_eq!(f.len(), 1, "{f:?}");
         assert_eq!(f[0].0, 0x1004);
+    }
+
+    /// D-10.79: a conversion whose destination is its source (`cvtss2sd %xmm3,%xmm3`, the boundary's in-place
+    /// widening) merges the operand's own register: dependency-broken even with nothing owned. The same
+    /// conversion into another unowned register still waits for that register's last writer.
+    #[test]
+    fn in_place_conversion_passes_and_another_destination_does_not() {
+        assert!(walk(&dis(&["cvtss2sd %xmm3,%xmm3", "ret"]), 0x1000, 0).is_empty());
+        let f = walk(&dis(&["cvtss2sd %xmm3,%xmm4", "ret"]), 0x1000, 0);
+        assert_eq!(f.iter().map(|f| f.0).collect::<Vec<_>>(), vec![0x1000]);
     }
 
     #[test]
