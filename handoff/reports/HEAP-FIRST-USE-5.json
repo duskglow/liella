@@ -1,0 +1,16 @@
+{"task": "HEAP-FIRST-USE-5", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: release red fixed (regen.sh traced with the caller's LC_CTYPE; clean env, list regenerated on Skylake-SP, release 14/14); fast products red by 1 fault on the time path (days_from_civil64 straddles a 64 KiB window)",
+ "branch": "task/heap-first-use-5", "head": null,
+ "gate": {"affected": "not run (head red on hot_text_products fast); hot_text_products release 14/14 on mei and keke, fast 12/14", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "regen.sh traced probes with the caller's environment; ssh forwards LC_CTYPE=C.UTF-8 into jobs, so the locale keys depended on the session (one cause of #4291, HOTTEXT-REGEN-HOSTS); fixed here in bbce0fc66",
+   "the time-path 0-fault bound depends on where a 64 KiB window boundary falls in the hot group; hfu4-gate2 (fast, keke list) was red on localtime_r for the same reason",
+   "a one-page text growth moves .data so global_locale::C crosses a 64 KiB fault-around window (+1 fault in every short program); within bounds now",
+   "hfu4-plants2: topology-decision-inlined and hot-list-drops-memchr-rest WARN-NO-MSG (failed at the plant's cargo xtask so step)"],
+ "refused": [],
+ "improvement": "regen.sh should never inherit the caller's locale variables; a window-aware hot-text layout would stop each list change from sliding a 0-fault path across a 64 KiB boundary",
+ "next_step": "window-aware placement of the time-path keys in xtask/src/hottext.rs (no straddle of a 64 KiB window), then gate + plants",
+ "report_file": "handoff/HEAP-FIRST-USE-5.md",
+ "jobs": ["hfu5-step0", "hfu5-head", "mei:hfu5-regen-skx2"]}
