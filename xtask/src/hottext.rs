@@ -1360,4 +1360,55 @@ mod tests {
         assert!(check_renames(&members, &ren(&[(".text.x", ".text.b")])).unwrap_err().contains(".text.x still there"));
         assert!(check_renames(&members, &ren(&[(".text.y", ".text.z")])).unwrap_err().contains(".text.z missing"));
     }
+
+    /// The first position after the start-up tier, and the start-up keys of `skeys` listed after it.
+    fn late_startup_keys(list: &str, skeys: &str) -> (usize, Vec<String>) {
+        let entries = parse_list(list).unwrap();
+        let startup: BTreeSet<String> = parse_list(skeys).unwrap().into_iter().map(|e| e.key).collect();
+        let head = entries.iter().take_while(|e| e.tier == "startup").count();
+        let late = entries[head..].iter().filter(|e| e.tier == "startup" || startup.contains(&e.key)).map(|e| e.key.clone()).collect();
+        (head, late)
+    }
+
+    #[test]
+    fn startup_text_keys_lead_the_hot_text_list() {
+        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build layout, D-X.63 / D-X.49): every
+        // startup-text.keys key the list holds is in the start-up tier, and that tier is the head
+        // of the list, so no aligned cluster can split the start-up text across extra windows.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/libc-so");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let (head, late) = late_startup_keys(&read("hot-text.list"), &read("startup-text.keys"));
+        assert!(head > 0, "hot-text.list has no start-up tier at its head");
+        assert!(late.is_empty(), "start-up keys after list position {head} (rerun tools/hottext/regen.sh): {late:?}");
+    }
+
+    #[test]
+    fn merge_moves_startup_text_keys_to_the_head() {
+        // LAYOUT-TEXT-PIN-5, ruling #4417 (no spec clause: build tooling): merge.py --startup-head
+        // gives the listed keys tier startup and puts the start-up tier first, each part in its
+        // merged order; without the option the trace order stands.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let tmp = root.join(format!("target/xtask-merge-head-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("old"), "").unwrap();
+        std::fs::write(tmp.join("new"), "_start1\tstartup\na\tstdio\nvf\tstrings\nb\tstrings\ngr\textra\n").unwrap();
+        std::fs::write(tmp.join("skeys"), "# c\nvf\tstartup\tfast\ngr\tstartup\tfast,release\nnot_listed\tstartup\tfast\n").unwrap();
+        let run = |head: bool| {
+            let mut c = std::process::Command::new("python3");
+            c.arg("-I").arg(root.join("tools/hottext/merge.py")).arg(tmp.join("old")).arg(tmp.join("new")).arg("fast");
+            if head {
+                c.arg("--startup-head").arg(tmp.join("skeys"));
+            }
+            let o = c.output().expect("python3 runs tools/hottext/merge.py");
+            assert!(o.status.success(), "merge.py: {}", String::from_utf8_lossy(&o.stderr));
+            String::from_utf8(o.stdout).unwrap()
+        };
+        let (plain, headed) = (run(false), run(true));
+        std::fs::remove_dir_all(&tmp).unwrap();
+        assert_eq!(plain, "_start1\tstartup\tfast\na\tstdio\tfast\nvf\tstrings\tfast\nb\tstrings\tfast\ngr\textra\tfast\n");
+        assert_eq!(headed, "_start1\tstartup\tfast\nvf\tstartup\tfast\ngr\tstartup\tfast\na\tstdio\tfast\nb\tstrings\tfast\n");
+        let skeys = "vf\tstartup\tfast\n";
+        assert_eq!(late_startup_keys(&headed, skeys), (3, vec![]));
+        assert_eq!(late_startup_keys(&plain, skeys), (1, vec!["vf".to_string()]));
+    }
 }
