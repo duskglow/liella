@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "Static TLS of initially loaded objects: Arch TLS rows, liella_ld::tls layout (64 KiB surplus), DTPMOD/DTPOFF/TPOFF, final thread block with canary/guard/dtv, __tls_get_addr exported; LE/IE/GD/LD matrix green; gate, plants and counts pending",
  "branch": "task/dl-tls-static",
- "head": "see git (commit after this file)",
+ "head": "ec259dd83",
  "gate": {
   "affected": "pending (dl-tls-static-gate2); targeted t2: tls 4/4, reloc 8/8, ldso_run, elf_* green",
   "peak": null
