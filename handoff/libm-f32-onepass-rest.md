@@ -20,6 +20,9 @@ Math work is finished (owner ruling #4424); powf moved to LIBM-F32-POWF and sinf
   ruling #4357 (repair only dead keys, keep the order), the list stays unchanged: this branch has no dead key to repair.
 * The dead keys come from combining branches. Repairing them needs that combined tree, and this story may not merge.
   See RULING NEEDED in handoff/reports/LIBM-F32-ONEPASS-REST-5.json.
+* docs/codemap/symbols.tsv was restored to the merge base (train-owned view, D-X.66 on next; the hand-back check
+  refuses an edited view). Static on the branch alone (older codemap rule) now reports it stale. Static merged with
+  next passes. Gates: FULL mei:libm-f32-onepass-rest-5-gate rc 0 on 276e7c219 (11426 passed, conformance 126).
 
 ## Done (all runs)
 * Runs 1-2: exp10f, logf, log2f, log10f on the one-pass path (`fast32::exp10_onepass_any`, `fast32::log_onepass`),
