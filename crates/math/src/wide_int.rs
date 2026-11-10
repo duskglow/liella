@@ -60,6 +60,8 @@
     clippy::unreadable_literal
 )] // fixed-point words, exponents and table indices of bounded range (each noted where it is formed)
 
+pub(crate) mod arc;
+
 use crate::coeffs::tables as t;
 use crate::float::{Float, Kind, Num};
 use crate::status::{Flags, Rounding, Status};
@@ -540,7 +542,7 @@ mod tests {
     /// `frac(2^e·2/π)` gives (Muller, Elementary Functions, 3rd ed. 2016, ch. 11): the last
     /// convergent denominator below 2^62 (as far as the 127-bit expansion's convergents are the
     /// number's own).
-    fn near_multiple(e: i32) -> Option<Num> {
+    pub(super) fn near_multiple(e: i32) -> Option<Num> {
         let (mut num, mut den) = (alpha(e), 1u128 << 127);
         let (mut q2, mut q1) = (1u128, 0u128);
         let mut best = None;
