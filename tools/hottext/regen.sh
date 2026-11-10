@@ -51,7 +51,10 @@ trace() { # <tier> <LANG> <program> <args...>
     local tier=$1 lang=$2; shift 2
     n=$((n + 1))
     printf '%s=%s\n' "$tier" "$work/names.$n" >> "$work/tagged"
-    LANG=$lang LC_ALL= HOT_TEXT_OUT=$work/names.$n HOT_TEXT_STDIN=${stdin:-$work/in.txt} HOT_TEXT_FOLLOW_FORK=${follow:-} timeout 900 \
+    # HEAP-FIRST-USE-5: a clean environment with LANG only, as hot_text_products runs the probes; an
+    # inherited LC_CTYPE (ssh forwards LC_*, often C.UTF-8) made setlocale(LC_ALL, "") skip the locale
+    # file's LC_CTYPE path, and the list lost its keys.
+    env -i PATH="$PATH" HOME="$HOME" LANG="$lang" HOT_TEXT_OUT="$work/names.$n" HOT_TEXT_STDIN="${stdin:-$work/in.txt}" HOT_TEXT_FOLLOW_FORK="${follow:-}" timeout 900 \
         gdb -nx -batch -x "$here/trace_gdb.py" --args "$@" > "$work/gdb.$n.log" 2>&1 || { tail -5 "$work/gdb.$n.log"; exit 1; }
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
@@ -101,7 +104,7 @@ done
 # crates/libc-so/startup-text.keys; the layout check of layout/contracts.tsv counts their 64 KiB windows.
 cc -std=gnu17 -O1 -static -nostdlib -fno-builtin "$T/target/liella/liella-crt1.o" "$T/crates/core/tests/oracle/page_faults.c" \
     "$T/target/liella/libc.a" -lgcc -o page_faults
-LANG=C LC_ALL= HOT_TEXT_OUT=$work/startup.names HOT_TEXT_STDIN=$work/in.txt HOT_TEXT_FOLLOW_FORK= timeout 900 \
+env -i PATH="$PATH" HOME="$HOME" LANG=C HOT_TEXT_OUT="$work/startup.names" HOT_TEXT_STDIN="$work/in.txt" HOT_TEXT_FOLLOW_FORK= timeout 900 \
     gdb -nx -batch -x "$here/trace_gdb.py" --args ./page_faults true > "$work/gdb.startup.log" 2>&1 || { tail -5 "$work/gdb.startup.log"; exit 1; }
 python3 "$here/keys.py" --tagged "startup=$work/startup.names" > "$work/startup.keys"
 skeys=$here/../../crates/libc-so/startup-text.keys
