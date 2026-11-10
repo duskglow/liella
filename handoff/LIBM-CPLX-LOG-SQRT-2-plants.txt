@@ -5,3 +5,10 @@ near-always | crates/math/src/complex_fast.rs | lit:if let Some(v) = fast64::nea
 csqrt-cut-sign | crates/math/src/complex_fast.rs | lit:Some([re, if y < 0.0 { im.neg() } else { im }]) ==> Some([re, if y > 0.0 { im.neg() } else { im }]) | cargo test -p liella-math --release --lib complex_fast::ls_tests | msg:wrong side of the cut|csqrt quick tier differs
 exact-guard | crates/math/src/complex_fast.rs | lit:if dd::abs(p.lo) <= eps { ==> if dd::abs(p.lo) < 0.0 { | cargo test -p liella-math --release --lib complex_fast::ls_tests | msg:exact root of .* answered|csqrt quick tier differs
 csqrtf-cut-sign | crates/math/src/fast32/clog_csqrt.rs | lit:Some((re, if y < 0.0 { -im } else { im })) ==> Some((re, if y > 0.0 { -im } else { im })) | cargo test -p liella-math --release --lib complex_fast::ls_tests | msg:csqrtf quick tier differs
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# near-one-path: CAUGHT, caught by liella_math complex_fast::ls_tests::clog_quick_tier_answers_near_the_unit_circle
+# csqrt-scale: CAUGHT, caught by liella_math complex_fast::ls_tests::clog_csqrt_quick_tiers_match_the_384_bit_route_in_every_mode
+# near-always: CAUGHT, caught by liella_math complex_fast::ls_tests::rounding_test_declines_an_interval_holding_a_midpoint
+# csqrt-cut-sign: CAUGHT, caught by liella_math complex_fast::ls_tests::clog_csqrt_quick_tiers_match_the_384_bit_route_in_every_mode
+# exact-guard: CAUGHT, caught by liella_math complex_fast::ls_tests::csqrt_quick_tiers_decline_exact_roots
+# csqrtf-cut-sign: CAUGHT, caught by liella_math complex_fast::ls_tests::clog_csqrt_quick_tiers_match_the_384_bit_route_in_every_mode
