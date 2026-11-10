@@ -1,0 +1,12 @@
+{"task": "STRCASECMP-N100-REGRESS", "model": "opus", "tokens": null,
+ "result": "Cause: MACHINE-JCC-PAD (8e0caad2c, D-4.67) prefix padding (4 cs prefixes per loop-head instruction) slows the N100 E-cores; prefix size 3 (D-4.70) times strcasecmp_c_256 1.549 -> 0.830x glibc on N100, IVB equal or better; strncasecmp_c_64 N100 1.149 -> 1.200 (open)",
+ "branch": "task/strcasecmp-n100-regress", "head": "04f072e1c",
+ "gate": {"affected": "records+clippy+static green; affected escalated to FULL, running at hand-back (keke:strcasecmp-n100-regress-gate2)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["cargo xtask affected escalates to FULL for a crates/boundary/jcc_pad.rs change (build flags of every product)", "strcasecmp_c_256_pageend stays 1.23x (N100) / 1.82x (IVB): BENCH-CASECMP-ALIGN open item 1, not this regression", "the layout contract JCC-HOT-ASM refused the unpadded 'none' stage variant (correct); stage job rc 1 is evidence only"],
+ "refused": [],
+ "jobs": ["keke:strcasecmp-n100-regress-gate2", "nozomi:strcasecmp-n100-regress-time-nozomi", "kotori:strcasecmp-n100-regress-time-kotori"],
+ "improvement": "A padding/layout story must time every bench whose kernels it pads on the E-core class (MACHINE-JCC-PAD timed memref/hot only); propose a jcc-check bound of <= 3 redundant segment prefixes per instruction",
+ "next_step": "Lay out casecmp_ord_avx2's head/second block so no NOPs land on the strncasecmp_c_64 path; count cbench_memref/cbench_hot p5 vs p3; add plants once the prefix-count check exists; re-time N100",
+ "report_file": "handoff/STRCASECMP-N100-REGRESS.md"}

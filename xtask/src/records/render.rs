@@ -152,7 +152,7 @@ mod tests {
             ("docs/sat/10-ten.md", Some("## 10. Ten\n".into())),
             ("docs/sat/2-two.md", Some("## 2. Two (x)\n".into())),
         ]);
-        gen_cmd(&root, false).expect("gen");
+        gen_cmd(&root, false, true).expect("gen");
         let t = std::fs::read_to_string(root.join("docs/reg.md")).expect("index");
         assert_eq!(t, format!("{GENERATED}\n# Register\n- [2. Two (x)](sat/2-two.md): section 2\n- [10. Ten](sat/10-ten.md): section 10\n"));
     }

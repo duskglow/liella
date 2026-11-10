@@ -114,6 +114,8 @@ if [ $replace = 1 ] || [ ! -f "$skeys" ]; then : > "$work/startup.old"; else gre
 } > "$skeys.tmp"
 mv "$skeys.tmp" "$skeys"
 echo "startup-text: $(wc -l < "$work/startup.keys") keys traced ($profile), $(grep -vc '^#' "$skeys") in $skeys"
+# STARTUP-DATA-WINDOWS (D-X.50): the data objects the same probe touches, into crates/libc-so/startup-data.keys.
+if [ $replace = 1 ]; then bash "$here/startup_data.sh" "$T" --replace; else bash "$here/startup_data.sh" "$T"; fi
 # shellcheck disable=SC2046
 python3 "$here/keys.py" --tagged $(cat "$work/tagged") > "$work/hit.keys"
 # Only names that are function sections of libc.a (drops the programs' own functions).

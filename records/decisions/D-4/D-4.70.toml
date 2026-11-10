@@ -1,0 +1,11 @@
+id = "D-4.70"
+section = "s04"
+spec = "§4.1–4.3"
+ann = "PERF"
+status = "active"
+amends = ["D-4.67"]
+story = "STRCASECMP-N100-REGRESS"
+date = "2026-11-10"
+body = '''
+**JCC padding of the hot machine assembly uses at most 3 prefix bytes per instruction** (STRCASECMP-N100-REGRESS, 2026-11-10; amends D-4.67). `crates/boundary/jcc_pad.rs` passes `-Wa,-malign-branch-prefix-size=3` (was 5); the boundary, the jump kinds and the file list are unchanged, so `jcc-check` still holds and the Skylake-family decoded-uop-cache gain of D-4.67 is kept (the assembler uses NOPs where 3 prefix bytes do not reach). Reason: with 5, the assembler put 4 `cs` prefixes on each of the four head instructions of `liella_machine_casecmp_ord_avx2`'s 64-byte loop (and on two of the page-aligned head test's instructions). Cores that decode every pass (no decoded-uop cache: Alder Lake-N E-cores) ran strcasecmp's 256-byte rows at 1.55x glibc (0.80x in the 11-06 sweep, before D-4.67); the timing sweep of 11-10 found it (the cbench_locale operand pinning landed in the same interval, so the sweep could not name the cause). Timing, cbench_locale, Liella/glibc time per row, same staged tree with only the prefix size changed, booked hosts, interleaved: Alder Lake-N, prefix 5 / 3 / 0: strcasecmp_c_256 1.549 / 0.830 / 0.835, _odd 1.368 / 0.839 / 0.836, _xpage 1.644 / 0.920 / 0.921, _pageend 1.933 / 1.232 / 1.230, strcasecmp_c_16 1.072 / 1.072 / 1.072, strncasecmp_c_64 1.149 / 1.200 / 1.200 (slower: NOPs on its head path; open). Ivy Bridge, prefix 5 / 0: strcasecmp_c_256 0.937 / 0.923, strncasecmp_c_64 1.002 / 0.981, other rows equal. Instructions rise where NOPs land (strcasecmp_c_256 1.122 -> 1.165 of glibc on Alder Lake-N). Raw logs: handoff/STRCASECMP-N100-REGRESS.md.
+'''

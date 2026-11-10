@@ -67,8 +67,23 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// tail) to 0x80a8e0, a page of its own: its first access (NSCACHE+0x25a) is the extra fault. No
 /// utmp code runs: gdb breakpoints on all 246 utmp/users/accounting/wtmp/lastlog functions in the
 /// program, none hit. LOCALE_BOUND 65 -> 68 (rule above: the highest count, 66, plus 2).
-const TRUE_BOUND: u64 = 23;
-const LOCALE_BOUND: u64 = 68;
+/// STARTUP-FAULTS-RESTORE: the bounds only ratchet down now (runs are deterministic, see
+/// HOTTEXT-VARIANCE): each is the count after the fix plus 1, no "highest seen plus 2" slack (the
+/// slack let DL-BOOT-RELOC-7's two start-up text faults through). Counts on the fix's build host:
+/// startup only 17, setlocale + printf 56, tool 59. TRUE_BOUND 23 -> 18, LOCALE_BOUND 68 -> 57,
+/// TOOL_BOUND 71 -> 60. [`init_startup_path_lies_in_the_hot_text_range`] checks the structure.
+/// STARTUP-FAULTS-RESTORE-4 (relay harness, see [`faults`]): every bound holds for both product
+/// profiles and both gate passes (exports interposed or not, which now read the same): one bound per
+/// mode at the larger profile's count plus 1. Haswell-EP host, every run identical, fast / release:
+/// startup only 16 / 15, setlocale + printf 56 / 56, tool 59 / 59, fork child 7 / 6, localtime and
+/// localtime + mktime 19 / 19, float 2 / 4. TRUE_BOUND 18 -> 17, FLOAT_BOUND 6 -> 5.
+/// STARTUP-FAULTS-RESTORE-5 (merged with next, relay harness): Skylake-SP host, both gate passes the
+/// same, fast / release: startup only 17 / 15, setlocale + printf 53 / 54, tool 56 / 57, fork child
+/// 7 / 6, localtime and localtime + mktime 20 / 19, float 2 / 4. LOCALE_BOUND 57 -> 55, TOOL_BOUND
+/// 60 -> 58; TRUE_BOUND, FORK_BOUND, LOCALTIME_BOUND and FLOAT_BOUND stay (each already at most the
+/// larger count plus 1; a bound is never raised).
+const TRUE_BOUND: u64 = 17;
+const LOCALE_BOUND: u64 = 55;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
 /// PERF-READDIR-ENTRY-4 (layout-only delta, owner rule): CI read tool 69 (bound 68) for the readdir
@@ -78,8 +93,8 @@ const LOCALE_BOUND: u64 = 68;
 /// c3424c99 68 / 66 / 19 (CI's longer role path reads one more). The readdir code has no key in the hot
 /// list and adds no startup code; next already sits one under the bound, and the branch adds one fault in
 /// both bases. TOOL_BOUND 68 -> 71 (rule above: the highest count, 69, plus 2); LOCALE_BOUND stays 68
-/// (66 plus 2), TRUE_BOUND stays 23.
-const TOOL_BOUND: u64 = 71;
+/// (66 plus 2), TRUE_BOUND stays 23. STARTUP-FAULTS-RESTORE-5: 60 -> 58 (see TRUE_BOUND).
+const TOOL_BOUND: u64 = 58;
 const RUNS: usize = 5;
 
 fn root() -> PathBuf {
@@ -87,9 +102,15 @@ fn root() -> PathBuf {
 }
 
 fn build(out: &Path) {
+    build_with(out, &[]);
+}
+
+/// [`build`] with extra compiler driver arguments (e.g. `-Wl,-Map=<file>`).
+fn build_with(out: &Path, extra: &[&str]) {
     let r = root();
     let st = Command::new("cc")
         .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
+        .args(extra)
         .arg(r.join("target/liella/liella-crt1.o"))
         .arg(r.join("crates/core/tests/oracle/page_faults.c"))
         .arg(r.join("target/liella/libc.a"))
@@ -132,6 +153,12 @@ fn stage(exe: &Path, run: &Path) {
 /// spans one more page; on Zen 1 host argv[0] or env of 2.5 KiB moved every count by +1. The program
 /// therefore runs from a copy at a fixed-length private path, with a fixed argv[0], cwd and
 /// environment, so the count does not depend on where the tree is checked out.
+/// STARTUP-FAULTS-RESTORE-4: the program runs each mode as `relay <mode>`, in a vfork child of its
+/// own (`page_faults.c`), so the counted process is spawned by the products' vfork + execve, not by
+/// this test process. The gate runs this test twice, the second time with Liella's exports
+/// interposed on the test process; spawned by the test, the counted process ran the test
+/// process's spawn code before exec, and the whole-process modes (startup, setlocale + printf,
+/// tool) read one more fault in that pass (CI, Skylake-SP host: 58 / 61 against bounds 57 / 60).
 fn faults(exe: &Path, mode: &str) -> u64 {
     // One directory per call (the tests run in parallel); the name always has the same length.
     static CALL: AtomicUsize = AtomicUsize::new(0);
@@ -146,6 +173,7 @@ fn faults(exe: &Path, mode: &str) -> u64 {
     for _ in 0..=RUNS {
         let o = Command::new(&run)
             .arg0("page_faults")
+            .arg("relay")
             .arg(mode)
             .current_dir("/")
             .env_clear()
@@ -297,7 +325,8 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
-const FLOAT_BOUND: u64 = 6;
+/// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
+const FLOAT_BOUND: u64 = 5;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
@@ -339,8 +368,12 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// Calibration (Zen 1 host, this test, every run identical): old list, release products 8 and fast
 /// products 13 (perf page-fault addresses: 9 text faults, 4 writes); regenerated list, release 6, fast
 /// 7. Bound = the highest count with the list, 7, plus 2 (the rule above); the old list on fast
-/// products (the gate's) reads 13.
-const FORK_BOUND: u64 = 9;
+/// products (the gate's) reads 13. STARTUP-FAULTS-RESTORE-2 (D-X.53, count + 1): 7 on the Zen 1 host
+/// and on the Skylake-SP host (fast products, every run identical), so the bound is 8.
+/// STARTUP-FAULTS-RESTORE-3: 6 after the merge with next (fork-tier functions `#[inline(never)]`,
+/// HOTTEXT-REGEN-UNBLOCK): Haswell-EP host, every run identical, and 6 on the Zen 1 host in that
+/// story's base column, so the bound is 7.
+const FORK_BOUND: u64 = 7;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {
@@ -434,6 +467,79 @@ fn init_cold_startup_functions_are_grouped() {
     assert!(seen >= 2, "name-service cache attach path: {seen} sections found in libc.a (renamed? update the names above)");
 }
 
+/// The address range of a linked program's start-up and hot text, from its GNU ld map: the
+/// input sections `.text.startup*` (`_start`, entry.S) and `.text.sorted.h*` (the hot group),
+/// which the default script places next to each other. `(lo, hi)`, hi exclusive.
+fn hot_text_range(map: &str) -> (u64, u64) {
+    let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+    let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
+    let (mut lo, mut hi) = (u64::MAX, 0);
+    for (i, l) in lines.iter().enumerate() {
+        let Some(t) = l.strip_prefix(' ') else { continue };
+        if !(t.starts_with(".text.sorted.h") || t.starts_with(".text.startup")) {
+            continue;
+        }
+        let mut w: Vec<&str> = t.split_whitespace().skip(1).collect();
+        if w.is_empty() {
+            w = lines.get(i.saturating_add(1)).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+        }
+        if let (Some(a), Some(s)) = (w.first().and_then(|x| hex(x)), w.get(1).and_then(|x| hex(x))) {
+            if a != 0 && s != 0 {
+                lo = lo.min(a);
+                hi = hi.max(a.saturating_add(s));
+            }
+        }
+    }
+    (lo, hi)
+}
+
+/// STARTUP-FAULTS-RESTORE: the functions every static process runs before `main` lie inside the
+/// hot text range of a linked program, a check that does not depend on fault counts. When
+/// DL-BOOT-RELOC-7 made `runtime::start` generic, its list key went dead and `start::<false>`
+/// and `apply_irelative` ran from two 64 KiB windows of cold `.text` (two more faults), which
+/// fitted inside the count bounds' slack. Required: `_start`, `__libc_start_main` and
+/// `start::<false>`; `apply_irelative` and `liella_rt::start::program` when the profile keeps
+/// them out of line (release inlines them). No spec clause (layout of the products).
+#[test]
+fn init_startup_path_lies_in_the_hot_text_range() {
+    let dir = std::env::temp_dir().join(format!("liella-hot-range-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let (exe, map) = (dir.join("page_faults"), dir.join("page_faults.map"));
+    build_with(&exe, &[&format!("-Wl,-Map={}", map.display())]);
+    let (lo, hi) = hot_text_range(&std::fs::read_to_string(&map).expect("link map"));
+    let out = Command::new("nm").arg(&exe).output().expect("nm");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(lo < hi, "no .text.startup / .text.sorted.h* input sections in the link map");
+    // A v0 name after its crate hash: `_R<prefix>Cs<hash>_<rest>` -> `<rest>`.
+    let path = |name: &str, prefix: &str| name.strip_prefix(prefix).and_then(|r| r.split_once('_')).map(|(_, r)| r.to_string());
+    let mut found = std::collections::BTreeMap::new();
+    for l in String::from_utf8_lossy(&out.stdout).lines() {
+        let w: Vec<&str> = l.split_whitespace().collect();
+        let [addr, kind, name] = w[..] else { continue };
+        // `W`: the products' public functions are weak (`__libc_start_main`).
+        if !matches!(kind, "T" | "t" | "W" | "w") {
+            continue;
+        }
+        let name = name.split(".llvm.").next().unwrap_or(name);
+        let which = match name {
+            "_start" => "_start",
+            "__libc_start_main" => "__libc_start_main",
+            _ if path(name, "_RINvNtCs").is_some_and(|r| r.starts_with("15liella_boundary7runtime5startKb0_E")) => "runtime::start::<false>",
+            _ if path(name, "_RNvNtCs").is_some_and(|r| r == "15liella_boundary7runtime15apply_irelative") => "runtime::apply_irelative",
+            _ if path(name, "_RNvNtCs").is_some_and(|r| r == "9liella_rt5start7program") => "liella_rt::start::program",
+            _ => continue,
+        };
+        found.insert(which, u64::from_str_radix(addr, 16).expect("nm address"));
+    }
+    eprintln!("hot text {lo:#x}..{hi:#x}; start-up functions {found:x?}");
+    for f in ["_start", "__libc_start_main", "runtime::start::<false>"] {
+        assert!(found.contains_key(f), "{f}: not found in the linked program (renamed? update this test)");
+    }
+    for (f, a) in &found {
+        assert!((lo..hi).contains(a), "{f} at {a:#x}: outside the hot text {lo:#x}..{hi:#x} (its hot-text.list key dead or missing? run tools/hottext/regen.sh)");
+    }
+}
+
 #[test]
 fn harness_staged_copy_execs_while_other_threads_spawn() {
     // HOTTEXT-ETXTBSY: no spec clause (it checks this file's harness, `stage`). Four threads spawn
@@ -518,4 +624,44 @@ fn init_startup_names_sit_in_one_window() {
     let at = names_at.unwrap_or_else(|| panic!("startup names: no STARTUP_NAMES symbol in the program"));
     assert!(addr <= at && at < addr + size, "startup names: STARTUP_NAMES at {at:#x} is not in .rodata1");
     assert!(!map.lines().any(|l| l.contains(".rodata.") && l.contains("Vdso5parse")), "startup names: Vdso::parse has a .rodata table again");
+}
+
+/// A static's symbol without the tails the compiler may add to it: ThinLTO's promotion suffix
+/// (`<sym>.llvm.<n>`) and a split part number (`<sym>.<n>`), the same tails
+/// `xtask/src/coldbss.rs` drops before matching sections.
+fn symbol_stem(name: &str) -> &str {
+    let name = name.split_once(".llvm.").map_or(name, |(s, _)| s);
+    match name.rsplit_once('.') {
+        Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => s,
+        _ => name,
+    }
+}
+
+/// STARTUP-FAULTS-RESTORE (D-X.53): the small statics that start-up writes first sit in `.data1`
+/// in libc.a (`xtask/src/coldbss.rs::move_startup_state`), so the linker puts them on one page
+/// next to `.bss`. Each one is worth at most one fault, which the count bounds' +1 slack lets
+/// through, so this checks the placement itself. No spec clause (layout of the products).
+#[test]
+fn init_startup_state_statics_are_in_data1() {
+    let out = Command::new("objdump").arg("-t").arg(root().join("target/liella/libc.a")).output().expect("objdump");
+    let table = String::from_utf8_lossy(&out.stdout).into_owned();
+    for suffix in [
+        "15liella_boundary7process10AUXV_WORDS",
+        "15liella_boundary3sys12SYSINFO_EHDR",
+        "15liella_boundary3cpu14AVX2_ERMS_FROM",
+        "15liella_boundary3cpu12AVX2_ERMS_TO",
+        "13liella_legacy13global_locale6GLOBAL",
+        "13liella_legacy13global_locale4LOCK",
+        "13liella_legacy7nscache7NSCACHE",
+    ] {
+        let sections: Vec<&str> = table
+            .lines()
+            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n).ends_with(suffix)))
+            // `<value> <flags> <section>\t<size> [.hidden ]<name>`
+            .filter_map(|l| l.split_once('\t').and_then(|(a, _)| a.split_whitespace().last()))
+            .filter(|s| *s != "*UND*")
+            .collect();
+        assert!(!sections.is_empty(), "start-up state: no definition of *{suffix} in libc.a (renamed? update xtask/src/coldbss.rs and this test)");
+        assert!(sections.iter().all(|s| *s == ".data1"), "start-up state: *{suffix} is in {sections:?}, want .data1 (move_startup_state not applied?)");
+    }
 }
