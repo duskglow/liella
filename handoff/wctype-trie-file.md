@@ -55,7 +55,11 @@ resolved per 256-character block on first touch; `ThreadBlock::wclass` (0x180) s
 `wtf4-lint0` rc 0 (inherited head e96e6ff); `wtf4-lint1` rc 0 (clippy, static, locale tests, s05_ctype_words; c66487a);
 `wtf4-count` rc 0 (counts + hot_text: 2 page-fault failures above; c66487a); `wtf4-count2` (6eef295, the worse
 out-of-line attempt); `wtf4-exp1` rc 141 (diagnostic objdump, SIGPIPE from `head`); `wtf4-plants`, `wtf4-plants2`
-killed (superseded heads); final head: `wtf4-gate`, `wtf4-plants3` (see the report json).
+killed (superseded heads). Final code head 0164fa2: `wtf4-plants3` rc 0 (13 CAUGHT, 1 EQUIVALENT publish-order,
+0 SURVIVED; WARN-NO-MSG safety-view-gate: caught, rc 101, without the expected message); `wtf4-gate` rc 1 (clippy,
+static ok; direct tier 6284 passed, 2 failed: the two `hot_text_products` page-fault bounds above, nothing else).
+`ops handback-check` (merged with next): red on `codemap` (docs/codemap out of date after the merge; my tree's static
+passed): regenerate with `cargo xtask codemap` after the next merge of origin/next.
 
 ## Next step
 1. tow* +2 (memory-operand flag test, above); 2. page faults; 3. `_l` rows; 4. direct gate; 5. timing.
