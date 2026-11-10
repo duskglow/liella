@@ -30,7 +30,7 @@ pub(super) const K2: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[
 pub(super) const K4: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[2]);
 pub(super) const K6: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[3]);
 
-/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 24.32·2^-53, for 2^-26 ≤ |x| < 2^19.
+/// (sin x, cos x) as `double`s, each with |y/f - 1| ≤ 24.3·2^-53, for 2^-26 ≤ |x| < 2^19.
 ///
 /// Reduction (Cody–Waite): x = n·π/64 + r, n = nearest(RN(x·64/π)), so |r| < 0.024544.
 /// n·PI64_1 and n·PI64_2 are exact (27 and 29 bits, |n| < 2^24); x - n·PI64_1 is exact (both on
@@ -42,18 +42,14 @@ pub(super) const K6: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[
 /// approximation error ≤ 15.25·2^-53|r| (the fit's 15.24 plus its coefficients' rounding, already
 /// in the fit's measured figure); with Δr and the evaluation (the r·z·(...) part is < 10^-4|r|,
 /// its roundings below 2^-63|r|; the final sum 2^-53), |Δsr| ≤ (3.01 + 15.25)·2^-53|r| =
-/// 18.26·2^-53|r|. cos r - 1 = cm = z·K2 + z²(K4 + z·K6) (Estrin's split, D-10.79): approximation
-/// error ≤ 2^-64.5 < 0.01·2^-53 absolute, |cm| ≤ 3.02·10^-4. Rounding, in units of 2^-53: z carries
-/// 2·3.01 + 1 = 7.02 relative, z·K2 8.02, z² 15.04, K4 + z·K6 1.01 (|z·K6| < 10^-6·K4), their
-/// product 17.06; |z²(K4 + z·K6)| ≤ z/12·|z·K2| < 6·10^-5|z·K2|, so the sum's relative error is
-/// ≤ 8.02 + 1 + 0.002 < 9.1: |Δcm| ≤ 9.1·2^-53|cm| + 0.01·2^-53. S = sin(nπ/64), C = cos(nπ/64)
+/// 18.26·2^-53|r|. cos r - 1 = cm = z(K2 + z(K4 + z·K6)): approximation error ≤ 2^-64.5 < 0.01·2^-53
+/// absolute, |cm| ≤ 3.02·10^-4, |Δcm| ≤ 8·2^-53|cm| + 0.01·2^-53. S = sin(nπ/64), C = cos(nπ/64)
 /// are the `double` heads of the table (relative error 2^-53; sin 0, sin π, cos ±π/2 are exactly
 /// 0 and ±1). sin x = S + (S·cm + C·sr); cos x is the same with (C, -S) for (S, C) (the angle
 /// shifted by π/2).
 /// * n ≢ 0 (mod 64): the angle is at least π/128 from a multiple of π, so |S| ≤ 2|y| and
 ///   |C·r| ≤ 1.0001|y|. The errors, in units of 2^-53|y|: S 2, C 1.0001, sr 18.26·1.0001, cm
-///   0.006 + 0.02 (2·9.1·3.02·10^-4 for Δcm), the two products 1.002, the inner sum 1.02, the outer
-///   1: ≤ 24.32 (below `TRIG_BOUND`).
+///   0.005 + 0.02, the two products 1.002, the inner sum 1.02, the outer 1: ≤ 24.3.
 /// * n ≡ 0 (mod 64): S = 0, C = ±1, y = ±sr: Δr ≤ (2 + 2^-5)·2^-53|r| (|r| ≥ 2^-36), so
 ///   ≤ 3.04 + 15.25 = 18.3.
 ///
@@ -86,10 +82,7 @@ pub(super) fn trig_core(x: f32) -> Option<(f64, f64)> {
     }
     let z = r * r;
     let sr = r + r * z * (S3 + z * S5);
-    // Estrin split (LIBM-SINF-IVB-RATCHET, D-10.79): z² runs beside z·K6 + K4, so cm's chain after z is
-    // mul, add, mul, add (16 cycles on Ivy Bridge) instead of Horner's mul, add, mul, add, mul (26),
-    // no longer than sr's: the call's longest dependency chain is shorter by one multiply.
-    let cm = z * K2 + (z * z) * (K4 + z * K6);
+    let cm = z * (K2 + z * (K4 + z * K6));
     let s = f64::from_bits(t::SIN_K_PI64[n][0]);
     let c = f64::from_bits(t::SIN_K_PI64[(n + 32) & 127][0]);
     Some((s + (s * cm + c * sr), c + (c * cm - s * sr)))

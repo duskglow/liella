@@ -1,7 +1,0 @@
-# LIBM-SINF-IVB-RATCHET plants (cargo xtask plants; docs/plants.md). trig_core's cos r - 1 polynomial in Estrin's split
-# (D-10.79): cm = z*K2 + z^2*(K4 + z*K6). The first two break the new expression; the third puts Horner's form back,
-# which the unit tests cannot see (same value within a few ulps of cm, one multiply fewer): only the Ivy Bridge timing
-# shows it, so it is declared equivalent.
-trig-estrin-square-dropped | crates/math/src/fast32/trig.rs | lit:+ (z * z) * (K4 + z * K6); ==> + z * (K4 + z * K6); | cargo test -p liella-math --lib -- fast32::tests::fast_path_agrees_with_the_accurate_path fast32::tests::trig_core_is_within_its_bound | msg:(fast_path_agrees_with_the_accurate_path|trig_core_is_within_its_bound).*FAILED|panicked
-trig-estrin-k2-term-lost | crates/math/src/fast32/trig.rs | lit:let cm = z * K2 + (z * z) ==> let cm = z * K4 + (z * z) | cargo test -p liella-math --lib -- fast32::tests::fast_path_agrees_with_the_accurate_path fast32::tests::trig_core_is_within_its_bound | msg:(fast_path_agrees_with_the_accurate_path|trig_core_is_within_its_bound).*FAILED|panicked
-trig-horner-back | crates/math/src/fast32/trig.rs | lit:let cm = z * K2 + (z * z) * (K4 + z * K6); ==> let cm = z * (K2 + z * (K4 + z * K6)); | cargo test -p liella-math --lib -- fast32::tests::fast_path_agrees_with_the_accurate_path fast32::tests::trig_core_is_within_its_bound | equivalent:Horner's form has the same value within 9 ulps of cm and passes every accuracy test by design; its cost is latency only (Ivy Bridge timing, handoff/libm-sinf-ivb-ratchet.md)
