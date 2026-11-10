@@ -37,7 +37,6 @@ use crate::errno;
 use crate::netdb;
 use crate::stdio::{self, Locking};
 use crate::sys::CSys;
-use crate::tb;
 
 // ------------------------------------------------------------------------------ the state
 
