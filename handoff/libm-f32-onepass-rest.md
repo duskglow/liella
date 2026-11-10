@@ -1,73 +1,68 @@
-# LIBM-F32-ONEPASS-REST: handoff (exp10f, logf, log2f, log10f on the one-pass `float` path)
+# LIBM-F32-ONEPASS-REST: handoff (binary32 functions onto the one-pass `float` path)
 
-State: branch `task/libm-f32-onepass-rest` (cut from origin/next df285561b, stacked on LIBM-PARTIAL-WRITE-CHECK, which
-is already in that base). Code d11779338, generated files and plants bfbd374af, this note and the report on top.
-Role shiki:~/w/sh1. Decision in force: D-10.72 (extends D-10.63 under D-10.67, D-10.68). Plan rows to read: D-10.63,
-D-10.67, D-10.68, D-10.72.
+State: branch `task/libm-f32-onepass-rest-2` (LIBM-F32-ONEPASS-REST's branch with origin/next 4070276c5 merged,
+ruling #4253). Role shiki:~/w/sh2. Decisions in force: D-10.72 (extends D-10.63 under D-10.67, D-10.68). Plan rows
+to read: D-10.63, D-10.67, D-10.68, D-10.72. Report of this run: handoff/reports/LIBM-F32-ONEPASS-REST-2.json.
 
-## Done
-* `exp10f`: `fast32::exp10_onepass_any` = `exp_onepass` with c = RN(128·log2 10), |x| < 37.9 (|z| < 2^13.98, so
-  D-10.63's bound holds unchanged). 10^n (n = 1..=10) is a `float` while z is inexact there: operands in [1, 10] with
-  their low 20 bits clear are refused on the bits first (`test` + `jcc` on the hot path).
-* `logf`/`log2f`/`log10f`: `fast32::log_onepass::<BASE>`. Positive normal x only (bit test); x = 2^e·m split on the
-  bits; m and e reach the `double` domain by integer operations and a full-register `movq` (e by the 1.5·2^52 shift):
-  no `cvtss2sd`/`cvtsi2sd`. Kernel = `log_core`'s table (LOG_INV/LOG_C) and degree-6 Estrin. log2 = e + t·(1/ln 2), so
-  x = 2^n is exact with no flag; log10 refuses x = 10^n by one load from a 32-entry table (index = exponent mod 32).
-  The directed-rounding bound (≤ 2^-44.7, < 313 ulp, margin LOG_DELTA 640) is the doc comment of `log_onepass`.
-* tsv rows exp10/log/log2/log10 `f` -> `mret::elem32_onepass`; math-gen, kernel-index and codemap regenerated.
-* `xtask/src/partial_write.rs`: the seven ALLOW entries of these four functions removed (the check now reports
-  5 findings, all allowed: acoshf, asinhf, sinf, cosf, tanf).
-* Hot paths (libm.so.6, objdump on the role): exp10f, logf, log2f, log10f each straight-line to one `cvtsd2ss`, no
-  call, no stack (logf ~45 instructions to the return).
+## Done (both runs)
+* exp10f, logf, log2f, log10f on the one-pass path (`fast32::exp10_onepass_any`, `fast32::log_onepass::<BASE>`;
+  proofs in their doc comments); tsv rows -> `mret::elem32_onepass`; their seven partial-write ALLOW entries removed.
+  Run 1 evidence (code unchanged since except exp10f's test below): exhaustive 2^32 x 4 directions, 0 mismatches each;
+  8/8 plants (handoff/LIBM-F32-ONEPASS-REST-plants.txt); Ivy Bridge time Liella/glibc: logf 1.16, log2f 1.18,
+  log10f 0.70, exp10f 1.44 (11-07: 2.60, 2.35, -, 2.60). N100 (read this run, nozomi:f32rest-n100, rc 0, two equal
+  rounds): exp10f 1.59, logf 1.60, log2f 1.43, log10f 0.82, expf 1.66.
+* Run 2: CI's red (static partial-write, 7 findings in these four functions) was a STALE PRODUCT: the CI job ran 32 s
+  (static only, no `so`) and walked the `libm.so.6` an earlier tree had left in its reused directory (its exp10f was the
+  pre-branch code: `stmxcsr`, `cvtss2sd` at +0x32), against this branch's ALLOW list. A fresh `cargo xtask so` on the
+  role: 5 findings, all allowed. Fix (17587fa67): `cargo xtask so` writes `target/liella/libm.so.6.source-digest`
+  (FNV-1a of crates/, csys/, manifests, lock, toolchain, cargo config) after its check passes; `cargo xtask static`
+  checks the product only when the digest matches the tree, else prints why it skipped (`so` still checks every product
+  it builds). Seen on the role: static skipped the pre-change binary ("no digest"), then checked the rebuilt one.
+* Run 2: exp10f's exact-power refusal as one compare (804875533, #4277): `(bits(x) - bits(1)).rotate_right(20) <=
+  0x1a`, the same operand set as the two tests LLVM had compiled branchless (+5 instructions over expf's path).
 
-## FP-op and critical-path targets (stated per the brief; counts below)
-* exp10f: as expf, 13 FP ops (z, shift add/sub, r, r², 3 Estrin mul+add, S·p, cvtsd2ss), chain z -> k -> r -> r² ->
-  r²·(...) -> sum -> S·p -> cvt: 9 dependent FP ops.
-* log family: about 19 FP ops (e, m·L - 1, r², r⁴, 3 Estrin mul+add, 2 sums, e·LN2 + LOG_C + r + s, cvt; log2/log10
-  +1 multiply); chain movq m -> m·L -> -1 -> r² -> r⁴ -> ·(...) -> s -> y -> cvt: 9 dependent FP ops, the e·LN2 + LOG_C
-  part off the chain.
+## Results of run 2 (head 804875533)
+* Lint shiki:f32r2-lint2 rc 0 (xtask unit test, `cargo xtask clippy`, static, `so`, static) on the code of 804875533.
+* Plants shiki:f32r2-plants rc 0: 4 CAUGHT, 0 SURVIVED, 0 WARN (handoff/LIBM-F32-ONEPASS-REST-2-plants.txt).
+* Gate shiki:f32r2-gate (`affected --run --base origin/next`) rc 1. It escalated itself to FULL because xtask
+  changed. 15 suites, 6313 passed, 1 failed: `liella::hot_text_products
+  init_coreutils_shaped_program_stays_within_its_page_fault_bound`, 59 minor faults > bound 58 (5 equal runs).
+  shiki:f32r2-basefault (rc 0) ran the same test on an exact origin/next 4070276c5 copy (RAM, `cargo xtask so`, same
+  fast profile): 56 faults, pass; on this branch's role: 59, fail. So THE BRANCH CAUSES IT (deterministic, not a flake).
+  The program uses only libc, and the branch changes no libc code. Its `so` reports 19 hot-text keys matching no
+  function section against 18 on origin/next. `target/product/fast/hot-text.matched` has 7990 keys against 8013.
+  Missing on the branch: generic instances in liella_boundary such as `ret::at::<i8>`, `ret::at::<i32>`,
+  `ret::found::<i8>`/`<i32>`, two `ret::arc4` instances, a `stdio::with<..mntent::next_entry..>` instance and
+  several `liella_abi::pack::Packer::items` instances. A `<u8>` instance appears instead. Working hypothesis (NOT
+  VERIFIED): run 1's changes to liella_boundary (s10_math_gen.rs routing) and to math alter which generic instances
+  survive inlining, so hot-text keys tied to those mangled names go dead, and the functions drop into cold text.
+  Pending: shiki:f32r2-sweep (exp10f exhaustive 2^32 x 4, started after the gate) and shiki:f32r2-counts (branch counts
+  FMA and SSE2, the bench stage `~/work/LIBM-F32-ONEPASS-REST-2/libm.tar`, then origin/next counts from a RAM copy:
+  `=== origin/next` section of ~/logs/f32r2-counts.log, #4274).
 
-## Results (all on the code at bfbd374af)
-* Gate shiki:f32rest-gate (affected --base origin/next): 32 suites ok, 11408 passed, 0 failed, conformance 126/126,
-  peak 16G (page cache), rc 0. Lint shiki:f32rest-lint3 (codemap + static with the partial-write check) rc 0;
-  f32rest-lint2 ran math-gen, kernel-index, `cargo xtask clippy` and `cargo xtask so` (partial-write: 5 findings,
-  all allowed) before its static failed on the codemap only.
-* Exhaustive shiki:f32rest-sweep, rc 0: exp10f, logf, log2f, log10f, each 17,179,869,184 calls (2^32 x 4 directions)
-  against the envelope (bits, errno, flags): 0 mismatches each.
-* Plants shiki:f32rest-plants (handoff/LIBM-F32-ONEPASS-REST-plants.txt): 8 CAUGHT, 0 SURVIVED, 0 WARN. Per function:
-  reduction constant's low part dropped (INV_M, LN2, INV_LN2), refusal tests skipped (exp10 exact powers, log margin
-  test, log10 10^n table), partial-write conversion reintroduced (exp10f cvtss2sd, log family cvtsi2sd: `cargo xtask
-  so` fails with the finding).
-* Counts shiki:f32rest-counts (cbench_libm --compare --counters; instr/call Liella vs glibc; "before" is the last
-  recorded count of the old code, cited from the handoffs named, not re-run here):
-  | row | before | after | glibc FMA | glibc SSE2 (-FMA) |
-  | exp10f | 64.2 (libm-expf-ratchet) | 62.1 | 43.1 | 43.1 |
-  | logf | 72.2 (libm-expf-ratchet) | 58.1 | 43.1 | 50.1 |
-  | log2f | 78.2 (libm-f32-onepass) | 59.1 | 42.1 | 50.1 |
-  | log10f | not recorded | 65.1 | 86.1 | 93.1 |
-  expf 55.1 / expf_qnan 28.1 unchanged. Liella has one build of these (no FMA dispatch), the same in both runs.
-  Unbooked indicative time on the build host (Liella/glibc): exp10f 1.57/1.56, logf 1.67/1.34, log2f 1.79/1.44, log10f
-  0.85/0.73 (FMA/SSE2 glibc); expf 1.70/1.45 on the same run, which is 1.24 on Ivy Bridge booked: the build host
-  is not the verdict.
-* Timing (`~/work/LIBM-F32-ONEPASS-REST/run.sh`, staged tree libm.tar sha256 3aef4c75888fdced..., two rounds of
-  `xtask-bin sweep run --only cbench_libm`, Liella/glibc median time ratio):
-  - Ivy Bridge (kotori:f32rest-ivb, rc 0, load 0.2-0.4, booking #150, cancelled after): round 1 / round 2:
-    logf 1.160 / 1.160, log2f 1.180 / 1.180, log10f 0.699 / 0.699, exp10f 1.441 / 1.442 (11-07 sweep: logf 2.60,
-    log2f 2.35, exp10f 2.60). Target <= 1.3x: met for logf, log2f, log10f; NOT met for exp10f (1.44).
-  - N100 (nozomi:f32rest-n100, booking #151): queued at hand-back, not read by this run.
-* exp10f's gap, found in the disassembly: LLVM compiles the exact-power refusal (`b & 0xf_ffff == 0 && b - bits(1)
-  <= bits(10) - bits(1)`) branchless (`test; sete; lea; cmp; setb; test; jne`: 7 instructions before the range test,
-  vs 2 intended): 62 instructions vs expf's 55. Fix for the continuation: one test, `(b - 0x3f80_0000).rotate_right(20)
-  <= 0x1a` (low 20 bits clear and b in [1, 10]; 4 instructions), then re-sweep exp10f and re-time.
+## Not done / open
+* Ivy Bridge re-time of exp10f: not booked. The change is an integer test (instruction counts are reliable for it);
+  this run could not cancel a booking (`ops timing-cancel 151` refused by the harness), so it booked none. The periodic
+  timing sweep judges the row; target <= 1.3x.
+* Booking #151 (nozomi, run 1) may still be open: the coordinator should cancel it.
 
-## Not done
-* N100 timing: read `~/logs/f32rest-n100.log` on nozomi (rows exp10f, logf, log2f, log10f), cancel booking #151.
-* exp10f <= 1.3x on Ivy Bridge (the rotate test above).
-* Before-counts were not re-run on this base (the role is not a git tree, so `bench --base` cannot stage a base).
-* Per-function sequencing of the brief (timing before the next function) was batched: four functions, one gate, one
-  sweep job, one timing run (budget).
+## Next (in order)
+0. Fix the coreutils-shaped page-fault regression (gate red above). First confirm which instance names are lost
+   (`diff` of the two `hot-text.matched` files: base copy at shiki:/mnt/zram/claude/LIBM-F32-ONEPASS-REST-2/base-2,
+   which ram-sweep may have removed by then; rebuild from `git archive origin/next`). Then make the branch fit the
+   bound 58 without loosening it (ALWAYS FORWARD). Options: the test's own advice (tools/hottext/regen.sh with a
+   coreutils program), or keep the lost instances' names stable. Re-run the FULL gate (xtask changed, so it
+   escalates). Then read f32r2-sweep and f32r2-counts.
+1. sinf/cosf/tanf (ALLOW `cvtss2sd %xmm0,%xmm3` at +0x25): the merge is `let xd = f64::from(x)` in
+   `fast32/trig.rs::trig_core`. TRIG_MIN = 2^-26 and TRIG_MAX = 2^19 are `float`s, so test |x| on the bits first
+   (`(b & 0x7fff_ffff) - 0x3280_0000 >= 0x4900_0000 - 0x3280_0000` refuses) and build xd exactly from the bits
+   (`((b & 0x7fff_ffff) << 29) + (896 << 52)`, sign to bit 63): the same value and refusal set for every caller, no
+   `cvtss2sd`, and subnormals no longer raise denormal-operand before refusal. Remove the three ALLOW entries; prove
+   with the trig exhaustive sweeps and a plant on the bit construction (sign dropped).
+2. acoshf/asinhf ALLOW entries (`cvtss2sd` at +0x3f / +0x54 in `crate::hot::{acoshf,asinhf}_nearest` paths): same
+   pattern (range test on bits, operand from bits).
+3. powf: many exact cases; refuse on the bits or prove the kernel exact there. Start from `onepass_scaled` and
+   `log_onepass`'s bit split.
 
-## Next: LIBM-F32-ONEPASS-REST-2
-0. exp10f: the rotate test above, re-sweep, re-time. Then sinf/cosf/tanf (ALLOW entries `cvtss2sd %xmm0,%xmm3`; operand from bits, re-prove the trig margin for directed
-intermediates, only x = 0 exact), acoshf/asinhf's ALLOW entries, then powf (many exact cases: refuse on the bits or
-prove the kernel exact there). Start from `onepass_scaled` and `log_onepass`'s bits split.
+## Do not redo
+* The exhaustive sweeps of logf/log2f/log10f (code unchanged since run 1). The partial-write CI red (cause fixed).

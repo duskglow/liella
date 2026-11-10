@@ -1,0 +1,12 @@
+{"task": "LIBM-F32-ONEPASS-REST-2", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: CI partial-write red was a stale libm.so.6 (fixed: static checks only a product built from this tree); exp10f exact-power refusal as one rotate compare; 4/4 plants; gate red: coreutils-shaped page faults 59 > 58 (origin/next 56), caused by the branch",
+ "branch": "task/libm-f32-onepass-rest-2", "head": null,
+ "gate": {"affected": "15 suites, 6313 passed / 1 failed (hot_text_products init_coreutils_shaped_program_stays_within_its_page_fault_bound: 59 > 58; FULL tier, escalated by the xtask change)", "peak": "14G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["CI red 5d53c402e: static walked a libm.so.6 left by an earlier tree in the reused CI directory (pre-branch exp10f code), not this branch's product; fixed by the source digest (17587fa67)", "N100 time Liella/glibc (run 1 staged tree): exp10f 1.59, logf 1.60, log2f 1.43, log10f 0.82, expf 1.66", "booking #151 (nozomi, run 1) not cancelled: ops timing-cancel was refused"],
+ "refused": ["~/src/liella-ops/bin/ops timing-cancel 151"],
+ "improvement": "affected escalates every xtask edit to FULL, which turned a small tooling fix into a 38-min gate that surfaced an unrelated-looking layout regression late; run the FULL-tier hot_text_products bounds in the direct tier of any change to crates/boundary or crates/math",
+ "next_step": "fix the page-fault regression (hot-text keys lost to changed generic instances in liella_boundary), re-gate, read f32r2-sweep and f32r2-counts, then sinf/cosf/tanf per the handoff",
+ "report_file": "handoff/libm-f32-onepass-rest.md",
+ "jobs": ["shiki:f32r2-gate", "shiki:f32r2-plants", "shiki:f32r2-sweep", "shiki:f32r2-counts", "shiki:f32r2-basefault", "shiki:f32r2-lint2"]}
