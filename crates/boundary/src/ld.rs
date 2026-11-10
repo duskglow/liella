@@ -499,7 +499,8 @@ fn run_init(hooks: &[init::Hooks], edges: &[(u8, u8)], sp: usize) -> usize {
     let call = |f: u64| {
         let _ = crate::ffi::liella_machine_call3(usize::try_from(f).unwrap_or(0), a, b, c);
     };
-    if let Some(h) = hooks.first() {
+    // Only the program's preinit array is non-empty (`init::hooks` drops a shared object's).
+    for h in hooks {
         init::init_calls(0, array_words(h.preinit)).for_each(call);
     }
     for &i in order.get(..len).unwrap_or(&[]) {
