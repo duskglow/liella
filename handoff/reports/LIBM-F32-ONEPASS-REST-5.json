@@ -1,0 +1,28 @@
+{
+ "task": "LIBM-F32-ONEPASS-REST-5",
+ "model": "opus",
+ "tokens": null,
+ "result": "CI train 572's two dead fast-profile hot-text keys (Features::detect<CSysImpl<false>>, iconv::load) do not reproduce on this branch: both profiles pass on mei with the list unchanged (fast: 0 dead keys, 5/5 start-up windows; release: 4/4, 11/11 contracts); a full regen.sh --build re-orders the list and breaks the release windows, so by ruling #4357 the list stays as it is; no code change",
+ "branch": "task/libm-f32-onepass-rest-5",
+ "head": "276e7c219",
+ "gate": {
+  "affected": "FULL (escalated: xtask changed on the branch), head 276e7c219: 32 suites ok, 11426 passed / 0 failed; conformance 126 passed / 0 failed",
+  "peak": "16G (page cache included), oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "the dead keys only appear in the train's combined tree (next + this branch + DL-MAP-PROBE, which changes crates/rt/src/start.rs and crates/boundary/src/ld.rs, + LIBM-F64-QUICK-PROFILE, LIBM-LD-TRIG-INVERSE-INT, CODEMAP-TRAIN-OWNED, XTASK-SMALL-FIXES-1110); this story may not merge, so it cannot build the tree that shows them",
+   "recommendation": "the train puts this branch alone on next (or bisects the 572 set); if this branch alone on next shows the keys, allow its continuation to merge origin/next and run the fast-profile dead-key repair there (ruling #4357); otherwise the repair belongs to the story whose changes kill the keys (DL-MAP-PROBE's start.rs and ld.rs changes are in the same crate as both keys)"
+  }
+ ],
+ "informational": [
+  "regen.sh . --build (fast) re-ordered 38 lines of hot-text.list without finding a dead key; the release pass then reported STARTUP-TEXT-WINDOWS 5 windows > budget-release 4 (mei:libm-f32-onepass-rest-5-regen, rc 1; diagnostic, not a job on the final head)",
+  "partial-write on mei: 779 exports walked, 0 findings (0 allowed)"
+ ],
+ "refused": [],
+ "improvement": "a CI hot-text red in a multi-story train is handed to one story by guess; CI could rebuild each member alone on next (one `cargo xtask so`, about 4 min) to name the branch whose combination kills a key before it cuts a continuation",
+ "next_step": "coordinator: bisect train 572 for the two dead keys; this branch is ready to land as it stands",
+ "report_file": "handoff/libm-f32-onepass-rest.md",
+ "jobs": ["libm-f32-onepass-rest-5-lint", "libm-f32-onepass-rest-5-relso", "libm-f32-onepass-rest-5-gate"]
+}
