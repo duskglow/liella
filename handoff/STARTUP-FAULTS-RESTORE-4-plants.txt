@@ -1,5 +1,5 @@
 # STARTUP-FAULTS-RESTORE-4 plants (cargo xtask plants; format docs/plants.md). The relay harness (page_faults.c "relay <mode>").
-# 6: the relay child execs /proc/self/exe instead of the path the program was exec'd by: shorter stack strings, setlocale + printf and tool +2.
-relay-exec-path | crates/core/tests/oracle/page_faults.c | lit:execve(self, cargv, environ); ==> execve("/proc/self/exe", cargv, environ); | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds | msg:setlocale \+ printf program: \d+ page faults > \d+
+# 6: the relay's AT_EXECFN lookup reads the wrong auxv tag: no path to exec, the program exits 7 and the harness reports the failed run.
+relay-execfn-tag | crates/core/tests/oracle/page_faults.c | lit:if (a[0] == 31) ==> if (a[0] == 32) | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds | msg:(true|locale) failed: ExitStatus
 # 7: the harness spawns the mode directly (no relay): in the exports-interposed pass the counted process runs the test process's spawn code before exec, +1.
 relay-dropped | crates/core/tests/hot_text_products.rs | perl:s/\n\s*\.arg\("relay"\)// | cargo xtask so && cargo test -p liella --features liella-boundary/export,liella-boundary/selftest --test hot_text_products init_coreutils_shaped_program_stays_within_its_page_fault_bound | msg:coreutils-shaped program: \d+ page faults > \d+

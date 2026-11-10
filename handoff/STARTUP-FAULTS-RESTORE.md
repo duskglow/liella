@@ -1,69 +1,60 @@
 # STARTUP-FAULTS-RESTORE: static start-up back to 61 page faults, and contracts that hold it
 
-State: branch `task/startup-faults-restore-3` (continues `-2` and `-1`), merged with origin/next 03c9a4972 (RECORDS
-cutover; coordinator-allowed merge). Role shiki:~/w/sh1 (Haswell-EP). Decisions in force: D-X.20, D-X.22, D-X.32,
-D-X.47, **D-X.53** (this story: bounds = count + at most 1, lowered when a count falls; a dead hot-text key fails
-`so` unless allow-listed with a reason; start-up state words in `.data1`); `records/decisions/D-X/D-X.53.toml` passes
-`cargo xtask records check` on the merged head. Plants: `handoff/STARTUP-FAULTS-RESTORE-plants.txt` (5 plants).
-Report json: `handoff/reports/STARTUP-FAULTS-RESTORE-3.json`.
+State: branch `task/startup-faults-restore-4` (continues `-3`, `-2`, `-1`), merged with origin/next 2bc03ede6
+(coordinator-allowed; clean merge). Role shiki:~/w/sh1 (Haswell-EP). Decisions in force: D-X.20, D-X.22, D-X.32,
+D-X.47, **D-X.53** (this story: bounds = count + at most 1, one per mode at the larger profile's count, lowered when
+a count falls; a dead hot-text key fails `so` unless allow-listed with a reason; start-up state words in `.data1`;
+counts taken through the relay harness). Plants: `handoff/STARTUP-FAULTS-RESTORE-plants.txt` (runs 1-3, 5 plants)
+and `handoff/STARTUP-FAULTS-RESTORE-4-plants.txt` (run 4, 2 plants). Report: `handoff/reports/STARTUP-FAULTS-RESTORE-4.json`.
 
-## What the story does (runs 1-2)
-* **Dead keys fail the build** (`xtask/src/hottext.rs`): in a fast or release products build every key of
-  `crates/libc-so/hot-text.list` must match a function section, any tier, except a key traced only in the other
-  profile or a line of `crates/libc-so/hot-text.absent` (`<key>\t<profile>\t<reason>`); a stale allow line fails
-  too. `so` writes `target/product/<profile>/hot-text.matched`; `tools/hottext/prune.py <list> <fast> <release>`
-  drops keys no build matches.
-* **Start-up state on one page** (`xtask/src/coldbss.rs::move_startup_state`): listed statics go to `.data1`, which
-  ends on the page where `.bss` starts (execve dirties it when it zero-fills the bss tail). `scan.S` puts
-  `scan_level` there.
-* **Bounds** (`crates/core/tests/hot_text_products.rs`) at count + 1; `init_startup_path_lies_in_the_hot_text_range`
-  and `init_startup_state_statics_are_in_data1` check the structure (the +1 slack lets a one-fault regression through).
-* `tools/hottext/faultmap.py`: page faults of one run -> section and nearest symbol.
+## What the story does (runs 1-3)
+* **Dead keys fail the build** (`xtask/src/hottext.rs`, through next's `dead_key_verdict`): every key of
+  `crates/libc-so/hot-text.list` must match a function section in a fast or release build, except a key traced only
+  in the other profile or a line of `crates/libc-so/hot-text.absent`. `tools/hottext/prune.py` drops dead keys.
+* **Start-up state on one page** (`xtask/src/coldbss.rs::move_startup_state`): listed statics (incl. NSCACHE) go to
+  `.data1`, on the page where `.bss` starts; `scan.S` puts `scan_level` there.
+* **Bounds** in `crates/core/tests/hot_text_products.rs`, structural tests `init_startup_path_lies_in_the_hot_text_range`
+  and `init_startup_state_statics_are_in_data1`. `tools/hottext/faultmap.py`: faults -> section and symbol.
 
-## Run 3
-* **gate3's red, cause:** `init_startup_state_statics_are_in_data1` compared raw symbol names; libc.a defines
-  `..._SYSINFO_EHDR.0` (LLVM split part number), so "no definition". The test now drops `.llvm.<n>` / `.<n>` tails
-  like coldbss.rs does (af317606a). plants3 (mei) had the same failure in its baseline: no plant ran there.
-* **Merge with next:** `hottext.rs` keeps this story's all-tier contract and routes its error through next's
-  `dead_key_verdict` (regen mode `--hottext-regen`, HOTTEXT-REGEN-UNBLOCK); the remedy text names
-  `regen.sh . --build`. `hot-text.list` took next's regenerated hunks, minus three `Ms1_` keys of
-  `liella::locale::Locale` (with, string, item_parsed): next renumbered that impl `Ms2_` (its keys are listed), so
-  they match no build in either profile (what prune.py drops).
-* **Merge cost a fault, fixed:** startup-only 17 -> 18 after the merge. Pre-merge head and merged head built side by
-  side on shiki (setarch -R, perf page-fault maps, `~/work/STARTUP-FAULTS-RESTORE-3/fmap-*` there): the extra fault
-  is `liella_legacy::nscache::NSCACHE` (608 bytes, written by `nscache::start` in every process) alone on a `.data`
-  page. NSCACHE joined the start-up state (bbd593199): startup 18 -> 17; setlocale+printf 56, tool 59, fork 6,
-  localtime 19, localtime_mktime 19, float 2 all unchanged (every run identical).
-* FORK_BOUND 8 -> 7 (count 6 on Haswell-EP here; 6 on Zen 1 in HOTTEXT-REGEN-UNBLOCK's base column).
-* Plant 5 (`nscache-not-moved`): NSCACHE dropped from the list; the structural test must name it.
-
-## Counts (fast products, `hot_text_products --nocapture`, every run identical)
-| mode | bound | Zen 1 (run 1) | Skylake-SP (run 2) | Haswell-EP (run 3, merged) |
-|---|---|---|---|---|
-| startup only | 18 | 17 | 17 | 17 |
-| setlocale + printf | 57 | 56 | 56 | 56 |
-| tool | 60 | 59 | 59 | 59 |
-| fork | 7 | 7 (pre-merge) | 7 (pre-merge) | 6 |
-| localtime / localtime+mktime | 20 / 20 | - | - | 19 / 19 |
-| float | 6 | - | - | 2 |
-
-Kit printf faults 62 -> 61 (run 1, Zen 1). wl_count vs main (run 2, mei): page faults printf-loop 1258745 ->
-1240079, seq 126 -> 123, wc 264 -> 259, md5sum 146 -> 144; instructions within 0.01%.
-
-NEGATIVE (keep): run 1's m3 (cpu COPY_MIN/FILL_MIN/ERMS_LARGE_FROM, fold.S cmp_sse, global_locale::MAPS to .data1)
-gained nothing; the freed pages got other first writers. Run 3 shows the same effect from the other side: a
-`.data` reorder alone moved NSCACHE onto its own page. A hand-kept list holds only while `.data` order holds.
-
-## Jobs
-Run 3 (shiki): -lint1 rc 1 (`so` refused the 3 dead Ms1_ keys; clippy, static, records check passed), -check2 rc 0,
--fmap-pre / -fmap-new rc 0 (diagnosis), -check3 rc 0 (NSCACHE move, all 14 tests). Final head: -gate1 (clippy,
-static, affected --run --base origin/next) and -plants1. Superseded: mei startup-faults-restore-2-gate3 (rc 1, the
-test bug above) and -plants3 (rc 2, same bug in its baseline).
+## Run 4: why CI was red, and the fix
+* The coordinator note blamed the release profile; the CI log says otherwise: the gate built `so: profile fast` only,
+  and both failures were in `tests-interposed` (the second `cargo xtask test` pass, exports interposed on the test
+  process, `xtask/src/main.rs::workspace_tests`). Reproduced on shiki with the same fast products:
+  plain pass 17 / 57 / 60, interposed pass 18 / 58 / 61 (CI's numbers). Cause: "true", "locale" and "tool" count the
+  whole process (RUSAGE_SELF), which includes the spawned process's pre-exec work in the SPAWNER's code (host
+  posix_spawn in one pass, Liella's in the other).
+* Fix: `page_faults.c` mode `relay <mode>` vforks and execs itself with raw syscalls (one asm block), at its
+  AT_EXECFN path (read from the auxv after envp) with the same env; the harness always passes `relay`. Two dead
+  ends on the way (both measured, release 59 / 62): exec of `/proc/self/exe`, then libc `vfork`/`execve`/`waitpid`/
+  `getauxval`; the cause of the +2 was the extra libc.a members moving the test program's layout, not the path.
+* Counts, relay harness, Haswell-EP, every run identical, plain and interposed passes identical:
+  | mode | fast | release | bound (was) |
+  |---|---|---|---|
+  | startup only | 16 | 15 | 17 (18) |
+  | setlocale + printf | 56 | 56 | 57 |
+  | tool | 59 | 59 | 60 |
+  | fork child | 7 | 6 | 7 |
+  | localtime, localtime+mktime | 19 | 19 | 20 |
+  | float | 2 | 4 | 5 (6) |
+* Host classes: before the relay, the same two binaries (fast, release) read identical counts on Haswell-EP,
+  Skylake-SP (mei) and Zen 1 (keke) with a posix_spawn replica of the harness (`pf_launch.c`, kept in
+  `~/work/STARTUP-FAULTS-RESTORE-4/` on those hosts; it matched the in-test counts exactly on shiki). The products
+  remap the build path to `/liella`, so counts follow the tree, not the host or role. NOT VERIFIED: the relay
+  binaries on Skylake-SP / Zen 1 (the CI gate on Skylake-SP will show them).
+* One bound per mode at max(fast, release) + 1, not per-profile: the gate builds fast only (reason in D-X.53 (4)).
+* Merge with next raised fast locale/tool/fork by 1 each before the relay (56/59/6 -> 57/60/7, layout-only); next's
+  own counts were not measured (budget). Release vs next not compared directly; all counts sit far under next's
+  bounds (23 / 68 / 71 / 9).
 
 ## Open / next
-* FLOAT_BOUND 6 and LOCALTIME 20: float reads 2 on Haswell-EP; ratchet to 3 once a Skylake-SP (CI class) run prints
-  its count (the gate log of this branch on CI does).
-* Structural fix for `.data`/`.bss` start-up faults: generate the `.data1` placement from a trace of first-touched
-  small statics (as regen.sh does for text), instead of the hand-kept `STATE_KEY_SUFFIXES`.
-* regen.sh `--build`: run prune.py once both profiles' `hot-text.matched` come from the same tree (a stale other
-  profile file would drop live keys, so it needs a tree-hash guard).
+* If the CI gate on Skylake-SP reads differently from the table, take its counts (both passes print the same now).
+* Structural fix for `.data`/`.bss` start-up faults: generate the `.data1` list from a trace of first-touched statics
+  (as regen.sh does for text) instead of the hand-kept `STATE_KEY_SUFFIXES` (a `.data` reorder alone moves NSCACHE).
+* regen.sh `--build`: run prune.py once both profiles' `hot-text.matched` come from the same tree (needs a tree-hash
+  guard: a stale other-profile file would drop live keys).
+
+## Jobs (run 4, shiki unless named)
+Diagnosis: -measure1 (step-0 clippy + static green on the inherited head; fast/release counts, replica = test),
+mei:-replica-mei, keke:-replica-keke (host classes), -interposed1 (reproduced CI's red), -relay1 / -relay2 (killed or
+superseded: dead ends above), -relay3 (final harness, all 4 configurations green). Final head: -gate1 (clippy, static,
+records check, affected --base origin/next) and -plants (2 plants).
