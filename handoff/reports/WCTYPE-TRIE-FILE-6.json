@@ -1,0 +1,11 @@
+{"task": "WCTYPE-TRIE-FILE-6", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: release build fixed (cause: fast regen moved a release-only start-up function from list position 50 to 255; the regen build's window check blocked its own repair; waiver in the regen build only, budget unchanged); hot-text regenerated in both profiles (release 4/4, fast 5/5); codemap regenerated; page faults, tow* counts and _l rows not reached",
+ "branch": "task/wctype-trie-file-6", "head": "see git log (handoff commit)",
+ "gate": {"affected": "wtf6-gate on shiki (see hand-back)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["tools/hottext: a python import of keys.py (gdb tracer or a diagnostic) leaves tools/hottext/__pycache__ in the role, which fails static private-paths (home path in the .pyc); regen.sh could set PYTHONDONTWRITEBYTECODE=1", "getrusage is a start-up key but sits at the hot-text list's tail (extra, traced by no probe): one start-up window in both profiles", "sync_role does not keep tools/hottext/regen.sh executable in the role: run it with bash"],
+ "refused": [],
+ "improvement": "hot-text order: put the start-up probe's keys (startup-text.keys) first in hot-text.list, so a regen in one profile cannot move another profile's start-up function out of the start-up windows",
+ "next_step": "read wtf6-gate/wtf6-plants/wtf6-diag on shiki, then the first localtime_r page fault (21 > 20) from wtf6-diag, then tow* counts and the _l rows",
+ "report_file": "handoff/wctype-trie-file.md",
+ "jobs": ["shiki:wtf6-lint2", "shiki:wtf6-gate", "shiki:wtf6-plants"]}
