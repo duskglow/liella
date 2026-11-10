@@ -36,6 +36,11 @@ pub const ALIGN: u64 = 65536;
 /// setlocale + printf program and the coreutils-shaped tool) run functions of these tiers; `fork` and
 /// `extra` (other traced programs) stay out.
 const HOT_TIERS: [&str; 5] = ["startup", "stdio", "strings", "locale", "tool"];
+/// The functions of the fault-bounded probe modes whose functions no [`HOT_TIERS`] tier holds (the
+/// localtime probes: their zone functions are in `extra`), traced per mode by
+/// `tools/hottext/probe_text.sh` (LAYOUT-STARTUP-RODATA-4: leaving them out split the `TZ` and `TZDIR`
+/// name literals off the windows start-up had faulted in, first localtime_r 19 -> 21 faults).
+const PROBE_KEYS: &str = "crates/libc-so/probe-text.keys";
 /// The prefix the weakening pass gives a library name (`weaken_archive`); start-up keys name the
 /// final archive's symbols, this pass runs before it.
 const LIB_PREFIX: &str = "__liella_libc_";
@@ -260,6 +265,8 @@ fn inputs(archive: &Path, root: &Path) -> Result<Inputs, String> {
     let read = |p: &str| fs::read_to_string(root.join(p)).map_err(|e| format!("{p}: {e}"));
     let mut text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
     text_keys.extend(crate::hottext::parse_list(&read("crates/libc-so/hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
+    // The fault-bounded probe modes no tier covers (the first localtime_r, + mktime): traced on their own.
+    text_keys.extend(keys(&read(PROBE_KEYS)?, |_| true));
     let ro_keys = keys(&read("crates/libc-so/startup-data.keys")?, |k| k == "ro");
     let listing = Command::new("readelf").arg("-SrsW").arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
     if !listing.status.success() {
