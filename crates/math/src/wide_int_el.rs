@@ -738,7 +738,7 @@ mod tests {
     /// no ties), with the sign of `v`.
     fn fixed(v: Mp, units: i64) -> i128 {
         let neg = v.neg && !v.is_zero();
-        let r = i128::try_from(ufixed(v.abs(), units)).expect("pinned value fits i128");
+        let r = i128::try_from(ufixed(v.abs(), units)).unwrap_or(i128::MAX); // a pin's assert_eq catches MAX
         if neg { -r } else { r }
     }
 
@@ -799,7 +799,7 @@ mod tests {
             let want = match i {
                 0 => 1 << 17,
                 127 => 1 << 16,
-                _ => ((1u128 << 26) / (2 * i as u128 + 257) + 1) / 2,
+                _ => ((1u128 << 26) / (2 * i as u128 + 257)).div_ceil(2),
             };
             let c = u128::from(C1[i]);
             assert_eq!(c, want, "C1[{i}]");
@@ -808,7 +808,7 @@ mod tests {
         }
         for (ii, (&c, &l)) in C2.iter().zip(L2.iter()).enumerate() {
             let d = 4096 + ii as u128 - 32;
-            assert_eq!(u128::from(c), ((1u128 << 64) * 4096 / d + 1) / 2, "C2[{ii}]");
+            assert_eq!(u128::from(c), ((1u128 << 64) * 4096 / d).div_ceil(2), "C2[{ii}]");
             assert_eq!(l, fixed(mp::ln_atanh(Mp::from_u128(false, c.into(), -63)).neg(), 133), "L2[{ii}]");
         }
     }
