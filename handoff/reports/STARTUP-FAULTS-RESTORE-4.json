@@ -1,0 +1,12 @@
+{"task": "STARTUP-FAULTS-RESTORE-4", "model": "opus", "tokens": null,
+ "result": "CI red cause found: the gate's exports-interposed test pass counted the spawner's pre-exec faults (+1), not the release profile; page_faults.c now relays each mode through a raw-syscall vfork/exec of itself, both passes and both profiles read the same, bounds one per mode at max(fast, release) + 1 (TRUE 18 -> 17, FLOAT 6 -> 5)",
+ "branch": "task/startup-faults-restore-4", "head": null,
+ "gate": {"affected": "shiki startup-faults-restore-4-gate1 (see jobs.tsv); relay3: hot_text_products 14/14 in all four configurations", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["The coordinator note attributed CI's red to release products; the CI log shows `so: profile fast` only and both failures in the tests-interposed pass (reproduced on shiki: 18/58/61 vs 17/57/60)", "Before the relay, the same fast and release binaries read identical counts on Haswell-EP, Skylake-SP and Zen 1 hosts; the relay binaries were measured on Haswell-EP only", "next's own counts not measured (budget); all counts far under next's bounds 23/68/71/9"],
+ "refused": [],
+ "improvement": "A coordinator diagnosis should quote the CI log's step line (tests vs tests-interposed, `so: profile`) before naming a cause; here it pointed at the release profile and the gate never built it",
+ "next_step": "If CI on Skylake-SP prints different relay counts, take them; then the trace-generated .data1 list (handoff Open)",
+ "report_file": "handoff/STARTUP-FAULTS-RESTORE.md",
+ "jobs": ["startup-faults-restore-4-gate1", "startup-faults-restore-4-plants2"]}
