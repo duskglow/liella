@@ -1,0 +1,5 @@
+# FUZZ-LOCK-FRESH: the lock-fresh check (xtask/src/locks.rs) must catch a lock behind its manifest.
+# Without --locked, cargo metadata rewrites the stale lock and succeeds: the check must then fail its test.
+no-locked | xtask/src/locks.rs | lit:        c.arg("--locked"); ==> | cargo test -p xtask --bin xtask locks:: | msg:stale_lock_is_reported_and_left_alone.*FAILED|panicked
+# Reporting a failed resolution as success hides the stale lock.
+ok-on-fail | xtask/src/locks.rs | lit:Ok(if out.status.success() { None } else { ==> Ok(if true { None } else { | cargo test -p xtask --bin xtask locks:: | msg:stale_lock_is_reported_and_left_alone.*FAILED|panicked

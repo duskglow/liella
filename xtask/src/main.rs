@@ -41,6 +41,7 @@
 //! | `bench-rows`   | The bench rows a change can move plus the sentinel rows (`bench/sentinels.tsv`), for a TARGETED bench (`benchrows.rs`, BENCH-AFF): `--base <ref>` / `--range <a>..<b>` / `--files <p>,...`, `--out <file>` for `bench --rows-file`. `bench --affected <base>` selects and times only those rows (`bench/c/cbench_rows.h`). FULL for build, link, allocator, startup and harness changes. The full bench on main stays the safety net. |
 //! | `sweep`        | The timing sweep (`sweep.rs`, SWEEP-RUN-TOOL): `run --out <dir> [--only a,b]` in a staged tree runs `bench --no-build --staged --counters` and exits 0 when every selected row was measured and `<dir>/sweep.tsv` written, flagged rows or not (nonzero: the measurement did not finish); `compare --new <class>=<sweep.tsv>... (--old <class>=<sweep.tsv>... \| --old-table <results.md>)` prints the report sections against the previous sweep. |
 //! | `fuzz-check`  | Type-check every fuzz target on the pinned nightly (`cargo check --bins` in `fuzz/`; no fuzzer runtime). Part of `test` and of `affected` when `crates/` or `fuzz/` sources change: the harnesses are a workspace of their own and a library signature change breaks them silently (HYGIENE-1). |
+//! | `locks`        | The tracked lock files (`Cargo.lock`, `crates/Cargo.lock`, `fuzz/Cargo.lock`) against their manifests (`locks.rs`, FUZZ-LOCK-FRESH): `--check` runs `cargo metadata --locked` per workspace and fails naming each lock cargo would rewrite (a `static` check, `lock-fresh`; a stale lock rewritten by a build made `affected --base` escalate to FULL); `--update` lets cargo rewrite them, to commit. |
 //! | `rust-dylib`   | The Rust dylib `libliella_rust.so.<abi>` (D-X.10) of a version in `spec/abi/rust-abi.toml` (default: the current one): builds it with that version's pinned rustup toolchain (failing if it is absent), after checking that toolchain's `rustc -vV` against the definition; builds it and a program against it in `target/liella/rust/<abi>`, checks soname, note, `LIELLA_RUST_ABI` and `DT_NEEDED` with `readelf`; builds a synthetic second version beside it and checks that both coexist. |
 //! | `classed-xref` | The classed pages' XREF bias rule (D-4.53, D-X.34): every out-of-page reference of page 1 addresses page 0's target + 4096, paired in order (an unpaired reference is an error). No file: assemble `csys/src/machine/fold.S` (also a `static` check); `<file>...`: check those archives, objects or linked objects (`so` checks `libc.a` and `libc.so.6`). |
 //! | `jcc-check` | The hot machine assembly keeps every jump off 32-byte boundaries (D-4.67, JCC erratum): no jump or fused compare-and-jump crosses or ends on one, and each section holding one is 32-byte aligned. No file: assemble the files of `crates/boundary/jcc_pad.rs` with its flags (also a `static` check); `<file>...`: check those archives or objects (`so` checks `libc.a`). |
@@ -97,6 +98,7 @@ mod labnames;
 mod privpaths;
 mod kernel_index;
 mod records;
+mod locks;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -164,6 +166,7 @@ fn main() -> ExitCode {
         "bench" => bench::run(&root, &args[1..]),
         "fuzz" => fuzz::run(&root, &args[1..]),
         "fuzz-check" => fuzz::check(&root),
+        "locks" => locks::run(&root, &args[1..]),
         "test" => test_all(&root, &args[1..]),
         "ctest" => ctest(&root),
         "nextest" => nextest::run(&std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()), &root, &args[1..]),
@@ -212,12 +215,12 @@ fn arch_tools() -> arch::Tools {
 }
 
 /// `cargo xtask static`: the gate's static checks (the first steps of `test`: arch-audit (ARCH-SEAMS), purity, unsafe-audit, csys-audit,
-/// env-audit, opaque-audit, crash-audit, k5 (ffi.rs against liella_csys.h), align, trace, fuzz-check, compat-probes) in one command, all of them run (a failure does not hide the next), so they can be run
+/// env-audit, opaque-audit, crash-audit, k5 (ffi.rs against liella_csys.h), align, trace, lock-fresh, fuzz-check, compat-probes) in one command, all of them run (a failure does not hide the next), so they can be run
 /// on Zen 1 host before a long gate. `~/bin/static-checks` on the VMs is the same list.
 fn static_checks(root: &Path) -> Result<(), String> {
     type Check = fn(&Path) -> Result<(), String>;
-    let checks: [(&str, Check); 28] =
-        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()]))];
+    let checks: [(&str, Check); 29] =
+        [("align", align::static_check), ("arch-audit", |r| arch::audit(r, false, &arch_tools())), ("remap", remap::static_check), ("classed-xref", classed::static_check), ("jcc-check", jcc::static_check), ("k5", csys::machine_decls_match), ("purity", policy::purity), ("unsafe-audit", policy::unsafe_audit), ("csys-audit", policy::csys_audit), ("env-audit", policy::env_audit), ("opaque-audit", policy::opaque_audit), ("crash-audit", policy::crash_audit), ("fork-child-alloc", forkalloc::fork_child_alloc), ("fs-order", fs_order::fs_order), ("trace", trace::run), ("fuzz-check", fuzz::check), ("machine-exports", affected::machine_exports_check), ("compat-gen", |r| compat::run(r, true)), ("compat-plan", compat_plan::check), ("compat-probes", compatprobe::check), ("records", records::check), ("records-gen", records::fresh_check), ("register", register::check), ("compat-ids", compat_ids::check), ("lab-names", labnames::check), ("private-paths", privpaths::check), ("reexec-audit", policy::reexec_audit), ("tables-fresh", |r| math::run_tables(r, &["--check".to_string()])), ("lock-fresh", locks::static_check)];
     let failed: Vec<&str> = checks.iter().filter(|(name, f)| f(root).map_err(|e| eprintln!("static: {name} FAILED: {e}")).is_err()).map(|(name, _)| *name).collect();
     if failed.is_empty() { Ok(()) } else { Err(format!("failed: {}", failed.join(", "))) }
 }
