@@ -1,0 +1,13 @@
+# LAYOUT-STARTUP-WINDOWS-2 (D-X.49): the STARTUP-TEXT-WINDOWS layout contract (xtask/src/layout.rs kind startup-text-windows),
+# on the head merged with next. lsw-budget-minus-one checks the release-profile products of that head, copied to
+# ~/work/LAYOUT-STARTUP-WINDOWS-2/rel-products (shiki job lsw2-measure-8e5a92e87). lsw-key-removed renames the start-up
+# key of runtime::start::<false> in hot-text.list and moves the line to tier `extra`, profile `-` (extra keys are not
+# guarded by hottext's dead-key check), so only this contract can see the function leave the hot group; the copy's
+# `cargo xtask so` runs the check last.
+lsw-budget-minus-one | layout/contracts.tsv | lit:budget-release=4; ==> budget-release=3; | cargo xtask layout-check ~/work/LAYOUT-STARTUP-WINDOWS-2/rel-products | msg:STARTUP-TEXT-WINDOWS BROKEN: 4 windows
+lsw-key-removed | crates/libc-so/hot-text.list | perl:s/^_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary\tstartup\tfast,release$/_RNvPLANTnotakey\textra\t-/m | cargo xtask so | msg:STARTUP-TEXT-WINDOWS BROKEN
+lsw-window-size | xtask/src/layout.rs | lit:const STARTUP_WINDOW: u64 = 1 << 16; ==> const STARTUP_WINDOW: u64 = 1 << 12; | cargo test -p xtask --bin xtask -- layout::tests:: | msg:panicked
+lsw-straddle-inverted | xtask/src/layout.rs | lit:if window_of(f.start, window) != window_of(f.end - 1, window) { ==> if window_of(f.start, window) == window_of(f.end - 1, window) { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:panicked
+lsw-sizeless-entry | xtask/src/layout.rs | lit:end: start + size.max(1), ==> end: start + size, | cargo test -p xtask --bin xtask -- layout::tests:: | msg:entry byte
+lsw-libc-filter | xtask/src/layout.rs | lit:&& s.file.contains("libc.a(")) ==> && true) | cargo test -p xtask --bin xtask -- layout::tests:: | msg:crt1's _start is not a libc.a function
+lsw-budget-compare | xtask/src/layout.rs | lit:if n > budget { ==> if n > budget + 1 { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:panicked

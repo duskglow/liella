@@ -48,7 +48,24 @@ pub trait Arch {
     /// own identification instructions (executed through `m`) into a [`Features`] value. The hwcaps
     /// search (§4) and the trampoline variant (§12) take that value only (DL-6, D-27.14).
     fn features(aux: &Auxv<'_>, m: &impl Machine) -> Features;
+    /// The smallest page this architecture has (design §0a "Pages"): the page size when the
+    /// auxiliary vector gives none or an unusable one.
+    const BASE_PAGE: u64;
+    /// The end of user address space: a fixed-address (`ET_EXEC`) object must end at or below it.
+    const USER_END: u64;
+    /// The page size the loader maps with (DL-7, D-27.15): `AT_PAGESZ` when it is a power of two
+    /// not below [`Arch::BASE_PAGE`], otherwise [`Arch::BASE_PAGE`]. The only source of the page size
+    /// in the loader.
+    fn page_size(aux: &Auxv<'_>) -> u64 {
+        match aux.get(AT_PAGESZ) {
+            Some(p) if p.is_power_of_two() && p >= Self::BASE_PAGE => p,
+            _ => Self::BASE_PAGE,
+        }
+    }
 }
+
+/// `AT_PAGESZ` (kernel UAPI `linux/auxvec.h`): the system page size.
+pub const AT_PAGESZ: u64 = 6;
 
 /// What a relocation does, independent of the architecture's numbering (design §0a). Relocation code
 /// matches on this, never on a raw `r_type` (§0a checklist item 2).
@@ -103,6 +120,11 @@ impl Arch for X86_64 {
     const EI_DATA: u8 = ELFDATA2LSB;
     /// The x86-64 psABI's program interpreter name (§5.2.1, "Program Interpreter").
     const INTERP: &'static str = "ld-linux-x86-64.so.2";
+    /// The 4 KiB base page (x86-64 psABI §3.3.3 "Page size": systems may use larger pages).
+    const BASE_PAGE: u64 = 4096;
+    /// 47-bit user addresses (four-level paging; the kernel gives a program addresses above this
+    /// only when it asks for them with a hint, which the loader never does).
+    const USER_END: u64 = 1 << 47;
 
     /// x86-64's features come from CPUID and XGETBV ([`Features::detect`], D-4.25): the same decision
     /// libc's dispatch makes. `AT_HWCAP` on x86-64 is CPUID leaf 1 EDX only (a subset), so it is not read.
