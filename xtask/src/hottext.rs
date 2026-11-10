@@ -496,6 +496,49 @@ fn rename_for(name: &str, f: &str, keys: &BTreeMap<String, usize>) -> String {
 const STARTUP_KEY_SUFFIX: &str = "13startup_names13STARTUP_NAMES";
 pub const STARTUP_SECTION: &str = ".rodata1";
 
+/// HOT-GROUP-ANCHOR (D-X.51): the hot group starts wherever the sections before it end, so growth
+/// there re-cut every 64 KiB fault-around window inside the group. An empty input section with
+/// this alignment, whose name sorts before every `.text.sorted.h<nnnnn>.<f>` (a shorter prefix sorts
+/// first in `SORT(.text.sorted.*)`), opens the group at a window boundary. It is added to the member
+/// holding the list's first key (start-up: every program links it) and marked `SHF_GNU_RETAIN`:
+/// `--gc-sections` drops an unreferenced empty section otherwise, and the retained one keeps nothing
+/// else of its object alive (probe link, GNU ld 2.42). Cost: up to 64 KiB of never-touched padding.
+pub const ANCHOR: &str = ".text.sorted.h0";
+pub const ANCHOR_ALIGN: u64 = 65536;
+const SHF_GNU_RETAIN: u64 = 0x20_0000;
+
+/// Set `SHF_GNU_RETAIN` on section `name` of the ELF64 little-endian object `path` (objcopy 2.42
+/// has no flag for it). Handles extended section numbering (`e_shnum` / `e_shstrndx` in section 0).
+fn set_retain(path: &Path, name: &str) -> Result<(), String> {
+    let mut b = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let bad = |what: &str| format!("{}: {what} (want an ELF64 little-endian object)", path.display());
+    let le = |b: &[u8], at: usize, n: usize| -> Option<u64> { Some(b.get(at..at + n)?.iter().rev().fold(0, |v, x| v << 8 | u64::from(*x))) };
+    if b.get(..6) != Some(b"\x7fELF\x02\x01".as_slice()) {
+        return Err(bad("not ELF64 LE"));
+    }
+    let get = |b: &[u8], at: usize, n: usize| le(b, at, n).map(|v| v as usize).ok_or_else(|| bad("truncated header"));
+    let (shoff, shentsize) = (get(&b, 0x28, 8)?, get(&b, 0x3a, 2)?);
+    let (mut shnum, mut shstrndx) = (get(&b, 0x3c, 2)?, get(&b, 0x3e, 2)?);
+    if shnum == 0 {
+        shnum = get(&b, shoff + 0x20, 8)?;
+    }
+    if shstrndx == 0xffff {
+        shstrndx = get(&b, shoff + 0x28, 4)?;
+    }
+    let strtab = get(&b, shoff + shstrndx * shentsize + 0x18, 8)?;
+    for i in 0..shnum {
+        let hdr = shoff + i * shentsize;
+        let at = strtab + get(&b, hdr, 4)?;
+        let end = b.get(at..).and_then(|s| s.iter().position(|c| *c == 0)).ok_or_else(|| bad("bad section name"))?;
+        if &b[at..at + end] == name.as_bytes() {
+            let flags = le(&b, hdr + 8, 8).ok_or_else(|| bad("truncated section header"))? | SHF_GNU_RETAIN;
+            b[hdr + 8..hdr + 16].copy_from_slice(&flags.to_le_bytes());
+            return fs::write(path, b).map_err(|e| format!("{}: {e}", path.display()));
+        }
+    }
+    Err(bad(&format!("no section {name}")))
+}
+
 /// Whether `section` is the start-up names' section, renamed or not.
 fn is_startup_names(section: &str) -> bool {
     section.strip_prefix(".rodata.").is_some_and(|s| key(s).ends_with(STARTUP_KEY_SUFFIX))
@@ -526,10 +569,18 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     let mut hot = 0;
     let mut startup = 0;
     let mut changed = Vec::new();
+    let empty = work.join("hot-anchor.empty");
+    fs::write(&empty, b"").map_err(|e| e.to_string())?;
+    let mut anchored = None;
     for m in &members {
         let obj = work.join(m);
         let mut args = String::new();
+        let (mut has_anchor, mut holds_first) = (false, false);
         for name in crate::so::sections_of(&obj)?.values() {
+            if name == ANCHOR {
+                has_anchor = true;
+                continue;
+            }
             if name == STARTUP_SECTION {
                 startup += 1;
                 continue;
@@ -544,17 +595,37 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             let want = rename_for(name, f, &keys);
             if want.starts_with(".text.sorted.") {
                 hot += 1;
+                holds_first |= want.starts_with(".text.sorted.h00000.");
             }
             if want != *name {
                 args.push_str(&format!("--rename-section {name}={want}\n"));
             }
         }
+        // HOT-GROUP-ANCHOR: in the first member holding the list's first key, nowhere else.
+        let anchor_here = holds_first && anchored.is_none();
+        if anchor_here {
+            anchored = Some(m.clone());
+            if !has_anchor {
+                args.push_str(&format!("--add-section {ANCHOR}={}\n", empty.display()));
+                args.push_str(&format!("--set-section-flags {ANCHOR}=alloc,load,readonly,code,contents\n"));
+                args.push_str(&format!("--set-section-alignment {ANCHOR}={ANCHOR_ALIGN}\n"));
+            }
+        } else if has_anchor {
+            args.push_str(&format!("--remove-section {ANCHOR}\n"));
+        }
         if !args.is_empty() {
             let rsp = work.join(format!("{m}.rsp"));
             fs::write(&rsp, args).map_err(|e| e.to_string())?;
             crate::so::run(Command::new(&objcopy).arg(format!("@{}", rsp.display())).arg(&obj))?;
+            if anchor_here && !has_anchor {
+                set_retain(&obj, ANCHOR)?;
+            }
             changed.push(m.clone());
         }
+    }
+    match &anchored {
+        Some(m) => println!("so: hot group anchor {ANCHOR} (align {ANCHOR_ALIGN}, retained) in {m}"),
+        None => println!("so: no member holds the first hot-text key; the hot group has no anchor"),
     }
     if !changed.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(&archive).args(&changed))?;

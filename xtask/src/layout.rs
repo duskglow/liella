@@ -24,7 +24,7 @@ const HEADER: [&str; 6] = ["id", "kind", "subjects", "rule", "reason", "decision
 /// Kinds whose contract is held by a directive in the source (alignment attribute, `.p2align`, `.org`): a row of one
 /// of them needs a `LAYOUT(<ID>)` tag at that directive.
 const SITE_KINDS: &[&str] = &["classed-xref", "object-window", "object-align", "section-offset", "label-align"];
-const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap"];
+const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "group-anchor"];
 const DIRECTIVES: &[&str] = &[".p2align", ".balign", ".align ", ".org ", "align("];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -97,6 +97,8 @@ struct Section {
     ty: String,
     size: u64,
     align: u64,
+    /// readelf's Flg column (`AXR`, ...; empty when the section has none).
+    flags: String,
 }
 
 #[derive(Debug)]
@@ -144,7 +146,8 @@ fn parse_readelf(text: &str) -> Vec<Member> {
             if out.is_empty() {
                 out.push(Member::default());
             }
-            out.last_mut().unwrap().sections.insert(nr, Section { name: f[0].to_string(), ty: f[1].to_string(), size, align });
+            let flags = if f.len() >= 10 { f[6].to_string() } else { String::new() };
+            out.last_mut().unwrap().sections.insert(nr, Section { name: f[0].to_string(), ty: f[1].to_string(), size, align, flags });
             continue;
         }
         // "Num: Value Size Type Bind Vis Ndx Name"
@@ -399,6 +402,45 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
             }
             let n = crate::remap::check_dir(pr.dir, &crate::remap::needles(pr.root)).map_err(|e| one(c.broken(&c.subjects.join(" "), &e)))?;
             Ok(format!("{n} products carry no build path"))
+        }
+        "group-anchor" => {
+            // HOT-GROUP-ANCHOR (D-X.51): exactly one empty, retained section `section` aligned to `align`, whose name
+            // sorts before every other `.text.sorted.*` section, so the static link opens the hot group on it.
+            let want = param(&p, c, "section").map_err(one)?;
+            let align = param_num(&p, c, "align").map_err(one)?;
+            same(c, "align", align, crate::hottext::ANCHOR_ALIGN).map_err(one)?;
+            if want != crate::hottext::ANCHOR {
+                return Err(one(format!("layout: {}: rule section={want} but the checker holds {}", c.id, crate::hottext::ANCHOR)));
+            }
+            let mut lines = Vec::new();
+            for f in &c.subjects {
+                let (mut found, mut later) = (Vec::new(), 0);
+                for m in pr.members(f).map_err(|e| one(c.broken(f, &e)))? {
+                    for s in m.sections.values() {
+                        if s.name == want {
+                            found.push((m.name.clone(), s.align, s.size, s.flags.clone()));
+                        } else if s.name.starts_with(".text.sorted.") {
+                            later += 1;
+                            if s.name.as_str() < want {
+                                lines.push(c.broken(&format!("{}({})", m.name, s.name), &format!("sorts before the anchor {want}")));
+                            }
+                        }
+                    }
+                }
+                match found.as_slice() {
+                    [(m, a, n, fl)] => {
+                        if *a < align || *n != 0 || !fl.contains('R') || !fl.contains('X') {
+                            lines.push(c.broken(&format!("{m}({want})"), &format!("alignment {a}, {n} bytes, flags {fl:?} (want >= {align}, empty, AX and R)")));
+                        }
+                    }
+                    [] => lines.push(c.broken(f, &format!("no member has the anchor {want} ({later} .text.sorted.* sections)"))),
+                    many => lines.push(c.broken(f, &format!("{} members carry {want}, want 1", many.len()))),
+                }
+                if later == 0 {
+                    lines.push(c.broken(f, "no .text.sorted.* section (the hot group did not run?)"));
+                }
+            }
+            if lines.is_empty() { Ok(format!("{want} opens the hot group, aligned to {align}, retained")) } else { Err(lines) }
         }
         k => Err(one(format!("layout: {}: unknown kind `{k}` (known: {})", c.id, KINDS.join(", ")))),
     }
