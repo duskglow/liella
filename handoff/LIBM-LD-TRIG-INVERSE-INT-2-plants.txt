@@ -14,3 +14,11 @@ arc-quadrant | crates/math/src/wide_int/arc.rs | lit:Some((b.neg, if a.neg { sub
 arc-root-low | crates/math/src/wide_int/arc.rs | lit:if r < 0 { s - c } else { s + c } ==> if r < 0 { s } else { s } | cargo test -p liella-math --lib wide_int::arc | msg:(quotient_and_root_meet_their_bounds|arc_tier_agrees_with_the_wide_route).*FAILED
 # acosl's reflection for a < 0 dropped (acos(−a) = π − acos a).
 arc-acos-neg | crates/math/src/wide_int/arc.rs | lit:Some((false, if n.neg { sub_from(PI, t) } else { t })) ==> Some((false, t)) | cargo test -p liella-math --lib wide_int::arc | msg:arc_tier_agrees_with_the_wide_route.*FAILED
+# cargo xtask plants results (7 plants: 7 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# arc-table-index: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# arc-div-low: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# arc-tan-low: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# arc-near-true: CAUGHT, caught by liella_math wide_int::tests::rounding_test_refuses_near_a_boundary
+# arc-quadrant: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
+# arc-root-low: CAUGHT, caught by liella_math wide_int::arc::tests::quotient_and_root_meet_their_bounds
+# arc-acos-neg: CAUGHT, caught by liella_math wide_int::arc::tests::arc_tier_agrees_with_the_wide_route
