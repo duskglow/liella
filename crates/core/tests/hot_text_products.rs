@@ -72,7 +72,12 @@ use liella_kernel::uapi::{ADDR_NO_RANDOMIZE, PERSONALITY_QUERY};
 /// slack let DL-BOOT-RELOC-7's two start-up text faults through). Counts on the fix's build host:
 /// startup only 17, setlocale + printf 56, tool 59. TRUE_BOUND 23 -> 18, LOCALE_BOUND 68 -> 57,
 /// TOOL_BOUND 71 -> 60. [`init_startup_path_lies_in_the_hot_text_range`] checks the structure.
-const TRUE_BOUND: u64 = 18;
+/// STARTUP-FAULTS-RESTORE-4 (relay harness, see [`faults`]): every bound holds for both product
+/// profiles and both gate passes (exports interposed or not, which now read the same): one bound per
+/// mode at the larger profile's count plus 1. Haswell-EP host, every run identical, fast / release:
+/// startup only 16 / 15, setlocale + printf 56 / 56, tool 59 / 59, fork child 7 / 6, localtime and
+/// localtime + mktime 19 / 19, float 2 / 4. TRUE_BOUND 18 -> 17, FLOAT_BOUND 6 -> 5.
+const TRUE_BOUND: u64 = 17;
 const LOCALE_BOUND: u64 = 57;
 /// "tool" mode: a coreutils-shaped program (setlocale, bindtextdomain, atexit, getenv, strtoimax,
 /// printf), see `init_coreutils_shaped_program_stays_within_its_page_fault_bound`.
@@ -143,6 +148,12 @@ fn stage(exe: &Path, run: &Path) {
 /// spans one more page; on Zen 1 host argv[0] or env of 2.5 KiB moved every count by +1. The program
 /// therefore runs from a copy at a fixed-length private path, with a fixed argv[0], cwd and
 /// environment, so the count does not depend on where the tree is checked out.
+/// STARTUP-FAULTS-RESTORE-4: the program runs each mode as `relay <mode>`, in a vfork child of its
+/// own (`page_faults.c`), so the counted process is spawned by the products' vfork + execve, not by
+/// this test process. The gate runs this test twice, the second time with Liella's exports
+/// interposed on the test process; spawned by the test, the counted process ran the test
+/// process's spawn code before exec, and the whole-process modes (startup, setlocale + printf,
+/// tool) read one more fault in that pass (CI, Skylake-SP host: 58 / 61 against bounds 57 / 60).
 fn faults(exe: &Path, mode: &str) -> u64 {
     // One directory per call (the tests run in parallel); the name always has the same length.
     static CALL: AtomicUsize = AtomicUsize::new(0);
@@ -157,6 +168,7 @@ fn faults(exe: &Path, mode: &str) -> u64 {
     for _ in 0..=RUNS {
         let o = Command::new(&run)
             .arg0("page_faults")
+            .arg("relay")
             .arg(mode)
             .current_dir("/")
             .env_clear()
@@ -308,7 +320,8 @@ fn init_first_localtime_r_stays_within_its_page_fault_bound() {
 /// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
 /// = that plus 2 for layout-only deltas, below the six stack faults alone of the inlined frame.
-const FLOAT_BOUND: u64 = 6;
+/// STARTUP-FAULTS-RESTORE-4: fast 2, release 4 (Haswell-EP host, relay harness); FLOAT_BOUND 6 -> 5.
+const FLOAT_BOUND: u64 = 5;
 
 #[test]
 fn init_first_float_conversion_stays_within_its_page_fault_bound() {
