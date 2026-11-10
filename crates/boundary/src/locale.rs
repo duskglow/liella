@@ -246,6 +246,26 @@ pub fn view() -> &'static LocaleView {
     view_of(tb::read::<tb::Locale>())
 }
 
+/// `f(view())` for a short leaf body (`towupper`, `towctrans`): the stored case inline, every
+/// other case one cold out-of-line call that runs `f` itself, so the caller reaches it with a
+/// tail jump and needs no frame of its own. WCTYPE-TRIE-FILE-5: through [`view`], the resolve
+/// path was laid out as the fall-through (the stored case a taken branch and a jump, +1
+/// instruction); a cold call that only resolved the view made the caller non-leaf (+4).
+#[inline(always)]
+pub fn with_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
+    if views_stored() {
+        return f(tb::view_at(tb::read::<tb::View>()));
+    }
+    with_resolved_view(f)
+}
+
+/// [`with_view`]'s path for a block whose words are not stored (D-5.11).
+#[cold]
+#[inline(never)]
+fn with_resolved_view<R>(f: impl FnOnce(&'static LocaleView) -> R) -> R {
+    f(view_of(tb::read::<tb::Locale>()))
+}
+
 /// The calling thread's current locale: its `uselocale` choice, else the global locale.
 #[inline]
 pub fn current() -> &'static Locale {
