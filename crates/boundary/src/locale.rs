@@ -159,15 +159,33 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// (`iswalpha`, ...), as the C `int`: the thread block's class-word table (D-5.11), one `%fs`
 /// load, then the table's resolved block (D-5.10). A thread whose word is not stored, and a
 /// block not resolved yet, take the view's path in a tail call.
+///
+/// D-5.11 safety: the `wclass` word (0x180) lies where a block another `ld.so` made keeps its
+/// own data, so it is read only in a block the runtime made (`FLAG_OWN`, tested first); such a
+/// block holds a table from its creation ([`own_block_made`]: the always-missing table until a
+/// view is stored), so the word needs no zero check. Any other block takes the view path,
+/// whatever the word holds.
 #[inline(always)]
 pub fn isw(c: u32, mask: Class) -> i32 {
-    let t = tb::read::<tb::WClass>();
-    if t != 0
-        && let Some(r) = tb::class_table_at(t).test(c, mask.0)
+    if own_block()
+        && let Some(r) = tb::class_table_at(tb::read::<tb::WClass>()).test(c, mask.0)
     {
         return r;
     }
     isw_view(c, mask)
+}
+
+/// Whether the calling thread's block is one the runtime made (`FLAG_OWN`): only such a block's
+/// words at 0x138-0x187 (`view`, `cache`, `wclass`) are Liella's to read and write (D-5.11).
+#[inline(always)]
+pub(crate) fn own_block() -> bool {
+    tb::read32::<tb::Flags>() & liella_rt::tls::FLAG_OWN != 0
+}
+
+/// Fill the Liella-only words of a block the runtime just made and marked `FLAG_OWN`: its
+/// `wclass` word gets the always-missing table (D-5.11: [`isw`] reads it without a zero check).
+pub(crate) fn own_block_made(b: &liella_rt::tls::ThreadBlock) {
+    b.wclass.store(core::ptr::from_ref(liella::locale::classes::ClassTable::missing()).expose_provenance(), Relaxed);
 }
 
 /// `iswctype(c, desc)` in the calling thread's current locale: a standard class's mask (or
@@ -194,13 +212,18 @@ fn isw_view(c: u32, mask: Class) -> i32 {
 }
 
 /// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load; a thread
-/// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
+/// whose word is not stored (0) resolves its `uselocale` choice, else the global locale. The
+/// word is read only in a block the runtime made ([`own_block`], D-5.11); any other block
+/// resolves, whatever the word holds.
 #[inline]
 pub fn view() -> &'static LocaleView {
-    match tb::read::<tb::View>() {
-        0 => view_of(tb::read::<tb::Locale>()),
-        w => tb::view_at(w),
+    if own_block() {
+        let w = tb::read::<tb::View>();
+        if w != 0 {
+            return tb::view_at(w);
+        }
     }
+    view_of(tb::read::<tb::Locale>())
 }
 
 /// The calling thread's current locale: its `uselocale` choice, else the global locale.
@@ -276,8 +299,12 @@ fn store_words(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
 }
 
 /// `b`'s `view` word and, with it, its `wclass` word (D-5.11: the class tests read the table
-/// without the view). Every writer of `view` stores both.
+/// without the view). Every writer of `view` stores both. A block the runtime did not make
+/// (`FLAG_OWN` clear) is never written there: those words are not Liella's (D-5.11).
 fn store_view(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
+    if b.flags.load(Relaxed) & liella_rt::tls::FLAG_OWN == 0 {
+        return;
+    }
     b.wclass.store(core::ptr::from_ref(v.class_table()).expose_provenance(), Release);
     b.view.store(core::ptr::from_ref(v).expose_provenance(), Release);
 }
@@ -822,6 +849,63 @@ pub fn rpmatch(response: usize) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D-5.11 safety (no spec clause: a Liella design rule, records/decisions/D-5/D-5.11.toml):
+    /// in a thread block the runtime did not make (`FLAG_OWN` clear: this test process's
+    /// threads, made by the system's `ld.so`), the words at 0x138-0x187 (`view`, the cache
+    /// line, `wclass`) are never used as pointers or values and never written. The test fills
+    /// them with non-canonical addresses (a dereference faults), asks the class tests, the view
+    /// and the time zone period, stores a view the way every writer does, and checks the
+    /// answers and that the words still hold what the test put there; then restores them.
+    #[test]
+    fn foreign_block_words_are_never_read_or_written() {
+        std::thread::spawn(|| {
+            let b = tb::current();
+            if b.flags.load(Relaxed) & liella_rt::tls::FLAG_OWN != 0 {
+                println!("skipped: this thread's block was made by the runtime, not a foreign ld.so");
+                return;
+            }
+            let words = || {
+                let mut w = [b.view.load(Relaxed), b.wclass.load(Relaxed), 0, 0, 0, 0, 0, 0, 0, 0];
+                for (d, s) in w.iter_mut().skip(2).zip(&b.cache) {
+                    *d = s.load(Relaxed);
+                }
+                w
+            };
+            let saved = words();
+            // Answers before the garbage (the view path: nothing stored for this thread).
+            let probe = [0x41u32, 0x7a, 0x30, 0xe9, 0x3b1, 0x4e00, 0x1_0400, 0x11_0000];
+            let classes = [Class::ALPHA, Class::DIGIT, Class::SPACE, Class::UPPER, Class::PRINT];
+            let want: Vec<i32> = probe.iter().flat_map(|&c| classes.iter().map(move |&m| view().isw_int(c, m))).collect();
+            let garbage = |k: usize| 0xdead_0000_0000_1000usize.wrapping_add(k.wrapping_mul(0x40));
+            b.view.store(garbage(0), Relaxed);
+            b.wclass.store(garbage(1), Relaxed);
+            for (k, w) in b.cache.iter().enumerate() {
+                w.store(garbage(k.wrapping_add(2)), Relaxed);
+            }
+            let planted = words();
+            let got: Vec<i32> = probe.iter().flat_map(|&c| classes.iter().map(move |&m| isw(c, m))).collect();
+            let defined = iswctype(0x41, u64::from(Class::ALPHA.0));
+            let v = core::ptr::from_ref(view()).expose_provenance();
+            store_view(b, view_of(GLOBAL));
+            let fresh = crate::zone::with_period(|p| {
+                let seen = *p == liella::time::Period::from_words(&[0; 3]);
+                *p = liella::time::Period::from_words(&[1, 2, 3]);
+                seen
+            });
+            let after = words();
+            for (d, s) in [&b.view, &b.wclass].into_iter().chain(&b.cache).zip(saved) {
+                d.store(s, Relaxed);
+            }
+            assert_eq!(got, want, "isw answers with garbage words");
+            assert_eq!(defined, 1, "iswctype('A', alpha)");
+            assert!(v != garbage(0), "view() used the garbage view word");
+            assert!(fresh, "with_period read the garbage cache words");
+            assert_eq!(after, planted, "a word at 0x138-0x187 of a foreign block was written");
+        })
+        .join()
+        .unwrap_or_else(|_| panic!("the foreign-block thread panicked"));
+    }
 
     /// The item-table fast path of `nl_langinfo` answers what the per-call path answers (LV-4),
     /// for the built-in locales over every category number around the valid ones, item indexes
