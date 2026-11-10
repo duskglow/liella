@@ -1,0 +1,12 @@
+# DL-RELOC / DL-RELOC-2 / DL-RELOC-3 (phase 14 DL-10, D-27.17): plants on the relocator, the version check, RELRO,
+# the empty-PT_LOAD skip, the unhashed-symbol count and the dependency identity (L14-4). Each command
+# rebuilds the ld.so product first, so plants in crates/ld/src and crates/boundary/src/ld.rs reach it.
+relative-addend-dropped | crates/ld/src/arch.rs | lit:word(o.b.wrapping_add(a)) ==> word(o.b) | cargo xtask so && cargo test -p liella-ld --test reloc | msg:RELATIVE is B \+ A
+abs64-addend-dropped | crates/ld/src/arch.rs | lit:RelocKind::Abs64 => word(o.s.wrapping_add(a)), ==> RelocKind::Abs64 => word(o.s), | cargo xtask so && cargo test -p liella-ld --test reloc | msg:64 is S \+ A
+forward-object-order | crates/ld/src/reloc.rs | lit:for i in (0..set.objs.len()).rev() { ==> for i in 0..set.objs.len() { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:reloc_.*panicked
+irelative-not-deferred | crates/ld/src/reloc.rs | lit:RelocKind::Irelative if !deferred => Ok(true), ==> RelocKind::Irelative if !deferred && false => Ok(true), | cargo xtask so && cargo test -p liella-ld --test reloc | msg:each IFUNC resolver runs once per relocation that needs it
+relro-left-writable | crates/boundary/src/ld.rs | lit:reloc::protect_relro(objs, &mut ProcImage, page) ==> reloc::protect_relro(&objs[..0], &mut ProcImage, page) | cargo xtask so && cargo test -p liella-ld --test reloc | msg:writing RELRO data after relocation must fault
+version-check-skipped | crates/boundary/src/ld.rs | lit:reloc::check_versions(objs) ==> reloc::check_versions(&objs[..0]) | cargo xtask so && cargo test -p liella-ld --test reloc | msg:unversioned stub must stop the load
+two-paths-loaded-twice | crates/boundary/src/ld.rs | lit:if ids[..n].contains(&id) { ==> if false && ids[..n].contains(&id) { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:mapped executable exactly once
+empty-load-refused | crates/ld/src/map.rs | lit:for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD && p.memsz != 0) { ==> for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD) { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:malformed loadable segments
+unhashed-symbol-refused | crates/ld/src/elf.rs | lit:count.filter(|_| lower_bound) ==> count.filter(|_| false) | cargo xtask so && cargo test -p liella-ld --test reloc | msg:malformed relocation tables

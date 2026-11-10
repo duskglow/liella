@@ -268,9 +268,19 @@ fn reloc_model_corpus_one_object_per_type() {
     assert_eq!(word(&mut m, t_word), bias(0) + sym_value(&files[0], b"t_target"), "TEXTREL word = S + A (the COPY)");
     let ifp = word(&mut m, bias(1) + sym_value(pa, b"a_ifunc_ptr"));
     assert!(ifp > 0xabc0_0000_0000 && (m.spans[1].0..m.spans[1].1).contains(&(ifp - 0xabc0_0000_0000)), "IRELATIVE holds its resolver's result: {ifp:#x}");
-    // GLOB_DAT / JUMP_SLOT of every object hold S of the definition the scope finds first.
+    // GLOB_DAT / JUMP_SLOT of every object hold S of the definition the scope finds first. Count
+    // the relocations that need a resolver: each IRELATIVE, and each symbol reference bound to an IFUNC.
+    let mut needs_resolver = 0;
     for (i, o) in objs.iter().enumerate() {
         for r in o.dynm.rela::<Native>().unwrap().into_iter().flatten().chain(o.dynm.jmprel::<Native>().unwrap().into_iter().flatten()) {
+            if matches!(r.kind, RelocKind::Irelative) {
+                needs_resolver += 1;
+            }
+            if matches!(r.kind, RelocKind::Abs64 | RelocKind::GlobDat | RelocKind::JumpSlot | RelocKind::TextRel { .. }) && r.sym != 0 {
+                let name = o.dynm.string(u64::from(syms[i].symtab().get(r.sym).unwrap().name)).unwrap();
+                let def = (0..objs.len()).find_map(|j| syms[j].lookup(&Request::new(name, Want::Oldest)).unwrap());
+                needs_resolver += usize::from(def.is_some_and(|d| d.st.kind() == 10));
+            }
             if matches!(r.kind, RelocKind::GlobDat | RelocKind::JumpSlot) {
                 let st = syms[i].symtab().get(r.sym).unwrap();
                 let name = o.dynm.string(u64::from(st.name)).unwrap();
@@ -288,6 +298,9 @@ fn reloc_model_corpus_one_object_per_type() {
     // after it in load order happens after a resolver call, except resolver results.
     let calls: Vec<usize> = m.log.iter().enumerate().filter_map(|(k, e)| matches!(e, Ev::Call(_)).then_some(k)).collect();
     assert!(!calls.is_empty(), "the corpus calls resolvers");
+    // A resolver runs once per relocation that needs it, in the deferred pass only: a call in pass 1
+    // as well would run it before its object's later entries are applied, and twice.
+    assert_eq!(calls.len(), needs_resolver, "each IFUNC resolver runs once per relocation that needs it: {:?}", m.log);
     for &k in &calls {
         let Ev::Call(j) = m.log[k] else { unreachable!() };
         for e in &m.log[k..] {
