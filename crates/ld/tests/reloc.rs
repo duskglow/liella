@@ -83,7 +83,9 @@ int a_get(void) { return b_data; }          /* GLOB_DAT */
 static int impl(void) { return a_get() + 1; }
 static void *pick(void) { return (void *)impl; }
 int a_ifunc(void) __attribute__((ifunc(\"pick\")));
-int (*a_ifunc_ptr)(void) = a_ifunc;         /* IRELATIVE */
+int (*a_ifunc_ptr)(void) = a_ifunc;         /* 64 bound to an IFUNC (deferred) */
+static int l_ifunc(void) __attribute__((ifunc(\"pick\")));
+int (*a_lifunc_ptr)(void) = l_ifunc;        /* IRELATIVE (a local IFUNC) */
 ";
 const LIBT: &str = "int t_target = 11;
 __asm__(\".text\\n.globl t_word\\n.type t_word,@object\\nt_word: .quad t_target\\n.size t_word, 8\\n\");
@@ -91,7 +93,7 @@ __asm__(\".text\\n.globl t_word\\n.type t_word,@object\\nt_word: .quad t_target\
 /// The program: exits 0 when every relocated value is right, else the number of the first wrong one.
 const PROG: &str = "extern int b_data; extern int b_fn(void); extern int a_call(void); extern int a_get(void);
 extern int a_ifunc(void); extern int a_local; extern int *a_ptr; extern int *a_lp; extern int (*a_ifunc_ptr)(void);
-extern int t_target; extern long t_word; extern int *a_sp;
+extern int (*a_lifunc_ptr)(void); extern int t_target; extern long t_word; extern int *a_sp;
 static void bye(int c) { __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); __builtin_unreachable(); }
 static int check(void) {
   if (b_data != 7) return 1;                 /* COPY */
@@ -99,7 +101,7 @@ static int check(void) {
   if (a_call() != 5 || b_fn() != 5) return 3;
   if (a_ptr != &b_data) return 4;
   if (a_lp != &a_local + 2) return 5;
-  if (a_ifunc() != 8 || a_ifunc_ptr() != 8) return 6;
+  if (a_ifunc() != 8 || a_ifunc_ptr() != 8 || a_lifunc_ptr() != 8) return 6;
   if (t_word != (long)&t_target) return 7;   /* TEXTREL */
   if (*a_sp != 4) return 8;                  /* RELATIVE */
   return 0;
@@ -266,15 +268,18 @@ fn reloc_model_corpus_one_object_per_type() {
     assert_eq!(&m.bytes(b_copy, 4)[..], &7i32.to_le_bytes(), "COPY copied b_data's bytes");
     let t_word = bias(3) + sym_value(pt, b"t_word");
     assert_eq!(word(&mut m, t_word), bias(0) + sym_value(&files[0], b"t_target"), "TEXTREL word = S + A (the COPY)");
-    let ifp = word(&mut m, bias(1) + sym_value(pa, b"a_ifunc_ptr"));
-    assert!(ifp > 0xabc0_0000_0000 && (m.spans[1].0..m.spans[1].1).contains(&(ifp - 0xabc0_0000_0000)), "IRELATIVE holds its resolver's result: {ifp:#x}");
+    for (sym, what) in [(&b"a_lifunc_ptr"[..], "IRELATIVE"), (&b"a_ifunc_ptr"[..], "64 bound to an IFUNC")] {
+        let ifp = word(&mut m, bias(1) + sym_value(pa, sym));
+        assert!(ifp > 0xabc0_0000_0000 && (m.spans[1].0..m.spans[1].1).contains(&(ifp - 0xabc0_0000_0000)), "{what} holds its resolver's result: {ifp:#x}");
+    }
     // GLOB_DAT / JUMP_SLOT of every object hold S of the definition the scope finds first. Count
     // the relocations that need a resolver: each IRELATIVE, and each symbol reference bound to an IFUNC.
-    let mut needs_resolver = 0;
+    let (mut needs_resolver, mut irelative) = (0, 0);
     for (i, o) in objs.iter().enumerate() {
         for r in o.dynm.rela::<Native>().unwrap().into_iter().flatten().chain(o.dynm.jmprel::<Native>().unwrap().into_iter().flatten()) {
             if matches!(r.kind, RelocKind::Irelative) {
                 needs_resolver += 1;
+                irelative += 1;
             }
             if matches!(r.kind, RelocKind::Abs64 | RelocKind::GlobDat | RelocKind::JumpSlot | RelocKind::TextRel { .. }) && r.sym != 0 {
                 let name = o.dynm.string(u64::from(syms[i].symtab().get(r.sym).unwrap().name)).unwrap();
@@ -298,6 +303,7 @@ fn reloc_model_corpus_one_object_per_type() {
     // after it in load order happens after a resolver call, except resolver results.
     let calls: Vec<usize> = m.log.iter().enumerate().filter_map(|(k, e)| matches!(e, Ev::Call(_)).then_some(k)).collect();
     assert!(!calls.is_empty(), "the corpus calls resolvers");
+    assert!(irelative > 0, "the corpus has an IRELATIVE (liba's local IFUNC)");
     // A resolver runs once per relocation that needs it, in the deferred pass only: a call in pass 1
     // as well would run it before its object's later entries are applied, and twice.
     assert_eq!(calls.len(), needs_resolver, "each IFUNC resolver runs once per relocation that needs it: {:?}", m.log);
