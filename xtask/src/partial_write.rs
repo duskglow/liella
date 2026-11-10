@@ -82,7 +82,6 @@ const NO_WRITE: &[&str] = &["ucomiss", "ucomisd", "comiss", "comisd", "ptest", "
 /// One decoded instruction.
 #[derive(Debug, Clone)]
 pub(crate) struct Insn {
-    pub addr: u64,
     pub mnem: String,
     pub ops: Vec<String>,
     pub text: String,
@@ -162,7 +161,7 @@ pub(crate) fn parse_objdump(text: &str) -> (BTreeMap<u64, Insn>, BTreeMap<u64, S
         }
         let ops = split_ops(ops.split(" <").next().unwrap_or("").trim());
         let text = format!("{mnem} {}", ops.join(",")).trim_end().to_string();
-        insns.insert(addr, Insn { addr, mnem, ops, text });
+        insns.insert(addr, Insn { mnem, ops, text });
     }
     (insns, syms)
 }
