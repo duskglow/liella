@@ -1024,7 +1024,8 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     // After the last product: every layout contract of layout/contracts.tsv (D-X.48) on the products, among them
     // the 64-byte entries (D-4.33), the classed pages' XREF bias (D-X.34), the hot kernels' jumps off 32-byte
     // boundaries (D-4.67) and no build path in any product (PRODUCT-PATH-REMAP).
-    crate::layout::check_products(root, &release)?;
+    // STARTUP-TEXT-WINDOWS (D-X.49) reads its budget for this profile.
+    crate::layout::check_products(root, &release, Some(profile.name()))?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
     fs::write(&marker, format!("{}
