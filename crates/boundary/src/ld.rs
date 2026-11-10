@@ -398,32 +398,62 @@ fn live_segment(at: usize, len: usize) -> &'static [u8] {
     unsafe { conv::bytes_at(at, len) }
 }
 
+/// `n` empty spans laid over `bytes` (the unique borrow of a fresh scratch mapping's tail, consumed
+/// here): the image reader's span list, sized from the program's header count, since the number of
+/// `PT_LOAD`s has no bound (D-27.15).
+fn span_slots(bytes: &'static mut [u8], n: usize, name: &[u8]) -> &'static mut [liella_ld::elf::Span<'static>] {
+    use liella_ld::elf::Span;
+    let p = bytes.as_mut_ptr().cast::<Span<'static>>();
+    if !p.is_aligned() || n.checked_mul(size_of::<Span<'static>>()).is_none_or(|need| need > bytes.len()) {
+        fail_with(&[name, b": malformed program headers\n"], program::FAILURE)
+    }
+    for i in 0..n {
+        let slot = p.wrapping_add(i);
+        // UNSAFE(slice): one slot of the span list, initialised before the list is formed (D-27.18).
+        #[allow(unsafe_code)]
+        // SAFETY: `bytes` is the only reference to its memory and is consumed here; `slot` is aligned for `Span`
+        // and inside it (`i < n`, and `n` spans fit: checked above).
+        unsafe {
+            slot.write(Span { vaddr: 0, bytes: &[] });
+        }
+    }
+    // UNSAFE(slice): the span list, in a fresh anonymous mapping (D-27.18).
+    #[allow(unsafe_code)]
+    // SAFETY: `p` is aligned, `n` spans fit and every one holds a valid empty span (written above); nothing
+    // else refers to the memory, and the mapping is unmapped only at the end of `link`, after the last use.
+    unsafe {
+        core::slice::from_raw_parts_mut(p, n)
+    }
+}
+
 /// The program as the reader sees it, read from its memory image (ruling #4229, D-27.18): its program
 /// header table and `PT_DYNAMIC` copied into one anonymous mapping, each `PT_LOAD` whose bytes cannot
 /// change during loading sliced in place, and each that can change and holds a table copied into a
-/// second one, all before the first relocation store. Returns the table and the spans (in `spans`);
-/// each mapping made is added to `maps` from `*n` on.
+/// second one, all before the first relocation store. The span list lives in the first mapping, after
+/// the table. Returns the table and the spans; each mapping made is stored in `maps`.
 // The span index stays below `spans.len()` (checked before each store).
 #[allow(clippy::indexing_slicing)]
-fn image_view<'s>(
+fn image_view(
     prog: &start::Program,
     bias: usize,
     name: &[u8],
-    spans: &'s mut [liella_ld::elf::Span<'static>],
     maps: &mut [(usize, usize)],
-) -> (&'static [u8], &'s [liella_ld::elf::Span<'static>]) {
+) -> (&'static [u8], &'static [liella_ld::elf::Span<'static>]) {
     use liella_ld::elf::{pt, Elf, Span, SpanKind, PHDR_SIZE};
     let bad = |what: &[u8]| -> ! { fail_with(&[name, what], program::FAILURE) };
     let table = prog.phnum.saturating_mul(PHDR_SIZE);
-    // Pass 1: the header table alone, to find PT_DYNAMIC and size the first mapping.
-    let (at, buf) = scratch(table, name);
+    // Pass 1: the header table alone, to find PT_DYNAMIC and size the first mapping. One span per
+    // PT_LOAD and one for PT_DYNAMIC's copy: at most phnum (PT_DYNAMIC, required below, is a header
+    // that is not a PT_LOAD), in the same mapping after the table (a multiple of 8 bytes from a page
+    // boundary, so aligned for them). Any number of PT_LOADs (D-27.15).
+    let whole = prog.phnum.saturating_mul(size_of::<Span<'static>>()).saturating_add(table);
+    let (at, buf) = scratch(whole, name);
+    let (buf, tail) = buf.split_at_mut(table);
     read_image(prog.phdr, buf);
     let head: &'static [u8] = buf;
+    let spans = span_slots(tail, prog.phnum, name);
     let probe = Elf::from_image::<Native>(head, &[]).unwrap_or_else(|_| bad(b": malformed program headers\n"));
     let loads = || probe.program_headers().filter(|p| p.p_type == pt::LOAD);
-    if loads().count() > map::LOADS_MAX {
-        bad(b": too many loadable segments\n");
-    }
     let run_at = |vaddr: u64| bias.wrapping_add(usize::try_from(vaddr).unwrap_or(usize::MAX));
     // A range is read from memory only when it lies in the file-backed part of one readable PT_LOAD.
     let mapped = |vaddr: u64, len: u64| {
@@ -434,7 +464,7 @@ fn image_view<'s>(
     if !mapped(dynph.vaddr, dynph.filesz) || dlen == 0 {
         bad(b": no valid dynamic section\n");
     }
-    maps[0] = (at, table);
+    maps[0] = (at, whole);
     let (at, buf) = scratch(dlen, name);
     read_image(run_at(dynph.vaddr), buf);
     maps[1] = (at, dlen);
@@ -474,6 +504,7 @@ fn image_view<'s>(
             k = k.saturating_add(1);
         }
     }
+    let spans: &'static [Span<'static>] = spans;
     (head, &spans[..k])
 }
 
@@ -495,8 +526,7 @@ fn link(prog: &start::Program, bias: usize, page: u64, name: &'static [u8]) {
     use liella_ld::reloc::{self, Obj, Objects};
     let mut maps = [(0usize, 0usize); OBJECTS_MAX];
     let mut own = [(0usize, 0usize); 3];
-    let mut spans = [liella_ld::elf::Span { vaddr: 0, bytes: &[] }; map::LOADS_MAX + 1];
-    let (head, view) = image_view(prog, bias, name, &mut spans, &mut own);
+    let (head, view) = image_view(prog, bias, name, &mut own);
     // The program's own file is not known (no file is read): (dev, ino) that no file has.
     let mut ids: [FileId; OBJECTS_MAX] = [(u64::MAX, u64::MAX); OBJECTS_MAX];
     let image = liella_ld::elf::Elf::from_image::<Native>(head, view).unwrap_or_else(|_| fail_with(&[name, b": malformed program headers\n"], program::FAILURE));
