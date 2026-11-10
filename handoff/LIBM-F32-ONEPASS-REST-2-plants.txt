@@ -1,0 +1,7 @@
+# LIBM-F32-ONEPASS-REST-2 plants (cargo xtask plants; docs/plants.md). exp10f's exact-power refusal as one rotate
+# compare (D-10.72), and partial-write's static check limited to a libm.so.6 built from the current tree (its
+# source digest, written by cargo xtask so).
+exp10-rotate-width | crates/math/src/fast32.rs | lit:.rotate_right(20) <= ==> .rotate_right(19) <= | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD exp10f|exp10f differs from the envelope)
+exp10-rotate-top-dropped | crates/math/src/fast32.rs | lit:.rotate_right(20) <= (0x4120_0000 ==> .rotate_right(20) < (0x4120_0000 | cargo test -p liella-boundary --release --test s10_math_symbols -- math_expf_onepass_entries_match_the_envelope | msg:(BAD exp10f|exp10f differs from the envelope)
+pw-static-ignores-digest | xtask/src/partial_write.rs | lit:if built != now { ==> if false && built != now { | cargo test -p xtask --release -- partial_write::tests::static_checks_only_a_product_of_this_tree | msg:(no digest: skipped|static_checks_only_a_product_of_this_tree.*FAILED|panicked)
+pw-digest-ignores-contents | xtask/src/partial_write.rs | lit:eat(&data); ==> let _ = &data; | cargo test -p xtask --release -- partial_write::tests::static_checks_only_a_product_of_this_tree | msg:(a source changed since the build: skipped|static_checks_only_a_product_of_this_tree.*FAILED|panicked)
