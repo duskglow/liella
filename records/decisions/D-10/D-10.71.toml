@@ -1,0 +1,10 @@
+id = "D-10.71"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+story = "LIBM-SQRT-ENTRY"
+date = "2026-11-10"
+body = '''
+**`sqrt`, `sqrtf`, `sqrtl` entries: nothing on the in-place path but the mode test and the instruction** (LIBM-SQRT-ENTRY). `sqrt`/`sqrtf` read MXCSR inline (`fpregs::mxcsr`, D-X.44), test `fpu::is_sqrt_in_place` as before, pin the operand behind the test and issue `sqrtsd`/`sqrtss` inline (`hot::sqrtsd`/`hot::sqrtss`, upper lanes `+0`: exact in every mode), with the EDOM store out of line (`sqrt_domain`, cold): the two calls (`liella_machine_mxcsr_get`, `liella_machine_sqrtsd`/`sqrtss`) are gone. `sqrtl`/`sqrtf64x` are assembly (csys/src/machine/sqrtl.S): `fnstcw`, the default-but-rounding test, `fldt` from the caller's stack slot, `fxam`, and `fsqrt` in place for a positive normal operand only; every other control word or class (zeros, subnormals, pseudo-denormals, infinities, NaNs, negatives, unsupported encodings) tail-calls the generated forwarder, now hidden as `liella_slow_sqrtl` (math-gen `ASM_ENTRY`), whose rules (D-10.20, D-10.22) are unchanged. Why: the generic forwarder rebuilt the 80-bit operand from two integer stores before each `fldt` (once in the C forwarder, once before `liella_machine_fsqrt`), and a load spanning two stores is not store-forwarded (Intel 64 and IA-32 Architectures Optimization Reference Manual, store forwarding restrictions): a stall per crossing at equal instruction counts. The mode test stays: an unmasked exception must not see the instruction trap where the software path answers (D-10.22). Behaviour unchanged.
+'''
