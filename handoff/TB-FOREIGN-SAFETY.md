@@ -51,6 +51,10 @@ and 0x30 (pointer guard).
 | 0x138 view | `%fs` load | never read (`view()` returns early with `foreign_view`); never written (already gated) |
 
 ## Open, and must be done before landing
+- `ops handback-check` at 67714a9e0 was red at the lint step with "codemap FAILED: docs/codemap/symbols.tsv out of
+  date: run cargo xtask codemap". This checkout's xtask usage lists no `codemap` subcommand, and the run ran out of
+  budget before finding the generator. Regenerate the codemap with whatever produces it (it is a generated file:
+  never hand-edit it) and copy the result back to the worktree.
 - Tests (spec trace `no spec clause`, D-X.58). (a) A dedicated test file with a single test, so its process has
   only the harness thread and this one. In a std thread: save words 0x9c-0x187, fill them with decoy values (bit 0
   of 0x9c set; pointers aimed at a static decoy area so a planted mutant gives a message, not SIGSEGV), and call
