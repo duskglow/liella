@@ -774,9 +774,14 @@ fn init_zero_fault_clusters_sit_in_one_window() {
     let dir = std::env::temp_dir().join(format!("liella-cluster-window-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
+    let file = std::fs::metadata(dir.join("page_faults")).map(|m| m.len()).unwrap_or(0);
     let _ = std::fs::remove_dir_all(&dir);
+    // The cost of the alignment (ruling #4363): where .text starts, and the gap ahead of each head.
+    let inputs = text_inputs(&map);
+    eprintln!("PADDING: probe file {file} bytes; .text starts at {:#x}", inputs.first().map_or(0, |s| s.1));
     for (name, lo, hi) in cluster_ranges(&map) {
-        eprintln!("cluster {name}: {lo:#x}..{hi:#x} ({} bytes)", hi.saturating_sub(lo));
+        let prev = inputs.iter().filter(|s| s.2 > 0 && s.1 < lo).map(|s| s.1 + s.2).max().unwrap_or(lo);
+        eprintln!("cluster {name}: {lo:#x}..{hi:#x} ({} bytes; {} bytes of padding ahead of it)", hi.saturating_sub(lo), lo.saturating_sub(prev));
         assert_eq!(lo >> 16, hi.saturating_sub(1) >> 16, "CLUSTER-WINDOW: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window (head alignment missing?)");
     }
 }

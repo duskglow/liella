@@ -653,6 +653,22 @@ fn section_table(obj: &Path) -> Result<Vec<(String, u64, u64)>, String> {
 
 /// [`section_table`] of the bytes `b`; `None` when they are not a well-formed ELF64 LE file.
 fn elf_sections(b: &[u8]) -> Option<Vec<(String, u64, u64)>> {
+    Some(elf_headers(b)?.into_iter().map(|s| (s.name, s.size, s.align)).collect())
+}
+
+/// One section header of an ELF64 object, as [`elf_headers`] reads it.
+pub(crate) struct Shdr {
+    pub(crate) name: String,
+    /// `sh_type` (`SHT_NOBITS` = 8 for zero-filled sections).
+    pub(crate) kind: u32,
+    pub(crate) size: u64,
+    pub(crate) align: u64,
+}
+pub(crate) const SHT_NOBITS: u32 = 8;
+
+/// The section headers of the ELF64 little-endian object `b`, in index order, with whole names;
+/// `None` when `b` is not a well-formed ELF64 LE file.
+pub(crate) fn elf_headers(b: &[u8]) -> Option<Vec<Shdr>> {
     let u16_at = |o: usize| Some(u16::from_le_bytes(b.get(o..o.checked_add(2)?)?.try_into().ok()?));
     let u32_at = |o: usize| Some(u32::from_le_bytes(b.get(o..o.checked_add(4)?)?.try_into().ok()?));
     let u64_at = |o: usize| Some(u64::from_le_bytes(b.get(o..o.checked_add(8)?)?.try_into().ok()?));
@@ -681,9 +697,91 @@ fn elf_sections(b: &[u8]) -> Option<Vec<(String, u64, u64)>> {
         let name_at = strtab.checked_add(usize::try_from(u32_at(h)?).ok()?)?;
         let rest = b.get(name_at..)?;
         let name = rest.get(..rest.iter().position(|c| *c == 0)?)?;
-        out.push((String::from_utf8_lossy(name).into_owned(), u64_at(h.checked_add(32)?)?, u64_at(h.checked_add(48)?)?));
+        out.push(Shdr {
+            name: String::from_utf8_lossy(name).into_owned(),
+            kind: u32_at(h.checked_add(4)?)?,
+            size: u64_at(h.checked_add(32)?)?,
+            align: u64_at(h.checked_add(48)?)?,
+        });
     }
     Some(out)
+}
+
+/// The members of the System V / GNU `ar` archive `data` in archive order: (name, bytes). Long
+/// names (`/<offset>` into the `//` member) are resolved; the symbol tables (`/`, `/SYM64/`) and
+/// the long-name table itself are left out.
+pub(crate) fn ar_members(data: &[u8]) -> Result<Vec<(String, &[u8])>, String> {
+    if data.get(..8) != Some(b"!<arch>\n".as_slice()) {
+        return Err("not an ar archive".into());
+    }
+    let (mut at, mut names, mut out): (usize, &[u8], Vec<(String, &[u8])>) = (8, &[], Vec::new());
+    while at < data.len() {
+        let h = data.get(at..at + 60).ok_or_else(|| format!("member header at {at} cut short"))?;
+        let size: usize = std::str::from_utf8(&h[48..58]).ok().and_then(|s| s.trim().parse().ok()).ok_or_else(|| format!("member header at {at}: bad size"))?;
+        let body = data.get(at + 60..(at + 60).checked_add(size).ok_or("member size overflows")?).ok_or_else(|| format!("member at {at} runs past the end"))?;
+        let raw = String::from_utf8_lossy(&h[..16]);
+        let raw = raw.trim_end();
+        if raw == "//" {
+            names = body;
+        } else if raw != "/" && raw != "/SYM64/" {
+            let name = match raw.strip_prefix('/') {
+                Some(off) => {
+                    let off: usize = off.parse().map_err(|_| format!("member name `{raw}`"))?;
+                    let rest = names.get(off..).ok_or_else(|| format!("long name offset {off} past the name table"))?;
+                    let end = rest.windows(2).position(|w| w == b"/\n").ok_or_else(|| format!("long name at {off} not terminated"))?;
+                    String::from_utf8_lossy(&rest[..end]).into_owned()
+                }
+                None => raw.strip_suffix('/').unwrap_or(raw).to_string(),
+            };
+            out.push((name, body));
+        }
+        at += 60 + size + size % 2;
+    }
+    Ok(out)
+}
+
+/// The section headers of every ELF member of the archive at `path`: (member, headers), in
+/// archive order. A member with the ELF magic that does not parse is an error.
+pub(crate) fn archive_headers(path: &Path) -> Result<Vec<(String, Vec<Shdr>)>, String> {
+    let data = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = Vec::new();
+    for (m, b) in ar_members(&data).map_err(|e| format!("{}: {e}", path.display()))? {
+        if !b.starts_with(b"\x7fELF") {
+            continue;
+        }
+        let h = elf_headers(b).ok_or_else(|| format!("{}({m}): not a well-formed ELF64 little-endian object", path.display()))?;
+        out.push((m, h));
+    }
+    Ok(out)
+}
+
+/// Check that every `from -> to` rename of `renames` (by member) took effect in `members` (the
+/// headers read back after the rename): `to` is there and `from` is gone (unless another rename
+/// of the member produces it). `objcopy --rename-section` with a name no section has does
+/// nothing and says nothing. Returns the number of renames checked.
+pub(crate) fn check_renames(members: &[(String, Vec<Shdr>)], renames: &BTreeMap<String, Vec<(String, String)>>) -> Result<usize, String> {
+    let mut bad = Vec::new();
+    let mut n = 0;
+    for (m, list) in renames {
+        let Some((_, h)) = members.iter().find(|(name, _)| name == m) else {
+            bad.push(format!("{m}: member missing after the rename"));
+            continue;
+        };
+        let has = |s: &str| h.iter().any(|x| x.name == s);
+        for (from, to) in list {
+            n += 1;
+            if !has(to) {
+                bad.push(format!("{m}: {to} missing (renamed from {from})"));
+            } else if from != to && has(from) && !list.iter().any(|(_, t)| t == from) {
+                bad.push(format!("{m}: {from} still there (wanted {to})"));
+            }
+        }
+    }
+    if bad.is_empty() {
+        Ok(n)
+    } else {
+        Err(format!("{} of {n} section renames did not take effect:\n  {}", bad.len(), bad.join("\n  ")))
+    }
 }
 
 /// STARTUP-READ-CONSTANTS: the key suffix of `liella_boundary::startup_names::STARTUP_NAMES`, the
@@ -738,6 +836,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     let mut hot = 0;
     let mut startup = 0;
     let mut changed = Vec::new();
+    let mut renames: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     // Every grouped section: (member, name after renaming, size, alignment).
     let mut grouped: Vec<(String, String, u64, u64)> = Vec::new();
     for m in &members {
@@ -752,6 +851,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             if is_startup_names(name) {
                 startup += 1;
                 args.push_str(&format!("--rename-section {name}={STARTUP_SECTION}\n"));
+                renames.entry(m.clone()).or_default().push((name.clone(), STARTUP_SECTION.to_string()));
                 continue;
             }
             let Some(f) = function_of(name) else { continue };
@@ -763,6 +863,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             }
             if want != *name {
                 args.push_str(&format!("--rename-section {name}={want}\n"));
+                renames.entry(m.clone()).or_default().push((name.clone(), want.clone()));
             }
         }
         if !args.is_empty() {
@@ -816,6 +917,8 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     if !changed.is_empty() {
         crate::so::run(Command::new(ar).current_dir(work).arg("r").arg(&archive).args(&changed))?;
     }
+    let checked = check_renames(&archive_headers(&archive)?, &renames).map_err(|e| format!("{}: hot-text grouping: {e}", archive.display()))?;
+    println!("so: hot-text grouping: {checked} section renames, all in effect");
     let _ = fs::remove_dir_all(work);
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
@@ -958,7 +1061,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{before_group, cluster_align, cluster_bytes, dead_key_verdict, elf_sections, function_of, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_renames, cluster_align, cluster_bytes, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -1185,5 +1288,33 @@ mod tests {
             let lo = start.next_multiple_of(a);
             assert_eq!(lo / WINDOW, (lo + size - 1) / WINDOW);
         }
+    }
+
+    #[test]
+    fn archive_members_and_rename_check() {
+        // LAYOUT-TEXT-PIN-2 (no spec clause; layout of the products): the in-memory ar reader
+        // resolves GNU long names, skips the symbol table, pads odd sizes; a rename that left its
+        // source in place or produced no target is reported, a chained one is not.
+        let long = "m".repeat(20) + ".o";
+        let hdr = |name: &str, size: usize| format!("{name:<16}{:<12}{:<6}{:<6}{:<8}{size:<10}`\n", 0, 0, 0, 644);
+        let names = format!("{long}/\n");
+        let mut a = b"!<arch>\n".to_vec();
+        for (n, body) in [("/", b"sym".as_slice()), ("//", names.as_bytes()), ("a.o/", b"x"), ("/0", b"yz")] {
+            a.extend(hdr(n, body.len()).as_bytes());
+            a.extend(body);
+            if body.len() % 2 == 1 {
+                a.push(b'\n');
+            }
+        }
+        let got = ar_members(&a).unwrap();
+        assert_eq!(got.iter().map(|(n, b)| (n.as_str(), *b)).collect::<Vec<_>>(), vec![("a.o", b"x".as_slice()), (long.as_str(), b"yz".as_slice())]);
+        assert!(ar_members(b"not ar").is_err());
+        assert!(ar_members(&a[..a.len() - 1]).is_err(), "a cut member is an error");
+        let sh = |n: &str| Shdr { name: n.into(), kind: 1, size: 1, align: 1 };
+        let members = vec![("a.o".to_string(), vec![sh(".text.b"), sh(".text.c"), sh(".text.x")])];
+        let ren = |l: &[(&str, &str)]| BTreeMap::from([("a.o".to_string(), l.iter().map(|(f, t)| (f.to_string(), t.to_string())).collect::<Vec<_>>())]);
+        assert_eq!(check_renames(&members, &ren(&[(".text.a", ".text.b"), (".text.b", ".text.c")])), Ok(2));
+        assert!(check_renames(&members, &ren(&[(".text.x", ".text.b")])).unwrap_err().contains(".text.x still there"));
+        assert!(check_renames(&members, &ren(&[(".text.y", ".text.z")])).unwrap_err().contains(".text.z missing"));
     }
 }

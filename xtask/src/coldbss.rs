@@ -15,6 +15,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::hottext::{archive_headers, Shdr, SHT_NOBITS};
 use crate::run;
 
 /// Sections from this size on are cold tables (measured on coreutils `printf` in en_US.UTF-8:
@@ -22,66 +23,57 @@ use crate::run;
 /// sections are the small state words themselves).
 pub const MIN: u64 = 1024;
 
-/// The `.bss.*` sections of at least [`MIN`] bytes per archive member, from `readelf -SW`.
-fn cold_sections(listing: &str) -> BTreeMap<String, Vec<String>> {
+/// The `.bss.*` sections of at least [`MIN`] bytes per archive member, from the members' own
+/// section headers ([`crate::hottext::archive_headers`]: whole names; `readelf -SW` cuts them
+/// at 256 bytes, and a cut name renames nothing).
+fn cold_sections(members: &[(String, Vec<Shdr>)]) -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut member = None;
-    for line in listing.lines() {
-        if let Some(rest) = line.strip_prefix("File: ") {
-            // "File: <archive>(<member>)"
-            member = rest.rfind('(').map(|i| rest[i + 1..].trim_end_matches(')').to_string());
-            continue;
-        }
-        // "  [ n] <name> NOBITS <addr> <off> <size> ..."; the index may contain a space.
-        let Some(after) = line.split_once(']').map(|(_, a)| a) else { continue };
-        let f: Vec<&str> = after.split_whitespace().collect();
-        let [name, "NOBITS", _, _, size, ..] = f.as_slice() else { continue };
-        if !name.starts_with(".bss.") {
-            continue;
-        }
-        let Ok(size) = u64::from_str_radix(size, 16) else { continue };
-        match &member {
-            Some(m) if size >= MIN => out.entry(m.clone()).or_default().push((*name).to_string()),
-            _ => {}
+    for (m, headers) in members {
+        for s in headers {
+            if s.kind == SHT_NOBITS && s.name.starts_with(".bss.") && s.size >= MIN {
+                out.entry(m.clone()).or_default().push(s.name.clone());
+            }
         }
     }
     out
 }
 
-/// Rename the cold `.bss.*` sections of `archive` to `.lbss.*` in place; `work` is scratch.
-/// Returns the number of sections renamed.
-pub fn move_cold_bss(ar: &str, archive: &Path, work: &Path) -> Result<usize, String> {
-    let _ = fs::remove_dir_all(work);
-    fs::create_dir_all(work).map_err(|e| e.to_string())?;
-    let listing = Command::new("readelf").arg("-SW").arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
-    if !listing.status.success() {
-        return Err(format!("readelf -SW {} failed", archive.display()));
-    }
-    let cold = cold_sections(&String::from_utf8_lossy(&listing.stdout));
-    if cold.is_empty() {
+/// Rename the sections `renames` names (member -> (from, to)) in `archive`, in place, through
+/// `work` (scratch), and check every rename took effect. Returns the number renamed.
+fn rename(ar: &str, archive: &Path, work: &Path, what: &str, renames: &BTreeMap<String, Vec<(String, String)>>) -> Result<usize, String> {
+    if renames.is_empty() {
         return Ok(0);
     }
+    let _ = fs::remove_dir_all(work);
+    fs::create_dir_all(work).map_err(|e| e.to_string())?;
     // Members are extracted and replaced by name: a duplicated name would be ambiguous.
     let names = Command::new(ar).arg("t").arg(archive).output().map_err(|e| format!("ar: {e}"))?;
     let names = String::from_utf8_lossy(&names.stdout).into_owned();
-    for m in cold.keys() {
+    for m in renames.keys() {
         if names.lines().filter(|l| l == m).count() != 1 {
-            return Err(format!("coldbss: archive member {m} is not unique in {}", archive.display()));
+            return Err(format!("{what}: archive member {m} is not unique in {}", archive.display()));
         }
     }
-    let members: Vec<&String> = cold.keys().collect();
+    let members: Vec<&String> = renames.keys().collect();
     run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&members))?;
-    let mut n = 0;
-    for (m, sections) in &cold {
+    for (m, list) in renames {
         let mut cmd = Command::new("objcopy");
-        for s in sections {
-            cmd.arg("--rename-section").arg(format!("{s}=.lbss{}", &s[".bss".len()..]));
-            n += 1;
+        for (from, to) in list {
+            cmd.arg("--rename-section").arg(format!("{from}={to}"));
         }
         run(cmd.arg(work.join(m)))?;
     }
     run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&members))?;
-    Ok(n)
+    let _ = fs::remove_dir_all(work);
+    crate::hottext::check_renames(&archive_headers(archive)?, renames).map_err(|e| format!("{}: {what}: {e}", archive.display()))
+}
+
+/// Rename the cold `.bss.*` sections of `archive` to `.lbss.*` in place; `work` is scratch.
+/// Returns the number of sections renamed (each checked in the archive afterwards).
+pub fn move_cold_bss(ar: &str, archive: &Path, work: &Path) -> Result<usize, String> {
+    let cold = cold_sections(&archive_headers(archive)?);
+    let renames = cold.into_iter().map(|(m, list)| (m, list.into_iter().map(|s| (s.clone(), format!(".lbss{}", &s[".bss".len()..]))).collect())).collect();
+    rename(ar, archive, work, "coldbss", &renames)
 }
 
 /// STARTUP-FAULTS-RESTORE: the small statics every static process writes (or reads, then writes)
@@ -111,19 +103,13 @@ const STATE_KEY_SUFFIXES: [&str; 7] = [
 /// See [`STATE_KEY_SUFFIXES`].
 pub const STATE_SECTION: &str = ".data1";
 
-/// The start-up state sections per archive member ([`STATE_KEY_SUFFIXES`]), from `readelf -SW`.
-/// Each suffix must name exactly one section: a renamed or removed static is an error, not a
-/// silent return to its own page.
-fn state_sections(listing: &str) -> Result<BTreeMap<String, Vec<String>>, String> {
+/// The start-up state sections per archive member ([`STATE_KEY_SUFFIXES`]), from the members'
+/// section headers (whole names). Each suffix must name exactly one section: a renamed or removed
+/// static is an error, not a silent return to its own page.
+fn state_sections(members: &[(String, Vec<Shdr>)]) -> Result<BTreeMap<String, Vec<String>>, String> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut seen = [0usize; STATE_KEY_SUFFIXES.len()];
-    let mut member = String::new();
-    for l in listing.lines() {
-        if let Some(m) = l.strip_prefix("File: ").and_then(|f| f.rsplit_once('(')).and_then(|(_, m)| m.strip_suffix(')')) {
-            member = m.to_string();
-            continue;
-        }
-        let Some(name) = l.split_once("] ").and_then(|(_, r)| r.split_whitespace().next()) else { continue };
+    for (member, name) in members.iter().flat_map(|(m, h)| h.iter().map(move |s| (m, s.name.as_str()))) {
         let Some(sym) = name.strip_prefix(".data.").or_else(|| name.strip_prefix(".bss.")) else { continue };
         // LLVM may split a static and number the part (`.data.<symbol>.0`).
         let sym = match sym.rsplit_once('.') {
@@ -146,34 +132,9 @@ fn state_sections(listing: &str) -> Result<BTreeMap<String, Vec<String>>, String
 /// Rename the start-up state sections of `archive` ([`STATE_KEY_SUFFIXES`]) to
 /// [`STATE_SECTION`] in place; `work` is scratch. Returns the number renamed.
 pub fn move_startup_state(ar: &str, archive: &Path, work: &Path) -> Result<usize, String> {
-    let _ = fs::remove_dir_all(work);
-    fs::create_dir_all(work).map_err(|e| e.to_string())?;
-    let listing = Command::new("readelf").arg("-SW").arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
-    if !listing.status.success() {
-        return Err(format!("readelf -SW {} failed", archive.display()));
-    }
-    let state = state_sections(&String::from_utf8_lossy(&listing.stdout))?;
-    let names = Command::new(ar).arg("t").arg(archive).output().map_err(|e| format!("ar: {e}"))?;
-    let names = String::from_utf8_lossy(&names.stdout).into_owned();
-    for m in state.keys() {
-        if names.lines().filter(|l| l == m).count() != 1 {
-            return Err(format!("start-up state: archive member {m} is not unique in {}", archive.display()));
-        }
-    }
-    let members: Vec<&String> = state.keys().collect();
-    run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&members))?;
-    let mut n = 0;
-    for (m, sections) in &state {
-        let mut cmd = Command::new("objcopy");
-        for s in sections {
-            cmd.arg("--rename-section").arg(format!("{s}={STATE_SECTION}"));
-            n += 1;
-        }
-        run(cmd.arg(work.join(m)))?;
-    }
-    run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&members))?;
-    let _ = fs::remove_dir_all(work);
-    Ok(n)
+    let state = state_sections(&archive_headers(archive)?)?;
+    let renames = state.into_iter().map(|(m, list)| (m, list.into_iter().map(|s| (s, STATE_SECTION.to_string())).collect())).collect();
+    rename(ar, archive, work, "start-up state", &renames)
 }
 
 #[cfg(test)]
@@ -184,27 +145,41 @@ mod tests {
     fn startup_state_sections_are_found_once_each() {
         // STARTUP-FAULTS-RESTORE (no spec clause; layout of the products): each listed static's
         // section is picked whatever its crate hash and ThinLTO suffix; a missing one is an error.
-        let mut listing = String::from("\nFile: libc.a(a.o)\n");
+        let mut members = vec![("a.o".to_string(), Vec::new())];
         for (i, s) in STATE_KEY_SUFFIXES.iter().enumerate() {
             let (kind, tail) = if i % 2 == 0 { (".bss", ".llvm.42") } else { (".data", ".0") };
-            listing.push_str(&format!("  [{i}] {kind}._RNvNtCsAbC12_{s}{tail}  NOBITS 0 0 8 00 WA 0 0 8\n"));
+            members.last_mut().unwrap().1.push(sec(&format!("{kind}._RNvNtCsAbC12_{s}{tail}"), SHT_NOBITS, 8));
             if i == 2 {
-                listing.push_str("\nFile: libc.a(b.o)\n  [9] .data._RNvNtCsX_15liella_boundary3cpu8NOT_USED PROGBITS 0 0 8 00 WA 0 0 8\n");
+                members.push(("b.o".to_string(), vec![sec(".data._RNvNtCsX_15liella_boundary3cpu8NOT_USED", 1, 8)]));
             }
         }
-        let got = state_sections(&listing).unwrap();
+        let got = state_sections(&members).unwrap();
         assert_eq!((got["a.o"].len(), got["b.o"].len()), (3, STATE_KEY_SUFFIXES.len() - 3));
         assert!(got["a.o"][0].starts_with(".bss._RNvNtCsAbC12_15liella_boundary7process10AUXV_WORDS"));
-        let short = listing.replace("6GLOBAL", "6GLOBAX");
-        assert!(state_sections(&short).unwrap_err().contains("13liella_legacy13global_locale6GLOBAL (0 sections)"));
+        for (_, h) in &mut members {
+            for s in h.iter_mut() {
+                s.name = s.name.replace("6GLOBAL", "6GLOBAX");
+            }
+        }
+        assert!(state_sections(&members).unwrap_err().contains("13liella_legacy13global_locale6GLOBAL (0 sections)"));
+    }
+
+    fn sec(name: &str, kind: u32, size: u64) -> Shdr {
+        Shdr { name: name.to_string(), kind, size, align: 8 }
     }
 
     #[test]
     fn picks_large_bss_sections_per_member() {
-        let listing = "\nFile: libc.a(a.o)\n  [ 3] .text.f           PROGBITS        0000000000000000 000040 000400 00  AX  0   0 16\n  [ 4] .bss.big          NOBITS          0000000000000000 000440 000400 00  WA  0   0  8\n  [ 5] .bss.small        NOBITS          0000000000000000 000440 0003ff 00  WA  0   0  8\n  [ 6] .tbss.t           NOBITS          0000000000000000 000440 001000 00 WAT  0   0  8\n  [ 7] .data.d           PROGBITS        0000000000000000 000440 002000 00  WA  0   0  8\n\nFile: libc.a(b.o)\n  [12] .bss.huge         NOBITS          0000000000000000 000440 010000 00  WA  0   0 64\n";
-        let got = cold_sections(listing);
+        // PAGEFAULTS-4 (no spec clause; layout of the products): zero-filled `.bss.*` of at least
+        // MIN bytes, by whole name, whatever its length (readelf -SW cut names at 256 bytes).
+        let long = format!(".bss.{}", "x".repeat(300));
+        let members = vec![
+            ("a.o".to_string(), vec![sec(".text.f", 1, 0x400), sec(".bss.big", SHT_NOBITS, 0x400), sec(".bss.small", SHT_NOBITS, 0x3ff), sec(".tbss.t", SHT_NOBITS, 0x1000), sec(".data.d", 1, 0x2000)]),
+            ("b.o".to_string(), vec![sec(".bss.huge", SHT_NOBITS, 0x10000), sec(&long, SHT_NOBITS, 0x800), sec(".bss.notnobits", 1, 0x800)]),
+        ];
+        let got = cold_sections(&members);
         assert_eq!(got.len(), 2);
         assert_eq!(got["a.o"], vec![".bss.big".to_string()]);
-        assert_eq!(got["b.o"], vec![".bss.huge".to_string()]);
+        assert_eq!(got["b.o"], vec![".bss.huge".to_string(), long]);
     }
 }
