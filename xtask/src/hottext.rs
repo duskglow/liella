@@ -533,6 +533,8 @@ fn set_retain(path: &Path, name: &str) -> Result<(), String> {
         if &b[at..at + end] == name.as_bytes() {
             let flags = le(&b, hdr + 8, 8).ok_or_else(|| bad("truncated section header"))? | SHF_GNU_RETAIN;
             b[hdr + 8..hdr + 16].copy_from_slice(&flags.to_le_bytes());
+            // sh_addralign: objcopy 2.42 ignores --set-section-alignment for a section added in the same run.
+            b[hdr + 0x30..hdr + 0x38].copy_from_slice(&ANCHOR_ALIGN.to_le_bytes());
             return fs::write(path, b).map_err(|e| format!("{}: {e}", path.display()));
         }
     }
@@ -608,7 +610,6 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             if !has_anchor {
                 args.push_str(&format!("--add-section {ANCHOR}={}\n", empty.display()));
                 args.push_str(&format!("--set-section-flags {ANCHOR}=alloc,load,readonly,code,contents\n"));
-                args.push_str(&format!("--set-section-alignment {ANCHOR}={ANCHOR_ALIGN}\n"));
             }
         } else if has_anchor {
             args.push_str(&format!("--remove-section {ANCHOR}\n"));
