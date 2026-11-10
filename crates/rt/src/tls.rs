@@ -82,8 +82,11 @@ pub struct ThreadBlock {
     /// reads); zero in a fresh block. Read with one `%fs`-relative load (`tb::read`), so a
     /// per-thread cache costs no descriptor lookup. The owners: [`CACHE_TZ_PERIOD`].
     pub cache: [AtomicUsize; CACHE_WORDS],
-    /// 0x180–0x300: room for later phases (0x180–0x280 is glibc's reserved area).
-    tail: [AtomicUsize; 48],
+    /// 0x180: the class-word table (`liella::locale::classes::ClassTable`) of the current view's
+    /// `LC_CTYPE`, stored with `view` by the same writers; 0 until stored (D-5.11).
+    pub wclass: AtomicUsize,
+    /// 0x188–0x300: room for later phases (0x180–0x280 is glibc's reserved area).
+    tail: [AtomicUsize; 47],
 }
 
 /// The number of [`ThreadBlock::cache`] words.
@@ -124,7 +127,8 @@ const _: () = {
     // One cache line (0x140-0x180), inside glibc's reserved area (a block glibc's `ld.so`
     // made has it zero).
     assert!(size_of::<[AtomicUsize; CACHE_WORDS]>() == 64);
-    assert!(offset_of!(ThreadBlock, tail) == 0x180);
+    assert!(offset_of!(ThreadBlock, wclass) == 0x180);
+    assert!(offset_of!(ThreadBlock, tail) == 0x188);
     assert!(size_of::<ThreadBlock>() == 0x300);
 };
 

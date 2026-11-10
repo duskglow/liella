@@ -118,6 +118,11 @@ field! {
 }
 
 field! {
+    /// `ThreadBlock::wclass`: the current view's class-word table (D-5.11).
+    WClass = wclass
+}
+
+field! {
     /// `ThreadBlock::heap_cache`: the address of the thread's heap cache, 0 for none yet (D-3.11).
     HeapCache = heap_cache
 }
@@ -421,6 +426,21 @@ pub(crate) fn view_at(addr: usize) -> &'static liella::locale::view::LocaleView 
     // SAFETY: a leaked, immutable `LocaleView` that lives for the rest of the process.
     unsafe {
         &*core::ptr::with_exposed_provenance::<liella::locale::view::LocaleView>(addr)
+    }
+}
+
+/// A class-word table (D-5.11). Crate-private contract: `addr` is the address of a
+/// [`ClassTable`](liella::locale::classes::ClassTable) a view's
+/// [`class_table`](liella::locale::view::LocaleView::class_table) returned (as stored in a thread
+/// block's `wclass` word): a static, never freed or moved.
+#[inline(always)]
+pub(crate) fn class_table_at(addr: usize) -> &'static liella::locale::classes::ClassTable {
+    // UNSAFE(slice): the contract above.
+    #[allow(unsafe_code)]
+    // SAFETY: a `ClassTable` in a static that lives for the rest of the process; it is only
+    // read and written through atomics.
+    unsafe {
+        &*core::ptr::with_exposed_provenance::<liella::locale::classes::ClassTable>(addr)
     }
 }
 

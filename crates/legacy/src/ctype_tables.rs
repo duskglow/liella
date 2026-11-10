@@ -200,18 +200,10 @@ pub fn iswctype(wc: u32, desc: u64, loc: &Locale) -> bool {
 #[inline]
 pub fn iswctype_view(wc: u32, desc: u64, v: &LocaleView) -> i32 {
     match u16::try_from(desc) {
-        // A built-in locale's arm is a tail call too: inline, its call kept the descriptor
-        // in a saved register on every path.
-        Ok(m) if v.has_wide() => v.isw_int(wc, Class(m)),
-        Ok(m) => iswctype_builtin(wc, Class(m), v),
+        // Every locale's class-word table (D-5.9, D-5.10).
+        Ok(m) => v.isw_int(wc, Class(m)),
         Err(_) => iswctype_defined(wc, desc, v),
     }
-}
-
-/// [`iswctype_view`] for a view without wide tables (the built-in locales).
-#[inline(never)]
-fn iswctype_builtin(wc: u32, m: Class, v: &LocaleView) -> i32 {
-    v.isw_int(wc, m)
 }
 
 /// [`iswctype_view`] for a descriptor that is not a standard class's mask: a locale-defined

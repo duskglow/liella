@@ -155,6 +155,44 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
     gl::view(&Glue, if loc == GLOBAL || loc == 0 { gl::global_handle() } else { 0 })
 }
 
+/// Whether wide character `c` has a class of `mask` in the calling thread's current locale
+/// (`iswalpha`, ...), as the C `int`: the thread block's class-word table (D-5.11), one `%fs`
+/// load, then the table's resolved block (D-5.10). A thread whose word is not stored, and a
+/// block not resolved yet, take the view's path in a tail call.
+#[inline(always)]
+pub fn isw(c: u32, mask: Class) -> i32 {
+    let t = tb::read::<tb::WClass>();
+    if t != 0
+        && let Some(word) = tb::class_table_at(t).hit(c)
+    {
+        return i32::from(word & mask.0 != 0);
+    }
+    isw_view(c, mask)
+}
+
+/// `iswctype(c, desc)` in the calling thread's current locale: a standard class's mask (or
+/// any value below 2^16) through [`isw`], a locale-defined class through the view.
+#[inline(always)]
+pub fn iswctype(c: u32, desc: u64) -> i32 {
+    match u16::try_from(desc) {
+        Ok(m) => isw(c, Class(m)),
+        Err(_) => iswctype_defined(c, desc),
+    }
+}
+
+/// [`iswctype`] for a descriptor of 2^16 or more (a locale-defined class, or no class).
+#[cold]
+#[inline(never)]
+fn iswctype_defined(c: u32, desc: u64) -> i32 {
+    ctype_tables::iswctype_view(c, desc, view())
+}
+
+/// [`isw`] through the current view (its class table resolves the block).
+#[inline(never)]
+fn isw_view(c: u32, mask: Class) -> i32 {
+    view().isw_int(c, mask)
+}
+
 /// The calling thread's current locale view (D-7.13): its `view` word, one `%fs` load; a thread
 /// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
 #[inline]
@@ -233,8 +271,15 @@ fn store_words(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
     b.ctype_tolower.store(lower, Release);
     b.ctype_toupper.store(upper, Release);
     if crate::thread::owned() {
-        b.view.store(core::ptr::from_ref(v).expose_provenance(), Release);
+        store_view(b, v);
     }
+}
+
+/// `b`'s `view` word and, with it, its `wclass` word (D-5.11: the class tests read the table
+/// without the view). Every writer of `view` stores both.
+fn store_view(b: &liella_rt::tls::ThreadBlock, v: &'static LocaleView) {
+    b.wclass.store(core::ptr::from_ref(v.class_table()).expose_provenance(), Release);
+    b.view.store(core::ptr::from_ref(v).expose_provenance(), Release);
 }
 
 /// After `newlocale` changed the object `loc` in place: the `view` word of every thread that
@@ -246,7 +291,7 @@ fn refresh_views_of(loc: usize) {
     }
     crate::thread::each_block(|b| {
         if b.locale.load(Acquire) == loc {
-            b.view.store(core::ptr::from_ref(view_of(loc)).expose_provenance(), Release);
+            store_view(b, view_of(loc));
         }
     });
 }
