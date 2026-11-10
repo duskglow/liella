@@ -927,7 +927,8 @@ pub fn select_with(root: &Path, repo: &Repo, files: &[String], narrow_alloc: boo
     // calls the private export `liella_expl_bits`, so the C name is known and is reached when its export is.
     let fwd = fs::read_to_string(root.join("csys/src/adapter/math_libm.c")).unwrap_or_default();
     for l in fwd.lines() {
-        let Some((_, rest)) = l.split_once("MATH_FWD(") else { continue };
+        // `MATH_SLOW(sqrtl)`: the forwarder behind the assembly entry (D-10.71), same name.
+        let Some((_, rest)) = l.split_once("MATH_FWD(").or_else(|| l.split_once("MATH_SLOW(")) else { continue };
         let Some((name, body)) = rest.split_once(')') else { continue };
         if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             continue;

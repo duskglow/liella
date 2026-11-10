@@ -1,0 +1,10 @@
+id = "D-3.19"
+section = "s03"
+spec = "§3.1"
+ann = "—"
+status = "active"
+story = "HEAP-FIRST-USE"
+date = "2026-11-10"
+body = '''
+**The heap's first reservation is one mapping** (HEAP-FIRST-USE, 2026-11-10). The first allocation of a process maps one range: the first segment (at its 16 MiB boundary), then one page holding generation 0 of the cache table, the segment bases and the segment hash, then the first 64 KiB cache chunk. Was five mappings (cache table 8 MiB, cache chunk, segment bases 8 MiB, segment hash 16 MiB, the segment), each registry page its own fault. Generation 0 of the segment registry is now at most 128 segments (2 GiB of slabs) and of the cache table at most 64 caches, with or without an address-space limit (amends D-3.14's "unlimited keeps the maxima"); later generations double as under D-3.14, so a heap past 2 GiB of slabs searches more than one hash generation on a registry lookup. If the one mapping fails, each part is mapped on its own as before; a first segment mapped for another NUMA node than the shard asking is left unused. Not changed: the `getcpu` shard choice on every slab refill (D-3.12). Tests: `the_first_allocation_reserves_one_mapping` (rt: one page request), `the_first_allocation_touches_few_pages` (core, `oracle/heap_first_faults.c`).
+'''

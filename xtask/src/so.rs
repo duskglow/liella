@@ -848,6 +848,7 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     localize_builtins(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &names, &product.join("libc-work"))?;
     // Large zero-initialised tables after the small state words, out of the start-up pages (D-X.22).
     crate::coldbss::move_cold_bss(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("coldbss-work"))?;
+    crate::coldbss::move_startup_state(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("state-work"))?;
     // The library's own copies and fills call its internal entries, directly (D-X.15).
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
@@ -1434,6 +1435,8 @@ fn run_libm(root: &Path, cargo: &str, cc: &str, ar: &str, profile: Profile) -> R
     let compat_count = check_compat_exports(root, &so, "libm.so.6", &compat)?;
     let versioned = check_version_sets(root, &so, "libm.so.6", &have, &BTreeSet::new())?;
     publish(&so, &so_final)?;
+    // No libm hot path merges into a register it has not written (D-10.68); published first so a finding can be read.
+    crate::partial_write::check_file(root, &so_final)?;
     println!("so: target/liella/libm.a ({} symbols, {} of them libc.a's and local there), libm.so.6 ({count} versioned symbols, {compat_count} compat versions as name@VERSION ({}); version set and default version of {versioned} names checked against spec/abi/versions.tsv; it cannot be loaded before phase 14)", exports.len(), both.iter().filter(|s| !s.starts_with("liella_")).count(), crate::compat::LIBM_FILE);
     Ok(())
 }

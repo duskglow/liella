@@ -93,6 +93,10 @@ enum CType {
     Complex(Fmt),
 }
 
+
+/// The forwarded symbols whose public entry is hand-written assembly (D-10.71): the first names
+/// the forwarder the entry tail-calls (`MATH_SLOW`), the others are aliases of the same entry.
+const ASM_ENTRY: [&str; 2] = ["sqrtl", "sqrtf64x"];
 fn ctype(s: &str) -> Option<CType> {
     let s = s.trim();
     if let Some(base) = s.strip_prefix("complex ") {
@@ -434,7 +438,19 @@ fn generate(root: &Path) -> Result<(String, [String; 3], String), String> {
                 _ => format!("return {call};"),
             };
             let _ = writeln!(file, "{} {rname}({});", s.ret.c_bits(), if bparams.is_empty() { "void".into() } else { bparams.join(", ") });
-            let _ = writeln!(file, "{} MATH_FWD({})({}) {{ {ret_expr} }}", s.ret.c(), s.name, if cparams.is_empty() { "void".into() } else { cparams.join(", ") });
+            // `sqrtl` and `sqrtf64x` enter in csys/src/machine/sqrtl.S (D-10.71), which tail-calls
+            // this forwarder, hidden under its own name, for every case it does not run in place.
+            let cname = if ASM_ENTRY.contains(&s.name.as_str()) {
+                format!("MATH_SLOW_ATTR MATH_SLOW({})", ASM_ENTRY[0])
+            } else {
+                format!("MATH_FWD({})", s.name)
+            };
+            let cparams = if cparams.is_empty() { "void".into() } else { cparams.join(", ") };
+            if ASM_ENTRY.contains(&s.name.as_str()) && s.name != ASM_ENTRY[0] {
+                // One forwarder serves the aliases (the same symbol body).
+                continue;
+            }
+            let _ = writeln!(file, "{} {cname}({cparams}) {{ {ret_expr} }}", s.ret.c());
         }
     }
     let headers = [
@@ -454,7 +470,10 @@ fn generate(root: &Path) -> Result<(String, [String; 3], String), String> {
         c.push_str(" * s10_math_gen.rs), which does all the work. Without the product's feature the forwarders\n");
         c.push_str(" * carry `liella_fwd_` names and are only compiled for checking (build.rs). */\n");
         c.push_str("#include <stddef.h>\n#include <stdint.h>\n#include \"liella_csys.h\"\n\n");
-        let _ = writeln!(c, "#if defined({macro_})\n#define MATH_FWD(name) name\n#else\n#define MATH_FWD(name) liella_fwd_##name\n#endif");
+        let _ = writeln!(
+            c,
+            "#if defined({macro_})\n#define MATH_FWD(name) name\n#define MATH_SLOW(name) liella_slow_##name\n#else\n#define MATH_FWD(name) liella_fwd_##name\n#define MATH_SLOW(name) liella_fwd_slow_##name\n#endif\n#define MATH_SLOW_ATTR __attribute__((visibility(\"hidden\")))"
+        );
         c.push_str("struct liella_ld_bits { uint64_t mant; uint16_t se; uint16_t pad[3]; };\n");
         c.push_str("struct liella_f128_bits { uint64_t lo; uint64_t hi; };\n");
         c.push_str("union liella_ld { long double value; struct liella_ld_bits bits; };\n");
@@ -588,7 +607,9 @@ pub fn run_remez(root: &Path, args: &[String]) -> Result<(), String> {
 /// `crates/math/KERNELS.md` ([`crate::kernel_index`]).
 pub fn run_tables(root: &Path, args: &[String]) -> Result<(), String> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(args))?;
+    // `--in-place` is the kernel index's (D-X.59), not the tables binary's.
+    let pass = args.iter().filter(|a| *a != "--in-place");
+    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(pass))?;
     // The kernel index rides on the same generate/check step (LIBM-KERNEL-INDEX).
-    crate::kernel_index::run(root, args.iter().any(|a| a == "--check"))
+    crate::kernel_index::run(root, args.iter().any(|a| a == "--check"), crate::records::in_place_env(args))
 }

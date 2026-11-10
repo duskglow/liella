@@ -130,7 +130,10 @@ tests directly. The CI FULL gate stays the exhaustive run.
   The tables `plan/07-decisions/*.md`, `docs/compat-flags.md`, `docs/saturation-register.md` and
   `docs/saturation/01..07-*.md` are **generated** (`cargo xtask records-gen`, first line
   `@generated`): never edit them, and do not commit them in a change that adds records; the
-  maintainers' merge train regenerates them (D-X.55). A decision that replaces an earlier one is
+  maintainers' merge train regenerates them (D-X.55). To see a view with your records in it, run
+  `cargo xtask records-gen` and read it under `target/records-views/<same path>`; the tracked
+  views stay untouched, so there is nothing to restore (`crates/math/KERNELS.md` and
+  `cargo xtask kernel-index` work the same way; only the train writes in place, D-X.59). A decision that replaces an earlier one is
   a new record with `supersedes = ["D-..."]`, a partial change uses `amends`; edit an existing
   record only to correct it or add a test reference. Find a decision with
   `grep -rn "D-12.18" records/` (or in the generated tables). Local details you can decide

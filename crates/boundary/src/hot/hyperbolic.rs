@@ -18,16 +18,17 @@ pub(crate) fn acoshf_nearest(x: f32) -> Option<f32> {
     liella_math::fast32::acosh_nearest_sqrt(x, sqrtsd)
 }
 
-/// The `double` `sinh` fast path (LIBM-F64-EXPM1-HYPER-CBRT-TIER) in its build chosen at startup
-/// (as [`super::exp_nearest`]).
+/// The `double` `sinh` fast path in its build chosen at startup (as [`super::exp_nearest`]): the
+/// quick phase on the exp kernel (D-10.70, LIBM-F64-HYPERB-QUICK), then tier 2
+/// (LIBM-F64-EXPM1-HYPER-CBRT-TIER) out of line.
 #[inline(always)]
 pub(crate) fn sinh_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::sinh_nearest(x) };
+        return unsafe { liella_math::fast64::quick::fused::sinh_tiered(x) };
     }
-    liella_math::fast64::sinh_nearest(x)
+    liella_math::fast64::quick::sinh_tiered(x)
 }
 
 /// The `double` `cosh` fast path in its build chosen at startup (as [`super::exp_nearest`]).
@@ -36,9 +37,9 @@ pub(crate) fn cosh_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::cosh_nearest(x) };
+        return unsafe { liella_math::fast64::quick::fused::cosh_tiered(x) };
     }
-    liella_math::fast64::cosh_nearest(x)
+    liella_math::fast64::quick::cosh_tiered(x)
 }
 
 /// The `double` `tanh` fast path in its build chosen at startup (as [`super::exp_nearest`]).
@@ -47,9 +48,9 @@ pub(crate) fn tanh_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::tanh_nearest(x) };
+        return unsafe { liella_math::fast64::quick::fused::tanh_tiered(x) };
     }
-    liella_math::fast64::tanh_nearest(x)
+    liella_math::fast64::quick::tanh_tiered(x)
 }
 
 /// The `double` `asinh` quick phase (D-10.65, LIBM-F64-INVHYP-QUICK) in its build chosen at
@@ -86,4 +87,15 @@ pub(crate) fn atanh_nearest(x: f64) -> Option<f64> {
         return unsafe { liella_math::fast64::quick_invhyp::fused::atanh_quick(x) };
     }
     liella_math::fast64::quick_invhyp::atanh_quick(x)
+}
+
+/// The `double` `sinh` (`f = 0`), `cosh` (1) or `tanh` (2) quick phase alone (D-10.70) in the
+/// build chosen at startup: the correctly rounded result, or `None` (tests only).
+pub(crate) fn hyp_quick(f: u8, x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick::fused::hyp_quick(f, x) };
+    }
+    liella_math::fast64::quick::hyp_quick(f, x)
 }

@@ -497,6 +497,14 @@ impl Soft {
     }
 }
 
+/// `sqrt`/`sqrtf`'s `errno` for a negative operand, out of line so the in-place path keeps only
+/// its NaN test (D-10.71).
+#[cold]
+#[inline(never)]
+fn sqrt_domain() {
+    store_error(MathError::Domain);
+}
+
 /// A format whose square root has a hardware form ([`sqrt`], M6-2).
 pub trait Sqrt: CVal {
     /// The square root, correctly rounded in the caller's direction, with its flags and `errno`.
@@ -504,15 +512,23 @@ pub trait Sqrt: CVal {
 }
 
 impl Sqrt for f64 {
-    #[inline]
+    #[inline(always)]
     fn sqrt_c(self) -> f64 {
-        let mx = crate::ffi::liella_machine_mxcsr_get();
+        // The inline MXCSR read (D-X.44) and `sqrtsd` in a register, no call on the path (D-10.71).
+        let mx = fpregs::mxcsr();
         if fpu::is_sqrt_in_place(mx) {
-            let r = crate::ffi::liella_machine_sqrtsd(self);
+            // The barrier keeps the root behind the mode test: a caller with an unmasked
+            // exception must never see the instruction run (D-X.44).
+            let x = self.pin();
+            // The root takes its own pinned copy of x, dead after it, so `sqrtsd` writes its
+            // operand's register: x stays live for the EDOM test, and a root into any other
+            // register merges that register's upper lane, waiting on its last writer (in a
+            // loop of calls, the previous root).
+            let r = crate::hot::sqrtsd(x.pin());
             // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
             // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
-            if r.is_nan() && !self.is_nan() {
-                store_error(MathError::Domain);
+            if r.is_nan() && !x.is_nan() {
+                sqrt_domain();
             }
             r
         } else {
@@ -523,15 +539,20 @@ impl Sqrt for f64 {
 }
 
 impl Sqrt for f32 {
-    #[inline]
+    #[inline(always)]
     fn sqrt_c(self) -> f32 {
-        let mx = crate::ffi::liella_machine_mxcsr_get();
+        // The inline MXCSR read (D-X.44) and `sqrtss` in a register, no call on the path (D-10.71).
+        let mx = fpregs::mxcsr();
         if fpu::is_sqrt_in_place(mx) {
-            let r = crate::ffi::liella_machine_sqrtss(self);
+            // The barrier keeps the root behind the mode test: a caller with an unmasked
+            // exception must never see the instruction run (D-X.44).
+            let x = self.pin();
+            // Its own copy of x for the root, as in `sqrt` (no merge with another register).
+            let r = crate::hot::sqrtss(x.pin());
             // EDOM exactly when a non-NaN operand gave NaN, that is for x < 0 as the caller's
             // DAZ reads x (D-10.22: -0, a negative subnormal under DAZ and negative NaNs give none).
-            if r.is_nan() && !self.is_nan() {
-                store_error(MathError::Domain);
+            if r.is_nan() && !x.is_nan() {
+                sqrt_domain();
             }
             r
         } else {

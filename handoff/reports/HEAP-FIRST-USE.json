@@ -1,0 +1,35 @@
+{
+ "task": "HEAP-FIRST-USE",
+ "model": "opus",
+ "tokens": null,
+ "result": "first malloc: 5 mmaps -> 1 (syscalls 21 -> 17 for the probe), faults 27 -> 25, kernel instr -30k; first setlocale probe -31k kernel instr, -2 faults",
+ "branch": "task/heap-first-use",
+ "head": "9b21d1bc0",
+ "gate": {
+  "affected": "hfu-gate-3 rc 0 (direct tier, --base origin/next)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "skip getcpu (vDSO parse ~6k user instr, 1 fault) on the first allocation / while one node is known: needs D-3.12 amended",
+   "recommendation": "amend D-3.12: ask the node only when more than one node is allowed"
+  }
+ ],
+ "informational": [
+  "the product never calls Heap::set_numa (D-3.12 says it should when >1 node is allowed)",
+  "the first malloc also triggers the dispatch guard's lazy /proc/sys/vm/mmap_min_addr read (3 syscalls), not heap code",
+  "timing check on Ivy Bridge and N100 not run (11-07 window passed): pending",
+  "bench --compare --counters on first_* rows not run (budget)"
+ ],
+ "refused": [],
+ "improvement": "sync_role rc 4 (busy) is easy to miss when a sync and a job start share one step: run jobwait before syncing, then check rc before starting jobs",
+ "next_step": "timing check on the first_* rows; then the getcpu ruling and the 2 alignment munmaps",
+ "report_file": "handoff/HEAP-FIRST-USE.md",
+ "jobs": [
+  "mei:hfu-gate-3",
+  "mei:hfu-plants-4",
+  "mei:hfu-counts-base",
+  "mei:hfu-check-2"
+ ]
+}

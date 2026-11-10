@@ -208,10 +208,12 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     #[allow(clippy::as_conversions)] // a function's address has no conversion other than `as`
     let own_entry = (crate::arch::liella_machine_ld_entry as *const ()).expose_provenance();
     let aux = Auxv::from_words(copy.get(..words).unwrap_or(&[]));
+    // The page size, from AT_PAGESZ through the arch seam only (DL-7, D-27.15).
+    let page = Native::page_size(&aux);
     if aux.get(AT_ENTRY).and_then(|e| usize::try_from(e).ok()) != Some(own_entry) {
         let prog = start::program(&aux).unwrap_or_else(|e| refuse(e.message()));
         let bias = liella_rt::start::program(program_headers(&prog), prog.phnum, prog.phdr).bias;
-        run(sp, &prog, bias)
+        run(sp, &prog, bias, page)
     }
     let arg = |i: usize| usize::try_from(stack_word(argv.wrapping_add(i.wrapping_mul(8)))).unwrap_or(0);
     match program::action((1..argc).map(|i| c_string(arg(i)))) {
@@ -229,12 +231,12 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
         }
         Action::Program(_) => {
             // argv[1] names the program; it becomes argv[0] and the stack starts one word later.
-            let (prog, bias) = load(arg(1));
+            let (prog, bias) = load(arg(1), page);
             let mut copy = copy;
             start::rewrite(copy.get_mut(..words).unwrap_or(&mut []), &prog, ehdr);
             store_words(auxv, copy.get(..words.wrapping_add(2)).unwrap_or(&[]));
             store_words(argv, &[u64::try_from(argc.wrapping_sub(1)).unwrap_or(0)]);
-            run(argv, &prog, bias)
+            run(argv, &prog, bias, page)
         }
         other => {
             for part in program::refusal(other) {
@@ -254,27 +256,32 @@ fn program_headers(prog: &start::Program) -> &'static [u64] {
     unsafe { conv::words_at(prog.phdr, prog.phnum.saturating_mul(PHDR_WORDS)) }
 }
 
-/// Relocate the mapped program `prog` (load bias `bias`), protect its RELRO segment and enter it
-/// with the initial stack at `sp`. A program with dependencies or with relocations other than
-/// RELATIVE/RELR is refused (DL-8 and DL-10 add them).
-fn run(sp: usize, prog: &start::Program, bias: usize) -> ! {
+/// Relocate the mapped program `prog` (load bias `bias`), protect its RELRO pages (pages of `page`
+/// bytes) and enter it with the initial stack at `sp`. A program with dependencies or with
+/// relocations other than RELATIVE/RELR is refused (DL-8 and DL-10 add them); a program without a
+/// dynamic section has neither, so nothing is relocated.
+fn run(sp: usize, prog: &start::Program, bias: usize, page: u64) -> ! {
     let headers = program_headers(prog);
-    let img = boot::image(headers, prog.phnum).unwrap_or_else(|_| refuse(b"ld.so: the program has no dynamic section\n"));
-    let dynamic = bias.wrapping_add(usize::try_from(img.dynamic.0).unwrap_or(0));
-    // UNSAFE(slice): the program's dynamic array (`PT_DYNAMIC`), read only.
-    #[allow(unsafe_code)]
-    // SAFETY: `dynamic` is the run-time address (bias + `p_vaddr`) of `PT_DYNAMIC`'s `p_memsz` bytes
-    // in the mapped program.
-    let dyn_words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
-    if start::needs_objects(dyn_words) {
-        refuse(start::NEEDS_OBJECTS);
+    let has_dynamic = headers.chunks_exact(PHDR_WORDS).take(prog.phnum).any(|h| h.first().is_some_and(|w| w & 0xffff_ffff == u64::from(liella_ld::elf::pt::DYNAMIC)));
+    if has_dynamic {
+        let img = boot::image(headers, prog.phnum).unwrap_or_else(|_| refuse(b"ld.so: the program's segments are not relocatable\n"));
+        let dynamic = bias.wrapping_add(usize::try_from(img.dynamic.0).unwrap_or(0));
+        // UNSAFE(slice): the program's dynamic array (`PT_DYNAMIC`), read only.
+        #[allow(unsafe_code)]
+        // SAFETY: `dynamic` is the run-time address (bias + `p_vaddr`) of `PT_DYNAMIC`'s `p_memsz` bytes
+        // in the mapped program.
+        let dyn_words = unsafe { conv::words_at(dynamic, usize::try_from(img.dynamic.1).unwrap_or(0) / 8) };
+        if start::needs_objects(dyn_words) {
+            refuse(start::NEEDS_OBJECTS);
+        }
+        let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
+        if crate::bootstrap::relocate_self(prog.phdr, prog.phnum, ehdr).is_err() {
+            refuse(b"ld.so: cannot relocate the program (only RELATIVE relocations in this build)\n");
+        }
     }
-    let ehdr = bias.wrapping_add(usize::try_from(img.header).unwrap_or(0));
-    if crate::bootstrap::relocate_self(prog.phdr, prog.phnum, ehdr).is_err() {
-        refuse(b"ld.so: cannot relocate the program (only RELATIVE relocations in this build)\n");
-    }
-    if let Some((addr, len)) = liella_rt::start::relro(headers, prog.phnum, prog.phdr, liella_rt::start::PAGE) {
-        if crate::raw::mprotect(addr, len, PROT_READ_I32).is_err() {
+    let page = usize::try_from(page).unwrap_or(usize::MAX);
+    if let Some((addr, len)) = liella_rt::start::relro(headers, prog.phnum, prog.phdr, page) {
+        if crate::raw::mprotect(addr, len, map::PROT_READ).is_err() {
             refuse(b"ld.so: cannot protect the program's RELRO segment\n");
         }
     }
@@ -283,12 +290,11 @@ fn run(sp: usize, prog: &start::Program, bias: usize) -> ! {
 
 /// `AT_FDCWD` (kernel UAPI `linux/fcntl.h`): a relative path is taken from the current directory.
 const AT_FDCWD: i64 = -100;
-/// `PROT_READ` as the `mprotect` argument.
-const PROT_READ_I32: i32 = 1;
 
-/// Open, read and map the program file named by the NUL-terminated path at `path` (`ld.so PROGRAM`):
-/// one reservation, each `PT_LOAD` inside it ([`liella_ld::map`]). The program and its load bias.
-fn load(path: usize) -> (start::Program, usize) {
+/// Open, read and map the program file named by the NUL-terminated path at `path` (`ld.so PROGRAM`)
+/// with pages of `page` bytes: [`map::load`] (one reservation, each `PT_LOAD` inside it, nothing left
+/// mapped on failure). The program and its load bias.
+fn load(path: usize, page: u64) -> (start::Program, usize) {
     let fail = |msg: &[u8]| -> ! {
         write_all(2, b"ld.so: ");
         write_all(2, c_string(path));
@@ -302,60 +308,78 @@ fn load(path: usize) -> (start::Program, usize) {
     let size = crate::ffi_sys::liella_sys_lseek(fd, 0, i64::from(SEEK_END));
     let len = usize::try_from(size).ok().filter(|&n| n >= liella_ld::elf::EHDR_SIZE).unwrap_or_else(|| fail(b"cannot read the program\n"));
     let fd32 = i32::try_from(fd).unwrap_or(-1);
-    let file_at = raw::mmap(0, len, PROT_READ_I32, MAP_PRIVATE_I32, fd32, 0).unwrap_or_else(|_| fail(b"cannot read the program\n"));
+    let file_at = raw::mmap(0, len, map::PROT_READ, MAP_PRIVATE_I32, fd32, 0).unwrap_or_else(|_| fail(b"cannot read the program\n"));
     // UNSAFE(slice): the program file, mapped read-only above.
     #[allow(unsafe_code)]
     // SAFETY: `len` bytes from `file_at` are a private read-only mapping of the file, unmapped only
     // after the last use of this slice below.
     let file = unsafe { conv::bytes_at(file_at, len) };
-    let page = PAGE_U64;
-    let plan = map::plan_file::<Native>(file, page).unwrap_or_else(|e| fail(e.message()));
-    let (span, align) = (usize::try_from(plan.span).unwrap_or(0), usize::try_from(plan.align).unwrap_or(0));
-    // One PROT_NONE reservation, aligned to the largest p_align by over-reserving and trimming.
-    let raw_at = raw::mmap(0, span.wrapping_add(align), 0, MAP_PRIVATE_I32 | MAP_ANONYMOUS_I32, -1, 0).unwrap_or_else(|_| fail(b"cannot reserve memory for the program\n"));
-    let base = raw_at.wrapping_add(align.wrapping_sub(1)) & !align.wrapping_sub(1);
-    let _ = raw::munmap(raw_at, base.wrapping_sub(raw_at));
-    let tail = base.wrapping_add(span);
-    let _ = raw::munmap(tail, raw_at.wrapping_add(span).wrapping_add(align).wrapping_sub(tail));
-    let bias = base.wrapping_sub(usize::try_from(plan.first).unwrap_or(0));
-    for seg in map::segments::<Native>(file, page) {
-        let seg = seg.unwrap_or_else(|e| fail(e.message()));
-        let at = |v: u64| bias.wrapping_add(usize::try_from(v).unwrap_or(0));
-        let fixed = MAP_PRIVATE_I32 | MAP_FIXED_I32;
-        let file_len = usize::try_from(seg.file_len).unwrap_or(0);
-        if file_len != 0 && raw::mmap(at(seg.start), file_len, seg.prot, fixed, fd32, i64::try_from(seg.offset).unwrap_or(-1)).is_err() {
-            fail(b"cannot map a segment\n");
-        }
-        // The rest of the page holding the last file byte is zero (writable segments only hold .bss).
-        let file_end = at(seg.file_end);
-        let page_end = file_end.wrapping_add(PAGE.wrapping_sub(1)) & !PAGE.wrapping_sub(1);
-        if seg.prot & PROT_WRITE_I32 != 0 && file_len != 0 && page_end > file_end {
-            // UNSAFE(slice): the tail of the segment's last file page, mapped writable just above.
-            #[allow(unsafe_code)]
-            // SAFETY: [file_end, page_end) lies in the page mapped above (private, writable).
-            let tail = unsafe { conv::bytes_at_mut(file_end, page_end.wrapping_sub(file_end)) };
-            tail.fill(0);
-        }
-        let anon_from = if file_len == 0 { at(seg.start) } else { page_end };
-        let anon_to = at(seg.zero_end);
-        if anon_to > anon_from && raw::mmap(anon_from, anon_to.wrapping_sub(anon_from), seg.prot, fixed | MAP_ANONYMOUS_I32, -1, 0).is_err() {
-            fail(b"cannot map a segment\n");
-        }
-    }
+    let loaded = map::load::<Native, _>(&mut SysMapper { fd: fd32 }, file, page);
     let _ = raw::munmap(file_at, len);
     let _ = crate::ffi_sys::liella_sys_close(fd);
-    let at = |v: u64| bias.wrapping_add(usize::try_from(v).unwrap_or(0));
-    (start::Program { phdr: at(plan.phdr), phnum: usize::from(plan.phnum), entry: at(plan.entry) }, bias)
+    let loaded = loaded.unwrap_or_else(|e| fail(e.message()));
+    let at = |v: u64| usize::try_from(v).unwrap_or(0);
+    (start::Program { phdr: at(loaded.phdr), phnum: usize::from(loaded.phnum), entry: at(loaded.entry) }, at(loaded.bias))
 }
 
-/// The page size the loader maps with (x86-64's base page; DL-7 takes `AT_PAGESZ`).
-const PAGE: usize = liella_rt::start::PAGE;
-const PAGE_U64: u64 = 4096;
-/// `mmap` flags and protections as `i32` (kernel UAPI `asm-generic/mman*.h`).
+/// The mapper's system calls ([`map::Mapper`]) on one object's file descriptor.
+struct SysMapper {
+    fd: i32,
+}
+
+impl map::Mapper for SysMapper {
+    fn reserve(&mut self, at: Option<u64>, len: u64) -> Result<u64, ()> {
+        let (hint, flags) = match at {
+            Some(a) => (a, MAP_PRIVATE_I32 | MAP_ANONYMOUS_I32 | MAP_FIXED_NOREPLACE_I32),
+            None => (0, MAP_PRIVATE_I32 | MAP_ANONYMOUS_I32),
+        };
+        let r = raw::mmap(word(hint)?, word(len)?, 0, flags, -1, 0).map_err(|_| ())?;
+        u64::try_from(r).map_err(|_| ())
+    }
+
+    fn map_file(&mut self, at: u64, len: u64, prot: i32, offset: u64) -> Result<(), ()> {
+        let off = i64::try_from(offset).map_err(|_| ())?;
+        raw::mmap(word(at)?, word(len)?, prot, MAP_PRIVATE_I32 | MAP_FIXED_I32, self.fd, off).map(|_| ()).map_err(|_| ())
+    }
+
+    fn map_zero(&mut self, at: u64, len: u64, prot: i32) -> Result<(), ()> {
+        raw::mmap(word(at)?, word(len)?, prot, MAP_PRIVATE_I32 | MAP_FIXED_I32 | MAP_ANONYMOUS_I32, -1, 0).map(|_| ()).map_err(|_| ())
+    }
+
+    fn store(&mut self, at: u64, len: u64, bytes: Option<&[u8]>) {
+        let (Ok(at), Ok(len)) = (word(at), word(len)) else { return };
+        // UNSAFE(slice): bytes of a segment page the mapper mapped writable just before this call.
+        #[allow(unsafe_code)]
+        // SAFETY: `map::load` calls `store` only on [at, at + len) inside a page it mapped private and
+        // writable through this mapper, before anything else can see the object.
+        let dst = unsafe { conv::bytes_at_mut(at, len) };
+        match bytes {
+            Some(b) => dst.iter_mut().zip(b).for_each(|(d, s)| *d = *s),
+            None => dst.fill(0),
+        }
+    }
+
+    fn protect(&mut self, at: u64, len: u64, prot: i32) -> Result<(), ()> {
+        raw::mprotect(word(at)?, word(len)?, prot).map_err(|_| ())
+    }
+
+    fn unmap(&mut self, at: u64, len: u64) {
+        if let (Ok(at), Ok(len)) = (word(at), word(len)) {
+            let _ = raw::munmap(at, len);
+        }
+    }
+}
+
+/// An address or length as a machine word.
+fn word(v: u64) -> Result<usize, ()> {
+    usize::try_from(v).map_err(|_| ())
+}
+
+/// `mmap` flags as `i32` (kernel UAPI `asm-generic/mman*.h`, `linux/mman.h`).
 const MAP_PRIVATE_I32: i32 = 0x02;
 const MAP_FIXED_I32: i32 = 0x10;
 const MAP_ANONYMOUS_I32: i32 = 0x20;
-const PROT_WRITE_I32: i32 = 2;
+const MAP_FIXED_NOREPLACE_I32: i32 = 0x10_0000;
 /// Words the loader copies of the auxiliary vector (128 pairs, `AT_NULL` included).
 const AUXV_WORDS_MAX: usize = 256;
 /// Words per program header.
