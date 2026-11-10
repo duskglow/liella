@@ -1,0 +1,8 @@
+id = "D-10.72"
+section = "s10"
+spec = "§10.0, §10.2"
+ann = "—"
+status = "active"
+body = '''
+**`exp10f`, `logf`, `log2f`, `log10f` on the one-pass `float` path** (LIBM-F32-ONEPASS-REST; extends D-10.63 under D-10.67 and D-10.68). `exp10f` runs `fast32::exp_onepass` with c = RN(128·log2 10) for |x| < 37.9 (|z| < 2^13.98, the bound of D-10.63 unchanged); 10^n is a `float` for n = 1..=10 while z is inexact there, so operands in [1, 10] with their low 20 bits clear are refused on the bits before any arithmetic (two instructions on the hot path). The log family (`fast32::log_onepass`) splits a positive normal x = 2^e·m (m in [0.75, 1.5)) on the bits and builds m and e as `double`s by integer operations and a full-register `movq` (e via the 1.5·2^52 shift, exact), with the `log_core` table kernel (LOG_INV/LOG_C, degree-6 Estrin); `log2f` adds e + t·(1/ln 2) so x = 2^n stays exact with no flag, `log10f` refuses x = 10^n (n = 1..=10) by one load from a 32-entry table indexed by the exponent mod 32 (the ten exponents differ mod 32). Bound in every direction ≤ 2^-44.7 (< 313 ulp, test margin LOG_DELTA 640); the proof is the doc comment of `log_onepass`, checked by the exhaustive tests (2^32 operands × 4 directions against the envelope, 0 mismatches for each of the four). No exception table: the margin test is direction-independent. Removes the seven `partial-write` ALLOW entries of these four functions. Counts and timing in handoff/libm-f32-onepass-rest.md.
+'''
