@@ -1,12 +1,29 @@
-{"task": "LIBM-F32-POWF-2", "model": "opus", "tokens": null,
+{
+ "task": "LIBM-F32-POWF-2",
+ "model": "opus",
+ "tokens": null,
  "result": "powf one-pass (D-10.78) merged with next: 1.83x glibc time on Ivy Bridge (was 4.47x), 1.82x on N100; 155.9 instr/call vs glibc 78.0 (FMA build) / 93.0 (hwcaps=-FMA build); 7/7 plants caught; target 1.5x not reached",
- "branch": "task/libm-f32-powf-2", "head": null,
- "gate": {"affected": "2435 passed / 0 failed", "peak": "2.0G"},
+ "branch": "task/libm-f32-powf-2",
+ "head": null,
+ "gate": {
+  "affected": "2435 passed / 0 failed on 21ec45efa; gate2 on 9357c30cf pending",
+  "peak": "2.0G"
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["CI conflict was docs/codemap/symbols.tsv only (train-owned): took origin/next's copy in the merge", "random-pair job (mei:libm-f32-powf-pairs, 4e9 calls + hard pairs x 16 modes, 0 mismatches) ran on the pre-merge head 67729b223; powf code unchanged by the merge"],
+ "informational": [
+  "CI conflict was docs/codemap/symbols.tsv only (train-owned): took origin/next's copy in the merge",
+  "random-pair job (mei:libm-f32-powf-pairs, 4e9 calls + hard pairs x 16 modes, 0 mismatches) ran on the pre-merge head 67729b223; powf code unchanged by the merge",
+  "results in the handoff (gate, plants 7/7, counts, Ivy Bridge/N100 timing) are from 21ec45efa; a second merge of next (fast32.rs adjacent additions) made 9357c30cf, whose gate2/plants2/counts2 were pending at hand-back"
+ ],
  "refused": [],
  "improvement": "the plants run took 78 min for 7 plants because each plant rebuilds the products first (440 s for the first one); plants on one file with the same cmd could share one product rebuild per plant only if the cmd needs it - worth a check in xtask plants",
  "next_step": "profile the remaining 155.9 instructions (wl_trace --spec validation/percall/math_f32.c) and shorten the log stage (log2-domain table or a 2^-46 bound with a wider margin) to reach 1.5x",
  "report_file": "handoff/libm-f32-powf.md",
- "jobs": ["libm-f32-powf-2-gate", "libm-f32-powf-2-plants", "libm-f32-powf-2-counts", "libm-f32-powf-2-lint", "kotori:libm-f32-powf-2-ivb", "nozomi:libm-f32-powf-2-n100"]}
+ "jobs": [
+  "libm-f32-powf-2-gate2",
+  "libm-f32-powf-2-plants2",
+  "libm-f32-powf-2-counts2",
+  "libm-f32-powf-2-lint2"
+ ]
+}

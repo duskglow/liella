@@ -2,7 +2,10 @@
 
 State: branch `task/libm-f32-powf-2` (LIBM-F32-POWF-2), which holds all of `task/libm-f32-powf` (code 8e913f324, plants
 33b3c36c6, record fix dc05891b6, handoff 67729b223) plus a merge of origin/next 8253a107c (99116e35d: the only conflict
-was the train-owned docs/codemap/symbols.tsv, taken from next; never commit it) and the two odd-y plants (21ec45efa).
+was the train-owned docs/codemap/symbols.tsv, taken from next; never commit it) and the two odd-y plants (21ec45efa),
+then a second merge of origin/next f1f5358d5 (9357c30cf: next's exp10f/logf-family one-pass entry points next to
+`pow_onepass_any` in fast32.rs, both kept; powf code unchanged). On 9357c30cf: clippy + static rc 0
+(keke:libm-f32-powf-2-lint2); gate2, plants2 and counts2 (same commands as below) were PENDING at hand-back.
 Role keke:~/w/n2. Decision: D-10.78 (extends D-10.63 under D-10.67). Plan rows to read: D-10.78, D-10.63, D-10.67, D-10.68.
 
 ## 1. Profile before the change (mei, Skylake-SP; wl_trace powf_typ, call 11; job mei:libm-f32-powf-trace2)
