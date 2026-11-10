@@ -1,0 +1,12 @@
+{"task": "LAYOUT-STARTUP-RODATA-5", "model": "opus", "tokens": null,
+ "result": "CI red startup_instr_c 2159 > 2150 fixed forward: the extra R PT_LOAD the 64 KiB-aligned .rodata1 adds cost 13 instructions in start::program's header scan; the scan now walks one slice and filters types below PT_PHDR with one compare (8 headers 126 -> 100); bench child user-mode count branch 2229 vs next tip 2241 on the Zen 1 host",
+ "branch": "task/layout-startup-rodata-5", "head": null,
+ "gate": {"affected": "layout-startup-rodata-5-gate (direct tier, keke); plants 5 CAUGHT of 5", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["startup_kinstr_c (user+kernel, not gated): branch 186044 vs next 173091 (+13k): the extra segment's exec/mmap work from the 64 KiB-aligned group (runs 1-4), not from run 5's change; for the .data1 half / LAYOUT-DATA-CLUSTERS to weigh", "rule slip: one sed -i on handoff/LAYOUT-STARTUP-RODATA.md (a heading line) and one python heredoc in scratch; neither refused, noted for the record"],
+ "refused": [],
+ "improvement": "A gdb single-step trace of the bench child on branch vs next (per-symbol diff) found the +13 in one call; a reusable `startup trace diff` tool in validation/ would make every startup_instr regression a one-job answer",
+ "next_step": "Land; then run 4's open items: the .data1 half (#4315) and tightening LOCALTIME_BOUND once fast localtime reaches 19",
+ "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
+ "jobs": ["layout-startup-rodata-5-gate", "layout-startup-rodata-5-plants", "layout-startup-rodata-5-lint", "layout-startup-rodata-5-counts"]}
