@@ -45,7 +45,8 @@ def sections(exe):
     out = []
     for line in run(["readelf", "-SW", exe]).splitlines():
         m = re.match(r"\s*\[\s*\d+\]\s+(\S+)\s+\S+\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)\s+\S+\s+(\S*)", line)
-        if not m or "A" not in m.group(4):
+        # TLS is left out: a TLS symbol's value is a TLS-block offset, and .tbss overlaps the next section.
+        if not m or "A" not in m.group(4) or "T" in m.group(4):
             continue
         start, size = int(m.group(2), 16), int(m.group(3), 16)
         out.append((start, start + size, m.group(1), "W" in m.group(4), "T" in m.group(4), "X" in m.group(4)))
