@@ -107,11 +107,16 @@ fn build(out: &Path) {
 
 /// [`build`] with extra compiler driver arguments (e.g. `-Wl,-Map=<file>`).
 fn build_with(out: &Path, extra: &[&str]) {
+    build_crt1(out, extra, &root().join("target/liella/liella-crt1.o"));
+}
+
+/// [`build_with`] with another start file in place of `liella-crt1.o` (the pad links below).
+fn build_crt1(out: &Path, extra: &[&str], crt1: &Path) {
     let r = root();
     let st = Command::new("cc")
         .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
         .args(extra)
-        .arg(r.join("target/liella/liella-crt1.o"))
+        .arg(crt1)
         .arg(r.join("crates/core/tests/oracle/page_faults.c"))
         .arg(r.join("target/liella/libc.a"))
         .arg("-lgcc")
@@ -664,4 +669,161 @@ fn init_startup_state_statics_are_in_data1() {
         assert!(!sections.is_empty(), "start-up state: no definition of *{suffix} in libc.a (renamed? update xtask/src/coldbss.rs and this test)");
         assert!(sections.iter().all(|s| *s == ".data1"), "start-up state: *{suffix} is in {sections:?}, want .data1 (move_startup_state not applied?)");
     }
+}
+
+/// The input sections of the `.text` output section of a GNU ld map, in address order:
+/// (name, address, size, file). A long name sits alone on its line, the rest on the next.
+fn text_inputs(map: &str) -> Vec<(String, u64, u64, String)> {
+    let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+    let lines: Vec<&str> = map.lines().skip_while(|l| !l.starts_with("Linker script and memory map")).collect();
+    let start = lines.iter().position(|l| l.split_whitespace().next() == Some(".text") && !l.starts_with(' ')).expect("no .text output section in the link map");
+    let mut out = Vec::new();
+    for (i, l) in lines.iter().enumerate().skip(start + 1) {
+        if !l.is_empty() && !l.starts_with(' ') {
+            break;
+        }
+        let Some(t) = l.strip_prefix(' ') else { continue };
+        if !t.starts_with('.') {
+            continue;
+        }
+        let mut w: Vec<&str> = t.split_whitespace().collect();
+        let name = w.remove(0).to_string();
+        if w.is_empty() {
+            w = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+        }
+        if let (Some(a), Some(s), Some(f)) = (w.first().and_then(|x| hex(x)), w.get(1).and_then(|x| hex(x)), w.get(2)) {
+            out.push((name, a, s, (*f).to_string()));
+        }
+    }
+    out
+}
+
+/// The probe linked with a `-Map`; returns the map's text.
+fn link_map(dir: &Path, crt1: &Path) -> String {
+    let (exe, map) = (dir.join("page_faults"), dir.join("page_faults.map"));
+    build_crt1(&exe, &[&format!("-Wl,-Map={}", map.display())], crt1);
+    std::fs::read_to_string(&map).expect("link map")
+}
+
+/// LAYOUT-TEXT-PIN (D-X.63): TEXT-PREFIX. No input section of `libc.a` lies between the start of
+/// `.text` and the hot group: rustc puts `#[cold]` functions in `.text.unlikely.<f>` (and a function
+/// named `exit` in `.text.exit`), which GNU ld places ahead of the group, so any cold function added
+/// anywhere in the library moved every 64 KiB window boundary inside the group (mktime 0 -> 1, start-up
+/// text 5 -> 4 in LAYOUT-STABILITY-RETHINK's pad matrix). `cargo xtask so` renames them out of those
+/// patterns. The start file's own `.text.startup._start` and the program's sections may stay.
+/// No spec clause (layout of the products).
+#[test]
+fn init_no_library_text_precedes_the_hot_group() {
+    let dir = std::env::temp_dir().join(format!("liella-text-prefix-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
+    let _ = std::fs::remove_dir_all(&dir);
+    let inputs = text_inputs(&map);
+    let group = inputs.iter().position(|s| s.0.starts_with(".text.sorted.h")).expect("no .text.sorted.h* input section: hot group missing");
+    let ahead: Vec<String> = inputs[..group].iter().filter(|s| s.2 > 0 && s.3.contains("libc.a(")).map(|s| format!("{} ({} bytes)", s.0, s.2)).collect();
+    eprintln!("TEXT-PREFIX: hot group at {:#x}; {} input sections ahead of it", inputs[group].1, group);
+    assert!(ahead.is_empty(), "TEXT-PREFIX: {} libc.a input sections lie ahead of the hot group (rename them in xtask/src/hottext.rs): {ahead:?}", ahead.len());
+}
+
+/// The 0-fault clusters of `crates/libc-so/hot-text.clusters`: (name, first, last list position).
+fn clusters() -> Vec<(String, usize, usize)> {
+    let dir = root().join("crates/libc-so");
+    let list = std::fs::read_to_string(dir.join("hot-text.list")).expect("hot-text.list");
+    let mut pos = std::collections::BTreeMap::new();
+    for (i, l) in list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).enumerate() {
+        pos.entry(l.split('\t').next().unwrap_or("").trim().to_string()).or_insert(i);
+    }
+    let text = std::fs::read_to_string(dir.join("hot-text.clusters")).expect("hot-text.clusters");
+    let mut out = Vec::new();
+    for l in text.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')) {
+        let f: Vec<&str> = l.split('\t').collect();
+        let [name, a, b] = f[..] else { panic!("hot-text.clusters: bad line {l:?}") };
+        let p = |k: &str| *pos.get(k).unwrap_or_else(|| panic!("hot-text.clusters: {name}: key {k} not in hot-text.list"));
+        out.push((name.to_string(), p(a), p(b)));
+    }
+    assert!(out.len() >= 4, "hot-text.clusters: {} clusters, want time, strings, rebind, float", out.len());
+    out
+}
+
+/// The address range of each cluster in a link map: (name, lo, hi), hi exclusive.
+fn cluster_ranges(map: &str) -> Vec<(String, u64, u64)> {
+    let inputs = text_inputs(map);
+    clusters()
+        .into_iter()
+        .map(|(name, first, last)| {
+            let (mut lo, mut hi) = (u64::MAX, 0);
+            for (n, a, s, _) in &inputs {
+                let p = n.strip_prefix(".text.sorted.h").and_then(|r| r.get(..5)).and_then(|d| d.parse::<usize>().ok());
+                if *s > 0 && p.is_some_and(|p| (first..=last).contains(&p)) {
+                    lo = lo.min(*a);
+                    hi = hi.max(a + s);
+                }
+            }
+            assert!(lo < hi, "cluster {name}: no section of positions {first}..={last} in the link");
+            (name, lo, hi)
+        })
+        .collect()
+}
+
+/// LAYOUT-TEXT-PIN (D-X.63): CLUSTER-WINDOW. Each 0-fault cluster (`crates/libc-so/hot-text.clusters`)
+/// lies inside one 64 KiB fault-around window of the linked probe. No spec clause (layout of the
+/// products).
+#[test]
+fn init_zero_fault_clusters_sit_in_one_window() {
+    let dir = std::env::temp_dir().join(format!("liella-cluster-window-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let map = link_map(&dir, &root().join("target/liella/liella-crt1.o"));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (name, lo, hi) in cluster_ranges(&map) {
+        eprintln!("cluster {name}: {lo:#x}..{hi:#x} ({} bytes)", hi - lo);
+        assert_eq!(lo >> 16, (hi - 1) >> 16, "CLUSTER-WINDOW: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window (head alignment missing?)");
+    }
+}
+
+/// `liella-crt1.o` merged (`ld -r`) with `pad` bytes in `.text.unlikely.*` (`pre`: ahead of the hot
+/// group) or in `.text` (`cold`: after it). The start file is the first object of the link, so the
+/// pad shifts everything after it, as unrelated code of a program or the library would.
+fn padded_crt1(dir: &Path, region: &str, pad: u64) -> PathBuf {
+    let section = if region == "pre" { ".section .text.unlikely.liella_pad,\"ax\",@progbits" } else { ".text" };
+    let (s, o, crt1) = (dir.join("pad.s"), dir.join("pad.o"), dir.join("crt1pad.o"));
+    std::fs::write(&s, format!("{section}\n.fill {pad},1,0xcc\n")).expect("pad.s");
+    assert!(Command::new("cc").arg("-c").arg(&s).arg("-o").arg(&o).status().expect("cc -c").success(), "pad.s does not assemble");
+    let st = Command::new("ld").arg("-r").arg("-o").arg(&crt1).arg(root().join("target/liella/liella-crt1.o")).arg(&o).status().expect("ld -r");
+    assert!(st.success(), "ld -r of the padded start file failed");
+    crt1
+}
+
+/// LAYOUT-TEXT-PIN (D-X.63): the 0-fault calls stay at 0 whatever code lies ahead of or after the
+/// hot group. The probe linked with a start file padded by 0x800, 0x2000, 0x8000 and 0xF000 bytes,
+/// ahead of the group (`pre`) and after it (`cold`): the first mktime after localtime_r, the first
+/// string calls after printf and a same-directory rebind take no fault, and every cluster stays in
+/// one 64 KiB window. Before the cluster alignment, the `pre` pads 0x800-0x3000 gave mktime 1
+/// (LAYOUT-STABILITY-RETHINK). No spec clause (layout of the products).
+#[test]
+fn init_zero_fault_calls_hold_at_every_text_phase() {
+    let base = std::env::temp_dir().join(format!("liella-text-phase-{}", std::process::id()));
+    let mut bad = Vec::new();
+    for region in ["pre", "cold"] {
+        for pad in [0x800_u64, 0x2000, 0x8000, 0xF000] {
+            let dir = base.join(format!("{region}-{pad:x}"));
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            let crt1 = padded_crt1(&dir, region, pad);
+            let map = link_map(&dir, &crt1);
+            for (name, lo, hi) in cluster_ranges(&map) {
+                if lo >> 16 != (hi - 1) >> 16 {
+                    bad.push(format!("{region} {pad:#x}: cluster {name} at {lo:#x}..{hi:#x} straddles a 64 KiB window"));
+                }
+            }
+            let exe = dir.join("page_faults");
+            for mode in ["mktime", "strings", "rebind"] {
+                let n = faults(&exe, mode);
+                eprintln!("text phase {region} {pad:#x}: {mode} {n}");
+                if n != 0 {
+                    bad.push(format!("{region} {pad:#x}: {mode} {n} faults, want 0"));
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(bad.is_empty(), "text phase: {bad:#?}");
 }

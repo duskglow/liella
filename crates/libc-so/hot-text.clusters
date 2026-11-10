@@ -1,0 +1,13 @@
+# 0-fault clusters of the hot group (LAYOUT-TEXT-PIN, D-X.63): <name> TAB <first key> TAB <last key>.
+# Hand-kept (hot-text.list is generated). A cluster is every list position from its first key to its
+# last; `cargo xtask so` aligns its first section to the smallest power of two not below its size, so
+# it never straddles a 64 KiB fault-around window. Each starts with a function the earlier calls of its
+# probe mode (page_faults.c) already ran, so the later call finds its text in a touched window.
+# time: localtime_r's conversion (local_in) to the code only the first mktime runs (mode mktime).
+# strings: the string kernels to the printf entry that runs first (mode strings).
+# rebind: bindtextdomain to the catalog lookup and the same-text check of a rebind (mode rebind).
+# float: the first float conversion (mode float).
+time	_RNvNtC15liella_boundary4zone8local_in	_RNvNtNtC6liella4time5civil17days_from_civil64
+strings	strlen	_RNvNtC15liella_boundary6printf8vfprintf
+rebind	bindtextdomain	_RNvMNtNtC6liella7catalog2moNtNtNtC6liella7catalog2mo2Mo4form
+float	_RINvNtC6liella6printf12simple_floatNtNtC15liella_boundary6printf8ToBufferEC15liella_boundary	_RINvNtNtC6liella3num6format14decimal_stylesKjb0_EC6liella

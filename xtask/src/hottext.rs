@@ -523,8 +523,12 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
 /// give `<f>`. `None` for other sections.
 fn function_of(section: &str) -> Option<&str> {
     let f = section.strip_prefix(".text.")?;
-    if let Some(name) = f.strip_prefix("unlikely.") {
-        return Some(name);
+    // LAYOUT-TEXT-PIN: `.text.startup.<f>` / `.text.exit.<f>` (GCC) and this tool's own
+    // [`COLD_PREFIX`] carry the function name the same way.
+    for p in ["unlikely.", "startup.", "exit.", COLD_PREFIX] {
+        if let Some(name) = f.strip_prefix(p) {
+            return Some(name);
+        }
     }
     if let Some(rest) = f.strip_prefix("sorted.h") {
         let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
@@ -545,16 +549,107 @@ fn section_for(f: &str, keys: &BTreeMap<String, usize>) -> String {
     }
 }
 
-/// The name function section `name` (of function `f`) should have: [`section_for`], except that
-/// an unlisted section that is not grouped keeps its name. HOTTEXT-COLD-STARTUP: start-up runs
-/// `#[cold]` functions (`cpu::init`, the heap's first refill, `resolve_fold_slow`), which rustc
-/// puts in `.text.unlikely.<f>`; ld gathers those ahead of the hot group, where their windows move
-/// with every other cold function in the library. Listed, they join the hot group in list order;
-/// unlisted, they stay in `.text.unlikely.*`.
-fn rename_for(name: &str, f: &str, keys: &BTreeMap<String, usize>) -> String {
+/// LAYOUT-TEXT-PIN (D-X.63): the prefix (after `.text.`) of an unlisted function whose plain
+/// `.text.<f>` would itself match one of GNU ld's pre-group patterns (a function named `exit`
+/// gets `.text.exit`). [`function_of`] strips it, so a later listing still finds the key.
+const COLD_PREFIX: &str = "liella_cold.";
+
+/// Whether GNU ld's default script (2.42) places input section `name` ahead of the hot group:
+/// `*(.text.unlikely .text.*_unlikely .text.unlikely.*)`, `*(.text.exit .text.exit.*)`,
+/// `*(.text.startup .text.startup.*)`, `*(.text.hot .text.hot.*)`.
+fn before_group(name: &str) -> bool {
+    let Some(f) = name.strip_prefix(".text.") else { return false };
+    f.ends_with("_unlikely") || ["unlikely", "exit", "startup", "hot"].iter().any(|p| f == *p || f.strip_prefix(p).is_some_and(|r| r.starts_with('.')))
+}
+
+/// The name function section `name` (of function `f`) should have: [`section_for`], and for an
+/// unlisted function a name GNU ld places after the hot group, with the cold rest of `.text`.
+/// HOTTEXT-COLD-STARTUP: start-up runs `#[cold]` functions (`cpu::init`, the heap's first refill,
+/// `resolve_fold_slow`), which rustc puts in `.text.unlikely.<f>`; listed, they join the hot group
+/// in list order. LAYOUT-TEXT-PIN (D-X.63): unlisted, they used to stay in `.text.unlikely.*`
+/// (with `.text.exit` of `exit` and any unlisted `.text.hot.*`), which ld places ahead of the
+/// group, so every cold function added anywhere in the library moved every window boundary inside
+/// the group. Now nothing of the library precedes the group (TEXT-PREFIX).
+fn rename_for(_name: &str, f: &str, keys: &BTreeMap<String, usize>) -> String {
     let want = section_for(f, keys);
-    let grouped = name.starts_with(".text.sorted.") || name.starts_with(".text.hot.");
-    if want.starts_with(".text.sorted.") || grouped { want } else { name.to_string() }
+    if before_group(&want) { format!(".text.{COLD_PREFIX}{f}") } else { want }
+}
+
+/// LAYOUT-TEXT-PIN (D-X.63): the 0-fault clusters of the hot group, next to the list:
+/// `<name> TAB <first key> TAB <last key>`, `#` comments. A cluster is every list position from
+/// its first key's to its last key's; the hand-kept file names keys, so a regen that moves them
+/// moves the cluster with them.
+pub const CLUSTER_LIST: &str = "hot-text.clusters";
+/// GNU ld 2.42 and the kernel's fault-around window on the reference hosts (64 KiB).
+const WINDOW: u64 = 0x10000;
+
+/// One cluster: name and the inclusive range of list positions.
+#[derive(Debug, PartialEq)]
+struct Cluster {
+    name: String,
+    first: usize,
+    last: usize,
+}
+
+/// Parses [`CLUSTER_LIST`] against the list's `keys` (key to position).
+fn parse_clusters(text: &str, keys: &BTreeMap<String, usize>) -> Result<Vec<Cluster>, String> {
+    let mut out = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        let l = l.trim_end();
+        if l.is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let f: Vec<&str> = l.split('\t').collect();
+        let [name, a, b] = f[..] else { return Err(format!("{CLUSTER_LIST}:{}: want <name> TAB <first key> TAB <last key>", n + 1)) };
+        let pos = |k: &str| keys.get(k).copied().ok_or_else(|| format!("{CLUSTER_LIST}:{}: cluster {name}: key {k} is not in the hot-text list", n + 1));
+        let (first, last) = (pos(a)?, pos(b)?);
+        if first > last {
+            return Err(format!("{CLUSTER_LIST}:{}: cluster {name}: first key after last key ({first} > {last})", n + 1));
+        }
+        out.push(Cluster { name: name.to_string(), first, last });
+    }
+    Ok(out)
+}
+
+/// The list position in a grouped section name (`.text.sorted.h<position>.<f>`).
+fn position_of(section: &str) -> Option<usize> {
+    let rest = section.strip_prefix(".text.sorted.h")?;
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    rest.get(..digits)?.parse().ok()
+}
+
+/// The bytes the grouped sections `secs` (name, size, alignment) occupy when GNU ld lays them out
+/// in name order (`SORT(.text.sorted.*)`) from an address aligned to all of them. An upper bound
+/// for any one link: a link pulls in only some of the archive's members.
+fn cluster_bytes(secs: &mut [(String, u64, u64)]) -> u64 {
+    secs.sort_by(|a, b| a.0.cmp(&b.0));
+    secs.iter().fold(0, |off, (_, size, align)| off.next_multiple_of((*align).max(1)) + size)
+}
+
+/// The alignment a cluster of `bytes` gets: the smallest power of two not below it (so the
+/// cluster cannot straddle a [`WINDOW`] boundary wherever the link puts it), at least `min` (its
+/// members' own alignment), at most [`WINDOW`] (a larger cluster then costs ceil(bytes / WINDOW)).
+fn cluster_align(bytes: u64, min: u64) -> u64 {
+    bytes.next_power_of_two().max(min).min(WINDOW)
+}
+
+/// An alignment at or above this on a grouped section was set by [`group`] (functions ask for
+/// at most a cache line); a section that is no longer a cluster head goes back to [`PLAIN_ALIGN`].
+const CLUSTER_MARK: u64 = 1024;
+const PLAIN_ALIGN: u64 = 64;
+
+/// `readelf -SW` of `obj`: (name, size, alignment) of every section.
+fn section_table(obj: &Path) -> Result<Vec<(String, u64, u64)>, String> {
+    let out = Command::new("readelf").args(["-SW"]).arg(obj).output().map_err(|e| format!("readelf: {e}"))?;
+    let mut v = Vec::new();
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let Some((_, rest)) = line.trim_start().strip_prefix('[').and_then(|l| l.split_once(']')) else { continue };
+        let f: Vec<&str> = rest.split_whitespace().collect();
+        // Name Type Address Off Size ES [Flg] Lk Inf Al
+        let (Some(name), Some(size), Some(al)) = (f.first(), f.get(4).and_then(|s| u64::from_str_radix(s, 16).ok()), f.last().and_then(|s| s.parse().ok())) else { continue };
+        v.push((name.to_string(), size, al));
+    }
+    Ok(v)
 }
 
 /// STARTUP-READ-CONSTANTS: the key suffix of `liella_boundary::startup_names::STARTUP_NAMES`, the
@@ -592,13 +687,30 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     }
     crate::so::run(Command::new(ar).current_dir(work).arg("x").arg(&archive))?;
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
+    let clusters_path = list.with_file_name(CLUSTER_LIST);
+    let clusters = match fs::read_to_string(&clusters_path) {
+        Ok(t) => parse_clusters(&t, &keys),
+        Err(e) => Err(format!("{}: {e}", clusters_path.display())),
+    };
+    // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
+    let clusters = match clusters {
+        Ok(c) => c,
+        Err(e) if REGEN.load(Ordering::Relaxed) => {
+            println!("so: {REGEN_FLAG}: hot-text clusters NOT aligned for this regen build: {e}");
+            Vec::new()
+        }
+        Err(e) => return Err(e),
+    };
     let mut hot = 0;
     let mut startup = 0;
     let mut changed = Vec::new();
+    // Every grouped section: (member, name after renaming, size, alignment).
+    let mut grouped: Vec<(String, String, u64, u64)> = Vec::new();
     for m in &members {
         let obj = work.join(m);
         let mut args = String::new();
-        for name in crate::so::sections_of(&obj)?.values() {
+        for (name, size, align) in section_table(&obj)? {
+            let name = &name;
             if name == STARTUP_SECTION {
                 startup += 1;
                 continue;
@@ -613,6 +725,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             let want = rename_for(name, f, &keys);
             if want.starts_with(".text.sorted.") {
                 hot += 1;
+                grouped.push((m.clone(), want.clone(), size, align));
             }
             if want != *name {
                 args.push_str(&format!("--rename-section {name}={want}\n"));
@@ -622,6 +735,47 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             let rsp = work.join(format!("{m}.rsp"));
             fs::write(&rsp, args).map_err(|e| e.to_string())?;
             crate::so::run(Command::new(&objcopy).arg(format!("@{}", rsp.display())).arg(&obj))?;
+            changed.push(m.clone());
+        }
+    }
+    // LAYOUT-TEXT-PIN (D-X.63): the head of each 0-fault cluster gets the smallest power-of-two
+    // alignment not below the cluster's size, so the cluster sits inside one fault-around window
+    // wherever the rest of the program moves the group (CLUSTER-WINDOW). Done after the renames,
+    // on the final names; a head left from an earlier run on this archive goes back to plain.
+    let mut realign: BTreeMap<String, Vec<(String, u64)>> = BTreeMap::new();
+    let mut heads = BTreeSet::new();
+    for c in &clusters {
+        let mut secs: Vec<(String, u64, u64)> = grouped
+            .iter()
+            .filter(|(_, n, _, _)| position_of(n).is_some_and(|p| (c.first..=c.last).contains(&p)))
+            .map(|(_, n, s, a)| (n.clone(), *s, if *a >= CLUSTER_MARK { PLAIN_ALIGN } else { *a }))
+            .collect();
+        let min = secs.iter().map(|s| s.2).max().unwrap_or(1);
+        let bytes = cluster_bytes(&mut secs);
+        let Some(head) = secs.iter().find(|s| s.1 > 0).map(|s| s.0.clone()) else {
+            return Err(format!("{CLUSTER_LIST}: cluster {} (positions {}..={}) has no section in {}", c.name, c.first, c.last, archive.display()));
+        };
+        let align = cluster_align(bytes, min);
+        println!("so: hot-text cluster {}: positions {}..={}, {} sections, {bytes} bytes, aligned {align}", c.name, c.first, c.last, secs.len());
+        for (m, n, _, a) in grouped.iter().filter(|g| g.1 == head) {
+            heads.insert((m.clone(), n.clone()));
+            if *a != align {
+                realign.entry(m.clone()).or_default().push((n.clone(), align));
+            }
+        }
+    }
+    for (m, n, _, a) in &grouped {
+        if *a >= CLUSTER_MARK && !heads.contains(&(m.clone(), n.clone())) {
+            realign.entry(m.clone()).or_default().push((n.clone(), PLAIN_ALIGN));
+        }
+    }
+    for (m, list) in &realign {
+        let mut cmd = Command::new(&objcopy);
+        for (n, a) in list {
+            cmd.arg(format!("--set-section-alignment={n}={a}"));
+        }
+        crate::so::run(cmd.arg(work.join(m)))?;
+        if !changed.contains(m) {
             changed.push(m.clone());
         }
     }
@@ -932,9 +1086,65 @@ mod tests {
         let cold: BTreeMap<String, usize> = [("_RNvNtC15liella_boundary3cpu4init".to_string(), 3)].into_iter().collect();
         let init = "_RNvNtCsabc_15liella_boundary3cpu4init";
         assert_eq!(rename_for(&format!(".text.unlikely.{init}"), init, &cold), format!(".text.sorted.h00003.{init}"));
-        assert_eq!(rename_for(".text.unlikely.other", "other", &cold), ".text.unlikely.other");
+        assert_eq!(rename_for(".text.unlikely.other", "other", &cold), ".text.other");
         assert_eq!(rename_for(".text.other", "other", &cold), ".text.other");
         assert_eq!(rename_for(".text.sorted.h00009.other", "other", &cold), ".text.other");
         assert_eq!(function_of(".data.x"), None);
+    }
+
+    #[test]
+    fn unlisted_sections_never_match_a_pre_group_pattern() {
+        // LAYOUT-TEXT-PIN (no spec clause, layout of the products): TEXT-PREFIX. Every name GNU
+        // ld 2.42's default script places ahead of the hot group leaves that place, under a name
+        // that still maps back to the function (a later listing finds its key).
+        let cold = positions(&parse_list("exit\tstartup\tfast\n").unwrap());
+        for (from, want) in [
+            (".text.unlikely.f", ".text.f"),
+            (".text.hot.f", ".text.f"),
+            (".text.startup.main", ".text.main"),
+            (".text.exit.g", ".text.g"),
+            (".text.unlikely", ".text.liella_cold.unlikely"),
+            (".text.startup", ".text.liella_cold.startup"),
+            (".text.hot", ".text.liella_cold.hot"),
+            (".text.read_unlikely", ".text.liella_cold.read_unlikely"),
+            (".text.liella_cold.hot", ".text.liella_cold.hot"),
+            (".text.f", ".text.f"),
+        ] {
+            let f = function_of(from).unwrap();
+            let got = rename_for(from, f, &cold);
+            assert_eq!(got, want, "{from}");
+            assert!(!before_group(&got), "{got}");
+            assert_eq!(rename_for(&got, function_of(&got).unwrap(), &cold), got, "{got} is not stable");
+        }
+        // `exit` (a Rust function named exit gets `.text.exit`) is listed here: it joins the group.
+        assert_eq!(rename_for(".text.exit", "exit", &cold), ".text.sorted.h00000.exit");
+        assert_eq!(rename_for(".text.liella_cold.exit", function_of(".text.liella_cold.exit").unwrap(), &cold), ".text.sorted.h00000.exit");
+        assert!(before_group(".text.exit") && before_group(".text.unlikely.x") && before_group(".text.hot.x") && before_group(".text.a_unlikely"));
+        assert!(!before_group(".text.exitx") && !before_group(".text.sorted.h00001.x") && !before_group(".text"));
+    }
+
+    #[test]
+    fn clusters_are_aligned_to_their_size() {
+        // LAYOUT-TEXT-PIN (no spec clause): CLUSTER-WINDOW. A cluster of S bytes aligned to the
+        // smallest power of two not below S cannot straddle a 64 KiB boundary.
+        let keys = positions(&parse_list("a\tstartup\tfast\nb\tstartup\tfast\nc\tstartup\tfast\n").unwrap());
+        let c = parse_clusters("# x\ntime\tb\tc\n", &keys).unwrap();
+        assert_eq!(c, vec![Cluster { name: "time".into(), first: 1, last: 2 }]);
+        assert!(parse_clusters("t\tc\tb\n", &keys).is_err());
+        assert!(parse_clusters("t\tb\tzz\n", &keys).unwrap_err().contains("zz"));
+        assert_eq!(position_of(".text.sorted.h00042.f"), Some(42));
+        assert_eq!(position_of(".text.f"), None);
+        let mut secs = vec![(".text.sorted.h00002.y".into(), 3, 16), (".text.sorted.h00001.x".into(), 17, 16)];
+        assert_eq!(cluster_bytes(&mut secs), 35);
+        assert_eq!(secs[0].0, ".text.sorted.h00001.x");
+        assert_eq!(cluster_align(35, 16), 64);
+        assert_eq!(cluster_align(5, 16), 16);
+        assert_eq!(cluster_align(0x8001, 16), 0x10000);
+        assert_eq!(cluster_align(0x30000, 16), WINDOW);
+        for (start, size) in [(0x1234_u64, 0x7000_u64), (0x8000, 0x8000), (0xfff0, 0x10)] {
+            let a = cluster_align(size, 16);
+            let lo = start.next_multiple_of(a);
+            assert_eq!(lo / WINDOW, (lo + size - 1) / WINDOW);
+        }
     }
 }
