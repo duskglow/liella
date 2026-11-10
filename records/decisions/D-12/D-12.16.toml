@@ -1,0 +1,8 @@
+id = "D-12.16"
+section = "s12"
+spec = "§12.2"
+ann = "HIST"
+status = "active"
+body = '''
+A write-only append stream (`a`, with any modifiers) starts at the end of the file as of opening, with `fopen`, `freopen` with a path, and `freopen(NULL, "a")` (POSIX: "as if reopened", "for writing at end-of-file"; probed: the reference agrees); `a+` starts at 0. Found by the phase-12 mount-table work (Liella reported 0), fixed 2026-10-03. `fdopen` keeps the descriptor's offset (POSIX fdopen); the reference moves to the end when it adds `O_APPEND` itself: recorded in `stdio_products`; owner ruling 2026-10-04: kept. Liella sets `O_APPEND` on a descriptor lacking it, as the reference does (`F_SETFL`; appends are atomic and the caller's descriptor appends too, as probed), and does not move the offset.
+'''

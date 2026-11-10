@@ -1,0 +1,7 @@
+id = "D-H1"
+section = "h"
+pattern = "NUL-terminated text"
+status = "active"
+body = '''
+**Internal:** text is `&[u8]` with a length, and wide text is `&[u32]`. NUL termination exists only in `kernel::KPath` and the `execve` argument builder (⚑ KERN). **Boundary:** `boundary::strz` reads C strings up to the terminator without over-reading (F1, OD-C2). Outputs append the terminator in `abi::ret`.
+'''

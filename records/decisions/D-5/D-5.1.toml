@@ -1,0 +1,8 @@
+id = "D-5.1"
+section = "s05"
+spec = "§5.1"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** `ctype::{is_class(u8, &Locale), is_wclass(u32, &Locale)}`. **Boundary:** the `int` domain is decided by the exported table, which covers -128..255 (`__ctype_b_loc` layout, ⚑ COMPAT), so negative `char` values have a defined result instead of UB (observable, stricter). `EOF` is in no class.
+'''

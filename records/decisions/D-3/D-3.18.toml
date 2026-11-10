@@ -1,0 +1,8 @@
+id = "D-3.18"
+section = "s03"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**Small-class block index: one multiply for every class** (TIMING-COV-MALLOC-PAIR-CHAIN, 2026-11-06). Malloc's block offset stays `i * size` and free's block index stays `(off * magic) >> 40` with the start check `q * size == off`, for power-of-two classes too. A shift form for power-of-two classes (a `log2(size)` word in `FREE_VIEW`, a class-kind branch) was built and measured slower on the Haswell-EP class at default and hwcaps=-AVX2: +9 instructions and +1.4 to +1.7 cycles per malloc/free pair, heap_mix_real +7 to +9% cycles; without BMI2 a shift by a register count is 3 uops, and the shift-table load and class test add the rest. Reverted; the test `every_class_places_blocks_by_index_and_finds_them_again` (every class, indexes past one bitmap word, interior addresses at the alignment step) stays. Register: docs/saturation/04-allocator.md.
+'''

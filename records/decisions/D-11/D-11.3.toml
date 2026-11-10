@@ -1,0 +1,8 @@
+id = "D-11.3"
+section = "s11"
+spec = "§11.3"
+ann = "KERN, HIST"
+status = "active"
+body = '''
+Single transfers keep short-count semantics (⚑ KERN). Internal `read_exact`/`write_all` helpers are offered. `SIGPIPE` stays kernel behaviour for `write`. Internal socket sends use `MSG_NOSIGNAL`.
+'''

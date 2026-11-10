@@ -1,0 +1,8 @@
+id = "D-5.8"
+section = "s05"
+spec = "§5.3, App. D.1.2"
+ann = "PERF"
+status = "active"
+body = '''
+**`towctrans` recognises the `toupper`/`tolower` descriptors in O(1)** (TOWCTRANS-DESC; WCTYPE-RETHINK proposal 4; local decision, no observable change). A compiled `LC_CTYPE`'s view stores its two `wctrans_t` (`CtypeFile::case_desc`: the case table's address at character 0, the value `wctrans` returns) when the view is built; the built-in locales' are the built-in tables' addresses. `towctrans` and `towctrans_l` (and the `__` aliases) compare the descriptor with the two and answer through the view's case map, the same code `towupper`/`towlower` run; any other descriptor (a locale-defined map, another locale's, a value naming none) keeps the general search, out of line. Before, every call re-derived each map's descriptor of the locale to find the one it was given. Proven by `crates/boundary/tests/towctrans_desc.rs` (every code point, C, C.UTF-8 and en_US.UTF-8, all four entries, descriptors across `uselocale`) and its plants; counts in handoff/TOWCTRANS-DESC.md.
+'''

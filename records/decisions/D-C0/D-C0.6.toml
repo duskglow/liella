@@ -1,0 +1,8 @@
+id = "D-C0.6"
+section = "c0"
+spec = "C0.6"
+ann = "COMPAT"
+status = "active"
+body = '''
+The version script is generated from Appendix C.3 (`spec/abi/versions.tsv`), which lists every version and binding. Old contracts live in `legacy::versioned`. Compat-only names are exported with non-default versions (`name@VER`, not `@@`), so new programs cannot link them, matching glibc.
+'''

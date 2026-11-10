@@ -1,0 +1,8 @@
+id = "D-23.5"
+section = "s23"
+spec = "§23.5"
+ann = "HIST, ARB, PATH"
+status = "active"
+body = '''
+**Internal:** `Zone::resolve` returns `Result<(i64, Local)>`: the fields other than the seconds give a wall time, the candidates are the instants whose local time shows it, and `tm_sec` is then added as elapsed seconds (as glibc). `tm_isdst<0` takes the earliest candidate, and in a skipped hour reads the wall time with the offset in force before the change; `tm_isdst>=0` takes the earliest candidate with that flag, else reads it with the offset of the nearest period with that flag; DST asked of a zone without DST reads one hour ahead (as glibc); standard time asked of a zone without it is ignored. Deliberate difference: in a repeated hour with `tm_isdst<0`, glibc's choice depends on the previous `mktime` call of the process (its first call takes the later occurrence east of UTC); Liella always takes the first. **Boundary:** -1 with `errno` (the ambiguity is kept, F4). `gmtime`/`localtime` share one `struct tm` and `asctime`/`ctime` one 26-byte text, in per-thread result slots (`SLOT_TM`, two slots, and `SLOT_ASCTIME`; process-wide fallbacks in `legacy::result_slots`). `asctime` and `asctime_r` give `EOVERFLOW` when the text and its NUL do not fit the fixed 26 bytes, which accepts years −999 to 9999 (spec gap: §23.5 says glibc rejects years outside 1000–9999, which the record contradicts; glibc's `asctime` also prints wider fields into a larger buffer); out-of-range names print as "???". `ctime` is `asctime(localtime())`; `ctime_r` is `asctime_r(localtime_r())`.
+'''

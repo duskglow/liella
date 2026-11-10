@@ -1,0 +1,13 @@
+id = "SR-8"
+section = "2"
+row = "`fread`/`fwrite`/`fclose` discard on read streams"
+now = "n/a (spec)"
+limit = "spec s12_8_c_1 plus a coordinator ruling require the discard"
+reason_class = "spec"
+basis = "M"
+source = "STDIO-5 (ledger `rejected`)"
+tried = "none"
+flag = "none"
+status = "active"
+body = '''
+'''

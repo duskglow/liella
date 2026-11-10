@@ -1,0 +1,8 @@
+id = "D-8.2"
+section = "s08"
+spec = "§8.1"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+Unsigned parsing of a leading `-` returns `Negated`. The wrap-around required by the contract is applied by `legacy::num_compat`.
+'''

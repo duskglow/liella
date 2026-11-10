@@ -1,0 +1,8 @@
+id = "D-24.6"
+section = "s24"
+spec = "§24.4"
+ann = "HIST"
+status = "active"
+body = '''
+`sysconf`'s fixed answers and `confstr`'s texts are the reference glibc's, recorded by `spec/tools/sysconf_probe.py` in `spec/abi/sysconf.tsv` and generated into `legacy::sysconf_table` (`spec/tools/sysconf_table.py`). The answers that depend on the machine (limits, page size, clock ticks, processors, memory, caches, signal stacks) are computed by `liella::system` (D-24.1). The tests compare every name with the host glibc.
+'''

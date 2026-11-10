@@ -1,0 +1,8 @@
+id = "D-23.14"
+section = "s23"
+spec = "§23.7"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**strptime engine and LC_TIME reader** (COLD-REWRITE2-cold-01-REWRITE-2, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-cold-01-REWRITE-2.md`; D-23.7). (1) A table-driven walker: each numeric conversion is a descriptor (max digits, range, signed) read by one `number` routine that stops once another digit would exceed the maximum (probed: `%M` on "60" reads 6); combining pieces (century, 12-hour clock and AM/PM, week numbers, ISO year/week) collect in an accumulator resolved once, so the result does not depend on conversion order; composites re-enter with a depth limit of 8; `%EY` tries each era on a snapshot; the result is `Parsed` with only the input's fields set. (2) Locale names are looked up on demand from the `nl_langinfo` items, longest case-folded match (LC_CTYPE folding; MON, ABMON, ALTMON, ABALTMON). (3) Failure is NULL only, no errno; malformed `era` entries are skipped. (4) (coordinator rulings 2026-10-21, #233) A week or day-of-year date outside the given year keeps `tm_year` and sets `tm_mon`/`tm_mday`/`tm_yday` relative to it, out of range, exactly as probed: after the year `tm_mon` 11 and `tm_mday` = days since 1 December + 1; before it `tm_mon` -1, `tm_mday` = `tm_yday` + 1 less 365 in a leap year, `tm_yday` negative; applies to `%U`, `%W`, `%j` and ISO week dates with `%Y`.
+'''

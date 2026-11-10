@@ -1,0 +1,8 @@
+id = "D-12.12"
+section = "s12"
+spec = "§12.6"
+ann = "HIST"
+status = "active"
+body = '''
+**The printf engine** (phase 8; IP-22, refines D-12.4). `liella::printf` parses a format once into literal runs and conversions; each conversion names its argument's index (and its `*` width's and precision's), so positional and sequential formats share one model, and the argument classes (integer register, `double`, x87 `long double`) are known before any is read. `legacy::printf_va` reads them through `abi::va::VaSource`, which the boundary implements with the C layer's `va_arg` accessors (`liella_va_long`, `liella_va_double`, `liella_va_ldouble`); the variadic names are C adapters forwarding the `va_list` by address to private entries, one per destination (stream, descriptor, caller buffer, allocation, obstack, and the wide forms). Rendering produces each conversion's body in the destination's units (bytes, or wide characters for `wprintf`) and pads it, so width and precision count what the destination counts; the locale gives the radix (which may be several bytes), grouping, thousands separator and the `I` digits; `%m` uses `errno` at entry and the reference texts of `spec/abi/errmsgs.tsv` (D-2.2). Observed reference behaviour followed (`printf_products.rs`, about 47,000 formattings compared): `%a` keeps a rounding carry in the leading digit (`0x2p+0`); `%La` prints the x87 significand nibble by nibble (`1.0L` is `0x8p-3`); `%%` ignores flags and width; a format ending inside a specification fails with `EINVAL` after the text before it; an unknown conversion is output as written; on an error `snprintf` still terminates what it wrote. The fortified forms reject `%n` in a format outside the executable's read-only segments (D-12.4).
+'''

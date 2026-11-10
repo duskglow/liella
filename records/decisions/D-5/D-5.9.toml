@@ -1,0 +1,8 @@
+id = "D-5.9"
+section = "s05"
+spec = "§5.2, App. D.1.2"
+ann = "PERF"
+status = "active"
+body = '''
+**Wide classes come from one two-stage table of class words per `LC_CTYPE`** (WCTYPE-RETHINK design A, coordinator rulings #3876/#3877; this row covers the built-in locales, WCTYPE-TRIE-BUILTIN). Stage 1 is indexed by `c >> 8` (4352 entries through U+10FFFF); its entry names a deduplicated leaf of 256 `u16` class words indexed by `c & 255`. The word's bits are the `Class` (`_IS*`) bits, so `wctype_t` stays the class mask. `cargo xtask unicode-gen` emits the `"C"` (POSIX XBD 7.3.1 rules, ASCII only) and `C.UTF-8` (the D-5.4 derivation) tables into `crates/core/src/unicode/class_words.rs` (rodata; a `u8` stage 1 while the leaves number at most 256, the generator fails otherwise; the two locales share leaves, leaf 0 = no class). A built-in view holds its stage 1; every `isw*`, `isw*_l` and `iswctype(_l)` there is the view word, the stage-1 byte, the leaf word and the mask test. Method: The Unicode Standard 15.1, ch. 5.1 (multistage tables). Proven by `builtin_class_tables_equal_wclasses` (every code point x 12 classes vs `ctype::wclasses`) and the plants in handoff/wctype-trie-builtin.md. File-backed `LC_CTYPE` (a lazily resolved stage 1) is the follow-up WCTYPE-TRIE-FILE.
+'''

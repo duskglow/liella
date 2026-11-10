@@ -1,0 +1,8 @@
+id = "D-24.2"
+section = "s24"
+spec = "§24.4"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `available_parallelism()` = affinity ∩ cgroup CPU quota, the accurate answer the spec says is missing. `get_nprocs` and friends keep their contracts.
+'''

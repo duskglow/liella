@@ -1,0 +1,8 @@
+id = "D-27.3"
+section = "s26-29"
+spec = "§27.1"
+ann = "—"
+status = "active"
+body = '''
+Library search reads the system `ld.so.cache` through its inspected format (Appendix D, phase 14), with `ld.so.conf` directory scanning as the fallback.
+'''

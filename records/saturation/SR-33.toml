@@ -1,0 +1,13 @@
+id = "SR-33"
+section = "3"
+row = "`strstr` adaptive one-stream / pair filter (STRSTR-ADAPTIVE-FILTER-EXP, landed by STRSTR-FILTER-LAND, owner ruling #2686)"
+now = "i (wl_percall, Zen 1 host, AVX2 path): `strstr_scan_4k` 1014 to 722 (glibc 818, 0.88x; was 1.22x); `strstr_hit_4k` 1.20x to 0.91x of glibc (time 1.53x to 1.01x); text rows cost about +3 to +6 instructions per call (e.g. `strstr_miss_64` 0.58x to 0.59x). **Open:** `strstr_hit_64` 1.09x and `strstr_dense_4k` (new row: 200 clean bytes, then the last needle byte every 2 bytes) 1042 vs glibc 818, 1.27x"
+limit = "the head block records whether it holds the last needle byte; without it the 128-byte groups are scanned in one stream (16 instructions per 128 bytes instead of 23), and a stop closer than 1024 bytes to the previous one switches that call to the pair filter. SSE2, wcspair and memmem unchanged"
+reason_class = "algorithm"
+basis = "M"
+source = "STRSTR-ADAPTIVE-FILTER-EXP (`handoff/strstr-adaptive-filter-exp.md`)"
+tried = "trade accepted by the owner: large gain on clean scans, a few instructions on the other rows; `strstr_hit_64` and `strstr_dense_4k` are NOT accepted as final"
+flag = "STRSTR-SHORT-DENSE-PARITY works on `strstr_hit_64` and `strstr_dense_4k`"
+status = "active"
+body = '''
+'''

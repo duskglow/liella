@@ -1,0 +1,8 @@
+id = "D-4.7"
+section = "s04"
+spec = "§4.12"
+ann = "HIST"
+status = "active"
+body = '''
+`memfrob` is kept (legacy). `strfry` draws from the CSPRNG instead of a clock-seeded generator (observable, stricter).
+'''

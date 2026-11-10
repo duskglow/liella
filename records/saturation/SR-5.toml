@@ -1,0 +1,13 @@
+id = "SR-5"
+section = "1"
+row = "`opendir_closedir`"
+now = "i 0.61x glibc"
+limit = "faster than glibc"
+reason_class = "n/a"
+basis = "M"
+source = "DU-3"
+tried = "none"
+flag = "none"
+status = "active"
+body = '''
+'''

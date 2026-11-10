@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-POW-QUICK-2", "model": "opus", "tokens": null,
+ "result": "pow quick phase verified: plants 6/6 CAUGHT; pow 177.5 vs 141.3 instr FMA (before 319), 247.7 vs 191.5 SSE2 (before 494); time IVB 1.411x (before 3.35), N100 1.478x (before 3.59)",
+ "branch": "task/libm-f64-pow-quick-2", "head": "see hand-back",
+ "gate": {"affected": "see hand-back (libm-f64-pow-quick-2-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["`GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA cargo xtask bench` does not reach the bench programs (xtask clears their environment); `--tunables glibc.cpu.hwcaps=-FMA` does: earlier SSE2 cbench counts taken the first way are FMA counts", "FMA instruction target 170 not reached (177.5); time target 1.5x met on both timing classes"],
+ "refused": [],
+ "improvement": "briefs that ask for SSE2-build counts should name `--tunables glibc.cpu.hwcaps=-FMA`; the env-var form silently measures the FMA build",
+ "next_step": "profile one pow call (wl_trace) to place the 36 instructions over glibc; likely the entry envelope (rulings #3938/#3939)",
+ "report_file": "handoff/LIBM-F64-POW-QUICK.md",
+ "jobs": ["libm-f64-pow-quick-2-lint", "libm-f64-pow-quick-2-plants", "libm-f64-pow-quick-2-gate", "libm-f64-pow-quick-2-stage", "libm-f64-pow-quick-2-counts-sse2", "nico:libm-f64-pow-quick-2-nico", "nozomi:libm-f64-pow-quick-2-nozomi", "libm-f64-pow-quick-2-sweep", "libm-f64-pow-quick-2-final"]}

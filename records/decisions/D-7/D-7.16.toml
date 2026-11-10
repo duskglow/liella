@@ -1,0 +1,8 @@
+id = "D-7.16"
+section = "s07"
+spec = "§7.1, §7.3"
+ann = "ARB"
+status = "active"
+body = '''
+**Built-in "C" and "C.UTF-8" item tables generated from `spec/abi/langinfo.tsv`** (COLD-TABLE-LOCALE-ITEMS, 2026-10-20; record `liella-historic:handoff/decisions/COLD-TABLE-LOCALE-ITEMS.md`; D-7.10, D-7.13). Sources: POSIX.1-2024 "POSIX Locale" and the man pages for the standard items, the TSV plus a black-box probe of glibc 2.39 for the extensions (C.UTF-8 matches on 315 of 316 rows, the other being `_NL_TIME_ERA_ENTRIES`; "C" differs only in `LC_IDENTIFICATION`, D-7.10). (1) The TSV is the single source; `cargo xtask locale-gen` emits a compact record list that `const fn`s expand into the statics (no build script, no run-time work). (2) C.UTF-8 is "C" plus a per-category `(index, record)` delta (14 of 316 items differ). (3) One string pool, substring-shared, deterministic order, `u16` offsets (2219 bytes; the generator refuses over 64 KiB). (4) Dense tables indexed by item number. (5) Length = highest recorded index + 1; an unrecorded index is empty; past the end `"\0"`; a one-byte value recorded without a terminator gets a NUL appended. (6) The `Item` type and statics keep their names (a compact relocation-free `Item` was weighed and not done: about 710 relative relocations in the shared image).
+'''

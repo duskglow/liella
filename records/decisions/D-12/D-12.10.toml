@@ -1,0 +1,8 @@
+id = "D-12.10"
+section = "s12"
+spec = "§12.5a"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**Internal:** transfers report bytes. **Boundary:** `ret::elements(bytes, size)` gives the element count.
+'''

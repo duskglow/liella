@@ -1,0 +1,8 @@
+id = "D-17.1"
+section = "s17"
+spec = "§17.2"
+ann = "KERN, HIST"
+status = "active"
+body = '''
+Process-wide changes broadcast over the one internal signal (D-20.1). A partial failure aborts, per the contract. The per-thread forms are available internally.
+'''

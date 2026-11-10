@@ -1,0 +1,8 @@
+id = "D-10.8"
+section = "s10"
+spec = "§10.0"
+ann = "HIST"
+status = "active"
+body = '''
+**Exports are generated** (`cargo xtask math-gen`): one body per family in `crates/boundary/src/posix/s10_math.tsv`, expanded over the default versions of `spec/abi/versions.tsv` and the C signatures of `spec/abi/prototypes.tsv` into `posix/s10_math_gen.rs`; symbols with `long double`/`_Float128` values get C forwarders (`csys/src/adapter/math_{libc,both,libm}.c`, OD-C4) compiled into the product that owns them. The environment (§10.6) is hand-written (`posix/s10_math.rs`).
+'''

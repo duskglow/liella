@@ -1,0 +1,8 @@
+id = "D-14.14"
+section = "s14"
+spec = "§14.10"
+ann = "—"
+status = "active"
+body = '''
+**wordexp result is ONE block** (WORDEXP-4; OWNER RULING 2026-10-09, WORDEXP-3 ruling (a): approved). `wordexp_t.we_wordv` points to one caller-heap allocation: `we_offs` null slots, the words, a NULL, then all strings (`place_block` in patterns.rs). A call makes 1 allocation (was 1 + words); `wordfree` releases that one address. Observable: `free(we_wordv[i])` of a single word is invalid (it never was valid POSIX). `WRDE_APPEND` copies the old words into the new block and releases the old one (old string pointers are invalid afterwards, as POSIX allows); `WRDE_DOOFFS` slots stay NULL. The nested-word arena of the parser is inline (4 segments). `globfree`/glob are unchanged (strings apart). Tests: crates/boundary/tests/wordexp_block.rs (one-block bounds via malloc_usable_size, APPEND, DOOFFS, empty result, leak freedom); 3 planted bugs fail.
+'''

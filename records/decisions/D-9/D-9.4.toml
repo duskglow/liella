@@ -1,0 +1,8 @@
+id = "D-9.4"
+section = "s09"
+spec = "§9.3"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+`random_data.state` holds the caller's state buffer itself (word 0 is the generator's header); `rand_type`/`rand_deg`/`rand_sep` describe it and `fptr`/`rptr`/`end_ptr` bound it. A zeroed `drand48_data` takes the default parameters on first use (`__init`), as glibc's does.
+'''

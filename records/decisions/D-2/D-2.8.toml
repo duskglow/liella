@@ -1,0 +1,8 @@
+id = "D-2.8"
+section = "s02"
+spec = "§2.4"
+ann = "COMPAT"
+status = "active"
+body = '''
+The assertion messages are glibc 2.39's exact text (ERRATA E8). They are written straight to descriptor 2, with no allocation and no stream (so they appear even from a corrupted heap), then `abort`.
+'''

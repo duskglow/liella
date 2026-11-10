@@ -1,0 +1,8 @@
+id = "D-15.3"
+section = "s15"
+spec = "§15.4"
+ann = "KERN"
+status = "active"
+body = '''
+Interface enumeration uses netlink only. Each call opens a private `NETLINK_ROUTE` socket and sends an `RTM_GETLINK`/`RTM_GETADDR` dump; `if_nametoindex`/`if_indextoname` ask for a single link. It works in any process, Liella-started or not. `getifaddrs` gives one `AF_PACKET` entry per link (`IFLA_STATS` as `ifa_data`), then the addresses in the kernel's order; the broadcast/destination field is `IFA_BROADCAST`, or else `IFA_ADDRESS` when `IFA_LOCAL` is given (127.0.0.1 for `lo`, observed). Unknown names give `ENODEV`, unknown indexes `ENXIO`.
+'''

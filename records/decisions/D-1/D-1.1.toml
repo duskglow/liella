@@ -1,0 +1,8 @@
+id = "D-1.1"
+section = "s01"
+spec = "§1.1"
+ann = "HIST, KERN"
+status = "active"
+body = '''
+Entry captures an immutable `ProcessStart { args, env, auxv }`. The kernel `argv`/`envp` layout is used only at entry and in `execve` (⚑ KERN).
+'''

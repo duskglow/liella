@@ -1,0 +1,8 @@
+id = "D-4.40"
+section = "s04"
+spec = "—"
+ann = "PERF"
+status = "active"
+body = '''
+**Bench triggers: allocator and header changes stay FULL triggers** (BENCH-AFF-2, coordinator decision 2026-10-10; recorded in the register by RELEASE-TREE-APPLY, 2026-10-22, from `liella-historic:handoff/bench-aff.md`). For merge benches, a change to the allocator or to `csys`/`include` headers keeps selecting the FULL bench set (their reach is not narrowed). `BENCH_NARROW_ALLOC=1` is an opt-in for task benches only, default off, to be enabled after one validation round. Grouping merge batches by FULL triggers is coordinator process, not a tool rule.
+'''

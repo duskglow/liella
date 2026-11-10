@@ -1,0 +1,10 @@
+id = "COMPAT-12"
+behaviour = "UDP RPC client: replies from an address other than the called one (§29.1; D-29.2, owner ruling 2026-10-23, #1643)"
+glibc = "Accepts a reply with the matching transaction ID from any source address; a call with no reply ends in `RPC_TIMEDOUT`"
+liella = "Takes replies only from the called address and port; others are dropped whatever their transaction ID; a reply-shaped datagram from another address during a call that times out gives `RPC_CANTRECV` with `EREMCHG`"
+restore = "`GLIBC_TUNABLES=liella.compat.rpc_reply_any_source=1`, parsed once at start-up into `liella::config::Tunables` and stored by `s29_rpc_clnt::compat_from_start`; ignored in a secure (`AT_SECURE`, setuid/setgid) process because it weakens behaviour. Forced both ways by `crates/boundary/tests/s29_rpc_reply_source.rs` (removed with the client)"
+cost = "none: one relaxed load per UDP call (not a hot path)"
+status = "withdrawn"
+status_text = "withdrawn (D-29.5, LEGACY-RPC-CLNT-SVC-STUBS): the UDP RPC client is a failing stub, so no reply is read and there is nothing to restore; the id stays reserved"
+body = '''
+'''

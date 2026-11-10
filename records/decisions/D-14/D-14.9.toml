@@ -1,0 +1,8 @@
+id = "D-14.9"
+section = "s14"
+spec = "§14.9"
+ann = "ARB"
+status = "active"
+body = '''
+**Program derived once at regcomp, read in place** (RX-T4, design step T4). regcomp derives the matcher's tables (node numbering, topological ranks, scope masks, first-byte map) and serialises them with the automaton into the regex_t block (format "Lrx3": 22-word header, then report, instructions, chains, scopes, fixed 10-word set records, set lists, node_base, owner, rank, by_rank, chain_masks, masks; all little-endian u32). regexec/re_search/re_exec read the block in place through `ProgRef` (bounds-checked byte reads, no copy, no allocation, no derive). regex_t's size and fields are unchanged (the block is internal); regfree frees it as before. Thread safety: the block is never written after regcomp, so any number of threads may search one regex_t. Damage check per call is O(1): magic + section sizes must fill the block exactly, else REG_BADPAT; damage inside the sections can change answers but never reads outside the block (the old per-call instruction validation is gone; a regex_t not from regcomp is undefined per POSIX). Cost: about 16 bytes per matcher node + 4 per instruction + 40 per set more per compiled regex_t, 0 per thread. Replaces PJ-6's per-thread program cache idea for regex.
+'''

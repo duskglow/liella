@@ -3,7 +3,24 @@
 //! folding; decomposition). The tables are generated from the Unicode 15.1.0 Character
 //! Database by `cargo xtask unicode-gen` (`tables.rs`).
 
+/// The built-in locales' class-word tables (D-5.9): `C_UTF8_STAGE1` (the classes [`classes`]
+/// derives), `C_STAGE1` (the `"C"` locale: ASCII only) and their shared `LEAVES`.
+pub(crate) mod class_words;
 mod tables;
+
+/// Stage 1 of a built-in locale's two-stage class-word table (D-5.9): the leaf of each block of
+/// 256 code points (`c >> 8`) through U+10FFFF.
+pub type ClassStage1 = [u8; class_words::STAGE1_LEN];
+
+/// The `<ctype.h>` class word of `c` in the built-in locale whose stage 1 is `s1` (D-5.9): two
+/// dependent loads, no branch but the bounds tests; 0 above U+10FFFF and for `WEOF`.
+#[inline(always)]
+pub fn class_word(s1: &ClassStage1, c: u32) -> u16 {
+    let block = usize::try_from(c >> 8).unwrap_or(usize::MAX);
+    let Some(&leaf) = s1.get(block) else { return 0 };
+    let low = usize::try_from(c & 0xff).unwrap_or(0);
+    class_words::LEAVES.get(usize::from(leaf)).and_then(|l| l.get(low)).copied().unwrap_or(0)
+}
 
 use crate::ctype::Class;
 

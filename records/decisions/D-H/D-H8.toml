@@ -1,0 +1,7 @@
+id = "D-H8"
+section = "h"
+pattern = "Dead subsystems"
+status = "active"
+body = '''
+Everything in §29 lives in `liella-legacy` and phase 15. No core code depends on it.
+'''

@@ -1,0 +1,8 @@
+id = "D-11.5"
+section = "s11"
+spec = "§11.8"
+ann = "HIST"
+status = "active"
+body = '''
+`posix_fallocate` emulation writes zeros **only into holes found with `SEEK_HOLE`/`SEEK_DATA`**, never over data, and refuses `O_APPEND` descriptors with `EBADF`, per the contract. This removes the data-clobbering race (observable, safer).
+'''

@@ -1,0 +1,13 @@
+id = "SR-42"
+section = "3"
+row = "`__memcmpeq` / `bcmp` / `memcmp` early-difference and tail rows (PERF-MEMCMPEQ-EARLY, Zen 1 host, `cbench_memref`)"
+now = "`memcmp_diff8_64` 34.4 -> 30.4 instr (glibc 24.4); `_96`/`_127` 33.4 (65-128 class, not touched); `__memcmpeq_head_1k` 30.4 and `_head_128` 28.4 vs glibc 20.4 (unchanged); `__memcmpeq_tail_32` 31.4 vs 20.4 (unchanged)"
+limit = "33-64 compare: the first block's mask is tested before the AND, so a first-block difference skips the second mask. Not changed: (a) 32 bytes on the AVX2 block (would drop `tail_32` to about 23) stays on the SSE2 blocks, the recorded MEMCMP-MID-4 result is 5 more cycles there, and the row is 0.60-0.70 of glibc in time; (b) the 65-2048 equality classes spend 4 instr on explicit NULL tests plus 4-6 on class dispatch before the first compare, about 10 of the 10 to 11 instr gap; NULL folding for these classes (no test, the first load faults on page zero as for 8-64) needs a maintainer's ruling (D-4.22 scopes folding to 1..=FOLD)"
+reason_class = "policy / ruling"
+basis = "R"
+source = "PERF-MEMCMPEQ-EARLY"
+tried = "`.Lcmp_wide` reorder"
+flag = "none"
+status = "active"
+body = '''
+'''

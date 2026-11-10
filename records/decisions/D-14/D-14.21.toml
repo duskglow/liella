@@ -1,0 +1,8 @@
+id = "D-14.21"
+section = "s14"
+spec = "§14.9"
+ann = "—"
+status = "active"
+body = '''
+**regexec first-byte scan: a one-range first-byte map scans by range** (TIMING-COV-REGEX-FIRSTBYTE-IVB, 2026-11-06). When the bytes a match can begin with form one contiguous range (`[0-9]`, `[a-z]`, a single byte), regcomp records it in the program header (flag bit 5, `lo`, `hi - lo`) and `first_start` tests `b - lo <= hi - lo` sixteen bytes per branch (SSE2 compares) instead of a bit of the 256-bit map, whose variable-count shift costs several micro-ops on cores without BMI2. Other maps keep the four-byte bitmap scan. Same answers by construction; tested over all 256 bytes against `can_start_with`.
+'''

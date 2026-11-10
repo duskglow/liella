@@ -1,0 +1,8 @@
+id = "D-21.3"
+section = "s21"
+spec = "§21.1–21.2"
+ann = "KERN"
+status = "active"
+body = '''
+**Shadow stacks** (refines D-21.1). Linux enables a user shadow stack only when the C library asks for it (`arch_prctl(ARCH_SHSTK_ENABLE)`, Linux 6.6+); glibc 2.39 does so only on request (tunable). Liella never asks, so no shadow stack exists in a Liella process and `longjmp`/`setcontext` have nothing to unwind. The `jmp_buf` and `ucontext_t` keep their shadow-stack fields (ABI) and Liella writes 0 there. Enabling shadow stacks is future work with its own decision.
+'''

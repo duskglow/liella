@@ -1,0 +1,8 @@
+id = "D-20.2"
+section = "s20"
+spec = "§20.2"
+ann = "KERN"
+status = "active"
+body = '''
+The restorer trampoline is a C-layer machine primitive (`machine/restorer.S`, ⚑ KERN). Internal dispositions are a typed enum in `rt::signal`.
+'''

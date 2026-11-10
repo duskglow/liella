@@ -1,0 +1,13 @@
+id = "SR-30"
+section = "3"
+row = "`strstr` 4 KiB"
+now = "i hit_4k 0.61x, miss_4k 0.20x glibc; pair-miss 1305"
+limit = "on instructions \"already below glibc\"; no kernel work needed at 4 KiB"
+reason_class = "n/a"
+basis = "M"
+source = "STRSTR-GETLINE, STRSTR-CYCLES"
+tried = "STRSTR-HIT-2: worse than the pair scanner on every row (hit_4k ratio 2.48 vs 2.11), removed (D-4.49)"
+flag = "none"
+status = "active"
+body = '''
+'''

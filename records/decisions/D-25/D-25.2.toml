@@ -1,0 +1,8 @@
+id = "D-25.2"
+section = "s25"
+spec = "§25.4, §22.7"
+ann = "HIST"
+status = "active"
+body = '''
+POSIX shared memory and named semaphores stay on `/dev/shm` (contract, Config). Internally, `memfd` is preferred for anonymous sharing.
+'''

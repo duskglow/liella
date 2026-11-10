@@ -1,0 +1,8 @@
+id = "D-6.2"
+section = "s06"
+spec = "§6.2"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+**Internal:** results are `Decoded::{Char(u32, len), Null, Incomplete, Invalid, SurrogateContinuation}`. **Boundary:** `(size_t)-1/-2/-3` via `abi::ret`. The non-restartable forms use a per-thread state (P-scope).
+'''

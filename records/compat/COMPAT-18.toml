@@ -1,0 +1,9 @@
+id = "COMPAT-18"
+behaviour = "`fnmatch` with `FNM_EXTMATCH` and `FNM_LEADING_DIR` together (§14.7; FNMATCH-EXTMATCH-LEADING-DIR-2, coordinator ruling #1823 2026-10-24, owner confirms)"
+glibc = "For the 16 probed pairs (`!(a)` on `a/b`; `+([ab])c` on `ab/c`; listed in `docs/differences-from-glibc.md`) answers differ from the documented `FNM_LEADING_DIR` rule: `!(...)` patterns lose matches that the whole string gives, and `+(...)`/`*(...)` patterns match across a `/` that the group cannot contain"
+liella = "The documented rule for every pattern kind: the whole string, or an initial segment followed by `/`; `FNM_LEADING_DIR` only adds matches"
+restore = "A tunable read at startup selecting the reference's answers for extmatch patterns under `FNM_LEADING_DIR`. Not designed further: the reference's rule has not been derived beyond the 16 pairs, so it is registered only"
+cost = "none today (the flag does not exist; the check would sit on the `FNM_LEADING_DIR` end test, only reached when both flags are set)"
+status = "registered"
+body = '''
+'''

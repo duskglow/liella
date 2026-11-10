@@ -1,0 +1,8 @@
+id = "D-14.3"
+section = "s14"
+spec = "§14.5"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** a growable hash map. **Boundary:** the `hsearch` tables grow instead of failing when full (P-lift; observable, more capable). There is still one global table for the non-`_r` form (contract).
+'''

@@ -1,0 +1,8 @@
+id = "D-4.8"
+section = "s04"
+spec = "§4.13–4.14"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `TextList` and `TextMap` values. **Boundary:** the argz/envz packed representation is produced by `abi::pack`.
+'''

@@ -1,0 +1,8 @@
+id = "D-22.10"
+section = "s22"
+spec = "§22.1"
+ann = "—"
+status = "active"
+body = '''
+**Threads Liella did not create.** In a test process the host C library starts (D-4.15) every thread is glibc's. Liella's thread-block fields there are glibc's zero reserved area (0x80–0x280), and a reused glibc stack keeps them: such a thread inherits the `errno` slot and heap cache of the dead thread whose block it reuses. That is sound for the heap, because exactly one live thread uses a block at a time, and it is the only case: a cache of a glibc thread whose stack is unmapped is never parked (it leaks its partial slabs; test processes only). What needs the TID asks the kernel (`gettid`) instead of the thread block, because a reused block's TID word is stale; descriptor-backed operations (`join`, cancellation, setxid) are defined only for threads Liella created (`FLAG_OWN`). In a process Liella started, or under glibc's `ld.so` with Liella's `libc.so.6`, every thread is Liella's. **Interim gap (owner ruling 2026-10-01): dynamically linked programs.** Under another `ld.so`, a new thread's TLS for every loaded module must come from that loader's private interface (glibc's `_dl_allocate_tls`), which Liella does not use. Until Liella's own `ld.so` (phase 14), `pthread_create` and `thrd_create` in a dynamically linked program fail with `EAGAIN`. Statically linked programs, which Liella starts itself, have full threads. That covers the conformance suite, which links statically and suffices for this milestone. In-process tests that create Liella threads run start routines that call only Liella and atomics (the host library's TLS is not set up in them); the full contracts run as C conformance programs against the products.
+'''
