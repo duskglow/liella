@@ -23,7 +23,6 @@
  "jobs": [
   "kanon:libm-sqrt-entry-gen",
   "kanon:libm-sqrt-entry-gate2",
-  "kanon:libm-sqrt-entry-plants3",
   "kanon:libm-sqrt-entry-counts2",
   "kanon:libm-sqrt-entry-exh"
  ],
@@ -31,6 +30,7 @@
   "kanon:libm-sqrt-entry-gate",
   "kanon:libm-sqrt-entry-plants",
   "kanon:libm-sqrt-entry-counts",
-  "kanon:libm-sqrt-entry-plants2"
+  "kanon:libm-sqrt-entry-plants2",
+  "kanon:libm-sqrt-entry-plants3 (REFUSED rc=3: two lit: patterns match 2 sites; to re-run anchored)"
  ]
 }
