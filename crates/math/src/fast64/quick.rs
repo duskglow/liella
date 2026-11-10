@@ -118,7 +118,12 @@
 //!   relative to its own head: `RHO_SSE2` with `th·rh`'s low part dropped (`X = false`), and with
 //!   it kept (Dekker's product or the FMA, `X = true`) expm1's kernel bound `2^-67.59` (SSE2) or
 //!   `RHO_FMA = 2^-67.68`.
-//! * cosh, `2^-60 <= a < 23`: `X = false`; `h + l` = Fast2Sum of `zh + qh` (`zh >= qh`: `e^a >=
+//! * cosh, `2^-60 <= a < 2^-5`: `1 + s·P(s)`, `s = RN(a²)`, `P` Taylor's `1/2, 1/4!, 1/6!, 1/8!`
+//!   (omitted `s^5/10! < 2^-71.8`); the tail within `3.01u` of itself and at most `2^-11`:
+//!   `2^-62.41` absolute, `h >= 1`; Fast2Sum`(1, tail)` exact. (The exponentials' route would
+//!   lose `e^±a`'s low parts in `zl + ql` here: harmless to the bound, but `l` comes out 0 and
+//!   the test declines.)
+//! * cosh, `2^-5 <= a < 23`: `X = false`; `h + l` = Fast2Sum of `zh + qh` (`zh >= qh`: `e^a >=
 //!   e^-a` and the kernels' errors are far below `e^(2a) − 1 >= 2^-59`, or both heads are `1`),
 //!   its error plus `zl + ql` (roundings on `2^-51`-sized parts: `< 2^-102·h`), a second
 //!   Fast2Sum. Error `RHO_SSE2·(zh + qh) + 2^-102·h`: `<= 2^-61.47·h`.
@@ -425,7 +430,7 @@ pub fn sinh_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
 }
 
 /// `cosh x = (h + l)·sc` within `RHO_M1·|h|·sc` for `2^-60 <= |x| < 708`, else `None` (as
-/// [`sinh_quick_parts`], with no series: `e^a + e^-a` does not cancel).
+/// [`sinh_quick_parts`], with the even series below `2^-5`).
 $(#[$a])*
 $(#[$i])*
 #[doc(hidden)] // public for the boundary's FMA-build tests only
@@ -435,6 +440,12 @@ pub fn cosh_quick_parts(x: f64) -> Option<(f64, f64, f64)> {
         return None;
     }
     let a = f64::from_bits(b);
+    if b < SINH_POLY {
+        let s = a * a;
+        let tl = s * $ma(s, $ma(s, $ma(s, C8, C6), C4), 0.5);
+        let h = 1.0 + tl;
+        return Some((h, (1.0 - h) + tl, 1.0));
+    }
     if b >= HYP_BIG {
         let (zh, zl, sc) = exp_quick_parts(a)?;
         return Some((zh, zl, 0.5 * sc));
