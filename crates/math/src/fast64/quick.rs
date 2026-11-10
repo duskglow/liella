@@ -135,7 +135,13 @@
 //!   most `a²/6·1.002 <= 2^-12.58·a`: `2^-63.58·a`; Fast2Sum`(a, tail)` exact.
 //! * cosh and sinh, `23 <= a < 708`: `e^a/2·(1 ± e^-2a)`, exp's quick parts halved: `RHO_SSE2 +
 //!   e^-46 = 2^-61.43` (FMA: `2^-66.2`).
-//! * tanh, `2^-60 <= a <= 22`: `N/(N + 2)` with `N = nh + nl = e^(2a) − 1` from
+//! * tanh, `2^-60 <= a < 2^-6`: `a + a³·P(a²)` as sinh's series, `P` Taylor's `−1/3, 2/15,
+//!   −17/315, 62/2835` (alternating, falling: omitted `< 0.0089·a^11 < 2^-66.8·a`); the tail
+//!   within `5.01u` of itself (the four roundings and `RN(−1/3)`'s) and at most `a³/3`:
+//!   `2^-64.3·a`, total `2^-64.0·a`, `h >= 0.99·a`. (Through expm1 the correction `a³/3` sinks
+//!   below expm1's own error for `a < 2^-30` and the low word can come out 0: a decline.) sinh's
+//!   series counts `RN(1/6)`'s rounding the same way (`5.01u`: `2^-63.3`).
+//! * tanh, `2^-6 <= a <= 22`: `N/(N + 2)` with `N = nh + nl = e^(2a) − 1` from
 //!   `expm1_quick_parts` (relative error `ε <= 2^-62.04`, its proven figure). `D = 2 + N` by 2Sum
 //!   (exact) with `dl = RN(de + nl)` (`< 2^-105·D`). As `D` follows `N` exactly, `N/D`'s
 //!   relative error is `ε·2/(N + 2) <= ε` (no doubling). One division: `inv = RN(1/dh)`, `q1 =
@@ -241,6 +247,12 @@ const SINH_POLY: u64 = 0x3fa0_0000_0000_0000;
 const HYP_BIG: u64 = 0x4037_0000_0000_0000;
 /// `bits(22) − bits(2^-60)`: tanh's quick domain `[2^-60, 22]` as one unsigned compare.
 const TANH_SPAN: u64 = 0x4036_0000_0000_0000 - LO_BITS;
+/// `bits(2^-6)`: tanh's series below it, with Taylor's `−1/3, 2/15, −17/315, 62/2835`.
+const TANH_POLY: u64 = 0x3f90_0000_0000_0000;
+const T3: f64 = -1.0 / 3.0;
+const T5: f64 = 2.0 / 15.0;
+const T7: f64 = -17.0 / 315.0;
+const T9: f64 = 62.0 / 2835.0;
 /// `bits(−37)`: a negative `x` with bits at or above it is `x <= −37` (tier 2's limit).
 const NEG37_BITS: u64 = 0xc042_8000_0000_0000;
 /// expm1's stated bound (both builds, both regions; module doc "expm1") and its [`super::near`]
@@ -468,7 +480,15 @@ pub fn tanh_quick_parts(x: f64) -> Option<(f64, f64)> {
     if b.wrapping_sub(LO_BITS) > TANH_SPAN {
         return None;
     }
-    let (nh, nl) = expm1_quick_parts(2.0 * f64::from_bits(b))?;
+    let a = f64::from_bits(b);
+    if b < TANH_POLY {
+        let s = a * a;
+        let p = $ma(s, $ma(s, $ma(s, T9, T7), T5), T3);
+        let tl = (a * s) * p;
+        let h = a + tl;
+        return Some((h, (a - h) + tl));
+    }
+    let (nh, nl) = expm1_quick_parts(2.0 * a)?;
     let dh = nh + 2.0;
     let bb = dh - nh;
     let dl = ((nh - (dh - bb)) + (2.0 - bb)) + nl;
@@ -740,7 +760,7 @@ pub mod fused {
     use super::{
         t, ABS, C3, C4, C5, C6, C7, C8, C9, C_FAM_FMA, C_FMA, C_M1, INV, INV10, KBIAS, LN10H, LN10L, LN2H, LN2L, LO_BITS, MASK27, NE0, NE1, NE2,
         NEG37_BITS, NL1, NL2, ONE_BITS, SHIFT, SMALL_M1, SPAN, SPAN10, SPAN2, SPAN_EXACT10, SINH_POLY, HYP_BIG,
-        TANH_SPAN,
+        TANH_SPAN, TANH_POLY, T3, T5, T7, T9,
     };
     // ARCH(x86_64): the scalar FMA intrinsics
     use core::arch::x86_64::{_mm_cvtsd_f64, _mm_fmadd_sd, _mm_fmsub_sd, _mm_set_sd};
