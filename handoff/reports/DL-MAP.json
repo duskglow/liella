@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "General object mapper (DL-7): validated plan, one aligned reservation, exact permissions, .bss, RELRO hook, unmap on failure, AT_PAGESZ seam, ET_EXEC; corpus, /proc/self/maps and model tests; ld_map fuzz target",
  "branch": "task/dl-map",
- "head": null,
+ "head": "8bee56901",
  "gate": {
   "affected": "pending (dl-map-gate-2, escalated to FULL); direct tests 64 passed / 0 failed (dl-map-tests)",
   "peak": null
