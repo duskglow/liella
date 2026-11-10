@@ -15,7 +15,9 @@
  * constant-time postconditions (the byte at the returned index is the one searched for;
  * strnlen's result is at most its bound). */
 
-	.data
+	/* .data1: with the other start-up state words (STARTUP-FAULTS-RESTORE, xtask/src/coldbss.rs
+	 * STATE_KEY_SUFFIXES): set_scan_level writes it before main. */
+	.section .data1,"aw",@progbits
 	.p2align 2
 	.globl liella_machine_scan_level
 	.hidden liella_machine_scan_level

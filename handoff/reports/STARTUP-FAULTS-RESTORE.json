@@ -1,0 +1,12 @@
+{"task": "STARTUP-FAULTS-RESTORE", "model": "opus", "tokens": null,
+ "result": "kit static printf 62 -> 61 faults (keke, setarch -R, deterministic); dead hot-text keys fail so (allow-list hot-text.absent, 75 dead keys pruned); start-up state words in .data1; bounds ratcheted to 18/57/60; structural start-up range test",
+ "branch": "task/startup-faults-restore", "head": "a465f7c35",
+ "gate": {"affected": "sfr-gate1 pending at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "bounds ratchet to count + 1 (policy change from highest-seen + 2)", "recommendation": "confirm; runs are deterministic under setarch -R"}],
+ "informational": ["m3 wider .data1 set gained nothing (61): reverted, recorded as negative in the handoff", "Zen 1 count host and wl_count faults gate not run", "D-row not written: D-NEW placeholder needed"],
+ "refused": [],
+ "improvement": "a trace-generated start-up data list (like regen.sh for text) would replace symbol-by-symbol whack-a-mole on .data/.bss pages",
+ "next_step": "D-row; wl_count printf-loop/seq/wc/md5sum vs main; Zen 1 host count; regen.sh prune step",
+ "report_file": "handoff/STARTUP-FAULTS-RESTORE.md",
+ "superseded": ["sfr-gate1 (xtask unit test did not compile)", "sfr-plants1 (stopped: same tree)"],
+ "jobs": ["keke:sfr-gate2", "keke:sfr-plants2"]}

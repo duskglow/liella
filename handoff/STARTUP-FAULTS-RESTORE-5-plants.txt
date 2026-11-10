@@ -1,0 +1,7 @@
+# STARTUP-FAULTS-RESTORE-5 plants (cargo xtask plants; format docs/plants.md). Bounds after the merge with next
+# (LOCALE 55, TOOL 58, TRUE 17). The gate builds fast products: fast startup 17 = TRUE_BOUND, so a harness that
+# counts one more fault is caught there (fast tool 56 / locale 53 sit 2 under their bounds, set from release).
+# 1: the relay's AT_EXECFN lookup reads the wrong auxv tag: no path to exec, the program exits 7 and the harness reports the failed run.
+relay-execfn-tag | crates/core/tests/oracle/page_faults.c | lit:if (a[0] == 31) ==> if (a[0] == 32) | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds | msg:(true|locale) failed: ExitStatus
+# 2: the harness spawns the mode directly (no relay): the counted process also runs the spawner's pre-exec code, +1 at least.
+relay-dropped | crates/core/tests/hot_text_products.rs | perl:s/\n\s*\.arg\("relay"\)// | cargo xtask so && cargo test -p liella --test hot_text_products init_short_programs_stay_within_their_page_fault_bounds | msg:startup-only program: [0-9]+ page faults > [0-9]+
