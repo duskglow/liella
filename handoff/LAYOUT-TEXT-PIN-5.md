@@ -45,7 +45,9 @@ The gap ahead of strings (fast) depends on where the plain text ends modulo 32 K
 new list order. Size vs faults stays the owner's decision (#4418) after LAYOUT-DATA-CLUSTERS.
 
 ## Open (next step, in order)
-1. Gate + plants on this head (jobs layout-text-pin-5-gate, layout-text-pin-5-plants; results in the report).
+1. **Gate RED** (job layout-text-pin-5-gate, code tree = 8fa0bb857): 30 suites ok, 11,448 passed, 0 failed; conformance
+   126 passed, **1 failed**, not identified (budget out). Find it in the conformance part of ~/w/sh2/target/affected.log
+   on shiki, run it on origin/next too, fix or report. Plants 5/5 CAUGHT (job layout-text-pin-5-plants).
 2. For C (LAYOUT-FAULT-CONTRACTS): regen --build cannot bootstrap when the current list breaks a contract (#4397).
 3. Start-up windows 3 -> 2: map the start-up key at the strings cluster head (alias) to its list key, so that function
    joins the head (the strings mode then finds it in an already faulted window). Recommend after A and B land.
