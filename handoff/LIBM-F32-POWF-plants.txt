@@ -1,0 +1,11 @@
+# LIBM-F32-POWF plants (cargo xtask plants; docs/plants.md). The one-pass powf (D-10.78).
+# An exact case taken by the polynomial path: |x| a power of two (x = 4, y = 0.5) raises a spurious inexact.
+exact-pow2-to-kernel | crates/math/src/fast32/exp_log.rs | lit:if xa & 0x7f_ffff == 0 { ==> if xa & 0x7f_ffff == 0 && xa == 1 { | cargo test -p liella-boundary --release --test s10_math_symbols math_powf_onepass_matches | msg:math_powf_onepass_matches_the_envelope.*(FAILED|panicked)|BAD powf
+# An exact case taken by the polynomial path: y in [1/8, 1/4) with 8y an integer (x = 6561 = 3^8, y = 1/8).
+exact-eighths-to-kernel | crates/math/src/fast32/exp_log.rs | lit:if ey >= -3 && yb ==> if ey >= -2 && yb | cargo test -p liella-boundary --release --test s10_math_symbols math_powf_onepass_matches | msg:math_powf_onepass_matches_the_envelope.*(FAILED|panicked)|BAD powf
+# A partial-write conversion reintroduced: e to double by cvtsi2sd instead of the shift trick.
+partial-write-cvtsi2sd | crates/math/src/fast32/exp_log.rs | lit:let ef = f64::from_bits(SHIFT.to_bits().wrapping_add(e as u64)) - SHIFT; ==> let ef = f64::from(e as i32); | cargo xtask so && cargo xtask partial-write | msg:powf[0-9]*\+0x[0-9a-f]+: cvtsi2sd
+# The overflow threshold one `float` ulp high: y0 up to 2^128 answered (round to nearest gives infinity, no errno).
+overflow-threshold-ulp | crates/math/src/fast32/exp_log.rs | lit:const POW_Y0_MAX: u64 = 0x47ef_ffff_e000_0000; ==> const POW_Y0_MAX: u64 = 0x47f0_0000_0000_0000; | cargo test -p liella-boundary --release --test s10_math_symbols math_powf_onepass_matches | msg:math_powf_onepass_matches_the_envelope.*(FAILED|panicked)|BAD powf
+# y = 2's overflow threshold one ulp of x high: x = 2^64 squared to infinity without errno.
+square-threshold-ulp | crates/math/src/fast32/exp_log.rs | lit:if xa.wrapping_sub(0x2000_0000) >= 0x5f80_0000 - 0x2000_0000 { ==> if xa.wrapping_sub(0x2000_0000) >= 0x5f80_0001 - 0x2000_0000 { | cargo test -p liella-boundary --release --test s10_math_symbols math_powf_onepass_matches | msg:math_powf_onepass_matches_the_envelope.*(FAILED|panicked)|BAD powf
