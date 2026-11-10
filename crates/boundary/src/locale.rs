@@ -858,6 +858,7 @@ mod tests {
     /// and the time zone period, stores a view the way every writer does, and checks the
     /// answers and that the words still hold what the test put there; then restores them.
     #[test]
+    #[allow(clippy::unwrap_used)] // a test: a panic in the thread is the failure
     fn foreign_block_words_are_never_read_or_written() {
         std::thread::spawn(|| {
             let b = tb::current();
@@ -904,7 +905,7 @@ mod tests {
             assert_eq!(after, planted, "a word at 0x138-0x187 of a foreign block was written");
         })
         .join()
-        .unwrap_or_else(|_| panic!("the foreign-block thread panicked"));
+        .unwrap();
     }
 
     /// The item-table fast path of `nl_langinfo` answers what the per-call path answers (LV-4),
