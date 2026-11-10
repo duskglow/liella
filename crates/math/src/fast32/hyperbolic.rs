@@ -137,7 +137,16 @@ pub(super) fn asinh_core(x: f32) -> Option<f64> {
 /// (`sqrtsd` in the default MXCSR, ≤ 0.5u) does both, so the proof above holds unchanged.
 #[inline(always)]
 pub(super) fn asinh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
-    let a = hyp_arg(x, f64::INFINITY)?;
+    // [`hyp_arg`]`(x, ∞)` from the bits (D-10.72, as `trig_core`): HYP_MIN = 2^-26 ≤ |x| < ∞ is a
+    // normal `float`, whose `double` is the exponent rebased by 896 and the fraction moved up 29
+    // places; no `cvtss2sd` (D-10.67), and a refused subnormal reaches no FP instruction.
+    const LO: u32 = 0x3280_0000;
+    const _: () = assert!(f32::from_bits(LO) as f64 == HYP_MIN);
+    let ab = x.to_bits() & 0x7fff_ffff;
+    if ab.wrapping_sub(LO) >= 0x7f80_0000 - LO {
+        return None;
+    }
+    let a = f64::from_bits((u64::from(ab) << 29) + (896 << 52));
     let a2 = a * a;
     let y = log1p64(a + a2 / (1.0 + sqrt(1.0 + a2)));
     Some(if x < 0.0 { -y } else { y })
@@ -156,10 +165,13 @@ pub(super) fn acosh_core(x: f32) -> Option<f64> {
 /// [2^-22, 2^257]).
 #[inline(always)]
 pub(super) fn acosh_core_with(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f64> {
-    let x = f64::from(x);
-    if !(x > 1.0 && x < f64::INFINITY) {
+    // 1 < x < ∞ on the bits (a negative x has the top bit set): x is then a normal `float`, its
+    // `double` built from the bits as in [`asinh_core_with`] (D-10.72; no `cvtss2sd`, D-10.67).
+    let b = x.to_bits();
+    if b.wrapping_sub(0x3f80_0001) >= 0x7f80_0000 - 0x3f80_0001 {
         return None;
     }
+    let x = f64::from_bits((u64::from(b) << 29) + (896 << 52));
     let t = x - 1.0;
     Some(log1p64(t + sqrt(t * (t + 2.0))))
 }

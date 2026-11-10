@@ -56,14 +56,9 @@ use std::process::Command;
 /// Accepted findings: `(containing function, instruction text as printed, reason)`. A ratchet: the findings present
 /// when the check landed, each to be removed by the story that fixes it (a fix that changes the register or the
 /// instruction makes the entry dead; a NEW finding fails). Anything else on the product is a failure.
-const ONEPASS_REST: &str = "on the hot path, present when D-10.68 landed: to be fixed (operand built from bits as D-10.67, or a zero idiom) and timed in LIBM-F32-ONEPASS-REST";
-pub(crate) const ALLOW: &[(&str, &str, &str)] = &[
-    ("acoshf", "cvtss2sd %xmm0,%xmm2", ONEPASS_REST),
-    ("asinhf", "cvtss2sd %xmm1,%xmm2", ONEPASS_REST),
-    ("cosf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
-    ("sinf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
-    ("tanf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
-];
+/// Empty since LIBM-F32-ONEPASS-REST-3 (D-10.72): the last five findings (sinf, cosf, tanf, asinhf, acoshf) build
+/// their `double` operand from the bits.
+pub(crate) const ALLOW: &[(&str, &str, &str)] = &[];
 
 /// Legacy-SSE mnemonics whose low element is computed from the sources only while the rest of the destination is
 /// kept (the merge set of the module doc). `movss`/`movsd` and the half-register loads merge only with a register
