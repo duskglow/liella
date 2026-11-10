@@ -26,6 +26,7 @@ Jobs:
   first.
 - `lsw2-gate-dbb3b1a9d`: `cargo xtask affected --run --base origin/next`. It escalated to FULL because xtask sources
   changed, and was left running at hand-back. Re-attach with `ssh shiki '~/bin/jobwait lsw2-gate-dbb3b1a9d'`.
+- `lsw2-static-dbb3b1a9d`: `cargo xtask static` and `records check` on the final code head. rc 0.
 - `ops handback-check` on dbb3b1a9d: rc 0. Its static/clippy step hit the timeout cap, which only gives a NOTE.
 
 ## Decision ids
