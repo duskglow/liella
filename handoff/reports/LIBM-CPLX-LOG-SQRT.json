@@ -1,0 +1,25 @@
+{
+ "task": "LIBM-CPLX-LOG-SQRT",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE (context checkpoint): clog/csqrt/clogf/csqrtf quick tiers written with proofs and tests; check3 showed no answer differing from the route; gate, plants, counts, timing not run",
+ "branch": "task/libm-cplx-log-sqrt",
+ "head": null,
+ "gate": {
+  "affected": "not run",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "clog's atan2 window (min/max >= 2^-60) sends operands with very unequal parts to the route; s10_math_gen.rs regenerated on r5 but not yet committed",
+  "step 0 (cexp/cexpf booked timing) not done"
+ ],
+ "refused": [],
+ "improvement": "the brief's step list (timing on two hosts + 10^7 sweeps + plants + code for four functions) does not fit a 180k-context run; split code and jobs into two stories",
+ "next_step": "handoff/libm-cplx-log-sqrt.md Next steps 1-4: commit math-gen output, D-10.74 row, plants, gate, sweep, counts, timing",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": [
+  "keke:libm-cplx-log-sqrt-check4"
+ ]
+}
