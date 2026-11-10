@@ -714,7 +714,9 @@ pub(crate) fn ar_members(data: &[u8]) -> Result<Vec<(String, &[u8])>, String> {
     if data.get(..8) != Some(b"!<arch>\n".as_slice()) {
         return Err("not an ar archive".into());
     }
-    let (mut at, mut names, mut out): (usize, &[u8], Vec<(String, &[u8])>) = (8, &[], Vec::new());
+    let mut at = 8;
+    let mut names: &[u8] = &[];
+    let mut out: Vec<(String, &[u8])> = Vec::new();
     while at < data.len() {
         let h = data.get(at..at + 60).ok_or_else(|| format!("member header at {at} cut short"))?;
         let size: usize = std::str::from_utf8(&h[48..58]).ok().and_then(|s| s.trim().parse().ok()).ok_or_else(|| format!("member header at {at}: bad size"))?;
