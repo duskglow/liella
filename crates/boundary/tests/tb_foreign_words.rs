@@ -6,6 +6,7 @@
 //! answers stay correct and the words stay as they were. A binary with one test, so the process
 //! has the harness thread and the test's thread only; nothing but Liella runs while the decoys
 //! are in place, and the block is restored before anything is asserted.
+#![no_builtins]
 #![allow(clippy::unwrap_used, clippy::as_conversions, clippy::arithmetic_side_effects, clippy::indexing_slicing, missing_docs)]
 
 use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
