@@ -1,0 +1,11 @@
+{"task": "LAYOUT-STARTUP-DATA", "model": "opus", "tokens": null,
+ "result": "STARTUP-DATA-WINDOWS contract (D-X.50): start-up ro objects in <= 3/4 64 KiB windows, written objects in <= 20/21 4 KiB pages (fast/release), keys from perf page-fault addresses + start-up operands; section-rename fix (item 3) not evaluated",
+ "branch": "task/layout-startup-data", "head": "1adb6d3f0",
+ "gate": {"affected": "see lsd-gate-1adb6d3f0 (keke)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "writable sections count by 4 KiB page even when only read (brief says written; section writability is the proxy)", "recommendation": "accept"}],
+ "informational": ["item 3 (rename written start-up objects' sections, e.g. .data1) not evaluated: budget", "plant 'NSCACHE moved back to .data order' needs item 3; replaced by rw-budget-minus-one naming NSCACHE alone", "plant 'startup name moved out of STARTUP_NAMES' not run: it may land in an already-touched window (no extra fault)"],
+ "refused": [],
+ "improvement": "a check-time operand scan beats regen-time keys for catching new objects; heredocs used for edits in this run against developer-flow (use Write + script files)",
+ "next_step": "continuation: evaluate the .data1 rename of written start-up objects (both profiles, fault counts, no row slower) and run the startup-names plant with cmd cargo xtask so",
+ "report_file": "handoff/LAYOUT-STARTUP-DATA.md",
+ "jobs": ["keke:lsd-gate-1adb6d3f0", "keke:lsd-plants-1adb6d3f0"]}

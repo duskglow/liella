@@ -1980,6 +1980,48 @@ fn math_sqrt_hardware_matches_the_software_square_root() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+#[test]
+fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
+    // Clauses: s10_0_f_0.
+    // D-10.22/D-10.71: the in-place `sqrtsd`/`sqrtss` runs only under a word whose exceptions are
+    // all masked. With the denormal-operand exception unmasked, a subnormal operand would trap in
+    // the instruction; the software path answers instead, with the reference bits, flags and
+    // errno, in every direction. The divide-by-zero, overflow and underflow masks (which a square
+    // root never raises) must give the same answers. Invalid and inexact stay masked: the
+    // harness's own arithmetic raises them.
+    use liella_math::{fused, MathError, Rounding};
+    let errno_of = |e: MathError| if e == MathError::Domain { 33 } else { 0 };
+    let modes = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
+    for unmask in [0x100_u32, 0x200, 0x400, 0x800] {
+        for (rc, &mode) in (0u32..).zip(modes.iter()) {
+            let mx = (0x1f80 & !unmask) | (rc << 13);
+            for x in [1e-310, 5e-324, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f64, f64>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrt(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+            for x in [1e-40f32, 1e-45, 2.0, 0.5, -1.0] {
+                let (w, st) = fused::sqrt::<f32, f32>(x, mode);
+                let mut got = 0;
+                let seen = observe_with_ctl(mx, || got = m::sqrtf(x).to_bits());
+                assert_eq!((mx, x.to_bits(), got, seen), (mx, x.to_bits(), w.to_bits(), (errno_of(st.error), Flags(st.flags.0))));
+            }
+        }
+    }
+    fpu::clear(&CSys, Flags::ALL);
+}
+
+#[test]
+fn math_sqrtl_entry_tests_its_word_and_class_in_c() {
+    // Clauses: s10_0_f_0.
+    // D-10.71: `sqrtl`'s assembly entry (its own control-word and `fxam` tests) is reached only
+    // from C: the tests above call `liella_sqrtl_bits`. conformance/c/s10_sqrtl_entry.c calls the
+    // exported `sqrtl` statically linked: in place in two directions, a negative operand's EDOM,
+    // -0, and 53-bit precision control keeping the 64-bit root.
+    products::conformance(&["s10_sqrtl_entry"]);
+}
+
 /// `hypotf` in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward zero): the result's bits,
 /// the IEEE flags it raised (the denormal-operand bit aside) and `errno`.
 #[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::float_arithmetic, clippy::integer_division)] // bit-level test arithmetic on bounded values
