@@ -27,6 +27,8 @@
 
 #![allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)] // step counts below MAX_STEPS (exact in f64), exponents of bounded range
 
+use core::cmp::Ordering;
+
 use crate::dd::{self, two_prod, Dd};
 use crate::fast32::{self, Fast};
 use crate::fast64;
@@ -48,7 +50,7 @@ const U_STEP: f64 = f64::from_bits(0x39b0_0000_0000_0000);
 /// One backward step's relative error on a ratio (`2·2^-101 + 2^-104`, rounded up).
 const U_BACK: f64 = f64::from_bits(0x39c0_0000_0000_0000);
 /// π/2 rounded up, and the slack covering the `f64` roundings of the bounds' own sums.
-const PI_2_UP: f64 = 1.5708;
+const PI_2_UP: f64 = core::f64::consts::FRAC_PI_2 * 1.000_001;
 const SLK: f64 = 1.001;
 const E20: f64 = f64::from_bits(0x3eb0_0000_0000_0000);
 const E100: f64 = f64::from_bits(0x39b0_0000_0000_0000);
@@ -85,7 +87,7 @@ fn forward(x: f64, r: Dd, f0: (Dd, f64), f1: (Dd, f64), m: u64) -> Option<Fwd> {
     let mut sj = f1.1 + f0.1 * jb(t);
     for k in 1..m {
         let p = b.mul_f64((2 * k) as f64).mul(r);
-        if !(dd::abs(p.hi) <= LIM) {
+        if !matches!(dd::abs(p.hi).partial_cmp(&LIM), Some(Ordering::Less | Ordering::Equal)) {
             return None;
         }
         let c = p.sub(a);
@@ -107,7 +109,7 @@ fn cas(x: f64, w: &Fwd, ym: f64) -> f64 {
 /// The bound for the `Y` recurrence itself (`|Y_m| <= |ỹ_m| + E`: `E <= a + β·E`).
 fn ybound(x: f64, w: &Fwd) -> Option<f64> {
     let beta = PI_2_UP * x * (w.sj + w.jb * w.s) * SLK;
-    if !(beta <= E20) {
+    if !matches!(beta.partial_cmp(&E20), Some(Ordering::Less | Ordering::Equal)) {
         return None;
     }
     Some(cas(x, w, dd::abs(w.f.hi) * SLK) * 1.000_002)
@@ -248,7 +250,7 @@ fn series(n: u64, x: f64) -> (Dd, f64, i32) {
 
 /// `(y ± eps)·2^e` correctly rounded to `double` in `mode`, or `None`: the rounding test.
 pub fn near64(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f64, Status)> {
-    if !(eps < dd::abs(y.hi)) {
+    if eps.partial_cmp(&dd::abs(y.hi)) != Some(Ordering::Less) {
         return None;
     }
     let neg = y.hi < 0.0;
@@ -266,7 +268,7 @@ pub fn near64(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f64, Status)> 
 
 /// `(y ± eps)·2^e` correctly rounded to a normal `float` in `mode`, or `None`.
 pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)> {
-    if !(eps < dd::abs(y.hi)) {
+    if eps.partial_cmp(&dd::abs(y.hi)) != Some(Ordering::Less) {
         return None;
     }
     let k = expo(y.hi) + e;
@@ -278,7 +280,7 @@ pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)> 
     let ulp = dd::pow2(k - 52);
     // The error in f64 units of `v`, rounded up (truncation plus 2: no `ceil` in core).
     let d = (dd::abs(lo) + eps * s) / ulp;
-    if !(d < 67_108_864.0) {
+    if d.partial_cmp(&67_108_864.0) != Some(Ordering::Less) {
         return None;
     }
     let r = fast32::round(v, d as u64 + 2, mode)?;
@@ -314,7 +316,7 @@ pub fn jn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)> {
 
 /// `yn(n, x)` for `x > 0` (`Y_{−n} = (−1)^n·Y_n`), or `None`.
 pub fn yn(n: i32, x: f64, mode: Rounding) -> Option<(f64, Status)> {
-    if !(x > 0.0 && x.is_finite()) {
+    if x.partial_cmp(&0.0) != Some(Ordering::Greater) || !x.is_finite() {
         return None;
     }
     let (m, flip) = order(n);
@@ -351,7 +353,7 @@ pub fn jnf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
 
 /// `ynf(n, x)` through the `double` kernels, or `None`.
 pub fn ynf(n: i32, x: f32, mode: Rounding) -> Option<(f32, Status)> {
-    if !(x.is_normal() && x > 0.0) {
+    if !x.is_normal() || x.is_sign_negative() {
         return None;
     }
     let (m, flip) = order(n);
