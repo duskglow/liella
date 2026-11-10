@@ -1,0 +1,4 @@
+# CODEMAP-TRAIN-OWNED plants: `cargo xtask plants handoff/CODEMAP-TRAIN-OWNED-plants.txt --dir <new RAM dir> --timeout 600`
+off-train-check-fatal | xtask/src/codemap.rs | lit:        if !train { ==>        if false { | cargo test -p xtask --bin xtask codemap:: | msg:off the train a stale code map is advisory
+on-train-check-advisory | xtask/src/codemap.rs | lit:return if stale.is_empty() { ==> return if true { | cargo test -p xtask --bin xtask codemap:: | msg:on the train a stale code map is fatal
+off-train-writes-in-place | xtask/src/codemap.rs | lit:let out = crate::records::out_root(root, in_place); ==> let out = crate::records::out_root(root, true); | cargo test -p xtask --bin xtask codemap:: | msg:tracked symbols.tsv untouched

@@ -1,0 +1,5 @@
+# LIBM-F64-BESSEL-N plants (cargo xtask plants; docs/plants.md)
+bessel-n-direction | crates/math/src/fast_bessel_n.rs | lit:let up = (n as f64) <= x; ==> let up = true; | cargo test -p liella-math --release --test fast_bessel_n | msg:j miller: the tier settled only
+bessel-n-miller-norm | crates/math/src/fast_bessel_n.rs | lit:let y = wj.f.mul(q); ==> let y = q; | cargo test -p liella-math --release --test fast_bessel_n | msg:accurate 0x|times its bound
+bessel-n-near-always | crates/math/src/fast_bessel_n.rs | lit:fast64::settle(ya.scale(s), eps * s, m, md)? ==> fast64::settle(ya.scale(s), 0.0, m, md)? | cargo test -p liella-math --release --test fast_bessel_n | msg:near64 settled a .*straddle
+bessel-n-tight-shrunk | crates/math/src/fast_bessel_n.rs | lit:(ej.min(k * wj.s), ey.min(k * wy.s)) ==> (ej.min(k * wj.s * E20), ey.min(k * wy.s * E20)) | cargo test -p liella-math --release --test fast_bessel_n | msg:times its bound|accurate 0x

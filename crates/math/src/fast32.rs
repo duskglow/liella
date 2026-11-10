@@ -405,7 +405,7 @@ include!("fast32_tables.rs");
 /// errno. Subnormal results (rare: x < -87.3 for expf) are left to the accurate path, which keeps
 /// this test to one fixed mask (s = 29).
 #[inline(always)]
-fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
+pub(crate) fn round(y: f64, delta: u64, mode: Rounding) -> Option<f32> {
     const LO: u64 = 0x3810_0000_0000_0000;
     let a = y.to_bits() & !(1 << 63);
     // (low + delta) mod 2^28 ≤ 2·delta exactly when low ≤ delta or low ≥ 2^28 - delta.

@@ -33,7 +33,6 @@ void liella_machine_x87_clex(void);
 void liella_machine_x87_env_store(void *env28);
 void liella_machine_x87_env_load(const void *env28);
 double liella_machine_sqrtsd(double x);
-float liella_machine_sqrtss(float x);
 void liella_machine_fsqrt(const void *x10, void *out10);
 uint32_t liella_machine_rdpkru(void);
 void liella_machine_wrpkru(uint32_t value);

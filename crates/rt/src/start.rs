@@ -89,8 +89,14 @@ pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
 /// `[page_down(vaddr), vaddr + memsz)`), so in practice this is the whole segment. `None`
 /// without the segment, or when it covers no whole page. `page` is a power of two.
 pub fn relro(words: &[u64], phnum: usize, phdr_addr: usize, page: usize) -> Option<(usize, usize)> {
+    relro_at(words, phnum, program(words, phnum, phdr_addr).bias, page)
+}
+
+/// [`relro`] with the load bias given by the caller: `ld.so` maps the program it runs and knows
+/// its bias, which `PT_PHDR` cannot supply for an object without one (a shared object run as a
+/// program).
+pub fn relro_at(words: &[u64], phnum: usize, bias: usize, page: usize) -> Option<(usize, usize)> {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
-    let bias = program(words, phnum, phdr_addr).bias;
     let h = words.chunks_exact(PHDR_WORDS).take(phnum).find(|h| h.first().is_some_and(|w| w & 0xffff_ffff == PT_GNU_RELRO))?;
     relro_pages(field(h, 2).wrapping_add(bias), field(h, 5), page)
 }
@@ -250,6 +256,8 @@ mod tests {
         assert_eq!(relro(&pie, 2, 0x5555_0040, 0x1000), Some((0x5555_2000, 0x2000)));
         assert_eq!(program(&pie, 2, 0x5555_0040).relro, Some((0x5555_2000, 0x2000)));
         assert_eq!(relro(&[], 0, 0, 0x1000), None, "no segment");
+        // Without PT_PHDR the caller's bias moves the segment.
+        assert_eq!(relro_at(&pie[PHDR_WORDS..], 1, 0x7f00_0000, 0x1000), Some((0x7f00_2000, 0x2000)));
     }
 
     #[test]

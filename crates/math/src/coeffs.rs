@@ -42,6 +42,7 @@ mod gamma;
 mod mp_const;
 mod series;
 mod trig;
+mod wide_int_el;
 
 /// Every generated table, under the one path the kernels use (`use crate::coeffs::tables as t`).
 pub(crate) mod tables {
@@ -52,6 +53,7 @@ pub(crate) mod tables {
     pub(crate) use super::mp_const::*;
     pub(crate) use super::series::*;
     pub(crate) use super::trig::*;
+    pub(crate) use super::wide_int_el::*;
 }
 
 #[cfg(test)]
