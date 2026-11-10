@@ -3,4 +3,4 @@
 hga-align-4096 | xtask/src/hottext.rs | lit:copy_from_slice(&ANCHOR_ALIGN.to_le_bytes()); ==> copy_from_slice(&4096u64.to_le_bytes()); | cargo xtask so | msg:HOT-GROUP-ANCHOR BROKEN.*alignment 4096
 hga-sorts-after | xtask/src/hottext.rs | lit:pub const ANCHOR: &str = ".text.sorted.h0"; ==> pub const ANCHOR: &str = ".text.sorted.h99999"; | cargo xtask so | msg:HOT-GROUP-ANCHOR: rule section=.text.sorted.h0 but the checker holds .text.sorted.h99999
 hga-removed | xtask/src/hottext.rs | lit:let anchor_here = holds_first && anchored.is_none(); ==> let anchor_here = false; | cargo xtask so | msg:HOT-GROUP-ANCHOR BROKEN.*no member has the anchor
-hga-no-retain | xtask/src/hottext.rs | lit:? | SHF_GNU_RETAIN; ==> ?; | cargo xtask so | msg:HOT-GROUP-ANCHOR BROKEN.*want >= 65536, empty, AX and R
+hga-no-retain | xtask/src/hottext.rs | lit:const SHF_GNU_RETAIN: u64 = 0x20_0000; ==> const SHF_GNU_RETAIN: u64 = 0; | cargo xtask so | msg:HOT-GROUP-ANCHOR BROKEN.*want >= 65536, empty, AX and R

@@ -1,0 +1,8 @@
+id = "D-X.51"
+section = "x"
+status = "active"
+story = "HOTTEXT-ISOLATE-64K"
+date = "2026-11-10"
+body = '''
+**Hot group anchored at a 64 KiB boundary** (HOTTEXT-ISOLATE-64K, 2026-11-10; layout only, no ABI or behaviour change; extends D-X.20; plan `handoff/layout-contracts-plan.md` 2c C2). `cargo xtask so` adds an empty input section `.text.sorted.h0` (sh_addralign 65536, SHF_GNU_RETAIN) to the `libc.a` member holding the first hot-text key; it sorts before every `.text.sorted.h<nnnnn>.<f>` in GNU ld's `SORT(.text.sorted.*)`, so a static program's hot group opens at a 64 KiB fault-around window boundary and growth before it no longer re-cuts the windows inside it. A probe link (GNU ld 2.42) showed an unretained empty section is dropped by `--gc-sections`, and the retained one keeps nothing else of its object alive. objcopy 2.42 sets neither the retain flag nor the alignment of a section it adds, so xtask writes both in the section header. Layout contract HOT-GROUP-ANCHOR (`layout/contracts.tsv`, kind group-anchor). Cost: up to 64 KiB of never-touched file padding per static program and in `libc.so.6`. Keep/reject verdict: by the measured fault, instruction and size rows in `handoff/HOTTEXT-ISOLATE-64K.md` (kept only if no measured row is slower).
+'''
