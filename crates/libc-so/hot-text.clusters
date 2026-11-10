@@ -5,7 +5,8 @@
 # probe mode (page_faults.c) already ran, so the later call finds its text in a touched window.
 # time: localtime_r's conversion (local_in) to the code only the first mktime runs (mode mktime).
 # strings: the string kernels to the printf entry that runs first (mode strings); the printf body after it
-# (vfprintf ...) is start-up text, at the list head since ruling #4417 (LAYOUT-TEXT-PIN-5).
+# (vfprintf ...) is start-up text, at the list head since ruling #4417 (LAYOUT-TEXT-PIN-5); so is memmove,
+# which start-up reaches through its entry labels (merge.py --alias, #4467, LAYOUT-TEXT-PIN-6).
 # rebind: bindtextdomain to the catalog lookup and the same-text check of a rebind (mode rebind), in two
 # clusters of at most 32 KiB each (rebind, rebind-tail from catalog_of): one 38 KiB cluster took a 64 KiB
 # alignment, which moved .text's start by 60 KiB and cost 52 KiB of gap ahead of it (ruling #4363).
