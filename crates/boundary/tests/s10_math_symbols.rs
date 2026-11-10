@@ -2307,6 +2307,182 @@ fn math_exp2f_onepass_sweep() {
     onepass_sweep(&ONEPASS[1]);
 }
 
+/// `powf`'s envelope on the accurate path: the entry the one-pass `powf` (D-10.78) replaced.
+fn powf_reference(x: f32, y: f32) -> f32 {
+    liella_boundary::mathret::elem((x, y), liella_boundary::mathret::Unit::Sse, |(x, y), r| liella_math::real::Real::pow(x, y, r))
+}
+
+/// Compare `powf` with [`powf_reference`] on (x, y) under MXCSR `mx`: bits, errno, flags.
+fn powf_differs(mx: u32, x: f32, y: f32, printed: u64) -> bool {
+    let (mut got, mut want) = (0u32, 0u32);
+    let seen = observe_with_ctl(mx, || got = m::powf(x, y).to_bits());
+    let wanted = observe_with_ctl(mx, || want = powf_reference(x, y).to_bits());
+    let differs = (got, seen) != (want, wanted);
+    if differs && printed < 4 {
+        eprintln!("BAD powf({:#010x}, {:#010x}) mxcsr {mx:#06x}: got {got:#010x} {seen:?}, want {want:#010x} {wanted:?}", x.to_bits(), y.to_bits());
+    }
+    differs
+}
+
+/// The hard and edge pairs of the one-pass `powf`: the special values, the bit-decided cases
+/// (y = 0, 1, 2 and their |x| bounds 2^-63 and 2^64 with the neighbouring encodings, x < 0 with
+/// odd, even and non-integer y, y with 2^23 ≤ |y| < 2^24), the exact results it must refuse (|x| a
+/// power of two; odd parts 3^k with y = n/2^j), y one ulp from integers and halves, x within a few
+/// ulps of 1 with large y, and results near the overflow and underflow thresholds.
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::cast_possible_wrap)] // bit fields of bounded width
+fn powf_hard_pairs() -> Vec<(f32, f32)> {
+    let mut v = Vec::new();
+    let sp: [u32; 12] = [0, 0x8000_0000, 1, 0x807f_ffff, 0x7f80_0000, 0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffc0_0000, 0x3f80_0000, 0xbf80_0000, 0x0080_0000];
+    let ys: [f32; 16] = [0.0, -0.0, 1.0, 2.0, -1.0, -2.0, 0.5, 3.0, 0.25, 1.5, 15.0, 15.875, 16.0, 0.125, 8_388_609.0, 8_388_610.0];
+    for &a in &sp {
+        for &b in &sp {
+            v.push((f32::from_bits(a), f32::from_bits(b)));
+        }
+        for &y in &ys {
+            v.push((f32::from_bits(a), y));
+            v.push((y, f32::from_bits(a)));
+        }
+    }
+    for xb in [0x1fff_ffffu32, 0x2000_0000, 0x2000_0001, 0x5f7f_ffff, 0x5f80_0000, 0x5f80_0001, 0x1fbf_ffff, 0x5f3f_ffff] {
+        for s in [0, 0x8000_0000] {
+            v.push((f32::from_bits(xb | s), 2.0));
+        }
+    }
+    for k in 0..16 {
+        let k = k as f32;
+        for x in [3.0f32, 9.0, 81.0, 6561.0, 5.0, 25.0, 0.75, 1.5, -3.0, -1.5, 2.0, 0.5, -2.0, 1024.0, 7.0, 49.0] {
+            for y in [k, k + 0.5, k + 0.25, k * 0.125, -k, -k - 0.5, k + 0.125, k + 0.0625] {
+                v.push((x, y));
+            }
+        }
+    }
+    for yb in [0x4b00_0001u32, 0x4b00_0002, 0x4b7f_ffff, 0x4b80_0001, 0xcb00_0001] {
+        for xb in [0x3f80_0001u32, 0x3f7f_ffff, 0x3f80_0002] {
+            v.push((-f32::from_bits(xb), f32::from_bits(yb)));
+        }
+    }
+    let mut s = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s
+    };
+    for _ in 0..20_000 {
+        let r = next();
+        let x = f32::from_bits(0x3c00_0000 + (r as u32 % 0x0700_0000));
+        let lx = f64::from(x).log2();
+        // y one ulp around integers and halves; results near 2^128 and 2^-126; x near 1, large y.
+        let n = ((r >> 32) % 40) as f32 - 20.0;
+        let yi = if r >> 63 == 0 { n } else { n + 0.5 };
+        let d = ((r >> 40) % 5) as i32 - 2;
+        v.push((x, f32::from_bits((yi.to_bits() as i32 + d) as u32)));
+        let (t, d) = (if r >> 62 & 1 == 0 { 128.0 } else { -126.0 }, ((r >> 45) % 9) as i32 - 4);
+        let yt = (t / lx) as f32;
+        v.push((x, f32::from_bits((yt.to_bits() as i32 + d) as u32)));
+        let x1 = f32::from_bits((0x3f80_0000i32 + ((r >> 20) % 64) as i32 - 32) as u32);
+        let y1 = f32::from_bits(0x4400_0000 + ((r >> 26) as u32 % 0x0480_0000)) * if r & 1 == 0 { 1.0 } else { -1.0 };
+        v.push((x1, y1));
+    }
+    v
+}
+
+/// A random pair: x and y from four generators by `r`'s low bits (every encoding; [0.01, 100]
+/// with |y| ≤ 64; x within 2^-8 of 1 with |y| up to 2^20; x < 0 with an integer y).
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss)] // bit fields of bounded width
+fn powf_random_pair(r: u64) -> (f32, f32) {
+    let (a, b) = ((r >> 2) as u32, (r >> 34) as u32);
+    let sign = (b & 1) << 31;
+    match r & 3 {
+        0 => (f32::from_bits(a), f32::from_bits(b)),
+        1 => (f32::from_bits(0x3c23_d70a + a % 0x0726_0000), f32::from_bits((0x3000_0000 + (b >> 1) % 0x1300_0000) | sign)),
+        2 => (f32::from_bits(0x3f80_0000 - 0x8000 + a % 0x1_0000), f32::from_bits((0x3800_0000 + (b >> 1) % 0x0f00_0000) | sign)),
+        _ => (-f32::from_bits(0x3d00_0000 + a % 0x0400_0000), ((b >> 1) % 128) as f32 - 64.0),
+    }
+}
+
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // counters
+fn math_powf_onepass_matches_the_envelope() {
+    // Clauses: s10_0_f_0. D-10.78: powf runs in the caller's MXCSR unread and gives the envelope's
+    // bits, errno and flags in every rounding direction and under FTZ, DAZ and both (D-10.22), on
+    // the hard and edge pairs and 2^16 random pairs per mode.
+    let hard = powf_hard_pairs();
+    for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
+        for rc in 0..4u32 {
+            let mx = 0x1f80 | ctl | rc << 13;
+            let mut bad = 0;
+            for &(x, y) in &hard {
+                bad += u64::from(powf_differs(mx, x, y, bad));
+            }
+            let mut s = 0x2545_f491_4f6c_dd1du64 ^ u64::from(mx);
+            for _ in 0..1 << 16 {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                let (x, y) = powf_random_pair(s);
+                bad += u64::from(powf_differs(mx, x, y, bad));
+            }
+            assert_eq!(bad, 0, "powf differs from the envelope under MXCSR {mx:#06x}");
+        }
+    }
+    // The sign of a negative base with an odd y in [2^23, 2^24) (no spec clause beyond s10_0_f_0:
+    // (-x)^n = -(x^n) for odd n).
+    assert!(m::powf(-1.000_000_1, 8_388_609.0) < -2.7, "powf(-(1 + 2^-23), 2^23 + 1) is negative");
+}
+
+#[test]
+#[ignore = "random pairs: LIELLA_POWF_PAIRS (default 10^9) per mode: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_powf_onepass_random_pairs"]
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation)] // counters
+fn math_powf_onepass_random_pairs() {
+    // Clauses: s10_0_f_0. D-10.78: LIELLA_POWF_PAIRS random pairs in each of the four rounding
+    // directions (default MXCSR otherwise) plus the hard pairs in all 16 modes, bits, errno and flags.
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    let pairs: u64 = std::env::var("LIELLA_POWF_PAIRS").ok().and_then(|s| s.parse().ok()).unwrap_or(1_000_000_000);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()) as u64;
+    const CHUNK: u64 = 1 << 20;
+    let chunks = pairs.div_ceil(CHUNK);
+    let (next, calls, bad, fast) = (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
+    std::thread::scope(|sc| {
+        for _ in 0..threads {
+            sc.spawn(|| loop {
+                let c = next.fetch_add(1, Relaxed);
+                if c >= 4 * chunks {
+                    break;
+                }
+                let mx = 0x1f80 | ((c & 3) as u32) << 13;
+                let mut s = (c >> 2).wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
+                let (mut n, mut b, mut f) = (0u64, 0u64, 0u64);
+                for _ in 0..CHUNK.min(pairs - (c >> 2) * CHUNK) {
+                    s ^= s << 13;
+                    s ^= s >> 7;
+                    s ^= s << 17;
+                    let (x, y) = powf_random_pair(s);
+                    n += 1;
+                    f += u64::from(liella_math::fast32::pow_onepass_any(x, y).is_some());
+                    b += u64::from(powf_differs(mx, x, y, b + bad.load(Relaxed)));
+                }
+                calls.fetch_add(n, Relaxed);
+                bad.fetch_add(b, Relaxed);
+                fast.fetch_add(f, Relaxed);
+            });
+        }
+    });
+    let hard = powf_hard_pairs();
+    let mut hard_bad = 0;
+    for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
+        for rc in 0..4u32 {
+            for &(x, y) in &hard {
+                hard_bad += u64::from(powf_differs(0x1f80 | ctl | rc << 13, x, y, hard_bad));
+            }
+        }
+    }
+    let (n, b, f) = (calls.load(Relaxed), bad.load(Relaxed), fast.load(Relaxed));
+    println!("powf one-pass random pairs: calls {n} (4 directions), answered by the one-pass path {f}, mismatches {b}; hard pairs {} x 16 modes, mismatches {hard_bad}", hard.len());
+    assert_eq!(n, 4 * pairs, "every pair checked once per direction");
+    assert_eq!(b + hard_bad, 0, "powf differs from the envelope");
+}
+
 #[test]
 #[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_hypotf_fast_path_sweep"]
 #[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::float_arithmetic, clippy::integer_division)] // bit-level test arithmetic on bounded values

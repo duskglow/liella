@@ -962,6 +962,29 @@ fn elem32_onepass_cold(x: f32, f: impl FnOnce(f32, Rounding) -> (f32, Status)) -
     elem(x, Unit::Sse, f)
 }
 
+/// [`elem32_onepass`] for a two-argument `float` function (`powf`, LIBM-F32-POWF, D-10.78), under
+/// the same contract for `fast`. Every refusal (NaN operands included: pow's NaN cases are not
+/// all `x + y`) goes to the unchanged [`elem`] envelope, out of line and cold.
+#[inline(always)]
+pub fn elem2_32_onepass(
+    x: f32,
+    y: f32,
+    fast: impl FnOnce(f32, f32) -> Option<f32>,
+    f: impl FnOnce((f32, f32), Rounding) -> (f32, Status),
+) -> f32 {
+    match fast(x, y) {
+        Some(v) => v,
+        None => elem2_32_onepass_cold(x, y, f),
+    }
+}
+
+/// [`elem2_32_onepass`]'s refusals: the full envelope.
+#[cold]
+#[inline(never)]
+fn elem2_32_onepass_cold(x: f32, y: f32, f: impl FnOnce((f32, f32), Rounding) -> (f32, Status)) -> f32 {
+    elem((x, y), Unit::Sse, f)
+}
+
 /// [`fpu::peek`] with the inline MXCSR read ([`fpregs::mxcsr`], D-X.44): the fast entries'
 /// one read of the caller's word and whether it is the default control word.
 #[inline(always)]

@@ -4393,7 +4393,7 @@ pub extern "C" fn pow(x: f64, y: f64) -> f64 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn powf(x: f32, y: f32) -> f32 {
-    mret::elem((x, y), mret::Unit::Sse, |(x, y), m| math::real::Real::pow(x, y, m))
+    mret::elem2_32_onepass(x, y, math::fast32::pow_onepass_any, |(x, y), m| math::real::Real::pow(x, y, m))
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -4403,7 +4403,7 @@ pub extern "C" fn liella_powf128_bits(x: F128Bits, y: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn powf32(x: f32, y: f32) -> f32 {
-    mret::elem((x, y), mret::Unit::Sse, |(x, y), m| math::real::Real::pow(x, y, m))
+    mret::elem2_32_onepass(x, y, math::fast32::pow_onepass_any, |(x, y), m| math::real::Real::pow(x, y, m))
 }}
 
 export! { libm "GLIBC_2.27";

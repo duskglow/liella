@@ -145,6 +145,10 @@ const B6: f64 = -154.0 / 6561.0;
 /// pow: ε < 89·2^-53 (proof at [`pow_core`]), so < 89.01 ulp; 96 leaves room. A `float` result
 /// falls back with probability about 2·96/2^28 (one call in 1.4 million).
 const POW_DELTA: u64 = 96;
+/// The one-pass pow in the caller's rounding direction (LIBM-F32-POWF, D-10.78): ε ≤ 2^-42.45
+/// in every direction, so < 1499 ulp (proof at [`pow_onepass`]); 4096 ≥ 1.5·1499 + 1 with room.
+/// A `float` result falls back with probability about 2·4096/2^28 (one call in 32768).
+const POW_ONEPASS_DELTA: u64 = 4096;
 
 /// x = 1.5·2^52: adding it rounds to an integer, held in the low bits.
 const SHIFT: f64 = 6_755_399_441_055_744.0;
@@ -511,6 +515,15 @@ pub fn exp_onepass_any(x: f32) -> Option<f32> {
 #[inline]
 pub fn exp2_onepass_any(x: f32) -> Option<f32> {
     exp_onepass(x, 128.0, 0x42fc_0000) // |x| < 126
+}
+
+/// `powf` in the caller's rounding direction and MXCSR, which it does not read, by one `double`
+/// evaluation and one conversion (LIBM-F32-POWF, D-10.78), or `None` for the envelope. Where it
+/// answers it raises inexact for an inexact result and nothing otherwise (proof at
+/// [`pow_onepass`]).
+#[inline]
+pub fn pow_onepass_any(x: f32, y: f32) -> Option<f32> {
+    pow_onepass(x, y)
 }
 
 macro_rules! fast_fn {
