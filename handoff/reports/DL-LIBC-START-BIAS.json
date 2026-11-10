@@ -1,0 +1,13 @@
+{"task": "DL-LIBC-START-BIAS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: blocked. liella_ld::start::bias, which the brief says to share, is not on origin/next (DL-IMAGE-READER-3 is queued_ci, not landed). No code changed. The origin/next cbench_startup baseline counters are recorded.",
+ "branch": "task/dl-libc-start-bias", "head": null,
+ "gate": {"affected": "not run (no code change)", "peak": null},
+ "jobs": ["DL-LIBC-START-BIAS-startup-base"],
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "The prerequisite DL-IMAGE-READER-3 (liella_ld::start::bias) has not landed, and this story is not stacked on it.", "recommendation": "Hold DL-LIBC-START-BIAS with --until-landed DL-IMAGE-READER-3, then re-run it from the new origin/next. Do not write a second copy in liella_rt."}],
+ "informational": ["Baseline cbench_startup on origin/next f1f5358d5, keke, Liella instructions per run (glibc in brackets): startup_instr_c 2146 (117437), startup_instr_setloc 68079 (142641), startup_instr_printf 71876 (144419), startup_instr_wctype 69106 (142862). Job DL-LIBC-START-BIAS-startup-base, rc 0.",
+                   "Open design point for D-27.21: libc's start sees AT_PHDR, AT_PHNUM and AT_ENTRY but not e_phoff, so the PT_LOAD fallback that ld.so's map::plan uses (it has the file header) is not directly available in memory. Check what the shared function takes as input once it lands."],
+ "refused": [],
+ "improvement": "The dispatcher admitted a story whose brief names a function from an un-landed branch. A planning-check that git-greps origin/next for the symbols a brief cites would have held it.",
+ "next_step": "After DL-IMAGE-READER-3 lands: route liella_rt::start::program's bias through the shared function, add the no-PT_PHDR PIE and ET_EXEC programs, plant, and compare cbench_startup against the baseline above.",
+ "report_file": "handoff/DL-LIBC-START-BIAS.md"}
