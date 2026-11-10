@@ -106,8 +106,9 @@ const SHARED: &[&str] = &["-fPIC", "-shared"];
 const EXEC: &[&str] = &["-fno-pie", "-no-pie", "-static"];
 const ALIGN_2M: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
 /// A movable (`ET_DYN`) object with 2 MiB `p_align` whose first `PT_LOAD` is at 0x600000, not 0:
-/// GNU ld keeps `-shared` output `ET_DYN` under `-Ttext-segment` (with `-pie` it emits `ET_EXEC`).
-const MOVED_2M: &[&str] = &["-fPIC", "-shared", "-Wl,-e,_start", "-Wl,-Ttext-segment=0x600000", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
+/// GNU ld keeps `-shared` output `ET_DYN` under `-Ttext-segment` (with `-pie` it emits `ET_EXEC`);
+/// `-Bsymbolic` binds its own symbols locally, so it has only `R_X86_64_RELATIVE` relocations.
+const MOVED_2M: &[&str] = &["-fPIC", "-shared", "-Wl,-Bsymbolic", "-Wl,-e,_start","-Wl,-Ttext-segment=0x600000", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
 const PAGE_16K: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x4000", "-Wl,-z,common-page-size=0x4000"];
 /// One ELF64 program header.
 fn ph(ty: u32, flags: u32, off: u64, at: u64, len: u64) -> Vec<u8> {
