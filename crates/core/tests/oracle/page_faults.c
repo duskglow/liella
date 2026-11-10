@@ -62,7 +62,56 @@ static int write_mo(const char *path) {
     return ok ? 0 : -1;
 }
 
-int main(int argc, char **argv) {
+/* vfork, then execve(path, argv, envp) in the child (exit 127 if it fails), as raw system calls in
+ * one block: the child runs no code and touches no memory before exec, and the program links no
+ * library function beyond what its modes already use (vfork, execve, waitpid and getauxval from
+ * libc.a moved the program's library layout: setlocale + printf and tool +2). Returns the child's
+ * pid or -errno. */
+static long relay_spawn(const char *path, char **argv, char **envp) {
+    long r;
+    __asm__ volatile("mov $58, %%eax\n\t" /* SYS_vfork */
+                     "syscall\n\t"
+                     "test %%rax, %%rax\n\t"
+                     "jnz 1f\n\t"
+                     "mov $59, %%eax\n\t" /* SYS_execve; rdi, rsi, rdx survive syscall */
+                     "syscall\n\t"
+                     "mov $127, %%edi\n\t"
+                     "mov $60, %%eax\n\t" /* SYS_exit */
+                     "syscall\n"
+                     "1:"
+                     : "=a"(r)
+                     : "D"(path), "S"(argv), "d"(envp)
+                     : "rcx", "r11", "memory");
+    return r;
+}
+
+int main(int argc, char **argv, char **envp) {
+    if (argc > 2 && strcmp(argv[1], "relay") == 0) {
+        /* STARTUP-FAULTS-RESTORE-4: "relay <mode>" runs <mode> in a vfork child of this program. The
+         * whole-process counts ("true", "locale", "tool") include what the counted process does
+         * between fork/spawn and exec, which is the spawning process's code: the test harness spawns
+         * through the host C library in one gate pass and through Liella's interposed exports in the
+         * other, and the two read one apart. Relayed, the counted process does nothing before exec,
+         * whoever spawned this program. The child execs the path this program was exec'd by
+         * (AT_EXECFN, 31, from the auxiliary vector after envp) with the same environment, so its
+         * stack strings are those of an unrelayed run. */
+        char *cargv[] = {argv[0], argv[2], NULL};
+        char **e = envp;
+        while (*e != NULL)
+            e++;
+        const char *self = NULL;
+        for (unsigned long *a = (unsigned long *)(e + 1); a[0] != 0; a += 2)
+            if (a[0] == 31)
+                self = (const char *)a[1];
+        if (self == NULL)
+            return 7;
+        long p = relay_spawn(self, cargv, envp);
+        struct rusage ru;
+        int st;
+        if (p < 0 || wait4((pid_t)p, &st, 0, &ru) != p)
+            return 5;
+        return WIFEXITED(st) ? WEXITSTATUS(st) : 6;
+    }
     if (argc > 1 && strcmp(argv[1], "fork") == 0) {
         /* TIMING-COV-FORK-COW-FAULTS: "fork" = fork + _exit(0) + wait4, twice; prints the minor
          * faults of the second child (wait4's rusage: from fork to exit). fork copies no page

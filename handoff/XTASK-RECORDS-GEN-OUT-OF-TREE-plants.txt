@@ -1,0 +1,9 @@
+records-off-train-in-place | xtask/src/records/mod.rs | lit:if in_place { root.to_path_buf() } else { root.join(OUT_OF_TREE) } ==> if in_place || true { root.to_path_buf() } else { root.join(OUT_OF_TREE) } | cargo test -p xtask --bin xtask -- records:: kernel_index:: | msg:(gen_off_train_writes_under_target_and_leaves_tracked_views|writes_out_of_tree_unless_in_place).*FAILED
+records-gen-ignores-in-place | xtask/src/records/mod.rs | lit:let out = out_root(root, in_place); ==> let out = out_root(root, false); | cargo test -p xtask --bin xtask -- records:: | msg:(in_place_only_on_the_train_or_when_asked|gen_writes_sorted_views_and_check_then_passes).*FAILED
+train-env-ignored | xtask/src/records/mod.rs | lit:train == Some("1") || args ==> train == Some("yes") || args | cargo test -p xtask --bin xtask -- records:: | msg:in_place_only_on_the_train_or_when_asked.*FAILED
+kernel-index-off-train-in-place | xtask/src/kernel_index.rs | lit:let out = crate::records::out_root(root, in_place).join(OUT); ==> let out = root.join(OUT); | cargo test -p xtask --bin xtask -- kernel_index:: | msg:writes_out_of_tree_unless_in_place.*FAILED
+# cargo xtask plants results (4 plants: 4 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# records-off-train-in-place: CAUGHT, caught by xtask kernel_index::tests::writes_out_of_tree_unless_in_place
+# records-gen-ignores-in-place: CAUGHT, caught by xtask records::render::tests::index_lines_come_from_headings
+# train-env-ignored: CAUGHT, caught by xtask records::tests::in_place_only_on_the_train_or_when_asked
+# kernel-index-off-train-in-place: CAUGHT, caught by xtask kernel_index::tests::writes_out_of_tree_unless_in_place

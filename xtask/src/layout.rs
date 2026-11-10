@@ -24,7 +24,7 @@ const HEADER: [&str; 6] = ["id", "kind", "subjects", "rule", "reason", "decision
 /// Kinds whose contract is held by a directive in the source (alignment attribute, `.p2align`, `.org`): a row of one
 /// of them needs a `LAYOUT(<ID>)` tag at that directive.
 const SITE_KINDS: &[&str] = &["classed-xref", "object-window", "object-align", "section-offset", "label-align"];
-const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap"];
+const KINDS: &[&str] = &["fn-align", "classed-xref", "jcc", "section-rename", "object-window", "object-align", "section-offset", "label-align", "remap", "startup-text-windows"];
 const DIRECTIVES: &[&str] = &[".p2align", ".balign", ".align ", ".org ", "align("];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -214,6 +214,9 @@ fn tool(cmd: &mut Command, what: &str) -> Result<String, String> {
 struct Products<'a> {
     root: &'a Path,
     dir: &'a Path,
+    /// The build profile of the products (`fast`, `release`), when known: `so` passes it, `layout-check <dir>` reads
+    /// `<dir>/.profile`. Kinds with a budget per profile need it.
+    profile: Option<String>,
     index: BTreeMap<String, Vec<Member>>,
 }
 
@@ -400,14 +403,16 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
             let n = crate::remap::check_dir(pr.dir, &crate::remap::needles(pr.root)).map_err(|e| one(c.broken(&c.subjects.join(" "), &e)))?;
             Ok(format!("{n} products carry no build path"))
         }
+        "startup-text-windows" => check_startup_windows(c, &p, pr),
         k => Err(one(format!("layout: {}: unknown kind `{k}` (known: {})", c.id, KINDS.join(", ")))),
     }
 }
 
-/// Check every contract on the products in `dir`; one line per contract, every failure listed.
-pub fn check_products(root: &Path, dir: &Path) -> Result<(), String> {
+/// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
+/// failure listed.
+pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
     let contracts = load(root)?;
-    let mut pr = Products { root, dir, index: BTreeMap::new() };
+    let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
     let mut bad = Vec::new();
     for c in &contracts {
         match check_one(c, &mut pr) {
@@ -427,6 +432,273 @@ pub fn check_products(root: &Path, dir: &Path) -> Result<(), String> {
     } else {
         Err(format!("layout: {} of {} contracts broken: {}", bad.len(), contracts.len(), bad.join(", ")))
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// STARTUP-TEXT-WINDOWS (D-X.49): the start-up text of the static probe in few 64 KiB windows
+//
+// A static program's text is a file mapping, and the first touch of each 64 KiB window of it costs one page fault
+// (fault-around maps the window). The functions `page_faults true` runs (keys in the row's `keys=` file, written by
+// `tools/hottext/regen.sh`) must occupy at most `budget-<profile>=` distinct windows of `page_faults.c` linked from the
+// products as `crates/core/tests/hot_text_products.rs` links it, and none outside the hot group (D-X.20) may straddle
+// a window boundary. STARTUP-TEXT-GROUPED (`grouped=error|warn`): every start-up function of `libc.a` lies in the
+// hot group. Products and counters only: no timing, no tracing at check time.
+
+/// The window the start-up text is counted in (bytes). The row's `window=` must equal it.
+const STARTUP_WINDOW: u64 = 1 << 16;
+
+/// A defined function of the linked probe: `[start, end)` and its linked name.
+#[derive(Clone, Debug, PartialEq)]
+struct Func {
+    start: u64,
+    end: u64,
+    name: String,
+}
+
+/// `nm -S --defined-only` output -> the text symbols by build-stable key (`hottext::key`, the keys of
+/// `hot-text.list`). An assembly entry without `.size` prints no size; it counts its entry byte, so the window it
+/// starts in is still counted.
+fn parse_nm(text: &str) -> BTreeMap<String, Vec<Func>> {
+    let mut out: BTreeMap<String, Vec<Func>> = BTreeMap::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let (addr, size, ty, name) = match f.as_slice() {
+            [a, s, t, n] => (*a, Some(*s), *t, *n),
+            [a, t, n] => (*a, None, *t, *n),
+            _ => continue,
+        };
+        if !matches!(ty, "t" | "T" | "w" | "W" | "i" | "I") {
+            continue;
+        }
+        let (Ok(start), Ok(size)) = (u64::from_str_radix(addr, 16), size.map_or(Ok(0), |s| u64::from_str_radix(s, 16))) else {
+            continue;
+        };
+        out.entry(crate::hottext::key(name)).or_default().push(Func { start, end: start + size.max(1), name: name.to_string() });
+    }
+    out
+}
+
+/// A `.text*` input section of a GNU ld link map: `[start, end)`, its name and the file it came from.
+#[derive(Clone, Debug, PartialEq)]
+struct InputText {
+    start: u64,
+    end: u64,
+    name: String,
+    file: String,
+}
+
+/// The `.text*` input sections of a link map (` .text.f 0x<addr> 0x<size> <file>`; a long name puts the address on
+/// the next line). Empty sections are dropped.
+fn parse_map(text: &str) -> Vec<InputText> {
+    let mut out = Vec::new();
+    let mut pending: Option<String> = None;
+    for line in text.lines() {
+        let (name, rest) = if line.starts_with(" .text") {
+            let mut it = line[1..].splitn(2, char::is_whitespace);
+            (it.next().unwrap_or("").to_string(), it.next().unwrap_or("").trim().to_string())
+        } else if let (Some(n), true) = (pending.take(), line.starts_with("  ")) {
+            (n, line.trim().to_string())
+        } else {
+            continue;
+        };
+        let f: Vec<&str> = rest.split_whitespace().collect();
+        if f.is_empty() {
+            pending = Some(name);
+            continue;
+        }
+        let hex = |s: &str| s.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok());
+        if let (Some(start), Some(size), Some(file)) = (f.first().and_then(|s| hex(s)), f.get(1).and_then(|s| hex(s)), f.get(2)) {
+            if size > 0 {
+                out.push(InputText { start, end: start + size, name, file: file.to_string() });
+            }
+        }
+    }
+    out
+}
+
+/// A grouped hot-text input section (D-X.20): `.text.sorted.h<n>.<f>`, or `.text.hot.<f>` of an older archive.
+fn is_hot_section(name: &str) -> bool {
+    if name.starts_with(".text.hot.") {
+        return true;
+    }
+    name.strip_prefix(".text.sorted.h").is_some_and(|r| {
+        let d = r.bytes().take_while(u8::is_ascii_digit).count();
+        d > 0 && r[d..].starts_with('.')
+    })
+}
+
+/// The start-up keys of `profile` from the keys file (`<key> TAB <tier> TAB <profiles>`, `#` comments), in order.
+fn startup_keys(text: &str, profile: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        match l.split('\t').collect::<Vec<_>>().as_slice() {
+            [k, _tier, profiles] => {
+                if profiles.split(',').any(|p| p == profile) {
+                    out.push(k.to_string());
+                }
+            }
+            _ => return Err(format!("line {}: not `<key> TAB <tier> TAB <profiles>`: {l}", n + 1)),
+        }
+    }
+    Ok(out)
+}
+
+/// What the start-up functions occupy in the linked probe.
+#[derive(Debug, Default, PartialEq)]
+struct StartupText {
+    /// `[lo, hi)` of the grouped hot text.
+    group: (u64, u64),
+    /// Every window (address / window size) a start-up function touches, with the functions in it.
+    windows: BTreeMap<u64, Vec<Func>>,
+    /// Start-up functions outside the group whose first and last byte lie in different windows.
+    straddling: Vec<Func>,
+    /// Start-up functions of `libc.a` outside the group (STARTUP-TEXT-GROUPED).
+    ungrouped: Vec<Func>,
+    /// Keys with no function in this link (inlined or renamed in this build).
+    missing: Vec<String>,
+}
+
+fn window_of(a: u64, window: u64) -> u64 {
+    a / window
+}
+
+/// Map the start-up keys to the linked functions and count their windows.
+fn startup_text(keys: &[String], fns: &BTreeMap<String, Vec<Func>>, sections: &[InputText], window: u64) -> Result<StartupText, String> {
+    let hot: Vec<&InputText> = sections.iter().filter(|s| is_hot_section(&s.name)).collect();
+    let (Some(lo), Some(hi)) = (hot.iter().map(|s| s.start).min(), hot.iter().map(|s| s.end).max()) else {
+        return Err("no grouped hot text in the link map (D-X.20 grouping missing?)".into());
+    };
+    let mut t = StartupText { group: (lo, hi), ..Default::default() };
+    let mut seen = BTreeSet::new();
+    for k in keys {
+        let Some(list) = fns.get(k) else {
+            t.missing.push(k.clone());
+            continue;
+        };
+        for f in list {
+            if !seen.insert((f.start, f.name.clone())) {
+                continue;
+            }
+            for w in window_of(f.start, window)..=window_of(f.end - 1, window) {
+                t.windows.entry(w).or_default().push(f.clone());
+            }
+            if (lo..hi).contains(&f.start) {
+                continue;
+            }
+            if window_of(f.start, window) != window_of(f.end - 1, window) {
+                t.straddling.push(f.clone());
+            }
+            if sections.iter().any(|s| (s.start..s.end).contains(&f.start) && s.file.contains("libc.a(")) {
+                t.ungrouped.push(f.clone());
+            }
+        }
+    }
+    Ok(t)
+}
+
+/// The verdict on `t`: `Ok(summary)` or `Err(lines)` naming the contract, every function in a window outside the
+/// group, and each straddling or (with `grouped_error`) ungrouped function.
+fn startup_verdict(c: &Contract, t: &StartupText, window: u64, budget: u64, grouped_error: bool, profile: &str) -> Result<String, Vec<String>> {
+    let (lo, hi) = t.group;
+    let group: BTreeSet<u64> = (window_of(lo, window)..=window_of(hi - 1, window)).collect();
+    let outside: Vec<u64> = t.windows.keys().copied().filter(|w| !group.contains(w)).collect();
+    let n = t.windows.len() as u64;
+    let hex = |f: &Func| format!("{} 0x{:x}-0x{:x}", f.name, f.start, f.end);
+    let mut summary = format!(
+        "{n} start-up text windows of {window} bytes (budget-{profile} {budget}); hot group 0x{lo:x}-0x{hi:x} ({} used); outside it: {}",
+        t.windows.keys().filter(|w| group.contains(w)).count(),
+        if outside.is_empty() { "none".to_string() } else { outside.iter().map(|w| format!("0x{:x}", w * window)).collect::<Vec<_>>().join(", ") }
+    );
+    if !t.missing.is_empty() {
+        summary += &format!("; not in this link (inlined or renamed): {}", t.missing.join(" "));
+    }
+    let mut bad = Vec::new();
+    if n > budget {
+        bad.push(c.broken(&format!("{n} windows"), &format!("start-up text spans {n} windows of {window} bytes > budget-{profile} {budget}")));
+    }
+    for f in &t.straddling {
+        let b = window_of(f.end - 1, window) * window;
+        bad.push(c.broken(&hex(f), &format!("outside the hot group, straddles the {window}-byte window boundary 0x{b:x}")));
+    }
+    let grouped: Vec<String> = t.ungrouped.iter().map(|f| format!("{} (0x{:x})", f.name, f.start)).collect();
+    if !grouped.is_empty() {
+        let what = format!("STARTUP-TEXT-GROUPED: {} start-up functions of libc.a outside the hot group 0x{lo:x}-0x{hi:x}: {}", grouped.len(), grouped.join(", "));
+        if grouped_error {
+            bad.push(c.broken(&what, "add their keys to crates/libc-so/hot-text.list (tools/hottext/regen.sh)"));
+        } else {
+            summary += &format!("\nlayout: {} WARNING {what}", c.id);
+        }
+    }
+    if bad.is_empty() {
+        return Ok(summary);
+    }
+    let mut lines = vec![format!("layout: {}: {summary}", c.id)];
+    for w in &outside {
+        for f in &t.windows[w] {
+            lines.push(format!("layout: {}:   window 0x{:x} (outside the hot group): {}", c.id, w * window, hex(f)));
+        }
+    }
+    lines.extend(bad);
+    Err(lines)
+}
+
+/// Link `page_faults.c` against the products as `hot_text_products.rs` does, with a link map; `(nm -S, map)` text.
+fn link_startup_probe(pr: &Products) -> Result<(String, String), String> {
+    let work = std::env::temp_dir().join(format!("liella-layout-startup-{}", std::process::id()));
+    std::fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
+    let (exe, map) = (work.join("page_faults"), work.join("page_faults.map"));
+    let linked = tool(
+        Command::new("cc")
+            .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
+            .arg(pr.file("liella-crt1.o")?)
+            .arg(pr.root.join("crates/core/tests/oracle/page_faults.c"))
+            .arg(pr.file("libc.a")?)
+            .arg("-lgcc")
+            .arg(format!("-Wl,-Map,{}", map.display()))
+            .arg("-o")
+            .arg(&exe),
+        "cc page_faults.c (the start-up probe)",
+    )
+    .and_then(|_| tool(Command::new("nm").args(["-S", "--defined-only"]).arg(&exe), "nm -S page_faults"))
+    .and_then(|nm| std::fs::read_to_string(&map).map(|m| (nm, m)).map_err(|e| format!("{}: {e}", map.display())));
+    let _ = std::fs::remove_dir_all(&work);
+    linked
+}
+
+fn check_startup_windows(c: &Contract, p: &BTreeMap<String, String>, pr: &mut Products) -> Result<String, Vec<String>> {
+    let one = |e: String| vec![e];
+    let window = param_num(p, c, "window").map_err(one)?;
+    same(c, "window", window, STARTUP_WINDOW).map_err(one)?;
+    let profile = pr.profile.clone().ok_or_else(|| one(format!("layout: {}: the products' profile is unknown (no {}/.profile)", c.id, pr.dir.display())))?;
+    let budget = param_num(p, c, &format!("budget-{profile}")).map_err(one)?;
+    let grouped_error = match param(p, c, "grouped").map_err(one)? {
+        "error" => true,
+        "warn" => false,
+        g => return Err(one(format!("layout: {}: grouped={g}: want error or warn", c.id))),
+    };
+    let path = param(p, c, "keys").map_err(one)?;
+    let text = std::fs::read_to_string(pr.root.join(path)).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    let keys = startup_keys(&text, &profile).map_err(|e| one(format!("layout: {}: {path}: {e}", c.id)))?;
+    if keys.is_empty() {
+        return Err(one(format!("layout: {}: {path}: no start-up key traced in profile {profile} (run tools/hottext/regen.sh)", c.id)));
+    }
+    for f in &c.subjects {
+        pr.file(f).map_err(|e| one(c.broken(f, &e)))?;
+    }
+    let (nm, map) = link_startup_probe(pr).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    let t = startup_text(&keys, &parse_nm(&nm), &parse_map(&map), window).map_err(|e| one(format!("layout: {}: {e}", c.id)))?;
+    if t.missing.len() == keys.len() {
+        return Err(one(c.broken("start-up keys", &format!("none of the {} keys of {path} names a function of the probe", keys.len()))));
+    }
+    startup_verdict(c, &t, window, budget, grouped_error, &profile).map(|s| format!("{s}; {} of {} start-up functions found", keys.len() - t.missing.len(), keys.len()))
+}
+
+/// The profile recorded in `<dir>/.profile` (written last by `cargo xtask so`).
+fn marker_profile(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join(".profile")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -623,8 +895,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("--static") => static_check(root),
         Some(d) if d.starts_with('-') => Err(format!("layout-check: unknown option {d} (usage: layout-check [--static | <products dir>])")),
-        Some(d) => check_products(root, Path::new(d)),
-        None => check_products(root, &root.join("target/liella")),
+        Some(d) => check_products(root, Path::new(d), marker_profile(Path::new(d)).as_deref()),
+        None => {
+            let d = root.join("target/liella");
+            check_products(root, &d, marker_profile(&d).as_deref())
+        }
     }
 }
 
@@ -733,5 +1008,89 @@ mod tests {
         assert_eq!(code.len(), 2);
         assert_eq!(bare_insn(&code[&0x1ed]), "punpcklbw %xmm0,%xmm0");
         assert_eq!(code.get(&0x231), None, "another member's instruction is not read");
+    }
+
+    /// A probe link: grouped hot text 0x401000-0x411200 (windows 0x40, 0x41), crt1's `_start` before it, and the
+    /// libc.a function `cold_b` of `size` bytes at `at` in cold text.
+    fn probe(at: u64, size: u64) -> (String, String) {
+        let map = format!(
+            "Linker script and memory map\n\n.text           0x0000000000400100   0x400000\n \
+             .text          0x0000000000400100       0x40 /x/liella-crt1.o\n \
+             .text.sorted.h00001.__libc_start_main\n                0x0000000000401000      0x200 /x/libc.a(start.o)\n \
+             .text.sorted.h00002.foo 0x0000000000401200 0x10000 /x/libc.a(foo.o)\n \
+             .text.empty    0x0000000000411200        0x0 /x/libc.a(e.o)\n \
+             .text.cold_b   0x{at:016x} 0x{size:x} /x/libc.a(b.o)\n"
+        );
+        let nm = format!(
+            "0000000000401000 0000000000000200 T __libc_start_main\n0000000000401200 0000000000010000 t foo\n\
+             0000000000400100 T _start\n{at:016x} {size:016x} t cold_b\n0000000000600000 0000000000000010 D data_obj\n\
+             0000000000400140 0000000000000008 T _ZN4core3fmt5write17h0123456789abcdefE\n"
+        );
+        (nm, map)
+    }
+
+    fn startup_row(rule: &str) -> Contract {
+        Contract { kind: "startup-text-windows".into(), subjects: vec!["libc.a".into(), "liella-crt1.o".into()], decision: "D-X.49".into(), ..row("STARTUP-TEXT-WINDOWS", rule) }
+    }
+
+    fn keys() -> Vec<String> {
+        ["_start", "__libc_start_main", "foo", "cold_b", "absent"].map(String::from).to_vec()
+    }
+
+    #[test]
+    fn startup_nm_and_map_are_read_by_key_and_section() {
+        // no spec clause: tooling (D-X.49).
+        let (nm, map) = probe(0x6f9680, 0x1476);
+        let f = parse_nm(&nm);
+        assert_eq!(f["_start"], vec![Func { start: 0x400100, end: 0x400101, name: "_start".into() }], "a size-less entry counts its entry byte");
+        assert!(f.contains_key("_ZN4core3fmt5writeE"), "keys are the build-stable keys of hot-text.list");
+        assert!(!f.contains_key("data_obj"), "objects are not text");
+        let s = parse_map(&map);
+        let names: Vec<&str> = s.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, [".text", ".text.sorted.h00001.__libc_start_main", ".text.sorted.h00002.foo", ".text.cold_b"], "a wrapped name reads the next line; empty sections are dropped");
+        assert_eq!((s[1].start, s[1].end, s[1].file.as_str()), (0x401000, 0x401200, "/x/libc.a(start.o)"));
+        assert!(is_hot_section(".text.sorted.h00002.foo") && is_hot_section(".text.hot.foo"));
+        assert!(!is_hot_section(".text.sorted.foo") && !is_hot_section(".text.cold_b"));
+        assert_eq!(startup_keys("# c\na\tstartup\tfast,release\nb\tstartup\trelease\n", "fast").unwrap(), ["a"]);
+        assert!(startup_keys("a\n", "fast").is_err(), "a line without tier and profiles is an error");
+    }
+
+    #[test]
+    fn startup_windows_hold_within_the_budget_and_fail_one_below() {
+        // no spec clause: tooling (D-X.49); the origin/next case of finding 1 (cold function in one window).
+        let (nm, map) = probe(0x6f9680, 0x1476);
+        let t = startup_text(&keys(), &parse_nm(&nm), &parse_map(&map), STARTUP_WINDOW).unwrap();
+        assert_eq!(t.windows.keys().copied().collect::<Vec<_>>(), [0x40, 0x41, 0x6f]);
+        assert_eq!(t.missing, ["absent"]);
+        assert!(t.straddling.is_empty());
+        let names: Vec<&str> = t.ungrouped.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["cold_b"], "crt1's _start is not a libc.a function");
+        let c = startup_row("window=65536; budget-fast=3; grouped=warn; keys=k");
+        let ok = startup_verdict(&c, &t, STARTUP_WINDOW, 3, false, "fast").unwrap();
+        assert!(ok.contains("3 start-up text windows") && ok.contains("outside it: 0x6f0000"), "{ok}");
+        assert!(ok.contains("WARNING STARTUP-TEXT-GROUPED") && ok.contains("cold_b"), "{ok}");
+        let e = startup_verdict(&c, &t, STARTUP_WINDOW, 2, false, "fast").unwrap_err().join("\n");
+        assert!(e.contains("STARTUP-TEXT-WINDOWS BROKEN: 3 windows") && e.contains("> budget-fast 2"), "{e}");
+        assert!(e.contains("window 0x6f0000 (outside the hot group): cold_b 0x6f9680-0x6faaf6"), "{e}");
+        let g = startup_verdict(&c, &t, STARTUP_WINDOW, 3, true, "fast").unwrap_err().join("\n");
+        assert!(g.contains("BROKEN: STARTUP-TEXT-GROUPED: 1 start-up functions of libc.a outside the hot group") && g.contains("cold_b (0x6f9680)"), "{g}");
+    }
+
+    #[test]
+    fn a_cold_startup_function_across_a_window_boundary_fails() {
+        // no spec clause: tooling (D-X.49); the LIBM-F64-LOG-FAMILY-WIRE-2 case of finding 1.
+        let (nm, map) = probe(0x6ef200, 0x1476);
+        let t = startup_text(&keys(), &parse_nm(&nm), &parse_map(&map), STARTUP_WINDOW).unwrap();
+        assert_eq!(t.windows.keys().copied().collect::<Vec<_>>(), [0x40, 0x41, 0x6e, 0x6f]);
+        assert_eq!(t.straddling.len(), 1);
+        let c = startup_row("window=65536; budget-fast=9; grouped=warn; keys=k");
+        let e = startup_verdict(&c, &t, STARTUP_WINDOW, 9, false, "fast").unwrap_err().join("\n");
+        assert!(e.contains("BROKEN: cold_b 0x6ef200-0x6f0676: outside the hot group, straddles the 65536-byte window boundary 0x6f0000"), "{e}");
+        assert!(!e.contains("BROKEN: 4 windows"), "within the budget, only the straddle fails: {e}");
+        // A function inside the group may cross a boundary: the group's windows are counted anyway.
+        let (nm, map) = probe(0x6f9680, 0x1476);
+        let t = startup_text(&keys(), &parse_nm(&nm), &parse_map(&map), STARTUP_WINDOW).unwrap();
+        assert!(t.windows[&0x40].iter().any(|f| f.name == "foo") && t.windows[&0x41].iter().any(|f| f.name == "foo") && t.straddling.is_empty());
+        assert!(startup_text(&keys(), &parse_nm(&nm), &[], STARTUP_WINDOW).is_err(), "no hot group: cannot check");
     }
 }

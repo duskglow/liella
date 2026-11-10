@@ -273,6 +273,12 @@ const _: () = assert!(FORECAST_CAP >> 4 == SMALL_CLASS.len() - 1 && CLASSES[31] 
 const _: () = assert!(C_SLABS + SLAB_HINTS <= CACHE_WORDS && SLAB_HINTS.is_power_of_two());
 const CACHE_BYTES: usize = CACHE_WORDS * 8;
 const CACHE_CHUNK: usize = 64 << 10;
+/// Generation 0 of the segment registry and of the cache table at most (D-3.19): 128 segments
+/// (2 GiB of slabs) and 64 caches, so that the three generation-0 tables (cache addresses,
+/// segment bases, segment hash at twice the entries) share one page; later generations double.
+const FIRST_SEGS: usize = 128;
+const FIRST_CACHES: usize = 64;
+const _: () = assert!((FIRST_CACHES + 3 * FIRST_SEGS) * 8 <= PAGE && FIRST_SEGS.is_power_of_two() && FIRST_CACHES.is_power_of_two());
 
 /// The size classes: 16-byte steps to 128, then four per doubling up to 64 KiB.
 pub const CLASSES: [usize; 44] = [
@@ -471,6 +477,10 @@ pub struct Heap {
     /// Unused room for caches in the current chunk: (address, bytes left).
     cache_room: AtomicUsize,
     cache_left: AtomicUsize,
+    /// The first segment, mapped by [`Heap::first_reservation`] and not yet registered (its
+    /// base, 0 for none), and the shard it was mapped for.
+    spare_seg: AtomicUsize,
+    spare_shard: AtomicUsize,
     large: RawMutex,
     /// (address, length) pairs, one hash table per generation (generation g has
     /// `large_cap << g` slots); a block is entered in the newest; lookups search all.
@@ -733,6 +743,8 @@ impl Heap {
             ncaches: AtomicUsize::new(0),
             cache_room: AtomicUsize::new(0),
             cache_left: AtomicUsize::new(0),
+            spare_seg: AtomicUsize::new(0),
+            spare_shard: AtomicUsize::new(0),
             large: RawMutex::new(),
             large_table: [const { AtomicUsize::new(0) }; GENS],
             large_used: [const { AtomicUsize::new(0) }; GENS],
@@ -778,7 +790,9 @@ impl Heap {
 
     /// Choose the registries' capacities once (T14): the maxima, or under an address-space limit
     /// `L` registries sized to it (segments for `L`, a cache per MiB of `L`, a large block per
-    /// page of `L`), so that their reservations, which count against `L`, stay small.
+    /// page of `L`), so that their reservations, which count against `L`, stay small. The
+    /// segment registry and the cache table start at most at [`FIRST_SEGS`] and
+    /// [`FIRST_CACHES`] either way (D-3.19).
     fn choose_capacities<P: Pages>(&self, pages: &P) {
         if self.seg.cap.load(Acquire) != 0 {
             return;
@@ -795,9 +809,43 @@ impl Heap {
             ),
             _ => (MAX_SEGS, MAX_CACHES, LARGE_CAP),
         };
+        // Generation 0 of the segments and caches fits one page (D-3.19); they grow by generations.
+        let (segs, caches) = (segs.min(FIRST_SEGS), caches.min(FIRST_CACHES));
         let _ = self.caches.compare_exchange(0, caches, AcqRel, Acquire);
         let _ = self.large_cap.compare_exchange(0, large, AcqRel, Acquire);
         let _ = self.seg.cap.compare_exchange(0, segs, AcqRel, Acquire);
+    }
+
+    /// The heap's first reservation (D-3.19), under `grow` after [`Heap::choose_capacities`]:
+    /// one mapping holds the first segment (at its 16 MiB boundary), then one page with the
+    /// generation-0 cache table, segment bases and segment hash, then the first cache chunk.
+    /// Separately they were five mappings (and their pages three more faults). Does nothing once
+    /// any of them exists, without segments, or when the mapping fails (each part is then
+    /// mapped on its own as before). Inlined into its two cold callers: out of line it took a
+    /// text page fault of its own on the first allocation.
+    #[inline(always)]
+    fn first_reservation<P: Pages>(&self, pages: &P, shard: usize) {
+        if self.no_segments.load(Relaxed)
+            || self.nsegs.load(Relaxed) != 0
+            || self.seg.ngens.load(Relaxed) != 0
+            || self.cache_ngens.load(Relaxed) != 0
+            || self.cache_left.load(Relaxed) != 0
+        {
+            return;
+        }
+        let (caches, segs) = (self.caches.load(Relaxed), self.seg.cap.load(Relaxed));
+        let tables = ((caches + 3 * segs) * 8).next_multiple_of(PAGE);
+        let Some(base) = pages.map(SEG + tables + CACHE_CHUNK, SEG, self.node_for(shard)) else { return };
+        let tab = base + SEG;
+        self.cache_tab[0].store(tab, Release);
+        self.cache_ngens.store(1, Release);
+        self.seg.bases[0].store(tab + caches * 8, Release);
+        self.seg.hash[0].store(tab + (caches + segs) * 8, Release);
+        self.seg.ngens.store(1, Release);
+        self.cache_room.store(tab + tables, Relaxed);
+        self.cache_left.store(CACHE_CHUNK, Relaxed);
+        self.spare_shard.store(shard, Relaxed);
+        self.spare_seg.store(base, Relaxed);
     }
 
     fn seg_base<P: Pages>(&self, pages: &P, idx: usize) -> usize {
@@ -851,6 +899,7 @@ impl Heap {
         if self.no_segments.load(Relaxed) {
             return None;
         }
+        self.first_reservation(pages, shard);
         let segs = self.seg.cap.load(Relaxed);
         let n = self.nsegs.load(Relaxed);
         let (g, o) = gen_of(n, segs);
@@ -871,7 +920,14 @@ impl Heap {
             self.seg.hash[g].store(hash, Release);
             self.seg.ngens.store(g + 1, Release);
         }
-        let base = pages.map(SEG, SEG, self.node_for(shard))?;
+        // The first reservation's segment, unless it was mapped for another node.
+        let spare = self.spare_seg.load(Relaxed);
+        let base = if spare != 0 && self.node_for(self.spare_shard.load(Relaxed)) == self.node_for(shard) {
+            self.spare_seg.store(0, Relaxed);
+            spare
+        } else {
+            pages.map(SEG, SEG, self.node_for(shard))?
+        };
         pages.words(base, 1)[0].store(w64(shard) + 1, Release);
         pages.words(self.seg.bases[g].load(Relaxed), len)[o].store(w64(base), Release);
         let table = pages.words(self.seg.hash[g].load(Relaxed), len * 2);
@@ -1065,6 +1121,7 @@ impl Heap {
     fn new_cache<S: Sys, P: Pages>(&self, sys: &S, pages: &P, shard: usize) -> Option<u64> {
         let _g = self.grow.lock(sys);
         self.choose_capacities(pages);
+        self.first_reservation(pages, shard);
         let cap = self.caches.load(Relaxed);
         let n = self.ncaches.load(Relaxed);
         let (g, o) = gen_of(n, cap);

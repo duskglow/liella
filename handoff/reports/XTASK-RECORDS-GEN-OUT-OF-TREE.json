@@ -1,0 +1,34 @@
+{
+ "task": "XTASK-RECORDS-GEN-OUT-OF-TREE",
+ "model": "opus",
+ "tokens": null,
+ "result": "records-gen and kernel-index (and tables) write under target/records-views/ off the train; in place only with LIELLA_TRAIN=1 or --in-place; --check unchanged (D-X.59)",
+ "branch": "task/xtask-records-gen-out-of-tree",
+ "head": null,
+ "gate": {
+  "affected": "pending: mei:xrgo1-gate (direct tier, --base origin/next) still running at hand-back",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "Ordering: ops/ci.py TRAIN_GENERATORS runs records-gen/kernel-index without LIELLA_TRAIN, so after this lands the train would regenerate nothing and its LIELLA_TRAIN=1 gate would go red",
+   "recommendation": "Before landing, change TRAIN_GENERATORS to ['cargo xtask records-gen --in-place', 'cargo xtask kernel-index --in-place'] (the current xtask ignores the extra argument, so this is safe now)"
+  }
+ ],
+ "informational": [
+  "developer-flow.md lines 254-255 sentence to replace is quoted in handoff/XTASK-RECORDS-GEN-OUT-OF-TREE.md",
+  "D-X.59.toml written by hand in canonical form (no cargo on agent host); records check passes"
+ ],
+ "refused": [],
+ "jobs": [
+  "mei:xrgo1-clippy",
+  "mei:xrgo1-static",
+  "mei:xrgo1-gate",
+  "mei:xrgo1-plants",
+  "mei:xrgo1-e2e"
+ ],
+ "improvement": "Generators whose output is train-owned should default to an untracked location; the same pattern fits any other @generated train-owned file",
+ "next_step": "coordinator: switch TRAIN_GENERATORS to --in-place, collect mei:xrgo1-gate, land, then update developer-flow.md lines 254-255",
+ "report_file": "handoff/XTASK-RECORDS-GEN-OUT-OF-TREE.md"
+}
