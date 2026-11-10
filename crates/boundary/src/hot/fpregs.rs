@@ -106,14 +106,14 @@ impl<A: Pin, B: Pin> Pin for (A, B) {
 /// caller's range test; callers convert only a normal, finite `x` (exact, raises nothing).
 #[inline(always)]
 pub(crate) fn widen(x: f32) -> f64 {
+    // `inout` needs one type in and out (f32 and f64 differ in size), so the one register is named:
+    // `%xmm0`, where the psABI passes the export's `float` argument.
     let y: f64;
     // UNSAFE(machine-register): the in-place widening (coordinator ruling #4434, D-10.79).
     #[allow(unsafe_code)]
     // UNSAFE(machine-register) SAFETY: the template is one register-to-register `cvtss2sd` on the
     // one `xmm` operand: no memory, flag, stack or control effect, and only that register written.
     unsafe {
-        // `inout` needs one type in and out (f32 and f64 differ in size), so the one register is named:
-        // `%xmm0`, where the psABI passes the export's `float` argument.
         core::arch::asm!("cvtss2sd xmm0, xmm0", in("xmm0") x, lateout("xmm0") y, options(nomem, nostack, preserves_flags)); // ARCH(x86_64): SSE2 scalar widening; aarch64 uses `fcvt` (A-4)
     }
     y

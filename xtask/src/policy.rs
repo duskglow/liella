@@ -113,7 +113,7 @@ const WIDEN_OPERANDS: [&str; 2] = ["in(\u{22}xmm0\u{22})", "lateout(\u{22}xmm0\u
 
 /// The *machine-register* file's inline-assembly templates (`src` unstripped): every string
 /// literal of every invocation outside a comment (other than an explicit register's name, the
-/// literal right after `(`) must be [`BARRIER_TEMPLATE`], [`WIDEN_TEMPLATE`] or [`MXCSR_TEMPLATE`],
+/// literal of an `in(`/`out(` operand) must be [`BARRIER_TEMPLATE`], [`WIDEN_TEMPLATE`] or [`MXCSR_TEMPLATE`],
 /// the MXCSR store must occur exactly once, a barrier must be `pure, nomem` (no memory effect) and
 /// a widening `nomem` on [`WIDEN_OPERANDS`]; no other invocation names a register.
 /// One message per violation.
@@ -146,7 +146,12 @@ fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
         }
         // U+0022 is the quote: a quote character literal would read as a string to `strip`.
         let parts: Vec<&str> = text.split('\u{22}').collect();
-        let named_register = |k: usize| parts[k - 1].trim_end().ends_with('(');
+        // An explicit register is the literal of an `in(`/`out(` operand (also `lateout(`, `inout(`,
+        // `inlateout(`); the template follows `asm!(` and is not one.
+        let named_register = |k: usize| {
+            let before = parts[k - 1].trim_end();
+            before.ends_with("in(") || before.ends_with("out(")
+        };
         let literals: Vec<&str> = (1..parts.len()).step_by(2).filter(|&k| !named_register(k)).map(|k| parts[k]).collect();
         let names_register = (1..parts.len()).step_by(2).any(named_register);
         if names_register && !literals.contains(&WIDEN_TEMPLATE) {
