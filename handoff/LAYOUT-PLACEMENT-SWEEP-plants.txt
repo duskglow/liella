@@ -1,0 +1,5 @@
+# LAYOUT-PLACEMENT-SWEEP plants (D-X.52). Run: cargo xtask plants handoff/LAYOUT-PLACEMENT-SWEEP-plants.txt --dir <new RAM dir>
+# 1. BENCH-CASECMP-ALIGN-2's head fix reverted: a page-aligned start back to the generic loop (exact head test sends it to .Lcord_generic).
+lps-casecmp-head-generic | csys/src/machine/scan.S | perl:s/(liella_machine_casecmp_ord_avx2:.*?)jbe \.Lcord_head\n/$1jbe .Lcord_generic\n/s | cargo test -p liella-boundary --test placement_sweep | msg:strn?casecmp: [0-9]+ instructions at head placement
+# 2. A bench buffer reordered: a64 moved before the 64-byte lead, so it starts at page offset 0.
+lps-bench-reorder | bench/c/cbench_hot.c | perl:s/(    char lead\[64\];\n)(    char a64\[128\][^\n]*\n)/$2$1/ | cargo xtask bench --compare --build-only --only cbench_hot | msg:a64 at page offset 0
