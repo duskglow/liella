@@ -1,8 +1,25 @@
 # LIBM-F32-ONEPASS-REST: handoff (binary32 functions onto the one-pass `float` path)
 
-State: branch `task/libm-f32-onepass-rest-4` (run 4; stacks on run 3's 3db6e91b2, no merge, no code change this run).
-Role kanon:~/w/kn1. Decisions in force: D-10.72 (extends D-10.63 under D-10.67, D-10.68). Plan rows to read: D-10.63,
-D-10.67, D-10.68, D-10.72. Reports: handoff/reports/LIBM-F32-ONEPASS-REST{,-2,-3,-4}.json.
+State: branch `task/libm-f32-onepass-rest-5` (run 5; stacks on run 4's 463e43fcd, no merge, no code change in runs 4-5).
+Role mei:~/w/s2. Decisions in force: D-10.72 (extends D-10.63 under D-10.67, D-10.68); hot text: D-X.56, ruling #4357.
+Plan rows to read: D-10.63, D-10.67, D-10.68, D-10.72, D-X.56. Reports: handoff/reports/LIBM-F32-ONEPASS-REST{,-2,-3,-4,-5}.json.
+Math work is finished (owner ruling #4424); powf moved to LIBM-F32-POWF and sinf on Ivy Bridge to LIBM-SINF-IVB-RATCHET (ruling #4425).
+
+## Run 5: CI train 572 hot-text red (2 dead fast-profile keys): does not reproduce on this branch
+* CI (merge becfe49f6 = next + this branch + DL-MAP-PROBE, LIBM-F64-QUICK-PROFILE, LIBM-LD-TRIG-INVERSE-INT,
+  CODEMAP-TRAIN-OWNED, XTASK-SMALL-FIXES-1110): `hot-text.list: 2 key(s) match no function section of the fast-profile
+  libc.a`: `Features::detect<CSysImpl<false>>` (startup) and `liella_boundary::iconv::load` (extra). Both are code in
+  liella_boundary. This branch changes that crate only in `posix/s10_math_gen.rs` (8 lines). The train also changed
+  `crates/rt/src/start.rs` and `crates/boundary/src/ld.rs`. None of the other train stories is on origin/next yet.
+* This branch alone, unchanged list, on mei (the CI host class), clean environment:
+  - fast `cargo xtask so` (mei:libm-f32-onepass-rest-5-lint0, rc 0): no dead key, STARTUP-TEXT-WINDOWS 5 of budget 5.
+  - release `LIELLA_FULL_PROFILE=1 cargo xtask so` (mei:libm-f32-onepass-rest-5-relso, rc 0): STARTUP-TEXT-WINDOWS 4
+    of budget 4, all 11 layout contracts hold.
+* `regen.sh . --build` per D-X.56 (mei:libm-f32-onepass-rest-5-regen, rc 1): the fast pass found no dead key, but it
+  re-ordered 38 lines of the list. The release pass then broke STARTUP-TEXT-WINDOWS (5 windows > budget-release 4). By
+  ruling #4357 (repair only dead keys, keep the order), the list stays unchanged: this branch has no dead key to repair.
+* The dead keys come from combining branches. Repairing them needs that combined tree, and this story may not merge.
+  See RULING NEEDED in handoff/reports/LIBM-F32-ONEPASS-REST-5.json.
 
 ## Done (all runs)
 * Runs 1-2: exp10f, logf, log2f, log10f on the one-pass path (`fast32::exp10_onepass_any`, `fast32::log_onepass`),
@@ -61,10 +78,12 @@ sinf tail, not the operand build; not investigated (budget).
   that, or prove the kernel exact there.
 
 ## Next (in order)
-1. powf: profile first: validation/wl_trace.sh on a powf percall case (split envelope / dispatch / `round` /
-   `pow_core`), write the split here, then design from it (notes above).
-2. Optional: sinf on Ivy Bridge (per-call trace of sinf vs cosf in the branch build) if the ruling asks for it.
+1. Coordinator: find which combination kills the two keys (this branch alone on next, or the train without this
+   branch). Repair them in the tree that shows them: `regen.sh . --build` in the fast profile, keeping only the
+   dead-key repair if the release windows break (ruling #4357).
+2. Math is done here: powf is LIBM-F32-POWF (notes above), sinf on Ivy Bridge is LIBM-SINF-IVB-RATCHET.
 
 ## Do not redo
 * The exhaustive sweeps of all nine functions (code unchanged since). The counts and timings above (code unchanged).
-* The partial-write CI red (fixed in run 2) and the hot-text regen (not needed on mei in run 3).
+* The partial-write CI red (fixed in run 2). The hot-text regen on this branch alone (run 5: no dead key in either
+  profile; a full regen re-orders the list and breaks the release start-up windows).
