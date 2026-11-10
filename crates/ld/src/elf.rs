@@ -112,6 +112,12 @@ pub mod dt {
     pub const RPATH: u64 = 15;
     /// Type of the PLT relocations (`DT_RELA` or `DT_REL`).
     pub const PLTREL: u64 = 20;
+    /// The object has relocations against non-writable segments (gABI `DT_TEXTREL`).
+    pub const TEXTREL: u64 = 22;
+    /// Flag word (gABI `DT_FLAGS`; [`DF_TEXTREL`] is the text-relocation bit).
+    pub const FLAGS: u64 = 30;
+    /// `DF_TEXTREL` in `DT_FLAGS` (gABI).
+    pub const DF_TEXTREL: u64 = 4;
     /// Address of the PLT relocations.
     pub const JMPREL: u64 = 23;
     /// Library search path (string table offset).

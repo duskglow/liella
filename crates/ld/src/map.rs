@@ -65,6 +65,8 @@ pub enum MapError {
     BadSegments,
     /// A segment asks to be writable and executable at once (design §3).
     WriteExec,
+    /// `PT_GNU_STACK` asks for an executable stack (R14-13, DL-10): refused, never honoured.
+    ExecutableStack,
     /// A fixed-address program's range is not free (or not in user space).
     Placement,
     /// A mapping system call failed (out of memory or address space).
@@ -81,6 +83,7 @@ impl MapError {
             MapError::TooManySegments => b"too many loadable segments\n",
             MapError::BadSegments => b"malformed loadable segments\n",
             MapError::WriteExec => b"a loadable segment asks to be writable and executable\n",
+            MapError::ExecutableStack => b"the object asks for an executable stack (PT_GNU_STACK with PF_X); refused\n",
             MapError::Placement => b"the fixed load address is not available\n",
             MapError::System => b"cannot map the object (out of memory or address space)\n",
         }
@@ -241,6 +244,9 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     if !page.is_power_of_two() {
         return Err(MapError::BadSegments);
     }
+    if executable_stack(elf.program_headers().map(|p| (p.p_type, p.flags))) {
+        return Err(MapError::ExecutableStack);
+    }
     if elf.program_headers().filter(|p| p.p_type == pt::LOAD).count() > LOADS_MAX {
         return Err(MapError::TooManySegments);
     }
@@ -283,6 +289,12 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     };
     let phdr = phdr.ok_or(MapError::NoSegments)?;
     Ok(Plan { span, align, first, fixed: h.e_type == ET_EXEC, phdr, phnum: h.phnum, entry: h.entry, relro, page })
+}
+
+/// Whether program headers given as (`p_type`, `p_flags`) pairs ask for an executable stack: a
+/// `PT_GNU_STACK` with `PF_X` (R14-13). An object without `PT_GNU_STACK` does not ask.
+pub fn executable_stack(headers: impl IntoIterator<Item = (u32, u32)>) -> bool {
+    headers.into_iter().any(|(t, f)| t == pt::GNU_STACK && f & PF_X != 0)
 }
 
 /// Parse `file` (a whole object file) and plan it.
