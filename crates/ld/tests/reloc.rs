@@ -60,8 +60,8 @@ fn build(d: &Path, out: &str, src: &str, flags: &[&str]) -> PathBuf {
     let o = d.join(out);
     let r = Command::new("cc")
         .args(["-nostdlib", "-O1", "-fno-stack-protector", "-fcf-protection=none", "-Wl,-z,relro", "-Wl,-z,now", "-Wl,--hash-style=gnu"])
-        .args(flags)
         .arg(&c)
+        .args(flags)
         .arg("-o")
         .arg(&o)
         .output()
