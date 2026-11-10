@@ -72,11 +72,15 @@ pub trait Arch {
     ///
     /// [`ApplyError::Overflow`] when the value does not fit a narrower field, and
     /// [`ApplyError::NoArithmetic`] as above.
-    fn apply(kind: RelocKind, o: Operands) -> Result<Option<Field>, ApplyError>;
+    /// The default (an architecture without a relocation table, such as a test double) has none.
+    fn apply(kind: RelocKind, o: Operands) -> Result<Option<Field>, ApplyError> {
+        let _ = (kind, o);
+        Err(ApplyError::NoArithmetic)
+    }
     /// The `PT_GNU_PROPERTY` property types this architecture knows (design §0a "Arch-only
     /// properties"), each with its name. The loader parses them and ignores them (L14-12); a type not
     /// listed is ignored as well.
-    const PROPERTIES: &'static [(u32, &'static str)];
+    const PROPERTIES: &'static [(u32, &'static str)] = &[];
 }
 
 /// The inputs of a relocation's arithmetic, in the psABI's notation.
