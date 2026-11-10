@@ -238,6 +238,10 @@ fn bench_rows_reach_the_route_only_where_measured() {
     for k in [1, 2, 4, 5] {
         assert_eq!(sq.get(k), Some(&[0, 0]), "{}: the plain bench row leaves the in-place tier", names.get(k).unwrap_or(&"?"));
     }
+    // LIBM-CPLX-LOG-SQRT-4: the exact-zero imaginary parts are answered in place (the axis paths).
+    for k in [0, 1, 2, 4, 5] {
+        assert_eq!(ax.get(k), Some(&[0, 0]), "{}: the _axis bench row leaves the in-place tier", names.get(k).unwrap_or(&"?"));
+    }
 }
 
 /// The 10^7-operand sweep per function (`cargo test --release -p liella-math --lib -- --ignored

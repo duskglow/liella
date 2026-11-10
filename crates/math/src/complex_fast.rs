@@ -120,8 +120,27 @@ fn parts(x: f64, y: f64) -> Option<([(Dd, f64); 2], i32)> {
 $(#[$a])*
 $(#[$i])*
 pub fn cexp_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    let ([(re, er), (im, ei)], m) = parts(x, y)?;
+    let Some(([(re, er), (im, ei)], m)) = parts(x, y) else {
+        return axis(x, y);
+    };
     Some((round(re, er, m, Rounding::Nearest)?, round(im, ei, m, Rounding::Nearest)?))
+}
+
+/// `cexp(x ± 0i) = (e^x, ±0)` for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74; C Annex
+/// G.6.3.1: the imaginary part is `e^x·sin(±0)`): `e^x` from the real function's in-place kernel
+/// (correctly rounded, normal and finite for `2^-60 <= |x| < 708`, inexact raised in hardware),
+/// and `cexp(±0 ± 0i) = (1, ±0)` exact. Out of line: only the tier's declines reach it.
+$(#[$a])*
+#[inline(never)]
+fn axis(x: f64, y: f64) -> Option<(f64, f64)> {
+    use $exp as ek;
+    if y != 0.0 || !(0.0..708.0).contains(&dd::abs(x)) {
+        return None;
+    }
+    if x == 0.0 {
+        return Some((1.0, y));
+    }
+    Some((ek::exp_nearest(x)?, y))
 }
     };
 }
@@ -321,8 +340,67 @@ fn round_root(p: Dd, mode: Rounding) -> Option<f64> {
 /// `csqrt(x + iy)` to nearest for the boundary's in-place entry, `sqrt` the hardware root.
 #[inline(always)]
 pub fn csqrt_nearest(x: f64, y: f64, sqrt: impl Fn(f64) -> f64) -> Option<(f64, f64)> {
-    let [re, im] = csqrt_parts(x, y, &sqrt)?;
+    let Some([re, im]) = csqrt_parts(x, y, &sqrt) else {
+        return csqrt_axis(x, y, &sqrt);
+    };
     Some((round_root(re, Rounding::Nearest)?, round_root(im, Rounding::Nearest)?))
+}
+
+/// `v` (positive) with the sign bit of `s`.
+#[inline(always)]
+fn with_sign(v: f64, s: f64) -> f64 {
+    f64::from_bits(v.to_bits() | (s.to_bits() & (1 << 63)))
+}
+
+/// Whether `v` is a normal finite nonzero `double` (either sign).
+#[inline(always)]
+fn normal(v: f64) -> bool {
+    (f64::MIN_POSITIVE..=f64::MAX).contains(&dd::abs(v))
+}
+
+/// `csqrt` on an axis for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74): one part an exact
+/// zero, the other normal. `csqrt(x ± 0i)` is `(√x, ±0)` for `x > 0` and `(+0, ±√|x|)` for
+/// `x < 0`; `csqrt(±0 + iy)` is `(t, t)` with the sign of `y` on the second, `t = √(|y|/2)`
+/// (`|y|/2` exact for `|y| >= 2^-1021`) (C Annex G.6.4.2 and conjugate symmetry). Each part is
+/// one correctly rounded hardware root, which raises inexact exactly when it is inexact and
+/// nothing else on a normal operand. Out of line: only the tier's declines reach it.
+#[inline(never)]
+fn csqrt_axis(x: f64, y: f64, sqrt: &impl Fn(f64) -> f64) -> Option<(f64, f64)> {
+    if y == 0.0 && normal(x) {
+        let r = sqrt(dd::abs(x));
+        return Some(if x > 0.0 { (r, y) } else { (0.0, with_sign(r, y)) });
+    }
+    if x == 0.0 && normal(y) && dd::abs(y) >= 2.0 * f64::MIN_POSITIVE {
+        let t = sqrt(0.5 * dd::abs(y));
+        return Some((t, with_sign(t, y)));
+    }
+    None
+}
+
+/// `clog` on an axis for the in-place entry (LIBM-CPLX-LOG-SQRT-4, D-10.74): one part an exact
+/// zero, the other normal. `clog(x ± 0i) = (ln|x|, ±0)` for `x > 0` and `(ln|x|, ±π)` for
+/// `x < 0`; `clog(±0 + iy) = (ln|y|, π/2)` with the sign of `y` (C Annex G.6.3.2 and conjugate
+/// symmetry). `ln|v|` is the real logarithm's in-place kernel ([`fast64::log_nearest`]: correctly
+/// rounded, inexact raised in hardware, `|v| != 1`); `clog(1 ± 0i) = (+0, ±0)` is exact. At
+/// `|v| = 1` otherwise the real part is an exact zero and the rounded `π` or `π/2` would raise
+/// nothing, so those decline.
+#[inline(never)]
+fn clog_axis(x: f64, y: f64) -> Option<(f64, f64)> {
+    let (v, im) = if y == 0.0 && normal(x) {
+        if x == 1.0 {
+            return Some((0.0, y));
+        }
+        (x, if x > 0.0 { y } else { with_sign(core::f64::consts::PI, y) })
+    } else if x == 0.0 && normal(y) {
+        (y, with_sign(core::f64::consts::FRAC_PI_2, y))
+    } else {
+        return None;
+    };
+    let v = dd::abs(v);
+    if v == 1.0 {
+        return None;
+    }
+    Some((fast64::log_nearest(v)?, im))
 }
 
 /// The correctly rounded `double` root in software (the envelope's modes; no `sqrtsd` here).
@@ -368,7 +446,9 @@ fn clog_parts(x: f64, y: f64) -> Option<[(Dd, f64); 2]> {
 /// `clog(x + iy)` to nearest for the boundary's in-place entry.
 #[inline(always)]
 pub fn clog_nearest(x: f64, y: f64) -> Option<(f64, f64)> {
-    let [(re, er), (im, ei)] = clog_parts(x, y)?;
+    let Some([(re, er), (im, ei)]) = clog_parts(x, y) else {
+        return clog_axis(x, y);
+    };
     Some((round(re, er, 0, Rounding::Nearest)?, round(im, ei, 0, Rounding::Nearest)?))
 }
 
