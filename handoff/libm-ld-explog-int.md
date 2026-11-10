@@ -42,7 +42,7 @@
   instructions, each with long latency, so only timing can judge the ratio. The SELF-CHECK MISMATCH lines (log10l,
   expm1l) are in glibc's last bit: base and new agree with each other and with the 384-bit route (D-10.19).
 
-**Gate.** `libm-ld-explog-int-3-gate` (`affected --run --base origin/next`, shiki): GATE_RESULT.
+**Gate.** `libm-ld-explog-int-3-gate` (`affected --run --base origin/next`, shiki, code head 088977d4b): rc 0, 16 suites ok, 12131 passed / 0 failed, conformance 127 / 0; peak 15G (page cache included).
 
 **Not done (next story).**
 1. Profile one call per phase (validation/wl_trace.sh or wl_percall.sh): logl spends ~548 instructions and where

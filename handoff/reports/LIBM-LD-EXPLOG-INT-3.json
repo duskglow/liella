@@ -1,7 +1,7 @@
 {"task": "LIBM-LD-EXPLOG-INT-3", "model": "opus", "tokens": null,
  "result": "x87 exp/log integer tier: tables moved into cargo xtask tables (values unchanged, re-derived); logl 0.064% undecided was the test band (even distances below 1), now 0 of 4e7; 8 rows 38-55% fewer instructions than base; -2's red gate was static (bare pipe, already fixed)",
  "branch": "task/libm-ld-explog-int-3", "head": "088977d4b",
- "gate": {"affected": "GATE_RESULT", "peak": "GATE_PEAK"},
+ "gate": {"affected": "16 suites ok, 12131 passed / 0 failed; conformance 127 passed / 0 failed", "peak": "15G (page cache included) oom_kill=0 rc=0"},
  "accepted_first_attempt": null,
  "rulings": [],
  "informational": ["percall SELF-CHECK MISMATCH on log10l and expm1l is in glibc's last bit; Liella base and new agree with the 384-bit route (D-10.19)",
