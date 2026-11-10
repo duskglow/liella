@@ -1,0 +1,11 @@
+{"task": "HOTTEXT-REGEN-HOSTS-2", "model": "opus", "tokens": null,
+ "result": "hot-text list split per profile (a fast regen can no longer reorder the release layout: the cause of hrh-regen-keke-r1); clean probe environment taken from bbce0fc66; release regen on both host classes still to do",
+ "branch": "task/hottext-regen-hosts-2", "head": "f87303a3d",
+ "gate": {"affected": "keke:hottext-regen-hosts-2-gate running at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["the inherited list fails the release build on its own (STARTUP-TEXT-WINDOWS 5 > budget-release 4, keke:hottext-regen-hosts-2-lint0); no release build of it had passed on any host", "keke's default rustc outside the tree is 1.99.0 (the pin selects 1.99.1 inside it)"],
+ "refused": [],
+ "improvement": "a regen job should end with a release build check in its log; mei r2 reported rc 0 without one, which hid the release break",
+ "next_step": "collect the gate; LIELLA_FULL_PROFILE=1 regen.sh . --build on keke then mei (seeded), commit hot-text-release.list",
+ "report_file": "handoff/HOTTEXT-REGEN-HOSTS.md",
+ "jobs": ["keke:hottext-regen-hosts-2-lint3", "keke:hottext-regen-hosts-2-plants2", "keke:hottext-regen-hosts-2-gate"]}
