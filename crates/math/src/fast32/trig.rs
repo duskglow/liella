@@ -58,11 +58,31 @@ pub(super) const K6: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[
 ///
 /// The range test and the `double` operand come from x's bits (LIBM-F32-ONEPASS-REST, D-10.72): no
 /// `cvtss2sd`, whose partial write would wait for the register's previous writer (D-10.67), and a
-/// refused subnormal never reaches an FP instruction. |x| in [`TRIG_MIN`, `TRIG_MAX`) is a normal
+/// refused subnormal never reaches an FP instruction. The `float` sin, cos and tan exports take
+/// [`trig_core_with`] and an in-place `cvtss2sd` from the boundary instead (D-10.79). |x| in [`TRIG_MIN`, `TRIG_MAX`) is a normal
 /// `float` with biased exponent 101..=145, so its `double` is the same sign, the exponent rebased by
 /// 1023 - 127 = 896 and the 23 fraction bits moved up 29 places: exactly `f64::from(x)`.
 #[inline(always)]
 pub(super) fn trig_core(x: f32) -> Option<(f64, f64)> {
+    trig_core_with(x, widen_bits)
+}
+
+/// `f64::from(x)` built from x's bits, for a normal `float` with biased exponent 101..=145
+/// ([`trig_core`]'s range): the exponent rebased by 896, the fraction moved up 29 places.
+#[inline(always)]
+fn widen_bits(x: f32) -> f64 {
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff;
+    f64::from_bits(((u64::from(ab) << 29) + (896 << 52)) | (u64::from(b ^ ab) << 32))
+}
+
+/// [`trig_core`] with the `double` operand from `widen` (LIBM-SINF-IVB-RATCHET-2, D-10.79): the
+/// boundary passes one in-place `cvtss2sd` (`hot::fpregs::widen`; this crate forbids `unsafe`),
+/// one instruction against [`widen_bits`]' six, with no false dependency either. `widen` is called
+/// only after the range test, on a normal `float` with biased exponent 101..=145, and must return
+/// exactly `f64::from(x)` there (the tests pass `f64::from`).
+#[inline(always)]
+pub(super) fn trig_core_with(x: f32, widen: impl Fn(f32) -> f64) -> Option<(f64, f64)> {
     const LO: u32 = 0x3280_0000; // TRIG_MIN = 2^-26 as `float` bits
     const HI: u32 = 0x4900_0000; // TRIG_MAX = 2^19
     const _: () = assert!(f32::from_bits(LO) as f64 == TRIG_MIN && f32::from_bits(HI) as f64 == TRIG_MAX);
@@ -72,7 +92,7 @@ pub(super) fn trig_core(x: f32) -> Option<(f64, f64)> {
     if ab.wrapping_sub(LO) >= HI - LO {
         return None;
     }
-    let xd = f64::from_bits(((u64::from(ab) << 29) + (896 << 52)) | (u64::from(b ^ ab) << 32));
+    let xd = widen(x);
     let k = xd * INV_PI64 + SHIFT;
     let n = (k.to_bits() & 127) as usize; // n mod 128 (the low bits of 2^51 + n)
     let kf = k - SHIFT;
@@ -86,6 +106,27 @@ pub(super) fn trig_core(x: f32) -> Option<(f64, f64)> {
     let s = f64::from_bits(t::SIN_K_PI64[n][0]);
     let c = f64::from_bits(t::SIN_K_PI64[(n + 32) & 127][0]);
     Some((s + (s * cm + c * sr), c + (c * cm - s * sr)))
+}
+
+/// `sin_nearest` with the `double` operand from `widen` ([`trig_core_with`], D-10.79): the
+/// boundary passes the in-place `cvtss2sd`. Where `widen` is exact on [`trig_core`]'s range, the
+/// result and flags are those of `sin_nearest`.
+#[inline(always)]
+pub fn sin_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32> {
+    round(trig_core_with(x, widen)?.0, TRIG_DELTA, Rounding::Nearest)
+}
+
+/// [`sin_nearest_widen`] for cos.
+#[inline(always)]
+pub fn cos_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32> {
+    round(trig_core_with(x, widen)?.1, TRIG_DELTA, Rounding::Nearest)
+}
+
+/// [`sin_nearest_widen`] for tan = s/c.
+#[inline(always)]
+pub fn tan_nearest_widen(x: f32, widen: impl Fn(f32) -> f64) -> Option<f32> {
+    let (s, c) = trig_core_with(x, widen)?;
+    round(s / c, TAN_DELTA, Rounding::Nearest)
 }
 
 /// `sincosf`: one reduction for both results; each one that fails its rounding test is computed

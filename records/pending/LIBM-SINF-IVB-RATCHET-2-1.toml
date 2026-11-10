@@ -1,0 +1,13 @@
+id = "SR-NEW"
+section = "7"
+row = "`sinf`/`cosf` on Ivy Bridge: Estrin split of the fast path's cos polynomial"
+now = "NEGATIVE: z*K2 + z^2*(K4 + z*K6) (one multiply shorter on the dependency chain) measured +0.6% slower than Horner (sinf 28.00-28.16 vs 27.83-27.91 ns, Ivy Bridge, interleaved, 5 rounds); reverted"
+limit = "the loop is throughput-bound (IPC ~2, reservation station full 46% of cycles), not latency-bound: a shorter chain bought with an extra multiply loses"
+reason_class = "hardware / kernel"
+basis = "M"
+source = "LIBM-SINF-IVB-RATCHET (`handoff/libm-sinf-ivb-ratchet.md`), recorded by LIBM-SINF-IVB-RATCHET-2"
+tried = "Estrin (b04a91485, reverted a8acfbc5e); alignment, decoded-icache/LSD and stack placement ruled out by counters and an offset sweep"
+flag = "none"
+status = "active"
+body = '''
+'''

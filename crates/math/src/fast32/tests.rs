@@ -673,6 +673,23 @@ fn hyperbolic_hardware_sqrt_agrees_sampled() {
     assert!(taken > 150_000, "{taken}");
 }
 
+/// The `float` sin, cos and tan entries with the boundary's conversion (`f64::from`, what its
+/// in-place `cvtss2sd` computes) answer exactly where, and exactly what, the bit-built entries do,
+/// on every 16411th `float` encoding: the operand handed to the core is x's `double` and each
+/// entry rounds its own result. (No spec clause: LIBM-SINF-IVB-RATCHET-2, D-10.79.)
+#[test]
+fn trig_widen_entries_match_the_bit_built_ones() {
+    let mut taken = 0u64;
+    for x in (0..u32::MAX).step_by(16411).map(f32::from_bits) {
+        let pairs = [(sin_nearest(x), sin_nearest_widen(x, f64::from)), (cos_nearest(x), cos_nearest_widen(x, f64::from)), (tan_nearest(x), tan_nearest_widen(x, f64::from))];
+        for (k, (want, got)) in pairs.into_iter().enumerate() {
+            assert_eq!(got.map(f32::to_bits), want.map(f32::to_bits), "entry {k} at {:#010x}", x.to_bits());
+            taken += u64::from(got.is_some());
+        }
+    }
+    assert!(taken > 300_000, "{taken}");
+}
+
 /// asinhf and acoshf with the hardware root on every `float` (2^33 calls, its own job:
 /// LIBM-F32-HYPERBOLIC-4's accuracy check). (No spec clause.)
 #[test]

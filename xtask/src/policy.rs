@@ -104,11 +104,15 @@ const MXCSR_TEMPLATE: &str = "stmxcsr dword ptr [{p}]";
 /// The barrier's template: an assembler comment naming its one operand, no instruction (rustc
 /// refuses a template that does not use an operand, so a truly empty one cannot name the register).
 const BARRIER_TEMPLATE: &str = "/* {x} */";
+/// The widening's template (coordinator ruling #4434, D-10.79): one `cvtss2sd` whose destination is
+/// its source, so the merge waits only for the operand (D-10.67).
+const WIDEN_TEMPLATE: &str = "cvtss2sd {x}, {x}";
 
 /// The *machine-register* file's inline-assembly templates (`src` unstripped): every string
-/// literal of every invocation outside a comment must be [`BARRIER_TEMPLATE`] or
-/// [`MXCSR_TEMPLATE`], the MXCSR store must occur exactly once, and a barrier must be
-/// `pure, nomem` (no memory effect). One message per violation.
+/// literal of every invocation outside a comment must be [`BARRIER_TEMPLATE`], [`WIDEN_TEMPLATE`]
+/// or [`MXCSR_TEMPLATE`], the MXCSR store must occur exactly once, a barrier must be
+/// `pure, nomem` (no memory effect) and a widening `nomem` with its operand `inout(xmm_reg)`.
+/// One message per violation.
 fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let mut stores = 0usize;
@@ -148,8 +152,12 @@ fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
                 if !(text.contains("pure") && text.contains("nomem")) {
                     errors.push(format!("{rel}:{}: machine-register barrier must be `pure, nomem`", start + 1));
                 }
+            } else if *t == WIDEN_TEMPLATE {
+                if !(text.contains("nomem") && text.contains("inout(xmm_reg)")) {
+                    errors.push(format!("{rel}:{}: machine-register widening must be `nomem` on one `inout(xmm_reg)` operand", start + 1));
+                }
             } else {
-                errors.push(format!("{rel}:{}: instruction `{t}` outside the machine-register list (D-X.44: `{MXCSR_TEMPLATE}` once, and the barrier `{BARRIER_TEMPLATE}`)", start + 1));
+                errors.push(format!("{rel}:{}: instruction `{t}` outside the machine-register list (D-X.44: `{MXCSR_TEMPLATE}` once, the barrier `{BARRIER_TEMPLATE}`; D-10.79: `{WIDEN_TEMPLATE}`)", start + 1));
             }
         }
     }
@@ -1054,5 +1062,35 @@ mod reexec_tests {
     fn an_unguarded_reexec_with_an_allow_comment_passes() {
         let src = GOOD.replace("assert!(String::from_utf8_lossy(&o.stdout).contains(\"running 1 test\"));", "").replace("    let o", "    // reexec-guard: allow(reviewed)\n    let o").replace(", \"--include-ignored\"", "");
         assert!(reexec_findings(&src).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod machine_register_tests {
+    //! no spec clause: the machine-register template list (D-X.44, D-10.79) on synthetic sources.
+    use super::machine_register_templates;
+
+    const STORE: &str = "asm!(\"stmxcsr dword ptr [{p}]\", p = in(reg) &raw mut v, options(nostack));\n";
+
+    #[test]
+    fn the_in_place_widening_passes() {
+        let src = format!("{STORE}asm!(\"cvtss2sd {{x}}, {{x}}\", x = inout(xmm_reg) x => y, options(nomem, nostack));\n");
+        assert!(machine_register_templates("f.rs", &src).is_empty());
+    }
+
+    #[test]
+    fn a_widening_into_another_register_is_refused() {
+        let src = format!("{STORE}asm!(\"cvtss2sd {{y}}, {{x}}\", x = in(xmm_reg) x, y = out(xmm_reg) y, options(nomem, nostack));\n");
+        let f = machine_register_templates("f.rs", &src);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].contains("outside the machine-register list"), "{f:?}");
+    }
+
+    #[test]
+    fn a_widening_that_may_touch_memory_is_refused() {
+        let src = format!("{STORE}asm!(\"cvtss2sd {{x}}, {{x}}\", x = inout(xmm_reg) x => y, options(nostack));\n");
+        let f = machine_register_templates("f.rs", &src);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].contains("widening must be `nomem`"), "{f:?}");
     }
 }
