@@ -105,6 +105,9 @@ const PIE: &[&str] = &["-fPIE", "-pie"];
 const SHARED: &[&str] = &["-fPIC", "-shared"];
 const EXEC: &[&str] = &["-fno-pie", "-no-pie", "-static"];
 const ALIGN_2M: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
+/// A movable (`ET_DYN`) object with 2 MiB `p_align` whose first `PT_LOAD` is at 0x600000, not 0:
+/// GNU ld keeps `-shared` output `ET_DYN` under `-Ttext-segment` (with `-pie` it emits `ET_EXEC`).
+const MOVED_2M: &[&str] = &["-fPIC", "-shared", "-Wl,-e,_start", "-Wl,-Ttext-segment=0x600000", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
 const PAGE_16K: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x4000", "-Wl,-z,common-page-size=0x4000"];
 /// One ELF64 program header.
 fn ph(ty: u32, flags: u32, off: u64, at: u64, len: u64) -> Vec<u8> {
@@ -376,10 +379,14 @@ fn map_model_objects_from_the_linker() {
         return eprintln!("SKIP: no cc");
     }
     let d = dir("model");
-    for (name, flags, page) in [("pie", PIE, 4096), ("shared.so", SHARED, 4096), ("exec", EXEC, 4096), ("align2m", ALIGN_2M, 4096), ("page16k", PAGE_16K, 0x4000)] {
+    for (name, flags, page) in [("pie", PIE, 4096), ("shared.so", SHARED, 4096), ("exec", EXEC, 4096), ("align2m", ALIGN_2M, 4096), ("moved2m.so", MOVED_2M, 4096), ("page16k", PAGE_16K, 0x4000)] {
         // Non-zero bytes after the sections: a `.bss` tail left unzeroed then shows as non-zero even
         // where the linker's file ends inside the last segment's page.
         let mut f = std::fs::read(build(&d, name, flags, None)).unwrap();
+        if name == "moved2m.so" {
+            let first = headers(&f)[loads(&f)[0]].vaddr;
+            assert_eq!((u16::from_le_bytes([f[16], f[17]]), first), (3, 0x60_0000), "moved2m.so: not ET_DYN at 0x600000");
+        }
         f.resize(f.len() + 0x1_0000, 0xaa);
         check_model(name, &f, page);
     }
@@ -614,7 +621,7 @@ fn check_maps(name: &str, cmd: &mut Command, align: u64, fixed: Option<u64>) {
 fn map_proc_self_maps_of_loaded_programs() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
     let d = dir("maps");
-    for (name, flags, align, fixed) in [("pie", PIE, 4096, None), ("align2m", ALIGN_2M, 0x20_0000, None), ("exec", &["-fno-pie", "-no-pie"][..], 4096, Some(0x40_0000))] {
+    for (name, flags, align, fixed) in [("pie", PIE, 4096, None), ("align2m", ALIGN_2M, 0x20_0000, None), ("moved2m", MOVED_2M, 0x20_0000, None), ("exec", &["-fno-pie", "-no-pie"][..], 4096, Some(0x40_0000))] {
         let prog = build(&d, name, flags, Some(&ld));
         for i in 0..4 {
             check_maps(&format!("{name} as ld.so PROG #{i}"), Command::new("timeout").arg("60").arg(&ld).arg(&prog), align, fixed);
