@@ -936,6 +936,7 @@ mod tests {
             let got: Vec<i32> = probe.iter().flat_map(|&c| classes.iter().map(move |&m| isw(c, m))).collect();
             let defined = iswctype(0x41, u64::from(Class::ALPHA.0));
             let v = core::ptr::from_ref(view()).expose_provenance();
+            let vw = with_view(|w| core::ptr::from_ref(w).expose_provenance());
             store_view(b, view_of(GLOBAL));
             let fresh = crate::zone::with_period(|p| {
                 let seen = *p == liella::time::Period::from_words(&[0; 3]);
@@ -949,6 +950,7 @@ mod tests {
             assert_eq!(got, want, "isw answers with garbage words");
             assert_eq!(defined, 1, "iswctype('A', alpha)");
             assert!(v != garbage(0), "view() used the garbage view word");
+            assert!(vw != garbage(0), "with_view() used the garbage view word");
             assert!(fresh, "with_period read the garbage cache words");
             assert_eq!(after, planted, "a word at 0x138-0x187 of a foreign block was written");
             assert_eq!(b.flags.load(Relaxed), flags, "the flag word of a foreign block was written");
