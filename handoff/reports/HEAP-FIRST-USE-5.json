@@ -13,4 +13,6 @@
  "improvement": "regen.sh should never inherit the caller's locale variables; a window-aware hot-text layout would stop each list change from sliding a 0-fault path across a 64 KiB boundary",
  "next_step": "window-aware placement of the time-path keys in xtask/src/hottext.rs (no straddle of a 64 KiB window), then gate + plants",
  "report_file": "handoff/HEAP-FIRST-USE-5.md",
- "jobs": ["hfu5-step0", "hfu5-head", "mei:hfu5-regen-skx2"]}
+ "evidence": ["hfu5-head (keke, rc 1: release 14/14, fast mktime red, counts)", "mei:hfu5-regen-skx2 (rc 101: release 14/14, fast mktime red)", "hfu5-basecheck", "hfu5-basefaults", "hfu5-fmap2", "mei:hfu5-fmapk"],
+ "superseded": ["hfu5-step0 (inherited head)", "mei:hfu5-regen-skx (before the regen.sh fix)", "hfu5-fmap (filter bug)"],
+ "jobs": ["hfu5-final-lint"]}
