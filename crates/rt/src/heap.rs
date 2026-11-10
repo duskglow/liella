@@ -821,7 +821,9 @@ impl Heap {
     /// generation-0 cache table, segment bases and segment hash, then the first cache chunk.
     /// Separately they were five mappings (and their pages three more faults). Does nothing once
     /// any of them exists, without segments, or when the mapping fails (each part is then
-    /// mapped on its own as before).
+    /// mapped on its own as before). Inlined into its two cold callers: out of line it took a
+    /// text page fault of its own on the first allocation.
+    #[inline(always)]
     fn first_reservation<P: Pages>(&self, pages: &P, shard: usize) {
         if self.no_segments.load(Relaxed)
             || self.nsegs.load(Relaxed) != 0
