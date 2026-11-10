@@ -2,7 +2,7 @@
 # catch the pure-logic plants without the product; the ld.so plant rebuilds it. page-literal-ldso is
 # equivalent on a host whose kernel gives AT_PAGESZ 4096 (every x86-64 kernel here): the seam itself is
 # planted in arch.rs and the 4096 literal in the mapper's .bss arithmetic is planted against 16 KiB pages.
-widened-permission | crates/ld/src/map.rs | lit:m.map_file(at(s.start), whole, s.prot, s.offset) ==> m.map_file(at(s.start), whole, if s.prot & PROT_EXEC == 0 { s.prot | PROT_WRITE } else { s.prot }, s.offset) | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
+widened-permission | crates/ld/src/map.rs | lit:m.map_file(at(s.start), whole, s.prot, s.offset) ==> m.map_file(at(s.start), whole, if s.prot & PROT_EXEC == 0 { s.prot ^ PROT_WRITE } else { s.prot }, s.offset) | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
 missed-unmap-on-failure | crates/ld/src/map.rs | lit:m.unmap(base, plan.span); ==> | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
 ignored-p-align | crates/ld/src/map.rs | lit:align = align.max(ph.align); ==> align = align.max(page); | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
 page-literal-arch | crates/ld/src/arch.rs | lit:Some(p) if p.is_power_of_two() && p >= Self::BASE_PAGE => p, ==> Some(p) if p.is_power_of_two() && p >= Self::BASE_PAGE => 4096, | cargo test -p liella-ld --test map | msg:map_page_size_from_auxv.*panicked

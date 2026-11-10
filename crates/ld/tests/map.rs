@@ -337,7 +337,10 @@ fn map_model_objects_from_the_linker() {
     }
     let d = dir("model");
     for (name, flags, page) in [("pie", PIE, 4096), ("shared.so", SHARED, 4096), ("exec", EXEC, 4096), ("align2m", ALIGN_2M, 4096), ("page16k", PAGE_16K, 0x4000)] {
-        let f = std::fs::read(build(&d, name, flags, None)).unwrap();
+        // Non-zero bytes after the sections: a `.bss` tail left unzeroed then shows as non-zero even
+        // where the linker's file ends inside the last segment's page.
+        let mut f = std::fs::read(build(&d, name, flags, None)).unwrap();
+        f.resize(f.len() + 0x1_0000, 0xaa);
         check_model(name, &f, page);
     }
     let f = std::fs::read(d.join("exec")).unwrap();
@@ -351,6 +354,7 @@ fn map_model_objects_from_the_linker() {
     // A read-only segment with .bss sharing its last file page (the data segment made read-only):
     // the file bytes copied, the rest zero, the page left read-only.
     let mut f = std::fs::read(d.join("pie")).unwrap();
+    f.resize(f.len() + 0x1_0000, 0xaa);
     let w = *loads(&f).iter().find(|&&i| headers(&f)[i].flags & 2 != 0).unwrap();
     let o = ph_at(&f, w) + 4;
     f[o..o + 4].copy_from_slice(&4u32.to_le_bytes());
