@@ -21,8 +21,9 @@ ranges, instructions per call; SSE2 = `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA`; gl
 | pow | 142.0 | 172.0 | 172.0 | 192.0 | 242.0 | 242.0 |
 | sin | 102.1 | 130.7 | 130.7 | 124.1 | 173.0 | 173.0 |
 
-Change 2's count is job `lfqp-count-after2` (log `~/work/LIBM-F64-QUICK-PROFILE/after2/percall-*.log` on keke):
-NOT READ by me at hand-back; expected exp FMA -1, SSE2 0.
+Change 2 (job `lfqp-count-after2`) measured exp FMA 88 (no gain) and SSE2 103.2 (+1): REVERTED (quick.rs restored
+from 21a894295; NEGATIVE result, record it in the saturation register). Final code = change 1 only. Final jobs:
+`lfqp-gate3` (started at hand-back), `lfqp-plants` and `lfqp-count-after` (ran on 21a894295, whose quick.rs is the final one).
 
 **Profile of one call** (`validation/wl_trace.sh --list`, call 11, keke; logs in scratch base/). Only the exported
 entry is a named symbol; the kernels are inlined or unnamed, and the `--list` output kept only the last ~60

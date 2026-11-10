@@ -19,7 +19,7 @@
 //!   4.6.4): `r2 = rh²`, `pa = rh·C3 + 1/2`, `pb = rh·C5 + C4`, `pc = r2·C6 + pb`,
 //!   `q = r2·(r2·pc + pa)`.
 //! * `y = T·(1 + r + q)`: `u = RN(th·rh)`; `th + u = yh + e1` by Fast2Sum (`|u| < th`);
-//!   `w = th·(rl + q) + (tl·rh + tl)`; `yl = (e1 + ul) + w` with `ul = th·rh − u` exactly by one
+//!   `w = th·(rl + q) + tl·(1 + rh)`; `yl = (e1 + ul) + w` with `ul = th·rh − u` exactly by one
 //!   FMA in the FMA build and `ul = 0` (dropped) in the SSE2 build; `(zh, zl)` = Fast2Sum of
 //!   `(yh, yl)` (Dekker 1971; Muller et al., Handbook of Floating-Point Arithmetic, 2nd ed. 2018).
 //! * Rounding: the one-sided test of [`super::near`] (de Dinechin, Lauter & Muller, RAIRO-ITA 41,
@@ -43,7 +43,7 @@
 //!    `2^-69.04`;
 //! 3. the low sum: `RN(rl + q)`, `RN(th·a)` (SSE2 only), the sum forming `w` and the one forming
 //!    `yl`, each `u·(qmax + 2^-62) = 2^-71.06`: 4 of them `2^-69.06` (SSE2), 3 `2^-69.47` (FMA);
-//!    `e1 + ul` and `tl·rh + tl`'s roundings (one with FMA, D-10.77; two in SSE2) act on `2^-52` quantities (`< 2^-104`);
+//!    `e1 + ul` and `tl·(1 + rh)`'s roundings act on `2^-52` quantities (`< 2^-104`);
 //! 4. neglected `rl·(e^rh − 1)`: `2^-70.53`; neglected `tl·(e^r − 1 − rh)`: `2^-71.06`;
 //! 5. truncation `R^7/7!·e^R`: `2^-72.00`;
 //! 6. reduction `|kd|·|ln2/128 − L1 − L2| + ` the two roundings forming `rl` (`<= 3·2^-80`, the
@@ -385,7 +385,7 @@ fn side<const X: bool>(kb: u64, rh: f64, rl: f64, q: f64) -> (f64, f64) {
     let u = th * rh;
     let yh = th + u;
     let e1 = (th - yh) + u;
-    let w = $ma(th, rl + q, $ma(tl, rh, tl));
+    let w = $ma(th, rl + q, tl * (1.0 + rh));
     let yl = (e1 + if X { $lox(th, rh, u) } else { $lo(th, rh, u) }) + w;
     let zh = yh + yl;
     (zh, (yh - zh) + yl)
