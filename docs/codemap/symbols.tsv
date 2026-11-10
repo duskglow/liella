@@ -2292,7 +2292,7 @@ liella_j1l_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3500	mr
 liella_jnf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3515	mret::elem
 liella_jnf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3535	mret::elem
 liella_jnl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3540	mret::elem
-liella_ld_start		crates/boundary/src/ld.rs:164	crate::bootstrap::relocate_image
+liella_ld_start		crates/boundary/src/ld.rs:166	crate::bootstrap::relocate_image
 liella_ldexpf128_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3557	mret::ret
 liella_ldexpf64x_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3580	mret::ret
 liella_ldexpl_bits	LIELLA_PRIVATE	crates/boundary/src/posix/s10_math_gen.rs:3585	mret::ret

@@ -223,7 +223,7 @@ fn search_pinned_sonames() {
     let mut own = search::PathBuf::default();
     assert!(search::prefixed(b"lib/libc.so.6", &mut own));
     let own = String::from_utf8(own.as_bytes().to_vec()).unwrap();
-    assert_eq!(candidates("libc.so.6", &[s], &ctx(true, Some(b"/env"), Some(&c))), [own.clone()]);
+    assert_eq!(candidates("libc.so.6", &[s], &ctx(true, Some(b"/env"), Some(&c))), std::slice::from_ref(&own));
     assert_eq!(candidates("libc.so.6", &[s], &ctx(false, Some(b"/env"), Some(&c))), ["/env/libc.so.6".to_string(), own]);
 }
 
