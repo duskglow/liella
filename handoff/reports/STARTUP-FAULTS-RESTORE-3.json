@@ -1,0 +1,25 @@
+{
+ "task": "STARTUP-FAULTS-RESTORE-3",
+ "model": "opus",
+ "tokens": null,
+ "result": "gate3 red fixed (data1 test missed the LLVM .0 symbol suffix); merged next (all-tier dead-key contract + next's regen mode, 3 dead Ms1_ keys dropped); merge's +1 start-up fault (NSCACHE alone on a .data page) fixed by moving NSCACHE to .data1: startup 18 -> 17; FORK_BOUND 8 -> 7",
+ "branch": "task/startup-faults-restore-3",
+ "head": "bbd593199",
+ "gate": {
+  "affected": "see shiki:startup-faults-restore-3-gate1",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "counts on Haswell-EP (merged head): startup 17, setlocale+printf 56, tool 59, fork 6, localtime 19, float 2; float bound 6 left until a Skylake-SP count is seen"
+ ],
+ "refused": [],
+ "improvement": "a hand-kept .data1 list is reshuffled by any .data reorder (this merge moved NSCACHE onto its own page); generate the start-up placement from a trace of first-touched statics",
+ "next_step": "ratchet FLOAT_BOUND to count + 1 once a Skylake-SP run prints it; trace-generated .data1 placement",
+ "report_file": "handoff/STARTUP-FAULTS-RESTORE.md",
+ "jobs": [
+  "shiki:startup-faults-restore-3-gate1",
+  "shiki:startup-faults-restore-3-plants1"
+ ]
+}
