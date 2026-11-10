@@ -1,0 +1,8 @@
+id = "D-13.7"
+section = "s13"
+spec = "§13.7"
+ann = "HIST"
+status = "active"
+body = '''
+Internally, `umask_get()` reads `/proc/self/status` (race-free). `access` keeps real-ID semantics. `euidaccess` prefers `faccessat2(AT_EACCESS)`.
+'''

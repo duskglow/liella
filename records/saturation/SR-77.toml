@@ -1,0 +1,13 @@
+id = "SR-77"
+section = "6"
+row = "`iconv_utf8_ascii_translit_4k` (UTF-8 -> ASCII//TRANSLIT) and its neighbours"
+now = "translit i 395,931 -> 190,502 per call (glibc 458,239; Haswell-EP build host); Ivy Bridge host, interleaved A/B base vs head, 5 rounds: translit t 0.354 of base (Liella/glibc cycles 0.469; base about 1.33), 8859-15 t 0.997, **utf16 t 1.052 with instructions 0.999** (Liella/glibc 0.636 -> 0.671), 2026-11-05"
+limit = "not at a limit"
+reason_class = "n/a"
+basis = "M"
+source = "TIMING-ICONV-TRANSLIT-CPI, -2 (D-6.14)"
+tried = "positive: per-call transliteration memo. Not explained: the utf16 time loss with the same instruction count; putting `Conv::convert` back in hot text (its mangled name had changed) did not change it (1.044 before, 1.052 after). Not tried: a two-stage direct-mapped decomposition table in the generator (would also help a first occurrence and other decomposition users)"
+flag = "**utf16 slower in time; open**"
+status = "active"
+body = '''
+'''

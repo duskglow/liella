@@ -13,6 +13,7 @@ use super::{is_word_item, Ctype, Data, Item, Locale, Tab};
 use crate::ctype::{self, Class, Trans};
 use crate::error::Errno;
 use crate::mem::{TryBox, TryVec};
+use crate::unicode::{self, class_words, ClassStage1};
 use super::{Tables, C_CATS, C_UTF8_CATS};
 use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
@@ -161,6 +162,13 @@ pub struct LocaleView {
     /// The wide tables of a compiled `LC_CTYPE`, and its ASCII case flag; `None` for the
     /// built-in ones.
     wide: Option<(Wide, bool)>,
+    /// A built-in `LC_CTYPE`'s class-word table (D-5.9), which answers every wide class test
+    /// when `wide` is `None`; a compiled one keeps the `"C"` table here, unread.
+    classes: &'static ClassStage1,
+    /// The `wctrans_t` of `toupper` and `tolower` in a compiled `LC_CTYPE`
+    /// ([`super::ctype::CtypeFile::case_desc`]), worked out once so that `towctrans` compares instead of
+    /// deriving every map's descriptor per call (D-5.8); unused (0) for the built-in ones.
+    case_descs: [usize; 2],
     /// The slot in [`LATIN`] holding the answers of `wide` for U+0000..U+00FF (ASCII and
     /// Latin-1 text is most of what wide-character calls see, WCTYPE-LOCALE): 0 until the first
     /// Latin-1 call takes one, `usize::MAX` when none was left (every call then walks `wide`).
@@ -376,7 +384,7 @@ impl LocaleView {
     /// The view of `"C"` (handle 0).
     #[allow(clippy::indexing_slicing)] // a const fn (no `get`): `Cat::Time.index()` is 2, below the 12 tables
     pub const fn c() -> LocaleView {
-        LocaleView { locale: Locale::C, handle: 0, wide: None, latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
+        LocaleView { locale: Locale::C, handle: 0, wide: None, classes: &class_words::C_STAGE1, case_descs: [0; 2], latin: AtomicUsize::new(0), cats: by_number(C_CATS), names: TimeNames::of(C_CATS[Cat::Time.index()]), lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) }
     }
 
     /// The words of this locale's `struct lconv`: `fill` works them out on the first call, later
@@ -444,11 +452,12 @@ impl LocaleView {
         }
         let cats = by_number(locale.tables.map_or([Tab::EMPTY; 12], |t| t.0));
         let names = TimeNames::of(cats.get(2).copied().unwrap_or(Tab::EMPTY)); // LC_TIME is C category 2
-        let wide = match locale.ctype() {
-            Ctype::File(f) => Some((f.wide(), f.ascii_case())),
-            Ctype::C | Ctype::CUtf8 => None,
+        let (wide, classes, case_descs) = match locale.ctype() {
+            Ctype::File(f) => (Some((f.wide(), f.ascii_case())), &class_words::C_STAGE1, [f.case_desc(true), f.case_desc(false)]),
+            Ctype::C => (None, &class_words::C_STAGE1, [0; 2]),
+            Ctype::CUtf8 => (None, &class_words::C_UTF8_STAGE1, [0; 2]),
         };
-        Ok(LocaleView { locale, handle, wide, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
+        Ok(LocaleView { locale, handle, wide, classes, case_descs, latin: AtomicUsize::new(0), cats, names, lconv: LconvWords::new(), answers: no_answers(), decoded: AtomicU32::new(0) })
     }
 
     /// The address of this view's [`Answers`] (Acquire: a built table is seen whole): the
@@ -549,6 +558,32 @@ impl LocaleView {
     /// `iswalpha` in C.UTF-8 went from 68 to 76 instructions.
     #[inline(always)]
     pub fn isw(&self, c: u32, mask: Class) -> bool {
+        self.isw_int(c, mask) != 0
+    }
+
+    /// The `wctrans_t` of `toupper` and `tolower` (in that order) of a compiled `LC_CTYPE`,
+    /// stored when the view was built; `None` for the built-in locales, whose descriptors are
+    /// the built-in tables' addresses (D-5.8).
+    #[inline(always)]
+    pub fn case_descs(&self) -> Option<[usize; 2]> {
+        self.wide.as_ref().map(|_| self.case_descs)
+    }
+
+    /// Whether the view has a compiled locale's checked wide tables (the built-in locales do
+    /// not): the arm [`LocaleView::isw_int`] answers inline.
+    #[inline(always)]
+    pub fn has_wide(&self) -> bool {
+        self.wide.is_some()
+    }
+
+    /// [`LocaleView::isw`] as the C `int` the exports return (1 or 0). Always inlined.
+    ///
+    /// The file-backed arm's out-of-line part returns this `int` itself, so an export reaches
+    /// it with a tail jump and keeps no frame on its inline paths (TIMING-COV-WCTYPE-L: the
+    /// `bool` it returned before needed a conversion after the call, so `__iswalpha_l` and
+    /// `__iswctype` saved a register on every call).
+    #[inline(always)]
+    pub fn isw_int(&self, c: u32, mask: Class) -> i32 {
         if let Some((w, _)) = &self.wide {
             // The two common answers are inline and call-free (PERF-WCTYPE-ENUS): a filled
             // Latin-1 entry, and one class's table walk above U+00FF (`iswalpha` passes a
@@ -557,14 +592,15 @@ impl LocaleView {
             // instructions of 101. A fill, a view without a slot and a mixed mask stay out of line.
             if let Ok(b) = u8::try_from(c) {
                 if let Some(v) = self.latin_class_hit(b) {
-                    return v & u32::from(mask.0) != 0;
+                    return i32::from(v & u32::from(mask.0) != 0);
                 }
             } else if mask.0.is_power_of_two() {
-                return w.in_class_bit(mask.0.trailing_zeros(), c);
+                return i32::from(w.in_class_bit(mask.0.trailing_zeros(), c));
             }
-            return self.isw_wide(c, mask);
+            return LocaleView::isw_wide(c, mask, self);
         }
-        ctype::wclasses(c, &self.locale).intersects(mask)
+        // A built-in locale: one two-stage table lookup and the mask test (D-5.9).
+        i32::from(unicode::class_word(self.classes, c) & mask.0 != 0)
     }
 
     /// The filled [`LATIN`] class entry of `b` for this view; `None` when the view has no slot
@@ -586,17 +622,23 @@ impl LocaleView {
         (v != 0).then(|| v.wrapping_sub(1))
     }
 
+    /// The out-of-line part of [`LocaleView::isw_int`], with its `int` answer.
+    ///
+    /// The character comes first and the view last (WCTYPE-TRIE-BUILTIN-2): an export receives
+    /// `c` in the first argument register, so this order lets the tail jump keep it there. With
+    /// the view first, every export moved `c` to the second register on entry, on its inline
+    /// paths too: +1 instruction per `isw*` call in a compiled locale.
     #[inline(never)]
-    fn isw_wide(&self, c: u32, mask: Class) -> bool {
-        let Some((w, _)) = &self.wide else { return ctype::wclasses(c, &self.locale).intersects(mask) };
+    fn isw_wide(c: u32, mask: Class, v: &LocaleView) -> i32 {
+        let Some((w, _)) = &v.wide else { return i32::from(ctype::wclasses(c, &v.locale).intersects(mask)) };
         if let Ok(b) = u8::try_from(c)
-            && let Some(l) = self.latin()
+            && let Some(l) = v.latin()
         {
-            return l.class(b, w) & u32::from(mask.0) != 0;
+            return i32::from(l.class(b, w) & u32::from(mask.0) != 0);
         }
         // One table walk, inlined here: as a call it cost a second frame on every character
         // above Latin-1 (PERF-REGRESS-1023-1105-2).
-        ctype::is_w_file(c, mask, w)
+        i32::from(ctype::is_w_file(c, mask, w))
     }
 
     /// `towupper` (`upper`) or `towlower` of `c`: [`ctype::wtrans`]. Always inlined, as
@@ -656,6 +698,43 @@ impl LocaleView {
             },
             None => crate::text::display_width(c, &self.locale),
         }
+    }
+}
+
+#[cfg(test)]
+mod class_word_tests {
+    use super::{Locale, LocaleView};
+    use crate::ctype::{self, Class, STANDARD_MASKS};
+    use crate::unicode::{self, class_words};
+
+    /// Spec §5.2 (s5_2_g_0: the classes follow the locale's definition; s5_2_c_0: `isw*` and
+    /// `iswctype` classify by them), D-5.9: the built-in locales' two-stage class-word tables
+    /// equal the per-call derivation (`ctype::wclasses`: the C rule and the `C.UTF-8` Unicode
+    /// properties) for every code point through U+10FFFF, 0x110000 and the edge values, as a
+    /// whole word and through the view's `isw` for each of the 12 standard classes.
+    #[test]
+    fn builtin_class_tables_equal_wclasses() {
+        let views = [(Locale::C, &class_words::C_STAGE1, "C"), (Locale::c_utf8(b"C.UTF-8"), &class_words::C_UTF8_STAGE1, "C.UTF-8")];
+        let mut members = [0usize; 12];
+        for (l, s1, what) in views {
+            let built = LocaleView::new(l, 3, &|_, _| None);
+            assert!(built.is_ok(), "{what}: the view is built");
+            let Ok(v) = built else { return };
+            for c in (0..=0x11_0000u32).chain([0x7fff_ffff, 0xffff_fffe, 0xffff_ffff]) {
+                let want = ctype::wclasses(c, &l);
+                assert_eq!(unicode::class_word(s1, c), want.0, "{what}: class word {c:#x}");
+                for (k, &m) in STANDARD_MASKS.iter().enumerate() {
+                    let has = want.intersects(Class(m));
+                    assert_eq!(v.isw(c, Class(m)), has, "{what}: isw {c:#x} class {k}");
+                    if let Some(n) = members.get_mut(k) {
+                        *n += usize::from(has);
+                    }
+                }
+            }
+        }
+        // Not vacuous: every class has members, and C.UTF-8's alphabetic ones are beyond ASCII.
+        assert!(members.iter().all(|&n| n > 0), "{members:?}");
+        assert!(members.get(2).is_some_and(|&n| n > 100_000), "{members:?}");
     }
 }
 

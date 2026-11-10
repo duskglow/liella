@@ -1,0 +1,8 @@
+id = "SR-84"
+section = "7"
+row = "`execvp` PATH search"
+now = "i 1.013 (3 dirs), 1.010-1.012 (200 dirs, `--stress path`) (Skylake-SP host, 2026-10-23)"
+open = "SMALL-OPEN-ROWS (2026-10-23) made the `Exec` closure generic in `search`/`run_child` (no indirect call per directory). Verified on Skylake-SP host (bare metal) by SMALL-OPEN-ROWS-2 job `small-open-rows-2-percall`: 4 interleaved ABBA pairs per mode, origin/next against head. Instr ratio against glibc: normal base 1.016-1.019, head 1.013 in every run; stress base 1.014-1.015, head 1.010-1.012. The ranges do not overlap. The gain is about 0.4% of the call, which the kernel's execve dominates. Cycles (advisory) move the same way: base 1.009-1.018, head 1.005-1.007. Kept"
+status = "active"
+body = '''
+'''

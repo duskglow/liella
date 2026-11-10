@@ -335,7 +335,7 @@ pub fn run(root: &Path) -> Result<(), String> {
         }
     }
 
-    problems.extend(decisions(root));
+    decisions(root);
 
     let tests = c.named + c.by_clause + c.no_spec_clause + c.no_clause_id + c.untraced;
     println!(
@@ -412,70 +412,40 @@ fn text_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Decision IDs (owner, 2026-10-04): every `D-…` cited in the tree resolves to exactly one row
-/// of the plan's decision register (a row starting `| D-… |`). Report-only: it prints what it
-/// finds, except DUP-D (TOOL-CLEAN, 2026-10-08): a decision number that heads two rows of `plan/07-decisions` is
-/// returned as a problem, which fails the check (D-X.17 was duplicated on main for a day).
-fn decisions(root: &Path) -> Vec<String> {
-    // The plan is an index (implementation-plan.md) plus part files under plan/ (2026-10-05).
-    let mut plan_files = vec![root.join("implementation-plan.md")];
-    text_files(&root.join("plan"), &mut plan_files);
-    plan_files.sort();
-    let plan: String = plan_files.iter().filter_map(|f| fs::read_to_string(f).ok()).collect::<Vec<_>>().join("\n");
-    let mut rows: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-    for l in plan.lines() {
-        if let Some(id) = l.strip_prefix("| ").and_then(|r| r.split(" |").next()).filter(|id| decision_ids(id) == [*id]) {
-            *rows.entry(id).or_default() += 1;
-        }
-    }
+/// Decision IDs (owner, 2026-10-04): every `D-…` cited in the tree resolves to a decision record
+/// (`records/decisions/<series>/<id>.toml`, RECORDS-1, D-X.55). Report-only. One file per id makes a decision defined
+/// twice impossible (the DUP-D check of TOOL-CLEAN, 2026-10-08, is gone with the tables it scanned); record bodies are
+/// scanned for citations like any other text.
+fn decisions(root: &Path) {
+    let ids = crate::records::ids(root, crate::records::Kind::Decision);
+    let rows: BTreeSet<&str> = ids.iter().map(String::as_str).collect();
     let mut files = vec![root.join("implementation-plan.md"), root.join("README.md")];
-    for d in ["plan", "crates", "csys", "conformance", "docs", "spec", "xtask", "benchmarks", "bench", "validation", "scripts"] {
+    for d in ["plan", "records", "crates", "csys", "conformance", "docs", "spec", "xtask", "benchmarks", "bench", "validation", "scripts"] {
         text_files(&root.join(d), &mut files);
     }
     let mut unknown: std::collections::BTreeMap<String, BTreeSet<String>> = std::collections::BTreeMap::new();
     for f in &files {
-        // This file's own examples are not citations.
-        if f.ends_with("xtask/src/trace.rs") {
+        // This file's own examples are not citations, nor are the records module's (id shapes, test records).
+        if f.ends_with("xtask/src/trace.rs") || f.starts_with(root.join("xtask/src/records")) {
             continue;
         }
         let Ok(text) = fs::read_to_string(f) else { continue };
         let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
         for id in decision_ids(&text) {
-            if !rows.contains_key(id) {
+            if !rows.contains(id) {
                 unknown.entry(id.to_string()).or_default().insert(rel.clone());
             }
         }
     }
-    let dup: Vec<&str> = rows.iter().filter(|(_, n)| **n > 1).map(|(id, _)| *id).collect();
-    println!("trace: decision IDs: {} plan rows, {} defined more than once, {} cited without a row (report only)", rows.len(), dup.len(), unknown.len());
-    for id in dup {
-        println!("trace:   {id}: more than one plan row");
-    }
+    println!("trace: decision IDs: {} decision records, {} cited without a record (report only)", rows.len(), unknown.len());
     for (id, files) in &unknown {
-        println!("trace:   {id}: no plan row (cited in {})", files.iter().cloned().collect::<Vec<_>>().join(", "));
+        println!("trace:   {id}: no decision record (cited in {})", files.iter().cloned().collect::<Vec<_>>().join(", "));
     }
-    let mut parts = Vec::new();
-    text_files(&root.join("plan").join("07-decisions"), &mut parts);
-    let named: Vec<(String, String)> = parts.iter().map(|f| (f.strip_prefix(root).unwrap_or(f).display().to_string().replace('\\', "/"), fs::read_to_string(f).unwrap_or_default())).collect();
-    duplicate_rows(&named).into_iter().map(|(id, at)| format!("plan/07-decisions: {id} heads {} rows ({})", at.len(), at.join(", "))).collect()
-}
-
-/// The decision numbers that head more than one row (`| D-x.y |`) across the given (file, text) pairs, with where.
-fn duplicate_rows(files: &[(String, String)]) -> Vec<(String, Vec<String>)> {
-    let mut at: std::collections::BTreeMap<&str, Vec<String>> = std::collections::BTreeMap::new();
-    for (f, text) in files {
-        for (n, l) in text.lines().enumerate() {
-            if let Some(id) = l.strip_prefix("| ").and_then(|r| r.split(" |").next()).filter(|id| decision_ids(id) == [*id]) {
-                at.entry(id).or_default().push(format!("{f}:{}", n + 1));
-            }
-        }
-    }
-    at.into_iter().filter(|(_, v)| v.len() > 1).map(|(id, v)| (id.to_string(), v)).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{clause_shaped, decision_ids, duplicate_rows, resolve, section_key, strip_items, test_texts};
+    use super::{clause_shaped, decision_ids, resolve, section_key, strip_items, test_texts};
     use std::collections::BTreeSet;
 
     #[test]
@@ -510,17 +480,6 @@ fn none() {}
         assert!(has(2, "TAG_LINE") && !has(2, "TAG_DOC"), "a line comment above belongs to its test");
         assert!(has(3, "TAG_BODY") && !has(3, "TAG_LINE"), "a tag inside the body belongs to it");
         assert!(!t[4].contains("TAG_"), "a test with none gets none");
-    }
-
-    #[test]
-    fn a_decision_number_heading_two_rows_is_found() {
-        let a = ("plan/07-decisions/x.md".to_string(), "| D-X.16 | one |\n| D-X.17 | first |\nprose citing D-X.17 and | D-X.18 | mid-line\n".to_string());
-        let b = ("plan/07-decisions/s03.md".to_string(), "| D-3.1 | row |\n| D-X.17 | second |\n".to_string());
-        let d = duplicate_rows(&[a.clone(), b.clone()]);
-        assert_eq!(d, [("D-X.17".to_string(), vec!["plan/07-decisions/x.md:2".to_string(), "plan/07-decisions/s03.md:2".to_string()])]);
-        assert!(duplicate_rows(&[a]).is_empty() && duplicate_rows(&[b]).is_empty(), "a citation or one row is not a duplicate");
-        let same_file = ("p.md".to_string(), "| D-1.1 | a |\n| D-1.1 | b |\n".to_string());
-        assert_eq!(duplicate_rows(&[same_file]).len(), 1, "two rows in one file");
     }
 
     #[test]

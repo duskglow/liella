@@ -1,0 +1,8 @@
+id = "D-21.4"
+section = "s21"
+spec = "§21.1"
+ann = "HIST"
+status = "active"
+body = '''
+**The `setjmp` symbol does not save the signal mask**, as the spec states (§21.1: "`setjmp` on glibc does not save the mask either"); it is `_setjmp`. **Divergence found (phase 6, for the owner):** the host glibc 2.39 binary disagrees: its `setjmp@@GLIBC_2.2.5` loads 1 into `%esi` before `__sigsetjmp` (the BSD behaviour; `objdump -d` of `libc.so.6`). C code never sees the difference, because `<setjmp.h>` defines `setjmp` as `_setjmp`; only a call through the symbol itself (an address taken, another language's binding) does. **Owner ruling (2026-10-01): confirmed.** Liella follows the spec; the difference from the host glibc is documented in `docs/differences-from-glibc.md`.
+'''

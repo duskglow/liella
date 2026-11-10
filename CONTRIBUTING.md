@@ -69,7 +69,8 @@ every build command are in [docs/toolchain.md](docs/toolchain.md).
 ```bash
 cargo xtask stubs     # regenerate test stubs and spec/clauses.tsv from the spec
 cargo xtask so        # build libc.a, libc.so.6, liella-crt1.o into target/liella/
-cargo xtask test      # the full test gate (long)
+cargo xtask test      # the full test gate (long); math sweep shards with unchanged inputs print
+                      # `verdict cached` and skip (D-10.57); LIELLA_NO_VERDICT_CACHE=1 runs them all
 cargo xtask affected --list   # only the tests your change can reach (--tier direct, the default)
 cargo xtask affected --run    # run them (--list or --run is required: without either, exit 2)
 cargo xtask clippy            # must be clean (workspace, all targets, -D warnings)
@@ -122,10 +123,19 @@ tests directly. The CI FULL gate stays the exhaustive run.
 * Tests are generated from the spec. A function is complete when every edge case and failure
   clause of its spec entry has an active test. Add a regression test for each bug; it must
   fail without your fix.
-* Decisions go in the decision register, `plan/07-decisions/`, as `D-<section>.<n>` rows in
-  the part file for that section. Find one with `grep -rn "^| D-12.18 " plan/`. Local details
-  you can decide yourself with a one-line row; trust boundaries, spec deviations, public
-  interfaces and anything costly to unwind need a maintainer's ruling first.
+* Decisions go in the decision register as records, one file per decision:
+  `records/decisions/D-<section>/D-<section>.<n>.toml` (`cargo xtask records new decision D-12.19`
+  writes the skeleton; fill it, then `cargo xtask records check`). Compat flags are
+  `records/compat/COMPAT-<n>.toml` and the classified saturation rows `records/saturation/SR-<n>.toml`.
+  The tables `plan/07-decisions/*.md`, `docs/compat-flags.md`, `docs/saturation-register.md` and
+  `docs/saturation/01..07-*.md` are **generated** (`cargo xtask records-gen`, first line
+  `@generated`): never edit them, and do not commit them in a change that adds records; the
+  maintainers' merge train regenerates them (D-X.55). A decision that replaces an earlier one is
+  a new record with `supersedes = ["D-..."]`, a partial change uses `amends`; edit an existing
+  record only to correct it or add a test reference. Find a decision with
+  `grep -rn "D-12.18" records/` (or in the generated tables). Local details you can decide
+  yourself with a one-line record; trust boundaries, spec deviations, public interfaces and
+  anything costly to unwind need a maintainer's ruling first.
 * **The three-way rule** (plan section 1.4) applies when an implementation, test or probe
   disagrees with the spec. Compare the spec clause, a glibc probe and official documentation:
   if the spec is contradicted by both, correct the spec and `spec/clauses.tsv` with the

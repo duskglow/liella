@@ -1,0 +1,8 @@
+id = "D-4.24"
+section = "s04"
+spec = "§4.5, §4.8"
+ann = "—"
+status = "active"
+body = '''
+**SSE2 terminator-scan loops** (STR-K1, 2026-10-08; owner hot-kernel ruling). The SSE2 paths of `liella_machine_strlen`, `_strnlen` and `_rawmemchr` (csys/src/machine/scan.S; AVX2 paths unchanged): head = [s, s + 64) unaligned when it stays in s's page (offset <= 4032; strlen/strnlen after the 16-byte prologue), else the masked aligned 64-byte group; then the aligned group g1 = (s & -64) + 64; then 128-byte aligned groups from (g1 + 64) & -128, folded (pminub for zero, pcmpeqb+por for a byte), loads as memory operands, one branch per 128 bytes; a hit is located per 16-byte block with a branch each (measured faster than a branch-free 64-bit mask). D-4.14 page rule kept: every group is aligned (never spans two pages) and loaded only after every byte before it was checked (SAFETY comment in scan.S). Instructions/call on the SSE2 path (Zen 1, perf): strlen 4k 1042 -> 593 (glibc 633), strnlen 4k 1266 -> 683 (829), rawmemchr 4k 1234 -> 965 (1025). memchr not changed (its bound logic differs; same treatment possible). Tests: machine_scanners sweep 0..512 x 64 alignments vs a byte loop, page-end guard 0..575; 5 planted bugs red.
+'''

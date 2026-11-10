@@ -1,0 +1,12 @@
+{"task": "DL-LDSO-RUN-2", "model": "opus", "tokens": null,
+ "result": "DL-6 survivors closed (auxv-not-moved, DL-5 link-reloc-symbols: 2/2 CAUGHT); startup counters base vs branch on mei at parity within run-to-run spread; FULL gate pending on mei",
+ "branch": "task/dl-ldso-run-2", "head": null,
+ "gate": {"affected": "pending (mei:dl-ldso-run-2-gate, FULL escalation; clippy and static ok)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["previous counts job failed on its own command (--no-archive is not a bench option); rerun as `cargo xtask bench --compare --counters cbench_startup`", "base measured at the merge base 1b3a3d58e (the branch's own base), not the current origin/next tip, so the delta is this branch's alone", "DL-5 ld-skip-relocation WARN-NO-MSG untouched", "ldso_run.rs `run` says it has a hang guard but runs the command without one"],
+ "refused": [],
+ "jobs": ["mei:dl-ldso-run-2-gate", "mei:dl-ldso-run-2-plants", "mei:dl-ldso-run-2-tests", "mei:dl-ldso-run-2-counts-base", "mei:dl-ldso-run-2-counts", "mei:dl-ldso-run-2-counts-repeat"],
+ "improvement": "the harness ran six jobwait calls at once when issued in one message, which spent 6 calls on one wait; issue waits one per message",
+ "next_step": "read dl-ldso-run-2-gate; then DL-7",
+ "report_file": "handoff/DL-LDSO-RUN.md"}

@@ -470,7 +470,7 @@ __mempcpy:
 	.globl liella_classed_page0
 	.hidden liella_classed_page0
 liella_classed_page0:
-/* Page 0, the SSE2 page. */
+/* Page 0, the SSE2 page. LAYOUT(CLASSED-XREF): both pages hold the same slots at the same offsets. */
 	.org liella_classed_page0 + LIELLA_SLOT_MEMSET
 	.globl liella_machine_memset
 	.hidden liella_machine_memset
@@ -1298,8 +1298,8 @@ memcmp:
  * class (MEMCMP-MID; no NULL test, the head load faults on page zero, PERF-MEMCMP-TAILS: the
  * 32-byte head block first, then three blocks in one test; 0 or 1) and its 129-2048 class with the
  * last chunk first (an early reject where only the tail differs; MEMCMP-MID-4), then the chunks from
- * byte 32 (0 or 1, nothing located), else (no AVX2) the SSE2 classes at .Leq_sse or (AVX2 above
- * 2048) .Leq_huge's NULL tests and the AVX2 classes;
+ * byte 32 (0 or 1, nothing located), else .Leq_sse: (no AVX2) the SSE2 classes or (AVX2 above
+ * 2048, via .Leq_sse_over's flag test) .Leq_huge's NULL tests and the AVX2 classes;
  * 8-64 with folding off to `liella_hot_equal_rest`
  * (the checked entry, after the 4-7 class's `n < 8` test); 0 to 7 bytes (MEMCMP-SHORT): explicit NULL
  * tests (NULL -> the checked entry), then both end words XORed and ORed into one test (4-7: 4-byte
@@ -1427,7 +1427,7 @@ __memcmpeq:
 	ret
 .Leq_big:
 	cmpq liella_machine_cmp_long(%rip), %rdx
-	ja .Leq_huge
+	ja .Leq_sse
 .Leq_big_load:
 	vmovdqu (%rdi), %ymm0
 	vpcmpeqb (%rsi), %ymm0, %ymm0
@@ -1500,10 +1500,9 @@ __memcmpeq:
  * `liella_machine_cmp_mid` flag word, nonzero only then): the explicit NULL tests (a NULL a or b ->
  * the checked entry's S6 abort; no folding above 2048), then the AVX2 classes above (PARITY-MEMCMP-AVX2:
  * the long class's 16-instruction 128-byte step instead of the Rust loop). Without AVX2 the SSE2
- * classes below. */
+ * classes below. Reached from .Leq_sse_over, which tests the flag word (TIMING-COV-COMPARE-HEAD-SSE2:
+ * the SSE2 65-2048 classes come first, as in the compare entry, so they skip the flag test). */
 .Leq_huge:
-	cmpq $0, liella_machine_cmp_mid(%rip)
-	je .Leq_sse
 	testq %rdi, %rdi
 	je liella_hot_equal_big
 	testq %rsi, %rsi
@@ -1565,8 +1564,11 @@ __memcmpeq:
 /* Above `liella_machine_cmp_sse`: the a test against `liella_machine_cmp_sse_null` (0 while folding
  * is on, so only a NULL a takes the checked entry; else SIZE_MAX: with folding off every size above
  * 64 takes `liella_hot_equal_big`, so the long class below runs only above 2048 > 128), the b NULL
- * test, the words at 0 and 8, then the long class. */
+ * test, the words at 0 and 8, then the long class. First the AVX2 flag word (nonzero only with
+ * AVX2, where `liella_machine_cmp_sse` is 0): AVX2 above `liella_machine_cmp_long` -> .Leq_huge. */
 .Leq_sse_over:
+	cmpq $0, liella_machine_cmp_mid(%rip)
+	jne .Leq_huge
 	cmpq liella_machine_cmp_sse_null(%rip), %rdi
 	jbe liella_hot_equal_big
 	testq %rsi, %rsi

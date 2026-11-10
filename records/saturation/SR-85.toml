@@ -1,0 +1,8 @@
+id = "SR-85"
+section = "7"
+row = "`memmove_4k` (overlapped)"
+now = "i 0.98 (Broadwell-EP host, 2026-10-23)"
+open = "CLOSED: the t 2.3 cause (checked path) is gone since MEM-BULK/MEM-FALLBACK (overlap goes to the AVX2/SSE2 move kernel); SMALL-OPEN-ROWS job `small-open-rows-percall` counted instr ratio 0.978 to 0.980 against glibc on Broadwell E5-2699 v4. On Skylake-SP host (SMALL-OPEN-ROWS-2, `small-open-rows-2-percall`, 16 runs) cycles are at parity (ratio 0.993-1.007, 163-164 cyc/op on both sides; two base runs disturbed by load, 0.76 at 26-44% spread) but instructions are not: ratio 1.058-1.059 in every run. The time row stays closed. The instruction gap on that CPU is INFORMATIONAL and not chased here"
+status = "active"
+body = '''
+'''

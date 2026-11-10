@@ -1,0 +1,8 @@
+id = "D-27.2"
+section = "s26-29"
+spec = "§27.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Result`. **Boundary:** per-thread `dlerror` state.
+'''

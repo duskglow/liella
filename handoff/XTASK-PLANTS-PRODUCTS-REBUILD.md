@@ -22,7 +22,7 @@ State: branch `task/xtask-plants-products-rebuild`, code commit 4602c207 (plus t
 - xtask plants unit tests: 13 passed (3 new: the toy products rebuild with a build count of 3; a mutant whose products
   do not build; the command classifier table).
 - NOT VERIFIED at hand-back (started detached, for the coordinator to collect):
-  - plants: label `xppr-plants`, log `~/logs/xppr-plants.log` on keke (10.0.100.53). Expect u1 CAUGHT with
+  - plants: label `xppr-plants`, log `~/logs/xppr-plants.log` on keke (keke). Expect u1 CAUGHT with
     `build: the baseline products, not rebuilt`, pr CAUGHT (rebuilt with the mutant), u2 CAUGHT with the restore rebuild.
   - direct-tier gate: label `xppr-gate`, log `~/logs/xppr-gate.log`
     (`cargo xtask affected --files <3 files> --tier direct --run` under `~/bin/gate 12G`).

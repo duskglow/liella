@@ -1,0 +1,8 @@
+id = "D-27.1"
+section = "s26-29"
+spec = "§27"
+ann = "HIST"
+status = "active"
+body = '''
+Our own loader follows the ELF gABI, the x86-64 psABI and the GNU extensions. Object lists are RCU-style, so `dl_iterate_phdr`/`_dl_find_object` take no global lock (observable: fewer deadlocks).
+'''

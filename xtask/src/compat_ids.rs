@@ -1,16 +1,17 @@
-//! `COMPAT-N` ids of `docs/compat-flags.md` (COMPAT-FLAG-IDS-UNIQUE).
+//! `COMPAT-N` ids (COMPAT-FLAG-IDS-UNIQUE): one record per flag, `records/compat/COMPAT-<n>.toml` (RECORDS-1).
 //!
-//! Ids are assigned by hand on each branch, so parallel branches picked the same number. The check
-//! (part of `cargo xtask static`, alone as `cargo xtask compat-ids`) fails when two rows of the
-//! registry share an id, when an id mentioned in `docs/`, `crates/` or `plan/` has no row, or when
-//! the ids are not contiguous from 1 (a gap must be listed in [`LISTED_GAPS`]).
-//! Handoff notes and reports are history and are not scanned.
+//! Ids come from the ops store (`ops reserve COMPAT`); one file per id makes a duplicate impossible. The check (part
+//! of `cargo xtask static`, alone as `cargo xtask compat-ids`) fails when an id mentioned in `docs/`, `crates/`,
+//! `plan/` or `records/` has no record, or when the ids are not contiguous from 1 (a gap must be listed in
+//! [`LISTED_GAPS`]). The generated view `docs/compat-flags.md` and the compat records themselves are not scanned;
+//! handoff notes and reports are history and are not scanned either.
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-const REGISTRY: &str = "docs/compat-flags.md";
-const SCANNED: [&str; 3] = ["docs", "crates", "plan"];
+const REGISTRY: &str = "records/compat";
+const VIEW: &str = "docs/compat-flags.md";
+const SCANNED: [&str; 4] = ["docs", "crates", "plan", "records"];
 const EXTENSIONS: [&str; 4] = ["rs", "md", "toml", "tsv"];
 const PREFIX: &str = "COMPAT-";
 /// Ids deliberately absent from the registry (none).
@@ -35,38 +36,19 @@ fn ids_in(text: &str) -> Vec<(u32, usize)> {
     out
 }
 
-/// The id of each registry row (a table line whose first cell is `COMPAT-<n>`), with its line.
-fn registry_rows(text: &str) -> Vec<(u32, usize)> {
-    let mut out = Vec::new();
-    for (n, line) in text.lines().enumerate() {
-        let Some(cell) = line.strip_prefix('|').and_then(|l| l.split('|').next()) else { continue };
-        let Some(num) = cell.trim().strip_prefix(PREFIX) else { continue };
-        if let Ok(v) = num.parse::<u32>() {
-            out.push((v, n + 1));
-        }
-    }
-    out
-}
-
-/// Problems of the registry text plus the references `(file, id, line)` found elsewhere.
-fn check_text(registry: &str, refs: &[(String, u32, usize)]) -> Vec<String> {
+/// Problems of the record ids plus the references `(file, id, line)` found elsewhere.
+fn check_ids(rows: &BTreeSet<u32>, refs: &[(String, u32, usize)]) -> Vec<String> {
     let mut errors = Vec::new();
-    let mut rows: BTreeMap<u32, usize> = BTreeMap::new();
-    for (id, line) in registry_rows(registry) {
-        if let Some(first) = rows.insert(id, line) {
-            errors.push(format!("{REGISTRY}:{line}: {PREFIX}{id} is already a row at line {first}"));
-        }
-    }
-    if let Some(&max) = rows.keys().next_back() {
+    if let Some(&max) = rows.iter().next_back() {
         for id in 1..max {
-            if !rows.contains_key(&id) && !LISTED_GAPS.contains(&id) {
+            if !rows.contains(&id) && !LISTED_GAPS.contains(&id) {
                 errors.push(format!("{REGISTRY}: {PREFIX}{id} is missing (ids run to {PREFIX}{max}; list a deliberate gap in LISTED_GAPS)"));
             }
         }
     }
     for (file, id, line) in refs {
-        if !rows.contains_key(id) {
-            errors.push(format!("{file}:{line}: {PREFIX}{id} has no row in {REGISTRY}"));
+        if !rows.contains(id) {
+            errors.push(format!("{file}:{line}: {PREFIX}{id} has no record in {REGISTRY}/"));
         }
     }
     errors
@@ -89,15 +71,20 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 pub fn check(root: &Path) -> Result<(), String> {
-    let registry = std::fs::read_to_string(root.join(REGISTRY)).map_err(|e| format!("{REGISTRY}: {e}"))?;
+    let mut rows = BTreeSet::new();
+    for id in crate::records::ids(root, crate::records::Kind::Compat) {
+        if let Some(n) = id.strip_prefix(PREFIX).and_then(|n| n.parse::<u32>().ok()) {
+            rows.insert(n);
+        }
+    }
     let mut files = Vec::new();
     for d in SCANNED {
         walk(&root.join(d), &mut files);
     }
     let mut refs = Vec::new();
     for f in files {
-        let rel = f.strip_prefix(root).unwrap_or(&f).to_string_lossy().into_owned();
-        if rel == REGISTRY {
+        let rel = f.strip_prefix(root).unwrap_or(&f).to_string_lossy().replace('\\', "/");
+        if rel == VIEW || rel.starts_with(&format!("{REGISTRY}/")) {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(&f) else { continue };
@@ -105,7 +92,7 @@ pub fn check(root: &Path) -> Result<(), String> {
             refs.push((rel.clone(), id, line));
         }
     }
-    let errors = check_text(&registry, &refs);
+    let errors = check_ids(&rows, &refs);
     if errors.is_empty() {
         return Ok(());
     }
@@ -119,37 +106,27 @@ pub fn check(root: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    fn row(n: u32) -> String {
-        format!("| {PREFIX}{n} | x | y |\n")
+    fn rows(ids: &[u32]) -> BTreeSet<u32> {
+        ids.iter().copied().collect()
     }
 
     #[test]
-    fn unique_rows_and_known_refs_pass() {
-        let reg = format!("{}{}", row(1), row(2));
-        assert!(check_text(&reg, &[("a.rs".into(), 2, 3)]).is_empty());
+    fn contiguous_ids_and_known_refs_pass() {
+        assert!(check_ids(&rows(&[1, 2]), &[("a.rs".into(), 2, 3)]).is_empty());
     }
 
     #[test]
     fn gap_fails() {
-        let reg = format!("{}{}", row(1), row(3));
-        let e = check_text(&reg, &[]);
+        let e = check_ids(&rows(&[1, 3]), &[]);
         assert_eq!(e.len(), 1);
         assert!(e[0].contains("COMPAT-2 is missing"));
     }
 
     #[test]
-    fn duplicate_row_fails() {
-        let reg = format!("{}{}{}", row(1), row(2), row(1));
-        let e = check_text(&reg, &[]);
+    fn reference_without_record_fails() {
+        let e = check_ids(&rows(&[1]), &[("a.rs".into(), 9, 4)]);
         assert_eq!(e.len(), 1);
-        assert!(e[0].contains("already a row"));
-    }
-
-    #[test]
-    fn reference_without_row_fails() {
-        let e = check_text(&row(1), &[("a.rs".into(), 9, 4)]);
-        assert_eq!(e.len(), 1);
-        assert!(e[0].contains("has no row"));
+        assert!(e[0].contains("has no record"));
     }
 
     #[test]

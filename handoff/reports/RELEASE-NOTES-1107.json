@@ -1,0 +1,13 @@
+{"task": "RELEASE-NOTES-1107", "model": "opus", "tokens": null,
+ "result": "New 11-07 pre-release section in docs/RELEASE-NOTES.md (10-24 kept below as previous) and README status updated; figures measured on next 9643c81b0 (5467 specified / 577 pending; 557 of 4305 names undefined)",
+ "branch": "task/release-notes-1107", "head": null,
+ "gate": {"affected": "docs only: no affected tests; cargo xtask static rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "jobs": ["keke:release-notes-1107-status-2", "keke:release-notes-1107-symcov-2", "keke:release-notes-1107-static", "local:secret_scan.py pass 1 (0 hits)"],
+ "superseded": ["keke:release-notes-1107-status (70cb44d76; next moved to 9643c81b0)", "keke:release-notes-1107-symcov (same)"],
+ "rulings": [{"item": "Owner review of the notes' content (claims from landed handoffs, not re-measured)", "recommendation": "land as is; refresh status/symcov if the promoted sha is later than 9643c81b0"}],
+ "informational": ["Secret scan pass 2 (gitleaks) not run: gitleaks absent locally and on keke, install needs network", "SECURITY-PRIVATE grep: hits reported to the coordinator by location in the hand-back", "cargo xtask so warns c_malloc never used (crates/boundary/src/heap.rs:501)"],
+ "refused": [],
+ "improvement": "sync_role-based measurement of a moving next needs a detached worktree; a 'measure origin/next@sha' job kind would save calls",
+ "next_step": "Coordinator lands the branch before promotion; if the promoted sha is past 9643c81b0, re-run status and symcov and update the figures",
+ "report_file": "handoff/release-notes-1107.md"}

@@ -1,0 +1,8 @@
+id = "D-23.1"
+section = "s23"
+spec = "§23.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Timespec{sec: i64, nsec: u32}` (validated) and `Duration`. `time`, `gettimeofday`, `ftime` and `clock` are translations of `clock_gettime` (vDSO). The `tz` argument is zero-filled, per the contract.
+'''

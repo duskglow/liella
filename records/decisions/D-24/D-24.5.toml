@@ -1,0 +1,8 @@
+id = "D-24.5"
+section = "s24"
+spec = "§24.6"
+ann = "HIST"
+status = "active"
+body = '''
+`syscall()` is exported (thin). Typed wrappers for the modern interfaces exist internally (D-H17). Clause `s24_6_c_5` (milestone 5): calls by number, including ones nothing else wraps (`pidfd_open`, `memfd_create`), -1 with `errno` (`EBADF`, `ENOSYS` for an unknown number), and all six arguments in order through real C varargs (`conformance/c/s24_variadic.c`: `mmap` of a memfd at an offset).
+'''

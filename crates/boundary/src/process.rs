@@ -38,6 +38,22 @@ static ENV_CAP: AtomicUsize = AtomicUsize::new(0);
 /// The initial auxiliary vector (address and words), set by the runtime; 0 in test processes.
 pub(crate) static AUXV_ADDR: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static AUXV_WORDS: AtomicUsize = AtomicUsize::new(0);
+/// The executable's load bias when the start found it some other way than `PT_PHDR`, else 0
+/// (D-27.12). Only the static-PIE start (`liella-rcrt1.o`) sets it, once, to the bias its
+/// relocator took from `__ehdr_start`: a static PIE linked by GNU ld has no `PT_PHDR`. A
+/// non-PIE static program and a dynamically linked one leave it 0 and keep the `PT_PHDR` bias.
+pub(crate) static EXE_BIAS: AtomicUsize = AtomicUsize::new(0);
+
+/// The executable's load bias, for its program headers `words` (`phnum` of them, at `phdr`):
+/// the static-PIE start's ([`EXE_BIAS`]) when it set one, else the one `PT_PHDR` gives (0
+/// without it). The one source for `%n` (`is_read_only`), `dl_iterate_phdr`, `_dl_find_object`
+/// and the backtrace (D-27.12).
+pub(crate) fn exe_bias(words: &[u64], phnum: usize, phdr: usize) -> usize {
+    match EXE_BIAS.load(Acquire) {
+        0 => liella_rt::start::program(words, phnum, phdr).bias,
+        b => b,
+    }
+}
 
 fn w(x: usize) -> u64 {
     u64::try_from(x).unwrap_or(u64::MAX)
@@ -430,7 +446,7 @@ pub fn is_read_only(addr: usize) -> bool {
     let get = |k: u64| auxval(k).and_then(|v| usize::try_from(v).ok()).unwrap_or(0);
     let (phdr, phnum) = (get(liella_kernel::uapi::AT_PHDR), get(liella_kernel::uapi::AT_PHNUM));
     let words = conv::program_headers(phdr, phnum.saturating_mul(liella_rt::start::PHDR_WORDS));
-    liella_rt::start::read_only(words, phnum, phdr, addr)
+    liella_rt::start::read_only(words, phnum, exe_bias(words, phnum, phdr), addr)
 }
 
 /// `getauxval(key)`: the value, or 0 with `ENOENT`.
@@ -523,6 +539,7 @@ pub fn finalize(dso: usize) {
 }
 
 /// `_exit`/`_Exit(status)`: end the process now.
+#[inline(never)]
 pub fn exit_now(status: i32) -> ! {
     CSys.exit_group(status)
 }

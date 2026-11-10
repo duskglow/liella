@@ -1,0 +1,9 @@
+id = "COMPAT-20"
+behaviour = "Code at the classed entries on the AVX2 class (§4.1-4.3; D-4.53, CLASSED-SLOT-INFRA, owner ruling #3141; default off by ruling #3434)"
+glibc = "The code that runs at every exported label is the code the file holds at that offset"
+liella = "By default the same: the swap is off (ruling #3434, `classed::SWAP_BY_DEFAULT`). With `liella.compat.no_classed_swap=0` on the AVX2 class, the AVX2 page is moved over the file's SSE2 page at start-up, so `perf annotate` and core files show the file's SSE2 bytes at the exported label, and a uprobe registered on the exported symbol after start-up does not fire. Not an ABI difference either way: results, symbols and addresses are the same"
+restore = "Nothing to restore by default. `GLIBC_TUNABLES=liella.compat.no_classed_swap=1` (or no setting), parsed once at start-up into `liella::config::Tunables` and read by `classed::start`: no page swap, the SSE2 page stays (the debugging note in `docs/design/loadtime-entry.md` section 5.7); `=0` turns the swap on. Unlike `glibc.cpu.hwcaps=-AVX2` it keeps the other AVX2 paths"
+cost = "none: read once at start-up; the entries test nothing per call"
+status = "implemented"
+body = '''
+'''

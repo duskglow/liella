@@ -75,7 +75,7 @@
   * **Deviations from the plan as written:**
     1. **`__assert_perror_fail`** shows the error's symbolic name (`ENOENT`) until §2.2's
        messages arrive (phase 8).
-    2. **Static PIE** executables are refused with a diagnostic: they must relocate themselves
+    2. **Static PIE** (closed by phase 14 DL-4, D-27.10: the start relocates a static PIE itself). Was: executables are refused with a diagnostic: they must relocate themselves
        before any address in static data is used (phase 14, with `ld.so`).
     3. **`libc.so.6`** carries default versions only. The 530 compat versions need `.symver`
        aliases (phase 15). It cannot be loaded by the host's `ld.so`, which expects glibc's

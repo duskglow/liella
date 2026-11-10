@@ -1,0 +1,13 @@
+id = "SR-67"
+section = "5"
+row = "`localtime_r` New York"
+now = "t 0.13"
+limit = "faster than glibc"
+reason_class = "n/a"
+basis = "M"
+source = ""
+tried = "none"
+flag = "**measured 2026-10-23** (section 10) (10-07)"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,11 @@
+{"task": "DL-BOOT-RELOC-3", "model": "opus", "tokens": null,
+ "result": "static PIEs start from their own start object liella-rcrt1.o (link-time selection: the non-PIE start has no ET_DYN test); relr-span and tls-rebase plants fixed (tls-rebase: the test program had no PT_TLS); plants 24/24 CAUGHT",
+ "branch": "task/dl-boot-reloc-3", "head": "79821fcf",
+ "gate": {"affected": "shiki dl-boot-reloc-3-gate-2 (see hand-back)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "new start object liella-rcrt1.o (public build product, like rcrt1.o of -static-pie links)", "recommendation": "accept; document it in docs/toolchain.md as a small follow-up"}],
+ "informational": ["static non-PIE instruction delta vs origin/next is zero by construction (start::<false> is origin/next's code), not measured with perf stat", "RELRO half of the static-PIE bias delta has no test of its own"],
+ "refused": [],
+ "improvement": "plants that survive should first check the test program actually has the feature (readelf): tls-rebase cost a run because gcc folded unwritten static __thread variables",
+ "next_step": "docs: say a static PIE links liella-rcrt1.o; optional RELRO read-only check for static PIE",
+ "report_file": "handoff/DL-BOOT-RELOC.md",
+ "jobs": ["shiki:dl-boot-reloc-3-gate-2", "shiki:dl-boot-reloc-3-plants-2"]}

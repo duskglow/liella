@@ -1,0 +1,8 @@
+id = "D-10.10"
+section = "s10"
+spec = "§10.0–§10.2"
+ann = "—"
+status = "active"
+body = '''
+**glibc's observable conventions are matched** where the contract leaves them open and the result is exact (`spec/behaviour/libm-exact.md`): the default NaN's sign, which operand's NaN payload propagates (per function and format), `ERANGE` only for ±∞/±0 results, `lrint` of `_Float128` saturating, `fromfp`'s clamped values, the `fmin`/`fmax` choice between ±0, `significand`'s flags per format. Deliberate differences (predicates return 1; x87 unnormals are not finite; pseudo-denormals are canonicalized; `scalbl(NaN, −∞)`) are in `docs/differences-from-glibc.md`.
+'''

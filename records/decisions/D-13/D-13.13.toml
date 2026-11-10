@@ -1,0 +1,8 @@
+id = "D-13.13"
+section = "s13"
+spec = "§13.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Walkers never abort (owner ruling 2026-10-03, binding).** Where the reference library aborts or crashes, Liella returns an error with a documented `errno`: `nftw` with `FTW_CHDIR` on a tree whose paths outgrow the walk (glibc fails an internal assertion past about 4.2 KB, and passes the callback an empty path one level earlier) returns -1 with `ENAMETOOLONG` only where a path the walk must form or pass cannot be represented, and otherwise walks on (D-13.4: `openat`-relative, no depth limit); `fts_open` with an empty argument list returns NULL with `EINVAL`; `fts_children` after the walk has ended returns NULL with `errno` 0, as at the end of a directory. Each is a deliberate difference (`docs/differences-from-glibc.md`).
+'''

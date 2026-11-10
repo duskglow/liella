@@ -1,0 +1,8 @@
+id = "D-7.8"
+section = "s07"
+spec = "§5.1, §7.2–7.4"
+ann = "COMPAT, HIST"
+status = "active"
+body = '''
+**Locale objects and the current locale** (phase 7; refines D-7.1, D-5.3). A `locale_t` points to the ABI `struct __locale_struct` (Appendix C): header macros read its `__ctype_b`, `__ctype_tolower` and `__ctype_toupper` directly, so those point into the `LC_CTYPE` data (the mapped file, or the built-in tables); `__locales[c]` points to Liella's per-category record, opaque to programs; `__names[c]` holds the category's name. Objects for the global locale are interned by composite name and never freed, so a thread reading the global locale never sees it freed (`setlocale` stays MT-safe, D-7.1); `newlocale`/`duplocale`/`freelocale` objects are owned by the caller. The thread's `uselocale` choice is a word in the thread block. `__ctype_b_loc` and its siblings return the address of a per-thread pointer that they refresh from the thread's current locale on every call, so a `setlocale` reaches every thread using the global locale (stricter than glibc, where other threads keep the old tables). `localeconv` fills a per-thread `struct lconv` (P-scope).
+'''

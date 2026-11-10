@@ -1,0 +1,8 @@
+id = "D-10.50"
+section = "s10"
+spec = "§10.2"
+ann = "—"
+status = "active"
+body = '''
+**The libm product decides its FMA builds itself, once, at load** (LIBM-F64-FAST-KERNELS-2 and -3, #2920, rulings #2965, owner failure-path-cost principle 10-21). `libm.a` and `libm.so.6` link their own copy of `liella-boundary`, everything but the math exports local, so the C library's startup (`cpu::init_with`) never writes libm's `dispatch::FMA` byte: before this row every program ran the baseline builds (cbench_libm counted the same with and without `-FMA`). libm's `.init_array` entry (`csys/src/adapter/libm_init.c`) calls `dispatch::liella_libm_start(argc, argv, envp)` once, which applies D-10.25's rule (`dispatch::fma_wanted`: CPUID FMA with the OS-saved AVX state, and `glibc.cpu.hwcaps` from the `GLIBC_TUNABLES` entry of `envp`; secure-execution mode, where `Tunables::parse` honours nothing, is asked only when that entry exists: `process::secure`, failing safe). It reads the `envp` argument, not the C library, because a dynamic program's loader runs libm.so.6's constructors before the C library's startup publishes the environment. A math call carries no is-it-decided test: one load and one test, as in the C library; code that runs before the constructor (a static program's constructors linked ahead of libm's) gets the baseline, which returns the same bits (D-10.25). The setting is the program's start-up environment, as for the C library's own choices. No new symbol in either library (`liella_libm_start` is local). Test: `crates/boundary/tests/libm_fma_select.rs` (user-mode instruction count of a static `-lm` program with and without `-FMA`).
+'''

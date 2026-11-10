@@ -195,21 +195,31 @@ pub fn iswctype(wc: u32, desc: u64, loc: &Locale) -> bool {
 }
 
 /// [`iswctype`] in the locale of view `v` (D-7.13): a standard class reads the view's checked
-/// wide tables, as `iswalpha` does; a locale-defined class takes the general path.
+/// wide tables, as `iswalpha` does; a locale-defined class takes the general path. The C
+/// `int` answer (1 or 0), so that every out-of-line part is a tail call ([`LocaleView::isw_int`]).
 #[inline]
-pub fn iswctype_view(wc: u32, desc: u64, v: &LocaleView) -> bool {
+pub fn iswctype_view(wc: u32, desc: u64, v: &LocaleView) -> i32 {
     match u16::try_from(desc) {
-        Ok(m) => v.isw(wc, Class(m)),
+        // A built-in locale's arm is a tail call too: inline, its call kept the descriptor
+        // in a saved register on every path.
+        Ok(m) if v.has_wide() => v.isw_int(wc, Class(m)),
+        Ok(m) => iswctype_builtin(wc, Class(m), v),
         Err(_) => iswctype_defined(wc, desc, v),
     }
+}
+
+/// [`iswctype_view`] for a view without wide tables (the built-in locales).
+#[inline(never)]
+fn iswctype_builtin(wc: u32, m: Class, v: &LocaleView) -> i32 {
+    v.isw_int(wc, m)
 }
 
 /// [`iswctype_view`] for a descriptor that is not a standard class's mask: a locale-defined
 /// class (the general path), or a value that names no class.
 #[cold]
 #[inline(never)]
-fn iswctype_defined(wc: u32, desc: u64, v: &LocaleView) -> bool {
-    desc >= DEFINED && iswctype(wc, desc, v.locale())
+fn iswctype_defined(wc: u32, desc: u64, v: &LocaleView) -> i32 {
+    i32::from(desc >= DEFINED && iswctype(wc, desc, v.locale()))
 }
 
 /// A marker whose address names the built-in `C.UTF-8` `totitle` mapping.
@@ -219,8 +229,8 @@ static UTF8_TOTITLE: i32 = 0;
 /// table at character 0 for `toupper`/`tolower`, the map's own table otherwise; 0 for none).
 pub fn trans_desc(t: Trans, loc: &Locale) -> usize {
     match (loc.ctype(), t) {
-        (Ctype::File(f), Trans::Upper) => f.toupper_table().as_ptr().wrapping_add(4 * ZERO).expose_provenance(),
-        (Ctype::File(f), Trans::Lower) => f.tolower_table().as_ptr().wrapping_add(4 * ZERO).expose_provenance(),
+        (Ctype::File(f), Trans::Upper) => f.case_desc(true),
+        (Ctype::File(f), Trans::Lower) => f.case_desc(false),
         (Ctype::File(f), Trans::Defined(k)) => f.map_table(k).as_ptr().expose_provenance(),
         (_, Trans::Upper) => C_TOUPPER.as_ptr().wrapping_add(ZERO).expose_provenance(),
         (_, Trans::Lower) => C_TOLOWER.as_ptr().wrapping_add(ZERO).expose_provenance(),
@@ -252,6 +262,35 @@ fn trans_of(desc: usize, loc: &Locale) -> Option<Trans> {
 /// another locale or of none maps `wc` to itself.
 pub fn towctrans(wc: u32, desc: usize, loc: &Locale) -> u32 {
     trans_of(desc, loc).map_or(wc, |t| ctype::wtrans(wc, t, loc))
+}
+
+/// [`towctrans`] in the locale of view `v` (D-5.8): a `toupper` or `tolower` descriptor is
+/// recognised by one comparison with the view's stored descriptors (the built-in tables'
+/// addresses for the built-in locales) and answered by the view's case map, as `towupper` and
+/// `towlower` are; any other descriptor (a locale-defined map, another locale's, none) takes
+/// the general search.
+#[inline]
+pub fn towctrans_view(wc: u32, desc: usize, v: &LocaleView) -> u32 {
+    let [up, low] = match v.case_descs() {
+        Some(d) => d,
+        None => [C_TOUPPER.as_ptr().wrapping_add(ZERO).expose_provenance(), C_TOLOWER.as_ptr().wrapping_add(ZERO).expose_provenance()],
+    };
+    // Two arms with a constant direction each: one arm with `upper` as a value kept both case
+    // tables live through the walk above U+00FF (six saved registers, ~84 instructions per call
+    // in en_US.UTF-8 against `towupper`'s ~44).
+    if desc == up {
+        return v.wtrans(wc, true);
+    }
+    if desc == low {
+        return v.wtrans(wc, false);
+    }
+    towctrans_other(wc, desc, v.locale())
+}
+
+/// [`towctrans_view`] for a descriptor that is not the view's `toupper` or `tolower`.
+#[inline(never)]
+fn towctrans_other(wc: u32, desc: usize, loc: &Locale) -> u32 {
+    towctrans(wc, desc, loc)
 }
 
 /// `towlower`.

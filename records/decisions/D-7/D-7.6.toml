@@ -1,0 +1,8 @@
+id = "D-7.6"
+section = "s07"
+spec = "§7.8"
+ann = "HIST"
+status = "active"
+body = '''
+catgets reads the X/Open catalogs installed on the system through their inspected format (Appendix D, phase 13).
+'''

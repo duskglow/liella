@@ -132,6 +132,7 @@ unsafe extern "C" {
     /// has AVX2 and the OS saves its state (`crate::cpu`).
     pub(crate) safe fn liella_machine_set_scan_level(level: u32);
     /// The scanners' current path (0 = SSE2, 1 = AVX2), for the self-tests (SHORT-3). No obligation.
+    #[cfg(feature = "selftest")]
     pub(crate) safe fn liella_machine_scan_level_get() -> u32;
     /// Bytes before the first NUL at `s` (aligned vector reads, never across a page). Proof
     /// obligation: `s` is non-NULL and a NUL-terminated string (`crate::strz`).
@@ -286,6 +287,14 @@ unsafe extern "C" {
     /// it. Proof obligation: the `off` bytes before `p` are string bytes before its NUL and `p` is
     /// at or before that NUL (`crate::strz::find_str`). Loads past the NUL stay in its page.
     pub(crate) safe fn liella_machine_strpair(p: *const u8, off: usize, c0: i32, c1: i32) -> usize;
+    /// `strstr`'s direct entry (TIMING-COV-STRSTR-PAIR): the address of the first occurrence of the
+    /// string at `n` in the string at `h`, `h` for an empty needle, or NULL. A needle of up to 15
+    /// bytes whose first candidate decides is settled in the kernel; every other call continues
+    /// in `liella_hot_strstr_slow` / `liella_hot_strstr_next` (`crate::strz::find_str_n`,
+    /// `crate::strz::find_str_after`). Proof obligation: each of `h` and `n` is NULL (the S6
+    /// abort, through the slow path) or a readable NUL-terminated string not written during the
+    /// call.
+    pub(crate) safe fn liella_machine_strstr(h: *const u8, n: *const u8) -> *mut u8;
     /// `liella_machine_strpair` over 4-byte units (`wcsstr`; `off` and the answer in units).
     /// Proof obligation: as `liella_machine_strpair` in units, and `p` 4-byte aligned
     /// (`crate::strz::find_wcs`).
@@ -524,6 +533,11 @@ unsafe extern "C" {
     pub(crate) safe fn liella_link_rela_iplt_start() -> usize;
     #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
     pub(crate) safe fn liella_link_rela_iplt_end() -> usize;
+    /// The run-time address of the ELF header of the image the start code is linked into
+    /// (`__ehdr_start`, hidden and not weak: reached PC-relatively, so it is right before the
+    /// image is relocated; `adapter/image_anchor.c`, D-27.10). Products with `runtime` only.
+    #[cfg_attr(not(feature = "runtime"), allow(dead_code))]
+    pub(crate) safe fn liella_link_image_header() -> usize;
     /// The address of the ELF header of the image the library is linked into (`__ehdr_start`),
     /// 0 where the link defines none (`backtrace`, D-2.7).
     pub(crate) safe fn liella_link_ehdr() -> usize;

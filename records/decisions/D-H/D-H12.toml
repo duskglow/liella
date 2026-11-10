@@ -1,0 +1,7 @@
+id = "D-H12"
+section = "h"
+pattern = "Insecure designs"
+status = "active"
+body = '''
+**Internal:** these are not offered: no unbounded writes, no name-only temp files, no shell-command APIs other than an explicit `Command`. **Boundary:** the contracts are implemented faithfully for ABI compatibility (`gets` as a compat symbol, `tmpnam`, `system`), with the defined-outcome rule S4. Link-time warnings are kept via `.gnu.warning` sections (phase 15).
+'''

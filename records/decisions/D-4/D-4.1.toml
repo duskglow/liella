@@ -1,0 +1,8 @@
+id = "D-4.1"
+section = "s04"
+spec = "§4"
+ann = "HIST"
+status = "active"
+body = '''
+174 exports over about 20 internal functions (C1). `mem*`/`str*`/`strn*`/`strl*`/`wcs*`/`wmem*` differ only in input conversion.
+'''

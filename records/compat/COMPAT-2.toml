@@ -1,0 +1,9 @@
+id = "COMPAT-2"
+behaviour = "`strcoll` on punctuation (§4.3, §4.4; D-4.42)"
+glibc = "Disagrees with its own `strxfrm` ordering for some pairs (undocumented deviation, 68,836 of 29.8M tested pairs)"
+liella = "POSIX: orders exactly as `strcmp` of the `strxfrm` keys"
+restore = "A tunable selecting the reference comparison path for the locale collation tables; needs the old comparison kept as a second path"
+cost = "none today"
+status = "registered"
+body = '''
+'''

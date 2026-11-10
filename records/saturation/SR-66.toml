@@ -1,0 +1,13 @@
+id = "SR-66"
+section = "5"
+row = "`gettext` hit with a memo"
+now = "+0.4 to 0.6% instr accepted"
+limit = "the memo needs the env writer calls seen (`with_env`); accepted as the cost"
+reason_class = "design"
+basis = "M"
+source = "GETTEXT-MEMO-HIT-COST (`handoff/gettext-memo-hit-cost.md`)"
+tried = "none"
+flag = "**measured 2026-10-23** (section 10): `gettext_found` t 2.80 (10-07)"
+status = "active"
+body = '''
+'''

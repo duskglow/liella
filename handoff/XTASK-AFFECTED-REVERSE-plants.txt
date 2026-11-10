@@ -1,0 +1,8 @@
+# XTASK-AFFECTED-REVERSE plants: `cargo xtask affected --reverse` (xtask/src/affected.rs). Run: cargo xtask plants handoff/XTASK-AFFECTED-REVERSE-plants.txt --dir <dir>
+# The shared membership rule looks a test target up under the wrong key: the reverse attributes nothing to the branch that selects it.
+selects-target-key | xtask/src/affected.rs | lit:FailedId::Target(c, t) => sel.tests.get(&(c, t)) ==> FailedId::Target(c, t) => sel.tests.get(&(t, c)) | cargo test -p xtask --bin xtask reverse | msg:reverse_(attributes|agrees|reports_every).*(FAILED|panicked)
+# A claim with one FULL reason next to a specific one is reported as low confidence (FULL) instead of high.
+full-any-reason | xtask/src/affected.rs | lit:let full = reasons.iter().all(|r| r.2); ==> let full = reasons.iter().any(|r| r.2); | cargo test -p xtask --bin xtask reverse | msg:reverse_flags_full_escalation_as_low_confidence.*(FAILED|panicked)
+# cargo xtask plants results (2 plants: 2 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# selects-target-key: CAUGHT, caught by xtask affected::tests::reverse_flags_full_escalation_as_low_confidence
+# full-any-reason: CAUGHT, caught by xtask affected::tests::reverse_flags_full_escalation_as_low_confidence

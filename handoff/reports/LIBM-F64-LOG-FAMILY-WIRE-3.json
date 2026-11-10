@@ -1,0 +1,18 @@
+{"task": "LIBM-F64-LOG-FAMILY-WIRE-3", "model": "opus", "tokens": null,
+ "result": "CI page-fault red fixed at the cause: hot-text.list named the non-generic runtime::start (start::<PIE> since D-27.10), so start::<false> and apply_irelative sat in plain .text and straddled a 64 KiB window on this branch; list regenerated (both profiles), startup faults after exec 35 -> 32, hot_text_products 12/12 green (startup 19/23). The first gate's one failure (system_signal_state_during_and_after hits=0) was a cross-thread SIGCHLD delivery race in the test, now fixed with an iteration-budget wait. Counts2 read into D-10.66: no row slower.",
+ "branch": "task/libm-f64-log-family-wire-3", "head": "0f5dc4988 (code; the report commit on top)",
+ "gate": {"affected": "gate2 pending at hand-back (first gate: 1 failed, system_signal_state_during_and_after, fixed in 0f5dc4988; hot_text_products 12 passed)", "peak": null},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+   "origin/next carries the same stale runtime::start key in crates/libc-so/hot-text.list; this branch's regen fixes it for whoever lands first",
+   "TIMING-COV-MEMCMP-NONAVX2-3 also regenerated hot-text.list (11-06, not landed): a conflict between the two is resolved by running tools/hottext/regen.sh again, never by hand-merging",
+   "system_signal_state_during_and_after (popen_system_eintr.rs) raced with libtest's main thread taking SIGCHLD; fixed in the test, plant sigchld-never-counted",
+   "Timing left to the periodic sweep (no rep-string, x87, division or instruction-mix change; standing rule); one-round ns on a loaded build host show log2 29.2 vs glibc 9.3 ns (FMA): instructions still above glibc on every row",
+   "Plants WARN-DEV-SHM on keke (no /mnt/zram there; the planted tests mount nothing)"
+ ],
+ "refused": [],
+ "improvement": "A stale hot-text key goes unnoticed until a layout lottery tips a bound: xtask so could warn when a hot-text.list key matches no function section in libc.a (the non-generic runtime::start key matched nothing since D-27.10)",
+ "next_step": "If gate2/plants2 are green, land; then a profile-first story for the remaining instruction gap (log2 +48, log1p +30 per call, FMA)",
+ "report_file": "handoff/LIBM-F64-LOG-FAMILY-WIRE.md",
+ "jobs": ["keke:libm-f64-log-family-wire-3-gate2", "keke:libm-f64-log-family-wire-3-plants2"]}

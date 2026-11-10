@@ -1,0 +1,4 @@
+# TIMING-SWEEP-LIBM-1107: plants on the sweep summary line (counted rows outside the selection). Format: docs/plants.md.
+unselected-rows-counted | xtask/src/sweep.rs | lit:filter(|r| r.selected && !deferred(&r.row)) ==> filter(|r| !deferred(&r.row)) | cargo test -p xtask --bin xtask sweep:: | msg:the_per_host_table_holds_ratios_spread_counters_and_flags.*FAILED
+every-row-selected | xtask/src/sweep.rs | lit:let is_selected = selected.contains(&k); ==> let is_selected = true; | cargo test -p xtask --bin xtask sweep:: | msg:the_per_host_table_holds_ratios_spread_counters_and_flags.*FAILED
+other-rows-not-named | xtask/src/sweep.rs | lit:filter(|r| !r.selected).map ==> filter(|r| r.selected && r.flagged && !r.selected).map | cargo test -p xtask --bin xtask sweep:: | msg:the_per_host_table_holds_ratios_spread_counters_and_flags.*FAILED

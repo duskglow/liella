@@ -1,0 +1,13 @@
+id = "SR-54"
+section = "4"
+row = "debug check folded out of the fast path"
+now = "4 instr per malloc/free pair"
+limit = "\"close it for now (P6-level gain, real concurrency risk); reopen only if the allocator becomes a measured bottleneck\""
+reason_class = "safety (exit-time thread blocks may be unmapped)"
+basis = "M"
+source = "ALLOC-DEBUG-FOLD (`handoff/alloc-debug-fold.md`)"
+tried = "medium story, est. 60-80 calls, for 4 instr"
+flag = "none (an explicit \"stop here\" decision)"
+status = "active"
+body = '''
+'''

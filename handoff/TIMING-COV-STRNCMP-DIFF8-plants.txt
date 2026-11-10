@@ -1,0 +1,20 @@
+# TIMING-COV-STRNCMP-DIFF8 plants: strncmp's SSE2 head (csys/src/machine/scan.S, .Lsnc_pt to .Lsnc_s64), spec §4.3.
+# machine_scanners runs the kernel on both scan levels (SSE2, and AVX2 on the build host).
+# Head page limit too high: the four blocks read past the terminator's page.
+head-limit-high | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_pt:.*?)cmpl \$4032, %eax/$1cmpl \$4064, %eax/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:SIGSEGV|signal: 11|strncmp.*(FAILED|panicked)
+# First block reads b one byte late.
+first-block-b-offset | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_pt:.*?)movdqu \(%rsi\), %xmm2/$1movdqu 1(%rsi), %xmm2/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# Order computed with the operands swapped.
+order-swapped | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_sdec:.*?)cmpl %r8d, %ecx/$1cmpl %ecx, %r8d/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# First block decides a hit at index n.
+first-block-bound | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_pt:.*?jae \.Lsnc_slow.*?)jae \.Lsnc_zero/$1ja .Lsnc_zero/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# Second block's hit index one too high.
+second-block-index | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_s16:.*?)addl \$16, %eax/$1addl \$17, %eax/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# Later blocks decide a hit at index n.
+later-block-bound | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_shit:.*?)jb \.Lsnc_sdec/$1jbe .Lsnc_sdec/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# Steps resume past 64 at the wrong index (bytes 64..79 skipped).
+resume-index | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_s64:.*?)movl \$64, %ecx/$1movl \$80, %ecx/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# An equal NUL returns 1, not 0.
+equal-nul-nonzero | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_seq:.*?)xorl %eax, %eax/$1movl \$1, %eax/s | cargo test -p liella-boundary --test machine_scanners strncmp | msg:string scanner postcondition failed|strncmp.*(FAILED|panicked)
+# The n <= 16 exit after the first block is performance only: [a, a + 64) and [b, b + 64) lie in their pages and a later hit at or past n gives 0.
+s16-exit-dropped | csys/src/machine/scan.S | perl:s/(liella_machine_strncmp:.*?\.Lsnc_s16:.*?)jbe \.Lsnc_zero/$1jb .Lsnc_zero/s | cargo test -p liella-boundary --test machine_scanners strncmp | equivalent:the exits before blocks 2-4 only save work; every block lies inside both pages and a hit at or past n gives 0

@@ -1,0 +1,8 @@
+id = "D-4.31"
+section = "s04"
+spec = "§4.3, §4.4"
+ann = "—"
+status = "active"
+body = '''
+**strcmp kernel fixed cost; ASCII table out of `Locale`** (STRCMP-FIXED, amends D-4.29/D-4.30). (1) The kernel's page pre-check is one test of `(a\|b) & 4095 > 4032` (the OR bounds the larger offset; false positives, about 1 in 5 for random alignments, go straight to the exact max test); the group count reuses the same register; the settle compares with `cmpb` (CF gives the sign). (2) `Collate.ascii1` was 512 B inline and every `Locale` copy carried it (regcomp copies the locale): `regcomp_regfree_sed_kv` ran +2710 instr / +7% cycles vs main on Zen 1. The table now lives in a static pool of 8 per-catalog slots (keyed by the catalog's `tablemb` address, filled once; entries are SLOW or correct while a filler runs, so a racing reader is always right), `Collate` holds `Option<&'static [AtomicU32;128]>` (8 B; a full pool means all-SLOW). Cost: 4 KiB bss per process, one extra dependent load per strcoll element (+9 instr on en_US names). Selftest: `ymm15` dirty/upper probes (csys) prove every AVX2 return ran `vzeroupper`.
+'''

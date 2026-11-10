@@ -1,0 +1,11 @@
+# LAYOUT-MANIFEST (D-X.48): one plant per contract kind changed or added here, and the static rules.
+# Product plants: the tool rebuilds the products with the mutant; `cargo xtask so` ends with layout-check.
+lm-slots-align | crates/legacy/src/intl.rs | perl:s/(LAYOUT\(GETTEXT-SLOTS-PAGE\)\.\n#\[repr\(C, )align\(4096\)/$1align(2048)/s | cargo xtask layout-check | msg:GETTEXT-SLOTS-PAGE BROKEN
+lm-names-section | xtask/src/hottext.rs | lit:pub const STARTUP_SECTION: &str = ".rodata1"; ==> pub const STARTUP_SECTION: &str = ".rodata.startup"; | cargo xtask layout-check | msg:STARTUP-NAMES-WINDOW BROKEN.*not \.rodata1
+lm-coldbss-skip | xtask/src/so.rs | perl:s/crate::coldbss::move_cold_bss\([^\n]*\)\?;// | cargo xtask layout-check | msg:COLD-BSS-LBSS BROKEN
+lm-memchr-org | csys/src/machine/scan.S | perl:s/(liella_machine_memchr_entry:.*?\.org liella_machine_memchr_entry \+ )0x231/${1}0x240/s | cargo xtask layout-check | msg:MEMCHR-SSE2-PIN BROKEN
+lm-rawloop-org | csys/src/machine/scan.S | perl:s/(liella_machine_rawmemchr_entry:.*?\.org liella_machine_rawmemchr_entry \+ )0x338/${1}0x348/s | cargo xtask layout-check | msg:RAWMEMCHR-LOOP-32 BROKEN
+# Static plants.
+lm-tag-removed | csys/src/machine/scan.S | perl:s/(liella_machine_memchr_entry:.*?)LAYOUT\(MEMCHR-SSE2-PIN\): /$1/s | cargo xtask layout-check --static | msg:MEMCHR-SSE2-PIN: kind section-offset holds its layout
+lm-unknown-drow | layout/contracts.tsv | perl:s/\tD-4\.63$/\tD-4.999/m | cargo xtask layout-check --static | msg:RAWMEMCHR-LOOP-32: decision D-4.999 is not a row
+lm-rule-d | xtask/src/layout.rs | lit:|| changed.iter().any(|f| f.starts_with("plan/07-decisions/")) { ==> || true { | cargo test -p xtask --bin xtask layout | msg:rule_d_needs_a_decision.*(FAILED|panicked)

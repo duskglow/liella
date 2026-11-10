@@ -1,0 +1,8 @@
+id = "D-17.4"
+section = "s17"
+spec = "§17.4"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+`lckpwdf` creates or opens `/etc/.pwd.lock` (0600) and takes an OFD write lock, retrying with pauses of 1 ms doubling to 100 ms for 15 s in all, then `EAGAIN`; no `SIGALRM` (observable: no signal handler is installed). A second `lckpwdf` while this process holds the lock returns -1 without setting errno (observed); `ulckpwdf` returns -1 when the lock is not held.
+'''

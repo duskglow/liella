@@ -1,0 +1,7 @@
+id = "D-H2"
+section = "h"
+pattern = "errno and five error conventions"
+status = "active"
+body = '''
+**Internal:** one `Result<T, Error>` (X1). **Boundary:** one `abi::ret` function per convention (X2). Ambiguous sentinels stay ambiguous at the boundary, because the C ABI fixes them (F4). Internally they never occur.
+'''

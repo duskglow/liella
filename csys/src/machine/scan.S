@@ -2263,7 +2263,7 @@ liella_machine_rawmemchr:
 	ret
 
 	.subsection 0
-	/* int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
+	/* LAYOUT(RAWMEMCHR-SSE2-PIN): int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
 	.org liella_machine_rawmemchr_entry + 0x1ed, 0xcc
 .Lraw_sse2:
 	punpcklbw %xmm0, %xmm0
@@ -2378,7 +2378,7 @@ liella_machine_rawmemchr:
 	bsfl %edx, %edx
 	leaq 48(%rdi,%rdx), %rax
 	ret
-	/* PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
+	/* LAYOUT(RAWMEMCHR-LOOP-32), PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
 	 * .Lraw_sse_loop (0xa8 bytes on) at entry + 0x3e0, 32-byte aligned, so the 117-byte loop
 	 * spans four 32-byte fetch windows instead of five (at entry + 0x3d0 it did, and
 	 * rawmemchr_4k timed slower on Ivy Bridge). The fill keeps the function's end before the
@@ -2816,7 +2816,7 @@ liella_machine_memchr:
 	ret
 
 	.subsection 0
-	/* int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
+	/* LAYOUT(MEMCHR-SSE2-PIN): int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
 	 * of the section, as before (the assembler refuses if the code above grows past it). */
 	.org liella_machine_memchr_entry + 0x231, 0xcc
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is
@@ -5301,6 +5301,7 @@ liella_machine_casecmp_ord_avx2:
 	andl $4095, %r9d
 	cmpl $4031, %r9d
 	ja .Lcord_head_exact
+.Lcord_head:
 	vmovdqu (%rdi), %ymm1
 	vmovdqu (%rsi), %ymm2
 	vpaddb .Lcasecmp_k3f(%rip), %ymm1, %ymm3
@@ -5331,11 +5332,22 @@ liella_machine_casecmp_ord_avx2:
 	movl %r8d, %eax
 	jmp .Lcord_found_idx
 .Lcord_head_exact:
-	/* A start near a page end, page-aligned or NULL: the NULL tests, then the loop from 0. */
+	/* A start near a page end, page-aligned or NULL: the NULL tests, then the exact page test
+	 * (BENCH-CASECMP-ALIGN-2): a start at page offset 4032 or below has its 64 head bytes in its
+	 * page, so a page-aligned start (which fails the test from one byte before) takes the head
+	 * too, 9 instructions later, instead of the loop from 0. The others take the loop from 0. */
 	testq %rdi, %rdi
 	jz .Lcord_open
 	testq %rsi, %rsi
 	jz .Lcord_open
+	movl %edi, %r8d
+	andl $4095, %r8d
+	cmpl $4032, %r8d
+	ja .Lcord_generic
+	movl %esi, %r9d
+	andl $4095, %r9d
+	cmpl $4032, %r9d
+	jbe .Lcord_head
 	jmp .Lcord_generic
 .Lcord_head_next:
 	/* No stop in the first 32 bytes. A bound above 64 enters the loop at offset 32 (it needs
@@ -5392,7 +5404,8 @@ liella_machine_casecmp_ord_avx2:
 	cmpl %r8d, %r9d
 	cmova %r9d, %r8d
 	cmpl $4064, %r8d
-	ja .Lcord_byte
+	ja .Lcord_back
+.Lcord_load32:
 	vmovdqu (%rdi,%rax), %ymm1
 	vmovdqu (%rsi,%rax), %ymm2
 	vpaddb %ymm5, %ymm1, %ymm3
@@ -5494,6 +5507,57 @@ liella_machine_casecmp_ord_avx2:
 	sbbl %eax, %eax
 	orl $1, %eax
 	ret
+.Lcord_back:
+	/* A 32-byte block at rax would cross a page (BENCH-CASECMP-ALIGN-2): r8d, the larger page
+	 * offset, is 4065-4095. Both strings back up by k = r8d - 4064 (1-31): the string at r8d
+	 * then ends its block at its page end, the other's block ends no later in its own page.
+	 * With rax >= k the block starts at or after both strings' starts (readable, and its first
+	 * k bytes already passed: no stop there), so the plain 32-byte step runs from rax - k. */
+	subl $4064, %r8d
+	cmpq %r8, %rax
+	jb .Lcord_back_start
+	subq %r8, %rax
+	jmp .Lcord_load32
+.Lcord_back_start:
+	/* rax < k (a start in the last 31 bytes of a page): the block starts k - rax bytes before
+	 * the strings. It stays in the page of a + rax and of b + rax when the smaller page offset
+	 * is at least k (lanes before the starts are cleared from the stop mask); otherwise one
+	 * string starts in the first k bytes of a page and the other in the last 31 bytes of one:
+	 * a byte step. */
+	leal (%rdi,%rax), %r9d
+	leal (%rsi,%rax), %r10d
+	andl $4095, %r9d
+	andl $4095, %r10d
+	cmpl %r9d, %r10d
+	cmovb %r10d, %r9d
+	cmpl %r8d, %r9d
+	jb .Lcord_byte
+	subq %r8, %rax
+	movq %rax, %r11
+	negq %r11
+	vmovdqu (%rdi,%rax), %ymm1
+	vmovdqu (%rsi,%rax), %ymm2
+	vpaddb %ymm5, %ymm1, %ymm3
+	vpaddb %ymm5, %ymm2, %ymm4
+	vpcmpgtb %ymm3, %ymm6, %ymm3
+	vpcmpgtb %ymm4, %ymm6, %ymm4
+	vpand %ymm7, %ymm3, %ymm3
+	vpand %ymm7, %ymm4, %ymm4
+	vpor %ymm3, %ymm1, %ymm1
+	vpor %ymm4, %ymm2, %ymm2
+	vpcmpeqb %ymm1, %ymm2, %ymm3
+	vpminub %ymm1, %ymm3, %ymm3
+	vpcmpeqb %ymm0, %ymm3, %ymm3
+	vpmovmskb %ymm3, %r8d
+	/* Clear the r11 (1-31) lanes before the starts; rcx (loc) is kept in r10 for the shift. */
+	movq %rcx, %r10
+	movl %r11d, %ecx
+	shrl %cl, %r8d
+	shll %cl, %r8d
+	movq %r10, %rcx
+	testl %r8d, %r8d
+	jnz .Lcord_found
+	jmp .Lcord_after32
 .Lcord_same:
 	/* Equal after folding: both NUL (the answer is 0), or a writer changed the text since the
 	 * vector step (open: the rest entry measures it again). */
@@ -5502,21 +5566,30 @@ liella_machine_casecmp_ord_avx2:
 	jnz .Lcord_open
 	ret
 .Lcord_byte:
+	/* From .Lcord_back_start, r8 = k: the nearer page end is 32 - k bytes on. Byte steps up to
+	 * it (or to n), with no page test per byte, then the loop. */
+	leaq 32(%rax), %r11
+	subq %r8, %r11
+	cmpq %rdx, %r11
+	cmova %rdx, %r11
+.Lcord_byte_loop:
 	movzbl (%rdi,%rax), %r8d
 	movzbl (%rsi,%rax), %r9d
 	leal -65(%r8), %r10d
-	leal 32(%r8), %r11d
 	cmpl $25, %r10d
-	cmovbe %r11d, %r8d
+	leal 32(%r8), %r10d
+	cmovbe %r10d, %r8d
 	leal -65(%r9), %r10d
-	leal 32(%r9), %r11d
 	cmpl $25, %r10d
-	cmovbe %r11d, %r9d
+	leal 32(%r9), %r10d
+	cmovbe %r10d, %r9d
 	cmpl %r9d, %r8d
 	jne .Lcord_byte_differ
 	testl %r8d, %r8d
 	jz .Lcord_zero
 	incq %rax
+	cmpq %r11, %rax
+	jb .Lcord_byte_loop
 	jmp .Lcord_top64
 .Lcord_byte_differ:
 	vzeroupper
@@ -5543,7 +5616,8 @@ liella_machine_casecmp_ord_avx2:
  * as two 16-byte blocks (the fold of liella_machine_casecmp_sse2: xmm12 = 0x25, xmm13 = 0x65,
  * xmm14 = 0x20, xmm15 = 0); the first step is 32 bytes, not 16 then 64, so a string under 32
  * bytes takes two blocks. Same page rule (the larger page offset <= 4064 reads 32 bytes, <= 4032
- * reads 64, otherwise one byte), same stop: the two deciding bytes read again and ordered here.
+ * reads 64, otherwise a 32-byte block backed up to end at the page end, see .Lcord2_back), same
+ * stop: the two deciding bytes read again and ordered here.
  * Scratch: rax, r8-r10, xmm1-xmm15; rcx (loc) is kept for the rest entry. */
 	.section .text.liella_machine_casecmp_ord_sse2,"ax",@progbits
 	.globl liella_machine_casecmp_ord_sse2
@@ -5565,9 +5639,10 @@ liella_machine_casecmp_ord_sse2:
 	cmpl %r8d, %r9d
 	cmova %r9d, %r8d
 	cmpl $4064, %r8d
-	ja .Lcord2_byte
+	ja .Lcord2_back
 	/* The loop's 9-instruction fold (see .Lcord2_loop64) on two blocks: result in xmm5/xmm6, zero iff
 	 * the A-Z-folded bytes are equal; a stop is a lane where the result is non-zero or a is NUL. */
+.Lcord2_load32:
 	movdqu (%rdi,%rax), %xmm1
 	movdqu (%rsi,%rax), %xmm5
 	movdqa %xmm1, %xmm9
@@ -5739,7 +5814,23 @@ liella_machine_casecmp_ord_sse2:
 	testl %r8d, %r8d
 	jnz .Lcord2_open
 	ret
+.Lcord2_back:
+	/* A 32-byte block at rax would cross a page (BENCH-CASECMP-ALIGN-2): as the AVX2 entry's
+	 * .Lcord_back, both strings back up by k = r8d - 4064 (1-31) when rax >= k (the block then
+	 * ends at the nearer page end and starts inside the text already passed); a start in the last
+	 * k bytes of a page (rax < k) takes byte steps. */
+	subl $4064, %r8d
+	cmpq %r8, %rax
+	jb .Lcord2_byte
+	subq %r8, %rax
+	jmp .Lcord2_load32
 .Lcord2_byte:
+	/* r8 = k: byte steps up to the nearer page end, 32 - k bytes on (or to n), then the loop. */
+	leaq 32(%rax), %r11
+	subq %r8, %r11
+	cmpq %rdx, %r11
+	cmova %rdx, %r11
+.Lcord2_byte_loop:
 	movzbl (%rdi,%rax), %r8d
 	movzbl (%rsi,%rax), %r9d
 	leal -65(%r8), %r10d
@@ -5755,6 +5846,8 @@ liella_machine_casecmp_ord_sse2:
 	testl %r8d, %r8d
 	jz .Lcord2_zero
 	incq %rax
+	cmpq %r11, %rax
+	jb .Lcord2_byte_loop
 	jmp .Lcord2_top64
 .Lcord2_byte_differ:
 	movl %r8d, %r10d
@@ -6073,6 +6166,8 @@ strchrnul:
 	jz .Lschrnul_s16
 	leaq (%rdi,%rdx), %rax
 	ret
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-4.68): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschrnul_t32), as strchr's (.Lschr_t32). */
 .Lschrnul_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6092,10 +6187,7 @@ strchrnul:
 	por %xmm1, %xmm2
 	pmovmskb %xmm2, %edx
 	bsfl %edx, %edx
-	jz .Lschrnul_s48
-	leaq 32(%rdi,%rdx), %rax
-	ret
-.Lschrnul_s48:
+	jnz .Lschrnul_t32
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6112,6 +6204,9 @@ strchrnul:
 	subq $16, %rax
 	xorl %r11d, %r11d
 	jmp .Lschr_next
+.Lschrnul_t32:
+	leaq 32(%rdi,%rdx), %rax
+	ret
 	.size liella_machine_strchrnul, .-liella_machine_strchrnul
 	.section .text.liella_machine_strchr,"ax",@progbits
 
@@ -6214,6 +6309,13 @@ index:
 	jnc .Lschr_snull
 	leaq (%rdi,%rcx), %rax
 	ret
+.Lschr_snull:
+	xorl %eax, %eax
+	ret
+	/* TIMING-COV-STRSCAN-SHORT-IVB (D-4.68): block 2 falls through into block 3 on a miss and
+	 * leaves on a hit to its out-of-line tail (.Lschr_t32); blocks 0, 1 and 3 keep their hit
+	 * inline. Taken branches per call by deciding block 0/1/2/3/beyond: 0/1/3/2/3 (one per
+	 * missed block before: 0/1/2/3/4), plus the NULL return's. Same instructions on every path. */
 .Lschr_s16:
 	movdqu 16(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
@@ -6236,13 +6338,7 @@ index:
 	por %xmm2, %xmm1
 	pmovmskb %xmm1, %ecx
 	bsfl %ecx, %ecx
-	jz .Lschr_s48
-	pmovmskb %xmm2, %edx
-	btl %ecx, %edx
-	jnc .Lschr_snull
-	leaq 32(%rdi,%rcx), %rax
-	ret
-.Lschr_s48:
+	jnz .Lschr_t32
 	movdqu 48(%rdi), %xmm1
 	movdqa %xmm1, %xmm2
 	pcmpeqb %xmm0, %xmm2
@@ -6256,15 +6352,18 @@ index:
 	jnc .Lschr_snull
 	leaq 48(%rdi,%rcx), %rax
 	ret
-.Lschr_snull:
-	xorl %eax, %eax
-	ret
 .Lschr_s64:
 	leaq 64(%rdi), %rax
 	andq $-16, %rax
 	subq $16, %rax
 	movl $1, %r11d
 	jmp .Lschr_next
+.Lschr_t32:
+	pmovmskb %xmm2, %edx
+	btl %ecx, %edx
+	jnc .Lschr_snull
+	leaq 32(%rdi,%rcx), %rax
+	ret
 .Lschr_pre1:
 	movl $1, %r11d
 .Lschr_body:
@@ -6745,8 +6844,8 @@ liella_machine_memrchr:
  * NUL, so the caller's contract makes them readable; a vector never leaves their page.
  * DIRECT ENTRY (STR-CHR-CMP-SHORT): `strncmp` in the products is this kernel, with no Rust
  * wrapper: n == 0 returns 0 before any read; the head's page test takes (a - 1) | (b - 1) & 4095
- * below liella_machine_rshort_mask, which a NULL a or b never passes; .Lsnc_pt tests both for
- * NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
+ * below liella_machine_rshort_mask, which a NULL a or b never passes; the SSE2 head's test below
+ * 4032 does not pass either, and .Lsnc_slow tests both for NULL and tail-jumps to `liella_hot_strncmp_null` (the S6 abort) before any read. */
 	.section .text.liella_machine_strncmp,"ax",@progbits
 	.hidden liella_hot_strncmp_null  /* crates/boundary/src/posix/s04_strings.rs */
 	.globl liella_machine_strncmp
@@ -6830,8 +6929,96 @@ strncmp:
 	/* The entry's taken branch lands on a 32-byte boundary (padding after the jmp above). */
 	.p2align 5
 .Lsnc_pt:
-	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected (or the SSE2
-	 * level: limit 0). */
+	/* TIMING-COV-STRNCMP-DIFF8 (D-4.69): the SSE2 head. eax = ((a - 1) | (b - 1)) & 4095 from the
+	 * entry, at least either offset after the - 1: below 4032, [a, a + 64) and [b, b + 64) lie in
+	 * their pages and neither is NULL (NULL - 1 has offset 4095), so up to four 16-byte blocks
+	 * run with no NULL test, no per-step page test and no index register. The AVX2 level reaches
+	 * here only with eax >= 4032 (its mask), so this compare sends it to the slow path. A hit
+	 * (bytes differ or a's is NUL) at i < n is decided by re-reading both bytes (D-4.21); a block
+	 * with no hit gives 0 when n ends inside it; n > 64 with no hit resumes the steps at 64. */
+	cmpl $4032, %eax
+	jae .Lsnc_slow
+	movdqu (%rdi), %xmm1
+	movdqu (%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s16
+	cmpq %rdx, %rax
+	jae .Lsnc_zero
+.Lsnc_sdec:
+	/* The deciding bytes at i = rax < n: different falls through to the order (no taken branch). */
+	movzbl (%rdi,%rax), %ecx
+	movzbl (%rsi,%rax), %r8d
+	cmpl %r8d, %ecx
+	je .Lsnc_seq
+	sbbl %eax, %eax
+	orl $1, %eax
+	ret
+.Lsnc_seq:
+	/* Equal and NUL: 0. Equal and not NUL (a writer changed them after the scan): the byte step
+	 * resumes after them, with the zero vector its steps compare against. */
+	testl %ecx, %ecx
+	jnz .Lsnc_swriter
+	xorl %eax, %eax
+	ret
+.Lsnc_swriter:
+	pxor %xmm3, %xmm3
+	movq %rax, %rcx
+	jmp .Lsnc_byte
+.Lsnc_s16:
+	cmpq $16, %rdx
+	jbe .Lsnc_zero
+	movdqu 16(%rdi), %xmm1
+	movdqu 16(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s32
+	addl $16, %eax
+.Lsnc_shit:
+	cmpq %rdx, %rax
+	jb .Lsnc_sdec
+	xorl %eax, %eax
+	ret
+.Lsnc_s32:
+	cmpq $32, %rdx
+	jbe .Lsnc_zero
+	movdqu 32(%rdi), %xmm1
+	movdqu 32(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s48
+	addl $32, %eax
+	jmp .Lsnc_shit
+.Lsnc_s48:
+	cmpq $48, %rdx
+	jbe .Lsnc_zero
+	movdqu 48(%rdi), %xmm1
+	movdqu 48(%rsi), %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pminub %xmm1, %xmm2
+	pcmpeqb .Lstrcmp_zero16(%rip), %xmm2
+	pmovmskb %xmm2, %eax
+	bsfl %eax, %eax
+	jz .Lsnc_s64
+	addl $48, %eax
+	jmp .Lsnc_shit
+.Lsnc_s64:
+	cmpq $64, %rdx
+	jbe .Lsnc_zero
+	pxor %xmm3, %xmm3
+	movl $64, %ecx
+	jmp .Lsnc_step
+.Lsnc_slow:
+	/* The S6 NULL tests, then the exact page test for a pair the OR test rejected. */
 	testq %rdi, %rdi
 	jz liella_hot_strncmp_null
 	testq %rsi, %rsi
@@ -6996,7 +7183,9 @@ strncmp:
  * Groups of four blocks (128 bytes, one page) run a one-stream filter (c1 at q, or c0 at q - off
  * after a dense run of c1 in a group free of c0) or the pair test, each with the 0 test of q.
  * Units past the terminator are read only inside the terminator's page and are masked off
- * (the bits from the first 0 unit on). Rust verifies the needle at every candidate. */
+ * (the bits from the first 0 unit on). Rust verifies the needle at every candidate.
+ * Registers (TIMING-COV-STRSTR-PAIR): strpair uses no stack and writes no rdi, rsi or rcx and no
+ * xmm13-xmm15; liella_machine_strstr keeps its values there across the call. */
 	.section .text.liella_machine_strpair,"ax",@progbits
 	.globl liella_machine_strpair
 	.type liella_machine_strpair, @function
@@ -7448,6 +7637,127 @@ liella_machine_strpair:
 	subq $64, %rax
 	jmp .Lliella_machine_strpair_sse_loop
 	.size liella_machine_strpair, .-liella_machine_strpair
+
+/* char *liella_machine_strstr(const char *h, const char *n) (TIMING-COV-STRSTR-PAIR): strstr's
+ * direct entry. In the products `strstr` is this code, with no Rust frame before the scan; the
+ * Rust twin (posix::strstr) calls it too, so the strstr tests run it. It settles a needle of at
+ * most 15 bytes whose first candidate decides the call, and hands every other call to Rust:
+ *   - when h - 1 and n - 1 each have a page offset below 4080 (h and n have offsets 1..4080, so
+ *     16 bytes from each lie in its page; a NULL, offset 4095 after the - 1, never passes),
+ *     one 16-byte load of n gives its length m when a NUL is among them (m <= 15); m == 0
+ *     returns h. Else `liella_hot_strstr_slow(h, n)`, the measuring path (strz::find_str_n).
+ *   - one 16-byte load of h: a NUL at an index below last = m - 1 means the haystack is shorter
+ *     than the needle's first m - 1 bytes: NULL. Else bytes [0, last) of h are text, the
+ *     contract of liella_machine_strpair(h + last, last, n[0], n[last]).
+ *   - its answer 2k (candidate at h + k): when h + k has a page offset <= 4080, one 16-byte load
+ *     there is compared with the needle (kept in xmm15) over bits [0, m); equal returns h + k.
+ *     Answer 2k + 1 (a NUL at h + last + k): that byte read again is 0: NULL.
+ *     Anything else (a failed candidate, a candidate at a page end, a NUL that a writer
+ *     changed) goes to `liella_hot_strstr_next(h, n, m, r)` with the answer r, which continues
+ *     as strz::find_known does after its first scan (strz::find_str_after).
+ * Registers: strpair writes no rdi, rsi or rcx and no xmm13-xmm15 (its header): rdi = h + last
+ * and rsi = last survive the call, the needle's 16 bytes stay in xmm15; n is pushed (one push
+ * keeps the call 16-byte aligned).
+ * SAFETY: every load lies in the page of a byte the contract makes readable (h[0], n[0], the
+ * candidate's first byte, which the scan saw as text) or is strpair's own; bytes loaded past a
+ * NUL are masked off (the length) or ignored (bits from m on). */
+	.section .text.liella_machine_strstr,"ax",@progbits
+	.hidden liella_hot_strstr_slow  /* crates/boundary/src/posix/s04_strings.rs */
+	.hidden liella_hot_strstr_next  /* crates/boundary/src/posix/s04_strings.rs */
+	.globl liella_machine_strstr
+	.type liella_machine_strstr, @function
+	/* 64-byte aligned like every exported entry (D-4.33). */
+	.p2align 6
+liella_machine_strstr:
+#ifdef LIELLA_EXPORT
+	.globl strstr
+	.type strstr, @function
+strstr:
+#endif
+	leal -1(%rdi), %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	jae .Lsstr_slow
+	leal -1(%rsi), %eax
+	andl $4095, %eax
+	cmpl $4080, %eax
+	jae .Lsstr_slow
+	movdqu (%rsi), %xmm15
+	pxor %xmm0, %xmm0
+	pcmpeqb %xmm15, %xmm0
+	pmovmskb %xmm0, %eax
+	bsfl %eax, %eax
+	jz .Lsstr_slow
+	/* eax = m; m == 0 (CF after the subtraction): h. Else eax = last. */
+	subl $1, %eax
+	jc .Lsstr_empty
+	movdqu (%rdi), %xmm1
+	pxor %xmm2, %xmm2
+	pcmpeqb %xmm1, %xmm2
+	pmovmskb %xmm2, %edx
+	orl $0x10000, %edx
+	bsfl %edx, %edx
+	cmpl %eax, %edx
+	jb .Lsstr_null
+	pushq %rsi
+	movzbl (%rsi), %edx
+	movzbl (%rsi,%rax), %ecx
+	addq %rax, %rdi
+	movq %rax, %rsi
+	call liella_machine_strpair
+	popq %r8
+	testb $1, %al
+	jnz .Lsstr_nul
+	/* Candidate h + k, k = r / 2; rdx = h. */
+	movq %rdi, %rdx
+	subq %rsi, %rdx
+	shrq %rax
+	addq %rdx, %rax
+	movl %eax, %r9d
+	andl $4095, %r9d
+	cmpl $4080, %r9d
+	ja .Lsstr_fail
+	movdqu (%rax), %xmm0
+	pcmpeqb %xmm15, %xmm0
+	pmovmskb %xmm0, %r10d
+	/* Bits from m on set: all ones exactly when bytes [0, m) are equal. */
+	leal 1(%rsi), %ecx
+	movl $-1, %r9d
+	shll %cl, %r9d
+	orl %r9d, %r10d
+	incl %r10d
+	jnz .Lsstr_fail
+	ret
+.Lsstr_fail:
+	/* r = 2 * (candidate - h). */
+	subq %rdx, %rax
+	leaq (%rax,%rax), %rcx
+	jmp .Lsstr_next
+.Lsstr_nul:
+	movq %rax, %rdx
+	shrq %rdx
+	cmpb $0, (%rdi,%rdx)
+	jne .Lsstr_changed
+.Lsstr_null:
+	xorl %eax, %eax
+	ret
+.Lsstr_changed:
+	movq %rax, %rcx
+.Lsstr_next:
+	/* (h, n, m, r) for the Rust continuation. */
+	leaq 1(%rsi), %rdx
+	subq %rsi, %rdi
+	movq %r8, %rsi
+	jmp liella_hot_strstr_next
+.Lsstr_empty:
+	movq %rdi, %rax
+	ret
+.Lsstr_slow:
+	jmp liella_hot_strstr_slow
+	.size liella_machine_strstr, .-liella_machine_strstr
+#ifdef LIELLA_EXPORT
+	.size strstr, .-strstr
+#endif
 	.section .text.liella_machine_wcspair,"ax",@progbits
 
 	.globl liella_machine_wcspair

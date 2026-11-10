@@ -1,0 +1,7 @@
+{"task": "SIGNAL-TEST-THREAD-AUDIT", "model": "opus", "tokens": null, "result": "audit done; 5 exposed s20 cases moved to a shared single-threaded fork helper with a sole_thread read guard; s18_4_g_2 exposed but not fixed; jobs pending", "branch": "task/signal-test-thread-audit", "head": null,
+ "gate": {"affected": "pending (mei:signal-test-thread-audit-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "brief names handoff/POPEN-SYSTEM-SIGCHLD-RACE.md, which exists only on an unmerged branch; reading it needs git show of others' work", "recommendation": "land POPEN-SYSTEM-SIGCHLD-RACE first or allow reading named handoff files from other branches"}],
+ "informational": ["system_two_threads_share_the_ignore relies on sleep 1 outlasting the short call", "s23 ualarm/getitimer checks use wall-clock windows", "s20_2_c_1_5 negative check after a 100 ms sleep"],
+ "refused": [], "jobs": ["mei:signal-test-thread-audit-lint3", "mei:signal-test-thread-audit-gate", "mei:signal-test-thread-audit-loop", "mei:signal-test-thread-audit-plants"],
+ "improvement": "the alone helpers are copied per test file; one shared re-exec helper (with the fork variant) would make this audit a grep",
+ "next_step": "collect jobs, write D-X.42 row, fix s18_4_g_2 with single_threaded", "report_file": "handoff/SIGNAL-TEST-THREAD-AUDIT.md"}

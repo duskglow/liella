@@ -1,0 +1,5 @@
+# LIBM-F64-EXP-QUICK-WIRE plants (docs/plants.md): exp's quick phase wired as tier 1, tier 2 on a miss, the envelope.
+tier1-on-miss | crates/math/src/fast64/quick.rs | lit:tier2(x) ==> Some(v) | cargo test -p liella-boundary --features selftest --test exp_quick exp_entry | msg:hard case exp.*through the entry
+tier2-skipped | crates/math/src/fast64/quick.rs | lit:super::exp_nearest(x) ==> None | cargo test -p liella-boundary --test libm_fma_select exp_quick | msg:a miss did not stop at tier 2
+mxcsr-inverted | crates/rt/src/fpu.rs | lit:(saved, is_default_control(saved)) ==> (saved, !is_default_control(saved)) | cargo test -p liella-boundary --features selftest --test s10_math_symbols | msg:panicked at crates/boundary/tests/s10_math_symbols\.rs
+fma-without-tunable | crates/boundary/src/dispatch.rs | lit:f.fma() && t.fma.unwrap_or(true) ==> f.fma() | cargo test -p liella-boundary --test libm_fma_select libm_product_selects | msg:the FMA builds did not run

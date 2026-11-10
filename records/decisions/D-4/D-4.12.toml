@@ -1,0 +1,8 @@
+id = "D-4.12"
+section = "s04"
+spec = "§4.13"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+`argz_insert(before)`: NULL appends; an address inside an entry inserts before that entry; an address outside the vector is `EINVAL` (glibc's behaviour).
+'''

@@ -1,0 +1,8 @@
+id = "D-10.60"
+section = "s10"
+spec = "§10.2"
+ann = "—"
+status = "active"
+body = '''
+**`log` quick phase: method, table and bound** (LIBM-F64-LOG-QUICK, under D-10.51; wired as `log`'s tier 1, tier 2 = `fast64::log_nearest` unchanged, then the accurate path). `fast64::quick_log`: `x = 2^e·m`, `m` in `[45/64, 90/64)` read from the bits, 128 intervals (Tang, ACM TOMS 16(4) 1990); reciprocals `c_j` of 8 significant bits so `r = c_j·m − 1` is exact (Gal & Bachelis, ACM TOMS 17(1) 1991): SSE2 `c_j·(m − F_j) + b_j`, FMA one `fma`; `c_j = 1` on the two intervals next to 1; `−ln c_j` and `ln 2` with high parts on the `2^-42` grid so `e·Kh + Lh` is exact (`LOG_Q128`, `LN2_Q`, `cargo xtask tables`, 4 KiB). `log1p(r)` by Taylor degree 9 in Estrin's scheme (log's coefficients do not decay: degree 5-6 leaves `2^-45` next to 1; a rigorous minimax fit could save one term, not done), `r − r²/2` as an exact pair (2MultFMA, or a 26-bit split in SSE2), three Fast2Sums. Bound (module doc, recomputed by `log_quick_constants_and_bounds`): case `e = 0`, `c = 1` `2^-64.91`, case `e = 0`, `c != 1` `2^-67.63`, case `e != 0` `2^-70.9`; stated `RHO = 2^-64` both builds; Ziv one-sided test (de Dinechin, Lauter & Muller, RAIRO-ITA 41, 2007) with `C = 0x3ff0040100401005`. Measured (Skylake-SP host): largest relative error SSE2 `2^-65.76`, FMA `2^-65.92` (3·10^5 / 10^5 operands vs `mp::ln`); fallback SSE2 797 of 800000 (0.0996%, model `C − 1 = 0.098%`), FMA 200 of 200000; every answer correctly rounded (2·10^6 SSE2, 2·10^5 per build through the entry). log2/log10/log1p not wired (follow-up stories).
+'''

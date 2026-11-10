@@ -20,8 +20,35 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::so::OWN_PREFIX;
+
+/// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
+/// check of [`group`] reported but not enforced. A stale start-up or fork key blocks the build, and
+/// the build is what `tools/hottext/regen.sh` traces to repair the list, so without this mode a dead
+/// key blocks its own repair. Only `regen.sh --build` passes it, and it then rebuilds without it, so
+/// the rewritten list must pass the check; [`static_check`] fails when anything else names it.
+pub const REGEN_FLAG: &str = "--hottext-regen";
+static REGEN: AtomicBool = AtomicBool::new(false);
+
+/// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
+/// CI (the `CI` variable set) and any other argument is an error.
+pub fn regen_mode(args: &[String]) -> Result<(), String> {
+    let mut on = false;
+    for a in args {
+        if a == REGEN_FLAG {
+            on = true;
+        } else {
+            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
+        }
+    }
+    if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
+        return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
+    }
+    REGEN.store(on, Ordering::Relaxed);
+    Ok(())
+}
 
 /// A function or section name -> its build-stable key (keep in step with tools/hottext/keys.py):
 /// no `__liella_libc_` prefix, no ThinLTO `.llvm.<n>` suffix, no v0 crate disambiguators
@@ -363,15 +390,90 @@ fn strip_legacy_hash(s: &str) -> String {
     out
 }
 
-/// The keys of `list` (one per line; `#` comments and blank lines skipped) -> their position (the
-/// first, if a key repeats). A missing list is empty.
-fn read_list(list: &Path) -> BTreeMap<String, usize> {
+/// The tiers of `hot-text.list` (HOTTEXT-STARTUP-COMPLETE), in first-touch order: the probe that
+/// touched a key first (tools/hottext/regen.sh). Keep in step with tools/hottext/merge.py.
+const TIERS: [&str; 7] = ["startup", "fork", "stdio", "strings", "locale", "tool", "extra"];
+/// The tiers whose keys must match a function section of the profile they were traced in: a
+/// start-up or fork-child function outside the group sits in cold `.text` and moves with any
+/// growth before it (LIBM-F64-LOG-FAMILY-WIRE-2: `runtime::start::<false>` crossed a 64 KiB
+/// window, one more start-up fault).
+const GUARDED_TIERS: [&str; 2] = ["startup", "fork"];
+
+/// One key of the list: its tier and the profiles whose trace hit it (empty: none recorded).
+#[derive(Debug, PartialEq)]
+struct Entry {
+    key: String,
+    tier: &'static str,
+    profiles: Vec<String>,
+}
+
+/// The lines of `hot-text.list`: `<key>\t<tier>\t<profiles>` (profiles comma-separated, `-` for
+/// none); `#` comments and blank lines skipped. A line with the key alone (the list before tiers)
+/// has tier `extra` and no profile. Errors name the line.
+fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
+    let mut out = Vec::new();
+    for (n, l) in text.lines().enumerate() {
+        if l.trim().is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = l.split('\t').collect();
+        let bad = || format!("hot-text.list line {}: {l:?}: want <key>\\t<tier>\\t<profiles>", n + 1);
+        let entry = match parts[..] {
+            [k] => Entry { key: k.trim().to_string(), tier: "extra", profiles: Vec::new() },
+            [k, t, p] => {
+                let tier = TIERS.iter().find(|x| **x == t).ok_or_else(bad)?;
+                let profiles: Vec<String> = if p == "-" { Vec::new() } else { p.split(',').map(str::to_string).collect() };
+                if profiles.iter().any(|p| p != "fast" && p != "release") {
+                    return Err(bad());
+                }
+                Entry { key: k.to_string(), tier, profiles }
+            }
+            _ => return Err(bad()),
+        };
+        out.push(entry);
+    }
+    Ok(out)
+}
+
+/// The keys of `entries` -> their position (the first, if a key repeats).
+fn positions(entries: &[Entry]) -> BTreeMap<String, usize> {
     let mut keys = BTreeMap::new();
-    let lines = fs::read_to_string(list).unwrap_or_default();
-    for (i, l) in lines.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).enumerate() {
-        keys.entry(l.to_string()).or_insert(i);
+    for (i, e) in entries.iter().enumerate() {
+        keys.entry(e.key.clone()).or_insert(i);
     }
     keys
+}
+
+/// The guard (HOTTEXT-STARTUP-COMPLETE): the keys of a [`GUARDED_TIERS`] tier traced in
+/// `profile` that are not in `matched` (the keys of the archive's function sections), and the
+/// count of the other unmatched keys. `profile` `None` (an archive built with other flags, e.g.
+/// the bench's x86-64-v3 copy, whose inlining differs): nothing is guarded, every unmatched key
+/// is counted.
+fn unmatched<'a>(entries: &'a [Entry], matched: &BTreeSet<String>, profile: Option<&str>) -> (Vec<&'a Entry>, usize) {
+    let mut guarded = Vec::new();
+    let mut others = 0;
+    for e in entries.iter().filter(|e| !matched.contains(&e.key)) {
+        let traced = profile.is_some_and(|p| e.profiles.iter().any(|x| x == p));
+        if traced && GUARDED_TIERS.contains(&e.tier) {
+            guarded.push(e);
+        } else {
+            others += 1;
+        }
+    }
+    (guarded, others)
+}
+
+/// The error for guarded keys that match no function section (empty: none).
+fn unmatched_error(guarded: &[&Entry], profile: &str) -> Option<String> {
+    if guarded.is_empty() {
+        return None;
+    }
+    let mut msg = format!("hot-text.list: {} {profile}-profile start-up/fork key(s) match no function section of libc.a", guarded.len());
+    for e in guarded {
+        msg.push_str(&format!("\n  {} ({}, traced in {})", e.key, e.tier, e.profiles.join(",")));
+    }
+    msg.push_str("\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile)");
+    Some(msg)
 }
 
 /// A function section's name without any hot prefix: `.text.sorted.h<n>.<f>`, the older
@@ -429,10 +531,15 @@ fn is_startup_names(section: &str) -> bool {
 /// Rename the function sections of `archive` whose keys are in `list` to
 /// `.text.sorted.h<position>.<f>`, in place, and any hot section whose key is not listed (or whose
 /// position changed) back to `.text.<f>` (or its new position): cargo may hand back an archive this
-/// already ran on, with another list. `work` is a scratch directory. Returns (hot
-/// sections in the result, keys in the list).
-pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usize, usize), String> {
-    let keys = read_list(list);
+/// already ran on, with another list. `work` is a scratch directory. `profile`: the profile the
+/// archive was built with (`fast`, `release`), `None` for other flags (see [`unmatched`]). Fails when
+/// a start-up or fork key traced in `profile` matches no function section; prints the count of the
+/// other unmatched keys. Returns (hot sections in the result, keys in the list).
+pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option<&str>) -> Result<(usize, usize), String> {
+    let text = fs::read_to_string(list).map_err(|e| format!("{}: {e}", list.display()))?;
+    let entries = parse_list(&text)?;
+    let keys = positions(&entries);
+    let mut matched = BTreeSet::new();
     let _ = fs::remove_dir_all(work);
     fs::create_dir_all(work).map_err(|e| e.to_string())?;
     let archive = fs::canonicalize(archive).map_err(|e| e.to_string())?;
@@ -460,6 +567,7 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usiz
                 continue;
             }
             let Some(f) = function_of(name) else { continue };
+            matched.insert(key(f));
             let want = rename_for(name, f, &keys);
             if want.starts_with(".text.sorted.") {
                 hot += 1;
@@ -482,13 +590,181 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path) -> Result<(usiz
     if startup != 1 {
         return Err(format!("{}: {startup} start-up names sections (STARTUP_NAMES), want 1", archive.display()));
     }
+    let (guarded, others) = unmatched(&entries, &matched, profile);
+    if let Some(e) = dead_key_verdict(unmatched_error(&guarded, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
+        println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
+    }
+    println!("so: {others} hot-text keys match no function section (other tiers or profiles; not guarded)");
     Ok((hot, keys.len()))
+}
+
+/// The dead-key check's outcome: the error of [`unmatched_error`] fails the build, except in the
+/// regen mode ([`REGEN_FLAG`]), where it is handed back to be printed.
+fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, String> {
+    match err {
+        None => Ok(None),
+        Some(e) if regen => Ok(Some(e)),
+        Some(e) => Err(e),
+    }
+}
+
+/// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
+/// (`tools/hottext/regen.sh`) and prose (`.md`, and the records under `records/`, which only xtask
+/// reads). A gate, CI script or other tool that passed it
+/// would build with the dead-key check off.
+fn may_name_regen_flag(path: &str) -> bool {
+    path == "xtask/src/hottext.rs" || path == "tools/hottext/regen.sh" || path.ends_with(".md")
+        || (path.starts_with("records/") && path.ends_with(".toml"))
+}
+
+/// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
+/// (crate, modules, function); `None` for generic, impl, closure and C names.
+fn plain_path(key: &str) -> Option<(String, Vec<String>, String)> {
+    let mut s = key.strip_prefix("_RNv")?;
+    let mut depth = 1;
+    while let Some(r) = s.strip_prefix("Nt") {
+        s = r;
+        depth += 1;
+    }
+    s = s.strip_prefix('C')?;
+    let mut idents = Vec::new();
+    for _ in 0..=depth {
+        let n = s.bytes().take_while(u8::is_ascii_digit).count();
+        let len: usize = s.get(..n)?.parse().ok()?;
+        idents.push(s.get(n..n + len)?.to_string());
+        s = &s[n + len..];
+    }
+    if !s.is_empty() {
+        return None;
+    }
+    let f = idents.pop()?;
+    let krate = idents.remove(0);
+    Some((krate, idents, f))
+}
+
+/// Whether every module-level definition of `fn f` in `text` carries `#[inline(never)]` among the
+/// attributes and comments directly above it; `None` when `text` defines no such function.
+fn inline_never(text: &str, f: &str) -> Option<bool> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut found = None;
+    for (i, l) in lines.iter().enumerate() {
+        let mut rest = *l;
+        for q in ["pub(crate) ", "pub(super) ", "pub ", "const ", "unsafe ", "extern \"C\" "] {
+            rest = rest.strip_prefix(q).unwrap_or(rest);
+        }
+        let Some(after) = rest.strip_prefix("fn ").and_then(|r| r.strip_prefix(f)) else { continue };
+        if !after.starts_with('(') && !after.starts_with('<') {
+            continue;
+        }
+        let marked = lines[..i].iter().rev().take_while(|a| a.starts_with("#[") || a.starts_with("//")).any(|a| a.trim() == "#[inline(never)]");
+        found = Some(found.unwrap_or(true) && marked);
+    }
+    found
+}
+
+/// The source of module `mods` of workspace crate `krate` (its library name): `(path, text)`.
+fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, String)> {
+    let package = krate.replace('_', "-");
+    let dir = fs::read_dir(root.join("crates")).ok()?.filter_map(Result::ok).map(|e| e.path()).find(|d| {
+        fs::read_to_string(d.join("Cargo.toml")).is_ok_and(|t| t.lines().any(|l| l.trim() == format!("name = \"{krate}\"") || l.trim() == format!("name = \"{package}\"")))
+    })?;
+    let base = dir.join("src").join(mods.join("/"));
+    let candidates = if mods.is_empty() { vec![dir.join("src/lib.rs")] } else { vec![base.with_extension("rs"), base.join("mod.rs")] };
+    candidates.into_iter().find_map(|p| fs::read_to_string(&p).ok().map(|t| (p.strip_prefix(root).unwrap_or(&p).display().to_string(), t)))
+}
+
+/// The tiers whose plain functions must be `#[inline(never)]` (HOTTEXT-REGEN-UNBLOCK): the fork
+/// tier only. Marking the start-up tier too cost 3 to 18 user instructions on the start-up rows
+/// (`process::run_thread_dtors` and `locale::refresh_words` stop being inlined), so it waits for
+/// an owner ruling (handoff/hottext-regen-unblock.md); the fork tier's functions are off the
+/// start-up path.
+const INLINE_NEVER_TIERS: [&str; 1] = ["fork"];
+
+/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK): (1) no tracked file but [`may_name_regen_flag`]'s
+/// names [`REGEN_FLAG`], so no gate can build with the dead-key check off; (2) every key of an
+/// [`INLINE_NEVER_TIERS`] tier that names a non-generic function of a workspace crate is
+/// `#[inline(never)]` in the source, so the function keeps its symbol (and its key) in both
+/// profiles whatever unrelated code does to the inliner's budget (two libm merges inlined
+/// `spawn::wait4` away and failed the build on 2026-11-07). Generic, impl and closure keys are
+/// not checked here; the build check of [`group`] still covers them.
+pub fn static_check(root: &Path) -> Result<(), String> {
+    let mut errs = Vec::new();
+    for p in crate::labnames::tracked_with(root, true)? {
+        if may_name_regen_flag(&p) {
+            continue;
+        }
+        if fs::read(root.join(&p)).is_ok_and(|b| String::from_utf8_lossy(&b).contains(REGEN_FLAG)) {
+            errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
+        }
+    }
+    let list = root.join("crates/libc-so/hot-text.list");
+    let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
+    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
+        let Some((krate, mods, f)) = plain_path(&e.key) else { continue };
+        if !krate.starts_with("liella") {
+            continue;
+        }
+        match module_source(root, &krate, &mods) {
+            None => errs.push(format!("hot-text.list: {} ({}): module source of {krate}::{} not found", e.key, e.tier, mods.join("::"))),
+            Some((path, text)) => match inline_never(&text, &f) {
+                Some(true) => {}
+                Some(false) => errs.push(format!("{path}: fn {f} ({} key in hot-text.list) needs #[inline(never)]: inlined, its key goes dead and fails `so`", e.tier)),
+                None => errs.push(format!("{path}: no module-level fn {f} ({} key {} in hot-text.list)", e.tier, e.key)),
+            },
+        }
+    }
+    if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{function_of, is_startup_names, key, rename_for, section_for};
-    use std::collections::BTreeMap;
+    use super::{dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn regen_mode_is_one_explicit_flag_for_regen_sh_only() {
+        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): `so` takes no argument but the
+        // regen flag, which is refused under CI; only regen.sh (and prose) may name it.
+        assert!(regen_mode(&[]).is_ok());
+        assert!(!REGEN.load(Ordering::Relaxed));
+        assert!(regen_mode(&["--hottext".to_string()]).unwrap_err().contains("unknown argument"));
+        let r = regen_mode(&[REGEN_FLAG.to_string()]);
+        if std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
+            assert!(r.unwrap_err().contains("never under CI"));
+        } else {
+            assert!(r.is_ok() && REGEN.load(Ordering::Relaxed));
+        }
+        REGEN.store(false, Ordering::Relaxed);
+        // The dead-key error fails the build unless in the regen mode.
+        assert_eq!(dead_key_verdict(Some("dead".to_string()), false), Err("dead".to_string()));
+        assert_eq!(dead_key_verdict(Some("dead".to_string()), true), Ok(Some("dead".to_string())));
+        assert_eq!(dead_key_verdict(None, false), Ok(None));
+        assert!(may_name_regen_flag("tools/hottext/regen.sh") && may_name_regen_flag("xtask/src/hottext.rs") && may_name_regen_flag("handoff/x.md"));
+        assert!(may_name_regen_flag("records/decisions/D-X/D-X.56.toml") && !may_name_regen_flag("records/views.sh"));
+        assert!(!may_name_regen_flag("tools/hottext/merge.py") && !may_name_regen_flag("scripts/ci.sh") && !may_name_regen_flag("xtask/src/affected.rs"));
+    }
+
+    #[test]
+    fn listed_plain_functions_must_be_inline_never() {
+        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): a start-up/fork key of a plain
+        // function maps to its module, and the definition must carry #[inline(never)].
+        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4"), Some(("liella_boundary".to_string(), vec!["spawn".to_string()], "wait4".to_string())));
+        assert_eq!(plain_path("_RNvNtNtC9liella_rt3a_b1c4f_un"), Some(("liella_rt".to_string(), vec!["a_b".to_string(), "c".to_string()], "f_un".to_string())));
+        assert_eq!(plain_path("_RNvC5plain3fun"), Some(("plain".to_string(), vec![], "fun".to_string())));
+        assert_eq!(plain_path("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), None);
+        assert_eq!(plain_path("_RNvMs_NtC9liella_rt4heap4Heap4grow"), None);
+        assert_eq!(plain_path("__waitpid"), None);
+        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4x"), None);
+        let src = "/// doc\n#[inline(never)]\npub fn wait4(a: i32) {}\n#[cold]\nfn other() {}\nfn wait44() {}\n";
+        assert_eq!(inline_never(src, "wait4"), Some(true));
+        assert_eq!(inline_never(src, "other"), Some(false));
+        assert_eq!(inline_never(src, "missing"), None);
+        // An attribute separated by a blank line or an indented (method) definition does not count.
+        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g"), Some(false));
+        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h"), None);
+        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k"), Some(true));
+    }
 
     #[test]
     fn keys_drop_build_hashes() {
@@ -518,6 +794,48 @@ mod tests {
         assert_eq!(key("_RINvMs1_NtCsx_9liella_rt4heapNtB6_4Heap10alloc_slowKb1_EB8_"), "_RINvMs1_NtC9liella_rt4heapNtNtC9liella_rt4heap4Heap10alloc_slowKb1_EC9liella_rt");
         // A name the walker cannot parse keeps the plain strip.
         assert_eq!(key("_RNvCsabc_3foo3barZZ"), "_RNvC3foo3barZZ");
+    }
+
+    #[test]
+    fn list_lines_carry_tier_and_profiles() {
+        // HOTTEXT-STARTUP-COMPLETE: `<key>\t<tier>\t<profiles>`; a bare key (the list before tiers) is
+        // an unguarded `extra` key; comments and blank lines are skipped; positions keep list order.
+        let text = "# c\n__libc_start_main\tstartup\tfast,release\n\nk2\tfork\trelease\nold\nk4\ttool\t-\n";
+        let e = parse_list(text).unwrap();
+        assert_eq!(e.len(), 4);
+        assert_eq!((e[0].key.as_str(), e[0].tier, e[0].profiles.clone()), ("__libc_start_main", "startup", vec!["fast".to_string(), "release".to_string()]));
+        assert_eq!((e[1].tier, e[1].profiles.clone()), ("fork", vec!["release".to_string()]));
+        assert_eq!((e[2].key.as_str(), e[2].tier, e[2].profiles.len()), ("old", "extra", 0));
+        assert_eq!((e[3].tier, e[3].profiles.len()), ("tool", 0));
+        assert_eq!(positions(&e).get("k2"), Some(&1));
+        assert_eq!(positions(&e).get("k4"), Some(&3));
+        // Unknown tiers, unknown profiles and two-field lines are errors naming the line.
+        assert!(parse_list("k\tboot\tfast\n").unwrap_err().contains("line 1"));
+        assert!(parse_list("# c\nk\tstartup\tdebug\n").unwrap_err().contains("line 2"));
+        assert!(parse_list("k\tstartup\n").is_err());
+    }
+
+    #[test]
+    fn unmatched_startup_and_fork_keys_of_the_built_profile_fail() {
+        // HOTTEXT-STARTUP-COMPLETE: a start-up or fork key traced in the profile being built that
+        // matches no function section fails `so`, naming the key; other tiers, other profiles and
+        // archives built with other flags (`None`) are only counted.
+        let e = parse_list("start\tstartup\tfast,release\nfk\tfork\tfast\nrel\tstartup\trelease\nio\tstdio\tfast\nbare\n").unwrap();
+        let all: BTreeSet<String> = ["start", "fk", "rel", "io", "bare"].iter().map(|s| s.to_string()).collect();
+        let (g, o) = unmatched(&e, &all, Some("fast"));
+        assert_eq!((g.len(), o), (0, 0));
+        assert_eq!(unmatched_error(&g, "fast"), None);
+        let none = BTreeSet::new();
+        let (g, o) = unmatched(&e, &none, Some("fast"));
+        assert_eq!(g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), ["start", "fk"]);
+        assert_eq!(o, 3);
+        let msg = unmatched_error(&g, "fast").unwrap();
+        assert!(msg.contains("start (startup, traced in fast,release)") && msg.contains("fk (fork, traced in fast)"));
+        assert!(msg.contains("renamed, now generic or inlined: run tools/hottext/regen.sh"));
+        let (g, o) = unmatched(&e, &none, Some("release"));
+        assert_eq!((g.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(), o), (vec!["start", "rel"], 3));
+        let (g, o) = unmatched(&e, &none, None);
+        assert_eq!((g.len(), o), (0, 5));
     }
 
     #[test]

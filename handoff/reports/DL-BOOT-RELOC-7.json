@@ -1,0 +1,16 @@
+{"task": "DL-BOOT-RELOC-7", "model": "opus", "tokens": null,
+ "result": "CI conflict resolved: origin/next merged, classed::start/nscache::start keep both next's cfg_attr(dead_code) and this branch's #[inline(always)]; Broadwell counters: origin/next 2152/71909/68115/69165, merged branch 2148/71897/68103/69153 (every startup_instr row below next, startup_instr_c at 2148)",
+ "branch": "task/dl-boot-reloc-7", "head": "4c1313d4",
+ "gate": {"affected": "kanon:dl-boot-reloc-7-gate (escalated to FULL by Cargo.toml, csys/ and xtask/src/so.rs; running at hand-back)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "origin/next 66b8d3ba measures startup_instr_c 2152 on Broadwell (E5-2699 v4), above the 2150 Zen 1 limit if Zen 1 tracks it; this branch is 2148",
+   "plants: run 6's set re-run as handoff/DL-BOOT-RELOC-7-plants.txt; the classed::start and nscache::start patterns were updated because the merged cfg_attr line sits between the inline attribute and the fn"
+ ],
+ "refused": [],
+ "jobs": ["kanon:dl-boot-reloc-7-gate", "kanon:dl-boot-reloc-7-plants", "kanon:dl-boot-reloc-7-lint1", "kanon:dl-boot-reloc-7-bench-branch"],
+ "superseded": ["kanon:dl-boot-reloc-7-lint0 (inherited head da6d7850, green)", "kanon:dl-boot-reloc-7-bench-next (origin/next 66b8d3ba, reference count, evidence)"],
+ "improvement": "the CI merge_next conflict came from two branches adding attributes to the same lines; a merge driver or a one-line policy (one attribute per line, sorted) would let git merge such attribute-only changes without an agent run",
+ "next_step": "land after the FULL gate is green; CI's Zen 1 instr check confirms startup_instr_c <= 2150",
+ "report_file": "handoff/DL-BOOT-RELOC.md"}

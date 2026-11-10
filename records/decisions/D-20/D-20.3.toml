@@ -1,0 +1,8 @@
+id = "D-20.3"
+section = "s20"
+spec = "§20.3"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**Internal:** `SigSet` is a `u64`. **Boundary:** `sigset_t` stays 128 bytes (ABI). Bits beyond 64 read as zero and are ignored on input.
+'''

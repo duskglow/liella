@@ -1,0 +1,25 @@
+{
+ "task": "DL-BOOT-RELOC-4",
+ "model": "opus",
+ "tokens": null,
+ "result": "CI conflict resolved: origin/next merged (so.rs keeps the DL-PLACEHOLDERS build and the liella-rcrt1.o product whole; D-27.9/10/11 once each); liella-rcrt1.o documented in docs/toolchain.md per ruling #3670; gate green",
+ "branch": "task/dl-boot-reloc-4",
+ "head": "d3ba674b",
+ "gate": {
+  "affected": "FULL (escalated): 11128 passed / 0 failed, conformance 124/0",
+  "peak": "16G (page cache) oom_kill=0"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "docs/toolchain.md 3.3 still describes the old libpthread-only placeholders; D-27.9 (DL-PLACEHOLDERS) changed them, left for that story",
+  "no plants this run: the merge changed none of this story's code (only a status line in so.rs); plants 24/24 CAUGHT on 79821fcf (shiki dl-boot-reloc-3-plants-2)"
+ ],
+ "refused": [],
+ "improvement": "affected escalates to FULL whenever entry.S is touched (it defines _start), so every continuation of this story pays a 60 min gate; a direct tier for start objects (conformance + start tests) would cut that",
+ "next_step": "land; optional: conformance check that RELRO is read-only in a static PIE",
+ "report_file": "handoff/DL-BOOT-RELOC.md",
+ "jobs": [
+  "dl-boot-reloc-4-gate"
+ ]
+}

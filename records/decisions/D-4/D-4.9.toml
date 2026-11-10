@@ -1,0 +1,8 @@
+id = "D-4.9"
+section = "s04"
+spec = "§4.2"
+ann = "—"
+status = "active"
+body = '''
+`explicit_bzero` zeroes the bytes in safe Rust, then calls the C layer's barrier primitive (`machine/barrier.S`, OD-C1) on the same region, so the compiler cannot elide the stores. Since D-X.11, through `liella_secure_zero`.
+'''

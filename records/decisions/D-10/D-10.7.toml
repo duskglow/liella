@@ -1,0 +1,8 @@
+id = "D-10.7"
+section = "s10"
+spec = "§10.0"
+ann = "—"
+status = "active"
+body = '''
+**Products.** `crates/libm-so` links `liella-boundary` with feature `libm` (the math exports only) into a static library; `cargo xtask so` turns it into one relocatable object (unused sections dropped from the exports as roots), keeps only the math names global and archives it as `libm.a`, so its private copies of library code never collide with `libc.a`. Names glibc exports from both libraries (`frexp`, `ldexp`, `modf`, `scalbn`, `copysign`, `finite`, `__finite*`, `__signbit*`) are in both products, weak in `libm.a` (a static link takes `libc.a`'s). Rust's `compiler_builtins` carries weak hidden copies of some C math names, made local first so they cannot hide the exports. `libm.so.6` is linked from the object against `libc.so.6` with the version script of `libm.so.6`'s default versions; it cannot be loaded until phase 14. The math code never allocates (the build checks that `libm.a` holds no heap) and the product's panic handler prints a fixed diagnostic and aborts. Compat-only versions wait for phase 15.
+'''

@@ -20,6 +20,10 @@ use liella_kernel::sys::Sys;
 use liella_kernel::uapi::{Itimerval, SigSet, Timeval};
 use liella_legacy::signal_compat::CSigaction;
 
+#[path = "../../core/tests/support/single_thread.rs"]
+mod single_thread;
+use single_thread::{single_threaded, sole_thread};
+
 const SIGALRM: i32 = 14;
 const SIG_BLOCK: i32 = 0;
 const SIG_UNBLOCK: i32 = 1;
@@ -144,7 +148,9 @@ fn body() -> bool {
     let mid = MID.load(Ordering::SeqCst);
     eprintln!("runs {runs} in {:?}, handler calls {hits}, mid-search {mid}, outer wrong {outer_bad}, inner wrong {inner_bad}", start.elapsed());
     // At least 20 inner searches must have run inside an outer one, or the test proves nothing.
-    mid >= 20 && hits >= 50 && outer_bad == 0 && inner_bad == 0
+    // SIGALRM goes to the whole process: only as the sole thread (D-X.42) is every handler run
+    // counted here one that interrupted this thread, not one that ran beside it.
+    sole_thread() && mid >= 20 && hits >= 50 && outer_bad == 0 && inner_bad == 0
 }
 
 #[test]
@@ -152,7 +158,7 @@ fn regexec_reentered_from_a_signal_handler_keeps_both_answers() {
     // Clauses: no spec clause (D-14.12: the busy word; plan row RX-T2-0).
     const NAME: &str = "regexec_reentered_from_a_signal_handler_keeps_both_answers";
     if std::env::var("LIELLA_REGEX_REENTRY").is_ok_and(|v| v == NAME) {
-        CSys.exit_group(if body() { 0 } else { 1 });
+        CSys.exit_group(if single_threaded(body) { 0 } else { 1 });
     }
     let o = std::process::Command::new(std::env::current_exe().unwrap())
         .args([NAME, "--exact", "--include-ignored", "--test-threads=1", "--nocapture"])

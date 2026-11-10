@@ -1,0 +1,10 @@
+{"task": "TIMING-COVERAGE-1107", "model": "opus", "tokens": null,
+ "result": "1106E slower entries mapped: covered 2, re-time 18, NONE 56; six code briefs written for the top NONE groups",
+ "branch": "task/timing-coverage-1107", "head": null,
+ "gate": {"affected": "n/a (planning, no code)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "IVB malloc_free/realloc rows 1.11-1.30 left unbriefed as saturated (docs/saturation/04, owner #2826/#3210)", "recommendation": "accept as saturated on Ivy Bridge unless the owner wants a new lever"}],
+ "informational": ["TIMING-COV-MEMCMP-NONAVX2-4 landed after 34c98f61 without its booked timing; step 1 of TIMING-COV-COMPARE-HEAD-SSE2 is that re-time", "cold-group Liella samples are kernel-dominated with unresolved kernel symbols for the claude user; cold attribution needs probes", "memchr_64 and rawmemchr_4k IVB gaps do not reproduce on Skylake-SP with hwcaps=-AVX2"],
+ "refused": [], "jobs": ["timing-coverage-1107-prof", "timing-coverage-1107-prof2"],
+ "improvement": "CBENCH_COUNTERS for the cold rows (per-row faults and kernel instructions in the child) would let coverage rounds attribute cold rows without hand-written probes",
+ "next_step": "coordinator submits the six briefs in rank order; COLD-SETLOCALE and COLD-STRCOLL not in parallel",
+ "report_file": "handoff/timing-coverage-1107/README.md"}

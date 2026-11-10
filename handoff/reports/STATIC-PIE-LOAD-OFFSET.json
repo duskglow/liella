@@ -1,0 +1,16 @@
+{"task": "STATIC-PIE-LOAD-OFFSET", "model": "opus", "tokens": null,
+ "result": "Static PIE load bias has one source (EXE_BIAS, set by the static-PIE start) used by %n, dl_iterate_phdr, _dl_find_object and the backtrace; conformance test with 100 random-base starts green, plants 5/5 caught; gate escalated to FULL, still running; static start counts not measured",
+ "branch": "task/static-pie-load-offset", "head": "20ad530a",
+ "gate": {"affected": "running (escalated to FULL by xtask affected: conformance/run.sh changed); lint3 conformance 4 passed / 0 failed", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "A static C++ program that throws without threads jumps to 0 in libgcc's uw_init_context_1: weak pthread_once is not pulled from libc.a while __pthread_key_create is; test names pthread_once; recommend a story after a black-box probe against the reference",
+   "Backtrace's use of exe_bias in a static PIE has no test or plant",
+   "wl_count on shiki: wl_prep has no link command for printf/seq; static start counts before/after not measured (the store is on the link-time PIE branch: argued, NOT VERIFIED)"
+ ],
+ "refused": [],
+ "jobs": ["shiki:static-pie-load-offset-gate", "shiki:static-pie-load-offset-plants", "shiki:static-pie-load-offset-lint3"],
+ "improvement": "xtask affected escalates to FULL for any conformance/run.sh change; a C-harness tweak scoped to LINK-STATIC-PIE could stay direct-tier (run the conformance programs that use the directive)",
+ "next_step": "Read the gate; measure the static start counts (printf-loop) where wl_prep can link them",
+ "report_file": "handoff/STATIC-PIE-LOAD-OFFSET.md"}

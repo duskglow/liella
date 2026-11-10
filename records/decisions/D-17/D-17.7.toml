@@ -1,0 +1,8 @@
+id = "D-17.7"
+section = "s17"
+spec = "§17.2"
+ann = "KERN"
+status = "active"
+body = '''
+**The setxid broadcast** (D-17.1, D-20.1; phase 6). The caller takes the thread-list lock, performs the system call itself, and on success sends the internal signal (`tgkill`) to every other thread Liella runs, with the request (call number and arguments) in a process-wide request record and the operation bit in each thread's request word. Each handler performs the same raw system call on its own thread and reports its result through a counter the caller waits on (futex). Any thread failing where the caller succeeded aborts the process (the contract). Threads Liella did not create (D-22.10) cannot be reached; in a process Liella started there are none.
+'''

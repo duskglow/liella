@@ -50,9 +50,9 @@ checkrc differ_both0 1 wl_faults_differ 0 0
 case "${WL_STATS_PLANT:-}" in
     futex) wl_strace_sys() { sed 's/^ *//; s/  */ /g' "$1" | awk -v mt="${2:-0}" '$NF == "total" { print $4, 0, 0 }'; } ;;   # the old total incl. futex and mtmem
     offby1) wl_strace_sys() { local l; l=$(wl_classify "$1" "${2:-0}") || return; echo "$(echo "$l" | awk -F'\t' '{ print $1 - 1, $10, $11 }')"; } ;;   # the gating count one too low
-    first) wl_strace_median() { shift; wl_strace_sys "$1" 1; } ;;   # one strace run instead of the median of three
-    nomt) wl_strace_median() { local mt=$1; shift; mt=0; for f in "$@"; do wl_strace_sys "$f" 0; done | awk '{ n++; a[n] = $1; b[n] = $2; c[n] = $3 } END { print a[(n + 1) / 2], b[(n + 1) / 2], c[(n + 1) / 2] }'; } ;;   # thread flag ignored
-    allmt) wl_strace_sys() { local l; l=$(wl_classify "$1" 1); echo "$l" | awk -F'\t' '{ print $1, $10, $11 }'; } ;;   # every run treated as threaded
+    first) wl_strace_median() { shift 2; wl_strace_sys "$1" 1; } ;;   # one strace run instead of the median of three
+    nomt) wl_strace_median() { local mt=$1 mp=$2; shift 2; mt=0; for f in "$@"; do wl_strace_sys "$f" 0 "$mp"; done | awk '{ n++; a[n] = $1; b[n] = $2; c[n] = $3; d[n] = $4 } END { print a[(n + 1) / 2], b[(n + 1) / 2], c[(n + 1) / 2], d[(n + 1) / 2] }'; } ;;   # thread flag ignored
+    allmt) wl_strace_sys() { local l; l=$(wl_classify "$1" 1); echo "$l" | awk -F'\t' '{ print $1, $10, $11, $12 }'; } ;;   # every run treated as threaded
     nofutex) WL_CLASSIFY=${WL_CLASSIFY//'s == "futex"'/'s == "nothing"'} ;;   # futex never recognised
 esac
 t=$(mktemp -d) && trap 'rm -rf "$t"' EXIT
@@ -61,34 +61,58 @@ printf '%s\n' '% time     seconds  usecs/call     calls    errors syscall' '----
     ' 10.00    0.000010           1        50         3 openat' '  5.00    0.000010           1        20           fstat' \
     '  2.00    0.000010           1        30           mmap' '  1.00    0.000010           1         8           munmap' '------ ----------- ----------- --------- --------- ----------------' \
     '100.00    0.000160           1       508        15 total' > "$t/e.txt"
-check strace_errors_col_single "208 300 0" "$(wl_strace_sys "$t/e.txt" 0)"        # mmap/munmap stay in the gate: 100 + 50 + 20 + 38
-check strace_errors_col_threaded "170 300 38" "$(wl_strace_sys "$t/e.txt" 1)"
-check strace_default_single "208 300 0" "$(wl_strace_sys "$t/e.txt")"
+check strace_errors_col_single "208 300 0 0" "$(wl_strace_sys "$t/e.txt" 0)"        # mmap/munmap stay in the gate: 100 + 50 + 20 + 38
+check strace_errors_col_threaded "170 300 38 0" "$(wl_strace_sys "$t/e.txt" 1)"
+check strace_default_single "208 300 0 0" "$(wl_strace_sys "$t/e.txt")"
 printf '%s\n' '% time     seconds  usecs/call     calls syscall' '------ ----------- ----------- --------- ----------------' \
     ' 90.00    0.000100           1       300 futex' ' 10.00    0.000050           1       100 read' \
     '------ ----------- ----------- --------- ----------------' '100.00    0.000160           1       400 total' > "$t/n.txt"
-check strace_no_errors_col "100 300 0" "$(wl_strace_sys "$t/n.txt" 1)"
+check strace_no_errors_col "100 300 0 0" "$(wl_strace_sys "$t/n.txt" 1)"
 printf '%s\n' '% time     seconds  usecs/call     calls    errors syscall' ' 50.00    0.0           1       100           read' '100.00    0.0           1       100 total' > "$t/z.txt"
-check strace_no_futex "100 0 0" "$(wl_strace_sys "$t/z.txt" 1)"
+check strace_no_futex "100 0 0 0" "$(wl_strace_sys "$t/z.txt" 1)"
 # a threaded run: two runs that differ only in futex waits and mapping calls give the same gating number (the point of MTMEM-2)
 sed 's/ 300        12 futex/ 777        12 futex/; s/ 30 *mmap/ 31           mmap/; s/ 8 *munmap/ 5           munmap/; s/ 508 .* total/ 983 15 total/' "$t/e.txt" > "$t/e2.txt"
 check strace_threaded_two_runs_same_gating "$(wl_strace_sys "$t/e.txt" 1 | cut -d' ' -f1)" "$(wl_strace_sys "$t/e2.txt" 1 | cut -d' ' -f1)"
-check strace_threaded_two_runs_differ_advisory "170 777 36" "$(wl_strace_sys "$t/e2.txt" 1)"
+check strace_threaded_two_runs_differ_advisory "170 777 36 0" "$(wl_strace_sys "$t/e2.txt" 1)"
 # one more deterministic call (a code change adding a syscall per call) must show, threaded or not: read 100 -> 101
 sed 's/ 100           read/ 101           read/; s/ 508 .* total/ 509 15 total/' "$t/e.txt" > "$t/p.txt"
-check strace_plus_one_threaded "171 300 38" "$(wl_strace_sys "$t/p.txt" 1)"
-check strace_plus_one_single "209 300 0" "$(wl_strace_sys "$t/p.txt" 0)"
+check strace_plus_one_threaded "171 300 38 0" "$(wl_strace_sys "$t/p.txt" 1)"
+check strace_plus_one_single "209 300 0 0" "$(wl_strace_sys "$t/p.txt" 0)"
 # median of three: gating 807 / 804 / 804 -> 804; futex 862 / 846 / 943 -> 862; mtmem 5 / 9 / 7 -> 7
 for n in 1 2 3; do printf '%s\n' '% time seconds usecs/call calls syscall' '------ ------ ------ ------ ------' ' 60.00    0.0           1       X          futex' ' 40.00    0.0           1       Y           mmap' ' 10.00    0.0           1       W           write' '100.00    0.0           1       Z total' > "$t/m$n.txt"; done
 sed -i 's/X/862/; s/Y/5/; s/W/807/; s/Z/1674/' "$t/m1.txt"; sed -i 's/X/846/; s/Y/9/; s/W/804/; s/Z/1659/' "$t/m2.txt"; sed -i 's/X/943/; s/Y/7/; s/W/804/; s/Z/1754/' "$t/m3.txt"
-check strace_median_threaded "804 862 7" "$(wl_strace_median 1 "$t/m1.txt" "$t/m2.txt" "$t/m3.txt")"
-check strace_median_single "812 862 0" "$(wl_strace_median 0 "$t/m1.txt")"
-check strace_median_one_threaded "807 862 5" "$(wl_strace_median 1 "$t/m1.txt")"
-check strace_empty "- - -" "$(: > "$t/0.txt"; wl_strace_sys "$t/0.txt" 1)"
+check strace_median_threaded "804 862 7 0" "$(wl_strace_median 1 0 "$t/m1.txt" "$t/m2.txt" "$t/m3.txt")"
+check strace_median_single "812 862 0 0" "$(wl_strace_median 0 0 "$t/m1.txt")"
+check strace_median_one_threaded "807 862 5 0" "$(wl_strace_median 1 0 "$t/m1.txt")"
+check strace_empty "- - - -" "$(: > "$t/0.txt"; wl_strace_sys "$t/0.txt" 1)"
 # wl_count_run.sh feeds the thread flag (a clone trace) to the median and keeps the mtmem field in its cached row
 check wl_count_run_detects_thread 1 "$(grep -c 'wl_has_thread "$tmp/clone.txt" && mt=1' "$here/wl_count_run.sh")"
-check wl_count_run_passes_mt 1 "$(grep -c 'wl_strace_median $mt $files' "$here/wl_count_run.sh")"
-check wl_count_run_row_fields 1 "$(grep -c "print NF }' \"\$cache\")\" = 10 \]" "$here/wl_count_run.sh")"
+check wl_count_run_passes_mt 1 "$(grep -c 'wl_strace_median $mt $mp $files' "$here/wl_count_run.sh")"
+check wl_count_run_detects_child 1 "$(grep -c 'wl_has_child "$tmp/clone.txt" && mp=1' "$here/wl_count_run.sh")"
+check wl_count_run_traces_pipe_fds 1 "$(grep -c 'strace -C -f -y -o "$tmp/strace$k.txt"' "$here/wl_count_run.sh")"
+check wl_count_run_clone_trace_forks 1 "$(grep -c 'strace -f -e trace=clone,clone3,fork,vfork -o' "$here/wl_count_run.sh")"
+check wl_count_run_row_fields 1 "$(grep -c "print NF }' \"\$cache\")\" = 11 \]" "$here/wl_count_run.sh")"
+# PIPERW (D-X.46): an `strace -C -f -y` output of a two-process pipeline; only the pipe calls move between runs
+pipetrace() { # pipe_reads file_reads -> file
+    local i
+    { echo '100 pipe2([3<pipe:[77]>, 4<pipe:[77]>], 0) = 0'
+      for ((i = 0; i < $1; i++)); do echo "101 read(0<pipe:[77]>, \"x\", 4096) = 1"; done
+      for ((i = 0; i < 10; i++)); do echo "100 write(1<pipe:[77]>, \"x\", 1) = 1"; done
+      for ((i = 0; i < $2; i++)); do echo "100 read(5</tmp/in>, \"x\", 4096) = 1"; done
+      echo '% time     seconds  usecs/call     calls    errors syscall'
+      echo '------ ----------- ----------- --------- --------- ----------------'
+      echo " 90.00    0.0           1       $(($1 + 10 + $2))           read"
+      echo ' 10.00    0.0           1         1           pipe2'
+      echo '------ ----------- ----------- --------- --------- ----------------'
+      echo "100.00    0.0           1       $(($1 + 11 + $2)) total"; }
+}
+pipetrace 20 5 > "$t/q1.txt"; pipetrace 47 5 > "$t/q2.txt"; pipetrace 20 6 > "$t/q3.txt"
+check pipe_multi_process "6 0 0 30" "$(wl_strace_sys "$t/q1.txt" 0 1)"
+check pipe_reads_differ_gate_same "$(wl_strace_sys "$t/q1.txt" 0 1 | cut -d' ' -f1)" "$(wl_strace_sys "$t/q2.txt" 0 1 | cut -d' ' -f1)"
+check pipe_reads_differ_advisory "6 0 0 57" "$(wl_strace_sys "$t/q2.txt" 0 1)"
+check pipe_file_read_differs_gate_moves "7 0 0 30" "$(wl_strace_sys "$t/q3.txt" 0 1)"
+check pipe_single_process_kept "36 0 0 0" "$(wl_strace_sys "$t/q1.txt" 0 0)"
+check pipe_median "6 0 0 30" "$(wl_strace_median 0 1 "$t/q1.txt" "$t/q2.txt" "$t/q1.txt")"
 
 echo "wl_stats_test: $pass passed, $fail failed"
 [ $fail = 0 ]

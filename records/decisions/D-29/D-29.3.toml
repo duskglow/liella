@@ -1,0 +1,8 @@
+id = "D-29.3"
+section = "s26-29"
+spec = "§29.4"
+ann = "COMPAT"
+status = "active"
+body = '''
+**`<regexp.h>` `step`/`advance` are stubs; `malloc_get_state`/`malloc_set_state` stay failing stubs** (owner rulings R6 and R9, 2026-11-04, SCOPE-APPLY-STUBS). `step` and `advance` return 0 (no match) for every argument and never write `loc1`, `loc2` or `locs`; the three objects stay exported, so old binaries still link. LG-10 (the matcher) is deferred until the LG-19 corpus finds a user. `malloc_get_state` returns NULL and `malloc_set_state` returns -1, both with `errno` ENOSYS (D-3.5, unchanged); `mtrace`/`muntrace` are unchanged. No compatibility option: the interfaces are obsolete and the old matcher is not offered (recorded in the differences row).
+'''

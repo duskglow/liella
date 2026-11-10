@@ -1,0 +1,8 @@
+id = "D-16.7"
+section = "s16"
+spec = "§16, §17"
+ann = "HIST"
+status = "active"
+body = '''
+Per-thread result slots: `SLOTS` = 16; `SLOT_RECORDS` covers 6 slots (192 bytes) for 12 record kinds (passwd, group, spwd, sgrp, utmp, ..., plus hostent, netent, servent, protoent, rpcent, aliasent). `h_errlist`/`h_nerr` are product-only data. `getipnodebyname`/`getipnodebyaddr`/`freehostent` are absent from glibc 2.39's ABI (`versions.tsv`) and are not exported. Phase 12 added the `MNT` and `FS` kinds: `SLOTS` = 17, `RECORDS_AREA` 224 bytes (14 kinds).
+'''

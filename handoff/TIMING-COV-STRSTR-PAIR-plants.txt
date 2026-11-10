@@ -1,0 +1,11 @@
+# TIMING-COV-STRSTR-PAIR: plants on strstr's direct entry liella_machine_strstr (csys/src/machine/scan.S)
+# and its Rust continuation strz::find_str_after.
+# Run: cargo xtask plants handoff/TIMING-COV-STRSTR-PAIR-plants.txt --dir <new RAM dir> --timeout 600
+needle-page-test | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?leal -1\(%rsi\), %eax\n\tandl \$4095, %eax\n\tcmpl \$4080, %eax\n)\tjae \.Lsstr_slow\n/$1/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:needle_ending_on_the_last_mapped_byte|SIGSEGV|signal: 11
+hay-page-test | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?leal -1\(%rdi\), %eax\n\tandl \$4095, %eax\n\tcmpl \$4080, %eax\n)\tjae \.Lsstr_slow\n/$1/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:never_read_past_the_terminator|SIGSEGV|signal: 11
+prefix-nul-ignored | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)\tjb \.Lsstr_null\n/$1/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at|SIGSEGV|signal: 11
+compare-short-by-two | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?)leal 1\(%rsi\), %ecx/$1leal -1(%rsi), %ecx/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:rejects_candidates_differing_in_one_byte|panicked at
+compare-dropped | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?incl %r10d\n)\tjnz \.Lsstr_fail\n/$1/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at
+fail-answer-skips | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?\.Lsstr_fail:\n.*?)leaq \(%rax,%rax\), %rcx/$1leaq 2(%rax,%rax), %rcx/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at
+empty-needle-null | csys/src/machine/scan.S | perl:s/(liella_machine_strstr:.*?\.Lsstr_empty:\n)\tmovq %rdi, %rax/$1\txorl %eax, %eax/s | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at
+after-needle-short | crates/boundary/src/strz.rs | lit:from_raw_parts(n.cast::<u8>(), m) }; ==> from_raw_parts(n.cast::<u8>(), m.saturating_sub(1)) }; | cargo test -p liella-boundary --features selftest --test strstr_find | msg:panicked at

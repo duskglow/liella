@@ -10,6 +10,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+include!("jcc_pad.rs");
+
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = fs::read_dir(dir) else { return };
     let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
@@ -48,6 +50,7 @@ fn main() {
     let cc = env::var("CC").unwrap_or_else(|_| "cc".into());
     let ar = env::var("AR").unwrap_or_else(|_| "ar".into());
     println!("cargo:rerun-if-changed={}", csys.display());
+    println!("cargo:rerun-if-changed=jcc_pad.rs");
     println!("cargo:rerun-if-env-changed=CC");
     println!("cargo:rerun-if-env-changed=AR");
 
@@ -56,6 +59,8 @@ fn main() {
     let export = env::var_os("CARGO_FEATURE_EXPORT").is_some();
     // The products' runtime (`__libc_start_main`, `environ`, ...): LIELLA_RUNTIME.
     let runtime = env::var_os("CARGO_FEATURE_RUNTIME").is_some();
+    // The ld.so product (feature `ld`, D-27.13): LIELLA_LD (the image anchor, adapter/image_anchor.c).
+    let ld = env::var_os("CARGO_FEATURE_LD").is_some();
 
     // The libm product (`crates/libm-so`): LIELLA_LIBM names the math forwarders it owns.
     let libm = env::var_os("CARGO_FEATURE_LIBM").is_some();
@@ -79,6 +84,9 @@ fn main() {
         };
         let obj = out.join(format!("csys_{i}.o"));
         let mut cmd = Command::new(&cc);
+        // The hot kernels keep every jump off 32-byte boundaries (D-4.67, jcc_pad.rs).
+        let jcc_pad = src.file_name().and_then(|n| n.to_str()).is_some_and(|n| JCC_PAD_FILES.contains(&n));
+        cmd.args(if jcc_pad { JCC_PAD_FLAGS } else { &[] });
         // One section per function, so the products drop what they do not use (`--gc-sections`).
         // Function entries on 64 bytes, like the Rust functions (D-4.33, `-align-all-functions=6`).
         cmd.args(["-std=c17", "-O2", "-fPIC", "-ffreestanding", "-fno-builtin", "-nostdlib", "-ffunction-sections", "-fdata-sections",
@@ -86,6 +94,7 @@ fn main() {
             .arg(if linked { "-c" } else { "-fsyntax-only" })
             .args(export.then_some("-DLIELLA_EXPORT"))
             .args(runtime.then_some("-DLIELLA_RUNTIME"))
+            .args(ld.then_some("-DLIELLA_LD"))
             .args(libm.then_some("-DLIELLA_LIBM"))
             .arg("-I").arg(csys.join("include"))
             .arg(src);

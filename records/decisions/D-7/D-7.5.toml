@@ -1,0 +1,8 @@
+id = "D-7.5"
+section = "s07"
+spec = "§7.7"
+ann = "HIST"
+status = "active"
+body = '''
+gettext keeps msgid-keyed lookup (the contract is sound). `.mo` parsing follows the GNU gettext file format specification. `_nl_msg_cat_cntr` is an exported counter that moves when a setting that selects catalogs changes (`textdomain`, a new binding directory or codeset, a `setlocale` that changes a category), not on loading a catalog or on `LANGUAGE` changes (as observed, phase 13). `.mo` lookup searches the sorted original strings by binary search and does not use the file's hash table (decision 2026-10-04: no hash function is needed, every entry of a well-formed catalog is found, a damaged table cannot loop; Appendix D.2). For `LC_MESSAGES` each `LANGUAGE` element is tried in the domain's directory (all variants), then in `/usr/share/locale-langpack` (all variants) whatever the binding, as glibc (owner ruling 2026-10-22, #411).
+'''

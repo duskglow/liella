@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::process::Command;
 
-const PAGE: i64 = 4096;
+pub(crate) const PAGE: i64 = 4096;
 /// The symbol at the start of page 0 (`csys/src/machine/fold.S`).
 const PAGE0: &str = "liella_classed_page0";
 
@@ -236,7 +236,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
     let dir = std::env::temp_dir().join(format!("liella-classed-xref-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("classed-xref: {}: {e}", dir.display()))?;
     let obj = dir.join("fold.o");
-    let built = tool(Command::new(&cc).args(["-c", "-fPIC", "-DLIELLA_EXPORT", "-DLIELLA_RUNTIME", "-I"]).arg(root.join("csys/include")).arg(root.join("csys/src/machine/fold.S")).arg("-o").arg(&obj), "assembling csys/src/machine/fold.S");
+    let built = tool(Command::new(&cc).args(["-c", "-fPIC", "-DLIELLA_EXPORT", "-DLIELLA_RUNTIME"]).args(crate::jcc::JCC_PAD_FLAGS).arg("-I").arg(root.join("csys/include")).arg(root.join("csys/src/machine/fold.S")).arg("-o").arg(&obj), "assembling csys/src/machine/fold.S");
     let res = built.and_then(|_| check_file(&obj));
     let _ = std::fs::remove_dir_all(&dir);
     res.map(|_| ())

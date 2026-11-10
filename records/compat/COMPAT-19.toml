@@ -1,0 +1,9 @@
+id = "COMPAT-19"
+behaviour = "Objects whose `PT_GNU_STACK` asks for an executable stack (§27, phase 14; threat model loader rule 10, R14-13, owner approval R14-15 #2549 2026-11-04; id assigned by ruling #2660)"
+glibc = "A library linked with `-z execstack` loads, and afterwards the main stack and the stacks of threads created before the `dlopen` are mapped `rwxp`; a program linked that way starts with `rwxp` stacks (black-box probe, DL-THREAT-TEXT)"
+liella = "Refused: `dlopen` fails with a `dlerror` message and maps nothing; such a program or startup dependency is refused at startup; no stack is ever executable"
+restore = "A tunable read at startup that lets the loader accept such an object and make the existing and later thread stacks executable, as the reference does; ignored in a secure (`AT_SECURE`, setuid/setgid) process because it weakens behaviour, as COMPAT-12 is (owner ruling #2662)"
+cost = "none (the flag does not exist; the check would sit on the `PT_GNU_STACK` branch of object loading, reached only for an object that asks for an executable stack)"
+status = "registered"
+body = '''
+'''

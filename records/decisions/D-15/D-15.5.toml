@@ -1,0 +1,8 @@
+id = "D-15.5"
+section = "s15"
+spec = "§15.1, §15.2"
+ann = "KERN, HIST"
+status = "active"
+body = '''
+Address and option results (`accept`, `getsockname`, `getpeername`, `recvfrom`, `getsockopt`) are received into `SockAddrBuf` and copied back truncated to the caller's `socklen_t`, with the full length reported; the kernel's addresses are at most `sizeof(struct sockaddr_storage)`, so this equals passing the caller's buffer. `struct msghdr`/`struct mmsghdr` have the kernel's layout and are viewed in place, so the kernel reads and writes the buffers they name. `setsockopt` at a level that registers caller memory goes through `raw` (D-X.9 b). The source-filter calls build `struct ip_msfilter`/`group_filter` in library memory for the typed `getsockopt`/`setsockopt` (`IP_MSFILTER`, `MCAST_MSFILTER`); the caller's list receives at most its capacity, and the count reports the kernel's.
+'''

@@ -1,0 +1,8 @@
+id = "D-10.6"
+section = "s10"
+spec = "§10.0"
+ann = "COMPAT"
+status = "active"
+body = '''
+`matherr` and `_LIB_VERSION` are inert compat symbols.
+'''

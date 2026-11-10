@@ -13,7 +13,8 @@
 //! 3. The shared object, linked from that archive with the script and soname `libc.so.6`:
 //!    `target/liella/libc.so.6`. Its dynamic symbol table is then checked: every native symbol
 //!    is exported as `name@@LIELLA_NATIVE_<n>`, and no other `liella_` name is exported.
-//! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`; the profiling
+//! 4. The start object from `csys/src/machine/entry.S`: `target/liella/liella-crt1.o`, and from the
+//!    same file the static-PIE start object `target/liella/liella-rcrt1.o` (D-27.10); the profiling
 //!    start object for `-pg` programs from `csys/start/gcrt1.S`: `target/liella/liella-gcrt1.o`.
 //! 5. Placeholders (`placeholders.rs`, D-27.9): `libpthread.so.0`, `libdl.so.2`, `librt.so.1`, `libutil.so.1`,
 //!    `libanl.so.1`, `libc_malloc_debug.so.0` from versions.tsv, their empty archives, and an
@@ -120,6 +121,76 @@ fn archive_elf_errors(data: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// The function the static-PIE start calls before the image is relocated (D-27.10), and the
+/// linker-defined symbol it must reach PC-relatively.
+const BOOT_ANCHOR: &str = "liella_link_image_header";
+const BOOT_ANCHOR_TARGET: &str = "__ehdr_start";
+
+/// D-27.10: the archive member defining [`BOOT_ANCHOR`] (`csys/src/adapter/image_anchor.c`, alone
+/// in its file) references [`BOOT_ANCHOR_TARGET`] and has no GOT-typed relocation. A static PIE
+/// runs that function before its GOT is relocated: a GOT-indirect read there returns the
+/// link-time address (a weak declaration of the symbol makes the compiler emit one).
+fn boot_anchor_pc_relative(archive: &Path) -> Result<(), String> {
+    let out = Command::new("readelf").args(["-rsW"]).arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("readelf -rs {} failed", archive.display()));
+    }
+    boot_anchor_errors(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{}: {e}", archive.display()))
+}
+
+/// The check of [`boot_anchor_pc_relative`] on `readelf -rsW` text of an archive (one
+/// `File: archive(member)` block per member).
+pub fn boot_anchor_errors(readelf: &str) -> Result<(), String> {
+    let defines = |l: &str| {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        f.len() == 8 && f[0].ends_with(':') && f[3] == "FUNC" && f[6] != "UND" && f[7] == BOOT_ANCHOR
+    };
+    let Some(member) = readelf.split("\nFile: ").find(|m| m.lines().any(defines)) else {
+        return Err(format!("no member defines {BOOT_ANCHOR} (D-27.10: the static-PIE start's anchor)"));
+    };
+    let name = member.lines().next().unwrap_or("?");
+    // A relocation line: offset, info, type, value, name (+ addend).
+    let relocs = member.lines().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.starts_with("R_")));
+    let got: Vec<&str> = relocs.clone().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.contains("GOT"))).collect();
+    if let Some(first) = got.first() {
+        return Err(format!(
+            "{name}: {BOOT_ANCHOR} is reached through the GOT ({} GOT-typed relocations; first: {}): a static PIE reads it before relocation (D-27.10); declare {BOOT_ANCHOR_TARGET} hidden and not weak",
+            got.len(),
+            first.trim()
+        ));
+    }
+    if !relocs.clone().any(|l| l.split_whitespace().nth(4) == Some(BOOT_ANCHOR_TARGET)) {
+        return Err(format!("{name}: {BOOT_ANCHOR} does not reference {BOOT_ANCHOR_TARGET} (D-27.10)"));
+    }
+    Ok(())
+}
+
+/// D-27.10: the static-PIE start object (`liella-rcrt1.o`) runs before the executable is
+/// relocated, so it has no GOT-typed relocation (a GOT slot still holds a link-time address).
+fn start_object_pc_relative(object: &Path) -> Result<(), String> {
+    let out = Command::new("readelf").args(["-rW"]).arg(object).output().map_err(|e| format!("readelf: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("readelf -r {} failed", object.display()));
+    }
+    start_object_errors(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{}: {e}", object.display()))
+}
+
+/// The check of [`start_object_pc_relative`] on `readelf -rW` text of one object: no relocation
+/// whose type names the GOT, and the call of the relocating start is there.
+pub fn start_object_errors(readelf: &str) -> Result<(), String> {
+    let relocs: Vec<&str> = readelf.lines().filter(|l| l.split_whitespace().nth(2).is_some_and(|t| t.starts_with("R_"))).collect();
+    if let Some(first) = relocs.iter().find(|l| l.split_whitespace().nth(2).is_some_and(|t| t.contains("GOT"))) {
+        return Err(format!("the static-PIE start object reaches a symbol through the GOT ({}): it runs before relocation (D-27.10)", first.trim()));
+    }
+    if !relocs.iter().any(|l| l.split_whitespace().nth(4) == Some(STATIC_PIE_START)) {
+        return Err(format!("the static-PIE start object does not call {STATIC_PIE_START} (D-27.10)"));
+    }
+    Ok(())
+}
+
+/// The relocating start that `liella-rcrt1.o`'s `_start` calls (D-27.10).
+const STATIC_PIE_START: &str = "liella_start_main_static_pie";
 
 /// Symbols defined (globally) in an archive or object, by `nm`.
 fn defined(path: &Path) -> Result<BTreeSet<String>, String> {
@@ -781,15 +852,67 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     let copies = crate::copies::direct_internal_copies(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &product.join("copies-work"))?;
     // (done in the archive as rustc built it, so `libc.so.6` and the weakened `libc.a` both get it)
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
-    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"))?;
+    let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
+    let edges = exclude_link_edges(&archive)?;
+    println!("so: {edges} link-edge words excluded from every link output (D-22.16)");
     check_archive_elf(&archive)?;
     let staged = tmp_name(out);
     let weak = weaken_archive(&archive, &product.join("weaken"), &staged)?;
+    // After the weakening pass, which rebuilds the product crate's objects.
+    shared_personality_ref(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &staged, &product.join("personality-work"))?;
     rust_symbols_stay_local(&staged)?;
     check_archive_elf(&staged)?;
+    boot_anchor_pc_relative(&staged)?;
     publish(&staged, out)?;
     Ok((archive, weak, copies))
+}
+
+/// The name every link-edge static carries (D-22.16): a `#[used]` Rust static whose only job is
+/// an undefined symbol in its object, so that a static link taking the object also takes the
+/// archive member defining that symbol (`LIELLA_LINK_EDGE_PTHREAD_ONCE`: the keys pull
+/// machine/once.S). Its 8-byte word is never read.
+const LINK_EDGE: &str = "LIELLA_LINK_EDGE_";
+
+/// Marks each link-edge static's section (`.data.rel.ro.<mangled name>`) `SHF_EXCLUDE` in
+/// `archive`: the linker then puts neither the word nor its relocation in any program or in
+/// `libc.so.6` (`#[used]` makes the section `SHF_GNU_RETAIN`, so `--gc-sections` alone keeps it,
+/// and in `libc.so.6` it would cost a `R_X86_64_RELATIVE` relocation at every start), while the
+/// object's undefined symbol still pulls the member. Returns the number of such sections; an
+/// archive with none, or one the flag did not reach, is an error.
+fn exclude_link_edges(archive: &Path) -> Result<usize, String> {
+    let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
+    let pattern = format!(".data.rel.ro.*{LINK_EDGE}*");
+    run(Command::new(&objcopy).arg(format!("--set-section-flags={pattern}=contents,exclude")).arg(archive))?;
+    run(Command::new(std::env::var("AR").unwrap_or_else(|_| "ar".into())).arg("s").arg(archive))?;
+    let out = Command::new("readelf").args(["-SW"]).arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut found = 0;
+    for l in text.lines().filter(|l| l.contains(LINK_EDGE)) {
+        // `[Nr] Name Type Address Off Size ES Flg Lk Inf Al`: after the bracketed index, the
+        // name is the first field and the flags the seventh (its `.rela` section is not checked).
+        let fields: Vec<&str> = l.split(']').nth(1).unwrap_or("").split_whitespace().collect();
+        if !fields.first().is_some_and(|n| n.starts_with(".data.rel.ro.")) {
+            continue;
+        }
+        if !fields.get(6).is_some_and(|f| f.contains('E') && !f.contains('A')) {
+            return Err(format!("{}: link-edge section not excluded: {}", archive.display(), l.trim()));
+        }
+        found += 1;
+    }
+    if found == 0 {
+        return Err(format!("{}: no {LINK_EDGE}* section (renamed static? D-22.16)", archive.display()));
+    }
+    Ok(found)
+}
+
+/// `so` carries no link-edge word (D-22.16): no symbol named `LIELLA_LINK_EDGE_*`.
+fn check_no_link_edge(so: &Path) -> Result<(), String> {
+    let out = Command::new("nm").arg(so).output().map_err(|e| format!("nm: {e}"))?;
+    match String::from_utf8_lossy(&out.stdout).lines().find(|l| l.contains(LINK_EDGE)) {
+        Some(l) => Err(format!("{} carries a link-edge word: {l}", so.display())),
+        None => Ok(()),
+    }
 }
 
 pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
@@ -844,6 +967,7 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
         .arg("-lgcc")
         .arg("-o")
         .arg(&so))?;
+    check_no_link_edge(&so)?;
     let native = check_native_exports(root, &so)?;
     let compat_count = check_compat_exports(root, &so, "libc.so.6", &compat)?;
     let objects = crate::compat_objects::check(root, &so)?;
@@ -854,13 +978,18 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let native_names: BTreeSet<String> = crate::native::symbols(root)?.into_iter().map(|(s, _)| s).collect();
     let versioned = check_version_sets(root, &so, "libc.so.6", &have, &native_names)?;
     println!("so: version set and default version of {versioned} libc.so.6 names checked against spec/abi/versions.tsv");
-    crate::align::check(&so)?;
+    // The 64-byte entry alignment (D-4.33) is contract FN-ALIGN-EXPORTS, checked with the others at the end.
     publish(&so, &so_final)?;
 
     // 4. The start object.
     let crt1 = tmp_name(&release.join("liella-crt1.o"));
     run(Command::new(&cc).arg("-c").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&crt1))?;
     publish(&crt1, &release.join("liella-crt1.o"))?;
+    // The static-PIE start object (D-27.10): the same file, calling the relocating start.
+    let rcrt1 = tmp_name(&release.join("liella-rcrt1.o"));
+    run(Command::new(&cc).arg("-c").arg("-DLIELLA_STATIC_PIE").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&rcrt1))?;
+    start_object_pc_relative(&rcrt1)?;
+    publish(&rcrt1, &release.join("liella-rcrt1.o"))?;
     // The profiling start object for `-pg` programs (GCRT1-START): the same `_start`, plus
     // `__gmon_start__` in `.preinit_array` (monstartup over the text, atexit(_mcleanup)).
     let gcrt1 = tmp_name(&release.join("liella-gcrt1.o"));
@@ -885,21 +1014,176 @@ pub fn run_so_as(root: &Path, profile: Profile) -> Result<(), String> {
     let kept: usize = copies.kept.values().sum();
     println!("so: internal copies (D-X.15): {} references to the internal entries (redirected now: {}; made relaxable: {}), {kept} other uses of memcpy/memmove/memset kept", copies.internal, redirected.join(", "), copies.relaxable_internal);
     println!("so: GOT calls, jumps and loads made relaxable (D-X.15, PJ-19): {}, {} other GOT uses left as they are", copies.relaxable, copies.unrecognised);
-    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
+    println!("so: target/liella/libc.a ({} functions overridable with internal calls bound to the library, {} names weak in place), libc.so.6 ({count} versioned symbols, {native} of them native), liella-crt1.o, liella-rcrt1.o, liella-gcrt1.o, libresolv placeholder", weak.0, weak.1);
     run_libm(root, &cargo, &cc, &ar, profile)?;
+    run_ld(root, &cargo, &cc, profile)?;
     check_placement(root, &release)?;
     // R14-12: no shared product defines or exports a GLIBC_PRIVATE version.
     crate::placeholders::check_no_private(&release)?;
-    // After the last product: no build path may be left in any of them (PRODUCT-PATH-REMAP).
-    // The classed pages' XREF bias in the linked products (D-4.53, D-X.34), whatever their layout.
-    crate::classed::check_file(&release.join("libc.a"))?;
-    crate::classed::check_file(&release.join("libc.so.6"))?;
-    crate::remap::check(root)?;
+    // After the last product: every layout contract of layout/contracts.tsv (D-X.48) on the products, among them
+    // the 64-byte entries (D-4.33), the classed pages' XREF bias (D-X.34), the hot kernels' jumps off 32-byte
+    // boundaries (D-4.67) and no build path in any product (PRODUCT-PATH-REMAP).
+    crate::layout::check_products(root, &release)?;
     // The marker last, so a set that was not finished has none.
     let marker = tmp_name(&release.join(".profile"));
     fs::write(&marker, format!("{}
 ", profile.name())).map_err(|e| e.to_string())?;
     publish(&marker, &release.join(".profile"))
+}
+
+/// The interpreter product (phase 14 DL-5, R14-2, D-27.13): `crates/ld-so` as a static archive,
+/// linked with the `ld` variant of `machine/entry.S` into `target/liella/<Arch::INTERP>`, a shared
+/// object whose entry point is `liella_machine_ld_entry` and whose every symbol is local (no
+/// exports before the loader has any, R14-12), then checked: [`check_interp`] (L14-1) and [`check_interp_prerelocation`] (design §1).
+/// The interpreter's Rust code runs before its image is relocated (design §0a item 9): with the
+/// `pie` model every symbol is local to the image, so calls and data references are PC-relative,
+/// never through a GOT slot that still holds a link-time address (rustc's default no-PLT calls
+/// load the callee from the GOT; the first, `liella_link_image_header`, crashed ld.so). Every
+/// symbol is local in the linked object (version script), so the model's assumption holds.
+const LD_RUSTFLAGS: &str = "-Crelocation-model=pie";
+
+fn run_ld(root: &Path, cargo: &str, cc: &str, profile: Profile) -> Result<(), String> {
+    use liella_ld::arch::Arch as _;
+    let name = liella_ld::arch::Native::INTERP;
+    let manifest = root.join("crates/ld-so/Cargo.toml");
+    let product = root.join("target/product");
+    let release = root.join("target/liella");
+    run(Command::new(cargo).current_dir(root).args(["rustc", "-q", "--profile", profile.name(), "--crate-type", "staticlib", "--manifest-path"]).arg(&manifest).arg("--target-dir").arg(&product).env("CARGO_ENCODED_RUSTFLAGS", crate::align::encoded_rustflags(root, Some(LD_RUSTFLAGS))))?;
+    let archive = product.join(profile.name()).join("libld_so.a");
+    let entry = product.join("ld-entry.o");
+    run(Command::new(cc).arg("-c").arg("-DLIELLA_LD").arg(root.join("csys/src/machine/entry.S")).arg("-o").arg(&entry))?;
+    let map = product.join("ld.map");
+    fs::write(&map, "{\n  local: *;\n};\n").map_err(|e| e.to_string())?;
+    let out = release.join(name);
+    let staged = tmp_name(&out);
+    run(Command::new(cc)
+        .args(["-shared", "-nostdlib", "-Wl,--gc-sections", "-Wl,-z,now", "-Wl,-z,relro", "-Wl,--hash-style=gnu", "-Wl,-z,pack-relative-relocs", "-Wl,-e,liella_machine_ld_entry", "-Wl,-Bsymbolic"])
+        .arg(format!("-Wl,--version-script={}", map.display()))
+        .arg(format!("-Wl,-soname,{name}"))
+        .arg(&entry)
+        .arg(&archive)
+        .arg("-lgcc")
+        .arg("-o")
+        .arg(&staged))?;
+    check_interp(&staged)?;
+    check_interp_prerelocation(&staged)?;
+    publish(&staged, &out)?;
+    println!("so: target/liella/{name} (the interpreter; L14-1 link check and pre-relocation check passed)");
+    Ok(())
+}
+
+/// L14-1 over a linked interpreter: no undefined symbol, no `DT_NEEDED`, relocations only
+/// `RelocKind::Relative` and RELR, no text relocations (`liella_ld::link`, design §1).
+pub(crate) fn check_interp(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r = liella_ld::link::check::<liella_ld::arch::Native>(&bytes).map_err(|e| format!("{}: {e:?}", path.display()))?;
+    if r.holds() {
+        return Ok(());
+    }
+    let first = r.first_undefined.map(|n| String::from_utf8_lossy(n).into_owned()).unwrap_or_default();
+    Err(format!(
+        "{}: the interpreter's link invariant (L14-1) does not hold: dynamic {}, {} undefined symbols (first {first:?}), {} DT_NEEDED, {} relocations other than RELATIVE/RELR (first {:?}), text relocations {}",
+        path.display(), r.dynamic, r.undefined, r.needed, r.other, r.first_other, r.textrel
+    ))
+}
+
+/// The entry primitive of `ld.so` (`machine/entry.S` with `-DLIELLA_LD`).
+const LD_ENTRY: &str = "liella_machine_ld_entry";
+/// The Rust start it calls; only its part up to the call of [`LD_RELOCATOR`] runs unrelocated.
+const LD_START: &str = "liella_ld_start";
+/// The relocation loop's function (`bootstrap::relocate_image`, a mangled Rust name).
+const LD_RELOCATOR: &str = "relocate_image";
+
+/// Design §1 over the linked `ld.so` (D-27.13): no instruction that runs before the relocation loop
+/// has finished reads a word a dynamic relocation writes (a GOT slot, a pointer in `.data.rel.ro`):
+/// it would still hold its link-time address. Static, over `objdump -d`: the code reached by direct
+/// calls and jumps from [`LD_ENTRY`], with [`LD_START`] cut after its call of [`LD_RELOCATOR`].
+fn check_interp_prerelocation(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut words = BTreeSet::new();
+    liella_ld::link::relocated_words::<liella_ld::arch::Native>(&bytes, |w| {
+        words.insert(w);
+    })
+    .map_err(|e| format!("{}: {e:?}", path.display()))?;
+    let out = Command::new("objdump").args(["-d", "--no-show-raw-insn"]).arg(path).output().map_err(|e| format!("objdump: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("objdump -d {} failed", path.display()));
+    }
+    prerelocation_errors(&String::from_utf8_lossy(&out.stdout), &words).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// One function of an `objdump -d` listing: its name, start address and `(address, text)` lines.
+struct Func<'a> {
+    name: &'a str,
+    start: u64,
+    insns: Vec<(u64, &'a str)>,
+}
+
+/// The functions of an `objdump -d --no-show-raw-insn` listing, in address order.
+fn listing(dis: &str) -> Vec<Func<'_>> {
+    let mut funcs: Vec<Func<'_>> = Vec::new();
+    for line in dis.lines() {
+        // A function header starts in column 0 (`0000000000001000 <name>:`); instructions are indented.
+        if !line.starts_with(char::is_whitespace) {
+            if let Some((Ok(start), Some(name))) = line.split_once(" <").map(|(a, rest)| (u64::from_str_radix(a, 16), rest.strip_suffix(">:"))) {
+                funcs.push(Func { name, start, insns: Vec::new() });
+            }
+            continue;
+        }
+        let Some((addr, text)) = line.trim_start().split_once(":\t") else { continue };
+        if let (Ok(addr), Some(f)) = (u64::from_str_radix(addr, 16), funcs.last_mut()) {
+            f.insns.push((addr, text.trim()));
+        }
+    }
+    funcs.sort_by_key(|f| f.start);
+    funcs
+}
+
+/// The check of [`check_interp_prerelocation`] on a listing and the set of relocated words.
+// ARCH(x86_64): the operand syntax read here is objdump's AT&T x86-64 form: `call 1234 <f>`,
+// `jcc 1234 <f+0x10>`, `op 0x10(%rip),%reg   # 1234 <sym>`, `call *%reg`; aarch64 needs its own reader.
+pub fn prerelocation_errors(dis: &str, relocated: &BTreeSet<u64>) -> Result<(), String> {
+    let funcs = listing(dis);
+    let find = |name: &str| funcs.iter().position(|f| f.name == name).ok_or_else(|| format!("no function {name} in the listing"));
+    let containing = |addr: u64| funcs.iter().rposition(|f| f.start <= addr).filter(|&i| funcs.get(i).is_some_and(|f| f.insns.last().is_some_and(|l| addr <= l.0)));
+    let mut todo = vec![find(LD_ENTRY)?];
+    let mut seen = BTreeSet::new();
+    let mut errors = Vec::new();
+    while let Some(i) = todo.pop() {
+        let Some(f) = funcs.get(i).filter(|_| seen.insert(i)) else { continue };
+        let mut insns = f.insns.as_slice();
+        if f.name == LD_START {
+            let cut = insns.iter().position(|(_, t)| t.starts_with("call") && t.contains(LD_RELOCATOR));
+            let cut = cut.ok_or_else(|| format!("{LD_START} does not call {LD_RELOCATOR} (keep it out of line)"))?;
+            insns = insns.get(..=cut).unwrap_or(insns);
+        }
+        for &(addr, text) in insns {
+            let (code, comment) = text.split_once('#').unwrap_or((text, ""));
+            // Prefixes objdump prints before the mnemonic (`addr32 call`: a call the linker relaxed).
+            let mut words = code.split_whitespace().skip_while(|w| ["addr32", "notrack", "bnd", "data16", "cs", "ds"].contains(w));
+            let op = words.next().unwrap_or("");
+            let operands = words.next().unwrap_or("");
+            let branch = op.starts_with("call") || op.starts_with('j');
+            if operands.contains("(%rip)") && !op.starts_with("lea") && !op.starts_with("nop") {
+                let target = comment.split_whitespace().next().and_then(|t| u64::from_str_radix(t, 16).ok());
+                if target.is_none_or(|t| relocated.range(t.saturating_sub(7)..=t).next().is_some()) {
+                    errors.push(format!("{} {addr:x}: `{text}` reads a relocated word before relocation", f.name));
+                }
+            } else if branch && operands.starts_with('*') {
+                // A register-indirect `jmp` is a jump table inside the function (PC-relative
+                // entries); a register-indirect call reaches code this check cannot name.
+                if op.starts_with("call") {
+                    errors.push(format!("{} {addr:x}: `{text}` calls an address the check cannot follow", f.name));
+                }
+            } else if branch {
+                match u64::from_str_radix(operands, 16).ok().map(containing) {
+                    Some(Some(j)) => todo.push(j),
+                    _ => errors.push(format!("{} {addr:x}: `{text}` branches outside the listed code", f.name)),
+                }
+            }
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(format!("ld.so reads its data before its relocation loop (design §1, D-27.13):\n{}", errors.join("\n"))) }
 }
 
 /// The names `spec/abi/versions.tsv` gives `libm.so.6` only that glibc 2.39's `libc.a` defines all
@@ -980,6 +1264,29 @@ fn localize_builtins(ar: &str, archive: &Path, names: &Path, work: &Path) -> Res
         run(Command::new("objcopy").arg(format!("--localize-symbols={}", names.display())).arg(work.join(m)))?;
     }
     run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&builtins))
+}
+
+/// The product crate's own object(s) in `libc.a` carry `DW.ref.rust_eh_personality` (the
+/// personality slot `.eh_frame` names) as a LOCAL symbol inside the COMDAT group of that name:
+/// the link keeps that group and drops the other members' copies, so their references (weak
+/// hidden, the compilers' usual form) find no definition. A non-PIE link resolves them to 0
+/// silently; a static PIE link refuses them (D-27.10). The symbol is made weak hidden, the form
+/// every other member has, so all references bind to the one kept slot. `work` is a scratch
+/// directory.
+fn shared_personality_ref(ar: &str, archive: &Path, work: &Path) -> Result<(), String> {
+    let _ = fs::remove_dir_all(work);
+    fs::create_dir_all(work).map_err(|e| e.to_string())?;
+    let listing = Command::new(ar).arg("t").arg(archive).output().map_err(|e| format!("ar: {e}"))?;
+    let own: Vec<String> = String::from_utf8_lossy(&listing.stdout).lines().filter(|m| m.starts_with("c-") && m.ends_with(".rcgu.o")).map(str::to_string).collect();
+    if own.is_empty() {
+        return Ok(());
+    }
+    run(Command::new(ar).current_dir(work).arg("x").arg(archive).args(&own))?;
+    for m in &own {
+        run(Command::new("objcopy").arg("--globalize-symbol=DW.ref.rust_eh_personality").arg(work.join(m)))?;
+        run(Command::new("objcopy").arg("--weaken-symbol=DW.ref.rust_eh_personality").arg(work.join(m)))?;
+    }
+    run(Command::new(ar).current_dir(work).arg("r").arg(archive).args(&own))
 }
 
 /// Data objects `libm.so.6` exports (spec §10.3).
@@ -1139,6 +1446,44 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// D-27.10 (no spec clause: start-up internals): the static-PIE anchor's member passes with a
+    /// PC-relative reference, and fails with a GOT-typed one, without the reference, or when no
+    /// member defines the anchor.
+    #[test]
+    fn boot_anchor_reference_is_pc_relative() {
+        let member = |reloc: &str| {
+            format!(
+                "\nFile: libc.a(csys_3.o)\n\nRelocation section '.rela.text.liella_link_image_header' at offset 0x1f0 contains 1 entry:\n    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend\n0000000000000003  0000000600000002 {reloc}      0000000000000000 __ehdr_start - 4\n\nSymbol table '.symtab' contains 7 entries:\n   Num:    Value          Size Type    Bind   Vis      Ndx Name\n     5: 0000000000000000     8 FUNC    GLOBAL DEFAULT    4 liella_link_image_header\n     6: 0000000000000000     0 NOTYPE  GLOBAL HIDDEN   UND __ehdr_start\n"
+            )
+        };
+        let other = "\nFile: libc.a(csys_2.o)\n\nSymbol table '.symtab' contains 2 entries:\n     1: 0000000000000000     8 FUNC    GLOBAL DEFAULT    4 liella_link_ehdr\n";
+        assert_eq!(boot_anchor_errors(&format!("{other}{}", member("R_X86_64_PC32"))), Ok(()));
+        let got = boot_anchor_errors(&format!("{other}{}", member("R_X86_64_REX_GOTPCRELX")));
+        assert!(got.as_ref().is_err_and(|e| e.contains("through the GOT") && e.contains("csys_3.o")), "{got:?}");
+        let unrelated = member("R_X86_64_PC32").replace("__ehdr_start - 4", "liella_other - 4");
+        assert!(boot_anchor_errors(&unrelated).is_err_and(|e| e.contains("does not reference")));
+        assert!(boot_anchor_errors(other).is_err_and(|e| e.contains("no member defines")));
+        let undefined_only = member("R_X86_64_PC32").replace("FUNC    GLOBAL DEFAULT    4", "NOTYPE  GLOBAL DEFAULT  UND");
+        assert!(boot_anchor_errors(&undefined_only).is_err(), "a reference to the anchor is not its definition");
+    }
+
+    /// D-27.10 (no spec clause: start-up internals): the static-PIE start object passes with
+    /// PC-relative references to `main` and the relocating start, and fails with a GOT-typed
+    /// one or when it calls `__libc_start_main` instead.
+    #[test]
+    fn static_pie_start_object_is_pc_relative() {
+        let object = |main: &str, start: &str, target: &str| {
+            format!(
+                "\nRelocation section '.rela.text.startup._start' at offset 0x1c8 contains 2 entries:\n    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend\n0000000000000013  0000000500000002 {main}      0000000000000000 main - 4\n0000000000000018  0000000600000004 {start}      0000000000000000 {target} - 4\n"
+            )
+        };
+        assert_eq!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_PLT32", STATIC_PIE_START)), Ok(()));
+        let got_main = start_object_errors(&object("R_X86_64_REX_GOTPCRELX", "R_X86_64_PLT32", STATIC_PIE_START));
+        assert!(got_main.as_ref().is_err_and(|e| e.contains("through the GOT") && e.contains("main")), "{got_main:?}");
+        assert!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_GOTPCRELX", STATIC_PIE_START)).is_err_and(|e| e.contains("through the GOT")));
+        assert!(start_object_errors(&object("R_X86_64_PC32", "R_X86_64_PLT32", "__libc_start_main")).is_err_and(|e| e.contains("does not call")));
     }
 
     /// Planted mismatch: the binding check names a symbol whose binding differs from the table, in
@@ -1351,5 +1696,37 @@ mod tests {
         let builtins = "compiler_builtins-1.compiler_builtins.2-cgu.000.rcgu.o:\n0000000000000000 T core::core_arch::x86::xsave::_xgetbv\n";
         assert!(exported_rust_std(builtins).is_empty());
         assert_eq!(exported_rust_std(&format!("{builtins}c-1.o:\n0000000000000000 T core::panicking::panic\n")), ["core::panicking::panic"]);
+    }
+
+    /// Design §1 / D-27.13 (no spec clause: loader start-up internals): over an `objdump -d`
+    /// listing shaped like ld.so's, the pre-relocation check passes when nothing before the end of
+    /// the relocation loop reads a relocated word (a later GOT call and taking a slot's address
+    /// are fine), and fails for a read in a callee reached by a tail jump (unaligned inside the
+    /// word), a read in the start before the relocator's call, an unfollowable call, and a start
+    /// whose relocator call is gone (inlined).
+    #[test]
+    fn interp_prerelocation_reads_are_refused() {
+        let clean = "\n\
+            0000000000001000 <liella_machine_ld_entry>:\n    1000:\txor    %ebp,%ebp\n    1002:\tmov    %rsp,%rdi\n\
+            \x20   1005:\tlea    -0x100c(%rip),%rsi        # 0 <__ehdr_start>\n    100c:\tcall   1100 <liella_ld_start>\n    1011:\thlt\n\n\
+            0000000000001100 <liella_ld_start>:\n    1100:\tpush   %rbp\n    1101:\tlea    0x2f00(%rip),%rsi        # 4008 <ptr>\n\
+            \x20   1108:\tcall   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>\n\
+            \x20   110d:\tcall   *0x2eed(%rip)        # 4000 <_GLOBAL_OFFSET_TABLE_+0x18>\n    1113:\tret\n\n\
+            0000000000001200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>:\n\
+            \x20   1200:\tcmpb   $0x0,0x2ef9(%rip)        # 4100 <flag>\n\
+            \x20   1207:\tje     1210 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image+0x10>\n\
+            \x20   1209:\tnotrack jmp *%rax\n    120b:\taddr32 call 1300 <helper>\n    1210:\tret\n\n\
+            0000000000001300 <helper>:\n    1300:\tjmp    1400 <tail>\n\n\
+            0000000000001400 <tail>:\n    1400:\tret\n";
+        let words: BTreeSet<u64> = [0x4000, 0x4008].into();
+        assert_eq!(prerelocation_errors(clean, &words), Ok(()));
+        let tail_read = clean.replace("1400:\tret", "1400:\tmov    0x2bfa(%rip),%rax        # 4004 <x>");
+        assert!(prerelocation_errors(&tail_read, &words).is_err_and(|e| e.contains("tail 1400") && e.contains("reads a relocated word")));
+        let start_read = clean.replace("1100:\tpush   %rbp", "1100:\tcall   *0x2efa(%rip)        # 4000 <_GLOBAL_OFFSET_TABLE_+0x18>");
+        assert!(prerelocation_errors(&start_read, &words).is_err_and(|e| e.contains("liella_ld_start 1100")));
+        let unfollowable = clean.replace("1300:\tjmp    1400 <tail>", "1300:\tcall   *%rax");
+        assert!(prerelocation_errors(&unfollowable, &words).is_err_and(|e| e.contains("cannot follow")));
+        let inlined = clean.replace("call   1200 <_RNvNtCs1_15liella_boundary9bootstrap14relocate_image>", "nop");
+        assert!(prerelocation_errors(&inlined, &words).is_err_and(|e| e.contains("does not call relocate_image")));
     }
 }

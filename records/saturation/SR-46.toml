@@ -1,0 +1,13 @@
+id = "SR-46"
+section = "3"
+row = "`memset_128`, `memset_256` NULL fold (NULLFOLD-MEMSET, -2, -3; D-4.60 REJECTED; N100 (Alder Lake-N) and Ivy Bridge timing, Haswell-EP counts)"
+now = "N100 ns/call (6 rounds x 25 runs, perf user cycles per run): explicit tests (kept) 128 3.35 / 256 3.78; 65-256 fold 2.94 / 4.09-4.19; 65-128 fold only 2.94 / 4.19 (1.369M -> 1.262M, 1.452M -> 1.518M cycles); one gate load, 129-256 bound 2 x set_mid 3.35 / 3.78 (1.345M, 1.457M); instr 256 37.3 -> 34.4 (glibc 34.3); Ivy Bridge 128 faster, 256 equal"
+limit = "NEGATIVE, reverted: no variant gains memset_128 in time on the N100 without slowing memset_256"
+reason_class = "hardware (decode: `topdown_fe_bound.decode` slots memset_256 0.32M explicit tests, 1.14M 65-128 fold, 0.20M one load; memset_128 1.35M, 0.98M, 1.32M; mispredicts, BACLEARs, icache misses, resteers and 4K aliasing equal)"
+basis = "M (staged trees, `cbench_memref` one row per run under perf stat, fixed iterations; one topdown pass in 4 event groups, no multiplexing)"
+source = "NULLFOLD-MEMSET-3"
+tried = "body padded (int3) to the old offset and to 64 bytes, gate word moved to another page offset: no change; further layout variants not tried (ruling #3621)"
+flag = "a decode-layout study of the memset entry on Alder Lake-N (where the 65-128 and 129-256 bodies fall in the decoders' fetch blocks) would be its own story"
+status = "active"
+body = '''
+'''

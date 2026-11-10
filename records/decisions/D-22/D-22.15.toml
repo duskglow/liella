@@ -1,0 +1,8 @@
+id = "D-22.15"
+section = "s22"
+spec = "§22.6 (s22_6_f_0)"
+ann = "ARB"
+status = "active"
+body = '''
+**`pthread_setspecific` never fails with `ENOMEM`** (PTHREAD-SETSPECIFIC-NOMEM, 2026-11-06; amends D-22.5, D-22.9). Every thread Liella creates, and the initial thread, holds the value storage for all `KEYS` keys in its own mapping from creation (D-22.9), so setting any live key never allocates and never fails for lack of memory. glibc 2.39 under an exhausted address space sets creation indexes 0 to 31 and returns `ENOMEM` from index 32 on, on the initial and on a new thread (probe spec/behaviour/key-nomem.md); Liella succeeds wherever glibc does and also above it, which POSIX allows (`ENOMEM` is a may-fail). Only a thread Liella did not create (a test process the host C library started, D-22.10) gets its key storage on first use and may still return `ENOMEM` there; products have no such thread. Test: conformance `s22_key_nomem` (keys 0, 1, 15, 31, 32, 33, 63, 64, 500, 1023 and all 1024 in order, both threads).
+'''

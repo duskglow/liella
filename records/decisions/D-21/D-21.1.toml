@@ -1,0 +1,8 @@
+id = "D-21.1"
+section = "s21"
+spec = "§21.1"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+`setjmp`/`longjmp` are assembly in the C layer (`machine/setjmp.S`). The `jmp_buf` layout is ABI (OD-1), with pointer mangling and CET shadow-stack unwinding. Library functions that are async-signal-safe keep no drop-carrying Rust state across interruptible points, so a `siglongjmp` out of a handler does not skip destructors (F37).
+'''

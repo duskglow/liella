@@ -1,0 +1,12 @@
+{"task": "TVA-MATH-VERDICT-CACHE-2", "model": "opus", "tokens": null,
+ "result": "CI red fixed: special_cr stays PASS0_ONLY; the loader query moved to verdict_programs.rs; nextest's pass-0 check gets a named include allow-list (PASS0_INCLUDES) and scans each listed include with the target's rules; plants 8/8 CAUGHT",
+ "branch": "task/tva-math-verdict-cache-2", "head": "3f71c45d0",
+ "gate": {"affected": "mei:tva-math-verdict-cache-2-gate1: clippy, static, cargo test -p xtask (249 passed) green; direct tier (--files, all changed files outside xtask/ and handoff/) still running at hand-back", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["An xtask change escalates `affected` to FULL, so the gate ran the direct tier with --files (every changed file outside xtask/ and handoff/) and ran xtask's own unit tests with cargo test -p xtask", "The cache gains only if CI keeps target/ between trains on a role (open from -1)"],
+ "refused": [],
+ "improvement": "affected could map an xtask/src/<module>.rs change that no gate command reads (nextest.rs's test-only items) to `cargo test -p xtask` instead of escalating to FULL; two runs of this chain had to hand-build a --files list",
+ "next_step": "Coordinator: land through the normal train; schedule the nightly LIELLA_NO_VERDICT_CACHE=1 cargo xtask test",
+ "report_file": "handoff/tva-math-verdict-cache.md",
+ "jobs": ["mei:tva-math-verdict-cache-2-gate1", "mei:tva-math-verdict-cache-2-plants1"]}

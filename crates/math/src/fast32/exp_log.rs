@@ -41,6 +41,69 @@ pub(super) fn exp_z(z: f64) -> f64 {
     f64::from_bits(s) * p
 }
 
+/// The smallest |x| the one-pass entries take: 2^-26, a normal `float` (below it y is within the
+/// margin of 1 and the test would refuse anyway).
+const ONEPASS_AMIN: u32 = 0x3280_0000;
+
+/// 2^896: [`onepass_scaled`]'s exponent offset, folded into the one-pass kernels' constants.
+const ONEPASS_SCALE: f64 = f64::from_bits((1023 + 896) << 52);
+
+/// x·2^-896 exactly, for a normal `float` x (the one-pass entries' operands), built from x's bits:
+/// sign to bit 63, the 8-bit biased exponent e to the low byte of the 11-bit field (a `double`
+/// with exponent e - 1023 = (e - 127) - 896), the 23 fraction bits to the top of the 52. It is the
+/// same value [`f64::from`] gives scaled by 2^-896 (normal: e ≥ 1), but the `double` arrives by a
+/// full-register `movq` from an integer register, not by `cvtss2sd`, which writes only the low
+/// half of its destination and so waits for that register's previous writer (D-10.67: with the
+/// previous call's result there, back-to-back calls formed one latency chain).
+#[inline(always)]
+pub(super) fn onepass_scaled(x: f32) -> f64 {
+    let b = u64::from(x.to_bits());
+    f64::from_bits(((b & 0x7fff_ffff) << 29) | ((b & 0x8000_0000) << 32))
+}
+
+/// e^x (`c` = [`INV_L`], `amax` = the bits of 87.33) or 2^x (`c` = 128, `amax` = the bits of 126)
+/// rounded in the caller's rounding direction by one evaluation in `double` and one `cvtsd2ss`
+/// (LIBM-F32-ONEPASS, D-10.63), or `None` for the caller's envelope.
+///
+/// It runs in the caller's MXCSR without reading it, so the proof holds in every rounding
+/// direction and under FTZ and DAZ:
+/// * Operands: 2^-26 ≤ |x| < `amax`, tested on the bits before any floating-point operation, so a
+///   NaN, an infinity, a zero or a subnormal (whose conversion DAZ would read as 0 and which
+///   raises denormal-operand) never reaches the arithmetic. f = base^x then lies in
+///   [2^-125.99, 2^125.99] (87.33 < 126·ln 2): normal, far from overflow and underflow.
+/// * Every intermediate is a normal `double` (z = x·c with |z| < 2^13.98, S = T·2^(k>>7) with
+///   k>>7 in [-127, 126], p near 1), so the arithmetic raises inexact and nothing else, and FTZ
+///   and DAZ change nothing. It raises inexact only for an inexact result: e^x is exact only at
+///   x = 0 (refused above) and 2^x at the integers, where z = 128·x, r = 0, p = 1 and y = S are
+///   all exact.
+/// * Bound in any direction (each operation's error ≤ 2^-52 relative, RN's 2^-53 doubled): z's
+///   error ≤ (2^-53 + 2^-52)|z| ≤ 2^-37.43 (0 for exp2), ≤ 2^-44.96 relative in f; k is the integer
+///   z + SHIFT rounds to, so |r| < 1 (1/2 in RN) and r's own rounding is ≤ 2^-53 absolute
+///   (2^-60.5 in f); |u| = |r|·ln 2/128 ≤ 2^-7.53, Taylor remainder ≤ |u|^5/120·1.01 ≤ 2^-44.54;
+///   the evaluation ≤ 2·1.006·2^-52 + 2^-59 ≤ 2^-50.97 (the two sums near 1; every other term is
+///   below 2^-15); T 2^-53, the product S·p 2^-52. Total ε ≤ 2.446·2^-45 = 2^-43.71: |y - f| <
+///   ε·2^53/(1 - ε) < 627 ulp(y) ([`EXP_ONEPASS_DELTA`] = 1024 ≥ 1.5·627 + 1).
+/// * Rounding: when y's low 28 significand bits are more than `delta` from 0 and from 2^28, no
+///   `float` and no midpoint lies between y and f (as in [`super::round`]), so `cvtsd2ss` of y in
+///   the caller's direction is f correctly rounded in that direction; y is not a `float`, so the
+///   conversion raises inexact, and the result is normal: no overflow, no underflow, no errno.
+/// * The operand reaches the `double` domain as [`onepass_scaled`]`(x)` = x·2^-896 (integer
+///   operations and one full-register move, LIBM-EXPF-RATCHET, D-10.67), multiplied by c·2^896:
+///   both scalings are exact (x·2^-896 ≥ 2^-922 is normal, c·2^896 < 2^904 finite) and z = x·c
+///   is normal, so RN, RD, RU and RZ of the product are those of x·c and the bound above holds
+///   unchanged.
+#[inline(always)]
+pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
+    if (x.to_bits() & 0x7fff_ffff).wrapping_sub(ONEPASS_AMIN) >= amax - ONEPASS_AMIN {
+        return None;
+    }
+    let y = exp_z(onepass_scaled(x) * (c * ONEPASS_SCALE));
+    if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA {
+        return None;
+    }
+    Some(y as f32)
+}
+
 /// ln x as a `double` y with |y/ln x - 1| ≤ 2^-51, for a positive finite `float` x.
 ///
 /// x = 2^e·m with m in [0.75, 1.5) (as a `double` every `float`, subnormals included, is normal).

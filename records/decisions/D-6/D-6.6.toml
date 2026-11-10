@@ -1,0 +1,8 @@
+id = "D-6.6"
+section = "s06"
+spec = "§6.5"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `display_width(u32, AmbiguousWidth::{Narrow, Wide})`. **Boundary:** narrow is the default.
+'''

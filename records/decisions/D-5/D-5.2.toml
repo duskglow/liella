@@ -1,0 +1,8 @@
+id = "D-5.2"
+section = "s05"
+spec = "§5.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** full Unicode case mapping (one-to-many, contextual) is available. **Boundary:** `towupper`/`towlower` use the simple 1:1 mapping required by the contract.
+'''

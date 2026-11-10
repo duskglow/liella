@@ -1,0 +1,8 @@
+id = "D-4.69"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**`strncmp`'s SSE2 head reuses the entry's OR page test** (TIMING-COV-STRNCMP-DIFF8, 2026-11-07). The direct entry computes ((a - 1) \| (b - 1)) & 4095 for the AVX2 head; below 4032 that value proves a and b non-NULL and [a, a + 64), [b, b + 64) inside their pages. On the SSE2 level the head now tests it once (cmp $4032) and runs up to four 16-byte blocks addressed from a and b directly, with an n exit before each later block; a difference falls through into the order, an equal NUL returns 0, n > 64 with no hit resumes the steps at 64, and a re-read that finds equal non-NUL bytes (a writer, D-4.21) resumes the byte step with the zero vector set. Before, every SSE2 call ran the NULL tests, a's exact page test, both step page tests and an index register before the first compare (20 instructions on a 16-byte call). The AVX2 level reaches the head's compare only with the value >= 4032 (its mask), so it keeps its paths with one fused compare more on its rejected pairs. Counts, cbench_hot instructions per call Liella (glibc), AVX2 forced off, Haswell-EP: diff8 56 -> 36 (39), eq16 67 -> 48 (66), names64 89 -> 68 (83).
+'''

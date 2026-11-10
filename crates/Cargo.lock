@@ -26,6 +26,7 @@ dependencies = [
  "liella",
  "liella-abi",
  "liella-kernel",
+ "liella-ld",
  "liella-legacy",
  "liella-math",
  "liella-rt",
@@ -34,6 +35,21 @@ dependencies = [
 [[package]]
 name = "liella-kernel"
 version = "0.0.0"
+
+[[package]]
+name = "liella-ld"
+version = "0.0.0"
+dependencies = [
+ "liella-kernel",
+ "liella-rt",
+]
+
+[[package]]
+name = "liella-ld-so"
+version = "0.0.0"
+dependencies = [
+ "liella-boundary",
+]
 
 [[package]]
 name = "liella-legacy"

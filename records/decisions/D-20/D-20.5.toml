@@ -1,0 +1,8 @@
+id = "D-20.5"
+section = "s20"
+spec = "§20.9"
+ann = "HIST"
+status = "active"
+body = '''
+The internal preferred interface is `SignalStream` (signalfd-backed) for synchronous handling.
+'''

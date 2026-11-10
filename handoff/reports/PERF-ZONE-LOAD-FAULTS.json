@@ -1,0 +1,12 @@
+{"task": "PERF-ZONE-LOAD-FAULTS", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: first localtime_r 25 -> 22 faults (keke oracle) by sizing the path and names once and checking TZif type records in place; gate red: first mktime after localtime_r now takes 1 text fault (days_from_civil64 page no longer pre-faulted by the load)",
+ "branch": "task/perf-zone-load-faults", "head": "05dc6cde",
+ "gate": {"affected": "red: init_first_mktime_after_localtime_r_takes_no_fault (1 fault, pinned 0); all else passed, conformance 6/6", "peak": "11G (page cache included), oom_kill=0"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "rule-years table (4.8 KiB filled with a sentinel at load, 2-3 faults): needs a fallible zeroed allocation hook from liella-boundary into the forbid(unsafe) core crate", "recommendation": "add TryVec::zeroed backed by the boundary allocator's alloc_zeroed and a zero sentinel; it also serves other lazily filled tables"}],
+ "informational": ["TZif header counts were already bounded by the file length before any table is sized; now pinned by zone_load_alloc.rs", "plants 4/4 CAUGHT on 05dc6cde (perf-zone-load-faults-plants2)", "timing step 5 not started (budget)"],
+ "refused": [],
+ "improvement": "the page_faults oracle's per-call modes share 64 KiB text windows, so a faster load can move a fault into the next call; a combined load+mktime bound would show net gains without hiding a regression",
+ "next_step": "pin civil::days_from_civil64 (first-mktime path) in hot text, re-run the oracle and the gate, then book kotori/nico and nozomi for the time-group rows",
+ "report_file": "handoff/perf-zone-load-faults.md",
+ "jobs": ["keke:perf-zone-load-faults-gate2", "keke:perf-zone-load-faults-plants2", "keke:perf-zone-load-faults-probe-base", "keke:perf-zone-load-faults-probe-new"]}

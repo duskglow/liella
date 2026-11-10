@@ -1,0 +1,8 @@
+id = "D-16.9"
+section = "s16"
+spec = "§16.4"
+ann = "HIST"
+status = "active"
+body = '''
+Text forms: `p_*`, `fp_*`, `ns_sprintrr`/`ns_sprintrrf`, `sym_*`, `b64_*` and `loc_*` produce the observed formats (`p_query`/`fp_query` read 512 bytes; `fp_nquery` follows `pfcode`; `p_secstodate` prints overflow above 2^31-1). `__p_type_syms`, `__p_class_syms`, `_res_opcodes` and `_res_hconf` are product-only data objects with the observed layouts; of `_res_hconf` only `multi` is implemented (trim, reorder and the `RESOLV_*` variables: spec gap).
+'''

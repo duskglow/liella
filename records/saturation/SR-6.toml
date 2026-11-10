@@ -1,0 +1,13 @@
+id = "SR-6"
+section = "2"
+row = "`qsort` with a C comparator"
+now = "Liella's count is not in the lines read; the note gives glibc as about 22 library instr per comparison"
+limit = "\"to get much closer to glibc's ~22, compare by offset in the boundary\"; 8 check instructions and the slice building per comparison remain while core's sort is safe Rust"
+reason_class = "safety bound"
+basis = "C (Liella's count not seen; the 8 and the 22 are the note's)"
+source = "QSORT-MERGE-INDEX (`handoff/qsort-merge-index.md`), QSORT-C-COMPARATOR"
+tried = "Design change (core's sort generic over \"compare positions\") is open and the note says to ask the owner first"
+flag = "**recheck**: wall time not verified (the note says so); read the note's table for Liella's count"
+status = "active"
+body = '''
+'''

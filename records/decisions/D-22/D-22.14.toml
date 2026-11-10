@@ -1,0 +1,8 @@
+id = "D-22.14"
+section = "s22"
+spec = "§22.4"
+ann = "ABI"
+status = "active"
+body = '''
+**`__count` is kept by recursive mutexes only** (TIMING-N100-MUTEX-MT, -2, 2026-11-06). The second word of `pthread_mutex_t` (`__data.__count`) holds the recursion depth of a private recursive mutex (1 held once, n held n times, 0 free); a private normal, error-checking or adaptive mutex leaves it 0, held or free, in the fast path (`Mutex::lock_fast`/`unlock_fast_deferred`) and the general path alike. Robust, priority-inheritance, priority-protected and process-shared mutexes keep their earlier layout. Settled by a black-box probe of the reference glibc (cached hash b2d4f23094db: 0 for normal, error-checking and adaptive mutexes held or free, before and after `pthread_create`; 1 for a recursive mutex held once), so the layout matches glibc and needs no differences row. Gain: one store fewer on each uncontended lock and release of the non-recursive types, ahead of the LOCK-prefixed instruction that must drain it. The type is tested once, before the acquire, so the recursive path costs no extra instruction. Tests: `only_a_recursive_mutex_keeps_a_count`, the count-word assertion in `every_mutex_type_excludes` (crates/rt/tests/pthread_sync.rs).
+'''

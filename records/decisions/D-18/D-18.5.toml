@@ -1,0 +1,8 @@
+id = "D-18.5"
+section = "s18"
+spec = "§18.7"
+ann = "HIST"
+status = "active"
+body = '''
+`system`/`popen` spawn `/bin/sh -c` through D-18.3. `system`'s SIGINT/SIGQUIT handling is reference-counted in `boundary::spawn` (the first caller ignores, the last restores); SIGCHLD is blocked in the calling thread only; the shell gets the original mask and SIGINT/SIGQUIT at default unless they were ignored before. An unexecutable shell is status 127 with `errno` untouched (glibc leaves `EACCES`; KNOWN). `system` is a cancellation point: a cancelled caller kills and reaps the shell, restores the dispositions, then acts. `popen` keeps a locked (stream, pid, fd) list held through the call; the child closes the other popen descriptors; the mode is exactly one of `r`/`w` plus at most one `e`, in any order. `pclose` is not a cancellation point (POSIX's "may" list, the spec's per-section listing, and the reference agree). `pclose` of a stream not from `popen` closes it and fails with `ECHILD` (pclose(3); glibc returns 0; KNOWN). The locks join fork's order (D-18.6).
+'''

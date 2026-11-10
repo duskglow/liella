@@ -230,6 +230,69 @@ fn init_first_mktime_after_localtime_r_takes_no_fault() {
     assert!(s == 0, "first mktime after localtime_r: {s} page faults (counter query back on the first implicit tzset?)");
 }
 
+/// The faults of the first `localtime_r` (PERF-ZONE-LOAD-FAULTS): it reads, parses and keeps
+/// the zone file. Zen 1 host role, every run identical: 25 before the change (the path, the
+/// names and a temporary type table each grown or copied through their own allocation size),
+/// 22 after. Bound = that plus 2 for layout-only deltas, under the old count;
+/// `zone_load_alloc.rs` pins each table at one allocation exactly.
+/// PERF-ZONE-LOAD-FAULTS-2: the zone-load functions the list lacked (`zone_path`, the transition
+/// table's `TryVec::resize`, `rule::when_of`, `Zone::kind_period`) and the first-mktime path now
+/// sit in the localtime block of `hot-text.list`: Skylake-SP host role, every run identical,
+/// 22 -> 20 (and the first mktime 1 -> 0). LOCALTIME_BOUND 24 -> 22 (20 plus 2).
+/// PERF-ZONE-LOAD-FAULTS-3: after the merge of next, whose list added `tsc_probe`, `liella_sys_prctl`,
+/// `liella_machine_rdtsc`, `Resolution::matches` and `TscGate::fresh` to the mktime block, that block
+/// sits behind the localtime block with them and the first `localtime_r` finds its `tsc_probe` call in
+/// the same 64 KiB window: Zen 1 host role, every run identical, 18 (the mktime block back behind
+/// strftime's functions: 19; the rule-years table four times longer: 21). LOCALTIME_BOUND 22 -> 20
+/// (18 plus 2).
+const LOCALTIME_BOUND: u64 = 20;
+
+/// The first `localtime_r` (zone load included) and the first `mktime` after it, counted
+/// together (PERF-ZONE-LOAD-FAULTS-2): a fault that moves from one call to its neighbour (the
+/// leaner zone load once left `days_from_civil64`'s text window to the first mktime) shows here
+/// as no change, an added one as a rise, while the per-call bounds above still hold each call.
+/// Skylake-SP host role, every run identical: 20 after the hot-text pin (before it the per-call
+/// modes read 22 + 1; this mode did not exist yet).
+/// Bound = 20 plus 2, as for LOCALTIME_BOUND.
+/// PERF-ZONE-LOAD-FAULTS-3 (merge of next, see LOCALTIME_BOUND): Zen 1 host role, every run
+/// identical, 18. Bound 22 -> 20 (18 plus 2).
+const LOCALTIME_MKTIME_BOUND: u64 = 20;
+
+#[test]
+fn init_first_localtime_r_and_mktime_stay_within_their_combined_page_fault_bound() {
+    // No spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS-2.
+    if !Path::new("/usr/share/zoneinfo/America/New_York").exists() {
+        eprintln!("skipped: no /usr/share/zoneinfo/America/New_York on this host");
+        return;
+    }
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_localtime_mktime");
+    build(&exe);
+    let s = faults(&exe, "localtime_mktime");
+    assert!(s <= LOCALTIME_MKTIME_BOUND, "first localtime_r + first mktime: {s} page faults > {LOCALTIME_MKTIME_BOUND} (zone-load or mktime text left the hot group?)");
+}
+
+#[test]
+fn init_first_localtime_r_stays_within_its_page_fault_bound() {
+    // No spec clause (cost of the products). PERF-ZONE-LOAD-FAULTS: the zone load makes one
+    // allocation per table, each sized once, so it touches few heap regions.
+    if !Path::new("/usr/share/zoneinfo/America/New_York").exists() {
+        eprintln!("skipped: no /usr/share/zoneinfo/America/New_York on this host");
+        return;
+    }
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("page_faults_liella_localtime");
+    build(&exe);
+    let s = faults(&exe, "localtime");
+    assert!(s <= LOCALTIME_BOUND, "first localtime_r: {s} page faults > {LOCALTIME_BOUND} (zone tables grown through several sizes again?)");
+}
+
 /// The faults of a program's first `%.2f` (PERF-FIRSTCALL-MKTIME-SNPRINTF). `format_float` with the
 /// full decimal expansion inlined had a 24 KiB frame whose prologue probed six stack pages.
 /// Haswell-EP host role, after the change: 4 in every run (text and the first stack page); bound
@@ -329,6 +392,26 @@ fn init_cold_startup_functions_are_grouped() {
             grouped.iter().any(|s| s.split_once('.').is_some_and(|(_, name)| name == f || name.ends_with(f))),
             "{f}: not in the hot group of libc.a (its own section? listed in crates/libc-so/hot-text.list?)"
         );
+    }
+    // HOTTEXT-STARTUP-COMPLETE: the first Rust function of start-up (generic since the run-path
+    // change: `start::<false>`, 5.1 KiB) and the IRELATIVE pass. Outside the group, `start` sat in
+    // cold `.text` and crossed a 64 KiB window when code before it grew (one more start-up fault).
+    // `start::<false>` itself: `_RINvNtCs<crate hash>_` then the path and `E` (closures and callers
+    // that carry `start::<false>` as a type argument, grouped or not, name other functions; plant
+    // start-key-removed). The release profile inlines `apply_irelative` into `start`: every section
+    // of it present must be grouped (the name's end: its closures are other functions).
+    let f = "15liella_boundary7runtime5startKb0_E";
+    assert!(
+        grouped.iter().any(|s| {
+            s.split_once('.').and_then(|(_, name)| name.strip_prefix("_RINvNtCs")).and_then(|r| r.split_once('_')).is_some_and(|(_, r)| r.starts_with(f))
+        }),
+        "{f}: not in the hot group of libc.a (renamed or generic? run tools/hottext/regen.sh)"
+    );
+    for l in sections.lines().filter_map(|l| l.split_once("] ").map(|(_, a)| a)) {
+        let s = l.split_whitespace().next().unwrap_or("");
+        if s.starts_with(".text.") && s.ends_with("15liella_boundary7runtime15apply_irelative") {
+            assert!(s.starts_with(".text.sorted.h"), "{s}: apply_irelative is not in the hot group of libc.a (run tools/hottext/regen.sh)");
+        }
     }
     // NSCACHE-SECOND-LOOKUP: the name-service cache's attach and hit paths (p_nss): outside the
     // group the second lookup of a process took 4 more text faults. Which of them keep a section of

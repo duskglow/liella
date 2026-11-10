@@ -1,0 +1,8 @@
+id = "D-12.18"
+section = "s12"
+spec = "§12.6"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Argument positions are limited to `NL_ARGMAX`** (found by a fuzzing smoke test, 2026-10-05; input `%142949672950$s`). A `%n$` or `*m$` position over `NL_ARGMAX` (4096) makes `printf::parse` fail with `EINVAL`, as for scanf (D-12.13). Before, `%100000000$s` made the parse record that many argument classes (4.7 GB, seconds) before anything failed. POSIX gives the range `[1, NL_ARGMAX]` and §12.6 (`s12_6_c_6`) cites POSIX; the reference accepts position 4097 (probe: 4097 arguments, `%4097$d` printed): spec and documentation over the reference, a differences row. Tests: `printf_products.rs` (`printf_position_over_nl_argmax_is_einval`, and the oracle's `argmax` lines; every position is used there, since the fortified reference aborts on a gap).
+'''

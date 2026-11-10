@@ -36,27 +36,28 @@ wl_faults_differ() {
     }'
 }
 
-# wl_strace_sys FILE [MT] -> "GATING FUTEX MTMEM" from an `strace -c -f` summary (WLCOUNT-FUTEX, WLCOUNT-MTMEM-2). It takes the
+# wl_strace_sys FILE [MT] [MP] -> "GATING FUTEX MTMEM PIPERW" from an `strace -C -f -y` (or `strace -c -f`) output (WLCOUNT-FUTEX, WLCOUNT-MTMEM-2). It takes the
 # classification from wl_syscls.sh (the same code wl_run.sh uses, so both tools agree): GATING = all calls minus the
 # scheduling-dependent ones; FUTEX = futex calls; MTMEM = for a run that created threads (MT=1, found by wl_has_thread on a
 # clone trace) its mmap/munmap/mremap/brk/mprotect/madvise calls. Futex counts and a threaded program's arena/stack mappings
 # depend on scheduling and vary run to run with identical code, so only GATING is a deterministic counter; the other two
-# are advisory. Prints "- - -" when the file has no total line.
+# are advisory. PIPERW = for a run that created another process (MP=1, wl_has_child) its read/write calls on pipes, advisory
+# too (WL-PIPE-READS-ADVISORY, D-X.46). Prints "- - - -" when the file has no total line.
 wl_strace_sys() {
     if grep -q 'total' "$1"; then
-        wl_classify "$1" "${2:-0}" | awk -F'\t' '{ printf "%d %d %d\n", $1, $10, $11 }'
+        wl_classify "$1" "${2:-0}" "${3:-0}" | awk -F'\t' '{ printf "%d %d %d %d\n", $1, $10, $11, $12 }'
     else
-        echo "- - -"
+        echo "- - - -"
     fi
 }
 
-# wl_strace_median MT FILE... -> "GATING FUTEX MTMEM": the median over several `strace -c -f` summaries of each number.
+# wl_strace_median MT MP FILE... -> "GATING FUTEX MTMEM PIPERW": the median over several `strace -c -f` summaries of each number.
 # Kept from WLCOUNT-FUTEX: it costs two extra runs and guards against a one-off strace hiccup in the gating number.
 wl_strace_median() {
-    local mt=$1 f
-    shift
-    for f in "$@"; do wl_strace_sys "$f" "$mt"; done | awk '
-        { n++; a[n] = $1; b[n] = $2; c[n] = $3 }
+    local mt=$1 mp=$2 f
+    shift 2
+    for f in "$@"; do wl_strace_sys "$f" "$mt" "$mp"; done | awk '
+        { n++; a[n] = $1; b[n] = $2; c[n] = $3; d[n] = $4 }
         function med(x, m,   i, j, v) { for (i = 2; i <= m; i++) { v = x[i]; j = i - 1; while (j >= 1 && x[j] > v) { x[j + 1] = x[j]; j-- } x[j + 1] = v } return (m % 2) ? x[(m + 1) / 2] : int((x[m / 2] + x[m / 2 + 1]) / 2) }
-        END { if (n == 0 || a[1] == "-") print "- - -"; else printf "%d %d %d\n", med(a, n), med(b, n), med(c, n) }'
+        END { if (n == 0 || a[1] == "-") print "- - - -"; else printf "%d %d %d %d\n", med(a, n), med(b, n), med(c, n), med(d, n) }'
 }

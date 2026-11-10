@@ -1,0 +1,13 @@
+id = "SR-32"
+section = "3"
+row = "`strstr` 4 KiB clean scan (`strstr_scan_4k`, PERF-STRSTR-HIT-4K)"
+now = "i 1299 before, 1144 after (128 bytes per test, `vptest`), glibc 830 (ratio 1.57 to 1.38); hit_4k 1549 to 1394, miss_4k 1281 to 1126, verify_4k 1299 to 1144, hit_short 173 unchanged; run-time AVX2 path on a Zen 1 host (no AVX-512)"
+limit = "parity not reached: the pair filter loads and compares two streams per block (28 instructions per 128 bytes, 0.22 per byte); a one-stream filter on the last byte would be about 18 per 128 but stops at every common last byte in text, and costs the text rows more than it gains"
+reason_class = "hardware / algorithm"
+basis = "M"
+source = "PERF-STRSTR-HIT-4K"
+tried = "64-byte test loop (19 per 64) replaced by a 128-byte loop; one-stream filter not built"
+flag = "none"
+status = "active"
+body = '''
+'''

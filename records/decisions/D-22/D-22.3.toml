@@ -1,0 +1,8 @@
+id = "D-22.3"
+section = "s22"
+spec = "§22.1"
+ann = "—"
+status = "active"
+body = '''
+C11 `thrd_*`/`mtx_*`/`cnd_*`/`tss_*` are translations of the same internals.
+'''

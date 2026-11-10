@@ -1,0 +1,8 @@
+id = "D-11.10"
+section = "s11"
+spec = "§11.1, §11.5, §11.6, §11.10, §24.1, §24.6, §25.2"
+ann = "HIST"
+status = "active"
+body = '''
+**Variadic entry points (phase 5).** `open`, `openat`, `fcntl`, `ioctl`, `mremap`, `semctl`, `ulimit` and `syscall` are C adapters (`csys/src/adapter/variadic.c`) forwarding to fixed-arity `LIELLA_PRIVATE` exports. The optional argument is read unconditionally: an absent `int` or pointer is an unspecified register value on x86-64, which the Rust side ignores for the commands that take none. `syscall` reads its six arguments in order, one statement each. `prctl` (§18.9) arrives with its section in phase 11.
+'''
