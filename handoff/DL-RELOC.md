@@ -32,7 +32,9 @@ for this story and NOT written yet.
 4. Plants file `handoff/DL-RELOC-plants.txt` via `cargo xtask plants`: Relative `wrapping_add(a)` -> drop addend;
    Abs64 S+A -> S; reverse order -> forward (`(0..n).rev()`); deferral off (`Irelative if !deferred => Ok(true)` ->
    apply now); `protect_relro` call removed in link; `check_versions` call removed; each with msg:.
-5. Gate: `cargo xtask static`, `cargo xtask affected --run --base origin/next`; cbench_startup counters vs next.
+5. handback-check at 58d0b6421 was red on static: arch-audit (1 untagged x86_64 seam, likely the
+   `#![cfg(target_arch = "x86_64")]` in tests/reloc.rs: add an `// ARCH(x86_64): why` tag, docs/arch-seams.md) and
+   codemap out of date (`cargo xtask codemap`). Gate: `cargo xtask static`, `cargo xtask affected --run --base origin/next`; cbench_startup counters vs next.
 6. Arch seam checklist: 1 ok (R_X86_64 only in arch.rs), 2 ok (matches RelocKind), 3 n/a, 4 no new asm, 5 n/a,
    6 ok, 7 tests cfg x86_64, 8 PROPERTIES + apply added to table, 9 n/a — ticked but unreviewed.
 
