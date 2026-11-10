@@ -55,14 +55,24 @@ pub(super) const K6: f64 = f64::from_bits(crate::coeffs::fast32_cos::FAST32_COS[
 ///
 /// No operand or intermediate is subnormal (|r| ≥ 2^-36 or r = x ≥ 2^-26, so z^4 ≥ 2^-304), and
 /// |y| ≥ 2^-37.
+///
+/// The range test and the `double` operand come from x's bits (LIBM-F32-ONEPASS-REST, D-10.72): no
+/// `cvtss2sd`, whose partial write would wait for the register's previous writer (D-10.67), and a
+/// refused subnormal never reaches an FP instruction. |x| in [`TRIG_MIN`, `TRIG_MAX`) is a normal
+/// `float` with biased exponent 101..=145, so its `double` is the same sign, the exponent rebased by
+/// 1023 - 127 = 896 and the 23 fraction bits moved up 29 places: exactly `f64::from(x)`.
 #[inline(always)]
 pub(super) fn trig_core(x: f32) -> Option<(f64, f64)> {
-    let xd = f64::from(x);
-    let ax = xd.abs();
+    const LO: u32 = 0x3280_0000; // TRIG_MIN = 2^-26 as `float` bits
+    const HI: u32 = 0x4900_0000; // TRIG_MAX = 2^19
+    const _: () = assert!(f32::from_bits(LO) as f64 == TRIG_MIN && f32::from_bits(HI) as f64 == TRIG_MAX);
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff;
     // NaN, ±∞, |x| ≥ 2^19 and |x| < 2^-26 (the zeros and subnormals included): the accurate path.
-    if !(TRIG_MIN..TRIG_MAX).contains(&ax) {
+    if ab.wrapping_sub(LO) >= HI - LO {
         return None;
     }
+    let xd = f64::from_bits(((u64::from(ab) << 29) + (896 << 52)) | (u64::from(b ^ ab) << 32));
     let k = xd * INV_PI64 + SHIFT;
     let n = (k.to_bits() & 127) as usize; // n mod 128 (the low bits of 2^51 + n)
     let kf = k - SHIFT;

@@ -1767,7 +1767,7 @@ pub extern "C" fn exp10(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.32";
 pub extern "C" fn exp10f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp10_nearest, math::real::Real::exp10)
+    mret::elem32_onepass(x, math::fast32::exp10_onepass_any, math::real::Real::exp10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -1777,7 +1777,7 @@ pub extern "C" fn liella_exp10f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn exp10f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::exp10_nearest, math::real::Real::exp10)
+    mret::elem32_onepass(x, math::fast32::exp10_onepass_any, math::real::Real::exp10)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3813,7 +3813,7 @@ pub extern "C" fn log10(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.2.5";
 pub extern "C" fn log10f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log10_nearest, math::real::Real::log10)
+    mret::elem32_onepass(x, math::fast32::log10_onepass_any, math::real::Real::log10)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3823,7 +3823,7 @@ pub extern "C" fn liella_log10f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log10f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log10_nearest, math::real::Real::log10)
+    mret::elem32_onepass(x, math::fast32::log10_onepass_any, math::real::Real::log10)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3893,7 +3893,7 @@ pub extern "C" fn log2(x: f64) -> f64 {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log2_nearest, math::real::Real::log2)
+    mret::elem32_onepass(x, math::fast32::log2_onepass_any, math::real::Real::log2)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3903,7 +3903,7 @@ pub extern "C" fn liella_log2f128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn log2f32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log2_nearest, math::real::Real::log2)
+    mret::elem32_onepass(x, math::fast32::log2_onepass_any, math::real::Real::log2)
 }}
 
 export! { libm "GLIBC_2.27";
@@ -3973,7 +3973,7 @@ pub extern "C" fn liella_logbl_bits(x: LdBits) -> LdBits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log_nearest, math::real::Real::log)
+    mret::elem32_onepass(x, math::fast32::log_onepass_any, math::real::Real::log)
 }}
 
 export! { libm "LIELLA_PRIVATE";
@@ -3983,7 +3983,7 @@ pub extern "C" fn liella_logf128_bits(x: F128Bits) -> F128Bits {
 
 export! { libm "GLIBC_2.27";
 pub extern "C" fn logf32(x: f32) -> f32 {
-    mret::elem32_fast::<{ math::Status::HW_ANY.0 }>(x, math::fast32::log_nearest, math::real::Real::log)
+    mret::elem32_onepass(x, math::fast32::log_onepass_any, math::real::Real::log)
 }}
 
 export! { libm "GLIBC_2.27";
