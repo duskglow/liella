@@ -274,7 +274,12 @@ struct LconvWords {
 /// (WL-REGRESS: filling all 256 characters eagerly cost ~194k instructions in every
 /// `setlocale(LC_ALL, "")`, 2.9x the whole of a short `printf` run). An entry holds 0 until
 /// filled; a racing second fill stores the same value.
+///
+/// Aligned to 4 KiB (3 KiB of data): a slot is one page, and the slot's address is the index
+/// shifted, where a 3 KiB stride cost `towupper`/`towlower` a multiply-add on every call
+/// (WCTYPE-TRIE-FILE-2).
 #[derive(Debug)]
+#[repr(align(4096))]
 struct Latin {
     /// `towupper`, `towlower` of each character ([`ctype::wtrans_file`]) + 1 (wrapping; a
     /// value of `u32::MAX` stays 0 and is worked out on every call).
@@ -560,8 +565,8 @@ impl LocaleView {
     /// tail jump and keeps no frame on its inline path (TIMING-COV-WCTYPE-L).
     #[inline(always)]
     pub fn isw_int(&self, c: u32, mask: Class) -> i32 {
-        if let Some(word) = self.classes.hit(c) {
-            return i32::from(word & mask.0 != 0);
+        if let Some(r) = self.classes.test(c, mask.0) {
+            return r;
         }
         LocaleView::isw_wide(c, mask, self)
     }

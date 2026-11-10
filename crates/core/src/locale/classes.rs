@@ -13,14 +13,17 @@
 use super::ctype::Wide;
 use crate::ctype::w_classes_file;
 use crate::unicode::class_words::{self, LEAVES, STAGE1_LEN};
-use core::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 /// A stage-1 value: 0 = not resolved yet; `1..=LEAVES.len()`: built-in leaf `v - 1`;
 /// `POOL_BASE + k`: [`POOL`] leaf `k`; [`WALK`]: no leaf (every test walks the file's tables).
-const POOL_BASE: u16 = 0x8000;
+/// The values fit in 16 bits; a stage-1 cell is 32 bits wide because a 16-bit atomic load
+/// left the compiler a separate zero extension before the leaf index on every test (one
+/// instruction per call), where a 32-bit load extends for free (WCTYPE-TRIE-FILE-2).
+const POOL_BASE: u32 = 0x8000;
 
 /// The stage-1 value of a block whose leaf did not fit in [`POOL`].
-const WALK: u16 = u16::MAX;
+const WALK: u32 = 0xffff;
 
 /// How many leaves the shared pool holds (128 KiB of `.bss`, touched only by a process that
 /// resolves a block no built-in leaf matches).
@@ -44,7 +47,7 @@ enum Mode {
 /// A two-stage class-word table (see the module documentation).
 #[derive(Debug)]
 pub struct ClassTable {
-    stage1: [AtomicU16; STAGE1_LEN],
+    stage1: [AtomicU32; STAGE1_LEN],
     mode: Mode,
 }
 
@@ -82,7 +85,7 @@ static WALK_TABLE: ClassTable = ClassTable::new(Mode::Walk);
 
 impl ClassTable {
     const fn new(mode: Mode) -> ClassTable {
-        ClassTable { stage1: [const { AtomicU16::new(0) }; STAGE1_LEN], mode }
+        ClassTable { stage1: [const { AtomicU32::new(0) }; STAGE1_LEN], mode }
     }
 
     /// A built-in locale's table from its generated stage 1 (leaf `i` stored as `i + 1`).
@@ -91,7 +94,7 @@ impl ClassTable {
         let mut t = ClassTable::new(Mode::Builtin);
         let mut i = 0;
         while i < STAGE1_LEN {
-            t.stage1[i] = AtomicU16::new(u16::from_le_bytes([s1[i], 0]).wrapping_add(1));
+            t.stage1[i] = AtomicU32::new(u32::from_le_bytes([s1[i], 0, 0, 0]).wrapping_add(1));
             i = i.wrapping_add(1);
         }
         t
@@ -116,14 +119,35 @@ impl ClassTable {
     /// then answers.
     #[inline(always)]
     pub fn hit(&self, c: u32) -> Option<u16> {
-        let block = usize::try_from(c >> 8).unwrap_or(usize::MAX);
-        // Acquire: a pool leaf named here was written before the name (`resolve`, Release).
-        let v = self.stage1.get(block)?.load(Acquire);
-        let low = usize::try_from(c & 0xff).unwrap_or(0);
-        match LEAVES.get(usize::from(v).wrapping_sub(1)) {
+        let (v, low) = self.stage1_of(c)?;
+        match LEAVES.get(leaf_index(v)) {
             Some(l) => l.get(low).copied(),
             None => pool_word(v, low),
         }
+    }
+
+    /// Whether `c`'s class word has a bit of `mask`, as the C `int`, when its block is
+    /// resolved: [`ClassTable::hit`] with the mask test.
+    ///
+    /// The test is made in each leaf's arm, not on a merged word: on a word merged from the two
+    /// arms the compiler zero-extended again before a test of bit 15 (`iswgraph`, one
+    /// instruction per call; WCTYPE-TRIE-FILE-2).
+    #[inline(always)]
+    pub fn test(&self, c: u32, mask: u16) -> Option<i32> {
+        let (v, low) = self.stage1_of(c)?;
+        match LEAVES.get(leaf_index(v)) {
+            Some(l) => l.get(low).map(|w| i32::from(w & mask != 0)),
+            None => pool_word(v, low).map(|w| i32::from(w & mask != 0)),
+        }
+    }
+
+    /// `c`'s stage-1 value and its index in the leaf; `None` above U+10FFFF.
+    #[inline(always)]
+    fn stage1_of(&self, c: u32) -> Option<(u32, usize)> {
+        let block = usize::try_from(c >> 8).unwrap_or(usize::MAX);
+        // Acquire: a pool leaf named here was written before the name (`resolve`, Release).
+        let v = self.stage1.get(block)?.load(Acquire);
+        Some((v, usize::try_from(c & 0xff).unwrap_or(0)))
     }
 
     /// The class word of `c` (the standard classes only), `w` being this table's locale's wide
@@ -155,7 +179,7 @@ impl ClassTable {
         let words: [u16; 256] = core::array::from_fn(|i| w_classes_file(first | u32::try_from(i).unwrap_or(0), w).0);
         let builtin = if share { LEAVES.iter().position(|l| *l == words) } else { None };
         let v = match builtin {
-            Some(i) => u16::try_from(i).map_or(WALK, |i| i.wrapping_add(1)),
+            Some(i) => u32::try_from(i).map_or(WALK, |i| i.wrapping_add(1)),
             None => pool_add(&words),
         };
         // Release: the pool leaf's words are seen by every thread that reads `v` (Acquire).
@@ -201,19 +225,25 @@ impl ClassTable {
 /// The word `low` of the pool leaf a stage-1 value `v` names; `None` for 0, [`WALK`] and a
 /// leaf not in the pool.
 #[inline(always)]
-fn pool_word(v: u16, low: usize) -> Option<u16> {
-    let l = POOL.leaves.get(usize::from(v.wrapping_sub(POOL_BASE)))?;
+fn pool_word(v: u32, low: usize) -> Option<u16> {
+    let l = POOL.leaves.get(usize::try_from(v.wrapping_sub(POOL_BASE)).unwrap_or(usize::MAX))?;
     Some(l.get(low)?.load(Relaxed))
+}
+
+/// The [`LEAVES`] index a stage-1 value `v` names (past the end for 0, a pool leaf and [`WALK`]).
+#[inline(always)]
+fn leaf_index(v: u32) -> usize {
+    usize::try_from(v).unwrap_or(usize::MAX).wrapping_sub(1)
 }
 
 /// The pool leaf equal to `words` (an existing one, else a new one): its stage-1 value, or
 /// [`WALK`] when the pool is full.
-fn pool_add(words: &[u16; 256]) -> u16 {
+fn pool_add(words: &[u16; 256]) -> u32 {
     let same = |k: usize| {
         POOL.ready.get(k).is_some_and(|r| r.load(Acquire))
             && POOL.leaves.get(k).is_some_and(|l| l.iter().zip(words).all(|(a, b)| a.load(Relaxed) == *b))
     };
-    let named = |k: usize| u16::try_from(k).map_or(WALK, |k| POOL_BASE.wrapping_add(k));
+    let named = |k: usize| u32::try_from(k).map_or(WALK, |k| POOL_BASE.wrapping_add(k));
     let filled = POOL.next.load(Acquire).min(POOL_LEAVES);
     if let Some(k) = (0..filled).find(|&k| same(k)) {
         return named(k);

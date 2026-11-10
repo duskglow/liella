@@ -163,9 +163,9 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 pub fn isw(c: u32, mask: Class) -> i32 {
     let t = tb::read::<tb::WClass>();
     if t != 0
-        && let Some(word) = tb::class_table_at(t).hit(c)
+        && let Some(r) = tb::class_table_at(t).test(c, mask.0)
     {
-        return i32::from(word & mask.0 != 0);
+        return r;
     }
     isw_view(c, mask)
 }

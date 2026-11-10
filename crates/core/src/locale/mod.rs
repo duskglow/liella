@@ -986,6 +986,10 @@ mod tests {
                     assert_eq!(t.word(c, Some(&w)), want, "{what} share {share}: word {c:#x}");
                     if c <= 0x10_ffff && t.hit(c).is_some() {
                         assert_eq!(t.hit(c), Some(want), "{what} share {share}: resolved word {c:#x}");
+                        // The mask test of each leaf kind (`isw*`'s inline path), one class per
+                        // code point in turn.
+                        let m = STANDARD_MASKS.get(usize::try_from(c).unwrap() % STANDARD_MASKS.len()).copied().unwrap();
+                        assert_eq!(t.test(c, m), Some(i32::from(want & m != 0)), "{what} share {share}: test {c:#x} mask {m:#x}");
                     }
                 }
                 let [unresolved, builtin, pool, walk] = t.census();
