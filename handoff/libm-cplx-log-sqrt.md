@@ -1,57 +1,57 @@
 # LIBM-CPLX-LOG-SQRT handoff: clog/csqrt (and clogf, csqrtf) quick tiers
 
-State: branch task/libm-cplx-log-sqrt-4 (continues -3, -2, -1; origin/next merged at run 3, not since). HEAD in
-handoff/reports/LIBM-CPLX-LOG-SQRT-4.json; code head 421f9dea7. Role keke:~/w/r5 (Zen 1); hot-text work on mei
-(Skylake-SP, the CI class) in RAM copies under /mnt/zram/claude/LIBM-CPLX-LOG-SQRT-4/. Decisions in force: D-10.53,
-D-10.74 (records/decisions/D-10/D-10.74.toml), D-10.55, D-10.25, D-X.56 (hot-text regen), HOTTEXT-PINNING (owner:
-no `#[inline(never)]` on start-up keys). Runs 1-3: see handoff/reports/LIBM-CPLX-LOG-SQRT-{2,3}.json.
+State: branch task/libm-cplx-log-sqrt-5 (continues -4, -3, -2, -1; origin/next merged at run 3, not since; next
+9af6dff86 unchanged since). Code head 12835f458; HEAD in handoff/reports/LIBM-CPLX-LOG-SQRT-5.json. Role mei:~/w/s1
+(Skylake-SP). Decisions in force: D-10.53, D-10.74 (now also records the axis paths), D-10.55, D-10.25, D-X.56,
+HOTTEXT-PINNING (no `#[inline(never)]` on start-up keys), coordinator ruling #4357, owner ruling #4347 (LAYOUT-JITTER).
 
-## Done in run 4
+## Done in run 5
 
-* Step 0: `cargo xtask clippy` + `static` green on the inherited head (job libm-cplx-log-sqrt-4-step0); its
-  `cargo xtask so` fails as run 3 said (2 dead fast-profile keys).
-* AXES (coordinator #4305), commit e5bb15487 (+ 421f9dea7 test lint fix and plants file): the in-place entries
-  answer exact-zero-part operands, out of line, only after the general tier declines (general path unchanged):
-  `csqrt(x±0i)` = hardware root (`(√x,±0)` / `(+0,±√|x|)`), `csqrt(±0+iy)` = `(t, ±t)`, `t = √(|y|/2)`;
-  `clog(x±0i)` = `(fast64::log_nearest|x|, ±0 or ±π)`, `clog(±0+iy)` = `(ln|y|, ±π/2)`, `clog(1±0i)` exact, other
-  `|v| = 1` decline; `cexp(x±0i)` = `(exp_nearest x, ±0)` (both FMA builds), `cexp(±0±0i)` = `(1, ±0)`; `clogf`
-  via `clog_core`'s formula with `b = 0` (exact `a²`, `(a-1)(a+1)`), `csqrtf` via the double root (Figueroa 1995,
-  `53 >= 2·24+2`). Not done: `cexpf` axis, `cexp(±0+iy)` (needs sincos), the zero/subnormal cases (route).
-* Tests: boundary `complex_axes_in_place_match_the_route` (s10_math_symbols.rs: bits, flags, errno of the
-  exported functions vs the 384-bit route, both axes, 21 magnitudes x signs x signed zeros, 6 functions); route
-  count now asserts `_axis` `[0, 0]` for cexp, clog, csqrt, clogf, csqrtf. Job libm-cplx-log-sqrt-4-step1b (keke,
-  head 421f9dea7): clippy, static, `complex_fast` lib tests (10 pass) and the axis test pass.
-* Plants file handoff/LIBM-CPLX-LOG-SQRT-4-plants.txt (10 plants): NOT RUN (the tool's baseline needs `so`).
+* Step 0: clippy + static green on the inherited head (job libm-cplx-log-sqrt-5-step0).
+* Hot-text repair (#4357), commit 12835f458: `tools/hottext/prune.py` with the fast and release
+  `hot-text.matched` of this tree dropped exactly the two dead keys (`Features::detect<CSysImpl<false>>`, startup,
+  fast; intl `catalog::variants::each` closure, extra, fast). Neither matches in the release archive either, so the
+  layout is unchanged in both profiles; list order kept. `cargo xtask so`: release 4 windows (budget 4), hot group
+  0x413280-0x4a204c (same as next), 101/101; fast 5 windows (budget 5), 106 of 107 (Features::detect inlined).
+  `records check` ok (job libm-cplx-log-sqrt-5-so2).
+* D-10.74 extended with the axis paths (Annex G.6.3.1/G.6.3.2/G.6.4.2, Figueroa 1995) and its test reference (no new
+  id needed: D-10.74 is this story chain's own, not yet landed).
+* Plants: handoff/LIBM-CPLX-LOG-SQRT-5-plants.txt (the -3 and -4 files, 14 plants): 14 CAUGHT, 0 WARN
+  (job libm-cplx-log-sqrt-5-plants).
+* Counts (job libm-cplx-log-sqrt-5-percall, instructions/call, Liella vs glibc dynamic, Skylake-SP): csqrtf 107.0 vs
+  127.5, csqrt 307.2 vs 146.2, csqrt_axis 85.0 vs 58.0, clogf 275.1 vs 274.4, clog 527.0 vs 417.6, clog_axis 288.9 vs
+  199.6. No base column (base = the 384-bit route for every axis operand, run 3's route count).
+* Timing (Ivy Bridge timing host kotori, booking 152, staged tree of 12835f458, job kotori:libm-cplx-log-sqrt-5-timing,
+  ns/op glibc vs Liella, ratio): cexp 75.7/404.3 5.34; clogf 138.0/131.2 0.95; clog 158.3/241.1 1.52; csqrtf
+  90.1/96.4 1.07; csqrt 64.6/220.3 3.41; clogf_axis 110.6/107.3 0.97; clog_axis 61.9/112.9 1.82; csqrtf_axis
+  45.0/55.0 1.22; csqrt_axis 16.2/23.0 1.42; clogf_near1 135.3/121.4 0.90; clog_near1 489.8/432.2 0.88.
 
-## BLOCKER (not fixed, numbers for LAYOUT-STABILITY-RETHINK / coordinator)
+## BLOCKER: LAYOUT-JITTER (owner ruling #4347; not chased)
 
-Clean env (`env -i`, no LC_*), Skylake-SP, RAM copies of this branch:
+Gate libm-cplx-log-sqrt-5-gate (escalated to FULL because hot-text.list changed; 6317 passed, 3 failed): three
+start-up fault bounds, each +1: coreutils-shaped tool 59 > 58, fork child 8 > 7, setlocale+printf 56 > 55 (startup
+only 17, bound 17). The repair places nothing new (dead keys), so this is the libm code growth of runs 1-4 moving the
+layout. Same three tests, fast products, plain jobrun on mei, deterministic (5 equal runs each):
 
-| build | list | result |
+| count (bound) | origin/next 9af6dff86 (job libm-cplx-log-sqrt-5-nextfaults) | branch 12835f458 (job libm-cplx-log-sqrt-5-branchfaults) |
 |---|---|---|
-| origin/next 9af6dff86 release | next's | ok: 4 windows (budget-release 4), hot group 0x413280-0x4a204c, 101/101 start-up fns |
-| origin/next fast | next's | ok: 5 windows (budget-fast 5), 107/107 |
-| branch release | inherited | ok: 4 windows, hot group 0x413280-0x4a204c, 101/101 (same as next) |
-| branch fast | inherited | FAIL: 2 dead keys `Features::detect<CSysImpl<false>>` (startup), intl `catalog::variants::each` closure (extra) |
-| branch fast, `regen.sh . --build` | regenerated | ok: 5 windows (budget-fast 5), 106/106; list 588 lines: 21 removed, 20 added |
-| branch release, `LIELLA_FULL_PROFILE=1 regen.sh . --build` (after the fast regen) | fast-regenerated | FAIL at its first build: STARTUP-TEXT-WINDOWS 5 > budget-release 4, hot group 0x413280-0x4a1f8c |
+| startup only (17) | 16 | 17 |
+| setlocale + printf (55) | 52 | 56 |
+| fork child (7) | 7 | 8 |
+| coreutils-shaped tool (58) | 55 | 59 |
 
-So the branch's code does not push release start-up text over budget; the fast regen's rewritten list does
-(it reorders/re-tags keys, which moves the release layout). The fast-regenerated list is kept on mei at
-~/work/LIBM-CPLX-LOG-SQRT-4/hot-text.list.fast-regen. Per the coordinator note, stopped here: no budget raised,
-no `#[inline(never)]` added. Jobs: libm-cplx-log-sqrt-4-regen2 (rc 1, the table's last two rows),
-libm-cplx-log-sqrt-4-reldiag (rc 0 by design, rows 1-4). Recommendation (RULING NEEDED): repair only the two
-dead fast keys (as the fast regen does for them) and keep the rest of the list's order, or make regen's merge keep
-the existing order for keys traced in the other profile; that keeps release at 4 windows.
++4 on locale and tool is above the 1-3 the ruling names, and above next's own pad-sweep range in
+handoff/layout-stability-rethink.md (locale 52-55, tool 55-58): see RULING NEEDED in the report. Hot-text inputs vs
+next: only the 2 pruned lines; next has one more line in layout/contracts.tsv (added on next after run 3's merge).
+No bound changed, no regen loop, no section moved.
 
 ## Next steps (in order)
 
-1. Unblock `so` (ruling above), then gate (`--files` = `git diff --name-only origin/next...HEAD` minus records/
-   and handoff/), plants (handoff/LIBM-CPLX-LOG-SQRT-4-plants.txt and -3-plants.txt, 4 not yet run), counts of the
-   `_axis` rows (cbench_libm `clog_axis csqrt_axis clogf_axis csqrtf_axis`) vs glibc.
-2. Decision record for the axis paths (`records new decision D-NEW --series D-10`, cite Figueroa 1995, C Annex
-   G.6.3.1/G.6.3.2/G.6.4.2), or an `amends` of D-10.74.
-3. Then run 3's list: csqrt by time (dependent sqrt/div chain), cexp's one routed operand, clog `_near1`, and the
-   cexpf / `cexp(±0+iy)` axes.
+1. When LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS land: merge origin/next, `cargo xtask so` both profiles, rerun the
+   gate (`--files` = `git diff --name-only origin/next...HEAD` minus records/ and handoff/; it escalates to FULL while
+   hot-text.list differs from next). Plants and counts above stand unless the merge changes the math code.
+2. Then run 3's list: csqrt by time (3.41x: dependent sqrt/div chain), cexp (5.34x; one routed operand), clog
+   (1.52x) and clog_axis (1.82x), the cexpf / `cexp(±0+iy)` axes.
 
-Do not redo: bound derivations in complex_fast.rs, the atan2 merge, the route-count table, the release diagnosis above.
+Do not redo: bound derivations in complex_fast.rs, the atan2 merge, the route-count table, the release diagnosis
+of run 4, the hot-text repair (prune of the two dead keys), the plants.

@@ -1,0 +1,12 @@
+{"task": "LIBM-CPLX-LOG-SQRT-5", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: LAYOUT-JITTER: dead hot-text keys pruned (both profiles build, release 4 windows), D-10.74 records the axis paths, 14/14 plants caught, counts and Ivy Bridge timing done; gate red on 3 start-up fault bounds (+1 each; next 16/52/7/55 vs branch 17/56/8/59)",
+ "branch": "task/libm-cplx-log-sqrt-5", "head": "see git log -1 (handoff commit after code head 12835f458)",
+ "gate": {"affected": "6317 passed / 3 failed (FULL escalation; hot_text_products page-fault bounds)", "peak": "14G"},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "start-up faults on this branch exceed next by +1/+4/+1/+4 (startup/locale/fork/tool), above the 1-3 jitter of ruling #4347 and next's pad-sweep range", "recommendation": "hold for LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS as #4347 says, then merge next and re-gate; if still red after those land, profile the fault attribution (measure.py) on this branch before any code change"}],
+ "informational": ["timing (Ivy Bridge, Liella/glibc): csqrt 3.41, cexp 5.34, clog 1.52, clog_axis 1.82, csqrt_axis 1.42, csqrtf_axis 1.22; clogf, clogf_axis, clog_near1, clogf_near1 below 1.0", "fast so build warns dead_code for hyp_quick (math) and c_malloc (boundary heap) in its own build; clippy is clean", "branch lacks one layout/contracts.tsv line that next added after run 3's merge"],
+ "refused": [],
+ "improvement": "touching hot-text.list escalates the gate to FULL (42 min); a layout-only check (so both profiles + hot_text_products) would have given the same verdict in 4 min",
+ "next_step": "after the layout pin stories land: merge origin/next, so both profiles, re-gate; then csqrt/cexp/clog time ratios",
+ "report_file": "handoff/libm-cplx-log-sqrt.md",
+ "jobs": ["libm-cplx-log-sqrt-5-gate", "libm-cplx-log-sqrt-5-plants", "libm-cplx-log-sqrt-5-percall", "libm-cplx-log-sqrt-5-so2", "kotori:libm-cplx-log-sqrt-5-timing"]}
