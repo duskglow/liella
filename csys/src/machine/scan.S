@@ -2265,7 +2265,7 @@ liella_machine_rawmemchr:
 	ret
 
 	.subsection 0
-	/* int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
+	/* LAYOUT(RAWMEMCHR-SSE2-PIN): int3 fill, never reached (after a ret): the SSE2 path starts at offset 0x1ed, as before. */
 	.org liella_machine_rawmemchr_entry + 0x1ed, 0xcc
 .Lraw_sse2:
 	punpcklbw %xmm0, %xmm0
@@ -2380,7 +2380,7 @@ liella_machine_rawmemchr:
 	bsfl %edx, %edx
 	leaq 48(%rdi,%rdx), %rax
 	ret
-	/* PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
+	/* LAYOUT(RAWMEMCHR-LOOP-32), PERF-RAWMEMCHR-4K-IVB (D-4.63): int3 fill after a ret, never executed. It puts
 	 * .Lraw_sse_loop (0xa8 bytes on) at entry + 0x3e0, 32-byte aligned, so the 117-byte loop
 	 * spans four 32-byte fetch windows instead of five (at entry + 0x3d0 it did, and
 	 * rawmemchr_4k timed slower on Ivy Bridge). The fill keeps the function's end before the
@@ -2818,7 +2818,7 @@ liella_machine_memchr:
 	ret
 
 	.subsection 0
-	/* int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
+	/* LAYOUT(MEMCHR-SSE2-PIN): int3 fill, never reached (it follows the jmp above): the SSE2 path starts at offset 0x231
 	 * of the section, as before (the assembler refuses if the code above grows past it). */
 	.org liella_machine_memchr_entry + 0x231, 0xcc
 	/* SSE2: the same with 16-byte blocks; the head and the groups fold with por, and a hit is

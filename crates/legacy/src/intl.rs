@@ -1198,6 +1198,7 @@ impl Key<'_> {
 /// The slots, page aligned so that the table (smaller than a page, checked below) always costs
 /// one page fault, never two: unaligned, the static link placed it across a page boundary and a
 /// program's first lookup touched both pages (GETTEXT-HIT-3, ls -l: +3.5 faults per process).
+/// LAYOUT(GETTEXT-SLOTS-PAGE).
 #[repr(C, align(4096))]
 struct Slots([Resolution; R_SLOTS]);
 const _: () = assert!(size_of::<Slots>() == 4096);

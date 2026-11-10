@@ -1,0 +1,11 @@
+id	kind	subjects	rule	reason	decision
+FN-ALIGN-EXPORTS	fn-align	libc.so.6	align=64	every exported function entry starts a 64-byte line (MEM-K5c: memset_16 13% slower at 0x30 mod 64)	D-4.33
+CLASSED-XREF	classed-xref	libc.a libc.so.6	bias=4096	the classed pages' out-of-page references: page 1 = page 0 + 4096, so the CPU-class swap keeps every target	D-X.34
+JCC-HOT-ASM	jcc	libc.a	boundary=32	no jump in fold.S / scan.S crosses or ends on a 32-byte boundary (JCC erratum, Skylake-family uop cache)	D-4.67
+COLD-BSS-LBSS	section-rename	libc.a	from=.bss.; to=.lbss.; min=1024; min-count=5	zero-initialised tables of 1 KiB or more sit in .lbss after .bss, so start-up writes pack into few RW pages	D-X.22
+STARTUP-NAMES-WINDOW	object-window	libc.a:15liella_boundary13startup_names13STARTUP_NAMES	section=.rodata1; window=65536	the names start-up reads share one object in .rodata1 that cannot cross a 64 KiB window (TIMER-SIGEV-THREAD-NOSPAWN-4: +1 fault)	D-X.48
+GETTEXT-SLOTS-PAGE	object-align	libc.a:13liella_legacy4intl8RESOLVED	align=4096; max-size=4096	the gettext resolution slots fill one page, so a first lookup costs one fault, not two (GETTEXT-HIT-3)	D-X.48
+MEMCHR-SSE2-PIN	section-offset	libc.a:liella_machine_memchr_entry	offset=0x231; insn=punpcklbw; section-align=64	memchr's SSE2 path keeps its offset when the AVX2 path changes (Ivy Bridge memchr_16_mix 14% slower when it moved)	D-4.56
+RAWMEMCHR-SSE2-PIN	section-offset	libc.a:liella_machine_rawmemchr_entry	offset=0x1ed; insn=punpcklbw; section-align=64	rawmemchr's SSE2 path keeps its offset when the AVX2 path changes	D-4.56
+RAWMEMCHR-LOOP-32	label-align	libc.a:liella_machine_rawmemchr_entry	offset=0x3e0; insn=movdqa %xmm0,%xmm1; align=32	rawmemchr's SSE2 128-byte loop starts 32-byte aligned: four fetch windows, not five (Ivy Bridge rawmemchr_4k)	D-4.63
+PRODUCT-PATH-REMAP	remap	libc.so.6 libm.so.6 libc.a libm.a liella-crt1.o liella-gcrt1.o libresolv.a	paths=none	no build path in the products, so their layout is the same in every role and host	D-X.48
