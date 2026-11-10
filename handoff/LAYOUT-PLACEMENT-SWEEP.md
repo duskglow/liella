@@ -2,7 +2,7 @@
 
 State: branch `task/layout-placement-sweep` (stacks on LAYOUT-MANIFEST-2, ddc2dbdaf), role mei:~/w/s1 (Xeon 8151,
 Skylake-SP). Code commits: bench asserts; 244e5b7f2 sweep test + D-X.52 + plants file; 4a813ea96 host name -> processor class. Plan: handoff/layout-contracts-plan.md L15, L16.
-Decision in force: D-X.52 (plan/07-decisions/x-implementation-decisions.md row, as D-X.48 on this branch; the landing
+Decision in force: D-X.52 (plan/07-decisions/x-implementation-decisions.md row, as the parent story did on this branch; the landing
 moves it to records/decisions/D-X/D-X.52.toml with the rest).
 
 ## What was done
