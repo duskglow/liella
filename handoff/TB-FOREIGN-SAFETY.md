@@ -32,7 +32,11 @@ shared static spare). Per word: 0x9c flags never read; 0xa0 thread, 0xa8 locale,
   ungated, the read entry's asm gate removed, the fork rule removed, the period word moved).
 - Jobs on mei:~/w/s1: tbfs2-lint-0 (inherited head: clippy+static clean), tbfs2-check-1 (compile error in the new
   test, fixed), tbfs2-check-2 (static: opaque-audit, fixed with `#![no_builtins]`), tbfs2-check-3 (targeted tests and
-  the conformance program green), tbfs2-gate-1 (clippy, static, records check, direct tier), tbfs2-plants-1.
+  the conformance program green), tbfs2-gate-1 (red at static: a record body must be one line; fixed),
+  tbfs2-plants-1 (6 caught, 2 of them WARN-NO-MSG with msg regexes too narrow (widened); the period plant moved only
+  the read side, so lookups just missed and stored the same words: equivalent for the test; replaced by a plant that
+  moves the store). FINAL head 3902244d5: tbfs2-gate-2 and tbfs2-plants-2 started, results not read in run 2:
+  read them first (`~/bin/jobwait tbfs2-gate-2 tbfs2-plants-2` on mei).
 
 ## Open
 - Counts NOT DONE (budget): before (origin/next) and after on isalpha/toupper, `__ctype_b_loc`, uselocale(0),
