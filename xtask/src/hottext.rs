@@ -609,10 +609,12 @@ fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, 
 }
 
 /// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
-/// (`tools/hottext/regen.sh`) and prose (`.md`). A gate, CI script or other tool that passed it
+/// (`tools/hottext/regen.sh`) and prose (`.md`, and the records under `records/`, which only xtask
+/// reads). A gate, CI script or other tool that passed it
 /// would build with the dead-key check off.
 fn may_name_regen_flag(path: &str) -> bool {
     path == "xtask/src/hottext.rs" || path == "tools/hottext/regen.sh" || path.ends_with(".md")
+        || (path.starts_with("records/") && path.ends_with(".toml"))
 }
 
 /// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
@@ -739,6 +741,7 @@ mod tests {
         assert_eq!(dead_key_verdict(Some("dead".to_string()), true), Ok(Some("dead".to_string())));
         assert_eq!(dead_key_verdict(None, false), Ok(None));
         assert!(may_name_regen_flag("tools/hottext/regen.sh") && may_name_regen_flag("xtask/src/hottext.rs") && may_name_regen_flag("handoff/x.md"));
+        assert!(may_name_regen_flag("records/decisions/D-X/D-X.56.toml") && !may_name_regen_flag("records/views.sh"));
         assert!(!may_name_regen_flag("tools/hottext/merge.py") && !may_name_regen_flag("scripts/ci.sh") && !may_name_regen_flag("xtask/src/affected.rs"));
     }
 
