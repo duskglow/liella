@@ -175,3 +175,151 @@ pub fn atan2(y: f32, x: f32, mode: Rounding) -> (f32, Status) {
         None => crate::trig::atan2(y, x, mode),
     }
 }
+
+// The one-pass forms (LIBM-F32-REST, D-10.82; the method of D-10.63/D-10.67/D-10.72): operands
+// tested and built from their bits, one evaluation in `double` in the caller's MXCSR (unread),
+// a margin test that does not depend on the direction, and one `cvtsd2ss` in the caller's
+// direction.
+
+/// The one-pass inverse trigonometric kernels' bound in every direction, in units of
+/// u = 2^-53 relative (the proofs at [`atan_red_any`] and its callers).
+pub(super) const INV_ONEPASS_BOUND: u64 = 24;
+/// Their margin in ulp of y: at least 1.5·bound + 1 (|y - f| < bound·(1 + ε) ulp(y)).
+pub(super) const INV_ONEPASS_DELTA: u64 = 64;
+const _: () = assert!(2 * INV_ONEPASS_DELTA >= 3 * INV_ONEPASS_BOUND + 2);
+
+/// 1.5·2^45: s·32 + GRID rounds s·32 to the 2^-7 grid (|s·32| ≤ 32 keeps the sum in GRID's
+/// binade, whose low 13 fraction bits are 0).
+const GRID: f64 = 52_776_558_133_248.0;
+const _: () = assert!(GRID.to_bits() == 0x42c8_0000_0000_0000 && SHIFT.to_bits() == 0x4338_0000_0000_0000);
+
+/// [`atan_red`] in any rounding direction, for an exact `double` s in [0, 1] that is a normal
+/// `double` or 0.
+///
+/// The index: s·32 is exact; s·32 + GRID rounds it to a multiple of 2^-7 within 2^-7 in any
+/// direction (≤ 32, so the low 13 fraction bits of the sum hold 128 times it, at most 4096), and
+/// i = (that + 64) >> 7 is its nearest integer (ties up) on the bits: |s·32 - i| ≤ 1/2 + 2^-7,
+/// so |s - c| ≤ 1/64 + 2^-12, c = i/32 = ((SHIFT + i) - SHIFT)/32 built exactly from i (no
+/// `cvtsi2sd`, D-10.67). A round-to-nearest `s·32 + SHIFT` would instead take the floor or
+/// the ceiling in a directed mode (|s - c| up to 1/32, outside the polynomial's interval).
+///
+/// Bound in any direction (each operation ≤ 2^-52 = 2u relative, RN's u doubled): s - c is exact
+/// by Sterbenz except for i = 1 with s in [1/64 - 2^-12, 1/64) (one rounding, 2u); the divisor 3u,
+/// the quotient 2u: u carries ≤ 7u. |u| ≤ (1/64 + 2^-12)/1.0004 < 1.016/64, where the fit's
+/// relative error (≤ 2^-57.95 on [-1/64, 1/64]) grows by less than the Chebyshev factor
+/// T_4(1.065) < 2.3: < 2^-56.7 = 0.08u; the u³ term's roundings < 2^-12·2u·3; the last sum 2u:
+/// p carries ≤ 9.2u. atan: A + p as [`atan_red`] with each term doubled except the fit's:
+/// ≤ 2·(1.0 + 1.0)u + 9.2u·(|p|/atan s ≤ 1) + 2u ≤ 15.2u for i = 1 (for i = 0, 9.2u). π/2 - atan:
+/// absolute in 2^-53, PIO2 0.5, A 0.5, the difference 1, p 9.2/64·1.02, the last rounding 2:
+/// ≤ 4.2, over a result ≥ π/4: ≤ 5.4u. A caller's s with relative error δ adds δ (atan) or
+/// 0.64δ (π/2 - atan), as at [`atan_red`]. Every intermediate is 0 or a normal `double` (u is 0
+/// or ≥ 2^-254·2^-53 relative to s ≥ 2^-254, and its cube stays above 2^-1000), so the
+/// arithmetic raises inexact and nothing else, and FTZ and DAZ change nothing.
+#[inline(always)]
+pub(super) fn atan_red_any(s: f64, inv: bool) -> f64 {
+    let g = ((s * 32.0 + GRID).to_bits() & 0x1fff) as u32;
+    let i = ((g + 64) >> 7) as usize;
+    let c = (f64::from_bits(SHIFT.to_bits() + i as u64) - SHIFT) * (1.0 / 32.0);
+    let u = (s - c) / (1.0 + s * c);
+    let u2 = u * u;
+    let p = u + u * u2 * (AT3 + u2 * (AT5 + u2 * AT7));
+    if inv { (PIO2 - ATAN32[i]) - p } else { ATAN32[i] + p }
+}
+
+/// A positive normal `float`'s bits as the `double` of the same value (D-10.72: exponent rebased
+/// by 896, fraction moved up 29 places; a full-register `movq`, no `cvtss2sd`, D-10.67).
+#[inline(always)]
+fn onepass_abs(ab: u32) -> f64 {
+    f64::from_bits((u64::from(ab) << 29) + (896 << 52))
+}
+
+/// The margin test and the conversion in the caller's direction (as [`super::exp_onepass`]): y
+/// has the result's sign and |y| ≥ 2^-126 (the callers' ranges), so when y's low 28 fraction bits
+/// are more than [`INV_ONEPASS_DELTA`] from 0 and from 2^28 no `float` and no midpoint lies
+/// between y and f, `cvtsd2ss` of y is f rounded in that direction, inexact, normal, and nothing
+/// else is raised.
+#[inline(always)]
+fn onepass_finish(y: f64) -> Option<f32> {
+    if (y.to_bits().wrapping_add(INV_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * INV_ONEPASS_DELTA {
+        return None;
+    }
+    Some(y as f32)
+}
+
+/// `asinf` in the caller's rounding direction and MXCSR, which it does not read (LIBM-F32-REST,
+/// D-10.82), or `None` for the envelope. `sqrt` must be correctly rounded in the caller's
+/// direction (`sqrtsd`; the tests pass `f64::sqrt` under the direction they set) and raise only
+/// inexact on a positive normal operand.
+///
+/// Operands 2^-26 ≤ |x| < 1 on the bits (zero, subnormals, |x| ≥ 1, ∞ and NaN reach no
+/// floating-point instruction); a = |x| exact. a² is exact, 1 - a² exact for a ≥ 1/8 and within
+/// 2u otherwise (≥ 2^-23.9: normal); the root 2u plus half that, the quotient 2u: δ ≤ 5u; the
+/// larger kernel bound plus δ: 15.2u + 5u ≤ 21u < [`INV_ONEPASS_BOUND`]. The sign is applied before
+/// the conversion (RD of -y is -(RU of y)). asin of a nonzero rational is irrational, so f is
+/// inexact; |f| ≥ 2^-26 is a normal `float`.
+#[inline(always)]
+pub fn asin_onepass_any(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff;
+    if ab.wrapping_sub(0x3280_0000) >= 0x3f80_0000 - 0x3280_0000 {
+        return None;
+    }
+    let a = onepass_abs(ab);
+    let d = sqrt(1.0 - a * a);
+    let y = if a <= d { atan_red_any(a / d, false) } else { atan_red_any(d / a, true) };
+    onepass_finish(if b >> 31 != 0 { -y } else { y })
+}
+
+/// `acosf` as [`asin_onepass_any`]: acos x = 2·atan t (x ≥ 0) or 2·(π/2 - atan t) (x < 0), with
+/// t = √((1 - a)/(1 + a)), a = |x|, for normal |x| < 1 (tested on the bits). 1 ± a is exact for
+/// a ≥ 2^-29 and within 2u otherwise, the quotient 2u, the root halves that and adds 2u: δ ≤ 5u
+/// (t ≥ 2^-12.6 is normal); doubling is exact: ≤ 20.2u. acos x is irrational for |x| < 1, and
+/// f ≥ 2^-11.5 is a normal `float`.
+#[inline(always)]
+pub fn acos_onepass_any(x: f32, sqrt: impl Fn(f64) -> f64) -> Option<f32> {
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff;
+    if ab.wrapping_sub(0x0080_0000) >= 0x3f80_0000 - 0x0080_0000 {
+        return None;
+    }
+    let a = onepass_abs(ab);
+    let t = sqrt((1.0 - a) / (1.0 + a));
+    onepass_finish(2.0 * atan_red_any(t, b >> 31 != 0))
+}
+
+/// `atanf` as [`asin_onepass_any`], for 2^-26 ≤ |x| < ∞ (tested on the bits): s = a exact for
+/// a ≤ 1 (15.2u), else s = 1/a (2u; ≥ 2^-128, normal) under π/2 - atan (5.4u + 1.3u). atan of a
+/// nonzero rational is irrational; |f| ≥ 2^-26.
+#[inline(always)]
+pub fn atan_onepass_any(x: f32) -> Option<f32> {
+    let b = x.to_bits();
+    let ab = b & 0x7fff_ffff;
+    if ab.wrapping_sub(0x3280_0000) >= 0x7f80_0000 - 0x3280_0000 {
+        return None;
+    }
+    let a = onepass_abs(ab);
+    let y = if a <= 1.0 { atan_red_any(a, false) } else { atan_red_any(1.0 / a, true) };
+    onepass_finish(if b >> 31 != 0 { -y } else { y })
+}
+
+/// `atan2f` as [`asin_onepass_any`], for normal finite nonzero y and x (tested on the bits):
+/// s = min/max of |y| and |x| (2u; s ≥ 2^-254, normal), t = atan s (17.2u) or π/2 - atan (6.7u);
+/// for x < 0, π - t: absolute in 2^-53, t's error ≤ 17.2·π/2 < 27.1, PI 2, the last rounding 2:
+/// ≤ 31.1 over a result ≥ π/2: ≤ 19.8u. Results below 2^-126 in magnitude (|y/x| tiny)
+/// are refused, so the conversion never underflows. atan2 of nonzero finite operands is
+/// irrational (Lambert: tan of a nonzero rational is irrational).
+#[inline(always)]
+pub fn atan2_onepass_any(y: f32, x: f32) -> Option<f32> {
+    let (by, bx) = (y.to_bits(), x.to_bits());
+    let (ay, ax) = (by & 0x7fff_ffff, bx & 0x7fff_ffff);
+    if ay.wrapping_sub(0x0080_0000) >= 0x7f00_0000 || ax.wrapping_sub(0x0080_0000) >= 0x7f00_0000 {
+        return None;
+    }
+    let (fy, fx) = (onepass_abs(ay), onepass_abs(ax));
+    let t = if fy <= fx { atan_red_any(fy / fx, false) } else { atan_red_any(fx / fy, true) };
+    let t = if bx >> 31 != 0 { PI - t } else { t };
+    if t < f64::from_bits(0x3810_0000_0000_0000) {
+        return None;
+    }
+    onepass_finish(if by >> 31 != 0 { -t } else { t })
+}

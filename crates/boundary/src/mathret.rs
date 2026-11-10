@@ -952,6 +952,28 @@ pub fn elem32_onepass(
     }
 }
 
+/// [`elem32_onepass`] for a function of two `float`s (`atan2f`, LIBM-F32-REST, D-10.82): `fast`
+/// meets the same contract on both operands; every refusal (NaN included) takes the full envelope.
+#[inline(always)]
+pub fn elem32_onepass2(
+    x: f32,
+    y: f32,
+    fast: impl FnOnce(f32, f32) -> Option<f32>,
+    f: impl FnOnce((f32, f32), Rounding) -> (f32, Status),
+) -> f32 {
+    match fast(x, y) {
+        Some(v) => v,
+        None => elem32_onepass2_cold(x, y, f),
+    }
+}
+
+/// [`elem32_onepass2`]'s refusals, out of line and cold.
+#[cold]
+#[inline(never)]
+fn elem32_onepass2_cold(x: f32, y: f32, f: impl FnOnce((f32, f32), Rounding) -> (f32, Status)) -> f32 {
+    elem((x, y), Unit::Sse, f)
+}
+
 /// [`elem32_onepass`]'s refusals, out of line and cold: a NaN, or the full envelope.
 #[cold]
 #[inline(never)]

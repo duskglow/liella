@@ -2216,13 +2216,16 @@ fn hypotf_oracle(x: f32, y: f32, f: f32, rc: u32) -> bool {
 /// The one-pass `float` entries (LIBM-F32-ONEPASS, D-10.63) and their reference: the full
 /// envelope on the accurate path, the entry they replaced.
 type OnePass = (&'static str, extern "C" fn(f32) -> f32, fn(f32) -> f32);
-const ONEPASS: [OnePass; 6] = [
+const ONEPASS: [OnePass; 9] = [
     ("expf", m::expf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp)),
     ("exp2f", m::exp2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp2)),
     ("exp10f", m::exp10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp10)),
     ("logf", m::logf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log)),
     ("log2f", m::log2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log2)),
     ("log10f", m::log10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log10)),
+    ("asinf", m::asinf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::asin)),
+    ("acosf", m::acosf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::acos)),
+    ("atanf", m::atanf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::atan)),
 ];
 
 /// Compare `entry` with `reference` on the encoding `b` under MXCSR `mx`: result bits, errno
@@ -2267,12 +2270,15 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
     // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
     // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
-    let edges: [u32; 36] = [
+    let edges: [u32; 44] = [
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
         0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
         0x4110_0000, 0x4120_0000, 0x4130_0000, 0x3f90_0000, 0x3f7f_ffff, 0x3f80_0001, 0x3f40_0000, 0x3fc0_0000,
         0x0080_0000, 0x7f7f_ffff, 0xbf80_0000, 0x5015_02f9,
+        // D-10.82 (asinf, acosf, atanf): the one-pass ranges' edges (|x| < 1, the least and the
+        // largest normal), the index split at s = 1/64 and 1/8, and 1 - 2^-24 on both sides.
+        0x3f7f_ffff, 0xbf7f_ffff, 0x3c80_0000, 0x3c7f_ffff, 0x3e00_0000, 0x0080_0001, 0x807f_ffff, 0xff7f_ffff,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
@@ -2357,6 +2363,123 @@ fn math_log2f_onepass_sweep() {
 fn math_log10f_onepass_sweep() {
     // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
     onepass_sweep(&ONEPASS[5]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_asinf_onepass_sweep"]
+fn math_asinf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[6]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_acosf_onepass_sweep"]
+fn math_acosf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[7]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_atanf_onepass_sweep"]
+fn math_atanf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.82: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[8]);
+}
+
+/// The `k`-th pair of the atan2f checks (a splitmix64 stream): uniform encodings for x, and for
+/// y either uniform (one in four) or x's encoding moved by up to ±2^25 (ratios within a few
+/// binades of 1 and of each other's sign, where the reduction's index runs over its whole table).
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation)] // bit mixing on u64
+fn atan2_pair(k: u64) -> (u32, u32) {
+    let mut z = k.wrapping_mul(0x9e37_79b9_7f4a_7c15).wrapping_add(0x6a09_e667_f3bc_c909);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^= z >> 31;
+    let x = z as u32;
+    let r = (z >> 32) as u32;
+    let y = if r & 3 == 0 { r } else { x.wrapping_add((r >> 6) & 0x03ff_ffff).wrapping_sub(0x0200_0000) ^ (r & 0x8000_0000) };
+    (y, x)
+}
+
+/// atan2f's one-pass entry against the full envelope (the entry it replaced) on the pairs
+/// `ks` under MXCSR `mx`: result bits, errno and flags. Returns the mismatches (a few printed).
+fn atan2_onepass_mismatches(mx: u32, ks: core::ops::Range<u64>) -> u64 {
+    let reference = |y: f32, x: f32| liella_boundary::mathret::elem((y, x), liella_boundary::mathret::Unit::Sse, |(y, x), md| liella_math::real::Real::atan2(y, x, md));
+    let mut bad = 0u64;
+    for k in ks {
+        let (by, bx) = atan2_pair(k);
+        let (y, x) = (f32::from_bits(by), f32::from_bits(bx));
+        let (mut got, mut want) = (0u32, 0u32);
+        let seen = observe_with_ctl(mx, || got = m::atan2f(y, x).to_bits());
+        let wanted = observe_with_ctl(mx, || want = reference(y, x).to_bits());
+        if (got, seen) != (want, wanted) {
+            if bad < 4 {
+                eprintln!("BAD atan2f({by:#010x}, {bx:#010x}) mxcsr {mx:#06x}: got {got:#010x} {seen:?}, want {want:#010x} {wanted:?}");
+            }
+            bad = bad.wrapping_add(1);
+        }
+    }
+    bad
+}
+
+#[test]
+#[allow(clippy::arithmetic_side_effects)] // MXCSR fields
+fn math_atan2f_onepass_matches_the_envelope() {
+    // Clauses: s10_0_f_0. D-10.82: atan2f's one-pass entry gives the envelope's bits, errno and
+    // flags in every rounding direction and under FTZ, DAZ and both, on a pair sample and on the
+    // special and edge pairs (zeros, subnormals, infinities, NaN, the least normal, signs, |y| = |x|).
+    let edges: [u32; 12] = [
+        0x0000_0000, 0x8000_0000, 0x0000_0001, 0x007f_ffff, 0x0080_0000, 0x3f80_0000, 0xbf80_0000, 0x7f7f_ffff,
+        0x7f80_0000, 0xff80_0000, 0x7fc0_0000, 0x7f80_0001,
+    ];
+    for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
+        for rc in 0..4u32 {
+            let mx = 0x1f80 | ctl | rc << 13;
+            let mut bad = atan2_onepass_mismatches(mx, 0..1 << 15);
+            for &by in &edges {
+                for &bx in &edges {
+                    let (y, x) = (f32::from_bits(by), f32::from_bits(bx));
+                    let (mut got, mut want) = (0u32, 0u32);
+                    let seen = observe_with_ctl(mx, || got = m::atan2f(y, x).to_bits());
+                    let wanted = observe_with_ctl(mx, || {
+                        want = liella_boundary::mathret::elem((y, x), liella_boundary::mathret::Unit::Sse, |(y, x), md| liella_math::real::Real::atan2(y, x, md)).to_bits();
+                    });
+                    bad += u64::from((got, seen) != (want, wanted));
+                }
+            }
+            assert_eq!(bad, 0, "atan2f differs from the envelope under MXCSR {mx:#06x}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "pairs: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_atan2f_onepass_pairs"]
+#[allow(clippy::arithmetic_side_effects, clippy::as_conversions, clippy::cast_possible_truncation)] // counters and MXCSR fields
+fn math_atan2f_onepass_pairs() {
+    // Clauses: s10_0_f_0. D-10.82: 2.5·10^8 pairs in each of the four directions (10^9 checks;
+    // LIELLA_PAIRS overrides the per-direction count) against the envelope, as
+    // math_atan2f_onepass_matches_the_envelope.
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    let per = std::env::var("LIELLA_PAIRS").ok().and_then(|s| s.parse().ok()).unwrap_or(250_000_000u64);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let chunks = per.div_ceil(1 << 20);
+    let (next, bad) = (AtomicU64::new(0), AtomicU64::new(0));
+    std::thread::scope(|sc| {
+        for _ in 0..threads {
+            sc.spawn(|| loop {
+                let c = next.fetch_add(1, Relaxed);
+                if c >= 4 * chunks {
+                    break;
+                }
+                let (rc, k) = ((c % 4) as u32, c / 4);
+                let ks = k << 20..((k + 1) << 20).min(per);
+                bad.fetch_add(atan2_onepass_mismatches(0x1f80 | rc << 13, ks), Relaxed);
+            });
+        }
+    });
+    let b = bad.load(Relaxed);
+    println!("atan2f one-pass pairs: {per} per direction (4 directions), mismatches {b}");
+    assert_eq!(b, 0, "atan2f differs from the envelope");
 }
 
 #[test]
