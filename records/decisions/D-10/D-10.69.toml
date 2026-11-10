@@ -1,0 +1,8 @@
+id = "D-10.69"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+body = '''
+**`atan`/`asin`/`acos`/`atan2` (`double`) quick phase** (LIBM-F64-INVTRIG-QUICK, under D-10.51 and D-10.13). `invtrig::atan_quick` runs first on the reduced argument the fast tier already forms (`atan` below and above 1, `asin`'s and `acos`'s ratios, `atan2`'s quadrants), with the same rounding test (`EPS = 2^-62`); on a refusal today's kernel `atan_unit` runs on the same argument (tier 2, unchanged), then the accurate path. Method: Tang's table-driven reduction (Tang, ACM TOMS 15(2), 1989; Muller, Elementary Functions 3rd ed. 2016, ch. 6) without a division: with `c = j/64`, `h = t − c`, `1 + c t = (1 + c²)(1 + g)`, `g = c h/(1 + c²)`, `\|g\| <= 2^-8`, so `v = h·R·(1 + s)` with `R = 1/(1 + c²)` from a new 1040-byte table `RECIP` (`rh` cut to 26 bits plus `rl`, within `2^-78`) and `s` the series of `1/(1 + g) − 1` to `g^7` as `−g + g²(1 − g)(1 + g² + g⁴)`; `h·rh` is an exact pair by one FMA or, in the SSE2 build, two masked partial products (no Veltkamp split); `atan v = v + v³P(v²)` as in the fast tier, on `RN(v.hi + vl)`. Bound `2^-63` relative (module comment derives each term; the reduction measured `2^-64.75` over 2·10^5 operands), so an answer is correctly rounded. Both builds compute the same pair `h·rh`, hence the same values. Tests `crates/math/tests/invtrig.rs` (the quick phase alone answers more than 98% and matches `mp::atan` at and around every node; the fast-tier tests cover the four entries in both builds). Counts and the continuation in handoff/LIBM-F64-INVTRIG-QUICK.md.
+'''

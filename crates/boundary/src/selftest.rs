@@ -819,6 +819,13 @@ pub fn acosh_quick(x: f64) -> Option<f64> {
     crate::hot::acosh_nearest(x)
 }
 
+/// The `double` `sinh` (`f = 0`), `cosh` (1) or `tanh` (2) quick phase alone (D-10.70) in the
+/// build [`set_math_fma`] chose: the correctly rounded result, or `None` (the entry then runs
+/// tier 2 and the accurate path).
+pub fn hyp_quick(f: u8, x: f64) -> Option<f64> {
+    crate::hot::hyp_quick(f, x)
+}
+
 /// [`asinh_quick`] for `atanh`.
 pub fn atanh_quick(x: f64) -> Option<f64> {
     crate::hot::atanh_nearest(x)

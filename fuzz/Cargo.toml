@@ -209,3 +209,10 @@ path = "fuzz_targets/elf.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "ld_map"
+path = "fuzz_targets/ld_map.rs"
+test = false
+doc = false
+bench = false

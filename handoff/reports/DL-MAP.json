@@ -1,0 +1,36 @@
+{
+ "task": "DL-MAP",
+ "model": "opus",
+ "tokens": null,
+ "result": "General object mapper (DL-7): validated plan, one aligned reservation, exact permissions, .bss, RELRO hook, unmap on failure, AT_PAGESZ seam, ET_EXEC; corpus, /proc/self/maps and model tests; ld_map fuzz target",
+ "branch": "task/dl-map",
+ "head": "8bee56901",
+ "gate": {
+  "affected": "pending (dl-map-gate-2, escalated to FULL); direct tests 64 passed / 0 failed (dl-map-tests)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "LOADS_MAX = 64 PT_LOADs not probed against the reference",
+   "recommendation": "probe a 65-PT_LOAD object in DL-MAP-2; raise the bound if the reference loads it, no differences row"
+  }
+ ],
+ "informational": [
+  "sed -i used once on the story's own plants file",
+  "ld_map fuzz target compiled, not fuzzed",
+  "no object covers a movable object with large p_align whose first segment is not at 0",
+  "startup counters: no row slower (c 2159->2159, setloc -7, printf -8, wctype -14)"
+ ],
+ "refused": [],
+ "jobs": [
+  "mei:dl-map-gate-2",
+  "mei:dl-map-plants-3",
+  "mei:dl-map-counts",
+  "mei:dl-map-counts-base",
+  "mei:dl-map-tests"
+ ],
+ "improvement": "plants files should reject ' | ' inside lit replacements at parse time with the line number instead of failing the baseline after a full product build",
+ "next_step": "DL-8 maps dependencies by path through map::load (a boundary loader returning Loaded); DL-10 calls Loaded::protect_relro",
+ "report_file": "handoff/DL-MAP-report.md"
+}
