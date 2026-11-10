@@ -1,0 +1,29 @@
+{
+ "task": "LAYOUT-PLACEMENT-SWEEP-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "Merged task/layout-manifest-2 (records cutover), D-X.52 is now a decision record; bounds verified on Zen 1 (counts identical to Skylake-SP); direct gate green, plants 2/2 caught",
+ "branch": "task/layout-placement-sweep-2",
+ "head": null,
+ "gate": {
+  "affected": "keke:lps2-gate 311 passed / 0 failed (affected --run --files on this story's two files; --base origin/next escalates to FULL, #4147)",
+  "peak": "1.3G"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected classifies records/decisions/*.toml as unknown paths, so any branch adding a decision record escalates to FULL; same for layout/contracts.tsv (#4147)",
+  "Zen 1 (EPYC 7551) sweep counts are identical to the Skylake-SP calibration for all 9 kernels; bounds unchanged",
+  "placement slow paths worth stories: strcmp 900 at 32/4065 (426%), strncmp 579 (470%), strncasecmp 701 (527%), strcasecmp 848 (280%)",
+  "a manifest build-assert kind would let the cbench_hot offset asserts (L15) become a manifest row"
+ ],
+ "refused": [],
+ "improvement": "affected should classify records/ (a decision record selects the tests it names in `tests`) instead of escalating to FULL; it forced a --files gate here",
+ "next_step": "land; follow-up stories for the strcmp/strncmp/strncasecmp page-end spreads (each tightens its K)",
+ "report_file": "handoff/LAYOUT-PLACEMENT-SWEEP.md",
+ "jobs": [
+  "lps2-gate",
+  "lps2-plants",
+  "lps2-lint1"
+ ]
+}
