@@ -27,8 +27,9 @@ read: D-10.63, D-10.67, D-10.68, D-10.72. Reports: handoff/reports/LIBM-F32-ONEP
   shiki read 59 on run 2's head vs 56 for its origin/next base; this head was not measured on shiki.
 
 ## Jobs of run 3 (mei; on the code of 93732e3f0 + the record fix; head in the report json)
-* libm-f32-onepass-rest-3-gate: `cargo xtask affected --run --base origin/next` (escalates to FULL: xtask changed).
-* libm-f32-onepass-rest-3-plants: handoff/LIBM-F32-ONEPASS-REST-3-plants.txt (6 plants).
+* libm-f32-onepass-rest-3-gate: `cargo xtask affected --run --base origin/next` (escalated to FULL: xtask changed): rc 0,
+  32 suites ok, 11426 passed, 0 failed; conformance 126 passed (includes hot_text_products on mei).
+* libm-f32-onepass-rest-3-plants: rc 0, 6 CAUGHT, 0 SURVIVED, 0 WARN (handoff/LIBM-F32-ONEPASS-REST-3-plants.txt).
 * libm-f32-onepass-rest-3-sweep: exhaustive sinf, cosf, tanf, asinhf, acoshf (2^32 x 4 each), after the gate.
 * libm-f32-onepass-rest-3-counts: cbench_libm --compare --counters, FMA and SSE2 builds, after the sweep. Base counts
   (origin/next 4070276c5, same merge base): `=== origin/next` section of shiki:~/logs/f32r2-counts.log (run 2).
