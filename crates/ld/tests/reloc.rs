@@ -13,7 +13,7 @@
 //! `-nostdlib` program with several shared objects, a program needing a version against an unversioned
 //! stub (status 127 and a message), executable-stack objects, and a write into RELRO.
 #![cfg(target_arch = "x86_64")]
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
