@@ -43,3 +43,14 @@ Jobs:
   `python3 -c` that did the work). It had no effect.
 - No `sed -i` was used (#4145).
 - Nothing was refused.
+
+## Second merge (same run)
+LAYOUT-MANIFEST landed on next (b14f639cc) with its own `D-X.48.toml`, which conflicted with this branch's copy.
+e13b5ad6b merges next and takes next's file, so this branch now adds only D-X.49. Between dbb3b1a9d and e13b5ad6b,
+nothing changed in this story's files (`xtask/src/layout.rs`, `layout/`, `crates/libc-so/`, `tools/hottext/`,
+`xtask/src/so.rs`). Jobs on e13b5ad6b:
+- `lsw2-gate-dbb3b1a9d` was stopped with kill-label because its head was stale (superseded).
+- `lsw2-static-e13b5ad6b` (static and records check): rc 0.
+- `lsw2-gate-e13b5ad6b` (affected, which escalates to FULL) and `lsw2-plants-e13b5ad6b` (the same 7 plants) were left
+  running at hand-back. lsw-budget-minus-one still reads the release products built at 8e5a92e87; they come from the
+  same contract code, so the plant still tests what the check decides.

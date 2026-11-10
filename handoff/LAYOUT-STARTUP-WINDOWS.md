@@ -2,7 +2,7 @@
 
 **State (2026-11-10, LAYOUT-STARTUP-WINDOWS-2):** branch `task/layout-startup-windows-2` (continues
 `task/layout-startup-windows`, stacked on `task/layout-manifest-2`), merged with origin/next 03c9a4972 (post-RECORDS).
-Code head dbb3b1a9d; the handoff/report commit follows it. Role shiki:~/w/sh2 (Skylake-SP). Decision **D-X.49** is
+Code head e13b5ad6b (second merge with next b14f639cc, where LAYOUT-MANIFEST landed); handoff commits follow it. Role shiki:~/w/sh2 (Skylake-SP). Decision **D-X.49** is
 `records/decisions/D-X/D-X.49.toml`. Plan: `handoff/layout-contracts-plan.md` findings 1-3, section 3. Full report:
 `handoff/LAYOUT-STARTUP-WINDOWS-report.md`.
 
@@ -14,9 +14,9 @@ Code head dbb3b1a9d; the handoff/report commit follows it. Role shiki:~/w/sh2 (S
 - `tools/hottext/regen.sh` also traces `page_faults true` and writes `crates/libc-so/startup-text.keys` (`@generated`).
 
 ## Decisions in force
-- D-X.49 (this story), a record since the merge. D-X.48 (LAYOUT-MANIFEST, stacked underneath) is a record on this branch
+- D-X.49 (this story), a record since the merge. D-X.48 landed on next with LAYOUT-MANIFEST; this branch takes next's record. (Before that landing, D-X.48 (LAYOUT-MANIFEST, stacked underneath) is a record on this branch
   too: the merge took next's generated view, and the D-X.48 contract rows of `layout/contracts.tsv` need the record for
-  the `layout` static check. Its body is LAYOUT-MANIFEST's row text, with story LAYOUT-MANIFEST.
+  the `layout` static check. Its body is LAYOUT-MANIFEST's row text, with story LAYOUT-MANIFEST.)
 
 ## Not to redo
 - Merge with next is done (views are next's; main.rs keeps next's 31 static checks with `layout`).
@@ -25,8 +25,7 @@ Code head dbb3b1a9d; the handoff/report commit follows it. Role shiki:~/w/sh2 (S
 - lsw-key-removed was re-planted at tier `extra`, profile `-` (`handoff/LAYOUT-STARTUP-WINDOWS-2-plants.txt`).
 
 ## Open questions
-- D-X.48 is reserved for LAYOUT-MANIFEST, which has not landed. If `ops handback-check` refuses this branch for
-  carrying it, the coordinator must decide whether the two stories land together. See the report.
+None.
 
 ## Next step
-None for this story beyond landing. A later raise of the `hot_text_products.rs` bounds quotes this check (D-X.49 rule d).
+Land once lsw2-gate-e13b5ad6b and lsw2-plants-e13b5ad6b (shiki) are green. A later raise of the `hot_text_products.rs` bounds quotes this check (D-X.49 rule d).
