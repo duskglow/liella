@@ -31,6 +31,11 @@ pub const SECTION: &str = crate::hottext::STARTUP_SECTION;
 /// library in one merge section (`.rodata.str1.1`, about 19 KiB) that start-up literals live in: the
 /// group's upper bound was 33 KiB on next 2e33a3cb9.
 pub const ALIGN: u64 = 65536;
+/// The tiers of `crates/libc-so/hot-text.list` whose functions' read-only data joins the group (ruling
+/// #4313): the probes whose page faults `crates/core/tests/hot_text_products.rs` bounds (start-up, the
+/// setlocale + printf program and the coreutils-shaped tool) run functions of these tiers; `fork` and
+/// `extra` (other traced programs) stay out.
+const HOT_TIERS: [&str; 5] = ["startup", "stdio", "strings", "locale", "tool"];
 /// The prefix the weakening pass gives a library name (`weaken_archive`); start-up keys name the
 /// final archive's symbols, this pass runs before it.
 const LIB_PREFIX: &str = "__liella_libc_";
@@ -145,9 +150,18 @@ fn keyed(name: &str, keys: &BTreeSet<String>) -> bool {
     keys.contains(&crate::hottext::key(name)) || keys.contains(&crate::hottext::key(&format!("{LIB_PREFIX}{name}")))
 }
 
+/// The function of a function section: `.text.sorted.h<n>.<f>` (grouped hot text) or `.text.<f>` -> `<f>`.
+fn text_function(section: &str) -> Option<&str> {
+    let f = section.strip_prefix(".text.")?;
+    Some(f.strip_prefix("sorted.h").and_then(|r| r.split_once('.')).filter(|(n, _)| n.bytes().all(|b| b.is_ascii_digit())).map_or(f, |(_, f)| f))
+}
+
+/// What [`plan`] returns: the sections to rename per member, the bytes, the (size, member:section) list.
+type Plan = (BTreeMap<String, BTreeSet<String>>, u64, Vec<(u64, String)>);
+
 /// The plan: per member, the sections (by name) to rename to [`SECTION`]; and the bytes [`SECTION`]
 /// holds over the archive (sizes plus alignment slack, the renamed ones and those already there).
-fn plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, ro_keys: &BTreeSet<String>) -> (BTreeMap<String, BTreeSet<String>>, u64, Vec<(u64, String)>) {
+fn plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, ro_keys: &BTreeSet<String>) -> Plan {
     // Defined global symbols -> (member, section index), for a relocation against another member's object.
     let mut global: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
     for (mi, (_, m)) in members.iter().enumerate() {
@@ -157,22 +171,37 @@ fn plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, ro_keys: &BT
             }
         }
     }
+    // Every section a hot function's relocations address, and (transitively) what a relocation-read-only
+    // table (`.data.rel.ro*`: statics holding `&str`s and slices) or a chosen constant addresses: the
+    // constants such a function reaches through a static are read with it.
     let mut chosen: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut todo: Vec<(usize, usize)> = Vec::new();
     for (mi, (_, m)) in members.iter().enumerate() {
-        let starts: BTreeSet<usize> = m.syms.values().filter(|s| matches!(s.ty.as_str(), "FUNC" | "NOTYPE") && keyed(&s.name, text_keys)).filter_map(|s| s.ndx).collect();
-        for (target, syms) in &m.relocs {
-            if !starts.contains(target) {
-                continue;
-            }
+        todo.extend(m.syms.values().filter(|s| matches!(s.ty.as_str(), "FUNC" | "NOTYPE") && keyed(&s.name, text_keys)).filter_map(|s| s.ndx).map(|ndx| (mi, ndx)));
+        // By section name too, as the hot-text grouping matches (`.text.sorted.h<n>.<f>` after it): a
+        // symbol ThinLTO promoted carries a `.llvm.<n>` suffix its section name does not.
+        todo.extend(m.secs.iter().filter(|(_, s)| s.flags.contains('X') && text_function(&s.name).is_some_and(|f| keyed(f, text_keys))).map(|(i, _)| (mi, *i)));
+    }
+    let mut seen: BTreeSet<(usize, usize)> = todo.iter().copied().collect();
+    while let Some((mi, from)) = todo.pop() {
+        let m = &members[mi].1;
+        for (_, syms) in m.relocs.iter().filter(|(target, _)| *target == from) {
             for si in syms {
                 let Some(s) = m.syms.get(si) else { continue };
                 let at = match s.ndx {
                     Some(ndx) => Some((mi, ndx)),
                     None => global.get(s.name.as_str()).copied(),
                 };
-                chosen.extend(at);
+                let Some(at) = at else { continue };
+                chosen.insert(at);
+                let follow = members[at.0].1.secs.get(&at.1).is_some_and(|t| t.name.starts_with(".data.rel.ro") || read_only_data(t));
+                if follow && seen.insert(at) {
+                    todo.push(at);
+                }
             }
         }
+    }
+    for (mi, (_, m)) in members.iter().enumerate() {
         for s in m.syms.values() {
             if let (Some(ndx), "OBJECT" | "NOTYPE") = (s.ndx, s.ty.as_str()) {
                 if keyed(&s.name, ro_keys) {
@@ -209,7 +238,8 @@ fn plan(members: &[(String, Member)], text_keys: &BTreeSet<String>, ro_keys: &BT
 /// the key files; `work`: scratch). Fails when they could exceed [`ALIGN`] bytes. Returns (sections renamed, bytes).
 pub fn place(ar: &str, archive: &Path, root: &Path, work: &Path) -> Result<(usize, u64), String> {
     let read = |p: &str| fs::read_to_string(root.join(p)).map_err(|e| format!("{p}: {e}"));
-    let text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
+    let mut text_keys = keys(&read("crates/libc-so/startup-text.keys")?, |_| true);
+    text_keys.extend(crate::hottext::parse_list(&read("crates/libc-so/hot-text.list")?)?.into_iter().filter(|e| HOT_TIERS.contains(&e.tier)).map(|e| e.key));
     let ro_keys = keys(&read("crates/libc-so/startup-data.keys")?, |k| k == "ro");
     let listing = Command::new("readelf").arg("-SrsW").arg(archive).output().map_err(|e| format!("readelf: {e}"))?;
     if !listing.status.success() {
@@ -318,6 +348,16 @@ Symbol table '.symtab' contains 3 entries:
         let b: Vec<&str> = rename["b.o"].iter().map(String::as_str).collect();
         assert_eq!(b, [".rodata.CTYPE", ".rodata.TABLE"]);
         assert_eq!(bytes, (0x10 + 7) + (0x20 + 15) + (0x40 + 7) + (0x300 + 1));
+    }
+
+    #[test]
+    fn a_function_section_names_its_function_grouped_or_not() {
+        // LAYOUT-STARTUP-RODATA-2 (no spec clause): hot functions are found by section name as the
+        // hot-text grouping names them, so a ThinLTO-promoted symbol's `.llvm.<n>` suffix does not hide them.
+        assert_eq!(text_function(".text.sorted.h00180.f.llvm.12"), Some("f.llvm.12"));
+        assert_eq!(text_function(".text.f"), Some("f"));
+        assert_eq!(text_function(".text.sorted.hx.f"), Some("sorted.hx.f"));
+        assert_eq!(text_function(".rodata.f"), None);
     }
 
     #[test]

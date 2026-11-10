@@ -584,7 +584,7 @@ _pthread_cleanup_push_defer	GLIBC_2.2.5	crates/boundary/src/posix/s22_threads.rs
 _rpc_dtablesize	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_clnt.rs:382	
 _seterr_reply	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_svc.rs:234	u64::from
 _setjmp		csys/src/machine/setjmp.S:108	liella_machine_sigsetjmp
-_start		csys/src/machine/entry.S:85	liella_start_main_static_pie
+_start		csys/src/machine/entry.S:90	liella_start_main_static_pie
 _sys_errlist	GLIBC_2.12	csys/src/machine/compat_aliases.S:3424	
 _sys_errlist	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:3421	
 _sys_errlist	GLIBC_2.3	csys/src/machine/compat_aliases.S:3422	
