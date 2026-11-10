@@ -17,8 +17,9 @@ const RUNS: usize = 5;
 /// Upper bound on the lowest of [`RUNS`] counts of the process's first `malloc(16)` (D-3.19): 11
 /// measured (one registry page, the first cache, the segment's head and bitmap pages, the
 /// block's slab page, the first `getcpu`'s vDSO page, and the text and stack pages of the path),
-/// plus one; the registries in mappings of their own add two (plant
-/// `first-reservation-off-faults`).
+/// plus one. A regression guard only: a heap that maps the three registries separately again
+/// stayed within it (plant run, HEAP-FIRST-USE); `the_first_allocation_reserves_one_mapping` (rt)
+/// holds the one mapping.
 const FIRST_BOUND: u64 = 12;
 
 fn root() -> PathBuf {
