@@ -78,7 +78,7 @@ def startup_fn_keys(path, profile):
     with open(path) as f:
         for line in f:
             p = line.rstrip("\n").split("\t")
-            if line.startswith("#") or len(p) != 3:
+            if line.startswith("#") or len(p) not in (3, 4):  # 4th column: provenance (D-X.61)
                 continue
             if profile in p[2].split(","):
                 out.add(p[0])
