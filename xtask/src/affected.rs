@@ -104,6 +104,11 @@ const NARROW: &[&str] = &["liella", "liella-boundary", "liella-legacy", "liella-
 /// `cargo xtask so` (D-X.34): a reference from one of them is no user of the symbol.
 const STATIC_CHECKERS: &[&str] = &["xtask/src/classed.rs", "xtask/src/jcc.rs"];
 
+/// The layout contracts (D-X.48): the manifest names the csys symbols whose placement it holds, and its checker names
+/// them in its unit tests. A csys symbol named here selects `cargo xtask layout-check` on fresh products, not FULL.
+const LAYOUT_CONSUMERS: &[&str] = &["layout/contracts.tsv", "xtask/src/layout.rs"];
+const LAYOUT_CHECK: &str = "layout-check";
+
 // ---------------------------------------------------------------------------------------------
 // The repository model
 
@@ -843,6 +848,7 @@ impl Repo {
             ("spec", &["tsv"][..]),
             ("scripts", &["sh", "py", "txt", "map"][..]),
             ("xtask/src", &["rs"][..]),
+            ("layout", &["tsv"][..]),
         ] {
             files_under(&root.join(dir), exts, &mut scan);
         }
@@ -2062,6 +2068,7 @@ fn csys_map_in(repo: &Repo, f: &str, sel: &mut Selection, seen: &mut BTreeSet<St
     };
     let mut users: BTreeSet<&str> = BTreeSet::new();
     let mut exported: Vec<(&str, &[&str])> = Vec::new();
+    let mut layout: BTreeSet<&str> = BTreeSet::new();
     for s in symbols {
         if !s.starts_with("liella_") {
             match machine_export(f, s).filter(|_| sel.direct) {
@@ -2083,6 +2090,10 @@ fn csys_map_in(repo: &Repo, f: &str, sel: &mut Selection, seen: &mut BTreeSet<St
             // A static checker of the csys source names its symbols to find them; it runs in `cargo xtask static`
             // and `so`, which every gate runs, so it selects nothing more (D-X.34).
             if STATIC_CHECKERS.contains(&r.file.as_str()) {
+                continue;
+            }
+            if LAYOUT_CONSUMERS.contains(&r.file.as_str()) {
+                layout.insert(&r.file);
                 continue;
             }
             if sibling && direct && f.starts_with("csys/src/machine/") {
@@ -2109,6 +2120,10 @@ fn csys_map_in(repo: &Repo, f: &str, sel: &mut Selection, seen: &mut BTreeSet<St
     }
     if !exported.is_empty() {
         sel.notes.push(format!("{f}: listed machine exports ({}) select their fixed machine tests and calling conformance programs", exported.iter().map(|(s, _)| *s).collect::<Vec<_>>().join(", ")));
+    }
+    if !layout.is_empty() {
+        sel.xtask_cmds.insert(LAYOUT_CHECK.to_string());
+        sel.notes.push(format!("{f}: its symbols are named by the layout contracts ({}): `cargo xtask {LAYOUT_CHECK}` on the products (D-X.48)", layout.into_iter().collect::<Vec<_>>().join(", ")));
     }
     sel.notes.push(format!("{f}: its symbols ({}) are used by {}; each is selected as if it changed", symbols.join(", "), users.iter().copied().collect::<Vec<_>>().join(", ")));
     add(&mut sel.clippy, CSYS_CRATE.to_string(), &format!("{f} changed (compiled by its build script)"));
@@ -2863,8 +2878,7 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
         if sel.xtask_tests {
             ok &= step_out(root, &log, "xtask unit tests", Command::new(&cargo).args(["test", "-p", "xtask"]), Some("xtask"), &mut std::io::stdout()) == Outcome::Ok;
         }
-        let needs_products = !sel.conf.is_empty() || sel.xtask_cmds.contains("symgap") || repo.targets.iter().any(|t| t.products && sel.tests.contains_key(&(t.krate.clone(), t.name.clone())));
-        if needs_products {
+        if needs_products(repo, sel) {
             let mut cmd = Command::new(&cargo);
             cmd.args(["xtask", "so"]);
             ok &= step(root, &log, "products (cargo xtask so)", &mut cmd);
@@ -2955,6 +2969,12 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
     }
     let _ = repo;
     if ok { Ok(()) } else { Err("a selected test or check failed".into()) }
+}
+
+/// Whether the selection runs on built products (`cargo xtask so` first): a conformance program, a products test, or
+/// an xtask command that reads the products (`symgap`, `layout-check`).
+fn needs_products(repo: &Repo, sel: &Selection) -> bool {
+    !sel.conf.is_empty() || sel.xtask_cmds.contains("symgap") || sel.xtask_cmds.contains(LAYOUT_CHECK) || repo.targets.iter().any(|t| t.products && sel.tests.contains_key(&(t.krate.clone(), t.name.clone())))
 }
 
 /// The cargo target flag that runs a package's unit tests: `--lib`, or `--bins` for a bin-only package (xtask, which
@@ -3955,6 +3975,40 @@ echo "conformance: $pass passed, $fail failed"; [ $fail -eq 0 ]
         assert!(!select_tier(&fx, &["csys/src/machine/scan.S".to_string()], Tier::Direct).full.is_empty());
         let p = machine_exports_problems(&fx).unwrap_or_default();
         assert!(p.len() == 1 && p[0].contains("`zz_unlisted_export`") && p[0].contains("add (\"scan.S\", \"zz_unlisted_export\""), "{p:?}");
+    }
+
+    #[test]
+    fn layout_manifest_names_select_the_layout_check() {
+        // Trace: no spec clause (test-harness tooling; LAYOUT-MANIFEST-2, D-X.48).
+        // The layout manifest and its checker name scan.S symbols (`libc.a:liella_machine_rawmemchr_entry`): in the
+        // direct tier that selects `cargo xtask layout-check` on fresh products, not FULL. Read against the CSYS-MAP-2
+        // fixture with one reference from each consumer added, so a manifest edit cannot break this test.
+        // The live manifest is scanned: each csys symbol it names has a reference from it.
+        let live = repo();
+        let manifest = read(&root().join(LAYOUT_CONSUMERS[0]));
+        let syms: BTreeSet<&str> = live.csys.values().filter_map(|c| c.symbols.as_ref()).flatten().map(String::as_str).collect();
+        let named: Vec<&str> = manifest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| syms.contains(w)).collect();
+        assert!(!named.is_empty(), "{} names no csys symbol (its section-offset rows name scan.S entries)", LAYOUT_CONSUMERS[0]);
+        for w in &named {
+            assert!(live.csys_refs.get(*w).is_some_and(|v| v.iter().any(|r| r.file == LAYOUT_CONSUMERS[0])), "`{w}`: no reference from {}", LAYOUT_CONSUMERS[0]);
+        }
+        let mut fx = machine_fixture(&[]);
+        let s = fx.csys["csys/src/machine/scan.S"].symbols.as_ref().and_then(|v| v.iter().find(|s| s.starts_with("liella_")).cloned()).expect("a liella_ symbol of scan.S");
+        for c in LAYOUT_CONSUMERS {
+            fx.csys_refs.entry(s.clone()).or_default().push(SymRef { file: c.to_string(), decl: false });
+        }
+        let d = select_tier(&fx, &["csys/src/machine/scan.S".to_string()], Tier::Direct);
+        assert!(d.full.is_empty(), "a layout-manifest name must not escalate: {:?}", d.full);
+        assert!(d.xtask_cmds.contains(LAYOUT_CHECK), "{:?}", d.xtask_cmds);
+        assert!(d.notes.iter().any(|n| n.contains("layout contracts") && LAYOUT_CONSUMERS.iter().all(|c| n.contains(c))), "{:?}", d.notes);
+        assert!(has_test(&d, "machine_scanners"), "the listed export's tests are still selected: {:?}", d.tests);
+        // The layout check reads the products, so they are built first.
+        assert!(needs_products(&fx, &Selection { xtask_cmds: BTreeSet::from([LAYOUT_CHECK.to_string()]), ..Selection::default() }));
+        assert!(!needs_products(&fx, &Selection::default()));
+        // Any other non-Rust file naming the symbol is still an unknown consumer: FULL.
+        fx.csys_refs.entry(s).or_default().push(SymRef { file: "tools/unknown.txt".into(), decl: false });
+        let u = select_tier(&fx, &["csys/src/machine/scan.S".to_string()], Tier::Direct);
+        assert!(u.full.iter().any(|w| w.contains("tools/unknown.txt")), "{:?}", u.full);
     }
 
     /// CSYS-MAP-2 fixture: the exported (non-`liella_`) symbols of the listed machine files, fixed; scan.S gets `extra` too.

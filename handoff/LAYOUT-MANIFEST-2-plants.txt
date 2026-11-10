@@ -1,0 +1,5 @@
+# LAYOUT-MANIFEST-2 (D-X.48): affected treats the layout manifest as a known consumer of csys symbols.
+lm2-consumer-skip | xtask/src/affected.rs | lit:if LAYOUT_CONSUMERS.contains(&r.file.as_str()) { ==> if false { | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:a layout-manifest name must not escalate
+lm2-no-cmd | xtask/src/affected.rs | lit:sel.xtask_cmds.insert(LAYOUT_CHECK.to_string()); ==> let _ = LAYOUT_CHECK; | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:layout_manifest_names_select_the_layout_check.*(FAILED|panicked)
+lm2-products | xtask/src/affected.rs | lit:|| sel.xtask_cmds.contains(LAYOUT_CHECK) || ==> || | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:layout_manifest_names_select_the_layout_check.*(FAILED|panicked)
+lm2-scan-dir | xtask/src/affected.rs | lit:("layout", &["tsv"][..]), ==> ("layout", &["md"][..]), | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:no reference from layout/contracts\.tsv
