@@ -1,52 +1,60 @@
 # TB-FOREIGN-SAFETY: Liella's thread-block words never trusted or written in a block Liella did not make
 
-State: branch `task/tb-foreign-safety-2` (run 2, continuing `task/tb-foreign-safety`, from origin/next 21ef00b34).
-Decision in force: **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212 registry now, #4213 the 0x80-0x9b
-words are TB-FOREIGN-WORDS-LOW, #4214 the period cache 0x140 stays with the WCTYPE-TRIE-FILE chain).
-Results of this run: see "Run 2" below and handoff/reports/TB-FOREIGN-SAFETY-2.json.
+State: branch `task/tb-foreign-safety-3` (run 3; continues `task/tb-foreign-safety-2`), origin/next 4070276c5 merged
+(ruling #4253). HEAD: the handoff commit on top of 32eacf1ff. NOT READY: the head's fast `cargo xtask so` fails the
+hot-text dead-key check (below).
+Decision in force: **D-X.58** (records/decisions/D-X/D-X.58.toml; rulings #4212, #4213, #4214).
 
 ## The design (D-X.58, short)
-Ownership = the process-level byte `liella_machine_owned` (machine/points.S), set by `init_initial` when the runtime
-started the process; Rust (`thread::owned()`) and the asm entries read, write, pread, pwrite and close test it.
-Elsewhere `thread::words()` gives the thread its words from a registry (64-entry mmap chunks keyed by thread pointer,
-holding the kernel TID; a thread `create` made keeps its own block from `claim_own` to `release_own`; ENOMEM: one
-shared static spare). Per word: 0x9c flags never read; 0xa0 thread, 0xa8 locale, 0xb0-0xc0 ctype, 0xc8 lconv,
-0x128 h_errno, 0x130 res from the registry; 0x138 view never read (`foreign_view`).
+Ownership = process-level byte `liella_machine_owned` (machine/points.S), set by `init_initial`; the asm entries
+read/write/pread/pwrite/close test it (`cmpb` + `je`). Rust reads a crate-private mirror `thread::OWNED_HERE`, stored
+beside it (run 3: one rip-relative `cmpb`; the extern byte cost a GOT load and `movzbl` too). Elsewhere
+`thread::words()` gives the thread registry words (64-entry mmap chunks keyed by thread pointer + TID). Per word:
+0x9c flags never read; 0xa0, 0xa8, 0xb0-0xc0, 0xc8, 0x128, 0x130 from the registry; 0x138 view never read.
 
-## Run 2
-- tbfs-gate-1 (run 1, shiki) failed on ONE test, `s07_locale_symbols::tb_read_locale_matches_thread_block`: it
-  expected `uselocale` in a std thread to write word 0xa8 of that thread's block, which is exactly what D-X.58
-  stops (the block is another library's). Fixed the test, not the code: it now checks the choice via
-  `uselocale(0)` and that the block word is unchanged.
-- Found and fixed: a forked child's only thread met its registry entry under a new TID and CLEARED it (uselocale
-  choice, h_errno, descriptor lost after any fork in a foreign process; the other library's `fork` runs no hook of
-  Liella's). Rule now in `foreign_words`: TID == getpid() means fork's copy (a process's first thread can only meet an
-  entry keyed by its pointer that way), so the words stay. Test: s07 `foreign_thread_words_kept_in_forked_child`.
-- New tests: `crates/boundary/tests/tb_foreign_words.rs` (one test; decoys in 0x9c-0x17f, bit 0 of 0x9c set, the
-  descriptor decoy shows a pending cancellation, pointers at a zero area; asks toupper, tolower, isalpha/isdigit,
-  towupper, `__ctype_b_loc`/`__ctype_toupper_loc` addresses, uselocale(0), localeconv address, h_errno set/get and its
-  address, pthread_self, read/write on a pipe; answers equal the undecoyed ones, block words and decoy area unchanged,
-  no allocation while decoys are in place). `conformance/c/tb_period_cache.c` (#4201: the period words at
-  %fs:0x140-0x157 across a thread and a fork, TZ=EST5EDT,M3.2.0,M11.1.0).
-- Plants: handoff/TB-FOREIGN-SAFETY-plants.txt (7: words() trusting FLAG_OWN, ctype_word, h_errno_location and view()
-  ungated, the read entry's asm gate removed, the fork rule removed, the period word moved).
-- Jobs on mei:~/w/s1: tbfs2-lint-0 (inherited head: clippy+static clean), tbfs2-check-1 (compile error in the new
-  test, fixed), tbfs2-check-2 (static: opaque-audit, fixed with `#![no_builtins]`), tbfs2-check-3 (targeted tests and
-  the conformance program green), tbfs2-gate-1 (red at static: a record body must be one line; fixed),
-  tbfs2-plants-1 (6 caught, 2 of them WARN-NO-MSG with msg regexes too narrow (widened); the period plant moved only
-  the read side, so lookups just missed and stored the same words: equivalent for the test; replaced by a plant that
-  moves the store). FINAL head 3902244d5: tbfs2-gate-2 and tbfs2-plants-2 started, results not read in run 2:
-  read them first (`~/bin/jobwait tbfs2-gate-2 tbfs2-plants-2` on mei).
+## Run 3
+- Inherited jobs (run 2, head 3902244d5): tbfs2-gate-2 green (11382 passed, 127 conformance), tbfs2-plants-2 7/7
+  CAUGHT, 0 WARN: coordinator note #4254 (period plant survived, 2 WARN-NO-MSG) was already settled by plants-2.
+- Merged origin/next; `cargo xtask codemap` regenerated docs/codemap/symbols.tsv (bb0df1770). clippy+static clean
+  (tbfs3-lint-1).
+- Dead hot-text keys after the merge (inlining moved): pruned with tools/hottext/prune.py from both profiles'
+  hot-text.matched (iconv::load, iconv::codec_named, ThreadScratch::table; all extra tier) (02b4787e5).
+- plants on 02b4787e5: tbfs3-plants-2 7/7 CAUGHT, 0 WARN.
+- COUNTS (Skylake-SP host, `bench --compare --counters --runs 3 cbench_hot cbench_locale`; before = origin/next in a
+  RAM copy, tbfs3-counts-base-1; after = 02b4787e5, tbfs3-counts-2): +6 instr per locale-word access, not +2:
+  ctype_b_loc 12->18 (glibc 10), isalpha_c 23->29 (16), iswalpha_utf8 31->37, localeconv 56->62, nl_langinfo 26->32,
+  strcasecmp_* +10, mbrtowc_utf8_* +13..+17, sys_close_ebadf +7.7, sys_read_1 +1.4, mutex +1/+2. Cause (objdump of
+  __ctype_b_loc/isalpha): GOT load + movzbl + test + je for the extern byte, and the second cold call (foreign path)
+  hoisted push/pop onto the hot path.
+- FIX (82ad32ee1, NOT YET COUNTED): `owned()` reads `OWNED_HERE`; `ctype_word` gives 0 in a foreign process so the
+  existing unstored path is the one cold call (`class_unstored`/`case_unstored` read the registry word first:
+  `foreign_word_or_zero`); `ctype_slot` has one cold `ctype_slot_slow`. Expected +2 on each gated path.
+- That rework made ThinLTO name a start-up static `.data.<sym>.0.llvm.<n>`; xtask coldbss stripped the part number
+  before the suffix, so `so` failed "start-up state ... SYSINFO_EHDR (0 sections)". Fixed in xtask/src/coldbss.rs
+  (32eacf1ff; unit test `startup_state_sections_are_found_once_each` extended, green in tbfs3-check-2).
+- tbfs3-check-2 (32eacf1ff): clippy, static, the coldbss test green; `so` (fast) RED: 4 hot-text keys dead:
+  `cpu::Features::detect<CSysImpl>` (STARTUP tier, fast), `locale::publish_global` (locale, fast+release),
+  `nscache::real_secs<CSysImpl>` (tool), `NsCache::config_epoch<CSysImpl>` (extra).
+
+## Exact next step
+1. On mei:~/w/s1 build the release profile too (`LIELLA_FULL_PROFILE=1 cargo xtask so`, it writes
+   target/product/release/hot-text.matched even when it fails), then run tools/hottext/prune.py with both profiles'
+   matched files. Features::detect is a STARTUP key: prefer `tools/hottext/regen.sh . --build` (both profiles) so
+   its inlined caller is traced into the list (startup page-fault bound, ALWAYS FORWARD); prune only the rest.
+2. Then: tests tb_foreign_words + s07_locale_symbols, counts again (after in a RAM copy or the role; compare with
+   tbfs3-counts-base-1's measure.tsv: /mnt/zram/claude/TB-FOREIGN-SAFETY-3/base/target/liella/bench/measure.tsv,
+   join script ~/work/TB-FOREIGN-SAFETY-3/join.py), direct gate, plants (handoff/TB-FOREIGN-SAFETY-plants.txt; the
+   ctype-word-ungated pattern still matches once). If the counts still show more than +2, profile one row first.
+3. Add the test reference/counts to D-X.58 via a record amendment only if the coordinator asks (records only).
 
 ## Open
-- Counts NOT DONE (budget): before (origin/next) and after on isalpha/toupper, `__ctype_b_loc`, uselocale(0),
-  `__h_errno_location`, errno, read (points.S), localeconv, pthread_getspecific, isw*. Expect +2 instructions on each
-  gated path in an owned process (one `cmpb` + branch); 0 on the TID fast paths. This is the next step.
-- codemap: run 1's `ops handback-check` was red with "docs/codemap/symbols.tsv out of date" on the head merged with
-  next (next has `cargo xtask codemap`; this branch predates it). If still red, it needs a merge of origin/next
-  (not allowed by this brief) or the coordinator's regeneration at landing: RULING NEEDED.
-- Known limits (in D-X.58's design, not defects): a dead foreign thread's resolver state is not freed when its entry is
-  reused (bounded by entries); TID reuse at the same thread pointer is indistinguishable from the same thread.
+- RULING NEEDED (owner safety review): the gate's remaining +2 per locale-word access in owned processes is the
+  design cost of D-X.58 (isalpha_c already 23 vs glibc 16 before it).
+- Known limits (D-X.58 design): a dead foreign thread's resolver state is not freed on entry reuse; TID reuse at the
+  same thread pointer looks like the same thread.
 
 ## Do not redo
-- No ownership test inside the block can be safe (D-X.58 options). The asm gate is per entry (+2); a label-free form costs +3.
+- No ownership test inside the block can be safe (D-X.58 options). Plants 7/7 settled (#4254).
+- Jobs on mei: tbfs3-codemap-1 (rc 128: a `git status` in a non-git role, codemap itself wrote fine), tbfs3-lint-1,
+  tbfs3-plants-1 (baseline so red: dead keys, fixed), tbfs3-counts-1 (same), tbfs3-plants-2, tbfs3-counts-base-1,
+  tbfs3-counts-2, tbfs3-gate-1 (stopped by me: stale head), tbfs3-check-1 (so red: coldbss, fixed), tbfs3-check-2.
