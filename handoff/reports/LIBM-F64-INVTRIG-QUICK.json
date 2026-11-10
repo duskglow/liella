@@ -1,0 +1,27 @@
+{
+ "task": "LIBM-F64-INVTRIG-QUICK",
+ "model": "opus",
+ "tokens": null,
+ "result": "COMPLETE: division-free quick atan kernel in front of the double atan family (D-10.69); every row fewer instructions (SSE2 asin 310->280, atan 213->189), asin/acos/atan targets not reached",
+ "branch": "task/libm-f64-invtrig-quick",
+ "head": null,
+ "gate": {
+  "affected": "gate2 rc 0 (direct tier via --files, 44 targets); plants 8/8 CAUGHT",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "affected --run escalates to FULL on any new records/decisions/*.toml (not a path the selection knows); the direct tier was selected with --files for the two code files"
+ ],
+ "refused": [],
+ "improvement": "affected should treat records/*.toml as data with no test selection, as it does handoff/, so record-carrying stories need no --files workaround",
+ "next_step": "profile asin/acos per phase (wl_percall), then the brief s polynomial asin (x + x^3 P(x^2) below 1/2, sqrt identity above) with a minimax P; booked timing IVB/N100",
+ "report_file": "handoff/LIBM-F64-INVTRIG-QUICK.md",
+ "jobs": [
+  "mei:libm-f64-invtrig-quick-gate2",
+  "mei:libm-f64-invtrig-quick-plants",
+  "mei:libm-f64-invtrig-quick-counts",
+  "mei:libm-f64-invtrig-quick-counts-base"
+ ]
+}

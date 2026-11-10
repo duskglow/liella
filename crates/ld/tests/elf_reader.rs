@@ -46,6 +46,8 @@ impl Arch for BigOther {
     const EI_CLASS: u8 = 2;
     const EI_DATA: u8 = ELFDATA2MSB;
     const INTERP: &'static str = "ld-test-big-endian.so";
+    const BASE_PAGE: u64 = 0x1_0000;
+    const USER_END: u64 = 1 << 48;
     fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
         liella_rt::cpu::Features::default()
     }
@@ -273,6 +275,8 @@ fn s27_1_f_0_wrong_class() {
         const EI_CLASS: u8 = 1;
         const EI_DATA: u8 = 1;
         const INTERP: &'static str = "ld-test-class32.so";
+        const BASE_PAGE: u64 = 0x1_0000;
+        const USER_END: u64 = 1 << 48;
         fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
             liella_rt::cpu::Features::default()
         }

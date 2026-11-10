@@ -45,6 +45,27 @@
 //!   `double` (an exact root such as `hypot(3, 4)`, which must not raise inexact, or too close to
 //!   tell): the accurate path decides those.
 //!
+//! **Quick phase** (D-10.69, LIBM-F64-INVTRIG-QUICK). The `atan` family first evaluates
+//! `atan_quick` on the same reduced argument `(th, tl, tab, sg)` and the same rounding test
+//! (`EPS`); only when that test refuses does today's kernel `atan_unit` run (tier 2, unchanged),
+//! then the accurate path. Method (table-driven reduction after Tang, ACM TOMS 15(2), 1989;
+//! Muller, Elementary Functions, 3rd ed. 2016, ch. 6): with `c = j/64`, `h = th − c` (exact),
+//! `1 + c t = (1 + c^2)(1 + g)`, `g = c (h + tl)/(1 + c^2)`, `|g| <= 2^-8`, so
+//! `v = (h + tl)·R/(1 + g)` with `R = 1/(1 + c^2)` from the table `RECIP` (`rh + rl` within
+//! `2^-78`) and `1/(1 + g) − 1` by its series to `g^7` (truncation `g^8`): no division.
+//! `h·rh` is an exact pair (one FMA, or two masked partial products with `rh` cut to 26 bits).
+//! Error terms, relative to the result `y` (each `j`; `|g|·|v|/|y| <= 2^-13` because
+//! `|g| <= c |h| R`, `|v| <= |h| R` and `|y| >= atan c − 2^-7`): the roundings of `g` (`2^-51.4`
+//! relative to `g`) and of `s` (`2^-52`) give `< 2^-64.4`; `rl`'s `2^-78`, the truncation
+//! `g^8 < 2^-64` and the dropped `tl·rl`, `e·s` terms below `2^-70` (`h·rl` is `2^-26 |v|`, so
+//! it is kept inside the `s` product with `tl·rh`); `vl`'s and the
+//! final sums' roundings (`u·|vl + tail|` with `|vl| <= |g||v| + 2^-51 |v|`) `< 2^-65`; the
+//! cubic `v^3 P(v^2)` as in `atan_unit` (truncation `2^-73.4`, evaluation `2^-65.6` times
+//! `|v|^2 <= 2^-14`), evaluated on `RN(v.hi + vl)` (`vl` carries `−g·v`, up to `2^-8 |v|`, so
+//! it cannot be dropped there; the one rounding adds `3u` relative to the cubic, `< 2^-65`). Total below `2^-63 |y|`, a factor 2 under the
+//! test's `EPS`; so an answer of the quick phase is the correctly rounded result. Both builds
+//! compute the same pair `h·rh` (exact either way) and so the same values.
+//!
 //! **Square root.** `asin`, `acos` and `hypot` take `sqrt`, which must be the correctly rounded
 //! `double` square root in round-to-nearest (the boundary passes `sqrtsd`; this crate forbids
 //! `unsafe` and so cannot issue it; the tests pass `f64::sqrt`). Any correctly rounded root gives
@@ -111,6 +132,36 @@ static HALF_MINUS: Table = shifted(&t::ATAN_J64, HALF_HI, HALF_LO, -1.0);
 static PI_MINUS: Table = shifted(&t::ATAN_J64, PI_HI, PI_LO, -1.0);
 static HALF_PLUS: Table = shifted(&t::ATAN_J64, HALF_HI, HALF_LO, 1.0);
 
+/// `1/(1 + c^2)` for `c = j/64` as `[rh, rl]` (D-10.69): `rh` its nearest `double` cut to 26
+/// significant bits (so `h·rh` is exact in two masked partial products, [`prod_short`]), `rl`
+/// the rest rounded once. `d = 1 + c^2` has at most 14 bits, so `d·rh` (40 bits) and
+/// `1 − d·rh` (below `2^-25`, Sterbenz) are exact: `rh + rl` is within `2^-78` of `1/d`.
+const fn recip_table() -> [[f64; 2]; 65] {
+    let mut o = [[0.0f64; 2]; 65];
+    let mut j = 0;
+    let mut c = 0.0f64;
+    while j < 65 {
+        let d = 1.0 + c * c;
+        let rh = f64::from_bits((1.0 / d).to_bits() & !((1u64 << 27) - 1));
+        o[j] = [rh, (1.0 - d * rh) / d];
+        j += 1;
+        c += 1.0 / 64.0;
+    }
+    o
+}
+static RECIP: [[f64; 2]; 65] = recip_table();
+
+/// `h·rh` as an exact pair for `rh` with at most 26 significant bits (a [`RECIP`] high part):
+/// `h = hh + hl` by a mask (`hh` 27 bits, `hl` at most 26), both partial products exact; `hh·rh − p`
+/// is exact (within `2^-26 |p|` of each other on a common grid) and the last sum is the exact,
+/// representable error of `p`. Bit for bit the FMA build's `two_prod_fma(h, rh)`.
+#[inline(always)]
+fn prod_short(h: f64, rh: f64) -> Dd {
+    let p = h * rh;
+    let hh = f64::from_bits(h.to_bits() & !((1u64 << 26) - 1));
+    Dd { hi: p, lo: (hh * rh - p) + (h - hh) * rh }
+}
+
 /// `j = round(64 th)` as a `double` and as the index (`0 <= th <= 1 + 2^-52`, so `0 <= j <= 64`):
 /// `m = 64 th + 1.5·2^52` holds `j` in its low bits, read directly instead of converting `j`.
 #[inline(always)]
@@ -169,7 +220,55 @@ fn done(y: Dd, sign: u64) -> Option<f64> {
 // product by `j/64`, `$a` the build's attributes, `$i` the helpers' inlining (`#[inline(always)]`
 // cannot be combined with `#[target_feature]`).
 macro_rules! kernels {
-    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path, $small:path) => {
+    ($(#[$a:meta])*; $(#[$i:meta])*; $prod:path, $small:path, $short:path) => {
+        /// The quick phase (D-10.69): `tab[j] + sg·atan v` for the same arguments as
+        /// [`atan_unit`], with no division: `1 + c t = (1 + c^2)(1 + g)`, `g = c (h + tl) R`,
+        /// so `v = (h + tl)·R·(1 + s)`, `s = −g + g^2 (1 − g)(1 + g^2 + g^4)` (the series of
+        /// `1/(1 + g) − 1` to `g^7`). Within `2^-63` relative (module comment, "Quick phase").
+        $(#[$a])* $(#[$i])*
+        fn atan_quick(th: f64, tl: f64, tab: &Table, sg: f64) -> Dd {
+            let (jf, j) = index(th);
+            let c = jf * (1.0 / 64.0);
+            let h = th - c; // exact
+            let [rh, rl] = RECIP[j];
+            let g = (c * (h + tl)) * (rh + rl);
+            let v = $short(h, rh);
+            let w = h * rl + tl * rh; // `rl` is `2^-26 R`: it takes part in the `s` product
+            let g2 = g * g;
+            let s = g2 * (((g2 * g2 + g2) + 1.0) * (1.0 - g)) - g;
+            let vl = (v.hi + w) * s + (v.lo + w);
+            let vt = v.hi + vl; // `vl` holds `−g·v`, up to `2^-8 v`: the cubic needs it
+            let z = vt * vt;
+            let tail = vt * z * (C3 + z * (C5 + z * (C7 + z * C9)));
+            let a = tab[j];
+            let y = fast_two_sum(f64::from_bits(a[0]), sg * v.hi);
+            fast_two_sum(y.hi, y.lo + (f64::from_bits(a[1]) + sg * (vl + tail)))
+        }
+
+        /// The quick phase's answer, else today's kernel ([`atan_unit`], tier 2) on the same
+        /// reduced argument; `post` maps either sum to the result's magnitude.
+        $(#[$a])* $(#[$i])*
+        fn two_tier(th: f64, tl: f64, tab: &Table, sg: f64, sign: u64, post: impl Fn(Dd) -> Dd) -> Option<f64> {
+            done(post(atan_quick(th, tl, tab, sg)), sign).or_else(|| done(post(atan_unit(th, tl, tab, sg)), sign))
+        }
+
+        /// The quick phase alone on `atan x`, `2^-60 <= |x| <= 1` (no tier 2): for the tests,
+        /// which show it answers nearly every call by itself.
+        ///
+        /// # Safety
+        ///
+        /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
+        #[doc(hidden)]
+        $(#[$a])* #[inline]
+        pub fn atan_quick_only(x: f64) -> Option<f64> {
+            let bits = x.to_bits();
+            let ab = bits & !SIGN;
+            if !(pow2_bits(-60)..=1.0f64.to_bits()).contains(&ab) {
+                return None;
+            }
+            done(atan_quick(f64::from_bits(ab), 0.0, &t::ATAN_J64, 1.0), bits)
+        }
+
         /// `tab[j] + sg·atan v` (`sg = ±1`, `tab` = `ATAN_J64` or a [`shifted`] table), that is
         /// `atan(th + tl)`, or a constant plus or minus it, for `2^-60 <= th <= 1 + 2^-52`,
         /// `|tl| <= ulp(th)`: within `2^-65.6` relative (module comment).
@@ -222,15 +321,14 @@ macro_rules! kernels {
                 return None;
             }
             let a = f64::from_bits(ab);
-            let y = if a <= 1.0 {
-                atan_unit(a, 0.0, &t::ATAN_J64, 1.0)
+            if a <= 1.0 {
+                two_tier(a, 0.0, &t::ATAN_J64, 1.0, bits, |y| y)
             } else {
                 let th = 1.0 / a;
                 let p = $prod(th, a);
                 let tl = ((1.0 - p.hi) - p.lo) * th;
-                atan_unit(th, tl, &HALF_MINUS, -1.0)
-            };
-            done(y, bits)
+                two_tier(th, tl, &HALF_MINUS, -1.0, bits, |y| y)
+            }
         }
 
         /// `asin(x)` to nearest, for `2^-60 <= |x| < 1`.
@@ -250,14 +348,13 @@ macro_rules! kernels {
             let p = $prod(m1.hi, m2.hi);
             let s = sqrt_dd(fast_two_sum(p.hi, p.lo + (m1.hi * m2.lo + m1.lo * m2.hi)), sqrt);
             let av = Dd { hi: a, lo: 0.0 };
-            let y = if a > s.hi {
+            if a > s.hi {
                 let t = div_dd(s, av);
-                atan_unit(t.hi, t.lo, &HALF_MINUS, -1.0)
+                two_tier(t.hi, t.lo, &HALF_MINUS, -1.0, bits, |y| y)
             } else {
                 let t = div_dd(av, s);
-                atan_unit(t.hi, t.lo, &t::ATAN_J64, 1.0)
-            };
-            done(y, bits)
+                two_tier(t.hi, t.lo, &t::ATAN_J64, 1.0, bits, |y| y)
+            }
         }
 
         /// `acos(x)` to nearest, for `2^-60 <= |x| < 1`.
@@ -274,9 +371,11 @@ macro_rules! kernels {
             }
             let a = f64::from_bits(ab);
             let w = sqrt_dd(div_dd(two_sum(1.0, -a), two_sum(1.0, a)), sqrt);
-            let at = atan_unit(w.hi, w.lo, &t::ATAN_J64, 1.0);
-            let y2 = Dd { hi: 2.0 * at.hi, lo: 2.0 * at.lo };
-            done(if bits & SIGN != 0 { comb(PI_HI, PI_LO, -1.0, y2) } else { y2 }, 0)
+            let neg = bits & SIGN != 0;
+            two_tier(w.hi, w.lo, &t::ATAN_J64, 1.0, 0, |at| {
+                let y2 = Dd { hi: 2.0 * at.hi, lo: 2.0 * at.lo };
+                if neg { comb(PI_HI, PI_LO, -1.0, y2) } else { y2 }
+            })
         }
 
         /// `atan2(y, x)` to nearest, for `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`.
@@ -286,16 +385,23 @@ macro_rules! kernels {
         /// The FMA build (`fused`) only: the CPU must support FMA and the OS must save the AVX state.
         $(#[$a])* #[inline]
         pub fn atan2_nearest(y: f64, x: f64) -> Option<f64> {
-            let r = atan2_abs(y, x)?;
-            done(r, y.to_bits())
+            let (th, tl, tab, sg) = atan2_reduce(y, x)?;
+            two_tier(th, tl, tab, sg, y.to_bits(), |r| r)
         }
 
-        /// `atan2(|y|, x)` as a double-double within `2^-65.5` relative (module comment), for
-        /// `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`, else `None`: [`atan2_nearest`]
-        /// before its rounding test, and the argument of the `clog` quick tier
-        /// (`crate::complex_fast`, LIBM-CPLX-LOG-SQRT).
+        /// `atan2(|y|, x)` as a double-double within `2^-65.5` relative (module comment, tier 2
+        /// [`atan_unit`]), for `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`, else `None`:
+        /// the argument of the `clog` quick tier (`crate::complex_fast`, LIBM-CPLX-LOG-SQRT).
         $(#[$a])* $(#[$i])*
         pub(crate) fn atan2_abs(y: f64, x: f64) -> Option<Dd> {
+            let (th, tl, tab, sg) = atan2_reduce(y, x)?;
+            Some(atan_unit(th, tl, tab, sg))
+        }
+
+        /// The reduction shared by [`atan2_nearest`] and [`atan2_abs`]: `atan2(|y|, x)` =
+        /// `tab[j] + sg·atan(th + tl)`, or `None` outside their window.
+        $(#[$a])* $(#[$i])*
+        fn atan2_reduce(y: f64, x: f64) -> Option<(f64, f64, &'static Table, f64)> {
             let (yb, xb) = (y.to_bits(), x.to_bits());
             let (ay, ax) = (yb & !SIGN, xb & !SIGN);
             let win = pow2_bits(-400)..pow2_bits(400);
@@ -311,13 +417,13 @@ macro_rules! kernels {
             }
             let p = $prod(th, d);
             let tl = ((n - p.hi) - p.lo) / d;
-            let (tab, sg): (&Table, f64) = match (swap, xb & SIGN != 0) {
+            let (tab, sg): (&'static Table, f64) = match (swap, xb & SIGN != 0) {
                 (false, false) => (&t::ATAN_J64, 1.0),
                 (true, false) => (&HALF_MINUS, -1.0),
                 (false, true) => (&PI_MINUS, -1.0),
                 (true, true) => (&HALF_PLUS, 1.0),
             };
-            Some(atan_unit(th, tl, tab, sg))
+            Some((th, tl, tab, sg))
         }
 
         /// `hypot(x, y)` to nearest, for `2^-450 <= |x|, |y| < 2^450` within a factor `2^61` of
@@ -343,7 +449,7 @@ macro_rules! kernels {
     };
 }
 
-kernels!(; #[inline(always)]; dd::two_prod, prod_small);
+kernels!(; #[inline(always)]; dd::two_prod, prod_small, prod_short);
 
 /// The FMA build of the kernels (MATH-F64-FMA-PATH, D-10.25): the same arithmetic with every
 /// exact product one FMA, so the same results bit for bit (module comment). Every function here
@@ -353,7 +459,7 @@ kernels!(; #[inline(always)]; dd::two_prod, prod_small);
 #[cfg(target_arch = "x86_64")]
 pub mod fused {
     use super::{comb, done, settle, index, two_sum, fast_two_sum, t, Dd, Table, dd, pow2_bits};
-    use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, SIGN, TWO_M60};
+    use super::{C3, C5, C7, C9, EPS_HYPOT, HALF_MINUS, HALF_PLUS, PI_HI, PI_LO, PI_MINUS, RECIP, SIGN, TWO_M60};
 
-    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma);
+    kernels!(#[target_feature(enable = "fma")]; #[inline]; dd::two_prod_fma, dd::two_prod_fma, dd::two_prod_fma);
 }
