@@ -1954,6 +1954,16 @@ fn math_sqrt_stays_out_of_place_under_an_unmasked_trap() {
     fpu::clear(&CSys, Flags::ALL);
 }
 
+#[test]
+fn math_sqrtl_entry_tests_its_word_and_class_in_c() {
+    // Clauses: s10_0_f_0.
+    // D-10.71: `sqrtl`'s assembly entry (its own control-word and `fxam` tests) is reached only
+    // from C: the tests above call `liella_sqrtl_bits`. conformance/c/s10_sqrtl_entry.c calls the
+    // exported `sqrtl` statically linked: in place in two directions, a negative operand's EDOM,
+    // -0, and 53-bit precision control keeping the 64-bit root.
+    products::conformance(&["s10_sqrtl_entry"]);
+}
+
 /// `hypotf` in MXCSR direction `rc` (0 nearest, 1 down, 2 up, 3 toward zero): the result's bits,
 /// the IEEE flags it raised (the denormal-operand bit aside) and `errno`.
 #[allow(clippy::as_conversions, clippy::arithmetic_side_effects, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss, clippy::cast_possible_wrap, clippy::float_arithmetic, clippy::integer_division)] // bit-level test arithmetic on bounded values
