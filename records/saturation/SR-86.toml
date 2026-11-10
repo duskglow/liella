@@ -1,0 +1,11 @@
+id = "SR-86"
+section = "7"
+row = "Static start-up and first-call minor faults: hot group anchored at a 64 KiB boundary (D-X.51, NEGATIVE)"
+now = "next (no anchor), `hot_text_products`, Skylake-SP host, fast / release: start-up only 18 / 17, setlocale + printf 56 / 57, coreutils-shaped tool 59 / 60, fork child 6 / 6 minor faults"
+open = "HOTTEXT-ISOLATE-64K(-2) anchored the hot group with an empty `.text.sorted.h0` input section (align 65536, retained) in the start-up member: the group opened on a boundary (fast 0x40dbc0 -> 0x420000, 10 -> 9 windows) but faults rose in every start-up row (start-up 19 / 18, setlocale + printf 58 / 61, tool 61 / 63; `init_first_mktime_after_localtime_r_takes_no_fault` took a fault), static probe file +72 / +116 KiB, `libc.so.6` +20 / +80 KiB and one more executable LOAD segment; reverted. Cause: the text before the group (start-up object, `.init`, cold text touched at start-up) shared the group's first window before and needs its own after, and the aligned text segment shifts the read-only data and data windows. Open: keep the group's first window shared with the start-up code (sort the start-up object's own text into the group, or anchor only where the preceding text is untouched), measured the same way."
+status = "active"
+story = "HOTTEXT-ISOLATE-64K-2"
+date = "2026-11-10"
+body = '''
+Measured with `~/work/HOTTEXT-ISOLATE-64K/measure.sh` on both profiles: `cargo xtask so`, `hot_text_products` minor-fault rows, the static fault probe's link map (hot group start, 64 KiB windows of the group and of its start-up tier), file and text sizes of the probe and `libc.so.6`. Base: next at 03c9a4972; change: the same tree with the anchor. Decision record D-X.51.
+'''

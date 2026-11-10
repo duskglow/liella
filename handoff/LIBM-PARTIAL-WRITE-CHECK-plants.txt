@@ -1,0 +1,8 @@
+# LIBM-PARTIAL-WRITE-CHECK plants (cargo xtask plants; docs/plants.md). D-10.68: `cargo xtask so` fails when a libm
+# export's hot path merges into an xmm register it has not written (xtask/src/partial_write.rs).
+expf-cvtss2sd-restored | crates/math/src/fast32/exp_log.rs | lit:exp_z(onepass_scaled(x) * (c * ONEPASS_SCALE)) ==> exp_z(f64::from(x) * c) | cargo xtask so | msg:(expf|exp2f|expf32)\+0x[0-9a-f]+: cvtss2sd
+checker-forgets-writes | xtask/src/partial_write.rs | lit:own |= 1 << w; ==> let _ = w; | cargo test -p xtask --bin xtask partial_write | msg:zero_idiom_break_passes.*FAILED
+checker-walks-past-call | xtask/src/partial_write.rs | lit:m.starts_with("call") ==> m.starts_with("callXX") | cargo test -p xtask --bin xtask partial_write | msg:merge_after_a_call_is_not_reported.*FAILED
+checker-drops-cvtss2sd | xtask/src/partial_write.rs | lit:const MERGE: &[&str] = &["cvtss2sd", ==> const MERGE: &[&str] = &["cvtss2sdX", | cargo test -p xtask --bin xtask partial_write | msg:unbroken_cvtss2sd_is_reported.*FAILED
+checker-one-branch-outcome | xtask/src/partial_write.rs | lit:work.push((t, own)); ==> let _ = t; | cargo test -p xtask --bin xtask partial_write | msg:both_branch_outcomes_are_walked_and_joins_intersect.*FAILED
+checker-vex-checks-dest | xtask/src/partial_write.rs | lit:vreg(&i.ops[n - 2])).flatten() ==> Some(dest)).flatten() | cargo test -p xtask --bin xtask partial_write | msg:merge_forms_and_their_exemptions.*FAILED

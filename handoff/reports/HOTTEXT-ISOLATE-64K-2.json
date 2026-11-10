@@ -1,0 +1,12 @@
+{"task": "HOTTEXT-ISOLATE-64K-2", "model": "opus", "tokens": null,
+ "result": "64 KiB hot-group anchor measured worse (start-up faults +1..+4 in every row, both profiles; a no-fault test failed) and is reverted; D-X.51 records the rejection, NEGATIVE saturation record pending an SR id; D-X.48 and D-X.51 turned into records after the next merge",
+ "branch": "task/hottext-isolate-64k-2", "head": "1fcb3913f",
+ "gate": {"affected": "pending: job hottext-isolate-64k-2-gate-1fcb391 (asked direct tier, --base origin/next; affected escalated it to FULL because records/ and layout/contracts.tsv are paths its selection does not know)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "SR id for records/pending/HOTTEXT-ISOLATE-64K-2-1.toml (NEGATIVE row)", "recommendation": "assign the next SR id"}],
+ "informational": ["The last run's three red jobs had separate causes: D-X.51 uncommitted in the synced tree, a literal | inside a plants field, an unprimed wl_count base; all fixed", "The branch stacks on LAYOUT-MANIFEST-2 (not on next); D-X.48 had to become a record because its row went with next's generated view at the merge", "wl_count and plants not run on the final head: it changes no product code against next (the anchor code was reverted)"],
+ "refused": [],
+ "improvement": "A rejected-by-measurement layout change would have been caught in one run if the measure script compared against a primed next base from the start instead of an older stacked commit",
+ "next_step": "New story: keep the hot group's first 64 KiB window shared with the start-up code (sort crt1's _start text into the group's first tier), measured with measure.sh on both profiles",
+ "report_file": "handoff/HOTTEXT-ISOLATE-64K.md",
+ "jobs": ["kanon:hottext-isolate-64k-2-lint-1fcb391", "kanon:hottext-isolate-64k-2-gate-1fcb391"]}
