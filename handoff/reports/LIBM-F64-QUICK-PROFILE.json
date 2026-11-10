@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-QUICK-PROFILE", "model": "opus", "tokens": null,
+ "result": "f64 quick tiers profiled (entry vs kernel, FMA and SSE2); exp's zero guard dropped (FMA 91->88, SSE2 104.2->102.2 instr, Zen 1) and the kernel's tl*(1+rh) fused (D-10.77); booked timing not run",
+ "branch": "task/libm-f64-quick-profile", "head": "c6b24f311",
+ "gate": {"affected": "lfqp-gate2 pending at hand-back", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["wl_trace.sh --list kept only the last ~60 instructions of each traced call, so a per-phase split was not possible", "minimax degree 5 for exp rejected on the bound: ~2^-63.7 vs the FMA bound 2^-67.7"],
+ "refused": [],
+ "improvement": "wl_trace.sh --list should keep the whole listing (it truncated to the call's tail); a phase split needs it",
+ "next_step": "book Ivy Bridge and N100 timing for exp/exp2/expm1 at c6b24f311, then profile log2/log1p's reduction (+18 instr over log)",
+ "report_file": "handoff/LIBM-F64-QUICK-PROFILE.md",
+ "jobs": ["lfqp-gate2", "lfqp-plants2", "lfqp-count-after2"]}
