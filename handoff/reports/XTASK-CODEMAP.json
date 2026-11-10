@@ -1,0 +1,11 @@
+{"task": "XTASK-CODEMAP", "model": "opus", "tokens": null,
+ "result": "cargo xtask codemap regenerates docs/codemap (symbols.tsv + README, hand-written sections kept) with a static freshness check; origin/next merged, map regenerated",
+ "branch": "task/xtask-codemap", "head": "05b8c5f86",
+ "gate": {"affected": "pending (mei:xtask-codemap-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["symbols.tsv 3315 -> 4044 rows: .symver compat aliases, asm-only exports, versions of libm/runtime exports now filled; old parser artefacts __isoc23_/__isoc99_/name and non-symbol default_obstack_failure dropped", "README clause-test column lists sNN_* test files only; the hand-added special_cr.rs/mp_kernels.rs for section 10 are gone", "plant stale-not-reported caught by the build (WARN-NO-MSG)"],
+ "refused": [],
+ "improvement": "a generated doc must live in the repo with a --check in static from day one; the lost scratchpad generator cost two stories",
+ "next_step": "dispatcher reads mei:xtask-codemap-gate; on red fix and rerun only the failing suite",
+ "report_file": "handoff/XTASK-CODEMAP.md",
+ "jobs": ["mei:xtask-codemap-gate", "mei:xtask-codemap-plants"]}
