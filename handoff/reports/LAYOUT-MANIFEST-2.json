@@ -1,0 +1,12 @@
+{"task": "LAYOUT-MANIFEST-2", "model": "opus", "tokens": null,
+ "result": "affected treats the layout manifest as a known consumer (layout-check, not FULL); layout decision ids and rule d read records/decisions too; 7/7 plants caught; gate escalated to FULL by design, running",
+ "branch": "task/layout-manifest-2", "head": "36babbbfe",
+ "gate": {"affected": "running (FULL by escalation: xtask core files + layout/contracts.tsv)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "merge origin/next into task/layout-manifest-2 (conflicts: plan/07-decisions view row D-X.48, xtask/src/main.rs adjacent lines)", "recommendation": "allow it; drop the view edit, create records/decisions/D-X/D-X.48.toml with records new decision, records check + static + clippy"}],
+ "informational": ["layout/contracts.tsv is unclassified in affected (any manifest edit escalates to FULL); a class selecting layout-check would keep follow-ups in the direct tier", "run 1 plant lm-rule-d targets code this run replaced; lm2-rule-d-change succeeds it", "one commit message went through a heredoc (git commit -F -), against the no-heredoc rule"],
+ "refused": [],
+ "improvement": "sync_role could warn when the branch no longer merges cleanly with --base (here a generated-view conflict after RECORDS went unnoticed until merge-tree)",
+ "next_step": "after the ruling: merge origin/next, convert D-X.48 to a record, rerun static/clippy and the gate",
+ "report_file": "handoff/LAYOUT-MANIFEST-2-report.md",
+ "jobs": ["layout-manifest-2-gate-36babbb", "layout-manifest-2-plants-36babbb", "layout-manifest-2-unit2"]}
