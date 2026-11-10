@@ -25,9 +25,11 @@
  "next_step": "owner ruling on the ro-window effect; then rerun counts.sh after, plants and the direct gate",
  "report_file": "handoff/LAYOUT-TEXT-PIN.md",
  "jobs": [
-  "mei:ltp-counts-before",
-  "mei:ltp-counts-after",
-  "mei:ltp-gate",
-  "mei:ltp-plants"
+  "mei:ltp-counts-before"
+ ],
+ "superseded": [
+  "mei:ltp-counts-after (rc 1 = the evidence: so fast fails STARTUP-DATA-WINDOWS ro 4 > 3)",
+  "mei:ltp-gate (stopped by me: same so failure)",
+  "mei:ltp-plants (stopped by me: baseline so would fail the same way)"
  ]
 }
