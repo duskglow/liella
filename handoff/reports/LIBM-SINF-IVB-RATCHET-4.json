@@ -1,0 +1,11 @@
+{"task": "LIBM-SINF-IVB-RATCHET-4", "model": "opus", "tokens": null,
+ "result": "LAYOUT-JITTER: -3's fork-child red (8 > 7, kanon) attributed: origin/next reaches 8 at pre/cold pads 0xE000/0xF000 on mei, merged head stays 6-7; merged head gate green, plants 7/7",
+ "branch": "task/libm-sinf-ivb-ratchet-4", "head": null,
+ "gate": {"affected": "32 suites ok: 11486 passed / 0 failed (libm-sinf-ivb-ratchet-4-gate1, mei)", "peak": "16G"}, "accepted_first_attempt": null,
+ "rulings": [{"item": "release the story although the brief holds LAYOUT-JITTER stories for the layout fix", "recommendation": "release: the merged head's direct gate is green on the CI host class (fork child 7, bound 7) and the code is unchanged since -3"}],
+ "informational": ["head vs next at the own layout: true 17 vs 16, localtime 20 vs 19; perf puts the difference in .lbss order (same objects and sizes from one rustc codegen object, another order), the class LAYOUT-DATA-CLUSTERS fixes", "-3's counts and timing jobs (kanon, kotori, nozomi) were on the pre-merge head; code unchanged, not rerun"],
+ "refused": [],
+ "improvement": "measure.py is a whole-matrix script; a small importable entry (one build, chosen regions/modes, no layout-check) would make the interim jitter rule a one-call check for every story",
+ "next_step": "none for code; coordinator decides release vs hold for LAYOUT-TEXT-PIN / LAYOUT-DATA-CLUSTERS",
+ "report_file": "handoff/libm-sinf-ivb-ratchet.md",
+ "jobs": ["libm-sinf-ivb-ratchet-4-gate1", "libm-sinf-ivb-ratchet-4-plants", "libm-sinf-ivb-ratchet-4-lint0"]}

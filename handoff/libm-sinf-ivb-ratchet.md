@@ -1,6 +1,7 @@
-# LIBM-SINF-IVB-RATCHET(-2, -3): handoff (sinf's Ivy Bridge loss from the bit-built trig operand, owner #4424)
+# LIBM-SINF-IVB-RATCHET(-2, -3, -4): handoff (sinf's Ivy Bridge loss from the bit-built trig operand, owner #4424)
 
-State: branch `task/libm-sinf-ivb-ratchet-3` (stacks on -2, -1), READY pending its gate. Role kanon:~/w/kn1.
+State: branch `task/libm-sinf-ivb-ratchet-4` (stacks on -3, -2, -1; origin/next merged in -4), code unchanged since -3.
+Role mei:~/w/s1 (-4); kanon:~/w/kn1 (-3).
 Decisions: D-10.67, D-10.68, D-10.72 in force; D-10.79 (amends D-10.67; rulings #4434, #4445) with the measurements.
 Pending saturation record records/pending/LIBM-SINF-IVB-RATCHET-2-1.toml (SR-NEW, section 1: the NEGATIVE Estrin
 trial; the coordinator assigns the SR id). Reports: handoff/reports/LIBM-SINF-IVB-RATCHET-{2,3}.json.
@@ -42,8 +43,35 @@ trial; the coordinator assigns the SR id). Reports: handoff/reports/LIBM-SINF-IV
   unchanged code is a placement effect, not this change.
 * gate: `cargo xtask affected --run --base origin/next` on the final head (label in the report).
 
+## -4: the -3 verify red attributed (fork child 8 > 7 on kanon, gate2)
+-3's verify gate `libm-sinf-ivb-ratchet-3-gate2` (kanon) failed only `hot_text_products
+init_fork_child_stays_within_its_page_fault_bound`: fork child 8 (bound 7; warm-up 8, runs all 8). The branch touches
+no start-up or fork code. Measured on mei (Skylake-SP, CI host class; load 24-28 on 6 vCPU), fast products of the
+merged head and of origin/next (the branch's crates/xtask/records diff reverse-applied in the role, then restored),
+through LAYOUT-STABILITY-RETHINK's `measure.py` (imported unchanged; fast profile, `orig` + the 19 `pre` and 19
+`cold` pads; one warm-up, five runs, lowest; every run identical). Driver and scripts: mei
+`~/work/LIBM-SINF-IVB-RATCHET-4/` (`fork_pads.py`, `attr.sh`, `pads.sh`, `attrib.sh`); jobs attr1, pads1, attrib1.
+| | fork test (own layout) | fork over `pre` pads | fork over `cold` pads |
+|---|---|---|---|
+| origin/next | 7 (bound 7) | 6-8 (8 at 0xE000, 0xF000) | 7-8 (8 at 0xE000, 0xF000) |
+| head (merged) | 7 (bound 7) | 6-7 | 7 |
+origin/next reaches the kanon count, 8, from padding alone; the head never exceeds 7 on mei: LAYOUT-JITTER (ruling
+#4347), not this change. Also seen: `true` 17 vs 16 and `localtime` 20 vs 19 at the own layout (head vs next), +1 at
+most pads. perf attribution (`perf record -e page-faults -d`, own layout): text faults equal (true: 5 and 5); the
+difference is `.lbss` (head 5 pages over 0x1D000, next 4 over 0x4900) against `.data` (3 vs 4). Both `.lbss` hold
+the same objects of the same sizes (total 0x56418) from one rustc codegen object, in another order: placement of
+written data by codegen order (the class LAYOUT-DATA-CLUSTERS fixes), not data this branch adds. The
+`init_short_programs` bounds passed on kanon and in the -4 gate.
+
+-4 jobs (mei, final head = the merge with origin/next + this note): `libm-sinf-ivb-ratchet-4-lint0` (xtask clippy +
+static, rc 0), `-gate1` (`affected --run --base origin/next`: 32 suites ok, 11,486 passed, 0 failed, conformance
+127/0, peak 16G, rc 0; the fork test passed), `-plants` (the -3 plants file: 7 CAUGHT, 0 SURVIVED, 0 WARN). Diagnostic
+(not on JOBS): `-attr1` (builds, fork test head 7 / next 7; its pad step hit a pickling error, rerun as `-pads1`),
+`-pads1`, `-attrib1`.
+
 ## Next step
-None for this story. Possible follow-up: sincosf/cexpf could take the same widening through their boundary wrappers.
+Handed back `INCOMPLETE: LAYOUT-JITTER` as the -4 brief asks for a jitter red; the merged head is green on the CI
+host class, so the coordinator may release it without waiting for the layout fix. No code work left. Possible follow-up: sincosf/cexpf could take the same widening through their boundary wrappers.
 
 ## Do not redo
 * The DSB/MITE and RS counters, the stack-offset sweep, the Estrin trial (NEGATIVE, recorded pending).
