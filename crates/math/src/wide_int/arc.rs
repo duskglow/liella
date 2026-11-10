@@ -201,6 +201,8 @@ fn atan_poly(u: u128, u1: u64) -> u128 {
 }
 
 /// `atan|r|·2^(127 + kr)` for `|r| = rm·2^(-128-kr)`, `rm` in `[2^127, 2^128)`, `kr >= 7`.
+/// Inlined: one of its sites runs per call, and the call cost atanl its register saves.
+#[inline(always)]
 fn atan_small(rm: u128, kr: i32) -> u128 {
     let u = mulhi(rm, rm).checked_shr((2 * kr - 14) as u32).unwrap_or(0); // r², units 2^-142
     mulhi(rm, atan_poly(u, (u >> 64) as u64))
@@ -212,23 +214,19 @@ fn inv_top(x: Val) -> f64 {
 }
 
 /// Step 3: `atan(y/x)` for `0 < y/x <= 1 + 2^-100` (the shared copy: atan2l, asinl, acosl).
-/// `ix` is `x`'s index scale ([`inv_top`] within `2^-49`) when the caller has it, else `None`.
-fn atan_le(y: Val, x: Val, ix: Option<f64>) -> Val {
-    atan_le_in(y, x, ix)
+/// `ix` is `x`'s index scale ([`inv_top`], or any value within `2^-49` of it).
+fn atan_le(y: Val, x: Val, ix: f64) -> Val {
+    atan_le_in(y, x, || ix)
 }
 
 /// [`atan_le`]'s body, inlined into `atanl` so its constant `x = 1` (or `y = 1`) folds: the
-/// `x.m == 2^127` test, the table index's scale and the call.
+/// `x.m == 2^127` test, the table index's scale and the call. `ix` is read only for `k <= 8`.
 #[inline(always)]
-fn atan_le_in(y: Val, x: Val, ix: Option<f64>) -> Val {
+fn atan_le_in(y: Val, x: Val, ix: impl FnOnce() -> f64) -> Val {
     let k = x.e - y.e; // >= 0
     let mut j = 0;
     if k <= 8 {
-        let ix = match ix {
-            Some(v) => v,
-            None => inv_top(x),
-        };
-        let h = (dbl((y.m >> 75) as u64) * ix) as usize; // ⌊256·y.m/x.m⌋ within one
+        let h = (dbl((y.m >> 75) as u64) * ix()) as usize; // ⌊256·y.m/x.m⌋ within one
         j = ((h >> k) + 1) >> 1;
     }
     if j == 0 {
@@ -264,12 +262,12 @@ fn atan_le_in(y: Val, x: Val, ix: Option<f64>) -> Val {
 
 /// `atan2(y, x)` for positive `y`, `x`: in `(0, π/2)`.
 fn atan2_pos(y: Val, x: Val) -> Val {
-    if (y.e, y.m) <= (x.e, x.m) { atan_le(y, x, None) } else { sub_from(PIO2, atan_le(x, y, None)) }
+    if (y.e, y.m) <= (x.e, x.m) { atan_le(y, x, inv_top(x)) } else { sub_from(PIO2, atan_le(x, y, inv_top(y))) }
 }
 
 fn atan_approx(n: &Num) -> Option<(bool, Val)> {
     let y = val(n)?;
-    Some((n.neg, if (y.e, y.m) <= (ONE.e, ONE.m) { atan_le_in(y, ONE, Some(ONE_IX)) } else { sub_from(PIO2, atan_le_in(ONE, y, None)) }))
+    Some((n.neg, if (y.e, y.m) <= (ONE.e, ONE.m) { atan_le_in(y, ONE, || ONE_IX) } else { sub_from(PIO2, atan_le_in(ONE, y, || inv_top(y))) }))
 }
 
 fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
@@ -302,7 +300,7 @@ fn asin_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
     let ia = inv_top(a);
     let (s, is, below) = root_one_minus_sq(a, hw)?;
-    Some((n.neg, if below { atan_le(a, s, Some(is)) } else { sub_from(PIO2, atan_le(s, a, Some(ia))) }))
+    Some((n.neg, if below { atan_le(a, s, is) } else { sub_from(PIO2, atan_le(s, a, ia)) }))
 }
 
 /// `acos a = atan2(s, |a|)` the same way, then `π −` that for `a < 0`.
@@ -310,7 +308,7 @@ fn acos_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
     let ia = inv_top(a);
     let (s, is, below) = root_one_minus_sq(a, hw)?;
-    let t = if below { sub_from(PIO2, atan_le(a, s, Some(is))) } else { atan_le(s, a, Some(ia)) };
+    let t = if below { sub_from(PIO2, atan_le(a, s, is)) } else { atan_le(s, a, ia) };
     Some((false, if n.neg { sub_from(PI, t) } else { t }))
 }
 
