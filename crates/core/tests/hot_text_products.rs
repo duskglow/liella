@@ -605,6 +605,17 @@ fn init_startup_names_sit_in_one_window() {
     assert!(!map.lines().any(|l| l.contains(".rodata.") && l.contains("Vdso5parse")), "startup names: Vdso::parse has a .rodata table again");
 }
 
+/// A static's symbol without the tails the compiler may add to it: ThinLTO's promotion suffix
+/// (`<sym>.llvm.<n>`) and a split part number (`<sym>.<n>`), the same tails
+/// `xtask/src/coldbss.rs` drops before matching sections.
+fn symbol_stem(name: &str) -> &str {
+    let name = name.split_once(".llvm.").map_or(name, |(s, _)| s);
+    match name.rsplit_once('.') {
+        Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => s,
+        _ => name,
+    }
+}
+
 /// STARTUP-FAULTS-RESTORE (D-X.53): the small statics that start-up writes first sit in `.data1`
 /// in libc.a (`xtask/src/coldbss.rs::move_startup_state`), so the linker puts them on one page
 /// next to `.bss`. Each one is worth at most one fault, which the count bounds' +1 slack lets
@@ -623,7 +634,7 @@ fn init_startup_state_statics_are_in_data1() {
     ] {
         let sections: Vec<&str> = table
             .lines()
-            .filter(|l| l.split_whitespace().last().is_some_and(|n| n.ends_with(suffix)))
+            .filter(|l| l.split_whitespace().last().is_some_and(|n| symbol_stem(n).ends_with(suffix)))
             // `<value> <flags> <section>\t<size> [.hidden ]<name>`
             .filter_map(|l| l.split_once('\t').and_then(|(a, _)| a.split_whitespace().last()))
             .filter(|s| *s != "*UND*")
