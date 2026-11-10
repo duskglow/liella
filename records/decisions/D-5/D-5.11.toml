@@ -1,0 +1,10 @@
+id = "D-5.11"
+section = "s05"
+spec = "§5.2, §7.3"
+ann = "PERF"
+status = "active"
+story = "WCTYPE-TRIE-FILE"
+date = "2026-11-10"
+body = '''
+**The thread block holds the current view's class-word table** (WCTYPE-RETHINK proposal 3, coordinator ruling #3878; the 0x180 slot and the zero fallback in a block glibc made: coordinator ruling #4133, provisional; WCTYPE-TRIE-FILE; extends D-5.5 and D-7.13). `ThreadBlock::wclass` (offset 0x180, zero in a block glibc's `ld.so` made) is stored with the `view` word by every writer of it (`uselocale`, `setlocale` for threads on the global locale, thread creation, `newlocale` changing the active object in place), so it follows exactly what `view` follows. `isw*` and `iswctype` read it with one `%fs` load, then stage 1 and the leaf; a 0 word or an unresolved block takes the view's path in a tail call. The `_l` entries read the object's view, which holds its own table. Proven by `conformance/c/s05_ctype_words.c` (wide tests after `uselocale`, `setlocale`, other threads, `newlocale` in place) and the stale-word plant in handoff/wctype-trie-file-plants.txt.
+'''
