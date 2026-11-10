@@ -536,7 +536,7 @@ fn startup_keys(text: &str, profile: &str) -> Result<Vec<String>, String> {
             continue;
         }
         match l.split('\t').collect::<Vec<_>>().as_slice() {
-            [k, _tier, profiles] => {
+            [k, _tier, profiles] | [k, _tier, profiles, _] => {
                 if profiles.split(',').any(|p| p == profile) {
                     out.push(k.to_string());
                 }

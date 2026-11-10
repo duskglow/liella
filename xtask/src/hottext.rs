@@ -418,11 +418,18 @@ fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
         let bad = || format!("hot-text.list line {}: {l:?}: want <key>\\t<tier>\\t<profiles>", n + 1);
         let entry = match parts[..] {
             [k] => Entry { key: k.trim().to_string(), tier: "extra", profiles: Vec::new() },
-            [k, t, p] => {
+            [k, t, p] | [k, t, p, _] => {
                 let tier = TIERS.iter().find(|x| **x == t).ok_or_else(bad)?;
                 let profiles: Vec<String> = if p == "-" { Vec::new() } else { p.split(',').map(str::to_string).collect() };
                 if profiles.iter().any(|p| p != "fast" && p != "release") {
                     return Err(bad());
+                }
+                // HOTTEXT-REGEN-HOSTS (D-X.61): `<profile>@<host class>` pairs (tools/hottext/merge.py);
+                // their profiles are exactly the profiles column.
+                if let [.., prov] = parts[..] {
+                    if parts.len() == 4 && !provenance_matches(prov, &profiles) {
+                        return Err(format!("hot-text.list line {}: {l:?}: provenance {prov:?} disagrees with profiles {p:?}", n + 1));
+                    }
                 }
                 Entry { key: k.to_string(), tier, profiles }
             }
@@ -431,6 +438,23 @@ fn parse_list(text: &str) -> Result<Vec<Entry>, String> {
         out.push(entry);
     }
     Ok(out)
+}
+
+/// Whether `prov` (`-`, or comma-separated `<profile>@<host class>` pairs, class `?` for one not
+/// recorded) is well formed and names exactly `profiles`.
+fn provenance_matches(prov: &str, profiles: &[String]) -> bool {
+    let mut seen = BTreeSet::new();
+    if prov != "-" {
+        for pair in prov.split(',') {
+            let Some((p, host)) = pair.split_once('@') else { return false };
+            let host_ok = host == "?" || (!host.is_empty() && !host.starts_with('-') && host.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'));
+            if !matches!(p, "fast" | "release") || !host_ok {
+                return false;
+            }
+            seen.insert(p);
+        }
+    }
+    seen == profiles.iter().map(String::as_str).collect()
 }
 
 /// The keys of `entries` -> their position (the first, if a key repeats).
@@ -865,6 +889,81 @@ mod tests {
         assert!(parse_list("k\tboot\tfast\n").unwrap_err().contains("line 1"));
         assert!(parse_list("# c\nk\tstartup\tdebug\n").unwrap_err().contains("line 2"));
         assert!(parse_list("k\tstartup\n").is_err());
+        // HOTTEXT-REGEN-HOSTS: a 4th column of `<profile>@<host class>` pairs naming exactly the profiles.
+        let e = parse_list("k\tstartup\tfast,release\tfast@amd-23-1,fast@intel-6-85,release@?\nj\ttool\t-\t-\n").unwrap();
+        assert_eq!((e[0].profiles.len(), e[1].profiles.len()), (2, 0));
+        assert!(parse_list("k\tstartup\tfast,release\tfast@intel-6-85\n").unwrap_err().contains("disagrees"));
+        assert!(parse_list("k\tstartup\tfast\tfast@Intel\n").is_err());
+        assert!(parse_list("k\tstartup\tfast\tdebug@x\n").is_err());
+    }
+
+    /// Runs tools/hottext/merge.py on `old` and `new` for `profile@host`; `None` when python3 is absent.
+    fn merge_py(old: &str, new: &str, profile: &str, host: &str) -> Option<String> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let dir = std::env::temp_dir().join(format!("hottext-merge-{}-{}", std::process::id(), REGEN_TEST_SEQ.fetch_add(1, Ordering::SeqCst)));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("old"), old).unwrap();
+        std::fs::write(dir.join("new"), new).unwrap();
+        let out = std::process::Command::new("python3").arg(root.join("tools/hottext/merge.py")).arg(dir.join("old")).arg(dir.join("new")).arg(profile).arg(host).output();
+        std::fs::remove_dir_all(&dir).unwrap();
+        let out = match out {
+            Ok(o) => o,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("SKIP merge.py tests: python3 not found ({e})");
+                return None;
+            }
+            Err(e) => panic!("python3: {e}"),
+        };
+        assert!(out.status.success(), "merge.py failed: {}", String::from_utf8_lossy(&out.stderr));
+        Some(String::from_utf8(out.stdout).unwrap())
+    }
+
+    static REGEN_TEST_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    #[test]
+    fn merge_keeps_a_key_another_host_class_reaches() {
+        // HOTTEXT-REGEN-HOSTS (no spec clause: build tooling): a trace is the whole truth for its own
+        // (profile, host class) only. Skylake-SP reaches fill_erms, Zen 1 (no ERMS) does not: the Zen 1
+        // regen keeps it, provenance and all; a key no host class reaches any more is dropped.
+        let Some(skx) = merge_py("", "a\tstartup\nfill_erms\tstdio\nb\tstdio\nstale\tlocale\n", "fast", "intel-6-85") else { return };
+        assert_eq!(skx, "a\tstartup\tfast\tfast@intel-6-85\nfill_erms\tstdio\tfast\tfast@intel-6-85\nb\tstdio\tfast\tfast@intel-6-85\nstale\tlocale\tfast\tfast@intel-6-85\n");
+        let zen = merge_py(&skx, "a\tstartup\nb\tstdio\nstale\tlocale\n", "fast", "amd-23-1").unwrap();
+        assert!(zen.contains("fill_erms\tstdio\tfast\tfast@intel-6-85\n"), "the Zen 1 trace dropped a key Skylake-SP reaches:\n{zen}");
+        assert!(zen.contains("a\tstartup\tfast\tfast@amd-23-1,fast@intel-6-85\n"), "{zen}");
+        // The same host class again, missing `stale`: dropped for intel-6-85, kept for amd-23-1.
+        let skx2 = merge_py(&zen, "a\tstartup\nfill_erms\tstdio\nb\tstdio\n", "fast", "intel-6-85").unwrap();
+        assert!(skx2.contains("stale\tlocale\tfast\tfast@amd-23-1\n"), "{skx2}");
+        let zen2 = merge_py(&skx2, "a\tstartup\nb\tstdio\n", "fast", "amd-23-1").unwrap();
+        assert!(!zen2.contains("stale"), "a key no host class reaches stays:\n{zen2}");
+        assert!(zen2.contains("fill_erms\tstdio\tfast\tfast@intel-6-85\n"), "{zen2}");
+        // A list without provenance: `<profile>@?` survives a miss and is resolved by a hit.
+        let legacy = merge_py("x\tstdio\tfast\nfill_erms\tstdio\tfast,release\n", "x\tstdio\n", "fast", "amd-23-1").unwrap();
+        assert_eq!(legacy, "x\tstdio\tfast\tfast@amd-23-1\nfill_erms\tstdio\tfast,release\tfast@?,release@?\n");
+    }
+
+    #[test]
+    fn regen_on_two_host_classes_in_either_order_gives_one_list() {
+        // HOTTEXT-REGEN-HOSTS (no spec clause: build tooling): the list is a function of the traces,
+        // not of which host class traced last: the same keys, tiers and provenance in either order (the
+        // layout position of a key only one class reaches follows the trace order around its anchor);
+        // a repeated trace changes nothing (fixed point).
+        let start = "a\tstartup\tfast\nloc\tlocale\tfast\n";
+        let (skx, zen) = ("a\tstartup\nfill_erms\tstdio\nloc\tlocale\nrecord_for\ttool\n", "a\tstartup\nloc\tlocale\nctype_x\tlocale\n");
+        let Some(s1) = merge_py(start, skx, "fast", "intel-6-85") else { return };
+        let ab = merge_py(&s1, zen, "fast", "amd-23-1").unwrap();
+        let z1 = merge_py(start, zen, "fast", "amd-23-1").unwrap();
+        let ba = merge_py(&z1, skx, "fast", "intel-6-85").unwrap();
+        let sorted = |s: &str| {
+            let mut v: Vec<String> = s.lines().map(str::to_string).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(sorted(&ab), sorted(&ba), "the host order changed the list");
+        for k in ["fill_erms", "record_for", "ctype_x"] {
+            assert!(ab.contains(k), "{k} lost:\n{ab}");
+        }
+        assert_eq!(merge_py(&ab, skx, "fast", "intel-6-85").unwrap(), ab, "a repeated Skylake-SP trace changed the list");
+        assert_eq!(merge_py(&ab, zen, "fast", "amd-23-1").unwrap(), ab, "a repeated Zen 1 trace changed the list");
     }
 
     #[test]
