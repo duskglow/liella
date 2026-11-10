@@ -6,9 +6,11 @@
 //! addresses. The steps:
 //!
 //! 1. [`plan`] validates the headers before anything is mapped: any number of `PT_LOAD`s
-//!    (D-27.15: the work is linear in `e_phnum`, which the ELF reader bounds), each non-empty,
-//!    with `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page, `p_align`
-//!    0, 1 or a power of two, its file bytes inside the file, never writable and executable at once; the segments in address order without sharing a page; the span and the
+//!    (D-27.15: the work is linear in `e_phnum`, which the ELF reader bounds), an empty one
+//!    (`p_memsz` 0, which linkers emit) skipped and never mapped, the others with
+//!    `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page, `p_align` 0, 1 or
+//!    a power of two, its file bytes inside the file, never writable and executable at once; the
+//!    segments in address order without sharing a page; the span and the
 //!    alignment bounded; a `PT_GNU_RELRO` range inside the span.
 //! 2. [`load`] makes one `PROT_NONE` reservation of the span, aligned so the load bias is a
 //!    multiple of the largest `p_align` (honoured above the page size, L14-5), or at the fixed
@@ -60,6 +62,8 @@ pub enum MapError {
     BadSegments,
     /// A segment asks to be writable and executable at once (design §3).
     WriteExec,
+    /// `PT_GNU_STACK` asks for an executable stack (R14-13, DL-10): refused, never honoured.
+    ExecutableStack,
     /// A fixed-address program's range is not free (or not in user space).
     Placement,
     /// A mapping system call failed (out of memory or address space).
@@ -75,6 +79,7 @@ impl MapError {
             MapError::NoSegments => b"no loadable segments holding the program headers\n",
             MapError::BadSegments => b"malformed loadable segments\n",
             MapError::WriteExec => b"a loadable segment asks to be writable and executable\n",
+            MapError::ExecutableStack => b"the object asks for an executable stack (PT_GNU_STACK with PF_X); refused\n",
             MapError::Placement => b"the fixed load address is not available\n",
             MapError::System => b"cannot map the object (out of memory or address space)\n",
         }
@@ -235,10 +240,13 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     if !page.is_power_of_two() {
         return Err(MapError::BadSegments);
     }
+    if executable_stack(elf.program_headers().map(|p| (p.p_type, p.flags))) {
+        return Err(MapError::ExecutableStack);
+    }
     let (mut first, mut last, mut align, mut count) = (0u64, 0u64, page, 0usize);
     let mut phdr = elf.find(pt::PHDR).map(|p| p.vaddr);
     let phend = h.phoff.saturating_add(u64::from(h.phnum).saturating_mul(PHENT));
-    for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD) {
+    for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD && p.memsz != 0) {
         let s = segment(&ph, page)?;
         elf.segment_bytes(&ph).map_err(MapError::Elf)?;
         if count == 0 {
@@ -276,6 +284,12 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     Ok(Plan { span, align, first, fixed: h.e_type == ET_EXEC, phdr, phnum: h.phnum, entry: h.entry, relro, page })
 }
 
+/// Whether program headers given as (`p_type`, `p_flags`) pairs ask for an executable stack: a
+/// `PT_GNU_STACK` with `PF_X` (R14-13). An object without `PT_GNU_STACK` does not ask.
+pub fn executable_stack(headers: impl IntoIterator<Item = (u32, u32)>) -> bool {
+    headers.into_iter().any(|(t, f)| t == pt::GNU_STACK && f & PF_X != 0)
+}
+
 /// Parse `file` (a whole object file) and plan it.
 ///
 /// # Errors
@@ -286,10 +300,14 @@ pub fn plan_file<A: Arch>(file: &[u8], page: u64) -> Result<Plan, MapError> {
     plan::<A>(&elf, page)
 }
 
-/// The `PT_LOAD` segments of `file` in page terms, in header order (after [`plan_file`] accepted it).
+/// The non-empty `PT_LOAD` segments of `file` in page terms, in header order (after [`plan_file`]
+/// accepted it).
 pub fn segments<'a, A: Arch>(file: &'a [u8], page: u64) -> impl Iterator<Item = Result<Segment, MapError>> + 'a {
     let elf = Elf::parse::<A>(file).ok();
-    elf.into_iter().flat_map(|e| (0..e.header().phnum).filter_map(move |i| e.program_header(i))).filter(|p| p.p_type == pt::LOAD).map(move |p| segment(&p, page))
+    elf.into_iter()
+        .flat_map(|e| (0..e.header().phnum).filter_map(move |i| e.program_header(i)))
+        .filter(|p| p.p_type == pt::LOAD && p.memsz != 0)
+        .map(move |p| segment(&p, page))
 }
 
 /// Map the object `file` (its whole contents; the [`Mapper`] maps from the same file) with pages of

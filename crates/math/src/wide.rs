@@ -28,6 +28,13 @@ use crate::status::{Rounding, Status};
 use crate::trig::elem_round_below;
 use crate::wide_dd;
 use crate::wide_int;
+use crate::wide_int_el;
+
+/// The fast tiers of the exponentials and logarithms in order: the integer fixed-point tier
+/// (x87 only, D-10.73), then the double-double tier; `None` leaves the 384-bit route.
+fn tiers<F: Float>(k: wide_dd::Kernel, n: &Num, mode: Rounding) -> Option<(F, Status)> {
+    wide_int_el::eval::<F>(k, n, mode).or_else(|| wide_dd::eval::<F>(k, n, mode))
+}
 
 /// The value of a finite or zero operand.
 pub(crate) fn value(n: &Num) -> Mp {
@@ -159,7 +166,7 @@ pub fn exp<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if linear_tiny::<F>(&n) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp, &n, mode) {
         return r;
     }
     exp_of(value(&n), mode)
@@ -184,7 +191,7 @@ pub fn exp2<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if linear_tiny::<F>(&n) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp2, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp2, &n, mode) {
         return r;
     }
     exp_of(value(&n).mul(mp::ln2()), mode)
@@ -211,7 +218,7 @@ pub fn exp10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if n.top() < -(F::PREC as i32 + 4) {
         return near_one(false, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Exp10, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Exp10, &n, mode) {
         return r;
     }
     exp_of(value(&n).mul(mp::ln10()), mode)
@@ -235,7 +242,7 @@ pub fn expm1<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         // x + x²/2: above x.
         return near_x(&n, !n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Expm1, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Expm1, &n, mode) {
         return r;
     }
     approx(mp::exp(value(&n)).sub(Mp::from_i64(1)), mode)
@@ -273,7 +280,7 @@ pub fn log<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd_part(&n) == (1, 0) {
         return (float::zero(false), Status::OK);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)), mode)
@@ -289,7 +296,7 @@ pub fn log2<F: Float>(x: F, mode: Rounding) -> (F, Status) {
     if odd == 1 {
         return exact(Mp::from_i64(e), mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log2, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log2, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)).div(mp::ln2()), mode)
@@ -309,7 +316,7 @@ pub fn log10<F: Float>(x: F, mode: Rounding) -> (F, Status) {
             return exact(Mp::from_i64(e), mode);
         }
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log10, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log10, &n, mode) {
         return r;
     }
     approx(mp::ln_atanh(value(&n)).div(mp::ln10()), mode)
@@ -342,7 +349,7 @@ pub fn log1p<F: Float>(x: F, mode: Rounding) -> (F, Status) {
         // x − x²/2: below x.
         return near_x(&n, n.neg, mode);
     }
-    if let Some(r) = wide_dd::eval::<F>(wide_dd::Kernel::Log1p, &n, mode) {
+    if let Some(r) = tiers::<F>(wide_dd::Kernel::Log1p, &n, mode) {
         return r;
     }
     approx(mp::ln1p(v), mode)

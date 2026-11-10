@@ -15,6 +15,7 @@ pub mod start;
 pub mod elf;
 pub mod map;
 pub mod search;
+pub mod cache;
 pub mod reloc;
 pub mod symbols;
 pub mod tls;
