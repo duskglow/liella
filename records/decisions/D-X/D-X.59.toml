@@ -1,0 +1,10 @@
+id = "D-X.59"
+section = "x"
+status = "active"
+amends = ["D-X.55"]
+story = "XTASK-RECORDS-GEN-OUT-OF-TREE"
+date = "2026-11-10"
+tests = ["xtask/src/records/mod.rs::gen_off_train_writes_under_target_and_leaves_tracked_views", "xtask/src/records/mod.rs::in_place_only_on_the_train_or_when_asked", "xtask/src/kernel_index.rs::writes_out_of_tree_unless_in_place"]
+body = '''
+**Off the train, the train-owned generators write under `target/records-views/`** (XTASK-RECORDS-GEN-OUT-OF-TREE). `cargo xtask records-gen` renders every view to `target/records-views/<view path>`, and `cargo xtask kernel-index` (also run by `cargo xtask tables`) writes `target/records-views/crates/math/KERNELS.md`. The tracked files stay byte-identical. They are written in place only under `LIELLA_TRAIN=1` (the train) or with an explicit `--in-place`. `records-gen --check` and static's stale-view checks still compare the tracked files, as before: fatal on the train, advisory elsewhere. Why: story branches kept committing views they had regenerated to read and then forgot to restore. Each such commit cost a red hand-back or a CI hold plus a coordinator fix. Writing out of tree makes that mistake impossible instead of documenting it. The train's generator list has to pass `LIELLA_TRAIN=1` or `--in-place`. Both are ignored by an xtask that predates this decision, so the train can switch first.
+'''

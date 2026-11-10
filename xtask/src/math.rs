@@ -588,7 +588,9 @@ pub fn run_remez(root: &Path, args: &[String]) -> Result<(), String> {
 /// `crates/math/KERNELS.md` ([`crate::kernel_index`]).
 pub fn run_tables(root: &Path, args: &[String]) -> Result<(), String> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(args))?;
+    // `--in-place` is the kernel index's (D-X.59), not the tables binary's.
+    let pass = args.iter().filter(|a| *a != "--in-place");
+    sh(std::process::Command::new(cargo).current_dir(root).args(["run", "-q", "--release", "-p", "liella-mathtools", "--bin", "tables", "--"]).args(pass))?;
     // The kernel index rides on the same generate/check step (LIBM-KERNEL-INDEX).
-    crate::kernel_index::run(root, args.iter().any(|a| a == "--check"))
+    crate::kernel_index::run(root, args.iter().any(|a| a == "--check"), crate::records::in_place_env(args))
 }
