@@ -9,8 +9,8 @@
 //! and the odd series of `atan r` in fixed point (R. Brent, P. Zimmermann, Modern Computer
 //! Arithmetic, 2010, ch. 4). The quotient and the square root are a `double` estimate refined by
 //! one exact integer residual (Newton's correction; Brent & Zimmermann ch. 3; J.-M. Muller,
-//! Elementary Functions, 3rd ed. 2016, ch. 2): one `divsd` (the root seeded by the integer root), never an
-//! integer `div`. `atan x = A(|x|, 1)` or `π/2 − A(1, |x|)`; `atan2` the same on `(|y|, |x|)`, then
+//! Elementary Functions, 3rd ed. 2016, ch. 2): one `divsd` (the root seeded by a `double` root the caller passes:
+//! the boundary's `sqrtsd`), never an integer `div`. `atan x = A(|x|, 1)` or `π/2 − A(1, |x|)`; `atan2` the same on `(|y|, |x|)`, then
 //! `π − θ` for `x < 0`; `asin a = atan2(|a|, s)` and `acos a = atan2(s, |a|)` (`π −` that for
 //! `a < 0`) with `s = √(1 − a²)`, `1 − a²` exact for `|a| >= 1/2`. `tan` takes the parent's
 //! reduction and polynomials once and divides `sin|a|` by `cos|a|` (the other way round in odd
@@ -25,10 +25,13 @@
 //!    q0·d/2^62` is formed exactly but for the floor of its last term (below one unit), and `Q =
 //!    q0·2^64 + E·V/2^64`: its error is `E·(V/2^64 − 2^126/d)` (at most `2^-50.97·2^-50.99` of the
 //!    quotient) plus two units: `Q` is `(n/d)·2^126` within `2^-101.9 + 2^-124 < 2^-101.8`.
-//! 2. Square root [`sqrt`] of `w` in `[2^126, 2^128)`: `s0 = ⌊√w⌋` (the integer root, `δ = √w −
-//!    s0` in `[0, 1)`); `V = 2^127/s0` from one `divsd`, within `2^-50.99` as in step 1; `S = s0·2^64
-//!    + (w − s0²)·V/2^64` (`w − s0²` exact). Newton's step leaves `(δ/s0)²/2 < 2^-127`, `V`'s error
-//!    reaches `δ/s0·2^-50.99 < 2^-113.9`, two units more: `S` is `√w·2^64` within `2^-113.8`.
+//! 2. Square root [`sqrt`] of `w` in `[2^126, 2^128)`: `s0 = ⌊hw(⌊w/2^74⌋)·2^37⌋`, `hw` any
+//!    `double` root within `2^-52` (the truncation of `w`, `2^-52`, and the conversion, `2^-52`, cost
+//!    `2^-53` each under the root, the product's truncation `2^-63`): `s0` is `√w` within `ε <
+//!    2^-51.0`, so `|w − s0²| < 2^78`; `V = 2^127/s0` from one `divsd`, within `2^-50.99` as in step
+//!    1; `S = s0·2^64 + (w − s0²)·V/2^64` (`w − s0²` exact). Newton's step leaves `(√w − s0)²/(2s0)`,
+//!    `ε²/2 < 2^-103` relative, `V`'s error reaches `ε·2^-50.99 < 2^-101.99`, two units more: `S` is
+//!    `√w·2^64` within `2^-101.4` (below `2^128` since `w <= 2^128 − 2^60`).
 //! 3. Kernel `A(y, x)`, `t = y/x <= 1`. `j = round(128t)` from a `double` estimate within `2^-50`
 //!    (any `j` it gives keeps `|t − j/128| <= 2^-8(1 + 2^-40)`), so `|r| <= 2^-8(1 + 2^-40)` and
 //!    `u = r² <= 2^-16(1 + 2^-39)`. `j = 0`: `r = t` (exact when `x` is a power of two, else
@@ -47,8 +50,8 @@
 //! 5. Compositions in units `2^-126`: `π/2 − A` (`A <= π/4`, result `>= π/4`) and `π − θ` (`θ <=
 //!    π/2`, result `>= π/2`) add two units (`2^-124`) to `A`'s or `θ`'s relative error: every arc
 //!    result is within `2^-100.6`. `s` (step 2 on `1 − a²`, exact or `2^-127.6` for `|a| < 1/2`)
-//!    passes its `2^-113.8` into `t` and so (step 3) into the result: `asin`, `acos` within
-//!    `2^-100.5`.
+//!    passes its `2^-101.4` into `t` and so (step 3) into the result: `asin`, `acos` within
+//!    `2^-100.1`.
 //! 6. `tan`: the parent's `sin|a|` and `cos|a|` (within `2^-94.8` and `2^-95.7` for `j >= 1`,
 //!    `2^-96.9` and `2^-96.2` for `j = 0`, its module documentation) and step 1: within `2^-94.1`.
 //!
@@ -69,6 +72,8 @@ struct Val {
 const ONE: Val = Val { m: 1 << 127, e: -127 };
 const TWO115: f64 = (1u128 << 115) as f64;
 const TWO116: f64 = (1u128 << 116) as f64;
+const TWO37: f64 = (1u64 << 37) as f64;
+const TWO_M26: f64 = 1.0 / (1u64 << 26) as f64;
 
 const PIO2: u128 = 0x6487ed51_10b4611a_62633145_c06e0e69; // π/2, units 2^-126
 const PI: u128 = 0xc90fdaa2_2168c234_c4c6628b_80dc1cd1; // π, units 2^-126
@@ -82,35 +87,36 @@ const A3: u128 = 0xaaaaaaaa_aaaaaaaa_aaaaaaaa_aaaaaaab; // 1/3, units 2^-129
 /// `atan x` rounded into `F` in `mode` when the tier decides it; `None` sends the caller to the
 /// 384-bit route. `x` finite and nonzero (the caller settles `|x| < 2^-34`).
 pub(crate) fn atan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
-    finish::<F>(atan_approx(n), mode)
+    finish::<F>(|| atan_approx(n), mode)
 }
 
 /// `atan2(y, x)` for finite nonzero `y`, `x` (the caller settles zeros, infinities and
 /// `|y/x| < 2^-72` with `x > 0`).
 pub(crate) fn atan2<F: Float>(y: &Num, x: &Num, mode: Rounding) -> Option<(F, Status)> {
-    finish::<F>(atan2_approx(y, x), mode)
+    finish::<F>(|| atan2_approx(y, x), mode)
 }
 
-/// `asin a` for `0 < |a| < 1` (other operands give `None`).
-pub(crate) fn asin<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
-    finish::<F>(asin_approx(n), mode)
+/// `asin a` for `0 < |a| < 1` (other operands give `None`); `hw` is a `double` square root
+/// (step 2: [`soft_sqrt`] or the boundary's `sqrtsd`).
+pub(crate) fn asin<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    finish::<F>(|| asin_approx(n, hw), mode)
 }
 
-/// `acos a` for `0 < |a| < 1` (other operands give `None`).
-pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
-    finish::<F>(acos_approx(n), mode)
+/// `acos a` for `0 < |a| < 1` (other operands give `None`); `hw` as for [`asin`].
+pub(crate) fn acos<F: Float>(n: &Num, mode: Rounding, hw: impl Fn(f64) -> f64) -> Option<(F, Status)> {
+    finish::<F>(|| acos_approx(n, hw), mode)
 }
 
 /// `tan x` for `|x| >= 2^-34` finite.
 pub(crate) fn tan<F: Float>(n: &Num, mode: Rounding) -> Option<(F, Status)> {
-    finish::<F>(tan_approx(n), mode)
+    finish::<F>(|| tan_approx(n), mode)
 }
 
-fn finish<F: Float>(r: Option<(bool, Val)>, mode: Rounding) -> Option<(F, Status)> {
+fn finish<F: Float>(r: impl FnOnce() -> Option<(bool, Val)>, mode: Rounding) -> Option<(F, Status)> {
     if F::PREC != 64 || !F::EXPLICIT {
-        return None;
+        return None; // other formats never compute an approximation
     }
-    let (neg, v) = r?;
+    let (neg, v) = r()?;
     round::<F>(neg, v.m, v.e, mode)
 }
 
@@ -151,16 +157,24 @@ fn div(n: u128, d: u128) -> u128 {
     if e < 0 { q - c } else { q + c }
 }
 
-/// `⌊√w⌋` and `2^127/⌊√w⌋` (step 2). The crate cannot issue `sqrtsd` (no `unsafe`, no `f64::sqrt`
-/// in `core`): the integer root.
-fn root_seed(w: u128) -> (u64, u64) {
-    let s0 = w.isqrt() as u64; // w < 2^128: below 2^64
+/// A `double` square root for operands in `[2^52, 2^54)` within `2^-52` (the integer root of
+/// `v·2^52`, below `2^53`, scaled): `hw` for this crate's own callers. The crate cannot issue
+/// `sqrtsd` (no `unsafe`, no `f64::sqrt` in `core`); the boundary passes it in (D-10.75).
+pub(crate) fn soft_sqrt(v: f64) -> f64 {
+    let n = (v as u64 as u128) << 52; // below 2^106
+    dbl(n.isqrt() as u64) * TWO_M26
+}
+
+/// `s0 ≈ √w` within `2^-51.19` and `2^127/s0` (step 2).
+fn root_seed(w: u128, hw: impl Fn(f64) -> f64) -> (u64, u64) {
+    let r = hw((w >> 74) as i64 as f64); // √(w/2^74), in [2^26, 2^27]
+    let s0 = (r * TWO37) as u64; // saturates at 2^64 − 1 when w is just below 2^128
     (s0, (TWO116 / dbl(s0 >> 11)) as u64)
 }
 
 /// Step 2: `√w·2^64` for `w` in `[2^126, 2^128 − 2^60]` (no overflow of the result).
-fn sqrt(w: u128) -> u128 {
-    let (s0, v) = root_seed(w);
+fn sqrt(w: u128, hw: impl Fn(f64) -> f64) -> u128 {
+    let (s0, v) = root_seed(w, hw);
     let r = w.wrapping_sub(u128::from(s0) * u128::from(s0)) as i128; // w − s0², |r| < 2^78
     let c = mul_wide(r.unsigned_abs(), v); // r·2^63/s0
     let s = u128::from(s0) << 64;
@@ -238,7 +252,7 @@ fn atan2_approx(b: &Num, a: &Num) -> Option<(bool, Val)> {
 }
 
 /// `√(1 − a²)` for `0 < a < 1` (step 5).
-fn root_one_minus_sq(a: Val) -> Option<Val> {
+fn root_one_minus_sq(a: Val, hw: impl Fn(f64) -> f64) -> Option<Val> {
     if a.e > -128 {
         return None; // a >= 1
     }
@@ -247,19 +261,19 @@ fn root_one_minus_sq(a: Val) -> Option<Val> {
     let v = (m * m).checked_shr(sh).unwrap_or(0).max(1 << 60); // a² in units 2^-128 (exact for a >= 1/2)
     let w = v.wrapping_neg(); // 1 − a²
     let lw = w.leading_zeros() & !1;
-    let s = sqrt(w << lw); // √(1 − a²)·2^(128 + lw/2)
+    let s = sqrt(w << lw, hw); // √(1 − a²)·2^(128 + lw/2)
     let l = s.leading_zeros();
     Some(Val { m: s << l, e: -128 - (lw / 2) as i32 - l as i32 })
 }
 
-fn asin_approx(n: &Num) -> Option<(bool, Val)> {
+fn asin_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
-    Some((n.neg, atan2_pos(a, root_one_minus_sq(a)?)))
+    Some((n.neg, atan2_pos(a, root_one_minus_sq(a, hw)?)))
 }
 
-fn acos_approx(n: &Num) -> Option<(bool, Val)> {
+fn acos_approx(n: &Num, hw: impl Fn(f64) -> f64) -> Option<(bool, Val)> {
     let a = val(n)?;
-    let t = atan2_pos(root_one_minus_sq(a)?, a);
+    let t = atan2_pos(root_one_minus_sq(a, hw)?, a);
     Some((false, if n.neg { sub_from(PI, t) } else { t }))
 }
 
@@ -452,7 +466,12 @@ mod tests {
     const MODES: [Rounding; 4] = [Rounding::Nearest, Rounding::Down, Rounding::Up, Rounding::Zero];
     /// The proved bounds (module documentation): arc functions `2^-99.9`, `tan` `2^-94.1`.
     fn bound(f: Fun) -> f64 {
-        2f64.powf(if f == Fun::Tan { -94.1 } else { -99.9 })
+        // The module documentation's steps 5 and 6.
+        2f64.powf(match f {
+            Fun::Tan => -94.1,
+            Fun::Asin | Fun::Acos => -100.1,
+            Fun::Atan | Fun::Atan2 => -100.6,
+        })
     }
 
     struct Rng(u64);
@@ -481,6 +500,13 @@ mod tests {
         Num { neg, kind: Kind::Finite, sig: u128::from(sig | 1 << 63), exp: top - 63 }
     }
 
+    /// The square root rounded up (operands in `[2^52, 2^54)`, roots with ulp `2^-26`).
+    fn ceil_sqrt(v: f64) -> f64 {
+        let r = v.sqrt();
+        let ri = (r * (1u64 << 26) as f64) as u128;
+        if ri * ri < (v as u128) << 52 { f64::from_bits(r.to_bits() + 1) } else { r }
+    }
+
     fn value(n: &Num) -> Mp {
         Mp::from_u128(n.neg, n.sig, i64::from(n.exp))
     }
@@ -503,7 +529,7 @@ mod tests {
     #[test]
     fn quotient_and_root_meet_their_bounds() {
         let mut g = Rng(0x0123_4567_89ab_cdef);
-        let mut worst: f64 = 0.0;
+        let (mut worst, mut root_worst): (f64, f64) = (0.0, 0.0);
         let ends = [1u128 << 127, (1 << 127) + 1, u128::MAX, u128::MAX - 1, 3 << 126];
         let mut pairs: Vec<(u128, u128)> = ends.iter().flat_map(|&a| ends.iter().map(move |&b| (a, b))).collect();
         for _ in 0..20_000 {
@@ -518,10 +544,15 @@ mod tests {
             // [2^126, 2^128 − 2^60]: 1 − a² for a >= 2^-34 (the caller's floor) in units 2^-128.
             let w = if d & 1 == 0 { n.min(u128::MAX - (1 << 60) + 1) } else { n >> 1 };
             let want = Mp::from_u128(false, w, 128).sqrt();
-            let got = Mp::from_u128(false, sqrt(w), 0);
-            let rel = (got.sub(want).to_f64() / want.to_f64()).abs();
-            assert!(rel < 2f64.powf(-113.8), "sqrt {w:#x}: {rel:e}");
+            // Step 2 allows any `double` root within 2^-52: the truncated soft root, the
+            // correctly rounded one (`sqrtsd`'s) and the one rounded up.
+            for (k, got) in [sqrt(w, soft_sqrt), sqrt(w, f64::sqrt), sqrt(w, ceil_sqrt)].into_iter().enumerate() {
+                let rel = (Mp::from_u128(false, got, 0).sub(want).to_f64() / want.to_f64()).abs();
+                assert!(rel < 2f64.powf(-101.4), "sqrt {w:#x} root {k}: {rel:e}");
+                root_worst = root_worst.max(rel);
+            }
         }
+        eprintln!("arc: worst root error 2^{:.1}", root_worst.log2());
         eprintln!("arc: worst quotient error 2^{:.1}", worst.log2());
     }
 
@@ -557,9 +588,9 @@ mod tests {
             }
             Fun::Asin => {
                 let s = one.sub(a.abs()).mul(one.add(a.abs())).sqrt();
-                (mp::atan2(a, s), asin_approx(x))
+                (mp::atan2(a, s), asin_approx(x, f64::sqrt))
             }
-            Fun::Acos => (mp::atan2(one.sub(a).mul(one.add(a)).sqrt(), a), acos_approx(x)),
+            Fun::Acos => (mp::atan2(one.sub(a).mul(one.add(a)).sqrt(), a), acos_approx(x, f64::sqrt)),
             Fun::Atan2 => (mp::atan2(value(y), a), atan2_approx(y, x)),
             Fun::Tan => {
                 let (s, c) = mp::sin_cos_wide(x.neg, x.sig, i64::from(x.exp));
@@ -578,8 +609,8 @@ mod tests {
             tally.calls += 1;
             let got = match f {
                 Fun::Atan => atan::<F80>(x, mode),
-                Fun::Asin => asin::<F80>(x, mode),
-                Fun::Acos => acos::<F80>(x, mode),
+                Fun::Asin => asin::<F80>(x, mode, f64::sqrt),
+                Fun::Acos => acos::<F80>(x, mode, f64::sqrt),
                 Fun::Atan2 => atan2::<F80>(y, x, mode),
                 Fun::Tan => tan::<F80>(x, mode),
             };
