@@ -1,50 +1,43 @@
-# LIBM-SINF-IVB-RATCHET: handoff (sinf's Ivy Bridge loss from the bit-built trig operand, owner #4424)
+# LIBM-SINF-IVB-RATCHET(-2): handoff (sinf's Ivy Bridge loss from the bit-built trig operand, owner #4424)
 
-State: branch `task/libm-sinf-ivb-ratchet`, net code change NONE (b04a91485 tried an Estrin split of `trig_core`'s
-cos polynomial, a8acfbc5e reverted it: measured no gain). Role mei:~/w/s2. Decisions in force: D-10.67, D-10.68,
-D-10.72 (unchanged; D-10.79 reserved and NOT used). Report: handoff/reports/LIBM-SINF-IVB-RATCHET.json.
-Verdict: INCOMPLETE, target not reached (sinf IVB still ~1.83x; target <= 1.78x).
+State: branch `task/libm-sinf-ivb-ratchet-2` (stacks on `task/libm-sinf-ivb-ratchet`), WIP, NOT READY. Role kanon:~/w/kn1.
+Decisions: D-10.67, D-10.68, D-10.72 in force; D-10.79 written (records/decisions/D-10/D-10.79.toml, amends D-10.67);
+pending saturation record records/pending/LIBM-SINF-IVB-RATCHET-2-1.toml (SR-NEW, section 1: the NEGATIVE Estrin trial;
+the coordinator assigns the SR id). Report: handoff/reports/LIBM-SINF-IVB-RATCHET-2.json.
 
-## Measured (kotori, Ivy Bridge E3-1265L v2, booking #155; cbench_libm rows run directly, Liella static bench and
-## glibc dynamic bench interleaved, 5 rounds; ns per call)
-| row | Liella before (head 463e43fcd) | Liella Estrin (b04a91485) | glibc |
-|---|---|---|---|
-| sinf | 27.83-27.91 | 28.00-28.16 | 15.16-15.38 |
-| cosf | 27.84-27.90 | 28.01-28.18 | 15.30-15.92 |
-| tanf | 34.00-34.13 | 33.66-33.85 | 41.7-42.2 |
-| asinhf / acoshf | 51.7 / 42.4 | 51.7 / 42.4 | 36.5 / 29.7 |
-Rounds 1-2 of the before run read 22-25 ns: CPU frequency, not code. A stack-offset sweep (setarch -R, env padding 0..1024
-in 16-byte steps, job kotori:libm-sinf-ivb-ratchet-ivb-stack) showed no offset effect, and the fast runs scaled
-expf, sinf and glibc's sinf by the same factor (x0.89, x0.80). Use interleaved ratios, never single-run ns, on this host.
+## Done in -2 (coordinator ruling #4434, option (a))
+* `hot/fpregs.rs`: `widen(x: f32) -> f64`, one `cvtss2sd xmm0, xmm0` (`in("xmm0") x, lateout("xmm0") y`, `nomem`,
+  not `pure` so it stays behind the range test). `inout(xmm_reg) x => y` is refused by rustc (f32/f64 differ in size),
+  hence the named register (the psABI passes the `float` argument in %xmm0).
+* `hot/f32_trig.rs`: `sinf/cosf/tanf_nearest` pass `widen` to new `fast32::{sin,cos,tan}_nearest_widen` ->
+  `trig_core_with(x, widen)`; `trig_core` = `trig_core_with(x, widen_bits)` (sincosf, cexpf, Bessel unchanged).
+  `s10_math.tsv` rows sin/cos/tan `f` point at `crate::hot::*f_nearest`. `cargo xtask math-gen` must be rerun and its
+  output (`s10_math_gen.rs`, maybe csys adapters) COMMITTED: the job regenerated it on the role only; not in the branch yet.
+* Tests: `fast32::tests::trig_widen_entries_match_the_bit_built_ones` (sampled, widen entries == bit-built entries);
+  `partial_write::tests::in_place_conversion_passes_and_another_destination_does_not` (dst == src passes with nothing
+  owned; dst != src reported: the rule already had the exemption, now tested and documented);
+  `policy::machine_register_tests` (3 tests: the widening passes, other dst refused, missing `nomem` refused).
+* `xtask/src/policy.rs`: machine-register allows `WIDEN_TEMPLATE = "cvtss2sd xmm0, xmm0"` with `WIDEN_OPERANDS`;
+  explicit-register literals (right after `(`) are no longer read as templates.
 
-perf stat, sinf, Liella vs glibc (same jobs): cycles 27.0M / 16.0M, instructions 53.8M / 30.1M (IPC 2.0 / 1.9),
-idq.dsb_uops 53.4M / 32.0M against idq.mite_uops 0.64M / 1.2M, resource_stalls.rs 12.4M / 6.7M (46% / 42% of cycles).
-cosf: the same to within 2%. Liella's sinf and cosf disassemble to the same instructions in a different schedule, both
-entries 64-byte aligned, 0x200 bytes.
-
-## Cause: what is ruled out, what fits
-* NOT alignment / decoded-icache / LSD: ~99% of uops come from the DSB on both functions.
-* NOT the cos polynomial's latency: Estrin (`z*K2 + z^2*(K4 + z*K6)`, one multiply shorter on the chain) measured
-  +0.6% slower; reverted (NEGATIVE; add it to the saturation register's libm rows, not done here: budget).
-* NOT stack/data placement (stack sweep above).
-* FITS: the loop is throughput-bound (IPC ~2, RS full 46% of cycles), so instruction count is time. The bit-built
-  operand added 6 instructions per call (85.2 -> 91.2, +7%, run 4's counts), sinf's time rose 3.5%. cosf, tanf and
-  the hyperbolic rows gained because their old `cvtss2sd` destination was a register the bench's previous call last
-  wrote (D-10.67's false dependency); sinf's old destination apparently was not, so sinf only paid the 6 instructions.
-  NOT VERIFIED: the base build's register choice for sinf (needs the base tree's disassembly: kanon
-  ~/work/LIBM-F32-ONEPASS-REST-4/base.tar).
+## Job results (kanon)
+* lint0 (inherited head): clippy + static green.
+* build3 (head before this note): math-gen, records check, `cargo xtask so`, clippy OK; partial-write 0 findings (791
+  exports); `cargo xtask static` RED: unsafe-audit 12 violations, incl. `fpregs.rs:117: machine-register template not
+  a plain string literal` and `fpregs.rs: 0 MXCSR stores` -> the audit's own parser (not machine_register_templates'
+  new code alone; the other 10 lines are above line 102 of ~/logs/libm-sinf-ivb-ratchet-2-build3.log, unread) trips
+  on the new block, probably the `"xmm0"` literals or the two-line comment between `#[allow]`/`unsafe`. The unit
+  tests after static did not run (set -e).
 
 ## Next step (exact)
-1. Confirm the register story: disassemble sinf and cosf in run 4's base tree; sinf's `cvtss2sd` destination should
-   be a register the bench loop does not write, cosf's one it does.
-2. Fix: a 1-instruction operand without a false dependency, `cvtss2sd %xmm0,%xmm0` (destination = source, which the
-   partial-write check accepts as owned; xtask/src/partial_write.rs). LLVM ties the destination only when x is dead
-   after the conversion, and x stays live for the refusal paths, so plain Rust cannot force it. Options:
-   (a) the export's boundary wrapper converts with inline asm (`UNSAFE(...)` in liella-boundary) and passes the
-   `double` into a `trig_core_d(b, xd)` (interface change for sinf/cosf/tanf/sincosf);
-   (b) `xorps` zero idiom + `cvtss2sd` from asm, same placement. Expect sinf back to ~85 instructions and <= 1.78x;
-   cosf/tanf keep their gain (no false dependency either way). Time IVB and N100 (sinf, cosf, tanf, asinhf, acoshf)
-   interleaved; counts.
+1. `grep -n "fpregs\|unsafe-audit" ~/logs/libm-sinf-ivb-ratchet-2-build3.log` on kanon; fix the audit findings (likely
+   the comment placement in `widen` and the audit's string-literal scan of `in("xmm0")`); fix D-10.79's body (it still
+   says `cvtss2sd {x}, {x}` / `inout(xmm_reg)`: now `cvtss2sd xmm0, xmm0`, `in/lateout("xmm0")`).
+2. Rerun ~/work/LIBM-SINF-IVB-RATCHET-2/build.sh as a job; commit the regenerated s10_math_gen.rs; check sinf's
+   disassembly has `cvtss2sd %xmm0,%xmm0` and no extra move on the hot path.
+3. Plants (`cargo xtask plants`): partial_write true_input disabled; dst != src exempted; policy WIDEN check dropped;
+   `sin_nearest_widen` using `.1`. Counts, then booked interleaved timing on Ivy Bridge + N100 (sinf, cosf, tanf,
+   asinhf, acoshf): gate sinf IVB <= 1.78x, other gains kept. Then affected --base origin/next.
 
 ## Do not redo
-* The DSB/MITE and RS counters above, the stack-offset sweep, the Estrin trial.
+* The DSB/MITE and RS counters, the stack-offset sweep, the Estrin trial (NEGATIVE, recorded pending).
