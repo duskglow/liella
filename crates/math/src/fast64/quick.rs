@@ -551,7 +551,8 @@ pub fn hyp_quick(f: u8, x: f64) -> Option<f64> {
         _ => { let (h, l) = tanh_quick_parts(x)?; (h, l, 1.0, sign) }
     };
     let w = l * C_M1;
-    if h + w == h && w != 0.0 { Some(f64::from_bits((h * sc).to_bits() | sign)) } else { None }
+    let decided = h + w == h && w != 0.0;
+    if decided { Some(f64::from_bits((h * sc).to_bits() | sign)) } else { None }
 }
 
 /// The correctly rounded `e^x` (round to nearest) when the quick phase's test decides it, else
