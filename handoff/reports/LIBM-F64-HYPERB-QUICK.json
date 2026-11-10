@@ -1,0 +1,26 @@
+{
+ "task": "LIBM-F64-HYPERB-QUICK",
+ "model": "opus",
+ "tokens": null,
+ "result": "double cosh/sinh/tanh quick tier on the exp quick kernel (one reduction for e^+-a, series below 2^-5/2^-6, tanh on expm1 quick); instructions FMA cosh 279->141 (glibc 85), sinh 144 vs 145, tanh 163 vs 132",
+ "branch": "task/libm-f64-hyperb-quick",
+ "head": null,
+ "gate": {
+  "affected": "see jobs (keke:libm-f64-hyperb-quick-gate)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "booked timing (IVB, N100) not run: context budget; cosh 1.67x glibc by instructions, target <=1.4x time not shown"
+ ],
+ "refused": [],
+ "improvement": "xtask plants splits on ' | ' so a lit: pattern containing a bitwise-or is refused; an escape for | in lit: would save a run",
+ "next_step": "book IVB/N100 timing for cosh/sinh/tanh; profile cosh (1.67x instructions) per call before a cheaper e^-a",
+ "report_file": "handoff/LIBM-F64-HYPERB-QUICK.md",
+ "jobs": [
+  "keke:libm-f64-hyperb-quick-gate",
+  "keke:libm-f64-hyperb-quick-plants2",
+  "keke:libm-f64-hyperb-quick-counts"
+ ]
+}

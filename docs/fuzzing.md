@@ -20,6 +20,7 @@ in memory. No harness opens a system file, runs a command or uses the network.
 | glob, wordexp | glob patterns, word expansion (no commands are run) |
 | scanners | the C layer's string scanners (`strcmp`, `strlen`, `strnlen`, `getenv`) at page ends, against Rust references |
 | elf | the dynamic loader's ELF reader (`liella_ld::elf`, D-27.7, D-27.8): headers, notes, the dynamic section, both hash tables, the symbol version tables, RELA/RELR |
+| ld_map | the dynamic loader's mapper (`liella_ld::map`, D-27.15): segment and RELRO validation at 4, 16 and 64 KiB pages, and the reservation, alignment and `.bss` arithmetic of `map::load` against a mapper that checks each call lies inside the reservation and is never writable and executable; seeds: a copy of the `elf` seeds |
 
 The `elf` seeds (`fuzz/seeds/elf`) are small stripped objects linked with `-nostdlib`, so no C library start files are in
 them (the shared objects' files have no `.so` suffix, which the repository ignores): a versioned library `dep`; three libraries
