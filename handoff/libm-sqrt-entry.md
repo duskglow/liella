@@ -36,3 +36,6 @@ Scratch: kanon ~/work/LIBM-SQRT-ENTRY/ (plants.txt), local /home/claude/w/.scrat
 1. Sync f62017246 when kn1 is idle; anchor the two lit: plants; run `cargo xtask plants` (all 5 must be CAUGHT).
 2. Read gate2, counts2, exh; run gate on f62017246 incl. `-- --include-ignored` after `cargo xtask so`.
 3. Book IVB + N100 timing for sqrt, sqrtf, sqrtl (targets 1.1x / 1.1x / 1.3x).
+
+## Decision record
+D-10.71 text is in handoff/libm-sqrt-entry-D-10.71.txt: the row was removed from the train-owned plan file (handback-check); next run writes it with `cargo xtask records new decision D-10.71`.
