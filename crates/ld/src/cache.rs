@@ -164,6 +164,9 @@ impl<'a> Cache<'a> {
         let at = HEADER.checked_add(i.checked_mul(ENTRY)?)?;
         let key = self.string(usize_at(self.file, at.checked_add(4)?)?)?;
         let value = self.string(usize_at(self.file, at.checked_add(8)?)?)?;
+        if value.first() != Some(&b'/') {
+            return None; // a cache path is absolute: anything else is an inconsistent entry
+        }
         Some((u32_at(self.file, at)?, key, value, u64_at(self.file, at.checked_add(16)?)?))
     }
 

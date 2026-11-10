@@ -112,14 +112,15 @@ pub fn pinned(name: &[u8]) -> bool {
 }
 
 /// Whether `dir` is a trusted directory (threat model rule 5): `<prefix>/lib` and, when the prefix
-/// is `/`, [`Arch::SYSTEM_TRUSTED`]. A trailing `/` is ignored.
+/// is `/`, exactly the default directories [`Arch::SYSTEM_DIRS`] (owner #4237). A trailing `/` is
+/// ignored.
 pub fn trusted<A: Arch>(dir: &[u8]) -> bool {
     let dir = match dir {
         [rest @ .., b'/'] if !rest.is_empty() => rest,
         d => d,
     };
     let mut own = PathBuf::default();
-    (prefixed(b"lib", &mut own) && own.as_bytes() == dir) || (PREFIX == "/" && A::SYSTEM_TRUSTED.iter().any(|t| t.as_bytes() == dir))
+    (prefixed(b"lib", &mut own) && own.as_bytes() == dir) || (PREFIX == "/" && A::SYSTEM_DIRS.iter().any(|t| t.as_bytes() == dir))
 }
 
 /// The tokens and the value each expands to, in the order they are matched.

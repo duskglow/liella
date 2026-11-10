@@ -6,6 +6,7 @@
 //!
 //! Clause: s27_1_c_1_1 (path search order). Pure tests take `Native` as an x86_64 table and say so;
 //! the product tests skip (with the reason) when `cc`, the product or the reference loader is absent.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::arithmetic_side_effects, clippy::as_conversions, missing_docs)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,7 +21,7 @@ const V3: &[&str] = &["x86-64-v3", "x86-64-v2"];
 fn cache_file(entries: &[(u32, &str, &str, Option<u32>)], names: &[&str]) -> Vec<u8> {
     let strings_at = 48 + 24 * entries.len();
     let mut strings = Vec::new();
-    let mut put = |s: &str, strings: &mut Vec<u8>| {
+    let put = |s: &str, strings: &mut Vec<u8>| {
         let at = strings_at + strings.len();
         strings.extend_from_slice(s.as_bytes());
         strings.push(0);
@@ -75,7 +76,7 @@ fn candidates(name: &str, chain: &[Scope<'_>], c: &Ctx<'_>) -> Vec<String> {
 
 const FLAGS: u32 = <Native as Arch>::CACHE_FLAGS;
 
-/// Appendix D.3.1/D.3.3, owner #940: entries of another architecture are skipped; the best
+/// s27_1_c_1_1 (the cache step), Appendix D.3.1/D.3.3, owner #940: entries of another architecture are skipped; the best
 /// supported hwcaps entry before the first plain one wins; else the plain one. x86_64 table.
 #[test]
 fn cache_lookup_arch_flag_and_hwcaps() {
@@ -97,7 +98,7 @@ fn cache_lookup_arch_flag_and_hwcaps() {
     assert_eq!(get("libonly32.so", V3), None, "an entry of another architecture is never taken");
 }
 
-/// Appendix D.3.3: the numeric key comparison, and lookups in a sorted (descending) cache.
+/// s27_1_c_1_1 (the cache step), Appendix D.3.3: the numeric key comparison, and lookups in a sorted (descending) cache.
 #[test]
 fn cache_numeric_compare_and_sorted_search() {
     use std::cmp::Ordering::*;
@@ -120,7 +121,7 @@ fn cache_numeric_compare_and_sorted_search() {
     assert_eq!(c.lookup(b"libnone.so", FLAGS, V3), None);
 }
 
-/// Threat model rule 5: a truncated or corrupted cache is "no cache" or "not found", never a crash
+/// s27_1_c_1_1 (the cache step), threat model rule 5: a truncated or corrupted cache is "no cache" or "not found", never a crash
 /// or a read outside the file; old and compat files are not read (#941).
 #[test]
 fn cache_corrupt_corpus_refused() {
@@ -186,7 +187,7 @@ fn search_order() {
     assert_eq!(&got[..2], ["./libq.so.1", "rel/libq.so.1"], "outside secure mode: empty = current directory");
 }
 
-/// Threat model rules 1-3 and 5 in a secure process: LD_LIBRARY_PATH ignored, `$ORIGIN` only in a
+/// s27_1_c_1_1, threat model rules 1-3 and 5 in a secure process: LD_LIBRARY_PATH ignored, `$ORIGIN` only in a
 /// trusted directory, empty and relative elements skipped, `$LIB` fixed.
 #[test]
 fn search_secure_rules() {
@@ -198,7 +199,12 @@ fn search_secure_rules() {
     assert!(!got.iter().any(|p| p.contains("/tmp/evil")), "secure: $ORIGIN in an untrusted directory is not used: {got:?}");
     assert_eq!(got.first().map(String::as_str), Some(format!("/abs/{}/libq.so.1", Native::LIB).as_str()));
     if PREFIX == "/" {
-        let t = Native::SYSTEM_TRUSTED[0];
+        // Owner #4237: for prefix `/` the trusted directories are exactly the default ones.
+        assert!(Native::SYSTEM_DIRS.iter().all(|d| search::trusted::<Native>(d.as_bytes())), "every default directory is trusted");
+        for t in ["/lib64", "/usr/lib64", "/usr/local/lib", "/lib/x86_64-linux-gnu/sub"] {
+            assert!(!search::trusted::<Native>(t.as_bytes()), "{t} is not a default directory, so not trusted");
+        }
+        let t = Native::SYSTEM_DIRS[0];
         let trusted = Scope { rpath: None, runpath: Some(b"$ORIGIN/sub"), origin: Some(t.as_bytes()) };
         let got = candidates("libq.so.1", &[trusted], &x);
         assert_eq!(got.first(), Some(&format!("{t}/sub/libq.so.1")), "a trusted $ORIGIN is used");
@@ -207,7 +213,7 @@ fn search_secure_rules() {
     assert!(open.iter().any(|p| p.starts_with("/tmp/evil/sub/")) && open.iter().any(|p| p.starts_with("/env1/")));
 }
 
-/// R14-3 (a), threat model rule 9: Liella's sonames resolve to `<prefix>/lib` only (never RPATH,
+/// s27_1_c_1_1, R14-3 (a), threat model rule 9: Liella's sonames resolve to `<prefix>/lib` only (never RPATH,
 /// RUNPATH or the cache); LD_LIBRARY_PATH may override outside secure mode only.
 #[test]
 fn search_pinned_sonames() {
@@ -239,8 +245,8 @@ fn deps(out: &[u8]) -> Vec<String> {
 
 /// `ld.so --list` and `LD_TRACE_LOADED_OBJECTS` against the reference loader (black box) for a
 /// program with `$ORIGIN` RUNPATH dependencies, a missing one, and a system library from the
-/// cache; then a secure (set-group-ID) program ignores LD_TRACE_LOADED_OBJECTS (rule 11).
-#[cfg(target_arch = "x86_64")] // x86-64 system loader and objects
+/// cache. s27_1_c_1_1.
+#[cfg(target_arch = "x86_64")] // ARCH(x86_64): runs the host's x86-64 reference loader on objects the host toolchain builds
 #[test]
 fn list_matches_reference() {
     let ld = target().join("liella").join(Native::INTERP);

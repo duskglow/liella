@@ -1,0 +1,9 @@
+# DL-SEARCH-CACHE-2 (DL-8) plants: cargo xtask plants handoff/DL-SEARCH-CACHE-2-plants.txt (docs/plants.md)
+cache-relative-value-accepted | crates/ld/src/cache.rs | lit:if value.first() != Some(&b'/') { ==> if value.is_empty() && false { | cargo test -p liella-ld --test search_cache | msg:cache_corrupt_corpus_refused.*panicked|a path from inside the string table
+trusted-subdirectory-accepted | crates/ld/src/search.rs | lit:A::SYSTEM_DIRS.iter().any(|t| t.as_bytes() == dir) ==> A::SYSTEM_DIRS.iter().any(|t| dir.starts_with(t.as_bytes())) | cargo test -p liella-ld --test search_cache | msg:search_secure_rules.*panicked|is not a default directory
+origin-honoured-in-secure-mode | crates/ld/src/search.rs | lit:(Some(o), true) if trusted::<A>(o) => o, ==> (Some(o), true) => o, | cargo test -p liella-ld --test search_cache | msg:search_secure_rules.*panicked
+library-path-read-in-secure-mode | crates/ld/src/search.rs | lit:let env_path = if ctx.secure { None } else { ctx.library_path }; ==> let env_path = ctx.library_path; | cargo test -p liella-ld --test search_cache | msg:search_secure_rules.*panicked|search_pinned_sonames.*panicked
+cache-wrong-arch-accepted | crates/ld/src/cache.rs | lit:if f != flags { ==> if f == u32::MAX { | cargo test -p liella-ld --test search_cache | msg:cache_lookup_arch_flag_and_hwcaps.*panicked
+pinned-soname-overridable | crates/ld/src/search.rs | lit:    if pinned(name) { ==>     if name.is_empty() { | cargo test -p liella-ld --test search_cache | msg:search_pinned_sonames.*panicked
+cache-best-hwcaps-ignored | crates/ld/src/cache.rs | lit:if best.is_none_or(|b| rank < b.0) { ==> if best.is_none() { | cargo test -p liella-ld --test search_cache | msg:cache_lookup_arch_flag_and_hwcaps.*panicked
+cache-string-end-unchecked | crates/ld/src/cache.rs | lit:if off < self.strings.0 { ==> if off < HEADER { | cargo test -p liella-ld --test search_cache | msg:cache_corrupt_corpus_refused.*panicked

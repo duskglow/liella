@@ -58,7 +58,6 @@ impl Arch for OtherTable {
     const USER_END: u64 = 1 << 48;
     const LIB: &'static str = "lib";
     const SYSTEM_DIRS: &'static [&'static str] = &[];
-    const SYSTEM_TRUSTED: &'static [&'static str] = &[];
     const CACHE_FLAGS: u32 = 0;
     fn hwcaps(_: &liella_rt::cpu::Features) -> &'static [&'static str] {
         &[]

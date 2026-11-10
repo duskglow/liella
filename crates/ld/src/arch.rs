@@ -66,11 +66,9 @@ pub trait Arch {
     /// environment input (threat model rule 2).
     const LIB: &'static str;
     /// The system's default directories, in search order, searched after `<prefix>/lib` when the
-    /// compile-time prefix is `/` (R14-3 (a), [`crate::search`]).
+    /// compile-time prefix is `/` (R14-3 (a), [`crate::search`]). For that prefix they are also
+    /// exactly the trusted directories (threat model rule 5, owner #4237).
     const SYSTEM_DIRS: &'static [&'static str];
-    /// The system directories that are trusted (threat model rule 5) when the prefix is `/`, besides
-    /// `<prefix>/lib`.
-    const SYSTEM_TRUSTED: &'static [&'static str];
     /// The `flags` an `ld.so.cache` entry for this architecture carries (spec Appendix D.3.1); an entry
     /// with other flags is skipped.
     const CACHE_FLAGS: u32;
@@ -153,8 +151,6 @@ impl Arch for X86_64 {
     const LIB: &'static str = "lib/x86_64-linux-gnu";
     /// The reference's system search path as its `ld.so --help` prints it (DL-8 probe, D-27.16).
     const SYSTEM_DIRS: &'static [&'static str] = &["/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu", "/lib", "/usr/lib"];
-    /// Threat model rule 5 (owner-approved, R14-15): `/lib64`, `/usr/lib64` and the multiarch pair.
-    const SYSTEM_TRUSTED: &'static [&'static str] = &["/lib64", "/usr/lib64", "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu"];
     /// Type 3 (ELF libc6) with ABI byte 3 (x86-64): `0x0303` (Appendix D.3.1; `0x0003` and `0x0803`
     /// were observed skipped by the reference x86-64 loader).
     const CACHE_FLAGS: u32 = 0x0303;

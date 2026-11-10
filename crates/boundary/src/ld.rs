@@ -461,10 +461,14 @@ fn dir_of(path: &[u8]) -> &[u8] {
 
 /// `v` as 16 lower-case hexadecimal digits.
 fn hex16(v: u64) -> [u8; 16] {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digit = |n: u8| HEX.get(usize::from(n & 0xf)).copied().unwrap_or(b'0');
     let mut out = [b'0'; 16];
-    for (i, d) in out.iter_mut().enumerate() {
-        let nibble = (v >> (60 - 4 * i)) & 0xf;
-        *d = b"0123456789abcdef".get(usize::try_from(nibble).unwrap_or(0)).copied().unwrap_or(b'0');
+    for (pair, byte) in out.chunks_exact_mut(2).zip(v.to_be_bytes()) {
+        if let [hi, lo] = pair {
+            *hi = digit(byte.wrapping_shr(4));
+            *lo = digit(byte);
+        }
     }
     out
 }

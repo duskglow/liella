@@ -50,7 +50,6 @@ impl Arch for BigOther {
     const USER_END: u64 = 1 << 48;
     const LIB: &'static str = "lib";
     const SYSTEM_DIRS: &'static [&'static str] = &[];
-    const SYSTEM_TRUSTED: &'static [&'static str] = &[];
     const CACHE_FLAGS: u32 = 0;
     fn hwcaps(_: &liella_rt::cpu::Features) -> &'static [&'static str] {
         &[]
@@ -289,8 +288,7 @@ fn s27_1_f_0_wrong_class() {
         const USER_END: u64 = 1 << 48;
         const LIB: &'static str = "lib";
         const SYSTEM_DIRS: &'static [&'static str] = &[];
-        const SYSTEM_TRUSTED: &'static [&'static str] = &[];
-        const CACHE_FLAGS: u32 = 0;
+            const CACHE_FLAGS: u32 = 0;
         fn hwcaps(_: &liella_rt::cpu::Features) -> &'static [&'static str] {
             &[]
         }
