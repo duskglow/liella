@@ -292,8 +292,15 @@ pub(crate) fn foreign_words() -> &'static liella_rt::tls::ThreadBlock {
     let tid = u32::try_from(CSys.gettid()).unwrap_or(0);
     let Some(s) = shadow_entry(tb::tp()) else { return tb::spare_at(addr_of(&SPARE)) };
     if s.tid.load(Acquire) != tid {
-        s.own.store(false, Release);
-        clear_words(&s.block);
+        // Another TID at this thread pointer: a new thread on a reused block (empty words), or
+        // a forked child's only thread, which continues its parent's thread and keeps its words
+        // (a fork by any library: no hook of Liella's need run). A thread whose TID is the
+        // process ID is a process's first thread, and a process's first thread finds an entry
+        // already keyed by its thread pointer only as a copy made by `fork`.
+        if i32::try_from(tid).unwrap_or(0) != CSys.getpid() {
+            s.own.store(false, Release);
+            clear_words(&s.block);
+        }
         s.tid.store(tid, Release);
     }
     if s.own.load(Acquire) { tb::current() } else { &s.block }
