@@ -276,11 +276,12 @@ pub fn near32(y: Dd, eps: f64, e: i32, mode: Rounding) -> Option<(f32, Status)> 
     let s = dd::pow2(e);
     let (v, lo) = (y.hi * s, y.lo * s);
     let ulp = dd::pow2(k - 52);
-    let d = ((dd::abs(lo) + eps * s) / ulp).ceil() + 1.0;
+    // The error in f64 units of `v`, rounded up (truncation plus 2: no `ceil` in core).
+    let d = (dd::abs(lo) + eps * s) / ulp;
     if !(d < 67_108_864.0) {
         return None;
     }
-    let r = fast32::round(v, d as u64, mode)?;
+    let r = fast32::round(v, d as u64 + 2, mode)?;
     Some((r, Status::flags(Flags::INEXACT).hw(Flags::INEXACT)))
 }
 
