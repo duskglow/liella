@@ -1,0 +1,8 @@
+id = "D-10.49"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+body = '''
+**`float` Bessel fast path without a table of zeros** (LIBM-F32-BESSEL, coordinator ruling #2881). `j0f`, `j1f`, `y0f`, `y1f` evaluate in `double` (`fast32::bessel_core`): \|x\| in [2^-20, 2) a fit of J0, J1/x and of the regular parts R0, R1 with Y_n = (2/π) ln(x) J_n + R_n (− 2/(πx) for Y1); [2, 24) eleven pieces [c − 1, c + 1), one Remez fit in t = x − c each (degree 13 for J, 16 for Y: the log singularity at 0 slows the first piece); [24, 2^19) Hankel's form (DLMF 10.17.3) truncated after a_20/a_21. Each core returns an ABSOLUTE bound e and `bessel_finish` turns it into the per-call margin e·2^53/\|y\| ulp of y; near a zero the margin grows and the rounding test refuses, so the accurate path answers there and the results stay correctly rounded in all four modes with no table of zeros. Bounds: `bessel_bounds_hold` (Horner γ·Σ\|a_i\|r^i plus the Remez tool's measured fit error, Hankel's first neglected term < 2^-58 at 24) and `bessel_cores_are_within_their_bounds` (mp sums at ~1.3e5 operand/function pairs, worst error/bound 0.78). Fallback (round-to-nearest, a 2^16-point grid over (0, 64]): j0f 0, j1f 1, y0f 2, y1f 1 in 65536; on the exhaustive sweep (LIBM-F32-BESSEL-3: every encoding, all four modes, against the tiered oracle of ruling #2889 with its Bessel estimator `oracle32::bessel_est`) the fast path refuses 8784 of the 2617245696 calls in its range [2^-20, 2^19) for j0f (3.4e-6), 9928 for j1f (3.8e-6), 8936 of 1308622848 for y0f (6.8e-6) and 7228 for y1f (5.5e-6), the calls near the zeros; the accurate path answers those. The oracle needed its mp tier for 0 modes in all four sweeps.
+'''

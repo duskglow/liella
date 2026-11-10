@@ -1,0 +1,13 @@
+id = "SR-58"
+section = "5"
+row = "`isalpha` (C locale)"
+now = "t 1.000 (Haswell-EP host after PJ-22 1.000; 2026-10-07 table 1.000); i 1.375"
+limit = "at parity in time"
+reason_class = "hardware"
+basis = "M"
+source = "PJ-22 (`ctype-cache`)"
+tried = "LOCALE-CTYPE-L: `nl_langinfo` +6% and `towupper_utf8` +3.6% instr (saved-register push in every caller), reverted"
+flag = "none"
+status = "active"
+body = '''
+'''

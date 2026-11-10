@@ -1,0 +1,8 @@
+id = "D-24.3"
+section = "s24"
+spec = "§24.3"
+ann = "ARB, COMPAT"
+status = "active"
+body = '''
+**Internal:** `CpuSet` is dynamic. **Boundary:** `cpu_set_t` is 1024 bits, plus the `CPU_ALLOC` sized forms. The old unsized `sched_setaffinity` version is legacy.
+'''

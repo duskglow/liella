@@ -1,0 +1,8 @@
+id = "D-2.10"
+section = "s02"
+spec = "§2.6"
+ann = "ARB"
+status = "active"
+body = '''
+**fmtmsg assembly, severity table and destinations** (COLD-REWRITE2-W-far-10-REWRITE, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-10-REWRITE.md`; mqueue part D-25.6, `va_source` part D-12.25). (F1) Up to 16 borrowed pieces joined into one heap buffer, so each destination gets one write and fields are not interleaved with other threads; without memory the pieces are written one by one. (F2) Layout is a five-row table (bit, prefix, separator); a separator is written only when another present field follows (empty strings count as present). (F3) A fixed 256-entry severity table (D-2.6 capacity, `MM_NOTOK` when full), atomic level plus copied string, under one `RawMutex`; replaced strings are not reclaimed (D-2.6's known inefficiency). (F4) `MSGVERB` and `SEV_LEVEL` read once at the first `fmtmsg` under the table lock; `SEV_LEVEL` elements go through `addseverity`'s `define` in order; a level must be one whole base-0 C integer above 4 within `int` (`5z` skipped). (F5) Validation order: label (split at the first colon, at most 10:14 bytes), then environment, then severity (unknown: `MM_NOTOK`); no destination: `MM_OK` after validation. (F6) stderr through the stream layer; console via `/dev/console` (`O_WRONLY or O_NOCTTY or O_CLOEXEC`), short writes and EINTR retried; both failed `MM_NOTOK`, else `MM_NOMSG` / `MM_NOCON`. (F7) `errno` saved and restored around the writes (a guard: no write path sets it today).
+'''

@@ -1,0 +1,13 @@
+id = "SR-16"
+section = "3"
+row = "`memcpy_64`, `memmove_64` (33-64 B, fold.S `.Lmove_33`)"
+now = "20.4 vs 19.4 (Skylake-SP)"
+limit = "1 over, not changed"
+reason_class = "design (two 32-byte vectors would need the AVX2 flag test on the shared entry: -1 on AVX2, +2 on the SSE2 path)"
+basis = "R (by reading, not built)"
+source = "PARITY-COPY-AVX2"
+tried = "none"
+flag = "none"
+status = "active"
+body = '''
+'''

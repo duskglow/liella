@@ -1,0 +1,8 @@
+id = "D-15.1"
+section = "s15"
+spec = "§15"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** addresses are typed byte values (`[u8;4]`, `[u8;16]`, `interim_db::Ip`) and interfaces are `liella::net::iface::{Link, Addr}`; socket addresses exist only at the boundary (`SockAddrBuf`, `net_compat`), so no `SocketAddr` enum was needed. **Boundary:** `sockaddr` packing and the `socklen_t` in-out protocol (D-15.5). `getifaddrs` and `if_nameindex` each return one caller-owned block (the structures, then the names and socket addresses they point to), freed whole; NULL is accepted. Truncation is reported, per the contract.
+'''

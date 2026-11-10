@@ -81,6 +81,13 @@
 //! `--tier wide` is the rule 4 above; `--tier full` runs everything, as the landing gate (`cargo xtask test`) does.
 //! `--replay <records>` checks that the failures of past gates fall inside a tier (`replay`).
 //!
+//! `--reverse` (XTASK-AFFECTED-REVERSE, attribution for a train gate): given the failed tests (`--failed <id>...` as
+//! the summary's `FAILED: <id>` lines name them, or `--failed-from <log>`) and each merged branch's changed files
+//! (`--branch <name>=<file-list>`), which branches select each failed test, with the file and rule. It runs the forward
+//! selection per branch (`select_tier`) and asks the same membership rule as `replay` (`selects`), so the two
+//! directions cannot disagree. A branch that escalates to FULL selects everything and is reported as such (low
+//! confidence). JSON on stdout, a summary on stderr; the shape is in `REVERSE_HELP` (`affected --help`).
+//!
 //! `--only <names>` (red/green runs): exactly the named test targets, `conformance:<program>`,
 //! `lib:<crate>` or `xtask`, without stubs, policy checks or clippy; labelled NOT A GATE in the
 //! plan and the summary.
@@ -920,6 +927,8 @@ pub struct Selection {
     pub products: bool,
     /// GATE-TIER: the DIRECT tier (`Tier::Direct`, see `narrow_direct`); false = the wide rules.
     pub direct: bool,
+    /// GATE-VALIDATION-SH-TESTS: `validation/` self-tests to run (`bash <path>` from the root) -> reason.
+    pub scripts: BTreeMap<String, String>,
 }
 
 /// GATE-TIER (coordinator ruling 10-11, owner intent "only run the tests that are impacted by a fix for gate runs and
@@ -1301,6 +1310,8 @@ enum Class {
     /// D-X.39: another `crates/mathtools/src/` source that a generator is built from (`mathtools_feeds`): its own
     /// mapping plus the check of each generated set it feeds.
     MathToolFeed(Feeds),
+    /// GATE-VALIDATION-SH-TESTS: a `validation/` script with self-tests (`VALIDATION_COVERED`): those self-tests run.
+    ValidationScript(&'static [&'static str]),
 }
 
 /// D-X.39: which generated sets a liella-mathtools source feeds. `remez`: the fitted coefficient files
@@ -1382,8 +1393,71 @@ const XTASK_AUDITS: &[(&str, &[&str])] = &[
     ("xtask/src/schedule.rs", &["status"]),
 ];
 
+/// GATE-VALIDATION-SH-TESTS (D-X.54): the self-tests of the workload scripts under `validation/`. Each runs as
+/// `bash <path>` from the tree root, needs no build, and ends 0 with a pass line or 1 (`wl_mtmem_test.sh` runs a real
+/// `strace` of a threaded `sort` and exits 0 with SKIP when either is absent). Seconds each (measured on an 8-thread
+/// host: 0.05 s, 0.2 s and 15 s).
+const VALIDATION_RUN_TEST: &str = "validation/wl_run_test.sh";
+const VALIDATION_STATS_TEST: &str = "validation/wl_stats_test.sh";
+const VALIDATION_MTMEM_TEST: &str = "validation/wl_mtmem_test.sh";
+pub(crate) const VALIDATION_SELF_TESTS: &[&str] = &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST];
+
+/// GATE-VALIDATION-SH-TESTS: a `validation/` script -> the self-tests that exercise it (each self-test also covers
+/// itself). A change to a script here selects those self-tests in every tier. `wl_run.sh` and `wl_count_run.sh` are
+/// covered only where the self-tests read them (that they source the shared classifier and pass the thread flag).
+const VALIDATION_COVERED: &[(&str, &[&str])] = &[
+    // The syscall verdict: sourced by wl_run_test.sh, and by wl_stats.sh (which the other two source).
+    ("validation/wl_syscls.sh", &[VALIDATION_RUN_TEST, VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_stats.sh", &[VALIDATION_STATS_TEST, VALIDATION_MTMEM_TEST]),
+    ("validation/wl_run.sh", &[VALIDATION_RUN_TEST]),
+    ("validation/wl_count_run.sh", &[VALIDATION_STATS_TEST]),
+    (VALIDATION_RUN_TEST, &[VALIDATION_RUN_TEST]),
+    (VALIDATION_STATS_TEST, &[VALIDATION_STATS_TEST]),
+    (VALIDATION_MTMEM_TEST, &[VALIDATION_MTMEM_TEST]),
+];
+
+/// GATE-VALIDATION-SH-TESTS: the `validation/wl_*.sh` scripts with no self-test the gate can run, each with why. The
+/// unit test `every_validation_wl_script_is_mapped` fails for a `wl_*.sh` script in neither table, so a new script
+/// needs a decision (a self-test, or a row here) before it lands.
+const VALIDATION_UNCOVERED: &[(&str, &str)] = &[
+    ("validation/wl_alloctrace.sh", "lab driver (runs a workload under gdb on a build host); no self-test"),
+    ("validation/wl_alloctrace_run.sh", "host side of wl_alloctrace.sh; no self-test"),
+    ("validation/wl_attr.sh", "workload gate attribution step on a timing host; no self-test"),
+    ("validation/wl_base.sh", "BASE checkout helper of the lab tools; no self-test"),
+    ("validation/wl_count.sh", "lab driver of wl_count_run.sh (ssh, queueing); no self-test"),
+    ("validation/wl_entries.sh", "lab driver of wl_entries_run.sh; no self-test"),
+    ("validation/wl_entries_run.sh", "host side of the entry-point counts (needs the built kits); no self-test"),
+    ("validation/wl_fallback.sh", "lab queueing fallback; no self-test"),
+    ("validation/wl_gate.sh", "the workload gate driver (lab hosts); no self-test"),
+    ("validation/wl_install.sh", "installs the lab tools on a host; no self-test"),
+    ("validation/wl_launch.sh", "detached lab launcher; no self-test"),
+    ("validation/wl_local.sh", "role-directory variant of the lab drivers; no self-test"),
+    ("validation/wl_lock.sh", "build lock of the lab hosts; no self-test"),
+    ("validation/wl_percall.sh", "its check wl_percall_tunables_test.sh is a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_percall_run.sh", "host side of wl_percall.sh (built products); no self-test"),
+    ("validation/wl_percall_tunables_test.sh", "a lab count job (built products, minutes), not a gate step"),
+    ("validation/wl_prep.sh", "workload gate step 1 (products, kits) on a lab host; no self-test"),
+    ("validation/wl_prime_base.sh", "puts a BASE source on a lab host; no self-test"),
+    ("validation/wl_shapes.sh", "lab driver of wl_shapes_run.sh; no self-test"),
+    ("validation/wl_shapes_run.sh", "host side of the argument-shape counts (needs the built kits); no self-test"),
+    ("validation/wl_stakes.sh", "lab pipeline over wl_shapes and wl_percall; no self-test"),
+    ("validation/wl_stats_plants.sh", "the plants runner of the covered self-tests (it mutates copies and expects them to fail)"),
+    ("validation/wl_trace.sh", "per-function trace of one call (built products, perf); no self-test"),
+    ("validation/wl_workloads.sh", "the workload definitions (data read by the lab drivers); no self-test"),
+];
+
+fn validation_self_tests(path: &str) -> Option<&'static [&'static str]> {
+    VALIDATION_COVERED.iter().find(|(s, _)| *s == path).map(|(_, t)| *t)
+}
+
 fn classify(path: &str) -> Option<Class> {
     let file = path.rsplit('/').next().unwrap_or(path);
+    if let Some(tests) = validation_self_tests(path) {
+        return Some(Class::ValidationScript(tests));
+    }
+    if let Some((_, why)) = VALIDATION_UNCOVERED.iter().find(|(s, _)| *s == path) {
+        return Some(Class::Nothing(why));
+    }
     let full = |why: &'static str| Some(Class::Full(why));
     if path == "xtask/src/affected.rs" {
         return Some(Class::XtaskOwn);
@@ -1570,6 +1644,12 @@ fn select_with(repo: &Repo, files: &[String], products: bool, tier: Tier) -> Sel
             }
             Some(Class::Docs) => docs_readers(repo, f, &mut sel),
             Some(Class::Nothing(why)) => sel.notes.push(format!("{f}: {why}")),
+            Some(Class::ValidationScript(tests)) => {
+                for t in tests {
+                    add(&mut sel.scripts, t.to_string(), &format!("{f} changed"));
+                }
+                sel.notes.push(format!("{f}: a validation script with self-tests ({}; not FULL)", tests.join(", ")));
+            }
             Some(Class::AllConf) => sel.all_conf(repo, &format!("{f}: every conformance program")),
             Some(Class::XtaskData) => {
                 sel.xtask_tests = true;
@@ -2375,7 +2455,10 @@ fn print_selection(repo: &Repo, files: &[String], sel: &Selection) {
     for (n, why) in &sel.conf {
         println!("conformance: {n}  [{why}]");
     }
-    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len());
+    for (s, why) in &sel.scripts {
+        println!("script: bash {s}  [{why}]");
+    }
+    println!("selected: {} of {} test targets, {} of {} conformance programs, {} unit-test libs, {} of {} validation self-tests", sel.tests.len(), repo.targets.len(), sel.conf.len(), repo.conf.len(), sel.libs.len(), sel.scripts.len(), VALIDATION_SELF_TESTS.len());
 }
 
 /// How one step ended. `Skipped` is only for a test step that failed solely because no test matched.
@@ -2829,6 +2912,10 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
         ok &= times.time("clippy-workspace", || step_saving(root, &log, "clippy --workspace", Command::new(&cargo).args(["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]), "clippy.log"));
         let from = fs::metadata(&log).map_or(0, |m| m.len());
         ok &= step(root, &log, "cargo xtask test", Command::new(&cargo).args(["xtask", "test"]));
+        // GATE-VALIDATION-SH-TESTS: everything includes the validation self-tests (`cargo xtask test` does not run them).
+        for s in VALIDATION_SELF_TESTS {
+            ok &= times.time(s, || step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s)));
+        }
         let bytes = fs::read(&log).unwrap_or_default();
         for (name, secs) in String::from_utf8_lossy(&bytes[(from as usize).min(bytes.len())..]).lines().filter_map(crate::steptime::parse) {
             // The remez binary's per-fit lines are parts of the `remez-check` step: shown, not summed again.
@@ -2940,6 +3027,9 @@ fn run_selection(root: &Path, repo: &Repo, sel: &Selection, with_exports: bool) 
             // A command may carry its flags (`math-gen --check`).
             ok &= step(root, &log, &format!("cargo xtask {c}"), Command::new(&cargo).arg("xtask").args(c.split_whitespace()));
         }
+        for s in sel.scripts.keys() {
+            ok &= step(root, &log, &format!("validation self-test {s}"), Command::new("bash").arg(s));
+        }
     }
     println!("--- summary ({}), log {}", format_args!("{:.0}s", started.elapsed().as_secs_f64()), log.display());
     let text = read(&log);
@@ -2965,19 +3055,211 @@ fn unit_tests_flag(repo: &Repo, krate: &str) -> &'static str {
     if repo.crates.iter().any(|c| c.name == krate && !c.lib) { "--bins" } else { "--lib" }
 }
 
-/// Is a failed test (`crate::target name`, `crate name` for unit tests, `xtask::bin/xtask name`) in the selection?
-fn covers(sel: &Selection, failed: &str) -> bool {
+/// A failed test as the gate names it (XTASK-AFFECTED-REVERSE): the text of a `FAILED: <id>` line of the summary
+/// (`summary`, `failed_tests`: `crate::target name` for a test target, `crate name` for unit tests, `xtask::bin/xtask
+/// name` or `xtask::<target> name` for xtask), or a conformance program (`conformance:<program>`, the `--only` form, or
+/// a whole `conformance FAILED: <program>: <why>` line of `conformance_failures`). A leading `FAILED: ` is ignored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FailedId {
+    Xtask,
+    Target(String, String),
+    Lib(String),
+    Conf(String),
+}
+
+impl FailedId {
+    fn parse(id: &str) -> FailedId {
+        let id = id.trim();
+        let id = id.strip_prefix("FAILED: ").unwrap_or(id);
+        if let Some(rest) = id.strip_prefix("conformance FAILED: ").or_else(|| id.strip_prefix("conformance:")) {
+            return FailedId::Conf(rest.split(':').next().unwrap_or_default().trim().to_string());
+        }
+        let bin = id.split_whitespace().next().unwrap_or_default();
+        if bin.starts_with("xtask") {
+            return FailedId::Xtask;
+        }
+        match bin.split_once("::") {
+            Some((c, t)) => FailedId::Target(c.to_string(), t.to_string()),
+            None => FailedId::Lib(bin.to_string()),
+        }
+    }
+
+    /// The `kind` field of the `--reverse` JSON.
+    fn kind(&self) -> &'static str {
+        match self {
+            FailedId::Xtask => "xtask",
+            FailedId::Target(..) => "target",
+            FailedId::Lib(_) => "lib",
+            FailedId::Conf(_) => "conformance",
+        }
+    }
+}
+
+/// Why a selection holds a failed test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Why {
+    /// The selection escalated to FULL (it runs everything): the escalation reasons. Low confidence for attribution.
+    Full(Vec<String>),
+    /// The selection names the test's binary: the reason recorded with it (the rule that selected it).
+    Rule(String),
+}
+
+/// THE membership rule of a failed test in a selection, for both directions (XTASK-AFFECTED-REVERSE): `replay` and
+/// `--reverse` ask it, and `run_selection` runs exactly these items (`tests` by target, `libs` by `--lib`/`--bins`,
+/// `xtask_tests`, `conf`), so a reverse attribution can never disagree with what the forward gate ran.
+fn selects(sel: &Selection, failed: &str) -> Option<Why> {
     if !sel.full.is_empty() {
-        return true;
+        return Some(Why::Full(sel.full.clone()));
     }
-    let bin = failed.split_whitespace().next().unwrap_or_default();
-    if bin.starts_with("xtask") {
-        return sel.xtask_tests;
+    match FailedId::parse(failed) {
+        FailedId::Xtask => sel.xtask_tests.then(|| Why::Rule(sel.notes.first().cloned().unwrap_or_else(|| "the xtask unit tests".to_string()))),
+        FailedId::Target(c, t) => sel.tests.get(&(c, t)).map(|w| Why::Rule(w.clone())),
+        FailedId::Lib(c) => sel.libs.get(&c).map(|w| Why::Rule(w.clone())),
+        FailedId::Conf(n) => sel.conf.get(&n).map(|w| Why::Rule(w.clone())),
     }
-    match bin.split_once("::") {
-        Some((c, t)) => sel.tests.contains_key(&(c.to_string(), t.to_string())),
-        None => sel.libs.contains_key(bin),
+}
+
+/// Is a failed test (see [`FailedId`]) in the selection?
+fn covers(sel: &Selection, failed: &str) -> bool {
+    selects(sel, failed).is_some()
+}
+
+/// One branch's claim on a failed test (`--reverse`).
+#[derive(Debug)]
+struct Hit {
+    branch: String,
+    /// Every reason is an escalation to FULL: the branch selects everything, so the claim is low confidence.
+    full: bool,
+    /// (file, rule, the rule is an escalation to FULL)
+    reasons: Vec<(String, String, bool)>,
+}
+
+/// The attribution of one failed test (`--reverse`).
+#[derive(Debug)]
+struct Attribution {
+    test: String,
+    kind: &'static str,
+    hits: Vec<Hit>,
+}
+
+/// XTASK-AFFECTED-REVERSE: for each failed test, the branches whose changed files select it in `tier`, through the
+/// forward selection itself (`select_tier`, then [`selects`]). A branch that selects the test is explained file by
+/// file (each file's own selection; the rules are per file, so the union is the branch's selection); should no single
+/// file select it, the reason is the branch's combined selection, under the file name `(the branch's files together)`.
+fn reverse(repo: &Repo, failed: &[String], branches: &[(String, Vec<String>)], tier: Tier) -> (Vec<Attribution>, Vec<bool>) {
+    let combined: Vec<Selection> = branches.iter().map(|(_, files)| select_tier(repo, files, tier)).collect();
+    // Per-file selections, computed only for a branch that selects some failed test.
+    let mut per_file: Vec<Option<Vec<Selection>>> = branches.iter().map(|_| None).collect();
+    let mut out = Vec::new();
+    for id in failed {
+        let mut hits = Vec::new();
+        for (b, (name, files)) in branches.iter().enumerate() {
+            let Some(why) = selects(&combined[b], id) else { continue };
+            let sels = per_file[b].get_or_insert_with(|| files.iter().map(|f| select_tier(repo, std::slice::from_ref(f), tier)).collect());
+            let mut reasons: Vec<(String, String, bool)> = files.iter().zip(sels.iter()).filter_map(|(f, s)| selects(s, id).map(|w| (f.clone(), w))).map(|(f, w)| why_row(f, w)).collect();
+            if reasons.is_empty() {
+                reasons.push(why_row("(the branch's files together)".to_string(), why));
+            }
+            let full = reasons.iter().all(|r| r.2);
+            hits.push(Hit { branch: name.clone(), full, reasons });
+        }
+        out.push(Attribution { test: id.clone(), kind: FailedId::parse(id).kind(), hits });
     }
+    (out, combined.iter().map(|s| !s.full.is_empty()).collect())
+}
+
+fn why_row(file: String, why: Why) -> (String, String, bool) {
+    match why {
+        Why::Full(r) => (file, format!("FULL: {}", r.join("; ")), true),
+        Why::Rule(r) => (file, r, false),
+    }
+}
+
+/// A JSON string literal.
+fn json_str(s: &str) -> String {
+    let mut o = String::with_capacity(s.len() + 2);
+    o.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            '\n' => o.push_str("\\n"),
+            '\r' => o.push_str("\\r"),
+            '\t' => o.push_str("\\t"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+/// The `--reverse` JSON (shape in [`REVERSE_HELP`]), one object, keys in a fixed order.
+fn reverse_json(tier: Tier, branches: &[(String, Vec<String>)], branch_full: &[bool], atts: &[Attribution]) -> String {
+    let tier = format!("{tier:?}").to_lowercase();
+    let bs: Vec<String> = branches.iter().zip(branch_full).map(|((n, f), full)| format!("{{\"name\":{},\"files\":{},\"full\":{full}}}", json_str(n), f.len())).collect();
+    let mut fs = Vec::new();
+    for a in atts {
+        let hs: Vec<String> = a
+            .hits
+            .iter()
+            .map(|h| {
+                let rs: Vec<String> = h.reasons.iter().map(|(f, r, full)| format!("{{\"file\":{},\"rule\":{},\"full\":{full}}}", json_str(f), json_str(r))).collect();
+                format!("{{\"branch\":{},\"confidence\":\"{}\",\"full\":{},\"reasons\":[{}]}}", json_str(&h.branch), if h.full { "low" } else { "high" }, h.full, rs.join(","))
+            })
+            .collect();
+        fs.push(format!("{{\"test\":{},\"kind\":\"{}\",\"branches\":[{}]}}", json_str(&a.test), a.kind, hs.join(",")));
+    }
+    let un: Vec<String> = atts.iter().filter(|a| a.hits.is_empty()).map(|a| json_str(&a.test)).collect();
+    format!("{{\"version\":1,\"tier\":\"{tier}\",\"branches\":[{}],\"failed\":[{}],\"unattributed\":[{}]}}\n", bs.join(","), fs.join(","), un.join(","))
+}
+
+/// The `--reverse` human summary (stderr): one line per failed test.
+fn reverse_summary(tier: Tier, branches: &[(String, Vec<String>)], branch_full: &[bool], atts: &[Attribution]) -> String {
+    let fulls: Vec<&str> = branches.iter().zip(branch_full).filter(|(_, f)| **f).map(|((n, _), _)| n.as_str()).collect();
+    let mut out = format!("affected --reverse ({tier:?}): {} failed tests, {} branches", atts.len(), branches.len());
+    if !fulls.is_empty() {
+        out.push_str(&format!("; escalating to FULL (select everything, low confidence): {}", fulls.join(", ")));
+    }
+    out.push('\n');
+    for a in atts {
+        if a.hits.is_empty() {
+            out.push_str(&format!("  {}: no branch selects it\n", a.test));
+            continue;
+        }
+        let hs: Vec<String> = a
+            .hits
+            .iter()
+            .map(|h| if h.full { format!("{} (low: FULL)", h.branch) } else { format!("{} (high: {})", h.branch, h.reasons.iter().filter(|r| !r.2).map(|r| r.0.as_str()).collect::<Vec<_>>().join(", ")) })
+            .collect();
+        out.push_str(&format!("  {}: {}\n", a.test, hs.join("; ")));
+    }
+    out
+}
+
+/// The failed test ids in a gate log or summary (`--failed-from`): the text after `FAILED: ` at the start of a line,
+/// and whole `conformance FAILED: ...` lines; every other line (`STEP FAILED:`, counts, panics) is skipped.
+fn failed_ids_of(log: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for l in log.lines().map(str::trim_end) {
+        let id = if let Some(t) = l.strip_prefix("FAILED: ") {
+            t.trim().to_string()
+        } else if let Some(c) = l.strip_prefix("conformance FAILED: ") {
+            format!("conformance:{}", c.split(':').next().unwrap_or_default().trim())
+        } else {
+            continue;
+        };
+        if !id.is_empty() && !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// A branch's changed-file list (`--branch <name>=<path>`): one repository path per line; blank lines and `#` lines
+/// are skipped.
+fn branch_files(text: &str) -> Vec<String> {
+    text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(String::from).collect()
 }
 
 fn counts(sel: &Selection) -> String {
@@ -3047,7 +3329,34 @@ fn default_base(env: Option<String>) -> String {
 /// XTASK-AFFECTED-EXPLICIT: the one line printed (exit 2) when `affected` is given neither `--list` nor `--run`. There is
 /// no default mode: a gate that ran `cargo xtask affected` without `--run` used to list the selection, run nothing and
 /// exit 0, a green gate that tested nothing.
-pub const USAGE: &str = "usage: cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports]  or  affected --replay <records> [--tier direct|wide|full]; --list prints the selection, --run runs it, one of them is required";
+pub const USAGE: &str = "usage: cargo xtask affected (--list | --run) [--base <ref>] [--files <path>...] [--only <names>] [--tier direct|wide|full] [--with-exports]  or  affected --replay <records> [--tier direct|wide|full]  or  affected --reverse (--failed <test-id>... | --failed-from <log>) --branch <name>=<file-list>... [--tier direct|wide|full]; --list prints the selection, --run runs it, one of them is required (but with --replay or --reverse); --help explains --reverse";
+
+/// `affected --help`: the `--reverse` interface (XTASK-AFFECTED-REVERSE), printed after [`USAGE`].
+pub const REVERSE_HELP: &str = "\
+--reverse: which merged branches' changes select each failed test (attribution for a train gate).
+  --failed <test-id>...    failed tests as the gate's summary names them, one argument each (quote them):
+                           the text after `FAILED: ` (`crate::target name`, `crate name` for unit tests,
+                           `xtask::bin/xtask name`), or `conformance:<program>`; may repeat
+  --failed-from <log>      read the ids from a gate log or summary: every `FAILED: <id>` line and every
+                           `conformance FAILED: <program>: ...` line (others, e.g. `STEP FAILED:`, are skipped)
+  --branch <name>=<path>   a branch and the file listing its changed paths (one per line, `#` and blank lines
+                           skipped); may repeat; names must be unique
+  --tier direct|wide|full  the tier the gate ran (default direct, as forward mode)
+The selection rules are forward mode's own (`select_tier`, then the membership rule `selects`). The changed files
+come only from the lists: no header or xtask diff is read, so a changed `csys/include` header or xtask source
+escalates to FULL, as forward `--files` does.
+stdout: one JSON object, stable shape (version 1):
+  {\"version\":1,\"tier\":\"direct\",
+   \"branches\":[{\"name\":\"b\",\"files\":3,\"full\":false}],
+   \"failed\":[{\"test\":\"liella::x y\",\"kind\":\"target|lib|xtask|conformance\",
+               \"branches\":[{\"branch\":\"b\",\"confidence\":\"high|low\",\"full\":false,
+                             \"reasons\":[{\"file\":\"crates/core/src/x.rs\",\"rule\":\"<why>\",\"full\":false}]}]}],
+   \"unattributed\":[\"<test ids no branch selects>\"]}
+  A branch whose change escalates to FULL selects every test: its reasons have \"full\":true and a rule
+  \"FULL: <why>\"; when every reason of a claim is FULL the claim has \"confidence\":\"low\" (else \"high\", and
+  the summary names the specific files). branches[].full: the branch's whole selection is FULL.
+stderr: a short human summary (one line per failed test). Exit 0 when the attribution ran (also with
+unattributed tests), 1 on an error (unreadable list, malformed --branch, duplicate name).";
 
 /// `--list` prints the selection; `--run` runs it. Exactly one is required (except with `--replay`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3066,21 +3375,49 @@ struct Opts {
     only: Option<String>,
     tier: Tier,
     replay_file: Option<String>,
+    /// `--reverse` (XTASK-AFFECTED-REVERSE) and its inputs: failed test ids, a log to read more from, (branch, list path).
+    reverse: bool,
+    failed: Vec<String>,
+    failed_from: Option<String>,
+    branches: Vec<(String, String)>,
+    help: bool,
 }
 
 impl Opts {
-    /// The mode to act in, or `None` when the command must be refused with [`USAGE`] (exit 2). `--replay` is a mode of
-    /// its own (it reads gate records, lists and runs nothing) and needs neither flag.
+    /// The mode to act in, or `None` when the command must be refused with [`USAGE`] (exit 2). `--replay` and
+    /// `--reverse` are modes of their own (they read records or lists, run nothing) and need neither flag.
     fn mode(&self) -> Option<Mode> {
-        if self.replay_file.is_some() { Some(self.mode.unwrap_or(Mode::List)) } else { self.mode }
+        if self.replay_file.is_some() || self.reverse { Some(self.mode.unwrap_or(Mode::List)) } else { self.mode }
     }
 }
 
+/// The values after a list flag (`--files`, `--failed`): every following argument up to the next `--` flag.
+fn list_values<'a>(it: &mut std::slice::Iter<'a, String>) -> Vec<String> {
+    let mut v = Vec::new();
+    while let Some(f) = it.clone().next().filter(|f| !f.starts_with("--")) {
+        v.push(f.clone());
+        it.next();
+    }
+    v
+}
+
 fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
-    let mut o = Opts { base: default_base, mode: None, with_exports: false, files: None, only: None, tier: Tier::Direct, replay_file: None };
+    let mut o = Opts { base: default_base, mode: None, with_exports: false, files: None, only: None, tier: Tier::Direct, replay_file: None, reverse: false, failed: Vec::new(), failed_from: None, branches: Vec::new(), help: false };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
+            "--help" | "-h" => o.help = true,
+            "--reverse" => o.reverse = true,
+            "--failed" => o.failed.extend(list_values(&mut it)),
+            "--failed-from" => o.failed_from = Some(it.next().ok_or("--failed-from needs a log file")?.clone()),
+            "--branch" => {
+                let b = it.next().ok_or("--branch needs <name>=<file-list>")?;
+                let (n, p) = b.split_once('=').filter(|(n, p)| !n.is_empty() && !p.is_empty()).ok_or(format!("--branch `{b}`: want <name>=<file-list>"))?;
+                if o.branches.iter().any(|(m, _)| m == n) {
+                    return Err(format!("--branch: `{n}` given twice"));
+                }
+                o.branches.push((n.to_string(), p.to_string()));
+            }
             "--base" => o.base = it.next().ok_or("--base needs a ref")?.clone(),
             "--tier" => o.tier = Tier::parse(it.next().ok_or("--tier needs direct, wide or full")?)?,
             "--replay" => o.replay_file = Some(it.next().ok_or("--replay needs a records file")?.clone()),
@@ -3093,16 +3430,19 @@ fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
             }
             "--with-exports" => o.with_exports = true,
             "--only" => o.only = Some(it.next().ok_or("--only needs a list: <target>[,crate::target][,conformance:<program>][,lib:<crate>][,xtask]")?.clone()),
-            "--files" => {
-                let mut v = Vec::new();
-                while let Some(f) = it.clone().next().filter(|f| !f.starts_with("--")) {
-                    v.push(f.clone());
-                    it.next();
-                }
-                o.files = Some(v);
-            }
+            "--files" => o.files = Some(list_values(&mut it)),
             other => return Err(format!("unknown argument `{other}` ({USAGE})")),
         }
+    }
+    if o.reverse {
+        if o.mode == Some(Mode::Run) {
+            return Err("--reverse runs nothing: drop --run".into());
+        }
+        if o.files.is_some() || o.only.is_some() || o.replay_file.is_some() {
+            return Err("--reverse takes its files from --branch lists, not --files, --only or --replay".into());
+        }
+    } else if !o.failed.is_empty() || o.failed_from.is_some() || !o.branches.is_empty() {
+        return Err("--failed, --failed-from and --branch need --reverse".into());
     }
     Ok(o)
 }
@@ -3111,6 +3451,10 @@ fn parse_args(args: &[String], default_base: String) -> Result<Opts, String> {
 pub fn main(root: &Path, args: &[String]) -> ExitCode {
     // AFFECTED_BASE: the ref a stacked branch (one cut from an unmerged parent) selects against; `--base` wins.
     let result = parse_args(args, default_base(std::env::var("AFFECTED_BASE").ok())).and_then(|o| match o.mode() {
+        _ if o.help => {
+            println!("{USAGE}\n{REVERSE_HELP}");
+            Ok(Some(()))
+        }
         None => Ok(None),
         Some(mode) => execute(root, &o, mode, &mut run_selection).map(Some),
     });
@@ -3133,6 +3477,24 @@ type Runner<'a> = dyn FnMut(&Path, &Repo, &Selection, bool) -> Result<(), String
 /// The work of one `affected` command; `runner` runs a selection when the mode is `--run`.
 fn execute(root: &Path, o: &Opts, mode: Mode, runner: &mut Runner<'_>) -> Result<(), String> {
     let tier = o.tier;
+    if o.reverse {
+        let mut failed = o.failed.clone();
+        if let Some(path) = &o.failed_from {
+            let text = fs::read_to_string(path).map_err(|e| format!("--failed-from {path}: {e}"))?;
+            failed.extend(failed_ids_of(&text).into_iter().filter(|id| !o.failed.contains(id)));
+        }
+        let mut branches = Vec::new();
+        for (name, path) in &o.branches {
+            let text = fs::read_to_string(path).map_err(|e| format!("--branch {name}={path}: {e}"))?;
+            branches.push((name.clone(), branch_files(&text)));
+        }
+        // The lists are the branches' changes, not this tree's: no header or xtask diff of the local tree applies.
+        let repo = Repo { hdr_diff: None, xtask_diff: None, ..Repo::load(root) };
+        let (atts, full) = reverse(&repo, &failed, &branches, tier);
+        print!("{}", reverse_json(tier, &branches, &full, &atts));
+        eprint!("{}", reverse_summary(tier, &branches, &full, &atts));
+        return Ok(());
+    }
     if let Some(path) = &o.replay_file {
         let repo = Repo::load(root);
         let text = fs::read_to_string(path).map_err(|e| format!("--replay {path}: {e}"))?;
@@ -4387,5 +4749,215 @@ fn plain() {}", &aliases);
         assert!(s.contains("error: unused variable: `x` [crates/core/src/a.rs:3:9]\n"), "{s}");
         assert!(s.contains("error[E0308]: mismatched types [crates/core/src/b.rs:7:1]\n"), "{s}");
         assert!(s.contains("error: could not compile `liella`\n") && !s.contains("c.rs") && !s.contains("d.rs"), "{s}");
+    }
+
+    // GATE-VALIDATION-SH-TESTS (no spec clause: gate tooling): every `validation/wl_*.sh` script is either covered by a
+    // self-test the gate runs or listed with a reason; every path the tables name exists; every self-test a row names
+    // is one the FULL tier runs, and covers itself.
+    #[test]
+    fn every_validation_wl_script_is_mapped() {
+        let root = root();
+        let mut problems = Vec::new();
+        for p in sorted_dir(&root.join("validation")) {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if !(name.starts_with("wl_") && name.ends_with(".sh")) {
+                continue;
+            }
+            let rel = format!("validation/{name}");
+            let covered = validation_self_tests(&rel).is_some();
+            let listed = VALIDATION_UNCOVERED.iter().any(|(s, _)| *s == rel);
+            if covered == listed {
+                problems.push(format!("{rel}: {}", if covered { "in both VALIDATION_COVERED and VALIDATION_UNCOVERED" } else { "no covering self-test and no VALIDATION_UNCOVERED row" }));
+            }
+        }
+        let named = VALIDATION_COVERED.iter().flat_map(|(s, ts)| std::iter::once(*s).chain(ts.iter().copied())).chain(VALIDATION_UNCOVERED.iter().map(|(s, _)| *s)).chain(VALIDATION_SELF_TESTS.iter().copied());
+        for s in named {
+            if !root.join(s).is_file() {
+                problems.push(format!("{s}: named in the validation tables but missing"));
+            }
+        }
+        for (s, ts) in VALIDATION_COVERED {
+            for t in ts.iter().filter(|t| !VALIDATION_SELF_TESTS.contains(t)) {
+                problems.push(format!("{s}: self-test {t} is not in VALIDATION_SELF_TESTS"));
+            }
+        }
+        for t in VALIDATION_SELF_TESTS {
+            if !validation_self_tests(t).is_some_and(|ts| ts.contains(t)) {
+                problems.push(format!("{t}: a self-test that does not select itself"));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    // GATE-VALIDATION-SH-TESTS red-before-green: a change to the workload syscall verdict selected nothing (a
+    // `Nothing` note); it now selects its three self-tests, in the direct tier, without escalating to FULL. An
+    // uncovered validation script and a Rust source select no self-test.
+    #[test]
+    fn validation_script_changes_select_their_self_tests() {
+        let d = tier(&["validation/wl_syscls.sh"], Tier::Direct);
+        assert!(d.full.is_empty(), "{:?}", d.full);
+        assert_eq!(d.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_MTMEM_TEST, VALIDATION_RUN_TEST, VALIDATION_STATS_TEST]);
+        assert!(d.tests.is_empty() && d.conf.is_empty() && !d.xtask_tests, "only the self-tests: {d:?}");
+        let r = tier(&["validation/wl_run.sh"], Tier::Direct);
+        assert_eq!(r.scripts.keys().map(String::as_str).collect::<Vec<_>>(), [VALIDATION_RUN_TEST]);
+        for unrelated in ["validation/wl_gate.sh", "validation/README.md", "crates/core/src/lib.rs"] {
+            assert!(tier(&[unrelated], Tier::Direct).scripts.is_empty(), "{unrelated} must select no validation self-test");
+        }
+    }
+
+    // XTASK-AFFECTED-REVERSE ------------------------------------------------------------------------------------------
+
+    fn branches(bs: &[(&str, &[&str])]) -> Vec<(String, Vec<String>)> {
+        bs.iter().map(|(n, fs)| (n.to_string(), fs.iter().map(|f| f.to_string()).collect())).collect()
+    }
+
+    fn hit_names(a: &Attribution) -> Vec<&str> {
+        a.hits.iter().map(|h| h.branch.as_str()).collect()
+    }
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn reverse_attributes_a_test_to_the_one_branch_that_selects_it() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let bs = branches(&[("docs", &["docs/x.md"]), ("printf", &["docs/y.md", "crates/core/src/printf.rs"])]);
+        let (atts, full) = reverse(repo(), &ids(&["liella::printf_products x"]), &bs, Tier::Direct);
+        assert_eq!(full, [false, false]);
+        assert_eq!(hit_names(&atts[0]), ["printf"]);
+        assert_eq!(atts[0].kind, "target");
+        let h = &atts[0].hits[0];
+        assert!(!h.full && h.reasons.len() == 1, "{h:?}");
+        assert!(h.reasons[0].0 == "crates/core/src/printf.rs" && !h.reasons[0].1.is_empty() && !h.reasons[0].2, "{h:?}");
+        let s = reverse_summary(Tier::Direct, &bs, &full, &atts);
+        assert!(s.contains("liella::printf_products x: printf (high: crates/core/src/printf.rs)"), "{s}");
+    }
+
+    #[test]
+    fn reverse_reports_every_branch_that_selects_the_test() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let bs = branches(&[("a", &["crates/boundary/src/printf.rs"]), ("b", &["crates/boundary/src/posix/s12_stdio.rs"])]);
+        let (atts, _) = reverse(repo(), &ids(&["FAILED: liella::aio_products t"]), &bs, Tier::Direct);
+        assert_eq!(hit_names(&atts[0]), ["a", "b"], "{atts:?}");
+        assert!(atts[0].hits.iter().all(|h| !h.full && h.reasons.len() == 1), "{atts:?}");
+    }
+
+    #[test]
+    fn reverse_reports_a_test_no_branch_selects() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let bs = branches(&[("a", &["crates/core/src/printf.rs"]), ("d", &["docs/x.md"])]);
+        let (atts, full) = reverse(repo(), &ids(&["liella-boundary::s18_processes_symbols x"]), &bs, Tier::Direct);
+        assert!(atts[0].hits.is_empty(), "{atts:?}");
+        let j = reverse_json(Tier::Direct, &bs, &full, &atts);
+        assert!(j.contains("\"branches\":[]") && j.contains("\"unattributed\":[\"liella-boundary::s18_processes_symbols x\"]"), "{j}");
+        assert!(reverse_summary(Tier::Direct, &bs, &full, &atts).contains("s18_processes_symbols x: no branch selects it"));
+    }
+
+    #[test]
+    fn reverse_flags_full_escalation_as_low_confidence() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let bs = branches(&[("cargo", &["Cargo.toml"]), ("printf", &["crates/core/src/printf.rs"]), ("mixed", &["Cargo.toml", "crates/core/src/printf.rs"])]);
+        let (atts, full) = reverse(repo(), &ids(&["liella::printf_products x", "liella-boundary::s18_processes_symbols x"]), &bs, Tier::Direct);
+        assert_eq!(full, [true, false, true]);
+        assert_eq!(hit_names(&atts[0]), ["cargo", "printf", "mixed"]);
+        let [cargo, printf, mixed] = &atts[0].hits[..] else { panic!("{atts:?}") };
+        assert!(cargo.full && cargo.reasons.len() == 1 && cargo.reasons[0].2 && cargo.reasons[0].1.starts_with("FULL: Cargo.toml"), "{cargo:?}");
+        assert!(!printf.full, "{printf:?}");
+        // A specific reason next to an escalation: high confidence, both reasons kept.
+        assert!(!mixed.full && mixed.reasons.len() == 2 && mixed.reasons.iter().filter(|r| r.2).count() == 1, "{mixed:?}");
+        // A test only the FULL escalations reach: every claim is low confidence.
+        assert_eq!(hit_names(&atts[1]), ["cargo", "mixed"]);
+        assert!(atts[1].hits.iter().all(|h| h.full), "{atts:?}");
+        let j = reverse_json(Tier::Direct, &bs, &full, &atts);
+        assert!(j.starts_with("{\"version\":1,\"tier\":\"direct\",\"branches\":[{\"name\":\"cargo\",\"files\":1,\"full\":true},"), "{j}");
+        assert!(j.contains("{\"branch\":\"cargo\",\"confidence\":\"low\",\"full\":true,\"reasons\":[{\"file\":\"Cargo.toml\",\"rule\":\"FULL: Cargo.toml"), "{j}");
+        assert!(j.contains("\"unattributed\":[]"), "{j}");
+        let s = reverse_summary(Tier::Direct, &bs, &full, &atts);
+        assert!(s.contains("escalating to FULL (select everything, low confidence): cargo, mixed") && s.contains("cargo (low: FULL)"), "{s}");
+    }
+
+    /// The test oracle: membership read straight from the forward selection's maps (what `run_selection` runs).
+    fn forward_runs(sel: &Selection, id: &str) -> bool {
+        if !sel.full.is_empty() {
+            return true;
+        }
+        if let Some(n) = id.strip_prefix("conformance:") {
+            return sel.conf.contains_key(n);
+        }
+        let bin = id.split(' ').next().unwrap_or_default();
+        if bin.starts_with("xtask") {
+            return sel.xtask_tests;
+        }
+        match bin.split_once("::") {
+            Some((c, t)) => sel.tests.contains_key(&(c.to_string(), t.to_string())),
+            None => sel.libs.contains_key(bin),
+        }
+    }
+
+    // Forward and reverse agree: over several file sets, a one-branch reverse attributes a test exactly when the forward
+    // selection of that set runs it, and each claim is explained by a single file (the rules are per file).
+    #[test]
+    fn reverse_agrees_with_forward_over_file_sets() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let r = repo();
+        let conf = format!("conformance/c/{}.c", r.conf.first().map(|c| c.name.as_str()).unwrap_or("x"));
+        let sets: Vec<Vec<&str>> = vec![
+            vec!["crates/core/src/printf.rs"],
+            vec!["crates/boundary/src/printf.rs", "docs/x.md"],
+            vec!["crates/boundary/src/posix/s12_stdio.rs", "crates/core/src/printf.rs"],
+            vec![conf.as_str()],
+            vec!["xtask/src/policy.rs"],
+            vec!["docs/x.md"],
+            vec!["Cargo.toml"],
+        ];
+        let forward: Vec<Selection> = sets.iter().map(|s| tier(s, Tier::Direct)).collect();
+        let mut cands: BTreeSet<String> = BTreeSet::from(["xtask::bin/xtask t".to_string(), "liella-boundary::s18_processes_symbols x".to_string()]);
+        for sel in &forward {
+            cands.extend(sel.tests.keys().map(|(c, t)| format!("{c}::{t} x")));
+            cands.extend(sel.libs.keys().map(|c| format!("{c} x")));
+            cands.extend(sel.conf.keys().map(|n| format!("conformance:{n}")));
+        }
+        let cands: Vec<String> = cands.into_iter().collect();
+        let mut seen = (0, 0);
+        for (set, sel) in sets.iter().zip(&forward) {
+            let (atts, _) = reverse(r, &cands, &branches(&[("b", set)]), Tier::Direct);
+            for a in &atts {
+                let want = forward_runs(sel, &a.test);
+                assert_eq!(!a.hits.is_empty(), want, "{set:?}: {}", a.test);
+                if want {
+                    seen.0 += 1;
+                    assert!(a.hits[0].reasons.iter().all(|(f, _, _)| set.contains(&f.as_str())), "{set:?}: {a:?}");
+                } else {
+                    seen.1 += 1;
+                }
+            }
+        }
+        assert!(seen.0 > 0 && seen.1 > 0, "the sets must both select and leave out tests: {seen:?}");
+    }
+
+    #[test]
+    fn reverse_arguments_and_failed_ids() {
+        // Trace: no spec clause (test-harness tooling; XTASK-AFFECTED-REVERSE).
+        let o = opts(&["--reverse", "--failed", "liella::a x", "liella b", "--branch", "one=l1", "--failed", "xtask::bin/xtask y", "--tier", "wide"]).unwrap();
+        assert_eq!(o.mode(), Some(Mode::List));
+        assert_eq!(o.failed, ["liella::a x", "liella b", "xtask::bin/xtask y"]);
+        assert_eq!(o.branches, [("one".to_string(), "l1".to_string())]);
+        assert_eq!(o.tier, Tier::Wide);
+        assert!(opts(&["--reverse", "--run"]).is_err());
+        assert!(opts(&["--reverse", "--files", "a.rs"]).is_err());
+        assert!(opts(&["--branch", "a=b"]).is_err(), "--branch needs --reverse");
+        assert!(opts(&["--reverse", "--branch", "noeq"]).is_err());
+        assert!(opts(&["--reverse", "--branch", "a=x", "--branch", "a=y"]).is_err());
+        assert!(opts(&["--help"]).unwrap().help);
+        let log = "suites: 3 (2 ok, 1 failed)\nFAILED: liella::a x\nSTEP FAILED: test -p liella\nconformance FAILED: prog: killed by signal 6\nFAILED: liella::a x\n";
+        assert_eq!(failed_ids_of(log), ["liella::a x", "conformance:prog"]);
+        assert_eq!(FailedId::parse("FAILED: liella::a x"), FailedId::Target("liella".into(), "a".into()));
+        assert_eq!(FailedId::parse("liella-mem x"), FailedId::Lib("liella-mem".into()));
+        assert_eq!(FailedId::parse("xtask::bin/xtask t"), FailedId::Xtask);
+        assert_eq!(FailedId::parse("conformance FAILED: prog: why"), FailedId::Conf("prog".into()));
+        assert_eq!(branch_files("# c\n\na/b.rs\n  c.rs \n"), ["a/b.rs", "c.rs"]);
+        assert_eq!(json_str("a\"b\\\n\u{1}"), "\"a\\\"b\\\\\\n\\u0001\"");
+        assert!(REVERSE_HELP.contains("\"confidence\":\"high|low\"") && USAGE.contains("--reverse"));
     }
 }

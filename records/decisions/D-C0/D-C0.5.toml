@@ -1,0 +1,8 @@
+id = "D-C0.5"
+section = "c0"
+spec = "C0.5"
+ann = "PATH"
+status = "active"
+body = '''
+**Internal functions always take bounded slices, so fortification is free.** `__x_chk(..., destlen)` builds the destination slice from `destlen` (`abi::chk`). An overflow becomes a detected bound violation that calls `__chk_fail` (spec §2.5). Non-`_chk` forms have no size (F2). Where the amount written depends on the input (`__fgets_chk`, `__fgetws_chk`), C0.5's "would write beyond" is taken literally (phase 8): the read is bounded by the object, and the process terminates only when another unit would have followed a full object; an `n` larger than the object alone does not terminate. The same holds for the bounded printf forms (`__snprintf_chk`, `__vsnprintf_chk`, `__swprintf_chk`, `__vswprintf_chk`): a `maxlen` larger than the object, or an empty object, terminates only when a unit (or the terminator) would land beyond it. The `%n` rule asks where the caller's format lies, also for the wide forms, which convert a copy. **Tests (milestone 5):** clause `s0_6_c0_5_0` runs `s02_chk_fail.c` and `s12_symbols_printf_chk.c` and compares `__memcpy_chk`/`__strcpy_chk` within the object with their base forms.
+'''

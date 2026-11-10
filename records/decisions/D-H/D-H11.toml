@@ -1,0 +1,7 @@
+id = "D-H11"
+section = "h"
+pattern = "Implicit configuration by files and environment"
+status = "active"
+body = '''
+**Internal:** typed configuration values (`NssConfig`, `ResolverConfig`, `Zone`, `LocaleData`, `Tunables`) parsed by IP-21 and passed explicitly. **Boundary:** the default configuration is loaded lazily from the conventional paths, and reloaded on change where the contract requires it (resolv.conf, nsswitch.conf, TZ). **No `dlopen` for built-in functionality**: charsets, IDNA, the `files` and `dns` sources and the unwinder are built in. Only third-party NSS modules are loaded (P14).
+'''

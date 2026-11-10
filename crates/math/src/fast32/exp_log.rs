@@ -45,6 +45,22 @@ pub(super) fn exp_z(z: f64) -> f64 {
 /// margin of 1 and the test would refuse anyway).
 const ONEPASS_AMIN: u32 = 0x3280_0000;
 
+/// 2^896: [`onepass_scaled`]'s exponent offset, folded into the one-pass kernels' constants.
+const ONEPASS_SCALE: f64 = f64::from_bits((1023 + 896) << 52);
+
+/// x·2^-896 exactly, for a normal `float` x (the one-pass entries' operands), built from x's bits:
+/// sign to bit 63, the 8-bit biased exponent e to the low byte of the 11-bit field (a `double`
+/// with exponent e - 1023 = (e - 127) - 896), the 23 fraction bits to the top of the 52. It is the
+/// same value [`f64::from`] gives scaled by 2^-896 (normal: e ≥ 1), but the `double` arrives by a
+/// full-register `movq` from an integer register, not by `cvtss2sd`, which writes only the low
+/// half of its destination and so waits for that register's previous writer (D-10.67: with the
+/// previous call's result there, back-to-back calls formed one latency chain).
+#[inline(always)]
+pub(super) fn onepass_scaled(x: f32) -> f64 {
+    let b = u64::from(x.to_bits());
+    f64::from_bits(((b & 0x7fff_ffff) << 29) | ((b & 0x8000_0000) << 32))
+}
+
 /// e^x (`c` = [`INV_L`], `amax` = the bits of 87.33) or 2^x (`c` = 128, `amax` = the bits of 126)
 /// rounded in the caller's rounding direction by one evaluation in `double` and one `cvtsd2ss`
 /// (LIBM-F32-ONEPASS, D-10.63), or `None` for the caller's envelope.
@@ -71,12 +87,17 @@ const ONEPASS_AMIN: u32 = 0x3280_0000;
 ///   `float` and no midpoint lies between y and f (as in [`super::round`]), so `cvtsd2ss` of y in
 ///   the caller's direction is f correctly rounded in that direction; y is not a `float`, so the
 ///   conversion raises inexact, and the result is normal: no overflow, no underflow, no errno.
+/// * The operand reaches the `double` domain as [`onepass_scaled`]`(x)` = x·2^-896 (integer
+///   operations and one full-register move, LIBM-EXPF-RATCHET, D-10.67), multiplied by c·2^896:
+///   both scalings are exact (x·2^-896 ≥ 2^-922 is normal, c·2^896 < 2^904 finite) and z = x·c
+///   is normal, so RN, RD, RU and RZ of the product are those of x·c and the bound above holds
+///   unchanged.
 #[inline(always)]
 pub(super) fn exp_onepass(x: f32, c: f64, amax: u32) -> Option<f32> {
     if (x.to_bits() & 0x7fff_ffff).wrapping_sub(ONEPASS_AMIN) >= amax - ONEPASS_AMIN {
         return None;
     }
-    let y = exp_z(f64::from(x) * c);
+    let y = exp_z(onepass_scaled(x) * (c * ONEPASS_SCALE));
     if (y.to_bits().wrapping_add(EXP_ONEPASS_DELTA) & 0x0fff_ffff) <= 2 * EXP_ONEPASS_DELTA {
         return None;
     }

@@ -1,0 +1,8 @@
+id = "D-10.14"
+section = "s10"
+spec = "§10.0, §10.3"
+ann = "—"
+status = "active"
+body = '''
+**Flags and `errno` of the elementary functions.** Inexact is raised exactly when the result is inexact, underflow when the rounded result is tiny and inexact (after rounding, x86), overflow as IEEE 754 defines it. glibc omits inexact for tiny arguments of `sin`, `tan`, `asin`, `atan`, `cos`, `acos`, `cosh`, `atan2` and raises it for some exact results (`cbrt(27)`, `log2(2^k)`, `pow(3, 4)`); C leaves both unspecified (F.10), so Liella follows IEEE 754 (decided, reported). Invalid, division by zero, NaN signs (positive domain NaN for `asin`, `acos`, `log10`) and NaN payload choice (`atan2`: `x`'s) follow glibc (D-10.10). `errno` follows §10.0 (`ERANGE` only for ±∞/±0 results); glibc also sets it for some subnormal and largest-finite results of `exp`, `exp2`, `exp10`, `pow` and not for others (three-way: the spec and C's implementation-defined rule against an inconsistent probe: the spec is kept and the difference recorded).
+'''

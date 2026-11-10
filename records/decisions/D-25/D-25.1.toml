@@ -1,0 +1,8 @@
+id = "D-25.1"
+section = "s25"
+spec = "§25.2"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** typed SysV operations. **Boundary:** `semctl`'s `union semun` is received through a C variadic adapter and decoded per command by `legacy` (F11).
+'''

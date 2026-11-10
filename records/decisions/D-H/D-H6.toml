@@ -1,0 +1,7 @@
+id = "D-H6"
+section = "h"
+pattern = "Fixed-size ABI structures"
+status = "active"
+body = '''
+**Internal:** unbounded types (`SigSet` u64 bits, `CpuSet` dynamic, `FdSet`-free polling, resolver lists unbounded). **Boundary:** the exact ABI sizes are kept (`fd_set` 1024, `sigset_t` 128 bytes, `cpu_set_t` 1024, `_res` 3 and 6, `utmp` fields). Truncation at the boundary follows the contract.
+'''

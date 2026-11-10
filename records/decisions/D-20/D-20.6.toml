@@ -1,0 +1,8 @@
+id = "D-20.6"
+section = "s20"
+spec = "§20.2"
+ann = "KERN"
+status = "active"
+body = '''
+**IP-16's "dispatch table" (accepted 2026-10-01):** user handlers are installed in the kernel directly, with the library's restorer, and the kernel's record is the only copy of a user disposition (no table that could drift from it, for example after `SA_RESETHAND`). The rt table holds the library's own handler for the internal signal, which phase 6 installs.
+'''

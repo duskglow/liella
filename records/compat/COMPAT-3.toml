@@ -1,0 +1,10 @@
+id = "COMPAT-3"
+behaviour = "`dl_iterate_phdr` and other WEAK exports: symbol binding (§27; D-27.4, CONF-SYMS-2, D-X.14)"
+glibc = "Binds WEAK for the exports glibc declares weak (the `scope` column of `spec/abi/versions.tsv`); `libc.a` has the rest strong"
+liella = "`libc.so.6`: matches glibc since WEAK-EXPORTS (0 binding differences on the common exports; `cargo xtask so` checks every build against the table). `libc.a`: every definition is WEAK (D-X.14), so a program's strong definition wins where glibc's archive would give a duplicate-definition link error (differences row \"Symbol binding in `libc.a`\")"
+restore = "Not a runtime flag: binding is fixed at link time. Only the `libc.a` direction remains; restoring it would be a build option of the archive (strong definitions for the names glibc has strong)"
+cost = "none today"
+status = "partial"
+status_text = "resolved for `libc.so.6`; registered for `libc.a`"
+body = '''
+'''

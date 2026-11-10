@@ -1,0 +1,8 @@
+id = "D-4.59"
+section = "s04"
+spec = "§4.3, §4.5"
+ann = "PERF"
+status = "active"
+body = '''
+**SSE2 strchr / strchrnul / strncmp heads: lay out for the decoded-uop cache, shortest compare chain** (TIMING-COV-STRSCAN-FRONTEND-SSE2, 2026-11-06). Per-row counters (Haswell-EP, AVX2 forced off) show the legacy decoder feeds under 1% of these rows uops: the gap at instruction parity is delivery (idq_uops_not_delivered) and latency, not decoding. strchrnul SSE2 head blocks compare c and NUL separately and OR them (as strchr), one step shorter than xor/min/compare at the same instruction count; strncmp vector hits fall through into the byte step and an equal NUL returns in place (one taken branch fewer on the equal and differ paths); the AVX2-level page-end / NULL stubs of strchr / strchrnul sit before the aligned SSE2 head (2-byte jae). No executed instruction count changes.
+'''

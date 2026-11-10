@@ -1,0 +1,8 @@
+id = "D-4.52"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**NULL folding in the 65-2048 AVX2 compare and equality classes** (PERF-MEMCMP-TAILS, 2026-11-05; ruling #2517 (coordinator, 2026-11-04), amends D-4.23 and the option B scope of D-4.22 for `memcmp`, `bcmp` and `__memcmpeq` only). With folding on and AVX2, sizes 65 to 2048 have no explicit NULL test: the first access of each region is its 32-byte head block at offset 0, so a NULL faults on page zero (SIGSEGV), within the `[0, 64 KiB)` proof obligation of `dispatch`. One class word (`liella_machine_cmp_long`, 2048 only with folding and AVX2 on, else 0) gates all of 65-2048 with one compare; the head block comes before the `n <= 128` test, so a head difference pays one size test. With folding off, the AVX2 build sends 65-128 compares to the SSE2 class and everything above 64 that is not handled there to the checked entries (explicit S6 checks, the EFAULT abort, as before). Results unchanged (-1/0/1; D-4.21 rescan kept). Evidence: tests/small_compare.rs (every size 0-256 and 129-2049, every first-difference position, each build with folding on and off; the NULL test expects SIGSEGV for 65-2048 only in the folded AVX2 build); plants handoff/PERF-MEMCMP-TAILS-plants.txt.
+'''

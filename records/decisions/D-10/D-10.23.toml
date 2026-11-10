@@ -1,0 +1,8 @@
+id = "D-10.23"
+section = "s10"
+spec = "§10.11"
+ann = "—"
+status = "active"
+body = '''
+**cpow integer powers beyond the exact width** (MATH-M5-CPOW-EXACT, #1720). When the exact `z^n` (`0 < \|n\| <= 64`) does not fit the width of the current step and one part dominates the other by 2^6 or more, each part is the alternating, decreasing (negative-)binomial series of exact terms (`n < 0` only for a power-of-two dominant part); the exact partial sum and the sign of the first term below `2^(ex A − B)` decide the rounding in every mode at any width (`pow_int_far`, bound in its comment). Other inexact cases keep the ladder and, at 3072 bits, D-10.17's assumption. Tested: `cpow_integer_powers_beyond_the_exact_width` (float, double, long double, _Float128; 2^-16000 parts).
+'''

@@ -1,0 +1,8 @@
+id = "D-13.10"
+section = "s13"
+spec = "§13.13"
+ann = "HIST"
+status = "active"
+body = '''
+**Schedule (phase 5):** the mount-table functions (`setmntent`, `getmntent`, `getmntent_r`, `addmntent`, `endmntent`, `hasmntopt`, the `fsent` set) return or take `FILE *`, so they move to phase 12, after the streams (phase 8).
+'''

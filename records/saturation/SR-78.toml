@@ -1,0 +1,13 @@
+id = "SR-78"
+section = "6"
+row = "`wordexp`"
+now = "t 2.9 to 4.2 (stale; Ivy Bridge host A 2026-10-23: t 0.72 to 1.76, section 10; Haswell-EP host 2026-10-23: t 0.6 to 1.7, instructions 0.3 to 2.0, `docs/wordexp-profile.md`)"
+limit = "OPT-STAGE1: \"no measurable gain, reverted\"; \"no design for a larger change\"; X-5 profile: a larger change is not justified"
+reason_class = "n/a"
+basis = "R"
+source = "OPT-STAGE1, X-5"
+tried = "see left"
+flag = "**measured 2026-10-23** (section 10; Zen 1 and Broadwell-EP not run)"
+status = "active"
+body = '''
+'''

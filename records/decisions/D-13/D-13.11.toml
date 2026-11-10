@@ -1,0 +1,8 @@
+id = "D-13.11"
+section = "s13"
+spec = "§13.7"
+ann = "HIST"
+status = "active"
+body = '''
+`faccessat` with `AT_EACCESS`/`AT_SYMLINK_NOFOLLOW` uses `faccessat2`; where that is `ENOSYS` (a seccomp filter), glibc's emulation from `fstatat` and the credentials. The emulation allocates nothing (D-17.6), as an async-signal-safe function must.
+'''

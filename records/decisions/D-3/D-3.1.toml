@@ -1,0 +1,8 @@
+id = "D-3.1"
+section = "s03"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**Two allocation domains.** Library-internal memory uses the internal heap directly. Memory handed to C callers (`strdup`, `getline`, `open_memstream`, `asprintf`, `scandir`, ...) comes from the *exported, interposable* `malloc` through the PLT, so that a user-interposed `free` can release it (spec §3.3; F23).
+'''

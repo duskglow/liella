@@ -1,0 +1,8 @@
+id = "SR-81"
+section = "7"
+row = "regex capture and back-reference rows"
+now = "t 3.1 to 5.8"
+open = "matcher itself, lazy-DFA plan"
+status = "active"
+body = '''
+'''

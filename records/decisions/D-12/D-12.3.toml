@@ -1,0 +1,8 @@
+id = "D-12.3"
+section = "s12"
+spec = "§12.2"
+ann = "HIST"
+status = "active"
+body = '''
+The mode-string mini-language is parsed by `legacy::stdio_compat::parse_mode` into typed `OpenOptions` (logic stays out of translation). `freopen` with a NULL path changes only what `fcntl` can (§12.2): the descriptor's access mode must allow the new mode (`EBADF` otherwise, as POSIX names it), `O_APPEND` follows `a`, `e` sets close-on-exec, and nothing is reopened or truncated.
+'''

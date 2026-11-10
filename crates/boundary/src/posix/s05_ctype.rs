@@ -478,22 +478,22 @@ pub extern "C" fn towupper_l(wc: wint_t, loc: locale_t) -> wint_t {
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn towctrans(wc: wint_t, desc: wctrans_t) -> wint_t {
-    ctype_tables::towctrans(wc, conv::addr(desc), locale::current())
+    ctype_tables::towctrans_view(wc, conv::addr(desc), locale::view())
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __towctrans(wc: wint_t, desc: wctrans_t) -> wint_t {
-    ctype_tables::towctrans(wc, conv::addr(desc), locale::current())
+    ctype_tables::towctrans_view(wc, conv::addr(desc), locale::view())
 }}
 
 export! { "GLIBC_2.3";
 pub extern "C" fn towctrans_l(wc: wint_t, desc: wctrans_t, loc: locale_t) -> wint_t {
-    ctype_tables::towctrans(wc, conv::addr(desc), locale::of(conv::addr(loc)))
+    ctype_tables::towctrans_view(wc, conv::addr(desc), locale::view_of(conv::addr(loc)))
 }}
 
 export! { "GLIBC_2.2.5";
 pub extern "C" fn __towctrans_l(wc: wint_t, desc: wctrans_t, loc: locale_t) -> wint_t {
-    ctype_tables::towctrans(wc, conv::addr(desc), locale::of(conv::addr(loc)))
+    ctype_tables::towctrans_view(wc, conv::addr(desc), locale::view_of(conv::addr(loc)))
 }}
 
 export! { "GLIBC_2.2.5";

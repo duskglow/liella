@@ -1,0 +1,8 @@
+id = "D-29.4"
+section = "s26-29"
+spec = "§29.1"
+ann = "COMPAT, SEC"
+status = "active"
+body = '''
+**Secure-RPC authentication, the key server client and the DES API are failing stubs** (owner ruling 2026-10-27; supersedes the LG-16 DES/netname behaviour of D-29.1 and ruling #1675): insecure by design, and outside the public API of glibc since 2.32. Each name stays exported at its compat version (an old program loads); no restore option (security). Failure table: `ecb_crypt`/`cbc_crypt` `DESERR_HWERROR` (2), buffer untouched; `des_setparity` no effect; `passwd2des` no effect (key untouched); `xencrypt`/`xdecrypt`, `key_secretkey_is_set`, `getpublickey`, `getsecretkey`, `authdes_getucred`, `user2netname`, `host2netname`, `getnetname`, `netname2user`, `netname2host` `0`; `key_setsecret`, `key_gendes`, `key_encryptsession[_pk]`, `key_decryptsession[_pk]`, `key_get_conv`, `key_setnet` `-1`; `authdes_create`, `authdes_pk_create`, `authunix_create[_default]` `NULL`. Every stub sets `errno` to `EOPNOTSUPP` and touches no network, file or key server. Test: `crates/boundary/tests/s29_rpc_auth_stubs.rs`. Still to do (same ruling): the client/server/portmapper constructors and calls (NULL + `rpc_createerr` `RPC_SYSTEMERROR`/`EOPNOTSUPP`), the rcmd family (`-1`, `EOPNOTSUPP`), `libnsl.so.1` stubs, code removal, COMPAT-12 withdrawal.
+'''

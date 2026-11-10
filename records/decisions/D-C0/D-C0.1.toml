@@ -1,0 +1,8 @@
+id = "D-C0.1"
+section = "c0"
+spec = "C0.1"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+errno is written only on failure (X3). One `ret` function per convention. **Tests (milestone 5, 2026-10-04):** `conformance/c/s00_errno.c` (clauses `s0_6_c0_1_0` to `s0_6_c0_1_2`): the sentinels with positive codes, `errno` per thread, the entries that say otherwise (`posix_memalign`, `pthread_join`; `fts_read`'s 0, D-13.14), and a sweep of 40 successful calls that must not leave `errno` 0. **Found and fixed:** `glob(GLOB_ALTDIRFUNC)` left the 0 it stores before each caller callback (to tell a failure from success); the caller's value is now restored after a callback that succeeded and left it 0. (The reference passes the sweep except `getpwuid`, which leaves 0 there.)
+'''

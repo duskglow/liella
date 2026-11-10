@@ -1,0 +1,8 @@
+id = "D-22.1"
+section = "s22"
+spec = "§22.4"
+ann = "ARB, COMPAT"
+status = "active"
+body = '''
+Every sync object fits its ABI size, is valid when all-zero (static initializers), and holds no pointers, so it works process-shared and survives being moved between processes by `mmap`.
+'''

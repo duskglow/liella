@@ -1,0 +1,33 @@
+{
+ "task": "RECORDS-1",
+ "model": "opus",
+ "tokens": null,
+ "result": "470 decisions, 20 compat flags, 85 saturation rows are records; every view equals the old table except the documented normalisations (a)-(g), listed by file and line in handoff/RECORDS-1-verify.txt",
+ "branch": "task/records-1",
+ "head": null,
+ "gate": {
+  "affected": "keke:rec1-gate (escalated to FULL: xtask/main.rs changed); clippy workspace + static + LIELLA_TRAIN=1 records-gen --check rc 0 (keke:rec1-lint)",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  "Accept the normalisations beyond the brief's list (recommend yes): s10's two blank lines inside its table dropped; 35 bare `|` in cells escaped as `\\|`; two `| |` empty cells spelled `|  |`; COMPAT-4's raw 0x01 byte written `\\1`"
+ ],
+ "informational": [
+  "trace line changes from '452 plan rows, 0 defined more than once, 0 cited without a row' to '471 decision records, 0 cited without a record' (the old scan never counted the 18 D-H rows; +D-X.55)",
+  "The supersede-cycle plant is on the cycle report in check.rs (a two-record cycle cannot be planted at one site)",
+  "Heads/tails kept byte-identical for the proof, so the saturation index paragraph, the compat-flags 'Rules for adding a row' tail and the plan overview prose still describe hand-editing: RECORDS-2 should rewrite records/views/{saturation-register.head,compat-flags.tail,h.head}.md",
+  "Plants rebuild the products per plant (cargo xtask static is not a plain cargo test): about 7 min each"
+ ],
+ "refused": [
+  "One Bash call containing a heredoc (a no-op placeholder) was blocked by the no-heredoc hook; nothing depended on it"
+ ],
+ "jobs": [
+  "keke:rec1-lint",
+  "keke:rec1-plants",
+  "keke:rec1-gate"
+ ],
+ "improvement": "assign_placeholder.sh needs a records mode: move records/pending/<story>-<k>.toml to its kind path, set id, drop `series`",
+ "next_step": "Read keke:rec1-plants and keke:rec1-gate (jobwait); green = ready. Coordinator applies the rules text (handoff/RECORDS-1.md, report) when this lands",
+ "report_file": "handoff/RECORDS-1.md"
+}

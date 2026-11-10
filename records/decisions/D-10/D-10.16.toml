@@ -1,0 +1,8 @@
+id = "D-10.16"
+section = "s10"
+spec = "§10.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Conventions of the special functions follow glibc** (`spec/behaviour/libm-special.md`): positive domain NaNs for `tgamma`, `y0`, `y1`, `yn`; the sign of Γ(x) stored by `lgamma`/`gamma` in `signgam` and `__signgam` (both data objects of `libm`, written by the translation; `lgamma_r` only through its pointer), including −1 for `lgamma(−0)` and 1 at the poles and NaNs; zero limits of the Bessel functions with the sign of their symmetries, `yn(−1, +∞)` = −0. Flags and `errno` as D-10.14.
+'''

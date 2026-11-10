@@ -1,0 +1,8 @@
+id = "D-9.3"
+section = "s09"
+spec = "§9.2–9.4"
+ann = "HIST"
+status = "active"
+body = '''
+The deterministic generators are explicit-state values (`Rng48`, `AdditiveFeedback`, and `rand_r`'s 32-bit state), because their algorithms are contracts. Per OD-13 the `random`/`rand`/`rand_r` sequences are Liella's own documented generators (unspecified by the spec); only the `drand48` family is bit-exact. The global states for `rand`/`random`/`drand48`/`seed48` live in `legacy::prng_global` behind one lock (`rand` stays MT-safe).
+'''

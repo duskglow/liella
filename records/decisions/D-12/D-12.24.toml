@@ -1,0 +1,8 @@
+id = "D-12.24"
+section = "s12"
+spec = "§12.7"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**scanf engine: one directive at a time, a 256-bit scanset, width as a unit budget** (COLD-REWRITE2-W-far-05-REWRITE and PROOF, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-05-REWRITE.md`; D-12.6, D-12.13). (1) The format is walked one directive at a time into a small `Spec` and dispatched to a state machine per field kind (integer, floating, text) returning Done, Mismatch or Eof; no pre-pass, no allocation; an invalid specification stops the scan where it sits; EOF only when an input failure comes before any conversion (suppressed ones included; `%n` is not a conversion). Grammar: `%[n$][* and ' in any order][width][m][len]conv`; width 0 is none; `%0$` and `m` on a non-text conversion are invalid; `%%` only as the whole specification; `%a` before `s`, `S` or `[` means `m`; a width on `%n` is ignored. Integers accumulate into a saturating u64 plus an overflow flag, then fit the destination (D-12.6); the `0` of `0x`/`0b` counts as a digit. Floats: a syntax machine normalising to ASCII, converted by `parse_float` (D-8.5) in the caller's rounding mode; a prefix-only field is consumed and fails (§12.7 guarantee, recorded difference D-12.13). (2) Scansets: a 256-bit map for units below 256 plus a re-walk of the set text for wide units above 255; one item walker defines the syntax. (3) Width is a unit budget (`usize::MAX` when absent; `%c` 1); suppression runs the same machine into `Discard`; text is stored in 1024-unit chunks; `%m` text is collected then allocated; invalid multibyte input fails with EILSEQ. `%'` accepts the separator in any base without grouping validation (not decided otherwise; unpinned).
+'''

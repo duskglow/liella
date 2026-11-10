@@ -1,0 +1,8 @@
+id = "D-3.13"
+section = "s04"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**Large blocks are reused** (phase 6; budget: 1 MiB `malloc`/`free` ≤ 2× glibc). A freed large block goes into its thread's cache of large blocks (at most 4 blocks and 64 MiB per thread) instead of `munmap`. It stays registered in the large table, marked cached by an atomic flag in its length word: a second `free` or a `realloc` of a cached block finds the flag and reports `DoubleFree`. Lookup in the large table becomes lock-free (insert-only probing with tombstones: a live block's probe chain never contains an empty slot, so a reader finds every live block without the lock); the lock remains for inserting and removing entries. A request is served from the cache when a cached block has at least the requested length and at most twice it plus 1 MiB; the block is then not known to be zero (`calloc` clears it). When the cache is full the oldest block is unmapped; a thread's large blocks are unmapped when its cache is parked, and `malloc_trim` empties the calling thread's. `mallopt(M_MMAP_THRESHOLD)` keeps its neutral answer (D-3.4).
+'''

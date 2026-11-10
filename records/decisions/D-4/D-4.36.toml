@@ -1,0 +1,8 @@
+id = "D-4.36"
+section = "s04"
+spec = "§4.3, §4.5"
+ann = "PERF"
+status = "active"
+body = '''
+**Branch-per-block AVX2 heads for 16-80 byte scans** (SHORT-2, 2026-10-09). strlen: after the 16-B SSE2 prologue misses and [s, s + 80) lies in s's page (offset <= 4016), [s + 16, s + 48) and [s + 48, s + 80) are checked as two unaligned 32-B blocks with one branch each, then the aligned groups from ((s + 16) & -64) + 64; near a page end the masked aligned group as before. rawmemchr: its in-page 64-B head is two blocks with one branch each. memchr: a 33-64 B class (blocks at s and s + n - 32, when [s, s + 64) lies in s's page; a miss pays no bit scan). Page rule (D-4.14) unchanged: every unaligned load lies in s's page, every aligned group starts at a checked byte or the byte after one. Safety lives in the machine_scanners sweeps (every alignment/length, page-end neighbours unmapped); planted bugs RED: strlen page bound 4016->4032 (SIGSEGV), strlen hit +47, rawmemchr hit +31, memchr hit -33, memchr page bound 4032->4064 (SIGSEGV). Tried and dropped: splitting rawmemchr's g1 group into two branches (Zen 1 instr 43.4 -> 45.4 for rawmemchr_64, no cycle gain).
+'''

@@ -1,0 +1,13 @@
+id = "SR-10"
+section = "2"
+row = "`fts` per-entry path"
+now = "i about 460 per entry at a 2 KiB path vs glibc about 74 (before FTS-SHARED-PATH)"
+limit = "\"one copy is the floor\" with a per-entry path; the block is allocated zeroed, so the path area is written twice; leaving it uninitialised is a boundary change"
+reason_class = "safety bound (zeroed allocation)"
+basis = "M"
+source = "FTS-PATH-COPY (`handoff/fts-path-copy.md`), FTS-PATH-ZERO"
+tried = "A shared path buffer was recommended against in one note and then built (`handoff/fts-shared-path.md`); that note puts the remaining flat cost at about 1.2x glibc, \"out of scope\""
+flag = "**recheck**: the \"floor\" claim predates FTS-SHARED-PATH; the shared buffer moved it. Re-count before quoting 460 vs 74"
+status = "active"
+body = '''
+'''

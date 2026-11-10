@@ -1,0 +1,13 @@
+id = "SR-53"
+section = "4"
+row = "`realloc` chain"
+now = "121.3 vs 166.6 instr (0.73x) after REALLOC-CHAIN, later 899 to 378 in REALLOC-GROW (a different shape)"
+limit = "ahead of glibc"
+reason_class = "n/a"
+basis = "M"
+source = "REALLOC-CHAIN, REALLOC-GROW"
+tried = "see above"
+flag = "none"
+status = "active"
+body = '''
+'''

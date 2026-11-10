@@ -1,0 +1,14 @@
+{"task": "RC-RECOUNT-1107", "model": "opus", "tokens": null,
+ "result": "30-workload count next 70cb44d76 vs main f3b3584af: outputs identical, instr:u max +0.25%; HOLD on printf-loop page faults +8.3% (+5 per static start, not proven layout-only)",
+ "branch": "task/rc-recount-1107", "head": null,
+ "gate": {"affected": "n/a (count story): 30/30 outputs SAME, job rc 0", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [
+  {"item": "+5 page faults per static process start (61 -> 66; printf-loop +8.3%)", "recommendation": "accept as layout growth for the pre-release only if no bisect is wanted; otherwise bisect the COLDSTART-* and DL-BOOT-RELOC-* merges with one printf exec under perf stat -e page-faults"},
+  {"item": "pipe read counts in multi-process workloads gate syscalls (pipe-mix +65, tar-gz +284 are scheduling)", "recommendation": "classify pipe read/write in pipelines as advisory in wl_syscls.sh"}],
+ "informational": ["pipe-mix/tar-gz syscall deltas are only read() counts on pipes; a single strace -f -c run moved tar-gz the other way (-472)", "instr:k printf-loop +5.3% follows its page faults"],
+ "refused": [],
+ "jobs": ["keke:rc-recount-1107-count"],
+ "improvement": "wl_count could cache per-syscall strace breakdowns per row so a syscall delta is explained without a separate probe",
+ "next_step": "owner rules on the +5 faults per static start; on request recount the final next sha (main rows cached, ~45 min)",
+ "report_file": "handoff/rc-recount-1107.md"}

@@ -20,8 +20,35 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::so::OWN_PREFIX;
+
+/// HOTTEXT-REGEN-UNBLOCK: `cargo xtask so --hottext-regen` builds the products with the dead-key
+/// check of [`group`] reported but not enforced. A stale start-up or fork key blocks the build, and
+/// the build is what `tools/hottext/regen.sh` traces to repair the list, so without this mode a dead
+/// key blocks its own repair. Only `regen.sh --build` passes it, and it then rebuilds without it, so
+/// the rewritten list must pass the check; [`static_check`] fails when anything else names it.
+pub const REGEN_FLAG: &str = "--hottext-regen";
+static REGEN: AtomicBool = AtomicBool::new(false);
+
+/// The arguments of `cargo xtask so`: [`REGEN_FLAG`] turns the regen mode on; it is refused under
+/// CI (the `CI` variable set) and any other argument is an error.
+pub fn regen_mode(args: &[String]) -> Result<(), String> {
+    let mut on = false;
+    for a in args {
+        if a == REGEN_FLAG {
+            on = true;
+        } else {
+            return Err(format!("so: unknown argument {a:?} (the only one is {REGEN_FLAG}, for tools/hottext/regen.sh)"));
+        }
+    }
+    if on && std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
+        return Err(format!("so: {REGEN_FLAG} is for tools/hottext/regen.sh only, never under CI"));
+    }
+    REGEN.store(on, Ordering::Relaxed);
+    Ok(())
+}
 
 /// A function or section name -> its build-stable key (keep in step with tools/hottext/keys.py):
 /// no `__liella_libc_` prefix, no ThinLTO `.llvm.<n>` suffix, no v0 crate disambiguators
@@ -478,7 +505,7 @@ fn unmatched_error(dead: &[&Entry], stale: &[String], profile: &str) -> Option<S
             msg.push_str(&format!("\n  {} ({}, {traced})", e.key, e.tier));
         }
         msg.push_str(&format!(
-            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh (both profiles); a key gone from every build: \
+            "\nrenamed, now generic or inlined: run tools/hottext/regen.sh . --build (in each profile); a key gone from every build: \
              tools/hottext/prune.py; a key absent from this profile by design: a line in crates/libc-so/{ABSENT_LIST} with its reason"
         ));
     }
@@ -616,17 +643,180 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     keys_out.insert_str(0, "# function keys of this archive (cargo xtask so; tools/hottext/prune.py reads it)\n");
     fs::write(archive.with_file_name("hot-text.matched"), keys_out).map_err(|e| e.to_string())?;
     let (dead, stale, allowed) = unmatched(&entries, &matched, &absent, profile);
-    if let Some(e) = unmatched_error(&dead, &stale, profile.unwrap_or("")) {
-        return Err(e);
+    if let Some(e) = dead_key_verdict(unmatched_error(&dead, &stale, profile.unwrap_or("")), REGEN.load(Ordering::Relaxed))? {
+        println!("so: {REGEN_FLAG}: dead-key check NOT enforced for this regen build (regen.sh rewrites the list, then rebuilds with it):\n{e}");
     }
     println!("so: {allowed} hot-text keys match no function section (traced in the other profile only, or in {ABSENT_LIST})");
     Ok((hot, keys.len()))
 }
 
+/// The dead-key check's outcome: the error of [`unmatched_error`] fails the build, except in the
+/// regen mode ([`REGEN_FLAG`]), where it is handed back to be printed.
+fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, String> {
+    match err {
+        None => Ok(None),
+        Some(e) if regen => Ok(Some(e)),
+        Some(e) => Err(e),
+    }
+}
+
+/// Whether tracked file `path` may name [`REGEN_FLAG`]: its definition, its one caller
+/// (`tools/hottext/regen.sh`) and prose (`.md`, and the records under `records/`, which only xtask
+/// reads). A gate, CI script or other tool that passed it
+/// would build with the dead-key check off.
+fn may_name_regen_flag(path: &str) -> bool {
+    path == "xtask/src/hottext.rs" || path == "tools/hottext/regen.sh" || path.ends_with(".md")
+        || (path.starts_with("records/") && path.ends_with(".toml"))
+}
+
+/// A key of a non-generic free function in a module path (`_RNvNtC<crate><module>...<fn>`) ->
+/// (crate, modules, function); `None` for generic, impl, closure and C names.
+fn plain_path(key: &str) -> Option<(String, Vec<String>, String)> {
+    let mut s = key.strip_prefix("_RNv")?;
+    let mut depth = 1;
+    while let Some(r) = s.strip_prefix("Nt") {
+        s = r;
+        depth += 1;
+    }
+    s = s.strip_prefix('C')?;
+    let mut idents = Vec::new();
+    for _ in 0..=depth {
+        let n = s.bytes().take_while(u8::is_ascii_digit).count();
+        let len: usize = s.get(..n)?.parse().ok()?;
+        idents.push(s.get(n..n + len)?.to_string());
+        s = &s[n + len..];
+    }
+    if !s.is_empty() {
+        return None;
+    }
+    let f = idents.pop()?;
+    let krate = idents.remove(0);
+    Some((krate, idents, f))
+}
+
+/// Whether every module-level definition of `fn f` in `text` carries `#[inline(never)]` among the
+/// attributes and comments directly above it; `None` when `text` defines no such function.
+fn inline_never(text: &str, f: &str) -> Option<bool> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut found = None;
+    for (i, l) in lines.iter().enumerate() {
+        let mut rest = *l;
+        for q in ["pub(crate) ", "pub(super) ", "pub ", "const ", "unsafe ", "extern \"C\" "] {
+            rest = rest.strip_prefix(q).unwrap_or(rest);
+        }
+        let Some(after) = rest.strip_prefix("fn ").and_then(|r| r.strip_prefix(f)) else { continue };
+        if !after.starts_with('(') && !after.starts_with('<') {
+            continue;
+        }
+        let marked = lines[..i].iter().rev().take_while(|a| a.starts_with("#[") || a.starts_with("//")).any(|a| a.trim() == "#[inline(never)]");
+        found = Some(found.unwrap_or(true) && marked);
+    }
+    found
+}
+
+/// The source of module `mods` of workspace crate `krate` (its library name): `(path, text)`.
+fn module_source(root: &Path, krate: &str, mods: &[String]) -> Option<(String, String)> {
+    let package = krate.replace('_', "-");
+    let dir = fs::read_dir(root.join("crates")).ok()?.filter_map(Result::ok).map(|e| e.path()).find(|d| {
+        fs::read_to_string(d.join("Cargo.toml")).is_ok_and(|t| t.lines().any(|l| l.trim() == format!("name = \"{krate}\"") || l.trim() == format!("name = \"{package}\"")))
+    })?;
+    let base = dir.join("src").join(mods.join("/"));
+    let candidates = if mods.is_empty() { vec![dir.join("src/lib.rs")] } else { vec![base.with_extension("rs"), base.join("mod.rs")] };
+    candidates.into_iter().find_map(|p| fs::read_to_string(&p).ok().map(|t| (p.strip_prefix(root).unwrap_or(&p).display().to_string(), t)))
+}
+
+/// The tiers whose plain functions must be `#[inline(never)]` (HOTTEXT-REGEN-UNBLOCK): the fork
+/// tier only. Marking the start-up tier too cost 3 to 18 user instructions on the start-up rows
+/// (`process::run_thread_dtors` and `locale::refresh_words` stop being inlined), so it waits for
+/// an owner ruling (handoff/hottext-regen-unblock.md); the fork tier's functions are off the
+/// start-up path.
+const INLINE_NEVER_TIERS: [&str; 1] = ["fork"];
+
+/// `cargo xtask static` (HOTTEXT-REGEN-UNBLOCK): (1) no tracked file but [`may_name_regen_flag`]'s
+/// names [`REGEN_FLAG`], so no gate can build with the dead-key check off; (2) every key of an
+/// [`INLINE_NEVER_TIERS`] tier that names a non-generic function of a workspace crate is
+/// `#[inline(never)]` in the source, so the function keeps its symbol (and its key) in both
+/// profiles whatever unrelated code does to the inliner's budget (two libm merges inlined
+/// `spawn::wait4` away and failed the build on 2026-11-07). Generic, impl and closure keys are
+/// not checked here; the build check of [`group`] still covers them.
+pub fn static_check(root: &Path) -> Result<(), String> {
+    let mut errs = Vec::new();
+    for p in crate::labnames::tracked_with(root, true)? {
+        if may_name_regen_flag(&p) {
+            continue;
+        }
+        if fs::read(root.join(&p)).is_ok_and(|b| String::from_utf8_lossy(&b).contains(REGEN_FLAG)) {
+            errs.push(format!("{p}: names {REGEN_FLAG}; only tools/hottext/regen.sh may build with the dead-key check off"));
+        }
+    }
+    let list = root.join("crates/libc-so/hot-text.list");
+    let entries = parse_list(&fs::read_to_string(&list).map_err(|e| format!("{}: {e}", list.display()))?)?;
+    for e in entries.iter().filter(|e| INLINE_NEVER_TIERS.contains(&e.tier)) {
+        let Some((krate, mods, f)) = plain_path(&e.key) else { continue };
+        if !krate.starts_with("liella") {
+            continue;
+        }
+        match module_source(root, &krate, &mods) {
+            None => errs.push(format!("hot-text.list: {} ({}): module source of {krate}::{} not found", e.key, e.tier, mods.join("::"))),
+            Some((path, text)) => match inline_never(&text, &f) {
+                Some(true) => {}
+                Some(false) => errs.push(format!("{path}: fn {f} ({} key in hot-text.list) needs #[inline(never)]: inlined, its key goes dead and fails `so`", e.tier)),
+                None => errs.push(format!("{path}: no module-level fn {f} ({} key {} in hot-text.list)", e.tier, e.key)),
+            },
+        }
+    }
+    if errs.is_empty() { Ok(()) } else { Err(errs.join("\n")) }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{function_of, is_startup_names, key, parse_absent, parse_list, positions, rename_for, section_for, unmatched, unmatched_error};
+    use super::{dead_key_verdict, function_of, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn regen_mode_is_one_explicit_flag_for_regen_sh_only() {
+        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): `so` takes no argument but the
+        // regen flag, which is refused under CI; only regen.sh (and prose) may name it.
+        assert!(regen_mode(&[]).is_ok());
+        assert!(!REGEN.load(Ordering::Relaxed));
+        assert!(regen_mode(&["--hottext".to_string()]).unwrap_err().contains("unknown argument"));
+        let r = regen_mode(&[REGEN_FLAG.to_string()]);
+        if std::env::var_os("CI").is_some_and(|v| !v.is_empty()) {
+            assert!(r.unwrap_err().contains("never under CI"));
+        } else {
+            assert!(r.is_ok() && REGEN.load(Ordering::Relaxed));
+        }
+        REGEN.store(false, Ordering::Relaxed);
+        // The dead-key error fails the build unless in the regen mode.
+        assert_eq!(dead_key_verdict(Some("dead".to_string()), false), Err("dead".to_string()));
+        assert_eq!(dead_key_verdict(Some("dead".to_string()), true), Ok(Some("dead".to_string())));
+        assert_eq!(dead_key_verdict(None, false), Ok(None));
+        assert!(may_name_regen_flag("tools/hottext/regen.sh") && may_name_regen_flag("xtask/src/hottext.rs") && may_name_regen_flag("handoff/x.md"));
+        assert!(may_name_regen_flag("records/decisions/D-X/D-X.56.toml") && !may_name_regen_flag("records/views.sh"));
+        assert!(!may_name_regen_flag("tools/hottext/merge.py") && !may_name_regen_flag("scripts/ci.sh") && !may_name_regen_flag("xtask/src/affected.rs"));
+    }
+
+    #[test]
+    fn listed_plain_functions_must_be_inline_never() {
+        // HOTTEXT-REGEN-UNBLOCK (no spec clause: build tooling): a start-up/fork key of a plain
+        // function maps to its module, and the definition must carry #[inline(never)].
+        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4"), Some(("liella_boundary".to_string(), vec!["spawn".to_string()], "wait4".to_string())));
+        assert_eq!(plain_path("_RNvNtNtC9liella_rt3a_b1c4f_un"), Some(("liella_rt".to_string(), vec!["a_b".to_string(), "c".to_string()], "f_un".to_string())));
+        assert_eq!(plain_path("_RNvC5plain3fun"), Some(("plain".to_string(), vec![], "fun".to_string())));
+        assert_eq!(plain_path("_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary"), None);
+        assert_eq!(plain_path("_RNvMs_NtC9liella_rt4heap4Heap4grow"), None);
+        assert_eq!(plain_path("__waitpid"), None);
+        assert_eq!(plain_path("_RNvNtC15liella_boundary5spawn5wait4x"), None);
+        let src = "/// doc\n#[inline(never)]\npub fn wait4(a: i32) {}\n#[cold]\nfn other() {}\nfn wait44() {}\n";
+        assert_eq!(inline_never(src, "wait4"), Some(true));
+        assert_eq!(inline_never(src, "other"), Some(false));
+        assert_eq!(inline_never(src, "missing"), None);
+        // An attribute separated by a blank line or an indented (method) definition does not count.
+        assert_eq!(inline_never("#[inline(never)]\n\nfn g() {}\n", "g"), Some(false));
+        assert_eq!(inline_never("impl X {\n    #[inline(never)]\n    fn h() {}\n}\n", "h"), None);
+        assert_eq!(inline_never("#[inline(never)]\npub(crate) extern \"C\" fn k<T>() {}\n", "k"), Some(true));
+    }
 
     #[test]
     fn keys_drop_build_hashes() {

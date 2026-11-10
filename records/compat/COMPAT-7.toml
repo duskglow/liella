@@ -1,0 +1,9 @@
+id = "COMPAT-7"
+behaviour = "`getopt` after the caller replaces `argv[optind]` mid-cluster (§1.6; D-1.6, COLD-REWRITE2-W-far-07-PROOF-2, owner ruling 2026-10-21)"
+glibc = "Goes on reading the string it was reading when the caller stores a different pointer in `argv[optind]` between two calls in the middle of an option cluster (the cursor is a pointer into the old string)"
+liella = "Reads `argv[optind]` as it is now: an element shorter than the cursor position is read again from its start at the same index (cut in place, both read the element again from its start). The owner is not confident either behaviour is the right one"
+restore = "A tunable read at startup (and kept in the parser state) making the boundary hold the old string pointer between calls inside a cluster; the parser core already works through the `Args` trait and would need no change. Not designed further until the owner decides which behaviour is the default"
+cost = "none today (placeholder only, behaviour unchanged; any flag must cost nothing on the default path or stay registered only)"
+status = "registered"
+body = '''
+'''

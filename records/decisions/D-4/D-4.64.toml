@@ -1,0 +1,8 @@
+id = "D-4.64"
+section = "s04"
+spec = "§4.1–4.2"
+ann = "PERF"
+status = "active"
+body = '''
+**Bench rows for memmove's forward direction at a short overlap distance** (BENCH-MEMMOVE-OVERLAP-SHORT, 2026-11-06). `cbench_memref` gains `memmove_overlap8_4k` (`memmove(d, d + 8, 4096)`) and `memmove_overlap64_4k` (`memmove(d, d + 64, 4096)`, the contrast row), both with the destination 16 bytes past a 4096-aligned allocation so the alignment the copy kernel sees does not move with the allocator (as the STRSTR-SHORT-DENSE-PARITY-3 rows). `memmove_4k` stays as it is (a move up, the backward direction). Registered in bench/budgets.tsv as `ratio_host` 1.00, report only; no host limit until a calibration. Measured (booked timing, `cargo xtask bench --compare`, two runs each, glibc / Liella ns): Alder Lake-N overlap8 87.92 / 86.80 and 87.92 / 87.30 (0.99), overlap64 126.04 / 65.59 (0.52); Ivy Bridge overlap8 175.20 / 136.90 (0.78), overlap64 125.52 / 119.28 (0.95); Zen 1 (build host, not booked) 1.00 and 1.03. Liella is not slower than the reference on either timing host, so the forward path is unchanged.
+'''

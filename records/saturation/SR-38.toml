@@ -1,0 +1,13 @@
+id = "SR-38"
+section = "3"
+row = "`getline` long records"
+now = "gap 1168 instr before; memcpy 945 vs glibc 49 instr (`rep movsb` retires as a handful)"
+limit = "the remainder is `rep movsb` vs a vector copy: a library-wide memcpy policy, not this story"
+reason_class = "hardware"
+basis = "M"
+source = "STRSTR-GETLINE"
+tried = "128-byte step cut front path 3403 to 1924 (-43%); gl_80 +2.9 instr accepted (RULING NEEDED, recommend accept)"
+flag = "**recheck** after MEMCPY-POLICY: the large-copy `rep movsb` path was the open recommendation"
+status = "active"
+body = '''
+'''

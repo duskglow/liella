@@ -1,0 +1,8 @@
+id = "D-1.8"
+section = "s01"
+spec = "§1.8"
+ann = "HIST"
+status = "active"
+body = '''
+Tunables are parsed once at entry into a typed `Tunables` value, with the secure-mode filter applied (S8). Tunable names are namespaced `liella.*`, and the `glibc.*` names that apply to our design are accepted as aliases. Unknown names are ignored, per the contract. **Amendment (R15-6, LEGACY-TUNABLES-POLICY, 2026-10-23):** the full syntax is parsed as glibc 2.39 does (black-box probes): `:`-separated entries, a trailing entry without `=` makes the whole string malformed, numbers in base 0 with leading spaces/tabs and a sign, each tunable's listed range (out of range ignored). Honoured: `glibc.cpu.hwcaps`, `glibc.cpu.x86_rep_{movsb,stosb}_threshold`, `glibc.pthread.rseq`, `glibc.malloc.perturb`; every other name ignored silently; secure mode honours none (threat model, `GLIBC_TUNABLES` row). Table: `docs/tunables.md`.
+'''

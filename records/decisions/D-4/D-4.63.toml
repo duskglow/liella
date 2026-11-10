@@ -1,0 +1,8 @@
+id = "D-4.63"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**`rawmemchr`'s SSE2 128-byte loop starts 32-byte aligned** (PERF-RAWMEMCHR-4K-IVB, 2026-11-06). In `csys/src/machine/scan.S`, 16 bytes of int3 fill after the `ret` that ends the SSE2 64-byte head (`.org liella_machine_rawmemchr_entry + 0x338`) put `.Lraw_sse_loop` at entry + 0x3e0. TIMING-IVB-MEMREF-ENTRY's entry change had moved the 117-byte loop to entry + 0x3d0 (16 mod 32: five 32-byte fetch windows instead of four), and `rawmemchr_4k` timed 1.3% slower on Ivy Bridge with the same instruction count. The fill is never executed (no instruction count changes) and the function still ends before the next section's 64-byte boundary, so no other symbol moves (`nm` of both builds identical). Ivy Bridge timing, 6 interleaved alternations x 5 rounds, glibc drift 1.000: `rawmemchr_4k` 0.970 of next (209.45 -> 203.10 ns; glibc 192.23), `rawmemchr_64`, `memchr_4k`, `strlen_4k` 1.000. Plants: a removed `ret` before the fill is caught (SIGTRAP in `machine_scanners`); the fill byte is equivalent. Any edit between `.Lraw_sse_masked` and the loop must re-check the loop's address.
+'''

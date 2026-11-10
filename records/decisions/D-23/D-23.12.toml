@@ -1,0 +1,8 @@
+id = "D-23.12"
+section = "s23"
+spec = "§23.7, §7.13"
+ann = "PERF"
+status = "active"
+body = '''
+**Per-locale `LC_TIME` name view (STRFTIME-NAMES; coordinator decision 2026-10-09: yes, internal, testable, small shared memory).** `LocaleView` (D-7.13) gains `names: TimeNames`, built when the locale is interned (a `const fn` for the `"C"` view): `LC_TIME` items 0..40 (`ABDAY_1..7`, `DAY_1..7`, `ABMON_1..12`, `MON_1..12`, `AM_STR`, `PM_STR`) as `&'static [u8]` (pointer + length, terminator cut off, empty for a missing item or a word: the answer `Locale::string` gives), 40 x 16 B = 640 B per interned locale view, no per-thread cost, immutable. `time::fast::strftime` now takes the `&LocaleView` (the boundary passes `locale::view()` / `view_of(loc)`) and copies `%a %A %b %h %B %p` from it: no item-table lookup, decode or `nul_at` per name. The general engine and `wcsftime` are unchanged and still read `Locale::string`. Tests: `time::format::tests::time_names_equal_the_item_reads` (every name item in C, C.UTF-8 and four compiled locales equals `Locale::item_parsed`; accessors equal `lctime::Time` over in-range and out-of-range indices), `fast_lane_is_the_general_path` (now through the view), boundary `strftime_names_follow_the_locale` (`strftime_l` and `strftime` under `uselocale` equal `nl_langinfo_l` for every weekday and month in C, de_DE, ja_JP, and follow `uselocale` switches). Planted bugs (day index +1, view built from C, name length -1) each fail all three. Zen 1 instr/op `strftime_names_en_us` 485 -> 345 (glibc 349).
+'''

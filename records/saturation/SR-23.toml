@@ -1,0 +1,13 @@
+id = "SR-23"
+section = "3"
+row = "`memmove_overlap8_4k`, `memmove_overlap64_4k` (4 KiB move down by 8 / 64 bytes: the forward direction, short overlap distance; BENCH-MEMMOVE-OVERLAP-SHORT, D-4.64)"
+now = "Zen 1 instr 425.7 vs 420.6 (both rows); time ratios (Liella / glibc, booked, two runs each): Alder Lake-N 0.99 and 0.52, Ivy Bridge 0.78 and 0.95, Zen 1 (not booked) 1.00 and 1.03"
+limit = "at or below parity in time"
+reason_class = "measured"
+basis = "M"
+source = "BENCH-MEMMOVE-OVERLAP-SHORT"
+tried = "none: a reported Alder Lake-N slowdown of about 3% at a short overlap distance did not reproduce on this row (0.99); no change made"
+flag = "none"
+status = "active"
+body = '''
+'''

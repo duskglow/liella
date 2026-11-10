@@ -1,0 +1,8 @@
+id = "D-11.8"
+section = "s11"
+spec = "§11.11"
+ann = "HIST"
+status = "active"
+body = '''
+POSIX AIO runs on **io_uring** when it is available and permitted, falling back to a worker pool. Completion order per fd and priority is preserved, per the contract (observable: fewer threads).
+'''

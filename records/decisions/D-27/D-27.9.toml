@@ -1,0 +1,8 @@
+id = "D-27.9"
+section = "s26-29"
+spec = "§22, §27"
+ann = "—"
+status = "active"
+body = '''
+**The placeholder libraries (DL-1 `DL-PLACEHOLDERS`, design §16, R14-12).** `cargo xtask so` builds `libpthread.so.0`, `libdl.so.2`, `librt.so.1`, `libutil.so.1`, `libanl.so.1` and `libc_malloc_debug.so.0` from `spec/abi/versions.tsv` (`xtask/src/placeholders.rs`), each with its soname and `DT_NEEDED libc.so.6`. **Rule:** a library's version nodes are the versions of its rows (numeric order, each the parent of the next, no `GLIBC_PRIVATE`); it exports each of its rows whose name `libc.so.6` has no row for, at the row's version and binding; every other name is reached through `libc.so.6` and never defined twice. So the five placeholders export only their `__lib<x>_version_placeholder` versions (bodies return), and `libc_malloc_debug.so.0` only `malloc_get_state`/`malloc_set_state` (bodies in `crates/libc-so/placeholders/libc_malloc_debug.c`: NULL / -1 with `ENOSYS`, as `libc.a`'s, D-3.5) while defining all its nodes; preloading it gives no hooks. An export without a body is a build error. Empty `libdl.a`, `librt.a`, `libutil.a`, `libanl.a` (and `libpthread.a`) let `-static -l<x>` resolve. **Check:** each built library is read back with `readelf` and compared with the table independently of the generator (soname, `DT_NEEDED`, version definitions, every defined export: unversioned, another library's row, a `libc.so.6` name, a missing row are errors), and no shared product (`libc.so.6`, `libm.so.6` included) defines or exports `GLIBC_PRIVATE` (R14-12). Tests: `placeholders::tests` (xtask), `s22_n_1` (links `-lpthread -ldl -lrt -lutil -lanl` statically and runs; dynamically, links only until DL-14).
+'''

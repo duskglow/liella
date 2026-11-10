@@ -14,14 +14,26 @@
 #   HOT-ORDER: the list is a LAYOUT ORDER, not a set: keys in first-touch order (startup first, then
 #   the probes in the order below, then the extra programs); xtask/src/hottext.rs numbers the
 #   sections so the link lays the group out in that order. merge.py keeps an older list's keys.
+#   HOTTEXT-REGEN-UNBLOCK: --build (needs <tree> = this script's tree) builds the products itself, in the
+#   profile LIELLA_FULL_PROFILE selects, with `cargo xtask so --hottext-regen`: the dead-key check is
+#   reported, not enforced, so a stale key no longer blocks its own repair. After rewriting the list it
+#   rebuilds with plain `cargo xtask so`, which must pass the check. Nothing else may pass that flag
+#   (`cargo xtask static`). Both profiles: `regen.sh . --build` then `LIELLA_FULL_PROFILE=1 regen.sh . --build`.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 T=$(cd "$1" && pwd); shift
 list=$here/../../crates/libc-so/hot-text.list
 replace=0
+build=0
+while [ $# -gt 0 ]; do
+    case $1 in --replace) replace=1; shift;; --build) build=1; shift;; *) break;; esac
+done
+if [ $build = 1 ]; then
+    if [ "$T" != "$(cd "$here/../.." && pwd)" ]; then echo "regen: --build builds the list's own tree; give $(cd "$here/../.." && pwd)" >&2; exit 1; fi
+    (cd "$T" && cargo xtask so --hottext-regen) || { echo "regen: product build failed" >&2; exit 1; }
+fi
 profile=$(cat "$T/target/liella/.profile" 2>/dev/null || true)
 case $profile in fast|release) ;; *) echo "regen: $T/target/liella/.profile: want fast or release, got '$profile' (build the products first)" >&2; exit 1;; esac
-if [ "${1:-}" = --replace ]; then replace=1; shift; fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/hottext.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp "$here"/probes/*.c "$work"/
@@ -100,3 +112,8 @@ if [ $replace = 1 ] || [ ! -f "$list" ]; then : > "$work/old.keys"; else grep -v
 } > "$list.tmp"
 mv "$list.tmp" "$list"
 echo "hot-text: $(wc -l < "$work/new.keys") keys traced ($profile), $(grep -vc '^#' "$list") in $list"
+if [ $build = 1 ]; then
+    # The rewritten list must pass the dead-key check in this profile (merge.py drops the keys this
+    # trace no longer hits from this profile).
+    (cd "$T" && cargo xtask so) || { echo "regen: the rewritten list still fails cargo xtask so ($profile)" >&2; exit 1; }
+fi

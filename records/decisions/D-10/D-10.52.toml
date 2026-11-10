@@ -1,0 +1,8 @@
+id = "D-10.52"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+body = '''
+**Integer fixed-point quick tier for x87 `long double` and `_Float128` ahead of the 384-bit route** (LIBM-RETHINK, LIBM-RETHINK-2). Today every `long double` call outside exp/log and every `_Float128` call runs the 384-bit `mp` route (sinl 80 262 instructions, atanl 160 923, expf128 33 153; 95-99% in `mp`). The new tier 1 unpacks the operand to an integer significand and evaluates in 64-bit limbs: exact 64x64->128 products (`mul`; `mulx`/`adcx`/`adox` where BMI2/ADX exist), table-driven reduction and short fixed-point polynomials (fixed-point and multi-limb evaluation: Brent & Zimmermann, Modern Computer Arithmetic, 2010; Tang's tables; Payne-Hanek reduction for sin/cos/tan, Payne & Hanek, SIGNUM Newsletter 18(1) 1983), bound about 2^-85..-90 for x87 (2 limbs) and 2^-135..-150 for `_Float128` (3 limbs), Ziv's test as an integer mask test, the four rounding modes as four integer roundings (no MXCSR or x87 control-word traffic, so directed modes cost the same); tier 2 is `wide_dd` where it exists, then `mp`. Rejected: x87 transcendental instructions as the quick phase (their results are rounded to 64 bits, so the test would fail on about every call, and they are microcoded), triple-double in FP registers for `_Float128` (Lauter 2005: about 3x the operations of the 3-limb integer form). Estimates (to be measured by the first brief): expl 95-120 instructions, sinl 150-250 (glibc 1119), expf128 300-600 (glibc 6673).
+'''

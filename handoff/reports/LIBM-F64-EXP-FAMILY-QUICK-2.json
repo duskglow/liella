@@ -1,0 +1,11 @@
+{"task": "LIBM-F64-EXP-FAMILY-QUICK-2", "model": "opus", "tokens": null,
+ "result": "expm1 on the exp quick kernel in both builds (table region with -1 folded before rounding, exact-head series below 2^-5, RHO_M1 = 1.5*2^-62, fallback 0.59%); near() doc precondition fixed; stale KERNELS.md fixed; counts/timing/10^8 jobs not done",
+ "branch": "task/libm-f64-exp-family-quick-2", "head": "91b2341df",
+ "gate": {"affected": "pending (keke libm-f64-exp-family-quick-2-gate)", "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["inherited head was static-red (tables-fresh: KERNELS.md never committed by LIBM-F64-EXP-FAMILY-QUICK); fixed here", "#4010 text not reachable from the agent (no gh); fixed the near() doc defect found: the 2^-15*H step held only for rho <= 2^-69, now precondition rho < 2^-55"],
+ "refused": [],
+ "jobs": ["keke:libm-f64-exp-family-quick-2-lint2", "keke:libm-f64-exp-family-quick-2-plants", "keke:libm-f64-exp-family-quick-2-gate"],
+ "improvement": "the static check (tables-fresh) should run in the lint step agents copy, so a regenerated-but-uncommitted KERNELS.md fails before hand-back, not in the next run",
+ "next_step": "expm1 after-counts (cbench_libm --compare --counters), 10^8 accuracy jobs for exp2/exp10/expm1, SSE2 counts, IVB/N100 timing",
+ "report_file": "handoff/LIBM-F64-EXP-FAMILY-QUICK-2.md"}
