@@ -1,0 +1,12 @@
+# LIBM-LD-EXPLOG-INT(-2) plants: cargo xtask plants handoff/LIBM-LD-EXPLOG-INT-plants.txt --dir <new RAM dir>
+# The x87 expl/exp2l/exp10l/expm1l/logl/log2l/log10l/log1pl integer tier (crates/math/src/wide_int_el.rs, D-10.73).
+# A fixed-point shift off by one in the exponential's polynomial (h8 lands in the wrong units).
+el-exp-poly-shift | crates/math/src/wide_int_el.rs | lit:mulhi64(a1, h) >> 11); // units 2^-79 ==> mulhi64(a1, h) >> 12); // units 2^-79 | cargo test -p liella-math --lib wide_int_el | msg:tier_agrees_with_the_wide_route.*(FAILED|panicked)|Exp.*error 2\^
+# The reduction's low part dropped: the fraction keeps only the bits of the top word of m·C.
+el-exp-reduction-low | crates/math/src/wide_int_el.rs | lit:let frac = (p01 >> s) ==> let frac = (0 >> s) | cargo test -p liella-math --lib wide_int_el | msg:tier_agrees_with_the_wide_route.*(FAILED|panicked)|error 2\^
+# `near` always true: the rounding test never refuses a result (shared with the sin/cos tier).
+el-near-always | crates/math/src/wide_int.rs | lit:if (lo & (u64::MAX >> 1)).wrapping_sub(ERR) > (1 << 63) - 2 * ERR { ==> if false { | cargo test -p liella-math --lib wide_int_el | msg:hairline_results_are_refused.*(FAILED|panicked)|hairline
+# The expm1 small-argument switch moved: |x| in [2^-30, ln2/256) takes the table route and loses relative accuracy.
+el-expm1-switch | crates/math/src/wide_int_el.rs | lit:if minus_one && k == 0 { ==> if minus_one && k == 0 && e + 63 < -30 { | cargo test -p liella-math --lib wide_int_el | msg:Expm1.*error 2\^|tier_agrees_with_the_wide_route.*(FAILED|panicked)
+# The logarithm's series term in the wrong units (w·h1 is in units 2^-139: shift 12 to 2^-127).
+el-log-series-units | crates/math/src/wide_int_el.rs | lit:(l1 + (L2[ii] >> 6) + (p >> 12), -127) ==> (l1 + (L2[ii] >> 6) + (p >> 13), -127) | cargo test -p liella-math --lib wide_int_el | msg:Log.*error 2\^|tier_agrees_with_the_wide_route.*(FAILED|panicked)

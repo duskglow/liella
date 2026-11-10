@@ -278,6 +278,8 @@ pub fn generate() -> Vec<(&'static str, String)> {
     o.close("gamma.rs", "Taylor tables of the `lgamma`/`tgamma` fast tier");
     crate::bessel_tables::emit(&mut o.src);
     o.close("bessel.rs", "Taylor, series and Hankel tables of the `j0`/`j1`/`y0`/`y1` fast tier");
+    crate::ld_explog_tables::emit(&mut o.src);
+    o.close("wide_int_el.rs", "Fixed-point constants and tables of the x87 `long double` exponentials' and logarithms' integer tier");
     o.files
 }
 
