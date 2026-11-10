@@ -619,7 +619,8 @@ fn init_startup_names_sit_in_one_window() {
     let addr = u64::from_str_radix(f[2], 16).unwrap();
     let size = u64::from_str_radix(f[4], 16).unwrap();
     eprintln!("startup names: .rodata1 at {addr:#x}, {size} bytes");
-    assert!(size > 0 && size <= 4096, "startup names: .rodata1 holds {size} bytes, want one static of at most a page");
+    // D-X.62: .rodata1 holds the start-up read-only data group (STARTUP_NAMES among it), at most one window.
+    assert!(size > 0 && size <= 65536, "startup names: .rodata1 holds {size} bytes, want the start-up group of at most one 64 KiB window");
     assert_eq!(addr >> 16, (addr + size - 1) >> 16, "startup names: .rodata1 {addr:#x}+{size} crosses a 64 KiB window");
     let at = names_at.unwrap_or_else(|| panic!("startup names: no STARTUP_NAMES symbol in the program"));
     assert!(addr <= at && at < addr + size, "startup names: STARTUP_NAMES at {at:#x} is not in .rodata1");
@@ -685,7 +686,7 @@ fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
         build_with(&exe, &[obj.to_str().expect("utf-8 path")]);
         let out = Command::new("readelf").arg("-SW").arg(&exe).output().expect("readelf");
         let text = String::from_utf8_lossy(&out.stdout);
-        let line = text.lines().find(|l| l.split_whitespace().nth(1) == Some(".rodata1")).unwrap_or_else(|| panic!("pad {pad:#x}: no .rodata1 in the probe"));
+        let line = text.lines().find(|l| l.split_once(']').and_then(|(_, r)| r.split_whitespace().next()) == Some(".rodata1")).unwrap_or_else(|| panic!("pad {pad:#x}: no .rodata1 in the probe"));
         let f: Vec<&str> = line.split(']').nth(1).expect("section line").split_whitespace().collect();
         let (start, size) = (u64::from_str_radix(f[2], 16).expect("address"), u64::from_str_radix(f[4], 16).expect("size"));
         spans.push((pad, start, size));
