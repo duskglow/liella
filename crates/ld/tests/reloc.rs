@@ -363,7 +363,7 @@ fn reloc_version_check_and_refusals_in_the_model() {
         Err(reloc::VersionError::Missing { by: 0, file: vname, version: b"VER_1" }),
         "missing version refused"
     );
-    assert_eq!(RelocError::Tls(18).message(), b"thread-local storage relocations are not available in this build\n");
+    assert_eq!(RelocError::Tls(36).message(), b"TLS descriptor relocations are not available in this build\n");
     std::fs::remove_dir_all(&d).ok();
 }
 

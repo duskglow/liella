@@ -53,7 +53,9 @@ static OWN_BASE: AtomicUsize = AtomicUsize::new(0);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 // The thread-block slots the arch table names are the fields of Liella's block (D-4.15).
+#[allow(clippy::as_conversions)] // const context: no `try_from`; the values are small offsets
 const _: () = {
+    assert!(ltls::DTV_HEADER == 2);
     assert!(Native::TCB_SIZE as usize == core::mem::size_of::<ThreadBlock>());
     assert!(Native::DTV_SLOT as usize == core::mem::offset_of!(ThreadBlock, dtv));
     assert!(matches!(Native::SELF_SLOT, Some(0)));
@@ -397,7 +399,8 @@ fn install_tls(mods: &[Option<Module>], biases: &[u64], placed: &[Option<Placed>
         unsafe { conv::bytes_at_mut(dst, n) }.copy_from_slice(image);
     }
     let dtv_at = base.wrapping_add(usize::try_from(area.dtv).unwrap_or(0));
-    let mut dtv = [0u64; ltls::DTV_HEADER as usize + OBJECTS_MAX];
+    // DTV_HEADER (2, asserted above) words, then a slot per object.
+    let mut dtv = [0u64; 2 + OBJECTS_MAX];
     let Some(dtv) = dtv.get_mut(..usize::try_from(area.dtv_words).unwrap_or(usize::MAX)) else { fail() };
     ltls::fill_dtv(dtv, GENERATION.load(Relaxed), tp64, placed);
     // UNSAFE(slice): the dtv in the area mapped above.
