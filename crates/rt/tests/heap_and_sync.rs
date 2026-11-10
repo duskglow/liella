@@ -430,6 +430,15 @@ fn the_first_allocation_reserves_one_mapping() {
         assert_eq!(maps.len(), 1, "{limit:?}: {maps:?}");
         let (base, len) = maps[0];
         assert_eq!((base % SEG, len), (0, SEG + PAGE + (64 << 10)), "{limit:?}");
+        // The registry page after the segment holds, without overlap, the cache table (64
+        // words; entry 0 is the first cache, at the chunk after the page), the segment bases
+        // (128 words; entry 0 is the segment) and the segment hash (256 words; the entry
+        // `key << 21 | index + 1` at the key's slot of the heap's multiplicative hash).
+        let w = |x: usize| u64::try_from(x).unwrap();
+        let reg: Vec<(usize, u64)> = pages.words(base + SEG, PAGE / 8).iter().map(|v| v.load(Ordering::Relaxed)).enumerate().filter(|&(_, v)| v != 0).collect();
+        let key = w(base / SEG);
+        let slot = usize::try_from(key.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (64 - 21)).unwrap() & 255;
+        assert_eq!(reg, [(0, w(base + SEG + PAGE)), (64, w(base)), (192 + slot, (key << 21) | 1)], "{limit:?}: registry page");
         assert_eq!(first / SEG, base / SEG, "{limit:?}: the block is in the first segment");
         heap.free(&CSys, &pages, first).unwrap();
         for b in blocks {
