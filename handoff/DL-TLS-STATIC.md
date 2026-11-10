@@ -55,3 +55,6 @@ init/release`, DL-13), dlopen'd TLS and the slow path (DL-15/16), `cbench_tls` r
 hand in the records' shape (no cargo on the agent host); `cargo xtask static` accepted it.
 
 ## Results
+Pending at hand-back (context checkpoint): dl-tls-static-gate2, dl-tls-static-plants, dl-tls-static-counts on mei.
+Re-attach: `~/bin/jobwait dl-tls-static-gate2 dl-tls-static-plants dl-tls-static-counts` (on mei); plants results in
+/mnt/zram/claude/plants-dl-tls-static/results.txt, counts in /tmp/dlts-counts.log.

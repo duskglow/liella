@@ -1,0 +1,32 @@
+{
+ "task": "DL-TLS-STATIC",
+ "model": "opus",
+ "tokens": null,
+ "result": "Static TLS of initially loaded objects: Arch TLS rows, liella_ld::tls layout (64 KiB surplus), DTPMOD/DTPOFF/TPOFF, final thread block with canary/guard/dtv, __tls_get_addr exported; LE/IE/GD/LD matrix green; gate, plants and counts pending",
+ "branch": "task/dl-tls-static",
+ "head": "see git (commit after this file)",
+ "gate": {
+  "affected": "pending (dl-tls-static-gate2); targeted t2: tls 4/4, reloc 8/8, ldso_run, elf_* green",
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [
+  {
+   "item": "ld.so as an object reads its own file (PT_INTERP path or /proc/self/exe) for __tls_get_addr's scope entry; same family as #4229",
+   "recommendation": "fold into DL-RELOC-4's image-mode reader"
+  },
+  {
+   "item": "programs without dependencies under ld.so now get a mapped final thread block (one mmap + arch_prctl more)",
+   "recommendation": "keep: the provisional block let LE TLS write into ld.so's data"
+  }
+ ],
+ "informational": [
+  "TB-FOREIGN-SAFETY not in origin/next: not merged; __tls_get_addr checks FLAG_OWN per block; DL-13 __liella_tls_init/release will need the process-level test",
+  "variant I implemented, untested until A-4",
+  "cbench_startup counts: branch only, not side by side with next"
+ ],
+ "refused": [],
+ "improvement": "developer-flow's detached jobrun form should be quoted in the brief's JOBS line: an undetached jobrun cost 3 calls to stop and restart",
+ "next_step": "collect dl-tls-static-gate2/plants/counts; then DL-13 (__liella_tls_layout/init/release)",
+ "report_file": "handoff/DL-TLS-STATIC.md"
+}
