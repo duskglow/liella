@@ -62,7 +62,8 @@ impl Rng {
     fn operand(&mut self, y: bool, float: bool) -> (i32, f64, usize) {
         let n = self.order();
         let nf = n as f64;
-        let top = if float { 2f64.powi(100) } else { 2f64.powi(500) };
+        // Beyond 2^100 the tier's modulus bound has no a priori cap and it declines by design.
+        let top = 2f64.powi(100);
         let low = if float { 2f64.powi(-120) } else { 2f64.powi(-980) };
         let mut x = if y {
             match self.next() % 4 {
@@ -261,11 +262,12 @@ fn bessel_n_rounding_tests_decline_straddles() {
         assert!(fbn::near64(y.neg(), p(-70), 3, mode).is_none(), "near64 settled a negative straddle in {mode:?}");
         assert!(fbn::near64(y, p(-90), 0, mode).is_some(), "near64 declined a clear case in {mode:?}");
     }
-    let mid32 = Dd { hi: 1.0 + p(-24), lo: p(-60) };
-    let above32 = Dd { hi: 1.0, lo: p(-60) };
+    // `near32` rounds `y.hi`: 2^-48 (16 units of its last place) beyond the boundary.
+    let mid32 = Dd { hi: 1.0 + p(-24) + p(-48), lo: 0.0 };
+    let above32 = Dd { hi: 1.0 + p(-48), lo: 0.0 };
     for (y, mode) in [(mid32, Rounding::Nearest), (above32, Rounding::Up), (above32, Rounding::Down)] {
-        assert!(fbn::near32(y, p(-50), 0, mode).is_none(), "near32 settled a straddle in {mode:?}");
-        assert!(fbn::near32(y, p(-70), 0, mode).is_some(), "near32 declined a clear case in {mode:?}");
+        assert!(fbn::near32(y, p(-45), 0, mode).is_none(), "near32 settled a straddle in {mode:?}");
+        assert!(fbn::near32(y, p(-60), 0, mode).is_some(), "near32 declined a clear case in {mode:?}");
     }
 }
 

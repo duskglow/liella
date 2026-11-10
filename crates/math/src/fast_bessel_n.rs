@@ -116,6 +116,26 @@ fn ybound(x: f64, w: &Fwd) -> Option<f64> {
     Some(cas(x, w, dd::abs(w.f.hi) * SLK) * 1.000_002)
 }
 
+/// The bounds `(ej, ey)` of a `J` and a `Y` recurrence to the same `m <= x`, tightened through
+/// the modulus `M_m = (J_m² + Y_m²)^(1/2)`: by Cauchy-Schwarz `|Y_k·J_m − J_k·Y_m| <= M_k·M_m <=
+/// M_m²` (`k <= m`), so each error is at most `(πx/2)·M_m²·S`. With `a = |J̃_m| + |Ỹ_m|` and
+/// `c = (πx/2)·(S_J + S_Y)`, `M_m <= a + c·M_m²`; the given bounds cap `M_m` at `M0`, and when
+/// `c·M0 <= 1/4` (below the large root `>= 1/(2c)`) and `u = 4ca <= 1/2`, `M_m` is at most the
+/// small root `2a/(1 + √(1−u)) <= a·(1 + u)`. Otherwise the given bounds stand.
+fn tight(x: f64, wj: &Fwd, wy: &Fwd, ej: f64, ey: f64) -> (f64, f64) {
+    let (aj, ay) = (dd::abs(wj.f.hi) * SLK, dd::abs(wy.f.hi) * SLK);
+    let m0 = ay + ey + (aj + ej).min(wj.jb);
+    let c = PI_2_UP * x * (wj.s + wy.s) * SLK;
+    let a = aj + ay;
+    let u = 4.0 * c * a;
+    if c * m0 > 0.25 || u > 0.5 || u.is_nan() || m0.is_nan() {
+        return (ej, ey);
+    }
+    let mb = a * (1.0 + u) * SLK;
+    let k = PI_2_UP * x * mb * mb * SLK;
+    (ej.min(k * wj.s), ey.min(k * wy.s))
+}
+
 /// `1/x` (within 2^-102).
 fn recip(x: f64) -> Dd {
     Dd::from(1.0).div(Dd::from(x))
@@ -137,7 +157,17 @@ pub fn yn_kernel(n: u64, x: f64) -> Option<(Dd, f64)> {
     if n > MAX_STEPS {
         return None;
     }
-    let w = forward(x, recip(x), kernel(2, x)?, kernel(3, x)?, n)?;
+    let r = recip(x);
+    if (n as f64) <= x {
+        // The oscillatory side: the `J` recurrence too, for the modulus bound ([`tight`]).
+        let [j0, j1, y0, y1] = base(x)?;
+        let wy = forward(x, r, y0, y1, n)?;
+        let ey = ybound(x, &wy)?;
+        let wj = forward(x, r, j0, j1, n)?;
+        let ej = cas(x, &wj, dd::abs(wy.f.hi) * SLK + ey);
+        return Some((wy.f, tight(x, &wj, &wy, ej, ey).1));
+    }
+    let w = forward(x, r, kernel(2, x)?, kernel(3, x)?, n)?;
     let e = ybound(x, &w)?;
     Some((w.f, e))
 }
@@ -162,6 +192,7 @@ pub fn jn_kernel(n: u64, x: f64) -> Option<(Dd, f64, i32)> {
     let wy = forward(x, r, y0, y1, m)?;
     let ey = ybound(x, &wy)?;
     let ej = cas(x, &wj, dd::abs(wy.f.hi) * SLK + ey);
+    let ej = tight(x, &wj, &wy, ej, ey).0;
     if up {
         return Some((wj.f, ej, 0));
     }
