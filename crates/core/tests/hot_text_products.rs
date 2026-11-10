@@ -350,8 +350,9 @@ fn init_coreutils_shaped_program_stays_within_its_page_fault_bound() {
 /// Calibration (Zen 1 host, this test, every run identical): old list, release products 8 and fast
 /// products 13 (perf page-fault addresses: 9 text faults, 4 writes); regenerated list, release 6, fast
 /// 7. Bound = the highest count with the list, 7, plus 2 (the rule above); the old list on fast
-/// products (the gate's) reads 13.
-const FORK_BOUND: u64 = 9;
+/// products (the gate's) reads 13. STARTUP-FAULTS-RESTORE-2 (D-X.53, count + 1): 7 on the Zen 1 host
+/// and on the Skylake-SP host (fast products, every run identical), so the bound is 8.
+const FORK_BOUND: u64 = 8;
 
 #[test]
 fn init_fork_child_stays_within_its_page_fault_bound() {

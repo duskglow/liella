@@ -1,49 +1,60 @@
 # STARTUP-FAULTS-RESTORE: static start-up back to 61 page faults, and contracts that hold it
 
-State: branch `task/startup-faults-restore` (stacked on HOTTEXT-STARTUP-COMPLETE 0b03e0dca), code commit a465f7c35.
-Role keke:~/w/n2. Jobs on a465f7c35: sfr-gate1 (clippy, static, affected --run --base origin/next, then the
-hot_text_products counts with --nocapture), sfr-plants1 (handoff/STARTUP-FAULTS-RESTORE-plants.txt). Both were
-pending at hand-back. Decisions in force: D-X.20, D-X.22, D-X.32, D-X.47. No D-row of its own yet: see Open.
+State: branch `task/startup-faults-restore-2` (continues `task/startup-faults-restore`, stacked on
+HOTTEXT-STARTUP-COMPLETE, which is in next). The branch is 100+ commits behind origin/next and was not merged (the
+brief allows no merge). Role mei:~/w/s1 (Skylake-SP). Decisions in force: D-X.20, D-X.22, D-X.32, D-X.47, **D-X.53**
+(this story: bounds = count + at most 1, lowered when a count falls; a dead hot-text key fails `so` unless
+allow-listed with a reason; start-up state words in `.data1`). Full report: this file. Plants:
+`handoff/STARTUP-FAULTS-RESTORE-plants.txt`.
 
-## What changed
+## What changed (run 1, a465f7c35..afca588ea)
 * **Dead keys fail the build** (`xtask/src/hottext.rs`): in a fast or release products build, every key of
-  `crates/libc-so/hot-text.list` must match a function section, whatever its tier (HOTTEXT-STARTUP-COMPLETE checked
-  only start-up and fork keys). The exceptions are a key whose trace names only the other profile, and a line in the
-  new allow-list `crates/libc-so/hot-text.absent` (`<key>\t<profile>\t<reason>`). A stale allow line also fails:
-  the key matches now, or is no longer in the list. `so` writes `target/product/<profile>/hot-text.matched`, and
-  `tools/hottext/prune.py <list> <matched fast> <matched release>` drops keys that no build matches.
-  It dropped 75, including the stale `runtime5start` key. 27 untraced keys that the release build inlines are
-  allow-listed. The list keeps `start::<false>`, `apply_irelative` and the `map_or` closure (HSC already fixed those).
+  `crates/libc-so/hot-text.list` must match a function section, whatever its tier. Exceptions: a key whose trace
+  names only the other profile, and a line of `crates/libc-so/hot-text.absent` (`<key>\t<profile>\t<reason>`). A stale
+  allow line also fails. `so` writes `target/product/<profile>/hot-text.matched`; `tools/hottext/prune.py <list>
+  <matched fast> <matched release>` drops keys no build matches (75 dropped; 27 release-inlined keys allow-listed).
 * **Start-up state on one page** (`xtask/src/coldbss.rs::move_startup_state`, the D-X.22 mechanism): the sections of
-  `process::AUXV_WORDS`, `sys::SYSINFO_EHDR`, `cpu::AVX2_ERMS_{FROM,TO}` and `global_locale::{GLOBAL,LOCK}` are
-  renamed to `.data1`. GNU ld places `.data1` after `.data`, next to `.bss`. `scan.S` puts `scan_level` there with
-  `.section .data1`. Each listed static must be found exactly once, otherwise `so` fails. LLVM's `.0` part suffix is
-  handled.
-* **Bounds** (`crates/core/tests/hot_text_products.rs`): set to count + 1. TRUE 23 -> 18, LOCALE 68 -> 57,
-  TOOL 71 -> 60. New `init_startup_path_lies_in_the_hot_text_range` links page_faults.c with `-Wl,-Map` and requires
-  `_start`, `__libc_start_main` and `start::<false>`. If present, `apply_irelative` and `liella_rt::start::program` are
-  checked too. Every one must lie inside the `.text.startup*` + `.text.sorted.h*` range.
-* `tools/hottext/faultmap.py`: page faults -> section and nearest symbol (perf script -F addr,ip,sym).
+  `process::AUXV_WORDS`, `sys::SYSINFO_EHDR`, `cpu::AVX2_ERMS_{FROM,TO}`, `global_locale::{GLOBAL,LOCK}` go to `.data1`
+  (after `.data`, next to `.bss`); `scan.S` puts `scan_level` there. Each listed static must be found exactly once.
+* **Bounds** (`crates/core/tests/hot_text_products.rs`): TRUE 23 -> 18, LOCALE 68 -> 57, TOOL 71 -> 60; new
+  `init_startup_path_lies_in_the_hot_text_range` (map-file check of `_start`, `__libc_start_main`, `start::<false>`,
+  and `apply_irelative` / `liella_rt::start::program` when out of line, inside `.text.startup*` + `.text.sorted.h*`).
+* `tools/hottext/faultmap.py`: page faults -> section and nearest symbol.
 
-## Measurements (keke, kit printf `'%s %d %x\n' a 1 1`, setarch -R, warm-up + 5, every run identical)
+## Run 2 (STARTUP-FAULTS-RESTORE-2)
+* sfr-gate2 (keke) failed only in clippy (`arithmetic_side_effects`, hot_text_products.rs `i + 1`, `a + s`): now
+  `saturating_add` (3dd4c0a3a).
+* D-X.53 written as `records/decisions/D-X/D-X.53.toml` in the records schema of next (this branch predates the records
+  system, so `records check` runs only once merged; the handback check merges with next and runs static).
+* FORK_BOUND 9 -> 8 (count 7 on both host classes; D-X.53 rule).
+* Plant 4 fixed: it passed two test names to `cargo test` (rc 1 in the baseline, so run 1's plants never ran plant 4);
+  the names now follow `--`.
+
+## Measurements
+Kit printf `'%s %d %x\n' a 1 1`, setarch -R, warm-up + 5, every run identical (keke, Zen 1, run 1):
 | build | faults | .data | .bss | .text |
 |---|---|---|---|---|
-| HSC head 0b03e0dca (sfr-base1) | 62 | 4 | 3 | 9 |
-| + dead-key prune + state move (sfr-m2) | **61** | 3 | 3 | 9 |
-| + cpu COPY_MIN/FILL_MIN/ERMS_LARGE_FROM, fold.S cmp_sse, global_locale::MAPS (sfr-m3) | 61 | 3 | 3 | 9 |
+| HSC head 0b03e0dca | 62 | 4 | 3 | 9 |
+| + dead-key prune + state move | **61** | 3 | 3 | 9 |
+| + more statics to .data1 (m3, NOT kept) | 61 | 3 | 3 | 9 |
 
-NEGATIVE (not kept): the m3 additions. The freed pages got other first writers: `liella_machine_fill_erms_from`,
-`nscache::NSCACHE`, and `global_locale::COUNT` (read, then written: 2 faults). It is whack-a-mole, symbol by symbol.
-hot_text_products counts at m3: startup 17, locale 56, tool 59, fork 7. The bounds come from these counts.
-The final head (m2 layout) is checked by sfr-gate1, whose --nocapture tail prints the counts.
-Target <= 61 met on keke (main = 61 per the bisect). Not measured: the Zen 1 count host, and validation/wl_count.sh
-printf-loop/seq/wc/md5sum (the faults gate). Both are NOT VERIFIED.
+hot_text_products counts (fast products): startup 17, setlocale+printf 56, tool 59, fork 7, identical on keke (Zen 1,
+run 1) and mei (Skylake-SP, startup-faults-restore-2-gate1).
+wl_count vs main 01ff5a63c (mei, startup-faults-restore-2-wlc1, rev 53d549957), page faults main -> new:
+printf-loop 1258745 -> 1240079, seq 126 -> 123, wc 264 -> 259, md5sum 146 -> 144. instructions:u and gating syscalls
+within 0.01% (printf-loop syscalls 737629 -> 737661), output SAME. Target <= 61 met; both host classes measured.
+
+NEGATIVE (keep): moving `cpu` COPY_MIN/FILL_MIN/ERMS_LARGE_FROM, `fold.S` cmp_sse and `global_locale::MAPS` to `.data1`
+left 61: the freed pages got other first writers (`liella_machine_fill_erms_from`, `nscache::NSCACHE`,
+`global_locale::COUNT`). A hand-kept symbol list does not converge.
+
+## Jobs (mei)
+startup-faults-restore-2-lint1 (clippy + static, inherited head + clippy fix) rc 0; -gate1 (clippy, static, affected
+--run --base origin/next, hot_text_products --nocapture) rc 0 on 53d549957; -wlc1 rc 0; -plants1 rc 2 (plant 4 baseline
+bug, superseded); final-head jobs: see handoff/reports/STARTUP-FAULTS-RESTORE-2.json.
 
 ## Open / next
-* Write the D-row (D-NEW placeholder; coordinator to reserve): ".data1 start-up state group; dead hot-text key is
-  a build error with hot-text.absent".
-* The remaining .bss/.data start-up faults: a structural fix rather than a symbol list. One option is a
-  `.data1` placement for every small static that start-up first-touches, generated from a trace the same way
-  regen.sh does it.
-* regen.sh: add the prune step after a regeneration of both profiles (today only the `so` error message names it).
-* Run wl_count printf-loop/seq/wc/md5sum against main, and the Zen 1 count host.
+* Structural fix for the remaining .data/.bss start-up faults: generate the `.data1` placement from a trace of
+  first-touched small statics (as regen.sh does for text) instead of a symbol list.
+* regen.sh: run prune.py after regenerating both profiles (today only the `so` error names it).
+* LOCALTIME/LOCALTIME_MKTIME/FLOAT bounds (20/20/6) print no counts; apply the D-X.53 rule once they do.
