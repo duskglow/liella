@@ -687,7 +687,9 @@ fn trig_widen_entries_match_the_bit_built_ones() {
             taken += u64::from(got.is_some());
         }
     }
-    assert!(taken > 300_000, "{taken}");
+    // 261,712 encodings sampled, 45 of 256 exponents in the core's range: about 3 x 46,000 entry
+    // calls reach the core, less its refusals (128,091 taken). A floor that proves the core ran.
+    assert!(taken > 120_000, "{taken}");
 }
 
 /// asinhf and acoshf with the hardware root on every `float` (2^33 calls, its own job:
