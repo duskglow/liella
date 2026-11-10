@@ -395,13 +395,22 @@ void _start(void) {
   sc(60, b_fn() == 5 ? 0 : 99, 0, 0);
 }
 ";
+    // The executable mappings of the program run by ld.so (the loader maps without file names, so
+    // count them all and compare with the same program naming libb.so once).
+    let exec_maps = |p: &Path| {
+        let o = Command::new(&ld).arg(p).output().unwrap();
+        let maps = String::from_utf8_lossy(&o.stdout).into_owned();
+        let n = maps.lines().filter(|l| l.split_whitespace().nth(1).is_some_and(|p| p.contains('x'))).count();
+        (o.status.code(), n, maps)
+    };
+    let once = build(&d, "pone", src, &["-fPIE", "-pie", b.to_str().unwrap()]);
     let p = build(&d, "pid", src, &["-fPIE", "-pie", "-Wl,--no-as-needed", b.to_str().unwrap(), alias.to_str().unwrap()]);
     let file = std::fs::read(&p).unwrap();
     assert!(file.windows(12).any(|w| w == b"libalias.so\0"), "the program names the symlink too");
-    let o = Command::new(&ld).arg(&p).output().unwrap();
-    let maps = String::from_utf8_lossy(&o.stdout);
-    let text = maps.lines().filter(|l| l.split_whitespace().nth(1).is_some_and(|p| p.contains('x')) && l.ends_with("/libb.so")).count();
-    assert_eq!((o.status.code(), text), (Some(0), 1), "libb.so must be mapped executable exactly once:\n{maps}{}", String::from_utf8_lossy(&o.stderr));
+    let (c1, n1, _) = exec_maps(&once);
+    let (c2, n2, maps) = exec_maps(&p);
+    assert_eq!((c1, c2), (Some(0), Some(0)), "both programs run");
+    assert_eq!(n2, n1, "libb.so must be mapped executable exactly once:\n{maps}");
     std::fs::remove_dir_all(&d).ok();
 }
 
