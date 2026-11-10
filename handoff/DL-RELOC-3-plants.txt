@@ -10,3 +10,13 @@ version-check-skipped | crates/boundary/src/ld.rs | lit:reloc::check_versions(ob
 two-paths-loaded-twice | crates/boundary/src/ld.rs | lit:if ids[..n].contains(&id) { ==> if false && ids[..n].contains(&id) { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:mapped executable exactly once
 empty-load-refused | crates/ld/src/map.rs | lit:for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD && p.memsz != 0) { ==> for ph in elf.program_headers().filter(|p| p.p_type == pt::LOAD) { | cargo xtask so && cargo test -p liella-ld --test reloc | msg:malformed loadable segments
 unhashed-symbol-refused | crates/ld/src/elf.rs | lit:count.filter(|_| lower_bound) ==> count.filter(|_| false) | cargo xtask so && cargo test -p liella-ld --test reloc | msg:malformed relocation tables
+# cargo xtask plants results (9 plants: 9 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# relative-addend-dropped: CAUGHT, caught by reloc reloc_apply_x86_64_arithmetic
+# abs64-addend-dropped: CAUGHT, caught by reloc reloc_apply_x86_64_arithmetic
+# forward-object-order: CAUGHT, caught by reloc reloc_ldso_runs_multi_object_program
+# irelative-not-deferred: CAUGHT, caught by reloc reloc_model_corpus_one_object_per_type
+# relro-left-writable: CAUGHT, caught by reloc reloc_ldso_relro_read_only_after_relocation
+# version-check-skipped: CAUGHT, caught by reloc reloc_ldso_version_needed_from_unversioned_stub
+# two-paths-loaded-twice: CAUGHT, caught by reloc reloc_ldso_one_object_by_two_paths
+# empty-load-refused: CAUGHT, caught by reloc reloc_ldso_runs_multi_object_program
+# unhashed-symbol-refused: CAUGHT, caught by reloc reloc_ldso_version_needed_from_unversioned_stub
