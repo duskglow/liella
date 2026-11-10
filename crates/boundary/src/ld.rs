@@ -579,8 +579,8 @@ const MAP_PRIVATE_I32: i32 = 0x02;
 const MAP_FIXED_I32: i32 = 0x10;
 const MAP_ANONYMOUS_I32: i32 = 0x20;
 const MAP_FIXED_NOREPLACE_I32: i32 = 0x10_0000;
-/// Objects a dependency list holds (the program included); more is refused (D-27.16).
-const OBJECTS_MAX: usize = 256;
+/// Objects a dependency list (`--list`) holds (the program included); more is refused (D-27.16).
+const LIST_OBJECTS_MAX: usize = 256;
 /// Bytes of resolved paths a dependency list holds; more is refused (D-27.16).
 const PATHS_MAX: usize = 64 * 1024;
 
@@ -606,8 +606,9 @@ struct Obj {
     bias: u64,
 }
 
-/// Open the NUL-terminated `path` and map the whole file read-only: the file and its descriptor.
-fn open_file(path: &[u8]) -> Option<(&'static [u8], i64)> {
+/// Open the NUL-terminated `path` and map the whole file read-only: the file and its descriptor
+/// (list mode; [`open_file`] is the run path's opener, which also gives the file's identity).
+fn open_whole(path: &[u8]) -> Option<(&'static [u8], i64)> {
     let fd = crate::ffi_sys::liella_sys_openat(AT_FDCWD, path.as_ptr().cast(), i64::from(O_RDONLY | O_CLOEXEC), 0);
     if fd < 0 {
         return None;
@@ -674,7 +675,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
         }
         exit(program::FAILURE)
     };
-    let Some((file, fd)) = (if path.push(prog) { path.c_str().and_then(open_file) } else { None }) else {
+    let Some((file, fd)) = (if path.push(prog) { path.c_str().and_then(open_whole) } else { None }) else {
         fail(prog, b"cannot open shared object file\n")
     };
     let _ = crate::ffi_sys::liella_sys_close(fd);
@@ -684,7 +685,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
         exit(1)
     }
     // The cache, once (R14-3 (a): `<prefix>/etc/ld.so.cache`); unreadable or inconsistent = none.
-    let cache_file = if search::prefixed(b"etc/ld.so.cache", &mut path) { path.c_str().and_then(open_file) } else { None };
+    let cache_file = if search::prefixed(b"etc/ld.so.cache", &mut path) { path.c_str().and_then(open_whole) } else { None };
     if let Some((_, fd)) = cache_file {
         let _ = crate::ffi_sys::liella_sys_close(fd);
     }
@@ -697,7 +698,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
         hwcaps: Native::hwcaps(env.features),
         cache: cache.as_ref(),
     };
-    let mut objs = [Obj::default(); OBJECTS_MAX];
+    let mut objs = [Obj::default(); LIST_OBJECTS_MAX];
     let mut store = [0u8; PATHS_MAX];
     let first = store.get_mut(..prog.len()).unwrap_or_else(|| fail(prog, b"path too long\n"));
     first.copy_from_slice(prog);
@@ -715,7 +716,7 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
         let old: &[u8] = old;
         let mut wrote = 0usize;
         // The requester chain: this object, then each object that loaded it, up to the program.
-        let mut chain = [Scope::default(); OBJECTS_MAX];
+        let mut chain = [Scope::default(); LIST_OBJECTS_MAX];
         let mut depth = 0usize;
         let mut k = me;
         while let (Some(slot), Some(o)) = (chain.get_mut(depth), objs.get(k)) {
@@ -734,13 +735,13 @@ fn list(env: &List<'_>, prog: &'static [u8], strict: bool) -> ! {
             if name == Native::INTERP.as_bytes() || known {
                 continue;
             }
-            if count >= OBJECTS_MAX {
+            if count >= LIST_OBJECTS_MAX {
                 fail(name, b"too many shared objects\n");
             }
             let mut hit: Option<(&'static [u8], i64)> = None;
             let mut hit_path = PathBuf::default();
             search::search::<Native>(name, chain, &ctx, &mut |p: &mut PathBuf| {
-                let Some((f, fd)) = p.c_str().and_then(open_file) else { return false };
+                let Some((f, fd)) = p.c_str().and_then(open_whole) else { return false };
                 if elf::Elf::parse::<Native>(f).is_err() {
                     // Another architecture's or not an object: skipped, the search goes on.
                     let _ = raw::munmap(f.as_ptr().expose_provenance(), f.len());
