@@ -1,6 +1,11 @@
-//! `cargo xtask codemap [--check]`: regenerates the code map (`docs/codemap/README.md`, `docs/codemap/symbols.tsv`)
-//! from the tree. `--check` (run by `cargo xtask static`) writes nothing and fails when either file differs from what
-//! the tree gives ("out of date: run cargo xtask codemap"). `codemap-asm` is kept as an alias.
+//! `cargo xtask codemap [--check] [--in-place]`: regenerates the code map (`docs/codemap/README.md`,
+//! `docs/codemap/symbols.tsv`) from the tree. The two files are train-owned (D-X.66, as the decision views and
+//! `crates/math/KERNELS.md`, D-X.59): a story branch never commits them, the CI train regenerates them. Off the train
+//! the command writes `target/records-views/docs/codemap/` and leaves the tracked files alone; `LIELLA_TRAIN=1` or
+//! `--in-place` writes them in place. `--check` (run by `cargo xtask static`) writes nothing; off the train it prints
+//! one advisory line ("codemap: N files pending regeneration by the train"), under `LIELLA_TRAIN=1` it fails when
+//! either file differs from what the tree gives ("out of date: run cargo xtask codemap --in-place"). Definitions it
+//! cannot resolve fail everywhere. `codemap-asm` is kept as an alias.
 //!
 //! `symbols.tsv` (header `symbol, version, defined at, first implementation call`; rows sorted bytewise, one per
 //! definition) has a row for:
@@ -505,20 +510,47 @@ pub fn generate(root: &Path) -> Result<(String, String), String> {
     }
 }
 
-pub fn run(root: &Path, check: bool) -> Result<(), String> {
+/// `cargo xtask codemap [--check] [--in-place]` (`in_place`: [`crate::records::in_place_env`]).
+pub fn run(root: &Path, check: bool, in_place: bool) -> Result<(), String> {
+    run_on(root, check, in_place, on_train())
+}
+
+/// The CI train's gate (`LIELLA_TRAIN=1`), where a stale code map is fatal (D-X.66).
+fn on_train() -> bool {
+    std::env::var("LIELLA_TRAIN").is_ok_and(|v| v == "1")
+}
+
+/// [`run`] with the train flag given. The code map is train-owned (D-X.66): `--check` off the train prints one
+/// advisory line and succeeds, on the train a stale file is fatal (the train regenerated it just before, so a stale
+/// file there is a hand edit or a nondeterministic generator). Generation writes under
+/// [`crate::records::OUT_OF_TREE`] unless `in_place`, so a story branch cannot commit the files by accident.
+/// Unresolvable definitions and dead paths in the hand-written section stay errors everywhere.
+fn run_on(root: &Path, check: bool, in_place: bool, train: bool) -> Result<(), String> {
     let (tsv, md) = generate(root)?;
-    let mut stale = Vec::new();
-    for (path, new) in [(TSV, &tsv), (README, &md)] {
-        if fs::read_to_string(root.join(path)).ok().as_ref() != Some(new) {
-            if check {
-                stale.push(path);
-            } else {
-                fs::write(root.join(path), new).map_err(|e| format!("{path}: {e}"))?;
-                println!("codemap: wrote {path}");
+    let files = [(TSV, &tsv), (README, &md)];
+    let stale: Vec<&str> = files.iter().filter(|(p, new)| fs::read_to_string(root.join(p)).ok().as_ref() != Some(*new)).map(|(p, _)| *p).collect();
+    if check {
+        if !train {
+            println!("codemap: {} files pending regeneration by the train", stale.len());
+            return Ok(());
+        }
+        return if stale.is_empty() { Ok(()) } else { Err(format!("{} out of date: run cargo xtask codemap --in-place", stale.join(", "))) };
+    }
+    let out = crate::records::out_root(root, in_place);
+    for (path, new) in files {
+        let shown = if in_place { path.to_string() } else { format!("{}/{path}", crate::records::OUT_OF_TREE) };
+        if fs::read_to_string(out.join(path)).ok().as_ref() != Some(new) {
+            if let Some(d) = out.join(path).parent() {
+                fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
             }
+            fs::write(out.join(path), new).map_err(|e| format!("{shown}: {e}"))?;
+            println!("codemap: wrote {shown}");
         }
     }
-    if stale.is_empty() { Ok(()) } else { Err(format!("{} out of date: run cargo xtask codemap", stale.join(", "))) }
+    if !in_place {
+        println!("codemap: docs/codemap is train-owned and untouched ({} stale in the tree); read {}/docs/codemap (in place: LIELLA_TRAIN=1 or --in-place)", stale.len(), crate::records::OUT_OF_TREE);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -572,14 +604,40 @@ mod tests {
     fn removed_file_leaves_no_row_and_check_sees_it() {
         let d = base("removed", RS);
         fs::write(d.join("crates/boundary/src/posix/s01_y.rs"), "export! { \"GLIBC_2.3\";\npub extern \"C\" fn gone() {}}\n").unwrap();
-        run(&d, false).unwrap();
+        run_on(&d, false, true, true).unwrap();
         assert!(fs::read_to_string(d.join(TSV)).unwrap().contains("\ngone\t"));
-        run(&d, true).unwrap();
+        run_on(&d, true, false, true).unwrap();
         fs::remove_file(d.join("crates/boundary/src/posix/s01_y.rs")).unwrap();
-        let e = run(&d, true).unwrap_err();
-        assert!(e.contains("out of date: run cargo xtask codemap"), "{e}");
-        run(&d, false).unwrap();
+        let e = run_on(&d, true, false, true).unwrap_err();
+        assert!(e.contains("out of date: run cargo xtask codemap --in-place"), "{e}");
+        run_on(&d, false, true, true).unwrap();
         assert!(!fs::read_to_string(d.join(TSV)).unwrap().contains("gone"));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// D-X.66 (no spec clause): the code map is train-owned. Off the train a stale copy is advisory for `--check` and
+    /// generation writes `target/records-views/docs/codemap/` with the tracked files byte-identical; on the train
+    /// (`LIELLA_TRAIN=1`) the same stale copy is fatal, and clean after an in-place regeneration.
+    #[test]
+    fn train_owned_check_and_out_of_tree_generation() {
+        let d = base("train", RS);
+        let (tsv, md) = generate(&d).unwrap();
+        fs::write(d.join(TSV), "stale\n").unwrap();
+        run_on(&d, true, false, false).expect("off the train a stale code map is advisory");
+        let e = run_on(&d, true, false, true).expect_err("on the train a stale code map is fatal");
+        assert!(e.contains("docs/codemap/symbols.tsv, docs/codemap/README.md out of date: run cargo xtask codemap --in-place"), "{e}");
+        run_on(&d, false, false, false).expect("off-train generation");
+        assert_eq!(fs::read_to_string(d.join(TSV)).unwrap(), "stale\n", "tracked symbols.tsv untouched");
+        assert_eq!(fs::read_to_string(d.join(README)).unwrap(), OLD_README, "tracked README.md untouched");
+        let out = d.join(crate::records::OUT_OF_TREE);
+        assert_eq!(fs::read_to_string(out.join(TSV)).unwrap(), tsv);
+        assert_eq!(fs::read_to_string(out.join(README)).unwrap(), md);
+        fs::remove_dir_all(&out).unwrap();
+        run_on(&d, false, true, true).expect("in-place generation");
+        assert_eq!(fs::read_to_string(d.join(TSV)).unwrap(), tsv);
+        assert_eq!(fs::read_to_string(d.join(README)).unwrap(), md);
+        assert!(!out.exists(), "in place writes nothing under target/");
+        run_on(&d, true, false, true).expect("clean on the train after regeneration");
         fs::remove_dir_all(&d).unwrap();
     }
 
