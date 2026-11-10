@@ -1,0 +1,18 @@
+# DL-MAP (phase 14 DL-7, D-27.15): plants on the general mapper. The model tests (crates/ld/tests/map.rs)
+# catch the pure-logic plants without the product; the ld.so plant rebuilds it. page-literal-ldso is
+# equivalent on a host whose kernel gives AT_PAGESZ 4096 (every x86-64 kernel here): the seam itself is
+# planted in arch.rs and the 4096 literal in the mapper's .bss arithmetic is planted against 16 KiB pages.
+widened-permission | crates/ld/src/map.rs | lit:m.map_file(at(s.start), whole, s.prot, s.offset) ==> m.map_file(at(s.start), whole, if s.prot & PROT_EXEC == 0 { s.prot | PROT_WRITE } else { s.prot }, s.offset) | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
+missed-unmap-on-failure | crates/ld/src/map.rs | lit:m.unmap(base, plan.span); ==> | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
+ignored-p-align | crates/ld/src/map.rs | lit:align = align.max(ph.align); ==> align = align.max(page); | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
+page-literal-arch | crates/ld/src/arch.rs | lit:Some(p) if p.is_power_of_two() && p >= Self::BASE_PAGE => p, ==> Some(p) if p.is_power_of_two() && p >= Self::BASE_PAGE => 4096, | cargo test -p liella-ld --test map | msg:map_page_size_from_auxv.*panicked
+page-literal-bss | crates/ld/src/map.rs | lit:m.store(file_end, page.wrapping_sub(file_end.wrapping_sub(tail_page)), None); ==> m.store(file_end, 4096u64.wrapping_sub(file_end.wrapping_sub(tail_page)), None); | cargo test -p liella-ld --test map | msg:map_model_objects_from_the_linker.*panicked
+page-literal-ldso | crates/boundary/src/ld.rs | lit:let page = Native::page_size(&aux); ==> let page = 4096u64; | sh -c 'cargo xtask so && cargo test -p liella-ld --test map --test ldso_run' | equivalent:the test hosts' kernels all give AT_PAGESZ 4096, so the literal and the seam agree; page-literal-arch and page-literal-bss plant the seam and the mapper
+bss-tail-not-zeroed | crates/ld/src/map.rs | lit:m.store(file_end, page.wrapping_sub(file_end.wrapping_sub(tail_page)), None); ==> | sh -c 'cargo xtask so && cargo test -p liella-ld --test map' | msg:(map_model_objects_from_the_linker|map_proc_self_maps_of_loaded_programs).*panicked
+write-exec-accepted | crates/ld/src/map.rs | lit:if ph.flags & PF_W != 0 && ph.flags & PF_X != 0 { ==> if false { | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+too-many-loads-accepted | crates/ld/src/map.rs | lit:.count() > LOADS_MAX { ==> .count() > LOADS_MAX + 1 { | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+zero-length-accepted | crates/ld/src/map.rs | lit:ph.filesz > ph.memsz || ph.memsz == 0 || !align_ok ==> ph.filesz > ph.memsz || !align_ok | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+overlap-accepted | crates/ld/src/map.rs | lit:} else if s.start < last { ==> } else if s.start < first { | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+relro-outside-accepted | crates/ld/src/map.rs | lit:if r.memsz != 0 && (r.vaddr < first || to > last) { ==> if false { | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+congruence-unchecked | crates/ld/src/map.rs | lit:if ph.vaddr & mask != ph.offset & mask || ==> if false || | cargo test -p liella-ld --test map | msg:map_malformed_corpus_refused.*panicked
+fixed-moved | crates/ld/src/map.rs | lit:return Ok((at, 0)); ==> return Ok((at, 0x1000)); | sh -c 'cargo xtask so && cargo test -p liella-ld --test map' | msg:map_(model_objects_from_the_linker|proc_self_maps_of_loaded_programs).*panicked
