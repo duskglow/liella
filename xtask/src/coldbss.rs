@@ -125,12 +125,14 @@ fn state_sections(listing: &str) -> Result<BTreeMap<String, Vec<String>>, String
         }
         let Some(name) = l.split_once("] ").and_then(|(_, r)| r.split_whitespace().next()) else { continue };
         let Some(sym) = name.strip_prefix(".data.").or_else(|| name.strip_prefix(".bss.")) else { continue };
-        // LLVM may split a static and number the part (`.data.<symbol>.0`).
-        let sym = match sym.rsplit_once('.') {
-            Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) && !s.ends_with(".llvm") => s,
-            _ => sym,
-        };
+        // LLVM may split a static and number the part (`.data.<symbol>.0`), also before a ThinLTO
+        // suffix (`.data.<symbol>.0.llvm.<n>`): the part number is taken off after the key drops
+        // the suffix.
         let k = crate::hottext::key(sym);
+        let k = match k.rsplit_once('.') {
+            Some((s, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => s.to_string(),
+            _ => k,
+        };
         if let Some(i) = STATE_KEY_SUFFIXES.iter().position(|s| k.ends_with(s)) {
             seen[i] += 1;
             out.entry(member.clone()).or_default().push(name.to_string());
@@ -186,7 +188,11 @@ mod tests {
         // section is picked whatever its crate hash and ThinLTO suffix; a missing one is an error.
         let mut listing = String::from("\nFile: libc.a(a.o)\n");
         for (i, s) in STATE_KEY_SUFFIXES.iter().enumerate() {
-            let (kind, tail) = if i % 2 == 0 { (".bss", ".llvm.42") } else { (".data", ".0") };
+            let (kind, tail) = match i % 3 {
+                0 => (".bss", ".llvm.42"),
+                1 => (".data", ".0"),
+                _ => (".data", ".0.llvm.10626316295180432642"),
+            };
             listing.push_str(&format!("  [{i}] {kind}._RNvNtCsAbC12_{s}{tail}  NOBITS 0 0 8 00 WA 0 0 8\n"));
             if i == 2 {
                 listing.push_str("\nFile: libc.a(b.o)\n  [9] .data._RNvNtCsX_15liella_boundary3cpu8NOT_USED PROGBITS 0 0 8 00 WA 0 0 8\n");
