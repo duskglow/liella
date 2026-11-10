@@ -618,30 +618,46 @@ fn reloc_ldso_kernel_started_without_proc() {
 
 /// s27_1_c_1 (ruling #4371, D-27.18): a position-independent program without `PT_PHDR` runs, started
 /// by the kernel and as `ld.so PROGRAM`: its load bias comes from its ELF header and the `PT_LOAD` that
-/// holds its program headers (never 0 for want of `PT_PHDR`).
+/// holds its program headers (never 0 for want of `PT_PHDR`). Two programs: one with dependencies
+/// (relocated and protected by `link`) and one without (RELATIVE relocations and its RELRO pages
+/// handled in `run`, which then protects the pages at that bias).
 #[test]
 fn reloc_ldso_program_without_pt_phdr() {
     let (true, Some(ld)) = (cc_ok(), product()) else { return };
     let d = dir("nophdr");
     let interp = format!("-Wl,--dynamic-linker={}", ld.display());
     let [.., p] = corpus(&d, &[&interp]);
-    let mut file = std::fs::read(&p).unwrap();
+    let alone = build(
+        &d,
+        "palone",
+        "int x = 1; int *const p = &x;
+void _start(void) { int *q = *(int *const volatile *)&p; int c = q == &x ? 0 : 3; __asm__ volatile(\"syscall\" :: \"a\"(231), \"D\"(c)); }\n",
+        &["-fPIE", "-pie", &interp],
+    );
+    for (i, p) in [p, alone].iter().enumerate() {
+        without_pt_phdr(&ld, &d, p, &format!("prog{i}-nophdr"));
+    }
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// Run `p` with its `PT_PHDR` made `PT_NULL` (written to `d/name`), kernel-started and as `ld.so PROGRAM`.
+fn without_pt_phdr(ld: &Path, d: &Path, p: &Path, name: &str) {
+    let mut file = std::fs::read(p).unwrap();
     let elf = Elf::parse::<Native>(&file).unwrap();
     let (phoff, phnum) = (elf.header().phoff as usize, usize::from(elf.header().phnum));
     let at = (0..phnum).map(|i| phoff + i * 56).find(|&o| file[o..o + 4] == 6u32.to_le_bytes()).expect("the linker gave the program a PT_PHDR");
     file[at..at + 4].copy_from_slice(&0u32.to_le_bytes()); // PT_PHDR -> PT_NULL
     // Written under another name and copied by cp(1): the program run below is never open for
     // writing in this process, so a fork by another test thread cannot make its exec fail (ETXTBSY).
-    let (tmp, q) = (d.join("prog-nophdr.bytes"), d.join("prog-nophdr"));
+    let (tmp, q) = (d.join(format!("{name}.bytes")), d.join(name));
     std::fs::write(&tmp, &file).unwrap();
     std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
     assert!(Elf::parse::<Native>(&file).unwrap().find(liella_ld::elf::pt::PHDR).is_none());
     let (code, sig, err) = run(&mut Command::new(&q));
-    assert_eq!((code, sig), (Some(0), None), "kernel-started program without PT_PHDR: check number {code:?} failed; stderr: {err}");
-    let (code, sig, err) = run(Command::new(&ld).arg(&q));
-    assert_eq!((code, sig), (Some(0), None), "ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
-    std::fs::remove_dir_all(&d).ok();
+    assert_eq!((code, sig), (Some(0), None), "{name}: kernel-started program without PT_PHDR: check number {code:?} failed; stderr: {err}");
+    let (code, sig, err) = run(Command::new(ld).arg(&q));
+    assert_eq!((code, sig), (Some(0), None), "{name}: ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
 }
 
 /// s27_1_c_1, L14-6 (ruling #4323): a text-relocated program with a dependency runs, started by the
