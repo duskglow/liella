@@ -154,6 +154,7 @@ long liella_machine_pread(int fd, void *buf, size_t n, long off);
 long liella_machine_pwrite(int fd, const void *buf, size_t n, long off);
 int liella_machine_close(int fd);
 extern unsigned char liella_machine_aio_used;
+extern unsigned char liella_machine_owned;
 int liella_machine_sigsetjmp(void *env, int savemask);
 void liella_machine_siglongjmp(void *env, int val);
 void liella_machine_longjmp_nomask(void *env, int val);

@@ -159,10 +159,58 @@ fn view_of_special(loc: usize) -> &'static LocaleView {
 /// whose word is not stored (0) resolves its `uselocale` choice, else the global locale.
 #[inline]
 pub fn view() -> &'static LocaleView {
+    if !crate::thread::owned() {
+        return foreign_view();
+    }
     match tb::read::<tb::View>() {
         0 => view_of(tb::read::<tb::Locale>()),
         w => tb::view_at(w),
     }
+}
+
+/// [`view`] in a process the runtime did not start (D-X.58): the thread block's words are not
+/// Liella's, so the choice comes from the thread's registry words (no `view` word is kept there).
+#[cold]
+#[inline(never)]
+fn foreign_view() -> &'static LocaleView {
+    view_of(crate::thread::foreign_words().locale.load(Acquire))
+}
+
+/// The calling thread's ctype word `slot` (0 class, 1 `tolower`, 2 `toupper`; `F` its field):
+/// one `%fs` load in a process the runtime started, the registry words elsewhere (D-X.58).
+#[inline(always)]
+fn ctype_word<F: tb::Field>(slot: usize) -> usize {
+    if crate::thread::owned() { tb::read::<F>() } else { foreign_ctype_word(slot) }
+}
+
+/// The word of [`foreign_ctype_slot`].
+#[cold]
+#[inline(never)]
+fn foreign_ctype_word(slot: usize) -> usize {
+    let b = crate::thread::foreign_words();
+    match slot {
+        0 => &b.ctype_b,
+        1 => &b.ctype_tolower,
+        _ => &b.ctype_toupper,
+    }
+    .load(Acquire)
+}
+
+/// [`ctype_slot`] in a process the runtime did not start: the address of the word in the
+/// thread's registry words, filled on first use.
+#[cold]
+#[inline(never)]
+fn foreign_ctype_slot(slot: usize) -> usize {
+    let b = crate::thread::foreign_words();
+    if b.ctype_b.load(Acquire) == 0 {
+        crate::thread::serialized(|| refresh_words(b));
+    }
+    let w = match slot {
+        0 => &b.ctype_b,
+        1 => &b.ctype_tolower,
+        _ => &b.ctype_toupper,
+    };
+    core::ptr::from_ref(w).expose_provenance()
 }
 
 /// The calling thread's current locale: its `uselocale` choice, else the global locale.
@@ -269,6 +317,9 @@ pub fn ctype_slot(slot: usize) -> usize {
     // word's offset (`__ctype_b_loc` = two loads and an add, no call). The unfilled case
     // returns `ctype_fill`'s result, a tail call, so the filled path keeps no frame (no
     // push/pop of the stack-alignment slot a call in the middle would cost: PERF-CTYPE-LOC).
+    if !crate::thread::owned() {
+        return foreign_ctype_slot(slot);
+    }
     if tb::read::<tb::CtypeB>() == 0 {
         return ctype_fill(slot);
     }
@@ -331,7 +382,7 @@ fn case_unstored(c: i32, upper: bool) -> i32 {
 /// (D-5.5); none outside -128...255.
 #[inline]
 pub fn byte_class(c: i32) -> Class {
-    let w = tb::read::<tb::CtypeB>();
+    let w = ctype_word::<tb::CtypeB>(0);
     if w == 0 {
         return class_unstored(c);
     }
@@ -402,13 +453,13 @@ pub fn case_map_l(c: i32, loc: usize, upper: bool) -> i32 {
 /// `toupper(c)` in the calling thread's locale (D-5.5).
 #[inline]
 pub fn toupper(c: i32) -> i32 {
-    case_map(c, tb::read::<tb::CtypeToupper>(), true)
+    case_map(c, ctype_word::<tb::CtypeToupper>(2), true)
 }
 
 /// `tolower(c)` in the calling thread's locale (D-5.5).
 #[inline]
 pub fn tolower(c: i32) -> i32 {
-    case_map(c, tb::read::<tb::CtypeTolower>(), false)
+    case_map(c, ctype_word::<tb::CtypeTolower>(1), false)
 }
 
 /// Fill a `locale_t` object for the interned locale `handle`.
@@ -495,10 +546,11 @@ pub fn freelocale(loc: usize) {
 pub fn uselocale(loc: usize) -> usize {
     if loc == 0 {
         // NO-ROW: the query (`ls` asks once per file) is one `%fs` load of the thread's own word.
-        let prev = tb::read::<tb::Locale>();
+        let prev = if crate::thread::owned() { tb::read::<tb::Locale>() } else { crate::thread::foreign_words().locale.load(Relaxed) };
         return if prev == 0 { GLOBAL } else { prev };
     }
-    let b = tb::current();
+    // D-X.58: the thread's own words (its block only in a process the runtime started).
+    let b = crate::thread::words();
     let prev = b.locale.load(Relaxed);
     let new = if loc == GLOBAL { 0 } else { loc };
     if loc != 0 {
@@ -663,7 +715,7 @@ fn lconv_char(l: &Locale, index: usize) -> u8 {
 
 /// `localeconv()`: the calling thread's `struct lconv`, filled from its current locale.
 pub fn localeconv() -> usize {
-    let w = &tb::current().lconv;
+    let w = &crate::thread::words().lconv;
     // The words are worked out once per locale view (D-7.13) and copied into this thread's
     // `struct lconv`, so that a pointer returned earlier keeps its address (D-7.8).
     for (slot, v) in w.iter().zip(view().lconv(lconv_words)) {

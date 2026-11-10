@@ -11,8 +11,9 @@
  * load, three tests, the shared window (machine/thread_start.S) and one result test.
  *
  * Every entry takes the Rust path (`liella_*_rest`: the full former export, unchanged) for
- * whatever is not the common case: no descriptor yet (`%fs:0xa0` is 0: a thread the runtime did
- * not create and has not adopted), a count of 0 or above isize::MAX, a NULL buffer (the export's
+ * whatever is not the common case: a process the runtime did not start (`liella_machine_owned`
+ * clear, D-X.58: its thread blocks are not Liella's, so `%fs:0xa0` is never read there), no
+ * descriptor yet (`%fs:0xa0` is 0: a thread the runtime did not create and has not adopted), a count of 0 or above isize::MAX, a NULL buffer (the export's
  * slice rules, EFAULT without a system call). A kernel error result (-4095..-1, which includes the
  * window's -ECANCELED) tail-jumps to `liella_cancel_point_fail` with the raw result: it acts on a
  * due request (the cancellation word, checked there) and otherwise sets errno and returns -1.
@@ -47,6 +48,8 @@ liella_machine_read:
 	.type read, @function
 read:
 #endif
+	cmpb $0, liella_machine_owned(%rip)
+	je liella_read_rest
 	movq %fs:0xa0, %r11
 	testq %r11, %r11
 	jz liella_read_rest
@@ -78,6 +81,8 @@ liella_machine_write:
 	.type write, @function
 write:
 #endif
+	cmpb $0, liella_machine_owned(%rip)
+	je liella_write_rest
 	movq %fs:0xa0, %r11
 	testq %r11, %r11
 	jz liella_write_rest
@@ -112,6 +117,8 @@ pread:
 	.type pread64, @function
 pread64:
 #endif
+	cmpb $0, liella_machine_owned(%rip)
+	je liella_pread_rest
 	movq %fs:0xa0, %r11
 	testq %r11, %r11
 	jz liella_pread_rest
@@ -147,6 +154,8 @@ pwrite:
 	.type pwrite64, @function
 pwrite64:
 #endif
+	cmpb $0, liella_machine_owned(%rip)
+	je liella_pwrite_rest
 	movq %fs:0xa0, %r11
 	testq %r11, %r11
 	jz liella_pwrite_rest
@@ -190,6 +199,8 @@ __close:
 	jne liella_close_rest
 	movl $3, %eax			/* SYS_close */
 	syscall
+	cmpb $0, liella_machine_owned(%rip)
+	je 1f
 	movq %fs:0xa0, %r11
 	testq %r11, %r11
 	jz 1f
@@ -212,4 +223,14 @@ __close:
 liella_machine_aio_used:
 	.byte 0
 	.size liella_machine_aio_used, 1
+/* D-X.58: set (by crates/boundary/src/thread.rs, `init_initial`) when the runtime started the
+ * process, so every thread block that runs library code is one it made; clear in a process another
+ * C library or loader started, whose blocks' words at 0x9c-0x187 are not Liella's: the entries
+ * above then never read %fs:0xa0 and take the Rust path. */
+	.globl liella_machine_owned
+	.hidden liella_machine_owned
+	.type liella_machine_owned, @object
+liella_machine_owned:
+	.byte 0
+	.size liella_machine_owned, 1
 	.section .note.GNU-stack,"",@progbits

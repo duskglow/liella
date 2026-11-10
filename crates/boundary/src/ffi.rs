@@ -480,6 +480,9 @@ unsafe extern "C" {
     /// Set once any asynchronous I/O starts (machine/points.S): `close` then takes the Rust path,
     /// which cancels the descriptor's requests. Written only by `crate::aio::mark_used`.
     pub(crate) safe static liella_machine_aio_used: core::sync::atomic::AtomicBool;
+    /// Set when the runtime started this process (machine/points.S, D-X.58): every thread block
+    /// that runs library code is then one it made. Written only by `crate::thread::init_initial`.
+    pub(crate) safe static liella_machine_owned: core::sync::atomic::AtomicBool;
     /// The cancellation window's start, end and cancelled exit (addresses), for the internal
     /// signal's handler.
     pub(crate) safe fn liella_machine_cancel_bounds(out: &mut [usize; 3]);

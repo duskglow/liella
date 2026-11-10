@@ -412,6 +412,36 @@ pub(crate) fn fresh(tp: usize) -> &'static ThreadBlock {
     }
 }
 
+/// A chunk of the foreign-thread registry (D-X.58). Crate-private contract: `addr` is an
+/// anonymous mapping of at least `size_of::<ShadowChunk>()` bytes that `thread::shadow_entry`
+/// made (zero-filled by the kernel, a valid value of every field: all atomics) and never unmaps.
+// UNSAFE(slice): the registry's own mapping becomes a reference.
+#[allow(unsafe_code)]
+pub(crate) fn shadow_chunk_at(addr: usize) -> &'static crate::thread::ShadowChunk {
+    // UNSAFE(slice): see the function's contract; every field is atomic.
+    #[allow(unsafe_code)]
+    // SAFETY: the caller's contract; the mapping is page-aligned (64-aligned) and permanent.
+    unsafe {
+        &*core::ptr::with_exposed_provenance::<crate::thread::ShadowChunk>(addr)
+    }
+}
+
+/// The shared spare words (D-X.58) as a thread block. Crate-private contract: `addr` is the
+/// address of `thread::SPARE`, a 64-aligned static of `BLOCK_SIZE` bytes of atomics.
+// UNSAFE(slice): a static of atomic words becomes a block-shaped reference.
+#[allow(unsafe_code)]
+pub(crate) fn spare_at(addr: usize) -> &'static ThreadBlock {
+    const _: () = assert!(size_of::<crate::thread::Spare>() == liella_rt::tls::BLOCK_SIZE);
+    const _: () = assert!(align_of::<crate::thread::Spare>() >= align_of::<ThreadBlock>());
+    // UNSAFE(slice): see the function's contract; every field of a block is atomic, and zero
+    // words are a valid value of each.
+    #[allow(unsafe_code)]
+    // SAFETY: the caller's contract; the static lives for the whole process.
+    unsafe {
+        &*core::ptr::with_exposed_provenance::<ThreadBlock>(addr)
+    }
+}
+
 /// An interned locale's view (D-7.8, D-7.13). Crate-private contract: `addr` is an address
 /// `liella_legacy::global_locale` recorded for a view it leaked (also as stored in a thread
 /// block's `view` word); such values are never freed or modified.
