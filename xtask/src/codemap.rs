@@ -14,6 +14,8 @@
 //!   empty). "Defined at" is the `fn` line; the first call is the first qualified call (`a::b(` or `a::b::<`) of the body.
 //! * every `export! { asm "V"; ... }`: "defined at" is the global label (`.globl NAME` and `NAME:`) in
 //!   `csys/src/machine/*.S`, the first call the first `call`/`jmp`/`jcc` target after it. No label is an error.
+//!   Labels are read after substituting each product's object-like `#define`s (`preprocess`), so a label written as
+//!   a macro (`SQRTL:` with `#define SQRTL sqrtl` under `LIELLA_LIBM`) gives the name the product exports.
 //! * every `LIELLA_VFWD(NAME)` definition in `csys/src/adapter/*.c` (version empty; first call: the callee after `FWD(`).
 //! * every family row of `crates/boundary/src/posix/s10_math.tsv` (version `(math-gen)`; first call from the body).
 //!
@@ -141,6 +143,91 @@ fn rust_exports(text: &str) -> Vec<(String, String, usize, String)> {
     out
 }
 
+/// The `-D` sets `crates/boundary/build.rs` assembles `csys/src/machine/*.S` with, one per product: libc.so.6,
+/// libm.so.6, ld.so.
+const PRODUCT_DEFINES: [&[&str]; 3] = [&["LIELLA_EXPORT", "LIELLA_RUNTIME"], &["LIELLA_LIBM"], &["LIELLA_LD"]];
+
+/// One `.S` source with the object-like `#define NAME VALUE`s active under `defined` substituted into every other
+/// line, each directive line blanked (line numbers are kept). Only the `#define`s follow the conditionals
+/// (`#ifdef`, `#ifndef`, `#if`/`#elif` of `defined(X)` terms joined by `||`, `#else`, `#endif`; another `#if`
+/// expression counts as false); code lines are all kept, as before, so a label under `#ifdef LIELLA_LD` still counts.
+fn preprocess(text: &str, defined: &[&str]) -> String {
+    fn holds(expr: &str, defined: &[&str], macros: &BTreeMap<String, String>) -> bool {
+        expr.split("||").any(|t| {
+            let t = t.trim();
+            let (neg, t) = t.strip_prefix('!').map_or((false, t), |r| (true, r.trim()));
+            let Some(name) = t.strip_prefix("defined") else { return false };
+            let name = name.trim().trim_start_matches('(').trim_end_matches(')').trim();
+            neg != (defined.contains(&name) || macros.contains_key(name))
+        })
+    }
+    let mut macros: BTreeMap<String, String> = BTreeMap::new();
+    // Per open conditional: (this branch active, some branch already taken, enclosing active).
+    let mut stack: Vec<(bool, bool, bool)> = Vec::new();
+    let mut out = String::with_capacity(text.len());
+    for l in text.lines() {
+        let active = stack.last().is_none_or(|s| s.0);
+        if let Some(d) = l.trim_start().strip_prefix('#') {
+            let d = d.trim_start();
+            let (kw, rest) = d.split_once(char::is_whitespace).map_or((d, ""), |(k, r)| (k, r.trim()));
+            match kw {
+                "ifdef" | "ifndef" | "if" => {
+                    let c = match kw {
+                        "ifdef" => holds(&format!("defined({rest})"), defined, &macros),
+                        "ifndef" => !holds(&format!("defined({rest})"), defined, &macros),
+                        _ => holds(rest, defined, &macros),
+                    };
+                    stack.push((active && c, c, active));
+                }
+                "elif" => {
+                    if let Some(s) = stack.last_mut() {
+                        let c = !s.1 && holds(rest, defined, &macros);
+                        *s = (s.2 && c, s.1 || c, s.2);
+                    }
+                }
+                "else" => {
+                    if let Some(s) = stack.last_mut() {
+                        *s = (s.2 && !s.1, true, s.2);
+                    }
+                }
+                "endif" => {
+                    stack.pop();
+                }
+                "define" if active => {
+                    let (name, value) = rest.split_once(char::is_whitespace).map_or((rest, ""), |(n, v)| (n, v.trim()));
+                    if name.bytes().all(is_ident) {
+                        macros.insert(name.to_string(), value.to_string());
+                    }
+                }
+                "undef" if active => {
+                    macros.remove(rest);
+                }
+                _ => {}
+            }
+            out.push('\n');
+            continue;
+        }
+        let b = l.as_bytes();
+        let mut i = 0;
+        while i < b.len() {
+            if is_ident(b[i]) {
+                let start = i;
+                while i < b.len() && is_ident(b[i]) {
+                    i += 1;
+                }
+                let word = &l[start..i];
+                out.push_str(macros.get(word).map_or(word, String::as_str));
+            } else {
+                let c = l[i..].chars().next().unwrap_or(' ');
+                out.push(c);
+                i += c.len_utf8();
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// Labels of one `.S` source: name -> (line, first `call`/`jmp`/`jcc` target up to its `.size`, global).
 fn asm_labels(text: &str) -> BTreeMap<String, (usize, String, bool)> {
     let lines: Vec<&str> = text.lines().collect();
@@ -249,8 +336,11 @@ fn symbols(root: &Path, errors: &mut Vec<String>) -> Result<String, String> {
     let mut aliases = Vec::new();
     for p in files(root, MACHINE, "S") {
         let text = read(root, &p)?;
-        for (k, (line, t, g)) in asm_labels(&text) {
-            labels.entry(k).or_insert((rel(root, &p), line, t, g));
+        // A label may be an object-like macro (`#define SQRTL sqrtl`): read the names each product assembles.
+        for config in PRODUCT_DEFINES {
+            for (k, (line, t, g)) in asm_labels(&preprocess(&text, config)) {
+                labels.entry(k).or_insert((rel(root, &p), line, t, g));
+            }
         }
         aliases.extend(symvers(&text).into_iter().map(|a| (rel(root, &p), a)));
     }
@@ -578,6 +668,23 @@ mod tests {
     fn base(tag: &str, rs: &str) -> PathBuf {
         let helper = "pub fn set() {}\n";
         fixture(tag, &[("crates/boundary/src/posix/s01_x.rs", rs), ("csys/src/machine/x.S", S), (SPEC, SPEC_MD), (README, OLD_README), (HELPERS[0], helper), (HELPERS[1], helper), (HELPERS[2], helper)])
+    }
+
+    // A macro label (`SQRTL:` with `#define SQRTL sqrtl` under LIELLA_LIBM) gives the exported name, never the
+    // macro (#4293); the libc branch's `liella_` names stay rowless. no spec clause: code map tooling.
+    const MACRO_S: &str = "#if defined(LIELLA_LIBM)\n#define SQRTL sqrtl\n#define SLOW liella_slow_sqrtl\n#else\n#define SQRTL liella_fwd_sqrtl\n#define SLOW liella_fwd_slow_sqrtl\n#endif\n\t.globl SQRTL\nSQRTL:\n\tjmp SLOW\n\t.size SQRTL, .-SQRTL\n";
+
+    #[test]
+    fn macro_labels_give_the_exported_name() {
+        let d = base("macro", RS);
+        fs::write(d.join("csys/src/machine/m.S"), MACRO_S).unwrap();
+        let (tsv, _) = generate(&d).unwrap();
+        assert!(tsv.contains("\nsqrtl\t\tcsys/src/machine/m.S:9\tliella_slow_sqrtl\n"), "{tsv}");
+        assert!(!tsv.contains("SQRTL") && !tsv.contains("SLOW") && !tsv.contains("liella_fwd_sqrtl"), "{tsv}");
+        let libc = preprocess(MACRO_S, &["LIELLA_EXPORT"]);
+        assert_eq!(libc.lines().nth(8), Some("liella_fwd_sqrtl:"), "else branch outside libm; line numbers kept");
+        assert_eq!(preprocess("#ifndef A\n#define X y\n#elif defined(B)\n#define X z\n#endif\nX:\n", &["A", "B"]).lines().nth(5), Some("z:"));
+        assert_eq!(preprocess("#ifdef A\n#define X y\n#endif\nX:\n", &[]).lines().nth(3), Some("X:"), "inactive define not applied");
     }
 
     #[test]
