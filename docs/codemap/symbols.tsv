@@ -486,7 +486,7 @@ __sysv_signal	GLIBC_2.2.5	crates/boundary/src/posix/s20_signals.rs:70	ret::handl
 __toascii_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:395	ctype_tables::toascii
 __tolower_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:420	locale::case_map_l
 __toupper_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:455	locale::case_map_l
-__towctrans	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:485	ctype_tables::towctrans_view
+__towctrans	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:485	locale::with_view
 __towctrans_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:495	ctype_tables::towctrans_view
 __towlower_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:435	locale::view_of
 __towupper_l	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:470	locale::view_of
@@ -3802,11 +3802,11 @@ totalordermagf64x	GLIBC_2.31	crates/boundary/src/posix/s10_math_gen.rs:5209	mret
 totalordermagl	GLIBC_2.31	crates/boundary/src/posix/s10_math_gen.rs:5214	mret::pure
 toupper	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:445	locale::toupper
 toupper_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:460	locale::case_map_l
-towctrans	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:480	ctype_tables::towctrans_view
+towctrans	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:480	locale::with_view
 towctrans_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:490	ctype_tables::towctrans_view
-towlower	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:430	locale::view
+towlower	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:430	locale::with_view
 towlower_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:440	locale::view_of
-towupper	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:465	locale::view
+towupper	GLIBC_2.2.5	crates/boundary/src/posix/s05_ctype.rs:465	locale::with_view
 towupper_l	GLIBC_2.3	crates/boundary/src/posix/s05_ctype.rs:475	locale::view_of
 tr_break	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:240	malloc_compat::inert
 trunc	(math-gen)	crates/boundary/src/posix/s10_math.tsv:31	mret::ret
