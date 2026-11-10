@@ -84,6 +84,13 @@ for p in $probes; do
         # TIMING-COV-FORK-COW-FAULTS: trace into the fork child (its text windows fault after fork).
         follow=child trace fork en_US.UTF-8 ./p_fork
         check_calls p_fork
+    elif [ "$p" = p_cold ]; then
+        # LAYOUT-TEXT-PIN-3: p_cold's localtime_r/mktime in the zone the fault-bounded probes
+        # (page_faults.c localtime, localtime_mktime, mktime) and cbench_opt's zone rows use, not the
+        # host's: a UTC host traced no rule-string parse, no period cache and another crate's vector
+        # growth, so those stayed out of the group and cost the first localtime_r two faults.
+        TZ=America/New_York trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
+        check_calls "$p"
     else
         trace "$(tier_of "$p")" en_US.UTF-8 "./$p"
         check_calls "$p"
