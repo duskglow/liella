@@ -1,0 +1,8 @@
+id = "D-18.1"
+section = "s18"
+spec = "§18.2"
+ann = "HIST"
+status = "active"
+body = '''
+Internally, **spawn is the primary creation primitive**. `fork` is exported with atfork and full library-lock handling, so `malloc` works in the child, per the contract. **`vfork` (owner ruling 2026-10-22, #410, VFORK-CLONE-VM; supersedes the copy-on-write `vfork`):** as glibc, `SYS_vfork` (= `clone(CLONE_VM\|CLONE_VFORK\|SIGCHLD)`): the child shares the caller's memory and stack and the caller is suspended until the child calls `execve` or `_exit` (the only things a child may do, POSIX). No page-table copy and no copy-on-write left on the parent's pages (F24). `vfork`/`__vfork` are assembly (`csys/src/machine/vfork.S`, products only): the return address is popped into a register before the syscall and pushed back after, since the child's return overwrites that stack slot; no signal is blocked (as glibc); an error tail-jumps to the local Rust `liella_vfork_fail` (errno, -1). Tests: `conformance/c/s18_vfork.c` (shared write, exec, failed exec 127, no faults on rewrite after a 64 MiB parent's vfork, masks unchanged, `EAGAIN` under `RLIMIT_NPROC`), `s18_fork.c`, `s18_fork_aliases.c`.
+'''

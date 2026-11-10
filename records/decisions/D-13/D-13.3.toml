@@ -1,0 +1,8 @@
+id = "D-13.3"
+section = "s13"
+spec = "§13.2"
+ann = "KERN"
+status = "active"
+body = '''
+`telldir`/`seekdir` pass the file system's 64-bit cookie directly. `long` is 64 bits on this ABI, so the mapping table is not needed.
+'''

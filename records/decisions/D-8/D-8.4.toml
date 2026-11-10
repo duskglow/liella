@@ -1,0 +1,8 @@
+id = "D-8.4"
+section = "s08"
+spec = "§8.5"
+ann = "HIST"
+status = "active"
+body = '''
+`num::format_int` fills the gap the spec notes (no integer-to-text primitive). printf, syslog and diagnostics use it with no locale machinery.
+'''

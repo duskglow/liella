@@ -1,0 +1,12 @@
+{"task": "WCTYPE-TRIE-BUILTIN", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: built-in C/C.UTF-8 views read generated two-stage class-word tables (D-5.9); exhaustive test and 5/5 plants caught; gate and after-counts still running, counts not yet compared",
+ "branch": "task/wctype-trie-builtin", "head": null,
+ "gate": {"affected": "running at hand-back (keke:wctype-trie-builtin-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["timing on Ivy Bridge/N100 PENDING: timing hosts down until about midweek", "first plants run refused by the tool (pattern matched two sites); rerun plants-2 all CAUGHT"],
+ "refused": [],
+ "improvement": "plants tool could print the second matching line when it refuses a two-site pattern, saving a rerun; the gate+count chain (one detached script, each step under jobrun) kept the role single-build without a waiter",
+ "next_step": "when keke:wctype-trie-builtin-count-after ends, run handoff/wctype-trie-builtin/cmp.py on before/after count-liella.tsv; COMPLETE if gate rc 0 and no row slower",
+ "report_file": "handoff/wctype-trie-builtin.md",
+ "jobs": ["keke:wctype-trie-builtin-gate", "keke:wctype-trie-builtin-plants-2", "keke:wctype-trie-builtin-count-before", "keke:wctype-trie-builtin-count-after", "keke:wctype-trie-builtin-test", "keke:wctype-trie-builtin-gen"]}

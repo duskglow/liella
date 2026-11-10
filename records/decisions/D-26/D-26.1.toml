@@ -1,0 +1,8 @@
+id = "D-26.1"
+section = "s26-29"
+spec = "§26.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Logger` handle (owned ident, explicit facility), with an optional structured journald protocol. **Boundary:** the global logger keeps the ident *by pointer*, as the contract says. The connection is synchronised (observable, stricter).
+'''

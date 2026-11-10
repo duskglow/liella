@@ -1,0 +1,7 @@
+id = "D-H4"
+section = "h"
+pattern = "Ambient locale, zone, printf registry, resolver state"
+status = "active"
+body = '''
+**Internal:** explicit `&Locale`, `&Zone`, `&Resolver` and registry parameters. **Boundary:** translations supply the current process or thread value from `liella-legacy`. The `_l` twins pass their argument instead.
+'''

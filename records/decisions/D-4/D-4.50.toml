@@ -1,0 +1,8 @@
+id = "D-4.50"
+section = "s04"
+spec = "§4.6"
+ann = "PERF"
+status = "active"
+body = '''
+**strstr and wcsstr: one fused candidate and terminator scan** (STRSTR-VEC, 2026-10-20; supersedes the haystack-measuring part of D-4.32 for `strstr` and D-4.49's unit scan for `wcsstr`/`wcswcs`). `liella_machine_strpair(p, off, c0, c1)` / `liella_machine_wcspair` (scan.S, bytes / 4-byte units; AVX2 and SSE2) return 2k for the first position q = p+k with unit q == c1 and unit q-off == c0 and no 0 unit in [p, q], or 2k+1 for the first 0 unit; loads: an unaligned head when p's page has 32 bytes left (else unit by unit to a 32-byte boundary), then aligned blocks (AVX2 from a 64-byte boundary: aligned pairs, test min((Y^c1)\|(L^c0), Y) == 0), the lead block always inside [p-off, block end), so nothing is read outside the terminator's page. Rust `strz::find_str` / `find_wcs`: the needle is measured, the haystack never is; pair = first and last unit, after the first false candidate the two rarest (`conv::rare_pair_by`; wide units above 255 rank rare); the needle is compared at each candidate (beyond the scanned units one unit at a time, never past the terminator); failed-candidate work past 4*progress+256 units hands the rest to `bytes::find_seq` (two-way), so the worst case stays linear; a reported terminator that is no longer 0 (a writer) also goes to that path. A `wchar_t*` not 4-byte aligned keeps measure + `find_seq`. `strcasestr`/`memmem` unchanged. Evidence: tests/strstr_find.rs (needle 0..=70 x haystack 0..=300 x every offset in a 32-byte block, page end, page crossing) and tests/wcsstr_find.rs (both scan levels, units above U+FFFF and negative, every unit offset, page end/crossing); plants and counts in liella-historic:handoff/strstr-vec.md.
+'''

@@ -1,0 +1,6 @@
+id = "D-X.40"
+section = "x"
+status = "active"
+body = '''
+**`system_signal_state_during_and_after` runs its case in a forked, single-threaded child** (POPEN-SYSTEM-SIGCHLD-RACE, 2026-11-07; decided locally, test only, no product code). POSIX blocks `SIGCHLD` only in the thread that calls `system`; in the re-executed test binary libtest's main thread kept it unblocked, so the child's `SIGCHLD` could go to that thread while `system` still waited and its handler could still be in flight when the case read its hit count (`hits=0` under load). In a child of `fork` the caller is the only thread: the pending signal can be delivered only to it, when `system` restores the mask, so `hits=1` is decided when read and the case still checks the mask during, and the mask, dispositions and delivery after. The child reports `gettid() == getpid()` and the parent asserts it. Rejected: polling the count with a bound (it would accept a handler that ran during the wait on another thread, so "delivered after" would go untested in those runs).
+'''

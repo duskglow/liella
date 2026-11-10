@@ -1,0 +1,13 @@
+id = "SR-50"
+section = "4"
+row = "`malloc` + `free` pair"
+now = "111 vs glibc 135 instr (0.82x); `free(NULL)` 5 vs 6"
+limit = "ahead of glibc; the metadata proposal gains 4 to 5 instr per pair and is closed"
+reason_class = "hardware"
+basis = "M"
+source = "MALLOC-FAST, HEAP-CUTS2 (pair 148 to 136, glibc 150)"
+tried = "HEAP-META (4-5 instr per malloc/free): rejected. HEAP-HINT: slow count unchanged, the 50% slow `malloc(8)` was not the hint. REALLOC-CHAIN frameless entry: 82.2 to 84.4, reverted"
+flag = "**measured 2026-10-23** (section 10): HEAP-META-DENSE (D-3.15) and TARC-ALLOC (unfinished, \"tar-c wl_count pending\") changed the allocator after MALLOC-FAST"
+status = "active"
+body = '''
+'''

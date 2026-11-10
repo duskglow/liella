@@ -1,0 +1,6 @@
+id = "D-X.29"
+section = "x"
+status = "active"
+body = '''
+**A failed test step names its failing tests under its FAIL line** (XTASK-AFFECTED-FAIL-EARLY, 2026-11-06; decided locally, tooling only, no product code). When a test step of `cargo xtask affected` fails (a crate's `test -p <crate>` pass, with or without the exports interposed, and `xtask unit tests`), the console gets right under that step's FAIL line, before the next step starts: the failing tests, each `<crate>[::<binary>] <test>` (at most 10, then `... and N more`), the first 5 lines of each one's panic (lines cut at 300 characters; `(no panic message ...)` when the output has none, e.g. a signal), and `full output: <target/affected.log> (this step from line N)`. A failed step naming no test shows its first `error` lines instead. Passing steps print nothing extra; the end-of-run summary is unchanged; the conformance step keeps its own report (D-X.27). The parser reads both runners' output: nextest's status lines and its indented captured output, and `cargo test`'s `---- <test> stdout ----` sections. Why: a gate stopped after a FAIL line left the agent without the failing test's name (CLASSED-SLOT-INFRA-5, -6). Tests: `a_failed_test_step_names_its_failures_under_its_fail_line`, `the_failed_test_report_reads_nextest_output_and_stays_bounded`; env-gated fixture `affected_fail_early_fixture`.
+'''

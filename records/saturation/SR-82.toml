@@ -1,0 +1,8 @@
+id = "SR-82"
+section = "7"
+row = "`first_*`, `second_*` cold rows (`first_mktime` 10.6, `second_setlocale` 120.6, `second_bindtextdomain_gettext` 19.8)"
+now = "instructions:u (COLD-FIRST-CALLS, `validation/percall/cold.c`, Zen 1 host, 2026-10-23): first `setlocale` en_US about 58k vs glibc 22k, C.UTF-8 16k vs 178k; first textdomain + `gettext` en_US 36k vs 130k; first `mktime` and `localtime_r` at or below glibc; repeated `setlocale` en_US 190 vs 159; repeated `bindtextdomain` + `gettext` en_US (no catalog) 14,896 vs 2,405"
+open = "the one-off costs are under 0.03% of every workload's instructions (largest: `ls-l-enUS`, 10 processes x 36k); the 120x `second_setlocale` time is not user instructions (kernel side, unmeasured); the open per-call gap is `gettext` in a locale with no catalog (6.2x)"
+status = "active"
+body = '''
+'''

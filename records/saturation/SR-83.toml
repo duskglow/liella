@@ -1,0 +1,8 @@
+id = "SR-83"
+section = "7"
+row = "`first_localtime_r_new_york` (hot text, NEGATIVE)"
+now = "1.79 of glibc (Haswell-EP host, 2026-11-06, `bench --compare --counters --runs 5 --only cbench_opt`)"
+open = "PERF-FIRSTCALL-MKTIME-SNPRINTF-2 regenerated `crates/libc-so/hot-text.list` (fast profile) so the zone load's counter query (`tsc_probe`, `liella_sys_prctl`, `liella_machine_rdtsc`) sits beside the zone-load functions: first_localtime_r 1.79 -> 1.78 (no gain), first_snprintf 0.75 -> 0.91 (the regenerated order moves the startup memcpy/`malloc_debug` group behind `stdio_compat::load`), first_mktime 0.89 -> 1.02. Not kept. The three functions were already in the hot group, and the query at zone load measured within run-to-run spread on first_localtime_r (1.78 before, 1.79 after)"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,8 @@
+id = "D-10.5"
+section = "s10"
+spec = "§10.6"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+`fenv` keeps MXCSR and x87 in step. `__fpu_control`/`__setfpucw` set the startup x87 word. `__fpu_control` (GLIBC_2.2.5, 2-byte object, 0x037f) is its own csys member (`fpu_control.c`), so a static program that defines the name links; start-up applies a program's own value only in dynamic programs, as glibc (#810, #812, probe-settled). Proven now: export, archive member, static conformance (default and program-defined) and the glibc oracle of the dynamic programs. The dynamic hook's run on Liella and its "drop the hook" plant wait for Liella's ld.so (phase 14, #814); until then that run is a reported skip.
+'''

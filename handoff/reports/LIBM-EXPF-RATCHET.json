@@ -1,0 +1,17 @@
+{"task": "LIBM-EXPF-RATCHET", "model": "opus", "tokens": null,
+ "result": "expf/exp2f regression was LIBM-F32-ONEPASS's cvtss2sd partial write chaining calls; operand now built from bits (D-10.67): N100 expf 3.11->1.66, exp2f 3.13->1.66, IVB 2.51->1.24, 2.75->1.37-1.52; other libm rows unchanged",
+ "branch": "task/libm-expf-ratchet", "head": "see hand-back",
+ "gate": {"affected": "keke:libm-expf-ratchet-gate2 (pending at report time)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   "Isolation used git diff --stat (file lists only) of the three candidate merges the brief names, plus disassembly of origin/next's libm.so.6",
+   "IVB round spreads 0.007-0.75 for base and head alike; medians repeat; N100 spreads <= 0.018",
+   "Instructions per call rise 47.1 -> 55.1 (+8); time falls ~47%: a dependency chain, not instruction cost",
+   "Role keke:~/w/n1 has no .git, so bench --stage --base could not stage the base there; the base was staged in the role with the one changed file at its origin/next content, then restored with cat and resynced"
+ ],
+ "refused": [],
+ "jobs": ["keke:libm-expf-ratchet-gate2", "keke:libm-expf-ratchet-plants2", "keke:libm-expf-ratchet-counts", "nozomi:libm-expf-ratchet-n100", "kotori:libm-expf-ratchet-ivb"],
+ "improvement": "A deterministic xtask check for scalar-SSE partial writes (cvtss2sd etc.) into registers a libm function never wrote would catch this class of regression without booked timing hosts.",
+ "next_step": "Build the partial-write disassembly check as its own story; start exp10f/logf one-pass conversions from fast32::onepass_scaled.",
+ "report_file": "handoff/libm-expf-ratchet.md"}

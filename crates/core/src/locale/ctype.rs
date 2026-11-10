@@ -167,6 +167,14 @@ impl CtypeFile {
         self.cat.item(TOUPPER)
     }
 
+    /// The `wctrans_t` of this file's `toupper` (`upper`) or `tolower` mapping: the address of
+    /// the case table's entry for character 0 (spec §5.2: the descriptor is the address of the
+    /// mapping's table). `wctrans` returns it and `towctrans` compares against it (D-5.8).
+    pub fn case_desc(&self, upper: bool) -> usize {
+        let t = if upper { self.toupper_table() } else { self.tolower_table() };
+        t.as_ptr().wrapping_add(4 * 128).expose_provenance()
+    }
+
     /// The 384 `i32` lowercase mappings (`__ctype_tolower`).
     pub fn tolower_table(&self) -> &'static [u8] {
         self.cat.item(TOLOWER)

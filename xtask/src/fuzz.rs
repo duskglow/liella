@@ -151,7 +151,7 @@ fn targets(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The nightly toolchain of `fuzz/rust-toolchain.toml`.
-fn toolchain(root: &Path) -> Result<String, String> {
+pub(crate) fn toolchain(root: &Path) -> Result<String, String> {
     let t = fs::read_to_string(root.join("fuzz/rust-toolchain.toml")).map_err(|e| format!("fuzz/rust-toolchain.toml: {e}"))?;
     t.lines()
         .filter_map(|l| l.trim().strip_prefix("channel"))
@@ -178,7 +178,7 @@ fn cargo_fuzz(root: &Path, nightly: &str) -> Command {
 }
 
 /// `rustup run <nightly> cargo` in `fuzz/` (environment of this `cargo` removed, own target dir).
-fn nightly_cargo(root: &Path, nightly: &str) -> Command {
+pub(crate) fn nightly_cargo(root: &Path, nightly: &str) -> Command {
     let rustup = std::env::var_os("CARGO_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cargo")))
@@ -211,16 +211,17 @@ fn status(c: &mut Command) -> Result<bool, String> {
 /// their own on a pinned nightly, so a signature change in a library crate breaks them without any gate
 /// noticing (wordexp after WORDEXP-3, regex after RX-T2-1: every fuzz binary failed to build for days).
 /// `cargo check --bins` needs no fuzzer runtime or sanitizer, and is incremental. The gate runs it
-/// (`xtask test`, and `affected` whenever `crates/` or `fuzz/` changed).
+/// (`xtask test`, and `affected` whenever `crates/` or `fuzz/` changed). `--locked`: the check never
+/// rewrites `fuzz/Cargo.lock`; a stale lock fails here and in `lock-fresh` (FUZZ-LOCK-FRESH).
 pub fn check(root: &Path) -> Result<(), String> {
     let nightly = toolchain(root)?;
     let mut c = nightly_cargo(root, &nightly);
-    c.args(["check", "--bins"]);
+    c.args(["check", "--bins", "--locked"]);
     if status(&mut c)? {
         println!("xtask fuzz-check: all {} fuzz targets type-check", targets(root)?.len());
         Ok(())
     } else {
-        Err("the fuzz targets do not build (fuzz/ is a workspace of its own: a library signature changed? see `cargo xtask fuzz-check`)".into())
+        Err("the fuzz targets do not build (fuzz/ is a workspace of its own: a library signature changed, or fuzz/Cargo.lock is stale (`cargo xtask locks --check`)? see `cargo xtask fuzz-check`)".into())
     }
 }
 

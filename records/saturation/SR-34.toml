@@ -1,0 +1,13 @@
+id = "SR-34"
+section = "3"
+row = "`strstr` short call and dense last byte (STRSTR-SHORT-DENSE-PARITY, NEGATIVE)"
+now = "i (wl_percall, Zen 1 host, AVX2 path; base = the adaptive filter): `strstr_dense_4k` 997 to 1068 (glibc 818), `strstr_hit_short` 173 to 188, `strstr_scan_4k` 775 to 790, `ss_hit_64` 188 to 207 (glibc 163.2), `ss_hit_1k` 436 to 728; every strstr row worse"
+limit = "not at parity and no bound proved yet: (1) a DENSE flag that made a one-stream stop within 1024 bytes of the previous one return a false candidate, so the caller re-ranked the needle and scanned on its rarest pair; (2) one SSE2 step measuring a needle of up to 15 bytes and checking the haystack prefix (an asm call) in place of the byte loop. (2) cost about +15 per call on every row instead of saving the loop; (1) also fires on the FIRST stop when it lies within 1024 bytes of the start (a lone match group, `ss_hit_1k` +292), and on `strstr_dense_4k` the hand-back plus second call cost more than the pair filter it replaced"
+reason_class = "algorithm"
+basis = "M"
+source = "STRSTR-SHORT-DENSE-PARITY (`handoff/strstr-short-dense-parity.md`)"
+tried = "both reverted (commit 37e2ef81 has the code; plants 5 CAUGHT, 2 EQUIVALENT); not profiled per phase (budget)"
+flag = "next: profile one call of each row with validation/wl_trace.sh before another design; a hand-back must not count the first stop as dense"
+status = "active"
+body = '''
+'''

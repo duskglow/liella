@@ -1,0 +1,8 @@
+id = "D-17.3"
+section = "s17"
+spec = "§17.3–17.4"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+**Internal:** `liella::users` reads records as borrowed views over the line (`Passwd`, `Group`, `Shadow`, `Gshadow`, `List`) and writes lines (`put_*`). **Boundary:** the `_r` forms use `liella_abi::pack::Packer`: the buffer holds only the record's strings and pointer arrays (aligned inside it); on `ERANGE` an enumeration or stream stays on the refused record (the stream is sought back). Non-`_r` results go in a per-thread block per record kind (`SLOT_RECORDS` result slots), grown as needed and freed at thread exit; `getusershell` and `getpass` are process-wide. The `*ent` cursors are process-wide and locked (P-scope): an open file and an offset. At the end of a stream, `_r` forms return `ENOENT`, the others NULL with errno `ENOENT`; a record not found is NULL with errno unchanged, or 0 with a NULL result. Deliberate differences (phase-10 probes): numbers are decimal digits only (glibc also takes `+5`, ` 5`); empty names are refused; `sgetspent`/`sgetsgent` skip leading white space and treat comment or blank lines as no record (`EINVAL`), like the stream forms; `put*` refusals always set `EINVAL`, and a newline in a field is refused (glibc writes a space); `putpwent`/`putgrent` keep non-zero IDs on `+`/`-` entries so the round trip is lossless; `getgrouplist`/`initgroups` skip `+`/`-` entries (glibc's `+group` added GID 0) and list each GID once; at the end of an enumeration the `_r` forms return `ENOENT` and every form leaves errno unchanged, as glibc (owner ruling 2026-10-22, #409: the `errno = 0; loop; check errno` idiom). `fgetpwent_r` needs room only for the record's strings, not the whole line (KNOWN in `users_products`).
+'''

@@ -1,0 +1,8 @@
+id = "D-4.19"
+section = "s04"
+spec = "§4.3–4.5, §4.10, §4.15"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+**Zero-length bounded calls and `strverscmp`** (validation stage, 2026-10-05, T11, T18). A bounded string function given a length of 0 reads nothing, so it takes any pointer, NULL included: `strnlen`, `strncmp`, `strncasecmp`, `strncpy`/`stpncpy` (source), `strndup`, `wcsnlen`, `wcsncmp`, `wcsncpy` and the other users of `strz::strz_n`/`wcsz_n` answer as for an empty text (the reference does; gnulib's `test-strncpy` and `test-strndup` call them so; C2y N3322 makes the same calls defined for the `mem*` functions). S6 still applies to every pointer a call reads through. `strverscmp` (and `versionsort`) follow the GNU C Library manual's and strverscmp(3)'s order (`000` < `00` < `01` < `010` < `09` < `0` < `1` < `9` < `10`): of two fractional runs (a leading zero), more leading zeros is smaller; with as many, a run of zeros only is larger, and otherwise the digits after the zeros compare one by one; when one is a prefix of the other, the characters after the shorter run decide, as text (`01` < `010` < `01a`). Before, `010` sorted before `01`. `versions_products.rs` compares every pair of strings of up to 4 characters over `012a.` (609,961 pairs) with the reference.
+'''

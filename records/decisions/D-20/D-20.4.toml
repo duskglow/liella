@@ -1,0 +1,8 @@
+id = "D-20.4"
+section = "s20"
+spec = "§20.2"
+ann = "HIST"
+status = "active"
+body = '''
+`signal` has BSD semantics. `sysv_signal`, `sigset`/`sighold`/`sigrelse`/`sigignore`, `sigvec`, `sigblock` and the two `sigpause` forms are legacy translations.
+'''

@@ -1,0 +1,13 @@
+id = "SR-60"
+section = "5"
+row = "`uselocale(0)` query"
+now = "i 18.0 vs glibc 22.0 (0.82x; 2026-10-20 spot check in `docs/perf-ledger.md`)"
+limit = "ahead of glibc"
+reason_class = "n/a"
+basis = "M"
+source = "NO-ROW"
+tried = "none"
+flag = "none"
+status = "active"
+body = '''
+'''

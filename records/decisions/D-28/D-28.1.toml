@@ -1,0 +1,8 @@
+id = "D-28.1"
+section = "s26-29"
+spec = "§28"
+ann = "HIST"
+status = "active"
+body = '''
+`gmon.out` follows the gprof file format specification. `profil` uses `ITIMER_PROF`, per the contract.
+'''

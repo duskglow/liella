@@ -1,0 +1,8 @@
+id = "D-11.2"
+section = "s11"
+spec = "§11.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `OpenOptions` is a typed builder, with `mode` required iff creating (type-level). **Boundary:** the variadic `open` trampoline (F11) and `__open_2` validation. `openat2` resolve flags are exposed internally (H17).
+'''

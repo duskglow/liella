@@ -1,0 +1,6 @@
+id = "D-X.32"
+section = "x"
+status = "active"
+body = '''
+**The fork child's path is in the hot text** (TIMING-COV-FORK-COW-FAULTS, 2026-11-06; layout only, no ABI or behaviour change; extends D-X.20). `fork` copies no page tables of file-backed text, so a child refaults every 64 KiB text window its path touches; the path (fork return, child reset hooks, `_exit`) spanned 9 windows. `tools/hottext/probes/p_fork.c` is traced into the child (`HOT_TEXT_FOLLOW_FORK=child` in trace_gdb.py) and its keys join `hot-text.list`: Zen 1 host, release products, per extra fork+_exit+waitpid, faults 10.0 -> 7.2, kernel instructions 231.7k -> 202.9k (glibc 2.39 dynamic 12.0 / 275.7k). Checked by `init_fork_child_stays_within_its_page_fault_bound`.
+'''

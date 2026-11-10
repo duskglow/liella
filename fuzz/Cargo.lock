@@ -87,11 +87,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "liella-boundary"
+version = "0.0.0"
+dependencies = [
+ "liella",
+ "liella-abi",
+ "liella-kernel",
+ "liella-ld",
+ "liella-legacy",
+ "liella-math",
+ "liella-rt",
+]
+
+[[package]]
 name = "liella-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "liella",
+ "liella-abi",
+ "liella-boundary",
+ "liella-ld",
  "liella-legacy",
 ]
 
@@ -100,12 +116,27 @@ name = "liella-kernel"
 version = "0.0.0"
 
 [[package]]
+name = "liella-ld"
+version = "0.0.0"
+dependencies = [
+ "liella-kernel",
+ "liella-rt",
+]
+
+[[package]]
 name = "liella-legacy"
 version = "0.0.0"
 dependencies = [
  "liella",
  "liella-abi",
  "liella-kernel",
+ "liella-rt",
+]
+
+[[package]]
+name = "liella-math"
+version = "0.0.0"
+dependencies = [
  "liella-rt",
 ]
 

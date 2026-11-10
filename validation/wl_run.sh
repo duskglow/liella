@@ -16,7 +16,7 @@
 # a fingerprint of the differing lines (count:sha1) is recorded; wl_known_diffs.tsv lists the
 # fingerprints that are allowed.
 # OUT.tsv columns: workload variant cpu_s sd_pct md5 instr instr_sd pf pf_sd sys_total sys_rw
-#   sys_open sys_fstat sys_stat sys_dir sys_mem sys_proc sys_other dfp cycles cycles_u cycles_k sys_futex sys_mtmem
+#   sys_open sys_fstat sys_stat sys_dir sys_mem sys_proc sys_other dfp cycles cycles_u cycles_k sys_futex sys_mtmem sys_piperw
 #   (cycles = user+kernel, FALLBACK-CYCLES: advisory with cpu_s; the report prints the GHz = cycles / cpu time;
 #    cycles_u, cycles_k = the same event with the :u / :k modifier, WLRUN-CYCLES-UK: which side a gap is on, program/libc
 #    user time or kernel time (page faults, syscalls). New columns are appended, older files without them still load.)
@@ -32,7 +32,11 @@
 #       because the alignment trims of an arena depend on the address the kernel returns while other threads map at the same
 #       time. Single-threaded workloads keep sys_mem in the gate. sys_futex and sys_mtmem are advisory (the report prints
 #       the futex change) and never a verdict. Still counted for threaded runs: rw, open, fstat, stat, dir, proc (clone,
-#       exit, signals, wait), other (without futex), and the total of those. Variants run in the given order, interleaved per workload, so a drifting
+#       exit, signals, wait), other (without futex), and the total of those.
+#   sys_piperw = when the run created another process (a pipeline: a clone/clone3 without CLONE_THREAD, fork or vfork in the
+#       clone trace), its read/write-family calls on pipes, out of sys_rw and sys_total (WL-PIPE-READS-ADVISORY, D-X.46):
+#       how much data waits when a reader wakes depends on scheduling. Advisory, never a verdict; a single-process run
+#       keeps its pipe calls in sys_rw. The strace run is `strace -C -f -y` (trace lines show pipe fds, then the summary). Variants run in the given order, interleaved per workload, so a drifting
 # host load hits all of them alike. The gate fails only on the counters (instr, pf, sys_*) and
 # on unexplained output differences; cpu_s is advisory.
 set -u
@@ -45,11 +49,11 @@ tmp=$WL/tmp.$$
 mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 [ -d "$work/tree" ] || { mkdir -p "$work/tree" && tar -xf "$work/tree.tar" -C "$work/tree"; }
-printf 'workload\tvariant\tcpu_s\tsd_pct\tmd5\tinstr\tinstr_sd\tpf\tpf_sd\tsys_total\tsys_rw\tsys_open\tsys_fstat\tsys_stat\tsys_dir\tsys_mem\tsys_proc\tsys_other\tdfp\tcycles\tcycles_u\tcycles_k\tsys_futex\tsys_mtmem\n' > "$out"
+printf 'workload\tvariant\tcpu_s\tsd_pct\tmd5\tinstr\tinstr_sd\tpf\tpf_sd\tsys_total\tsys_rw\tsys_open\tsys_fstat\tsys_stat\tsys_dir\tsys_mem\tsys_proc\tsys_other\tdfp\tcycles\tcycles_u\tcycles_k\tsys_futex\tsys_mtmem\tsys_piperw\n' > "$out"
 
 . "${WL_SYSCLS:-$(dirname "$0")/wl_syscls.sh}"   # the classifier, shared with wl_count_run.sh (WLCOUNT-MTMEM-2)
 nosys=$(printf -- '-\t-\t-\t-\t-\t-\t-\t-\t-')
-nosys2=$(printf -- '-\t-')
+nosys2=$(printf -- '-\t-\t-')
 
 ev() { # event field: first line of the perf stat output naming the event, field $2 of the csv
     echo "$stat" | grep ",$1," | tail -1 | cut -d, -f"$2"
@@ -70,13 +74,15 @@ for d in "${WL_DEFS[@]}"; do
         sys=$nosys
         sysx=$nosys2
         if [ "${STRACE:-1}" = 1 ]; then
-            (cd "$work" && strace -c -f -o "$tmp/strace.txt" sh -c "$c" > /dev/null 2>&1)
-            (cd "$work" && strace -f -e trace=clone,clone3 -o "$tmp/clone.txt" sh -c "$c" > /dev/null 2>&1)
+            (cd "$work" && strace -C -f -y -o "$tmp/strace.txt" sh -c "$c" > /dev/null 2>&1)
+            (cd "$work" && strace -f -e trace=clone,clone3,fork,vfork -o "$tmp/clone.txt" sh -c "$c" > /dev/null 2>&1)
             mt=0
+            mp=0
             wl_has_thread "$tmp/clone.txt" && mt=1
-            all=$(wl_classify "$tmp/strace.txt" "$mt")
+            wl_has_child "$tmp/clone.txt" && mp=1
+            all=$(wl_classify "$tmp/strace.txt" "$mt" "$mp")
             sys=$(echo "$all" | cut -f1-9)
-            sysx=$(echo "$all" | cut -f10-11)
+            sysx=$(echo "$all" | cut -f10-12)
         fi
         dfp=-
         if [ "$v" = glibc ]; then

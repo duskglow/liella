@@ -1,0 +1,6 @@
+id = "D-X.19"
+section = "x"
+status = "active"
+body = '''
+**Zone periods for files; Neri-Schneider civil dates** (MKT-2, 2026-10-08; local decision, no ABI or behaviour change). The thread's period (P7, D-X.17's three words) now also holds a TZif file's interval between two transitions (kind = type index; word 0 = zone id \| kind << 32); a zone has a number only when its kind changes and its transitions are sorted. `mktime` skips the candidate search when one period holds its whole six-day window (the thread's, else the one around the window start by one binary search) and builds the local time from that period. `civil_days64` uses Neri and Schneider's (2023 paper) unsigned multiply-shift conversion with the day of the year from the March-based day, replacing the era divisions (gmtime's latency chain). Safety: `resolve_by(.., fast=false)` keeps the full search as the reference; tests `transition_period_changes_nothing`, `resolve_shortcuts_change_nothing` (system zoneinfo + synthetic + rules, every transition +/-1 s, isdst -1/0/1) and `fast_paths_agree` (every day of +/-6000 years, stride over +/-2^48) compare against it; five planted bugs caught (liella-historic:handoff/mkt2.md).
+'''

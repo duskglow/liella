@@ -1,0 +1,8 @@
+id = "D-8.8"
+section = "s08"
+spec = "§8.10"
+ann = "HIST"
+status = "active"
+body = '''
+`l64a` uses a per-thread buffer: delivered in milestone 6 through the result area of D-C0.2 (it was process-wide until then).
+'''

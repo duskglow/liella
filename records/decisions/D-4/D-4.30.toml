@@ -1,0 +1,8 @@
+id = "D-4.30"
+section = "s04"
+spec = "§4.3, §4.4"
+ann = "—"
+status = "active"
+body = '''
+**Precomputed first level of ASCII bytes for strcoll** (STRCOLL-1, builds on D-4.18). At `LC_COLLATE` load, `Collate::parse` fills `ascii1[128]` (256 bytes per loaded rules locale, per process; nothing per thread): for each ASCII byte, from the same lookups `first_level` makes per element, the start and count of its first-level weights in `weightmb`, or SLOW (the `tablemb` entry is a list whose first entry is not a plain length-0 match, i.e. a contraction may start there, or the level-0 rule is backward or by position). At an element start in both strings, two table bytes are taken from the table instead of `element()` + rule + `weights()` (skipped together when their entries are equal); `FirstLevel::next` does the same for one string. Equivalent by construction (one-byte elements; units identical); wide text (`wcscoll`) and non-ASCII bytes keep the general path; keys (`strxfrm`) are untouched. Tests: `locale_data.rs` `ascii_lane_orders_every_pair_as_the_keys_do` (every pair of ~345 file-name-like strings in 7 rules locales vs the key order) plus the existing key/oracle tests.
+'''

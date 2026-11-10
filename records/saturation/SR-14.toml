@@ -1,0 +1,13 @@
+id = "SR-14"
+section = "3"
+row = "`memcpy_4k`, `memcpy_64k`, `memcpy`/`memmove` 16 and 64 KiB (rows where either side runs `rep movsb`)"
+now = "Skylake-SP 73 vs 419, 85.5 vs 57.5; Ivy Bridge 718 vs about 27, 100 vs 54; Haswell-EP 80 vs 44, 5718 vs 44"
+limit = "not comparable by instructions: judged by timing on a booked host, same-host ratio (owner ruling 2026-11-05)"
+reason_class = "measurement (the counter counts one `rep movsb`/`rep stosb` as one instruction at 0 B to 64 KiB on Skylake-SP, Haswell-EP and Ivy Bridge; probe in benchmarks.md section 2a)"
+basis = "M"
+source = "PARITY-COPY-AVX2"
+tried = "none"
+flag = "none"
+status = "active"
+body = '''
+'''

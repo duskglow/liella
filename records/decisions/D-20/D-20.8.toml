@@ -1,0 +1,8 @@
+id = "D-20.8"
+section = "s20"
+spec = "§20.4"
+ann = "HIST"
+status = "active"
+body = '''
+**`pthread_kill` and `pthread_sigqueue` (milestone 5, 2026-10-04).** Both target one thread through `tgkill`/`rt_tgsigqueueinfo`; signal 0 only checks; an invalid signal (and the internal signal 32, D-20.1) is `EINVAL` returned with `errno` untouched. A thread that has exited but not been joined: `pthread_kill` returns 0 and sends nothing, as §20.4's Failure clause says for 2.34+ (**found and fixed:** it returned `ESRCH`, including when the thread exits between the lookup and `tgkill`); `pthread_sigqueue` returns `ESRCH`, as the reference does and pthread_sigqueue(3) says ("thread is not valid"). `conformance/c/s20_pthread_kill.c` checks all of it and passes against the reference too (clauses `s20_4_c_5`, `s20_4_f_0`).
+'''

@@ -1,0 +1,6 @@
+id = "D-X.24"
+section = "x"
+status = "active"
+body = '''
+**Legacy compatibility entry points** (COLD-REWRITE-T-06, 2026-10-14; record `liella-historic:handoff/decisions/COLD-REWRITE-T-06.md`). (1) Global PRNG storage: one spin lock plus Relaxed atomics (one process-wide sequence, s9_2_t_0; the crate forbids `unsafe`). (2) The reentrant forms are the primitives; the caller-memory window logic is one function (`prng_r::caller_words`) used by the global and `_r` forms. (3) Unusable caller memory is EFAULT everywhere; a descriptor that describes no state stays EINVAL; header types above the largest read as the largest. (4) `rand_r` aliases the core function. (5) `strtok`/`strsep`: step functions on slices plus one generic C-memory shell; the cursor stays process-wide and moves to the terminator on exhaustion. (6) IPC: one (command, shape) table per family answers "known?" and "argument shape"; `IPC_64` masked. (7) Credentials: stack buffer plus a `/proc/self/status` byte-automaton fallback.
+'''

@@ -1,0 +1,8 @@
+id = "D-23.8"
+section = "s23"
+spec = "§23.1"
+ann = "KERN"
+status = "active"
+body = '''
+`time()` reads the vDSO's `time` entry as glibc does: whole seconds as of the last tick, which may trail `clock_gettime(CLOCK_REALTIME)` by up to a tick at a second's boundary. Refines D-23.1 (found by `benchmarks/progress.md` entry 3: the `clock_gettime` path cost 5×).
+'''

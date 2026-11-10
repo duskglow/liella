@@ -1,0 +1,13 @@
+id = "SR-48"
+section = "3"
+row = "`memrchr_64_hit` SSE2 level (Ivy Bridge)"
+now = "31 vs 28 instructions, time 1.276; both libraries 1 cache-line-split load per call (the bench's buffer is 64-aligned)"
+limit = "split loads equal, so the gap is the 3 instructions and front-end delivery (idq_uops_not_delivered 93 vs 9 per 1e7)"
+reason_class = "n/a"
+basis = "M"
+source = "TIMING-COV-STRSCAN-SHORT-IVB (counters only)"
+tried = "none"
+flag = "measured 2026-11-07"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,13 @@
+id = "SR-25"
+section = "3"
+row = "`strlen_64`, `strnlen_64`, `rawmemchr_64`"
+now = "38.4 vs 33.4; 55.4 vs 48.4; 35.5 vs 33.4 (**ABOVE glibc**)"
+limit = "none"
+reason_class = "n/a"
+basis = "C"
+source = "LIMITS-TIGHTEN"
+tried = "SSE2-GAP: net loss (+2 per head miss, instr 43.4 to 45.4, no cycle gain), dropped"
+flag = "**measured 2026-10-23** (section 10)"
+status = "active"
+body = '''
+'''

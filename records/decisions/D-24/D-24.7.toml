@@ -1,0 +1,8 @@
+id = "D-24.7"
+section = "s24"
+spec = "§24.4"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Known deviation (accepted 2026-10-01):** cache geometry (`_SC_LEVEL*`) comes from the deterministic cache leaves (Intel leaf 4, AMD 0x8000001D). glibc's leaf-2 descriptor table is not reproduced, so a CPU that describes its caches only through leaf 2 could answer differently. glibc's conventions are kept: the level-1 instruction cache's associativity and level 4's associativity and line size are -1, as is an absent level, except that on AMD and Hygon an absent level 4's size is 0 (found on an AMD EPYC host, phase 7).
+'''

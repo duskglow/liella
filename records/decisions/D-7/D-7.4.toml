@@ -1,0 +1,8 @@
+id = "D-7.4"
+section = "s07"
+spec = "§7.5"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `format_monetary(Decimal, &Locale, Spec)` with exact decimal amounts. **Boundary:** `double`/`long double` inputs are converted exactly (IP-18) before formatting.
+'''

@@ -1,0 +1,6 @@
+id = "D-X.4"
+section = "x"
+status = "active"
+body = '''
+**Zero external dependencies** (§1.2). Generated data (UCD tables, locale tables, Appendix C) is produced by project tooling from normative inputs, and the output is committed.
+'''

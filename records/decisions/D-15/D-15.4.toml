@@ -1,0 +1,8 @@
+id = "D-15.4"
+section = "s15"
+spec = "§15.8"
+ann = "HIST"
+status = "active"
+body = '''
+The rcmd family is implemented per contract in `liella_legacy::rcmd` and documented as insecure. Trust checks as observed: `hosts.equiv` owned by root; `.rhosts` owned by root or the user and read under the user's file-system identity; regular file, not writable by group or others, one link; `__rcmd_errstr` carries the reference's messages. `ruserpass` follows `netrc(5)` where glibc's parser fails (`account` values skipped, `macdef` bodies end at a blank line, `password` before `login`). `rexec` without a name or password uses `.netrc` and then fails (no terminal prompt until phase 11), and never blocks for ever on the error channel. Diagnostics go to stderr; a silent close is reported as `short read`. Untested: the privileged-port success paths (no test uses `sudo`). Netgroup entries (`+@g`/`-@g`) match through `innetgr`: a host field matches the official name or an alias of the remote address, a user field the remote user; without a netgroup database nobody is a member (phase 10 part 3).
+'''

@@ -1,0 +1,8 @@
+id = "D-4.5"
+section = "s04"
+spec = "§4.11"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+**Internal:** tokenizers are non-destructive iterators yielding `(start, len)`. **Boundary:** `strtok`/`strtok_r`/`strsep`/`wcstok` write terminators, per the contract. The `strtok` cursor is per thread (P-scope).
+'''

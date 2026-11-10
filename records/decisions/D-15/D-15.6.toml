@@ -1,0 +1,8 @@
+id = "D-15.6"
+section = "s15"
+spec = "§15.7, §15.8, §16, §17, §24.5"
+ann = "ARB"
+status = "active"
+body = '''
+**Interim lookups retired (phase 10 part 3).** ethers, hosts (rcmd, gethostid), users, groups, shadow, gshadow, netgroups, group lists and getlogin go through the NSS engine (`legacy::nss`, `netdb_compat`; D-16.1), with path parameters kept through `nss::Paths` for fixture tests. `interim_db` keeps only re-exports of the `files` source primitives (`nss_files`) and cursors (`cursors`) for the parts 1–2 clause tests; nothing in the library uses it.
+'''

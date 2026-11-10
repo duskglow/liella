@@ -1,0 +1,8 @@
+id = "D-4.57"
+section = "s04"
+spec = "§4.5"
+ann = "PERF"
+status = "active"
+body = '''
+**memchr SSE2: n <= 16 settled by block 0** (TIMING-COV-MEMCHR-SHORT-NONAVX2, 2026-11-06; reconciled with TIMING-IVB-MEMREF-ENTRY in run 4). In `csys/src/machine/scan.S` the memchr SSE2 head (`.Lmemchr_sse_pre`, whose one `cmpl $4032, %ecx` is the level and page test) answers NULL right after a miss in block 0 when n <= 16 instead of folding blocks 1-3 first: a 16-byte miss skips three loads, three compares, two ors and the mask test; a call with n > 16 and no match in block 0 runs two more instructions (the test and its not-taken branch). Why: memchr_16 on the SSE2 path ran the whole 64-byte fold for a 16-byte region. Amends the SSE2-GAP-4 ordering (no n <= 16 test before the fold). Run 3's own merged level/page test and its layout pads were dropped for MEMREF-ENTRY's entry (one taken branch from the kernel's first test, no level load). Measured against that entry (instructions per call, SSE2 level, `cbench_memref`): memchr_16 44.3 -> 29.3 (glibc 29.3), memchr_16_mix 51.3 -> 36.3, memchr_64 40.3 -> 42.3, memchr_64_mix 47.4 -> 49.4, memchr_4k 965.9 -> 967.8; the AVX2 level never reaches the test (its rows unchanged). Ivy Bridge timing with AVX2 off is in the story's handoff.
+'''

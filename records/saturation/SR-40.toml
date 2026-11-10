@@ -1,0 +1,13 @@
+id = "SR-40"
+section = "3"
+row = "`strdup`"
+now = "saves 12 to 16 instr on short strings but costs 3 to 12 on 40+ bytes (1% rule)"
+limit = "\"floor is malloc + free\""
+reason_class = "hardware / allocator"
+basis = "R"
+source = "STRDUP-FAST (ledger)"
+tried = "no code shipped"
+flag = "none"
+status = "active"
+body = '''
+'''

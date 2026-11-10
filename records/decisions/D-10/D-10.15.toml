@@ -1,0 +1,8 @@
+id = "D-10.15"
+section = "s10"
+spec = "§10.3"
+ann = "—"
+status = "active"
+body = '''
+**Special functions of `float` and `double`** (milestone 3). Evaluated in a 384-bit binary floating point of the library's own (`math::mp`: truncating add, multiply, division by small integers, Newton reciprocal and square root, `exp`, `ln`, `sin`/`cos` with Payne–Hanek reduction) and rounded once, so every result is correctly rounded in every mode: the series of `erf`, the `1 − erf` and continued-fraction forms of `erfc`, Stirling's series with argument shifting and reflection for `lgamma`/`tgamma` (exact factorials at small integers), and for the Bessel functions the power series below 100 (at most about 150 of the 384 bits cancel), Hankel's expansion above for orders up to √x, forward recurrence for `Y_n` and for `J_n` with `n < x`, Miller's normalised backward recurrence for `J_n` with `n ≥ x` (recurrences beyond 5000 steps in double-double). Constants (π, ln 2, γ by Brent–McMillan, ½ln 2π, 2/√π, 1/√π, 2/π, 130 Stirling coefficients from exact Bernoulli numbers) from `cargo xtask tables`. The oracle uses independent methods where it can (Spouge's formula for `lgamma`, the continued fraction with bracketing convergents for `erfc`). Tiny arguments whose deviation from a representable value lies beyond 384 bits (`erfc(tiny)`, `j0(tiny)`, `j1(tiny)`, `tgamma(±2^-k)`) are rounded by the side of that deviation.
+'''

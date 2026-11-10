@@ -1,0 +1,9 @@
+id = "COMPAT-13"
+behaviour = "`h_errno` of `getnetbyaddr`/`getnetbyname` through the `dns` source when the answer is damaged (a PTR target that cannot be read) (§16.3; D-16.2, NS-NETWORKS-DNS-2, COORDINATOR #1997, provisional)"
+glibc = "NULL with `h_errno` 0"
+liella = "NULL with `h_errno` HOST_NOT_FOUND, so the caller can tell that the lookup failed"
+restore = "A tunable read at startup (name to be chosen when implemented) making the damaged-answer path of the `networks` dns reader leave `h_errno` 0; the path is cold (a damaged answer only)"
+cost = "none expected (cold error path)"
+status = "registered"
+body = '''
+'''

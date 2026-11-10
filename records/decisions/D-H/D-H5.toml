@@ -1,0 +1,7 @@
+id = "D-H5"
+section = "h"
+pattern = "Multiple delimiting conventions"
+status = "active"
+body = '''
+**Internal:** one function per need. **Boundary:** `str*`, `strn*`, `strl*`, `mem*`, `wcs*` and `wmem*` differ only in which `conv` builds the input slice.
+'''

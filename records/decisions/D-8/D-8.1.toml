@@ -1,0 +1,8 @@
+id = "D-8.1"
+section = "s08"
+spec = "§8.1–8.3"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+**Internal:** `parse_int::<T>(text, radix, dialect) -> Parsed<T>`, one of `Value{v, used}`, `NoDigits`, or `OutOfRange{clamped, used}`. **Boundary:** `endptr` and `ERANGE` come from `ret`. The `__isoc23_*` names select `dialect = C23`.
+'''

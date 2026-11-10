@@ -1,0 +1,13 @@
+id = "SR-1"
+section = "1"
+row = "`realpath`, deep paths (64 components)"
+now = "i 1.0019 per component: 23,862 vs 23,815 instr, 46 instr (0.19%) above"
+limit = "at the limit: the per-component cost is the kernel's `readlinkat` of the whole prefix; syscall count equals glibc's (1 per component)"
+reason_class = "hardware / kernel"
+basis = "M"
+source = "REALPATH-DEPTH, REALPATH-DEPTH-2 (`handoff/realpath-depth-2.md`)"
+tried = "The 46-instr residual was not ablated: 0.19% is below the 1% cycle spread"
+flag = "none (supported by a slope over 64 components)"
+status = "active"
+body = '''
+'''

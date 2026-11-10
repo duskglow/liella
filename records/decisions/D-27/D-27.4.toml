@@ -1,0 +1,8 @@
+id = "D-27.4"
+section = "s26-29"
+spec = "§27"
+ann = "—"
+status = "active"
+body = '''
+**`dl_iterate_phdr`** (static programs, until the loader of phase 14 supplies the object list): one callback for the main program (name "", `AT_PHDR`/`AT_PHNUM`, `dlpi_addr` from `PT_PHDR`, TLS module 1 and the calling thread's block when `PT_TLS` exists), then one for the vDSO (`linux-vdso.so.1`, ELF64 header fields e_phoff at 32, e_phentsize 54, e_phnum 56) when `AT_SYSINFO_EHDR` is set, as a glibc static program reports (probe); `dlpi_adds` = objects, `dlpi_subs` = 0, `size` = 64; a non-zero callback result stops the walk and is returned; it reads immutable startup data only (async-signal-safe). **`stime`** is compat-only as in glibc 2.39: `libc.so` exports `stime@GLIBC_2.2.5` (non-default; `.symver` stub in `s23_time.rs`, listed in the version script by `cargo xtask so`), `libc.a` offers no plain `stime`, so no new program links it while old binaries resolve it. Known difference: `libc.so` binds `dl_iterate_phdr` GLOBAL where glibc binds WEAK (the same for every WEAK export, e.g. `fgetc`). Probes: CONF-SYMS-2.
+'''

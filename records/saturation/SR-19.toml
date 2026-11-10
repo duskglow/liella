@@ -1,0 +1,13 @@
+id = "SR-19"
+section = "3"
+row = "`memcpy_144`, `memcpy_256` (129-256 B with NULL folding, D-4.55) on Ivy Bridge (SSE2 body) (NULLFOLD-COPY-MID-2, NEGATIVE for D-4.55 as built)"
+now = "cycles/call 19.4-19.9 with D-4.55 vs 18.8-19.2 before (glibc 18.5-18.8; 3 interleaved passes, plus 2 earlier); same rows on Alder Lake-N 13.2-13.4 vs 14.2-14.5 before (glibc 13.2-13.3); Zen 1 host instr 34.4 vs 38.4"
+limit = "not reached on Ivy Bridge: the class's gate word is one more load"
+reason_class = "hardware (on Sandy/Ivy Bridge loads and store addresses share two ports; the SSE2 body already sends 16 loads and 16 stores there, so one more load costs about 0.5 cycle)"
+basis = "M (bench counters, base/new/padded builds interleaved on one host; memmove rows unchanged on both classes)"
+source = "NULLFOLD-COPY-MID-2"
+tried = "Starting the SSE2 body on a 64-byte line again (`.p2align 6` after the AVX2 `ret`; base had it there by chance): no change on either class (Ivy Bridge 19.4, Alder Lake-N 13.4), so the loss is not layout"
+flag = "a gate that reads one word on the SSE2 path (base read one: the AVX2 flag)"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,6 @@
+id = "D-X.36"
+section = "x"
+status = "active"
+body = '''
+**The exports-interposed test pass runs shard 0 only of the heavy math products sweeps** (GATE-PASS2-MATH-SHARD, owner ruling #3794, 2026-11-07). Rule: a suite runs in the interposed pass only to the extent that it exercises the interposed functions. `complex_ld_cr_products`, `complex_f128_products`, `special_ld_products`, `special_f128_products` and `complex_products` (liella-math) run every shard in pass 1 and only `_s0` in pass 2 (`nextest::PASS1_SHARD0`: the filterset term `binary_id(..) & test(/_s[1-9][0-9]*$/)`, in `xtask test` and in `affected`'s pass 1 under nextest; the `cargo test` fallback runs all). Every shard does the same harness work (build and run the C programs, read and split their whole output, check lines `i % SHARDS == k` with the oracle), so shard 0 calls the interposed allocator and string functions on the same paths, a fixed 1-in-SHARDS slice (1/20, 1/8) spread over every function and mode; the other shards add only more lines of checks pass 1 made. Non-shard tests of those targets stay in both passes. Tests: `pass2_runs_shard_0_of_the_heavy_products_targets`, `pass0_only_targets_are_pure_rust` (xtask).
+'''

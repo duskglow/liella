@@ -1,0 +1,26 @@
+{
+ "task": "LIBM-F64-TRIG-QUICK",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: sin/cos/tan/sincos quick phase (shared pi/64 reduction, integer Payne-Hanek for |x|>=2^20) written and wired, SSE2 unit tests green; static, kernel-index, FMA test, plants, gate, counts, timing not run",
+ "branch": "task/libm-f64-trig-quick",
+ "head": "cd9fc815a",
+ "gate": {
+  "affected": null,
+  "peak": null
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "base profile one call Zen1: FMA sin 142 cos 176 tan 169 sin_huge 1395; SSE2 sin 222 cos 257 tan 346 sin_huge 1398",
+  "quick bound RHO 0.875*2^-61, largest seen 2^-63.163"
+ ],
+ "refused": [],
+ "improvement": "the per-function trace hides the inlined kernel as raw addresses; a --list phase split by source line would make profile-first cheaper",
+ "next_step": "kernel-index + static, FMA boundary test, plants (4 in handoff), direct gate, counts, D-10.61 row, timing",
+ "report_file": "handoff/LIBM-F64-TRIG-QUICK.md",
+ "jobs": [
+  "keke:libm-f64-trig-quick-trace0",
+  "keke:libm-f64-trig-quick-check3"
+ ]
+}

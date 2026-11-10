@@ -1,0 +1,8 @@
+id = "D-8.10"
+section = "s08"
+spec = "§8.4"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+`ecvt`/`fcvt` details: fewer than one requested digit gives one for `ecvt`; zero gives `max(n, 1)` zero digits with `decpt = 1`; a value `fcvt` rounds to zero counts as zero; infinities and NaNs give `"inf"`/`"nan"` with `decpt = 0`; digits beyond the destination are dropped. The conversions honour the current rounding mode. **`ndigit` is reduced** to 17 for `double` and 21 for the `long double` forms (`ecvt`, `fcvt`, the `_r` and `q` forms; spec §8.4 corrected 2026-10-04 from ecvt(3) and a probe; for `fcvt` the places after the point), the digits staying exact where glibc's last is not always rounded; `gcvt` keeps `%.*g`'s any precision where glibc caps it at 17 (both recorded differences).
+'''

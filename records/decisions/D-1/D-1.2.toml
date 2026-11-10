@@ -1,0 +1,8 @@
+id = "D-1.2"
+section = "s01"
+spec = "§1.2"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+One `ExitHandlers` registry of closures tagged by owning object (DSO) and by kind (`exit`/`quick_exit`/thread). `atexit`, `on_exit` and `__cxa_atexit` are three translations. The `on_exit` status parameter is captured at exit. The two POSIX lists stay distinct because the contract makes them distinct.
+'''

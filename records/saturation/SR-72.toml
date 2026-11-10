@@ -1,0 +1,13 @@
+id = "SR-72"
+section = "6"
+row = "`snprintf` `%e`"
+now = "t 3.28 (2.68 with x86-64-v3)"
+limit = "not at a limit"
+reason_class = "n/a"
+basis = "C"
+source = ""
+tried = "a multiversioned float core flagged \"worth a look\", not planned"
+flag = "**measured 2026-10-23** (section 10)"
+status = "active"
+body = '''
+'''

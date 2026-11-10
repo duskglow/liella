@@ -1,0 +1,8 @@
+id = "D-5.4"
+section = "s05"
+spec = "§5.1–5.3, §6.5"
+ann = "ARB (spec silent on derivation)"
+status = "active"
+body = '''
+**Built-in `C.UTF-8` tables from the UCD** (phase 7; IP-19, D-X.4, D-7.2). `cargo xtask unicode-gen` derives classes, simple case maps, title case and widths from `spec/unicode/15.1.0` and commits compact tables (`crates/core/src/unicode/`); `--check` is a gate like `csys-gen`. The derivation rules are chosen so the results equal the reference system's compiled `C.utf8` for every code point; a test compares them with `/usr/lib/locale/C.utf8/LC_CTYPE` when present and names any difference. The tables also serve the internal Unicode API (full case mapping, D-5.2; normalization for transliteration, D-6.9). `C.UTF-8` collates in code-point order.
+'''
