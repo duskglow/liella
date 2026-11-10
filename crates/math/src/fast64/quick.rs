@@ -25,7 +25,11 @@
 //! * Rounding: the one-sided test of [`super::near`] (de Dinechin, Lauter & Muller, RAIRO-ITA 41,
 //!   2007) with `c` the least double with `c·(1 − 2^54·rho) > 1 + 2^-53`; `zh·2^m` is formed
 //!   beside the test, not after it. Its proof needs `e^x` neither a double nor a midpoint (true for
-//!   every double `x != 0`: Lindemann–Weierstrass) and `zh·2^m` normal (below).
+//!   every double `x != 0`: Lindemann–Weierstrass) and `zh·2^m` normal (below). exp's test has
+//!   no `w != 0` guard (D-10.77, LIBM-F64-QUICK-PROFILE): `zl = 0` passes it, and then the
+//!   error `<= rho·|zh| < 2^-61·|zh|` is below a quarter of `ulp(zh)` (the gap below a power of
+//!   two included), so `zh` is still `e^x` rounded to nearest; the guard exists only for the
+//!   family's exact results (exp2, exp10 below), which exp has none of.
 //! * Domain `2^-60 <= |x| < 708` (today's `exp_near`; one integer subtract and compare on the
 //!   bits, NaN and infinities fall outside): `|k| <= 130740 < 2^17`, `-1022 <= m <= 1021`, and
 //!   `zh >= 1` whenever `m = -1022` (`j >= 76` there), so `zh·2^m` is normal and finite.
@@ -562,8 +566,7 @@ $(#[$i])*
 pub fn exp_quick(x: f64) -> Option<f64> {
     let (zh, zl, sc) = exp_quick_parts(x)?;
     let v = zh * sc;
-    let w = zl * $c;
-    if zh + w == zh && w != 0.0 { Some(v) } else { None }
+    if zh + zl * $c == zh { Some(v) } else { None }
 }
 
 /// `exp`'s in-place fast path (D-10.51): the quick phase, then on a miss tier 2
@@ -575,8 +578,7 @@ $(#[$i])*
 pub fn exp_tiered(x: f64) -> Option<f64> {
     let (zh, zl, sc) = exp_quick_parts(x)?;
     let v = zh * sc;
-    let w = zl * $c;
-    if zh + w == zh && w != 0.0 {
+    if zh + zl * $c == zh {
         return Some(v);
     }
     tier2(x)
