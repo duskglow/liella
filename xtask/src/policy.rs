@@ -106,12 +106,16 @@ const MXCSR_TEMPLATE: &str = "stmxcsr dword ptr [{p}]";
 const BARRIER_TEMPLATE: &str = "/* {x} */";
 /// The widening's template (coordinator ruling #4434, D-10.79): one `cvtss2sd` whose destination is
 /// its source, so the merge waits only for the operand (D-10.67).
-const WIDEN_TEMPLATE: &str = "cvtss2sd {x}, {x}";
+const WIDEN_TEMPLATE: &str = "cvtss2sd xmm0, xmm0";
+/// The widening's operands: the one register named for input and late output (`inout` needs one
+/// type, and `float` and `double` differ in size).
+const WIDEN_OPERANDS: [&str; 2] = ["in(\u{22}xmm0\u{22})", "lateout(\u{22}xmm0\u{22})"];
 
 /// The *machine-register* file's inline-assembly templates (`src` unstripped): every string
-/// literal of every invocation outside a comment must be [`BARRIER_TEMPLATE`], [`WIDEN_TEMPLATE`]
-/// or [`MXCSR_TEMPLATE`], the MXCSR store must occur exactly once, a barrier must be
-/// `pure, nomem` (no memory effect) and a widening `nomem` with its operand `inout(xmm_reg)`.
+/// literal of every invocation outside a comment (other than an explicit register's name, the
+/// literal right after `(`) must be [`BARRIER_TEMPLATE`], [`WIDEN_TEMPLATE`] or [`MXCSR_TEMPLATE`],
+/// the MXCSR store must occur exactly once, a barrier must be `pure, nomem` (no memory effect) and
+/// a widening `nomem` on [`WIDEN_OPERANDS`]; no other invocation names a register.
 /// One message per violation.
 fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
     let mut errors = Vec::new();
@@ -141,7 +145,13 @@ fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
             n = k + 1;
         }
         // U+0022 is the quote: a quote character literal would read as a string to `strip`.
-        let literals: Vec<&str> = text.split('\u{22}').skip(1).step_by(2).collect();
+        let parts: Vec<&str> = text.split('\u{22}').collect();
+        let named_register = |k: usize| parts[k - 1].trim_end().ends_with('(');
+        let literals: Vec<&str> = (1..parts.len()).step_by(2).filter(|&k| !named_register(k)).map(|k| parts[k]).collect();
+        let names_register = (1..parts.len()).step_by(2).any(named_register);
+        if names_register && !literals.contains(&WIDEN_TEMPLATE) {
+            errors.push(format!("{rel}:{}: machine-register invocation names a register outside the widening", start + 1));
+        }
         if text.contains('\\') || literals.is_empty() {
             errors.push(format!("{rel}:{}: machine-register template not a plain string literal", start + 1));
         }
@@ -153,8 +163,9 @@ fn machine_register_templates(rel: &str, src: &str) -> Vec<String> {
                     errors.push(format!("{rel}:{}: machine-register barrier must be `pure, nomem`", start + 1));
                 }
             } else if *t == WIDEN_TEMPLATE {
-                if !(text.contains("nomem") && text.contains("inout(xmm_reg)")) {
-                    errors.push(format!("{rel}:{}: machine-register widening must be `nomem` on one `inout(xmm_reg)` operand", start + 1));
+                let named = (1..parts.len()).step_by(2).filter(|&k| named_register(k)).count();
+                if !(text.contains("nomem") && WIDEN_OPERANDS.iter().all(|o| text.contains(o)) && named == 2) {
+                    errors.push(format!("{rel}:{}: machine-register widening must be `nomem` on exactly `{}`, `{}`", start + 1, WIDEN_OPERANDS[0], WIDEN_OPERANDS[1]));
                 }
             } else {
                 errors.push(format!("{rel}:{}: instruction `{t}` outside the machine-register list (D-X.44: `{MXCSR_TEMPLATE}` once, the barrier `{BARRIER_TEMPLATE}`; D-10.79: `{WIDEN_TEMPLATE}`)", start + 1));
@@ -1074,21 +1085,21 @@ mod machine_register_tests {
 
     #[test]
     fn the_in_place_widening_passes() {
-        let src = format!("{STORE}asm!(\"cvtss2sd {{x}}, {{x}}\", x = inout(xmm_reg) x => y, options(nomem, nostack));\n");
-        assert!(machine_register_templates("f.rs", &src).is_empty());
+        let src = format!("{STORE}asm!(\"cvtss2sd xmm0, xmm0\", in(\"xmm0\") x, lateout(\"xmm0\") y, options(nomem, nostack));\n");
+        let f = machine_register_templates("f.rs", &src);
+        assert!(f.is_empty(), "{f:?}");
     }
 
     #[test]
     fn a_widening_into_another_register_is_refused() {
-        let src = format!("{STORE}asm!(\"cvtss2sd {{y}}, {{x}}\", x = in(xmm_reg) x, y = out(xmm_reg) y, options(nomem, nostack));\n");
+        let src = format!("{STORE}asm!(\"cvtss2sd xmm1, xmm0\", in(\"xmm0\") x, lateout(\"xmm1\") y, options(nomem, nostack));\n");
         let f = machine_register_templates("f.rs", &src);
-        assert_eq!(f.len(), 1, "{f:?}");
-        assert!(f[0].contains("outside the machine-register list"), "{f:?}");
+        assert!(f.iter().any(|e| e.contains("outside the machine-register list")), "{f:?}");
     }
 
     #[test]
     fn a_widening_that_may_touch_memory_is_refused() {
-        let src = format!("{STORE}asm!(\"cvtss2sd {{x}}, {{x}}\", x = inout(xmm_reg) x => y, options(nostack));\n");
+        let src = format!("{STORE}asm!(\"cvtss2sd xmm0, xmm0\", in(\"xmm0\") x, lateout(\"xmm0\") y, options(nostack));\n");
         let f = machine_register_templates("f.rs", &src);
         assert_eq!(f.len(), 1, "{f:?}");
         assert!(f[0].contains("widening must be `nomem`"), "{f:?}");
