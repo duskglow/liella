@@ -1,0 +1,8 @@
+id = "D-4.4"
+section = "s04"
+spec = "§4.3"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+**Internal:** `eq_ignore_case(a, b, &Locale)` uses Unicode full case folding. **Boundary:** `*casecmp` keep the contract's per-byte `tolower` semantics via the locale byte table. `_l` variants pass the explicit locale.
+'''

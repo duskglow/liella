@@ -1,0 +1,8 @@
+id = "D-25.3"
+section = "s25"
+spec = "§25.3"
+ann = "KERN"
+status = "active"
+body = '''
+`mq_notify` `SIGEV_THREAD` uses the kernel's netlink protocol (⚑ KERN).
+'''

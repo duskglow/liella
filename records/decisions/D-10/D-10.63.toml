@@ -1,0 +1,8 @@
+id = "D-10.63"
+section = "s10"
+spec = "§10.0, §10.2"
+ann = "—"
+status = "active"
+body = '''
+**One-pass `float` exp and exp2 in the caller's environment** (LIBM-F32-ONEPASS; DESIGN.md 3.1 A/B under D-10.51). `expf` and `exp2f` (and their `_Float32` names) no longer read MXCSR on the fast path: for 2^-26 ≤ \|x\| < 87.33 (exp) or 126 (exp2), tested on the bits before any floating-point operation, one `double` evaluation (Tang 1989 table of 2^(j/128) and a degree-4 Estrin polynomial, `fast32::exp_onepass`) runs in the caller's rounding direction, with a margin proved for every direction (ε ≤ 2^-43.71, test margin 1024 ulp of y), then one `cvtsd2ss` rounds in the caller's direction and raises inexact. Every intermediate is a normal `double`, so FTZ and DAZ (D-10.22) change nothing, and inexact is raised only for an inexact result (D-10.14: e^x is exact only at 0, which is refused, and 2^x at the integers, where the kernel is exact). Refusals (rounding test, range, NaN) go to the unchanged envelope; a NaN returns x + x before it. Proof by exhaustion: `math_expf_onepass_sweep`, `math_exp2f_onepass_sweep` (all 2^32 encodings x 4 directions, bits, errno and flags against the envelope); the sampled test also covers FTZ, DAZ and both. Literature: Tang, ACM TOMS 15(2) 1989; Muller et al., Handbook of Floating-Point Arithmetic, 2nd ed. 2018, ch. 10-11. Not yet converted: exp10f (an integer x up to 10 has an exact result that the multiply by 128·log2 10 makes inexact), the log family (log2 and log10 of exact powers), trig and powf.
+'''

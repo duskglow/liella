@@ -1,0 +1,8 @@
+id = "D-12.9"
+section = "s12"
+spec = "§12.12"
+ann = "HIST"
+status = "active"
+body = '''
+Internally, only exclusive creation of temporary files is offered. `tmpnam`/`tempnam`/`mktemp` are legacy.
+'''

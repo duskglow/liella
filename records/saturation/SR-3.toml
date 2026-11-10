@@ -1,0 +1,13 @@
+id = "SR-3"
+section = "1"
+row = "`readdir` / `getdents64` loop"
+now = "t 1.01 and 0.99 (Zen 1 host, ns); user instr per entry 75.9 vs glibc 64.8 (1.17x)"
+limit = "\"already at parity, kernel `getdents64` dominated\""
+reason_class = "kernel"
+basis = "M (ns), C (instr)"
+source = "READDIR-1, DU-3 (`bench/perf-ledger.tsv`)"
+tried = "DIR-SYSCALLS: no safe-Rust buffer policy gives both fewer calls and fewer faults; a zero-fill-free buffer needs `unsafe` in the boundary (RULING NEEDED, never ruled)"
+flag = "**measured 2026-10-23** (section 10): parity is a time ratio; the instruction gap (75.9 vs 64.8) was real when recorded and was not re-counted"
+status = "active"
+body = '''
+'''

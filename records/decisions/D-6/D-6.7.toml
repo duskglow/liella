@@ -1,0 +1,8 @@
+id = "D-6.7"
+section = "s06"
+spec = "§5–§7"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+**Approved.** The built-in `"C"`/`"POSIX"` locale's charset is ASCII. Bytes 0x80–0xFF: no class, mapped to themselves by `tolower`/`toupper`, `mbrtowc` fails with `EILSEQ`, `btowc` returns `WEOF`, `wctob` of a code point above 0x7F returns `EOF`, and `MB_CUR_MAX` is 1. Wide classification in `"C"` covers ASCII only. `"C.UTF-8"` (phase 7) is the Unicode locale.
+'''

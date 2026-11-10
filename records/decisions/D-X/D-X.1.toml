@@ -1,0 +1,6 @@
+id = "D-X.1"
+section = "x"
+status = "active"
+body = '''
+**`no_std` library.** Rust `std` is never linked into the product (§3.1).
+'''

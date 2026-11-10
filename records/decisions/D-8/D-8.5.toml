@@ -1,0 +1,8 @@
+id = "D-8.5"
+section = "s08"
+spec = "§8.2, §8.4"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+One exact float engine (IP-18) serves `strtod`, `strfrom*`, printf, scanf and `ecvt`/`fcvt`/`gcvt`. The `ecvt`-family static buffers are per-thread slots.
+'''

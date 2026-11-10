@@ -1,0 +1,8 @@
+id = "D-4.6"
+section = "s04"
+spec = "§4.12"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** `path::{basename, dirname}` return sub-slices and never mutate. **Boundary:** GNU `basename` (non-mutating) and XPG `__xpg_basename`/`dirname` (mutating) are separate exports.
+'''

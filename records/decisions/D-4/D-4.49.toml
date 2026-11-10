@@ -1,0 +1,8 @@
+id = "D-4.49"
+section = "s04"
+spec = "§4.6"
+ann = "PERF"
+status = "active"
+body = '''
+**wcsstr and wcswcs scan for one needle unit in 16-unit blocks; strstr stays on the pair scanner** (STRSTR-HIT, 2026-10-11) \| `conv::find_wide`: the candidate unit is the needle's rarest by `commonness` for units below 256 (any unit >= 256 or negative counts as rarest); `find_unit` folds 16 units per block with no early exit (vectorisable safe Rust), then the whole needle is compared at the candidate. Failed candidates cost m+32 each; past from/2+256 the rest goes to `bytes::find_seq` (linear worst case). Lengths still come from `strz::wcsz`. Zen 1 instr/op (branch / main / glibc): wcsstr_hit_4k 32.9k / 94.6k / 28.7k, wcsstr_hit_64 863 / 1812 / 472, wcsstr_miss_4k 69.4k / 84.6k / 26.8k, wcsstr_miss_64 992 / 1783 / 476. REJECTED: a strstr rarest-byte strchrnul scan with no haystack strlen (measured worse on every strstr row: instr ratio hit_4k 2.48 vs 2.11, hit_64 2.38 vs 1.74, miss_64 1.40 vs 0.63) - the per-call needle ranking and candidate compares cost more than the measured pair scan. Next: a wcslen kernel for `wcsz` (the remaining wcsstr gap is the two length scans). Tests: tests/wcsstr_find.rs.
+'''

@@ -1,0 +1,8 @@
+id = "D-16.11"
+section = "s16"
+spec = "§16.1"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+**`__nss_hostname_digits_dots` (owner ruling 2026-10-05).** Written into §16.1 (clauses `s16_1_c_3` to `s16_1_c_6`) from the black-box record `spec/behaviour/digits-dots.md` and exported (`netaddr::digits_dots`, the reading in `inet_compat::digits_dots` over `inet_aton` and `parse_v6`). Layout in the strings' memory: from the first 8-aligned byte, the address (16 bytes), the address list (2 words), the alias list (1 word), the name; a caller buffer needs that (52 bytes for `10.20.30.40` when aligned: the reference needs more than 48 and at most 56). The allocating form enlarges `*buffer` with `realloc` for every non-empty name (observed). One deliberate difference: a NULL `status`, `h_errnop` or `result` is not written (the reference crashes; S6). `digits_dots_products.rs` compares the probe line by line (identical); on the fuzzing list and in phase 14's scope (NSS modules call it).
+'''

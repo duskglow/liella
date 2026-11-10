@@ -1,0 +1,6 @@
+id = "D-X.16"
+section = "x"
+status = "active"
+body = '''
+**Current-thread field reads by one `%fs` load** (owner ruling 2026-10-06, plan S2 *tb-field*; PJ-21). `tb::read::<F>()` loads a field of the calling thread's own block with one `mov %fs:OFFSET`; `F` is a sealed marker made by `field!` (offset from `offset_of!`, field type checked to be `AtomicUsize`, 8-aligned, inside the block). Decided locally: only `Locale` exists, because only its readers were converted (`locale::current`, `locale::current_handle`: toupper/isalpha and every locale-dependent call); a marker is added only with a profiled or clearly hot reader. Not converted: `heap.rs` `cache_slot` (hands out a reference, not a read; its fast-path read became the `HeapCache` marker through `Pages::cache_word`, HEAP-CUTS2 2026-10-09, plan/heap-small.md section 6), `thread.rs` descriptor load (Acquire, not a hot path), errno/h_errno (4-byte fields; their accessors return addresses). `tp()` and `liella_machine_tp` stay for every other user. Evidence: liella-historic:handoff/tb-field.md.
+'''

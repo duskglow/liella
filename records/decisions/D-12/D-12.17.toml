@@ -1,0 +1,8 @@
+id = "D-12.17"
+section = "s12"
+spec = "§12.1, §12.5"
+ann = "—"
+status = "active"
+body = '''
+**Reporting with an exhausted heap (T22, milestone 5, 2026-10-04).** The standard streams' slots are taken at first use, from the heap or, with the heap exhausted, from the static reserve below (kept for good; PERF-REGRESS 2026-10-05: taking them at process start made every program, even an empty one, set up the heap: +120 us per exec). Every stream slot has a 128-byte spare buffer, used when its buffer cannot be allocated (the stream then writes in pieces of 120 bytes). `dprintf`/`vdprintf` format into a 4 KiB buffer on the stack and write it out when full (output up to 4 KiB is still one `write`). The library's own short-lived allocations (a format's parsed pieces and arguments, `perror`'s line) fall back to a 64 KiB static reserve, used as a stack and free again when no block is live, when the heap is exhausted; the C `malloc` family never uses it. Tests: `conformance/c/s12_malloc_fails.c` (the program's `malloc` refuses everything from `main` on: `printf`, `fputs`, `fprintf(stderr)`, `perror` and `dprintf` all work) and `s03_rlimit_as.c` (the real heap exhausted under `RLIMIT_AS`). Before, nothing printed and the program exited 0 silently.
+'''

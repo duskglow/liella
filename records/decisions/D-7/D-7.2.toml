@@ -1,0 +1,8 @@
+id = "D-7.2"
+section = "s07"
+spec = "§7.1"
+ann = "—"
+status = "active"
+body = '''
+**Locale data: compiled data only** (owner ruling 2026-10-01, phase 7; revises the plan's "archive and locale sources"). Named locales come from glibc's compiled locales: the locale archive (`/usr/lib/locale/locale-archive`) and per-category directories (`LC_*` files under `/usr/lib/locale/<name>` or `LOCPATH`), read through their inspected formats (the format-inspection decision; recorded as Appendix D in phase 7). Locale sources (`/usr/share/i18n/locales`) are never compiled at run time, so `setlocale` fails exactly where glibc does, and classes, case maps, widths and collation order equal glibc's for every installed locale. Collation evaluates the compiled `LC_COLLATE` weights under the ISO 14651 multi-level rules (D-4.18). The UCD tables (IP-19) serve the built-in `C.UTF-8` and the internal Unicode API; `allkeys.txt` (DUCET) is a test oracle only. Built-in `C`, `POSIX` and `C.UTF-8` never touch the file system.
+'''

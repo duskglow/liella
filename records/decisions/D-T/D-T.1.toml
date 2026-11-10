@@ -1,0 +1,7 @@
+id = "D-T.1"
+section = "h"
+pattern = "Directory order in tests"
+status = "active"
+body = '''
+**Owner ruling 2026-10-04.** Results whose order follows directory order (`readdir`, unsorted `scandir`, `GLOB_NOSORT`, unsorted walks) are compared as sets, not as sequences; any order recorded in a behaviour document names the filesystem that produced it; an extra run on tmpfs is added only where order is itself the subject of a test.
+'''

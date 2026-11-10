@@ -1,0 +1,8 @@
+id = "D-10.18"
+section = "s10"
+spec = "§10.5"
+ann = "HIST"
+status = "active"
+body = '''
+**Conventions of the complex functions follow glibc** (`spec/behaviour/libm-complex.md`) where Annex G leaves them open: its NaNs (the positive quiet NaN, the operand, the default NaN of invalid operations, `cacos`'s negated imaginary NaN), invalid for quiet NaNs where Annex G makes it optional, the unspecified signs, `cproj`'s invalid for signalling NaNs, and `cpow` with an infinite, NaN or zero operand as `cexp(w·clog z)` with Annex G's multiplication (G.5.1). Inexact follows IEEE 754 (D-10.14). `errno` follows §10.0 (`ERANGE` for a part that overflows to ±∞ or underflows to ±0 and for a pole, `EDOM` for invalid from non-NaN operands); glibc sets it only incidentally (three-way: C 7.3.2 permits either, the spec kept; one place, `mathret::cplx`, if a ruling chooses flags only). The C boundary passes `float _Complex`/`double _Complex` as `mathret::Complex<T>` (`repr(C)`, SSE registers); `long double` and `_Float128` complex members (forwarders) are milestone 5.
+'''

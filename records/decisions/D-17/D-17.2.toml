@@ -1,0 +1,8 @@
+id = "D-17.2"
+section = "s17"
+spec = "§17.2"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `setfsuid` returns `Result<Previous>`. **Boundary:** the contract's "previous value, no error" is kept.
+'''

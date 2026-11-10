@@ -1,0 +1,13 @@
+id = "SR-13"
+section = "3"
+row = "`memchr_16`, `memchr_64`, `strlen_16`, `rawmemchr_16`, `strnlen_16`"
+now = "25.4 vs 28.4; 29.4 vs 40.4; 19.4 vs 21.4; 21.4 vs 23.4; 26.4 vs 26.4"
+limit = "below or at glibc"
+reason_class = "hardware"
+basis = "M"
+source = "LIMITS-TIGHTEN, LIMITS-TIGHTEN-2"
+tried = "none recorded"
+flag = "none"
+status = "active"
+body = '''
+'''

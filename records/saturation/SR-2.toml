@@ -1,0 +1,13 @@
+id = "SR-2"
+section = "1"
+row = "`scandir_alphasort_1000`, normal and deep"
+now = "i 1.003 normal and deep (was 1.29x before the comparator change)"
+limit = "at parity; the deep profile's extra +36k per phase at depth 64 is the kernel's `openat` path walk, identical user counts on both sides"
+reason_class = "kernel"
+basis = "M"
+source = "SCANDIR-ALPHASORT-DEEP (`handoff/scandir-alphasort-deep.md`)"
+tried = "none recorded"
+flag = "none"
+status = "active"
+body = '''
+'''

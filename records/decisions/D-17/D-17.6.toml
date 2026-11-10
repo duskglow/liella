@@ -1,0 +1,8 @@
+id = "D-17.6"
+section = "s17"
+spec = "§17.1"
+ann = "HIST"
+status = "active"
+body = '''
+Supplementary-group membership (`group_member`, the `faccessat` emulation) allocates nothing: up to 64 groups in a stack buffer, a longer list scanned from `/proc/self/status` in fixed chunks. Found by the phase-5 AS-safety harness's review: `faccessat` is async-signal-safe.
+'''

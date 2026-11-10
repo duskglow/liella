@@ -1,0 +1,8 @@
+id = "D-20.1"
+section = "s20"
+spec = "§20.1"
+ann = "HIST"
+status = "active"
+body = '''
+**One** reserved real-time signal (32), multiplexing cancellation and credential broadcast with a per-thread request word. `SIGEV_THREAD` timers need no signal (D-23.3). So `SIGRTMIN` = 33 (observable; programs obtain it through `__libc_current_sigrtmin`). OD-8 records the fallback of reserving two. **Verified 2026-10-04 (OD-8 ruling):** `conformance/c/s20_internal_signal.c` (run by clause tests `s20_1_c_2`, `s20_2_f_0`, `s20_3_g_0`) reads the kernel's mask and action raw after every route: `sigprocmask`, `pthread_sigmask`, `sigblock`, `sigsetmask`, an action's `sa_mask`, `setcontext`/`swapcontext` masks, `signalfd`, `sigsuspend`, `sigwaitinfo`/`sigtimedwait`, `posix_spawn` `SETSIGMASK` never block 32; `sigaction`, `signal`, `sigset`, `sigignore`, `sighold`, `sigrelse`, `siginterrupt` on 32 are `EINVAL`; no reported set (masks, `sa_mask`, `sigpending`, spawn attributes, `getcontext`) contains it; it has no name and no real-time text. Two fixes: `setcontext` and `swapcontext` installed the context's mask as given (a context mask with bit 32 blocked it); they now install a copy with 32 cleared (`machine/context.S`). `raise(32)` is `EINVAL` (it was sent; glibc refuses its own internal signals in `raise`, `pthread_kill`, `pthread_sigqueue`). `kill`, `tgkill`, `sigqueue` and `killpg` stay the kernel's, as glibc's: 32 sent to a Liella process reaches the library's handler, which ignores a signal without a request.
+'''

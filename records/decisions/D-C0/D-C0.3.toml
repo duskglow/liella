@@ -1,0 +1,8 @@
+id = "D-C0.3"
+section = "c0"
+spec = "C0.3"
+ann = "KERN, HIST"
+status = "active"
+body = '''
+`EINTR` is surfaced (⚑ KERN), with no hidden retries (X4). `close` is never retried: the descriptor is released even on `EINTR` (spec §11.2 guarantee).
+'''

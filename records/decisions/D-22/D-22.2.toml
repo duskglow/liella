@@ -1,0 +1,8 @@
+id = "D-22.2"
+section = "s22"
+spec = "§22.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Cancellation is an explicit internal error.** Deferred cancellation makes the current cancellation point return `Error::Canceled`. That propagates through Rust frames normally, and at the ABI boundary `ret` hands it to `rt::cancel::act()`. `act()` runs the cleanup handlers and performs the forced unwind of the *caller's* frames, never unwinding a Rust frame. Asynchronous cancellation is acted on only while the thread executes outside the library's text range, and is deferred to the next boundary crossing otherwise (F12, F39).
+'''

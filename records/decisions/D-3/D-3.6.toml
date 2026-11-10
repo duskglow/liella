@@ -1,0 +1,8 @@
+id = "D-3.6"
+section = "s03"
+spec = "§3.5"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Arena` (obstack semantics) returns `Result`. **Boundary:** `obstack_alloc_failed_handler` (default: exit) is called by the legacy adapter, per the contract.
+'''

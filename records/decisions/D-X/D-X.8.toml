@@ -1,0 +1,6 @@
+id = "D-X.8"
+section = "x"
+status = "active"
+body = '''
+**Fixed-size C objects cross the boundary as `Option<&T>`/`Option<&mut T>` export parameters**, safe Rust with NULL handled by type (S6). Category *slice* is needed only for variable-length memory (buffers, strings, arrays).
+'''

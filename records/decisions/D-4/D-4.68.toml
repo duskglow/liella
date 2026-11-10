@@ -1,0 +1,8 @@
+id = "D-4.68"
+section = "s04"
+spec = "§4.5"
+ann = "PERF"
+status = "active"
+body = '''
+**SSE2 strchr / strchrnul head: block 2 falls through into block 3** (TIMING-COV-STRSCAN-SHORT-IVB, 2026-11-07). Ivy Bridge counters at instruction parity: Liella's calls take one more taken branch than the reference's and its decoded-uop cache delivers 4 uops in far fewer cycles (35 vs 57 per 1e7 on strchr_16_hit), so taken branches are the cost. Block 2 now falls through into block 3 on a miss and leaves for an out-of-line tail on a hit; blocks 0, 1 and 3 keep their hit inline. Taken branches by deciding block 0/1/2/3/beyond: 0/1/3/2/3 (0/1/2/3/4 before), same instructions. Ivy Bridge time Liella after/before: 64-byte rows 0.895-0.948, 16-byte rows 1.000; N100 (AVX2 level, head not run) unchanged. Rejected: all three blocks out of line (16-byte miss rows 1.08-1.20 slower).
+'''

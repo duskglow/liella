@@ -1,0 +1,8 @@
+id = "D-25.6"
+section = "s25"
+spec = "§25.3"
+ann = "ARB, KERN"
+status = "active"
+body = '''
+**mq_notify `SIGEV_THREAD` service** (COLD-REWRITE2-W-far-10-REWRITE and PROOF-2, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-10-REWRITE.md`; D-25.3, D-25.5). (M1) One netlink socket and one service thread per process, made lazily, the socket above the standard descriptors (D-25.3). (M2) The cookie is a key that is never reused, looked up among the live records: an address arriving through a socket is never dereferenced. (M3) Records are heap blocks of atomic words on a grow-only list; key 0 is free and reused; freed on a failed registration, on its REMOVED cookie, when its thread cannot start, and by the notification thread before it calls the function. (M4) NULL function EINVAL before any side effect; thread, socket and ENOMEM errors passed on; kernel errors passed through and the record freed; other `sigev_notify` values go straight to the kernel. (M5) The service loop accepts only 32-byte messages, ignores EINTR and ENOBUFS, sleeps 1 s on other errors, never exits. (M6) Notification threads via `stacks::launch` with the record's attribute copy and an empty signal mask (D-25.5). (M7) fork child: reset the lock, close the socket copy, mark every record free, allocate nothing. (M8) `__mq_open_2` with `O_CREAT` is EINVAL (D-25.5).
+'''

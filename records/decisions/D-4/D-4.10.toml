@@ -1,0 +1,8 @@
+id = "D-4.10"
+section = "s04"
+spec = "§4.5"
+ann = "ARB"
+status = "active"
+body = '''
+const-discarding signatures are C only. Internally, search functions return indices, not pointers.
+'''

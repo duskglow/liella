@@ -1,0 +1,8 @@
+id = "D-4.17"
+section = "s04"
+spec = "§4.3, §4.5"
+ann = "—"
+status = "active"
+body = '''
+**Bounded scanners in the C layer** (OD-C2 revised, P7; phase 6a). `memchr` uses `liella_machine_memchr`; `memcmp`, `bcmp` and `__memcmpeq` use `liella_machine_memcmp` (`csys/src/machine/scan.S`). Each returns an index (the first match or difference, or `n`); the path (SSE2 or AVX2) is the scan level of D-4.14. Unlike the terminator scanners they know their length, so every load lies inside `[s, s + n)` (and `[b, b + n)`): unaligned vectors in 64-byte (SSE2) or 128-byte (AVX2) groups, then single vectors, then one vector overlapping the previous and ending exactly at `s + n`; below one vector, a byte loop (`memcmp`: two overlapping 8-byte words from 8 bytes). No over-read at all, so no page argument is needed. **Rust owns the contract** (`conv::find_byte`, `conv::compare`): the regions come from slices, and the answer is checked: an index above `n`, a reported match that is not `c`, or a reported difference where the bytes are equal aborts as a scanner fault. `memcmp`'s sign comes from the two bytes in Rust, not from the assembly. What Rust cannot check in constant time (that the index is the *first*) is held by exhaustive tests (`crates/boundary/tests/machine_scanners.rs`): both paths, every alignment, lengths 0–300 and across the 128-byte groups, every position with decoys after it and outside the region, every byte value and pair, and regions touching an unmapped page on either side. Measured against the host glibc (`benchmarks/progress.md` entry 3): 0.97–1.09× at 64 B, 4 KiB and 64 KiB. `wmemchr`/`wmemcmp` stay in safe Rust (no budget).
+'''
