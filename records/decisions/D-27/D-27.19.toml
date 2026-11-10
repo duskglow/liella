@@ -1,0 +1,10 @@
+id = "D-27.19"
+section = "s26-29"
+spec = "§1.1, §27"
+ann = "—"
+status = "active"
+story = "DL-INIT-ORDER"
+date = "2026-11-10"
+body = '''
+**Constructor and destructor order in ld.so (phase 14 DL-11, DL-INIT-ORDER; design §9).** `liella_ld::init` (pure) and `run_init`/`fini_all` in `boundary/src/ld.rs`. After relocation and RELRO of the whole start set: the program's `DT_PREINIT_ARRAY` (a shared object's is ignored), then each shared object's `DT_INIT` then `DT_INIT_ARRAY` in order, each called with `(argc, argv, envp)`. The program's own `DT_INIT`/`DT_INIT_ARRAY` are left to its C library's start (the reference loader runs neither for a program without one). Order: objects indexed in load order, object 0 the root (the program; the object named to `dlopen` later); a depth-first walk over objects 1..n in reverse load order, each placed after the objects it names in `DT_NEEDED` (in their order); a dependency already being walked (a cycle) is passed over; the root is never entered from another object and comes last. Fini: the same walk over every object loaded at the time, reversed (program first): `DT_FINI_ARRAY` in reverse then `DT_FINI`, through the termination function the loader passes in `%rdx` (`liella_machine_ld_enter` no longer zeroes it), run once. Array entries 0 and all-ones are not called (no spec clause; calling them could only fault). Probe-settled, black box: tools/probe/dl/order.sh (diamond, ties, a dependency reached through a later sibling, two- and three-object cycles, a retagged preinit array in a shared object; exit order from the same programs linked with the C library) and DL-0b's `== order` record (the `dlopen` cycle H <-> I initialises I then H: the root-last rule). Open: the `dlopen`/`dlclose` path and `__cxa_finalize` per object come with the dlopen story; a dynamic program without `DT_NEEDED` still enters with `%rdx` = 0 and runs no preinit array. Proof: `crates/ld/tests/init_order.rs` (pure orders; the corpus under the built ld.so equal line for line to the reference's record, and live against the reference); plants handoff/DL-INIT-ORDER-plants.txt.
+'''
