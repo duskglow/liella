@@ -736,7 +736,7 @@ fn clusters() -> Vec<(String, usize, usize)> {
     }
     let text = std::fs::read_to_string(dir.join("hot-text.clusters")).expect("hot-text.clusters");
     let mut out = Vec::new();
-    for l in text.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')) {
+    for l in text.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#') && !l.starts_with('@')) {
         let f: Vec<&str> = l.split('\t').collect();
         let [name, a, b] = f[..] else { panic!("hot-text.clusters: bad line {l:?}") };
         let p = |k: &str| *pos.get(k).unwrap_or_else(|| panic!("hot-text.clusters: {name}: key {k} not in hot-text.list"));
@@ -754,7 +754,10 @@ fn cluster_ranges(map: &str) -> Vec<(String, u64, u64)> {
         .map(|(name, first, last)| {
             let (mut lo, mut hi) = (u64::MAX, 0);
             for (n, a, s, _) in &inputs {
-                let p = n.strip_prefix(".text.sorted.h").and_then(|r| r.get(..5)).and_then(|d| d.parse::<usize>().ok());
+                // `h<position, 5 digits>.`, or `h9<cluster, 2><position, 5>.` for a cluster moved to the
+                // end of the group (`@place end`, xtask/src/hottext.rs cluster_section).
+                let d = n.strip_prefix(".text.sorted.h").map(|r| &r[..r.bytes().take_while(u8::is_ascii_digit).count()]);
+                let p = d.map(|d| if d.len() == 8 && d.starts_with('9') { &d[3..] } else { d }).and_then(|d| d.parse::<usize>().ok());
                 if *s > 0 && p.is_some_and(|p| (first..=last).contains(&p)) {
                     lo = lo.min(*a);
                     hi = hi.max(a.saturating_add(*s));

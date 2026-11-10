@@ -601,7 +601,7 @@ fn parse_clusters(text: &str, keys: &BTreeMap<String, usize>) -> Result<Vec<Clus
     let mut out = Vec::new();
     for (n, l) in text.lines().enumerate() {
         let l = l.trim_end();
-        if l.is_empty() || l.starts_with('#') {
+        if l.is_empty() || l.starts_with('#') || l.starts_with('@') {
             continue;
         }
         let f: Vec<&str> = l.split('\t').collect();
@@ -616,11 +616,39 @@ fn parse_clusters(text: &str, keys: &BTreeMap<String, usize>) -> Result<Vec<Clus
     Ok(out)
 }
 
-/// The list position in a grouped section name (`.text.sorted.h<position>.<f>`).
+/// LAYOUT-TEXT-PIN-4 (D-X.63): `@place TAB end` in [`CLUSTER_LIST`] moves every cluster, in the
+/// file's order, after the last list position: the start-up and plain text before it then has no
+/// alignment gap inside it (STARTUP-TEXT-WINDOWS), and the clusters' gaps sit side by side.
+/// `@place TAB in-place` (or no line) keeps each cluster at its list positions.
+fn clusters_at_end(text: &str) -> Result<bool, String> {
+    let mut end = false;
+    for (n, l) in text.lines().enumerate() {
+        let Some(d) = l.trim_end().strip_prefix('@') else { continue };
+        end = match d.split('\t').collect::<Vec<_>>()[..] {
+            ["place", "end"] => true,
+            ["place", "in-place"] => false,
+            _ => return Err(format!("{CLUSTER_LIST}:{}: want @place TAB end|in-place", n + 1)),
+        };
+    }
+    Ok(end)
+}
+
+/// The name of grouped section `.text.sorted.h<position>.<f>` when it is moved to the end with
+/// cluster `index` (file order): `.text.sorted.h9<index, 2 digits><position, 5 digits>.<f>`. It
+/// sorts after every list position (5 digits, below 90000) and keeps the `h<digits>.` shape every
+/// reader of grouped names expects.
+fn cluster_section(index: usize, position: usize, f: &str) -> String {
+    format!(".text.sorted.h9{index:02}{position:05}.{f}")
+}
+
+/// The list position in a grouped section name (`.text.sorted.h<position>.<f>`, or the moved
+/// form of [`cluster_section`]).
 fn position_of(section: &str) -> Option<usize> {
     let rest = section.strip_prefix(".text.sorted.h")?;
     let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
-    rest.get(..digits)?.parse().ok()
+    let d = rest.get(..digits)?;
+    let d = if digits == 8 && d.starts_with('9') { &d[3..] } else { d };
+    d.parse().ok()
 }
 
 /// The bytes the grouped sections `secs` (name, size, alignment) occupy when GNU ld lays them out
@@ -823,15 +851,15 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
     let objcopy = std::env::var("OBJCOPY").unwrap_or_else(|_| "objcopy".into());
     let clusters_path = list.with_file_name(CLUSTER_LIST);
     let clusters = match fs::read_to_string(&clusters_path) {
-        Ok(t) => parse_clusters(&t, &keys),
+        Ok(t) => parse_clusters(&t, &keys).and_then(|c| Ok((c, clusters_at_end(&t)?))),
         Err(e) => Err(format!("{}: {e}", clusters_path.display())),
     };
     // A regen build must not be blocked by a cluster key the old list lacks (D-X.56).
-    let clusters = match clusters {
+    let (clusters, at_end) = match clusters {
         Ok(c) => c,
         Err(e) if REGEN.load(Ordering::Relaxed) => {
             println!("so: {REGEN_FLAG}: hot-text clusters NOT aligned for this regen build: {e}");
-            Vec::new()
+            (Vec::new(), false)
         }
         Err(e) => return Err(e),
     };
@@ -858,7 +886,12 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
             }
             let Some(f) = function_of(name) else { continue };
             matched.insert(key(f));
-            let want = rename_for(name, f, &keys);
+            let mut want = rename_for(name, f, &keys);
+            if at_end {
+                if let Some((i, p)) = position_of(&want).and_then(|p| clusters.iter().position(|c| (c.first..=c.last).contains(&p)).map(|i| (i, p))) {
+                    want = cluster_section(i, p, f);
+                }
+            }
             if want.starts_with(".text.sorted.") {
                 hot += 1;
                 grouped.push((m.clone(), want.clone(), size, align));
@@ -1063,7 +1096,7 @@ pub fn static_check(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ar_members, before_group, check_renames, cluster_align, cluster_bytes, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
+    use super::{ar_members, before_group, check_renames, cluster_align, cluster_bytes, cluster_section, clusters_at_end, dead_key_verdict, elf_sections, function_of, Shdr, parse_clusters, position_of, Cluster, WINDOW, inline_never, is_startup_names, key, may_name_regen_flag, parse_absent, parse_list, plain_path, positions, regen_mode, rename_for, section_for, unmatched, unmatched_error, REGEN, REGEN_FLAG};
     use std::collections::{BTreeMap, BTreeSet};
     use std::sync::atomic::Ordering;
 
@@ -1272,6 +1305,14 @@ mod tests {
         assert!(parse_clusters("t\tc\tb\n", &keys).is_err());
         assert!(parse_clusters("t\tb\tzz\n", &keys).unwrap_err().contains("zz"));
         assert_eq!(position_of(".text.sorted.h00042.f"), Some(42));
+        // LAYOUT-TEXT-PIN-4: a cluster moved to the end keeps its position and sorts last.
+        assert_eq!(position_of(&cluster_section(3, 42, "f")), Some(42));
+        assert!(cluster_section(0, 1, "f").as_str() > ".text.sorted.h89999.f" && cluster_section(0, 1, "f") < cluster_section(1, 0, "f"));
+        assert_eq!(function_of(&cluster_section(3, 42, "f")), Some("f"));
+        assert_eq!(clusters_at_end("# x\n@place\tend\nt\tb\tc\n"), Ok(true));
+        assert_eq!(clusters_at_end("t\tb\tc\n"), Ok(false));
+        assert!(clusters_at_end("@place\tmiddle\n").is_err());
+        assert_eq!(parse_clusters("@place\tend\ntime\tb\tc\n", &keys).unwrap().len(), 1);
         assert_eq!(position_of(".text.f"), None);
         let mut secs = vec![(".text.sorted.h00002.y".into(), 3, 16), (".text.sorted.h00001.x".into(), 17, 16)];
         assert_eq!(cluster_bytes(&mut secs), 35);
