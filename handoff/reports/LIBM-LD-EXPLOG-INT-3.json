@@ -1,0 +1,13 @@
+{"task": "LIBM-LD-EXPLOG-INT-3", "model": "opus", "tokens": null,
+ "result": "x87 exp/log integer tier: tables moved into cargo xtask tables (values unchanged, re-derived); logl 0.064% undecided was the test band (even distances below 1), now 0 of 4e7; 8 rows 38-55% fewer instructions than base; -2's red gate was static (bare pipe, already fixed)",
+ "branch": "task/libm-ld-explog-int-3", "head": "088977d4b",
+ "gate": {"affected": "GATE_RESULT", "peak": "GATE_PEAK"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["percall SELF-CHECK MISMATCH on log10l and expm1l is in glibc's last bit; Liella base and new agree with the 384-bit route (D-10.19)",
+                   "plants run 1: el-gen-l2-units WARN-NO-MSG (caught by the generator's fit check); plant retargeted, plants2 run"],
+ "refused": [],
+ "improvement": "the near-1 test band's below-1 side silently differed from its above-1 side (u64::MAX - d vs 2^63 + d); per-band undecided counts in the long test made the cause checkable in one run, and long tests with bands should report per band from the start",
+ "next_step": "profile one logl/expl call per phase (where ~550-800 instructions go), then booked timing on Ivy Bridge and N100 for the 8 rows and a D-10.73 amend with the timing line",
+ "report_file": "handoff/libm-ld-explog-int.md",
+ "jobs": ["libm-ld-explog-int-3-lint3", "libm-ld-explog-int-3-gate", "libm-ld-explog-int-3-plants2", "libm-ld-explog-int-3-acc", "libm-ld-explog-int-3-percall2"]}

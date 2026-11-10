@@ -1,42 +1,56 @@
-# handoff: libm-ld-explog-int (LIBM-LD-EXPLOG-INT, -2)
+# handoff: libm-ld-explog-int (LIBM-LD-EXPLOG-INT, -2, -3)
 
-**State.** Branch `task/libm-ld-explog-int-2` (stacked on `task/libm-ld-explog-int`, from origin/next 21ef00b34).
-Kernels, proof, wiring and tests built and verified on keke:~/w/r5 (run -2). Code head `bc427462a`; later commits are
-handoff/report only. Decision record D-10.73 written (`records/decisions/D-10/D-10.73.toml`).
+**State.** Branch `task/libm-ld-explog-int-3` (continues `task/libm-ld-explog-int-2`; origin/next merged at
+`ed1256e33`, ruling #4253). Code head `088977d4b`; later commits are handoff/report only. Decision record D-10.73
+(`records/decisions/D-10/D-10.73.toml`). Jobs ran on shiki:~/w/sh2.
 
-**Done in -2.**
-* Built the run-1 WIP (it had never compiled). Fixed: the test band table (3-tuples); two unit slips in the kernel
-  (`a·h1` is in units 2^-135, so `exp_table` shifts by 7; the log series `w·h1` is in units 2^-139, so the sums shift
-  by 12 / 26); the constant pins' helper (zero and sub-unit values). The test now refuses-and-skips results
-  outside the normal range, skips the operands the entry points settle first (`expm1` x < -50.8, `log 1`), and keeps
-  structural hairlines (1 ± d·2^-63 with d rich in trailing zeros) out of the near-1 random band (they stay in `hard()`).
-* Results, `tier_agrees_with_the_wide_route` (3 200 random per function, four modes, plus hard operands): 0 undecided
-  in the random bands; worst error exp/exp2/exp10 2^-112.2, expm1 2^-104.1, log 2^-104.5, log2 2^-104.2, log10
-  2^-105.5, log1p 2^-106.2 (proof: 2^-110.4 / 2^-101.8 / 2^-103.2).
-* Long run, 10^7 operands per function in four modes (job libm-ld-explog-int-2-acc, before the band fix): exp, exp2,
-  exp10, expm1: 0 undecided in ~1.5·10^8 calls each, worst 2^-112.0 / 2^-103.6; log: 0.08% undecided. Rerun after
-  making the near-1 band's distance odd (-acc2): log still 0.064% undecided (25 504 of 4·10^7), so the "structural
-  hairline" explanation covers at most part of it. **OPEN, first step of -3**: print the undecided log operands
-  (by band) from the long test, find the path that loses precision or the operand class, fix; the test's limit is
-  1e-5. log2/log10/log1p long runs not reached yet (the test stops at the first failing function). Undecided calls
-  are correct (they go on to the double-double tier), only slower.
-* static (lint3) failed on a bare `|` in the D-10.73 body; fixed after the jobs started (code unchanged).
-* Plants `handoff/LIBM-LD-EXPLOG-INT-plants.txt`: 5 of 5 CAUGHT with msg (polynomial shift, reduction low part,
-  `near` always true, expm1 switch, log series units).
-* clippy + static clean (lint2).
+**Done in -3.**
+* -2's red gate (`libm-ld-explog-int-2-gate`, keke): every suite passed (8385 tests, 126 conformance); the one red
+  was `cargo xtask static`, the bare `|` in the D-10.73 body, which -2's last commit `2340fc97a` had already fixed.
+  On the merged head clippy, static and codemap are clean (`-lint2`); `cargo xtask codemap` wrote no change.
+* #4209: the tables moved into `cargo xtask tables`. New family `crates/mathtools/src/ld_explog_tables.rs` (400-bit
+  mp) writes `@generated` `crates/math/src/coeffs/wide_int_el.rs` (`WI_*` names, re-exported in `coeffs::tables`;
+  `wide_int_el.rs` imports them under the old short names). C1/C2 are exact integer formulas; the generator checks
+  `|y''·c1' − 1| <= 2^-7` at both ends of every first-step interval. Values unchanged:
+  `constants_are_the_rounded_values` re-derives every one from the 384-bit mp and passes. The Python script is retired.
+* #4266, the logl 0.064% undecided: **a test artifact, not a product cost.** The long test's near-1 band built `x`
+  below 1 as `u64::MAX − d` (d odd), so the distance `(d + 1)·2^-64` was even; distances with `2·v2 >= log2` put
+  `ln x` within the cube term of a representable value or midpoint (genuine hard cases, correctly sent on to the dd
+  tier). With `1 − d·2^-64`, d odd, the long run (`-acc`, 10^7 operands × 4 modes per function) gives **0 undecided
+  for logl in 4·10^7 calls**, and all 8 functions pass: undecided exp 0, exp2 0, exp10 4 (band 1, ~10^-7), expm1 0,
+  log/log2/log10/log1p 0; worst error 2^-112.1 (exp family), 2^-103.6 (expm1), 2^-103.9 (logs). The test now prints
+  undecided calls per band. No product code was tightened.
+* Plants `handoff/LIBM-LD-EXPLOG-INT-3-plants.txt`: -2's 5 kernel plants and 2 generator plants (L2 units -> stale
+  `tables --check`; C1[127] = 1 -> the |u1| check fires). First run (`-plants`): 6 CAUGHT, 1 WARN-NO-MSG (L2 at
+  units 2^-134 tripped the generator's own 127-bit fit check, not the stale check); the plant now uses 2^-132
+  (`-plants2`, same code head, plants file copied to the host because the gate held the role): 7 of 7 CAUGHT with their messages, no WARN.
+* Percall (`validation/percall/libm_wide_dd.c`, already covering the 8 rows and 4 `_full` rows; no new file needed),
+  base = origin/next (dd tier only) vs this head vs glibc, instructions:u per call (`-percall2`):
 
-**Jobs on the final code head (keke).** libm-ld-explog-int-2-lint3 (clippy + static), -acc2 (10^7 long run),
--plants2, -gate (`affected --run --base origin/next`). Re-attach: `ssh keke '~/bin/jobwait <label>...'`.
+  | row | glibc | base (dd tier) | new | new/glibc |
+  |---|---|---|---|---|
+  | expl | 87.0 | 1072.4 | 605.0 | 6.95 |
+  | exp2l | 68.0 | 1225.9 | 766.5 | 11.27 |
+  | exp10l | 87.0 | 1223.9 | 765.5 | 8.80 |
+  | expm1l | 75.0 | 1231.9 | 770.5 | 10.27 |
+  | logl | 52.2 | 1179.5 | 547.9 | 10.50 |
+  | log2l | 49.2 | 1208.5 | 589.9 | 12.00 |
+  | log10l | 49.2 | 1212.5 | 592.9 | 12.06 |
+  | log1pl | 50.9 | 1469.0 | 818.3 | 16.09 |
 
-**Not done (LIBM-LD-EXPLOG-INT-3).**
-1. #4209: move the table generator into `cargo xtask tables`: a new family in `crates/mathtools/src/tables.rs`
-   writing `crates/math/src/coeffs/wide_int_el.rs` (`@generated`), with the constants and tables (C_E .. G3, EXP2T,
-   C1, L1, C2, L2) removed from `wide_int_el.rs`. The run-1 generator is `~/w/.scratch/LIBM-LD-EXPLOG-INT/gen.py`
-   (Python decimal, 90 digits; also checks |u1| <= 2^-7 per interval): port its formulas, not its code. Until then
-   every value is independently re-derived in-repo by `constants_are_the_rounded_values` (384-bit `mp`).
-2. Percall counts: add `validation/percall/libm_ld_explog.c` on the pattern of `libm_ld_trig.c`; counts for the 8 rows.
-3. Booked timing, Ivy Bridge (nico or kotori, the quieter) and N100 (nozomi); target <= 1.5x glibc cycles per row.
-4. Saturation entry and codemap if static asks; then fill the timing line of D-10.73 (a new record that `amends`).
+  (`_full` rows within 2 of these.) Every row is 38-55% below base, and no row is slower. glibc's x87 code uses few
+  instructions, each with long latency, so only timing can judge the ratio. The SELF-CHECK MISMATCH lines (log10l,
+  expm1l) are in glibc's last bit: base and new agree with each other and with the 384-bit route (D-10.19).
 
-**Do not redo.** The design and proof (module doc of `wide_int_el.rs`); the unit fixes above; the plants.
+**Gate.** `libm-ld-explog-int-3-gate` (`affected --run --base origin/next`, shiki): GATE_RESULT.
+
+**Not done (next story).**
+1. Profile one call per phase (validation/wl_trace.sh or wl_percall.sh): logl spends ~548 instructions and where
+   they go (entry, decoding, kernel, rounding) is not measured yet: split it before any tuning.
+2. Booked timing (x87: instructions mislead): Ivy Bridge (nico or kotori, the quieter) and N100 (nozomi), the 8
+   rows of cbench_libm; target <= 1.5x glibc time per row. Then a record that `amends` D-10.73 with the timing line,
+   and a saturation entry (`records new saturation SR-NEW --section <n>`).
+
+**Do not redo.** The design and proof (module doc of `wide_int_el.rs`); the unit fixes of -2; the generator; the
+near-1 band analysis above.
 **Read.** D-10.52, D-10.56, D-10.73; `crates/math/src/wide_int_el.rs` (module doc); `wide.rs` `tiers()`.
