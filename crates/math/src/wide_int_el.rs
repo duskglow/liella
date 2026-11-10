@@ -868,10 +868,11 @@ mod tests {
         let is_log = matches!(k, Kernel::Log | Kernel::Log2 | Kernel::Log10);
         if is_log && band == 3 {
             // Within 2^-8 of 1 (top -1: below, top 0: above), down to 2^-55, with at least 9
-            // random bits in the distance: `1 ± d·2^-63` for a tiny or power-of-two `d` puts
-            // `ln x` within about `2^-128` of a representable value (hairline by structure;
-            // `hard()` holds those), which is not the rate this band measures.
-            let d = (g.next() | 1 << 63) >> (8 + g.next() % 48);
+            // significant bits in the distance and an odd `d`: `1 ± d·2^-63` with `2·v2(d) >=
+            // log2(d)` (tiny `d`, powers of two) puts `ln x = δ − δ²/2 + δ³/3 …` within the cube
+            // term of a representable value or midpoint (hairline by structure; `hard()` holds
+            // those), which is not the rate this band measures.
+            let d = ((g.next() | 1 << 63) >> (8 + g.next() % 48)) | 1;
             sig = if top == 0 { (1 << 63) + d } else { u64::MAX - d };
         }
         let neg = match sign {
