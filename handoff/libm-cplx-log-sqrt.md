@@ -1,84 +1,57 @@
 # LIBM-CPLX-LOG-SQRT handoff: clog/csqrt (and clogf, csqrtf) quick tiers
 
-State: branch task/libm-cplx-log-sqrt-3 (continues task/libm-cplx-log-sqrt-2, origin/next merged at run 3), HEAD in
-handoff/reports/LIBM-CPLX-LOG-SQRT-3.json. Role mei:~/w/s3. Decisions in force: D-10.53 (design), D-10.74 (this
-story's record, records/decisions/D-10/D-10.74.toml: windows, bounds, Kahan 1987, Dekker 1971, de Dinechin-Lauter-Muller
-2007), D-10.55, D-10.25. Full run-2 results (counts, timing, sweep): handoff/reports/LIBM-CPLX-LOG-SQRT-2.json and
-the previous version of this note on task/libm-cplx-log-sqrt-2.
+State: branch task/libm-cplx-log-sqrt-4 (continues -3, -2, -1; origin/next merged at run 3, not since). HEAD in
+handoff/reports/LIBM-CPLX-LOG-SQRT-4.json; code head 421f9dea7. Role keke:~/w/r5 (Zen 1); hot-text work on mei
+(Skylake-SP, the CI class) in RAM copies under /mnt/zram/claude/LIBM-CPLX-LOG-SQRT-4/. Decisions in force: D-10.53,
+D-10.74 (records/decisions/D-10/D-10.74.toml), D-10.55, D-10.25, D-X.56 (hot-text regen), HOTTEXT-PINNING (owner:
+no `#[inline(never)]` on start-up keys). Runs 1-3: see handoff/reports/LIBM-CPLX-LOG-SQRT-{2,3}.json.
 
-## Done
+## Done in run 4
 
-* Runs 1-2: code, proofs, tests, D-10.74, plants (6/6), gate, counts, booked timing, 10^7 sweep (green: every tier
-  answer equals the 384-bit route in four modes).
-* Run 3 (LIBM-CPLX-LOG-SQRT-3):
-  * Merged origin/next (ruling #4253). Conflict in crates/math/src/invtrig.rs: next gave `atan2_nearest` a quick
-    phase (`two_tier`), this branch had split out `atan2_abs` for clog. Resolved with one shared reduction
-    `atan2_reduce`: `atan2_nearest` takes next's two-tier answer unchanged; `atan2_abs` keeps the accurate
-    `atan_unit` sum that clog's bound (2^-65.5) assumes. The FMA build's `atan2_abs` copy is now unused
-    (`allow(dead_code)` with the reason).
-  * `cargo xtask codemap` (docs/codemap/symbols.tsv: line shifts from this branch's s10_math rows).
-  * BENCH COMMIT (separate, #4269): cbench_libm rows `clogf_axis clog_axis csqrtf_axis csqrt_axis` (x in [-3, 3],
-    y = +0 and -0 in turn) and `clogf_near1 clog_near1` (| |z| - 1 | log-uniform in [2^-52, 2^-1]); budget rows
-    ratio_host, not gated. Not yet timed or counted.
-  * #4270 route-entry count, test `bench_rows_reach_the_route_only_where_measured` (complex_fast_ls_tests.rs):
-    cbench_libm's own operand sets through each in-place tier and the mode tier behind it, as `cplx_fast`
-    dispatches them. [declined in place, reached the 384-bit route] of 256:
+* Step 0: `cargo xtask clippy` + `static` green on the inherited head (job libm-cplx-log-sqrt-4-step0); its
+  `cargo xtask so` fails as run 3 said (2 dead fast-profile keys).
+* AXES (coordinator #4305), commit e5bb15487 (+ 421f9dea7 test lint fix and plants file): the in-place entries
+  answer exact-zero-part operands, out of line, only after the general tier declines (general path unchanged):
+  `csqrt(x±0i)` = hardware root (`(√x,±0)` / `(+0,±√|x|)`), `csqrt(±0+iy)` = `(t, ±t)`, `t = √(|y|/2)`;
+  `clog(x±0i)` = `(fast64::log_nearest|x|, ±0 or ±π)`, `clog(±0+iy)` = `(ln|y|, ±π/2)`, `clog(1±0i)` exact, other
+  `|v| = 1` decline; `cexp(x±0i)` = `(exp_nearest x, ±0)` (both FMA builds), `cexp(±0±0i)` = `(1, ±0)`; `clogf`
+  via `clog_core`'s formula with `b = 0` (exact `a²`, `(a-1)(a+1)`), `csqrtf` via the double root (Figueroa 1995,
+  `53 >= 2·24+2`). Not done: `cexpf` axis, `cexp(±0+iy)` (needs sincos), the zero/subnormal cases (route).
+* Tests: boundary `complex_axes_in_place_match_the_route` (s10_math_symbols.rs: bits, flags, errno of the
+  exported functions vs the 384-bit route, both axes, 21 magnitudes x signs x signed zeros, 6 functions); route
+  count now asserts `_axis` `[0, 0]` for cexp, clog, csqrt, clogf, csqrtf. Job libm-cplx-log-sqrt-4-step1b (keke,
+  head 421f9dea7): clippy, static, `complex_fast` lib tests (10 pass) and the axis test pass.
+* Plants file handoff/LIBM-CPLX-LOG-SQRT-4-plants.txt (10 plants): NOT RUN (the tool's baseline needs `so`).
 
-    | fn | plain square [-3,3]^2 | _axis | _near1 |
-    |---|---|---|---|
-    | cexp | 1, 1 | 256, 256 | 0, 0 |
-    | clog | 0, 0 | 256, 256 | 10, 10 |
-    | csqrt | 0, 0 | 256, 256 | 0, 0 |
-    | cexpf | 0, 0 | 256, 256 | 0, 0 |
-    | clogf | 0, 0 | 256, 256 | 0, 0 |
-    | csqrtf | 0, 0 | 256, 256 | 0, 0 |
+## BLOCKER (not fixed, numbers for LAYOUT-STABILITY-RETHINK / coordinator)
 
-    VERDICT on the hypothesis: refuted for csqrt (no bench operand leaves the tier, so its 3.9x-by-time vs
-    2.1x-by-instructions gap is in the tier itself: latency of the dependent sqrt -> div -> sqrt -> div chain is
-    the remaining suspect). For cexp, exactly one operand of 256 reaches the route; whether that one call carries
-    the time gap is NOT VERIFIED (needs a per-operand count/time of that operand). Every exact-zero part goes to
-    the route in all six functions (cexp too: `cexp(x + 0i)` is a real exp passed as complex).
+Clean env (`env -i`, no LC_*), Skylake-SP, RAM copies of this branch:
 
-## Results (run 3)
+| build | list | result |
+|---|---|---|
+| origin/next 9af6dff86 release | next's | ok: 4 windows (budget-release 4), hot group 0x413280-0x4a204c, 101/101 start-up fns |
+| origin/next fast | next's | ok: 5 windows (budget-fast 5), 107/107 |
+| branch release | inherited | ok: 4 windows, hot group 0x413280-0x4a204c, 101/101 (same as next) |
+| branch fast | inherited | FAIL: 2 dead keys `Features::detect<CSysImpl<false>>` (startup), intl `catalog::variants::each` closure (extra) |
+| branch fast, `regen.sh . --build` | regenerated | ok: 5 windows (budget-fast 5), 106/106; list 588 lines: 21 removed, 20 added |
+| branch release, `LIELLA_FULL_PROFILE=1 regen.sh . --build` (after the fast regen) | fast-regenerated | FAIL at its first build: STARTUP-TEXT-WINDOWS 5 > budget-release 4, hot group 0x413280-0x4a1f8c |
 
-* Lint `libm-cplx-log-sqrt-3-check` (mei, head 74ac7a459 content): `cargo xtask clippy` + `static` green, the
-  route-count test passes, the bench compiles (`gcc -Wall -Wextra -fsyntax-only`).
-* BLOCKER, NOT FIXED: the merged tree's products do not build. `cargo xtask so` (fast profile) fails its hot-text
-  check: `hot-text.list: 2 key(s) match no function section of the fast-profile libc.a`:
-  `Features::detect<CSysImpl<false>>` (startup tier) and an intl catalog closure (extra tier). origin/next alone
-  builds clean (job `libm-cplx-log-sqrt-3-nextso`, scratch copy, rc 0), and this branch was green before the merge,
-  so the combination does it: this branch's extra boundary code (s10_math rows, hot csqrt entries) changes rustc's
-  inlining of those two generic functions. Gate `libm-cplx-log-sqrt-3-gate` (rc 1: 6 product suites fail with
-  "the products are missing") and plants `libm-cplx-log-sqrt-3-plants` (BASELINE FAILED at `so`, no plant applied)
-  both stop there.
-* Tried the tool's remedy, `tools/hottext/regen.sh . --build` then `LIELLA_FULL_PROFILE=1 ... --build` (job
-  `libm-cplx-log-sqrt-3-hottext`, rc 1): the fast regen rewrote the list (keys reordered, several stdio keys dropped:
-  `liella_internal_memcpy`, `internal_move`, `internal_large`, `liella_machine_copy_avx2`); the release regen then
-  failed `STARTUP-TEXT-WINDOWS BROKEN: start-up text spans 5 windows > budget-release 4` and flagged one stale
-  hot-text.absent release line. Nothing from it is committed (the role's hot-text.list is modified; the next sync
-  restores it).
-
-Next run, step 0 (before anything else): make the merged products build. Options, in order of preference: (a) find
-why the two functions are inlined now (look for the caller that gained them; `#[inline(never)]` on
-`Features::detect` would make the key build-stable if the layout owner agrees: RULING NEEDED); (b) regen in both
-profiles, then fit start-up text into the release budget (ALWAYS FORWARD: never raise budget-release); (c) a
-hot-text.absent line only if the absence is by design. Then rerun the gate (`--files` as below) and the plants
-(handoff/LIBM-CPLX-LOG-SQRT-3-plants.txt, 4 plants, not yet run). Gate files: `git diff --name-only
-origin/next...HEAD` minus records/ and handoff/ (records/ escalates `affected` to FULL).
+So the branch's code does not push release start-up text over budget; the fast regen's rewritten list does
+(it reorders/re-tags keys, which moves the release layout). The fast-regenerated list is kept on mei at
+~/work/LIBM-CPLX-LOG-SQRT-4/hot-text.list.fast-regen. Per the coordinator note, stopped here: no budget raised,
+no `#[inline(never)]` added. Jobs: libm-cplx-log-sqrt-4-regen2 (rc 1, the table's last two rows),
+libm-cplx-log-sqrt-4-reldiag (rc 0 by design, rows 1-4). Recommendation (RULING NEEDED): repair only the two
+dead fast keys (as the fast regen does for them) and keep the rest of the list's order, or make regen's merge keep
+the existing order for keys traced in the other profile; that keeps release at 4 windows.
 
 ## Next steps (in order)
 
-1. LIBM-CPLX-AXES (new story, now the biggest lever by the table above): exact-zero parts answered in the in-place
-   tier for cexp/clog/csqrt and the float variants: `csqrt(x ± 0i)` = `(sqrt x, ±0)` for `x > 0`,
-   `(+0, ±sqrt(-x))` for `x < 0`; `clog(x ± 0i)` = `(log|x|, ±0 or ±π)`; `cexp(x ± 0i)` = `(exp x, ±0)`; the
-   `x = ±0` axis likewise. Annex G signs; flags from the real function (exact cases raise no inexact). Measure with
-   the new `_axis` rows and the percall `_axis` cases.
-2. csqrt by time (3.9x): profile `csqrt_bench` per phase (two `sqrt_dd`, `div_b`, two `round_root`) and its
-   dependency chain; the route is not involved (table above).
-3. cexp: per-operand cost of the one routed bench operand (instructions and time) to settle whether it carries the
-   5.4x-by-time row; if so, an intermediate double-double tier for cexp's hard cases.
-4. clog `_near1`: 10 of 256 reach the route (|z| within ~2^-40 of 1 or a hard rounding); time the new rows.
-5. Continuations: LIBM-CPLX-TRIG (csin/ccos), LIBM-CPLX-POW, then the long double variants.
+1. Unblock `so` (ruling above), then gate (`--files` = `git diff --name-only origin/next...HEAD` minus records/
+   and handoff/), plants (handoff/LIBM-CPLX-LOG-SQRT-4-plants.txt and -3-plants.txt, 4 not yet run), counts of the
+   `_axis` rows (cbench_libm `clog_axis csqrt_axis clogf_axis csqrtf_axis`) vs glibc.
+2. Decision record for the axis paths (`records new decision D-NEW --series D-10`, cite Figueroa 1995, C Annex
+   G.6.3.1/G.6.3.2/G.6.4.2), or an `amends` of D-10.74.
+3. Then run 3's list: csqrt by time (dependent sqrt/div chain), cexp's one routed operand, clog `_near1`, and the
+   cexpf / `cexp(±0+iy)` axes.
 
-Do not redo: the bound derivations in complex_fast.rs, the atan2_abs split / atan2_reduce merge, the float margins,
-the plants (handoff/LIBM-CPLX-LOG-SQRT-2-plants.txt, -3-plants.txt), the route-count table.
+Do not redo: bound derivations in complex_fast.rs, the atan2 merge, the route-count table, the release diagnosis above.
