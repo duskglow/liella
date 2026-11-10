@@ -1,0 +1,36 @@
+{
+ "task": "LIBM-SQRT-ENTRY",
+ "model": "opus",
+ "tokens": null,
+ "result": "sqrt/sqrtf inline entry and sqrtl asm entry (D-10.71) committed; gate2 running, plants not yet accepted, counts/exhaustive/timing pending",
+ "branch": "task/libm-sqrt-entry",
+ "head": "f62017246",
+ "gate": {
+  "affected": "clippy+static ok, s10 sqrt 8 passed/0 failed; affected run pending",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+  "cbench_libm rows already make a real call (-fno-builtin); the inlining artifact is only in the percall/trace probes"
+ ],
+ "refused": [
+  "sync_role.sh ... kanon kn1 at f62017246: BUSY (own gate2 running), not a permission refusal"
+ ],
+ "improvement": "plants tool rejects ambiguous lit:/.S anchors only at run time; a `cargo xtask plants --check` dry run locally would have saved two queue rounds",
+ "next_step": "sync f62017246, anchor the two lit: plants, run plants + gate with --include-ignored, read counts2/exh, book IVB/N100 timing",
+ "report_file": "handoff/libm-sqrt-entry.md",
+ "jobs": [
+  "kanon:libm-sqrt-entry-gen",
+  "kanon:libm-sqrt-entry-gate2",
+  "kanon:libm-sqrt-entry-plants3",
+  "kanon:libm-sqrt-entry-counts2",
+  "kanon:libm-sqrt-entry-exh"
+ ],
+ "superseded": [
+  "kanon:libm-sqrt-entry-gate",
+  "kanon:libm-sqrt-entry-plants",
+  "kanon:libm-sqrt-entry-counts",
+  "kanon:libm-sqrt-entry-plants2"
+ ]
+}
