@@ -8,11 +8,11 @@
 //! never a skip.
 //!
 //! `static` (and `layout-check --static`) checks the manifest without products: every row names a D-row of
-//! `plan/07-decisions/`; every `LAYOUT(<ID>)` tag in `crates/` and `csys/` names a row and sits on, or in the comment
-//! directly above, an alignment or offset directive (`.p2align`, `.balign`, `.align`, `.org`, `align(`), so deleting a
+//! `plan/07-decisions/` or a decision record (`records/decisions/`); every `LAYOUT(<ID>)` tag in `crates/` and
+//! `csys/` names a row and sits on, or in the comment directly above, an alignment or offset directive (`.p2align`, `.balign`, `.align`, `.org`, `align(`), so deleting a
 //! tagged directive fails; every row of a kind with a source site has a tag; and (rule d) with the branch's changed
-//! files (as `affected` reads them), a removed row or a changed kind, subjects or rule needs a change under
-//! `plan/07-decisions/`.
+//! files (as `affected` reads them), a removed row or a changed kind, subjects or rule needs a decision change
+//! (`DECISION_DIRS`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -432,11 +432,20 @@ pub fn check_products(root: &Path, dir: &Path) -> Result<(), String> {
 // ---------------------------------------------------------------------------------------------------------------
 // Static checks
 
-/// The D-row ids of `plan/07-decisions/*.md` (`| D-<section>.<n> |` at the start of a line).
+/// Where decisions live: the D-row tables, and the decision records (D-X.55: one TOML file per decision,
+/// `records/decisions/<series>/<id>.toml`, from which the tables are generated). A change under either is a decision
+/// change for rule d, and a row may name a decision found in either.
+const DECISION_DIRS: &[&str] = &["plan/07-decisions/", "records/decisions/"];
+
+/// The decision ids: the D-rows of `plan/07-decisions/*.md` (`| D-<section>.<n> |` at the start of a line) and the
+/// file stems of `records/decisions/**/D-*.toml`. A missing directory adds nothing; neither present is an error.
 fn decision_ids(root: &Path) -> Result<BTreeSet<String>, String> {
-    let dir = root.join("plan/07-decisions");
     let mut out = BTreeSet::new();
-    for e in std::fs::read_dir(&dir).map_err(|e| format!("layout: {}: {e}", dir.display()))? {
+    let (tables, records) = (root.join(DECISION_DIRS[0]), root.join(DECISION_DIRS[1]));
+    if !tables.is_dir() && !records.is_dir() {
+        return Err(format!("layout: neither {} nor {} exists", tables.display(), records.display()));
+    }
+    for e in std::fs::read_dir(&tables).into_iter().flatten() {
         let p = e.map_err(|e| e.to_string())?.path();
         if p.extension().is_some_and(|x| x == "md") {
             for l in std::fs::read_to_string(&p).map_err(|e| format!("layout: {}: {e}", p.display()))?.lines() {
@@ -446,7 +455,25 @@ fn decision_ids(root: &Path) -> Result<BTreeSet<String>, String> {
             }
         }
     }
+    let mut stack = vec![records];
+    while let Some(dir) = stack.pop() {
+        for e in std::fs::read_dir(&dir).into_iter().flatten() {
+            let p = e.map_err(|e| e.to_string())?.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "toml")
+                && let Some(id) = p.file_stem().and_then(|s| s.to_str()).filter(|s| s.starts_with("D-"))
+            {
+                out.insert(id.to_string());
+            }
+        }
+    }
     Ok(out)
+}
+
+/// Whether `changed` holds a decision change (a file under one of `DECISION_DIRS`).
+fn decision_change(changed: &[String]) -> bool {
+    changed.iter().any(|f| DECISION_DIRS.iter().any(|d| f.starts_with(d)))
 }
 
 /// The rows' own problems: kind known, D-row present.
@@ -457,7 +484,7 @@ pub fn row_errors(contracts: &[Contract], decisions: &BTreeSet<String>) -> Vec<S
             e.push(format!("{}: unknown kind `{}` (known: {})", c.id, c.kind, KINDS.join(", ")));
         }
         if !decisions.contains(&c.decision) {
-            e.push(format!("{}: decision {} is not a row of plan/07-decisions/", c.id, c.decision));
+            e.push(format!("{}: decision {} is not a row of plan/07-decisions/ or a record of records/decisions/", c.id, c.decision));
         }
     }
     e
@@ -513,20 +540,20 @@ fn source_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 
 /// Rule d: with `changed` (the branch's changed files) and `base` (the manifest at the merge base: `Some(rows)`,
 /// empty when it did not exist; `None` when unknown, e.g. a role tree without history), a removed row or a changed
-/// kind, subjects or rule fails unless a file under `plan/07-decisions/` changed too.
+/// kind, subjects or rule fails unless a decision changed too (a file under `DECISION_DIRS`).
 pub fn rule_d(changed: &[String], base: Option<&[Contract]>, now: &[Contract]) -> Vec<String> {
-    if !changed.iter().any(|f| f == MANIFEST) || changed.iter().any(|f| f.starts_with("plan/07-decisions/")) {
+    if !changed.iter().any(|f| f == MANIFEST) || decision_change(changed) {
         return Vec::new();
     }
     let Some(base) = base else {
-        return vec![format!("{MANIFEST} changed without a change under plan/07-decisions/ (no history here to tell an added row from a changed one)")];
+        return vec![format!("{MANIFEST} changed without a decision change (plan/07-decisions/ or records/decisions/) (no history here to tell an added row from a changed one)")];
     };
     let mut e = Vec::new();
     for b in base {
         match now.iter().find(|c| c.id == b.id) {
-            None => e.push(format!("{}: row removed without a change under plan/07-decisions/ (removing a contract needs a decision)", b.id)),
+            None => e.push(format!("{}: row removed without a decision change (plan/07-decisions/ or records/decisions/) (removing a contract needs a decision)", b.id)),
             Some(c) if (&c.kind, &c.subjects, &c.rule) != (&b.kind, &b.subjects, &b.rule) => {
-                e.push(format!("{}: kind, subjects or rule changed (`{}` -> `{}`) without a change under plan/07-decisions/", b.id, b.rule, c.rule));
+                e.push(format!("{}: kind, subjects or rule changed (`{}` -> `{}`) without a decision change (plan/07-decisions/ or records/decisions/)", b.id, b.rule, c.rule));
             }
             Some(_) => {}
         }
@@ -645,10 +672,30 @@ mod tests {
         assert_eq!(rule_d(&m, Some(&base), &loosened).len(), 1, "a changed rule without a decision change");
         assert_eq!(rule_d(&m, Some(&base), std::slice::from_ref(&a)).len(), 1, "a removed row without a decision change");
         assert!(rule_d(&md, Some(&base), &loosened).is_empty(), "with a decision change");
+        let rec = vec![MANIFEST.to_string(), "records/decisions/D-X/D-X.48.toml".to_string()];
+        assert!(rule_d(&rec, Some(&base), &loosened).is_empty(), "with a decision record change (D-X.55)");
+        let near = vec![MANIFEST.to_string(), "records/compat/COMPAT-1.toml".to_string()];
+        assert_eq!(rule_d(&near, Some(&base), &loosened).len(), 1, "another record is not a decision change");
         assert!(rule_d(&other, Some(&base), &loosened).is_empty(), "the manifest did not change");
         assert!(rule_d(&m, Some(&base), &[a.clone(), b.clone(), row("C", "align=8")]).is_empty(), "an added row");
         assert!(rule_d(&m, Some(&[]), &base).is_empty(), "a new manifest");
         assert_eq!(rule_d(&m, None, &base).len(), 1, "unknown base: the change needs a decision change");
+    }
+
+    #[test]
+    fn decisions_are_read_from_the_tables_and_the_records() {
+        // no spec clause: tooling (D-X.48 rows name decisions; D-X.55 moved them to records/decisions/).
+        let dir = std::env::temp_dir().join(format!("liella-layout-decisions-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(decision_ids(&dir).is_err(), "neither place exists");
+        std::fs::create_dir_all(dir.join("records/decisions/D-X")).unwrap();
+        std::fs::write(dir.join("records/decisions/D-X/D-X.48.toml"), "id = \"D-X.48\"\n").unwrap();
+        std::fs::write(dir.join("records/decisions/D-X/notes.txt"), "D-X.77\n").unwrap();
+        assert_eq!(decision_ids(&dir).unwrap(), BTreeSet::from(["D-X.48".to_string()]), "records only");
+        std::fs::create_dir_all(dir.join("plan/07-decisions")).unwrap();
+        std::fs::write(dir.join("plan/07-decisions/x.md"), "| D-4.63 | row |\n| not a row\n").unwrap();
+        assert_eq!(decision_ids(&dir).unwrap(), BTreeSet::from(["D-4.63".to_string(), "D-X.48".to_string()]), "both");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

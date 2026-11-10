@@ -1,5 +1,9 @@
-# LAYOUT-MANIFEST-2 (D-X.48): affected treats the layout manifest as a known consumer of csys symbols.
+# LAYOUT-MANIFEST-2 (D-X.48): affected treats the layout manifest as a known consumer of csys symbols; the layout
+# static check reads decisions from the D-row tables and from the decision records (D-X.55).
 lm2-consumer-skip | xtask/src/affected.rs | lit:if LAYOUT_CONSUMERS.contains(&r.file.as_str()) { ==> if false { | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:a layout-manifest name must not escalate
 lm2-no-cmd | xtask/src/affected.rs | lit:sel.xtask_cmds.insert(LAYOUT_CHECK.to_string()); ==> let _ = LAYOUT_CHECK; | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:layout_manifest_names_select_the_layout_check.*(FAILED|panicked)
 lm2-products | xtask/src/affected.rs | lit:|| sel.xtask_cmds.contains(LAYOUT_CHECK) || ==> || | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:layout_manifest_names_select_the_layout_check.*(FAILED|panicked)
 lm2-scan-dir | xtask/src/affected.rs | lit:("layout", &["tsv"][..]), ==> ("layout", &["md"][..]), | cargo test -p xtask --bin xtask -- affected::tests::layout_manifest_names_select_the_layout_check | msg:no reference from layout/contracts\.tsv
+lm2-records-dir | xtask/src/layout.rs | lit:"plan/07-decisions/", "records/decisions/"]; ==> "plan/07-decisions/", "records/decisionz/"]; | cargo test -p xtask --bin xtask layout | msg:with a decision record change|decisions_are_read_from_the_tables_and_the_records.*(FAILED|panicked)
+lm2-records-recurse | xtask/src/layout.rs | lit:stack.push(p); ==> let _ = p; | cargo test -p xtask --bin xtask layout | msg:decisions_are_read_from_the_tables_and_the_records.*(FAILED|panicked)
+lm2-rule-d-change | xtask/src/layout.rs | lit:|| decision_change(changed) { ==> || false { | cargo test -p xtask --bin xtask layout | msg:rule_d_needs_a_decision_for_a_changed_or_removed_row.*(FAILED|panicked)
