@@ -1,53 +1,56 @@
-# LAYOUT-STARTUP-RODATA(-2,-3): hot read-only data in one 64 KiB-aligned .rodata1 (D-X.62, amends D-X.50) - NOT READY
+# LAYOUT-STARTUP-RODATA(-2,-3,-4): hot read-only data in one 64 KiB-aligned .rodata1 (D-X.62, amends D-X.50)
 
-**State (2026-11-10, run -3):** branch `task/layout-startup-rodata-3` (stacks on -2 and -1; base origin/next 2e33a3cb9,
-next has moved since, not merged). Build role mei:~/w/s1. Scratch on mei: ~/work/LAYOUT-STARTUP-RODATA-3/ (exp.sh = fast
-products + faults, rel.sh = release products + windows over 5 text paddings + faults, who.py, prod-fast/, prod-release/),
-older: ~/work/LAYOUT-STARTUP-RODATA{,-2}/ (romap.py, pad*.o, prod-base-{fast,release} = next 2e33a3cb9 products).
+**State (2026-11-10, run -4):** branch `task/layout-startup-rodata-4` (stacks on -3, -2, -1; base origin/next 2e33a3cb9,
+next has moved 38 commits since, not merged). Build role shiki:~/w/sh1. Scratch on shiki: ~/work/LAYOUT-STARTUP-RODATA-4/
+(build.sh = release products of branch + next tip, probe.py = the hot_text_products fault harness outside cargo,
+fmap.sh/who.sh/who.py = fault map + link-map owner of each read-only fault, exp.sh = trace + both profiles + faults;
+prod-next = next tip 9af6dff86 release, prod-fast2/prod-rel2 = this head). Older: mei ~/work/LAYOUT-STARTUP-RODATA{,-2,-3}/.
 Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded probes read; never raise a fault bound.
 
 ## What the branch does
 - Run 1: `xtask/src/startup_ro.rs` renames start-up read-only sections to `.rodata1`; entry.S aligns `.rodata1` to 64 KiB;
   STARTUP-DATA-WINDOWS ro budgets 1/1; product test with 16 text paddings.
-- Run 2: start functions = startup-text.keys + hot-text.list keys of tiers startup/stdio/strings/locale/tool (`HOT_TIERS`),
-  by symbol and by section name; transitive selection (text -> .rodata*/.data.rel.ro* -> .rodata*).
-- Run 3 (the open bug, FIXED): `readelf -SW` cuts section names at 256 bytes (symbol names are whole); `plan` chose the
-  hot switch table `.rodata..Lswitch.table.<v0 name of an intern_locked closure>` (read by global_locale::replace<Glue>),
-  but objcopy `--rename-section <cut name>` matched nothing and renamed it silently never. Now `section_names` reads
-  the whole names from the archive's ELF members (own ar + ELF64 reader, GNU long names, >0xff00 sections) and
-  `whole_names` replaces readelf's (error if not a prefix); relocation sections are matched by name AND file offset
-  (two names can be cut alike). New `cargo xtask startup-ro-plan <libc.a> [<filter>]`: prints the plan without changing
-  the archive; with a filter, each matching section's start status and relocation targets (renamed or not). On built
-  products it must print "0 sections to rename". Three unit tests added (whole names, cut-alike rela, existing ones).
-  D-X.62 body corrected to the run-2/3 selection (record, not view). Plants file rewritten for the current code (not run).
+- Run 2: start functions = startup-text.keys + hot-text.list keys of tiers startup/stdio/strings/locale/tool (`HOT_TIERS`);
+  transitive selection (text -> .rodata*/.data.rel.ro* -> .rodata*).
+- Run 3: whole section names read from the archive's ELF members (readelf cuts at 256 bytes); `cargo xtask startup-ro-plan`.
+- Run 4: release first localtime_r read 21 (bound 20). **Measured next first** (same harness as the test, ADDR_NO_RANDOMIZE,
+  env LANG only, min of 5): next tip 9af6dff86 and base 2e33a3cb9 release both read localtime 19 / lt+mktime 19, the
+  branch 21 / 21, identical on the Skylake-SP host (mei) and the Haswell-EP host (shiki). So the +2 was the branch's.
+  Fault map: the two extra faults are the `TZ` (2 bytes) and `TZDIR` (5 bytes) getenv name literals (ip env_find), which
+  in next shared windows start-up had already faulted; the group moved their neighbours out and left them alone in two cold
+  `.rodata` windows. The zone functions are hot-text tier `extra`, outside `HOT_TIERS`. Fix (generic, trace-built):
+  `tools/hottext/probe_text.sh` traces each fault-bounded probe mode that no tier covers (`MODES="localtime
+  localtime_mktime"`) as the test runs it into `crates/libc-so/probe-text.keys` (@generated, both profiles merged with
+  merge.py, tier column `extra`; regen.sh calls it), and `startup_ro::inputs` adds those keys (`PROBE_KEYS`) to the starts.
 
-## Measured (Skylake-SP host mei, role s1)
-| products | group bytes | ro windows, any text pad | tool | locale | startup | localtime / lt+mktime |
-|---|---|---|---|---|---|---|
-| next 2e33a3cb9 fast | - | 2-4 | 56 | 53 | 17 | 20 / 20 |
-| run 3 fast (lsr3-exp1) | 60037 | 1 | **56** | **53** | **17** | 20 / 20 pass |
-| run 3 release (lsr3-rel1) | 49385 | 1 (plain + 5 paddings) | 56 | 53 | 15 | **21 / 21 FAIL (bound 20)** |
-Fast meets the ratchet (<= 56/53/17, bounds untouched). Release localtime fails; next's release localtime NOT measured.
+## Measured (this head 56504e2a1, same harness; next = tip 9af6dff86)
+| products | group bytes | true | locale | localtime | lt+mktime |
+|---|---|---|---|---|---|
+| next release | - | 15 | 54 | 19 | 19 |
+| run 3 release | 49385 | 15 | 53 | 21 | 21 |
+| run 4 release | 49412 | 15 | 53 | **18** | **18** |
+| run 4 fast | 60064 | 17 | 53 | 20 | 20 |
+Fast is unchanged from run 3 (17/53/20, at the bounds 17/55/20). Bounds untouched (ALWAYS FORWARD: release localtime is now
+one under next; tightening LOCALTIME_BOUND needs the fast profile at 19 too, not yet).
 
-## Open
-1. Release localtime 21 > 20. The zone functions (localtime_r, mktime, implicit, ...) are all in hot-text tier `extra`,
-   which the selection leaves out (all of `extra` = 160 KiB, too big). The localtime probe is fault-bounded, so ruling
-   #4313 covers its data. Next: (a) measure next's release localtime (build next's release products, or run the test on
-   ~/work/LAYOUT-STARTUP-RODATA/prod-base-release if the test can take a products dir) to see if this is a +1 of the
-   branch; (b) fault-map it (tools/hottext/faultmap.py, as -2's fmap.sh) to name the page; (c) likely fix: add the
-   localtime probe's functions (the `4zone` keys of `extra`) as starts, generically: a start set per fault-bounded
-   probe rather than per tier, and check release + fast group bytes stay <= 65536.
-2. The RW shift (64 KiB gap moves the RW segment: +1 `.data.rel.ro` fault in tool/locale, paid back by the grouped
-   straggler today). Making the writable start-up pages independent of the ro size (the `.data1` half, #4315) would
-   give tool 55 / locale 52: then tighten the bounds.
-3. Then: plants (handoff/LAYOUT-STARTUP-RODATA-plants.txt, 4 unit + 2 product plants), direct-tier affected gate.
+## Open / next step
+1. Jobs on this head: gate `layout-startup-rodata-4-gate` (direct tier), plants `layout-startup-rodata-4-plants`
+   (handoff/LAYOUT-STARTUP-RODATA-plants.txt, 7 plants incl. new lsr-probe-keys-dropped, release profile). See the report.
+   lsr-reloc-not-followed (run 3's) printed WARN-NO-MSG: the tool rebuilds the products with an xtask mutant and that
+   build already fails on it (logs/lsr-reloc-not-followed.so.log), before the unit test runs: caught by the build, not by
+   the named message. Its msg should also accept the build failure (not changed in this run).
+2. The RW shift (64 KiB gap moves the RW segment; +1 `.data.rel.ro` fault in tool/locale paid back by grouped data). The
+   `.data1` half (#4315) would give tool 55 / locale 52: then tighten the bounds.
+3. Fast localtime 20 (= bound): if the fast trace's ro data is all in the group, the remaining faults are text/zone file.
 
-## For LAYOUT-STABILITY-RETHINK
-- The placement plan is one list: `plan()` = starts (hot keys by tier) + transitive relocation closure + ro keys. To
-  take it over, replace `starts()`/`HOT_TIERS` with the rethink's per-probe hot object list; keep `section_names` /
-  `whole_names`: any objcopy-by-name pass fed from `readelf -S` names has the 256-byte cut (xtask/src/coldbss.rs
-  reads `.bss.*` names from `readelf -SW` the same way: INFORMATIONAL, not checked whether any of its names are cut).
+## For LAYOUT-DATA-CLUSTERS / the layout rethink
+- The placement plan is one list: `plan()` = starts (startup-text.keys + `HOT_TIERS` hot keys + probe-text.keys) +
+  transitive relocation closure + ro keys. To take it over, replace `starts()` inputs with the rethink's per-probe hot
+  object list (probe-text.keys is already per probe mode; add modes to `MODES` in probe_text.sh). Keep `section_names` /
+  `whole_names` (readelf's 256-byte cut; xtask/src/coldbss.rs reads `.bss.*` names the same way, unchecked).
 - The 64 KiB alignment gap shifts every later segment; any window contract on RW data must account for it.
+- Group headroom: fast 60064 of 65536 bytes; a new probe mode's data may not fit (the archive-wide check fails `so`).
 
-Not to redo: 16 KiB alignment (bound 33 KiB fast), "all tiers" (160 KiB), symbol-only matching, hunting the straggler.
+Not to redo: 16 KiB alignment (bound 33 KiB fast), "all tiers" (160 KiB), symbol-only matching, hunting the straggler,
+measuring next's release localtime (19, above).
 Plan rows: D-X.50, D-X.62 (records/decisions/D-X/), D-X.48/49 (hot text), contract STARTUP-DATA-WINDOWS.
