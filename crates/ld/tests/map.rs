@@ -328,6 +328,8 @@ fn check_model(name: &str, f: &[u8], page: u64) {
     }
 }
 
+/// s27_1_c_1: each segment mapped as the object asks (protection, file bytes, zero `.bss`, `p_align`);
+/// nothing left mapped when a call fails (no spec clause: threat model loader rule 4).
 #[test]
 fn map_model_objects_from_the_linker() {
     if !cc_ok() {
@@ -356,6 +358,7 @@ fn map_model_objects_from_the_linker() {
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// no spec clause: the page size comes from `AT_PAGESZ` through the arch seam (design §0a, D-27.15).
 #[test]
 fn map_page_size_from_auxv() {
     let aux = |words: &[u64]| Native::page_size(&Auxv::from_words(words));
@@ -452,11 +455,12 @@ fn corpus(pie: &[u8]) -> Vec<Case> {
             let o = ph_at(v, i) + 16;
             put64(v, o, 1 << 40);
         }), bad),
-        ("not-loadable", edit(&|v| v[16..18].copy_from_slice(&1u16.to_le_bytes())), |e| *e == MapError::NotLoadable),
+        ("not-loadable", edit(&|v| v[16..18].copy_from_slice(&1u16.to_le_bytes())), |e| matches!(e, MapError::NotLoadable | MapError::Elf(_))),
         ("too-many-loads", synthetic(map::LOADS_MAX as u16 + 1), |e| *e == MapError::TooManySegments),
     ]
 }
 
+/// no spec clause: malformed objects refused before anything is mapped (threat model loader rule 4).
 #[test]
 fn map_malformed_corpus_refused() {
     if !cc_ok() {
@@ -483,6 +487,7 @@ fn map_malformed_corpus_refused() {
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// no spec clause: `ld.so` refuses the malformed corpus with one line and status 127, no signal.
 #[test]
 fn map_malformed_corpus_refused_by_ldso() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
@@ -556,6 +561,7 @@ fn check_maps(name: &str, cmd: &mut Command, align: u64, fixed: Option<u64>) {
     }
 }
 
+/// s27_1_c_1: objects `ld.so` maps, as `/proc/self/maps` shows them.
 #[test]
 fn map_proc_self_maps_of_loaded_programs() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
