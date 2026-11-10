@@ -5,10 +5,10 @@
 //! programs and shared objects) anywhere, fixed-address programs (`ET_EXEC`) at their link-time
 //! addresses. The steps:
 //!
-//! 1. [`plan`] validates the headers before anything is mapped: at most [`LOADS_MAX`] `PT_LOAD`s,
-//!    each non-empty, with `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page,
-//!    `p_align` 0, 1 or a power of two, its file bytes inside the file, never writable and
-//!    executable at once; the segments in address order without sharing a page; the span and the
+//! 1. [`plan`] validates the headers before anything is mapped: any number of `PT_LOAD`s
+//!    (D-27.15: the work is linear in `e_phnum`, which the ELF reader bounds), each non-empty,
+//!    with `p_filesz <= p_memsz`, `p_offset` congruent to `p_vaddr` modulo the page, `p_align`
+//!    0, 1 or a power of two, its file bytes inside the file, never writable and executable at once; the segments in address order without sharing a page; the span and the
 //!    alignment bounded; a `PT_GNU_RELRO` range inside the span.
 //! 2. [`load`] makes one `PROT_NONE` reservation of the span, aligned so the load bias is a
 //!    multiple of the largest `p_align` (honoured above the page size, L14-5), or at the fixed
@@ -43,9 +43,6 @@ pub const PROT_EXEC: i32 = 4;
 /// The largest span or alignment accepted (2^46 bytes: half of x86-64's 47-bit user space; a
 /// larger one is a malformed object, never a real one).
 const SPAN_MAX: u64 = 1 << 46;
-/// The most `PT_LOAD`s an object may have (D-27.15): linkers emit two to five; the bound keeps the
-/// work per object fixed and lets the loader keep no list of segments.
-pub const LOADS_MAX: usize = 64;
 /// Bytes per program header (ELF64).
 const PHENT: u64 = 56;
 
@@ -58,8 +55,6 @@ pub enum MapError {
     NotLoadable,
     /// No `PT_LOAD`, or the program headers are not inside a loaded segment.
     NoSegments,
-    /// More than [`LOADS_MAX`] `PT_LOAD`s.
-    TooManySegments,
     /// A `PT_LOAD` (or the `PT_GNU_RELRO` range) is malformed: empty, misaligned, outside the file,
     /// unsorted or overlapping, or the span or the alignment too large.
     BadSegments,
@@ -78,7 +73,6 @@ impl MapError {
             MapError::Elf(_) => b"not a valid ELF file for this machine\n",
             MapError::NotLoadable => b"not a loadable object (neither ET_EXEC nor ET_DYN)\n",
             MapError::NoSegments => b"no loadable segments holding the program headers\n",
-            MapError::TooManySegments => b"too many loadable segments\n",
             MapError::BadSegments => b"malformed loadable segments\n",
             MapError::WriteExec => b"a loadable segment asks to be writable and executable\n",
             MapError::Placement => b"the fixed load address is not available\n",
@@ -240,9 +234,6 @@ pub fn plan<A: Arch>(elf: &Elf<'_>, page: u64) -> Result<Plan, MapError> {
     }
     if !page.is_power_of_two() {
         return Err(MapError::BadSegments);
-    }
-    if elf.program_headers().filter(|p| p.p_type == pt::LOAD).count() > LOADS_MAX {
-        return Err(MapError::TooManySegments);
     }
     let (mut first, mut last, mut align, mut count) = (0u64, 0u64, page, 0usize);
     let mut phdr = elf.find(pt::PHDR).map(|p| p.vaddr);
