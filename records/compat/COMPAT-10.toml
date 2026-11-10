@@ -1,0 +1,9 @@
+id = "COMPAT-10"
+behaviour = "An invalid x87 encoding (pseudo-NaN, pseudo-infinity, unnormal) as an operand of a `long double` / `_Float64x` function (§10.3; D-10.20, X87-NAN-RULE-AUDIT-2, X87-INVALID-ENC-SWEEP, X87-INVALID-ENC-CPLX, owner ruling 2026-10-23, #902, #945). The rule covers every exported `long double` function; the functions where glibc differs are those in the x87 invalid-encoding row of `docs/differences-from-glibc.md` (`fmaxl`, `fminl`, the four `_numl` selections, `nextafterl`, `nexttowardl`, `powl`, `remquol`, and the complex functions), and the exceptions the standard makes are the `EXEMPT` table of `crates/math/tests/x87_invalid_sweep.rs`"
+glibc = "Beside a number the result differs by function (the number operand, a neighbouring number, +0, −0, or an invalid encoding), invalid raised; the complex functions give `7fffc000000000000000` in their NaN parts"
+liella = "The default NaN with the invalid flag raised (every NaN part of a complex result), as every other `long double` operation"
+restore = "A tunable read at startup selecting glibc's results for the functions where glibc differs; the check sits on the path that already tests for an invalid encoding, so the default path gains no branch"
+cost = "none today (the flag does not exist; any flag must cost nothing on the default path or stay registered only)"
+status = "registered"
+body = '''
+'''

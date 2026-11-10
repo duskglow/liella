@@ -1,0 +1,8 @@
+id = "D-14.1"
+section = "s14"
+spec = "§14.1"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+`qsort` is **stable and never fails**: merge sort with an internal buffer, falling back to an in-place stable merge (O(n log² n)) if allocation fails. The contract does not require stability. Stability is chosen because programs silently depended on it (observable, stricter). A C++ exception thrown by the comparator reaches the caller (OD-6 revised, D-14.6); the array stays a permutation of its elements and the merge buffer is freed.
+'''

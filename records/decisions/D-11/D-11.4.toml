@@ -1,0 +1,8 @@
+id = "D-11.4"
+section = "s11"
+spec = "§11.7"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+`fd_set` is kept at 1024 (ABI). `select`/`pselect` translate to `pselect6`. `FD_SET` beyond 1024 is caught by `__fdelt_chk` (contract). Internally, polling uses `poll`/`epoll` values with no limit.
+'''

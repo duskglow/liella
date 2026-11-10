@@ -1,0 +1,8 @@
+id = "D-8.7"
+section = "s08"
+spec = "§8.7, §8.9"
+ann = "HIST"
+status = "active"
+body = '''
+`<stdbit.h>` is one generic implementation over five widths (70 exports). `ffs*` equals `stdc_first_trailing_one` on the unsigned reinterpretation.
+'''

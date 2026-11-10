@@ -1,0 +1,8 @@
+id = "D-12.20"
+section = "s12"
+spec = "§12.6"
+ann = "PERF"
+status = "active"
+body = '''
+**printf-family output to an unbuffered stream is staged per call (AUD-M2).** `vfprintf` and its callers stage an unbuffered stream's output in a 128-byte stack buffer and pass it on in 128-byte pieces, the rest at the end of the call (also when the call fails, so the bytes produced so far still reach the stream, as before). A short `fprintf(stderr, ...)` is one `write(2)` instead of one per literal piece and conversion (5 for `"x=%d y=%s\n"`). 128 bytes and the piece pattern are the reference's (black-box strace on Zen 1: `fprintf(stderr, "%s", 500 bytes)` writes 128-byte pieces, then the remainder; a call's output never merges with the next call's). Spec and ISO C say nothing about write boundaries, so this is a local detail. Fully and line-buffered streams are unchanged (the stream buffers; line-buffered output already matched the reference for lines up to the buffer size; above it the reference writes 4096-byte pieces and Liella writes the long piece directly: INFORMATIONAL, not changed). Error semantics unchanged: the first failed write stops later pieces and the call fails. Test: conformance `s12_printf` `printf_unbuffered_writes` (SOCK_SEQPACKET: one message per write; passes against glibc, fails against the main libc.a of a7bc952).
+'''

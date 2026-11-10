@@ -1,0 +1,13 @@
+id = "SR-36"
+section = "3"
+row = "`strstr` pinned haystack alignment, second head block (STRSTR-SHORT-DENSE-PARITY-3)"
+now = "i (wl_percall, AVX2 path, every haystack 16 bytes past a 4096-aligned buffer, Haswell-EP host; Liella's AVX2 counts are the same on any AVX2 host): `ss_hit_64` 176 to 138 (Zen 1 host glibc 163.2 at the old address, 0.85x), `ss_miss_64` 181 to 143; every other strstr row unchanged: `ss_hit_1k` 333 (355.2, 0.94x), `strstr_dense_4k` 947 (818, 1.16x), `strstr_hit_4k` 1227, `strstr_hit_short` 126. glibc on the Haswell-EP host takes another path: `ss_hit_64` 102, `strstr_hit_short` 87, `ss_hit_1k` 661, `strstr_dense_4k` 2253"
+limit = "with the address pinned, the 4 KiB rows did not move between two library builds of different code size (0 on every row); `strstr_hit_4k`'s +4 against the pre-PARITY-2 base remains when pinned (every other hit row -47), so it is a code cost of the out-of-line `find_next` pass, not layout. At offset 16 a 64-byte hit spent 90 of 167 in the kernel walking to a 64-byte boundary; a second unaligned head block at p + 32 settles strings up to 64 bytes from p in two block tests (kernel 90 to ~52). Dense split (pinned): pair loop 738 (32 groups x 23), kernel fixed ~117, Rust 81"
+reason_class = "algorithm"
+basis = "S"
+source = "STRSTR-SHORT-DENSE-PARITY-3 (`handoff/strstr-short-dense-parity.md`)"
+tried = "`strstr_dense_4k` open (1.16x); the Zen 1 host glibc reference is from unpinned addresses"
+flag = "next: re-measure the Zen 1 glibc reference with the pinned spec; dense: 8-block (256-byte) pair groups (21.5 per 128 bytes, about -48 on 4 KiB) with a direct exit from the group's min vectors (no block-loop re-test), then the kernel entry (16)"
+status = "active"
+body = '''
+'''

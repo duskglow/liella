@@ -1,0 +1,13 @@
+id = "SR-71"
+section = "6"
+row = "`snprintf` `%d`, `%x08`, `%ld` large"
+now = "t 1.13, 1.06, 1.00; i 0.96, 1.04, 0.91"
+limit = "at or near parity"
+reason_class = "n/a"
+basis = "M"
+source = "PRINTF rows"
+tried = "see above"
+flag = "**measured 2026-10-23** (section 10) (10-07)"
+status = "active"
+body = '''
+'''

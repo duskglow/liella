@@ -1,0 +1,13 @@
+id = "SR-76"
+section = "6"
+row = "`iconv_utf8_utf16_4k` time on Ivy Bridge after the transliteration memo (D-6.14)"
+now = "counted ASCII step (-4): t 0.887x of base, i 0.810x (74,663 -> 60,511 per call; Ivy Bridge, E3-1220L v2, A/B spread 0.6%); against the memo head: utf16 t 0.841x, 8859-15 t 1.002x, translit t 1.053x at i 0.985x (still t 0.374x of base)"
+limit = "not at a limit"
+reason_class = "n/a"
+basis = "M"
+source = "TIMING-ICONV-TRANSLIT-CPI-3, -4"
+tried = "Fixed in -4: an ASCII run of the fused loop is widened by its own counted loop (room checked once for up to eight bytes, `i`/`o` advanced once per run; the 24-byte inner loop sits in one 32-byte window). `perf stat` base vs -4 head on utf16: cycles 0.88x, instructions 0.81x. The translit row's 5% time loss against the memo head at fewer instructions is the same kind of placement effect in `Conv::convert` (not profiled). Before -4: `perf stat`, Liella only, base vs memo head: legacy-decode uops 10.5x (2.5% of uops), DSB-to-MITE switch penalty 15x, `ild_stall.lcp` 8.5x, cycles 1.055x. Sampling `dsb2mite_switches` puts the switches in the ASCII step of the fused UTF-8 -> UTF-16 loop that is inlined in `Conv::convert`: its offset in the 32-byte windows changed when the memo shrank the rest of convert. Tried, both measured negative, reverted: (1) `fast::utf8_to_wide` `#[inline(never)]` (its own 64-byte-aligned hot-text function): utf16 1.017x of base in time, 8859-15 1.182x time and 1.178x instructions; (2) each `fast::run` `#[inline(never)]`: utf16 1.021x, 8859-15 1.120x time, 1.178x instructions; translit 0.362-0.363x in both. Out-of-line layouts swap one window lottery for another; the 8859-15 instruction rise is not explained yet (both stages were built on a different build host than the base stage)"
+flag = "none"
+status = "active"
+body = '''
+'''

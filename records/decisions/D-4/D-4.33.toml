@@ -1,0 +1,8 @@
+id = "D-4.33"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**Every function entry on a 64-byte boundary, product-wide** (FN-ALIGN, owner ruling 2026-10-09, MEM-K5c option (a); standing owner principle: "size for speed is a tradeoff we should always take as long as the size is reasonable - disk space is cheap"). Stable Rust cannot align one function, so every product crate (`libc-so`, `libm-so` and their dependencies) is built with `-Cllvm-args=-align-all-functions=6` (`xtask/src/align.rs` `PRODUCT_RUSTFLAGS`, set as `CARGO_ENCODED_RUSTFLAGS` by `build_archive` and `run_libm`, so the bench build, the v3 measurement build and the shipped `libc.so.6`/`libc.a` all see it; the caller's own `RUSTFLAGS`/`BENCH_RUSTFLAGS` are appended, not replaced); the C adapters (`crates/boundary/build.rs`) get `-falign-functions=64` and the entries in `csys/src/machine/*.S` `.p2align 6`. Evidence (MEM-K5c): `memset_16` at 0x30 mod 64 ran about 13% slow, aligned 0.945 of glibc. Cost: libc.so.6 4,300,224 -> 4,398,536 bytes (+2.3%), libc.a 10,473,138 -> 10,575,050 (+1.0%). Guard: `cargo xtask static` (check `align`) and the end of every `cargo xtask so` fail when an exported function entry of `target/liella/libc.so.6` is not a multiple of 64 (planted: flag removed -> 1691 of 2180 entries fail). Tests may build without it; the products and benches may not.
+'''

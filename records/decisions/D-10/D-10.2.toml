@@ -1,0 +1,8 @@
+id = "D-10.2"
+section = "s10"
+spec = "§10.0"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `(value, Status)` with IEEE flags. No errno. **Boundary:** errno is set per `math_errhandling` (`MATH_ERRNO \| MATH_ERREXCEPT`, kept). This is the only place math touches errno.
+'''

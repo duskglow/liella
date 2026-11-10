@@ -1,0 +1,8 @@
+id = "D-14.19"
+section = "s14"
+spec = "§14.9"
+ann = "HIST"
+status = "active"
+body = '''
+**Repetition after an anchor follows the reference, cell for cell** (REGEX-ANCHOR-REPEAT, #1783, 2026-10-24; coordinator ruling: follow glibc). Probed black-box on the conformance host (glibc 2.39), `regcomp` code per pattern (`tests/data/regex_anchor_repeat.ref`, checked by `regex_anchor_repeat`); REG_NEWLINE changes no cell. **ERE:** `^*  ^+  ^?  ^{2}  $*  $+  $?  ${2}` give REG_BADRPT at the start, in the middle (`x^*`), after `(` and after `\|` (`x\|^*`, `x\|$+`): all 32 cells. **BRE:** `^*`, `^+`, `^?`, `$*`, `$+`, `$?` and `\+ \?` after either anchor compile at every position (the operator is an ordinary character or applies as the BRE rules say); `$\{2\}` compiles at every position (the `$` is an ordinary character there); `^\{2\}` is REG_BADRPT at the start, after `\(` and after `\|`, and compiles in the middle (`x^\{2\}`, the `^` is ordinary). The matcher's answers on 15 subjects equal the reference's for every accepted cell.
+'''

@@ -1,0 +1,6 @@
+id = "D-X.31"
+section = "x"
+status = "active"
+body = '''
+**xtask's root is a workspace or a staged tree, never a missing build path; `--compare --no-build` verifies a staged tree** (XTASK-BENCH-COMPARE-STAGED, 2026-11-06). The root is the nearest directory at or above the working directory holding `Cargo.toml` with `xtask/Cargo.toml` or `bench-stage.manifest`, else the build-time workspace root if it is one, else xtask exits 2 with an error naming the directory (`benchstage::find_root`). `bench --compare --no-build` checks a staged tree's products against the manifest (as plain `--no-build` does) and prints the `staged:` header; an unknown bench name lists the names and the directory searched, or says that directory holds no `*.c`. Why: a staged tree repacked without its manifest and `Cargo.toml` resolved to the build host's path, so `--compare` reported every bench as unknown with an empty list ("Valid names: .", COLDSTART-SECOND-LATENCY-3). Tests: `benchstage::tests::compare_in_a_staged_tree_finds_its_root_and_benches`, `bench::tests::compare_rejects_unknown_bench_name_listing_valid_ones`.
+'''

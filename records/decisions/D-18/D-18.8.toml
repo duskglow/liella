@@ -1,0 +1,8 @@
+id = "D-18.8"
+section = "s18"
+spec = "§18.2"
+ann = "PERF"
+status = "active"
+body = '''
+**`fork` child reset cost** (COLDSTART-FORK-CHILD-RESET). The child resets the aio and `getaddrinfo_a` tables (aio buckets, the `getaddrinfo_a` queue and groups) only after their first use: one `USED` word in `boundary::fork`, read once by `child_reset`, whose bits `mark_used` sets on the first-use path (aio `lock()`, `getaddrinfo_a` entry), never at start-up; their locks are reset either way. Every other reset (thread, stacks, timer, mqueue, spawn, `RawMutex::reset`, stream locks, `__libc_single_threaded`) loads first and stores only a value that differs (`set_if_differs!`), so a page already holding its reset values stays shared copy-on-write with the parent. The name-service cache bumps its credential generation only with a table attached (an idle cache attaches anew anyway). Tested by `conformance/c/s18_fork_reset.c`.
+'''

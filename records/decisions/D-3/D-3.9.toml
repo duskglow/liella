@@ -1,0 +1,8 @@
+id = "D-3.9"
+section = "s03"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**S8 is enforced by lint.** `clippy.toml` lists the infallible `alloc` methods (`Vec::push`, `with_capacity`, `reserve`, `extend_from_slice`, `insert`, `resize`, `append`, `vec![x; n]`, `Box::new`, `String::push_str`, `to_vec`, `to_owned`, `Extend::extend`, ...). Every library crate root denies `clippy::disallowed_methods` outside tests. Host tools (`xtask`, build scripts) and tests are exempt. **Accepted by the owner (2026-10-01).** **Manual review obligations**, since no lint can catch them: (1) `Iterator::collect` into a `Vec`, `String` or other collection; (2) `format!` and `alloc::fmt::format`; (3) `Clone` of a collection (`Vec`, `String`, `Box`). In library code each of these is either replaced by a fallible equivalent (`TryVec::from_slice`, `try_clone`, a fallible collect helper) or carries a comment explaining why it cannot fail. Every review of a library crate checks for all three.
+'''

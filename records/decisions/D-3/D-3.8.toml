@@ -1,0 +1,8 @@
+id = "D-3.8"
+section = "s03"
+spec = "§3.4"
+ann = "HIST"
+status = "active"
+body = '''
+`alloca` is a compiler builtin. Nothing to implement.
+'''

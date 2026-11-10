@@ -1,0 +1,8 @@
+id = "D-14.17"
+section = "s14"
+spec = "§14.9"
+ann = "—"
+status = "active"
+body = '''
+**End-anchored literal fast path (RE-SO-3).** A pattern that is exactly bytes L then `$` (no subexpression, no back-reference, no REG_ICASE, ASCII-only in a multibyte UTF-8 locale; `regex::end_literal`) is compiled with block-head flag 3 and lead bytes L plus one newline; `regex::end_prefilter` answers regexec/re_search without the program: the earliest of L ending the subject (unless REG_NOTEOL) and, with newline_anchor, the first L followed by a newline (searched only before the tail occurrence). Flags 1 and 3 are set only when nsub == 0, so `gnu_search` fills the registers of a prefilter match without building the program and builds ProgRef only for the engine (as regexec already did). SAFETY: a damaged or foreign block is still rejected by ProgRef::from_bytes whenever the engine runs; on the prefilter paths every read is a bounds-checked slice of the caller's subject, so a wrong head can change an answer but never read outside the block or the subject (same contract as flags 1/2). Tests: `end_literals_agree_with_the_engine` (exhaustive vs the engine with accelerations off) and the oracle diff, which now takes the same path. \| RE-SO-3
+'''

@@ -1,0 +1,8 @@
+id = "D-22.5"
+section = "s22"
+spec = "§22.6"
+ann = "ARB"
+status = "active"
+body = '''
+Keys beyond `PTHREAD_KEYS_MAX` are allowed (P-lift). The constant stays 1024 in the ABI.
+'''

@@ -1,0 +1,6 @@
+id = "D-X.3"
+section = "x"
+status = "active"
+body = '''
+**The kernel is a value**: library code is generic over `liella_kernel::{Sys, Machine}` (X5). This also keeps the crate graph acyclic with the boundary at both ends.
+'''

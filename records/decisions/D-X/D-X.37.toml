@@ -1,0 +1,6 @@
+id = "D-X.37"
+section = "x"
+status = "active"
+body = '''
+**The gate prints each step's wall seconds** (XTASK-TEST-STEP-TIMES, 2026-11-07; decided locally, tooling only, no product code). `cargo xtask test` prints `step: <name> <seconds>s` (name without whitespace, one decimal) as each step ends, the remez binary one `step: remez/<fit>` line per fit, and the run ends with `step-summary:` lines slowest first and `step-total:`, also after a failed step; `affected --run` escalated to FULL times stubs and clippy and re-prints the `step:` lines `xtask test` wrote to its log (as `test/<name>`) before its own summary. Reported for trends only, never asserted (rule 3); a CI trend check reads the lines from the gate log. Tests: `line_format_is_fixed_and_round_trips`, `summary_is_slowest_first_with_total` (xtask/src/steptime.rs).
+'''

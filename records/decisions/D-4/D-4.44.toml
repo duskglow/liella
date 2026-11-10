@@ -1,0 +1,8 @@
+id = "D-4.44"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**Head probe in the equality kernel above 64 bytes** (EQ-HEAD, 2026-10-10): `hot::equal_bytes` tests the first block of each region alone (AVX2 32 bytes, SSE2 16 bytes) before the 65-128 block class and before the long class's tail-first scan, so `__memcmpeq`/`bcmp` reject a difference near the start after one load per side (owner preference: equality early reject, cheap probes first). Up to 64 bytes unchanged (every load is issued before one test there). The answer never depends on the probe (it only returns 1 for bytes it saw differ; D-4.21 unaffected: no difference is located). Plant: `EQ_HEAD_PROBE = false` makes the head rows regress (counters in liella-historic:handoff/eq-head.md).
+'''

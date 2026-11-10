@@ -1,0 +1,8 @@
+id = "D-22.4"
+section = "s22"
+spec = "§22.5"
+ann = "HIST"
+status = "active"
+body = '''
+Read-write locks default to prefer-reader, per the contract. A fair policy is available internally.
+'''

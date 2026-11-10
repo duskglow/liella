@@ -1,0 +1,8 @@
+id = "D-19.3"
+section = "s19"
+spec = "§19.3"
+ann = "HIST"
+status = "active"
+body = '''
+`ttyname`: `readlink(/proc/self/fd/N)`, accepted only when that path names the same (dev, ino, rdev); otherwise `ENODEV` (glibc scans `/dev` and reports `ENOTTY` for another devpts instance; 3 KNOWN lines). Without `/proc` (OD-5, D-X.12, 2026-10-04): the name the device number gives (`/dev/pts/N`, `/dev/ttyN`, `/dev/ttySN`, `/dev/tty`, `/dev/console`, `/dev/ptmx`), accepted only when it is the same (dev, ino, rdev), else `ENODEV`. `_r` forms: NULL is `EINVAL` (`ptsname_r(NULL)` crashes glibc; KNOWN), size 0 is `ERANGE` before the descriptor, a short buffer is `ERANGE` and untouched (glibc gives `ENODEV` for a buffer of exactly `strlen(name)` and writes into it; KNOWN); the error is also stored in `errno`.
+'''

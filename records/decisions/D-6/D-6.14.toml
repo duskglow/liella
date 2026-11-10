@@ -1,0 +1,8 @@
+id = "D-6.14"
+section = "s06"
+spec = "§6.4"
+ann = "PERF"
+status = "active"
+body = '''
+**Transliterations kept for one call (TIMING-ICONV-TRANSLIT-CPI).** `Conv::convert` keeps the transliterations it works out in a small per-call table (`iconv::Memo`: 8 slots, direct-mapped on the character's low bits, results of up to 11 bytes), made on the first character the target cannot encode; a character met again in the same call takes its bytes from the table instead of a new derivation (decomposition, combining-class and property searches, or the locale file's table). Nothing is kept between calls or in the descriptor (no ABI or `iconv_t` layout change), and within one call the descriptor and locale are fixed, so a kept result equals a new derivation; only lossy results are kept, so the irreversible count is unchanged. The lookup is out of line (`Conv::encode_memo`), keeping the conversion loop small. Tests: `iconv_translit_memo_repeats_and_collisions` (s06_multibyte_clauses).
+'''

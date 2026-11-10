@@ -1,0 +1,13 @@
+id = "SR-63"
+section = "5"
+row = "`strftime` (iso, `%c`, log)"
+now = "t 1.78 to 2.26; i 1.4 to 1.7"
+limit = "not at a limit"
+reason_class = "n/a"
+basis = "R"
+source = "STRFTIME-FAST"
+tried = "STRFTIME-FAST: names -10 but `iso` +70 to +350, reverted"
+flag = "**measured 2026-10-23** (section 10)"
+status = "active"
+body = '''
+'''

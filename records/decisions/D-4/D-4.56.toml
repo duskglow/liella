@@ -1,0 +1,8 @@
+id = "D-4.56"
+section = "s04"
+spec = "§4.5"
+ann = "PERF"
+status = "active"
+body = '''
+**memchr/rawmemchr: the SSE2 path keeps its offset when the AVX2 path changes** (TIMING-N100-SCAN-64K-3, 2026-11-06). In `csys/src/machine/scan.S` the AVX2 long paths of memchr and rawmemchr are assembled in subsection 1, after the SSE2 code, and an `.org` (int3 fill, never reached) pins each SSE2 path at the offset it had before the 256-byte AVX2 loops (0x231 and 0x1ed in the section). Why: the longer AVX2 loop moved the SSE2 path and Ivy Bridge timed memchr_16_mix 14% slower at identical instruction counts; the SSE2-executed bytes are now identical to the earlier build. A later change to the SSE2 path moves the `.org` with it (re-time on the SSE2 class).
+'''

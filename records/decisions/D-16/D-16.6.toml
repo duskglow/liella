@@ -1,0 +1,8 @@
+id = "D-16.6"
+section = "s16"
+spec = "§16.4, Appendix C"
+ann = "—"
+status = "active"
+body = '''
+**Where libresolv's symbols live** (2026-10-02). The 69 symbols Appendix C places in `libresolv.so.2` (`inet_net_pton`, `inet_net_ntop`, `inet_neta`, the `ns_*`, `res_*` and `__dn_*` families, ...) are built into `libc.a` with everything else, and `cargo xtask so` adds an empty `libresolv.a` (as for `libpthread.a`), so `-lresolv` links statically. They are not exported from `libc.so.6`, whose version nodes do not contain them. The shared `libresolv.so.2` (its own version nodes, sharing the resolver state with `libc.so.6`) is built with the dynamic products of phase 14, when programs linked against it can run.
+'''

@@ -1,0 +1,7 @@
+id = "D-H7"
+section = "h"
+pattern = "Versioned superseded contracts"
+status = "active"
+body = '''
+**Internal:** one current contract. **Boundary:** each old version is a separate export mapped to `legacy::versioned` (`memcpy@2.2.5` → move semantics; `fmemopen@2.2.5`; `glob@2.2.5`; `sched_setaffinity@2.3.3`; `pthread_cond_*@2.2.5`; `realpath@2.2.5`; the `scanf` dialects; `strerror_r` XSI/GNU; `basename` GNU/XPG; `sigpause` BSD/XSI; `signal` BSD/SysV; `__posix_getopt`). The version script comes from the manifest.
+'''

@@ -1,0 +1,13 @@
+id = "SR-26"
+section = "3"
+row = "`strchr` / `strchrnul` / `memrchr` 16 and 64"
+now = "31.0 vs 29.0 (16); 38.1 vs 38.0 (64); strchrnul_64 35.1 vs 36.1; memrchr_64 34.1 vs 39.0"
+limit = "within 0 to 2 instr of glibc"
+reason_class = "hardware"
+basis = "M"
+source = "STR-CHR-CMP-SHORT, STR-SCAN-SHORT"
+tried = "3-instr scalar head: +2 on head differences, rejected"
+flag = "none"
+status = "active"
+body = '''
+'''

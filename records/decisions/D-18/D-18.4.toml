@@ -1,0 +1,8 @@
+id = "D-18.4"
+section = "s18"
+spec = "§18.6"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `liella::process::ChildStatus` (Exited/Killed/Stopped/Continued) with `word`/`from_word`. **Boundary:** the waits pass the kernel's status word through and write `*status` only when a child is reported. Every wait is a cancellation point (`wait4`/`waitid` by number). `si_status` is what the kernel gives: 8 bits for exits (⚑ KERN; §18.6 corrected by owner ruling 2026-10-03).
+'''

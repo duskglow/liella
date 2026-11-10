@@ -1,0 +1,8 @@
+id = "D-3.4"
+section = "s03"
+spec = "§3.2"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+Introspection is implementation-neutral. `mallinfo2` reports in-use, held and releasable bytes in the fields whose meaning is neutral, and zero elsewhere (observable). A block freed by another thread counts as free once its `free` has returned, collected by its owner or not (D-3.11), in every report (`mallinfo2`, `mallinfo`, `malloc_stats`, `malloc_info`): the reader subtracts pending remote frees, so the result does not depend on when collection runs. `mallinfo` saturates at `INT_MAX` instead of wrapping (observable, stricter). `mallopt` returns 1 for every parameter, known or not, as glibc (owner ruling 2026-10-22, #412), and 0 only for `M_MXFAST` outside 0 to 160; only `M_PERTURB` takes effect, the others are ignored. `malloc_info` emits the same XML element structure with neutral content.
+'''

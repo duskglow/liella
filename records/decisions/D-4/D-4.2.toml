@@ -1,0 +1,8 @@
+id = "D-4.2"
+section = "s04"
+spec = "§4.1"
+ann = "COMPAT, ARB"
+status = "active"
+body = '''
+`memcpy` has move semantics for **all** versions, so overlap is defined (observable, stricter). Cost: one address comparison, then the same kernel as `memmove`. This removes a UB class, and makes `memcpy@2.2.5` and `@2.14` one function.
+'''

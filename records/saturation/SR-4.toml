@@ -1,0 +1,13 @@
+id = "SR-4"
+section = "1"
+row = "`posix_spawn`, `posix_spawnp` (`cbench_process`)"
+now = "not gated; run spread 7 to 47%"
+limit = "kernel-dominated (clone, wait); no instruction limit possible"
+reason_class = "kernel"
+basis = "M"
+source = "POSIX-SPAWNP-ROW (`handoff/posix-spawnp-row.md`)"
+tried = "A user-only instruction column would give a gate; separate story, not done"
+flag = "none"
+status = "active"
+body = '''
+'''

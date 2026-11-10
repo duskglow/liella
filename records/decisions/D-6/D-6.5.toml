@@ -1,0 +1,8 @@
+id = "D-6.5"
+section = "s06"
+spec = "§6.2"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+`MB_CUR_MAX` is 6 for UTF-8 locales, per the contract, because programs size buffers from it. Internally, UTF-8 needs at most 4.
+'''

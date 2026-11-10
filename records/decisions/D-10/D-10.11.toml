@@ -1,0 +1,8 @@
+id = "D-10.11"
+section = "s10"
+spec = "§10.1"
+ann = "—"
+status = "active"
+body = '''
+Classification decodes through an optimisation barrier (`float::decode_opaque`): the compiler may otherwise turn bit tests back into floating comparisons, which raise invalid for a signalling NaN.
+'''

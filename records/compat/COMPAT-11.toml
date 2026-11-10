@@ -1,0 +1,9 @@
+id = "COMPAT-11"
+behaviour = "`__libc_freeres` releases internal allocations (§29.4; LG-11 MALLOC-COMPAT, coordinator ruling #1317, provisional)"
+glibc = "Frees libc's internal allocations (stdio, locale, iconv and other caches), so a leak checker run at exit sees no blocks still reachable from libc"
+liella = "Releases nothing: it returns at once and every internal allocation stays, so a call mid-run cannot tear down live state; leak checkers may report Liella's internal allocations as still reachable"
+restore = "A tunable read at startup making `__libc_freeres` run the internal teardown of the caches at exit. Not designed further; the function is called once at exit, so it is off every hot path"
+cost = "none today (the flag does not exist; the default `__libc_freeres` is unchanged)"
+status = "registered"
+body = '''
+'''

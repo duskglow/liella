@@ -1,0 +1,13 @@
+id = "SR-28"
+section = "3"
+row = "`strcmp` (names, equal-16, late-256)"
+now = "t 1.49, 2.10, 1.70; i 1.51, 2.00, 1.93 (2026-10-07)"
+limit = "none stated; STRCMP-HEAD and STRCMP-FIXED closed the head ideas"
+reason_class = "n/a"
+basis = "R"
+source = "PJ-8, STRCMP-HEAD, STRCMP-FIXED"
+tried = "see left"
+flag = "**measured 2026-10-23** (section 10): only the 2026-10-07 table has these rows; no newer count of them was found in the files read"
+status = "active"
+body = '''
+'''

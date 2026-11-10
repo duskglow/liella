@@ -1,0 +1,8 @@
+id = "D-19.1"
+section = "s19"
+spec = "§19.1"
+ann = "HIST, KERN"
+status = "active"
+body = '''
+**Internal:** `liella::term::Termios` is the kernel's `termios2` (integer rates; any rate via BOTHER), through `TCGETS2`/`TCSETS2`. **Boundary:** the glibc `struct termios` with B* codes in `c_cflag`; `c_ispeed`/`c_ospeed` hold the kernel's rates (`ISPEED_ZERO` = `UINT_MAX` records `cfsetispeed(0)`), converted in `abi::pack`. `tcsetattr` reads, sets and re-reads the settings: `EINVAL` when no requested change was taken, success when nothing was to change (as the reference, probed). A BOTHER code without a rate keeps the terminal's rate (as `TCSETS` does). Mode words pass unchanged (glibc clears `c_iflag` bit 31, which it uses for "input speed 0"; KNOWN). Known effect: a struct read from one terminal with BOTHER and applied to another carries the first terminal's rate. `tcsendbreak`: `TCSBRK 0` for a duration ≤ 0, else `TCSBRKP` with ceil(d/100). Cancellation points: `tcdrain`, `posix_openpt`, `getpt`, `openpty`, `forkpty`.
+'''

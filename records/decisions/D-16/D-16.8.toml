@@ -1,0 +1,8 @@
+id = "D-16.8"
+section = "s16"
+spec = "§16.2"
+ann = "ARB"
+status = "active"
+body = '''
+`getaddrinfo_a`: a queue of up to 4096 requests served by up to 32 worker threads that block application signals; status in `__return`, the request state in `__glibc_reserved[0]`. Notification once per list: `SIGEV_SIGNAL` with `SI_ASYNCNL`, or `SIGEV_THREAD`. Where no thread can be made, `GAI_WAIT` runs the requests in the caller and `GAI_NOWAIT` returns `EAI_AGAIN`. `gai_suspend`: 0 if any listed request is done, `EAI_ALLDONE` if the list holds no requests, `EAI_AGAIN` on timeout, `EAI_INTR` when interrupted. The queue is reset in the child after `fork`. **Deliberate differences** (getaddrinfo_a(3); KNOWN in `dns_products`): `gai_suspend` on an already completed request returns 0 (glibc: `EAI_ALLDONE`); a timeout returns `EAI_AGAIN` (glibc: `EAI_SYSTEM`).
+'''

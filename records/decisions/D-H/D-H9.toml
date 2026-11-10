@@ -1,0 +1,7 @@
+id = "D-H9"
+section = "h"
+pattern = "POSIX process-wide semantics over per-thread kernel state (⚑ KERN)"
+status = "active"
+body = '''
+**Internal:** both are offered explicitly: `cred::set_thread_*` (native, one syscall) and `cred::set_process_*` (broadcast). **Boundary:** POSIX names map to the process-wide form, so the contract holds. Cost finding F16. Scheduling calls act on the thread named, as the kernel does, and the documentation says so.
+'''
