@@ -436,7 +436,7 @@ fn image_view<'s>(
                 unsafe { conv::bytes_at(run_at(p.vaddr), len) }
             };
             spans[k] = Span { vaddr: p.vaddr, bytes };
-            k += 1;
+            k = k.saturating_add(1);
         }
         if kind == SpanKind::Copy {
             // After the whole-segment copies, before the live slices: PT_DYNAMIC's own copy.
@@ -444,7 +444,7 @@ fn image_view<'s>(
                 bad(b": malformed program headers\n");
             }
             spans[k] = Span { vaddr: dynph.vaddr, bytes: dynamic };
-            k += 1;
+            k = k.saturating_add(1);
         }
     }
     (head, &spans[..k])
