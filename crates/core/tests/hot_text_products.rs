@@ -604,3 +604,31 @@ fn init_startup_names_sit_in_one_window() {
     assert!(addr <= at && at < addr + size, "startup names: STARTUP_NAMES at {at:#x} is not in .rodata1");
     assert!(!map.lines().any(|l| l.contains(".rodata.") && l.contains("Vdso5parse")), "startup names: Vdso::parse has a .rodata table again");
 }
+
+/// STARTUP-FAULTS-RESTORE (D-X.53): the small statics that start-up writes first sit in `.data1`
+/// in libc.a (`xtask/src/coldbss.rs::move_startup_state`), so the linker puts them on one page
+/// next to `.bss`. Each one is worth at most one fault, which the count bounds' +1 slack lets
+/// through, so this checks the placement itself. No spec clause (layout of the products).
+#[test]
+fn init_startup_state_statics_are_in_data1() {
+    let out = Command::new("objdump").arg("-t").arg(root().join("target/liella/libc.a")).output().expect("objdump");
+    let table = String::from_utf8_lossy(&out.stdout).into_owned();
+    for suffix in [
+        "15liella_boundary7process10AUXV_WORDS",
+        "15liella_boundary3sys12SYSINFO_EHDR",
+        "15liella_boundary3cpu14AVX2_ERMS_FROM",
+        "15liella_boundary3cpu12AVX2_ERMS_TO",
+        "13liella_legacy13global_locale6GLOBAL",
+        "13liella_legacy13global_locale4LOCK",
+    ] {
+        let sections: Vec<&str> = table
+            .lines()
+            .filter(|l| l.split_whitespace().last().is_some_and(|n| n.ends_with(suffix)))
+            // `<value> <flags> <section>\t<size> [.hidden ]<name>`
+            .filter_map(|l| l.split_once('\t').and_then(|(a, _)| a.split_whitespace().last()))
+            .filter(|s| *s != "*UND*")
+            .collect();
+        assert!(!sections.is_empty(), "start-up state: no definition of *{suffix} in libc.a (renamed? update xtask/src/coldbss.rs and this test)");
+        assert!(sections.iter().all(|s| *s == ".data1"), "start-up state: *{suffix} is in {sections:?}, want .data1 (move_startup_state not applied?)");
+    }
+}
