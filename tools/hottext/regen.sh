@@ -7,7 +7,7 @@
 #   Run it once per profile (`cargo xtask so` = fast, LIELLA_FULL_PROFILE=1 = release): inlining
 #   differs, and the list is the union. Liella binaries only; never trace a glibc-linked program.
 #   HOTTEXT-STARTUP-COMPLETE: each line is `<key>\t<tier>\t<profiles>`: the tier of the first probe
-#   that touched it (startup p_true, fork p_fork, stdio p_puts/p_cat/p_fmt, strings p_str, locale
+#   that touched it (startup p_true, fork p_fork, stdio p_puts/p_cat/p_fmt, strings p_str/p_strlazy, locale
 #   p_loc, tool p_locuse/p_nss and the extra programs, extra anything else) and the profiles whose
 #   trace hit it (fast, release; read from <tree>/target/liella/.profile). xtask/src/hottext.rs
 #   fails the build when a startup- or fork-tier key of the profile being built matches no section.
@@ -42,7 +42,7 @@ cd "$work"
 n=0
 tier_of() { # <probe> -> its tier (HOTTEXT-STARTUP-COMPLETE)
     case $1 in
-        p_true) echo startup;; p_fork) echo fork;; p_puts|p_cat|p_fmt) echo stdio;; p_str) echo strings;;
+        p_true) echo startup;; p_fork) echo fork;; p_puts|p_cat|p_fmt) echo stdio;; p_str|p_strlazy) echo strings;;
         p_loc) echo locale;; p_locuse|p_nss) echo tool;; *) echo extra;;
     esac
 }
@@ -56,9 +56,10 @@ trace() { # <tier> <LANG> <program> <args...>
 }
 # Startup (p_true) first, then the probes from the most common calls to the rarer ones (printf before
 # setlocale: HOT-ORDER-2, a printf-first program spans fewer windows); any new
-# probe not named here goes last (alphabetically).
-probes=$(for p in p_true p_puts p_cat p_str p_fmt p_loc p_cold; do [ -f $p.c ] && echo $p; done
-         for c in *.c; do case " p_true p_puts p_cat p_str p_fmt p_loc p_cold " in *" ${c%.c} "*) ;; *) echo "${c%.c}";; esac; done)
+# probe not named here goes last (alphabetically). p_strlazy right after p_str: the checked string
+# entries a program runs before the lazy folding decision (HEAP-FIRST-USE-4), next to the strings group.
+probes=$(for p in p_true p_puts p_cat p_str p_strlazy p_fmt p_loc p_cold; do [ -f $p.c ] && echo $p; done
+         for c in *.c; do case " p_true p_puts p_cat p_str p_strlazy p_fmt p_loc p_cold " in *" ${c%.c} "*) ;; *) echo "${c%.c}";; esac; done)
 # HOT-ORDER-3 guard: every library function a probe's source names must have run in its trace. gcc
 # folds or replaces libc calls with constant arguments (p_cold's strcoll at -O2), and the list then
 # silently misses the function; call it through a volatile pointer instead.
