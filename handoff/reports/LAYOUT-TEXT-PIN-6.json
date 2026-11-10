@@ -1,0 +1,12 @@
+{"task": "LAYOUT-TEXT-PIN-6", "model": "opus", "tokens": null,
+ "result": "Start-up labels resolve to their sections at the hot-text head (#4467, keys.py --aliases, merge.py --alias); both profiles regenerated after the origin/next merge; start-up text windows 3 -> 2 in fast and release; plants 4/4 CAUGHT",
+ "branch": "task/layout-text-pin-6", "head": null,
+ "gate": {"affected": "pending (job layout-text-pin-6-gate on shiki, escalated to FULL)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Last run's red was conformance s04_classed_memset (status 1); its stderr was lost with the reused role; it passed alone on this tree, and job layout-text-pin-6-release loops it 10 times on the final fast products", "After the merge, 5 release lines of hot-text.absent were stale and regen's closing so refused them; removed (hand-kept file)", "liella_machine_memset stayed in the strings tier (list position 116); not established why the alias map did not move it; windows are 2 either way"],
+ "refused": [],
+ "improvement": "regen --build should report stale hot-text.absent lines like dead keys (report, then fix) instead of failing after the list is rewritten; and a jobwait wrapper with a hard 570 s cap would stop chained waits overrunning the tool timeout",
+ "next_step": "Read gate and layout-text-pin-6-release; STARTUP-TEXT-WINDOWS 4/4 -> 2/2 at the #4348 re-derivation",
+ "report_file": "handoff/LAYOUT-TEXT-PIN-6.md",
+ "jobs": ["layout-text-pin-6-gate", "layout-text-pin-6-plants", "layout-text-pin-6-release"]}
