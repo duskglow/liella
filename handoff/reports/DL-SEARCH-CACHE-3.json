@@ -1,0 +1,15 @@
+{"task": "DL-SEARCH-CACHE-3", "model": "opus", "tokens": null,
+ "result": "Run 2 red fixed: the surviving cache plant is caught (corpus checks paths lie inside the string table); rule-11 plant added and caught on a non-nosuid plants dir (#4286); #4237 in branch; cbench_startup at parity vs origin/next",
+ "branch": "task/dl-search-cache-3", "head": null,
+ "gate": {"affected": "18 steps ok / 0 failed (direct tier, conformance 126 passed)", "peak": "12G"},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+   {"item": "cargo xtask affected escalates fuzz/Cargo.toml to FULL (Cargo.toml rule precedes the fuzz/ rule); a story adding a fuzz target gates FULL", "recommendation": "xtask story: classify fuzz/Cargo.toml as fuzz-check only"},
+   {"item": "gaps (records only, D-27.16): DF_1_NODEFLIB, --library-path/--inhibit-cache, $PLATFORM beyond Haswell, ld_cache under libFuzzer", "recommendation": "follow-up stories"}
+ ],
+ "refused": [],
+ "jobs": ["dl-search-cache-3-gate", "dl-search-cache-3-plants", "dl-search-cache-3-count", "dl-search-cache-3-count-base2"],
+ "improvement": "fuzz/Cargo.toml sending affected to FULL cost run 2 its gate; fixing the classifier order saves a FULL gate per fuzz-target story",
+ "next_step": "DL-10 relocates the mapped dependencies; gap stories as listed",
+ "report_file": "handoff/DL-SEARCH-CACHE-3-report.md"}

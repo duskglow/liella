@@ -1,0 +1,11 @@
+{"task": "LIBM-LD-EXPLOG-INT", "model": "opus", "tokens": null,
+ "result": "INCOMPLETE: exp/log integer tier written with proof, tests and wiring (WIP 9eef2c1bb), stopped at the 150k context checkpoint before any build; NOT VERIFIED",
+ "branch": "task/libm-ld-explog-int", "head": "9eef2c1bb",
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["Table generator kept outside the repo at ~/w/.scratch/LIBM-LD-EXPLOG-INT/gen.py; the resume should move it under cargo xtask tables or keep the pins as the record"],
+ "refused": [],
+ "jobs": [],
+ "improvement": "Design-heavy L stories hit the 150k context checkpoint while reading context (DESIGN, sibling kernel, wide_dd): give them the RETHINK-style brief-budget checkpoint or a pre-digested kernel summary",
+ "next_step": "Resume: build and test wide_int_el on mei:~/w/s2, then clippy/static, plants, 10^7 job, percall, booked timing, D-10.73 row",
+ "report_file": "handoff/libm-ld-explog-int.md"}

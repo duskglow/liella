@@ -222,6 +222,18 @@ pub(crate) fn math_exported(name: &str) {
     assert!(owners > 0, "{name} has no default version in versions.tsv");
 }
 
+/// A compat-only libm alias (the `__<name>_finite` entry points, spec Appendix B.10 "Reserved-name entry points",
+/// D-10.2): `libm.so.6` exports it at the non-default `ver` alone, and `libm.a` does not define it, so a new program
+/// cannot bind it. Where its stub jumps is checked by `s10_0_c2_0` (crates/math/tests/s10_math_clauses.rs).
+pub(crate) fn math_compat(name: &str, ver: &str) {
+    type Product = (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>);
+    static LIBM: OnceLock<Product> = OnceLock::new();
+    let (archive, so) = LIBM.get_or_init(|| (defined_in("libm.a"), dynsym_of("libm.so.6")));
+    let have = so.get(name).cloned().unwrap_or_default();
+    assert!(have.len() == 1 && have.contains(ver), "{name}: libm.so.6 exports {have:?}, want the non-default {ver} alone");
+    assert!(!archive.contains(name), "libm.a defines the compat-only {name}");
+}
+
 /// Every member of the math family `base` (spec Appendix B.10: `base` plus a type suffix) is
 /// exported (`math_exported`); the number of members.
 pub(crate) fn math_family(base: &str) -> usize {
