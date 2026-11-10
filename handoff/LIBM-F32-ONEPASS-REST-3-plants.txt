@@ -6,3 +6,10 @@ trig-range-hi-open | crates/math/src/fast32/trig.rs | lit:>= HI - LO { ==> >= HI
 trig-cvtss2sd-back | crates/math/src/fast32/trig.rs | perl:s/let xd = f64::from_bits\(.*?\);/let xd = f64::from(x);/ | cargo xtask so | msg:partial-register merge\(s\) on libm hot paths
 asinh-bias-off | crates/math/src/fast32/hyperbolic.rs | lit:let a = f64::from_bits((u64::from(ab) << 29) + (896 << 52)); ==> let a = f64::from_bits((u64::from(ab) << 29) + (897 << 52)); | cargo test -p liella-math --lib -- fast32::tests::hyperbolic | msg:hyperbolic_(cores_are_within_their_bounds|hardware_sqrt_agrees_sampled).*FAILED|panicked
 acosh-sign-ignored | crates/math/src/fast32/hyperbolic.rs | lit:if b.wrapping_sub(0x3f80_0001) ==> if (b & 0x7fff_ffff).wrapping_sub(0x3f80_0001) | cargo test -p liella-math --lib -- fast32::tests::hyperbolic | msg:hyperbolic_(cores_are_within_their_bounds|hardware_sqrt_agrees_sampled).*FAILED|panicked
+# cargo xtask plants results (6 plants: 6 CAUGHT, 0 SURVIVED, 0 EQUIVALENT, 0 WARN-RC-ONLY, 0 WARN-NO-MSG):
+# trig-sign-dropped: CAUGHT, caught by liella_math fast32::tests::trig_core_is_within_its_bound
+# trig-bias-off: CAUGHT, caught by liella_math fast32::tests::trig_core_is_within_its_bound
+# trig-range-hi-open: CAUGHT, caught by liella_math fast32::tests::fast_path_agrees_with_the_accurate_path
+# trig-cvtss2sd-back: CAUGHT, caught by no test the log names
+# asinh-bias-off: CAUGHT, caught by liella_math fast32::tests::hyperbolic_hardware_sqrt_agrees_sampled
+# acosh-sign-ignored: CAUGHT, caught by liella_math fast32::tests::hyperbolic_hardware_sqrt_agrees_sampled
