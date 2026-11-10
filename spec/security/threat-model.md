@@ -195,8 +195,11 @@ text. Facts about the reference come from black-box probes: `spec/behaviour/dynl
    (never writable and executable at once; `PT_GNU_STACK` honoured; `PT_GNU_RELRO` made read-only
    after relocation). For a `PT_GNU_STACK` that asks for an executable stack, rule 10 applies.
 5. **Trusted directories and the cache.** The trusted directories are the compiled-in default
-   directories of the build (`<prefix>/lib`, and, when the prefix is `/`, the system's `/lib64`,
-   `/usr/lib64`, `/lib/x86_64-linux-gnu` and `/usr/lib/x86_64-linux-gnu`) and nothing else.
+   directories of the build and nothing else: `<prefix>/lib` when the prefix is not `/`
+   (co-install); when the prefix is `/`, exactly the reference loader's default directories for the
+   architecture as its `ld.so --help` reports them, taken from the `Arch` table (x86-64:
+   `/lib/x86_64-linux-gnu`, `/usr/lib/x86_64-linux-gnu`, `/lib` and `/usr/lib`; owner #4237, which
+   dropped `/lib64` and `/usr/lib64`).
    `ld.so.conf` directories are *searched* through the cache but are not trusted for rules 1 and
    2. **The cache is untrusted input** (`/etc/ld.so.cache`, format recorded in Appendix D, as the
    locale files were): a corrupt or truncated cache means falling back to the default
