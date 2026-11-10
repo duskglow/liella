@@ -43,8 +43,9 @@
 //! finding, never invent one).
 //!
 //! Readers: `nm -D --defined-only` (the exports) and `objdump -d -w --no-show-raw-insn` (the code). `cargo xtask so`
-//! runs the check on the `libm.so.6` it builds (a finding fails the build); `cargo xtask static` runs it on
-//! `target/liella/libm.so.6` when that exists and prints why it skipped otherwise; `cargo xtask partial-write
+//! runs the check on the `libm.so.6` it builds (a finding fails the build) and records the digest of the sources beside
+//! it; `cargo xtask static` runs it on `target/liella/libm.so.6` when that digest matches the current tree and prints
+//! why it skipped otherwise (a product left by another tree is not this tree's); `cargo xtask partial-write
 //! [<libm.so.6>...]` checks the files named and prints every finding as `function+offset: instruction (why) [entry]`.
 //! [`ALLOW`] lists accepted findings, each with its reason.
 
@@ -391,11 +392,71 @@ pub(crate) fn check_file(root: &Path, so: &Path) -> Result<(), String> {
     if bad.is_empty() { Ok(()) } else { Err(format!("{} partial-register merge(s) on libm hot paths (D-10.68):\n  {}", bad.len(), bad.join("\n  "))) }
 }
 
-/// `cargo xtask static`: check `target/liella/libm.so.6` when it has been built.
+/// The file beside a `libm.so.6` that `cargo xtask so` built and checked: [`source_digest`] of the tree it was built
+/// from.
+fn stamp_path(so: &Path) -> PathBuf {
+    so.with_file_name("libm.so.6.source-digest")
+}
+
+/// The inputs of the product build, by path and contents (64-bit FNV-1a, stable across xtask builds): every file under
+/// `crates/` and `csys/` (no `target/` directory) and the workspace's `Cargo.toml`, `Cargo.lock`,
+/// `rust-toolchain.toml` and `.cargo/config.toml`. Equal digests mean `libm.so.6` came from these sources.
+pub(crate) fn source_digest(root: &Path) -> String {
+    fn files(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut v: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
+        v.sort();
+        for p in v {
+            if p.is_dir() {
+                if p.file_name().is_some_and(|n| n != "target") {
+                    files(&p, out);
+                }
+            } else {
+                out.push(p);
+            }
+        }
+    }
+    let mut all = Vec::new();
+    files(&root.join("crates"), &mut all);
+    files(&root.join("csys"), &mut all);
+    all.extend(["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/config.toml"].iter().map(|f| root.join(f)).filter(|p| p.is_file()));
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |bytes: &[u8]| {
+        for &b in bytes {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for p in &all {
+        let data = std::fs::read(p).unwrap_or_default();
+        eat(p.strip_prefix(root).unwrap_or(p).to_string_lossy().as_bytes());
+        eat(&(data.len() as u64).to_le_bytes());
+        eat(&data);
+    }
+    format!("{h:016x} {} files", all.len())
+}
+
+/// `cargo xtask so`: forget the digest before checking a new `libm.so.6`, record it once the check passed.
+pub(crate) fn check_built(root: &Path, so: &Path) -> Result<(), String> {
+    let stamp = stamp_path(so);
+    let _ = std::fs::remove_file(&stamp);
+    check_file(root, so)?;
+    std::fs::write(&stamp, source_digest(root)).map_err(|e| format!("{}: {e}", stamp.display()))
+}
+
+/// `cargo xtask static`: check `target/liella/libm.so.6` when it was built from this tree (its digest, written by
+/// `cargo xtask so`, matches). A product left by an earlier tree (a role or CI directory reused across branches) says
+/// nothing about this one's [`ALLOW`] list: it is skipped, and `cargo xtask so` builds and checks the current one.
 pub fn static_check(root: &Path) -> Result<(), String> {
     let so = root.join("target/liella/libm.so.6");
     if !so.exists() {
         println!("partial-write: skipped: {} not built (`cargo xtask so` builds and checks it)", so.display());
+        return Ok(());
+    }
+    let built = std::fs::read_to_string(stamp_path(&so)).unwrap_or_default();
+    let now = source_digest(root);
+    if built != now {
+        let built = if built.is_empty() { "no digest" } else { built.as_str() };
+        println!("partial-write: skipped: {} was not built from this tree (built: {built}; tree: {now}; `cargo xtask so` builds and checks it)", so.display());
         return Ok(());
     }
     check_file(root, &so)
@@ -418,6 +479,28 @@ mod tests {
     fn dis(lines: &[&str]) -> BTreeMap<u64, Insn> {
         let text: String = lines.iter().enumerate().map(|(k, l)| format!("  {:x}:\t{l}\n", 0x1000 + 4 * k)).collect();
         parse_objdump(&format!("0000000000001000 <expf>:\n{text}")).0
+    }
+
+    /// A `libm.so.6` left by another tree is skipped, one built from this tree is checked (here: a file that is not
+    /// an ELF, so checking it fails), and the digest follows a source file's contents.
+    #[test]
+    fn static_checks_only_a_product_of_this_tree() {
+        let root = std::env::temp_dir().join(format!("xtask-partial-write-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("crates/math/src")).unwrap();
+        std::fs::create_dir_all(root.join("target/liella")).unwrap();
+        let src = root.join("crates/math/src/lib.rs");
+        std::fs::write(&src, "a").unwrap();
+        let so = root.join("target/liella/libm.so.6");
+        std::fs::write(&so, "not an ELF").unwrap();
+        assert!(static_check(&root).is_ok(), "no digest: skipped");
+        std::fs::write(stamp_path(&so), source_digest(&root)).unwrap();
+        assert!(static_check(&root).is_err(), "built from this tree: checked");
+        std::fs::write(&src, "b").unwrap();
+        assert!(static_check(&root).is_ok(), "a source changed since the build: skipped");
+        std::fs::write(&src, "a").unwrap();
+        assert!(static_check(&root).is_err(), "back to the built sources: checked");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
