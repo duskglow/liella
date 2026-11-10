@@ -29,7 +29,9 @@ Product code is unchanged since -2's 0d64c7f00; -3 added a test, fixed the plant
 - libm-sqrt-entry-3-lint2 (clippy + static on c214cf606): rc 0. libm-sqrt-entry-3-check (so + run.sh s10_sqrtl_entry +
   the sqrt tests): rc 0, 10 passed.
 - libm-sqrt-entry-3-gate (affected --run --base origin/next) and libm-sqrt-entry-3-plants (7 plants, dir
-  /mnt/zram/claude/LIBM-SQRT-ENTRY-3/plants-1): see the report (handoff/reports/LIBM-SQRT-ENTRY-3.json).
+  /mnt/zram/claude/LIBM-SQRT-ENTRY-3/plants-1), both on tree c214cf606 (code identical to the final head, which adds
+  only handoff files): gate rc 0 (32 suites ok, 11428 passed, 0 failed, 1257 ignored; conformance 127 passed; peak
+  16G, oom_kill 0); plants rc 0, 7 CAUGHT, 0 SURVIVED, no WARN (results in the plants file).
 - Superseded: libm-sqrt-entry-3-lint (rc 128: its `git status` step ran in a role directory that is not a git
   checkout; the codemap it wrote was copied back and committed).
 
