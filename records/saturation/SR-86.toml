@@ -1,4 +1,4 @@
-id = "SR-NEW"
+id = "SR-86"
 section = "7"
 row = "Static start-up and first-call minor faults: hot group anchored at a 64 KiB boundary (D-X.51, NEGATIVE)"
 now = "next (no anchor), `hot_text_products`, Skylake-SP host, fast / release: start-up only 18 / 17, setlocale + printf 56 / 57, coreutils-shaped tool 59 / 60, fork child 6 / 6 minor faults"
