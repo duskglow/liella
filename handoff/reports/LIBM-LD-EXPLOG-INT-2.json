@@ -1,0 +1,11 @@
+{"task": "LIBM-LD-EXPLOG-INT-2", "model": "opus", "tokens": null,
+ "result": "x87 exp/log integer tier built, two unit slips fixed, 8 functions correct in 4 modes; logl 0.064% undecided in the 10^7 run (open); generator move, counts, timing not done",
+ "branch": "task/libm-ld-explog-int-2", "head": null,
+ "gate": {"affected": "pending (keke:libm-ld-explog-int-2-gate)", "peak": null}, "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": ["wide_int_el long Log: 25504 of 4e7 calls undecided (limit 1e-5); results correct, they fall to the double-double tier", "plants 5/5 CAUGHT (libm-ld-explog-int-2-plants on 62a354a9; plants2 on the final code head pending)"],
+ "refused": [],
+ "improvement": "a run that inherits unbuilt WIP should get a compile-only job before the brief's other steps are budgeted; most of this run went to first-build bugs",
+ "next_step": "LIBM-LD-EXPLOG-INT-3: diagnose the logl undecided rate, move the generator into cargo xtask tables (#4209), percall counts, booked timing IVB + N100",
+ "report_file": "handoff/libm-ld-explog-int.md",
+ "jobs": ["keke:libm-ld-explog-int-2-gate", "keke:libm-ld-explog-int-2-plants2"]}
