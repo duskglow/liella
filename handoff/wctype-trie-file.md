@@ -35,9 +35,11 @@ resolved per 256-character block on first touch; `ThreadBlock::wclass` (0x180) s
 * tow* (ruling #4281): no `%fs:0x9c` test; `with_view` (run 5) stays; its count is still unmeasured.
 
 ## Still open
-* **Page faults (since run 3):** `hot_text_products` first `localtime_r` 21 > 20. Job `wtf6-diag` (handoff tools
-  pfmark.c/diag1.sh/resolve.py, copy in ~/work/WCTYPE-TRIE-FILE-6 on shiki) prints the test's numbers and every fault
-  of the first localtime_r with section and symbol: read ~/logs/wtf6-diag.log on shiki first. Note the regen moved
+* **Page faults (since run 3):** `hot_text_products` first `localtime_r` 21 > 20. NOT run in run 6 (out of budget;
+  its chained job was stopped before it started). Ready: shiki ~/work/WCTYPE-TRIE-FILE-6/diag.sh (diag1.sh without the
+  build, with pfmark.c/resolve.py beside it) runs the test, then prints every fault of the first localtime_r with section
+  and symbol: run it as a jobrun job in the role after a fast build.
+* Plants: `coldbss-part-before-llvm` (run 5) printed WARN-NO-MSG in wtf6-plants (caught by rc only): fix its msg regex. Note the regen moved
   `zone::localtime_r` to `release` only (fast now inlines it) and added `time::load` in fast.
 * getrusage sits at the list tail (`extra -`, no probe traces it) yet is a start-up key: one window in both profiles.
   A tooling fix (start-up probe keys first in the order) would free a window: own story, not this one.
@@ -50,7 +52,7 @@ vs the -2 head: 432 faster, 450 equal, 54 slower (towupper/towlower/towctrans +2
 handoff/wctype-trie-file/cmpcls.py; counts by handoff/wctype-trie-file/count.sh <role> <label>.
 
 ## Next step
-1. Read wtf6-gate / wtf6-plants / wtf6-diag (shiki); fix a red. 2. Page fault from wtf6-diag. 3. tow* counts.
+1. Read wtf6-gate / wtf6-plants (shiki); fix a red. 2. Page fault: run diag.sh. 3. tow* counts.
 4. `_l` rows. 5. timing.
 Do not redo: the stage-1 encoding, the shared pool, `.bss` slots, the 32-bit cells, the Latin alignment experiment, the
 cold out-of-line resolve-only path, `cold_path`; the codemap and coldbss fixes of run 5; the release-build diagnosis
