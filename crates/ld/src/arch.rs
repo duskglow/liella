@@ -76,6 +76,78 @@ pub trait Arch {
     fn hwcaps(f: &Features) -> &'static [&'static str];
     /// The value of the `$PLATFORM` dynamic string token for `f` (a fixed string per CPU class).
     fn platform(f: &Features) -> &'static str;
+    /// The arithmetic of one non-TLS relocation (design §0a "Relocation arithmetic", DL-10, D-27.17):
+    /// the field to store for `kind` given the [`Operands`], `Ok(None)` for a kind that stores nothing
+    /// ([`RelocKind::None`]). For [`RelocKind::Irelative`] the field is the resolver's address (the
+    /// relocator calls it and stores the result in a word). Kinds without arithmetic of their own
+    /// (`Copy`, the TLS kinds, `Unsupported`) are [`ApplyError::NoArithmetic`].
+    ///
+    /// # Errors
+    ///
+    /// [`ApplyError::Overflow`] when the value does not fit a narrower field, and
+    /// [`ApplyError::NoArithmetic`] as above.
+    /// The default (an architecture without a relocation table, such as a test double) has none.
+    fn apply(kind: RelocKind, o: Operands) -> Result<Option<Field>, ApplyError> {
+        let _ = (kind, o);
+        Err(ApplyError::NoArithmetic)
+    }
+    /// The `PT_GNU_PROPERTY` property types this architecture knows (design §0a "Arch-only
+    /// properties"), each with its name. The loader parses them and ignores them (L14-12); a type not
+    /// listed is ignored as well.
+    const PROPERTIES: &'static [(u32, &'static str)] = &[];
+}
+
+/// The inputs of a relocation's arithmetic, in the psABI's notation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Operands {
+    /// S: the run-time value of the symbol (0 for an undefined weak reference).
+    pub s: u64,
+    /// A: the addend.
+    pub a: i64,
+    /// B: the load bias of the object being relocated.
+    pub b: u64,
+    /// P: the run-time address of the field.
+    pub p: u64,
+}
+
+/// A value to store and the width of its field in bytes (8, or 4 for the 32-bit text fields).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Field {
+    /// The value (only the low `width` bytes are stored).
+    pub value: u64,
+    /// The field width in bytes.
+    pub width: u8,
+}
+
+/// Why [`Arch::apply`] gives no field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyError {
+    /// The value does not fit the field (a 32-bit field, signed or unsigned as the kind says).
+    Overflow,
+    /// The kind has no arithmetic of its own.
+    NoArithmetic,
+}
+
+/// `value` as a `width`-byte field: unchanged when it fits as a signed (`signed`) or unsigned number of
+/// that width, else [`ApplyError::Overflow`]. Arch-neutral helper for [`Arch::apply`].
+///
+/// # Errors
+///
+/// [`ApplyError::Overflow`] as above; a width other than 1 to 8 overflows too.
+pub fn narrow(value: u64, width: u8, signed: bool) -> Result<Field, ApplyError> {
+    let bits = u32::from(width).checked_mul(8).filter(|b| (8..=64).contains(b)).ok_or(ApplyError::Overflow)?;
+    if bits == 64 {
+        return Ok(Field { value, width });
+    }
+    let fits = if signed {
+        // Sign-extending the low `bits` bits gives the value back.
+        let shift = 64u32.wrapping_sub(bits);
+        let v = i64::from_ne_bytes(value.to_ne_bytes());
+        v.wrapping_shl(shift).wrapping_shr(shift) == v
+    } else {
+        value.checked_shr(bits) == Some(0)
+    };
+    if fits { Ok(Field { value, width }) } else { Err(ApplyError::Overflow) }
 }
 
 /// `AT_PAGESZ` (kernel UAPI `linux/auxvec.h`): the system page size.
@@ -197,6 +269,38 @@ impl Arch for X86_64 {
             n => RelocKind::Unsupported(n),
         }
     }
+
+    /// x86-64 psABI §4.4.1 "Relocation Types" (calculation column): `R_X86_64_64` S + A, `GLOB_DAT`
+    /// and `JUMP_SLOT` S, `RELATIVE` B + A, `IRELATIVE` the resolver at B + A, `PC32` S + A - P checked
+    /// as a signed 32-bit field, `32` S + A as an unsigned one, `32S` S + A as a signed one. Every
+    /// field other than the 32-bit text fields is a 64-bit word.
+    fn apply(kind: RelocKind, o: Operands) -> Result<Option<Field>, ApplyError> {
+        let word = |value: u64| Ok(Some(Field { value, width: 8 }));
+        let a = u64::from_ne_bytes(o.a.to_ne_bytes());
+        match kind {
+            RelocKind::None => Ok(None),
+            RelocKind::Relative | RelocKind::Irelative => word(o.b.wrapping_add(a)),
+            RelocKind::Abs64 => word(o.s.wrapping_add(a)),
+            RelocKind::GlobDat | RelocKind::JumpSlot => word(o.s),
+            RelocKind::TextRel { width, pc_relative, signed } => {
+                let v = o.s.wrapping_add(a).wrapping_sub(if pc_relative { o.p } else { 0 });
+                narrow(v, width, signed).map(Some)
+            }
+            RelocKind::Copy | RelocKind::DtpMod | RelocKind::DtpOff | RelocKind::TpOff | RelocKind::TlsDesc | RelocKind::Unsupported(_) => {
+                Err(ApplyError::NoArithmetic)
+            }
+        }
+    }
+
+    /// The x86 feature properties of the x86-64 psABI (§2.1.7 "Program Property"; CET and ISA level
+    /// notes), parsed and ignored (L14-12).
+    const PROPERTIES: &'static [(u32, &'static str)] = &[
+        (0xc000_0002, "GNU_PROPERTY_X86_FEATURE_1_AND"),
+        (0xc000_8002, "GNU_PROPERTY_X86_ISA_1_NEEDED"),
+        (0xc001_0001, "GNU_PROPERTY_X86_FEATURE_2_USED"),
+        (0xc001_0002, "GNU_PROPERTY_X86_ISA_1_USED"),
+        (0xc000_8001, "GNU_PROPERTY_X86_FEATURE_2_NEEDED"),
+    ];
 }
 
 /// The architecture this crate is built for.

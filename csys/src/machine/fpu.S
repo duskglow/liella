@@ -93,14 +93,6 @@ liella_machine_sqrtsd:
 	sqrtsd %xmm0, %xmm0
 	ret
 	.size liella_machine_sqrtsd, .-liella_machine_sqrtsd
-	.section .text.liella_machine_sqrtss,"ax",@progbits
-	.globl liella_machine_sqrtss
-	.type liella_machine_sqrtss, @function
-	.p2align 4
-liella_machine_sqrtss:
-	sqrtss %xmm0, %xmm0
-	ret
-	.size liella_machine_sqrtss, .-liella_machine_sqrtss
 	.section .text.liella_machine_fsqrt,"ax",@progbits
 	.globl liella_machine_fsqrt
 	.type liella_machine_fsqrt, @function

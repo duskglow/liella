@@ -1,0 +1,34 @@
+{
+ "task": "DL-RELOC",
+ "model": "opus",
+ "tokens": null,
+ "result": "INCOMPLETE: relocator, version check, exec-stack refusal and ld.so multi-object linking written and clippy-clean; corpus tests not yet green (context checkpoint)",
+ "branch": "task/dl-reloc",
+ "head": "15d27c850",
+ "gate": {
+  "affected": "not run",
+  "peak": null
+ },
+ "accepted_first_attempt": false,
+ "rulings": [
+  {
+   "item": "PT_INTERP programs with dependencies read their file via /proc/self/exe",
+   "recommendation": "memory-image reader mode in DL-10-2; refuse without /proc meanwhile"
+  },
+  {
+   "item": "COMPAT-19 (executable stack compat flag) registered but not implemented",
+   "recommendation": "implement in a follow-up story, not DL-10"
+  }
+ ],
+ "informational": [
+  "dependency dedup by name only, not dev/ino (L14-4) yet"
+ ],
+ "refused": [],
+ "improvement": "brief sized M with 90 calls but context hit 150k at call 51: reading boundary ld.rs and the reader API cost ~60k; a codemap excerpt of the reader API in the brief would save it",
+ "next_step": "read mei:dl-reloc-t4, fix the corpus, write D-27.17, plants, gate, startup counters (handoff/DL-RELOC.md steps 1-5)",
+ "report_file": "handoff/DL-RELOC.md",
+ "jobs": [
+  "mei:dl-reloc-clippy2",
+  "mei:dl-reloc-t4"
+ ]
+}

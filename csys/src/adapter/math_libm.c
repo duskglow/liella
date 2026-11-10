@@ -12,9 +12,12 @@
 
 #if defined(LIELLA_LIBM)
 #define MATH_FWD(name) name
+#define MATH_SLOW(name) liella_slow_##name
 #else
 #define MATH_FWD(name) liella_fwd_##name
+#define MATH_SLOW(name) liella_fwd_slow_##name
 #endif
+#define MATH_SLOW_ATTR __attribute__((visibility("hidden")))
 struct liella_ld_bits { uint64_t mant; uint16_t se; uint16_t pad[3]; };
 struct liella_f128_bits { uint64_t lo; uint64_t hi; };
 union liella_ld { long double value; struct liella_ld_bits bits; };
@@ -764,9 +767,8 @@ long double MATH_FWD(sinl)(long double a0) { return LD(liella_sinl_bits(LD_BITS(
 struct liella_f128_bits liella_sqrtf128_bits(struct liella_f128_bits);
 __float128 MATH_FWD(sqrtf128)(__float128 a0) { return F128(liella_sqrtf128_bits(F128_BITS(a0))); }
 struct liella_ld_bits liella_sqrtf64x_bits(struct liella_ld_bits);
-long double MATH_FWD(sqrtf64x)(long double a0) { return LD(liella_sqrtf64x_bits(LD_BITS(a0))); }
 struct liella_ld_bits liella_sqrtl_bits(struct liella_ld_bits);
-long double MATH_FWD(sqrtl)(long double a0) { return LD(liella_sqrtl_bits(LD_BITS(a0))); }
+long double MATH_SLOW_ATTR MATH_SLOW(sqrtl)(long double a0) { return LD(liella_sqrtl_bits(LD_BITS(a0))); }
 struct liella_f128_bits liella_tanf128_bits(struct liella_f128_bits);
 __float128 MATH_FWD(tanf128)(__float128 a0) { return F128(liella_tanf128_bits(F128_BITS(a0))); }
 struct liella_ld_bits liella_tanf64x_bits(struct liella_ld_bits);
