@@ -393,6 +393,7 @@ macro_rules! kernels {
         /// [`atan_unit`]), for `2^-400 <= |x|, |y| < 2^400` with `min/max >= 2^-60`, else `None`:
         /// the argument of the `clog` quick tier (`crate::complex_fast`, LIBM-CPLX-LOG-SQRT).
         $(#[$a])* $(#[$i])*
+        #[allow(dead_code)] // the clog tier calls the plain build only; the FMA build's copy is unused
         pub(crate) fn atan2_abs(y: f64, x: f64) -> Option<Dd> {
             let (th, tl, tab, sg) = atan2_reduce(y, x)?;
             Some(atan_unit(th, tl, tab, sg))

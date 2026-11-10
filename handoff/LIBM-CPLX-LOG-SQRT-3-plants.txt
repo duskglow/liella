@@ -1,0 +1,6 @@
+# LIBM-CPLX-LOG-SQRT-3 plants: the merged atan2 reduction (atan2_reduce shared by atan2_nearest and clog's
+# atan2_abs) and the bench-operand route count (bench_rows_reach_the_route_only_where_measured)
+atan2-reduce-table | crates/math/src/invtrig.rs | lit:(false, true) => (&PI_MINUS, -1.0), ==> (false, true) => (&HALF_MINUS, -1.0), | cargo test -p liella-math --release --test invtrig double_atan2_hypot | msg:double_atan2_hypot.*FAILED|panicked
+atan2-nearest-sign | crates/math/src/invtrig.rs | lit:two_tier(th, tl, tab, sg, y.to_bits(), |r| r) ==> two_tier(th, tl, tab, sg, x.to_bits(), |r| r) | cargo test -p liella-math --release --test invtrig double_atan2_hypot | msg:double_atan2_hypot.*FAILED|panicked
+atan2-abs-table | crates/math/src/invtrig.rs | lit:Some(atan_unit(th, tl, tab, sg)) ==> Some(atan_unit(th, tl, &t::ATAN_J64, 1.0)) | cargo test -p liella-math --release --lib complex_fast::ls_tests | msg:quick tier differs|wrong side of the cut|panicked
+bench-route-count | crates/math/src/complex_fast.rs | lit:round(im, ei, 0, Rounding::Nearest)? ==> round(im, ei * 1e6, 0, Rounding::Nearest)? | cargo test -p liella-math --release --lib complex_fast::ls_tests::bench_rows | msg:plain bench row leaves the in-place tier

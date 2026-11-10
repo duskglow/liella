@@ -162,6 +162,84 @@ fn csqrt_branch_cut_sides() {
     }
 }
 
+/// cbench_libm's operand sets (its xorshift, seed and formulas, `bench/c/cbench_libm.c`): 0 the
+/// square `[-3, 3]^2` of the plain rows, 1 the `_axis` rows, 2 the `_near1` rows.
+fn bench_operands(set: usize) -> [(f64, f64); 256] {
+    let mut st: u64 = 88_172_645_463_325_252;
+    let mut u = || {
+        st ^= st << 13;
+        st ^= st >> 7;
+        st ^= st << 17;
+        (st >> 11) as f64 / 9_007_199_254_740_992.0
+    };
+    let mut out = [(0.0, 0.0); 256];
+    for (i, o) in out.iter_mut().enumerate() {
+        *o = match set {
+            0 => {
+                let x = -3.0 + 6.0 * u();
+                (x, -3.0 + 6.0 * u())
+            }
+            1 => {
+                let x = -3.0 + 6.0 * u();
+                let _ = u();
+                (x, if i % 2 == 1 { -0.0 } else { 0.0 })
+            }
+            _ => {
+                let t = -1.0 + 2.0 * u();
+                let q = 1.0 + t * t;
+                let mut p = 1.0;
+                for _ in 0..2 + (51.0 * u()) as i32 {
+                    p *= 0.5;
+                }
+                let d = p * (1.0 + u());
+                let s = if u() < 0.5 { 1.0 - d } else { 1.0 + d };
+                let (x, y) = (s * (1.0 - t * t) / q, s * 2.0 * t / q);
+                (if u() < 0.5 { -x } else { x }, y)
+            }
+        };
+    }
+    out
+}
+
+/// Per function, the bench operands the in-place tier declines and those that then reach the
+/// 384-bit route (`[declined, routed]`), as the boundary's `cplx_fast` dispatches them.
+fn bench_route_counts(set: usize) -> [[usize; 2]; 6] {
+    let mut c = [[0usize; 2]; 6];
+    let mut tally = |k: usize, inplace: bool, tier: bool| {
+        if let Some(e) = c.get_mut(k) {
+            e[0] += usize::from(!inplace);
+            e[1] += usize::from(!inplace && !tier);
+        }
+    };
+    let n = Rounding::Nearest;
+    for (x, y) in bench_operands(set) {
+        let (xf, yf) = (x as f32, y as f32);
+        tally(0, cexp_nearest(x, y).is_some(), cexp_any(x, y, n).is_some());
+        tally(1, clog_nearest(x, y).is_some(), clog_any(x, y, n).is_some());
+        tally(2, csqrt_nearest(x, y, hw_sqrt).is_some(), csqrt_any(x, y, n).is_some());
+        tally(3, crate::fast32::cexpf_nearest(xf, yf).is_some(), cexp_any(xf, yf, n).is_some());
+        tally(4, crate::fast32::clogf_nearest(xf, yf).is_some(), clog_any(xf, yf, n).is_some());
+        tally(5, crate::fast32::csqrtf_nearest(xf, yf, hw_sqrt).is_some(), csqrt_any(xf, yf, n).is_some());
+    }
+    c
+}
+
+#[test]
+fn bench_rows_reach_the_route_only_where_measured() {
+    // No spec clause: the bench rows' cost model (#4270). On the plain rows' 256 operands the
+    // in-place tiers answer every clog/csqrt call and all but the counted cexp calls, so a time
+    // ratio worse than the instruction ratio is not explained by route calls beyond these.
+    let names = ["cexp", "clog", "csqrt", "cexpf", "clogf", "csqrtf"];
+    let sq = bench_route_counts(0);
+    let (ax, n1) = (bench_route_counts(1), bench_route_counts(2));
+    for (k, name) in names.iter().enumerate() {
+        std::println!("bench {name}: [declined, routed] of 256: square {:?} axis {:?} near1 {:?}", sq.get(k), ax.get(k), n1.get(k));
+    }
+    for k in [1, 2, 4, 5] {
+        assert_eq!(sq.get(k), Some(&[0, 0]), "{}: the plain bench row leaves the in-place tier", names.get(k).unwrap_or(&"?"));
+    }
+}
+
 /// The 10^7-operand sweep per function (`cargo test --release -p liella-math --lib -- --ignored
 /// clog_csqrt_quick_tier_sweep`): the comparison above on 8 threads, four modes.
 #[test]
