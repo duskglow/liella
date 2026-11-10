@@ -51,3 +51,39 @@ pub(crate) fn tanh_nearest(x: f64) -> Option<f64> {
     }
     liella_math::fast64::tanh_nearest(x)
 }
+
+/// The `double` `asinh` quick phase (D-10.65, LIBM-F64-INVHYP-QUICK) in its build chosen at
+/// startup (as [`super::exp_nearest`]), with its square root issued inline by [`sqrtsd`]: the
+/// correctly rounded result, or `None` (a miss, or outside the quick ranges), and the caller runs
+/// the accurate path (tier 2, unchanged).
+#[inline(always)]
+pub(crate) fn asinh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_invhyp::fused::asinh_quick(x, sqrtsd) };
+    }
+    liella_math::fast64::quick_invhyp::asinh_quick(x, sqrtsd)
+}
+
+/// [`asinh_nearest`] for `acosh`.
+#[inline(always)]
+pub(crate) fn acosh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_invhyp::fused::acosh_quick(x, sqrtsd) };
+    }
+    liella_math::fast64::quick_invhyp::acosh_quick(x, sqrtsd)
+}
+
+/// [`asinh_nearest`] for `atanh` (no square root).
+#[inline(always)]
+pub(crate) fn atanh_nearest(x: f64) -> Option<f64> {
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: as in `exp_log::exp_nearest`.
+        #[allow(unsafe_code)]
+        return unsafe { liella_math::fast64::quick_invhyp::fused::atanh_quick(x) };
+    }
+    liella_math::fast64::quick_invhyp::atanh_quick(x)
+}

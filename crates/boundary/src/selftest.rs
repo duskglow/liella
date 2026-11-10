@@ -808,6 +808,22 @@ pub fn log_quick_parts(x: f64) -> Option<(f64, f64)> {
     crate::hot::log_quick_parts(x)
 }
 
+/// The `double` `asinh` quick phase alone (D-10.65) in the build [`set_math_fma`] chose: the
+/// correctly rounded result, or `None` (the entry then runs the accurate path).
+pub fn asinh_quick(x: f64) -> Option<f64> {
+    crate::hot::asinh_nearest(x)
+}
+
+/// [`asinh_quick`] for `acosh`.
+pub fn acosh_quick(x: f64) -> Option<f64> {
+    crate::hot::acosh_nearest(x)
+}
+
+/// [`asinh_quick`] for `atanh`.
+pub fn atanh_quick(x: f64) -> Option<f64> {
+    crate::hot::atanh_nearest(x)
+}
+
 /// The quick phase of `log2`, `log10` or `log1p` (`f` names it; D-10.66) in the build
 /// [`set_math_fma`] chose: its unrounded `(zh, zl)` (within `liella_math::fast64::quick_log::RHO·|zh|`)
 /// and its rounded answer (`None` when the rounding test does not decide).
