@@ -2,7 +2,7 @@
 
 State: branch task/libm-sqrt-entry, code head f62017246 (cut from origin/next 2bc03ede6); role kanon:~/w/kn1
 (synced at fd0a631e0; f62017246 only adds a local asm label and is NOT synced: sync refused BUSY while gate2 ran).
-Scratch: kanon ~/work/LIBM-SQRT-ENTRY/ (plants.txt), local /home/claude/w/.scratch/LIBM-SQRT-ENTRY/.
+Scratch: kanon ~/work/LIBM-SQRT-ENTRY/ (plants.txt), local ~/w/.scratch/LIBM-SQRT-ENTRY/.
 
 ## Done (D-10.71, plan/07-decisions/s10-mathematics.md)
 - sqrt/sqrtf (mathret.rs `Sqrt for f64/f32`): inline MXCSR read (`fpregs::mxcsr`, D-X.44), same mode test
