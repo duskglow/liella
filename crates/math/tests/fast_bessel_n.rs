@@ -134,7 +134,7 @@ fn bessel_n_tier_matches_the_accurate_path_and_rarely_falls_back() {
     let mut report = Vec::new();
     for (f, (name, float, fast, acc)) in FUNCS.into_iter().enumerate() {
         let y = name.starts_with('y');
-        let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (f as u64 + 1) * 0x1234_5678);
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ ((f as u64 + 1) * 0x1234_5678));
         let mut tried = [0u32; 5];
         let mut got = [0u32; 5];
         for _ in 0..600 {
@@ -171,7 +171,7 @@ fn zero_between(acc: Acc, float: bool, n: i32, mut lo: f64, mut hi: f64) -> f64 
     let s = sign(lo);
     for _ in 0..80 {
         let mid = if float {
-            f64::from(f32::from_bits((((lo as f32).to_bits() + (hi as f32).to_bits()) / 2) as u32))
+            f64::from(f32::from_bits(((lo as f32).to_bits() + (hi as f32).to_bits()) / 2))
         } else {
             f64::from_bits((lo.to_bits() + hi.to_bits()) / 2)
         };
@@ -289,7 +289,7 @@ fn bessel_n_tier_sweep() {
             let hs: Vec<_> = (0..threads)
                 .map(|t| {
                     s.spawn(move || {
-                        let mut rng = Rng(0x510e_527f_ade6_82d1 ^ ((f as u64) << 40) ^ (t + 1) * 0x9e37_79b9);
+                        let mut rng = Rng(0x510e_527f_ade6_82d1 ^ ((f as u64) << 40) ^ ((t + 1) * 0x9e37_79b9));
                         let (mut settled, mut fallback) = (0u64, [0u64; 5]);
                         for _ in 0..(total / threads + 1) {
                             let (n, x, regime) = rng.operand(y, float);

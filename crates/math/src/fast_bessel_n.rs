@@ -20,7 +20,11 @@
 //! * Series (`jn`, `x² <= n + 1`): `(x/2)^n/n!·Σ (−x²/4)^k/(k!·(n+1)_k)` (A&S 9.1.10), terms
 //!   alternating and falling by at least 4 each, the sum in `[3/4, 1]`.
 //!
-//! Declines: orders above [`MAX_STEPS`], `x` outside `[2^-990, 2^500]`, values beyond `2^960`
+//! * Modulus (`m <= x`, both recurrences run): `|Y_k·J_m − J_k·Y_m| <= M_m²` (`tight`), which
+//!   keeps the bound near the kernels' own on the oscillatory side.
+//!
+//! Declines: orders above [`MAX_STEPS`], `x` outside `[2^-990, 2^500]` (on the oscillatory side
+//! from about `2^100`, where `tight` has no a priori cap), values beyond `2^960`
 //! in a forward recurrence (`yn`'s overflow region stays with the 384-bit path), a bound that
 //! does not settle (near the zeros of `J_n`, `Y_n`). Results below half the least subnormal
 //! (`jn`'s underflow region) are settled as underflows; subnormal ones by [`fast64::settle`].
