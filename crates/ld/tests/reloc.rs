@@ -214,7 +214,7 @@ fn bias(i: usize) -> u64 {
 fn sym_value(file: &[u8], name: &[u8]) -> u64 {
     let elf = Elf::parse::<Native>(file).unwrap();
     let o = Object::new(elf.dynamic().unwrap().unwrap()).unwrap();
-    o.lookup(&Request::new(name, Want::Any)).unwrap().unwrap_or_else(|| panic!("{}", String::from_utf8_lossy(name))).st.value
+    o.lookup(&Request::new(name, Want::Oldest)).unwrap().unwrap_or_else(|| panic!("{}", String::from_utf8_lossy(name))).st.value
 }
 
 fn word(m: &mut Model, at: u64) -> u64 {
@@ -273,7 +273,7 @@ fn reloc_model_corpus_one_object_per_type() {
             if matches!(r.kind, RelocKind::GlobDat | RelocKind::JumpSlot) {
                 let st = syms[i].symtab().get(r.sym).unwrap();
                 let name = o.dynm.string(u64::from(st.name)).unwrap();
-                let def = (0..objs.len()).find_map(|j| syms[j].lookup(&Request::new(name, Want::Any)).unwrap().map(|d| (j, d))).unwrap();
+                let def = (0..objs.len()).find_map(|j| syms[j].lookup(&Request::new(name, Want::Oldest)).unwrap().map(|d| (j, d))).unwrap();
                 let v = word(&mut m, o.bias + r.offset);
                 if def.1.st.kind() == 10 {
                     assert!(v > 0xabc0_0000_0000, "{} bound to an IFUNC holds the resolver's result", String::from_utf8_lossy(name));
