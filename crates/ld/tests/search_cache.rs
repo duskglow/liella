@@ -141,7 +141,8 @@ fn cache_corrupt_corpus_refused() {
         }
     }
     for at in (20..f.len() - 3).step_by(4) {
-        for wild in [0xffff_fff0u32, u32::try_from(f.len()).unwrap() - 1, 47, 0x8000_0000] {
+        // 48: the first entry's bytes, outside the string table.
+        for wild in [0xffff_fff0u32, u32::try_from(f.len()).unwrap() - 1, 47, 48, 0x8000_0000] {
             let mut g = f.clone();
             g[at..at + 4].copy_from_slice(&wild.to_le_bytes());
             probe(&g);

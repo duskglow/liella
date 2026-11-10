@@ -123,7 +123,7 @@ pub fn trusted<A: Arch>(dir: &[u8]) -> bool {
 }
 
 /// The tokens and the value each expands to, in the order they are matched.
-fn token<'a>(rest: &'a [u8]) -> Option<(&'static [u8], &'a [u8])> {
+fn token(rest: &[u8]) -> Option<(&'static [u8], &[u8])> {
     for name in [&b"ORIGIN"[..], b"PLATFORM", b"LIB"] {
         if let Some(after) = rest.strip_prefix(b"{").and_then(|r| r.strip_prefix(name)).and_then(|r| r.strip_prefix(b"}")) {
             return Some((name, after));
@@ -151,18 +151,15 @@ pub fn expand<A: Arch>(elem: &[u8], origin: Option<&[u8]>, ctx: &Ctx<'_>, out: &
         }
         let Some((name, after)) = token(rest.get(at.saturating_add(1)..).unwrap_or(&[])) else { return false };
         let value: &[u8] = match name {
-            b"ORIGIN" => {
-                let o = match (origin, ctx.secure) {
-                    (Some(o), true) if trusted::<A>(o) => o,
-                    (_, true) => return false,
-                    (Some(o), false) => o,
-                    (None, false) => match ctx.origin_path {
-                        Some(o) => o,
-                        None => return false,
-                    },
-                };
-                o
-            }
+            b"ORIGIN" => match (origin, ctx.secure) {
+                (Some(o), true) if trusted::<A>(o) => o,
+                (_, true) => return false,
+                (Some(o), false) => o,
+                (None, false) => match ctx.origin_path {
+                    Some(o) => o,
+                    None => return false,
+                },
+            },
             b"LIB" => A::LIB.as_bytes(),
             _ => ctx.platform.as_bytes(),
         };

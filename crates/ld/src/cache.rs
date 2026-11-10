@@ -50,6 +50,18 @@ fn usize_at(b: &[u8], at: usize) -> Option<usize> {
     usize::try_from(u32_at(b, at)?).ok()
 }
 
+/// The digit run of `s` at `k` without its leading zeros, and the index after the run.
+fn digits(s: &[u8], mut k: usize) -> (&[u8], usize) {
+    while s.get(k) == Some(&b'0') {
+        k = k.saturating_add(1);
+    }
+    let start = k;
+    while s.get(k).is_some_and(u8::is_ascii_digit) {
+        k = k.saturating_add(1);
+    }
+    (s.get(start..k).unwrap_or(&[]), k)
+}
+
 /// The comparison the cache is sorted by and the loader matches keys with (Appendix D.3.3): a run
 /// of digits compares by numeric value (leading zeros ignored) and ranks above any other byte, other
 /// bytes compare by value, and a key that is a prefix of another is smaller.
@@ -64,17 +76,7 @@ pub fn compare(a: &[u8], b: &[u8]) -> Ordering {
         };
         match (x.is_ascii_digit(), y.is_ascii_digit()) {
             (true, true) => {
-                let run = |s: &[u8], mut k: usize| {
-                    while s.get(k) == Some(&b'0') {
-                        k = k.saturating_add(1);
-                    }
-                    let start = k;
-                    while s.get(k).is_some_and(u8::is_ascii_digit) {
-                        k = k.saturating_add(1);
-                    }
-                    (s.get(start..k).unwrap_or(&[]), k)
-                };
-                let ((da, ni), (db, nj)) = (run(a, i), run(b, j));
+                let ((da, ni), (db, nj)) = (digits(a, i), digits(b, j));
                 let by_value = da.len().cmp(&db.len()).then_with(|| da.cmp(db));
                 if by_value != Ordering::Equal {
                     return by_value;
@@ -182,7 +184,7 @@ impl<'a> Cache<'a> {
         // Sorted descending: the first entry whose key is not greater than `name`.
         let (mut lo, mut hi) = (0usize, self.nlibs);
         while lo < hi {
-            let mid = lo + (hi - lo) / 2;
+            let mid = lo.midpoint(hi);
             if compare(self.entry(mid)?.1, name) == Ordering::Greater {
                 lo = mid.saturating_add(1);
             } else {
