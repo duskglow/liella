@@ -240,15 +240,9 @@ pub fn view() -> &'static LocaleView {
     if views_stored() {
         return tb::view_at(tb::read::<tb::View>());
     }
-    view_resolved()
-}
-
-/// [`view`] in a thread whose words are not stored: its `uselocale` choice, else the global
-/// locale. Out of line and cold: inlined, the compiler made it the fall-through and the stored
-/// case a taken branch and a jump (two instructions on every `towupper`, WCTYPE-TRIE-FILE-4).
-#[cold]
-#[inline(never)]
-fn view_resolved() -> &'static LocaleView {
+    // WCTYPE-TRIE-FILE-4 (negative): the compiler lays this out as the fall-through and the
+    // stored case as a taken branch and a jump; a cold out-of-line call instead (+4) and
+    // `core::hint::cold_path` (the frame setup moved above the test) both measured worse.
     view_of(tb::read::<tb::Locale>())
 }
 
