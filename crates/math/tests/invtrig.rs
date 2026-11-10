@@ -262,3 +262,33 @@ fn double_atan_fast_tier_table_agrees_with_the_multiprecision_atan() {
     }
     selftest::set_math_fma(false);
 }
+
+#[test]
+fn double_atan_quick_phase_answers_alone_and_agrees_with_the_multiprecision_atan() {
+    // Clauses: s10_3_c_0 (D-10.13, D-10.69). The quick phase without tier 2 behind it: it must
+    // answer nearly every operand by itself (a quick phase that always refuses would hide behind
+    // tier 2) and each answer must be the multiprecision `atan` rounded to nearest, also next to
+    // every table node j/64 (where `|v|/|y|` is largest) and at the nodes themselves.
+    use liella_math::mp::{self, Mp};
+    let mut rng = Rng(0x2f1d_33a7_9b0c_51e3);
+    let (mut answered, mut total) = (0usize, 0usize);
+    let mut xs: Vec<f64> = (0..=64).map(|j| f64::from(j) / 64.0).filter(|&x| x > 0.0).collect();
+    for j in 1..=64u32 {
+        for _ in 0..64 {
+            xs.push((f64::from(j) - 0.5 + (rng.next() >> 11) as f64 * 2f64.powi(-53)) / 64.0);
+        }
+    }
+    for _ in 0..4096 {
+        xs.push(rng.mag(-60, 0).abs());
+    }
+    for &x in &xs {
+        let want: f64 = mp::round::<f64>(mp::atan(Mp::from_f64(x)), Rounding::Nearest).0;
+        total += 1;
+        if let Some(v) = invtrig::atan_quick_only(-x) {
+            answered += 1;
+            assert_eq!((-v).to_bits(), want.to_bits(), "atan(-{x:e}) = {v:e} by the quick phase, multiprecision -{want:e}: quick phase FAILED");
+        }
+    }
+    // The test refuses about 2^-8 of operands (EPS = 2^-62 against a 2^-63 bound).
+    assert!(answered * 100 > total * 98, "quick phase answered only {answered} of {total}: quick phase FAILED");
+}
