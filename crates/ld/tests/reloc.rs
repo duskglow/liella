@@ -610,8 +610,37 @@ fn reloc_ldso_kernel_started_without_proc() {
         std::fs::copy(f, inside(f)).unwrap();
     }
     assert!(!root.join("proc").exists());
-    let (code, sig, err) = run(Command::new("unshare").arg("-r").arg("chroot").arg(&root).arg(&files[3]));
+    // `unshare --root` changes the root itself: no chroot(8), which sits outside many PATHs.
+    let (code, sig, err) = run(Command::new("unshare").arg("-r").arg(format!("--root={}", root.display())).arg(&files[3]));
     assert_eq!((code, sig), (Some(0), None), "kernel-started program without /proc: check number {code:?} failed; stderr: {err}");
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// s27_1_c_1 (ruling #4371, D-27.18): a position-independent program without `PT_PHDR` runs, started
+/// by the kernel and as `ld.so PROGRAM`: its load bias comes from its ELF header and the `PT_LOAD` that
+/// holds its program headers (never 0 for want of `PT_PHDR`).
+#[test]
+fn reloc_ldso_program_without_pt_phdr() {
+    let (true, Some(ld)) = (cc_ok(), product()) else { return };
+    let d = dir("nophdr");
+    let interp = format!("-Wl,--dynamic-linker={}", ld.display());
+    let [.., p] = corpus(&d, &[&interp]);
+    let mut file = std::fs::read(&p).unwrap();
+    let elf = Elf::parse::<Native>(&file).unwrap();
+    let (phoff, phnum) = (elf.header().phoff as usize, usize::from(elf.header().phnum));
+    let at = (0..phnum).map(|i| phoff + i * 56).find(|&o| file[o..o + 4] == 6u32.to_le_bytes()).expect("the linker gave the program a PT_PHDR");
+    file[at..at + 4].copy_from_slice(&0u32.to_le_bytes()); // PT_PHDR -> PT_NULL
+    // Written under another name and copied by cp(1): the program run below is never open for
+    // writing in this process, so a fork by another test thread cannot make its exec fail (ETXTBSY).
+    let (tmp, q) = (d.join("prog-nophdr.bytes"), d.join("prog-nophdr"));
+    std::fs::write(&tmp, &file).unwrap();
+    std::fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert!(Command::new("cp").arg(&tmp).arg(&q).status().unwrap().success());
+    assert!(Elf::parse::<Native>(&file).unwrap().find(liella_ld::elf::pt::PHDR).is_none());
+    let (code, sig, err) = run(&mut Command::new(&q));
+    assert_eq!((code, sig), (Some(0), None), "kernel-started program without PT_PHDR: check number {code:?} failed; stderr: {err}");
+    let (code, sig, err) = run(Command::new(&ld).arg(&q));
+    assert_eq!((code, sig), (Some(0), None), "ld.so PROGRAM without PT_PHDR: check number {code:?} failed; stderr: {err}");
     std::fs::remove_dir_all(&d).ok();
 }
 

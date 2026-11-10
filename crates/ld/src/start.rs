@@ -11,6 +11,7 @@
 //! * [`rewrite`]: for `ld.so PROGRAM`, the auxiliary vector entries that describe the program the
 //!   loader mapped instead of the loader itself.
 //! * [`ld_env`], [`preload_names`]: the `LD_*` settings, read once.
+//! * [`bias`]: the mapped program's load bias, from `PT_PHDR` or, without one, its ELF header.
 //! * [`needs_objects`]: whether a dynamic array names a `DT_NEEDED` object (loading dependencies
 //!   comes with DL-8; until then such a program is refused).
 
@@ -170,3 +171,34 @@ pub fn needs_objects(words: &[u64]) -> bool {
 
 /// The diagnostic for a program with dependencies (DL-8 loads them).
 pub const NEEDS_OBJECTS: &[u8] = b"ld.so: the program needs shared objects; loading them is not available in this build\n";
+
+/// The load bias of a mapped program whose `phnum` program headers `words` are at run-time address
+/// `phdr` (D-27.18, ruling #4371): `phdr` minus the table's own link-time address. That address is
+/// `PT_PHDR`'s `p_vaddr` when the program has one. Without it, the table's address comes from the
+/// `PT_LOAD` whose file-backed part holds it (`p_vaddr - p_offset + e_phoff`), and `e_phoff` from the
+/// ELF header, which then begins the `page`-byte page holding `phdr` (the bias and `p_vaddr - p_offset`
+/// are page-aligned, so a header whose table starts in its first page lies there). `header(at)` reads
+/// that header's first 64 bytes (it is called only without `PT_PHDR`); `None` when they are not the
+/// header of this table (magic, `e_phoff`, `e_phentsize`, `e_phnum`) or no `PT_LOAD` holds the table.
+pub fn bias(words: &[u64], phnum: usize, phdr: usize, page: usize, header: impl FnOnce(usize) -> [u8; 64]) -> Option<usize> {
+    use crate::elf::pt;
+    let heads = || words.chunks_exact(7).take(phnum);
+    let ty = |h: &[u64]| h.first().map_or(0, |w| w & 0xffff_ffff);
+    let field = |h: &[u64], i: usize| h.get(i).copied().unwrap_or(0);
+    if let Some(h) = heads().find(|h| ty(h) == u64::from(pt::PHDR)) {
+        return Some(phdr.wrapping_sub(usize::try_from(field(h, 2)).ok()?));
+    }
+    let at = phdr & !page.wrapping_sub(1);
+    let ehdr = header(at);
+    let half = |i: usize| ehdr.get(i..i.wrapping_add(2)).and_then(|b| b.try_into().ok()).map(u16::from_le_bytes);
+    let phoff = u64::try_from(phdr.wrapping_sub(at)).ok()?;
+    let e_phoff = ehdr.get(32..40).and_then(|b| b.try_into().ok()).map(u64::from_le_bytes);
+    let fits = ehdr.starts_with(b"\x7fELF\x02") && e_phoff == Some(phoff) && half(54) == Some(56) && half(56).map(usize::from) == Some(phnum);
+    if !fits {
+        return None;
+    }
+    let end = phoff.checked_add(u64::try_from(phnum).ok()?.checked_mul(PHENT)?)?;
+    let load = heads().find(|h| ty(h) == u64::from(pt::LOAD) && field(h, 1) <= phoff && field(h, 1).checked_add(field(h, 4)).is_some_and(|e| end <= e))?;
+    let own = field(load, 2).checked_sub(field(load, 1))?.checked_add(phoff)?;
+    Some(phdr.wrapping_sub(usize::try_from(own).ok()?))
+}

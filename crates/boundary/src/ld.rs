@@ -212,7 +212,16 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     let page = Native::page_size(&aux);
     if aux.get(AT_ENTRY).and_then(|e| usize::try_from(e).ok()) != Some(own_entry) {
         let prog = start::program(&aux).unwrap_or_else(|e| refuse(e.message()));
-        let bias = liella_rt::start::program(program_headers(&prog), prog.phnum, prog.phdr).bias;
+        // The bias from PT_PHDR or, without one, the ELF header in the page holding the program
+        // headers (ruling #4371, D-27.18).
+        let page_bytes = usize::try_from(page).unwrap_or(usize::MAX);
+        let header = |at: usize| {
+            let mut out = [0u8; 64];
+            read_image(at, &mut out);
+            out
+        };
+        let bias = start::bias(program_headers(&prog), prog.phnum, prog.phdr, page_bytes, header)
+            .unwrap_or_else(|| refuse(b"ld.so: cannot find the program's load bias (no PT_PHDR, and no ELF header before its program headers)\n"));
         run(sp, &prog, bias, page, 0)
     }
     let arg = |i: usize| usize::try_from(stack_word(argv.wrapping_add(i.wrapping_mul(8)))).unwrap_or(0);
@@ -289,7 +298,7 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         }
     }
     let page = usize::try_from(page).unwrap_or(usize::MAX);
-    if let Some((addr, len)) = liella_rt::start::relro(headers, prog.phnum, prog.phdr, page) {
+    if let Some((addr, len)) = liella_rt::start::relro_at(headers, prog.phnum, bias, page) {
         if crate::raw::mprotect(addr, len, map::PROT_READ).is_err() {
             refuse(b"ld.so: cannot protect the program's RELRO segment\n");
         }
@@ -358,9 +367,11 @@ fn scratch(len: usize, name: &[u8]) -> (usize, &'static mut [u8]) {
 fn read_image(at: usize, out: &mut [u8]) {
     // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
     #[allow(unsafe_code)]
-    // SAFETY: the caller checked [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN) or lies
-    // in the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped; the slice lives
-    // only for this copy, and nothing stores into the program while it is taken.
+    // SAFETY: the caller checked [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), lies
+    // in the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped, or is the first
+    // 64 bytes of the page holding the program header table (readable: the table is, and mappings
+    // are whole pages); the slice lives only for this copy, and nothing stores into the program
+    // while it is taken.
     out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
 }
 

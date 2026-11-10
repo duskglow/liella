@@ -74,8 +74,13 @@ pub fn program(words: &[u64], phnum: usize, phdr_addr: usize) -> Program {
 /// `[page_down(vaddr), vaddr + memsz)`), so in practice this is the whole segment. `None`
 /// without the segment, or when it covers no whole page. `page` is a power of two.
 pub fn relro(words: &[u64], phnum: usize, phdr_addr: usize, page: usize) -> Option<(usize, usize)> {
+    relro_at(words, phnum, program(words, phnum, phdr_addr).bias, page)
+}
+
+/// [`relro`] for a program whose load bias the caller already knows (`ld.so`, which finds it
+/// without `PT_PHDR` too: D-27.18).
+pub fn relro_at(words: &[u64], phnum: usize, bias: usize, page: usize) -> Option<(usize, usize)> {
     let field = |h: &[u64], i: usize| h.get(i).copied().map_or(0, |v| usize::try_from(v).unwrap_or(usize::MAX));
-    let bias = program(words, phnum, phdr_addr).bias;
     let h = words.chunks_exact(PHDR_WORDS).take(phnum).find(|h| h.first().is_some_and(|w| w & 0xffff_ffff == PT_GNU_RELRO))?;
     relro_pages(field(h, 2).wrapping_add(bias), field(h, 5), page)
 }
