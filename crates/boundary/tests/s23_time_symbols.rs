@@ -558,6 +558,16 @@ fn tz_period_words_per_thread_and_fork() {
             (o.tm_hour, o.tm_isdst)
         }
         set_tz("EST5EDT,M3.2.0,M11.1.0");
+        if tb::read32::<tb::Flags>() & liella_rt::tls::FLAG_OWN == 0 {
+            // D-5.11: a block the runtime did not make (this test process's, made by the
+            // system's `ld.so`) keeps its cache words untouched; the answers stay right.
+            let before = words();
+            assert_eq!(kind_at(SUMMER), (5, 1));
+            assert_eq!(kind_at(WINTER), (17, 0));
+            assert_eq!(words(), before, "a foreign block's cache words were written");
+            println!("per-thread and fork checks skipped: this block was made by another ld.so (D-5.11: no cache words)");
+            return;
+        }
         assert_eq!(kind_at(SUMMER), (5, 1));
         let mine = words();
         assert!(mine[0] & 0xffff_ffff != 0 && mine[0] & DST != 0, "a DST period is kept: {mine:x?}");
