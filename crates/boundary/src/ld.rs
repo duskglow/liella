@@ -20,10 +20,12 @@ use core::sync::atomic::Ordering::Relaxed;
 
 use liella::config::Tunables;
 use liella_kernel::auxv::Auxv;
-use liella_kernel::uapi::{AT_ENTRY, O_CLOEXEC, O_RDONLY, SEEK_END};
+use liella_kernel::uapi::{AT_ENTRY, AT_EXECFN, AT_SYSINFO_EHDR, O_CLOEXEC, O_RDONLY, SEEK_END};
 use liella_ld::arch::{Arch, Native};
 use liella_ld::program::{self, Action};
-use liella_ld::{boot, map, start};
+use liella_ld::cache::Cache;
+use liella_ld::search::{self, Ctx, PathBuf, Scope};
+use liella_ld::{boot, elf, map, start};
 use liella_legacy::search_c::CWords;
 use liella_rt::tls::ThreadBlock;
 
@@ -198,7 +200,7 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     // features come from the arch seam only (design §0a); the hwcaps search (DL-8) reads them.
     let ld = start::ld_env(env_entries(envp));
     let _tunables = ld.tunables.map(|t| Tunables::parse(t, secure));
-    let _features = Native::features(&Auxv::from_words(copy.get(..words).unwrap_or(&[])), &crate::sys::CSys);
+    let features = Native::features(&Auxv::from_words(copy.get(..words).unwrap_or(&[])), &crate::sys::CSys);
     for name in ld.preload.map(start::preload_names).into_iter().flatten() {
         for part in start::preload_ignored(name) {
             write_all(2, part);
@@ -210,7 +212,14 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
     let aux = Auxv::from_words(copy.get(..words).unwrap_or(&[]));
     // The page size, from AT_PAGESZ through the arch seam only (DL-7, D-27.15).
     let page = Native::page_size(&aux);
+    // LD_TRACE_LOADED_OBJECTS lists the dependencies instead of running (ldd); never in secure mode
+    // (threat model rule 11).
+    let list_env = List { ld: &ld, secure, features: &features, page, vdso: aux.get(AT_SYSINFO_EHDR), base: ehdr };
     if aux.get(AT_ENTRY).and_then(|e| usize::try_from(e).ok()) != Some(own_entry) {
+        if ld.trace && !secure {
+            let execfn = aux.get(AT_EXECFN).and_then(|a| usize::try_from(a).ok()).unwrap_or(0);
+            list(&list_env, if execfn == 0 { b"" } else { c_string(execfn) })
+        }
         let prog = start::program(&aux).unwrap_or_else(|e| refuse(e.message()));
         let bias = liella_rt::start::program(program_headers(&prog), prog.phnum, prog.phdr).bias;
         run(sp, &prog, bias, page)
@@ -229,7 +238,10 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
             }
             exit(0)
         }
-        Action::Program(_) => {
+        Action::Program(name) => {
+            if ld.trace && !secure {
+                list(&list_env, name)
+            }
             // argv[1] names the program; it becomes argv[0] and the stack starts one word later.
             let (prog, bias) = load(arg(1), page);
             let mut copy = copy;
@@ -238,6 +250,7 @@ pub extern "C" fn liella_ld_start(sp: usize, ehdr: usize) -> ! {
             store_words(argv, &[u64::try_from(argc.wrapping_sub(1)).unwrap_or(0)]);
             run(argv, &prog, bias, page)
         }
+        Action::List(name) => list(&list_env, name),
         other => {
             for part in program::refusal(other) {
                 write_all(2, part);
@@ -380,6 +393,216 @@ const MAP_PRIVATE_I32: i32 = 0x02;
 const MAP_FIXED_I32: i32 = 0x10;
 const MAP_ANONYMOUS_I32: i32 = 0x20;
 const MAP_FIXED_NOREPLACE_I32: i32 = 0x10_0000;
+/// Objects a dependency list holds (the program included); more is refused (D-27.16).
+const OBJECTS_MAX: usize = 256;
+/// Bytes of resolved paths a dependency list holds; more is refused (D-27.16).
+const PATHS_MAX: usize = 64 * 1024;
+
+/// What the dependency list needs from the start (DL-8).
+struct List<'a> {
+    ld: &'a start::LdEnv<'static>,
+    secure: bool,
+    features: &'a liella_rt::cpu::Features,
+    page: u64,
+    vdso: Option<u64>,
+    base: usize,
+}
+
+/// One object of the dependency list: the name it was needed as, its `DT_SONAME`, its file (empty
+/// when not found), its resolved path (a span of the path store) and the object that needed it.
+#[derive(Clone, Copy, Default)]
+struct Obj {
+    name: &'static [u8],
+    soname: &'static [u8],
+    file: &'static [u8],
+    path: (usize, usize),
+    parent: usize,
+}
+
+/// Open the NUL-terminated `path` and map the whole file read-only: the file and its descriptor.
+fn open_file(path: &[u8]) -> Option<(&'static [u8], i64)> {
+    let fd = crate::ffi_sys::liella_sys_openat(AT_FDCWD, path.as_ptr().cast(), i64::from(O_RDONLY | O_CLOEXEC), 0);
+    if fd < 0 {
+        return None;
+    }
+    let len = usize::try_from(crate::ffi_sys::liella_sys_lseek(fd, 0, i64::from(SEEK_END))).ok().filter(|&n| n > 0);
+    let at = len.and_then(|len| raw::mmap(0, len, map::PROT_READ, MAP_PRIVATE_I32, i32::try_from(fd).unwrap_or(-1), 0).ok());
+    let (Some(len), Some(at)) = (len, at) else {
+        let _ = crate::ffi_sys::liella_sys_close(fd);
+        return None;
+    };
+    // UNSAFE(slice): a file mapped read-only above, never unmapped while the slice is in use.
+    #[allow(unsafe_code)]
+    // SAFETY: `len` bytes from `at` are a private read-only mapping of the file; the list mode keeps
+    // every such mapping until the process exits (the caller unmaps only a file it rejects, after its
+    // last use).
+    let file = unsafe { conv::bytes_at(at, len) };
+    Some((file, fd))
+}
+
+/// The dynamic section of the object file `file`, when it is one of this architecture's.
+fn dynamic_of(file: &'static [u8]) -> Option<elf::Dynamic<'static>> {
+    elf::Elf::parse::<Native>(file).ok()?.dynamic().ok().flatten()
+}
+
+/// The string of dynamic tag `tag` in `d`.
+fn dyn_string(d: &elf::Dynamic<'static>, tag: u64) -> Option<&'static [u8]> {
+    d.get(tag).and_then(|o| d.string(o).ok())
+}
+
+/// The directory part of `path` (`$ORIGIN`): `.` for a bare name, `/` for a name in the root.
+fn dir_of(path: &[u8]) -> &[u8] {
+    match path.iter().rposition(|&b| b == b'/') {
+        None => b".",
+        Some(0) => b"/",
+        Some(i) => path.get(..i).unwrap_or(b"."),
+    }
+}
+
+/// `v` as 16 lower-case hexadecimal digits.
+fn hex16(v: u64) -> [u8; 16] {
+    let mut out = [b'0'; 16];
+    for (i, d) in out.iter_mut().enumerate() {
+        let nibble = (v >> (60 - 4 * i)) & 0xf;
+        *d = b"0123456789abcdef".get(usize::try_from(nibble).unwrap_or(0)).copied().unwrap_or(b'0');
+    }
+    out
+}
+
+/// `ld.so --list PROGRAM` and `LD_TRACE_LOADED_OBJECTS` (ld.so(8), design §19, DL-8): find and map
+/// (through [`map::load`]) every object the program needs, breadth first in `DT_NEEDED` order, each
+/// once, and write one line per object as `ldd` shows them; nothing is relocated or run. Status 0, or
+/// 127 when a dependency was not found.
+fn list(env: &List<'_>, prog: &'static [u8]) -> ! {
+    let mut path = PathBuf::default();
+    let fail = |what: &[u8], msg: &[u8]| -> ! {
+        for part in [&b"ld.so: "[..], what, b": ", msg] {
+            write_all(2, part);
+        }
+        exit(program::FAILURE)
+    };
+    let Some((file, fd)) = (if path.push(prog) { path.c_str().and_then(open_file) } else { None }) else {
+        fail(prog, b"cannot open shared object file\n")
+    };
+    let _ = crate::ffi_sys::liella_sys_close(fd);
+    let interp = elf::Elf::parse::<Native>(file).ok().and_then(|e| e.interp().ok().flatten());
+    if dynamic_of(file).is_none() {
+        write_all(1, b"\tnot a dynamic executable\n");
+        exit(1)
+    }
+    // The cache, once (R14-3 (a): `<prefix>/etc/ld.so.cache`); unreadable or inconsistent = none.
+    let cache_file = if search::prefixed(b"etc/ld.so.cache", &mut path) { path.c_str().and_then(open_file) } else { None };
+    if let Some((_, fd)) = cache_file {
+        let _ = crate::ffi_sys::liella_sys_close(fd);
+    }
+    let cache = cache_file.and_then(|(f, _)| Cache::parse(f));
+    let ctx = Ctx {
+        secure: env.secure,
+        library_path: env.ld.library_path,
+        origin_path: if env.secure { None } else { env.ld.origin_path },
+        platform: Native::platform(env.features),
+        hwcaps: Native::hwcaps(env.features),
+        cache: cache.as_ref(),
+    };
+    let mut objs = [Obj::default(); OBJECTS_MAX];
+    let mut store = [0u8; PATHS_MAX];
+    let first = store.get_mut(..prog.len()).unwrap_or_else(|| fail(prog, b"path too long\n"));
+    first.copy_from_slice(prog);
+    let mut used = prog.len();
+    if let Some(o) = objs.first_mut() {
+        *o = Obj { name: prog, file, path: (0, prog.len()), ..Obj::default() };
+    }
+    let mut count = 1usize;
+    let mut status = 0;
+    if let Some(v) = env.vdso.filter(|&v| v != 0) {
+        for part in [&b"\tlinux-vdso.so.1 (0x"[..], &hex16(v), b")\n"] {
+            write_all(1, part);
+        }
+    }
+    let mut i = 0usize;
+    while i < count {
+        let me = i;
+        i = i.wrapping_add(1);
+        let Some(d) = objs.get(me).and_then(|o| dynamic_of(o.file)) else { continue };
+        let (old, free) = store.split_at_mut(used);
+        let old: &[u8] = old;
+        let mut wrote = 0usize;
+        // The requester chain: this object, then each object that loaded it, up to the program.
+        let mut chain = [Scope::default(); OBJECTS_MAX];
+        let mut depth = 0usize;
+        let mut k = me;
+        while let (Some(slot), Some(o)) = (chain.get_mut(depth), objs.get(k)) {
+            let od = dynamic_of(o.file);
+            let origin = old.get(o.path.0..o.path.0.saturating_add(o.path.1)).map(dir_of);
+            *slot = Scope { rpath: od.as_ref().and_then(|x| dyn_string(x, elf::dt::RPATH)), runpath: od.as_ref().and_then(|x| dyn_string(x, elf::dt::RUNPATH)), origin };
+            depth = depth.wrapping_add(1);
+            if k == 0 {
+                break;
+            }
+            k = o.parent;
+        }
+        let chain = chain.get(..depth).unwrap_or(&[]);
+        for name in d.needed().flatten() {
+            let known = objs.get(..count).unwrap_or(&[]).iter().any(|o| o.name == name || (!o.soname.is_empty() && o.soname == name));
+            if name == Native::INTERP.as_bytes() || known {
+                continue;
+            }
+            if count >= OBJECTS_MAX {
+                fail(name, b"too many shared objects\n");
+            }
+            let mut hit: Option<(&'static [u8], i64)> = None;
+            let mut hit_path = PathBuf::default();
+            search::search::<Native>(name, chain, &ctx, &mut |p: &mut PathBuf| {
+                let Some((f, fd)) = p.c_str().and_then(open_file) else { return false };
+                if elf::Elf::parse::<Native>(f).is_err() {
+                    // Another architecture's or not an object: skipped, the search goes on.
+                    let _ = raw::munmap(f.as_ptr().expose_provenance(), f.len());
+                    let _ = crate::ffi_sys::liella_sys_close(fd);
+                    return false;
+                }
+                hit_path.clear();
+                hit_path.push(p.as_bytes());
+                hit = Some((f, fd));
+                true
+            });
+            let Some((f, fd)) = hit else {
+                for part in [&b"\t"[..], name, b" => not found\n"] {
+                    write_all(1, part);
+                }
+                status = program::FAILURE;
+                if let Some(o) = objs.get_mut(count) {
+                    *o = Obj { name, parent: me, ..Obj::default() };
+                }
+                count = count.wrapping_add(1);
+                continue;
+            };
+            let found = hit_path.as_bytes();
+            let loaded = map::load::<Native, _>(&mut SysMapper { fd: i32::try_from(fd).unwrap_or(-1) }, f, env.page);
+            let _ = crate::ffi_sys::liella_sys_close(fd);
+            let loaded = loaded.unwrap_or_else(|e| fail(found, e.message()));
+            let at = wrote;
+            let dst = free.get_mut(at..at.saturating_add(found.len())).unwrap_or_else(|| fail(found, b"too many shared objects\n"));
+            dst.copy_from_slice(found);
+            wrote = wrote.saturating_add(found.len());
+            let soname = dynamic_of(f).and_then(|x| dyn_string(&x, elf::dt::SONAME)).unwrap_or(b"");
+            if let Some(o) = objs.get_mut(count) {
+                *o = Obj { name, soname, file: f, path: (used.saturating_add(at), found.len()), parent: me };
+            }
+            count = count.wrapping_add(1);
+            for part in [&b"\t"[..], name, b" => ", found, b" (0x", &hex16(loaded.bias), b")\n"] {
+                write_all(1, part);
+            }
+        }
+        used = used.saturating_add(wrote);
+    }
+    let interp = interp.unwrap_or(Native::INTERP.as_bytes());
+    let base = u64::try_from(env.base).unwrap_or(0);
+    for part in [&b"\t"[..], interp, b" (0x", &hex16(base), b")\n"] {
+        write_all(1, part);
+    }
+    exit(status)
+}
+
 /// Words the loader copies of the auxiliary vector (128 pairs, `AT_NULL` included).
 const AUXV_WORDS_MAX: usize = 256;
 /// Words per program header.

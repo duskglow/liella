@@ -56,6 +56,16 @@ impl Arch for OtherTable {
     const INTERP: &'static str = "ld-test-other-table.so";
     const BASE_PAGE: u64 = 0x1_0000;
     const USER_END: u64 = 1 << 48;
+    const LIB: &'static str = "lib";
+    const SYSTEM_DIRS: &'static [&'static str] = &[];
+    const SYSTEM_TRUSTED: &'static [&'static str] = &[];
+    const CACHE_FLAGS: u32 = 0;
+    fn hwcaps(_: &liella_rt::cpu::Features) -> &'static [&'static str] {
+        &[]
+    }
+    fn platform(_: &liella_rt::cpu::Features) -> &'static str {
+        "other"
+    }
     fn features(_: &liella_kernel::auxv::Auxv<'_>, _: &impl liella_kernel::machine::Machine) -> liella_rt::cpu::Features {
         liella_rt::cpu::Features::default()
     }

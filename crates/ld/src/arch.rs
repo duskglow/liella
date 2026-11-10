@@ -62,6 +62,22 @@ pub trait Arch {
             _ => Self::BASE_PAGE,
         }
     }
+    /// The value of the `$LIB` dynamic string token (design §4, DL-8, D-27.16): a fixed string, no
+    /// environment input (threat model rule 2).
+    const LIB: &'static str;
+    /// The system's default directories, in search order, searched after `<prefix>/lib` when the
+    /// compile-time prefix is `/` (R14-3 (a), [`crate::search`]).
+    const SYSTEM_DIRS: &'static [&'static str];
+    /// The system directories that are trusted (threat model rule 5) when the prefix is `/`, besides
+    /// `<prefix>/lib`.
+    const SYSTEM_TRUSTED: &'static [&'static str];
+    /// The `flags` an `ld.so.cache` entry for this architecture carries (spec Appendix D.3.1); an entry
+    /// with other flags is skipped.
+    const CACHE_FLAGS: u32;
+    /// The `glibc-hwcaps` subdirectories `f` supports, highest priority first (design §4, #940).
+    fn hwcaps(f: &Features) -> &'static [&'static str];
+    /// The value of the `$PLATFORM` dynamic string token for `f` (a fixed string per CPU class).
+    fn platform(f: &Features) -> &'static str;
 }
 
 /// `AT_PAGESZ` (kernel UAPI `linux/auxvec.h`): the system page size.
@@ -131,6 +147,37 @@ impl Arch for X86_64 {
     fn features(aux: &Auxv<'_>, m: &impl Machine) -> Features {
         let _ = aux;
         Features::detect(m)
+    }
+
+    /// `$LIB` as the reference expands it in a `DT_RUNPATH` (spec/behaviour/dynlink.md, DL-0b probe).
+    const LIB: &'static str = "lib/x86_64-linux-gnu";
+    /// The reference's system search path as its `ld.so --help` prints it (DL-8 probe, D-27.16).
+    const SYSTEM_DIRS: &'static [&'static str] = &["/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu", "/lib", "/usr/lib"];
+    /// Threat model rule 5 (owner-approved, R14-15): `/lib64`, `/usr/lib64` and the multiarch pair.
+    const SYSTEM_TRUSTED: &'static [&'static str] = &["/lib64", "/usr/lib64", "/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu"];
+    /// Type 3 (ELF libc6) with ABI byte 3 (x86-64): `0x0303` (Appendix D.3.1; `0x0003` and `0x0803`
+    /// were observed skipped by the reference x86-64 loader).
+    const CACHE_FLAGS: u32 = 0x0303;
+
+    /// The x86-64 psABI micro-architecture levels (§3.1.1, "Micro-Architecture Levels"), each
+    /// subdirectory only when its level and every level below it are supported.
+    fn hwcaps(f: &Features) -> &'static [&'static str] {
+        const ALL: &[&str] = &["x86-64-v4", "x86-64-v3", "x86-64-v2"];
+        let v2 = f.cx16() && f.lahf() && f.popcnt() && f.sse3() && f.sse41() && f.sse42() && f.ssse3();
+        let v3 = v2 && f.avx() && f.avx2() && f.bmi1() && f.bmi2() && f.f16c() && f.fma() && f.lzcnt() && f.movbe();
+        let v4 = v3 && f.avx512_v4();
+        let skip = match (v4, v3, v2) {
+            (true, _, _) => 0,
+            (false, true, _) => 1,
+            (false, false, true) => 2,
+            _ => 3,
+        };
+        ALL.get(skip..).unwrap_or(&[])
+    }
+
+    /// `haswell` for the x86-64-v3 class (probed on a Haswell host, dynlink.md), `x86_64` otherwise.
+    fn platform(f: &Features) -> &'static str {
+        if Self::hwcaps(f).first().is_some_and(|h| *h != "x86-64-v2") { "haswell" } else { "x86_64" }
     }
 
     /// The `R_X86_64_*` numbers of the x86-64 psABI (§4.4.1, table "Relocation Types") the loader
