@@ -1,0 +1,9 @@
+# LIBM-F64-INVTRIG-QUICK plants (cargo xtask plants; docs/plants.md): the brief's four plus the quick kernel's own terms.
+asin-regime-moved | crates/math/src/invtrig.rs | lit:if a > s.hi { ==> if a > 2.0 * s.hi { | cargo test -p liella-math --release --test invtrig | msg:asin\(.*(rounding test|entry) FAILED
+table-index-off-by-one | crates/math/src/invtrig.rs | lit:let [rh, rl] = RECIP[j]; ==> let [rh, rl] = RECIP[(j + 1).min(64)]; | cargo test -p liella-math --release --test invtrig | msg:quick phase FAILED|rounding test FAILED
+near-always-true | crates/math/src/invtrig.rs | lit:if gap - ylo > eps && ylo > floor { ==> if true || (gap - ylo > eps && ylo > floor) { | cargo test -p liella-math --release --test invtrig | msg:(rounding test|quick phase|table entry) FAILED
+atan2-quadrant-dropped | crates/math/src/invtrig.rs | lit:(false, true) => (&PI_MINUS, -1.0), ==> (false, true) => (&t::ATAN_J64, 1.0), | cargo test -p liella-math --release --test invtrig | msg:atan2\(.*(rounding test|entry) FAILED
+recip-low-dropped | crates/math/src/invtrig.rs | lit:let w = h * rl + tl * rh; ==> let w = 0.0 * rl + tl * rh; | cargo test -p liella-math --release --test invtrig | msg:quick phase FAILED|rounding test FAILED
+cubic-on-high-part | crates/math/src/invtrig.rs | lit:let vt = v.hi + vl; ==> let vt = v.hi + 0.0 * vl; | cargo test -p liella-math --release --test invtrig | msg:quick phase FAILED|rounding test FAILED
+series-g4-dropped | crates/math/src/invtrig.rs | lit:(((g2 * g2 + g2) + 1.0) * (1.0 - g)) ==> ((g2 + 1.0) * (1.0 - g)) | cargo test -p liella-math --release --test invtrig | msg:quick phase FAILED|rounding test FAILED
+short-low-dropped | crates/math/src/invtrig.rs | lit:lo: (hh * rh - p) + (h - hh) * rh ==> lo: (hh * rh - p) | cargo test -p liella-math --release --test invtrig | msg:quick phase FAILED|rounding test FAILED

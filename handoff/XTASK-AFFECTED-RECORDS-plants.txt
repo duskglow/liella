@@ -1,0 +1,5 @@
+# XTASK-AFFECTED-RECORDS (D-X.57): plants on the records and layout-manifest classes of `cargo xtask affected`.
+# Run: cargo xtask plants handoff/XTASK-AFFECTED-RECORDS-plants.txt --dir <new-directory>
+xar-records-select-nothing | xtask/src/affected.rs | lit:return Some(Class::Records); ==> return Some(Class::Nothing("records")); | cargo test -p xtask --bin xtask records_select | msg:records_select_the_xtask_tests_and_static_not_full.*(FAILED|panicked)
+xar-layout-no-check | xtask/src/affected.rs | perl:s/(Some\(Class::LayoutManifest\) => \{.*?)sel\.xtask_cmds\.insert\(LAYOUT_CHECK\.to_string\(\)\);/$1/s | cargo test -p xtask --bin xtask the_layout_manifest | msg:the_layout_manifest_selects_layout_check_not_full.*(FAILED|panicked)
+xar-bad-record-id | records/decisions/D-X/D-X.57.toml | lit:id = "D-X.57" ==> id = "D-X.5x" | cargo xtask affected --files records/decisions/D-X/D-X.57.toml --run | msg:D-X\.57\.toml:1: .*(is not a decision id|differs from its id)

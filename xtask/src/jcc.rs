@@ -38,7 +38,7 @@ struct Insn {
 }
 
 /// The mnemonic without the prefixes objdump prints as separate words (segment prefixes are what the padding adds).
-fn split_insn(text: &str) -> (String, String) {
+pub(crate) fn split_insn(text: &str) -> (String, String) {
     const PREFIXES: &[&str] = &["cs", "ds", "es", "ss", "fs", "gs", "bnd", "notrack", "lock", "rep", "repz", "repnz", "repe", "repne", "data16", "addr32", "rex", "rex.W", "rex.R", "rex.X", "rex.B"];
     let mut words = text.split_whitespace().peekable();
     while let Some(w) = words.peek() {
