@@ -32,7 +32,7 @@ const OFFSETS: [u32; 11] = [0, 1, 15, 16, 31, 32, 4032, 4064, 4065, 4080, 4095];
 const HEAD_MAX: u32 = 32;
 
 /// Per kernel: (name, worst over median for all placements in percent, the same for head
-/// placements in percent). K is the kernel's measured spread on origin/next 03c9a4972 (mei,
+/// placements in percent). K is the kernel's measured spread on origin/next 03c9a4972 (Skylake-SP,
 /// Xeon 8151, AVX2 kernels; D-X.52) plus about 10 percent, rounded up to 5. The spreads differ
 /// by kernel: strcmp, strncmp and strncasecmp already take longer paths near a page end
 /// (426, 470 and 527 percent measured), so one K for all would not see a casecmp regression
