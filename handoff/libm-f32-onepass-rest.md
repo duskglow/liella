@@ -49,18 +49,25 @@ D-10.67, D-10.68, D-10.72.
   Unbooked indicative time on the build host (Liella/glibc): exp10f 1.57/1.56, logf 1.67/1.34, log2f 1.79/1.44, log10f
   0.85/0.73 (FMA/SSE2 glibc); expf 1.70/1.45 on the same run, which is 1.24 on Ivy Bridge booked: the build host
   is not the verdict.
-* Timing (booked): kotori:f32rest-ivb and nozomi:f32rest-n100 (`~/work/LIBM-F32-ONEPASS-REST/run.sh`, staged tree
-  libm.tar sha256 3aef4c75888fdced..., two rounds of `xtask-bin sweep run --only cbench_libm`; bookings #150/#151).
-  Started at hand-back; NOT read by this run. The target is <= 1.3x on Ivy Bridge per moved function.
+* Timing (`~/work/LIBM-F32-ONEPASS-REST/run.sh`, staged tree libm.tar sha256 3aef4c75888fdced..., two rounds of
+  `xtask-bin sweep run --only cbench_libm`, Liella/glibc median time ratio):
+  - Ivy Bridge (kotori:f32rest-ivb, rc 0, load 0.2-0.4, booking #150, cancelled after): round 1 / round 2:
+    logf 1.160 / 1.160, log2f 1.180 / 1.180, log10f 0.699 / 0.699, exp10f 1.441 / 1.442 (11-07 sweep: logf 2.60,
+    log2f 2.35, exp10f 2.60). Target <= 1.3x: met for logf, log2f, log10f; NOT met for exp10f (1.44).
+  - N100 (nozomi:f32rest-n100, booking #151): queued at hand-back, not read by this run.
+* exp10f's gap, found in the disassembly: LLVM compiles the exact-power refusal (`b & 0xf_ffff == 0 && b - bits(1)
+  <= bits(10) - bits(1)`) branchless (`test; sete; lea; cmp; setb; test; jne`: 7 instructions before the range test,
+  vs 2 intended): 62 instructions vs expf's 55. Fix for the continuation: one test, `(b - 0x3f80_0000).rotate_right(20)
+  <= 0x1a` (low 20 bits clear and b in [1, 10]; 4 instructions), then re-sweep exp10f and re-time.
 
 ## Not done
-* Timing verdict (above): read `~/logs/f32rest-ivb.log` on kotori and `~/logs/f32rest-n100.log` on nozomi; rows
-  exp10f, logf, log2f, log10f (and expf as the control), then cancel bookings #150/#151 if still held.
+* N100 timing: read `~/logs/f32rest-n100.log` on nozomi (rows exp10f, logf, log2f, log10f), cancel booking #151.
+* exp10f <= 1.3x on Ivy Bridge (the rotate test above).
 * Before-counts were not re-run on this base (the role is not a git tree, so `bench --base` cannot stage a base).
 * Per-function sequencing of the brief (timing before the next function) was batched: four functions, one gate, one
   sweep job, one timing run (budget).
 
 ## Next: LIBM-F32-ONEPASS-REST-2
-sinf/cosf/tanf (ALLOW entries `cvtss2sd %xmm0,%xmm3`; operand from bits, re-prove the trig margin for directed
+0. exp10f: the rotate test above, re-sweep, re-time. Then sinf/cosf/tanf (ALLOW entries `cvtss2sd %xmm0,%xmm3`; operand from bits, re-prove the trig margin for directed
 intermediates, only x = 0 exact), acoshf/asinhf's ALLOW entries, then powf (many exact cases: refuse on the bits or
 prove the kernel exact there). Start from `onepass_scaled` and `log_onepass`'s bits split.
