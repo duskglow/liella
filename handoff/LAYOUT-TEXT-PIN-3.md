@@ -20,11 +20,11 @@ commit carrying this note. Role mei:~/w/s2. Decision D-X.63 (unchanged). Plants 
 4. #4375: so.rs::sections_of reads the ELF section headers (hottext::elf_headers), not readelf -SW; unit test
    `so::tests::alias_sections_keep_whole_names_at_their_index`.
 
-## Counts (Zen 1 host, mei; bound in parentheses)
+## Counts (Skylake-SP host, mei; bound in parentheses; commit 62fcaac7e's message says "Zen 1 host" in error)
 | products | localtime | lt+mktime | mktime | STARTUP-TEXT-WINDOWS | other |
 |---|---|---|---|---|---|
 | inherited head, fast | 21 (20) FAIL | 21 (20) FAIL | 0 | ok | - |
-| this head, fast (fmap-r1, final job) | **18** | **18** | 0 | ok (all 12 contracts) | see the final counts job |
+| this head, fast (job layout-text-pin-3-final: 18 of 18 hot_text_products pass) | **18** | **18** | 0 | ok (all 12 contracts) | tool 58 (58), locale 54 (55), true 16 (17), fork 6 (7), float 3 (5), strings/rebind 0 |
 | inherited head, release (rel-base) | 21 FAIL | 21 FAIL | 0 | **5 > 4 BROKEN** | tool 58 (58), locale 55 (55), true 15 (17), fork 6 (7), float 3 |
 | fast-regen list, release (regen1's build) | not run | | | **7 > 4 BROKEN** | |
 Bounds untouched (rulings #4347/#4348: no re-derivation before A and B land).
