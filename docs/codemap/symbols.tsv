@@ -83,7 +83,7 @@ __clog10	(math-gen)	crates/boundary/src/posix/s10_math.tsv:188	mret::cplx
 __clog10	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:19	mret::cplx
 __clog10f	GLIBC_2.2.5	crates/boundary/src/posix/s10_math_gen.rs:24	mret::cplx
 __clone		csys/src/adapter/variadic.c:99	
-__close	GLIBC_2.2.5	csys/src/machine/points.S:187	liella_close_rest
+__close	GLIBC_2.2.5	csys/src/machine/points.S:196	liella_close_rest
 __cmsg_nxthdr	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:184	ret::ptr
 __confstr_chk	GLIBC_2.4	crates/boundary/src/posix/s24_system.rs:233	ret::size0
 __connect	GLIBC_2.2.5	crates/boundary/src/posix/s15_sockets.rs:73	ret::zero
@@ -912,7 +912,7 @@ clogf32	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1121	mret::cplx
 clogf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1126	mret::cplx
 clogf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:1131	mret::cplx
 clone		csys/src/adapter/variadic.c:98	
-close	GLIBC_2.2.5	csys/src/machine/points.S:184	liella_close_rest
+close	GLIBC_2.2.5	csys/src/machine/points.S:193	liella_close_rest
 close_range	GLIBC_2.34	crates/boundary/src/posix/s11_lowio.rs:120	ret::zero
 closedir	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:737	ret::zero
 closefrom	GLIBC_2.34	crates/boundary/src/posix/s11_lowio.rs:125	ret::must
@@ -2888,8 +2888,8 @@ powf32x	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4410	mret::elem_fas
 powf64	GLIBC_2.27	crates/boundary/src/posix/s10_math_gen.rs:4415	mret::elem_fast
 ppoll	GLIBC_2.4	crates/boundary/src/posix/s11_lowio.rs:388	cancel::point
 prctl		csys/src/adapter/variadic.c:113	
-pread	GLIBC_2.2.5	csys/src/machine/points.S:110	liella_pread_rest
-pread64	GLIBC_2.2.5	csys/src/machine/points.S:113	liella_pread_rest
+pread	GLIBC_2.2.5	csys/src/machine/points.S:115	liella_pread_rest
+pread64	GLIBC_2.2.5	csys/src/machine/points.S:118	liella_pread_rest
 preadv	GLIBC_2.10	crates/boundary/src/posix/s11_lowio.rs:246	cancel::point
 preadv2	GLIBC_2.26	crates/boundary/src/posix/s11_lowio.rs:270	cancel::point
 preadv64	GLIBC_2.10	crates/boundary/src/posix/s11_lowio.rs:252	cancel::point
@@ -3159,8 +3159,8 @@ putwc_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:572	ret::wint_
 putwchar	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:577	ret::wint_written
 putwchar_unlocked	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:582	ret::wint_written
 pvalloc	GLIBC_2.2.5	crates/boundary/src/posix/s03_memory.rs:126	ret::null
-pwrite	GLIBC_2.2.5	csys/src/machine/points.S:145	liella_pwrite_rest
-pwrite64	GLIBC_2.2.5	csys/src/machine/points.S:148	liella_pwrite_rest
+pwrite	GLIBC_2.2.5	csys/src/machine/points.S:152	liella_pwrite_rest
+pwrite64	GLIBC_2.2.5	csys/src/machine/points.S:155	liella_pwrite_rest
 pwritev	GLIBC_2.10	crates/boundary/src/posix/s11_lowio.rs:258	cancel::point
 pwritev2	GLIBC_2.26	crates/boundary/src/posix/s11_lowio.rs:282	cancel::point
 pwritev64	GLIBC_2.10	crates/boundary/src/posix/s11_lowio.rs:264	cancel::point
@@ -3188,7 +3188,7 @@ re_search	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:363	regex::gnu_sea
 re_search_2	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:368	regex::gnu_search
 re_set_registers	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:383	regex::re_set_registers
 re_set_syntax	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:347	regex::re_set_syntax
-read	GLIBC_2.2.5	csys/src/machine/points.S:48	liella_read_rest
+read	GLIBC_2.2.5	csys/src/machine/points.S:49	liella_read_rest
 readahead	GLIBC_2.3	crates/boundary/src/posix/s11_lowio.rs:468	ret::ssize_zero
 readdir	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:702	core::ptr::with_exposed_provenance_mut
 readdir64	GLIBC_2.2.5	crates/boundary/src/posix/s13_filesystem.rs:707	core::ptr::with_exposed_provenance_mut
@@ -3980,7 +3980,7 @@ wmemset	GLIBC_2.2.5	crates/boundary/src/posix/s04_strings.rs:1358	ret::same
 wordexp	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:312	patterns::wordexp
 wordfree	GLIBC_2.2.5	crates/boundary/src/posix/s14_search.rs:318	patterns::wordfree
 wprintf		csys/src/adapter/variadic.c:167	liella_vfwprintf4
-write	GLIBC_2.2.5	csys/src/machine/points.S:79	liella_write_rest
+write	GLIBC_2.2.5	csys/src/machine/points.S:82	liella_write_rest
 writev	GLIBC_2.2.5	crates/boundary/src/posix/s11_lowio.rs:240	cancel::point
 xdecrypt	GLIBC_2.2.5	crates/boundary/src/posix/s29_rpc_auth.rs:76	
 xdr_bool	GLIBC_2.2.5	csys/src/machine/compat_aliases.S:2678	liella_compat_xdr_bool
