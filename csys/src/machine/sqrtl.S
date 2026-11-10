@@ -28,6 +28,7 @@
 	.p2align 4
 SQRTL:
 SQRTF64X:
+liella_machine_sqrtl:	/* local: the anchor plants and audits name (docs/plants.md) */
 	fnstcw -2(%rsp)
 	movzwl -2(%rsp), %eax
 	andl $0xf3ff, %eax
