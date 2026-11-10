@@ -1,0 +1,8 @@
+id = "D-12.4"
+section = "s12"
+spec = "§12.6"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** formatting is typed (`Arg` enum, `Spec`), with no `%n`. **Boundary:** `legacy::printf_va` decodes `va_list` by format. `%n` is honoured in the plain family. In `_chk` forms it is rejected when the format lies in writable memory: the format pointer is checked against the loader's read-only segment map (`ld`), and before phase 14 against the executable's read-only segments from `AT_PHDR`.
+'''

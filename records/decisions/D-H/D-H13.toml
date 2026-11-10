@@ -1,0 +1,7 @@
+id = "D-H13"
+section = "h"
+pattern = "Ancestral duplicates"
+status = "active"
+body = '''
+One internal function. The duplicates are translation aliases, sometimes one function exported under two names.
+'''

@@ -1,0 +1,8 @@
+id = "D-8.9"
+section = "s08"
+spec = "§8.4"
+ann = "ARB (spec silent)"
+status = "active"
+body = '''
+`%a` output follows the reference library (revised in phase 8, measured by `printf_products.rs`): a `float`/`double`/`_Float128` has a leading `1` (`0` for subnormals), and a rounding carry makes it `2` (`0x2p+0`), not renormalised; an x87 `long double` prints its 64-bit significand nibble by nibble, so the leading digit is its top nibble (`1.0L` is `0x8p-3`), and a carry out of `f` gives `0x1` with the exponent 4 higher. A NaN with its sign bit set prints as `-nan`. Underflow (`ERANGE`) means a tiny *and* inexact result.
+'''

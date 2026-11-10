@@ -1,0 +1,8 @@
+id = "D-4.67"
+section = "s04"
+spec = "§4.1–4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**Hot machine assembly keeps every jump off 32-byte boundaries** (MACHINE-JCC-PAD, 2026-11-07; from COMPARE-HEAD-RETHINK). `csys/src/machine/fold.S` and `scan.S` are assembled with `-Wa,-malign-branch-boundary=32 -Wa,-malign-branch=jcc+fused+jmp+call+ret+indirect -Wa,-malign-branch-prefix-size=5` (list and flags in `crates/boundary/jcc_pad.rs`, read by `build.rs` and xtask). Reason: on Skylake-family cores with the JCC-erratum microcode, a 32-byte window holding a jump (Jcc, fused compare-and-Jcc, JMP, indirect, call, return) that crosses or ends on a 32-byte boundary is not cached as decoded uops, and the code runs from the legacy decoders (IDQ.MITE_UOPS 8-56 per call on the compare rows in the rethink, about 0 with padding); instruction counts do not show it. Reference: Intel, "Mitigations for Jump Conditional Code Erratum" (2019). Cost: fold.S +78 bytes, scan.S +640 bytes of code; 8 scan.S sections 16- to 32-byte aligned. Kept true by `cargo xtask jcc-check` (a `static` check on the assembled files, and on `libc.a` in `so`): no jump or fusible pair crosses or ends on a boundary, every section holding one is 32-byte aligned. Measuring aid: `CBENCH_COUNTERS=mite` (bench programs run directly), `wl_percall.sh --event mite`. Evidence and timing on cores without the erratum: handoff/machine-jcc-pad.md.
+'''

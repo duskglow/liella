@@ -1,0 +1,17 @@
+{"task": "LIBM-F64-LOG-FAMILY-WIRE-2", "model": "opus", "tokens": null,
+ "result": "static findings fixed; gate found log2(2^e)/log10(10^n) answered with inexact raised by the fast entry, fixed with exact paths before any arithmetic; gate2 green, plants 14 CAUGHT / 0 SURVIVED (2 WARN-NO-MSG, caught); counts (FMA+SSE2) and stage queued; timing not run",
+ "branch": "task/libm-f64-log-family-wire-2", "head": "72cce56e6 (code; handoff commits on top)",
+ "gate": {"affected": "affected: ok (direct tier, --base origin/next), clippy, static, 10^7 accuracy runs green", "peak": "11G"},
+ "accepted_first_attempt": false,
+ "rulings": [],
+ "informational": [
+   "Inherited plants job on mei had 2 SURVIVED (k0 one ulp: only the FMA build's product uses k0); re-aimed at the FMA test, plus SSE2 k26 plants",
+   "Plants WARN-NO-MSG: log2-tier2-skipped, log10-tier2-skipped (rc 101; caught by the new tiered-path assertion; regex widened in the plants file after the run)",
+   "Plants WARN-DEV-SHM on keke (no /mnt/zram there; the planted tests mount nothing)",
+   "Timing bookings 132/133 cancelled: the stage tarball comes after gate and counts, past this run's budget"
+ ],
+ "refused": [],
+ "improvement": "A jobrun queued behind full slots inside a foreground ssh call blocked a tool call for 10 min; a 'queued, start detached' hint from jobrun when no slot is free would avoid it",
+ "next_step": "Read counts2 (FMA and SSE2) into the handoff and D-10.66, then booked timing on Ivy Bridge and N100 from ~/work/LIBM-F64-LOG-FAMILY-WIRE-2/libm-stage.tar on keke",
+ "report_file": "handoff/LIBM-F64-LOG-FAMILY-WIRE.md",
+ "jobs": ["keke:libm-f64-log-family-wire-2-gate2", "keke:libm-f64-log-family-wire-2-plants2", "keke:libm-f64-log-family-wire-2-counts2"]}

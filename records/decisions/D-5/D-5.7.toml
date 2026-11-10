@@ -1,0 +1,8 @@
+id = "D-5.7"
+section = "s05"
+spec = "§5.2, App. D.1.2"
+ann = "PERF"
+status = "active"
+body = '''
+**Three-level tables read whole words; the wide entries return their `int` from tail calls** (TIMING-COV-WCTYPE-L; local decisions). (1) `Table3` keeps its data as words (`as_chunks::<4>`) and its `bound` level-1 entries as a slice: each level is one checked slice read, where it was a `bound` test plus a checked byte-range read with overflow tests. A level-2 or level-3 offset that is not a multiple of 4 (not well-formed, D.1.2 blocks are `u32` arrays) reads the word it falls in; every read stays inside the table, as before. (2) `Wide` holds `Table3::EMPTY` (no entries) for a class without a table, not an `Option`: one test fewer per call, same answers. (3) `LocaleView::isw_int` and `iswctype_view` return the C `int`, so the out-of-line arms are tail calls and `__iswalpha_l`/`__iswctype` keep no frame on the hit path (build-host disassembly: `__iswctype` saves no register, `__iswalpha_l` pushes only on the built-in arm; per-call counts in handoff/TIMING-COV-WCTYPE-L.md). Proven by the plants in handoff/TIMING-COV-WCTYPE-L-plants.txt.
+'''

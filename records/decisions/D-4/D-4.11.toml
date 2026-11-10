@@ -1,0 +1,8 @@
+id = "D-4.11"
+section = "s04"
+spec = "§4.1–4.3"
+ann = "—"
+status = "active"
+body = '''
+The loops behind `memcpy`, `memmove`, `memset`, `memcmp` and `bcmp` live in the leaf crate `liella-mem`, compiled `#![no_builtins]` and not generic, so they are never turned back into calls to those C symbols (which, in the product, are these exports: `memcpy` would call itself). Everything else may use the standard slice operations. An optimised build is checked to contain no such calls. (Named D-4.10 in commit ddc6579.)
+'''

@@ -1,0 +1,8 @@
+id = "D-8.3"
+section = "s08"
+spec = "§8.2"
+ann = "HIST"
+status = "active"
+body = '''
+The radix character is an explicit parameter. `strtod` passes the current locale's, and `strtod_l` its argument's. The internal default is the C radix. Phase 7: the radix is the `LC_NUMERIC` decimal-point string, which can be several bytes (`ps_AF`'s `٫`), and for the wide functions the wide decimal point (`_NL_NUMERIC_DECIMAL_POINT_WC`). Parsing takes no grouping: the spec ties thousands grouping to printf's `'` flag (phase 8).
+'''

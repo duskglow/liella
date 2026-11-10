@@ -1,0 +1,8 @@
+id = "D-24.10"
+section = "s24"
+spec = "§24.4"
+ann = "HIST"
+status = "active"
+body = '''
+`_SC_ARG_MAX` = max(128 KiB, min(stack limit / 4, 6 MiB)), per execve(2) and a phase-11 probe (the reference returns 6291456 for 32 MiB, 64 MiB and unlimited stacks; Liella returned 2^62-1 for an unlimited stack before).
+'''

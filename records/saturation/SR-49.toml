@@ -1,0 +1,13 @@
+id = "SR-49"
+section = "3"
+row = "`rawmemchr_4k` SSE2 level (Ivy Bridge time)"
+now = "same instructions; time 1.090 x glibc at entry + 0x3d0, 1.057 x glibc with the loop 32-byte aligned (D-4.63)"
+limit = "none"
+reason_class = "layout"
+basis = "T"
+source = "PERF-RAWMEMCHR-4K-IVB"
+tried = "Cause of the 1.3% loss after TIMING-IVB-MEMREF-ENTRY: the 128-byte loop moved from 32-byte aligned to 16 mod 32 (five 32-byte fetch windows). perf stat (whole program, Liella only): all three layouts run the loop mostly from the decoded-uop cache; the aggregate front-end counters did not separate them (run-length calibration differs per run), so timing decided. Not tried: 64-byte alignment (entry + 0x400 needs 48 bytes of fill, which pushes the next section by 64 and moves every later function)."
+flag = "-"
+status = "active"
+body = '''
+'''

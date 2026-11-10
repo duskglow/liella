@@ -1,0 +1,8 @@
+id = "D-1.3"
+section = "s01"
+spec = "§1.3"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Env` is an ordered multimap. "First match wins" for lookups and "remove all" for unset reproduce the contract for duplicate `execve` entries. **Boundary:** `environ` is an exported array the caller may read or replace (F7). `legacy::environ` treats that array as authoritative, and `putenv` stores the caller's pointer (contract). `setenv` keeps replaced values alive, as the contract requires ("leaks by design"), but they are tracked in one arena so `clearenv`/exit can release them.
+'''

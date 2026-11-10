@@ -1,0 +1,8 @@
+id = "D-16.12"
+section = "s16"
+spec = "§16 (IDNA)"
+ann = "ARB"
+status = "active"
+body = '''
+**IDNA tables: generated, one property trie, delta-run mappings** (COLD-TABLE-IDNA, 2026-10-20; record `liella-historic:handoff/decisions/COLD-TABLE-IDNA.md`; D-16.4). glibc has no IDNA tables of its own (it loads libidn2), so there is no glibc shape here. (1) Unicode 15.1.0 stays (the D-16.4 pin; move all Unicode consumers together). (2) `cargo xtask unicode-gen` writes `idna_tables.rs` from the pinned files (`--check` fails when stale); data only, lookup hand-written in `idna.rs`; no build script, no binary blob. (3) Status, Bidi class, joining type and mark packed in one 16-bit word reached by a two-level trie (block size chosen by the generator, 256: 48.9 KB). (4) Mappings as `(start, len, delta)` runs plus a deduplicated string pool; lookups by value (`MAX_MAP` 18). (5) Fully expanded canonical decompositions with `u16` end offsets; compositions one `u64` per pair searched on the top 42 bits. (6) Cold path: no per-instruction tuning. Finding: the old table matched the public data except two deviation mappings (U+00DF, U+03C2), now kept as the public table says; `to_ascii`/`to_unicode` unchanged. Data 161.7 KB to 130.7 KB.
+'''

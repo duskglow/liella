@@ -1,0 +1,13 @@
+id = "SR-9"
+section = "2"
+row = "`ualarm` > `UINT_MAX`, `mallinfo` > `INT_MAX`, `ecvt` 17th digit"
+now = "n/a"
+limit = "deliberate differences, not perf"
+reason_class = "spec"
+basis = "M"
+source = "`docs/differences-from-glibc.md`"
+tried = "n/a"
+flag = "none (listed so the review does not take them for gaps)"
+status = "active"
+body = '''
+'''

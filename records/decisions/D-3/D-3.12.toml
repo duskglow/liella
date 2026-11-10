@@ -1,0 +1,8 @@
+id = "D-3.12"
+section = "s04"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**Topology and placement** (phase 6; M3, M5). A thread's NUMA node is read only on a cache's slow path (taking a slab or a cache), never per allocation: from the rseq area's `node_id` when Liella owns the thread's registration and the kernel fills it (Linux 6.3+), otherwise from the vDSO `getcpu` (no system call). It is stored in the thread block (0x98) as a hint. The shard is the node (D-3.10); the cache pool is per node too, so a new thread takes a cache whose slabs sit on its node. `Heap::set_numa(true)` is called at startup when `get_mempolicy(MPOL_F_MEMS_ALLOWED)` reports more than one allowed node; otherwise placement stays the kernel's default (first touch), which on one node is optimal. A thread that migrates keeps using its slabs; its *new* slabs come from its new node. The topology is reached through the `Pages` trait, so tests simulate several nodes on any machine (the development host has one).
+'''

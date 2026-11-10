@@ -1,0 +1,8 @@
+id = "D-14.11"
+section = "s14"
+spec = "§14.9"
+ann = "—"
+status = "active"
+body = '''
+**regexec per-call scratch, no allocation** (RX-CAP, 2026-10-08; stack cap by the coordinator). Everything a search writes lives in scratch owned by the call or the thread (`pattern/regex/scratch.rs`: fixed-capacity `Buf`s carved from typed `Pool`s); the compiled block stays read-only and shared. Storage, in order: `Small` on the stack, 3,712 bytes for both passes together (cap about 4 KiB, so a thread with a `PTHREAD_STACK_MIN` stack can call regexec; conformance program `s14_regexec_min_stack`); else the caller's `ScratchSource` (`regexec`/`re_search`: four blocks per thread, kinds REGEX_* in the thread's result table, calloc'ed on first need, grown to a power of two, kept between calls, freed at thread exit by `users::thread_ending`; bounded by the thread's largest search); else per-call heap blocks (core callers without a source). Sizes from the program before the search (`Room`: a bucket per state, a best slot per state and class C, 3C+1 threads per frontier = exact bound for single-byte characters without back-references); a too-small buffer fails with `Grow` and the search reruns with twice the room (pure, same answer; unit test with the least room). Ring a power of two, masked: 2 single-byte, 8 multibyte, 16 with back-references. Buckets packed as four u64 words. `Match::groups` is an `InlineVec` of 9. Remainder: back-reference patterns keep subject-sized heap buffers (prefix hashes, pending lists).
+'''

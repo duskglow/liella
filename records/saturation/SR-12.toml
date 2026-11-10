@@ -1,0 +1,13 @@
+id = "SR-12"
+section = "3"
+row = "`memcmp_16`, `memcmp_64`, `memcmp_128`"
+now = "29.4 vs 29.4; 25.4 vs 27.4; 39.4 vs 39.4"
+limit = "at parity; tightened to count + 2%"
+reason_class = "hardware (instruction floor of the load/compare/branch ladder)"
+basis = "M"
+source = "LIMITS-TIGHTEN"
+tried = "MEM-ENTRY-2: fused flag test rejected (+1 uop on Haswell). MEMCMP-EQ rejected (D-4.47). Equal 24-32: +11 memcmp, +7 bcmp, at most about 10M instr in the workloads, \"no band trade is worth a story\" (MEMCMP-SIZE-MIX); MEMCMP-EQ-24-32 then cut memcmp 8-16 from 21 to 19 (static count)"
+flag = "**measured 2026-10-23** (section 10) the 24-32 equal gap after MEMCMP-EQ-24-32 (no counts in the tree)"
+status = "active"
+body = '''
+'''

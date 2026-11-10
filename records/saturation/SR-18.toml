@@ -1,0 +1,13 @@
+id = "SR-18"
+section = "3"
+row = "`memcpy_144`, `memcpy_256` (129-256 B, fold.S `.Lmove_129_go`, AVX2) on Alder Lake-N (Gracemont E-cores) (TIMING-N100-COPY-MID, NEGATIVE)"
+now = "time 1.077 / 1.077 of glibc (14.4 vs 13.2 cycles, 38.1 vs 38.1 instr, bench on next 730f416b); Zen 1 host instr 38.4 vs 36.4"
+limit = "no same-instruction-count shape closes it on this core: the time gap is the class's entry tests, not the copy body"
+reason_class = "design (the explicit NULL tests of option B, owner ruling 2026-10-08)"
+basis = "M (scratch microbench, the class's code and reorderings in one binary next to glibc's memcpy, per-call cycles by perf difference, min of 5, pinned)"
+source = "TIMING-N100-COPY-MID"
+tried = "Current 13.00 cycles/call, glibc 12.26 (any src/dst placement except a 4 KiB alias, which costs both 17). Same cycles (13.00, or 13.1-13.2 worse): stores reversed, head/tail interleaved, tail stored first, tail loaded first, `vmovups`, 129 class as fall-through (65 taken), flag test first, `vzeroall`. Diagnostic only: no entry tests 11.0; no `vzeroupper` 12.67; VEX.128 (+15 instr) 12.67-13.78; without the 129 flag test (-2 instr) 13.00; without the two NULL tests (-4 instr) 12.00. Retired slots = instructions + 1 per 256-bit memory op (each 256-bit load or store runs as two halves): the call is bound by allocation width. By reading (not built): entry layouts that save the 129 class an instruction (NULL tests shared by both classes, or a 128 split without the `lea`) cost the 65-128 class +1 or +2"
+flag = "the row's verdict needs the ruling on the 129-256 NULL tests"
+status = "active"
+body = '''
+'''

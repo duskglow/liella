@@ -1,0 +1,12 @@
+{"task": "STARTUP-FAULTS-BISECT", "model": "opus", "tokens": null,
+ "result": "static printf start main 61 vs next 64 (mei, ASLR off, deterministic); causes: DL-BOOT-RELOC-7 (merge 253) left runtime::start::<false> and apply_irelative outside the hot group (+2 text; corrected keys alone give 60), integrate-hconf-3 (merge 42) put global_locale LOCK/GLOBAL on a .bss page of their own read-then-written (+2), plus +1 .data/+1 .rodata layout; fix brief STARTUP-FAULTS-RESTORE written",
+ "branch": "task/startup-faults-bisect", "head": null,
+ "gate": {"affected": "n/a (no code change); hot_text_products on next 12 passed (startup 22/23, locale 60/68, tool 62/71)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [{"item": "hot_text_products bounds only ever rise (+2 each layout-only ruling); fix brief ratchets them to count+1 and makes a dead hot-text key a build error", "recommendation": "accept the ratchet and the dead-key error with an allow-list"}],
+ "informational": ["84 of 655 hot-text keys match no function in libc.a on next", "the total count is a layout lottery across main..next (57..66 sampled); text alone 7..13 windows", "recount's 66 on keke at 70cb44d76 not re-measured (no keke role); mei reads 64 at 82fe6cfd1", "32 high-address faults (heap arena pages at 256 KiB stride, locale mmaps, stack, vdso) are identical main/next: the next saturation row"],
+ "refused": [],
+ "improvement": "wl_count measures faults with ASLR on (+-1..2 noise); counting under setarch -R makes the fault gate deterministic",
+ "next_step": "run STARTUP-FAULTS-RESTORE (handoff/startup-faults-bisect/STARTUP-FAULTS-RESTORE.md)",
+ "report_file": "handoff/startup-faults-bisect.md",
+ "jobs": ["mei:sfb-round1", "mei:sfb-maps1", "mei:sfb-step2", "mei:sfb-attrib1", "mei:sfb-round2", "mei:sfb-attrib2", "mei:sfb-round3", "mei:sfb-hottext-next2"]}

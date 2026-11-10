@@ -1,0 +1,7 @@
+id = "D-H15"
+section = "h"
+pattern = "Retrofitted threading"
+status = "active"
+body = '''
+**Internal:** thread-safe by construction. No `_unlocked` distinction internally: streams take `&mut Stream` under a lock held for a whole operation. **Boundary:** `flockfile` and the `*_unlocked` forms are honoured, because callers rely on the lock scope.
+'''

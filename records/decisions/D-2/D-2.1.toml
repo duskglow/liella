@@ -1,0 +1,8 @@
+id = "D-2.1"
+section = "s02"
+spec = "§2.1"
+ann = "HIST"
+status = "active"
+body = '''
+The errno cell is a TLS slot in `legacy::errno_slot`, exported via `__errno_location`. It is never touched internally. **Hosted test builds** (no `export` feature, where the host C library owns the threads and their TLS) reach the errno of the running C library through the interposable `__errno_location` symbol, as `caller_alloc` reaches `malloc` (F23). Product builds resolve the same symbol to Liella's own export. Translation tests therefore observe the real per-thread `errno` from phase 2 on.
+'''

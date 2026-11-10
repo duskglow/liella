@@ -1,0 +1,13 @@
+id = "SR-75"
+section = "6"
+row = "sed-utf8 workload, regex prefilter one-byte search (`conv::find_core`, m == 1)"
+now = "instructions:u 2456411104 at fa513bd3, +0.40% vs fa678f74 (2446684937); sed-s +0.14% (Zen 1 host, 60 vCPU, wl_count, 2026-11-04)"
+limit = "accepted (ruling #2333)"
+reason_class = "design"
+basis = "M"
+source = "PERF-RC1024-SED-UTF8, -2, -3"
+tried = "Probe (LD_PRELOAD log of sed's `re_search`, -2): lines without the required byte make no regex call; a matching line makes 3 calls (start 0, end of match 1, end of match 2), two alternating line buffers, so a start never repeats and a 'present' cache cannot hit (not built). -3: a scalar scan of the first 16 bytes before `memchr` (m == 1): sed-utf8 +1.20% (2485913088), sed-s +0.22% vs fa513bd3, other rows 1.0000, reverted. The `memchr` scanner is already cheaper on these windows."
+flag = "no"
+status = "active"
+body = '''
+'''

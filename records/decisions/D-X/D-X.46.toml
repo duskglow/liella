@@ -1,0 +1,6 @@
+id = "D-X.46"
+section = "x"
+status = "active"
+body = '''
+**Pipe read/write calls of a multi-process workload are advisory, like futex calls** (WL-PIPE-READS-ADVISORY, 2026-11-07; owner ruling #4065; tooling only, no product code). In a pipeline (pipe-mix, tar-gz) the number of `read`/`write` calls on a pipe depends on how much data waits when a reader wakes, not on the code (a recount moved pipe-mix by +65 and tar-gz by +284 syscalls). `validation/wl_syscls.sh` now reads one `strace -C -f -y` output (trace lines show pipe fds as `N<pipe:[ino]>`, then the summary): when the clone trace (`clone,clone3,fork,vfork`) shows a new process without `CLONE_THREAD` (`wl_has_child`), every read/write-family call whose first fd is a pipe leaves `rw` and the gating total and is reported as `piperw` (wl_run `sys_piperw`, wl_count row "pipe rw (advisory)"), never a verdict. Single-process runs keep pipe calls in the gate; every other class is unchanged. Tests: `validation/wl_run_test.sh` (canned traces: only pipe calls differ, gate unchanged; a file read differs, gate changes; single-process run keeps them), `validation/wl_stats_test.sh`; plants in `validation/wl_stats_plants.sh`.
+'''

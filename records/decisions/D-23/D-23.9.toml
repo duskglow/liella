@@ -1,0 +1,8 @@
+id = "D-23.9"
+section = "s23"
+spec = "§23.7"
+ann = "PERF"
+status = "active"
+body = '''
+**Internal (P8):** `strftime`/`wcsftime` take a direct path for a conversion right after its `%` (no flag, width, modifier or inherited `%EY` padding): `Y C y m d e H k I l M S j u w U W` with values in 0..=9999, `T R D F` below the nesting limit, `z` below 100 hours, `n t %`, and for byte output the names `a A b h B p Z`; each is built on the stack (two-digit table, u16) and stored as one field, and ordinary text is copied as a run with the unit-by-unit truncation rule. Everything else (flags, widths, E/O, eras, other values, wide names) takes the general path unchanged. The engine is generic over its sink (no `dyn Out` on the hot path), and composites read byte formats in place. `time::format::tests::direct_path_is_the_general_path` compares the two paths (7 locales x 102 times x 59 formats x both units, every buffer length for 17 of the times).
+'''

@@ -1,0 +1,38 @@
+{
+ "task": "LIBM-F64-TRIG-QUICK-2",
+ "model": "opus",
+ "tokens": null,
+ "result": "PENDING JOBS: trig quick phase FMA-build boundary test + 10^8 accuracy job, 6/6 plants CAUGHT, D-10.61 written; first gate red only on an unsafe-audit line (fixed); final lint/stage/counts/gate/accuracy queued on keke; timing not run",
+ "branch": "task/libm-f64-trig-quick-2",
+ "head": "757f653e9 (last code commit; handoff/report commit on top)",
+ "gate": {
+  "affected": "first gate (2d543fd81): 7288 passed / 0 failed, STEP FAILED unsafe-audit 1 (fixed in 757f653e9); final gate2 queued",
+  "peak": "11G, oom_kill 0 (first gate)"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "The brief's accuracy job asks for four rounding modes: the quick phase runs only in round-to-nearest (the unchanged elem_fast envelope takes the accurate path otherwise); the new job checks nearest only.",
+  "keke's slots were full at hand-back: a foreground full clippy waited 10+ min in the queue and was stopped by PID; lint runs as the driver's first job instead.",
+  "Timing bookings 128 (kotori) and 129 (nozomi) were cancelled unused: the stage tarball could not be built within budget."
+ ],
+ "refused": [],
+ "jobs": [
+  "libm-f64-trig-quick-2-lint",
+  "libm-f64-trig-quick-2-stage2",
+  "libm-f64-trig-quick-2-counts2",
+  "libm-f64-trig-quick-2-gate2",
+  "libm-f64-trig-quick-2-accuracy2",
+  "libm-f64-trig-quick-2-plants2"
+ ],
+ "superseded": [
+  "libm-f64-trig-quick-2-t1 (lint failure, fixed)",
+  "libm-f64-trig-quick-2-t2 (pre-fix tree)",
+  "libm-f64-trig-quick-2-gate (unsafe-audit on 2d543fd81, fixed)",
+  "libm-f64-trig-quick-2-counts (killed while queued, stale tree)",
+  "libm-f64-trig-quick-2-plants (6/6 CAUGHT on 2d543fd81, before the hook fix)"
+ ],
+ "improvement": "Run cargo xtask static after every code change, not only on the inherited head: a 59-minute gate went red on a one-line audit miss that static catches in seconds.",
+ "next_step": "Read the five driver jobs on keke; add counts to D-10.61; timing of sin/cos/tan/sin_huge on Ivy Bridge and N100 from stage.tar.",
+ "report_file": "handoff/LIBM-F64-TRIG-QUICK.md"
+}

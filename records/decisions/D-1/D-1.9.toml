@@ -1,0 +1,8 @@
+id = "D-1.9"
+section = "s01"
+spec = "§1.2"
+ann = "—"
+status = "active"
+body = '''
+**`exit`'s order** (ERRATA E9): the calling thread's `thread_local` destructors, then the registered handlers most recent first (including those registered while running, and a static program's `.fini_array`/`_fini`, registered at startup), then `exit_group`. Each handler is taken before it is called, so a nested `exit` runs only the rest. The first 32 registrations live in the registry itself (the ISO minimum needs no memory); later ones go to a lazily mapped extension of up to 2^20.
+'''

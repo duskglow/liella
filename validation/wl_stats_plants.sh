@@ -35,8 +35,8 @@ fplant thread_test_wrong wl_syscls.sh 's/grep -q .CLONE_THREAD./grep -q CLONE_CH
 fplant munmap_dropped    wl_syscls.sh 's/\|munmap\|mremap/|mremap/'
 fplant write_dropped     wl_syscls.sh 's/\|write\|pread64/|pread64/'
 fplant count_no_thread   wl_count_run.sh 's/wl_has_thread "\$tmp\/clone.txt" && mt=1/:/'
-fplant count_mt_ignored  wl_count_run.sh 's/wl_strace_median \$mt \$files/wl_strace_median 0 \$files/'
-fplant count_cache_old   wl_count_run.sh 's/= 10 \]; then cat/= 9 ]; then cat/'
+fplant count_mt_ignored  wl_count_run.sh 's/wl_strace_median \$mt \$mp \$files/wl_strace_median 0 \$mp \$files/'
+fplant count_cache_old   wl_count_run.sh 's/= 11 \]; then cat/= 10 ]; then cat/'
 fplant run_no_thread     wl_run.sh 's/wl_has_thread "\$tmp\/clone.txt" && mt=1/:/'
 fplant run_mt_ignored    wl_run.sh 's/wl_classify "\$tmp\/strace.txt" "\$mt"/wl_classify "\$tmp\/strace.txt" 0/'
 exit $rc

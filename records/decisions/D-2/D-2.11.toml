@@ -1,0 +1,8 @@
+id = "D-2.11"
+section = "s02"
+spec = "§2.7"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+**Backtrace unwinder: three pure layers, no cache between calls** (COLD-REWRITE2-W-far-03-REWRITE, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-W-far-03-REWRITE.md`; D-2.7). Liella exports no `_Unwind_*`; C++ throws use libgcc's unwinder over Liella's CFI. (1) Locate (object, FDE), interpret (row at pc), apply (caller registers); one walker serves `trace` and `caller`. (2) A row is 17 rules plus the CFA rule, a rule 16 bytes (expressions kept as address and length); remember-state depth 4; about 1.5 KB of working storage (fits a small alternate stack); columns above 16 parsed and dropped. (3) Nothing kept between calls (async-signal-safe, no allocation, no lock); header lookup by binary search; a scan (static programs without a header) keeps the last CIE; `OwnMemory` keeps one aligned 64-byte line per trace. (4) Any fixed-size header table encoding is decoded; a header without a usable table falls back to scanning. (5) Signal frames by CFI only (`S`): the next address is looked up exactly; no code-pattern fallback; termination is no progress (same return address and stack pointer), not a growing stack. (6) Augmentations "" or "z" + {R, P, L, S, B, G}, an unknown letter rejects the CIE; CIE versions 1, 3, 4; pointer encodings absolute, pcrel, datarel (header only). (7) An unreadable save slot makes that register unknown, not the step fail. (8) Expressions: wrapping arithmetic, signed `div` failing on zero and overflow, unsigned `mod`, signed comparisons, branches inside the block, stack 32, 1024 operations. (9) `caller`'s `max` counts return addresses examined; `program_headers` is `None` for PN_XNUM.
+'''

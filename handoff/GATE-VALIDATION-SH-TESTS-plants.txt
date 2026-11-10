@@ -1,0 +1,10 @@
+# GATE-VALIDATION-SH-TESTS plants (cargo xtask plants; format docs/plants.md).
+# syscls-futex: the workload syscall verdict stops recognising futex; the gate selection of a wl_syscls.sh change must run
+# the self-tests and go red (this also proves the run step executes the selected scripts).
+syscls-futex | validation/wl_syscls.sh | lit:s == "futex" { fx += n; next } ==> s == "nothing" { fx += n; next } | cargo xtask affected --files validation/wl_syscls.sh --run | msg:FAIL +validation self-test validation/wl_(run|stats)_test
+# map-drop: wl_run.sh loses its mapping row (neither covered nor listed).
+map-drop | xtask/src/affected.rs | lit:("validation/wl_run.sh", &[VALIDATION_RUN_TEST]), ==> // dropped | cargo test -p xtask --bins validation_ | msg:every_validation_wl_script_is_mapped.*(FAILED|panicked)|wl_run.sh: no covering self-test
+# classify-order: a covered script falls through to the validation/ `Nothing` rule (the state before this story).
+classify-order | xtask/src/affected.rs | lit:return Some(Class::ValidationScript(tests)); ==> let _ = tests; | cargo test -p xtask --bins validation_ | msg:validation_script_changes_select_their_self_tests.*(FAILED|panicked)
+# missing-path: a table names a script that does not exist.
+missing-path | xtask/src/affected.rs | lit:("validation/wl_workloads.sh", ==> ("validation/wl_workloads_gone.sh", | cargo test -p xtask --bins validation_ | msg:wl_workloads_gone.sh: named in the validation tables but missing

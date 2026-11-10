@@ -1,0 +1,8 @@
+id = "D-14.20"
+section = "s14"
+spec = "§14.8"
+ann = "—"
+status = "active"
+body = '''
+**`GLOB_BRACE` expansion is bounded** (GLOB-BRACE-EXPANSION-BOUND, 2026-11-04; PROVISIONAL coordinator decision from #2401, for the owner's review; cheap to unwind: one constant and one check). Groups multiply, so a 4 KiB pattern can name 10^5 or more patterns (the fuzz time-out `fuzz/seeds/glob/timeout-5351ade2`: two groups of ~45 alternatives plus two-way groups). `glob` counts the patterns structurally (product over groups of the sum over alternatives, with overflow checks, stopping once past the bound) before expanding anything, and returns `GLOB_NOSPACE` (the error class of a failed allocation) when the count passes `BRACE_MAX_ALTERNATIVES` = 2^14 or count × pattern length passes `BRACE_MAX_BYTES` = 64 MiB. 2^14 is 14 two-way groups or four 11-way groups; shell-style patterns have a handful of alternatives. An unbalanced `{` is still `GLOB_NOMATCH`. No compat flag: restoring glibc's behaviour would mean unbounded expansion. Test `s14_8_c_2_1_brace_bound`.
+'''

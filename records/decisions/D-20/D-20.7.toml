@@ -1,0 +1,8 @@
+id = "D-20.7"
+section = "s20"
+spec = "§20.2, §20.3"
+ann = "HIST"
+status = "active"
+body = '''
+C `struct sigaction` and the 1024-bit `sigset_t` are converted in `legacy::signal_compat`. The ABI crate models `sa_handler`/`sa_sigaction` as a union whose fields only `unsafe` code may read, so legacy defines `CSigaction` with the same layout (tested). The internal signal is never set, blocked, reported, accepted by a wait, or put into a filled set.
+'''

@@ -1,0 +1,8 @@
+id = "D-1.6a"
+section = "s01"
+spec = "§1.6a"
+ann = "HIST"
+status = "active"
+body = '''
+Rewritten under the clean-room rules of §1.4 (item 2). Internally a non-destructive reader (`liella::getopt::subopt`) giving the token index and the offsets of the name end, the value, the suboption end and the next start. The boundary does the destructive part as the spec says: it overwrites the `,` and, for a recognised suboption with a value, the `=` with NUL (glibc leaves the `=`: a recorded difference); it advances the cursor and sets `*valuep` to the value (NULL without one), to the whole unchanged suboption when it is unrecognised (as glibc does), or to NULL for empty text (glibc leaves it unset: deliberate).
+'''

@@ -1,0 +1,13 @@
+id = "SR-65"
+section = "5"
+row = "locale data page faults"
+now = "n/a"
+limit = "data pre-read raised `du` and `printf` faults; `MADV_POPULATE_READ` costs tens of microseconds per exec"
+reason_class = "hardware (kernel)"
+basis = "R"
+source = "RC2-FAULT"
+tried = "both rejected"
+flag = "none"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,8 @@
+id = "D-5.3"
+section = "s05"
+spec = "§5.1"
+ann = "COMPAT"
+status = "active"
+body = '''
+The per-locale 16-bit class tables and 32-bit case tables are generated with the locale data (IP-20). `__ctype_b_loc` returns a per-thread pointer to the current locale's table.
+'''

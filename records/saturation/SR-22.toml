@@ -1,0 +1,13 @@
+id = "SR-22"
+section = "3"
+row = "`memcpy_144`, `memcpy_192`, `memcpy_256`, `memmove_144`, `memmove_192`, `memmove_256` (SSE2 129-256 B copy only: six 16-byte blocks per end for 129-192, eight for 193-256; memset unchanged) (SSE2-COPY-MID-SPLIT, NEGATIVE; the copy half after the fill half of the row above)"
+now = "ns/call head / next, median of paired rounds (whole cbench_memref, `bench --stage` trees, 4 interleaved alternations x 5 rounds, glibc drift 1.000); Ivy Bridge / Alder Lake-N at hwcaps=-AVX2: memmove_144 0.828 / 0.851, memmove_192 0.853 / 0.845, memmove_256 1.000 / 1.000; layout 1 (193-256 takes the branch): memcpy_144 0.934 / 1.000, memcpy_192 0.826 / 1.000, memcpy_256 **1.155** (7.31 -> 8.44 ns) / **1.077** (5.44 -> 5.86 ns); layout 2 (193-256 falls through the compare): memcpy_144 **1.044** / 0.923, memcpy_192 0.914 / 0.923, memcpy_256 **1.045** / **1.077**; Skylake-SP instr -AVX2 129-192 51.4 -> 45.4, 193-256 51.4 -> 53.4; AVX2 level unchanged"
+limit = "not reached: memcpy_256 (the statx size) is slower on both classes in both layouts, so the gain on overlapping 129-192 moves does not pay for it"
+reason_class = "design (the 193-256 copy pays for the size compare, or for its body's new address, more than 129-192 saves from 4 fewer stores; not profiled)"
+basis = "M (bench --stage trees timed interleaved, next / head, whole cbench_memref)"
+source = "SSE2-COPY-MID-SPLIT, SSE2-COPY-MID-SPLIT-2 (reverted; D-4.61 REJECTED, ruling #3608)"
+tried = "the copy split in two layouts (branch task/sse2-copy-mid-split, fold.S at 464bc9ba; test and 192 bench rows at fb8480f9)"
+flag = "a third attempt needs a memcpy_256 profile on Alder Lake-N first (cycles, uops, front-end stalls, next vs layout 2) and should keep the 8-block body at next's address"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,8 @@
+id = "D-4.42"
+section = "s04"
+spec = "§4.3, §4.4"
+ann = "HIST"
+status = "active"
+body = '''
+**strcoll follows POSIX over glibc's undocumented deviations** (WL-EXPLAIN-2, owner ruling 2026-10-09 "POSIX wins over undocumented glibc deviations (strcoll)"; evidence STRCOLL-PUNCT-2). POSIX requires `strcoll` to order exactly as `strcmp` of the `strxfrm` keys. Liella's `strcoll` equals `strcmp` of its own `strxfrm` keys on 29.8M tested pairs, and its keys equal the reference library's keys byte for byte. The reference library's own `strcoll` disagrees with its `strxfrm` on 68,836 of those 29.8M pairs (runs of digits and punctuation), so Liella's `strcoll` differs from the reference's on those pairs by design (see D-4.18). The workload gate lists the one visible effect, the `ls -l` order in en_US.UTF-8, in `validation/wl_known_diffs.tsv` (fingerprint-matched, so any other output change still fails).
+'''

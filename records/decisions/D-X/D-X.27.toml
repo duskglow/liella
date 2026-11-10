@@ -1,0 +1,6 @@
+id = "D-X.27"
+section = "x"
+status = "active"
+body = '''
+**`affected` prints a failed conformance program's output** (XTASK-AFFECTED-CONFORMANCE-OUTPUT, 2026-11-06; decided locally, tooling only, no product code). When `conformance/run.sh` fails inside `cargo xtask affected`, the console gets, per program the runner names as failed, a line `conformance FAILED: <name>: <end>` (exit status, or `killed by signal N SIGxxx` for a status above 128, and any missing `EXPECT-STDERR` text), then the last 40 lines of its stdout and of its stderr (`conformance/build/<name>.log.stdout`, `.stderr`), each line cut at 300 characters, with a note naming the whole file when lines were cut; a program that did not build shows the tail of its build log instead (its stdout and stderr files there belong to an earlier run). Passing programs print nothing; a failed step naming no program shows its last 40 lines. Why: `cargo xtask plants` matches `msg:` against the console, which named the step only, so a plant caught by a program's own check was WARN-NO-MSG. The parser reads `run.sh`'s own message lines; a unit test fails when their format changes. Fixture: `conformance/c/x_affected_report.c` (fails only with `LIELLA_CONF_REPORT_FIXTURE` set).
+'''

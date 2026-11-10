@@ -1,0 +1,8 @@
+id = "D-26.2"
+section = "s26-29"
+spec = "§26.1"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**syslog (phase 13); decisions.** `liella::log::Logger` (owned ident, options, facility, mask, channels); the global logger `legacy::log_compat::GLOBAL` keeps the ident by pointer under one lock over settings, connection and delivery; a fork child resets the lock and shares the connection. **Never blocks indefinitely:** sends use `MSG_DONTWAIT\|MSG_NOSIGNAL` and `ppoll` with at most 1 s per message, and the console is opened `O_NONBLOCK` with the same bound (the reference blocks on a full receiver or a FIFO console with no reader); a timeout counts as not delivered (`LOG_CONS` then writes to the console). One reconnect and resend on any other failure. The socket is moved to descriptor 3 or above. The stream transport cuts the text at the first NUL. `errno` is never changed (X3; the reference leaks it after a failed send). A NULL format logs nothing (the reference crashes). Kept from the reference: the extra "unknown facility/priority" record for stray priority bits, `openlog` replacing the options, facility 0 accepted, `closelog` resetting only the ident, `setlogmask(0)` querying; timestamp per `localtime_r`, English month names; console form `IDENT[PID]: MSG\r\n`. The journald protocol of D-26.1 is not built (optional). `openlog(NULL)` selects the program name, also after an earlier `openlog` with another ident (openlog(3); owner ruling 2026-10-04; the reference keeps the previous ident: recorded in `syslog_products`).
+'''

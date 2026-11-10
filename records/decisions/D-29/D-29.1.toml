@@ -1,0 +1,8 @@
+id = "D-29.1"
+section = "s26-29"
+spec = "§29"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+RPC and XDR follow RFC 5531/4506. NIS follows the YP protocol. STREAMS and removed interfaces are `ENOSYS` stubs. `_IO_*` vtable objects export tables of our functions (F32).
+'''

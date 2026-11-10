@@ -1,0 +1,8 @@
+id = "D-11.1"
+section = "s11"
+spec = "§11"
+ann = "KERN"
+status = "active"
+body = '''
+Thin wrappers keep the kernel contract exactly. Internally they are typed methods on `Fd` with `Result`.
+'''

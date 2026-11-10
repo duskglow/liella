@@ -1,0 +1,9 @@
+id = "COMPAT-15"
+behaviour = "`errno` after `perror` (§2.2; D-2.2, PERROR-HERROR-REFERENCE, owner ruling 2026-10-24, #2043)"
+glibc = "The caller's `errno` is the same before and after `perror` when the report is written"
+liella = "`errno` can be `EINVAL` after `perror` on a fresh file `stderr`"
+restore = "A tunable read at startup making `perror` leave `EINVAL` in `errno` in that stream state; the value is set on the cold error-report path only"
+cost = "none (cold path)"
+status = "registered"
+body = '''
+'''

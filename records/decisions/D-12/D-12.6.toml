@@ -1,0 +1,8 @@
+id = "D-12.6"
+section = "s12"
+spec = "§12.7"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+**Internal:** the scan engine reports range errors per conversion. **Boundary:** three exported dialects. Overflowing integer conversions store the clamped value (the contract permits "wrapped or clamped"; clamped is chosen and documented).
+'''

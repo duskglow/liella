@@ -1,0 +1,8 @@
+id = "D-6.12"
+section = "s06"
+spec = "§6.4"
+ann = "PERF"
+status = "active"
+body = '''
+**Fused UTF-16/UTF-32/UCS-2/UCS-4 -> UTF-8 transcoder (ICONV-2), the reverse of D-6.11.** `Conv::convert` offers a wide source whose byte order is known (`fast::wide_source`: fixed, or selected by a BOM / the first unit, so BOM sensing and the first unit of the BOM forms stay in the general loop) with target UTF-8 to `fast::wide_to_utf8` at the top of each loop turn: one tight loop (const-generic on unit size, order, UCS-2) with inline unit load, surrogate-pair join and inline UTF-8 encode, and an out-of-line 16-byte-block ASCII narrowing run entered after eight ASCII units in a row. It stops, touching nothing further, at the end of the input, a partial unit, no room for the next character, a lone or reversed surrogate (or a surrogate in UCS-2 / UTF-32 / UCS-4), a high surrogate not followed by a complete low unit, and any value above U+10FFFF (UCS-4 up to 7FFFFFFF is the general loop's 5/6-byte encode); the general loop then handles that one character (EILSEQ, EINVAL, E2BIG, //IGNORE, //TRANSLIT as before). No ABI or boundary change. Tests in `fast.rs`: every source x byte order x flag set x C/C.UTF-8 x unit string x every byte prefix x every output size + resume vs the pivot loop; every scalar value vs `char::encode_utf8`; planted bugs (wrong BE/LE load, no low-surrogate check, wrong 4-byte continuation) each fail.
+'''
