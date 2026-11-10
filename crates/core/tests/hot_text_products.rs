@@ -459,12 +459,12 @@ fn hot_text_range(map: &str) -> (u64, u64) {
         }
         let mut w: Vec<&str> = t.split_whitespace().skip(1).collect();
         if w.is_empty() {
-            w = lines.get(i + 1).map(|n| n.split_whitespace().collect()).unwrap_or_default();
+            w = lines.get(i.saturating_add(1)).map(|n| n.split_whitespace().collect()).unwrap_or_default();
         }
         if let (Some(a), Some(s)) = (w.first().and_then(|x| hex(x)), w.get(1).and_then(|x| hex(x))) {
             if a != 0 && s != 0 {
                 lo = lo.min(a);
-                hi = hi.max(a + s);
+                hi = hi.max(a.saturating_add(s));
             }
         }
     }
