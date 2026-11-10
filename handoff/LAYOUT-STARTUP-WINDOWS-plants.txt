@@ -1,7 +1,7 @@
 # LAYOUT-STARTUP-WINDOWS (D-X.49): the STARTUP-TEXT-WINDOWS layout contract (xtask/src/layout.rs kind startup-text-windows).
 # Real-product plants check the release-profile products of this branch copied to ~/work/LAYOUT-STARTUP-WINDOWS/rel-products
 # (shiki job lsw-measure-1); the key plant rebuilds the products in the copy (cargo xtask so runs the check last).
-lsw-budget-minus-one | layout/contracts.tsv | lit:budget-release=4; ==> budget-release=3; | cargo xtask layout-check /home/claude/work/LAYOUT-STARTUP-WINDOWS/rel-products | msg:STARTUP-TEXT-WINDOWS BROKEN: 4 windows
+lsw-budget-minus-one | layout/contracts.tsv | lit:budget-release=4; ==> budget-release=3; | cargo xtask layout-check ~/work/LAYOUT-STARTUP-WINDOWS/rel-products | msg:STARTUP-TEXT-WINDOWS BROKEN: 4 windows
 lsw-key-removed | crates/libc-so/hot-text.list | lit:_RINvNtC15liella_boundary7runtime5startKb0_EC15liella_boundary ==> _RNvPLANTnotakey | cargo xtask so | msg:STARTUP-TEXT-WINDOWS BROKEN
 lsw-window-size | xtask/src/layout.rs | lit:const STARTUP_WINDOW: u64 = 1 << 16; ==> const STARTUP_WINDOW: u64 = 1 << 12; | cargo test -p xtask --bin xtask -- layout::tests:: | msg:panicked
 lsw-straddle-inverted | xtask/src/layout.rs | lit:if window_of(f.start, window) != window_of(f.end - 1, window) { ==> if window_of(f.start, window) == window_of(f.end - 1, window) { | cargo test -p xtask --bin xtask -- layout::tests:: | msg:panicked
