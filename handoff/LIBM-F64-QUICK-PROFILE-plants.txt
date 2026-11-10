@@ -1,0 +1,4 @@
+# LIBM-F64-QUICK-PROFILE plants (docs/plants.md): exp's quick rounding test without the `w != 0` guard (D-10.77),
+# shortened too far (c = 1: the test no longer covers the error bound), must misround a hard case.
+near-too-short-quick | crates/math/src/fast64/quick.rs | lit:if zh + zl * $c == zh { Some(v) ==> if zh + zl == zh { Some(v) | cargo test -p liella-math --lib quick_declines_or_rounds_right_on_hard_cases | msg:hard case exp\(.*quick .*correctly rounded
+near-too-short-tiered | crates/math/src/fast64/quick.rs | perl:s/(pub fn exp_tiered.*?)zh \+ zl \* \$c == zh/${1}zh + zl == zh/s | cargo test -p liella-boundary --features selftest --test exp_quick exp_entry | msg:hard case exp.*through the entry

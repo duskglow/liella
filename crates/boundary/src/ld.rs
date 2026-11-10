@@ -300,7 +300,7 @@ fn run(sp: usize, prog: &start::Program, bias: usize, page: u64, path: usize) ->
         }
     }
     let page = usize::try_from(page).unwrap_or(usize::MAX);
-    if let Some((addr, len)) = liella_rt::start::relro(headers, prog.phnum, prog.phdr, page) {
+    if let Some((addr, len)) = liella_rt::start::relro_at(headers, prog.phnum, bias, page) {
         if crate::raw::mprotect(addr, len, map::PROT_READ).is_err() {
             refuse(b"ld.so: cannot protect the program's RELRO segment\n");
         }

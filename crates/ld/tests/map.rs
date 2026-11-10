@@ -105,7 +105,51 @@ const PIE: &[&str] = &["-fPIE", "-pie"];
 const SHARED: &[&str] = &["-fPIC", "-shared"];
 const EXEC: &[&str] = &["-fno-pie", "-no-pie", "-static"];
 const ALIGN_2M: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
+/// A movable (`ET_DYN`) object with 2 MiB `p_align` whose first `PT_LOAD` is at 0x600000, not 0:
+/// GNU ld keeps `-shared` output `ET_DYN` under `-Ttext-segment` (with `-pie` it emits `ET_EXEC`);
+/// `-Bsymbolic` binds its own symbols locally, so it has only `R_X86_64_RELATIVE` relocations.
+const MOVED_2M: &[&str] = &["-fPIC", "-shared", "-Wl,-Bsymbolic", "-Wl,-e,_start","-Wl,-Ttext-segment=0x600000", "-Wl,-z,max-page-size=0x200000", "-Wl,-z,common-page-size=0x200000"];
 const PAGE_16K: &[&str] = &["-fPIE", "-pie", "-Wl,-z,max-page-size=0x4000", "-Wl,-z,common-page-size=0x4000"];
+/// One ELF64 program header.
+fn ph(ty: u32, flags: u32, off: u64, at: u64, len: u64) -> Vec<u8> {
+    let mut p = vec![0u8; 56];
+    p[..4].copy_from_slice(&ty.to_le_bytes());
+    p[4..8].copy_from_slice(&flags.to_le_bytes());
+    for (o, v) in [(8, off), (16, at), (24, at), (32, len), (40, len), (48, 4096)] {
+        put64(&mut p, o, v);
+    }
+    p
+}
+
+/// `f` (a linked PIE) rewritten to have `total` `PT_LOAD`s: the program headers move to a new page
+/// at the end of the file, covered by a new read-only `PT_LOAD` one page after the last segment
+/// (`PT_PHDR` follows them); the other added `PT_LOAD`s map that page again, one page each, at
+/// ascending addresses after it.
+fn add_loads(f: &[u8], total: usize) -> Vec<u8> {
+    const PT_INTERP: u32 = 3;
+    const PT_PHDR: u32 = 6;
+    let hs = headers(f);
+    let added = total - loads(f).len();
+    let end = hs.iter().filter(|h| h.ty == PT_LOAD).map(|h| h.vaddr + h.memsz).max().unwrap();
+    let base = end.div_ceil(4096) * 4096 + 4096;
+    let size = 56 * (hs.len() + added) as u64;
+    let (off, tlen) = ((f.len() as u64).div_ceil(4096) * 4096, size.div_ceil(4096) * 4096);
+    let raw = |ty: u32| hs.iter().enumerate().filter(move |(_, h)| h.ty == ty).map(|(i, _)| f[ph_at(f, i)..ph_at(f, i) + 56].to_vec());
+    let mut table: Vec<Vec<u8>> = hs.iter().filter(|h| h.ty == PT_PHDR).map(|_| ph(PT_PHDR, 4, off, base, size)).collect();
+    table.extend(raw(PT_INTERP).chain(raw(PT_LOAD)));
+    table.push(ph(PT_LOAD, 4, off, base, tlen));
+    table.extend((1..added).map(|i| ph(PT_LOAD, 4, off, base + tlen + 4096 * (i as u64 - 1), 4096)));
+    for ty in hs.iter().map(|h| h.ty).filter(|t| ![PT_PHDR, PT_INTERP, PT_LOAD].contains(t)).collect::<std::collections::BTreeSet<_>>() {
+        table.extend(raw(ty));
+    }
+    let mut v = f.to_vec();
+    v.resize((off + tlen) as usize, 0);
+    v.splice(off as usize..(off + size) as usize, table.concat());
+    put64(&mut v, 32, off);
+    v[56..58].copy_from_slice(&(table.len() as u16).to_le_bytes());
+    assert_eq!(loads(&v).len(), total);
+    v
+}
 
 // ---------------------------------------------------------------- the address-space model
 
@@ -336,10 +380,14 @@ fn map_model_objects_from_the_linker() {
         return eprintln!("SKIP: no cc");
     }
     let d = dir("model");
-    for (name, flags, page) in [("pie", PIE, 4096), ("shared.so", SHARED, 4096), ("exec", EXEC, 4096), ("align2m", ALIGN_2M, 4096), ("page16k", PAGE_16K, 0x4000)] {
+    for (name, flags, page) in [("pie", PIE, 4096), ("shared.so", SHARED, 4096), ("exec", EXEC, 4096), ("align2m", ALIGN_2M, 4096), ("moved2m.so", MOVED_2M, 4096), ("page16k", PAGE_16K, 0x4000)] {
         // Non-zero bytes after the sections: a `.bss` tail left unzeroed then shows as non-zero even
         // where the linker's file ends inside the last segment's page.
         let mut f = std::fs::read(build(&d, name, flags, None)).unwrap();
+        if name == "moved2m.so" {
+            let first = headers(&f)[loads(&f)[0]].vaddr;
+            assert_eq!((u16::from_le_bytes([f[16], f[17]]), first), (3, 0x60_0000), "moved2m.so: not ET_DYN at 0x600000");
+        }
         f.resize(f.len() + 0x1_0000, 0xaa);
         check_model(name, &f, page);
     }
@@ -455,7 +503,6 @@ fn corpus(pie: &[u8]) -> Vec<Case> {
             put64(v, o, 1 << 40);
         }), bad),
         ("not-loadable", edit(&|v| v[16..18].copy_from_slice(&1u16.to_le_bytes())), |e| matches!(e, MapError::NotLoadable | MapError::Elf(_))),
-        ("too-many-loads", synthetic(map::LOADS_MAX as u16 + 1), |e| *e == MapError::TooManySegments),
     ]
 }
 
@@ -467,9 +514,14 @@ fn map_malformed_corpus_refused() {
     }
     let d = dir("corpus");
     let pie = std::fs::read(build(&d, "pie", PIE, None)).unwrap();
-    // The positive controls: the unedited PIE and the most PT_LOADs allowed.
+    // The positive controls: the unedited PIE and many PT_LOADs (no count bound, D-27.15; the
+    // reference loads tens of thousands), mapped by the model too.
     map::plan_file::<Native>(&pie, 4096).unwrap();
-    map::plan_file::<Native>(&synthetic(map::LOADS_MAX as u16), 4096).unwrap();
+    let many = synthetic(72);
+    map::plan_file::<Native>(&many, 4096).unwrap();
+    let mut s = Space::new(&many, 4096);
+    map::load::<Native, _>(&mut s, &many, 4096).unwrap();
+    assert!(s.calls > 72, "72 PT_LOADs: {} mapping calls", s.calls);
     for (name, f, want) in corpus(&pie) {
         let e = map::plan_file::<Native>(&f, 4096).expect_err(name);
         assert!(want(&e), "{name}: {e:?}");
@@ -565,7 +617,7 @@ fn check_maps(name: &str, cmd: &mut Command, align: u64, fixed: Option<u64>) {
 fn map_proc_self_maps_of_loaded_programs() {
     let (Some(ld), true) = (product(), cc_ok()) else { return eprintln!("SKIP: no product or no cc") };
     let d = dir("maps");
-    for (name, flags, align, fixed) in [("pie", PIE, 4096, None), ("align2m", ALIGN_2M, 0x20_0000, None), ("exec", &["-fno-pie", "-no-pie"][..], 4096, Some(0x40_0000))] {
+    for (name, flags, align, fixed) in [("pie", PIE, 4096, None), ("align2m", ALIGN_2M, 0x20_0000, None), ("moved2m", MOVED_2M, 0x20_0000, None), ("exec", &["-fno-pie", "-no-pie"][..], 4096, Some(0x40_0000))] {
         let prog = build(&d, name, flags, Some(&ld));
         for i in 0..4 {
             check_maps(&format!("{name} as ld.so PROG #{i}"), Command::new("timeout").arg("60").arg(&ld).arg(&prog), align, fixed);
@@ -574,5 +626,19 @@ fn map_proc_self_maps_of_loaded_programs() {
             check_maps("exec by PT_INTERP", Command::new("timeout").arg("60").arg(&prog), align, fixed);
         }
     }
+    // 300 PT_LOADs (no count bound, D-27.15): the program runs and the last added page is mapped.
+    let many = d.join("pie-300-loads");
+    let f = add_loads(&std::fs::read(build(&d, "pie-loads", PIE, Some(&ld))).unwrap(), 300);
+    std::fs::write(&many, &f).unwrap();
+    check_maps("300 PT_LOADs as ld.so PROG", Command::new("timeout").arg("60").arg(&ld).arg(&many), 4096, None);
+    let o = Command::new("timeout").arg("60").arg(&ld).arg(&many).output().unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    let last = headers(&f).into_iter().filter(|h| h.ty == PT_LOAD).map(|h| h.vaddr).max().unwrap();
+    let bias = hexval(&out.lines().map(str::to_owned).collect::<Vec<_>>(), "ehdr:");
+    let mapped = out.lines().filter_map(|l| l.split_once(' ')?.0.split_once('-')).any(|(s, e)| {
+        let (s, e) = (u64::from_str_radix(s, 16).unwrap_or(0), u64::from_str_radix(e, 16).unwrap_or(0));
+        s <= bias + last && bias + last < e
+    });
+    assert!(mapped, "300 PT_LOADs: the last segment ({last:#x} + bias {bias:#x}) is not mapped: {out}");
     std::fs::remove_dir_all(&d).ok();
 }

@@ -797,7 +797,10 @@ family!(fam_cproj, "cproj", 8);
 family!(fam_creal, "creal", 8);
 family!(fam_csin, "csin", 8);
 family!(fam_csinh, "csinh", 8);
-family!(fam_csqrt, "csqrt", 8);
+#[test]
+fn fam_csqrt() {
+    assert_eq!(products::math_family("csqrt"), 8);
+}
 family!(fam_ctan, "ctan", 8);
 family!(fam_ctanh, "ctanh", 8);
 #[test]
@@ -1549,10 +1552,22 @@ symbol!(sym___sinh_finite, "__sinh_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhf128_finite, "__sinhf128_finite", "10", "2.26", r##""##);
 symbol!(sym___sinhf_finite, "__sinhf_finite", "10", "2.15", r##""##);
 symbol!(sym___sinhl_finite, "__sinhl_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrt_finite, "__sqrt_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtf128_finite, "__sqrtf128_finite", "10", "2.26", r##""##);
-symbol!(sym___sqrtf_finite, "__sqrtf_finite", "10", "2.15", r##""##);
-symbol!(sym___sqrtl_finite, "__sqrtl_finite", "10", "2.15", r##""##);
+#[test]
+fn sym___sqrt_finite() {
+    products::math_compat("__sqrt_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtf128_finite() {
+    products::math_compat("__sqrtf128_finite", "GLIBC_2.26");
+}
+#[test]
+fn sym___sqrtf_finite() {
+    products::math_compat("__sqrtf_finite", "GLIBC_2.15");
+}
+#[test]
+fn sym___sqrtl_finite() {
+    products::math_compat("__sqrtl_finite", "GLIBC_2.15");
+}
 symbol!(sym___y0_finite, "__y0_finite", "10", "2.15", r##""##);
 symbol!(sym___y0f128_finite, "__y0f128_finite", "10", "2.26", r##""##);
 symbol!(sym___y0f_finite, "__y0f_finite", "10", "2.15", r##""##);
