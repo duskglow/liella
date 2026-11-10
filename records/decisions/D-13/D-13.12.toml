@@ -1,0 +1,8 @@
+id = "D-13.12"
+section = "s13"
+spec = "§24.4"
+ann = "HIST"
+status = "active"
+body = '''
+`pathconf`/`fpathconf` follow glibc's per-file-system tables (`_PC_LINK_MAX`, `_PC_FILESIZEBITS`, `_PC_2_SYMLINKS` by `statfs.f_type`). The ext2/3/4 family, which shares a magic number, is told apart by the mount's type in `/proc/self/mountinfo` (D-13.8). `_PC_PIPE_BUF` is 4096 for every file, pipes included, as glibc 2.39 answers.
+'''

@@ -1,0 +1,8 @@
+id = "D-4.18"
+section = "s04"
+spec = "§4.3–4.4, §6.6"
+ann = "HIST"
+status = "active"
+body = '''
+**Collation over compiled `LC_COLLATE`** (phase 7; D-7.2). The engine follows Appendix D.1.4: element lookup through the byte or wide tables (contractions first, ranges through the indirect tables), per-level rules (backward runs, position separators counting skipped elements), and key assembly. `strxfrm`/`wcsxfrm` produce exactly the reference library's keys. `strcoll`/`wcscoll` compare the two element streams level by level without building keys or allocating, and return the sign the keys would give (the §4.3 guarantee holds by construction: both walk the same element sequence). A table with no rules (`C`, `C.UTF-8`) is byte and code-point order. Loading checks the file's header and item offsets (D-7.7); every offset read inside a table is bounds-checked at the read, so a damaged table can give wrong or default answers but no lookup can leave the file.
+'''

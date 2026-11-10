@@ -1,0 +1,6 @@
+id = "D-X.18"
+section = "x"
+status = "active"
+body = '''
+**`cargo xtask affected` narrowing beyond the module graph** (TOOL-AFF, 2026-10-07). Under-selection is the risk, so every rule falls back to FULL when unsure, and the merge gate stays FULL. (a) xtask audit/report modules (`XTASK_AUDITS`: policy, symgap, status, schedule) select the xtask unit tests, clippy, the policy checks and their own command; a unit test keeps them leaves. (b) `csys/src/**/*.S`: symbols are read statically (`.globl`/`.weak`, `liella_` labels) and followed on every run (no stored map, nothing to go stale) to their Rust users, then at function granularity (rustfmt indentation spans) to the modules naming both the module and a function. FULL for: C sources, macros/includes/`.set`, non-`liella_` symbols (exported ABI), use by another csys file, link lists, xtask, C entry points, and trait methods (the `Machine` trait in `sys.rs` is reached without naming the module). Chosen over a generated `nm` reachability map: same answer for assembly, no build step and no staleness check. (c) `conformance/c/*.h`: the programs including it. (d) `--only <names>`: the named binaries, labelled NOT A GATE.
+'''

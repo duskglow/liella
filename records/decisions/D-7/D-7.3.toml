@@ -1,0 +1,8 @@
+id = "D-7.3"
+section = "s07"
+spec = "§7.4"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** grouping is `TryVec<u8>` plus a `repeat_last` flag. **Boundary:** `lconv.grouping` is encoded with `CHAR_MAX` (`abi::pack`).
+'''

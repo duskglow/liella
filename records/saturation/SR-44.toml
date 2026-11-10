@@ -1,0 +1,13 @@
+id = "SR-44"
+section = "3"
+row = "`__memcmpeq` / `bcmp` 17-32 equal and tail rows; `memcmp_diff8_*`, `__memcmpeq_head_128`/`_1k` (PARITY-MEMCMP-SMALL-EQ, Zen 1 host, `cbench_memref`)"
+now = "before: `__memcmpeq_eq_32` 31.4 vs 26.4, `_tail_32` 31.4 vs 20.4, `bcmp_eq_32` 31.4 vs 27.4, `bcmp_tail_32` 31.4 vs 24.4; percall eq_17/24/32 34 vs 27-30; static count after: -1 on each 17-32 equal/tail path (the word at 8 replaces the second 16-byte block and the AND)"
+limit = "gap left about 5-6 instr on 17-32, above the 3-instruction floor"
+reason_class = "structure (class ladder: head probe 3, `n > 16` 2, `n > 32` 2 needed only for the folded SSE2 build)"
+basis = "M"
+source = "PARITY-MEMCMP-SMALL-EQ"
+tried = "not done, each recorded negative or slower elsewhere: (a) 32 on the AVX2 block (MEMCMP-MID-4: 5 more cycles); (b) no head probe on 33-64 (row above, sort-C); (c) 17-64 in one AVX2 class with a split: +1 to +2 on every 32-64 row; (d) the `n > 32` test before the probe: +10 on 17-32 head rows; (e) diff8/head above 64: the entry ladder costs 8 before the first block, 3 for 33-64; a third carry test or a merged bound word saves 1 there and costs 1 on 1-7"
+flag = "none"
+status = "active"
+body = '''
+'''

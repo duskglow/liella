@@ -1,0 +1,13 @@
+id = "SR-59"
+section = "5"
+row = "`toupper` (C locale)"
+now = "t 1.000, i 1.050"
+limit = "at parity"
+reason_class = "hardware"
+basis = "M"
+source = "PJ-21, PJ-22"
+tried = "see above"
+flag = "none"
+status = "active"
+body = '''
+'''

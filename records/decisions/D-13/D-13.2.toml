@@ -1,0 +1,8 @@
+id = "D-13.2"
+section = "s13"
+spec = "§13.2"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** `Dir::entries()` yields borrowed entries. **Boundary:** `struct dirent` packing. `readdir_r` copies into the caller's buffer (compat). Names never exceed 255 bytes on Linux (NAME_MAX ⚑ KERN). **Removed directory (owner ruling 2026-10-03, three-way rule):** `readdir`, `readdir64`, `readdir_r` and `readdir64_r` report the kernel's `ENOENT` (`getdents64` fails with it on ext4 and tmpfs once the directory is removed: `spec/behaviour/fstree.md`): `readdir` returns NULL with `errno` `ENOENT`, the `_r` forms return `ENOENT`; entries already buffered are returned first. glibc ends the stream silently (a recorded difference).
+'''

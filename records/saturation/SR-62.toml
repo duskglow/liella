@@ -1,0 +1,13 @@
+id = "SR-62"
+section = "5"
+row = "`mbrtowc` UTF-8"
+now = "t 1.655 (Haswell-EP host median 1.49 after AUD-FIX); i 1.84"
+limit = "not at a limit"
+reason_class = "n/a"
+basis = "C"
+source = "AUD-FIX, MB-K2"
+tried = "LV-4: names -24 but `strftime_iso` +180 (inlining shifts); cold fallback adds push/pop (+2 in `nl_langinfo`)"
+flag = "**measured 2026-10-23** (section 10)"
+status = "active"
+body = '''
+'''

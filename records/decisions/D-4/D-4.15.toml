@@ -1,0 +1,8 @@
+id = "D-4.15"
+section = "s04"
+spec = "§1.1, §22.6"
+ann = "KERN, COMPAT"
+status = "active"
+body = '''
+**The thread block and the runtime feature.** The block at the thread pointer keeps glibc's `tcbhead_t` prefix up to 0x80 (self pointer at 0, canary at 0x28, pointer guard at 0x30; ERRATA E7). Liella's fields (`errno` at 0x80, the TID, the `thread_local` destructor list, and the phase-6 allocator cache and NUMA node) sit in glibc's reserved 0x80–0x280 range, so a block glibc's `ld.so` built is also valid. The exports meaningful only in a process Liella started (`__libc_start_main`, `exit` and the registrations, `__errno_location`, the startup data objects) use the `export! { runtime ...}` form and feature `runtime`, which only the products enable. Test processes keep the host C library's start, exit, `errno` and `environ`, and Liella's environment functions work on the host's `environ`.
+'''

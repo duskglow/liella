@@ -1,0 +1,13 @@
+id = "SR-47"
+section = "3"
+row = "`strchr` / `strchrnul` 64 SSE2 level (Ivy Bridge time, TIMING-COV-STRSCAN-SHORT-IVB)"
+now = "same instructions; Liella after/before strchr_64_hit 0.948, strchr_64_miss 0.902, strchrnul_64_hit / _miss 0.895; L/g time strchr_64_miss 1.289 to 1.162, strchrnul_64_hit 1.274 to 1.140; 16-byte rows 1.000"
+limit = "the rest is one taken branch per call (the entry's level `jae`): Liella 4 taken branches per 16_hit call, glibc 3; DSB 4-uop cycles 35 vs 57 per 1e7"
+reason_class = "layout"
+basis = "T"
+source = "TIMING-COV-STRSCAN-SHORT-IVB (D-4.68)"
+tried = "NEGATIVE: blocks 1-3 all out of line (misses fall through): 64 rows 0.90-0.95 but strchr_16_miss 1.200 and strchrnul_16_miss 1.076 (a block-1 decision gained a taken branch), replaced by the block-2-only layout. Open: a decision in bytes 32-47 now takes one more taken branch (no bench row)"
+flag = "measured 2026-11-07"
+status = "active"
+body = '''
+'''

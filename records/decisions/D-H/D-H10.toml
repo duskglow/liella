@@ -1,0 +1,7 @@
+id = "D-H10"
+section = "h"
+pattern = "Variadic and untyped interfaces"
+status = "active"
+body = '''
+**Internal:** typed operations only: `OpenOptions`, `FcntlCmd` enum, `Ioctl` typed requests for the terminal and socket subsets, `PrctlOp` enum, typed format arguments. **Boundary:** C variadic adapters (OD-C1) plus format-directed `va_list` decoding in `legacy` (F11). Untyped `ioctl`/`prctl`/`ptrace`/`syscall` pass through, because the kernel itself is untyped there (⚑ KERN).
+'''

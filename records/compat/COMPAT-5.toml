@@ -1,0 +1,9 @@
+id = "COMPAT-5"
+behaviour = "Seek inside the read-ahead (§12.8; D-12.22, owner ruling 2026-10-10)"
+glibc = "A `SEEK_SET`, `SEEK_CUR` or `SEEK_END` seek (or `rewind`) to a position inside the bytes already read ahead keeps them and moves the read pointer; a later read returns the buffered (possibly stale) bytes"
+liella = "Since STDIO-SEEKWIN the default keeps the buffer as glibc does for `SEEK_SET`/`SEEK_CUR` targets in `[window start, window end]` once the stream knows its descriptor offset (one `lseek` to the window end, result not used); see the differences row. Remaining differences: a `SEEK_END` target inside the window takes the full seek and re-reads, a target exactly at the window end stays in the window, and a failing `lseek` there leaves `errno` alone. The spec-literal behaviour (s12_8_c_1: discard the window on every seek and re-read) is no longer the default"
+restore = "Two directions. (a) Spec-literal: a tunable read at startup that makes the in-window test fail, so every seek re-reads (one branch on the seek path, which already tests the window). (b) glibc's `SEEK_END` case: keep the window for a `SEEK_END` target inside it; this needs the file size (`fstat` or a second `lseek`) on that path, so it is not free and stays registered only"
+cost = "none today (neither flag exists); the in-window test itself is on the default seek path since STDIO-SEEKWIN"
+status = "registered"
+body = '''
+'''

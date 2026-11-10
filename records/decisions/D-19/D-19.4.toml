@@ -1,0 +1,8 @@
+id = "D-19.4"
+section = "s19"
+spec = "§19.4, §19.5"
+ann = "HIST"
+status = "active"
+body = '''
+`login_tty` checks for a terminal before changing anything (glibc has already called `setsid` when it fails), keeps `errno` untouched on success (X3; glibc leaves `EPERM`) and accepts a master (the kernel decides). `/etc/ttys` lines have no length limit and an unterminated last line is an entry (glibc skips lines of 100+ bytes and the last line without a newline; KNOWN/ADDED). `tcflush` and `tcflow` check their argument before the descriptor (as `tcsetattr`'s action; glibc reports `ENOTTY` on `/dev/null`; KNOWN). `tcgetpgrp` on a master nobody controls returns the kernel's 0. `gtty`, `stty` and `revoke` are `ENOSYS`.
+'''

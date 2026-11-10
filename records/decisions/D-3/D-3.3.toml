@@ -1,0 +1,8 @@
+id = "D-3.3"
+section = "s03"
+spec = "§3.1"
+ann = "HIST"
+status = "active"
+body = '''
+Internal deallocation passes size and alignment (`free_sized`-style), so there is no per-block header for internal allocations. C `free(p)` recovers the size from the size-class map.
+'''

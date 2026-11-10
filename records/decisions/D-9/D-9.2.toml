@@ -1,0 +1,8 @@
+id = "D-9.2"
+section = "s09"
+spec = "§9.1"
+ann = "HIST"
+status = "active"
+body = '''
+`arc4random*`: a per-thread ChaCha20 keystream reseeded from `getrandom`, held in pages marked `MADV_WIPEONFORK`, so the output stays fork-safe (the contract). If the vDSO offers `getrandom`, it is used (⚑ KERN interface). It is never a failure path. Lack of entropy terminates, per the contract.
+'''

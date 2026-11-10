@@ -1,0 +1,13 @@
+id = "SR-17"
+section = "3"
+row = "`memcpy_128`, `memmove_128`"
+now = "28.4 vs 28.4; 28.5 vs 28.5"
+limit = "at parity"
+reason_class = "hardware"
+basis = "M"
+source = "LIMITS-TIGHTEN"
+tried = "MEM-IFUNC: slower on Haswell, dropped (Zen 1 not measured). SMALLCOPY: no gain on Haswell-EP host. `rep movsb` for 64 KiB: cost 60%, reverted (OPT-STAGE1, progress.md row 12)"
+flag = "none"
+status = "active"
+body = '''
+'''

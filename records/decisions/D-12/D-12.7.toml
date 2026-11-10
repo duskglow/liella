@@ -1,0 +1,8 @@
+id = "D-12.7"
+section = "s12"
+spec = "§12.10"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** a stream is bytes plus an optional codec layer. **Boundary:** orientation locking is enforced in legacy (contract).
+'''

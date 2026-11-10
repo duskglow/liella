@@ -1,0 +1,8 @@
+id = "D-22.8"
+section = "s22"
+spec = "§22.10"
+ann = "HIST"
+status = "active"
+body = '''
+We ship our own `libthread_db` describing our layout (F30).
+'''

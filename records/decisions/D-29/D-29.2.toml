@@ -1,0 +1,8 @@
+id = "D-29.2"
+section = "s26-29"
+spec = "§29.1"
+ann = "COMPAT"
+status = "active"
+body = '''
+**UDP RPC replies from the called address only** (owner ruling 2026-10-23, #1643, provisional): the UDP client compares each datagram's `recvfrom` source (port and IPv4 address) with the called address and drops any other, whatever its xid; the socket is not connected (that would change ICMP error reporting). A reply-shaped datagram (type REPLY, status accepted or denied; the xid is never consulted) from another address during a call turns its timeout into `RPC_CANTRECV` with `EREMCHG`; nothing ends a call early. Each call's xid is fresh random bits (`getrandom`), except the call after `CLSET_XID`, which is stepped from the set value as probed. Opt-out COMPAT-12 (`liella.compat.rpc_reply_any_source=1`, ignored when `AT_SECURE`). `clnt_broadcast` and TCP are not affected. Reason: replies over UDP are matched by xid only; accepting them from any source lets a third party who can send packets to the client answer in the server's place. **Superseded by D-29.5** (the UDP client is a failing stub; COMPAT-12 withdrawn).
+'''

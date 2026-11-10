@@ -1,0 +1,8 @@
+id = "D-C0.4"
+section = "c0"
+spec = "C0.4"
+ann = "COMPAT"
+status = "active"
+body = '''
+64-bit only. Each `*64` name is a second export of the same translation function. 32-bit ABIs are out of scope (OD-10). **Tests (milestone 5):** `conformance/c/s00_largefile.c` (a 5 GiB sparse file through both names of each pair, `struct stat64`/`statvfs64`/`rlimit64`/`dirent64`, `time_t` past 2038) and the products' symbol list against the reference's `*64` names (clause `s0_6_c0_4_0`).
+'''

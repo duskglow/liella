@@ -1,0 +1,8 @@
+id = "D-15.2"
+section = "s15"
+spec = "§15.3, §15.5, §15.7"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** the strict texts are `liella::net::addr` (RFC 4291 in, RFC 5952 out, mixed notation for `::ffff:0:0/96`, and for `::/96` when the upper half of the last 32 bits is non-zero); the historical texts (aton, network, classful, CIDR, NSAP, RFC 2292) are `liella_legacy::inet_compat`. **Boundary:** `inet_aton`/`inet_addr` keep the lenient grammar, including the address ending at white space (callers may rely on it; `inet_pton` is the strict form), and the `INADDR_NONE` ambiguity. `inet_ntoa`, `ether_ntoa` and `ether_aton` use per-thread slots (D-H3); `inet_nsap_ntoa`'s NULL-buffer result is process-wide, and at most 255 bytes are formatted either way. `inet_network` keeps the classful results. **Deliberate differences (phase-10 probes):** `inet_network` refuses a part beyond 32 bits (glibc wraps it; KNOWN in `netaddr_products`); `inet_neta` keeps interior zero bytes (glibc's `10.1` for `0x0a000100` is lossy) and needs only the text's size; `ether_line` requires white space after the address (`ethers(5)`); RFC 2292 is followed where glibc departs from it (NULL `*tptrp` at the end of a walk, no pad types in `inet6_option_append`, no negative `inet6_option_alloc` length); `if_freenameindex(NULL)` is a no-op.
+'''

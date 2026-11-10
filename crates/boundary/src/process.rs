@@ -539,6 +539,7 @@ pub fn finalize(dso: usize) {
 }
 
 /// `_exit`/`_Exit(status)`: end the process now.
+#[inline(never)]
 pub fn exit_now(status: i32) -> ! {
     CSys.exit_group(status)
 }

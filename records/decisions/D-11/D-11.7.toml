@@ -1,0 +1,8 @@
+id = "D-11.7"
+section = "s11"
+spec = "§11.10"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `Mapping` RAII values expose only safe views: read-only file maps as `&[u8]`, anonymous maps as `&mut [u8]`. **Boundary:** raw addresses. `MAP_FAILED` comes from `ret`. `posix_madvise(DONTNEED)` stays a no-op (contract).
+'''

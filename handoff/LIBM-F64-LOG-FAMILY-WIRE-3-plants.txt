@@ -1,0 +1,3 @@
+# LIBM-F64-LOG-FAMILY-WIRE-3: the SIGCHLD wait added to system_signal_state_during_and_after must still fail on a
+# signal that is never counted (the budget runs out and hits reads 0).
+sigchld-never-counted | crates/core/tests/popen_system_eintr.rs | perl:s/HITS\.fetch_add\(1, Ordering::SeqCst\)/HITS.fetch_add(0, Ordering::SeqCst)/ | cargo test -p liella --test popen_system_eintr -- system_signal_state_during_and_after --exact | msg:blocked=0 hits=0

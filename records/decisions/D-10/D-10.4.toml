@@ -1,0 +1,8 @@
+id = "D-10.4"
+section = "s10"
+spec = "§10.1, §10.3"
+ann = "HIST, PATH"
+status = "active"
+body = '''
+`isinf` returns ±1 (contract). `signgam` is an exported data symbol written by the `lgamma` translation. The internal `lgamma` returns `(value, sign)`.
+'''

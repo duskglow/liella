@@ -1,0 +1,7 @@
+id = "D-H16"
+section = "h"
+pattern = "Implicit offsets"
+status = "active"
+body = '''
+**Internal:** positioned I/O is the primitive (`read_at`/`write_at`), and cursor I/O is layered on top. **Boundary:** the kernel's shared file offset is kept (⚑ KERN).
+'''

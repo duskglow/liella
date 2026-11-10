@@ -1,0 +1,8 @@
+id = "D-4.32"
+section = "s04"
+spec = "§4.6"
+ann = "PERF"
+status = "active"
+body = '''
+**strstr and strcasestr on the pair scanner** (STRSTR-FIND, 2026-10-09; stacked on D-4.28; D-4.30/31 are on opt/strcmp-fixed, 28/29 on opt/strcoll1). `strstr` = terminator scans (`strz`, unchanged: they bound both slices, the needle ends at its own NUL) then `conv::find_slice` (D-4.28). `strcasestr` = `conv::find_slice_ci`: when the current locale's byte `tolower` is exactly the ASCII fold (checked once per locale, cached as pointer\|answer in one atomic; true for C, POSIX, C.UTF-8) the new kernel `liella_machine_pairscan_ci(h,count,off,b0,b1,fl)` (scan.S; `pairscan` plus an OR of 0x20 into the haystack byte for each pair byte that is an ASCII letter, b0/b1 passed lowered) names candidates and Rust compares with `eq_ignore_ascii_case`; any other locale keeps `bytes::find_seq` with the locale fold. Candidate policy, rare-pair retune (ranked on the folded byte), tail <16 positions and the linear bound are `find_slice`'s (one `find_core(ci)`). Result checks as D-4.28 (Rust verifies the whole needle at the answer). `wcsstr`/`wcswcs` unchanged (4-byte units: a byte scan gives unaligned false candidates; a vpcmpeqd kernel is a separate task). Tests: tests/strstr_find.rs (needle 0..=64 x haystack 0..=300 x 6 alignments x positions, copy of the needle after the haystack NUL, bytes after the needle NUL, page-end with unmapped next page, case variants incl. 0x80..0xFF, C and C.UTF-8, both scan paths, failed-candidate fallback); planted bugs (needle NUL ignored, read past the terminator, fold on one side) each FAIL.
+'''

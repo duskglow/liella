@@ -1,0 +1,8 @@
+id = "D-3.2"
+section = "s03"
+spec = "§3.1"
+ann = "ARB, HIST"
+status = "active"
+body = '''
+`malloc(0)` returns a unique freeable pointer. `realloc(p, 0)` frees and returns NULL. Both are the contract's glibc choices, kept for compatibility.
+'''

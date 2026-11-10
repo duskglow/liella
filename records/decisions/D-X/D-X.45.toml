@@ -1,0 +1,6 @@
+id = "D-X.45"
+section = "x"
+status = "active"
+body = '''
+**No lab network address and no personal home path anywhere in the tree** (RELEASE-HANDOFF-SCRUB, 2026-11-07; decided locally, tooling and records only, no product code). `cargo xtask static` runs `private-paths` (xtask/src/privpaths.rs) over every tracked file, `handoff/` included: it fails on a lab-subnet address (`10.0.100.x`, `10.0.0.x`) and on `/home/<name>` or a `<drive>:/Users` path. Other 10/8 addresses are resolver test data and pass; the one placeholder form is `/home/<fixture>` for the fixture accounts listed in `PLACEHOLDERS`. Scripts that reach a lab host get the address at run time from `validation/lab_host.sh` (`LIELLA_HOST_<NAME>`, `~/.config/liella/lab-hosts`, the ops checkout, else the bare name). Records keep their meaning: home paths became `~`, addresses became the host's lab name, and the harvested user name in printf.corpus was replaced with one of the same length (the line numbers that printf.known uses are unchanged).
+'''

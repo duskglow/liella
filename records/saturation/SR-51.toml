@@ -1,0 +1,13 @@
+id = "SR-51"
+section = "4"
+row = "`malloc` + `free` pair, cycles (PERF-HEAP-PAIR-TIME-2, 2026-10-23)"
+now = "Skylake-SP host (Xeon 8151, Skylake-SP), unbooked at load 18 to 78, paired and interleaved, 7 rounds of 20M `malloc(16)`+`free` pairs: Liella 45.1 cycles/123.0 instr/23 branches against glibc dynamic 46.3/148.0/30 and static 47.0/142.9/30; 0 branch misses, 0 `ld_blocks.store_forward`, 0 L1D misses per pair for all builds"
+limit = "at parity or ahead on Skylake-SP; the row 6 gap (t 1.16) does not reproduce there, so it is specific to Ivy Bridge host A (Ivy Bridge) or to cbench_malloc"
+reason_class = "hardware (unconfirmed)"
+basis = "M"
+source = "PERF-HEAP-PAIR-TIME-2"
+tried = "storing `K_HINT`/`K_FREE` in `freed_into` only on a change (to break a guessed loop-carried store-forward chain): +3 instr and +2 branches per pair, cycles 45.1 to 46.4; reverted. The \"store-forwarding or branch cost\" guess is refuted on Skylake-SP (both counters 0)"
+flag = "**Ivy Bridge host A not measured** (measured 11-05: next row)"
+status = "active"
+body = '''
+'''

@@ -1,0 +1,13 @@
+id = "SR-31"
+section = "3"
+row = "`strstr` short (hit_short)"
+now = "cycles 50.6 vs glibc 22.2 (i 174 vs 87 after STRSTR-SHORT-SETUP)"
+limit = "\"the short gap stays\": the AVX2 pair kernel's fixed cost"
+reason_class = "hardware (setup cost)"
+basis = "M"
+source = "STRSTR-SHORT-SETUP (`handoff/strstr-short-setup.md`)"
+tried = "base 220 to 174 instr is the gain taken; no cheaper setup recorded"
+flag = "**measured 2026-10-23** (section 10): the largest strstr gap left, 2.3x in cycles"
+status = "active"
+body = '''
+'''

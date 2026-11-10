@@ -1,0 +1,8 @@
+id = "D-16.1"
+section = "s16"
+spec = "§16.1"
+ann = "HIST"
+status = "active"
+body = '''
+**Internal:** `liella::names::nss` holds the typed configuration (`Database`, `Service`, `Spec`, `Config`) and the engine (`run`, `gather`). **Sources:** `files` is built in; `dns` is built in from phase 10 part 4; `compat` is `files` for passwd/group/shadow. Every other source (`db`, `nis`, `systemd`, `sss`, ...) is unavailable (UNAVAIL) until the NSS module ABI (F27, phase 14). No built-in `myhostname` (the spec does not ask for one). **Defaults** (no `nsswitch.conf`; glibc manual, observed): hosts and networks `files dns`, every other database `files`; initgroups uses group's line, and group's `NOTFOUND=return` does not stop it. **Grammar** (observed): database and source names are case-sensitive, status and action keywords are not; `[!STATUS=...]` works; an unknown database is ignored; the last line for a database wins; an unparsable line leaves it with no sources. **Actions:** return, continue and merge as in nsswitch.conf(5); merge appends group members. **Reload:** `/etc/nsswitch.conf` and `/etc/host.conf` are checked on every lookup (device, inode, size, change times) and re-read when they change; `__nss_configure_lookup` overrides persist for the process (EINVAL for an unknown database or unparsable text; glibc returns 0 for an unclosed `[`). Process state is `legacy::nss::{SWITCH, HOST_CONF}`; tests pass a `Ctx` with `Paths` and a `Config`. Enumerations read `files` only. nscd: not supported (D-16.5, closed 2026-10-03); lookups are answered directly. **Phase 10 part 4:** `dns` is built in for hosts; for networks it is unavailable (the reference sends PTR queries; spec gap).
+'''

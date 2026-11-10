@@ -1,0 +1,6 @@
+id = "D-X.35"
+section = "x"
+status = "active"
+body = '''
+**A documentation-only change selects `cargo xtask static`, not the FULL gate; a docs file that code reads selects its readers** (XTASK-AFFECTED-DOCS-PATHS, 2026-11-07; tooling only). `results/` and `spec/**/*.md` join the docs paths of `cargo xtask affected` rule 2 (a `results/*.md` table escalated to FULL as an unknown path). Every docs path now adds `cargo xtask static` (lab names, decision and compat ids, the register, trace), and a docs file that a test target, a crate source or an xtask source names as a quoted path on a non-comment line selects that target, the crate's unit tests or the xtask unit tests (e.g. `spec/behaviour/*.glibc.txt` records, read by the products tests, used to select nothing; `docs/codemap/symbols.tsv`, read by `affected` itself). A path cited in a comment, or a bare top-level file name with no `/` or `join("` before it, is no read; a path built at run time is not seen (its readers today are static checks). Tests: `affected::tests::docs_paths_select_static_only`, `docs_read_by_code_select_their_readers`, `docs_mixed_with_code_select_as_before`, `names_path_needs_a_quoted_path_outside_comments`.
+'''

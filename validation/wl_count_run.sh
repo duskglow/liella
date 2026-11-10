@@ -20,8 +20,11 @@
 # mmap/munmap/mremap/brk/mprotect/madvise calls are the separate advisory row "mtmem (advisory)" and not in "syscalls" (a
 # worker sometimes gets its own allocator arena, and arena alignment trims depend on addresses the kernel returns while
 # other threads map). Single-threaded workloads keep those calls in the gating number.
-# Row: instr_u  instr_sd%  instr_k  page-faults(median)  syscalls(gating)  md5  faults_min  faults_max  futex  mtmem
-# (a cached row with fewer than 10 fields predates the mtmem split and is re-measured.)
+# PIPERW (WL-PIPE-READS-ADVISORY, D-X.46): when the run created another process (a pipeline such as pipe-mix or tar-gz:
+# wl_has_child on the clone trace), its read/write calls on pipes depend on scheduling (how much data waits when a reader
+# wakes); they are the advisory row "pipe rw (advisory)" and not in "syscalls". Single-process runs keep them.
+# Row: instr_u  instr_sd%  instr_k  page-faults(median)  syscalls(gating)  md5  faults_min  faults_max  futex  mtmem  piperw
+# (a cached row with other than 11 fields predates the piperw split and is re-measured.)
 # WLC_ENV='NAME=VALUE ...': environment for the measured command in every variant (see wl_count.sh); the
 # cache file name carries a hash of it. Stdout of the measured command always goes into a pipe (| cat), never
 # straight to /dev/null (GNU grep exits at the first match on /dev/null); cache files of this method end .p.tsv.
@@ -58,7 +61,7 @@ measure() { # workload cmd variant [fresh] [noenv] -> row on stdout; fresh=1 ign
         [ -s "$cache" ] && [ "$(date -r "$cache" +%F)" != "$(date +%F)" ] && fresh=1 ;;
     esac
     if [ "${COUNT_FRESH:-0}" != 1 ] && [ "$fresh" != 1 ] && [ -s "$cache" ] \
-        && [ "$(awk -F'\t' 'NR == 1 { print NF }' "$cache")" = 10 ]; then cat "$cache"; return; fi
+        && [ "$(awk -F'\t' 'NR == 1 { print NF }' "$cache")" = 11 ]; then cat "$cache"; return; fi
     c=${cmd//@/$WL/kit/$v/bin}
     [ -n "$e" ] && c="env $e $c"
     (cd "$work" && sh -c "$c" 2>/dev/null | cat > /dev/null)
@@ -71,17 +74,19 @@ measure() { # workload cmd variant [fresh] [noenv] -> row on stdout; fresh=1 ign
     local st
     st=$(printf '%s' "$runs" | wl_stats)   # iu sd% ik pf_med pf_min pf_max
     sum=$(cd "$work" && sh -c "$c" 2>/dev/null | md5sum | cut -c1-12)
-    local k files= mt=0
-    (cd "$work" && strace -f -e trace=clone,clone3 -o "$tmp/clone.txt" sh -c "$c" 2>/dev/null | cat > /dev/null)
+    local k files= mt=0 mp=0
+    (cd "$work" && strace -f -e trace=clone,clone3,fork,vfork -o "$tmp/clone.txt" sh -c "$c" 2>/dev/null | cat > /dev/null)
     wl_has_thread "$tmp/clone.txt" && mt=1
+    wl_has_child "$tmp/clone.txt" && mp=1
     for k in 1 2 3; do   # three strace runs, the median of each number (a threaded program's mmap/munmap count can move by a few)
-        (cd "$work" && strace -c -f -o "$tmp/strace$k.txt" sh -c "$c" 2>/dev/null | cat > /dev/null)
+        (cd "$work" && strace -C -f -y -o "$tmp/strace$k.txt" sh -c "$c" 2>/dev/null | cat > /dev/null)
         files="$files $tmp/strace$k.txt"
     done
-    sys=$(wl_strace_median $mt $files)   # "GATING FUTEX MTMEM"
-    local fx=${sys#* }
+    sys=$(wl_strace_median $mt $mp $files)   # "GATING FUTEX MTMEM PIPERW"
+    local fx mx pr
+    read -r _ fx mx pr <<< "$sys"
     mkdir -p "$WL/count/$v"
-    echo "$st" | awk -v sys="${sys%% *}" -v fx="${fx% *}" -v mx="${fx#* }" -v sum="$sum" -v OFS='\t' '{ print $1, $2, $3, $4, sys, sum, $5, $6, fx, mx }' | tee "$cache"
+    echo "$st" | awk -v sys="${sys%% *}" -v fx="$fx" -v mx="$mx" -v pr="$pr" -v sum="$sum" -v OFS='\t' '{ print $1, $2, $3, $4, sys, sum, $5, $6, fx, mx, pr }' | tee "$cache"
 }
 
 IFS=, read -r -a want <<< "$list"
@@ -113,7 +118,7 @@ for w in "${want[@]}"; do
         fi
         printf '%s\n%s\n%s\n' "$rn" "$rb" "$rg" | awk -F'\t' -v name="$name" -v nsha="${new:0:9}" -v bsha="${base:0:9}" -v note="$note" -v envck="$envck" '
             function ratio(a, b) { return (b + 0 > 0) ? sprintf("%.4f", a / b) : "-" }
-            { for (i = 1; i <= 10; i++) f[NR, i] = $i }
+            { for (i = 1; i <= 11; i++) f[NR, i] = $i }
             END {
                 printf "== %s   (new %s, base %s)\n", name, nsha, bsha
                 printf "%-18s %16s %16s %16s %9s %9s\n", "counter", "new", "base", "glibc", "new/glibc", "new/base"
@@ -125,6 +130,7 @@ for w in "${want[@]}"; do
                 }
                 printf "%-18s %16s %16s %16s %9s %9s\n", "futex (advisory)", f[1, 9], f[2, 9], f[3, 9], ratio(f[1, 9], f[3, 9]), ratio(f[1, 9], f[2, 9])
                 printf "%-18s %16s %16s %16s %9s %9s\n", "mtmem (advisory)", f[1, 10], f[2, 10], f[3, 10], ratio(f[1, 10], f[3, 10]), ratio(f[1, 10], f[2, 10])
+                printf "%-18s %16s %16s %16s %9s %9s\n", "pipe rw (advisory)", f[1, 11], f[2, 11], f[3, 11], ratio(f[1, 11], f[3, 11]), ratio(f[1, 11], f[2, 11])
                 printf "instr:u sd%%        %16s %16s %16s\n", f[1, 2], f[2, 2], f[3, 2]
                 printf "faults min..max     %16s %16s %16s   (table shows the median)\n", f[1, 7] ".." f[1, 8], f[2, 7] ".." f[2, 8], f[3, 7] ".." f[3, 8]
                 if (note != "") printf "note               %s\n", note

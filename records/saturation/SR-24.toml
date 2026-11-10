@@ -1,0 +1,13 @@
+id = "SR-24"
+section = "3"
+row = "`memcpy_16`, `memset_16`, `memmove_16`, `memcpy_64`, `memset_64`, `memmove_64`"
+now = "20.4 vs 19.4; 22.4 vs 19.4; 20.4 vs 19.4; 22.3 vs 20.4; 22.3 vs 20.4; 22.4 vs 20.4 (**ABOVE glibc by 1 to 3 instr**)"
+limit = "set as a gate at the current count; no saturation claim"
+reason_class = "n/a"
+basis = "C"
+source = "LIMITS-TIGHTEN"
+tried = "MEM-ENTRY-2: order_ne + one-register entry ladder + out-of-line 65-128 entry took 4 instr off 65-128, 1 off long, 1-64 unchanged; fused flag test +1 uop"
+flag = "**measured 2026-10-23** (section 10): a gap of 1 to 3 instr that the entry ladder work did not close"
+status = "active"
+body = '''
+'''

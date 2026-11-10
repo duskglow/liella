@@ -1,0 +1,8 @@
+id = "D-23.2"
+section = "s23"
+spec = "§23.4"
+ann = "HIST, KERN"
+status = "active"
+body = '''
+Written under the clean-room rules of §1.4 in a fresh session, from the spec, `spec/behaviour/timers.md` and black-box probes. `alarm`, `ualarm` and the itimers are the kernel's shared timers (⚑ KERN): `alarm` is the `alarm` system call, `ualarm` translates `ITIMER_REAL` (`clock_compat::ualarm`: either argument ≥ 1 s is `EINVAL`; a remainder beyond `useconds_t` saturates at `UINT_MAX-1`, where glibc wraps), and `setitimer` with a NULL value is `EFAULT` (S6; the kernel would take it as zero). POSIX timers notified by the kernel (`SIGEV_SIGNAL`, `SIGEV_THREAD_ID`, `SIGEV_NONE`, NULL) are the kernel's timers, and their `timer_t` is the kernel id; a NULL setting in `timer_settime` is `EINVAL` (as glibc), and a NULL id in `timer_create` is `EFAULT` (glibc crashes). `timerfd_*` are the system calls. Internal timers use `timerfd`.
+'''

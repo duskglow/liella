@@ -1,0 +1,8 @@
+id = "D-18.6"
+section = "s18"
+spec = "§18.2"
+ann = "HIST"
+status = "active"
+body = '''
+**`fork` mechanics** (phase 6). *Prepare* `atfork` handlers run in reverse registration order, then the library's locks are taken in one documented order (the atfork list, `popen`'s list and `system`'s count (D-18.5, phase 11), the stdio list, the thread list, the stack cache, the setxid broadcast, the time zone, the heap with `Heap::lock_all` and its cache pool, the environment lock). `clone(SIGCHLD \| CLONE_CHILD_SETTID \| CLONE_CHILD_CLEARTID)` names the thread block's TID word. In the parent the locks are released and the *parent* handlers run. In the child the locks are released (it is their only thread), the thread list is reset to the calling thread, the other threads' heap caches are parked in their pools (their slabs stay usable, M4), the stack cache keeps only stacks whose threads had already exited, the robust list is registered again (the kernel does not inherit it), `popen`'s and `system`'s locks are reset and a `system` count left by a parent thread is cleared with SIGINT/SIGQUIT given the dispositions it saved (also after `_Fork`), and the *child* handlers run. `_Fork` does only the `clone` and the child's list, robust-list and TID resets: no handlers and no locks (it is async-signal-safe).
+'''

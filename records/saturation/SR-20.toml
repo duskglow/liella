@@ -1,0 +1,13 @@
+id = "SR-20"
+section = "3"
+row = "`memcpy_144`, `memcpy_256`, `memmove_144`, `memmove_256` (129-256 B with NULL folding, D-4.55 one-word gate) (NULLFOLD-COPY-MID-3)"
+now = "cycles/call Ivy Bridge (SSE2 body): memcpy_144 18.8-18.9 vs 18.8-19.0 before D-4.55 (glibc 18.5-18.9), memcpy_256 18.9 vs 18.9 (glibc 25.6-25.9), memmove_144/256 35.7-35.8 / 34.7-34.8 vs 35.8-36.0 / 34.7-34.9; Alder Lake-N (AVX2 body): memcpy_144 12.2-12.4 vs 14.4 (glibc 13.2-13.4), memcpy_256 12.2-12.3 vs 14.2 (glibc 13.2-13.3), memmove_144/256 27.7-27.9 / 26.8-27.0 vs 27.8 / 26.8; memcpy_128 control unchanged on both; bench instr Alder Lake-N 35.3 vs 38.3 (two-word gate 34.3), Ivy Bridge 51.4 vs 53.5"
+limit = "reached on both classes: no row slower, Alder Lake-N below glibc"
+reason_class = "design (one class word whose sign bit picks the body: one load on both paths, as before folding; the AVX2 path keeps one more instruction than the two-word gate but one load fewer)"
+basis = "M (bench counters, 3 interleaved passes of base / one-word / two-word builds per host)"
+source = "NULLFOLD-COPY-MID-3"
+tried = "the two-word gate above (Ivy Bridge 19.4-19.5)"
+flag = "none"
+status = "active"
+body = '''
+'''

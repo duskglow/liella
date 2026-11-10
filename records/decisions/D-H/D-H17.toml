@@ -1,0 +1,7 @@
+id = "D-H17"
+section = "h"
+pattern = "Unwrapped kernel interfaces"
+status = "active"
+body = '''
+`liella-kernel` wraps the whole modern syscall surface with typed APIs, whether or not POSIX exports them (D-24.6).
+'''

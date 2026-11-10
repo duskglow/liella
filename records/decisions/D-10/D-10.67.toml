@@ -1,0 +1,8 @@
+id = "D-10.67"
+section = "s10"
+spec = "§10.0, §10.2"
+ann = "—"
+status = "active"
+body = '''
+**One-pass `float` kernels take their operand into the `double` domain without a partial-register write** (LIBM-EXPF-RATCHET; amends D-10.63). `cvtss2sd` (like `cvtsi2sd`, `sqrtsd` and the other scalar SSE writes) replaces only the low lane of its destination and so depends on that register's previous writer; the compiler chose a register the function had not written, which held the previous call's result, so back-to-back `expf`/`exp2f` calls formed one latency chain (Intel 64 and IA-32 Architectures Optimization Reference Manual: partial-register dependencies of scalar SSE). Rule: the one-pass entries build x·2^-896 from x's bits with integer operations (`fast32::onepass_scaled`; exact for every normal `float`, which the bit test guarantees) and move it in with a full-register `movq`; the 2^896 goes into the kernel's constant (exact, z = x·c normal, so the rounding in every direction and D-10.63's bound are unchanged). Cost +8 integer instructions per call (expf hot path 40 -> 48 instructions in libm.so.6); timing in the story report. A later one-pass kernel (exp10f, logf, trig) starts from `onepass_scaled` or checks its disassembly for a scalar SSE write into a register not written earlier in the function.
+'''

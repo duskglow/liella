@@ -1,0 +1,8 @@
+id = "D-4.60"
+section = "s04"
+spec = "§4.1"
+ann = "PERF"
+status = "active"
+body = '''
+**REJECTED (measured, reverted in NULLFOLD-MEMSET-3, 2026-11-06, ruling #3621): `memset` and `__memset_chk` keep the explicit NULL test on 65-256 (option B of D-4.22 unchanged for fills).** Tried (NULLFOLD-MEMSET, -2): NULL folding of the fill's 65-128 class (gated by `liella_machine_set_mid`, no NULL test while folding is on) and of its 129-256 class. On the N100 (Alder Lake-N) no variant sped up `memset_128` in time without slowing `memset_256`: the 65-128 fold alone gave memset_128 3.35 -> 2.94 ns but memset_256 3.78 -> 4.19 ns with the 129-256 instructions unchanged; the 65-256 fold with one gate load (129-256 bound 2 x set_mid) gave 3.35 -> 3.35 ns and 3.78 -> 3.78 ns (6 rounds x 25 runs; perf user cycles per run 1.369M -> 1.345M and 1.452M -> 1.457M). One topdown profile pass found mispredicts, BACLEARs, icache misses, resteers and 4K aliasing equal across the variants; the whole difference is in decode-bound front-end slots (`topdown_fe_bound.decode`, memset_256 0.32M before, 1.14M with the 65-128 fold; memset_128 1.35M before, 0.98M with it): a code-layout effect on the decoders, not the removed test. Padding the body and moving the gate word did not change it; further layout variants were not tried (ruling #3621). Ivy Bridge: memset_128 faster, memset_256 equal. Kept: the tests of the fill classes' head-first store order (17-256, both classed pages; what a later fold would rely on) and of NULL fills above 64 KiB (tests/small_copy.rs, tests/classed_slots.rs). Numbers: docs/saturation/03-memory-and-string-kernels.md.
+'''

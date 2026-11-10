@@ -1,0 +1,8 @@
+id = "D-3.10"
+section = "s04"
+spec = "§3.1"
+ann = "—"
+status = "active"
+body = '''
+**The heap is sharded and NUMA-aware (M1–M5).** It has 64 shards, one per NUMA node, each with its own lock, free lists, current segment and counters on its own cache lines. Segments are 16 MiB, aligned to 16 MiB, and belong to one shard; they are mapped with that shard's node preferred (`mbind(MPOL_PREFERRED)`, two internal system calls the spec does not list, since glibc does not wrap them). Slab records carry their owner shard, and `free` from any thread returns a block to its owner. The address-to-segment registry is insert-only and read without locks: segments are never unmapped, only their pages discarded. Bitmaps and use counts change only by atomic read-modify-write, so phase 6 can let other threads free without the owner's lock, without a layout change. Large blocks have their own lock, and their `mmap`/`munmap` calls run outside it. Capacity: 16 TiB of small blocks, 786,432 live large blocks, both in lazily mapped tables. Until threads know their node (phase 6), every thread uses shard 0 and placement is the kernel's default. See the NUMA review in the phase-3 Delivered block.
+'''

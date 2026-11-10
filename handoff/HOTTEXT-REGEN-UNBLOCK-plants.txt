@@ -1,0 +1,17 @@
+# HOTTEXT-REGEN-UNBLOCK plants (cargo xtask plants; format docs/plants.md).
+# 1: the regen mode ignored: a dead start-up/fork key no longer fails a normal build.
+verdict-always-regen | xtask/src/hottext.rs | lit:Some(e) if regen => Ok(Some(e)), ==> Some(e) => Ok(Some(e)), | cargo test -p xtask --bin xtask hottext | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 2: the CI refusal dropped: under CI the regen flag would be accepted.
+ci-refusal-dropped | xtask/src/hottext.rs | lit:if on && std::env::var_os("CI") ==> if false && std::env::var_os("CI") | CI=1 cargo test -p xtask --bin xtask hottext | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 3: unknown arguments of `so` accepted (a typo of the flag would silently build with the check on, or another flag slip in).
+unknown-arg-accepted | xtask/src/hottext.rs | lit:            return Err(format!("so: unknown argument ==>             let _ = (format!("so: unknown argument | cargo test -p xtask --bin xtask hottext | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 4: shell scripts allowed to name the regen flag (a gate script could then build with the check off).
+flag-allowed-in-scripts | xtask/src/hottext.rs | lit:|| path.ends_with(".md") ==> || path.ends_with(".md") || path.ends_with(".sh") | cargo test -p xtask --bin xtask hottext | msg:regen_mode_is_one_explicit_flag_for_regen_sh_only.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 5: another tracked file names the regen flag: the static check names it.
+flag-named-elsewhere | tools/hottext/merge.py | perl:s/(Merge an ordered hot-text list)/$1 --hottext\x2dregen/ | cargo xtask hottext-check | msg:tools/hottext/merge.py: names
+# 6: the inline(never) test made blind.
+inline-never-blind | xtask/src/hottext.rs | lit:.any(|a| a.trim() == "#[inline(never)]") ==> .any(|_| true) | cargo test -p xtask --bin xtask hottext | msg:listed_plain_functions_must_be_inline_never.*(FAILED|panicked)|panicked at xtask/src/hottext.rs
+# 7: a listed fork-tier function loses #[inline(never)] (wait4, inlined away on 2026-11-07): the static check names it.
+wait4-attr-removed | crates/boundary/src/spawn.rs | perl:s/#\[inline\(never\)\]\n(pub fn wait4\()/$1/ | cargo xtask hottext-check | msg:spawn.rs: fn wait4 \(fork key in hot-text.list\) needs #\[inline\(never\)\]
+# 8: another fork-tier function loses #[inline(never)] (timer::after_fork_child, inlined in the release profile before).
+after-fork-attr-removed | crates/boundary/src/timer.rs | perl:s/#\[inline\(never\)\]\n(pub\(crate\) fn after_fork_child\()/$1/ | cargo xtask hottext-check | msg:timer.rs: fn after_fork_child \(fork key in hot-text.list\) needs #\[inline\(never\)\]

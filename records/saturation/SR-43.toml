@@ -1,0 +1,13 @@
+id = "SR-43"
+section = "3"
+row = "AVX2-class classed-page swap at start-up (D-4.53, `memset` slot; swap off by default)"
+now = "with the swap on, per start: +65.5k kernel instructions (Broadwell-EP), +66.6k (Zen 1); Alder Lake-N +29.3 us (+15.6%) on a static exec-to-exit; SSE2 class 0"
+limit = "kernel floor: any change of what is mapped at page 0 needs one VMA-changing call; on kernel 6.8 the cheapest that can do it costs 20-31k kernel instructions in the call (`mmap(MAP_FIXED)` 20.3k, `munmap` 29.3k, `mremap` 30.5k; `mprotect` 10.3k cannot swap), above the 5k target"
+reason_class = "kernel"
+basis = "M"
+source = "CLASSED-SLOT-SWAP-COST"
+tried = "the pair at the head, middle or tail of its file VMA, or alone in a 2-page VMA: no saving (in-call 29.6k to 35.7k, the lone VMA the most); pages not faulted in: -2.5k in the call, no fault is taken either way, so populating gains nothing; no guard mapping exists. Not made: the `/proc/self/pagemap` guard (+48k whole process, 23k in the calls) as a user-space int3 scan of both pages (2.05k user instructions, 0 kernel), a change to ruling #3140 that still leaves about +44-60k"
+flag = "**recheck** on a kernel whose single-page `mremap` is under 5k"
+status = "active"
+body = '''
+'''

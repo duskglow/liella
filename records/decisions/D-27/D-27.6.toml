@@ -1,0 +1,8 @@
+id = "D-27.6"
+section = "s26-29"
+spec = "§27.5"
+ann = "—"
+status = "active"
+body = '''
+**`__x86_get_cpuid_feature_leaf@GLIBC_2.33`** (`<sys/platform/x86.h>`, behind `CPU_FEATURE_PRESENT`/`CPU_FEATURE_ACTIVE`): returns `struct cpuid_feature` (32 bytes, align 4: the raw CPUID words eax, ebx, ecx, edx, then the "active" words in that order). Index to leaf: 0=1, 1=7.0, 2=0x80000001, 3=0xd.1, 4=0x80000007, 5=0x80000008, 6=7.1, 7=0x19, 8=0x14.0, 9=0x24. A leaf or subleaf past the CPU's maximum reads zero. Index 10 and above (including 0xffffffff) gets one shared all-zero entry, never NULL. The table is filled on the first call (`liella_rt::cpu::feature_leaves`). Active = present AND a fixed per-bit rule: the `ACTIVE_ALWAYS` bits; FMA/AVX/F16C/AVX2 only with XCR0 SSE+AVX state; AVX-512 F/DQ/CD/BW/VL only with XCR0 0xe6; HLE/RTM inactive and RTM_ALWAYS_ABORT active (even though not present) when 7.EDX bit 11 or 13 is set. Probe: X86-CPUID-FEATURE-LEAF (glibc 2.39 on Skylake-SP host Skylake-SP, Haswell-EP host Haswell, Broadwell-EP host Broadwell, Zen 1 host). **Known gaps (ruling #778, #781, #782):** (1) an active bit never seen present on a probed CPU stays inactive (AVX512_IFMA/VBMI/VNNI/BITALG, GFNI, VAES, VPCLMULQDQ, the 7.1, 0x19, 0x14 and 0x24 active bits, among others). This is the safe answer: a feature is never claimed usable when it is not. Trigger: extend `ACTIVE_ALWAYS` once a newer CPU (Ice Lake+ / Zen 4) can be probed against glibc. (2) The TSX rule (abort bit 11 or 13) rests on one CPU per side (Skylake-SP host with bit 13, Broadwell-EP host without either bit). A model-based rule cannot be told apart on these hosts. (3) `glibc.cpu.hwcaps` tunable masking of the active bits is not implemented.
+'''

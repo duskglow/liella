@@ -1,0 +1,6 @@
+{"task": "HOTTEXT-REGEN-UNBLOCK", "model": "opus", "tokens": null, "result": "regen builds past a dead hot-text key (regen-only flag, static-checked); fork-tier plain functions inline(never); start-up tier needs a ruling", "branch": "task/hottext-regen-unblock", "head": null,
+ "gate": {"affected": null, "peak": null}, "accepted_first_attempt": null,
+ "rulings": [{"item": "start-up tier inline(never): +3..+18 user instructions per start-up row (fast), +18..+45 (release), no fault change", "recommendation": "(b) leave the start-up tier to the build check plus regen.sh --build; (c) mark the three already-outlined ones as a follow-up if a start-up key flips again"}],
+ "informational": ["~/bin/static-checks on the build hosts needs a hottext entry", "the list is not regenerated for the fork-only variant: wait4 (fast) and after_fork_child (release) join the group at the next regen.sh --build"], "refused": [],
+ "improvement": "regen.sh --build replaces the hand drop-and-rebuild workaround", "next_step": "read hrg-measure-fork, hrg-gate, hrg-plants on the build host; then regen.sh --build in both profiles",
+ "jobs": ["hrg-measure-fork", "hrg-gate", "hrg-plants"], "report_file": "handoff/hottext-regen-unblock.md"}

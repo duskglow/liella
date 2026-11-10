@@ -1,0 +1,8 @@
+id = "D-C0.7"
+section = "c0"
+spec = "C0.7"
+ann = "HIST"
+status = "active"
+body = '''
+Internal APIs encode ownership in types (`TryVec`, `&mut [u8]`, borrowed views). Caller-owned C results come from `boundary::caller_alloc` (F23). Entry points with two ownership modes (`realpath(p, NULL)`, `getcwd(NULL, 0)`) are two internal calls selected by the conversion of the pointer argument (`conv::opt_buf`), not by a branch in the translation. **Tests (milestone 5):** `conformance/c/s00_ownership.c` (clause `s0_6_c0_7_0`): copies of borrowed arguments (`putenv` keeps its string, as stated), heap results measured with `malloc_usable_size` and freed, views inside the caller's object.
+'''

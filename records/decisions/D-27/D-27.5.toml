@@ -1,0 +1,8 @@
+id = "D-27.5"
+section = "s26-29"
+spec = "§27.1"
+ann = "—"
+status = "active"
+body = '''
+**`_dl_find_object`** (static programs, until phase 14): a `pc` in one of the main program's `PT_LOAD` segments gives that segment's range (a static glibc 2.39 program reports the segment, not the whole object), one in the vDSO the vDSO's whole mapped range; `dlfo_eh_frame` = the object's `PT_GNU_EH_FRAME` address (0 without one), `dlfo_flags` 0, result 0; any other `pc` (stack, past `_end`, 0) gives -1 and leaves `*result` alone. libgcc_eh (GCC 13) calls it, so a static C++ or `-fexceptions` program needs it to link. Exported with feature `runtime` only (`export! { runtime ... }`): the answer covers only a process Liella started, so test builds that interpose exports on a host process keep the host's (interposed, it hid the host's shared objects from Rust's panic unwinder: SIGABRT). Known gap: `dlfo_link_map` is 0 (no `struct link_map` before phase 14; glibc gives a non-null one). Probe: PTHREAD-ONCE-UNWIND-2 (static and dynamic glibc).
+'''
