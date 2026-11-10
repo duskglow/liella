@@ -652,6 +652,11 @@ pub fn group(ar: &str, archive: &Path, list: &Path, work: &Path, profile: Option
 
 /// The dead-key check's outcome: the error of [`unmatched_error`] fails the build, except in the
 /// regen mode ([`REGEN_FLAG`]), where it is handed back to be printed.
+/// Whether this build runs in the regen mode ([`REGEN_FLAG`]).
+pub fn regen_on() -> bool {
+    REGEN.load(Ordering::Relaxed)
+}
+
 fn dead_key_verdict(err: Option<String>, regen: bool) -> Result<Option<String>, String> {
     match err {
         None => Ok(None),

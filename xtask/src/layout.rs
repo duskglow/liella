@@ -408,12 +408,23 @@ fn check_one(c: &Contract, pr: &mut Products) -> Result<String, Vec<String>> {
     }
 }
 
+/// HOTTEXT-REGEN-UNBLOCK for the layout: a contract whose verdict follows the hot-text ORDER (`startup-text-windows`:
+/// where the start-up functions land in the group) is reported, not enforced, in the regen build of
+/// `tools/hottext/regen.sh --build`. That build is what the script traces to rewrite the order, so a list made by one
+/// profile's trace (its touch order moves a function only the other profile's start-up runs) would otherwise block its
+/// own repair in that other profile. regen.sh rebuilds with plain `cargo xtask so` after rewriting the list, and that
+/// build enforces every contract; nothing else can pass the flag (hottext::static_check).
+fn waived_in_regen(kind: &str, regen: bool) -> bool {
+    regen && kind == "startup-text-windows"
+}
+
 /// Check every contract on the products in `dir` (built with `profile`, when known); one line per contract, every
 /// failure listed.
 pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<(), String> {
     let contracts = load(root)?;
     let mut pr = Products { root, dir, profile: profile.map(str::to_string), index: BTreeMap::new() };
     let mut bad = Vec::new();
+    let regen = crate::hottext::regen_on();
     for c in &contracts {
         match check_one(c, &mut pr) {
             Ok(s) => println!("layout: {} ok: {s} ({})", c.id, c.decision),
@@ -422,6 +433,10 @@ pub fn check_products(root: &Path, dir: &Path, profile: Option<&str>) -> Result<
                     eprintln!("{l}");
                 }
                 eprintln!("layout: {} protects: {}", c.id, c.reason);
+                if waived_in_regen(&c.kind, regen) {
+                    println!("layout: {}: NOT enforced for this {} build (regen.sh rewrites the hot-text order, then rebuilds and checks it)", c.id, crate::hottext::REGEN_FLAG);
+                    continue;
+                }
                 bad.push(c.id.clone());
             }
         }
@@ -909,6 +924,15 @@ mod tests {
 
     fn row(id: &str, rule: &str) -> Contract {
         Contract { id: id.into(), kind: "object-align".into(), subjects: vec!["libc.a:X".into()], rule: rule.into(), reason: "r".into(), decision: "D-X.48".into() }
+    }
+
+    #[test]
+    fn only_the_order_contract_is_waived_and_only_in_the_regen_build() {
+        // no spec clause: tooling (D-X.49, HOTTEXT-REGEN-UNBLOCK): a plain build enforces every kind.
+        for k in KINDS {
+            assert!(!waived_in_regen(k, false), "{k} waived outside the regen build");
+            assert_eq!(waived_in_regen(k, true), *k == "startup-text-windows", "{k}");
+        }
     }
 
     #[test]
