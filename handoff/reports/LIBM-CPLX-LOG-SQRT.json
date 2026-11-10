@@ -4,7 +4,7 @@
  "tokens": null,
  "result": "INCOMPLETE (context checkpoint): clog/csqrt/clogf/csqrtf quick tiers written with proofs and tests; check3 showed no answer differing from the route; gate, plants, counts, timing not run",
  "branch": "task/libm-cplx-log-sqrt",
- "head": "01975d760",
+ "head": "3aa1ea532",
  "gate": {
   "affected": "not run",
   "peak": null
