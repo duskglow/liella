@@ -12,9 +12,12 @@
 
 #if defined(LIELLA_EXPORT)
 #define MATH_FWD(name) name
+#define MATH_SLOW(name) liella_slow_##name
 #else
 #define MATH_FWD(name) liella_fwd_##name
+#define MATH_SLOW(name) liella_fwd_slow_##name
 #endif
+#define MATH_SLOW_ATTR __attribute__((visibility("hidden")))
 struct liella_ld_bits { uint64_t mant; uint16_t se; uint16_t pad[3]; };
 struct liella_f128_bits { uint64_t lo; uint64_t hi; };
 union liella_ld { long double value; struct liella_ld_bits bits; };

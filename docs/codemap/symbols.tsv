@@ -5,6 +5,8 @@ symbol	version	defined at	first implementation call
 @mul	(math-gen)	crates/boundary/src/posix/s10_math.tsv:87	mret::ret
 @sqrt	(math-gen)	crates/boundary/src/posix/s10_math.tsv:89	mret::ret
 @sub	(math-gen)	crates/boundary/src/posix/s10_math.tsv:86	mret::ret
+SQRTF64X		csys/src/machine/sqrtl.S:30	SLOW
+SQRTL		csys/src/machine/sqrtl.S:29	SLOW
 _Exit	GLIBC_2.2.5	crates/boundary/src/posix/s01_startup.rs:64	process::exit_now
 _Fork	GLIBC_2.34	crates/boundary/src/posix/s18_processes.rs:66	ret::int32
 _IO_fclose	GLIBC_2.2.5	crates/boundary/src/posix/s12_stdio.rs:744	
