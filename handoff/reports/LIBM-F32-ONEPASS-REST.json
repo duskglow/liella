@@ -1,0 +1,32 @@
+{
+ "task": "LIBM-F32-ONEPASS-REST",
+ "model": "opus",
+ "tokens": null,
+ "result": "exp10f, logf, log2f, log10f on the one-pass float path (D-10.72): exhaustive 2^32x4 0 mismatches each, 8/8 plants, instr exp10f 64->62, logf 72->58, log2f 78->59, log10f 65 (glibc 86); booked IVB/N100 timing started, not read",
+ "branch": "task/libm-f32-onepass-rest",
+ "head": null,
+ "gate": {
+  "affected": "11408 passed / 0 failed (32 suites, conformance 126/126)",
+  "peak": "16G (page cache)"
+ },
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": [
+  "before-counts cited from earlier handoffs (role is not a git tree, bench --base cannot stage a base there)",
+  "the brief's per-function sequence was batched into one gate/sweep/timing run (budget)",
+  "booking #147/#148 expired while the counts+stage job ran; re-booked as #150/#151"
+ ],
+ "refused": [],
+ "improvement": "bench --stage and counts in one job took 23 min and outlived a 60-min booking: book timing only after the stage tarball exists",
+ "next_step": "read kotori:f32rest-ivb and nozomi:f32rest-n100 for the four rows (target <= 1.3x IVB); then LIBM-F32-ONEPASS-REST-2 (sinf/cosf/tanf, acoshf/asinhf, powf)",
+ "report_file": "handoff/libm-f32-onepass-rest.md",
+ "jobs": [
+  "shiki:f32rest-gate",
+  "shiki:f32rest-plants",
+  "shiki:f32rest-sweep",
+  "shiki:f32rest-counts",
+  "shiki:f32rest-lint3",
+  "kotori:f32rest-ivb",
+  "nozomi:f32rest-n100"
+ ]
+}
