@@ -82,3 +82,29 @@ fn the_first_allocation_touches_few_pages() {
     eprintln!("page faults of the first malloc(16): {best} (bound {FIRST_BOUND})");
     assert!(best <= FIRST_BOUND, "the first malloc(16) took {best} page faults > {FIRST_BOUND} (first reservation split again?)");
 }
+
+#[test]
+fn the_vdso_lookup_takes_no_folding_decision() {
+    // Trace: D-3.20 (no spec clause: system calls of an internal lookup). The vDSO lookup runs on
+    // the heap's first slow path when several nodes are allowed (D-3.20) and at the first clock
+    // call on every host, which this oracle uses so the test does not depend on the host's
+    // topology. Its name compares must not go through the exported compare entry, whose first
+    // small call reads vm.mmap_min_addr (#4170, ruling #4197): the first clock_gettime makes no
+    // read system call. The guard itself is untouched; the program's own first copy, fill or
+    // compare takes the decision.
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("vdso_lookup_reads_liella");
+    build("vdso_lookup_reads.c", &exe);
+    let o = Command::new(&exe).env_clear().stdin(Stdio::null()).output().unwrap();
+    assert!(o.status.success(), "{} failed: {:?}", exe.display(), o.status);
+    let err = String::from_utf8_lossy(&o.stderr);
+    if let Some(why) = err.trim().strip_prefix("skip ") {
+        eprintln!("skipped: {why}");
+        return;
+    }
+    let n: i64 = err.trim().strip_prefix("reads ").and_then(|v| v.parse().ok()).unwrap_or_else(|| panic!("unexpected output {err:?}"));
+    assert!(n == 0, "the first clock_gettime made {n} read system calls (vDSO name compare through the exported compare entry?)");
+}

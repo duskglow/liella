@@ -46,6 +46,24 @@ fn u64_at(b: &[u8], off: usize) -> Option<u64> {
     Some(u64::from_le_bytes(w))
 }
 
+/// Whether `a` and `b` hold the same bytes, compared one byte at a time. Slice `==` lowers to a
+/// `bcmp` call, which in the products is the library's own exported compare entry, and its first
+/// small call takes the NULL-folding decision (the `vm.mmap_min_addr` read, 3 system calls). The
+/// vDSO lookup runs on the first heap slow path of a multi-node process (D-3.20) and at the first
+/// clock call; it compares names of about 20 bytes, so a byte loop costs nothing measurable and
+/// leaves that decision to the program's own first copy, fill or compare (#4170, ruling #4197).
+fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for (x, y) in a.iter().zip(b) {
+        if x != y {
+            return false;
+        }
+    }
+    true
+}
+
 fn usz(v: u64) -> Option<usize> {
     usize::try_from(v).ok()
 }
@@ -194,7 +212,7 @@ impl<'a> Vdso<'a> {
             let Some(sym_name) = sym_name else { continue };
             for k in 0..N {
                 let (Some(o), Some(&want)) = (open.get(k).copied(), names.get(k)) else { continue };
-                if !o || sym_name != want {
+                if !o || !same_bytes(sym_name, want) {
                     continue;
                 }
                 match self.version_ok(i, version) {
@@ -234,7 +252,7 @@ impl<'a> Vdso<'a> {
     fn version_ok(&self, i: usize, version: &[u8]) -> Option<bool> {
         let Some(vs) = self.versym else { return Some(true) };
         let ndx = u16_at(self.image, vs.checked_add(i.checked_mul(2)?)?)?;
-        Some(self.version_name(ndx) == Some(version))
+        Some(self.version_name(ndx).is_some_and(|v| same_bytes(v, version)))
     }
 
     /// The image offsets of the symbol table and the version index table, and the symbol count

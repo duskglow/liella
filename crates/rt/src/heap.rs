@@ -804,10 +804,19 @@ impl Heap {
     #[inline]
     fn shard_of<P: Pages>(&self, pages: &P) -> usize {
         if !self.topology.load(Relaxed) {
-            self.numa.store(pages.allowed_nodes() > 1, Relaxed);
-            self.topology.store(true, Relaxed);
+            self.decide_topology(pages);
         }
         if self.numa.load(Relaxed) { pages.shard() % SHARDS } else { 0 }
+    }
+
+    /// [`Heap::shard_of`]'s one-time question, out of line and cold: it runs once per process,
+    /// so its code stays out of the slow paths' hot text (HEAP-FIRST-USE-3: inlined at both
+    /// sites, the slow paths grew and moved the first `mktime`'s text past a fault-around window).
+    #[cold]
+    #[inline(never)]
+    fn decide_topology<P: Pages>(&self, pages: &P) {
+        self.numa.store(pages.allowed_nodes() > 1, Relaxed);
+        self.topology.store(true, Relaxed);
     }
 
     fn node_for(&self, shard: usize) -> Option<u32> {
