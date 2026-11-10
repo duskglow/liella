@@ -43,7 +43,7 @@ Results on f7a1becd6 (keke r1):
   on the train with rc 1; off-train generation leaves the tracked files untouched; in-place regeneration is clean)
 - plants rc 0 (3 CAUGHT, 0 SURVIVED, 0 WARN)
 - gate PENDING: `affected --run --base origin/next` escalated to FULL because xtask changed, and was still running at
-  hand-back. Re-attach: `ssh claude@10.0.100.53 '~/bin/jobwait codemap-train-owned-gate'`.
+  hand-back. Re-attach: `~/bin/jobwait codemap-train-owned-gate` on keke.
 
 ## Notes
 - I wrote D-X.66.toml by hand in the shape `records new` produces, because the worktree host has no cargo. The static job
