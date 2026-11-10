@@ -367,11 +367,9 @@ fn scratch(len: usize, name: &[u8]) -> (usize, &'static mut [u8]) {
 fn read_image(at: usize, out: &mut [u8]) {
     // UNSAFE(slice): bytes of the mapped program, copied before any relocation store.
     #[allow(unsafe_code)]
-    // SAFETY: the caller checked [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), lies
-    // in the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped, or is the first
-    // 64 bytes of the page holding the program header table (readable: the table is, and mappings
-    // are whole pages); the slice lives only for this copy, and nothing stores into the program
-    // while it is taken.
+    // SAFETY: [at, at + len) is the program header table (`AT_PHDR`, ⚑ KERN), the start of its (whole, readable)
+    // page, or the file-backed part of one readable `PT_LOAD` the kernel or `load` mapped; the slice lives
+    // only for this copy, and nothing stores into the program while it is taken.
     out.copy_from_slice(unsafe { conv::bytes_at(at, out.len()) });
 }
 

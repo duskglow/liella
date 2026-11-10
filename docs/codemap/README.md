@@ -49,7 +49,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/dev/` | crates/legacy/src/accounting.rs:470 |
 | `/dev/console` | crates/boundary/src/fmtmsg.rs:268, crates/core/src/log.rs:65, crates/core/src/term.rs:506 |
 | `/dev/log` | crates/core/src/log.rs:63 |
-| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:153 |
+| `/dev/null` | crates/boundary/src/selftest.rs:442, crates/boundary/src/spawn.rs:778, crates/boundary/src/spawn.rs:851, crates/rt/src/start.rs:158 |
 | `/dev/ptmx` | crates/core/src/term.rs:335, crates/core/src/term.rs:507 |
 | `/dev/pts/` | crates/core/src/term.rs:391, crates/core/src/term.rs:502 |
 | `/dev/shm/` | crates/boundary/src/mqueue.rs:370, crates/boundary/src/nscache.rs:54 |
@@ -101,7 +101,7 @@ Other crates: abi, boundary, core, kernel, ld, ld-so, legacy, libc-so, libm-so, 
 | `/sys/devices/system/cpu` | crates/core/src/system.rs:351 |
 | `/sys/devices/system/cpu/online` | crates/core/src/system.rs:331 |
 | `/usr/` | crates/core/src/catalog/xopen.rs:197 |
-| `/usr/bin/ls` | crates/rt/src/start.rs:250 |
+| `/usr/bin/ls` | crates/rt/src/start.rs:255 |
 | `/usr/bin/prog` | crates/legacy/src/argp.rs:72 |
 | `/usr/lib/locale` | crates/core/src/locale/mod.rs:533 |
 | `/usr/lib/locale/locale-archive` | crates/core/src/locale/mod.rs:535 |
