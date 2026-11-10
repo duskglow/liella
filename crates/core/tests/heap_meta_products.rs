@@ -14,24 +14,29 @@ use std::process::{Command, Stdio};
 /// Upper bound on the lowest of [`RUNS`] counts: 7 bitmap pages for 14 classes plus headroom.
 const BOUND: u64 = 9;
 const RUNS: usize = 5;
+/// Upper bound on the lowest of [`RUNS`] counts of the process's first `malloc(16)` (D-3.19): one
+/// registry page, the first cache, the segment's head page and bitmap page, the block's slab
+/// page and the first `getcpu`'s vDSO page (6 measured). With the cache table, segment bases
+/// and segment hash in separate mappings it took 8.
+const FIRST_BOUND: u64 = 7;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn build(out: &Path) {
+fn build(src: &str, out: &Path) {
     let r = root();
     let st = Command::new("cc")
         .args(["-std=gnu17", "-O1", "-static", "-nostdlib", "-fno-builtin"])
         .arg(r.join("target/liella/liella-crt1.o"))
-        .arg(r.join("crates/core/tests/oracle/heap_meta_faults.c"))
+        .arg(r.join("crates/core/tests/oracle").join(src))
         .arg(r.join("target/liella/libc.a"))
         .arg("-lgcc")
         .arg("-o")
         .arg(out)
         .status()
         .expect("cc");
-    assert!(st.success(), "heap_meta_faults.c does not link against the products");
+    assert!(st.success(), "{src} does not link against the products");
 }
 
 #[test]
@@ -42,7 +47,7 @@ fn init_heap_metadata_of_new_size_classes_stays_dense() {
     let dir = r.join("target/test-oracles");
     std::fs::create_dir_all(&dir).unwrap();
     let exe = dir.join("heap_meta_faults_liella");
-    build(&exe);
+    build("heap_meta_faults.c", &exe);
     let mut best = u64::MAX;
     for _ in 0..RUNS {
         let o = Command::new(&exe).env_clear().stdin(Stdio::null()).output().unwrap();
@@ -53,4 +58,25 @@ fn init_heap_metadata_of_new_size_classes_stays_dense() {
     }
     eprintln!("heap metadata faults for 14 new classes (malloc + free): {best} (bound {BOUND})");
     assert!(best <= BOUND, "14 new size classes took {best} page faults > {BOUND} (dense slab metadata lost?)");
+}
+
+#[test]
+fn the_first_allocation_touches_few_pages() {
+    // Trace: D-3.19 (no spec clause: the heap's first reservation is internal).
+    let r = root();
+    assert!(r.join("target/liella/libc.a").exists(), "the products are missing: run `cargo xtask so`");
+    let dir = r.join("target/test-oracles");
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("heap_first_faults_liella");
+    build("heap_first_faults.c", &exe);
+    let mut best = u64::MAX;
+    for _ in 0..RUNS {
+        let o = Command::new(&exe).env_clear().stdin(Stdio::null()).output().unwrap();
+        assert!(o.status.success(), "{} failed: {:?}", exe.display(), o.status);
+        let err = String::from_utf8_lossy(&o.stderr);
+        let n: u64 = err.trim().strip_prefix("minflt ").and_then(|v| v.parse().ok()).unwrap_or_else(|| panic!("unexpected output {err:?}"));
+        best = best.min(n);
+    }
+    eprintln!("page faults of the first malloc(16): {best} (bound {FIRST_BOUND})");
+    assert!(best <= FIRST_BOUND, "the first malloc(16) took {best} page faults > {FIRST_BOUND} (first reservation split again?)");
 }

@@ -368,8 +368,8 @@ fn an_address_space_limit_sizes_the_registries() {
     let heap = Heap::new();
     let a = heap.alloc(&CSys, &pages, 40, ALIGN).unwrap().addr;
     let lens: Vec<usize> = pages.maps.borrow().values().map(|m| m.len).collect();
-    assert!(lens.contains(&(16 << 20)), "a segment: {lens:?}");
-    assert!(lens.iter().all(|&l| l <= 16 << 20), "registries sized to 1 GiB: {lens:?}");
+    // One mapping: the segment, one page of registries sized to 1 GiB, the first cache chunk (D-3.19).
+    assert_eq!(lens, [SEG + PAGE + (64 << 10)], "a segment and small registries: {lens:?}");
     heap.free(&CSys, &pages, a).unwrap();
 }
 
@@ -378,7 +378,7 @@ fn a_raised_address_space_limit_lets_the_heap_grow() {
     // Clauses: s3_1_c_1, s3_1_f_1 (T14, owner requirement 2026-10-05): a process that raises
     // its address-space limit after the heap's first reservations can grow the heap past the
     // earlier limit: the registries chosen for 20 MiB grow by generations. Without a limit the
-    // sizes are the maxima: `without_an_address_space_limit_the_registries_keep_their_maxima`.
+    // first allocation maps one range: `the_first_allocation_reserves_one_mapping`.
     let pages = FakePages::new();
     pages.limit.set(Some(20 << 20));
     let heap = Heap::new();
@@ -413,23 +413,29 @@ fn a_raised_address_space_limit_lets_the_heap_grow() {
 }
 
 #[test]
-fn without_an_address_space_limit_the_registries_keep_their_maxima() {
-    // Clauses: s3_1_c_1 (T14, D-3.14). No limit (or 64 GiB and more): the registries and the
-    // segments have the sizes they had before limits were considered: 16 MiB segments, 8 MiB of
-    // segment bases and 16 MiB of segment hash (MAX_SEGS).
+fn the_first_allocation_reserves_one_mapping() {
+    // Clauses: s3_1_c_1 (T14, D-3.14, D-3.19). No limit (or 64 GiB and more): the first
+    // allocation maps one range, the first segment at its 16 MiB boundary, one page holding the
+    // generation-0 cache table, segment bases and segment hash, and the first cache chunk; the
+    // next hundred blocks map nothing more. The generations that follow are tested under a
+    // raised limit (`a_raised_address_space_limit_lets_the_heap_grow`).
     for limit in [None, Some(64usize << 30)] {
         let pages = FakePages::new();
         pages.limit.set(limit);
         let heap = Heap::new();
-        let blocks: Vec<usize> = (0..100).map(|i| heap.alloc(&CSys, &pages, 24 + i, ALIGN).unwrap().addr).collect();
-        let mut lens: Vec<usize> = pages.maps.borrow().values().map(|m| m.len).collect();
-        lens.sort_unstable();
-        // A cache chunk; the cache table and the segment bases (8 MiB each); the segment hash
-        // and one segment (16 MiB each).
-        assert_eq!(lens, [64 << 10, 8 << 20, 8 << 20, 16 << 20, SEG], "{limit:?}");
+        let first = heap.alloc(&CSys, &pages, 24, ALIGN).unwrap().addr;
+        assert_eq!(*pages.calls.borrow(), 1, "{limit:?}: one page request for the first allocation");
+        let blocks: Vec<usize> = (1..100).map(|i| heap.alloc(&CSys, &pages, 24 + i, ALIGN).unwrap().addr).collect();
+        let maps: Vec<(usize, usize)> = pages.maps.borrow().iter().map(|(&b, m)| (b, m.len)).collect();
+        assert_eq!(maps.len(), 1, "{limit:?}: {maps:?}");
+        let (base, len) = maps[0];
+        assert_eq!((base % SEG, len), (0, SEG + PAGE + (64 << 10)), "{limit:?}");
+        assert_eq!(first / SEG, base / SEG, "{limit:?}: the block is in the first segment");
+        heap.free(&CSys, &pages, first).unwrap();
         for b in blocks {
             heap.free(&CSys, &pages, b).unwrap();
         }
+        assert_eq!(heap.stats(&CSys, &pages).in_use, 0);
     }
 }
 
@@ -560,9 +566,10 @@ fn secure_blocks_are_wiped_on_every_release_and_never_kept() {
 
 // ------------------------------------------------------------------------------ shards (D-3.10)
 
-/// The node each segment (a 16 MiB mapping at a 16 MiB boundary) asked for, by base.
+/// The node each segment (a mapping of 16 MiB or more at a 16 MiB boundary: the first one also
+/// holds registries, D-3.19) asked for, by base.
 fn segment_nodes(pages: &FakePages) -> BTreeMap<usize, Option<u32>> {
-    pages.maps.borrow().iter().filter(|(b, m)| m.len == SEG && *b % SEG == 0).map(|(&b, m)| (b, m.node)).collect()
+    pages.maps.borrow().iter().filter(|(b, m)| m.len >= SEG && *b % SEG == 0).map(|(&b, m)| (b, m.node)).collect()
 }
 
 #[test]
