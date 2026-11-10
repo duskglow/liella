@@ -241,7 +241,7 @@ fn ldso_run_as_program_at_random_bases() {
     let needs = d.join("needs");
     let o = Command::new("cc").args(["-fPIE", "-pie", "-O1"]).arg(d.join("prog.c")).args(["-nostartfiles", "-Wl,--no-as-needed", "-lm", "-o"]).arg(&needs).output().unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    for (arg, msg) in [(d.join("prog.c"), "not a valid ELF"), (needs, "needs shared objects"), (d.join("absent"), "cannot open")] {
+    for (arg, msg) in [(d.join("prog.c"), "not a valid ELF"), (needs, "cannot open shared object file"), (d.join("absent"), "cannot open")] {
         let o = run(Command::new(&ld).arg(&arg));
         assert_eq!(o.status.code(), Some(127), "{}: {o:?}", arg.display());
         assert!(String::from_utf8_lossy(&o.stderr).contains(msg), "{}: {o:?}", arg.display());

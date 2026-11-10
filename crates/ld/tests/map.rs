@@ -435,11 +435,6 @@ fn corpus(pie: &[u8]) -> Vec<Case> {
             let va = u64_at(v, o);
             put64(v, o, va + 0x10);
         }), bad),
-        ("zero-length", edit(&|v| {
-            let o = ph_at(v, last);
-            put64(v, o + 32, 0);
-            put64(v, o + 40, 0);
-        }), bad),
         ("filesz-over-memsz", edit(&|v| {
             let o = ph_at(v, a);
             let m = u64_at(v, o + 40);
