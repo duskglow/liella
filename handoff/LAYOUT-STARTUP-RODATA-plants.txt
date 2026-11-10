@@ -1,0 +1,6 @@
+# LAYOUT-STARTUP-RODATA (D-X.62): the start-up read-only data grouped in .rodata1 (xtask/src/startup_ro.rs), its 64 KiB
+# start alignment (entry.S), the STARTUP-DATA-WINDOWS budgets tightened to 1 window, and the product test
+# init_startup_rodata_stays_in_one_window_for_any_text_size (16 text paddings). Fast profile products.
+lsr-operands-left-out | xtask/src/startup_ro.rs | lit:chosen.extend(at); ==> let _ = at; | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:STARTUP-DATA-WINDOWS.*(sits alone|spans)
+lsr-placement-skipped | xtask/src/startup_ro.rs | lit:let moved = s.name == SECTION || ==> let moved = s.name == SECTION && | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:STARTUP-DATA-WINDOWS.*(sits alone|spans)
+lsr-align-removed | csys/src/machine/entry.S | perl:s/(liella_machine_ld_enter:.*?)\.balign 65536/$1.balign 1/s | cargo xtask so && cargo test -p liella --test hot_text_products init_startup_rodata | msg:straddles a 64 KiB window|not 64 KiB aligned|STARTUP-DATA-WINDOWS.*(sits alone|spans)

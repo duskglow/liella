@@ -855,6 +855,9 @@ fn build_archive_locked(root: &Path, product: &Path, out: &Path, rustflags: Opti
     // The functions short programs run, grouped into `.text.hot.*` (PAGEFAULTS-2: fewer text faults).
     let (hot, _) = crate::hottext::group(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, &root.join("crates/libc-so/hot-text.list"), &product.join("hot-work"), rustflags.is_none().then(|| profile.name()))?;
     println!("so: {hot} function sections grouped as hot text");
+    // The read-only data start-up reads, after the grouping (it places STARTUP_NAMES), in one aligned section (D-X.62).
+    let (ro, ro_bytes) = crate::startup_ro::place(&std::env::var("AR").unwrap_or_else(|_| "ar".into()), &archive, root, &product.join("startup-ro-work"))?;
+    println!("so: {ro} start-up read-only data sections in {} (at most {ro_bytes} of {} bytes)", crate::startup_ro::SECTION, crate::startup_ro::ALIGN);
     let edges = exclude_link_edges(&archive)?;
     println!("so: {edges} link-edge words excluded from every link output (D-22.16)");
     check_archive_elf(&archive)?;

@@ -665,3 +665,41 @@ fn init_startup_state_statics_are_in_data1() {
         assert!(sections.iter().all(|s| *s == ".data1"), "start-up state: *{suffix} is in {sections:?}, want .data1 (move_startup_state not applied?)");
     }
 }
+
+/// LAYOUT-STARTUP-RODATA (D-X.62; no spec clause, layout of the products): the read-only data start-up
+/// reads is grouped in `.rodata1`, which starts on a 64 KiB boundary (the start object's empty
+/// `.rodata1`), so it occupies one 64 KiB fault-around window wherever `.rodata` ends. Before the
+/// grouping, `page_faults.c` linked with 4 KiB steps of extra text read its start-up constants from
+/// 2 to 4 windows (fast) and 4 to 6 (release). Each of 16 links here adds `0x30 + k * 4 KiB` bytes
+/// of text, covering every 4 KiB position of `.rodata` in a window.
+#[test]
+fn init_startup_rodata_stays_in_one_window_for_any_text_size() {
+    let dir = std::env::temp_dir().join(format!("liella-startup-ro-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let mut spans = Vec::new();
+    for k in 0..16u64 {
+        let pad = 0x30 + k * 4096;
+        let (src, obj, exe) = (dir.join(format!("pad{k}.s")), dir.join(format!("pad{k}.o")), dir.join(format!("pf{k}")));
+        std::fs::write(&src, format!("\t.text\n\t.globl liella_test_pad{k}\nliella_test_pad{k}:\n\t.skip {pad}, 0x90\n\t.section .note.GNU-stack,\"\",@progbits\n")).expect("pad source");
+        assert!(Command::new("cc").arg("-c").arg(&src).arg("-o").arg(&obj).status().expect("cc").success(), "pad object");
+        build_with(&exe, &[obj.to_str().expect("utf-8 path")]);
+        let out = Command::new("readelf").arg("-SW").arg(&exe).output().expect("readelf");
+        let text = String::from_utf8_lossy(&out.stdout);
+        let line = text.lines().find(|l| l.split_whitespace().nth(1) == Some(".rodata1")).unwrap_or_else(|| panic!("pad {pad:#x}: no .rodata1 in the probe"));
+        let f: Vec<&str> = line.split(']').nth(1).expect("section line").split_whitespace().collect();
+        let (start, size) = (u64::from_str_radix(f[2], 16).expect("address"), u64::from_str_radix(f[4], 16).expect("size"));
+        spans.push((pad, start, size));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    for (pad, start, size) in &spans {
+        eprintln!("text pad {pad:#x}: .rodata1 {start:#x}+{size:#x}");
+    }
+    for (pad, start, size) in &spans {
+        assert!(*size > 0, "pad {pad:#x}: .rodata1 is empty (start-up read-only data not grouped?)");
+        assert_eq!(start >> 16, (start + size - 1) >> 16, "pad {pad:#x}: .rodata1 {start:#x}+{size:#x} straddles a 64 KiB window boundary");
+    }
+    // The cause, when every span above happened to fit: the start alignment the grouping relies on.
+    for (pad, start, _) in &spans {
+        assert_eq!(start % 65536, 0, "pad {pad:#x}: .rodata1 at {start:#x} is not 64 KiB aligned (entry.S's .rodata1 not first?)");
+    }
+}

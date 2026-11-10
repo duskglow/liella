@@ -83,6 +83,7 @@ mod repro;
 mod rust_dylib;
 mod schedule;
 mod so;
+mod startup_ro;
 mod spec;
 mod status;
 mod steptime;
