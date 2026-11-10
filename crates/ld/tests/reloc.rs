@@ -503,8 +503,8 @@ void _start(void) {{ int **pp = r_pp(); int c = *pp == &r_x ? 0 : 3; if ({}) *pp
 /// text holding `_start` is mapped `r-x` (never writable) when its code first runs and its
 /// text-relocated word is right; 10 when the text is writable or not executable, 20 when no mapping
 /// holds it, 11 for a wrong word.
-const TEXT_PROG: &str = "extern int b_data;
-__asm__(\".text\\n.globl p_word\\n.type p_word,@object\\np_word: .quad b_data\\n.size p_word, 8\\n\");
+const TEXT_PROG: &str = "extern int b_fn(void); int p_target = 9;
+__asm__(\".text\\n.globl p_word\\n.type p_word,@object\\np_word: .quad p_target\\n.size p_word, 8\\n\");
 extern long p_word;
 void _start(void);
 static long sc(long n, long a, long b, long c) { long r; __asm__ volatile(\"syscall\" : \"=a\"(r) : \"a\"(n), \"D\"(a), \"S\"(b), \"d\"(c) : \"rcx\", \"r11\", \"memory\"); return r; }
@@ -521,7 +521,7 @@ void _start(void) {
     while (*p && *p != '\\n') p++;
     if (*p) p++;
   }
-  if (code == 0 && p_word != (long)&b_data) code = 11;
+  if (code == 0 && (p_word != (long)&p_target || b_fn() != 5)) code = 11;
   sc(60, code, 0, 0);
 }
 ";
