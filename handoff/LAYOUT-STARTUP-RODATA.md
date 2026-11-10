@@ -21,6 +21,13 @@ Ruling #4313 (option 1) in force: group ALL read-only data the fault-bounded pro
   segment's exec/mmap work and the 64 KiB file-offset gap. Not from run 5's change; a layout cost of the group. The
   `.data1`/RW half or LAYOUT-DATA-CLUSTERS should weigh it (an R segment that starts 64 KiB-aligned without a split).
 
+## Run 5 hand-back status
+- Jobs (keke): lint rc 0 (clippy all-targets, xtask clippy, static on 440d1fd0e), plants 5/5 CAUGHT, counts rc 0 (2229 vs
+  next 2241), gate `layout-startup-rodata-5-gate` (direct tier) still running at hand-back (the rt change reaches a wide tier).
+- handback-check red on a contradiction: it calls docs/codemap/symbols.tsv train-owned (restored to the base copy in
+  a660692d6), while `static` on the head alone (the branch conflicts with next, so no merged run) says symbols.tsv is out
+  of date. Next step: the train's regen/merge settles it; or a ruling on which check wins for an unmerged branch.
+
 ## What the branch does
 - Run 1: `xtask/src/startup_ro.rs` renames start-up read-only sections to `.rodata1`; entry.S aligns `.rodata1` to 64 KiB;
   STARTUP-DATA-WINDOWS ro budgets 1/1; product test with 16 text paddings.
