@@ -262,7 +262,7 @@ fn list_matches_reference() {
     let cc = |args: &[&str]| assert!(Command::new("cc").current_dir(&d).args(args).status().unwrap().success(), "cc {args:?}");
     cc(&["-shared", "-fPIC", "-Wl,-soname,libgone.so.1", "-o", "libgone.so.1", "x.c"]);
     cc(&["-shared", "-fPIC", "-Wl,-soname,libb.so.1", "-o", "sub/libb.so.1", "x.c"]);
-    cc(&["-shared", "-fPIC", "-Wl,-soname,liba.so.1", "-o", "liba.so.1", "x.c", "-L", "sub", "-l:libb.so.1", "-L", ".", "-l:libgone.so.1", "-lgcc_s", "-Wl,--enable-new-dtags,-rpath,$ORIGIN/sub"]);
+    cc(&["-shared", "-fPIC", "-Wl,-soname,liba.so.1", "-o", "liba.so.1", "x.c", "-Wl,--no-as-needed", "-L", "sub", "-l:libb.so.1", "-L", ".", "-l:libgone.so.1", "-lgcc_s", "-Wl,--enable-new-dtags,-rpath,$ORIGIN/sub"]);
     cc(&["-o", "prog", "main.c", "-L", ".", "-l:liba.so.1", "-Wl,--enable-new-dtags,-rpath,$ORIGIN"]);
     std::fs::remove_file(d.join("libgone.so.1")).unwrap();
     let prog = d.join("prog");
