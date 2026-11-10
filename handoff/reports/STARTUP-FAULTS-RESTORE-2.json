@@ -1,12 +1,27 @@
-{"task": "STARTUP-FAULTS-RESTORE-2", "model": "opus", "tokens": null,
+{
+ "task": "STARTUP-FAULTS-RESTORE-2",
+ "model": "opus",
+ "tokens": null,
  "result": "clippy fix for sfr-gate2; D-X.53 record; fork bound 9 -> 8; structural .data1 placement test (plant 4 survived the fault bounds); wl_count vs main: fewer faults on printf-loop/seq/wc/md5sum; counts 17/56/59/7 identical on both host classes",
- "branch": "task/startup-faults-restore-2", "head": "89744f282",
- "gate": {"affected": "gate2 rc 0 on 5650511c4; gate3 on 89744f282 pending", "peak": null},
+ "branch": "task/startup-faults-restore-2",
+ "head": "89744f282",
+ "gate": {
+  "affected": "gate2 rc 0 on 5650511c4; gate3 on 89744f282 RED (rc 1, failing test not yet identified)",
+  "peak": null
+ },
  "accepted_first_attempt": null,
  "rulings": [],
- "informational": ["Branch is 100+ commits behind origin/next and has no records/ system; D-X.53 is a hand-written records/decisions/D-X/D-X.53.toml checked only when merged with next", "affected --base origin/next selects a large set because the branch is far behind next (gate ~50 min cold)"],
+ "informational": [
+  "Branch is 100+ commits behind origin/next and has no records/ system; D-X.53 is a hand-written records/decisions/D-X/D-X.53.toml checked only when merged with next",
+  "affected --base origin/next selects a large set because the branch is far behind next (gate ~50 min cold)"
+ ],
  "refused": [],
  "improvement": "Plant 4 never ran in run 1 (two test names to cargo test failed its baseline); a plants-file lint for multiple positional test filters would catch this before a run",
- "next_step": "Trace-generated .data1 placement for first-touched small statics; prune.py in regen.sh; counts for LOCALTIME/FLOAT bounds",
+ "next_step": "Find the gate3 failure in ~/logs/startup-faults-restore-2-gate3.log on mei, fix, rerun that suite; read plants3",
  "report_file": "handoff/STARTUP-FAULTS-RESTORE.md",
- "jobs": ["mei:startup-faults-restore-2-gate3", "mei:startup-faults-restore-2-plants3", "mei:startup-faults-restore-2-wlc1"]}
+ "jobs": [
+  "mei:startup-faults-restore-2-gate3",
+  "mei:startup-faults-restore-2-plants3",
+  "mei:startup-faults-restore-2-wlc1"
+ ]
+}

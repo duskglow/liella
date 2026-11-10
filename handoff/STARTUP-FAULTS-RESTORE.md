@@ -55,7 +55,7 @@ left 61: the freed pages got other first writers (`liella_machine_fill_erms_from
 startup-faults-restore-2-lint1 (clippy + static, inherited head + clippy fix) rc 0; -gate1 (clippy, static, affected
 --run --base origin/next, hot_text_products --nocapture) rc 0 on 53d549957; -wlc1 rc 0; -plants1 rc 2 (plant 4 baseline
 bug, superseded); -gate2 rc 0 and -plants2 rc 1 (plant 4 survived) on 5650511c4, superseded. Final head 89744f282
-(later commits: handoff/ only): -gate3 and -plants3, PENDING at hand-back. If plants3 shows plant 4 SURVIVED, check
+(later commits: handoff/ only): -gate3 RED (rc 1, `xtask affected: a selected test or check failed`, after 10 min with a warm cache; the failing test was NOT identified: budget checkpoint). FIRST STEP of the next run: `grep -n -E 'FAIL|panicked' ~/logs/startup-faults-restore-2-gate3.log` on mei, then fix and rerun only that suite. -plants3 was still running at hand-back (left for its result). If plants3 shows plant 4 SURVIVED, check
 that `objdump -t` prints `.data1` as the section column for those statics.
 
 ## Open / next
