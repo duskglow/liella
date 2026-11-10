@@ -1,0 +1,9 @@
+id = "COMPAT-6"
+behaviour = "Full-buffer flush granularity (§12.1; STDIO-FLUSH-56 black-box probe, owner ruling 2026-10-11)"
+glibc = "On a fresh fully buffered stream the first `fputs`/`fwrite`/`fprintf` write goes straight to the descriptor; later writes buffer, and a full buffer is written whole (64 of 64 bytes with a 64-byte `setvbuf` buffer; an `fputc` loop writes 64 at the 65th byte)"
+liella = "Buffers from the first write; when the buffer fills it writes 56 of 64 bytes and keeps an 8-byte tail. Both satisfy §12.1 and ISO C (output reaches the file when the buffer fills); only programs that watch the file length or pipe contents mid-run, or mix `write(2)` with the stream on one descriptor, can see it"
+restore = "A tunable read at startup selecting whole-buffer flushes and first-write pass-through on the write path; implement only if it costs nothing on the default path"
+cost = "none today (the flag does not exist)"
+status = "registered"
+body = '''
+'''

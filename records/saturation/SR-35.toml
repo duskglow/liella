@@ -1,0 +1,13 @@
+id = "SR-35"
+section = "3"
+row = "`strstr` fixed per-call cost (STRSTR-SHORT-DENSE-PARITY-2)"
+now = "i (wl_percall, AVX2 path; base = the adaptive filter; reference = Zen 1 host): `ss_hit_64` 188 to 141 (glibc 163.2, 0.86x), `strstr_hit_short` 173 to 126 (153, 0.82x), `ss_hit_1k` 436 to 389 (355.2, 1.10x), `strstr_dense_4k` 997 to 950 (818, 1.16x), misses -36; `strstr_hit_4k` 1271 to 1275 (layout, see why)"
+limit = "a one-call trace by instruction (`wl_trace.sh --list`) put ~128 of a 179-instruction short call outside the kernel: the result passed through memory from a second frame, and the loop state spilled around the first kernel call. `find_str_n` is inlined into the export; `find_known` keeps only the first pass and its compare (and a miss) inline, the loop is out of line (`find_next`). The 4 KiB rows also move by up to ~50 with the haystack's address mod 128 (the kernel's alignment prologue: 13 per 32-byte block to a 64/128 boundary, then loop64), which the static arrays of `strstr_cycles.c` change with code size"
+reason_class = "algorithm"
+basis = "S"
+source = "STRSTR-SHORT-DENSE-PARITY-2 (`handoff/strstr-short-dense-parity.md`)"
+tried = "short rows at parity; `ss_hit_1k` and `strstr_dense_4k` open, no bound proved"
+flag = "next: pin the bench haystacks' alignment; a fixed-cost unaligned first 128-byte group in place of the alignment prologue (hit_1k holds 146 there); dense floor 21.5-23 per 128 bytes (AVX2 pair test) leaves <= 123-171 for fixed cost at 1.05x"
+status = "active"
+body = '''
+'''

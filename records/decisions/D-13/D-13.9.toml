@@ -1,0 +1,8 @@
+id = "D-13.9"
+section = "s13"
+spec = "§13.7"
+ann = "KERN"
+status = "active"
+body = '''
+`lchmod`/`fchmodat(AT_SYMLINK_NOFOLLOW)`: **accepted 2026-10-01.** `EOPNOTSUPP` only for a symlink; every other file has its mode changed. **Kernel dependency:** Linux 6.6 and later answer through `fchmodat2` (one system call, symlink refusal by the kernel). Linux 5.10–6.5 (the supported minimum is 5.10, OD-5) take the spec's glibc fallback: `openat(O_PATH \| O_NOFOLLOW)`, `fstatat(AT_EMPTY_PATH)` to refuse a symlink, then `fchmodat` on `/proc/self/fd/N`. The fallback therefore needs `/proc` mounted (OD-5 requires it); without `/proc` it fails with `EOPNOTSUPP` where 6.6 would succeed (**changed 2026-10-05, milestone 6**, three-way rule: fchmodat(2)'s `EOPNOTSUPP`, the flag "is not supported", and the reference agree; it was `ENOENT`, which said the file does not exist). It is chosen per call by `fchmodat2`'s `ENOSYS`. On success `errno` is untouched (X3); the reference leaves its failed `fchmodat2`'s `ENOSYS` there on kernels before 6.6 (recorded, `noproc_products.rs` checks it only on such kernels).
+'''

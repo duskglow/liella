@@ -143,26 +143,65 @@ pub(crate) fn exp2_nearest(x: f64) -> Option<f64> {
     liella_math::fast64::quick::exp2_tiered(x)
 }
 
-/// The `double` `log2` fast path in its build chosen at startup (as [`exp_nearest`]).
+/// The `double` `log2` fast path in its build chosen at startup (as [`exp_nearest`]): the quick
+/// phase with `fast64::log2_nearest` as tier 2 on a miss (D-10.51, D-10.66).
 #[inline(always)]
 pub(crate) fn log2_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::log2_nearest(x) };
+        return unsafe { liella_math::fast64::quick_log::fused::log2_tiered(x) };
     }
-    liella_math::fast64::log2_nearest(x)
+    liella_math::fast64::quick_log::log2_tiered(x)
 }
 
-/// The `double` `log10` fast path in its build chosen at startup (as [`exp_nearest`]).
+/// The `double` `log10` fast path in its build chosen at startup (as [`exp_nearest`]): the quick
+/// phase with `fast64::log10_nearest` as tier 2 on a miss (D-10.51, D-10.66).
 #[inline(always)]
 pub(crate) fn log10_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::log10_nearest(x) };
+        return unsafe { liella_math::fast64::quick_log::fused::log10_tiered(x) };
     }
-    liella_math::fast64::log10_nearest(x)
+    liella_math::fast64::quick_log::log10_tiered(x)
+}
+
+/// The quick phase of `log2`, `log10` or `log1p` (`f` names it; D-10.66) in its build chosen at
+/// startup: the unrounded `(zh, zl)` and the rounded answer (`None` when the test fails).
+#[cfg(feature = "selftest")]
+pub(crate) fn log_family_quick(f: &str, x: f64) -> (Option<(f64, f64)>, Option<f64>) {
+    use liella_math::fast64::quick_log as q;
+    if crate::dispatch::fma() {
+        // UNSAFE(hot-kernel) SAFETY: calls to the FMA build in the arms below; as in
+        // `exp_nearest`, the flag is set only on a CPU with FMA whose AVX state the OS saves.
+        #[allow(unsafe_code)]
+        return match f {
+            "log2" => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log2_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log2_quick(x) },
+            ),
+            "log10" => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log10_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log10_quick(x) },
+            ),
+            _ => (
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log1p_quick_parts(x) },
+                // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
+                unsafe { q::fused::log1p_quick(x) },
+            ),
+        };
+    }
+    match f {
+        "log2" => (q::log2_quick_parts(x), q::log2_quick(x)),
+        "log10" => (q::log10_quick_parts(x), q::log10_quick(x)),
+        _ => (q::log1p_quick_parts(x), q::log1p_quick(x)),
+    }
 }
 
 /// The `double` `pow` fast path in its build chosen at startup (as [`exp_nearest`]); takes the
@@ -224,15 +263,16 @@ pub(crate) fn expm1_quick_parts(x: f64) -> Option<(f64, f64)> {
     liella_math::fast64::quick::expm1_quick_parts(x)
 }
 
-/// The `double` `log1p` fast path in its build chosen at startup (as [`exp_nearest`]).
+/// The `double` `log1p` fast path in its build chosen at startup (as [`exp_nearest`]): the quick
+/// phase with `fast64::log1p_nearest` as tier 2 on a miss (D-10.51, D-10.66).
 #[inline(always)]
 pub(crate) fn log1p_nearest(x: f64) -> Option<f64> {
     if crate::dispatch::fma() {
         // UNSAFE(hot-kernel) SAFETY: as in `exp_nearest`.
         #[allow(unsafe_code)]
-        return unsafe { liella_math::fast64::fused::log1p_nearest(x) };
+        return unsafe { liella_math::fast64::quick_log::fused::log1p_tiered(x) };
     }
-    liella_math::fast64::log1p_nearest(x)
+    liella_math::fast64::quick_log::log1p_tiered(x)
 }
 
 /// The `double` `cbrt` fast path in its build chosen at startup (as [`exp_nearest`]); it declines

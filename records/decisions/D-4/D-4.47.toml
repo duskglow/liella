@@ -1,0 +1,8 @@
+id = "D-4.47"
+section = "s04"
+spec = "§4.3"
+ann = "PERF"
+status = "active"
+body = '''
+**The head probe's word stands in for block 0 in the SSE2 compare classes** (MEMCMP-EQ) \| After D-4.46's probe reads bytes 0-7 equal, the SSE2 classes 16-32, 33-64 and 65-128 (`cmp_blocks::<K>`) compare the word at 8 (bytes 8-15) with one fused test-and-branch and then the blocks at 16.. and the K ending at n; the block at 0 is no longer loaded (same load count, no `pcmpeqb`/`pand`/`movdqa` for it). A difference in bytes 8-15 is ordered from the two words in registers (`order_words`, no index search, no second read); later differences as before (lowest set bit, `order_at`, D-4.21 rescan). AVX2 classes unchanged: a 32-byte block covers bytes 0-31 in one compare, a word in its place never pays. Considered and rejected: probe word taken from block 0 by `movq` (saves 2 loads, +2 instructions on the head path: sort-C bound); `cmp` with a memory operand plus a reload on mismatch (eq -1, head +2); a per-thread predictor that skips the probe (costs as much as the probe). \| Zen 1 instructions/op (AVX2 build): bcmp_tail_16 47.4 -> 34.4, bcmp_tail_32 50.4 -> 44.4, equal rows unchanged; SSE2 33-128 classes and diff8 rows measured on the fallback hosts (liella-historic:handoff/memcmp-eq.md). Safety: small_compare.rs size x position sweeps; planted bugs.
+'''

@@ -1,0 +1,8 @@
+id = "D-19.2"
+section = "s19"
+spec = "§19.4"
+ann = "HIST"
+status = "active"
+body = '''
+`openpty` opens `/dev/ptmx` (`O_RDWR\|O_NOCTTY`), unlocks it and opens the slave with `TIOCGPTPEER` in one step; `termp` is applied as `tcsetattr` would (as far as the slave takes it; `errno` untouched on success, glibc leaves `EINVAL`) and `winp` with `TIOCSWINSZ`. NULL descriptor pointers are `EFAULT` with nothing opened (S6; glibc crashes; KNOWN). `posix_openpt` refuses `O_DIRECTORY`, `O_PATH`, `O_TMPFILE`, undefined bits and -1 with `EINVAL` (POSIX allows it; glibc passes them to `open`; KNOWN). The four-step API stays as translations; `grantpt` only validates the master. `forkpty` is a runtime-only export like `fork`; `openpty`/`forkpty`/`login_tty` export at GLIBC_2.34, their 2.2.5 versions wait for phase 15.
+'''

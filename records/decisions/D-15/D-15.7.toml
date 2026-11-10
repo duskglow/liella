@@ -1,0 +1,8 @@
+id = "D-15.7"
+section = "s15"
+spec = "§15.8"
+ann = "COMPAT, SEC"
+status = "active"
+body = '''
+**The rcmd family is a set of stubs (owner rulings R10/R11 2026-11-04; ruserpass and __ivaliduser with the family, coordinator 2026-11-04).** `rcmd`, `rcmd_af`, `rexec`, `rexec_af`, `rresvport`, `rresvport_af` and `ruserpass` return `-1` with `errno` `EOPNOTSUPP` (the D-29.4 rule) and make no socket, lookup, file read or write through any argument. `ruserok`, `ruserok_af`, `iruserok`, `iruserok_af` and `__ivaliduser` always deny (`-1`, `errno` untouched: a refusal is an answer, not an error), so a module that links them still loads and address-based trust never succeeds. No restore option (owner ruling 2026-11-04 for rexec; the same reason for the family): the protocols send credentials in clear text and trust network addresses. `bindresvport` is unchanged. Tests: s15_sockets_clauses.rs s15_8_c_1..c_4, s15_sockets_symbols.rs sym_rcmd*, sym_rexec*, sym_rresvport*, sym_ruserok*, sym_iruserok*, sym_ruserpass, sym___ivaliduser.
+'''

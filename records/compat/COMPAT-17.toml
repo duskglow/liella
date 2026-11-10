@@ -1,0 +1,9 @@
+id = "COMPAT-17"
+behaviour = "Record cut by a peer close on a stream `/dev/log` (§26.1; D-26.1, SYSLOG-STREAM-PARTIAL, SYSLOG-RESEND-ROW, #2052)"
+glibc = "After the peer closes in the middle of a record, the next send on the new connection carries only the next record; the cut record is not sent again"
+liella = "The cut record is sent whole again on the new connection (the retry-once rule of §26.1), then the next record; no record is lost"
+restore = "A tunable (name to be chosen when designed, e.g. `compat.syslog_no_resend`) read at startup makes the retry skip the cut record"
+cost = "none expected: the choice is on the reconnect path only, taken after a failed send"
+status = "registered"
+body = '''
+'''

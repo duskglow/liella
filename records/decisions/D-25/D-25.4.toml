@@ -1,0 +1,8 @@
+id = "D-25.4"
+section = "s25"
+spec = "§25.2"
+ann = "HIST"
+status = "active"
+body = '''
+The `*ctl` commands' untyped argument is decoded by command (`ipc_compat::*_shape`, then `conv`). The smaller statistics structures (`msginfo`, `seminfo`, `shminfo`, `shm_info`) are copied out of a full-size scratch structure, so no reference ever spans more than the caller's object. `shmat`/`shmdt` take the caller's address through `raw` (D-X.9).
+'''

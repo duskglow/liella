@@ -1,0 +1,8 @@
+id = "D-13.6"
+section = "s13"
+spec = "§13.9"
+ann = "ARB"
+status = "active"
+body = '''
+The template must end in exactly six `X`s (contract, kept). Internally, the random suffix length is a parameter.
+'''

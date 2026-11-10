@@ -1,0 +1,8 @@
+id = "D-13.5"
+section = "s13"
+spec = "§13.8"
+ann = "HIST, ARB"
+status = "active"
+body = '''
+**Internal:** `canonicalize(dir, path) -> TryVec<u8>`, with no length limit. **Boundary:** `realpath` with a caller buffer assumes `PATH_MAX`, per the contract. `__realpath_chk` uses the real size.
+'''

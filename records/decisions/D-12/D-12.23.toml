@@ -1,0 +1,8 @@
+id = "D-12.23"
+section = "s12"
+spec = "§12.6"
+ann = "PERF"
+status = "active"
+body = '''
+**Negative result: no per-thread printf plan cache for the buffer path** (PRINTF-PLAN-BUF idea, measured in SPRINTF-RENDER, 2026-10-11; recorded in the register by RELEASE-TREE-APPLY, 2026-10-22). A per-thread one-entry plan cache for `sprintf`/`snprintf` (D-12.21 style, keyed on the format pointer, length and bytes) was measured and did not pay; it was not adopted. SPRINTF-RENDER instead routed a lone conversion to `render_lone` and a lone `%c` to its own piece. The figures of the attempt are not in the record (`liella-historic:handoff/sprintf-render.md`, `liella-historic:handoff/sprintf-chk-ls.md`); re-measure before trying it again.
+'''

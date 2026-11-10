@@ -1,0 +1,8 @@
+id = "D-23.15"
+section = "s23"
+spec = "§23.6"
+ann = "ARB"
+status = "active"
+body = '''
+**Zone loader: selection, reading and identity** (COLD-REWRITE2-cold-02-REWRITE-2 and PROOF, 2026-10-21; record `liella-historic:handoff/decisions/COLD-REWRITE2-cold-02-REWRITE-3.md`). (1) The loader stays in `time.rs` (about 120 lines). (2) Selection: one leading `:` dropped (probed); empty TZ is UTC with no file; unset reads `default` and always records it (a later file is noticed); a value is a path (absolute, else `TZDIR` or `ZONEINFO` + `/` + value; an empty `TZDIR` used as given), a TZif zone is watched, otherwise the value is rule text, unwatched. (3) Reading: allocate `size + 1` from `fstat`, double up to `FILE_LIMIT + 1` if the file grew; the 4 MiB limit is inclusive; not a regular file or over the limit is not a zone; EINTR retried; only ENOMEM propagates; the fd is closed on every path. (4) Identity is the `fstat` of the descriptor actually read; `file_id` uses `fstatat` with links followed. Untested: the EINTR retry and grown-past-limit branch (no fault-injecting test `Sys`), link-following.
+'''

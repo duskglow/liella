@@ -1,0 +1,6 @@
+id = "D-X.41"
+section = "x"
+status = "active"
+body = '''
+**`affected` runs a bin-only package's unit tests with `--bins`, and routes xtask test code to the xtask unit tests, clippy and `cargo xtask static` instead of FULL** (XTASK-AFFECTED-XTASK-TESTS, 2026-11-07; decided locally, tooling only). (1) xtask, reached through `wide` of a crate it depends on, was run with `--lib` and the step failed at once ("no library targets found"); a package without `src/lib.rs` or `[lib]` now gets `--bins`. (2) `xtask/tests/` is test code by path; an `xtask/src` source is test code only when its `git diff -U0` against the merge base (from git, else a `.changed.xtask` file a sync may write) has one plain modification section whose hunks all lie strictly inside a column-0 `#[cfg(test)]` + `mod <name> {` module that ends the file, with no added or removed column-0 line. No diff (a VM tree today, `--files`), an untracked/new/renamed file, or anything else: FULL as before; `--tier full` is unchanged. Tests: `a_bin_only_package_runs_its_unit_tests_through_its_bins`, `a_change_inside_the_test_module_is_test_code`, `a_change_outside_the_test_module_stays_full`, `xtask_test_code_selects_the_xtask_tests_and_static_not_full` (xtask).
+'''

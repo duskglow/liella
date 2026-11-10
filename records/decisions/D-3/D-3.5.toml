@@ -1,0 +1,8 @@
+id = "D-3.5"
+section = "s03"
+spec = "§3.3"
+ann = "HIST"
+status = "active"
+body = '''
+The hook variables are inert compat data (as in 2.34+). `mcheck`/`mtrace` semantics come with the debug library (phase 13). `malloc_get_state`/`malloc_set_state` fail. **Phase 13 (owner ruling 2026-10-04: kept; phase 14 ships an empty `libc_malloc_debug.so.0`, and preloading it gives no hooks):** Liella's libc provides the `libc_malloc_debug` semantics itself (`mcheck`, `mcheck_pedantic`, `mprobe`, `mcheck_check_all`, `mtrace` with `MALLOC_TRACE` read through `secure_getenv` and never written in a secure process, `M_PERTURB`): checked blocks carry 16 guard bytes before and 8 after, tracked in a library-owned table; `mcheck` succeeds only before the first block the C family hands out; a freed block reports `MCHECK_FREE`; the mtrace log follows the reference's format. Off, the cost is one relaxed load of one atomic word per call (`Heap::alloc`/`free` are `#[inline(always)]` so the check does not stop the fast path being inlined: 13.7 ns per 64-byte pair). The hook variables stay inert. `malloc_info` options other than 0 give -1 `EINVAL` (malloc_info(3), §3.2 since 2026-10-04; glibc returns 22); `malloc_trim` returns 1 only when pages were released; `mallopt` returns 0 for parameters it does not honour (D-3.4).
+'''

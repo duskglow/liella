@@ -1,0 +1,13 @@
+id = "SR-7"
+section = "2"
+row = "`memcmp` 129 to 2048 (class dispatch)"
+now = "i `memcmp_128` 39.4 vs 39.4 (parity)"
+limit = "merging the 65-128 and 129-2048 heads saves 2 on one class and costs 2 on the other; `cmpq $128; jbe` in `memcmp_256` must stay"
+reason_class = "safety (torn read of the two class words, MEMCMP-MID-4)"
+basis = "M"
+source = "STR-CHR-CMP-SHORT (`handoff/str-chr-cmp-short-report.md`)"
+tried = "3-instruction head on 33-64: saves 1 on every call, costs 2 on head differences, rejected. MEMCMP-EQ: each trick costs as much as it saves (D-4.47)"
+flag = "none"
+status = "active"
+body = '''
+'''

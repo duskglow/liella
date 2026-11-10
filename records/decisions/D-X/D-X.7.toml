@@ -1,0 +1,6 @@
+id = "D-X.7"
+section = "x"
+status = "active"
+body = '''
+**The unsafe policy** (§2.1 S1–S4): `unsafe` only in `liella-boundary`, in four categories, each site documented and audited. Everything that needs the machine is in `csys/`.
+'''

@@ -1,9 +1,11 @@
-//! `cargo xtask register --check`: the saturation register is one file per section under
-//! `docs/saturation/`, listed in `docs/saturation-register.md`. Checks: every section file is listed in the
-//! index and every listed file exists; section numbers (the `NN-` file prefix and the `## N.` heading) are
-//! unique and contiguous from 1 (00 is the introduction); every row id (first cell of a table whose header
-//! starts with `Row`) is unique across all files. Renumbering is done by tool, never by hand.
-use std::collections::{BTreeMap, BTreeSet};
+//! `cargo xtask register --check`: the saturation register is one file per section under `docs/saturation/`.
+//! `docs/saturation-register.md` is its index, a view generated from the files' `## N. <title>` headings, and
+//! sections 1-7 are views of the classified rows, one SR record each (`records/saturation/`; `cargo xtask records-gen`,
+//! RECORDS-1). Checks: section numbers (the `NN-` file prefix and the `## N.` heading) are unique (a gap is allowed:
+//! new numbers come from the ops store, series SAT, and a released reservation leaves one; 00 is the introduction);
+//! every row id (the `row` of an SR record, or the first cell of a table whose header starts with `Row` in a
+//! hand-written section) is unique; no text cites a section number above the highest.
+use std::collections::BTreeMap;
 use std::path::Path;
 
 fn section_files(dir: &Path) -> Result<BTreeMap<String, u32>, String> {
@@ -24,18 +26,6 @@ pub fn check(root: &Path) -> Result<(), String> {
     let mut bad: Vec<String> = Vec::new();
     let dir = root.join("docs/saturation");
     let files = section_files(&dir)?;
-    let index = std::fs::read_to_string(root.join("docs/saturation-register.md")).map_err(|e| format!("docs/saturation-register.md: {e}"))?;
-    let listed: BTreeSet<String> = index.split("](saturation/").skip(1).filter_map(|r| r.split(')').next()).map(str::to_string).collect();
-    for f in files.keys() {
-        if !listed.contains(f) {
-            bad.push(format!("{f}: not listed in docs/saturation-register.md"));
-        }
-    }
-    for l in &listed {
-        if !files.contains_key(l) {
-            bad.push(format!("index lists {l}, which does not exist"));
-        }
-    }
     let mut seen: BTreeMap<u32, &str> = BTreeMap::new();
     for (f, n) in &files {
         if let Some(prev) = seen.insert(*n, f) {
@@ -43,19 +33,24 @@ pub fn check(root: &Path) -> Result<(), String> {
         }
     }
     let max = files.values().copied().max().unwrap_or(0);
-    for n in 0..=max {
-        if !seen.contains_key(&n) {
-            bad.push(format!("section numbers are not contiguous: {n} is missing"));
+    let mut rows: BTreeMap<String, String> = BTreeMap::new();
+    for (row, file) in crate::records::saturation_rows(root) {
+        if let Some(prev) = rows.insert(row.trim().to_string(), file.clone()) {
+            bad.push(format!("row id {} appears in both {prev} and {file}", row.trim()));
         }
     }
-    let mut rows: BTreeMap<String, String> = BTreeMap::new();
     for (f, n) in &files {
         let text = std::fs::read_to_string(dir.join(f)).map_err(|e| format!("{f}: {e}"))?;
+        // A generated section (1-7) starts with the @generated line; its rows are the SR records.
+        let generated = text.starts_with(crate::records::GENERATED);
         if *n > 0 {
-            let head = text.lines().next().unwrap_or("");
+            let head = text.lines().nth(usize::from(generated)).unwrap_or("");
             if !head.starts_with(&format!("## {n}. ")) {
                 bad.push(format!("{f}: first line must be the heading '## {n}. <title>'"));
             }
+        }
+        if generated {
+            continue;
         }
         let mut in_rows = false;
         for line in text.lines() {
@@ -144,7 +139,7 @@ fn stale_references(root: &Path, max: u32) -> Result<Vec<String>, String> {
     files.sort();
     let mut bad = Vec::new();
     for rel in files.iter().map(String::as_str) {
-        if rel.starts_with("docs/saturation/") || rel.starts_with("spec/") || rel == "glibc-functional-spec.md" || rel.ends_with(".tsv") || rel.starts_with("xtask/src/register.rs") {
+        if rel.starts_with("docs/saturation/") || rel.starts_with("records/saturation/") || rel.starts_with("spec/") || rel == "glibc-functional-spec.md" || rel.ends_with(".tsv") || rel.starts_with("xtask/src/register.rs") {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(root.join(rel)) else { continue };

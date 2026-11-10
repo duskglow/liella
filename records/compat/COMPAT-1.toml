@@ -1,0 +1,9 @@
+id = "COMPAT-1"
+behaviour = "`bcmp` return value (§4.3; D-4.43)"
+glibc = "Non-zero for unequal operands is the sign of the first differing byte pair, as `memcmp`"
+liella = "0 when equal, exactly 1 otherwise (the equality kernel of `__memcmpeq`, D-4.41); no order"
+restore = "A `compat` tunable read at startup makes `bcmp` take the ordered `memcmp` kernel (`hot::compare_bytes`). A branch or resolved pointer in the hot export costs about one predicted branch per call; the zero-cost route is a small preload object exporting an ordered `bcmp`, which needs no change to the default build"
+cost = "none today (the flag does not exist)"
+status = "registered"
+body = '''
+'''

@@ -1,0 +1,13 @@
+id = "SR-11"
+section = "2"
+row = "`fts` flat walk"
+now = "i about 1.2x glibc (FTS-SHARED-PATH note)"
+limit = "attributed further in FTS-FLAT-FIXES-2; not at a limit"
+reason_class = "n/a"
+basis = "C"
+source = "FTS-FLAT-FIXES-2"
+tried = "`ddbcff99` cost 9.0k per walk (about 9 per entry), gained nothing, reverted"
+flag = "**measured 2026-10-23** (section 10) (not a saturation claim; listed because the ledger marks the attempt negative)"
+status = "active"
+body = '''
+'''

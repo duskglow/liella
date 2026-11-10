@@ -1,0 +1,8 @@
+id = "D-24.8"
+section = "s24"
+spec = "§24.3"
+ann = "KERN"
+status = "active"
+body = '''
+D-24.4 realised: `liella_kernel::uapi::nice_from_priority` undoes the bias (`Sys::getpriority` returns the system call's value, as its contract documents); `getpriority` and `nice` use it. Phase 1's `CSys::getpriority` was reported to C callers biased until phase 5 found it.
+'''

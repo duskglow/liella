@@ -1,0 +1,8 @@
+id = "D-23.10"
+section = "s23"
+spec = "§23.6"
+ann = "PERF"
+status = "active"
+body = '''
+**`mktime` allocates nothing per call; `localtime_r` skips the environment (AUD-M6).** `Zone::resolve` keeps the transitions within its six-day window, the segments and the candidates in inline storage of 8 (`InlineVec`; a file with more transitions there spills to the heap, still correct): 0 heap allocations per call (tools/allocs: 2 at a7bc952, 0 now, for UTC, America/New_York and `EST5EDT,M3.2.0,M11.1.0`). The `_r` forms read the selected zone first and measure `TZ`/`TZDIR` only when none is selected. The implicit tzset's environment comparison is kept: it is what notices an in-place edit of a `putenv`'d TZ string with no setenv call, which the reference also notices (probe: `localtime` after `strcpy(buf, "TZ=EST5")` gives EST in both), so an identity-only cache would change behaviour. Checked by tools/allocs (the in-process counting-allocator test was dropped: unsafe is not allowed in tests; a gated allocation-count harness is menu row ALLOC-GATE).
+'''

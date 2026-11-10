@@ -1,0 +1,8 @@
+id = "D-10.25"
+section = "s10"
+spec = "§10.2"
+ann = "—"
+status = "active"
+body = '''
+**FMA build of the `double` exp/log fast paths, chosen at run time** (MATH-F64-FMA-PATH; owner principle 2026-11-04: use all hardware options, never a different result; coordinator ruling #2261 widens UNSAFE(hot-kernel) to such calls). `fast64`'s `kernels!` macro builds `mul`, `mul_f64`, `reduce`, `exp_kernel` and `log_kernel` twice: with Dekker `two_prod` and, in `fast64::fused`, with `dd::two_prod_fma` (one `vfmsub`). Every product the kernels take is exact under either build (operands far from overflow, error terms representable), and an exact product's pair is unique, so both builds compute the same `y` and `eps`, take the same `None` branches and round the same: results are bit-identical by construction and each build has the error bounds proved at the kernels. `dispatch::FMA` (one byte set at startup like the AVX2 byte) is true only when CPUID reports FMA and the OS saves the AVX state, and `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA` clears it (the glibc tunable name; no new interface). `hot::exp_nearest`/`log_nearest` select the build; `selftest::set_math_fma` forces either for tests. Test: `crates/boundary/tests/math_fma_paths.rs` compares both builds bit for bit on a random sample. exp2, exp10, log2, log10 and pow remain single-path (plain build) until extended.
+'''

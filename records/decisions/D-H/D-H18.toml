@@ -1,0 +1,7 @@
+id = "D-H18"
+section = "h"
+pattern = "Signals for asynchrony"
+status = "active"
+body = '''
+**Internal:** descriptor-based notification (`timerfd`, `signalfd`, `pidfd`, `eventfd`, io_uring). **Boundary:** signal-based contracts are reproduced where observable (`alarm`, itimers, `SIGEV_SIGNAL`). Signals are no longer used where the contract does not require them: `lckpwdf` and utmp lock timeouts (D-17.5, D-17.6), and `SIGEV_THREAD` timers (D-23.3).
+'''

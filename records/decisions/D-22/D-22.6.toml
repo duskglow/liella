@@ -1,0 +1,8 @@
+id = "D-22.6"
+section = "s22"
+spec = "§22.6"
+ann = "HIST"
+status = "active"
+body = '''
+The static TLS surplus for initial-exec `dlopen` objects is sized by tunable, with a generous default. Dynamic TLS never fails except for `ENOMEM`, which aborts, per the contract (§27.3).
+'''

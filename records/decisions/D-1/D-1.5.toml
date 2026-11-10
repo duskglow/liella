@@ -1,0 +1,8 @@
+id = "D-1.5"
+section = "s01"
+spec = "§1.5"
+ann = "ARB"
+status = "active"
+body = '''
+**Internal:** `auxv::get(key) -> Option<u64>`. **Boundary:** 0 plus `ENOENT`.
+'''

@@ -1,0 +1,8 @@
+id = "D-7.9"
+section = "s07"
+spec = "§7.6"
+ann = "—"
+status = "active"
+body = '''
+**`rpmatch` moves to phase 12** (phase 7 deviation; it was then left out of phase 12 and added in the validation stage, 2026-10-05, validation T2: the locale's `YESEXPR`, then `NOEXPR`, compiled with the library's `regcomp(REG_EXTENDED\|REG_NOSUB)` and matched with `regexec`; NULL is -1, where the reference crashes). The locales' `YESEXPR`/`NOEXPR` are POSIX extended regular expressions (alternation, groups, `[[:alpha:]]`, repetition, anchors), so `rpmatch` is built on phase 12's regex engine instead of a second, partial one. **Owner: accepted (2026-10-01).** Only the locale's expressions count (the reference has no y/n fallback, `spec/behaviour/specman.md` p1-10); an expression that does not compile matches nothing (decision: no locale tested has one). `locale_products.rs` compares 31 responses in all 11 test locales with the reference (identical; from the ledger thread's implementation of the same function, whose tests now run against this one, merged 2026-10-04). Clause `s7_6_c_0`.
+'''

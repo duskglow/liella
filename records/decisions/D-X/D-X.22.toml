@@ -1,0 +1,6 @@
+id = "D-X.22"
+section = "x"
+status = "active"
+body = '''
+**Large zero-initialised tables in `.lbss`** (PAGEFAULTS-4, 2026-10-10; local build decision, no ABI or behaviour change). `cargo xtask so` renames every `.bss.<symbol>` section of 1 KiB or more in the library archive to `.lbss.<symbol>` (xtask/src/coldbss.rs, before weakening, so `libc.a` and `libc.so.6` both get it). GNU ld's default x86-64 script places `.lbss` after `.bss` in the same writable segment, so the small state words that start-up writes pack into a few pages instead of ~20 pages separated by thread-key, resolver, locale-interning and heap-reserve tables. Measured (Zen 1, coreutils printf in en_US.UTF-8, static, main 3285d94): 119 -> 110 page faults per process (threshold 4096: 114, 256: 112). Other linkers place the orphan `.lbss` with the writable zero-filled sections; only placement changes (names, sizes, alignment, zero contents, per-section `--gc-sections` stay). Test: crates/core/tests/cold_bss_products.rs (no `.bss.*` of 1 KiB or more left in libc.a). Not done: `.data` (an `.ldata` would sit after `.lbss` and turn it into file bytes).
+'''

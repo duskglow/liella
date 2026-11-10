@@ -1,0 +1,8 @@
+id = "D-22.13"
+section = "s22"
+spec = "§22.5 (s22_5_c_1_2)"
+ann = "COMPAT, HIST"
+status = "active"
+body = '''
+**Old-ABI condition variables hold a heap pointer: the one exception to D-22.1** (COMPAT-CONDVAR-OLD, ruling #1153, 2026-10-23). Only `pthread_cond_*@GLIBC_2.2.5`, which old binaries bind; the 2.3.2 defaults keep D-22.1. The old object is one 8-byte word (probe tools/probe/compat/compat_condvar.c, spec/behaviour/compat.glibc.txt "== compat_condvar"), too small for Liella's condition variable, so the word holds the address of a `calloc`'d block: Liella's `Cond` (all-zero = default, private, `CLOCK_REALTIME`) plus a reference word (waiters inside; bit 31 = destroyed). `init` zeroes the word and allocates nothing; the first signal, broadcast or wait installs the block by compare-exchange (the loser frees its own). Conditions, each tested (crates/boundary/src/sync.rs `old_cond_tests`, tests/s22_threads_symbols.rs `sym_liella_compat_pthread_cond_objects`): (1) allocation failure on first use returns `ENOMEM` with the word still zero and the mutex untouched, as glibc (probe `rc=12 ... word zero`); never a half-built block, the block is complete before it is published. (2) `destroy` detaches and frees the block, or leaves it to the last waiter still inside (a destroy right after a broadcast is allowed); 1000 init/use/destroy cycles leave no block. (3) No old object is process-shared: `init` with `PTHREAD_PROCESS_SHARED` (or `CLOCK_MONOTONIC`) zeroes the word and returns `EINVAL`, as glibc, so no heap pointer is ever shared between processes. Kept difference: `destroy` leaves the word zero (glibc's leaves it nonzero), so the object is again a valid static initializer; gain: robustness, nothing observable to a correct program.
+'''

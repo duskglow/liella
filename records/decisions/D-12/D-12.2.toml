@@ -1,0 +1,8 @@
+id = "D-12.2"
+section = "s12"
+spec = "§12.1, §12.13"
+ann = "HIST, COMPAT"
+status = "active"
+body = '''
+**Boundary:** `FILE` is `abi::layout::FILE`. Its ABI-visible prefix (the buffer-window pointers used by header-inline `getc`/`putc` and `__uflow`/`__overflow`) aliases the stream's current window (F10). The rest is a pointer to the internal stream. `stdin`/`stdout`/`stderr`/`_IO_2_1_*_` are exported objects of that type.
+'''

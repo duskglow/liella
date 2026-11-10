@@ -13,15 +13,23 @@ does the code look like when it is rewritten from documentation, with modern tec
 Liella is public as a work in progress. It is not an alpha or a release candidate, and nothing
 here should be used in production. In particular:
 
-* **It cannot run ordinary programs yet.** The dynamic loader (`ld-linux`, phase 14) is not
-  written, so dynamically linked programs, which are almost every program on a Linux system,
-  have not been run against Liella. Programs run only when they are linked statically
-  against Liella's `libc.a`.
+* **It cannot run ordinary programs yet.** The dynamic loader (`ld-linux`, phase 14) is only
+  begun: it relocates itself and starts a program that needs no shared object, but it does not
+  load shared objects yet. So dynamically linked programs, which are almost every program on a
+  Linux system, do not run against Liella. Programs run only when they are linked statically
+  against Liella's `libc.a` (as fixed-address or position-independent executables).
 * **It cannot replace glibc on a system.** Running unmodified glibc-linked binaries is the
   project's aim (phase 15) and has not been demonstrated. Do not install it as a system library.
 * **It has not had a security audit.** That is planned after phase 15.
 * **It is under active development.** Interfaces, behaviour, file layout and the build change
   without notice, and there are no release branches or compatibility promises between commits.
+
+What changed in this pre-release (2026-11-07), with every figure measured on the tree and its
+source named, is in [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md). In short: on `next` at
+`136b5246` (tagged `snapshot-2026-11-07`), 5,484 tests are specified and 577 of them are still pending, and 557 of the 4,305
+names of the glibc 2.39 ABI are not defined yet, 110 of them for phase 14 and 161 for phase 15
+(the rest are internal to glibc's own libraries). Static PIE programs are supported, and `libm`'s
+`exp`, `log` and x87 `sinl`/`cosl` got faster; most `libm` rows remain slower than glibc's.
 
 Its full development history is kept in a separate historical repository; references of the
 form `liella-historic:<path>` point into it.
@@ -29,11 +37,11 @@ form `liella-historic:<path>` point into it.
 | Area | State | Where it is recorded |
 |---|---|---|
 | Phases 1 to 13 (kernel boundary through remaining services: strings, locale, math, stdio, file system, sockets, name services, processes, signals, threads, time, IPC, ...) | Implemented on `main` and covered by the test gate; see [docs/spec-symbol-gaps.md](docs/spec-symbol-gaps.md) (`cargo xtask symcov`) for every name not yet defined. Every change lands on `main` only after the full test gate (unit and integration tests, conformance programs, static checks and an instruction-count check) passes in CI. | [plan/06-phases](plan/06-phases/00-overview.md), [docs/spec-symbol-gaps.md](docs/spec-symbol-gaps.md) |
-| Phase 14, the dynamic loader (`ld-linux`, `dlopen`, TLS descriptors, IFUNC, ...) | **Not done.** No dynamically linked program has yet been run against Liella's `libc.so.6`; such programs are linked and checked, not executed. | [docs/toolchain.md section 8](docs/toolchain.md), [plan phase 14](plan/06-phases/17-phase-14-dynamic-linking.md) |
+| Phase 14, the dynamic loader (`ld-linux`, `dlopen`, TLS descriptors, IFUNC, ...) | **In progress.** `ld-linux-x86-64.so.2` is built; it relocates itself and starts a program that needs no shared object, as its interpreter or as `ld.so PROGRAM`. It does not load shared objects yet, so no dynamically linked program runs against Liella's `libc.so.6`; such programs are linked and checked, not executed. | [docs/toolchain.md section 8](docs/toolchain.md), [plan phase 14](plan/06-phases/17-phase-14-dynamic-linking.md) |
 | Phase 15, legacy tier and binary-compatibility acceptance | **Not done.** Running unmodified glibc-linked binaries is the project's aim and has not been demonstrated. | [plan phase 15](plan/06-phases/18-phase-15-legacy-tier-and.md) |
 | Security pass | Planned after phase 15. The library has not had a security audit. | [plan](plan/06-phases/19-security-pass-after-phase-15.md) |
 | Rust `std` programs | Not supported yet; Rust programs are `#![no_std]`. | [docs/toolchain.md section 8](docs/toolchain.md) |
-| Performance | Measured against glibc with a micro-benchmark suite (parity per row is the target; some rows are still above it) and with a workload set of real programs (coreutils, gawk, sed, grep, tar, gzip, ...) built statically against Liella. **Preliminary:** on 2026-10-24 (the tree of this release, one lab host), each of the 30 workloads ran no more user-space instructions as Liella static builds than with the host's glibc 2.39; the geometric mean ratio was 0.821 (below 1.00 means fewer instructions). Their outputs match glibc's, except one documented difference: `ls -l` in `en_US.UTF-8` orders some punctuation differently, because Liella follows the POSIX collation rules there (decision D-4.42). This is one host and one counter, not a release benchmark, and per-call micro-benchmarks still show rows slower than glibc, notably in libm. Merge decisions use deterministic counters (instructions, page faults, system calls), never wall time. | [benchmarks/progress.md](benchmarks/progress.md), [docs/benchmarks.md](docs/benchmarks.md), [validation/README.md](validation/README.md) (workload gate) |
+| Performance | Measured against glibc with a micro-benchmark suite (parity per row is the target; some rows are still above it) and with a workload set of real programs (coreutils, gawk, sed, grep, tar, gzip, ...) built statically against Liella. Timing sweeps of every benchmark row against glibc on Ivy Bridge, N100 and Zen 3 (2026-11-06 and 11-07) are summarised in [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md). **Preliminary:** on 2026-10-24 (the previous release's tree, one lab host; not repeated for this pre-release), each of the 30 workloads ran no more user-space instructions as Liella static builds than with the host's glibc 2.39; the geometric mean ratio was 0.821 (below 1.00 means fewer instructions). Their outputs match glibc's, except one documented difference: `ls -l` in `en_US.UTF-8` orders some punctuation differently, because Liella follows the POSIX collation rules there (decision D-4.42). This is one host and one counter, not a release benchmark, and per-call micro-benchmarks still show rows slower than glibc, notably in libm. Merge decisions use deterministic counters (instructions, page faults, system calls), never wall time. | [benchmarks/progress.md](benchmarks/progress.md), [docs/benchmarks.md](docs/benchmarks.md), [validation/README.md](validation/README.md) (workload gate) |
 | Platforms | Linux x86-64 only. Building on Windows is not supported (use WSL or Linux). | [docs/toolchain.md](docs/toolchain.md) |
 
 For exact numbers, run `cargo xtask status` (specified versus implemented tests) and

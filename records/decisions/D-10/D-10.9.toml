@@ -1,0 +1,8 @@
+id = "D-10.9"
+section = "s10"
+spec = "§10.0, §10.4"
+ann = "—"
+status = "active"
+body = '''
+**One soft-float core.** Every correctly rounded operation computes exactly (256-bit intermediates) and rounds once into the result format, so narrowing is the same code as `fma`. The rounding direction is an argument (C2), read by the translation from MXCSR (x87's control word for `long double`); x87 precision control is not honoured (results are always rounded to 64 bits; decided, reported). Flags travel in `Status` and are raised by `fpu::raise` (set in MXCSR; an SSE operation when the trap is enabled, which delivers `SIGFPE`); `feraiseexcept` sets overflow, underflow and inexact in the x87 status word as glibc does. Hardware `sqrt`/`fma` paths are for the optimization pass.
+'''

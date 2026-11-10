@@ -1,0 +1,8 @@
+id = "D-24.9"
+section = "s24"
+spec = "§24.5"
+ann = "HIST"
+status = "active"
+body = '''
+`gethostid`/`sethostid` live in `liella_legacy::sys_compat`. `/etc/hostid` holds 4 native-order bytes, created with mode 0644; a shorter or empty file counts as absent, and of a longer one only the first 4 bytes count (observed 2026-10-03 with an owner-approved root probe in a private mount namespace over a tmpfs `/etc`; a directory in its place gives `EISDIR`). Without the file, the result is the node name's IPv4 address (D-15.6) with its 16-bit halves exchanged (observed), else 0. `sethostid` checks `EOVERFLOW` first (observed), gives `EPERM` when the effective IDs differ from the real ones (man page), and otherwise reports the open/write error (`EACCES`, observed). Tests never write the system's file.
+'''

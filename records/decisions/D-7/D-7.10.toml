@@ -1,0 +1,8 @@
+id = "D-7.10"
+section = "s07"
+spec = "§7.4"
+ann = "COMPAT, ARB"
+status = "active"
+body = '''
+**`nl_langinfo` and the built-in data** (phase 7). For the 35 word items (Appendix D.1.5) `nl_langinfo` returns the value converted to a pointer, zero-extended; for every other item the address of its data: in the mapped file, or in the built-in tables generated from `spec/abi/langinfo.tsv` (the reference values of "C" and "C.UTF-8"). An item number beyond a category's items returns `""`. One deliberate difference: the reference "C" locale's `LC_IDENTIFICATION` names a person (postal address, e-mail, telephone, fax); Liella's "C" returns the "C.UTF-8" identification instead, so no personal contact data is copied. The built-ins' transliteration items describe Liella's own table (D-6.9). **Owner: accepted (2026-10-01).**
+'''

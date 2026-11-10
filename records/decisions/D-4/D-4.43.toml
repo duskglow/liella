@@ -1,0 +1,8 @@
+id = "D-4.43"
+section = "s04"
+spec = "§4.3"
+ann = "HIST, PERF"
+status = "active"
+body = '''
+**`bcmp` uses the equality kernel** (BCMP-EQ, owner ruling 2026-10-10: YES, plus "register this for a future compatibility flag") \| `bcmp` calls `hot::equal_bytes` directly (same kernel as `__memcmpeq`, D-4.41): 0 iff equal, else exactly 1. The spec already says `bcmp` reports only equal or not equal (§4.3); glibc returns the memcmp order, so a program that (wrongly) reads the sign differs. Registered as COMPAT-1 in `docs/compat-flags.md` (a future startup tunable would restore the ordered result; the flag is not built). Tests: `small_compare` and `machine_scanners` now expect exactly 0/1 from `bcmp` (they accepted the order before). \| BCMP-EQ
+'''

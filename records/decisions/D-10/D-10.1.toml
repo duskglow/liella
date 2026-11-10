@@ -1,0 +1,8 @@
+id = "D-10.1"
+section = "s10"
+spec = "§10.0"
+ann = "HIST"
+status = "active"
+body = '''
+One generic implementation per operation. Formats that coincide are exported as aliases of one function (C3).
+'''

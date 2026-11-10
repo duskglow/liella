@@ -1,0 +1,9 @@
+id = "COMPAT-16"
+behaviour = "Error indicator after an `open_memstream` / `open_wmemstream` buffer cannot grow (§12.3; D-12.3, MEMSTREAM-FERROR-ROW, coordinator ruling #2066; id placeholder, the coordinator assigns the number)"
+glibc = "The reference's result differs from Liella's in the stream's error indicator only (see the differences row)"
+liella = "Every failed backing write sets the error indicator, per POSIX's rule that a write error sets it; the write is short with `ENOMEM`; pinned by `open_memstream_out_of_memory_sets_the_error_indicator`"
+restore = "A tunable read at startup making the growth failure skip the error-indicator update for this stream kind only; the failure path is cold"
+cost = "none today (the flag does not exist; register only)"
+status = "registered"
+body = '''
+'''

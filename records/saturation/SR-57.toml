@@ -1,0 +1,13 @@
+id = "SR-57"
+section = "4"
+row = "`malloc` + `free` pair: shift instead of `imul` for power-of-two classes (TIMING-COV-MALLOC-PAIR-CHAIN, 2026-11-06)"
+now = "not adopted; the index computation stays one multiply per side for every class (D-3.18)"
+limit = "the latency chain through the bitmap word (row above)"
+reason_class = "hardware (uop cost of variable shifts)"
+basis = "M"
+source = "TIMING-COV-MALLOC-PAIR-CHAIN"
+tried = "NEGATIVE: `FREE_VIEW` gained a `log2(size)` word (0 for other classes); malloc's `i * size` became `i << log2` and free's `(off * magic) >> 40` became `off >> log2` behind a predicted class-kind branch (one `bt` on a class mask), keeping `q * size == off` for both kinds. Codegen confirmed real branches, no `cmov`. Measured on the Haswell-EP class (E5-2697 v3; the Ivy Bridge gap reproduces there), cbench_malloc region counters, pinned, base / new / glibc interleaved, default and hwcaps=-AVX2, medians of 3 rounds (default) and 2 (-AVX2): `malloc_free_16/64/1024` 122.1 to 131.1 instr, cycles 47.0-47.2 to 48.6-48.7 (glibc 38.3-39.4); `heap_mix_real` 89.3 to 95.4 (default), 89.6 to 97.9 (-AVX2); `realloc_within_usable` 194.1 to 207.1 instr, 64.8 to 65.2 (default), 64.7 to 66.2 (-AVX2) cycles; `realloc_null_24` 149.1 to 159.1 instr, 54.9 to 56.3 (default), 54.8 to 63.8 (-AVX2). Ranges do not overlap. Why: without BMI2 (the SSE2 build) a shift by `cl` is 3 uops, and the shift-table load, the class test and its branch add 4 to 5 instructions per side; that costs more than the two 3-cycle `imul`s it takes off the chain. Ivy Bridge and N100 were not timed (the change was already slower on the development host). A form with no per-class load or branch was not found: the classes are 1, 3, 5 or 7 times a power of two, so a uniform shift still needs a multiply"
+flag = "none"
+status = "active"
+body = '''
+'''

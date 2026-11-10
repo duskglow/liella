@@ -1,0 +1,8 @@
+id = "D-18.7"
+section = "s18"
+spec = "§18.5, §18.8, §18.9"
+ann = "HIST"
+status = "active"
+body = '''
+`pidfd_getpid` parses `/proc/self/fdinfo`: not a pidfd or not open is `EBADF` (without `/proc`, an open descriptor is `ENOSYS`, D-X.12), a reaped process `ESRCH`, `Pid: 0` (another PID namespace) `EREMOTE` (probed). Groups and sessions are thin. `daemon` uses Liella's `fork` (handlers and locks); the parent does `_exit(0)` without flushing (daemon(3)); the child does `setsid`, `chdir("/")` and `/dev/null` (O_RDWR) on 0–2; only `fork` and `setsid` errors are reported. `prctl`, `ptrace` and `arch_prctl` pass the caller's arguments through `raw`; `PTRACE_PEEK*` returns the word and leaves `errno` untouched on success; `prctl` and `personality` results are truncated to `int`. Known limits: a setxid broadcast waits while a spawning thread is suspended in its vfork child.
+'''

@@ -1,0 +1,8 @@
+id = "D-4.13"
+section = "s04"
+spec = "§4.1–4.3"
+ann = "—"
+status = "active"
+body = '''
+**The `memcpy` path builds nothing wider than two words.** Code that copies a larger value (an enum of two slices, a 64-byte block) is lowered to a call to `memcpy` unless optimised away. In the products that call reaches Liella's own `memcpy`, so its own path would recurse. So `conv::move_units` passes the regions to `liella::bytes` as slices, which travel in registers, and `liella-mem` is always built at `opt-level = 3`, even in the dev profile. The test gate runs the workspace with `--all-features`, which interposes the exports on the test binaries: any recursion crashes the run. **Accepted by the owner (2026-10-01):** the always-optimised override and the second test pass are the baseline. Since phase 4 that pass enables `export` without `runtime` (D-4.15): a test process must keep the host C library's own start and exit.
+'''

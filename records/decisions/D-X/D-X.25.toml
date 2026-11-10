@@ -1,0 +1,6 @@
+id = "D-X.25"
+section = "x"
+status = "active"
+body = '''
+**C syscall veneer generated from `csys/syscalls.tsv`** (COLD-REWRITE-W-far-08, 2026-10-14; record `liella-historic:handoff/decisions/COLD-REWRITE-W-far-08.md`). (1) One generated file per area from the table (`xtask/src/csys/veneer.rs`), the same table that makes the Rust `extern` declarations and the headers; one wrapper per call (csys README rule). (2) The kernel's value is returned unchanged, errors as `-errno`; the wrapper narrows, translates and stores nothing (no `errno` in a freestanding layer that runs before TLS). (3) x86-64 has one `time_t` width: structures pass through as pointers, no `*_time64` variants; vDSO fast paths are a Rust decision. (4) Arguments typed by table kind (`i`, `c` const pointer, `p` writable pointer); `sizeof(void *) == sizeof(long)` asserted. (5) Each unit includes `liella_sys.h` before defining its wrappers (a disagreeing signature is a compile error), plus `liella_sysnr.h` and `liella_raw.h` only. (6) Each wrapper is one `return liella_rawN(...)`. (7) Documented limits: `clone` with a new stack, `exit`/`execve` not `noreturn`, cancellation handled on the Rust side (D-22.11). Checked by `csys_veneer_abi` (seccomp trap of all 100 wrappers).
+'''

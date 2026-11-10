@@ -1,0 +1,8 @@
+id = "D-4.3"
+section = "s04"
+spec = "§4.1"
+ann = "HIST"
+status = "active"
+body = '''
+`strncpy`/`stpncpy` zero padding and non-termination are in `legacy::string_compat`. Internally, bounded copy is `copy_truncating(dst, src) -> Copied{len, truncated}`. `strlcpy`'s full-source scan is contract (return value = `strlen(s)`) and is kept.
+'''

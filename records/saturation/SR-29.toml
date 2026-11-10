@@ -1,0 +1,13 @@
+id = "SR-29"
+section = "3"
+row = "`strlen_4k` (single pass)"
+now = "i 374 vs glibc 382"
+limit = "\"floor of a single pass\""
+reason_class = "hardware"
+basis = "M"
+source = "STRSTR-GETLINE (`handoff/strstr-getline.md`)"
+tried = "n/a"
+flag = "none"
+status = "active"
+body = '''
+'''

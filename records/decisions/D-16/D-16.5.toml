@@ -1,0 +1,8 @@
+id = "D-16.5"
+section = "s16"
+spec = "§16.1"
+ann = "—"
+status = "active"
+body = '''
+**Closed (owner, 2026-10-03): nscd is not supported.** Liella never talks to nscd: no client, no protocol inspection; a running nscd is ignored and lookups are answered by the NSS engine (observable: nscd's cache is bypassed). Liella's integrated name-service cache (D-16.10) replaces it. Clause `s16_1_g_3` (nscd answers first) is a recorded deviation.
+'''

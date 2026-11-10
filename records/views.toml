@@ -1,0 +1,415 @@
+[[view]]
+name = "h"
+path = "plan/07-decisions/00-overview-and-cross-cutting.md"
+kind = "decision"
+section = "h"
+series = ["D-H", "D-T"]
+header = "| ID | Pattern | Decision |"
+separator = "|---|---|---|"
+columns = ["id", "pattern", "body"]
+head = "records/views/h.head.md"
+tail = "records/views/h.tail.md"
+
+[[view]]
+name = "c0"
+path = "plan/07-decisions/c0-cross-cutting-conventions.md"
+kind = "decision"
+section = "c0"
+series = ["D-C0"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/c0.head.md"
+
+[[view]]
+name = "s01"
+path = "plan/07-decisions/s01-program-startup-termination-and-environment.md"
+kind = "decision"
+section = "s01"
+series = ["D-1"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s01.head.md"
+
+[[view]]
+name = "s02"
+path = "plan/07-decisions/s02-error-reporting-and-diagnostics.md"
+kind = "decision"
+section = "s02"
+series = ["D-2"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s02.head.md"
+
+[[view]]
+name = "s03"
+path = "plan/07-decisions/s03-memory-allocation.md"
+kind = "decision"
+section = "s03"
+series = ["D-3"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s03.head.md"
+
+[[view]]
+name = "s04"
+path = "plan/07-decisions/s04-byte-arrays-and-strings.md"
+kind = "decision"
+section = "s04"
+series = ["D-3", "D-4"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s04.head.md"
+
+[[view]]
+name = "s05"
+path = "plan/07-decisions/s05-character-classification.md"
+kind = "decision"
+section = "s05"
+series = ["D-5"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s05.head.md"
+
+[[view]]
+name = "s06"
+path = "plan/07-decisions/s06-multibyte-text-wide-characters-and.md"
+kind = "decision"
+section = "s06"
+series = ["D-6"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s06.head.md"
+
+[[view]]
+name = "s07"
+path = "plan/07-decisions/s07-locales-and-message-translation.md"
+kind = "decision"
+section = "s07"
+series = ["D-7"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s07.head.md"
+
+[[view]]
+name = "s08"
+path = "plan/07-decisions/s08-numeric-conversion-and-integer-arithmetic.md"
+kind = "decision"
+section = "s08"
+series = ["D-8"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s08.head.md"
+
+[[view]]
+name = "s09"
+path = "plan/07-decisions/s09-random-numbers.md"
+kind = "decision"
+section = "s09"
+series = ["D-9"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s09.head.md"
+
+[[view]]
+name = "s10"
+path = "plan/07-decisions/s10-mathematics.md"
+kind = "decision"
+section = "s10"
+series = ["D-10"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s10.head.md"
+
+[[view]]
+name = "s11"
+path = "plan/07-decisions/s11-low-level-i-o.md"
+kind = "decision"
+section = "s11"
+series = ["D-11"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s11.head.md"
+
+[[view]]
+name = "s12"
+path = "plan/07-decisions/s12-buffered-streams.md"
+kind = "decision"
+section = "s12"
+series = ["D-12"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s12.head.md"
+
+[[view]]
+name = "s13"
+path = "plan/07-decisions/s13-file-system.md"
+kind = "decision"
+section = "s13"
+series = ["D-13"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s13.head.md"
+
+[[view]]
+name = "s14"
+path = "plan/07-decisions/s14-searching-sorting-and-patterns.md"
+kind = "decision"
+section = "s14"
+series = ["D-14"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s14.head.md"
+
+[[view]]
+name = "s15"
+path = "plan/07-decisions/s15-sockets-and-network-interfaces.md"
+kind = "decision"
+section = "s15"
+series = ["D-15"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s15.head.md"
+
+[[view]]
+name = "s16"
+path = "plan/07-decisions/s16-name-services.md"
+kind = "decision"
+section = "s16"
+series = ["D-16"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s16.head.md"
+
+[[view]]
+name = "s17"
+path = "plan/07-decisions/s17-users-groups-and-credentials.md"
+kind = "decision"
+section = "s17"
+series = ["D-17"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s17.head.md"
+
+[[view]]
+name = "s18"
+path = "plan/07-decisions/s18-processes.md"
+kind = "decision"
+section = "s18"
+series = ["D-18"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s18.head.md"
+
+[[view]]
+name = "s19"
+path = "plan/07-decisions/s19-terminals.md"
+kind = "decision"
+section = "s19"
+series = ["D-19"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s19.head.md"
+
+[[view]]
+name = "s20"
+path = "plan/07-decisions/s20-signals.md"
+kind = "decision"
+section = "s20"
+series = ["D-20"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s20.head.md"
+
+[[view]]
+name = "s21"
+path = "plan/07-decisions/s21-contexts.md"
+kind = "decision"
+section = "s21"
+series = ["D-21"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s21.head.md"
+
+[[view]]
+name = "s22"
+path = "plan/07-decisions/s22-threads.md"
+kind = "decision"
+section = "s22"
+series = ["D-22"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s22.head.md"
+
+[[view]]
+name = "s23"
+path = "plan/07-decisions/s23-time.md"
+kind = "decision"
+section = "s23"
+series = ["D-23"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s23.head.md"
+
+[[view]]
+name = "s24"
+path = "plan/07-decisions/s24-resources-and-system-information.md"
+kind = "decision"
+section = "s24"
+series = ["D-24"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s24.head.md"
+
+[[view]]
+name = "s25"
+path = "plan/07-decisions/s25-ipc.md"
+kind = "decision"
+section = "s25"
+series = ["D-25"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s25.head.md"
+
+[[view]]
+name = "s26-29"
+path = "plan/07-decisions/s26-29.md"
+kind = "decision"
+section = "s26-29"
+series = ["D-26", "D-27", "D-28", "D-29"]
+header = "| ID | Spec | Ann. | Decision |"
+separator = "|---|---|---|---|"
+columns = ["id", "spec", "ann", "body"]
+head = "records/views/s26-29.head.md"
+
+[[view]]
+name = "x"
+path = "plan/07-decisions/x-implementation-decisions.md"
+kind = "decision"
+section = "x"
+series = ["D-X"]
+header = "| ID | Decision |"
+separator = "|---|---|"
+columns = ["id", "body"]
+head = "records/views/x.head.md"
+
+[[view]]
+name = "compat-flags"
+path = "docs/compat-flags.md"
+kind = "compat"
+series = ["COMPAT"]
+header = "| Id | Behaviour | glibc's behaviour | Liella's behaviour | How a flag would restore glibc's | Cost on the default path | Status |"
+separator = "|----|-----------|-------------------|--------------------|-----------------------------------|--------------------------|--------|"
+columns = ["id", "behaviour", "glibc", "liella", "restore", "cost", "status"]
+head = "records/views/compat-flags.head.md"
+tail = "records/views/compat-flags.tail.md"
+
+[[view]]
+name = "saturation-1"
+path = "docs/saturation/01-kernel-shared-work.md"
+kind = "saturation"
+section = "1"
+series = ["SR"]
+header = "| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-1.head.md"
+
+[[view]]
+name = "saturation-2"
+path = "docs/saturation/02-safety-bound-spec-or-abi.md"
+kind = "saturation"
+section = "2"
+series = ["SR"]
+header = "| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-2.head.md"
+
+[[view]]
+name = "saturation-3"
+path = "docs/saturation/03-memory-and-string-kernels.md"
+kind = "saturation"
+section = "3"
+series = ["SR"]
+header = "| Row | Now (i: Liella vs glibc) | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-3.head.md"
+
+[[view]]
+name = "saturation-4"
+path = "docs/saturation/04-allocator.md"
+kind = "saturation"
+section = "4"
+series = ["SR"]
+header = "| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-4.head.md"
+
+[[view]]
+name = "saturation-5"
+path = "docs/saturation/05-locale-ctype-time-gettext.md"
+kind = "saturation"
+section = "5"
+series = ["SR"]
+header = "| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-5.head.md"
+
+[[view]]
+name = "saturation-6"
+path = "docs/saturation/06-printf-regex-wordexp-iconv.md"
+kind = "saturation"
+section = "6"
+series = ["SR"]
+header = "| Row | Now | Claimed limit | Reason class | Basis | Source story | Tried, measured negative | Flag |"
+separator = "|---|---|---|---|---|---|---|---|"
+columns = ["row", "now", "limit", "reason_class", "basis", "source", "tried", "flag"]
+head = "records/views/saturation-6.head.md"
+tail = "records/views/saturation-6.tail.md"
+
+[[view]]
+name = "saturation-7"
+path = "docs/saturation/07-rows-that-are-not-near-the.md"
+kind = "saturation"
+section = "7"
+series = ["SR"]
+header = "| Row | Now | Why it is open |"
+separator = "|---|---|---|"
+columns = ["row", "now", "open"]
+head = "records/views/saturation-7.head.md"
+
+[[view]]
+name = "saturation-register"
+path = "docs/saturation-register.md"
+kind = "index"
+dir = "docs/saturation"
+head = "records/views/saturation-register.head.md"

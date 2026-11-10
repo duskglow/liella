@@ -1,0 +1,7 @@
+id = "D-H14"
+section = "h"
+pattern = "Type-suffix explosion"
+status = "active"
+body = '''
+Generic internals over `Float` and `Int` traits. Exports are per suffix (C3).
+'''

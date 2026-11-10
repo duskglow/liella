@@ -1,0 +1,13 @@
+{"task": "LIBM-F64-LOG-FAMILY-WIRE", "model": "opus", "tokens": null,
+ "result": "log2, log10, log1p wired on the log quick phase as tier 1 in both builds (D-10.66); bounds 2^-64.9/2^-64.3 under RHO 2^-64, tests green (t4); gate/plants/counts pending; timing not run",
+ "branch": "task/libm-f64-log-family-wire", "head": "1b72cd30c",
+ "gate": {"affected": "pending (mei:libm-f64-log-family-wire-gate)", "peak": null},
+ "accepted_first_attempt": null,
+ "rulings": [],
+ "informational": ["handoff/LIBM-F64-LOG-QUICK-plants.txt near-dropped literal now matches four sites; anchor it with perl: before rerunning",
+                   "SSE2-build counts not measured (the bench host dispatches the FMA build)"],
+ "refused": [],
+ "jobs": ["mei:libm-f64-log-family-wire-gate", "mei:libm-f64-log-family-wire-plants", "mei:libm-f64-log-family-wire-counts"],
+ "improvement": "a selftest hook taking a function name kept the boundary hooks to two; an env-var operand count (LIELLA_QUICK_LOG_N) lets the 10^7 accuracy run reuse the gate's tests instead of a separate harness",
+ "next_step": "read counters.txt, then booked timing on Ivy Bridge and the N100 (hosts down 11-07 20:00 UTC to midweek)",
+ "report_file": "handoff/LIBM-F64-LOG-FAMILY-WIRE.md"}
