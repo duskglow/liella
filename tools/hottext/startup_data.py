@@ -10,8 +10,9 @@ Two sources, both without a debugger watch:
      each names the first object touched on a page (a window, for read-only file pages);
   2. every RIP-relative operand of the traced start-up functions (the keys of <startup-text.keys> for
      <profile>; `objdump -d` prints its target as `# <addr> <sym>`): the objects their code addresses.
-Each address is resolved to the data symbol that holds it (`nm -S`); text, TLS and unnamed bytes
-(merged string literals) are not objects and are left out. The kind is the section's: `rw` when the
+Each address is resolved to the data symbol that holds it (`nm -S`); text, TLS, unnamed bytes and
+compiler-numbered constants (`anon.<hash>.<n>`: no build-stable name) are left out; the layout check
+counts those through the start-up functions' operands at check time. The kind is the section's: `rw` when the
 section is writable (.data, .bss, .lbss, .data.rel.ro, ...), else `ro`.
 Output (rewritten in place, the union over the profiles traced, like startup-text.keys):
   `<key> TAB <ro|rw> TAB <profiles>` lines, keys build-stable (tools/hottext/keys.py), sorted.
@@ -113,6 +114,10 @@ def resolve(addrs, data, secs):
         if not hit:
             continue
         name = min(hit, key=lambda o: o[1] - o[0])[2]
+        if name.startswith(("anon.", ".L")):
+            # A compiler-numbered constant has no build-stable name: the layout check finds it at check time
+            # through the start-up functions' operands, which address it.
+            continue
         out.setdefault(K.key(name), "rw" if sec[3] else "ro")
     return out
 

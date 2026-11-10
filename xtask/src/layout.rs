@@ -1414,11 +1414,11 @@ mod tests {
         let objs = parse_nm_data(&data_nm(0x600100), &secs);
         let disasm = "0000000000401000 <_start>:\n  401000:\tlea    0x1234(%rip),%rdi        # 50f000 <x>\n\n\
                       0000000000401100 <other>:\n  401100:\tlea    0x1(%rip),%rdi        # 510000 <y>\n\n\
-                      0000000000401200 <_ZN4core3fmt5write17h0123456789abcdefE>:\n  401200:\tmov    0x2(%rip),%rax        # 600050 <AUXV+0x10>\n\
+                      0000000000401200 <_ZN4core3fmt5write17h0123456789abcdefE>:\n  401200:\tmov    0x2(%rip),%rax        # 600048 <AUXV+0x8>\n\
                         401208:\tmov    0x3(%rip),%rax        # 402000 <_start+0x1000>\n";
         let fns: BTreeSet<String> = ["_start", "_ZN4core3fmt5writeE"].map(String::from).into();
         let t = operand_targets(disasm, &fns);
-        assert_eq!(t, [(0x50f000, "_start".to_string()), (0x600050, "_ZN4core3fmt5write17h0123456789abcdefE".to_string()), (0x402000, "_ZN4core3fmt5write17h0123456789abcdefE".to_string())], "functions not in the set are not read");
+        assert_eq!(t, [(0x50f000, "_start".to_string()), (0x600048, "_ZN4core3fmt5write17h0123456789abcdefE".to_string()), (0x402000, "_ZN4core3fmt5write17h0123456789abcdefE".to_string())], "functions not in the set are not read");
         let o = target_objects(&t, &objs, &secs);
         assert_eq!(o.len(), 2, "a text target is not data: {o:?}");
         assert_eq!((o[0].start, o[0].name.as_str(), o[0].rw), (0x50f000, "<unnamed .rodata byte addressed by _start>", false));
