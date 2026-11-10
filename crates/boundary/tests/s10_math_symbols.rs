@@ -2159,9 +2159,13 @@ fn hypotf_oracle(x: f32, y: f32, f: f32, rc: u32) -> bool {
 /// The one-pass `float` entries (LIBM-F32-ONEPASS, D-10.63) and their reference: the full
 /// envelope on the accurate path, the entry they replaced.
 type OnePass = (&'static str, extern "C" fn(f32) -> f32, fn(f32) -> f32);
-const ONEPASS: [OnePass; 2] = [
+const ONEPASS: [OnePass; 6] = [
     ("expf", m::expf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp)),
     ("exp2f", m::exp2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp2)),
+    ("exp10f", m::exp10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::exp10)),
+    ("logf", m::logf, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log)),
+    ("log2f", m::log2f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log2)),
+    ("log10f", m::log10f, |x| liella_boundary::mathret::elem(x, liella_boundary::mathret::Unit::Sse, liella_math::real::Real::log10)),
 ];
 
 /// Compare `entry` with `reference` on the encoding `b` under MXCSR `mx`: result bits, errno
@@ -2203,10 +2207,15 @@ fn math_expf_onepass_entries_match_the_envelope() {
     // envelope's bits, errno and flags in every rounding direction and under FTZ, DAZ and both
     // (D-10.22), on a sample of every chunk of the encodings, and on the operands at the edges of
     // the one-pass range, the exact results and the special values.
-    let edges: [u32; 20] = [
+    // D-10.72 adds exp10f's range edges (±37.9) and exact powers (1, 9, 10; 11 and 1.125 are not
+    // exact), and the log family's: 1 and its neighbours, the m split at 0.75 and 1.5, the least
+    // normal and the largest finite operand, -1, and the 10^n operands log10 refuses (10, 10^10).
+    let edges: [u32; 36] = [
         0x0000_0000, 0x8000_0000, 0x0000_0001, 0x807f_ffff, 0x327f_ffff, 0x3280_0000, 0xb280_0000, 0x42ae_a8f5,
         0x42ae_a8f6, 0xc2ae_a8f6, 0x42fb_ffff, 0x42fc_0000, 0xc2fc_0000, 0x4040_0000, 0xc0e0_0000, 0x7f80_0000,
-        0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005,
+        0xff80_0000, 0x7fc0_0000, 0x7f80_0001, 0xffa0_0005, 0x4217_9999, 0x4217_999a, 0xc217_999a, 0x3f80_0000,
+        0x4110_0000, 0x4120_0000, 0x4130_0000, 0x3f90_0000, 0x3f7f_ffff, 0x3f80_0001, 0x3f40_0000, 0x3fc0_0000,
+        0x0080_0000, 0x7f7f_ffff, 0xbf80_0000, 0x5015_02f9,
     ];
     for p in &ONEPASS {
         for ctl in [0u32, 0x8000, 0x0040, 0x8040] {
@@ -2263,6 +2272,34 @@ fn math_expf_onepass_sweep() {
 fn math_exp2f_onepass_sweep() {
     // Clauses: s10_0_f_0. D-10.63: as math_expf_onepass_sweep.
     onepass_sweep(&ONEPASS[1]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_exp10f_onepass_sweep"]
+fn math_exp10f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[2]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_logf_onepass_sweep"]
+fn math_logf_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[3]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_log2f_onepass_sweep"]
+fn math_log2f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[4]);
+}
+
+#[test]
+#[ignore = "exhaustive: cargo test -p liella-boundary --release --test s10_math_symbols -- --ignored --nocapture math_log10f_onepass_sweep"]
+fn math_log10f_onepass_sweep() {
+    // Clauses: s10_0_f_0. D-10.72: as math_expf_onepass_sweep.
+    onepass_sweep(&ONEPASS[5]);
 }
 
 #[test]

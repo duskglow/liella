@@ -513,6 +513,37 @@ pub fn exp2_onepass_any(x: f32) -> Option<f32> {
     exp_onepass(x, 128.0, 0x42fc_0000) // |x| < 126
 }
 
+/// `exp10f` as [`exp_onepass_any`] (D-10.72): `c` = RN(128·log2 10), |x| < 37.9 (|x·log2 10| <
+/// 125.9, so [`exp_onepass`]'s range and proof hold unchanged: |z| < 2^13.98). 10^n is a `float`
+/// for n = 1..=10 while z = x·c is inexact there, so the operands in [1, 10] with their low 20
+/// bits clear (the integers among them; at most 4 significant bits) are refused on the bits first.
+#[inline]
+pub fn exp10_onepass_any(x: f32) -> Option<f32> {
+    let b = x.to_bits();
+    if b & 0xf_ffff == 0 && b.wrapping_sub(0x3f80_0000) <= 0x4120_0000 - 0x3f80_0000 {
+        return None;
+    }
+    exp_onepass(x, INV_M, 0x4217_999a)
+}
+
+/// `logf` in the caller's rounding direction and MXCSR, unread (D-10.72; proof at [`log_onepass`]).
+#[inline]
+pub fn log_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<0>(x)
+}
+
+/// `log2f` as [`log_onepass_any`].
+#[inline]
+pub fn log2_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<1>(x)
+}
+
+/// `log10f` as [`log_onepass_any`].
+#[inline]
+pub fn log10_onepass_any(x: f32) -> Option<f32> {
+    log_onepass::<2>(x)
+}
+
 macro_rules! fast_fn {
     ($name:ident, $f:expr) => {
         fast_fn!($name, $f, exp_log);

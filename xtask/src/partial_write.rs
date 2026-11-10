@@ -60,13 +60,6 @@ pub(crate) const ALLOW: &[(&str, &str, &str)] = &[
     ("acoshf", "cvtss2sd %xmm0,%xmm2", ONEPASS_REST),
     ("asinhf", "cvtss2sd %xmm1,%xmm2", ONEPASS_REST),
     ("cosf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
-    ("exp10f", "cvtss2sd %xmm0,%xmm1", ONEPASS_REST),
-    ("log10f", "cvtss2sd %xmm0,%xmm1", ONEPASS_REST),
-    ("log10f", "cvtsi2sd %ecx,%xmm2", ONEPASS_REST),
-    ("log2f", "cvtss2sd %xmm0,%xmm1", ONEPASS_REST),
-    ("log2f", "cvtsi2sd %ecx,%xmm2", ONEPASS_REST),
-    ("logf", "cvtss2sd %xmm0,%xmm1", ONEPASS_REST),
-    ("logf", "cvtsi2sd %ecx,%xmm2", ONEPASS_REST),
     ("sinf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
     ("tanf", "cvtss2sd %xmm0,%xmm3", ONEPASS_REST),
 ];
