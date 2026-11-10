@@ -1747,6 +1747,8 @@ fn complex_axes_in_place_match_the_route() {
             let ((wr, wi), st) = route(x, y, Nearest);
             assert_eq!((name, x, y, got, seen), (name, x, y, (wr.to_bits(), wi.to_bits()), (errno(st.error), st.flags)), "{name} on an axis differs from the route");
         }
+        // The same magnitudes rounded to `float` (overflow to infinity and underflow to zero are wanted operands).
+        #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         let (xf, yf) = (x as f32, y as f32);
         for (name, f, route) in flt {
             let mut got = (0, 0);
