@@ -1,5 +1,5 @@
 id = "SR-NEW"
-section = "7"
+section = "1"
 row = "`sinf`/`cosf` on Ivy Bridge: Estrin split of the fast path's cos polynomial"
 now = "NEGATIVE: z*K2 + z^2*(K4 + z*K6) (one multiply shorter on the dependency chain) measured +0.6% slower than Horner (sinf 28.00-28.16 vs 27.83-27.91 ns, Ivy Bridge, interleaved, 5 rounds); reverted"
 limit = "the loop is throughput-bound (IPC ~2, reservation station full 46% of cycles), not latency-bound: a shorter chain bought with an extra multiply loses"
