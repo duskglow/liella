@@ -1,12 +1,35 @@
-{"task": "LAYOUT-STARTUP-RODATA", "model": "opus", "tokens": null,
+{
+ "task": "LAYOUT-STARTUP-RODATA",
+ "model": "opus",
+ "tokens": null,
  "result": "DO NOT LAND: start-up rodata grouped in a 64 KiB-aligned .rodata1 gives 1 ro window at any text size (was 2-4 fast, 4-6 release) but raises tool/locale page faults 56->59 / 53->55 on mei fast",
- "branch": "task/layout-startup-rodata", "head": null,
- "gate": {"affected": "not run (checkpoint; hot_text_products: 13 passed / 1 failed, tool 59 > bound 58)", "peak": null},
+ "branch": "task/layout-startup-rodata",
+ "head": "b9477966a",
+ "gate": {
+  "affected": "not run (checkpoint; hot_text_products: 13 passed / 1 failed, tool 59 > bound 58)",
+  "peak": null
+ },
  "accepted_first_attempt": false,
- "rulings": [{"item": "contract goal (ro windows independent of text size) vs item 4 (fault bounds): grouping start-up rodata alone adds a window real programs fault", "recommendation": "group all read-only data the fault-bounded probes read (start-up+tool+locale traces) at the head of .rodata1, or make the contract count windows beyond those other reads already touch"}],
- "informational": ["no-merge variant (merge pools left in .rodata): faults 57/54/17, contract 2 windows", "rw pages unchanged across text shifts (fast 20, release 21); .data1 half not done", "D-X.62 hand-written in the records-new shape; static not run"],
+ "rulings": [
+  {
+   "item": "contract goal (ro windows independent of text size) vs item 4 (fault bounds): grouping start-up rodata alone adds a window real programs fault",
+   "recommendation": "group all read-only data the fault-bounded probes read (start-up+tool+locale traces) at the head of .rodata1, or make the contract count windows beyond those other reads already touch"
+  }
+ ],
+ "informational": [
+  "no-merge variant (merge pools left in .rodata): faults 57/54/17, contract 2 windows",
+  "rw pages unchanged across text shifts (fast 20, release 21); .data1 half not done",
+  "D-X.62 hand-written in the records-new shape; static not run"
+ ],
  "refused": [],
  "improvement": "the STARTUP-DATA-WINDOWS contract counts only start-up objects, so a layout can pass it while real fault counts rise; a contract should be validated against the fault tests before tightening",
  "next_step": "ruling on design; then perf page-fault maps of tool/locale programs base vs branch (tools/hottext/faultmap.py)",
  "report_file": "handoff/LAYOUT-STARTUP-RODATA.md",
- "jobs": ["mei:lsr-base-measure", "mei:lsr-after-4", "mei:lsr-ptest-5", "mei:lsr-basetool-6", "mei:lsr-exp-7"]}
+ "jobs": [
+  "mei:lsr-base-measure",
+  "mei:lsr-after-4",
+  "mei:lsr-ptest-5",
+  "mei:lsr-basetool-6",
+  "mei:lsr-exp-7"
+ ]
+}
